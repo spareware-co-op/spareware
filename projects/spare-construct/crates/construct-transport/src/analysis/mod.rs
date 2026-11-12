@@ -7,7 +7,7 @@
 //! pack" and "MSM consistency".
 //!
 //! Each function takes the results it compares (`&Res`) explicitly. The standards (extent,
-//! diff, msm) come from crate::standards; the extent test's regular expressions are matched
+//! diff, msm) come from `crate::standards`; the extent test's regular expressions are matched
 //! by hand here (see [`extent_class`]).
 
 // `!(x > 0)` is the JavaScript's own test: unlike `x <= 0` it is true for NaN
@@ -55,6 +55,7 @@ fn key_truthy(v: &Value, k: &str) -> bool {
 }
 
 /// `Engine.fcOf(L, decade)`: the link's Future Connect classes (conflated or set by the user, the first-decade ones when decade and given), otherwise from its road class.
+#[must_use]
 pub fn fc_of(l: &Link, decade: bool) -> FcOf {
     if let Some(f) = l.fc.get().filter(|f| value_truthy(f))
         && ["gt", "pt", "freight", "gt10", "pt10", "freight10"]
@@ -87,7 +88,7 @@ pub fn fc_of(l: &Link, decade: bool) -> FcOf {
         };
     }
     let gt = match l.cls.as_str() {
-        Some("motorway") | Some("ramp") => "Motorway",
+        Some("motorway" | "ramp") => "Motorway",
         Some("arterial") => "Arterial (from road class)",
         Some("collector") => "Collector (from road class)",
         Some("local") => "Local (from road class)",
@@ -170,6 +171,7 @@ fn gt10(s: &str) -> bool {
 /// The patterns of STANDARDS.extent (gt5, pt5, freight5, gt10) are matched as JavaScript's
 /// case-insensitive regular expressions match them: ASCII letters fold, word characters for
 /// `` are [A-Za-z0-9_].
+#[must_use]
 pub fn extent_class(fc: &FcOf) -> ExtentClass {
     let mut why = Vec::new();
     let text = |v: &Value| value_to_js_string(v);
@@ -325,12 +327,9 @@ fn union_keys<'a, V, W>(a: &'a OrderedMap<V>, b: &'a OrderedMap<W>) -> Vec<&'a s
 
 // key.slice(0, key.lastIndexOf(':')) and key.slice(-2)
 fn arc_link_id(key: &str) -> String {
-    match key.rfind(':') {
-        Some(i) => key[..i].to_string(),
-        None => {
-            let n = key.chars().count();
-            key.chars().take(n.saturating_sub(1)).collect()
-        }
+    if let Some(i) = key.rfind(':') { key[..i].to_string() } else {
+        let n = key.chars().count();
+        key.chars().take(n.saturating_sub(1)).collect()
     }
 }
 
@@ -462,9 +461,9 @@ pub fn extent_test(
             e = math_max(e, q[1]);
         }
     }
-    let pad = STANDARDS.extent.buffer / 111320.0;
+    let pad = STANDARDS.extent.buffer / 111_320.0;
     let pad_l = if s.is_finite() {
-        STANDARDS.extent.buffer / (111320.0 * crate::jsmath::cos((s + n) / 2.0 * std::f64::consts::PI / 180.0))
+        STANDARDS.extent.buffer / (111_320.0 * crate::jsmath::cos(f64::midpoint(s, n) * std::f64::consts::PI / 180.0))
     } else {
         0.0
     };
@@ -550,6 +549,7 @@ pub struct DiffOpts {
 }
 
 /// `Engine.difference(base, opt, o)`: per arc change in flow, V/C and junction delay; bars hidden under max(20, 2 × noise95), labels from 10 veh/h (50 below zoom 15). None without both results.
+#[must_use]
 pub fn difference(base: Option<&Res>, opt: Option<&Res>, o: DiffOpts) -> Option<Difference> {
     let (base, opt) = (base?, opt?);
     let n95 = math_max(
@@ -636,7 +636,7 @@ pub struct WwSide {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WwDelta {
-    /// Change in DoS, 0.001.
+    /// Change in `DoS`, 0.001.
     #[serde(with = "plain")]
     pub dos: f64,
     /// "+0.12" or "–".
@@ -682,7 +682,7 @@ pub struct WithWithout {
     pub rows: Vec<WwRow>,
     /// Warning when the runs had different gap targets ("" otherwise).
     pub note: String,
-    /// SELECT_LABEL.
+    /// `SELECT_LABEL`.
     pub label: String,
 }
 
@@ -719,7 +719,8 @@ fn ww_sgn(x: f64, u: &str, dp: usize) -> String {
     )
 }
 
-/// `Engine.withWithout(without, withRes, opts)`: per junction, max DoS, average delay, LoS and longest Q95 without and with development, and the changes. name(id) names a junction (default: its site's name, otherwise the id). None without both results.
+/// `Engine.withWithout(without, withRes, opts)`: per junction, max `DoS`, average delay, `LoS` and longest Q95 without and with development, and the changes. name(id) names a junction (default: its site's name, otherwise the id). None without both results.
+#[must_use]
 pub fn with_without(
     without: Option<&Res>,
     with: Option<&Res>,
@@ -778,14 +779,14 @@ pub fn with_without(
     }
     let delay_of = |r: &WwRow| or_default(r.delta.as_ref().map_or(0.0, |d| d.delay), 0.0);
     js_sort_by(&mut rows, |p, q| delay_of(q) - delay_of(p));
-    let note = if without.gap_tol != with.gap_tol {
+    let note = if without.gap_tol == with.gap_tol {
+        String::new()
+    } else {
         format!(
             "Without (gap target {}) and with ({}) ran at different convergence targets. Re-run both at the same target.",
             number_to_js_string(without.gap_tol),
             number_to_js_string(with.gap_tol)
         )
-    } else {
-        String::new()
     };
     Some(WithWithout {
         rows,
@@ -823,7 +824,7 @@ pub struct DevRow {
     pub name: String,
     /// Development traffic through it by period (veh/h), 0.1.
     pub vph: OrderedMap<f64>,
-    /// "AMin", "AMout", "PMin", "PMout" ...: % of the period's development trips in and out.
+    /// "`AMin`", "`AMout`", "`PMin`", "`PMout`" ...: % of the period's development trips in and out.
     pub shares: OrderedMap<f64>,
 }
 
@@ -852,6 +853,7 @@ pub struct DevDistribution {
 }
 
 /// `Engine.devDistribution(sc, resList)`: per gateway, the % of development trips arriving and leaving through it in each period, and the veh/h.
+#[must_use]
 pub fn dev_distribution(sc: Option<&Scenario>, res_list: &[&Res]) -> DevDistribution {
     let mut ids: Vec<String> = Vec::new();
     let mut periods: OrderedMap<DevPeriod> = OrderedMap::new();
@@ -1004,7 +1006,7 @@ fn js_entries(v: &Value) -> Vec<(String, Value)> {
 /// `Engine.msmCheck(baseRes, futRes, msm, opts)`: implied linear growth per link ((future / base − 1) / years × 100) against MSM's; flagged when they differ by more than pct % of the MSM rate (20 by default).
 ///
 /// msm is `P.data.msm` ({ links: { linkId: { growth } } }). Its links are read in the order
-/// serde_json's Value keeps (sorted), where JavaScript keeps the file's order. A missing base
+/// `serde_json`'s Value keeps (sorted), where JavaScript keeps the file's order. A missing base
 /// result with a later future result (the JavaScript throws) reads as not checked.
 pub fn msm_check(
     base: Option<&Res>,

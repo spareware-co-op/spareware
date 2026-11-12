@@ -8,6 +8,7 @@ use crate::util::{Flat, clamp, flat};
 use std::collections::{HashMap, HashSet};
 
 /// `mainComponent(N, arcs)`: flags (1) the nodes of the largest weakly connected piece of network, given each arc's (from, to).
+#[must_use]
 pub fn main_component(n: usize, edges: &[(usize, usize)]) -> Vec<u8> {
     let mut p: Vec<usize> = (0..n).collect();
     fn find(p: &mut [usize], mut i: usize) -> usize {
@@ -68,7 +69,7 @@ pub(crate) fn connector_targets(
         } else {
             2
         };
-        clamp(c as f64, 1.0, 4.0)
+        clamp(f64::from(c), 1.0, 4.0)
     };
     let ll = z.ll();
     let zx = f.x(&ll);
@@ -90,6 +91,7 @@ pub(crate) fn connector_targets(
 /// `connectorMap(sc)`: connector targets for every zone without building a full graph (used for drawing).
 ///
 /// s is the project's settings (`Store.S` in the prototype).
+#[must_use]
 pub fn connector_map(sc: &Scenario, s: &Settings) -> OrderedMap<Vec<String>> {
     let ids: Vec<&str> = sc.nodes.keys().collect();
     let idx: HashMap<String, usize> = ids
@@ -121,7 +123,7 @@ pub fn connector_map(sc: &Scenario, s: &Settings) -> OrderedMap<Vec<String>> {
         .filter(|n| {
             deg.contains(n.id.as_str())
                 && idx.get(&n.id).is_some_and(|&i| main[i] != 0)
-                && !idx.get(&n.id).is_some_and(|&i| in_site[i].is_some())
+                && idx.get(&n.id).is_none_or(|&i| in_site[i].is_none())
         })
         .collect();
     let lat0 = nodes.first().map_or(-36.85, |n| n.lat.num());
@@ -145,6 +147,7 @@ pub fn connector_map(sc: &Scenario, s: &Settings) -> OrderedMap<Vec<String>> {
 }
 
 /// `zoneClass(z)`: "external" for a gateway, else the zone's role when it is existing, committed or development, else existing (`existing === true`) or development.
+#[must_use]
 pub fn zone_class(z: Option<&Zone>) -> &'static str {
     let Some(z) = z else {
         return "existing";
@@ -167,6 +170,7 @@ pub fn zone_class(z: Option<&Zone>) -> &'static str {
 }
 
 /// `zcIdx(z)`: 2 development, 1 committed, otherwise 0.
+#[must_use]
 pub fn zc_idx(z: Option<&Zone>) -> usize {
     match zone_class(z) {
         "development" => 2,

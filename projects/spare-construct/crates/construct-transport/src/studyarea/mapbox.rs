@@ -4,6 +4,7 @@ use crate::census::Bx;
 use crate::jsnum::{math_max, math_min};
 
 /// `L.latLngBounds(points)`: the box that holds every [lat, lng] point (a list of two corners in any order, or more points).
+#[must_use]
 pub fn latlng_bounds(points: &[[f64; 2]]) -> Bx {
     let mut b = Bx::new(f64::NAN, f64::NAN, f64::NAN, f64::NAN);
     let mut first = true;
@@ -27,6 +28,7 @@ pub fn extend(b: &mut Bx, lat: f64, lng: f64) {
 }
 
 /// `bounds.pad(ratio)`: the box grown on every side by a share of its height and width.
+#[must_use]
 pub fn pad(b: &Bx, ratio: f64) -> Bx {
     let hb = (b.s - b.n).abs() * ratio;
     let wb = (b.w - b.e).abs() * ratio;
@@ -34,11 +36,13 @@ pub fn pad(b: &Bx, ratio: f64) -> Bx {
 }
 
 /// `bounds.getCenter()`: [lat, lng] of the middle.
+#[must_use]
 pub fn center(b: &Bx) -> [f64; 2] {
-    [(b.s + b.n) / 2.0, (b.w + b.e) / 2.0]
+    [f64::midpoint(b.s, b.n), f64::midpoint(b.w, b.e)]
 }
 
 /// `bounds.contains([lat, lng])`: the point is inside or on the edge.
+#[must_use]
 pub fn contains(b: &Bx, lat: f64, lng: f64) -> bool {
     lat >= b.s && lat <= b.n && lng >= b.w && lng <= b.e
 }
@@ -96,6 +100,7 @@ fn dst_end_day(y: i64) -> i64 {
 }
 
 /// The offset of New Zealand time from UTC at an instant (ms since 1970): 13 hours in daylight saving time (the last Sunday of September at 2 am to the first Sunday of April at 3 am), else 12.
+#[must_use]
 pub fn nz_offset_ms(utc_ms: f64) -> f64 {
     let days = (utc_ms / DAY).floor() as i64;
     let y = civil_from_days(days).0;
@@ -106,6 +111,7 @@ pub fn nz_offset_ms(utc_ms: f64) -> f64 {
 }
 
 /// `nzDate(now)`: the New Zealand date at an instant (ms since 1970).
+#[must_use]
 pub fn nz_date(utc_ms: f64) -> NzDate {
     let local = utc_ms + nz_offset_ms(utc_ms);
     let (y, m, d) = civil_from_days((local / DAY).floor() as i64);
@@ -113,6 +119,7 @@ pub fn nz_date(utc_ms: f64) -> NzDate {
 }
 
 /// `new Date(ms).toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' })` in New Zealand time: "Mar 2025" ("Sept" for September).
+#[must_use]
 pub fn nz_month_year(utc_ms: f64) -> String {
     const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
     let d = nz_date(utc_ms);
@@ -120,6 +127,7 @@ pub fn nz_month_year(utc_ms: f64) -> String {
 }
 
 /// `new Date(ms).toISOString().slice(0, 10)`: the UTC date, YYYY-MM-DD.
+#[must_use]
 pub fn utc_date(utc_ms: f64) -> String {
     let (y, m, d) = civil_from_days((utc_ms / DAY).floor() as i64);
     format!("{y:04}-{m:02}-{d:02}")

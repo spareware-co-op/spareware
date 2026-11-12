@@ -11,6 +11,7 @@ pub trait ReportCtx {
 }
 
 /// `rT(ctx, title, tblHtml, noteText)` of the Compliance+ report sections: the table in the report lane's block, or a figure with a caption.
+#[must_use]
 pub fn rt(ctx: Option<&dyn ReportCtx>, title: &str, tbl: &str, note_text: &str) -> String {
     match ctx {
         Some(c) => c.table(title, tbl, note_text),
@@ -28,11 +29,13 @@ pub struct Th {
 }
 
 /// A text heading.
+#[must_use]
 pub fn th(label: &str) -> Th {
     Th { label: label.to_string(), n: false }
 }
 
 /// A numeric column heading.
+#[must_use]
 pub fn thn(label: &str) -> Th {
     Th { label: label.to_string(), n: true }
 }
@@ -56,6 +59,7 @@ pub fn tr<S: Into<String>>(cells: impl IntoIterator<Item = S>) -> Tr {
 }
 
 /// `Kit.table({ head, rows, compact, cls, empty })`: a table wrapped for scrolling; with no rows, the `empty` text in one cell (or nothing).
+#[must_use]
 pub fn kit_table(head: &[Th], rows: &[Tr], compact: bool, cls: &str, empty: &str) -> String {
     let thc = |h: &Th| if h.n { "n" } else { "" };
     let th_row = if head.is_empty() {
@@ -95,6 +99,7 @@ pub fn kit_table(head: &[Th], rows: &[Tr], compact: bool, cls: &str, empty: &str
 }
 
 /// The report tables of the Compliance module (`T(head, rows)`): headings are escaped, cells are written as given.
+#[must_use]
 pub fn report_table(head: &[&str], rows: &[Vec<String>]) -> String {
     format!(
         "<table class=\"rt\"><thead><tr>{}</tr></thead><tbody>{}</tbody></table>",
@@ -104,11 +109,13 @@ pub fn report_table(head: &[&str], rows: &[Vec<String>]) -> String {
 }
 
 /// `P_(t)`: an escaped paragraph.
+#[must_use]
 pub fn p_(t: &str) -> String {
     format!("<p>{}</p>", esc_text(t))
 }
 
 /// The pill of the Compliance module: tone "warn" and "bad" use the proposed and closed classes, "ok" is green.
+#[must_use]
 pub fn pill(text: &str, tone: &str) -> String {
     format!(
         "<span class=\"pill{}\"{}>{text}</span>",
@@ -122,6 +129,7 @@ pub fn pill(text: &str, tone: &str) -> String {
 }
 
 /// The pill of Compliance+: tones map onto the classes the stylesheet defines (ok, warn, bad).
+#[must_use]
 pub fn pill_x(text: &str, tone: &str) -> String {
     format!(
         "<span class=\"pill{}\">{text}</span>",
@@ -135,6 +143,7 @@ pub fn pill_x(text: &str, tone: &str) -> String {
 }
 
 /// `note(t, warn)` of Compliance+: a note paragraph (the text is markup).
+#[must_use]
 pub fn note(t: &str, warn: bool) -> String {
     format!("<p class=\"note{}\">{t}</p>", if warn { " warn" } else { "" })
 }

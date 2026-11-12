@@ -50,6 +50,7 @@ pub const REPORT_IDS: &[&str] = &[
 ];
 
 /// The HTML of a Compliance report section (`REPORT[id].render(P)`), None when the id is not one of this module's. A section with nothing to say gives an empty string.
+#[must_use]
 pub fn report(id: &str, p: &V) -> Option<String> {
     Some(match id {
         "report-regulatory" => {
@@ -99,7 +100,7 @@ pub fn report(id: &str, p: &V) -> Option<String> {
             format!("{}{}{}\n        {}\n        <h3>Objectives and policies (E27.2, E27.3)</h3>{}\n        <p class=\"note\">The objectives and policies are paraphrased; quote the plan text in the evaluation.</p>",
                 a, if ee.g("supplementary").t() { p_(&format!("Network level-of-service sections are {}.", table("E27.supplementary").s())) } else { String::new() }, p_(&format!("{}.", table("E27.s104C").s())),
                 if r.g("side").eq_s("transition") { p_("For a district land use consent lodged from 30 October 2026, the effects listed in s104(1A) are disregarded (s104(1A), s92(2AA)), and Planning Act and NEA instruments are not relied on (s104(1C)).") } else { String::new() },
-                t(&["Provision", "Applies", "Evidence"], ee.g("matrix").items().iter().map(|m| vec![format!("{} {}", m.g("ref").sn(), e(m.g("text"))), if m.g("applies").t() { "Yes".into() } else { format!("No ({})", e(m.g("why"))) }, esc(&m.g("evidence").items().iter().map(|x| x.s()).collect::<Vec<_>>().join("; "))]).collect()))
+                t(&["Provision", "Applies", "Evidence"], ee.g("matrix").items().iter().map(|m| vec![format!("{} {}", m.g("ref").sn(), e(m.g("text"))), if m.g("applies").t() { "Yes".into() } else { format!("No ({})", e(m.g("why"))) }, esc(&m.g("evidence").items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join("; "))]).collect()))
         }
         "compliance-scope" => {
             let i = ita_scope(p);
@@ -157,7 +158,7 @@ pub fn report(id: &str, p: &V) -> Option<String> {
                 } else { String::new() },
                 if x.g("tech").jlen() > 0 { t(&["Access", "Required SISD (m)", "Basis", "Movements a day", "Access type"], x.g("tech").items().iter().map(|a| vec![e(a.g("name")), e(a.g("sisd").g("m")), e(a.g("sisd").g("basis")), format!("{} ({})", nvalue(a.g("daily")), e(a.g("volBasis"))), e(a.g("type").g("text"))]).collect()) } else { String::new() },
                 if x.g("noise").t() { p_("A noise-sensitive activity is within 100 m of a state highway: assess reverse sensitivity and acoustic design (NZTA PPM Managing effects s5.2.2).") } else { String::new() },
-                p_(&x.g("labels").items().iter().map(|v| v.s()).collect::<Vec<_>>().join("; ")), d12)
+                p_(&x.g("labels").items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join("; ")), d12)
         }
         "compliance-fds" => {
             let x = fds_check(p);
@@ -217,6 +218,7 @@ pub fn report(id: &str, p: &V) -> Option<String> {
 }
 
 /// The HTML of any compliance report section, from either module (`REPORT` of both scripts); None when the id is not one of theirs.
+#[must_use]
 pub fn report_section(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     report(id, p).or_else(|| extra::report(id, p, ctx))
 }
@@ -225,11 +227,13 @@ pub fn report_section(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<St
 pub const EXPORT_IDS: &[&str] = &["compliance-checklist", "compliance-scoping", "compliance-register", "compliance-timeline", "compliance-jws"];
 
 /// Exports that carry author text are refused while the scope linter has a blocking finding (`GUARD`, `authorText`).
+#[must_use]
 pub fn export_guarded(id: &str) -> bool {
     ["report-html", "report-datapack", "compliance-extra-ftaa", "compliance-extra-planchange", "compliance-scoping", "compliance-jws", "compliance-extra-mitigation"].contains(&id)
 }
 
 /// The file name of an export (`filename(c)` with `c.fileBase`), None for an unknown id. The Fast-track package is a zip only when a zip writer exists, otherwise a json bundle.
+#[must_use]
 pub fn export_filename(id: &str, file_base: &str) -> Option<String> {
     Some(match id {
         "compliance-checklist" => format!("{file_base}-regulatory-checklist.csv"),
@@ -250,6 +254,7 @@ fn table_ext(key: &str) -> &'static str {
 }
 
 /// Whether an export is offered for the project (`enabled()`), None for an unknown id.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     Some(match id {
         "compliance-checklist" | "compliance-scoping" => true,
@@ -262,11 +267,10 @@ pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
 
 /// The text of an export (`build(P)`): `Ok(text)`, or `Err(why)` when the scope linter blocks an export that carries author text; None for an unknown id.
 pub fn export_build(id: &str, p: &V, now: &V) -> Option<Result<String, String>> {
-    if export_guarded(id) {
-        if let Some(why) = extra::lint::export_block(p) {
+    if export_guarded(id)
+        && let Some(why) = extra::lint::export_block(p) {
             return Some(Err(why));
         }
-    }
     let c = state(p);
     Some(Ok(match id {
         "compliance-checklist" => checklist_csv(p, now),
@@ -304,6 +308,7 @@ pub fn export_build(id: &str, p: &V, now: &V) -> Option<Result<String, String>> 
 
 /// `stamps(d)`: whether an export registered by another part of the app gets the disclaimer, watermark and version stamp footer (CSV exports on the
 /// human-readable list, or any that ask with `stamp: true`; machine hand-over files stay byte-clean).
+#[must_use]
 pub fn stamps_export(id: &str, ext: &str, stamp_flag: Option<bool>) -> bool {
     let st_t = table("STAMP");
     stamp_flag != Some(false) && ext.eq_ignore_ascii_case("csv") && !st_t.g("handover").has(id) && (stamp_flag == Some(true) || st_t.g("tables").items().iter().any(|x| x.eq_s(id)))
@@ -316,6 +321,7 @@ pub fn stamp_export_text(p: &mut V, text: &str, handover: Option<&str>, now: &V)
 }
 
 /// The label of a model.js stage, for callers that print the checklist's group labels.
+#[must_use]
 pub fn group_label(group: &str) -> String {
     let g = table("CK_GROUPS").g(group);
     if g.t() { g.s() } else { group.to_string() }

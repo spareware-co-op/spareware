@@ -24,12 +24,14 @@ pub use crate::project::{
 };
 
 /// `Scenarios.roleOf(sc)`: the scenario's role key when it is a known role, otherwise None.
+#[must_use]
 pub fn role_of(sc: &Scenario) -> Option<&str> {
     sc.role.as_str().filter(|r| scenario_role(r).is_some())
 }
 
 /// `Scenarios.zoneRole(z)`: "external" for a gateway, else the zone's role if it has a known one, else "existing" for an
 /// existing land use and "development" for anything else.
+#[must_use]
 pub fn zone_role(z: &Zone) -> &str {
     if z.kind.is("gateway") {
         return "external";
@@ -47,6 +49,7 @@ pub fn zone_role(z: &Zone) -> &str {
 }
 
 /// `Scenarios.zoneInBaseline(z, P)`: a committed zone belongs in the baseline unless its register row says otherwise.
+#[must_use]
 pub fn zone_in_baseline(z: &Zone, p: &Project) -> bool {
     match z.reg.as_str() {
         Some(r) if !r.is_empty() => in_baseline(p.register_row(r)).0,
@@ -55,6 +58,7 @@ pub fn zone_in_baseline(z: &Zone, p: &Project) -> bool {
 }
 
 /// `Scenarios.designYear(type, opening)`: the default design year for a consenting pathway (NZTA RR 422 s5.5; AT ITA 3.6).
+#[must_use]
 pub fn design_year(pathway: &str, opening: f64) -> f64 {
     let d = &STANDARDS.design;
     let years = match pathway {
@@ -534,10 +538,10 @@ pub fn describe(sc: &Scenario, p: &Project) -> Description {
         network,
         periods,
         buildout: if lu.contains(&"development") {
-            Some(if !sc.buildout.is_nullish() {
-                sc.buildout.num()
-            } else {
+            Some(if sc.buildout.is_nullish() {
                 100.0
+            } else {
+                sc.buildout.num()
             })
         } else {
             None
@@ -559,6 +563,7 @@ pub fn describe(sc: &Scenario, p: &Project) -> Description {
 
 /// `Scenarios.table(P)`: the assessment scenarios table (ID, role, year, land use, network, periods, build-out), by year,
 /// then without and with the proposal.
+#[must_use]
 pub fn table(p: &Project) -> Vec<Description> {
     let mut rows: Vec<Description> = p.scenarios.iter().map(|sc| describe(sc, p)).collect();
     let ord = |r: &Description| {
@@ -599,17 +604,14 @@ pub fn groups(p: &Project) -> Vec<YearGroup> {
         let at = g
             .iter()
             .position(|x| x.year == r.year || (x.year.is_nan() && r.year.is_nan()));
-        let k = match at {
-            Some(k) => k,
-            None => {
-                g.push(YearGroup {
-                    year: r.year,
-                    without: Vec::new(),
-                    with_proposal: Vec::new(),
-                    other: Vec::new(),
-                });
-                g.len() - 1
-            }
+        let k = if let Some(k) = at { k } else {
+            g.push(YearGroup {
+                year: r.year,
+                without: Vec::new(),
+                with_proposal: Vec::new(),
+                other: Vec::new(),
+            });
+            g.len() - 1
         };
         let side = r
             .role

@@ -1,6 +1,6 @@
 //! Queries on results (engine.js travel, isochrone, selectLink, exportReady, lts) and the
 //! model status metadata (modelStatus, modelMeta). The settings readers they use (yearOf,
-//! growthBasis, junctionSet, capMethodOf) and the STANDARDS table are in crate::standards.
+//! growthBasis, junctionSet, capMethodOf) and the STANDARDS table are in `crate::standards`.
 
 // `!(x > 0)` is the JavaScript's own test: unlike `x <= 0` it is true for NaN
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
@@ -20,7 +20,7 @@ use crate::util::LatLng;
 use serde::Serialize;
 use serde_json::Value;
 
-/// SELECT_LABEL: Frank-Wolfe path splits are not unique, so select-link results are indicative.
+/// `SELECT_LABEL`: Frank-Wolfe path splits are not unique, so select-link results are indicative.
 pub const SELECT_LABEL: &str =
     "Frank-Wolfe path splits are not unique; select-link results are indicative.";
 
@@ -69,6 +69,7 @@ pub struct SearchTree {
 
 impl SearchTree {
     /// `pathTo(G, W, v)`: arc indexes from the source to node v, or None when v was not reached.
+    #[must_use]
     pub fn path_to(&self, v: usize) -> Option<Vec<usize>> {
         if v == self.src {
             return Some(Vec::new());
@@ -134,12 +135,14 @@ pub struct TravelRoute {
 }
 
 /// The graph travel and isochrone search: `buildGraph(sc, Store.S, (res && res.period) || null)`.
+#[must_use]
 pub fn query_graph(sc: &Scenario, s: &Settings, res: Option<&Res>) -> Graph {
     let period = res.map(|r| r.period.as_str()).filter(|p| !p.is_empty());
     build_graph(sc, s, period)
 }
 
 /// `Engine.travel(sc, res, fromId, toId)`: the quickest route between two node ids (zone centroids are "z:<zone id>") on the result's times, under the project settings s; None when either id is not a node.
+#[must_use]
 pub fn travel(
     sc: &Scenario,
     s: &Settings,
@@ -201,6 +204,7 @@ pub struct Isochrone {
 }
 
 /// `Engine.isochrone(sc, res, fromId)`: earliest arrival at every node from one node on the result's times, under the project settings s; None when the id is not a node.
+#[must_use]
 pub fn isochrone(
     sc: &Scenario,
     s: &Settings,
@@ -341,6 +345,7 @@ pub struct ExportReady {
 }
 
 /// `Engine.exportReady(res)`: turn-volume exports need a gap of STANDARDS.sidraGap.max (0.01%) or better.
+#[must_use]
 pub fn export_ready(res: Option<&Res>) -> ExportReady {
     let max = STANDARDS.sidra_gap.max;
     let Some(res) = res else {
@@ -370,6 +375,7 @@ pub fn export_ready(res: Option<&Res>) -> ExportReady {
 /// `Engine.lts(L, res)`: cycling level of traffic stress, 1 (all ages) to 4 (confident riders only); 0 where cycling is not allowed.
 ///
 /// Daily traffic is both directions' flow times `Store.S.peakToDaily` (the project settings `s`).
+#[must_use]
 pub fn lts(l: &Link, res: Option<&Res>, s: &Settings) -> u8 {
     let c = l.class();
     let sp = l.speed.or(c.speed);
@@ -507,11 +513,10 @@ pub fn model_status(p: &Project, period: &str) -> ModelStatus {
         let now = if std != "tmdg" {
             std_name(&std).unwrap_or(&std).to_string()
         } else {
-            format!("TMDG Category {}", cat)
+            format!("TMDG Category {cat}")
         };
         format!(
-            "The validation was recorded for {}; the settings now name {}. Validate the base year again.",
-            recorded, now
+            "The validation was recorded for {recorded}; the settings now name {now}. Validate the base year again."
         )
     } else {
         String::new()
@@ -631,6 +636,7 @@ pub fn model_meta(
 /// JavaScript uses the local time zone. Arrays are read through their text. None where
 /// JavaScript has an invalid date (toISOString throws) or a format only V8's fallback parser
 /// reads.
+#[must_use]
 pub fn js_iso_day(t: &Value) -> Option<String> {
     let ms = match t {
         Value::Number(n) => n.as_f64()?,
@@ -649,6 +655,7 @@ pub fn js_iso_day(t: &Value) -> Option<String> {
 }
 
 /// The UTC day "YYYY-MM-DD" (extended years "+YYYYYY-MM") of a JavaScript time value; None outside the Date range.
+#[must_use]
 pub fn iso_day_of_ms(ms: f64) -> Option<String> {
     if !ms.is_finite() || ms.abs() > 8.64e15 {
         return None;
@@ -657,13 +664,13 @@ pub fn iso_day_of_ms(ms: f64) -> Option<String> {
     let days = (t / 86_400_000.0).floor() as i64;
     let (y, m, d) = civil_from_days(days);
     let year = if (0..=9999).contains(&y) {
-        format!("{:04}", y)
+        format!("{y:04}")
     } else if y < 0 {
         format!("-{:06}", -y)
     } else {
-        format!("+{:06}", y)
+        format!("+{y:06}")
     };
-    let full = format!("{}-{:02}-{:02}", year, m, d);
+    let full = format!("{year}-{m:02}-{d:02}");
     Some(full.chars().take(10).collect())
 }
 
@@ -791,6 +798,6 @@ fn parse_iso_date(s: &str) -> Option<f64> {
     let days = days_from_civil(year, month, day);
     let ms = days as f64 * 86_400_000.0
         + ((hh * 60 + mm - offset) * 60 + ss) as f64 * 1000.0
-        + msec as f64;
+        + f64::from(msec);
     if ms.abs() > 8.64e15 { None } else { Some(ms) }
 }

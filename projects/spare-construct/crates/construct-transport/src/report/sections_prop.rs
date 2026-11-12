@@ -244,7 +244,7 @@ pub(crate) fn tripgen(c: &mut Ctx) -> String {
                         rfmt::num(rate.rate.num(), 2),
                         if dflt { "Spare Construct indicative default (replace with surveyed rates)".to_string() } else { "User-entered".to_string() },
                         rfmt::num(gross, 0),
-                        if red != 0.0 { format!("\u{2212}{}", rfmt::pct(red)) } else { fmt::DASH.to_string() },
+                        if red == 0.0 { fmt::DASH.to_string() } else { format!("\u{2212}{}", rfmt::pct(red)) },
                         if stage < 1.0 { format!("{} built", rfmt::pct(stage * 100.0)) } else { fmt::DASH.to_string() },
                         rfmt::num(net, 0),
                         rfmt::pct(inp),

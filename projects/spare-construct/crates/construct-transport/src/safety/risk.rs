@@ -1,9 +1,9 @@
 //! Road-safety metrics (`linkAADT`, `linkRisk`, `nodeRisk`, `junctionOf`, `riskBand`, `linkBand`, `safetySummary`, `crashesNear`).
 //!
 //! Rates use the window the crashes were downloaded for, not just the years that happen to have crashes. Divided
-//! roads mapped as two one-way carriageways count road kilometres once (KiwiRAP collective risk is per kilometre
+//! roads mapped as two one-way carriageways count road kilometres once (`KiwiRAP` collective risk is per kilometre
 //! of road, both directions). Personal risk uses current exposure only: counts, or modelled volumes from results
-//! no later than the crash window. Links shorter than 500 m, or with under 200 veh/day, get no risk band: KiwiRAP
+//! no later than the crash window. Links shorter than 500 m, or with under 200 veh/day, get no risk band: `KiwiRAP`
 //! measures risk over sections several kilometres long.
 
 use super::assign::{assign_crashes, Assignment, CasLoad, Tally, Years, LINK_R, LOW_AADT, NODE_R, SHORT_KM};
@@ -52,7 +52,8 @@ const BAND_LABELS: [&str; 5] = ["Low", "Low-medium", "Medium", "Medium-high", "H
 const BAND_COLOURS: [&str; 5] = ["#2f9e44", "#94d82d", "#fcc419", "#f76707", "#e03131"];
 const NO_COLOUR: &str = "#adb5bd";
 
-/// `riskBand(value, kind)`: the band of a rate. Kinds: "collective" (DSI crashes per km per year) and "personal" (DSI crashes per 100 million vehicle-km) use KiwiRAP's risk-map bands; "injury" (injury crashes per km per year) and "node" (DSI crashes per year at a junction) are Spare Construct's own indicative bands. An unknown kind reads as collective; None or a value that is not finite gives "No data".
+/// `riskBand(value, kind)`: the band of a rate. Kinds: "collective" (DSI crashes per km per year) and "personal" (DSI crashes per 100 million vehicle-km) use `KiwiRAP`'s risk-map bands; "injury" (injury crashes per km per year) and "node" (DSI crashes per year at a junction) are Spare Construct's own indicative bands. An unknown kind reads as collective; None or a value that is not finite gives "No data".
+#[must_use]
 pub fn risk_band(value: Option<f64>, kind: &str) -> Band {
     let b = bands_of(kind);
     match value {
@@ -68,6 +69,7 @@ pub fn risk_band(value: Option<f64>, kind: &str) -> Band {
 }
 
 /// `noBand(why)`: no band, because the link is too short or too quiet for one.
+#[must_use]
 pub fn no_band(why: &str) -> Band {
     Band {
         band: None,
@@ -98,9 +100,9 @@ pub struct LinkRisk {
     pub aadt_src: Option<String>,
     /// Injury crashes per road km per year.
     pub per_km_yr: Option<f64>,
-    /// DSI crashes per road km per year (KiwiRAP collective risk).
+    /// DSI crashes per road km per year (`KiwiRAP` collective risk).
     pub dsi_per_km_yr: Option<f64>,
-    /// DSI crashes per 100 million vehicle-km (KiwiRAP personal risk).
+    /// DSI crashes per 100 million vehicle-km (`KiwiRAP` personal risk).
     pub personal: Option<f64>,
     /// Shorter than 500 m.
     pub short: bool,
@@ -266,7 +268,7 @@ pub fn link_aadt(sc: &Scenario, s: &Settings, data: &Data, pair: &HashMap<String
             } else if !e.ab.is_empty() && !e.ba.is_empty() {
                 out.insert(id.clone(), (mean(&e.ab) + mean(&e.ba), "count"));
             } else {
-                out.insert(id.clone(), (mean(if !e.ab.is_empty() { &e.ab } else { &e.ba }) * 2.0, "count (one direction, doubled)"));
+                out.insert(id.clone(), (mean(if e.ab.is_empty() { &e.ba } else { &e.ab }) * 2.0, "count (one direction, doubled)"));
             }
         } else if !own.is_empty() {
             out.insert(id.clone(), (mean(own), "count"));
@@ -282,6 +284,7 @@ pub fn link_aadt(sc: &Scenario, s: &Settings, data: &Data, pair: &HashMap<String
 }
 
 /// The crashes saved in a project under `key` ("crashes" for the five-year set, "crashesLong" for the ten-year set), as tuples read for the analysis.
+#[must_use]
 pub fn crashes_of(p: &Project, key: &str) -> Vec<Crash> {
     match p.data.get().and_then(|d| d.extra.get(key)) {
         Some(Value::Array(a)) => a
@@ -313,6 +316,7 @@ impl<'a> SafetyModel<'a> {
     /// Reads the project's crashes (`P.data.crashes`) and assigns them to a scenario's links and junctions; None when the project holds no crashes (the prototype answers null then).
     ///
     /// The base scenario (`Store.baseSc`) supplies modelled volumes when the scenario's own results are for a later year.
+    #[must_use]
     pub fn new(p: &'a Project, sc: &'a Scenario) -> Option<SafetyModel<'a>> {
         let crashes = crashes_of(p, "crashes");
         if crashes.is_empty() {
@@ -441,13 +445,10 @@ impl<'a> SafetyModel<'a> {
         for c in &self.crashes {
             total.add(c);
             let y = if c.year > 0.0 { Some(c.year) } else { None };
-            match years.iter_mut().find(|(k, _)| *k == y) {
-                Some(e) => e.1.add(c),
-                None => {
-                    let mut t = Tally::default();
-                    t.add(c);
-                    years.push((y, t));
-                }
+            if let Some(e) = years.iter_mut().find(|(k, _)| *k == y) { e.1.add(c) } else {
+                let mut t = Tally::default();
+                t.add(c);
+                years.push((y, t));
             }
             let f = &c.flags;
             if f.contains('p') {
@@ -550,6 +551,7 @@ impl<'a> SafetyModel<'a> {
 }
 
 /// `linkBand(r, kind)`: the band of one link's rate for display: no data without a risk, no band for a short link (or a quiet one for personal risk).
+#[must_use]
 pub fn link_band(r: Option<&LinkRisk>, kind: &str) -> Band {
     let Some(r) = r else { return risk_band(None, kind) };
     if r.short {
@@ -602,6 +604,7 @@ pub enum Near<'a> {
 ///
 /// `long` reads the ten-year set (`crashesLong`) for state highway accesses. None when the project holds no crashes of
 /// that set, or the junction or link is not in the scenario; the prototype's default radius is 25 m.
+#[must_use]
 pub fn crashes_near(p: &Project, sc: &Scenario, sel: Near, r: f64, long: bool) -> Option<CrashesNear> {
     let cr = crashes_of(p, if long { "crashesLong" } else { "crashes" });
     if cr.is_empty() {

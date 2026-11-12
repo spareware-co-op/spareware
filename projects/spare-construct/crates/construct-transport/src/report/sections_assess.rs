@@ -96,7 +96,7 @@ pub(crate) fn modelling(c: &mut Ctx) -> String {
         .collect();
     let checks: Vec<Vec<Value>> = reps
         .iter()
-        .map(|x| x.as_ref().map_or(Vec::new(), |x| x.checks.iter().map(|k| k.to_value()).collect()))
+        .map(|x| x.as_ref().map_or(Vec::new(), |x| x.checks.iter().map(crate::calibrate::Check::to_value).collect()))
         .collect();
     let mut ids: Vec<String> = Vec::new();
     for cs in &checks {
@@ -155,7 +155,9 @@ pub(crate) fn modelling(c: &mut Ctx) -> String {
             fmt::num(s.gap_tol.num() * 100.0, 3),
             int_f(s.max_iter.num())
         )),
-        if !bad.is_empty() {
+        if bad.is_empty() {
+            para("Every stored run converged to its target (Appendix B).")
+        } else {
             note(
                 &format!(
                     "{} did not converge: {}. Results from these runs are not reliable.",
@@ -167,8 +169,6 @@ pub(crate) fn modelling(c: &mut Ctx) -> String {
                 ),
                 true,
             )
-        } else {
-            para("Every stored run converged to its target (Appendix B).")
         },
         c.table(
             &format!("Table C-SUM \u{b7} Calibration summary, {}", esc(r.sc(sc).name())),
@@ -364,7 +364,7 @@ pub(crate) fn extent(c: &mut Ctx) -> String {
     for e in &ex {
         let (p, x) = (&e.p, &e.x);
         let inc: Vec<&crate::analysis::ExtentRow> = x.rows.iter().filter(|q| q.included).collect();
-        let list: Vec<&crate::analysis::ExtentRow> = if !inc.is_empty() { inc.clone() } else { x.rows.iter().take(15).collect() };
+        let list: Vec<&crate::analysis::ExtentRow> = if inc.is_empty() { x.rows.iter().take(15).collect() } else { inc.clone() };
         let rows: Vec<Row> = list
             .iter()
             .take(60)
@@ -401,7 +401,9 @@ pub(crate) fn extent(c: &mut Ctx) -> String {
         );
         let nt = format!(
             "{} Included when \u{394}% is over 5% (motorways, arterials, RTN/FTN, freight levels 1A\u{2013}2) or 10% (collectors) and \u{394} \u{2265} {} veh/h. The {} veh/h floor and the freight set are Spare Construct assumptions. {}",
-            if !inc.is_empty() {
+            if inc.is_empty() {
+                "No link passes the thresholds; the 15 largest changes are shown.".to_string()
+            } else {
                 format!(
                     "{} and {} are included.{}",
                     plural(inc.len() as f64, "link direction", "link directions"),
@@ -412,8 +414,6 @@ pub(crate) fn extent(c: &mut Ctx) -> String {
                         String::new()
                     }
                 )
-            } else {
-                "No link passes the thresholds; the 15 largest changes are shown.".to_string()
             },
             number_to_js_string(xs.floor),
             number_to_js_string(xs.floor),
@@ -718,12 +718,12 @@ fn predict(r: &Rep, sc: usize, s: &CrashSite) -> Option<Pred> {
     let n = r.scenario(sc).nodes.get(&s.id)?;
     let multi = legs
         .iter()
-        .any(|x| x.0.iter().any(|l| math_max(l.lanes_ab.int32() as f64, l.lanes_ba.int32() as f64) >= 2.0));
+        .any(|x| x.0.iter().any(|l| math_max(f64::from(l.lanes_ab.int32()), f64::from(l.lanes_ba.int32())) >= 2.0));
     let control = n.control.as_str().unwrap_or("");
     let mid = cec_model_for(control, legs.len(), multi)?;
     let q: Vec<f64> = legs.iter().map(|x| x.1).collect();
-    let qmaj = (q[0] + q[1]) / 2.0;
-    let qmin = if legs.len() >= 4 { (q[2] + q[3]) / 2.0 } else { q[2] };
+    let qmaj = f64::midpoint(q[0], q[1]);
+    let qmin = if legs.len() >= 4 { f64::midpoint(q[2], q[3]) } else { q[2] };
     let model = super::consts::CEC_MODELS.iter().find(|m| m.key == mid)?;
     let (label, a, flag) = if model.per_approach {
         let first = cec_predict(mid, q[0], 0.0)?;
@@ -772,13 +772,13 @@ fn ssm_matrix(c: &mut Ctx, s: &CrashSite) -> String {
                     &ssm::VRU_EXPOSURE,
                 )
             } else {
-                band4(if aadt != 0.0 { Some(aadt) } else { None }, &ssm::VEH_EXPOSURE)
+                band4(if aadt == 0.0 { None } else { Some(aadt) }, &ssm::VEH_EXPOSURE)
             };
             let lk_v = js::num(vru(k));
             let lk = if lk_v > 0.0 { Some(lk_v) } else { None };
             let sv = sev_hint(speed, ssm::safe(k));
             let prod = match (e, lk, sv) {
-                (Some(e), Some(l), Some(sv)) => Some(e as f64 * l * sv as f64),
+                (Some(e), Some(l), Some(sv)) => Some(f64::from(e) * l * f64::from(sv)),
                 _ => None,
             };
             Cell { e, l: lk, s: sv, prod }
@@ -791,9 +791,9 @@ fn ssm_matrix(c: &mut Ctx, s: &CrashSite) -> String {
     };
     let q = |x: Option<f64>| x.map_or("?".to_string(), number_to_js_string);
     let rows = vec![
-        row("Exposure (1\u{2013}4)", &|x| q(x.e.map(|v| v as f64))),
+        row("Exposure (1\u{2013}4)", &|x| q(x.e.map(|v| f64::from(v)))),
         row("Likelihood (1\u{2013}4, author)", &|x| q(x.l)),
-        row("Severity (1\u{2013}4)", &|x| q(x.s.map(|v| v as f64))),
+        row("Severity (1\u{2013}4)", &|x| q(x.s.map(|v| f64::from(v)))),
         row("<b>Product (max 64)</b>", &|x| match x.prod {
             Some(p) => format!("<b>{}</b>", number_to_js_string(p)),
             None => fmt::DASH.to_string(),
@@ -810,7 +810,7 @@ fn ssm_matrix(c: &mut Ctx, s: &CrashSite) -> String {
                 esc(ssm::LABEL),
                 rfmt::adt(aadt),
                 esc(ssm::SEVERITY_BASIS),
-                if speed != 0.0 { number_to_js_string(speed) } else { "?".to_string() }
+                if speed == 0.0 { "?".to_string() } else { number_to_js_string(speed) }
             )),
             source: Some(format!("{}, {}", esc(ssm::NAME), esc(ssm::EDITION))),
             d: vec!["D13"],
@@ -868,9 +868,7 @@ pub(crate) fn safety(c: &mut Ctx) -> String {
         ]));
     }
     let ssm_rows: String = sites.iter().take(3).map(|s| ssm_matrix(c, s)).collect();
-    let nt = format!(
-        "A = b0\u{b7}Qmaj^b1\u{b7}Qmin^b2 with two-way AADT (modelled peak \u{d7} peak-to-daily factor); Qmaj and Qmin are the means of the two busiest and the remaining legs (Spare Construct reading). DSI from the CEC severity indices. A junction of several nodes (such as a roundabout) is one site, with the links that leave it as its approaches. Observed \u{f7} predicted divides the observed injury crashes a year by the prediction from the existing (base-year) scenario's volumes. Midblock and rural (80 km/h and over) models are not applied."
-    );
+    let nt = "A = b0\u{b7}Qmaj^b1\u{b7}Qmin^b2 with two-way AADT (modelled peak \u{d7} peak-to-daily factor); Qmaj and Qmin are the means of the two busiest and the remaining legs (Spare Construct reading). DSI from the CEC severity indices. A junction of several nodes (such as a roundabout) is one site, with the links that leave it as its approaches. Observed \u{f7} predicted divides the observed injury crashes a year by the prediction from the existing (base-year) scenario's volumes. Midblock and rural (80 km/h and over) models are not applied.".to_string();
     format!(
         "{}\n      {}\n      {}{}{}",
         para(&match &cy {
@@ -978,7 +976,7 @@ pub(crate) fn sensitivity(c: &mut Ctx) -> String {
         match x {
             Some(o) if o.is_object() || o.is_array() => {
                 let name = js::text_or_empty(js::get(Some(o), "name"));
-                let name = if !name.is_empty() { name } else { js::text_or_empty(js::get(Some(o), "id")) };
+                let name = if name.is_empty() { js::text_or_empty(js::get(Some(o), "id")) } else { name };
                 format!(
                     "{}{}",
                     esc(&name),
@@ -1139,7 +1137,7 @@ pub(crate) fn economics(c: &mut Ctx) -> String {
                     .unwrap_or_default();
                 let bcr_text = {
                     let t = et(e, "bcrText");
-                    if !t.is_empty() { t } else { crate::econ::bcr_text(ev(e, "bcr").filter(|v| !v.is_nan())) }
+                    if t.is_empty() { crate::econ::bcr_text(ev(e, "bcr").filter(|v| !v.is_nan())) } else { t }
                 };
                 let bcr8 = {
                     let t = et(e, "bcr8Text");
@@ -1168,7 +1166,7 @@ pub(crate) fn economics(c: &mut Ctx) -> String {
                         None => fmt::DASH.to_string(),
                     },
                 ]));
-                for wtxt in e.get("warnings").and_then(Value::as_array).map(|a| a.as_slice()).unwrap_or(&[]) {
+                for wtxt in e.get("warnings").and_then(Value::as_array).map(std::vec::Vec::as_slice).unwrap_or(&[]) {
                     out.push(Row::span(format!("<span class=\"warn\">{}</span>", esc(&val_text(wtxt))), 10));
                 }
             }

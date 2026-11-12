@@ -15,12 +15,14 @@ use serde_json::{Value, json};
 use std::rc::Rc;
 
 /// `gwCounted(sc)`: how many gateways have flows set from counts, and how many there are.
+#[must_use]
 pub fn gw_counted(sc: &Scenario) -> (usize, usize) {
     let g: Vec<_> = sc.zones.values().filter(|z| z.kind.is("gateway")).collect();
     (g.iter().filter(|z| z.gw_src.get().is_some_and(value_truthy)).count(), g.len())
 }
 
 /// `distBasis(sc, res, P, S)`: how the distribution of a result was made, in words.
+#[must_use]
 pub fn dist_basis(p: &Project, sc: &Scenario, res: &Res) -> String {
     if res.manual {
         return "manual OD matrix entered by the user".to_string();
@@ -66,6 +68,7 @@ pub struct Distribution {
 /// A result read back from a saved project lists its junctions and gateways alphabetically (the saved JSON is read into sorted maps), where the prototype keeps the
 /// order the run made them in; the rows are then in the same order unless two have exactly the same traffic. Pass the results of a run to [`distribution_of`]
 /// to keep the run's own order.
+#[must_use]
 pub fn distribution(p: &Project, sc: &Scenario) -> Option<Distribution> {
     let res: Vec<Res> = PERIODS.iter().filter_map(|per| stored_res(sc, per)).collect();
     let refs: Vec<&Res> = res.iter().collect();
@@ -73,6 +76,7 @@ pub fn distribution(p: &Project, sc: &Scenario) -> Option<Distribution> {
 }
 
 /// `distribution(sc)` for results the caller holds (AM then PM): those with development trips are used.
+#[must_use]
 pub fn distribution_of(p: &Project, sc: &Scenario, results: &[&Res]) -> Option<Distribution> {
     let res: Vec<&Res> = results.iter().copied().filter(|r| r.dev.trips > 0.0).collect();
     if res.is_empty() {
@@ -113,7 +117,7 @@ pub fn without_scenario(p: &Project, sc_idx: usize) -> Option<usize> {
     same.iter()
         .find(|i| role(**i).as_deref() == Some("baseline"))
         .or_else(|| same.iter().find(|i| p.base.is(&p.scenarios[**i].id)))
-        .or_else(|| same.iter().find(|i| !matches!(role(**i).as_deref(), Some("proposal") | Some("mitigation"))))
+        .or_else(|| same.iter().find(|i| !matches!(role(**i).as_deref(), Some("proposal" | "mitigation"))))
         .copied()
 }
 
@@ -130,6 +134,7 @@ pub struct JunctionComparison {
 
 /// `withWithout(sc, woSc, period)`: junctions without and with the development in a period, from the results the two scenarios have stored; None unless both have one
 /// for it. (A result read back from a saved project lists its junctions alphabetically; see [`distribution`].)
+#[must_use]
 pub fn with_without_period(sc: &Scenario, wo: &Scenario, period: &str) -> Option<JunctionComparison> {
     let a = stored_res(wo, period)?;
     let b = stored_res(sc, period)?;
@@ -137,6 +142,7 @@ pub fn with_without_period(sc: &Scenario, wo: &Scenario, period: &str) -> Option
 }
 
 /// `withWithout(sc, woSc, period)` for results the caller holds: `without` is the scenario without the development, `with` the scenario `sc`.
+#[must_use]
 pub fn with_without_res(sc: &Scenario, a: &Res, b: &Res, period: &str) -> Option<JunctionComparison> {
     let name = |id: &str| -> String {
         let nr = b.nodes.get(id).or_else(|| a.nodes.get(id));
@@ -152,6 +158,7 @@ pub fn with_without_res(sc: &Scenario, a: &Res, b: &Res, period: &str) -> Option
 }
 
 /// `gwSrcText(z)`: the count source of a gateway as "NZTA 01N00478 \u{b7} SH1 Drury \u{b7} 61,200/day \u{b7} NB": each count named in the gateway's `gwSrc` with its direction, or "both directions" for a two-way count.
+#[must_use]
 pub fn gw_src_text(sc: &Scenario, gw_id: &str, counts: &[Rc<Count>]) -> String {
     let Some(z) = sc.zones.get(gw_id) else { return String::new() };
     let Some(src) = z.gw_src.get().filter(|v| value_truthy(v)) else { return String::new() };
@@ -275,6 +282,7 @@ pub fn card_check(k: &str, raw: &Value) -> Result<(String, f64), String> {
 pub const CARD_USES: [&str; 6] = LANDUSES_CARD_USES;
 
 /// The `{ k, q }` answer of [`card_check`] as JSON.
+#[must_use]
 pub fn card_json(r: &Result<(String, f64), String>) -> Value {
     match r {
         Ok((k, q)) => json!({ "k": k, "q": crate::jsnum::json_number(*q) }),

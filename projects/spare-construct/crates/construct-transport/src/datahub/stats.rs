@@ -10,12 +10,14 @@ use serde::Serialize;
 use std::rc::Rc;
 
 /// `Math.sqrt(2 * (m - c) ** 2 / Math.max(1, m + c))`: the GEH statistic of a modelled flow m and a count c (veh/h).
+#[must_use]
 pub fn geh(m: f64, c: f64) -> f64 {
     let d = m - c;
     (2.0 * (d * d) / math_max(1.0, m + c)).sqrt()
 }
 
 /// The modelled flow at a matched count: the arc it counts (or both arcs of the link added), None when that arc has no result.
+#[must_use]
 pub fn model_flow(res: &Res, mt: &Match) -> Option<f64> {
     let a = res.arcs.get(&format!("{}:ab", mt.link));
     let b = res.arcs.get(&format!("{}:ba", mt.link));
@@ -53,6 +55,7 @@ pub struct Regression {
 }
 
 /// `DataHub.regression(x, y)`: slope through the origin and the three R² of model (y) against counts (x); None where undefined.
+#[must_use]
 pub fn regression(x: &[f64], y: &[f64]) -> Regression {
     let n = x.len().min(y.len());
     let mut out = Regression {
@@ -325,6 +328,7 @@ pub struct JtCheck {
 }
 
 /// `DataHub.jtCheck(modelS, obsS)`: the journey-time check of a modelled against an observed time (s), None unless the modelled time is 0 or more and the observed time above 0.
+#[must_use]
 pub fn jt_check(model_s: f64, obs_s: f64) -> Option<JtCheck> {
     if !(model_s >= 0.0) || !(obs_s > 0.0) {
         return None;

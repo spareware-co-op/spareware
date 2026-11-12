@@ -52,6 +52,7 @@ pub struct SiteOpts<'a> {
 }
 
 /// `idSet(ids)`: the ids as a set.
+#[must_use]
 pub fn id_set(ids: &[String]) -> HashSet<String> {
     ids.iter().cloned().collect()
 }
@@ -202,6 +203,7 @@ pub struct ParallelCheck {
 }
 
 /// `Calibrate.parallel(res, rows, groups)`: checks that each group's counts are parallel (no path crosses two of them carrying more than max(1 pcu/h, 1% of the group's modelled flow)).
+#[must_use]
 pub fn parallel(res: &Res, rows: &[SiteRow], groups: &[Group], s: &Settings) -> ParallelCheck {
     let mut out = ParallelCheck::default();
     if groups.is_empty() {
@@ -325,6 +327,7 @@ pub struct Unit {
 ///
 /// Each accepted group is one unit (its total), rejected groups are left out, other counts are units of their own.
 /// Rows are matched to the check by count id, so the same check serves every pass.
+#[must_use]
 pub fn units(rows: &[SiteRow], chk: Option<&ParallelCheck>) -> Vec<Unit> {
     let single = |r: &SiteRow| Unit {
         obs: r.obs,

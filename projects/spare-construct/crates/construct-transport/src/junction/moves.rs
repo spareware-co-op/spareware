@@ -46,7 +46,7 @@ pub(crate) fn prep_moves(sc: &Scenario, g: &mut Graph, k: usize) {
             .filter(|v| value_truthy(v))
             .or_else(|| node.and_then(|n| n.gaps.get()).filter(|v| value_truthy(v)))
             .cloned();
-        let lm = lane_model(raw, a.gl as f64);
+        let lm = lane_model(raw, f64::from(a.gl));
         let thru = math_max(
             1.0,
             lm.lanes
@@ -75,7 +75,7 @@ pub(crate) fn prep_moves(sc: &Scenario, g: &mut Graph, k: usize) {
             Some(match &a.ring_in {
                 Some(ri) if !ri.is_empty() => math_max_of(
                     &ri.iter()
-                        .map(|&j| math_max(1.0, g.arcs[j].gl as f64))
+                        .map(|&j| math_max(1.0, f64::from(g.arcs[j].gl)))
                         .collect::<Vec<_>>(),
                 ),
                 _ => 0.0,
@@ -91,8 +91,8 @@ pub(crate) fn prep_moves(sc: &Scenario, g: &mut Graph, k: usize) {
                 Some(s) => leg_key(s.leg_in.get(&i)),
                 None => a.link.clone(),
             },
-            gl: math_max(1.0, a.gl as f64),
-            s_lane: a.cap_mid / math_max(1.0, a.gl as f64),
+            gl: math_max(1.0, f64::from(a.gl)),
+            s_lane: a.cap_mid / math_max(1.0, f64::from(a.gl)),
             stop: a.stop,
             gaps,
             lanes: lm.lanes,
@@ -134,6 +134,7 @@ pub(crate) fn prep_moves(sc: &Scenario, g: &mut Graph, k: usize) {
 ///
 /// The fallback for a graph without traced site flows: chaining shares invents U-turns on
 /// multi-node sites, so the assignment traces the movements along its paths instead.
+#[must_use]
 pub fn site_exits(g: &Graph, ctl: &Ctl, x_t: &[f64]) -> Vec<(usize, Vec<(usize, f64)>)> {
     fn add(m: &mut Vec<(usize, f64)>, b: usize, v: f64) {
         match m.iter_mut().find(|e| e.0 == b) {
@@ -184,6 +185,7 @@ pub fn site_exits(g: &Graph, ctl: &Ctl, x_t: &[f64]) -> Vec<(usize, Vec<(usize, 
 }
 
 /// `siteMv(G, ctl, a, b)`: movement of a site movement from entry arc a to exit arc b ("U" when it leaves on the leg it entered).
+#[must_use]
 pub fn site_mv(g: &Graph, ctl: &Ctl, a: usize, b: usize) -> &'static str {
     let bb = &g.arcs[b];
     if !bb.conn {

@@ -6,22 +6,25 @@ use engine_sim::{Tree, Workspace};
 
 impl Graph {
     /// `workspace(G)`: scratch arrays for searches on this graph.
+    #[must_use]
     pub fn workspace(&self) -> Workspace {
         Workspace::new(&self.search.net)
     }
     /// `spt(G, cost, src, W, target, fromArc)`: edge-based Dijkstra from node src (see [`engine_sim::EdgeGraph::spt`]).
     ///
     /// Entering arc b from arc a costs the turn penalty plus `cost[b]`; banned turns are skipped
-    /// and zone centroids are never routed through. from_arc (>= 0, arriving at src) makes the
+    /// and zone centroids are never routed through. `from_arc` (>= 0, arriving at src) makes the
     /// first turn obey the same rules; the search stops once target (>= 0) is reached.
     pub fn spt(&self, cost: &[f64], src: usize, w: &mut Workspace, target: i32, from_arc: i32) {
         self.search.spt(cost, src, w, target, from_arc);
     }
     /// `pathTo(G, W, v)`: arcs from the last search's source to node v; empty for the source, None if v was not reached.
+    #[must_use]
     pub fn path_to(&self, w: &Workspace, v: usize) -> Option<Vec<usize>> {
         w.path_to(v)
     }
     /// A tree for `dijkstra` and `trace`: the node-array interface, each tree keeping its own search.
+    #[must_use]
     pub fn tree(&self) -> Tree {
         Tree::new(&self.search.net)
     }
@@ -30,6 +33,7 @@ impl Graph {
         tree.search(&self.search, cost, src, target);
     }
     /// `trace(G, pred, src, dst)`: arcs from src to dst on the tree's last search; None if unreached or the tree searched from elsewhere.
+    #[must_use]
     pub fn trace(&self, tree: &Tree, src: usize, dst: usize) -> Option<Vec<usize>> {
         tree.trace(src, dst)
     }
@@ -37,6 +41,7 @@ impl Graph {
     ///
     /// Each leg continues from the arc the previous one arrived on, so its first turn obeys the
     /// turn rules; a waypoint that can only be left by a banned turn starts its leg afresh.
+    #[must_use]
     pub fn resolve_route(&self, r: &Route, cost: Option<&[f64]>) -> Vec<usize> {
         let cost = cost.unwrap_or(&self.ffc);
         let wp: Vec<usize> = r

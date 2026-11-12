@@ -68,6 +68,7 @@ fn pct_ok(n: &Num) -> bool {
 }
 
 /// `stageOf(z, sc)`: the share of the zone built: its own `buildout` percent, times the scenario's when the zone is development.
+#[must_use]
 pub fn stage_of(z: Option<&Zone>, sc: Option<&Scenario>) -> f64 {
     let mut k = match z {
         Some(z) if pct_ok(&z.buildout) => clamp(z.buildout.num(), 0.0, 100.0) / 100.0,
@@ -83,11 +84,13 @@ pub fn stage_of(z: Option<&Zone>, sc: Option<&Scenario>) -> f64 {
 }
 
 /// `luFactorsOf(period)`: the project's per-land-use trip-end factors for the period (None unless it holds a set of factors).
+#[must_use]
 pub fn lu_factors_of<'a>(p: &'a Project, period: &str) -> Option<&'a OrderedMap<Num>> {
     p.lu_factors.get()?.get(period)?.get()
 }
 
 /// `factorOf(F, k)`: the factor for a land use (or "gateways"), 1 when it is missing, negative or not finite.
+#[must_use]
 pub fn factor_of(f: Option<&OrderedMap<Num>>, k: &str) -> f64 {
     let v = f.map_or(f64::NAN, |f| f.num_at(k).num());
     if v >= 0.0 && v.is_finite() { v } else { 1.0 }
@@ -137,7 +140,7 @@ pub fn trip_ends(p: &Project, z: &Zone, s: &Settings, period: &str, sc: &Scenari
     } else {
         let lf = if f.is_some() && lf_eligible(z) { f } else { None };
         let rates = s.rates.get();
-        for lu in LANDUSES.iter() {
+        for lu in &LANDUSES {
             let q = z.lu.get().map_or(f64::NAN, |m| m.num_at(lu.key).num());
             let q = or_default(q, 0.0);
             if q == 0.0 {
@@ -259,7 +262,7 @@ pub fn apply_me(p: &Project, zones: &[Zone], period: &str, t: &mut [f64], year: 
             format!(
                 "Matrix estimation (base year {}): ME adjustment carried forward as additive delta to {} OD pair{} ({} \u{2192} {} veh/h).",
                 number_to_js_string(by.unwrap_or(f64::NAN)),
-                fmt::int(n as f64),
+                fmt::int(f64::from(n)),
                 plural(n),
                 fmt::int(before),
                 fmt::int(after)
@@ -287,7 +290,7 @@ pub fn apply_me(p: &Project, zones: &[Zone], period: &str, t: &mut [f64], year: 
     if n > 0 {
         format!(
             "Matrix estimation factors applied to {} OD pair{} ({} \u{2192} {} veh/h).",
-            fmt::int(n as f64),
+            fmt::int(f64::from(n)),
             plural(n),
             fmt::int(before),
             fmt::int(after)
@@ -305,6 +308,7 @@ pub fn apply_me(p: &Project, zones: &[Zone], period: &str, t: &mut [f64], year: 
 /// receive come in through the gateways, and the rest of each gateway's count is through traffic
 /// between gateways, favouring far-apart pairs (Furness). Matrix estimation then scales or shifts
 /// the base-year pairs, and O and D follow the adjusted matrix (O0 and D0 keep the prior).
+#[must_use]
 pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings) -> Demand {
     let zn = g.zones.len();
     let mut o = vec![0.0f64; zn];
@@ -353,7 +357,7 @@ pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings)
                         .and_then(|r| r.get(a))
                         .and_then(|r| r.get())
                         .and_then(|r| r.get(b))
-                        .map_or(f64::NAN, |n| n.num());
+                        .map_or(f64::NAN, super::jsnum::Maybe::num);
                     t[i * zn + j] = or_default(v, 0.0) * kz[i] * kz[j];
                 }
             }

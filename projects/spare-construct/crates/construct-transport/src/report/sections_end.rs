@@ -120,7 +120,7 @@ pub fn network_diff(a: Option<&Scenario>, b: Option<&Scenario>) -> Vec<Change> {
                     "{} at {}{}{}",
                     control_label(ctl),
                     kit_junction_name(b, &n.id),
-                    if o.control != n.control { format!(" (was {})", control_label(octl).to_lowercase()) } else { String::new() },
+                    if o.control == n.control { String::new() } else { format!(" (was {})", control_label(octl).to_lowercase()) },
                     if n.cycle.truthy() && n.control.is("signals") { format!(", cycle {} s", n.cycle.js_string()) } else { String::new() }
                 ),
             });
@@ -194,18 +194,18 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
                                 _ => None,
                             })
                             .unwrap_or(3.0);
-                        Some(m.link_len(l) / 1000.0 * ((l.lanes_ab.int32() | 0) as f64 + (l.lanes_ba.int32() | 0) as f64) * per_km)
+                        Some(m.link_len(l) / 1000.0 * (l.lanes_ab.int32() as f64 + l.lanes_ba.int32() as f64) * per_km)
                     }
                     _ => None,
                 }
             };
             let trigger = {
                 let t = js::text_or_empty(a.get("trigger"));
-                if !t.is_empty() {
-                    t
-                } else {
+                if t.is_empty() {
                     let st = js::text_or_empty(r.rs.staging.as_ref().and_then(|s| s.get("text")));
                     if st.is_empty() { fmt::DASH.to_string() } else { st }
+                } else {
+                    t
                 }
             };
             Row::new(vec![
@@ -382,7 +382,7 @@ pub(crate) fn staging(c: &mut Ctx) -> String {
                 ..TableOpts::default()
             },
         ),
-        para(&if !text.is_empty() { format!("<b>{}</b>", esc(&text)) } else { "No assessed site fails at any increment.".to_string() }),
+        para(&if text.is_empty() { "No assessed site fails at any increment.".to_string() } else { format!("<b>{}</b>", esc(&text)) }),
         trig,
         ex
     )
@@ -442,13 +442,13 @@ pub fn conclusion_text(c: &Ctx) -> String {
     let gs = junction_groups(r, base, s, &ids);
     let n_over = gs.iter().filter(|g| g.ids.iter().any(|id| over.contains(&id.as_str()))).count();
     let year = r.year_of(s).map_or("null".to_string(), number_to_js_string);
-    if !over.is_empty() {
+    if over.is_empty() {
+        format!("{who}, all {} assessed junctions operate within practical DoS in the {year} {pers} peaks; {tail}.", gs.len())
+    } else {
         format!(
             "{who}, {n_over} of {} assessed junctions exceed their practical degree of saturation in the {year} {pers} peaks; {tail}. Further mitigation or a staging condition is needed at those junctions.",
             gs.len()
         )
-    } else {
-        format!("{who}, all {} assessed junctions operate within practical DoS in the {year} {pers} peaks; {tail}.", gs.len())
     }
 }
 

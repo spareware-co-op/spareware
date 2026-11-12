@@ -30,7 +30,7 @@ fn site_mv(g: &Graph, li: &HashMap<usize, usize>, lo: &HashMap<usize, usize>, a:
 /// `siteResults(sc, G, xT, pf, nodesRes, sm)`: None when the graph has no sites.
 ///
 /// sm is the traced movement flows (all traffic, development traffic) by site-movement slot,
-/// when the run traced them; otherwise the movements are chained from the turn flows x_t.
+/// when the run traced them; otherwise the movements are chained from the turn flows `x_t`.
 pub(super) fn site_results(
     sc: &Scenario,
     g: &Graph,
@@ -104,7 +104,7 @@ pub(super) fn site_results(
                 ent: None,
             };
             let ex = site_exits(g, &pseudo, x_t);
-            for &a in inc.iter() {
+            for &a in inc {
                 let Some((_, outs)) = ex.iter().find(|e| e.0 == a) else {
                     continue;
                 };
@@ -139,7 +139,7 @@ pub(super) fn site_results(
             None => {
                 let mut sorted = members.clone();
                 js_sort_by(&mut sorted, |&a, &b| {
-                    let d = (g.deg[b] - g.deg[a]) as f64;
+                    let d = f64::from(g.deg[b] - g.deg[a]);
                     if d != 0.0 {
                         d
                     } else if js_str_lt(&g.ids[a], &g.ids[b]) {

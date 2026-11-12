@@ -21,6 +21,7 @@ pub struct Head {
 }
 
 /// A text heading.
+#[must_use]
 pub fn h(label: &str) -> Head {
     Head {
         label: label.to_string(),
@@ -30,6 +31,7 @@ pub fn h(label: &str) -> Head {
 }
 
 /// A numeric heading.
+#[must_use]
 pub fn hn(label: &str) -> Head {
     Head {
         label: label.to_string(),
@@ -53,6 +55,7 @@ pub struct Row {
 
 impl Row {
     /// A plain row.
+    #[must_use]
     pub fn new(cells: Vec<String>) -> Row {
         Row {
             cells,
@@ -60,6 +63,7 @@ impl Row {
         }
     }
     /// A row with a class (empty for none).
+    #[must_use]
     pub fn cls(cells: Vec<String>, cls: &str) -> Row {
         Row {
             cells,
@@ -68,6 +72,7 @@ impl Row {
         }
     }
     /// A row with an element id.
+    #[must_use]
     pub fn id(cells: Vec<String>, id: &str) -> Row {
         Row {
             cells,
@@ -76,6 +81,7 @@ impl Row {
         }
     }
     /// A row whose one cell spans the table.
+    #[must_use]
     pub fn span(cell: String, span: usize) -> Row {
         Row {
             cells: vec![cell],
@@ -105,6 +111,7 @@ pub struct Tbl {
 
 impl Tbl {
     /// A table of headings and rows.
+    #[must_use]
     pub fn new(head: Vec<Head>, rows: Vec<Row>) -> Tbl {
         Tbl {
             head,
@@ -114,6 +121,7 @@ impl Tbl {
         }
     }
     /// The same table with the text it prints for no rows.
+    #[must_use]
     pub fn empty(mut self, text: &str) -> Tbl {
         self.empty = Some(text.to_string());
         self
@@ -121,6 +129,7 @@ impl Tbl {
 }
 
 /// `tbl(o)`: a table with a <thead> (it repeats on every printed page).
+#[must_use]
 pub fn tbl(o: &Tbl) -> String {
     let th = if o.head.is_empty() {
         String::new()
@@ -187,11 +196,13 @@ pub fn tbl(o: &Tbl) -> String {
 }
 
 /// `disc(id, fill)`: a standing disclaimer.
+#[must_use]
 pub fn disc(id: &str) -> String {
     disc_with(id, None, None)
 }
 
 /// `disc(id, { version, tools })`: a standing disclaimer with its fill-ins.
+#[must_use]
 pub fn disc_with(id: &str, version: Option<&str>, tools: Option<&str>) -> String {
     format!(
         "<div class=\"disc\" data-d=\"{}\"><b>{} {}.</b> {}</div>",
@@ -203,11 +214,13 @@ pub fn disc_with(id: &str, version: Option<&str>, tools: Option<&str>) -> String
 }
 
 /// `note(t, warn)`: a small grey (or amber) note; `t` is HTML.
+#[must_use]
 pub fn note(t: &str, warn: bool) -> String {
     format!("<p class=\"note{}\">{}</p>", if warn { " warn" } else { "" }, t)
 }
 
 /// `para(t)`: a paragraph; `t` is HTML.
+#[must_use]
 pub fn para(t: &str) -> String {
     format!("<p>{t}</p>")
 }
@@ -262,6 +275,7 @@ fn bullet_len(l: &str) -> Option<usize> {
 }
 
 /// `authorHtml(text)`: the author's text: blank lines make paragraphs, lines starting '- ' make bullets (everything escaped).
+#[must_use]
 pub fn author_html(text: &str) -> String {
     let t = crate::jsnum::js_trim(text);
     split_blank_lines(t)
@@ -324,6 +338,7 @@ pub struct FigRequest {
 
 impl FigRequest {
     /// As JSON, with the keys the prototype's request has (left out when unset).
+    #[must_use]
     pub fn to_value(&self) -> serde_json::Value {
         use serde_json::{Map, Value, json};
         let mut m = Map::new();
@@ -353,6 +368,7 @@ impl FigRequest {
 }
 
 /// `figHtml(f, img, tno)`: one figure: the drawn map, or a placeholder until it is drawn.
+#[must_use]
 pub fn fig_html(f: &FigRequest, img: Option<&MapImage>, tno: &str) -> String {
     let src = match img {
         Some(MapImage::Url(u)) => Some(u.as_str()),
@@ -399,6 +415,7 @@ pub fn fig_html(f: &FigRequest, img: Option<&MapImage>, tno: &str) -> String {
 }
 
 /// `fillFigures(body, requests, images)`: puts drawn maps into a built report body (figures keep their numbers).
+#[must_use]
 pub fn fill_figures(body: &str, requests: &[FigRequest], images: &HashMap<String, MapImage>) -> String {
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
@@ -471,6 +488,7 @@ fn table_id(title: &str) -> Option<(String, usize)> {
 }
 
 /// `tnoToken(title)`: the placeholder for a table's number.
+#[must_use]
 pub fn tno_token(title: &str) -> String {
     match table_id(title) {
         Some((id, _)) => format!("%%TNO:{id}%%"),
@@ -479,6 +497,7 @@ pub fn tno_token(title: &str) -> String {
 }
 
 /// `tnoRest(title)`: the title without its 'Table X · ' lead.
+#[must_use]
 pub fn tno_rest(title: &str) -> String {
     match table_id(title) {
         Some((_, end)) => title[end..].to_string(),
@@ -527,6 +546,7 @@ pub struct TableOpts {
 
 impl TableOpts {
     /// Options with a note.
+    #[must_use]
     pub fn note(n: &str) -> TableOpts {
         TableOpts {
             note: Some(n.to_string()),
@@ -534,6 +554,7 @@ impl TableOpts {
         }
     }
     /// Options with a source and a note.
+    #[must_use]
     pub fn src_note(src: &str, n: &str) -> TableOpts {
         TableOpts {
             source: Some(src.to_string()),
@@ -589,7 +610,7 @@ pub struct Ctx<'a, 'r> {
     pub(super) crash_cache: Option<Vec<super::sections_env::CrashSite>>,
 }
 
-impl<'a, 'r> Ctx<'a, 'r> {
+impl Ctx<'_, '_> {
     /// `ctx.table(title, body, opts)`: a numbered, sourced table.
     pub fn table(&self, title: &str, body: impl Into<TableBody>, o: &TableOpts) -> String {
         let t = match body.into() {
@@ -647,6 +668,7 @@ impl<'a, 'r> Ctx<'a, 'r> {
     }
 
     /// `ctx.author(id, prompt)`: the author's own text for a box; an empty box prints the prompt as 'to be completed'.
+    #[must_use]
     pub fn author(&self, id: &str, prompt: &str) -> String {
         match self.r.rs.text_of(id) {
             Some(t) if t.truthy() && !crate::jsnum::js_trim(&t.js_string()).is_empty() => {
@@ -657,6 +679,7 @@ impl<'a, 'r> Ctx<'a, 'r> {
     }
 
     /// `runText(...scs)`: the scenarios with their year and run date, as escaped HTML.
+    #[must_use]
     pub fn run_text(&self, scs: &[Option<usize>]) -> String {
         scs.iter()
             .flatten()
@@ -686,6 +709,7 @@ impl<'a, 'r> Ctx<'a, 'r> {
     }
 
     /// `sourceOf(c)`: the provenance of a table that names no source: the section's own, with the scenarios and run dates it reads.
+    #[must_use]
     pub fn source_of(&self) -> String {
         let s = &self.sel;
         let id = self.section.id.as_str();

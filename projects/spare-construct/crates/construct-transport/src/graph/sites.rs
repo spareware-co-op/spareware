@@ -11,6 +11,7 @@ use std::collections::HashMap;
 ///
 /// A node already taken by an earlier site is left out of later ones; a site with no members
 /// left is dropped.
+#[must_use]
 pub fn site_index(
     sc: &Scenario,
     idx: &HashMap<String, usize>,
@@ -202,6 +203,7 @@ fn js_key(v: Option<&Value>) -> String {
 }
 
 /// `tracedExits(G, s, xm)`: for each entry arc of site s, the exit arcs with flow and their pcu/h, from traced flows xm.
+#[must_use]
 pub fn traced_exits(g: &Graph, s: usize, xm: &[f64]) -> Vec<(usize, Vec<(usize, f64)>)> {
     let st = &g.sm.as_ref().expect("site movement slots").list[s];
     let mut out: Vec<(usize, Vec<(usize, f64)>)> = Vec::new();

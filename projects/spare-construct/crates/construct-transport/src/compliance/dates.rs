@@ -9,6 +9,7 @@ use crate::jsnum::number_to_js_string;
 pub const DAY: f64 = 864e5;
 
 /// The year, month (0 to 11), day of month and weekday (0 is Sunday) of a moment given in milliseconds since 1970 (UTC).
+#[must_use]
 pub fn parts(t: f64) -> Option<(i64, u32, u32, u32)> {
     if !t.is_finite() || t.abs() > 8.64e15 {
         return None;
@@ -20,11 +21,12 @@ pub fn parts(t: f64) -> Option<(i64, u32, u32, u32)> {
 }
 
 /// The proleptic Gregorian date of a day number (days since 1970-01-01): (year, month 1 to 12, day).
+#[must_use]
 pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719468;
-    let era = z.div_euclid(146097);
-    let doe = z.rem_euclid(146097);
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
@@ -34,17 +36,19 @@ pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
 }
 
 /// The day number (days since 1970-01-01) of a date.
+#[must_use]
 pub fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = y.div_euclid(400);
     let yoe = y.rem_euclid(400);
-    let mp = if m > 2 { m - 3 } else { m + 9 } as i64;
-    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+    let mp = i64::from(if m > 2 { m - 3 } else { m + 9 });
+    let doy = (153 * mp + 2) / 5 + i64::from(d) - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146097 + doe - 719468
+    era * 146_097 + doe - 719_468
 }
 
 /// `Date.UTC(y, m0, d)`: midnight UTC of a date; a month or day out of range rolls over, and a year from 0 to 99 means 1900 to 1999.
+#[must_use]
 pub fn date_utc(y: f64, m0: f64, d: f64) -> f64 {
     if !(y.is_finite() && m0.is_finite() && d.is_finite()) {
         return f64::NAN;
@@ -58,11 +62,13 @@ pub fn date_utc(y: f64, m0: f64, d: f64) -> f64 {
 }
 
 /// The weekday (0 is Sunday) of a moment.
+#[must_use]
 pub fn weekday(t: f64) -> u32 {
     parts(t).map_or(0, |p| p.3)
 }
 
 /// `isoUTC(t)`: "YYYY-MM-DD" of a moment (the year is not padded, as `getUTCFullYear` is not).
+#[must_use]
 pub fn iso_utc(t: f64) -> String {
     match parts(t) {
         Some((y, m0, d, _)) => format!("{}-{}-{}", y, pad_start(&(m0 + 1).to_string(), 2, '0'), pad_start(&d.to_string(), 2, '0')),
@@ -71,6 +77,7 @@ pub fn iso_utc(t: f64) -> String {
 }
 
 /// `parseDay(s)`: midnight UTC of the YYYY-MM-DD at the start of the text, None when it does not start with one.
+#[must_use]
 pub fn parse_day(s: &str) -> Option<f64> {
     let c = rx(r"^(\d{4})-(\d{2})-(\d{2})", "").exec(s)?;
     let n = |i: usize| c.get(i).parse::<f64>().unwrap_or(f64::NAN);
@@ -78,16 +85,19 @@ pub fn parse_day(s: &str) -> Option<f64> {
 }
 
 /// `parseDay` for a loose value (`String(s || '')`).
+#[must_use]
 pub fn parse_day_v(v: &V) -> Option<f64> {
     if v.t() { parse_day(&v.s()) } else { None }
 }
 
 /// `validDay(s)`.
+#[must_use]
 pub fn valid_day(v: &V) -> bool {
     parse_day_v(v).is_some()
 }
 
 /// `validDay(s)` for text.
+#[must_use]
 pub fn valid_day_s(s: &str) -> bool {
     parse_day(s).is_some()
 }
@@ -107,11 +117,13 @@ pub fn long_date(s: &str) -> String {
 }
 
 /// `longDate(s)` for a loose value.
+#[must_use]
 pub fn long_date_v(v: &V) -> String {
     if v.t() { long_date(&v.s()) } else { "\u{2013}".to_string() }
 }
 
 /// `dayName(s)`: "Wednesday", or empty for text that is not a day.
+#[must_use]
 pub fn day_name(s: &str) -> String {
     parse_day(s).map_or(String::new(), |t| WEEKDAYS[weekday(t) as usize].to_string())
 }
@@ -132,6 +144,7 @@ fn nz_changes(y: i64) -> (f64, f64) {
 }
 
 /// The New Zealand calendar day of a moment, "YYYY-MM-DD" (`Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland' })`).
+#[must_use]
 pub fn nz_day(t: f64) -> String {
     let Some((y, _, _, _)) = parts(t) else { return "NaN-NaN-NaN".to_string() };
     let (start, end) = nz_changes(y);
@@ -140,17 +153,19 @@ pub fn nz_day(t: f64) -> String {
 }
 
 /// `new Date(x).getTime()` for a loose value: a number is milliseconds, text is read as an ISO date or date and time.
+#[must_use]
 pub fn to_ms(v: &V, clock_ms: f64) -> f64 {
     match v {
         V::Null => clock_ms,
         V::Number(x) => *x,
         V::String(s) => parse_date_text(s),
-        V::Bool(b) => *b as i32 as f64,
+        V::Bool(b) => i32::from(*b) as f64,
         _ => f64::NAN,
     }
 }
 
 /// `Date.parse` for ISO text: "2026-10-05", "2026-10-05T01:02:03Z", with milliseconds or an offset.
+#[must_use]
 pub fn parse_date_text(s: &str) -> f64 {
     let re = rx(r"^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?\s*(Z|[+-]\d{2}:?\d{2})?$", "i");
     let Some(c) = re.exec(s.trim()) else { return f64::NAN };
@@ -161,7 +176,7 @@ pub fn parse_date_text(s: &str) -> f64 {
     let z = c.get(8);
     if !z.is_empty() && !z.eq_ignore_ascii_case("z") {
         let sign = if z.starts_with('-') { -1.0 } else { 1.0 };
-        let digits: String = z.chars().filter(|c| c.is_ascii_digit()).collect();
+        let digits: String = z.chars().filter(char::is_ascii_digit).collect();
         let (hh, mm) = (digits[..2].parse::<f64>().unwrap_or(0.0), digits[2..].parse::<f64>().unwrap_or(0.0));
         t -= sign * (hh * 3600e3 + mm * 60e3);
     } else if has_time && z.is_empty() {
@@ -171,6 +186,7 @@ pub fn parse_date_text(s: &str) -> f64 {
 }
 
 /// The system clock in milliseconds since 1970.
+#[must_use]
 pub fn system_ms() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_millis() as f64)
 }
@@ -187,17 +203,17 @@ pub fn set_clock(ms: Option<f64>) {
 
 /// `Date.now()`: the fixed clock when one is set ([`set_clock`]), otherwise the system clock.
 pub fn now_ms() -> f64 {
-    CLOCK.with(|c| c.get()).unwrap_or_else(system_ms)
+    CLOCK.with(std::cell::Cell::get).unwrap_or_else(system_ms)
 }
 
 /// `today(now)` of the compliance tab: today in New Zealand as YYYY-MM-DD. `now` can be a day as text (returned as given), a
 /// timestamp in milliseconds, other date text, or null for the system clock.
+#[must_use]
 pub fn today(now: &V) -> String {
-    if let V::String(s) = now {
-        if valid_day_s(s) {
+    if let V::String(s) = now
+        && valid_day_s(s) {
             return crate::compliance::jv::slice(s, 0, Some(10));
         }
-    }
     let t = to_ms(now, now_ms());
     match parts(t) {
         Some(_) => nz_day(t),
@@ -206,6 +222,7 @@ pub fn today(now: &V) -> String {
 }
 
 /// `String(n)` of a day count or year.
+#[must_use]
 pub fn istr(n: i64) -> String {
     number_to_js_string(n as f64)
 }

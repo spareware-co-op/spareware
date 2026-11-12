@@ -22,7 +22,7 @@ mod results;
 pub use results::{SignalResult, SimPath, SimResults};
 
 use crate::graph::{Arc, Ctrl, Graph, apply_signal, build_graph, js_sort_by};
-use crate::jsnum::math_max;
+use crate::jsnum::{math_max, u64_to_f64, usize_to_f64};
 use crate::project::{Scenario, Settings};
 use crate::routes::bus_freq;
 use crate::standards::pcu_f;
@@ -76,6 +76,7 @@ pub struct Hud {
 
 impl Hud {
     /// The clock as "hh:mm:ss".
+    #[must_use]
     pub fn clock_text(&self) -> String {
         fmt::clock(self.clock)
     }
@@ -121,6 +122,73 @@ pub struct Sim<R: Rng> {
     core: MicroSim<R>,
 }
 
+/// The optimised signal timings of the assignment, put on the graph's signal controllers.
+fn use_assigned_timings(g: &mut Graph, res: &SimResults) {
+    let Graph { ctl, ids, arcs, .. } = g;
+    for c in ctl.iter_mut() {
+        if c.kind != "signals" {
+            continue;
+        }
+        let Some(nr) = ids.get(c.n).and_then(|id| res.signals.get(id)) else {
+            continue;
+        };
+        if !nr.has_cycle() {
+            continue;
+        }
+        if let Some(t) = c.signal.as_mut() {
+            t.c = nr.cycle.unwrap_or(f64::NAN);
+            if let Some(split) = &nr.split {
+                t.split.clone_from(split);
+            }
+        }
+        apply_signal(c, arcs);
+    }
+}
+
+/// The car routes of an assignment: each stored path whose arcs are all on the graph, without its connectors, at its flow.
+fn car_routes(g: &Graph, res: &SimResults, pf: f64) -> (Vec<MicroRoute>, Vec<SimRoute>) {
+    let mut routes: Vec<MicroRoute> = Vec::new();
+    let mut info: Vec<SimRoute> = Vec::new();
+    let (Some(paths), Some(keys)) = (&res.paths, &res.arc_keys) else {
+        return (routes, info);
+    };
+    let map: Vec<Option<usize>> = keys.iter().map(|k| g.key_idx.get(k).copied()).collect();
+    for p in paths {
+        let mut arcs: Vec<usize> = Vec::new();
+        let mut ok = true;
+        for &ai in &p.arcs {
+            match map.get(ai).copied().flatten() {
+                None => {
+                    ok = false;
+                    break;
+                }
+                Some(m) => {
+                    if g.arcs.get(m).is_some_and(|a| !a.conn) {
+                        arcs.push(m);
+                    }
+                }
+            }
+        }
+        if !ok || arcs.is_empty() {
+            continue;
+        }
+        let rate = p.flow / pf / 3600.0;
+        if rate > 0.0 {
+            routes.push(MicroRoute {
+                arcs,
+                rate,
+                bus: false,
+            });
+            info.push(SimRoute {
+                bus: false,
+                colour: None,
+                route_id: None,
+            });
+        }
+    }
+    (routes, info)
+}
+
 impl<R: Rng> Sim<R> {
     /// Starts a run for scenario `sc` and settings `s` from an assignment result (None: no car routes).
     ///
@@ -137,26 +205,8 @@ impl<R: Rng> Sim<R> {
             .and_then(|r| r.period.clone())
             .or_else(|| s.period.get().cloned());
         let mut g = build_graph(sc, s, period.as_deref());
-        // The optimised signal timings of the assignment
         if let Some(res) = res {
-            for k in 0..g.ctl.len() {
-                if g.ctl[k].kind != "signals" {
-                    continue;
-                }
-                let Some(nr) = res.signals.get(&g.ids[g.ctl[k].n]) else {
-                    continue;
-                };
-                if !nr.has_cycle() {
-                    continue;
-                }
-                if let Some(t) = g.ctl[k].signal.as_mut() {
-                    t.c = nr.cycle.unwrap_or(f64::NAN);
-                    if let Some(split) = &nr.split {
-                        t.split = split.clone();
-                    }
-                }
-                apply_signal(&g.ctl[k], &mut g.arcs);
-            }
+            use_assigned_timings(&mut g, res);
         }
         let sim_settings = s.sim.get();
         let scale = opts
@@ -170,53 +220,16 @@ impl<R: Rng> Sim<R> {
         } else {
             16.5 * 3600.0
         };
-        let mut routes: Vec<MicroRoute> = Vec::new();
-        let mut info: Vec<SimRoute> = Vec::new();
-        // Cars on the assigned paths
-        if let Some(res) = res
-            && let (Some(paths), Some(keys)) = (&res.paths, &res.arc_keys)
-        {
-            let map: Vec<Option<usize>> = keys.iter().map(|k| g.key_idx.get(k).copied()).collect();
-            for p in paths {
-                let mut arcs: Vec<usize> = Vec::new();
-                let mut ok = true;
-                for &ai in &p.arcs {
-                    match map.get(ai).copied().flatten() {
-                        None => {
-                            ok = false;
-                            break;
-                        }
-                        Some(m) => {
-                            if !g.arcs[m].conn {
-                                arcs.push(m);
-                            }
-                        }
-                    }
-                }
-                if !ok || arcs.is_empty() {
-                    continue;
-                }
-                let rate = p.flow / pf / 3600.0;
-                if rate > 0.0 {
-                    routes.push(MicroRoute {
-                        arcs,
-                        rate,
-                        bus: false,
-                    });
-                    info.push(SimRoute {
-                        bus: false,
-                        colour: None,
-                        route_id: None,
-                    });
-                }
-            }
-        }
+        let (mut routes, mut info) = match res {
+            Some(res) => car_routes(&g, res, pf),
+            None => (Vec::new(), Vec::new()),
+        };
         // Buses on the bus routes
         for r in sc.routes.values() {
             let arcs: Vec<usize> = g
                 .resolve_route(r, None)
                 .into_iter()
-                .filter(|&i| !g.arcs[i].conn)
+                .filter(|&i| g.arcs.get(i).is_some_and(|a| !a.conn))
                 .collect();
             let freq = bus_freq(r, period.as_deref());
             if !arcs.is_empty() && freq > 0.0 {
@@ -317,7 +330,11 @@ impl<R: Rng> Sim<R> {
     pub fn for_each_vehicle(&self, mut f: impl FnMut(&Vehicle, &Arc, usize, usize)) {
         let g = &self.graph;
         self.core
-            .for_each_vehicle(|v, ai, li, nl| f(v, &g.arcs[ai], li, nl));
+            .for_each_vehicle(|v, ai, li, nl| {
+                if let Some(a) = g.arcs.get(ai) {
+                    f(v, a, li, nl);
+                }
+            });
     }
 
     /// The numbers the HUD shows now.
@@ -334,7 +351,7 @@ impl<R: Rng> Sim<R> {
             speed,
             trips_done: st.done,
             delay_per_trip: if st.done != 0 {
-                (st.tt - st.ff) / st.done as f64
+                (st.tt - st.ff) / u64_to_f64(st.done)
             } else {
                 0.0
             },
@@ -355,7 +372,7 @@ impl<R: Rng> Sim<R> {
         let reference = snaps
             .iter()
             .find(|s| s.t <= t - 300.0 && s.t >= 120.0)
-            .unwrap_or(&snaps[0]);
+            .or_else(|| snaps.first())?;
         let h = (t - reference.t) / 3600.0;
         if h <= 0.0 {
             return None;
@@ -372,7 +389,10 @@ impl<R: Rng> Sim<R> {
             if v < 50.0 {
                 continue;
             }
-            let sim = (passed[ai] - reference.passed[ai]) / h;
+            let (Some(now), Some(then)) = (passed.get(ai), reference.passed.get(ai)) else {
+                continue;
+            };
+            let sim = (now - then) / h;
             rows.push(ValidationRow {
                 key: a.key.clone(),
                 link: a.link.clone(),
@@ -391,7 +411,7 @@ impl<R: Rng> Sim<R> {
             r.geh = (2.0 * (d * d) / math_max(1.0, r.sim + r.model)).sqrt();
         }
         js_sort_by(&mut rows, |a, b| b.model - a.model);
-        let pass = rows.iter().filter(|r| r.geh < 5.0).count() as f64 / rows.len() as f64;
+        let pass = usize_to_f64(rows.iter().filter(|r| r.geh < 5.0).count()) / usize_to_f64(rows.len());
         Some(Validation { rows, pass })
     }
 }
@@ -401,9 +421,9 @@ pub fn micro_net(g: &Graph) -> MicroNet {
     // One timing plan per signal controller
     let mut plan_of: Vec<Option<usize>> = vec![None; g.ctl.len()];
     let mut signals: Vec<SignalPlan> = Vec::new();
-    for (k, ctl) in g.ctl.iter().enumerate() {
+    for (plan, ctl) in plan_of.iter_mut().zip(&g.ctl) {
         if let Some(t) = &ctl.signal {
-            plan_of[k] = Some(signals.len());
+            *plan = Some(signals.len());
             signals.push(SignalPlan {
                 cycle: t.c,
                 lost: t.lost,
@@ -420,8 +440,7 @@ pub fn micro_net(g: &Graph) -> MicroNet {
         g.ctl_at
             .get(n)
             .copied()
-            .filter(|&k| k >= 0)
-            .map(|k| k as usize)
+            .and_then(|k| usize::try_from(k).ok())
     };
     let arcs = g
         .arcs
@@ -433,7 +452,7 @@ pub fn micro_net(g: &Graph) -> MicroNet {
                 Ctrl::Rbt => Control::Roundabout,
                 Ctrl::Sig => ctl_index(a.to)
                     .or_else(|| a.node.and_then(ctl_index))
-                    .and_then(|k| plan_of[k])
+                    .and_then(|k| plan_of.get(k).copied().flatten())
                     .map_or(Control::Free, |plan| Control::Signal {
                         plan,
                         phase: a.phase.unwrap_or(0),

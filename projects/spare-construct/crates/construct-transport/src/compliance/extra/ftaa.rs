@@ -16,7 +16,8 @@ use crate::jsnum::to_fixed;
 use crate::util::fmt;
 
 /// `invitees(P)`: who the Fast-track panel invites to comment (s53): the council, NZTA when a state highway is near the site or the author
-/// marks a designation, and KiwiRail when the author marks one: `[{ who, basis, auto }]`.
+/// marks a designation, and `KiwiRail` when the author marks one: `[{ who, basis, auto }]`.
+#[must_use]
 pub fn invitees(p: &V) -> V {
     let cx = data(p);
     let cx = cx.g("ftaa");
@@ -58,6 +59,7 @@ pub fn invitees(p: &V) -> V {
 
 /// `ftaaTimeline(P)`: the Fast-track dates: the comment clock from the invitation (s54, s55(2)), the draft conditions clock (s67) and the lapse and
 /// development contributions dates from the approval: `[{ step, date, rule, basis? }]`.
+#[must_use]
 pub fn ftaa_timeline(p: &V) -> V {
     let cx = data(p);
     let f = cx.g("ftaa");
@@ -142,7 +144,7 @@ pub fn ftaa_package(p: &V) -> V {
     for pol in cdata("POLICY").items() {
         let r0 = recorded.g(&pol.g("ref").s());
         let r = if r0.t() { r0.clone() } else { V::object() };
-        let mut ev: Vec<String> = pol.g("evidence").items().iter().filter(|x| x.t()).map(|x| x.s()).collect();
+        let mut ev: Vec<String> = pol.g("evidence").items().iter().filter(|x| x.t()).map(crate::compliance::jv::Jx::s).collect();
         if r.g("note").t() {
             ev.push(r.g("note").s());
         }
@@ -198,7 +200,7 @@ pub fn ftaa_package(p: &V) -> V {
     let benefits = vec![
         jarr![
             "Travel time saved",
-            if !ps.is_empty() { format!("{} ({} \u{2192} {})", pp_text(&dv, 1, "veh\u{b7}h per modelled peak hour"), base.g("name").s(), opt.g("name").s()) } else { "Run the do-minimum and the option".to_string() }
+            if ps.is_empty() { "Run the do-minimum and the option".to_string() } else { format!("{} ({} \u{2192} {})", pp_text(&dv, 1, "veh\u{b7}h per modelled peak hour"), base.g("name").s(), opt.g("name").s()) }
         ],
         jarr!["Reliability", or_s(ftaa_cx.g("reliability"), "Not modelled: enter from observed data")],
         jarr!["Jobs reachable", or_s(ftaa_cx.g("jobs"), "Enter from the accessibility analysis (policy alignment table)")],
@@ -216,7 +218,9 @@ pub fn ftaa_package(p: &V) -> V {
     let impacts = vec![
         jarr![
             "Worst junctions after mitigation",
-            if !worst.is_empty() {
+            if worst.is_empty() {
+                "Not run".to_string()
+            } else {
                 format!(
                     "{} ({junction})",
                     worst
@@ -229,14 +233,12 @@ pub fn ftaa_package(p: &V) -> V {
                         .collect::<Vec<_>>()
                         .join("; ")
                 )
-            } else {
-                "Not run".to_string()
             }
         ],
-        jarr!["DSI hotspots (CAS)", if !hot.is_empty() { hot.join("; ") } else { "CAS not loaded or no DSI crashes".to_string() }],
+        jarr!["DSI hotspots (CAS)", if hot.is_empty() { "CAS not loaded or no DSI crashes".to_string() } else { hot.join("; ") }],
         jarr![
             "Public transport delay",
-            if !d_pt.g("by").keys().is_empty() { pp_text(&pt_min, 1, "min per modelled peak hour, summed over the modelled bus routes") } else { fmt::DASH.to_string() }
+            if d_pt.g("by").keys().is_empty() { fmt::DASH.to_string() } else { pp_text(&pt_min, 1, "min per modelled peak hour, summed over the modelled bus routes") }
         ],
     ];
     let s85 = jobj! {
@@ -310,6 +312,7 @@ pub fn ftaa_package(p: &V) -> V {
 }
 
 /// `Store.serialise(P)`: the project as JSON text without the cached paths, arc keys and settings notice.
+#[must_use]
 pub fn serialise(p: &V) -> String {
     fn strip(v: &V) -> V {
         match v {
@@ -330,6 +333,7 @@ pub fn serialise(p: &V) -> String {
 }
 
 /// `ftaaFiles(P)`: the Fast-track package as files, file name to content, in the order the package lists them.
+#[must_use]
 pub fn ftaa_files(p: &V) -> Vec<(String, String)> {
     let f = ftaa_package(p);
     let s84a_label = label("s84a");
@@ -359,7 +363,7 @@ pub fn ftaa_files(p: &V) -> Vec<(String, String)> {
     let mut tl = vec![cells!["Step", "Date", "Rule", "Basis"]];
     tl.extend(f.g("timeline").items().iter().map(|t| cells![t.g("step"), or_s(t.g("date"), ""), t.g("rule"), or_s(t.g("basis"), "")]));
     files.push(("timeline.csv".into(), csv(&tl)));
-    files.push(("notes.txt".into(), f.g("notes").items().iter().map(|n| n.s()).collect::<Vec<_>>().join("\n")));
+    files.push(("notes.txt".into(), f.g("notes").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("\n")));
     let rv = f.g("reviewer");
     let mut asm = vec![cells!["Assumption", "Value", "Unit", "Basis"]];
     asm.extend(rv.g("assumptions").items().iter().map(|r| r.items().to_vec()));
@@ -389,6 +393,7 @@ pub fn ftaa_files(p: &V) -> Vec<(String, String)> {
 }
 
 /// `ftaaBundle(P)`: the Fast-track package as one JSON text: its format, the date, the project, the version stamp, the disclaimers, the manifest and the files.
+#[must_use]
 pub fn ftaa_bundle(p: &V) -> String {
     let files = ftaa_files(p);
     let mut fo = V::object();
@@ -404,6 +409,7 @@ pub fn ftaa_bundle(p: &V) -> String {
 }
 
 /// The README of the Fast-track ZIP (the text `ftaaZip` adds first): the project, date, version stamp, disclaimers D1, D3 and D12 and the manifest, lines joined by CRLF.
+#[must_use]
 pub fn ftaa_readme(p: &V) -> String {
     let files = ftaa_files(p);
     let mut lines: Vec<String> = vec![
@@ -422,6 +428,7 @@ pub fn ftaa_readme(p: &V) -> String {
 
 /// `ftaaZip(P)`: the Fast-track export. The prototype builds a ZIP with the report lane's `Report.zip` (README.txt then every file of
 /// [`ftaa_files`]) and falls back to the JSON bundle when that is not loaded; this gives the bundle, so the export is named ".json".
+#[must_use]
 pub fn ftaa_zip(p: &V) -> String {
     ftaa_bundle(p)
 }
@@ -458,6 +465,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-ftaa"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id == "compliance-extra-ftaa" { Some(report_ftaa(p, ctx)) } else { None }
 }
@@ -467,11 +475,13 @@ pub const EXPORT_IDS: &[&str] = &["compliance-extra-ftaa"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's. The Fast-track export is the JSON bundle
 /// (see [`ftaa_zip`]).
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     if id == "compliance-extra-ftaa" { Some(ftaa_zip(p)) } else { None }
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, _p: &V) -> Option<bool> {
     if id == "compliance-extra-ftaa" { Some(true) } else { None }
 }

@@ -11,13 +11,15 @@ use crate::util::fmt;
 use std::collections::HashSet;
 
 /// `pof(legs)`: the HRIG product of flows from the two-way AADTs [major 1, major 2, minor 1, minor 2] (the second minor leg is 0 at a T).
+#[must_use]
 pub fn pof(legs: &[f64]) -> f64 {
     let g = |i: usize| or_default(legs.get(i).copied().unwrap_or(0.0), 0.0);
     let (a, b, c, d) = (g(0), g(1), g(2), g(3));
-    jsmath::pow(((a + b) / 2.0) * ((c + d) / 2.0), 0.4)
+    jsmath::pow(f64::midpoint(a, b) * f64::midpoint(c, d), 0.4)
 }
 
 /// `personalRisk(dsi5, pf)`: DSI equivalents (5 years) per 100 million vehicles through the junction.
+#[must_use]
 pub fn personal_risk(dsi5: f64, pf: f64) -> Option<f64> {
     if pf > 0.0 {
         Some(dsi5 * 1e8 / (pf * hrig::YEARS * 365.0 * hrig::FACTOR))
@@ -27,6 +29,7 @@ pub fn personal_risk(dsi5: f64, pf: f64) -> Option<f64> {
 }
 
 /// `collectiveBand(dsi5, fs5)`: the HRIG collective risk band; High with three or more fatal and serious crashes.
+#[must_use]
 pub fn collective_band(dsi5: f64, fs5: f64) -> &'static str {
     if fs5 >= hrig::FS_HIGH {
         return "High";
@@ -49,6 +52,7 @@ pub struct PersonalBand {
 }
 
 /// `personalBand(pr, injury5)`: High and Medium-high need 4 or more injury crashes in 5 years, otherwise 'indicative'.
+#[must_use]
 pub fn personal_band(pr: Option<f64>, injury5: f64) -> PersonalBand {
     let Some(pr) = pr.filter(|p| p.is_finite()) else {
         return PersonalBand {
@@ -74,6 +78,7 @@ pub fn personal_band(pr: Option<f64>, injury5: f64) -> PersonalBand {
 }
 
 /// `severityIndex(flags, control, where)`: the CEC severity index of one crash at a site: vulnerable users first, then the vehicle index by control.
+#[must_use]
 pub fn severity_index(flags: &str, control: &str, midblock: bool) -> f64 {
     if flags.contains('p') {
         return if midblock { cec::SI_PED_MID } else { cec::SI_PED_INT };
@@ -111,6 +116,7 @@ pub struct CecPrediction {
 }
 
 /// `cecPredict(modelId, qmaj, qmin)`: A = b0 x Qmaj^b1 x Qmin^b2 (injury crashes a year; two-way AADT); flags flows outside the recorded range.
+#[must_use]
 pub fn cec_predict(model_id: &str, qmaj: f64, qmin: f64) -> Option<CecPrediction> {
     let m = CEC_MODELS.iter().find(|m| m.key == model_id)?;
     let a = if m.per_approach {
@@ -143,6 +149,7 @@ pub fn cec_predict(model_id: &str, qmaj: f64, qmin: f64) -> Option<CecPrediction
 }
 
 /// `cecModelFor(control, legs, multiLane)`: the crash model of a junction by control and legs.
+#[must_use]
 pub fn cec_model_for(control: &str, legs: usize, multi_lane: bool) -> Option<&'static str> {
     if control == "roundabout" {
         return Some(if multi_lane { "rbtMulti" } else { "rbt1" });
@@ -175,6 +182,7 @@ pub struct PedInput {
 }
 
 /// `pedDelay(control, o)`: pedestrian delay (s) at a crossing; None where it cannot be worked out.
+#[must_use]
 pub fn ped_delay(control: &str, o: &PedInput) -> Option<f64> {
     let sp = or_default(o.sp, ped::SP);
     let ts = if o.ts.is_nan() { ped::TS } else { o.ts };
@@ -205,6 +213,7 @@ pub fn ped_delay(control: &str, o: &PedInput) -> Option<f64> {
 }
 
 /// `band4(v, cuts)`: a Safe System exposure score 1 to 4.
+#[must_use]
 pub fn band4(v: Option<f64>, cuts: &[f64; 3]) -> Option<u8> {
     let v = v.filter(|x| x.is_finite())?;
     Some(if v < cuts[0] {
@@ -219,6 +228,7 @@ pub fn band4(v: Option<f64>, cuts: &[f64; 3]) -> Option<u8> {
 }
 
 /// `sevHint(speed, safe)`: a Safe System severity score 1 to 4 from the posted speed.
+#[must_use]
 pub fn sev_hint(speed: f64, safe: f64) -> Option<u8> {
     if !(speed > 0.0) {
         return None;
@@ -267,9 +277,9 @@ fn crit_of(r: &JsonValue, id: &str) -> Vec<String> {
 }
 
 /// `stagingTrigger(rows)` from build-out rows [{ pct, dwellings, gfa, fails: [site ids], crit: { id: ['dos', 'los', 'queue'] },
-/// dos: { id: worst DoS } }]. A site triggers at the first increment where it fails a criterion it passed at 0% (so a junction
-/// whose queue already exceeds its storage still triggers when it first exceeds practical DoS or reaches LoS E/F), or where a
-/// criterion it already failed at 0% gets materially worse (DoS up by 0.05 or more).
+/// dos: { id: worst `DoS` } }]. A site triggers at the first increment where it fails a criterion it passed at 0% (so a junction
+/// whose queue already exceeds its storage still triggers when it first exceeds practical `DoS` or reaches `LoS` E/F), or where a
+/// criterion it already failed at 0% gets materially worse (`DoS` up by 0.05 or more).
 pub fn staging_trigger(rows: &[JsonValue]) -> Trigger {
     let mut order: Vec<usize> = (0..rows.len()).collect();
     js_sort_by(&mut order, |a, b| js::num(js::get(Some(&rows[*a]), "pct")) - js::num(js::get(Some(&rows[*b]), "pct")));
@@ -302,10 +312,10 @@ pub fn staging_trigger(rows: &[JsonValue]) -> Trigger {
             if !fresh.is_empty() || worse {
                 nf.push(id.clone());
                 let text = if !fresh.is_empty() {
-                    if !was.is_empty() {
-                        format!("new criterion failed: {}", fresh.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
-                    } else {
+                    if was.is_empty() {
                         "new failure".to_string()
+                    } else {
+                        format!("new criterion failed: {}", fresh.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
                     }
                 } else {
                     format!("existing deficiency worse by DoS {}", fmt::num(js::num(d_now) - js::num(d_was), 2))
@@ -348,6 +358,7 @@ fn unique(it: impl Iterator<Item = String>) -> Vec<String> {
 }
 
 /// `ordinal(n)`: 1st, 2nd, 3rd, 4th.
+#[must_use]
 pub fn ordinal(n: f64) -> String {
     let v = n % 100.0;
     let s = ["th", "st", "nd", "rd"];
@@ -363,6 +374,7 @@ pub fn ordinal(n: f64) -> String {
 }
 
 /// `triggerText(trig, measure)`: the staging condition in words.
+#[must_use]
 pub fn trigger_text(rows: &[JsonValue], trig: &Trigger, measure: Option<&str>) -> String {
     let Some(ri) = trig.row else {
         return String::new();
@@ -390,6 +402,7 @@ pub fn trigger_text(rows: &[JsonValue], trig: &Trigger, measure: Option<&str>) -
 }
 
 /// `tsv(rows)`: tab-separated text of a table's rows (arrays of cell text), each cell on one line and trimmed.
+#[must_use]
 pub fn tsv(rows: &[Vec<String>]) -> String {
     rows.iter()
         .map(|r| {

@@ -69,7 +69,7 @@ impl Jx for V {
         self.as_array().map_or(&[], |a| a.as_slice())
     }
     fn jlen(&self) -> usize {
-        self.as_array().map_or(0, |a| a.len())
+        self.as_array().map_or(0, std::vec::Vec::len)
     }
     fn entries(&self) -> Vec<(&str, &V)> {
         self.as_object().map_or_else(Vec::new, |m| m.iter().collect())
@@ -140,7 +140,7 @@ impl ToV for f64 {
 }
 impl ToV for i32 {
     fn to_v(self) -> V {
-        V::Number(self as f64)
+        V::Number(f64::from(self))
     }
 }
 impl ToV for i64 {
@@ -150,7 +150,7 @@ impl ToV for i64 {
 }
 impl ToV for u32 {
     fn to_v(self) -> V {
-        V::Number(self as f64)
+        V::Number(f64::from(self))
     }
 }
 impl ToV for usize {
@@ -209,6 +209,7 @@ macro_rules! jarr {
 pub(crate) use jarr;
 
 /// A number value.
+#[must_use]
 pub fn f(x: f64) -> V {
     V::Number(x)
 }
@@ -229,6 +230,7 @@ pub fn strs<S: AsRef<str>>(items: impl IntoIterator<Item = S>) -> V {
 }
 
 /// `{ ...a, ...b }`: the fields of a, then those of b (a field in both keeps a's place and takes b's value).
+#[must_use]
 pub fn merge(a: &V, b: &V) -> V {
     let mut o = if a.is_object() { a.clone() } else { V::object() };
     for (k, v) in b.entries() {
@@ -244,7 +246,7 @@ pub fn set(o: &mut V, k: &str, v: impl ToV) {
 
 /// The field of an object for changing, made an empty object first when missing or not an object-like value.
 pub fn obj_at<'a>(o: &'a mut V, k: &str) -> &'a mut V {
-    let ok = o.get(k).is_some_and(|x| x.is_object());
+    let ok = o.get(k).is_some_and(crate::edit::json::JsonValue::is_object);
     if !ok {
         o.set(k, V::object());
     }
@@ -253,7 +255,7 @@ pub fn obj_at<'a>(o: &'a mut V, k: &str) -> &'a mut V {
 
 /// The field of an object for changing, made an empty array first when missing or not an array.
 pub fn arr_at<'a>(o: &'a mut V, k: &str) -> &'a mut Vec<V> {
-    let ok = o.get(k).is_some_and(|x| x.is_array());
+    let ok = o.get(k).is_some_and(crate::edit::json::JsonValue::is_array);
     if !ok {
         o.set(k, V::Array(Vec::new()));
     }
@@ -261,6 +263,7 @@ pub fn arr_at<'a>(o: &'a mut V, k: &str) -> &'a mut Vec<V> {
 }
 
 /// A dotted path read from a value (`getPath`): null when any step is missing.
+#[must_use]
 pub fn path<'a>(v: &'a V, p: &str) -> &'a V {
     let mut cur = v;
     for k in p.split('.') {
@@ -278,11 +281,13 @@ pub fn trim(s: &str) -> &str {
 }
 
 /// `n.toString()` for a number (JavaScript's formatting).
+#[must_use]
 pub fn ns(x: f64) -> String {
     number_to_js_string(x)
 }
 
 /// `s.slice(a, b)` by character (negative bounds count from the end); b None is the end.
+#[must_use]
 pub fn slice(s: &str, a: i64, b: Option<i64>) -> String {
     let c: Vec<char> = s.chars().collect();
     let n = c.len() as i64;
@@ -296,6 +301,7 @@ pub fn slice(s: &str, a: i64, b: Option<i64>) -> String {
 }
 
 /// `s.padStart(n, '0')`.
+#[must_use]
 pub fn pad_start(s: &str, n: usize, with: char) -> String {
     let len = s.chars().count();
     if len >= n {
@@ -306,22 +312,26 @@ pub fn pad_start(s: &str, n: usize, with: char) -> String {
 }
 
 /// `s.toLowerCase()`.
+#[must_use]
 pub fn lower(s: &str) -> String {
     s.to_lowercase()
 }
 
 /// `s.toUpperCase()`.
+#[must_use]
 pub fn upper(s: &str) -> String {
     s.to_uppercase()
 }
 
 /// `arr.includes(x)` for text.
+#[must_use]
 pub fn has_str(a: &[&str], x: &str) -> bool {
     a.contains(&x)
 }
 
 /// `U.csvCell(v)`: one RFC 4180 cell. Text that a spreadsheet would read as a formula gets a leading apostrophe; null is an empty
 /// cell; numbers (a number that is not finite prints as NaN or Infinity), booleans, arrays and objects are written as `String(v)`.
+#[must_use]
 pub fn csv_cell(v: &V) -> String {
     let mut s = if v.is_null() { String::new() } else { v.js_string() };
     if let V::String(_) = v {
@@ -334,11 +344,13 @@ pub fn csv_cell(v: &V) -> String {
 }
 
 /// `U.csv(rows)`: cells joined with commas, rows with CRLF.
+#[must_use]
 pub fn csv(rows: &[Vec<V>]) -> String {
     rows.iter().map(|r| r.iter().map(csv_cell).collect::<Vec<_>>().join(",")).collect::<Vec<_>>().join("\r\n")
 }
 
 /// `U.parseCSV(text)`: rows of cells, quotes and doubled quotes read, rows that are blank left out.
+#[must_use]
 pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
     let t: Vec<char> = text.chars().collect();
     let mut rows: Vec<Vec<String>> = Vec::new();

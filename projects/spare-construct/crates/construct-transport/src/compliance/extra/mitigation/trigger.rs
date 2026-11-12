@@ -17,6 +17,7 @@ use std::collections::HashSet;
 
 /// `storageOf(sc, linkId, nodeId)`: the queue storage on an approach: the approach road back to the upstream junction, chained through simple nodes
 /// (two roads, no control) up to 3000 m: `{ m, links }`; null for a roundabout circulating link (junction-internal) and for a missing road.
+#[must_use]
 pub fn storage_of(sc: &V, link_id: &str, node_id: &str) -> V {
     let mut l: &V = sc.g("links").g(link_id);
     let mut at = node_id.to_string();
@@ -56,9 +57,10 @@ fn los_index(v: &V) -> i32 {
 /// `failsAt(sc, res, crit, only)`: the junctions of a result that fail the criteria `{ dos, los, queue, minStorage }` (degree of saturation above the
 /// limit, level of service worse than the limit, a 95th-percentile queue longer than the storage back to the upstream junction), `only` limiting the
 /// junctions looked at: `[{ id, why: [text], dos, los, delay }]`.
+#[must_use]
 pub fn fails_at(sc: &V, res: &V, crit: &V, only: Option<&HashSet<String>>) -> V {
     let mut out: Vec<V> = Vec::new();
-    let min_st = if !crit.g("minStorage").nullish() { crit.g("minStorage").n() } else { xdata("STD.trigger.minStorage").n() };
+    let min_st = if crit.g("minStorage").nullish() { xdata("STD.trigger.minStorage").n() } else { crit.g("minStorage").n() };
     for (id, nr) in res.g("nodes").entries() {
         if only.is_some_and(|o| !o.contains(id)) {
             continue;
@@ -68,11 +70,10 @@ pub fn fails_at(sc: &V, res: &V, crit: &V, only: Option<&HashSet<String>>) -> V 
         if !crit.g("dos").nullish() && nr.g("dos").n() > crit.g("dos").n() {
             why.push(V::String(format!("DoS {} > {}", num(nr.g("dos"), 2), crit.g("dos").s())));
         }
-        if let Some(l) = los.as_ref().filter(|l| l.t()) {
-            if crit.g("los").t() && los_index(l) > los_index(crit.g("los")) {
+        if let Some(l) = los.as_ref().filter(|l| l.t())
+            && crit.g("los").t() && los_index(l) > los_index(crit.g("los")) {
                 why.push(V::String(format!("LoS {} worse than {}", l.s(), crit.g("los").s())));
             }
-        }
         if crit.g("queue").t() {
             for a in nr.g("appr").items() {
                 let st = storage_of(sc, &a.g("link").s(), id);
@@ -108,6 +109,7 @@ pub fn fails_at(sc: &V, res: &V, crit: &V, only: Option<&HashSet<String>>) -> V 
 
 /// `anopFitOf(scB, rB, scJ, rJ, c)`: the ANOP fit of one corridor for a project result against the do-minimum result ("High", "Moderate", "Low"; None
 /// when nothing could be assessed).
+#[must_use]
 pub fn anop_fit_of(sc_b: &V, r_b: &V, sc_j: &V, r_j: &V, c: &V) -> Option<String> {
     let lb = anop::anop_los(sc_b, r_b, c);
     let lj = anop::anop_los(sc_j, r_j, c);
@@ -124,10 +126,11 @@ pub fn anop_fit_of(sc_b: &V, r_b: &V, sc_j: &V, r_j: &V, c: &V) -> Option<String
 }
 
 /// `ordinal(n)`: a number with its English ordinal ending ("1st", "22nd", "1,013th").
+#[must_use]
 pub fn ordinal(n: f64) -> String {
     let s = ["th", "st", "nd", "rd"];
     let v = n % 100.0;
-    let idx = |x: f64| -> Option<usize> { if x >= 0.0 && x < 4.0 && x == x.trunc() { Some(x as usize) } else { None } };
+    let idx = |x: f64| -> Option<usize> { if (0.0..4.0).contains(&x) && x == x.trunc() { Some(x as usize) } else { None } };
     fmt::int(n) + s[idx((v - 20.0) % 10.0).or_else(|| idx(v)).unwrap_or(0)]
 }
 
@@ -225,7 +228,7 @@ impl Run<'_> {
 
 /// `why.join('; ')` of a failure's reasons.
 fn join_why(why: &V) -> String {
-    why.items().iter().map(|w| w.sn()).collect::<Vec<_>>().join("; ")
+    why.items().iter().map(crate::compliance::jv::Jx::sn).collect::<Vec<_>>().join("; ")
 }
 
 /// `triggerFinder(P, opts)`: steps the build-out of a scenario for the periods (default AM and PM) and reports, for the scenario without an upgrade
@@ -263,7 +266,7 @@ fn find(p: &V, opts: &V) -> V {
         opts.g("periods").items().to_vec()
     } else {
         let have = ctx::periods_of(sc);
-        if !have.is_empty() { have.into_iter().filter(|x| *x != "IP").map(|x| V::String(x.to_string())).collect() } else { vec![V::String("AM".into()), V::String("PM".into())] }
+        if have.is_empty() { vec![V::String("AM".into()), V::String("PM".into())] } else { have.into_iter().filter(|x| *x != "IP").map(|x| V::String(x.to_string())).collect() }
     };
     let up_ids: Vec<V> = if opts.g("upgrades").t() {
         opts.g("upgrades").items().to_vec()
@@ -275,13 +278,12 @@ fn find(p: &V, opts: &V) -> V {
     };
     let mut ups: Vec<&V> = Vec::new();
     for id in &up_ids {
-        if let Some(s) = ctx::sc_by_id(p, id) {
-            if !std::ptr::eq(s, sc) && !ups.iter().any(|u| std::ptr::eq(*u, s)) {
+        if let Some(s) = ctx::sc_by_id(p, id)
+            && !std::ptr::eq(s, sc) && !ups.iter().any(|u| std::ptr::eq(*u, s)) {
                 ups.push(s);
             }
-        }
     }
-    let only: Option<HashSet<String>> = if opts.g("nodes").t() && opts.g("nodes").jlen() > 0 { Some(opts.g("nodes").items().iter().map(|n| n.s()).collect()) } else { None };
+    let only: Option<HashSet<String>> = if opts.g("nodes").t() && opts.g("nodes").jlen() > 0 { Some(opts.g("nodes").items().iter().map(crate::compliance::jv::Jx::s).collect()) } else { None };
     // the ANOP criterion compares each step with the do-minimum, so it needs a do-minimum other than the stepped scenario
     let anop_on = crit.g("anop").t() && pr.base.t() && !std::ptr::eq(pr.base, sc);
     let cors = if anop_on { anop::anop_corridors(p) } else { V::Array(Vec::new()) };
@@ -413,7 +415,7 @@ fn find(p: &V, opts: &V) -> V {
         rows.push(jobj! { "variant" => &v.id, "label" => v.label.as_str(), "upgrade" => v.upgrade, "first" => first, "lastPass" => last_pass_v, "existing" => existing_v, "trace" => trace, "text" => text });
     }
     // Resolved Y/N (mitigation-staging Table M2): does each upgrade clear the trigger of the variant without it?
-    let w0 = rows.first().map(|r| r.g("first").clone()).filter(|f| f.t());
+    let w0 = rows.first().map(|r| r.g("first").clone()).filter(crate::compliance::jv::Jx::t);
     for r in rows.iter_mut().skip(1) {
         let resolved = match &w0 {
             None => jobj! { "state" => V::Null, "text" => "Nothing to resolve: no trigger without the upgrade" },
@@ -494,7 +496,7 @@ fn find(p: &V, opts: &V) -> V {
    Tables
    ===================================================================================== */
 
-/// `mvalH(x)`: a junction's values at a build-out as table text ("DoS 0.95, 12 s, LoS D"), an en dash when there are none.
+/// `mvalH(x)`: a junction's values at a build-out as table text ("`DoS` 0.95, 12 s, `LoS` D"), an en dash when there are none.
 fn mval_h(x: &V) -> String {
     if x.t() { format!("DoS {}, {} s, LoS {}", num(x.g("dos"), 2), num(x.g("delay"), 0), esc(&if x.g("los").t() { x.g("los").clone() } else { V::String("\u{2013}".into()) })) } else { "\u{2013}".to_string() }
 }
@@ -533,7 +535,7 @@ pub fn trigger_tables(t: &V) -> String {
                 esc(e.g("period")),
                 mval_h(e.g("at0")),
                 mval_h(e.g("at100")),
-                if !e.g("worsenedAt").nullish() { pill_x(&format!("worsened from {}%", e.g("worsenedAt").s()), "bad") } else { "not beyond the threshold".to_string() },
+                if e.g("worsenedAt").nullish() { "not beyond the threshold".to_string() } else { pill_x(&format!("worsened from {}%", e.g("worsenedAt").s()), "bad") },
             ]));
         }
     }

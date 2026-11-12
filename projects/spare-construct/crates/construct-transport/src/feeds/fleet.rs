@@ -18,6 +18,7 @@ use crate::util::{clamp, fmt};
 use serde_json::{json, Map, Value};
 
 /// `fleetCacheKey(district)`: the key a host keeps a district's result under ("corridor.feeds.fleet.AUCKLAND").
+#[must_use]
 pub fn fleet_cache_key(district: &str) -> String {
     format!("corridor.feeds.fleet.{district}")
 }
@@ -36,7 +37,7 @@ pub fn fleet_district(text: &str) -> Result<String, String> {
 pub struct Fleet {
     /// The district as the register spells it.
     pub district: String,
-    /// The register layer used ("MVR_Oct26").
+    /// The register layer used ("`MVR_Oct26`").
     pub service: String,
     /// The layer's address.
     pub url: String,
@@ -50,6 +51,7 @@ pub struct Fleet {
 
 impl Fleet {
     /// The fleet as the prototype saves it. The shares are an object; the project file's objects are sorted by key, so the order biggest first is not kept there.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({
             "district": self.district, "service": self.service, "url": self.url, "at": self.at, "total": json_number(self.total),
@@ -60,7 +62,7 @@ impl Fleet {
 
 const MON: [(&str, f64); 12] = [("Jan", 1.0), ("Feb", 2.0), ("Mar", 3.0), ("Apr", 4.0), ("May", 5.0), ("Jun", 6.0), ("Jul", 7.0), ("Aug", 8.0), ("Sep", 9.0), ("Oct", 10.0), ("Nov", 11.0), ("Dec", 12.0)];
 
-/// The newest register layer in the NZTA services list: the name ("MVR_Oct26") with a monthly number to compare.
+/// The newest register layer in the NZTA services list: the name ("`MVR_Oct26`") with a monthly number to compare.
 pub fn newest_mvr(list: &JsonValue) -> Option<String> {
     let re = Regex::lit(r"^MVR_([A-Z][a-z]{2})(\d{2})$", "");
     let services = match list.get("services") {
@@ -148,6 +150,7 @@ pub struct FleetLoad {
 
 impl FleetLoad {
     /// A download for a district (as the register spells it: see [`fleet_district`]). `limit_ms` is the settings time limit; the statistics query is allowed at least 90 s.
+    #[must_use]
     pub fn new(district: &str, now_ms: f64, limit_ms: f64, cache: &MetaCache) -> FleetLoad {
         FleetLoad {
             district: district.to_string(),
@@ -166,6 +169,7 @@ impl FleetLoad {
         }
     }
     /// The fleet, once the download is done.
+    #[must_use]
     pub fn finish(self) -> Option<Fleet> {
         self.fleet
     }
@@ -285,6 +289,7 @@ pub fn use_cached_fleet(p: &mut Project, cached: &Value, now_ms: f64) -> Option<
 /// "Use for CO2": the factor and its source text from the fleet: the share of cars and vans that are not battery electric, to three decimals.
 ///
 /// `shares` is the fleet's share by motive power in any order. Gives (factor, source text).
+#[must_use]
 pub fn fleet_co2(district: &str, service: &str, shares: &[(String, f64)]) -> (f64, String) {
     let electric = Regex::lit("^ELECTRIC$", "i");
     let bev = shares.iter().filter(|(k, _)| electric.test(crate::jsnum::js_trim(k))).fold(0.0, |a, (_, v)| a + if *v == 0.0 || v.is_nan() { 0.0 } else { *v });

@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 pub type Pt = [f64; 2];
 
 /// landuse.js `ringArea(r)`: the signed area (m2) of a ring by the shoelace formula.
+#[must_use]
 pub fn ring_area(r: &[Pt]) -> f64 {
     let mut a = 0.0;
     let n = r.len();
@@ -20,6 +21,7 @@ pub fn ring_area(r: &[Pt]) -> f64 {
 }
 
 /// landuse.js `ringCentroid(r)`: the area centroid of a ring (the mean of its points when its area is under 1e-6).
+#[must_use]
 pub fn ring_centroid(r: &[Pt]) -> Pt {
     let (mut a, mut cx, mut cy) = (0.0, 0.0, 0.0);
     let n = r.len();
@@ -44,6 +46,7 @@ pub fn ring_centroid(r: &[Pt]) -> Pt {
 }
 
 /// landuse.js `inRing(x, y, r)`: whether a point is inside a ring (even-odd rule).
+#[must_use]
 pub fn in_ring(x: f64, y: f64, r: &[Pt]) -> bool {
     let mut c = false;
     if r.is_empty() {
@@ -67,6 +70,7 @@ fn same(p: &Pt, q: &Pt) -> bool {
 
 /// landuse.js `assemble(parts)`: joins open member ways end to end into closed rings (multipolygon relations); keeps rings of three
 /// points or more.
+#[must_use]
 pub fn assemble(parts: Vec<Vec<Pt>>) -> Vec<Vec<Pt>> {
     let mut rings: Vec<Vec<Pt>> = Vec::new();
     let mut open: Vec<Vec<Pt>> = Vec::new();
@@ -115,11 +119,12 @@ pub struct Grid {
 }
 
 fn key(i: f64, j: f64) -> i64 {
-    ((i + 50000.0) * 100000.0 + j + 50000.0) as i64
+    ((i + 50000.0) * 100_000.0 + j + 50000.0) as i64
 }
 
 impl Grid {
     /// A grid with this cell size (m) over the limits [x0, y0, x1, y1].
+    #[must_use]
     pub fn new(cell: f64, lim: [f64; 4]) -> Grid {
         Grid {
             cell,
@@ -154,6 +159,7 @@ impl Grid {
             .map_or(&[], Vec::as_slice)
     }
     /// `near(x, y, r)`: the distinct values filed under any cell within r of the point, in the order the cells are visited.
+    #[must_use]
     pub fn near(&self, x: f64, y: f64, r: f64) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
         let mut seen: HashSet<usize> = HashSet::new();
@@ -197,6 +203,7 @@ pub struct Shape {
 
 impl Shape {
     /// landuse.js `contains(s, x, y)`: inside an outer ring and outside every hole.
+    #[must_use]
     pub fn contains(&self, x: f64, y: f64) -> bool {
         x >= self.bb[0]
             && x <= self.bb[2]
@@ -206,6 +213,7 @@ impl Shape {
             && !self.inner.iter().any(|r| in_ring(x, y, r))
     }
     /// landuse.js `edge(s, x, y)`: the distance (m) from a point to the nearest edge of the outer rings.
+    #[must_use]
     pub fn edge(&self, x: f64, y: f64) -> f64 {
         let mut d = f64::INFINITY;
         for r in &self.outer {

@@ -12,12 +12,14 @@ pub const MAX_SITES: usize = 20;
 pub const D1_SHORT: &str = "Indicative screening results from Spare Construct, a sketch model; not an approved regional model (Disclaimer D1)";
 
 /// The title of a disclaimer.
+#[must_use]
 pub fn disclaimer_title(id: &str) -> &'static str {
     DISCLAIMER_ITEMS.iter().find(|d| d.0 == id).map_or("", |d| d.1)
 }
 
 /// `dText(id, fill)`: the text of a disclaimer. D10 names the version date (`fill.version`, else the standing one) and D12 the
 /// tools it is prepared for (`fill.tools`, else the bracketed list stays).
+#[must_use]
 pub fn disclaimer_text(id: &str, version: Option<&str>, tools: Option<&str>) -> String {
     let mut t = DISCLAIMER_ITEMS
         .iter()
@@ -37,6 +39,7 @@ pub fn disclaimer_text(id: &str, version: Option<&str>, tools: Option<&str>) -> 
 }
 
 /// The disclaimer ids in their order.
+#[must_use]
 pub fn disclaimer_ids() -> Vec<&'static str> {
     DISCLAIMER_ITEMS.iter().map(|d| d.0).collect()
 }
@@ -105,11 +108,13 @@ pub const SCOPES: [Scope; 4] = [
 ];
 
 /// The scope with this key.
+#[must_use]
 pub fn scope(key: &str) -> Option<&'static Scope> {
     SCOPES.iter().find(|s| s.key == key)
 }
 
 /// `LEVEL[l]`: the words for P, L, S, U.
+#[must_use]
 pub fn level(l: char) -> &'static str {
     match l {
         'P' => "Probable",
@@ -162,6 +167,7 @@ pub mod rr422 {
 }
 
 /// `levelOf(row, scope)`: the level a scope gives a row (the first scope's when the scope is not known).
+#[must_use]
 pub fn level_of(row: &Rr422Row, scope_key: &str) -> char {
     let i = SCOPES.iter().position(|s| s.key == scope_key).unwrap_or(0);
     row.lv.as_bytes()[i] as char
@@ -283,6 +289,7 @@ pub mod ssm {
         ("mc", "Motorcyclist"),
     ];
     /// Safe System speeds by column key.
+    #[must_use]
     pub fn safe(k: &str) -> f64 {
         match k {
             "ror" => 40.0,
@@ -410,6 +417,7 @@ pub const CHAPTER_I: Chapter = Chapter {
 };
 
 /// Every chapter, in order.
+#[must_use]
 pub fn chapters() -> Vec<&'static Chapter> {
     let mut v: Vec<&'static Chapter> = CHAPTERS.iter().collect();
     v.push(&CHAPTER_I);
@@ -417,6 +425,7 @@ pub fn chapters() -> Vec<&'static Chapter> {
 }
 
 /// Labels for the settings keys the appendix prints (`KEY_LABELS`).
+#[must_use]
 pub fn key_label(k: &str) -> Option<&'static str> {
     Some(match k {
         "sv" => "Settings version",

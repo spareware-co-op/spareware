@@ -2,7 +2,7 @@
 //!
 //! `jsmath` has V8's exp, sin, cos, asin and pow; the logarithm matrix estimation takes of each count ratio is
 //! here, next to the code that uses it, so that the factors come out the same as the prototype's to the last bit.
-//! tests/calibrate_truth.rs checks it against Node on 2,000 arguments.
+//! `tests/calibrate_truth.rs` checks it against Node on 2,000 arguments.
 
 // fdlibm's constants are written as it writes them
 #![allow(clippy::excessive_precision)]
@@ -27,10 +27,11 @@ fn lo(x: f64) -> u32 {
 }
 
 fn with_hi(x: f64, h: i32) -> f64 {
-    f64::from_bits(((h as u32 as u64) << 32) | (x.to_bits() & 0xffff_ffff))
+    f64::from_bits((u64::from(h as u32) << 32) | (x.to_bits() & 0xffff_ffff))
 }
 
 /// `Math.log(x)`: the natural logarithm, as V8 computes it.
+#[must_use]
 pub fn log(x: f64) -> f64 {
     let mut x = x;
     let mut hx = hi(x);
@@ -63,18 +64,18 @@ pub fn log(x: f64) -> f64 {
             if k == 0 {
                 return 0.0;
             }
-            let dk = k as f64;
+            let dk = f64::from(k);
             return dk * LN2_HI + dk * LN2_LO;
         }
         let r = f * f * (0.5 - 0.333_333_333_333_333_33 * f);
         if k == 0 {
             return f - r;
         }
-        let dk = k as f64;
+        let dk = f64::from(k);
         return dk * LN2_HI - ((r - dk * LN2_LO) - f);
     }
     let s = f / (2.0 + f);
-    let dk = k as f64;
+    let dk = f64::from(k);
     let z = s * s;
     let mut i = hx - 0x6147a;
     let w = z * z;

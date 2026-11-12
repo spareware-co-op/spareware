@@ -26,7 +26,7 @@ pub fn run_design_life(p: &mut V, opts: &V) -> V {
         let a = opts.g("pct").n();
         if truthy_number(a) { a } else { or_n(cx.g("pct"), 10.0) }
     };
-    let periods: Vec<String> = if opts.g("periods").t() { opts.g("periods").items().iter().map(|x| x.s()).collect() } else { vec!["AM".to_string(), "PM".to_string()] };
+    let periods: Vec<String> = if opts.g("periods").t() { opts.g("periods").items().iter().map(crate::compliance::jv::Jx::s).collect() } else { vec!["AM".to_string(), "PM".to_string()] };
     let res = {
         let pr = pair(p);
         let sc = pr.opt;
@@ -47,6 +47,7 @@ pub fn run_design_life(p: &mut V, opts: &V) -> V {
 }
 
 /// `tsdgPack(P)`: the ATOC Traffic Signals Design Guidelines s2.5 signal pack (CSV).
+#[must_use]
 pub fn tsdg_pack(p: &V) -> String {
     let pr = pair(p);
     let sc = pr.opt;
@@ -55,7 +56,7 @@ pub fn tsdg_pack(p: &V) -> String {
         signals
     } else {
         match res_of(sc, "AM").or_else(|| res_of(sc, "PM")) {
-            Some(r) => r.g("nodes").keys().into_iter().take(10).map(|k| k.to_string()).collect(),
+            Some(r) => r.g("nodes").keys().into_iter().take(10).map(std::string::ToString::to_string).collect(),
             None => vec![],
         }
     };
@@ -151,8 +152,8 @@ pub fn tsdg_pack(p: &V) -> String {
                 or_blank(c.g("peak")),
                 or_blank(c.g("peakTime")),
                 if hv.nullish() { sv("") } else { hv.clone() },
-                if !hv.nullish() { V::Number(math_round(c.g("adt").n() * (1.0 - hv.n() / 100.0))) } else { sv("") },
-                if !hv.nullish() { V::Number(math_round(c.g("adt").n() * hv.n() / 100.0)) } else { sv("") },
+                if hv.nullish() { sv("") } else { V::Number(math_round(c.g("adt").n() * (1.0 - hv.n() / 100.0))) },
+                if hv.nullish() { sv("") } else { V::Number(math_round(c.g("adt").n() * hv.n() / 100.0)) },
             ]
         })
         .collect();

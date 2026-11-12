@@ -16,7 +16,7 @@ pub fn ensure_data(p: &mut Project) {
     }
     let d = p.data.get_mut().expect("just made");
     for k in ["counts", "crashes", "jt"] {
-        let falsy = matches!(d.extra.get(k), None | Some(Value::Null) | Some(Value::Bool(false)));
+        let falsy = matches!(d.extra.get(k), None | Some(Value::Null | Value::Bool(false)));
         if falsy {
             d.extra.insert(k.to_string(), json!([]));
         }
@@ -37,6 +37,7 @@ pub fn ensure_data(p: &mut Project) {
 }
 
 /// `dirOf(s)`: the first count direction named in the text as a whole word (NB, SB, EB or WB, any case), else None.
+#[must_use]
 pub fn dir_of(s: &str) -> Option<&'static str> {
     let up: Vec<char> = s.to_uppercase().chars().collect();
     let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
@@ -59,7 +60,7 @@ pub fn dir_of(s: &str) -> Option<&'static str> {
 /// `importCSV(text)`: replaces the project's own counts (source "user") with those in a CSV file; gives how many were read.
 ///
 /// Columns, in any order and case: lat and lng (or latitude, longitude, lon, long, x, y), at least one of am, pm and
-/// adt (or aadt, daily; am_peak, pm_peak and so on), and optionally name (site, location, road) and dir (direction;
+/// adt (or aadt, daily; `am_peak`, `pm_peak` and so on), and optionally name (site, location, road) and dir (direction;
 /// NB, SB, EB or WB makes the count directional). Rows without a number in lat and lng are skipped. Counts of other
 /// sources stay. The time the file was read is kept in `loaded.user`.
 pub fn import_csv(p: &mut Project, text: &str, ids: &mut dyn IdSource) -> Result<usize, String> {

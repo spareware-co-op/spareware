@@ -39,7 +39,7 @@ struct Cand {
 /// split by the lanes each way. Flows are rounded to 10 veh/h, and the gateway's `gwSrc` names the counts used. Gives
 /// the number of gateways set.
 ///
-/// A matched count that gives no volume in a period stops the prototype with a TypeError (`periodVol(...).v` of
+/// A matched count that gives no volume in a period stops the prototype with a `TypeError` (`periodVol(...).v` of
 /// null); here it adds no flow for that period and is not named in `gwSrc`.
 pub fn gateways_from_counts(sc: &mut Scenario, s: &Settings, data: &Data) -> usize {
     let m = matches(sc, s, data);

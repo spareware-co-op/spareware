@@ -10,7 +10,7 @@ use crate::graph::{js_sort_by, turn_type};
 use crate::jsnum::{Maybe, math_max, math_min, math_round, or_default};
 use crate::junction::{ArcFlow, ConvInfo, JUNCTION_LABEL, cap_src, conv_text, eff_cap, junction_result};
 use crate::project::{OrderedMap, Project, Scenario, Settings};
-use crate::results::*;
+use crate::results::{ArcRes, TurnRow, ClassFlows, DevRes, DevZone, DevGateway, Select, OdFlow, SelectTurn, OdPaths, PathFlow, Res, NodeRes, KpiWorst, RouteRes, GrowthInfo, JunctionInfo, ScenarioInfo, model_meta, Convergence, Kpi};
 use crate::standards::{LOS_VC, STANDARDS, ef, growth, growth_basis, junction_set, los_of, year_of};
 use crate::util::{r1, r3};
 use crate::routes::bus_freq;
@@ -64,7 +64,7 @@ fn arc_results(run: &Run) -> (OrderedMap<ArcRes>, Vec<ArcFlow>, Totals) {
         // What sets the capacity: the mid-block, or the junction at the arc's downstream end (results-trust (c))
         let node_cap = match arc.ctrl {
             crate::graph::Ctrl::Sig => {
-                arc.gl as f64 * s.sat_flow.num() * arc.g_c.unwrap_or(f64::NAN)
+                f64::from(arc.gl) * s.sat_flow.num() * arc.g_c.unwrap_or(f64::NAN)
             }
             crate::graph::Ctrl::Minor | crate::graph::Ctrl::Rbt => or_default(arc.cap_n.unwrap_or(f64::NAN), arc.cap_mid),
             crate::graph::Ctrl::Free => f64::INFINITY,
@@ -102,7 +102,7 @@ fn arc_results(run: &Run) -> (OrderedMap<ArcRes>, Vec<ArcFlow>, Totals) {
         k.vht += veh * t / 3600.0;
         k.dly += veh * (t - arc.ff) / 3600.0;
         k.co2 += veh * arc.len / 1000.0 * ef(spd, s) / 1e6;
-        k.lane_km += arc.lanes as f64 * arc.len / 1000.0;
+        k.lane_km += f64::from(arc.lanes) * arc.len / 1000.0;
         if vc > 1.0 {
             k.over += 1.0;
         }
@@ -181,7 +181,7 @@ fn class_results(run: &Run) -> (ClassFlows, DevRes) {
         }
     }
     let cls = ClassFlows {
-        names: ZCLASS.iter().map(|s| s.to_string()).collect(),
+        names: ZCLASS.iter().map(std::string::ToString::to_string).collect(),
         trips: run.cls_trips.iter().map(|&t| r1(t)).collect(),
         arcs,
     };
@@ -352,7 +352,7 @@ pub(super) fn build_res(
         converged,
         hit_max: run.hit_max,
         gap: run.gap,
-        it: run.it as f64,
+        it: f64::from(run.it),
         gap_tol: cv.gap_tol,
         stable: cv.stable,
         share: cv.share,
@@ -429,7 +429,7 @@ pub(super) fn build_res(
         period: run.period.clone(),
         year: year_of(Some(sc), s),
         ts,
-        it: run.it as f64,
+        it: f64::from(run.it),
         gap: run.gap,
         ms,
         stale: false,
@@ -483,7 +483,7 @@ pub(super) fn build_res(
                 hit_max: run.hit_max,
                 gap: run.gap,
                 gap_tol: cv.gap_tol,
-                it: run.it as f64,
+                it: f64::from(run.it),
                 note: conv_note,
             },
         ),

@@ -110,6 +110,7 @@ pub struct DetectResult {
 }
 
 /// `Sites.of(sc, nodeId)`: the first site that has this node.
+#[must_use]
 pub fn of<'a>(sc: &'a Scenario, node_id: &str) -> Option<&'a Site> {
     sc.sites
         .get()?
@@ -117,7 +118,7 @@ pub fn of<'a>(sc: &'a Scenario, node_id: &str) -> Option<&'a Site> {
         .find(|s| s.nodes.iter().any(|n| n == node_id))
 }
 
-/// SameValueZero for the site numbers of AT points.
+/// `SameValueZero` for the site numbers of AT points.
 fn same_value(a: &Option<Value>, b: &Option<Value>) -> bool {
     match (a, b) {
         (None, None) => true,
@@ -205,12 +206,9 @@ pub fn detect(sc: &mut Scenario, ids: &mut dyn IdSource, opts: &DetectOpts) -> D
         let mut inc_ix: HashMap<&str, usize> = HashMap::new();
         for (li, l) in links.iter().enumerate() {
             for n in [l.a.as_str(), l.b.as_str()] {
-                match inc_ix.get(n) {
-                    Some(&k) => inc[k].1.push(li),
-                    None => {
-                        inc_ix.insert(n, inc.len());
-                        inc.push((n, vec![li]));
-                    }
+                if let Some(&k) = inc_ix.get(n) { inc[k].1.push(li) } else {
+                    inc_ix.insert(n, inc.len());
+                    inc.push((n, vec![li]));
                 }
             }
         }
@@ -353,7 +351,7 @@ pub fn detect(sc: &mut Scenario, ids: &mut dyn IdSource, opts: &DetectOpts) -> D
                     }
                 }
             }
-            let mut sorted: Vec<String> = members.iter().map(|s| s.to_string()).collect();
+            let mut sorted: Vec<String> = members.iter().map(std::string::ToString::to_string).collect();
             sort_ids(&mut sorted);
             let mut site = blank_site(&id);
             site.nodes = sorted;

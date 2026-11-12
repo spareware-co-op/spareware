@@ -1,8 +1,8 @@
-//! GeoJSON and CSV in and out: model.js `Importers.importGeoJSON`, `geojson` and `linksCSV`.
+//! `GeoJSON` and CSV in and out: model.js `Importers.importGeoJSON`, `geojson` and `linksCSV`.
 //!
-//! [`import_geojson`] adds the line features of a GeoJSON file as roads, snapping their ends to a junction within 2 m
+//! [`import_geojson`] adds the line features of a `GeoJSON` file as roads, snapping their ends to a junction within 2 m
 //! or making one. [`geojson`] writes the network (roads with their results, controlled junctions, zones) as a
-//! FeatureCollection, and [`links_csv`] writes one row per road direction, both with the results of a run when given.
+//! `FeatureCollection`, and [`links_csv`] writes one row per road direction, both with the results of a run when given.
 
 use crate::edit::IdSource;
 use crate::edit::json::JsonValue;
@@ -14,7 +14,7 @@ use crate::results::Res;
 use crate::util::{self, LatLng};
 use serde_json::Value;
 
-/// `Importers.importGeoJSON(sc, gj, template)`: adds the LineString and MultiLineString features of a GeoJSON value as roads and
+/// `Importers.importGeoJSON(sc, gj, template)`: adds the `LineString` and `MultiLineString` features of a `GeoJSON` value as roads and
 /// returns how many. The template gives the class, lanes, speed and status a feature does not set itself (`cls`, `lanesAB`,
 /// `lanesBA`, `speed`, `status` of its props; any other key it has is copied onto each road). A feature's own `cls`, `name`,
 /// `speed`, `lanesAB`, `lanesBA` and `status` properties are read. Afterwards default junction control is applied everywhere.
@@ -153,9 +153,10 @@ fn opt_num(x: Option<f64>) -> JsonValue {
     x.map_or(JsonValue::Null, JsonValue::Number)
 }
 
-/// `Importers.geojson(sc, res)`: the network as GeoJSON text (`JSON.stringify(x, null, 1)`): every road as a LineString with its
+/// `Importers.geojson(sc, res)`: the network as `GeoJSON` text (`JSON.stringify(x, null, 1)`): every road as a `LineString` with its
 /// class, lanes, speed, length and, with results, volume, volume-to-capacity ratio and speed each way; every junction that has a
 /// control as a Point with its delay and level of service; every zone as a Point with its land use or gateway flows.
+#[must_use]
 pub fn geojson(sc: &Scenario, res: Option<&Res>) -> String {
     let mut features: Vec<JsonValue> = Vec::new();
     for l in sc.links.values() {
@@ -279,6 +280,7 @@ fn cell_num_field(n: &Num) -> String {
 /// `Importers.linksCSV(sc, res)`: one row per road direction that has lanes (link id, name, class, status, direction, lanes,
 /// speed limit, length, and with results volume in vehicles and in pcu, capacity, volume-to-capacity ratio, level of service,
 /// speed, travel time and junction delay), rows joined by CRLF.
+#[must_use]
 pub fn links_csv(sc: &Scenario, res: Option<&Res>) -> String {
     let head = [
         "link_id",

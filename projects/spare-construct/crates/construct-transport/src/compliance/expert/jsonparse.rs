@@ -56,7 +56,7 @@ fn tok_of(c: Option<u16>) -> Tok {
     match c {
         None => Tok::Eos,
         Some(0x22) => Tok::Str,
-        Some(0x2d) | Some(0x30..=0x39) => Tok::Num,
+        Some(0x2d | 0x30..=0x39) => Tok::Num,
         Some(0x7b) => Tok::LBrace,
         Some(0x7d) => Tok::RBrace,
         Some(0x5b) => Tok::LBrack,
@@ -98,7 +98,7 @@ impl Parser {
     }
 
     fn skip_ws(&mut self) {
-        while matches!(self.cur(), Some(0x20) | Some(0x09) | Some(0x0a) | Some(0x0d)) {
+        while matches!(self.cur(), Some(0x20 | 0x09 | 0x0a | 0x0d)) {
             self.pos += 1;
         }
     }
@@ -144,7 +144,7 @@ impl Parser {
                     return format!("\"{whole}\" is not valid JSON");
                 }
                 let n = self.src.len();
-                let ch = text_of(&self.src[self.pos..self.pos + 1]);
+                let ch = text_of(&self.src[self.pos..=self.pos]);
                 if n < MIN_FOR_CONTEXT {
                     format!("Unexpected token '{ch}', \"{whole}\" is not valid JSON")
                 } else if self.pos < CONTEXT {
@@ -259,9 +259,9 @@ impl Parser {
                 self.pos += 1;
             }
         }
-        if matches!(self.cur(), Some(0x65) | Some(0x45)) {
+        if matches!(self.cur(), Some(0x65 | 0x45)) {
             self.pos += 1;
-            if matches!(self.cur(), Some(0x2b) | Some(0x2d)) {
+            if matches!(self.cur(), Some(0x2b | 0x2d)) {
                 self.pos += 1;
             }
             if !is_digit(self.cur()) {

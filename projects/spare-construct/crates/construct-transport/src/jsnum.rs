@@ -12,12 +12,12 @@
 //! [`JsNum`] is any JSON value read through coercion (a number, text, a boolean, or an
 //! array or object), and [`Num`] (`Maybe<JsNum>`) is the usual field type for a number,
 //! flag or other scalar the engine coerces.
-//! Method: the ECMAScript specification's ToNumber, StringToNumber, ToInt32, ToUint32,
-//! Number::toString, Number.prototype.toFixed and toPrecision, and Math.round; V8's
+//! Method: the ECMAScript specification's `ToNumber`, `StringToNumber`, `ToInt32`, `ToUint32`,
+//! `Number::toString`, Number.prototype.toFixed and toPrecision, and Math.round; V8's
 //! algorithms for Math.round (ceiling, then step back) and Math.hypot (scaled, Kahan-summed);
 //! ICU's behaviour for `Intl.NumberFormat` (it rounds the shortest round-trip decimal, half
 //! away from zero). Every function is checked bit for bit, or character for character,
-//! against Node 24 in tests/util_cases.rs (tools/transport-truth/gen-util-cases.mjs).
+//! against Node 24 in `tests/util_cases.rs` (tools/transport-truth/gen-util-cases.mjs).
 //!
 //! Not covered here: `Math.sin`, `cos`, `asin`, `atan2`, `exp`, `log` and `pow`. Rust's f64
 //! methods call the platform's C library, which differs from V8's own implementations in the
@@ -25,13 +25,19 @@
 //! [`crate::jsmath`] has V8's `exp`, `sin`, `cos` and `asin` bit for bit; `atan2` and `log`
 //! are still the platform's, and `pow` is the platform's with V8's special cases.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "the names in the number-to-text algorithms are ECMAScript's (Number::toString: k, n, s, e), so the port reads against the specification"
+)]
+
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use serde_json::Value;
 
 /* ---------------- white space and strings ---------------- */
 
-/// True for the characters JavaScript's StringToNumber and `String.prototype.trim` strip (white space and line terminators).
+/// True for the characters JavaScript's `StringToNumber` and `String.prototype.trim` strip (white space and line terminators).
+#[must_use]
 pub fn is_js_space(c: char) -> bool {
     matches!(
         c,
@@ -57,6 +63,7 @@ pub fn js_trim(s: &str) -> &str {
 ///
 /// Hexadecimal, octal and binary literals longer than 128 bits are summed in f64 and may
 /// differ from JavaScript in the last bit (no saved project holds one).
+#[must_use]
 pub fn string_to_number(s: &str) -> f64 {
     let t = js_trim(s);
     if t.is_empty() {
@@ -136,9 +143,9 @@ fn parse_radix(s: &str, radix: u32) -> f64 {
             return f64::NAN;
         };
         exact = exact
-            .and_then(|v| v.checked_mul(radix as u128))
-            .and_then(|v| v.checked_add(d as u128));
-        approx = approx * radix as f64 + d as f64;
+            .and_then(|v| v.checked_mul(u128::from(radix)))
+            .and_then(|v| v.checked_add(u128::from(d)));
+        approx = approx * f64::from(radix) + f64::from(d);
     }
     // u128 to f64 rounds to nearest, ties to even, as the specification's rounding does
     match exact {
@@ -148,6 +155,7 @@ fn parse_radix(s: &str, radix: u32) -> f64 {
 }
 
 /// `Number(v)` for any JSON value: null 0, booleans 0 or 1, text by [`string_to_number`], arrays through their text, objects NaN.
+#[must_use]
 pub fn value_to_number(v: &Value) -> f64 {
     match v {
         Value::Null => 0.0,
@@ -164,6 +172,7 @@ fn bool_to_number(b: bool) -> f64 {
 }
 
 /// `String(v)` for any JSON value: "null", "true", JavaScript number text, arrays joined with commas, objects "[object Object]".
+#[must_use]
 pub fn value_to_js_string(v: &Value) -> String {
     match v {
         Value::Null => "null".to_string(),
@@ -187,6 +196,7 @@ pub fn value_to_js_string(v: &Value) -> String {
 }
 
 /// `!!v` for any JSON value: null, false, 0, NaN and "" are false; arrays and objects are true.
+#[must_use]
 pub fn value_truthy(v: &Value) -> bool {
     match v {
         Value::Null => false,
@@ -198,34 +208,38 @@ pub fn value_truthy(v: &Value) -> bool {
 }
 
 /// `!!x` for a number: false for 0, -0 and NaN.
+#[must_use]
 pub fn truthy_number(x: f64) -> bool {
     !(x == 0.0 || x.is_nan())
 }
 
 /// `x || d` for a number already coerced (`+x || d`): 0, -0 and NaN fall through to d.
+#[must_use]
 pub fn or_default(x: f64, d: f64) -> f64 {
     if truthy_number(x) { x } else { d }
 }
 
 /// `x | 0` (ToInt32): NaN and infinities give 0; otherwise truncated and wrapped modulo 2^32 into the signed range.
+#[must_use]
 pub fn to_int32(x: f64) -> i32 {
     if !x.is_finite() {
         return 0;
     }
-    let m = x.trunc().rem_euclid(4294967296.0);
-    if m >= 2147483648.0 {
-        (m - 4294967296.0) as i32
+    let m = x.trunc().rem_euclid(4_294_967_296.0);
+    if m >= 2_147_483_648.0 {
+        (m - 4_294_967_296.0) as i32
     } else {
         m as i32
     }
 }
 
 /// `x >>> 0` (ToUint32): NaN and infinities give 0; otherwise truncated and wrapped modulo 2^32.
+#[must_use]
 pub fn to_uint32(x: f64) -> u32 {
     if !x.is_finite() {
         return 0;
     }
-    x.trunc().rem_euclid(4294967296.0) as u32
+    x.trunc().rem_euclid(4_294_967_296.0) as u32
 }
 
 /// A count, limit or position read from a JSON number, as Rust's `x as usize` gives it: truncated toward zero, with NaN and
@@ -252,9 +266,21 @@ pub fn usize_to_f64(n: usize) -> f64 {
     n as f64
 }
 
+/// A count kept in a `u64` (vehicles, trips) as a JavaScript number.
+#[must_use]
+// Bound: these count things a run makes one at a time, far below 2^53, where f64 is exact.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "a count stays below 2^53, where f64 is exact"
+)]
+pub fn u64_to_f64(n: u64) -> f64 {
+    n as f64
+}
+
 /* ---------------- Math ---------------- */
 
-/// `Math.round`: the nearest integer, ties toward +Infinity; keeps -0 for -0.5 <= x <= -0 (V8's Float64Round).
+/// `Math.round`: the nearest integer, ties toward +Infinity; keeps -0 for -0.5 <= x <= -0 (V8's `Float64Round`).
+#[must_use]
 pub fn math_round(x: f64) -> f64 {
     if !x.is_finite() {
         return x;
@@ -264,6 +290,7 @@ pub fn math_round(x: f64) -> f64 {
 }
 
 /// `Math.min(a, b)`: NaN if either is NaN, and -0 is below +0 (unlike `f64::min`).
+#[must_use]
 pub fn math_min(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
         return f64::NAN;
@@ -279,6 +306,7 @@ pub fn math_min(a: f64, b: f64) -> f64 {
 }
 
 /// `Math.max(a, b)`: NaN if either is NaN, and +0 is above -0 (unlike `f64::max`).
+#[must_use]
 pub fn math_max(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
         return f64::NAN;
@@ -294,16 +322,19 @@ pub fn math_max(a: f64, b: f64) -> f64 {
 }
 
 /// `Math.min(...xs)`: Infinity for no values.
+#[must_use]
 pub fn math_min_of(xs: &[f64]) -> f64 {
     xs.iter().fold(f64::INFINITY, |m, &x| math_min(m, x))
 }
 
 /// `Math.max(...xs)`: -Infinity for no values.
+#[must_use]
 pub fn math_max_of(xs: &[f64]) -> f64 {
     xs.iter().fold(f64::NEG_INFINITY, |m, &x| math_max(m, x))
 }
 
 /// `Math.hypot(...xs)` as V8 computes it: scaled by the largest value, Kahan-summed squares (not the C library's hypot).
+#[must_use]
 pub fn math_hypot(xs: &[f64]) -> f64 {
     if xs.is_empty() {
         return 0.0;
@@ -346,10 +377,10 @@ pub fn math_hypot(xs: &[f64]) -> f64 {
 // of them upward; the specification (and ICU) take the even one, so a tie is checked and corrected
 // (1642031110231315.25 is "1642031110231315.2" in JavaScript, not ".3").
 fn shortest_digits(x: f64) -> (Vec<u8>, i32) {
-    let s = format!("{:e}", x);
+    let s = format!("{x:e}");
     let (mant, exp) = s.split_once('e').expect("exponent form");
     let exp: i32 = exp.parse().expect("exponent");
-    let mut digits: Vec<u8> = mant.bytes().filter(|c| c.is_ascii_digit()).collect();
+    let mut digits: Vec<u8> = mant.bytes().filter(u8::is_ascii_digit).collect();
     strip_zeros(&mut digits);
     let n = exp + 1;
     // The last digit counts units of 10^unit; a tie means x is exactly half a unit from two candidates
@@ -433,7 +464,7 @@ impl Big {
     fn digits(&self) -> Vec<u8> {
         let mut s = self.0.last().copied().unwrap_or(0).to_string();
         for limb in self.0.iter().rev().skip(1) {
-            s.push_str(&format!("{:09}", limb));
+            s.push_str(&format!("{limb:09}"));
         }
         s.into_bytes()
     }
@@ -469,7 +500,7 @@ fn exact_digits(x: f64) -> (Vec<u8>, i32) {
 // The whole number nearest digits times 10^(exp + frac), a tie rounding up (the value is a magnitude,
 // so this is round half away from zero): its decimal digits, without leading zeros ("0" for zero).
 fn round_digits(digits: &[u8], exp: i32, frac: i32) -> Vec<u8> {
-    let shift = exp as i64 + frac as i64;
+    let shift = i64::from(exp) + i64::from(frac);
     let mut v: Vec<u8>;
     if shift >= 0 {
         v = digits.to_vec();
@@ -512,7 +543,8 @@ fn ascii(v: &[u8]) -> &str {
 
 /* ---------------- number to text ---------------- */
 
-/// `String(x)` for a number (Number::toString): shortest round-trip digits, exponent form below 1e-6 and from 1e21.
+/// `String(x)` for a number (`Number::toString)`: shortest round-trip digits, exponent form below 1e-6 and from 1e21.
+#[must_use]
 pub fn number_to_js_string(x: f64) -> String {
     if x.is_nan() {
         return "NaN".to_string();
@@ -540,18 +572,19 @@ pub fn number_to_js_string(x: f64) -> String {
     }
     let e = n - 1;
     let es = if e >= 0 {
-        format!("+{}", e)
+        format!("+{e}")
     } else {
         format!("-{}", -e)
     };
     if k == 1 {
-        format!("{}e{}", s, es)
+        format!("{s}e{es}")
     } else {
         format!("{}.{}e{}", &s[..1], &s[1..], es)
     }
 }
 
 /// `x.toFixed(digits)` (digits 0 to 100): exact decimal value rounded half up; from 1e21 the `String(x)` form.
+#[must_use]
 pub fn to_fixed(x: f64, digits: usize) -> String {
     assert!(digits <= 100, "toFixed digits must be 0 to 100");
     if !x.is_finite() {
@@ -586,6 +619,7 @@ fn with_point(mut n: Vec<u8>, frac: usize) -> String {
 }
 
 /// `x.toPrecision(p)` (p 1 to 100): exact decimal value rounded half up to p significant digits.
+#[must_use]
 pub fn to_precision(x: f64, p: usize) -> String {
     assert!(
         (1..=100).contains(&p),
@@ -617,14 +651,14 @@ pub fn to_precision(x: f64, p: usize) -> String {
         }
         out.push('e');
         out.push_str(&if e >= 0 {
-            format!("+{}", e)
+            format!("+{e}")
         } else {
             format!("-{}", -e)
         });
         return out;
     }
     if e == pi - 1 {
-        return format!("{}{}", sign, s);
+        return format!("{sign}{s}");
     }
     if e >= 0 {
         let k = (e + 1) as usize;
@@ -638,6 +672,7 @@ pub fn to_precision(x: f64, p: usize) -> String {
 /// ICU rounds the shortest round-trip decimal (so 1.005 gives "1.01", where toFixed gives
 /// "1.00"), half away from zero; thousands are grouped with commas; the minus sign is a
 /// hyphen-minus and is kept for -0 and for values that round to zero ("-0", "-0.0").
+#[must_use]
 pub fn intl_format(x: f64, d: usize) -> String {
     let neg = x.is_sign_negative();
     let a = x.abs();
@@ -678,10 +713,10 @@ pub fn json_number(x: f64) -> Value {
         return Value::Null;
     }
     if x.fract() == 0.0 {
-        if (-9223372036854775808.0..9223372036854775808.0).contains(&x) {
+        if (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0).contains(&x) {
             return Value::from(x as i64);
         }
-        if (0.0..18446744073709551616.0).contains(&x) {
+        if (0.0..18_446_744_073_709_551_616.0).contains(&x) {
             return Value::from(x as u64);
         }
     }
@@ -689,6 +724,7 @@ pub fn json_number(x: f64) -> Value {
 }
 
 /// A number as tools/transport-truth/gen-expected.mjs writes results: finite as [`json_number`], otherwise "NaN", "Infinity" or "-Infinity".
+#[must_use]
 pub fn plain_number(x: f64) -> Value {
     if x.is_finite() {
         json_number(x)
@@ -766,6 +802,7 @@ impl Maybe<String> {
         self.get().map(String::as_str)
     }
     /// `x || d` for text: missing, null and "" give d.
+    #[must_use]
     pub fn str_or<'a>(&'a self, d: &'a str) -> &'a str {
         match self.as_str() {
             Some(s) if !s.is_empty() => s,
@@ -773,6 +810,7 @@ impl Maybe<String> {
         }
     }
     /// `x === s`: true only when set to exactly s.
+    #[must_use]
     pub fn is(&self, s: &str) -> bool {
         self.as_str() == Some(s)
     }
@@ -817,6 +855,7 @@ pub enum JsNum {
 
 impl JsNum {
     /// `Number(x)` / `+x`.
+    #[must_use]
     pub fn to_number(&self) -> f64 {
         match self {
             JsNum::Number(x) => *x,
@@ -826,6 +865,7 @@ impl JsNum {
         }
     }
     /// `!!x`.
+    #[must_use]
     pub fn truthy(&self) -> bool {
         match self {
             JsNum::Number(x) => truthy_number(*x),
@@ -835,6 +875,7 @@ impl JsNum {
         }
     }
     /// `String(x)`.
+    #[must_use]
     pub fn to_js_string(&self) -> String {
         match self {
             JsNum::Number(x) => number_to_js_string(*x),
@@ -844,6 +885,7 @@ impl JsNum {
         }
     }
     /// The text, when the value is text.
+    #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
             JsNum::Text(s) => Some(s),
@@ -851,6 +893,7 @@ impl JsNum {
         }
     }
     /// The value as JSON, as the file held it.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         match self {
             JsNum::Number(x) => json_number(*x),
@@ -912,6 +955,7 @@ pub type Num = Maybe<JsNum>;
 
 impl Maybe<JsNum> {
     /// `+x` / `Number(x)`: missing gives NaN, null gives 0.
+    #[must_use]
     pub fn num(&self) -> f64 {
         match self {
             Maybe::Missing => f64::NAN,
@@ -920,14 +964,17 @@ impl Maybe<JsNum> {
         }
     }
     /// `+x || d`: 0 and NaN (so missing, null, "" and false too) give d.
+    #[must_use]
     pub fn or(&self, d: f64) -> f64 {
         or_default(self.num(), d)
     }
     /// `x | 0`.
+    #[must_use]
     pub fn int32(&self) -> i32 {
         to_int32(self.num())
     }
     /// `!!x`.
+    #[must_use]
     pub fn truthy(&self) -> bool {
         match self {
             Maybe::Set(v) => v.truthy(),
@@ -935,14 +982,17 @@ impl Maybe<JsNum> {
         }
     }
     /// `x === true`.
+    #[must_use]
     pub fn is_true(&self) -> bool {
         matches!(self, Maybe::Set(JsNum::Bool(true)))
     }
     /// `x === false`.
+    #[must_use]
     pub fn is_false(&self) -> bool {
         matches!(self, Maybe::Set(JsNum::Bool(false)))
     }
     /// `String(x)`: "undefined" when missing, "null" when null.
+    #[must_use]
     pub fn js_string(&self) -> String {
         match self {
             Maybe::Missing => "undefined".to_string(),
@@ -951,6 +1001,7 @@ impl Maybe<JsNum> {
         }
     }
     /// A number field set to x.
+    #[must_use]
     pub fn number(x: f64) -> Self {
         Maybe::Set(JsNum::Number(x))
     }

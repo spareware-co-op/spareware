@@ -43,6 +43,7 @@ fn is_array_index(k: &str) -> bool {
 
 impl JsonValue {
     /// An empty object.
+    #[must_use]
     pub fn object() -> JsonValue {
         JsonValue::Object(OrderedMap::new())
     }
@@ -61,22 +62,27 @@ impl JsonValue {
         serde_json::from_str(text).map_err(|e| e.to_string())
     }
     /// True for an object.
+    #[must_use]
     pub fn is_object(&self) -> bool {
         matches!(self, JsonValue::Object(_))
     }
     /// True for an array.
+    #[must_use]
     pub fn is_array(&self) -> bool {
         matches!(self, JsonValue::Array(_))
     }
     /// True for null.
+    #[must_use]
     pub fn is_null(&self) -> bool {
         matches!(self, JsonValue::Null)
     }
     /// `typeof x === 'object' && x !== null` (arrays count).
+    #[must_use]
     pub fn is_object_like(&self) -> bool {
         matches!(self, JsonValue::Object(_) | JsonValue::Array(_))
     }
     /// The object's map, if an object.
+    #[must_use]
     pub fn as_object(&self) -> Option<&OrderedMap<JsonValue>> {
         match self {
             JsonValue::Object(m) => Some(m),
@@ -91,6 +97,7 @@ impl JsonValue {
         }
     }
     /// The array, if an array.
+    #[must_use]
     pub fn as_array(&self) -> Option<&Vec<JsonValue>> {
         match self {
             JsonValue::Array(a) => Some(a),
@@ -105,6 +112,7 @@ impl JsonValue {
         }
     }
     /// The text, if text.
+    #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
             JsonValue::String(s) => Some(s),
@@ -112,6 +120,7 @@ impl JsonValue {
         }
     }
     /// The number, if a number.
+    #[must_use]
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             JsonValue::Number(x) => Some(*x),
@@ -119,6 +128,7 @@ impl JsonValue {
         }
     }
     /// `obj[key]` of an object (None for a missing key or another type).
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&JsonValue> {
         self.as_object().and_then(|m| m.get(key))
     }
@@ -158,6 +168,7 @@ impl JsonValue {
         self.as_object_mut().and_then(|m| m.remove(key))
     }
     /// `!!x`.
+    #[must_use]
     pub fn truthy(&self) -> bool {
         match self {
             JsonValue::Null => false,
@@ -168,6 +179,7 @@ impl JsonValue {
         }
     }
     /// `+x`.
+    #[must_use]
     pub fn to_number(&self) -> f64 {
         match self {
             JsonValue::Number(x) => *x,
@@ -175,6 +187,7 @@ impl JsonValue {
         }
     }
     /// `String(x)`.
+    #[must_use]
     pub fn js_string(&self) -> String {
         match self {
             JsonValue::Number(x) => number_to_js_string(*x),
@@ -183,6 +196,7 @@ impl JsonValue {
         }
     }
     /// `x === y` for two values (objects and arrays are never identical).
+    #[must_use]
     pub fn strict_eq(&self, other: &JsonValue) -> bool {
         match (self, other) {
             (JsonValue::Null, JsonValue::Null) => true,
@@ -221,12 +235,14 @@ impl JsonValue {
         }
     }
     /// `JSON.stringify(x)`.
+    #[must_use]
     pub fn stringify(&self) -> String {
         let mut s = String::new();
         self.write(&mut s, None, 0);
         s
     }
     /// `JSON.stringify(x, null, indent)` with an indent of that many spaces (1 to 10).
+    #[must_use]
     pub fn stringify_pretty(&self, indent: usize) -> String {
         let mut s = String::new();
         self.write(&mut s, Some(indent.min(10)), 0);
@@ -387,6 +403,7 @@ impl<'de> Deserialize<'de> for JsonValue {
 
 /// `U.deepMerge(base, over)`: objects merge key by key (the base's keys first, in its order, then new keys in the
 /// over object's order); anything else in `over` replaces the base (arrays are replaced, not merged).
+#[must_use]
 pub fn deep_merge(base: &JsonValue, over: &JsonValue) -> JsonValue {
     let JsonValue::Object(om) = over else {
         return over.clone();

@@ -1,4 +1,4 @@
-//! The junction CSVs: junction_movements.csv, turning_movements.csv and one junction's turning count.
+//! The junction CSVs: `junction_movements.csv`, `turning_movements.csv` and one junction's turning count.
 
 use super::j1::{J1Row, J1Sub};
 use super::{Entry, Sc, Tools, entries, js_str, moves_of, nc_text, per_name, xid, STORAGE_RED};
@@ -53,7 +53,7 @@ fn heads(h: &[&str]) -> Vec<Cell> {
     h.iter().map(|x| txt(x)).collect()
 }
 
-/// The columns of junction_movements.csv.
+/// The columns of `junction_movements.csv`.
 pub const JM_HEAD: [&str; 25] = [
     "scenario_id",
     "year",
@@ -82,7 +82,7 @@ pub const JM_HEAD: [&str; 25] = [
     "exceeds_storage",
 ];
 
-/// The columns of turning_movements.csv.
+/// The columns of `turning_movements.csv`.
 pub const TM_HEAD: [&str; 19] = [
     "scenario_id",
     "period",
@@ -105,7 +105,7 @@ pub const TM_HEAD: [&str; 19] = [
     "pcu_h",
 ];
 
-/// What a summary row gives the junction_movements.csv: the fields `row` reads.
+/// What a summary row gives the `junction_movements.csv`: the fields `row` reads.
 struct RowView<'a> {
     v: Option<f64>,
     hv_pct: Option<f64>,
@@ -165,6 +165,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `junctionMovementsCSV(P, which, periods)`: the movement summary of every junction, scenario and period (docs/spec/sidra-tables).
+    #[must_use]
     pub fn junction_movements_csv(&self, which: Option<&[Sc<'a>]>, periods: Option<&[String]>) -> String {
         let mut out: Vec<Vec<Cell>> = vec![heads(&JM_HEAD)];
         for s in self.sc_list(which) {
@@ -261,7 +262,7 @@ impl<'a> Tools<'a> {
 
     /// `turningMovementsCSV(P, which, periods, opts)`: every junction with turning traffic; site movements for sites. Turn-volume
     /// exports need the SIDRA gap: an unconverged run gives its reason as the error unless `force`, and a forced file gains a
-    /// last column, export_note, that says NOT CONVERGED on every row from such a run.
+    /// last column, `export_note`, that says NOT CONVERGED on every row from such a run.
     pub fn turning_movements_csv(
         &self,
         which: Option<&[Sc<'a>]>,
@@ -363,7 +364,7 @@ pub struct TurnCountFile {
     pub nc: String,
 }
 
-impl<'a> Tools<'a> {
+impl Tools<'_> {
     /// `turnCountFile(sc, res, nodeId)`: one junction's turning count (`Turns.turnCountCSV`); a run short of the turn-volume
     /// export gap starts with a 'Convergence, NOT CONVERGED' row, so the file says so wherever it goes.
     pub fn turn_count_file(

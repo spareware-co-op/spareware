@@ -7,15 +7,12 @@
 //!
 //! Results are passed explicitly: `econ` takes each scenario with its [`Results`] (what
 //! engine.js reads as `sc.res`), and the settings it reads as `Store.S`.
-//! The standards (mbcm, mbcmUpdate, ipm, noise) come from crate::standards.
+//! The standards (mbcm, mbcmUpdate, ipm, noise) come from `crate::standards`.
 
 // `!(x > 0)` is the JavaScript's own test: unlike `x <= 0` it is true for NaN
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
 
-use crate::jsnum::{
-    Maybe, Num, js_trim, json_number, math_max, math_min, math_round, number_to_js_string,
-    or_default, plain_number, to_fixed, to_int32, value_to_number,
-};
+use crate::jsnum::{Maybe, Num, js_trim, json_number, math_max, math_min, math_round, number_to_js_string, or_default, plain_number, to_fixed, to_int32, usize_to_f64, value_to_number};
 use crate::project::{EconSettings, OrderedMap, Scenario, Settings};
 use crate::results::{Res, Results, js_sort_by, plain};
 use crate::standards::{STANDARDS, year_of};
@@ -25,6 +22,7 @@ use serde_json::{Value, json};
 use std::borrow::Cow;
 
 /// The default discount schedule as engine.js holds it ([{ to: 30, r: 2 }, ...]).
+#[must_use]
 pub fn mbcm_rates() -> Value {
     Value::Array(
         STANDARDS
@@ -40,7 +38,8 @@ pub fn mbcm_rates() -> Value {
 fn econ_settings(s: &Settings) -> Cow<'_, EconSettings> {
     match s.econ.get() {
         Some(e) => Cow::Borrowed(e),
-        None => Cow::Owned(serde_json::from_value(json!({})).expect("an empty econ block")),
+        // every field reads as missing, as an empty object would give
+        None => Cow::Owned(EconSettings::default()),
     }
 }
 
@@ -85,6 +84,7 @@ pub struct Capital {
 /// A settings object without `econ.laneKm` or `econ.node` reads as empty maps (the JavaScript
 /// throws when it needs them). Junction prices are added as numbers; the JavaScript's `+=`
 /// joins a price saved as text onto the total as text ("0" + "2" is "02").
+#[must_use]
 pub fn capital(sc: &Scenario, s: &Settings) -> Capital {
     let e = econ_settings(s);
     let (mut links, mut nodes, mut km) = (0.0, 0.0, 0.0);
@@ -92,7 +92,7 @@ pub fn capital(sc: &Scenario, s: &Settings) -> Capital {
         if l.status.is("proposed") && sc.nodes.contains_key(&l.a) && sc.nodes.contains_key(&l.b) {
             let k = sc.link_len(l) / 1000.0;
             km += k;
-            let lanes = to_int32(l.lanes_ab.num()) as f64 + to_int32(l.lanes_ba.num()) as f64;
+            let lanes = f64::from(to_int32(l.lanes_ab.num())) + f64::from(to_int32(l.lanes_ba.num()));
             links += k * lanes * map_num_or(&e.lane_km, key_text(&l.cls), 3.0);
         }
     }
@@ -112,6 +112,7 @@ pub fn capital(sc: &Scenario, s: &Settings) -> Capital {
 /* ---------------- MBCM discounting ---------------- */
 
 /// `Engine.uspwf(i, n)`: present worth of a constant benefit of 1 a year for n years, continuously discounted at rate i.
+#[must_use]
 pub fn uspwf(i: f64, n: f64) -> f64 {
     if !(n > 0.0) {
         return 0.0;
@@ -123,6 +124,7 @@ pub fn uspwf(i: f64, n: f64) -> f64 {
 }
 
 /// `Engine.agpwf(i, n)`: present worth of a benefit growing by 1 a year for n years, continuously discounted at rate i.
+#[must_use]
 pub fn agpwf(i: f64, n: f64) -> f64 {
     if !(n > 0.0) {
         return 0.0;
@@ -171,6 +173,7 @@ fn is_js_object(v: &Value) -> bool {
 }
 
 /// `Engine.pwf(rates, n)`: present worth factors over n years of a schedule ([{ to, r }], to null = onwards) or a single rate (%).
+#[must_use]
 pub fn pwf(rates: &Value, n: f64) -> Pwf {
     let mut segs: Vec<Seg> = match rates {
         Value::Array(a) => a
@@ -193,7 +196,8 @@ pub fn pwf(rates: &Value, n: f64) -> Pwf {
         segs.push(Seg { to: n, r: 0.0 });
     }
     let (mut t0, mut d, mut u1, mut a1) = (0.0, 1.0, 0.0, 0.0);
-    let last = segs.len() - 1;
+    // segs has at least one segment (one is pushed when it is empty)
+    let last = segs.len().saturating_sub(1);
     for (k, seg) in segs.iter().enumerate() {
         if !(t0 < n) {
             break;
@@ -237,7 +241,74 @@ fn has_text(x: &Num) -> bool {
     x.truthy() && !js_trim(&x.js_string()).is_empty()
 }
 
+/// The uniform method of `Engine.econ`: older projects keep their saved flat-benefit discounting, with the
+/// sensitivity rate beside it. `dco2_avg` is the CO2 difference averaged over the periods.
+fn econ_uniform(
+    e: &EconSettings,
+    dvht: f64,
+    dco2_avg: f64,
+    cap: f64,
+    n_pairs: f64,
+    noise: Option<PeriodSnr>,
+) -> Econ {
+    let bcr_of = |pv: f64| if cap > 0.001 { Some(pv / cap) } else { None };
+    let commercial = e.activity.is("commercial");
+    // Older projects keep their saved flat-benefit discounting, with the sensitivity rate beside it
+    let annual = dvht * e.annual_hours.num() * e.vot.num() / 1e6;
+    let years = e.years.num();
+    let flat = |rr: f64| {
+        let r = rr / 100.0;
+        if r > 0.0 {
+            (1.0 - crate::jsmath::pow(1.0 + r, -years)) / r
+        } else {
+            years
+        }
+    };
+    let pv = annual * flat(e.discount.num());
+    let sens_rate = if commercial {
+        STANDARDS.mbcm.commercial_sens_rate
+    } else if e.sens_rate.num() > 0.0 {
+        e.sens_rate.num()
+    } else {
+        STANDARDS.mbcm.sens_rate
+    };
+    let pv8 = annual * flat(sens_rate);
+    let warnings = match &noise {
+        Some(n) if !n.snr.ok => vec![n.snr.text.clone()],
+        _ => Vec::new(),
+    };
+    Econ::Uniform(Box::new(EconUniform {
+        method: "uniform".to_string(),
+        dvht,
+        annual,
+        pv,
+        pv8,
+        cap,
+        bcr: bcr_of(pv),
+        bcr8: bcr_of(pv8),
+        bcr_text: bcr_text(bcr_of(pv)),
+        bcr8_text: bcr_text(bcr_of(pv8)),
+        sens_rate,
+        dco2: dco2_avg * e.annual_hours.num(),
+        periods: n_pairs,
+        years: e.years.clone(),
+        rate: e.discount.clone(),
+        snr: noise,
+        label: STANDARDS.mbcm.label.to_string(),
+        basis: format!(
+            "{}% a year over {} years, flat benefits (the project's saved settings, not MBCM v1.7.5); {}% sensitivity ({})",
+            e.discount.js_string(),
+            e.years.js_string(),
+            number_to_js_string(sens_rate),
+            STANDARDS.mbcm.discount.src.name
+        ),
+        standard: std_ref(&STANDARDS.mbcm.discount.src),
+        warnings,
+    }))
+}
+
 /// `Engine.econPeriod(E)`: 40 years by default; up to 60 with a justification note; more than 60 only with NZTA's written approval.
+#[must_use]
 pub fn econ_period(e: &EconSettings) -> EconPeriod {
     let want = math_round(or_default(e.years.num(), STANDARDS.mbcm.years));
     let (my, ly) = (STANDARDS.mbcm.years, STANDARDS.mbcm.long_years);
@@ -312,6 +383,7 @@ pub struct IpmRating {
 }
 
 /// `Engine.ipmBand(bcr, edition)`: the IPM band of a BCR in each edition (or only the one named), banded on the unrounded value.
+#[must_use]
 pub fn ipm_band(bcr: Option<f64>, edition: Option<&str>) -> Vec<IpmRating> {
     STANDARDS
         .ipm
@@ -333,13 +405,19 @@ pub fn ipm_band(bcr: Option<f64>, edition: Option<&str>) -> Vec<IpmRating> {
                     url: None,
                     verified: None,
                 },
-                Some(x) => {
-                    let b = e
-                        .bands
-                        .iter()
-                        .find(|b| x < b.below)
-                        .expect("the last band has no upper bound");
-                    IpmRating {
+                // the last band has no upper bound, so a finite x always finds one
+                Some(x) => match e.bands.iter().find(|b| x < b.below) {
+                    None => IpmRating {
+                        edition: e.src.id.to_string(),
+                        draft: e.draft,
+                        band: None,
+                        label: "No BCR".to_string(),
+                        note,
+                        source: None,
+                        url: None,
+                        verified: None,
+                    },
+                    Some(b) => IpmRating {
                         edition: e.src.id.to_string(),
                         draft: e.draft,
                         band: Some(b.band.to_string()),
@@ -348,14 +426,15 @@ pub fn ipm_band(bcr: Option<f64>, edition: Option<&str>) -> Vec<IpmRating> {
                         source: Some(e.src.name.to_string()),
                         url: e.src.url.map(str::to_string),
                         verified: Some(e.src.verified),
-                    }
-                }
+                    },
+                },
             }
         })
         .collect()
 }
 
 /// `Engine.bcrText(x)`: one decimal below 10, a whole number from 10 (12.4 is "12"), "–" when none.
+#[must_use]
 pub fn bcr_text(x: Option<f64>) -> String {
     match x {
         Some(x) if x.is_finite() => {
@@ -401,14 +480,15 @@ pub struct Snr {
 }
 
 /// `Engine.snr(bRes, oRes)`: signal to noise of the VHT difference between two runs; None without both results or a base VHT. s is `Store.S` (for the tighter gap target).
+#[must_use]
 pub fn snr(b: Option<&Res>, o: Option<&Res>, s: &Settings) -> Option<Snr> {
     let (b, o) = (b?, o?);
     if !(b.kpi.vht > 0.0) {
         return None;
     }
-    let g = math_max(or_default(b.gap, 0.0), or_default(o.gap, 0.0));
-    let d = (b.kpi.vht - o.kpi.vht).abs() / b.kpi.vht;
-    let r = if g > 0.0 { d / g } else { f64::INFINITY };
+    let gap = math_max(or_default(b.gap, 0.0), or_default(o.gap, 0.0));
+    let diff = (b.kpi.vht - o.kpi.vht).abs() / b.kpi.vht;
+    let r = if gap > 0.0 { diff / gap } else { f64::INFINITY };
     let min = STANDARDS.noise.min;
     let text = if r >= min {
         String::new()
@@ -490,6 +570,7 @@ pub enum Econ {
 
 impl Econ {
     /// "mbcm" or "uniform"; None for a year mismatch.
+    #[must_use]
     pub fn method(&self) -> Option<&str> {
         match self {
             Econ::Mismatch(_) => None,
@@ -748,7 +829,7 @@ fn seg_text(rates: &Value) -> String {
             if k > 0 {
                 format!("{}% from year {}", r, number_to_js_string(from))
             } else {
-                format!("{}% for all years", r)
+                format!("{r}% for all years")
             }
         } else if k > 0 {
             format!("{}% to year {}", r, number_to_js_string(x.to))
@@ -767,11 +848,12 @@ fn hours_of(h: &OrderedMap<Num>, p: &str) -> f64 {
 }
 
 /// `Engine.econ(baseSc, optSc, period)`: indicative economics of an option against its base, from
-/// each scenario's results (base_res, opt_res: `sc.res`) under the settings s (`Store.S`).
+/// each scenario's results (`base_res`, `opt_res`: `sc.res`) under the settings s (`Store.S`).
 ///
 /// None unless both have a result for the period. Benefits are the VHT saved in the modelled
 /// peaks (AM and PM), valued at the value of time over each period's equivalent hours a year,
 /// discounted by MBCM (method "mbcm") or flat at the saved rate (older projects).
+#[must_use]
 pub fn econ(
     s: &Settings,
     base_sc: &Scenario,
@@ -807,7 +889,7 @@ pub fn econ(
         .collect();
     js_sort_by(&mut noises, |a, b| a.snr.r - b.snr.r);
     let noise = noises.into_iter().next();
-    let n_pairs = pairs.len() as f64;
+    let n_pairs = usize_to_f64(pairs.len());
     if let Some((b, o, _)) = odd {
         let base_year = base_year_of(b);
         let opt_year = opt_year_of(o);
@@ -841,58 +923,7 @@ pub fn econ(
     let bcr_of = |pv: f64| if cap > 0.001 { Some(pv / cap) } else { None };
     let commercial = e.activity.is("commercial");
     if !e.method.is("mbcm") {
-        // Older projects keep their saved flat-benefit discounting, with the sensitivity rate beside it
-        let annual = dvht * e.annual_hours.num() * e.vot.num() / 1e6;
-        let years = e.years.num();
-        let flat = |rr: f64| {
-            let r = rr / 100.0;
-            if r > 0.0 {
-                (1.0 - crate::jsmath::pow(1.0 + r, -years)) / r
-            } else {
-                years
-            }
-        };
-        let pv = annual * flat(e.discount.num());
-        let sens_rate = if commercial {
-            STANDARDS.mbcm.commercial_sens_rate
-        } else if e.sens_rate.num() > 0.0 {
-            e.sens_rate.num()
-        } else {
-            STANDARDS.mbcm.sens_rate
-        };
-        let pv8 = annual * flat(sens_rate);
-        let warnings = match &noise {
-            Some(n) if !n.snr.ok => vec![n.snr.text.clone()],
-            _ => Vec::new(),
-        };
-        return Some(Econ::Uniform(Box::new(EconUniform {
-            method: "uniform".to_string(),
-            dvht,
-            annual,
-            pv,
-            pv8,
-            cap,
-            bcr: bcr_of(pv),
-            bcr8: bcr_of(pv8),
-            bcr_text: bcr_text(bcr_of(pv)),
-            bcr8_text: bcr_text(bcr_of(pv8)),
-            sens_rate,
-            dco2: avg(|k| k.co2) * e.annual_hours.num(),
-            periods: n_pairs,
-            years: e.years.clone(),
-            rate: e.discount.clone(),
-            snr: noise,
-            label: STANDARDS.mbcm.label.to_string(),
-            basis: format!(
-                "{}% a year over {} years, flat benefits (the project's saved settings, not MBCM v1.7.5); {}% sensitivity ({})",
-                e.discount.js_string(),
-                e.years.js_string(),
-                number_to_js_string(sens_rate),
-                STANDARDS.mbcm.discount.src.name
-            ),
-            standard: std_ref(&STANDARDS.mbcm.discount.src),
-            warnings,
-        })));
+        return Some(econ_uniform(&e, dvht, avg(|k| k.co2), cap, n_pairs, noise));
     }
     // { AM: 600, PM: 600, IP: 0, ...periodHours }
     let mut hours: OrderedMap<Num> = [("AM", 600.0), ("PM", 600.0), ("IP", 0.0)]

@@ -13,8 +13,9 @@ use crate::util::fmt;
 use std::collections::HashMap;
 
 /// `sectionCrashes(P, sc, Ls)`: the crashes on a section's links by year and severity (`{ year: { F, S, M, N } }`): each crash goes to its nearest
-/// existing road within 25 m, or to a nearby road its crash location names (as DataHub assigns crashes for crash risk). The crashes are the
+/// existing road within 25 m, or to a nearby road its crash location names (as `DataHub` assigns crashes for crash risk). The crashes are the
 /// project's own (`P.data.crashes`, each `[lat, lng, severity, year, location]`). None when no crashes are loaded.
+#[must_use]
 pub fn section_crashes(p: &V, sc: &V, ls: &[&V]) -> Option<V> {
     let cr = p.g("data").g("crashes").items();
     if cr.is_empty() {
@@ -101,6 +102,7 @@ pub fn section_crashes(p: &V, sc: &V, ls: &[&V]) -> Option<V> {
 /// `crashHistory(P, sc, Ls, since)`: the cl 3.3 crash history: the full calendar years of the CAS window (from the year the limit or road existed,
 /// `since`, when later), with the year to date reported but not counted (incomplete): `{ hist, years, from, to, since, ytdYear, ytd, lagYear, period }`.
 /// Null when no crashes are loaded.
+#[must_use]
 pub fn crash_history(p: &V, sc: &V, ls: &[&V], since: Option<f64>) -> V {
     let Some(by) = section_crashes(p, sc, ls) else { return V::Null };
     let cas = if p.g("data").g("loaded").g("cas").t() { p.g("data").g("loaded").g("cas").clone() } else { V::object() };
@@ -175,6 +177,7 @@ fn hist_of(ch: &V) -> [f64; 4] {
 /// watermark, disclaimer, decision }`. The proposed limit, school and new-road flags are read from `sc` (the active scenario by default); the existing
 /// road, its current limit, crash history, modelled speed and AADT from the do-minimum. A mean operating speed must be measured: a modelled one is
 /// labelled as a placeholder.
+#[must_use]
 pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
     let pr = pair(p);
     let sc = sc.unwrap_or_else(|| active_sc(p));
@@ -241,7 +244,7 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
     let src_txt: Option<V> = ls
         .iter()
         .map(|l| if l.g("cx").t() && l.g("cx").g("meanSpeedSrc").t() { l.g("cx").g("meanSpeedSrc").clone() } else { base_of(l).g("cx").g("meanSpeedSrc").clone() })
-        .find(|v| v.t());
+        .find(crate::compliance::jv::Jx::t);
     let m_src = if !meas.is_empty() {
         format!("measured ({})", src_txt.map_or("entered by the author".to_string(), |s| s.s()))
     } else if !mm.is_empty() {

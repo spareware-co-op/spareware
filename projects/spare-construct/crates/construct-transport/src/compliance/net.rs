@@ -4,11 +4,13 @@ use super::jv::{Jx, V};
 use crate::util::{self, LatLng};
 
 /// `[lat, lng]` of a node (or point) value.
+#[must_use]
 pub fn ll_of(n: &V) -> LatLng {
     [n.g("lat").n(), n.g("lng").n()]
 }
 
 /// A stored `[lat, lng]` pair.
+#[must_use]
 pub fn pt(p: &V) -> LatLng {
     [p.ix(0).n(), p.ix(1).n()]
 }
@@ -24,11 +26,13 @@ pub fn geom(sc: &V, l: &V) -> Option<Vec<LatLng>> {
 }
 
 /// `Net.len(sc, L)`: the link's length in metres.
+#[must_use]
 pub fn len(sc: &V, l: &V) -> f64 {
     geom(sc, l).map_or(f64::NAN, |g| util::poly_len(&g))
 }
 
 /// `Net.linksAt(sc, nid)`: the links that start or end at a node, in the scenario's order.
+#[must_use]
 pub fn links_at<'a>(sc: &'a V, nid: &str) -> Vec<&'a V> {
     sc.g("links").vals().into_iter().filter(|l| l.g("a").eq_s(nid) || l.g("b").eq_s(nid)).collect()
 }
@@ -44,6 +48,7 @@ pub struct Projection {
 }
 
 /// `Net.project(sc, L, ll)`: the nearest point on a link to a position.
+#[must_use]
 pub fn project(sc: &V, l: &V, ll: LatLng) -> Option<Projection> {
     let g = geom(sc, l)?;
     let f = util::flat(ll[0]);
@@ -60,11 +65,13 @@ pub fn project(sc: &V, l: &V, ll: LatLng) -> Option<Projection> {
 }
 
 /// `Object.values(sc.links)` that are open (`L.status !== 'closed'`).
+#[must_use]
 pub fn open_links(sc: &V) -> Vec<&V> {
     sc.g("links").vals().into_iter().filter(|l| !l.g("status").eq_s("closed")).collect()
 }
 
 /// `Kit.junctionName(id, sc)`: the names of the roads at a junction (up to three, joined with " / "), or "Unnamed junction".
+#[must_use]
 pub fn junction_name(sc: &V, id: &str) -> String {
     let mut names: Vec<String> = Vec::new();
     for l in links_at(sc, id) {
@@ -77,12 +84,14 @@ pub fn junction_name(sc: &V, id: &str) -> String {
 }
 
 /// `roadLinks(sc, id)`: the open links at a junction.
+#[must_use]
 pub fn road_links<'a>(sc: &'a V, id: &str) -> Vec<&'a V> {
     links_at(sc, id).into_iter().filter(|l| !l.g("status").eq_s("closed")).collect()
 }
 
 /// `Scenarios.zoneRole(z)`: "external" for a gateway, else the zone's role when it is a known one, else "existing" for an existing
 /// land use and "development" for anything else.
+#[must_use]
 pub fn zone_role(z: &V) -> &'static str {
     if z.g("kind").eq_s("gateway") {
         return "external";
@@ -97,6 +106,7 @@ pub fn zone_role(z: &V) -> &'static str {
 
 /// `Engine.zoneClass(z)`: "external" for a gateway, else the zone's role when it is existing, committed or development, else existing
 /// (`existing === true`) or development.
+#[must_use]
 pub fn zone_class(z: &V) -> &'static str {
     if !z.t() {
         return "existing";
@@ -113,6 +123,7 @@ pub fn zone_class(z: &V) -> &'static str {
 }
 
 /// `Engine.stageOf(z, sc)`: the share of a zone built out: its own `buildout` percent, times the scenario's for a development zone.
+#[must_use]
 pub fn stage_of(z: &V, sc: &V) -> f64 {
     let ok = |v: &V| v.entered();
     let mut k = if ok(z.g("buildout")) { util::clamp(z.g("buildout").n(), 0.0, 100.0) / 100.0 } else { 1.0 };
@@ -123,6 +134,7 @@ pub fn stage_of(z: &V, sc: &V) -> f64 {
 }
 
 /// `Scenarios.linkStage(L)`: the link's stage, or "proposal" for a proposed link and "existing" otherwise.
+#[must_use]
 pub fn link_stage(l: &V) -> &'static str {
     for s in ["existing", "committed", "unfunded", "proposal", "mitigation"] {
         if l.g("stage").eq_s(s) {
@@ -133,18 +145,21 @@ pub fn link_stage(l: &V) -> &'static str {
 }
 
 /// `Scenarios.unfunded(L)`: stage "unfunded", or committed with funding "unfunded".
+#[must_use]
 pub fn link_unfunded(l: &V) -> bool {
     let s = link_stage(l);
     s == "unfunded" || (s == "committed" && l.g("funding").eq_s("unfunded"))
 }
 
 /// The land use quantity of a zone (`+(z.lu || {})[k] || 0`).
+#[must_use]
 pub fn lu_of(z: &V, k: &str) -> f64 {
     let v = z.g("lu").g(k).n();
     if v.is_nan() { 0.0 } else { v }
 }
 
 /// The development zones of a scenario (`Object.values(sc.zones).filter(z => z.kind !== 'gateway' && role is development)`).
+#[must_use]
 pub fn dev_zones(sc: &V) -> Vec<&V> {
     sc.g("zones").vals().into_iter().filter(|z| !z.g("kind").eq_s("gateway") && zone_role(z) == "development").collect()
 }

@@ -13,7 +13,7 @@ pub fn parse_int10(s: &str) -> f64 {
         Some(b'+') => (false, &t[1..]),
         _ => (false, t),
     };
-    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() {
         return f64::NAN;
     }
@@ -80,6 +80,7 @@ pub fn parse_float(s: &str) -> f64 {
 }
 
 /// `parseInt(x, 10)` of a JSON value or a missing key (`parseInt` first turns its argument into text).
+#[must_use]
 pub fn parse_int10_value(v: Option<&Value>) -> f64 {
     match v {
         None => f64::NAN,

@@ -93,6 +93,7 @@ fn replace_sh(s: &str) -> String {
 }
 
 /// `DataHub.norm(s)`: a road name for comparison: lower case, bracketed text removed, the usual abbreviations written out (rd, st, ave, dr, pl, cres, hwy, pde, tce, ln, mwy, "sh 16"), anything but letters and digits a space, spaces collapsed.
+#[must_use]
 pub fn norm(s: &str) -> String {
     let mut t = strip_brackets(&s.to_lowercase());
     for (w, r) in [("rd", "road"), ("st", "street")] {
@@ -134,6 +135,7 @@ pub fn norm(s: &str) -> String {
 }
 
 /// `norm(x || y)` for loose values: the first that is truthy, as text, normalised.
+#[must_use]
 pub fn norm_of(a: &crate::jsnum::Num, b: &crate::jsnum::Num) -> String {
     norm(&or_text(a, b))
 }
@@ -157,6 +159,7 @@ pub struct Match {
 pub type Matches = OrderedMap<Match>;
 
 /// `Net.project(sc, L, ll).d`: distance (m) from a point to the nearest point on a polyline of [lat, lng].
+#[must_use]
 pub fn project_dist(g: &[LatLng], ll: &LatLng) -> f64 {
     let f = flat(ll[0]);
     let px = f.x(ll);
@@ -190,6 +193,7 @@ struct Item<'a> {
 /// (the road class adds 30 m below arterial); other counts with a road name need the link's name to match unless
 /// they sit within 12 m of it (a mismatch adds 25 m). A directional count matches a link carrying traffic within
 /// 80 degrees of its direction, and the direction it counts. A link of the count's own name wins whenever one is in range.
+#[must_use]
 pub fn match_counts(sc: &Scenario, s: &Settings, counts: &[Rc<Count>]) -> Matches {
     let r = s.data.get().map_or(40.0, |d| d.match_radius.or(40.0));
     let mut items: Vec<Item> = Vec::new();
@@ -208,7 +212,7 @@ pub fn match_counts(sc: &Scenario, s: &Settings, counts: &[Rc<Count>]) -> Matche
         let b_ab = bearing(&g[0], &g[g.len() - 1]);
         items.push(Item {
             link: lk,
-            nm: norm(&lk.name.as_str().unwrap_or("")),
+            nm: norm(lk.name.as_str().unwrap_or("")),
             rank: lk.class().rank,
             b_ab,
             g,

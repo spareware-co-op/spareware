@@ -118,10 +118,10 @@ pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String])
     }
     l.push(String::new());
     l.push("COLUMNS (name: unit or meaning)".to_string());
-    for (f, cols) in COLS.iter() {
+    for (f, cols) in &COLS {
         l.push(String::new());
         l.push(f.to_string());
-        for (k, u) in cols.iter() {
+        for (k, u) in *cols {
             l.push(format!("  {k}: {}", if u.is_empty() { "-" } else { u }));
         }
     }

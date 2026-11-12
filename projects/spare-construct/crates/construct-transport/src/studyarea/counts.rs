@@ -15,7 +15,7 @@ use serde_json::{Map, Value, json};
 const NZTA_SITES: &str = "https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/rest/services/Assets_SHTrafficMonitoringSites/FeatureServer/0";
 const NZTA_CAS: &str = "https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/rest/services/CAS_Data_Public/FeatureServer/0";
 const AT_COUNTS: &str = "https://services2.arcgis.com/JkPEgZJGxhSjYOo0/arcgis/rest/services/TrafficService/FeatureServer/0";
-/// The time limit of one ArcGIS request (ms).
+/// The time limit of one `ArcGIS` request (ms).
 pub const ARCGIS_TIMEOUT_MS: f64 = 30000.0;
 /// The crash fields at fixed positions in a crash tuple (from position 7).
 pub const CAS_FIELDS: [&str; 8] = ["fatalCount", "seriousInjuryCount", "minorInjuryCount", "light", "weatherA", "OBJECTID", "trafficControl", "urban"];
@@ -55,7 +55,7 @@ pub fn data_d(p: &mut Project) -> &mut ProjectData {
             d.extra.insert(k.to_string(), json!([]));
         }
     }
-    if !d.loaded.get().is_some() {
+    if d.loaded.get().is_none() {
         d.loaded = Maybe::Set(OrderedMap::new());
     }
     let mut use_ = Map::new();
@@ -167,7 +167,7 @@ pub fn arcgis(net: &mut dyn Net, url: &str, b: &Bx, where_: &str, fields: &str, 
         let j = match net.get_json(&format!("{url}/query?{q}")) {
             Ok(j) => j,
             Err(Failure::Cancelled(m)) => return Err(DataError::Cancelled(m)),
-            Err(Failure::Timeout) | Err(Failure::ReadTimeout) => return Err(DataError::Failed(format!("{host} did not answer within {secs} s. Try again later"))),
+            Err(Failure::Timeout | Failure::ReadTimeout) => return Err(DataError::Failed(format!("{host} did not answer within {secs} s. Try again later"))),
             Err(Failure::Unreachable(m)) => return Err(DataError::Failed(format!("{host} could not be reached ({m})"))),
             Err(Failure::Http(s)) => return Err(DataError::Failed(format!("{host} answered HTTP {s}"))),
             Err(Failure::Unreadable(_)) => return Err(DataError::Failed(format!("{host} sent an answer Spare Construct could not read"))),
@@ -358,11 +358,12 @@ pub struct CasWindow {
     pub lag_year: Option<i64>,
     /// The window in words.
     pub label: String,
-    /// The ArcGIS where clause.
+    /// The `ArcGIS` where clause.
     pub where_: String,
 }
 
 /// `casWindow(now, years)`: the window of crash years at an instant (ms since 1970).
+#[must_use]
 pub fn cas_window(now_ms: f64, years: Option<f64>) -> CasWindow {
     let t = nz_date(now_ms);
     let y = t.y;

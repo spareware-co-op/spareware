@@ -114,7 +114,7 @@ pub struct StressNode {
     pub runs: Vec<StressRun>,
     /// The largest rise per unit of demand increase.
     pub sens: f64,
-    /// DoS rises more than twice the demand increase.
+    /// `DoS` rises more than twice the demand increase.
     pub flag: bool,
 }
 
@@ -147,6 +147,7 @@ pub struct StressState {
 }
 
 /// `Kit.junctionName(id, sc)`: the road names at a junction ("A / B / C"), or "Unnamed junction".
+#[must_use]
 pub fn junction_name(sc: &Scenario, id: &str) -> String {
     let mut names: Vec<String> = Vec::new();
     for l in links_at(sc, id) {
@@ -182,7 +183,7 @@ pub fn stress_test(
         Some(x) if !x.is_empty() => x.to_string(),
         _ => s.period.as_str().filter(|x| !x.is_empty()).unwrap_or("AM").to_string(),
     };
-    let factors: Vec<f64> = factors.map(|f| f.to_vec()).unwrap_or_else(|| corridor::STRESS_FACTORS.to_vec());
+    let factors: Vec<f64> = factors.map(<[f64]>::to_vec).unwrap_or_else(|| corridor::STRESS_FACTORS.to_vec());
     let ao = |df: Option<f64>| AssignOpts {
         period: Some(period.clone()),
         demand_factor: df.map_or(Maybe::Missing, Num::number),
@@ -324,7 +325,7 @@ pub fn trip_end_factors(
             }
             continue;
         }
-        for lu in LANDUSES.iter() {
+        for lu in &LANDUSES {
             let qv = z.lu.get().map_or(f64::NAN, |m| m.num_at(lu.key).num());
             let qv = crate::jsnum::or_default(qv, 0.0);
             let r = s0.rates.get().and_then(|r| r.get(lu.key)).and_then(|r| r.get()).and_then(|r| r.get(&period)).and_then(|r| r.get());
@@ -405,12 +406,9 @@ pub fn trip_end_factors(
                 let l = view.links.get(&r.mt.link);
                 let cls = cg(l);
                 let key = format!("{cls}|{sec}");
-                let pos = match grp.iter().position(|(k, _)| *k == key) {
-                    Some(i) => i,
-                    None => {
-                        grp.push((key, Grp { arcs: Vec::new(), c: 0.0, wsum: 0.0, n: 0, ids: Vec::new() }));
-                        grp.len() - 1
-                    }
+                let pos = if let Some(i) = grp.iter().position(|(k, _)| *k == key) { i } else {
+                    grp.push((key, Grp { arcs: Vec::new(), c: 0.0, wsum: 0.0, n: 0, ids: Vec::new() }));
+                    grp.len() - 1
                 };
                 let gr = &mut grp[pos].1;
                 if r.mt.dir == "both" {
@@ -561,7 +559,7 @@ pub fn trip_end_factors(
             }
         }
     }
-    let date = opts.date.map(str::to_string).unwrap_or_else(|| super::fit::iso_of_ms(crate::util::now_ms()));
+    let date = opts.date.map_or_else(|| super::fit::iso_of_ms(crate::util::now_ms()), str::to_string);
     // the earlier record's applied factors stay with the new record
     let prev_applied: Value = p.scenarios[idx]
         .extra
@@ -651,7 +649,7 @@ pub fn can_apply(sc: &Scenario, period: &str) -> CanApply {
 }
 
 fn mark_all_stale(p: &mut Project) {
-    for s in p.scenarios.iter_mut() {
+    for s in &mut p.scenarios {
         if let Some(Value::Object(r)) = s.res.get_mut() {
             for v in r.values_mut() {
                 if let Value::Object(o) = v {
@@ -733,7 +731,7 @@ pub fn revert_factors(p: &mut Project, sc_id: &str, period: &str) -> bool {
             p.lu_factors.get_mut().expect("set").remove(period);
         }
     }
-    if p.lu_factors.get().is_some_and(|m| m.is_empty()) {
+    if p.lu_factors.get().is_some_and(crate::project::OrderedMap::is_empty) {
         p.lu_factors = Maybe::Missing;
     }
     set_applied(p, sc_id, period, Value::Null);

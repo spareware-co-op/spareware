@@ -21,6 +21,7 @@ pub struct DistSkim {
 }
 
 /// `distSkim(sc, fromIds)`: shortest road distances (arc lengths) from each start node (ids such as `z:zDev`) to every node of the scenario's graph.
+#[must_use]
 pub fn dist_skim(p: &V, sc: &V, from_ids: &[String]) -> DistSkim {
     let g = engine::build_graph(p, sc, None);
     let cost: Vec<f64> = g.arcs.iter().map(|a| if truthy_number(a.len) { a.len } else { 0.0 }).collect();
@@ -35,6 +36,7 @@ pub fn dist_skim(p: &V, sc: &V, from_ids: &[String]) -> DistSkim {
 }
 
 /// `rearAccess(a)`: a rear-site access checked against AUP Table E38.8.1.2.1: the entry with its table row, the flags and `ok`.
+#[must_use]
 pub fn rear_access(a: &V) -> V {
     let n = n0(a.g("sites"));
     let std = xdata("STD.e38");
@@ -149,11 +151,10 @@ pub fn subdivision(p: &V) -> V {
                 }
                 let i = sk.g.idx.get(&format!("z:{}", o.g("id").s()));
                 let cr = util::dist(&[z.g("lat").n(), z.g("lng").n()], &[o.g("lat").n(), o.g("lng").n()]);
-                if let Some(&i) = i {
-                    if nd[i].is_finite() && cr > 200.0 && cr < 3000.0 {
+                if let Some(&i) = i
+                    && nd[i].is_finite() && cr > 200.0 && cr < 3000.0 {
                         dirs.push(nd[i] / cr);
                     }
-                }
             }
             let near = |ids: &[String]| -> f64 { math_min_of(&ids.iter().map(|id| sk.g.idx.get(id).map_or(f64::INFINITY, |&i| nd[i])).collect::<Vec<_>>()) };
             if !stops.is_empty() {
@@ -180,10 +181,10 @@ pub fn subdivision(p: &V) -> V {
     }
     // AUP Table E27.6.1.1 subdivision rows (T3A, T3B): from the Compliance lane's E27 data when loaded
     let e27_data: Vec<&V> = core_table("E27.rows").items().iter().filter(|r| r.g("key").eq_s("subdivision")).collect();
-    let (e27_rows, e27src): (Vec<V>, &str) = if !e27_data.is_empty() {
-        (e27_data.into_iter().cloned().collect(), "Compliance tab E27 data")
-    } else {
+    let (e27_rows, e27src): (Vec<V>, &str) = if e27_data.is_empty() {
         (vec![jobj! { "id" => "T3A", "thr" => 40, "tier" => 1 }, jobj! { "id" => "T3B", "thr" => 100, "tier" => 2 }], "Compliance+ copy (verify)")
+    } else {
+        (e27_data.into_iter().cloned().collect(), "Compliance tab E27 data")
     };
     let e27: Vec<V> = e27_rows.iter().map(|r| jobj! { "id" => r.g("id"), "thr" => r.g("thr"), "tier" => r.g("tier"), "exceeded" => lots > r.g("thr").n() }).collect();
     let mut exceeded: Vec<&V> = e27.iter().filter(|r| r.g("exceeded").t()).collect();
@@ -229,6 +230,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-subdivision"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id != "compliance-extra-subdivision" {
         return None;
@@ -247,7 +249,7 @@ pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
             vec![
                 esc(if a.g("name").t() { a.g("name") } else { &dash }),
                 num(a.g("sites"), 0),
-                if a.g("ok").t() { "Complies".to_string() } else { super::ctx::esc_s(&a.g("flags").items().iter().map(|f| f.s()).collect::<Vec<_>>().join("; ")) },
+                if a.g("ok").t() { "Complies".to_string() } else { super::ctx::esc_s(&a.g("flags").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("; ")) },
             ]
         })
         .collect();
@@ -256,8 +258,8 @@ pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
         esc(s.g("warning")),
         if s.g("e27Text").t() { format!("<p class=\"note\">{}.</p>", esc(s.g("e27Text"))) } else { String::new() },
         t_table(&["Rear access", "Sites", "Check"], rows, "No rear accesses."),
-        if !con.g("density").nullish() { format!("{} per km\u{b2}", num(con.g("density"), 0)) } else { "\u{2013}".to_string() },
-        if !con.g("directness").nullish() { num(con.g("directness"), 2) } else { "\u{2013}".to_string() },
+        if con.g("density").nullish() { "\u{2013}".to_string() } else { format!("{} per km\u{b2}", num(con.g("density"), 0)) },
+        if con.g("directness").nullish() { "\u{2013}".to_string() } else { num(con.g("directness"), 2) },
     ))
 }
 
@@ -265,11 +267,13 @@ pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &[];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(_id: &str, _p: &V) -> Option<String> {
     None
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(_id: &str, _p: &V) -> Option<bool> {
     None
 }

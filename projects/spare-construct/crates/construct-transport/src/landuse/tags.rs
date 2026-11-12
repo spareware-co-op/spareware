@@ -24,6 +24,7 @@ pub fn tag_str<'a>(t: &'a Value, k: &str) -> Option<&'a str> {
 }
 
 /// landuse.js `num(v)`: `parseFloat(String(v ?? '').replace(',', '.'))`, or None when it is not a finite number.
+#[must_use]
 pub fn num(v: &str) -> Option<f64> {
     let x = parse_float(&v.replacen(',', ".", 1));
     x.is_finite().then_some(x)
@@ -55,6 +56,7 @@ fn has_thousands_separators(s: &str) -> bool {
 
 /// landuse.js `count(v)`: a count (rolls, capacities, rooms) that may carry thousands separators ("1,200" or "1 450"); None when it
 /// is not a finite number.
+#[must_use]
 pub fn count(v: &str) -> Option<f64> {
     let s = js_trim(v);
     if has_thousands_separators(s) {
@@ -70,6 +72,7 @@ pub fn count_tag(t: &Value, k: &str) -> Option<f64> {
 }
 
 /// landuse.js `levelsOf(t, apartments)`: floors from `building:levels`, else height divided by 3 m, else 1 (3 for buildings tagged apartments).
+#[must_use]
 pub fn levels_of(t: &Value, apartments: bool) -> f64 {
     if let Some(l) = num(&tag_text(t, "building:levels"))
         && l >= 1.0
@@ -205,7 +208,7 @@ pub const IGNORE: [&str; 25] = [
 ];
 /// More building values that are ignored (landuse.js IGNORE continued).
 pub const IGNORE2: [&str; 5] = ["container", "shelter", "toilets", "kiosk_atm", "no"];
-/// Buildings that generate trips but have no land use (churches, halls, clubrooms; landuse.js OTHER_B).
+/// Buildings that generate trips but have no land use (churches, halls, clubrooms; landuse.js `OTHER_B`).
 pub const OTHER_B: [&str; 22] = [
     "church",
     "chapel",
@@ -230,7 +233,7 @@ pub const OTHER_B: [&str; 22] = [
     "police",
     "museum",
 ];
-/// Amenities that are community or other uses (landuse.js OTHER_A).
+/// Amenities that are community or other uses (landuse.js `OTHER_A`).
 pub const OTHER_A: [&str; 16] = [
     "place_of_worship",
     "community_centre",
@@ -249,7 +252,7 @@ pub const OTHER_A: [&str; 16] = [
     "parking",
     "fuel",
 ];
-/// Residential building values (landuse.js RES_B).
+/// Residential building values (landuse.js `RES_B`).
 pub const RES_B: [&str; 5] = [
     "house",
     "detached",
@@ -257,13 +260,13 @@ pub const RES_B: [&str; 5] = [
     "bungalow",
     "static_caravan",
 ];
-/// Retail building values (landuse.js RETAIL_B).
+/// Retail building values (landuse.js `RETAIL_B`).
 pub const RETAIL_B: [&str; 3] = ["retail", "kiosk", "shop"];
-/// Industrial building values (landuse.js IND_B).
+/// Industrial building values (landuse.js `IND_B`).
 pub const IND_B: [&str; 4] = ["industrial", "factory", "manufacture", "workshop"];
-/// Shops that are workshops (landuse.js SHOP_IND).
+/// Shops that are workshops (landuse.js `SHOP_IND`).
 pub const SHOP_IND: [&str; 3] = ["car_repair", "tyres", "motorcycle_repair"];
-/// Trade and bulky-goods shops (landuse.js SHOP_BULKY).
+/// Trade and bulky-goods shops (landuse.js `SHOP_BULKY`).
 pub const SHOP_BULKY: [&str; 21] = [
     "car",
     "car_parts",
@@ -287,7 +290,7 @@ pub const SHOP_BULKY: [&str; 21] = [
     "bed",
     "lighting",
 ];
-/// Shops with a yard that adds no floor area (landuse.js SHOP_YARD).
+/// Shops with a yard that adds no floor area (landuse.js `SHOP_YARD`).
 pub const SHOP_YARD: [&str; 8] = [
     "car",
     "garden_centre",
@@ -300,6 +303,7 @@ pub const SHOP_YARD: [&str; 8] = [
 ];
 
 /// landuse.js `shopUse(s)`: workshops count as industrial, trade and bulky-goods shops as warehouse, others as retail.
+#[must_use]
 pub fn shop_use(s: Option<&str>) -> &'static str {
     match s {
         Some(s) if SHOP_IND.contains(&s) => "industrial",
@@ -308,7 +312,7 @@ pub fn shop_use(s: Option<&str>) -> &'static str {
     }
 }
 
-/// landuse.js LU_CLASS: the OpenStreetMap landuse values the build reads.
+/// landuse.js `LU_CLASS`: the OpenStreetMap landuse values the build reads.
 pub fn lu_class(v: Option<&str>) -> Option<&'static str> {
     match v? {
         "residential" => Some("residential"),
@@ -339,6 +343,7 @@ pub const WEIGHT: [(&str, f64); 13] = [
 ];
 
 /// The weight of a land-use key.
+#[must_use]
 pub fn weight(k: &str) -> f64 {
     WEIGHT
         .iter()
@@ -346,19 +351,19 @@ pub fn weight(k: &str) -> f64 {
         .map_or(f64::NAN, |(_, w)| *w)
 }
 
-/// Amenities that are schools (landuse.js EDU_A).
+/// Amenities that are schools (landuse.js `EDU_A`).
 pub const EDU_A: [&str; 1] = ["school"];
-/// Amenities that are tertiary campuses (landuse.js TERT_A).
+/// Amenities that are tertiary campuses (landuse.js `TERT_A`).
 pub const TERT_A: [&str; 2] = ["college", "university"];
-/// Amenities that are early childhood centres (landuse.js CHILD_A).
+/// Amenities that are early childhood centres (landuse.js `CHILD_A`).
 pub const CHILD_A: [&str; 2] = ["kindergarten", "childcare"];
-/// Amenities that are clinics (landuse.js MED_A).
+/// Amenities that are clinics (landuse.js `MED_A`).
 pub const MED_A: [&str; 3] = ["doctors", "clinic", "dentist"];
-/// Building values that are schools (landuse.js EDU_B).
+/// Building values that are schools (landuse.js `EDU_B`).
 pub const EDU_B: [&str; 1] = ["school"];
-/// Building values that are tertiary buildings (landuse.js TERT_B).
+/// Building values that are tertiary buildings (landuse.js `TERT_B`).
 pub const TERT_B: [&str; 2] = ["university", "college"];
-/// Building values that are early childhood buildings (landuse.js CHILD_B).
+/// Building values that are early childhood buildings (landuse.js `CHILD_B`).
 pub const CHILD_B: [&str; 2] = ["kindergarten", "childcare"];
 
 /// `Set.has(v)` for a tag that may be missing.

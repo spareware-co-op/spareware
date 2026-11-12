@@ -16,6 +16,7 @@ use crate::util::{self, fmt, r1, r3, r7};
 use serde_json::{Map, Value, json};
 
 /// A zone with every field missing, for the fields a fill sets one by one.
+#[must_use]
 pub fn new_zone(id: &str) -> Zone {
     Zone {
         id: id.to_string(),
@@ -43,6 +44,7 @@ pub fn new_zone(id: &str) -> Zone {
 }
 
 /// A [`Num`] as the JSON it would be saved as (None when missing).
+#[must_use]
 pub fn num_json(n: &Num) -> Option<Value> {
     match n {
         Maybe::Missing => None,
@@ -71,8 +73,9 @@ fn lu_q(z: &Zone, k: &str) -> f64 {
 }
 
 /// `fromMoE(s)`: a provenance record from the Ministry of Education.
+#[must_use]
 pub fn from_moe(s: Option<&Value>) -> bool {
-    s.filter(|s| value_truthy(s)).and_then(|s| s.get("source")).filter(|x| value_truthy(x)).map_or(false, |x| value_to_js_string(x).starts_with("Ministry"))
+    s.filter(|s| value_truthy(s)).and_then(|s| s.get("source")).filter(|x| value_truthy(x)).is_some_and(|x| value_to_js_string(x).starts_with("Ministry"))
 }
 
 /// `luProv(z, k)`: where the quantity of land use k in a zone came from.
@@ -157,6 +160,7 @@ pub struct EmployeesReport {
 
 impl EmployeesReport {
     /// The report as JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let n = |x: Option<f64>| x.map_or(Value::Null, json_number);
         json!({
@@ -285,6 +289,7 @@ pub struct SchoolsReport {
 
 impl SchoolsReport {
     /// The report as JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({ "created": json_number(self.created), "updated": json_number(self.updated), "needsRoll": self.needs_roll,
             "replaced": { "school": json_number(self.replaced_school), "childcare": json_number(self.replaced_childcare) },
@@ -361,25 +366,22 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
                 ("note", json!(if s.roll.is_some() { format!("MoE roll, {}", s.kind_of_org) } else { "Roll entered by the user (the MoE directory has none)".to_string() })),
             ],
         );
-        let id = match zid {
-            Some(id) => {
-                out.updated += 1.0;
-                id
-            }
-            None => {
-                let id = ids.uid("z");
-                let mut z = new_zone(&id);
-                z.kind = Maybe::Set("zone".into());
-                z.name = Maybe::Set(s.name.clone());
-                z.lat = Num::number(r7(s.lat));
-                z.lng = Num::number(r7(s.lng));
-                z.lu = Maybe::Set(OrderedMap::new());
-                z.connectors = Maybe::Null;
-                z.src = Maybe::Set(json!("moe"));
-                sc.zones.insert(id.clone(), z);
-                out.created += 1.0;
-                id
-            }
+        let id = if let Some(id) = zid {
+            out.updated += 1.0;
+            id
+        } else {
+            let id = ids.uid("z");
+            let mut z = new_zone(&id);
+            z.kind = Maybe::Set("zone".into());
+            z.name = Maybe::Set(s.name.clone());
+            z.lat = Num::number(r7(s.lat));
+            z.lng = Num::number(r7(s.lng));
+            z.lu = Maybe::Set(OrderedMap::new());
+            z.connectors = Maybe::Null;
+            z.src = Maybe::Set(json!("moe"));
+            sc.zones.insert(id.clone(), z);
+            out.created += 1.0;
+            id
         };
         let z = sc.zones.get_mut(&id).expect("zone");
         lu_of(z).insert("school", Num::number(roll));
@@ -418,7 +420,7 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
                 }
             }
         }
-        let f = util::flat((b.s + b.n) / 2.0);
+        let f = util::flat(f64::midpoint(b.s, b.n));
         let mut cands: Vec<String> = sc.zones.values().filter(|z| is_existing(z) && !z.extra.get("moe").is_some_and(value_truthy)).map(|z| z.id.clone()).collect();
         for c in ece {
             if !in_box(b, c.lat, c.lng) {
@@ -446,24 +448,21 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
                     zid = Some(x.clone());
                 }
             }
-            let zid = match zid {
-                Some(z) => z,
-                None => {
-                    let id = ids.uid("z");
-                    let mut z = new_zone(&id);
-                    z.kind = Maybe::Set("zone".into());
-                    z.existing = true.into();
-                    z.src = Maybe::Set(json!("moe"));
-                    z.name = Maybe::Set(c.name.clone());
-                    z.lat = Num::number(r7(c.lat));
-                    z.lng = Num::number(r7(c.lng));
-                    z.lu = Maybe::Set(OrderedMap::new());
-                    z.connectors = Maybe::Null;
-                    sc.zones.insert(id.clone(), z);
-                    cands.push(id.clone());
-                    out.created += 1.0;
-                    id
-                }
+            let zid = if let Some(z) = zid { z } else {
+                let id = ids.uid("z");
+                let mut z = new_zone(&id);
+                z.kind = Maybe::Set("zone".into());
+                z.existing = true.into();
+                z.src = Maybe::Set(json!("moe"));
+                z.name = Maybe::Set(c.name.clone());
+                z.lat = Num::number(r7(c.lat));
+                z.lng = Num::number(r7(c.lng));
+                z.lu = Maybe::Set(OrderedMap::new());
+                z.connectors = Maybe::Null;
+                sc.zones.insert(id.clone(), z);
+                cands.push(id.clone());
+                out.created += 1.0;
+                id
             };
             let z = sc.zones.get_mut(&zid).expect("zone");
             let cur = crate::jsnum::or_default(lu_q(z, "childcare"), 0.0);
@@ -491,7 +490,7 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
     out
 }
 
-fn aup_at<'a>(a: &'a AupData, lat: f64, lng: f64) -> Option<(&'a super::parse::AupZone, f64)> {
+fn aup_at(a: &AupData, lat: f64, lng: f64) -> Option<(&super::parse::AupZone, f64)> {
     let at = |la: f64, ln: f64| a.zones.iter().find(|f| in_poly(&f.poly, ln, la));
     let here = at(lat, lng);
     if let Some(h) = here
@@ -502,7 +501,7 @@ fn aup_at<'a>(a: &'a AupData, lat: f64, lng: f64) -> Option<(&'a super::parse::A
     let k = util::flat(lat);
     for m in [20.0, 40.0, 80.0] {
         for i in 0..8 {
-            let bearing = i as f64 * std::f64::consts::PI / 4.0;
+            let bearing = f64::from(i) * std::f64::consts::PI / 4.0;
             if let Some(f) = at(lat + m * jsmath::cos(bearing) / k.ky, lng + m * jsmath::sin(bearing) / k.kx)
                 && !NOT_LAND.iter().any(|c| f64::from(*c) == f.code)
             {
@@ -562,12 +561,9 @@ pub fn aup_to_zones(sc: &mut Scenario, ids: &dyn IdSource, a: &AupData, b: &Bx) 
         if !(sh > 0.0) {
             continue;
         }
-        let i = match by.iter().position(|r| r.code == f.code) {
-            Some(i) => i,
-            None => {
-                by.push(Row { code: f.code, name: f.name.clone(), group: f.group.clone(), ha: 0.0, n: 0.0 });
-                by.len() - 1
-            }
+        let i = if let Some(i) = by.iter().position(|r| r.code == f.code) { i } else {
+            by.push(Row { code: f.code, name: f.name.clone(), group: f.group.clone(), ha: 0.0, n: 0.0 });
+            by.len() - 1
         };
         by[i].ha += rings_area(&f.poly.rings) * sh / 1e4;
         by[i].n += 1.0;
@@ -646,6 +642,7 @@ impl FillReport {
 }
 
 /// `choices(o)`: which source was used for each item, with what it gave.
+#[must_use]
 pub fn choices(c: Option<&CensusReport>, e: Option<&EmployeesReport>, s: Option<&SchoolsReport>, aup: Option<&AupReport>) -> Vec<Value> {
     let val = |id: &str| -> Option<String> {
         match id {
@@ -837,7 +834,7 @@ pub fn fill_all(
     }
     let mut out = out.expect("the scenario filled");
     let mut w = warnings;
-    w.extend(out.warnings.drain(..));
+    w.append(&mut out.warnings);
     out.warnings = w;
     out.built_from_osm = Some(built);
     out.scenarios = Some(targets.len());

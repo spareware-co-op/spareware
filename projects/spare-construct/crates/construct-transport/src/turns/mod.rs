@@ -10,8 +10,8 @@
 //!
 //! NZ / SIDRA conventions: a leg's bearing is the arrival heading plus 180 degrees, snapped to 45 degree bins coded S 0, SE 1,
 //! E 2, NE 3, N 4, NW 5, W 6, SW 7; two legs never share a code (greedy minimum angular error), and past eight legs the least
-//! important (driveways, zone accesses) merge into the nearest leg. The turn designation t = (o_in - o_out) mod 8 is 0 U, 1 L3, 2
-//! L2, 3 L1, 4 T1, 5 R1, 6 R2, 7 R3, as SIDRA's drive-on-left ConvertMovODToMovTurn; L / T / R / U come from its first letter.
+//! important (driveways, zone accesses) merge into the nearest leg. The turn designation t = (`o_in` - `o_out`) mod 8 is 0 U, 1 L3, 2
+//! L2, 3 L1, 4 T1, 5 R1, 6 R2, 7 R3, as SIDRA's drive-on-left `ConvertMovODToMovTurn`; L / T / R / U come from its first letter.
 
 mod csv;
 mod diagram;
@@ -43,9 +43,9 @@ const N8: [&str; 8] = [
     "North-west",
 ];
 
-/// turns.js LEG_CODES: the leg codes by bin (S 0, SE 1, E 2, NE 3, N 4, NW 5, W 6, SW 7).
+/// turns.js `LEG_CODES`: the leg codes by bin (S 0, SE 1, E 2, NE 3, N 4, NW 5, W 6, SW 7).
 pub const LEG_CODES: [&str; 8] = ["S", "SE", "E", "NE", "N", "NW", "W", "SW"];
-/// turns.js LEG_NAMES: the leg names by bin.
+/// turns.js `LEG_NAMES`: the leg names by bin.
 pub const LEG_NAMES: [&str; 8] = [
     "South",
     "South-east",
@@ -56,7 +56,7 @@ pub const LEG_NAMES: [&str; 8] = [
     "West",
     "South-west",
 ];
-/// turns.js TURN_CODES: the turn designations by (o_in - o_out) mod 8.
+/// turns.js `TURN_CODES`: the turn designations by (`o_in` - `o_out`) mod 8.
 pub const TURN_CODES: [&str; 8] = ["U", "L3", "L2", "L1", "T1", "R1", "R2", "R3"];
 
 /// `norm(b)`: a heading in [0, 360).
@@ -65,6 +65,7 @@ pub(crate) fn norm(b: f64) -> f64 {
 }
 
 /// `Turns.sideName(b, eight)`: the compass side of an arm from its outward bearing, as 4 or 8 points.
+#[must_use]
 pub fn side_name(b: f64, eight: bool) -> &'static str {
     let i = math_round(norm(b) / if eight { 45.0 } else { 90.0 });
     if i.is_nan() {
@@ -78,11 +79,13 @@ pub fn side_name(b: f64, eight: bool) -> &'static str {
 }
 
 /// `Turns.approachName(inB, eight)`: the side arriving traffic comes from, given its arrival heading.
+#[must_use]
 pub fn approach_name(in_b: f64, eight: bool) -> &'static str {
     side_name(in_b + 180.0, eight)
 }
 
 /// `Turns.classify(inB, outB)`: the movement (L, T, R or U) from an arrival heading to a departure heading.
+#[must_use]
 pub fn classify(in_b: f64, out_b: f64) -> &'static str {
     turn_type(in_b, out_b)
 }
@@ -105,11 +108,13 @@ fn road_name(l: &Link) -> String {
 }
 
 /// `binBearing(o)`: the outward bearing of leg code o.
+#[must_use]
 pub fn bin_bearing(o: usize) -> f64 {
     norm(180.0 - 45.0 * o as f64)
 }
 
 /// `Turns.legCodeOf(legB)`: the leg code of an outward leg bearing.
+#[must_use]
 pub fn leg_code_of(leg_b: f64) -> usize {
     let i = math_round(norm(180.0 - leg_b) / 45.0);
     (i as i64).rem_euclid(8) as usize
@@ -129,6 +134,7 @@ pub struct LegAssign {
 }
 
 /// `Turns.assignLegs(bearings, prio)`: leg codes for outward leg bearings; a higher priority decides who keeps a code past eight legs.
+#[must_use]
 pub fn assign_legs(bearings: &[f64], prio: &[f64]) -> Vec<LegAssign> {
     let n = bearings.len();
     let p = |i: usize| prio.get(i).copied().map_or(0.0, |x| or_default(x, 0.0));
@@ -193,16 +199,19 @@ pub fn assign_legs(bearings: &[f64], prio: &[f64]) -> Vec<LegAssign> {
 }
 
 /// `turnCode(oIn, oOut)`: the turn designation ("L2") from the arrival and departure leg codes.
+#[must_use]
 pub fn turn_code(o_in: usize, o_out: usize) -> &'static str {
     TURN_CODES[(((o_in as i64 - o_out as i64) % 8) + 8) as usize % 8]
 }
 
 /// `movementId(oIn, oOut)`: the movement id ("S-L2").
+#[must_use]
 pub fn movement_id(o_in: usize, o_out: usize) -> String {
     format!("{}-{}", LEG_CODES[o_in], turn_code(o_in, o_out))
 }
 
 /// `legLabel(o, road)`: "South: Great South Road".
+#[must_use]
 pub fn leg_label(o: usize, road: &str) -> String {
     if road.is_empty() {
         LEG_NAMES[o].to_string()
@@ -212,6 +221,7 @@ pub fn leg_label(o: usize, road: &str) -> String {
 }
 
 /// `Turns.rank(mv, major)`: the priority rank of a movement from a major road (1 or 2) or a minor road (2, 3 or 4).
+#[must_use]
 pub fn rank(mv: &str, major: bool) -> f64 {
     if major {
         if mv == "T" || mv == "L" { 1.0 } else { 2.0 }
@@ -310,6 +320,7 @@ fn nv(x: f64) -> Value {
 
 impl Arm {
     /// The arm as JSON (numbers that JSON cannot hold are "NaN", "Infinity" or "-Infinity"); the code keys are there once coded.
+    #[must_use]
     pub fn to_value(&self, coded: bool) -> Value {
         let mut o = serde_json::Map::new();
         o.insert("id".into(), json!(self.id));
@@ -373,6 +384,7 @@ impl KeySet {
 /// every road at the node). Names follow the side of the arm; 8-point names are used when two approaches share a quadrant, the
 /// road name is added if that still clashes, and any still-equal names are numbered clockwise. Arms come back clockwise from
 /// north, starting half a sector west of north.
+#[must_use]
 pub fn arms(sc: &Scenario, node_id: &str, list: &[TurnRow], links: Option<&[&Link]>) -> Vec<Arm> {
     let Some(n) = sc.nodes.get(node_id) else {
         return Vec::new();
@@ -383,12 +395,9 @@ pub fn arms(sc: &Scenario, node_id: &str, list: &[TurnRow], links: Option<&[&Lin
         used.add(&t.to);
     }
     let at_node: Vec<&Link>;
-    let ls: &[&Link] = match links {
-        Some(l) => l,
-        None => {
-            at_node = crate::edit::net::links_at(sc, node_id);
-            &at_node
-        }
+    let ls: &[&Link] = if let Some(l) = links { l } else {
+        at_node = crate::edit::net::links_at(sc, node_id);
+        &at_node
     };
     let mut out: Vec<Arm> = Vec::new();
     for l in ls {
@@ -498,7 +507,7 @@ pub fn arms(sc: &Scenario, node_id: &str, list: &[TurnRow], links: Option<&[&Lin
         })
     };
     let eight = clash(&out, false);
-    for a in out.iter_mut() {
+    for a in &mut out {
         a.side = a.b;
         a.name = side_name(a.b, eight).to_string();
     }
@@ -511,7 +520,7 @@ pub fn arms(sc: &Scenario, node_id: &str, list: &[TurnRow], links: Option<&[&Lin
     };
     if eight && clash(&out, true) {
         let cnt = dupes(&out);
-        for a in out.iter_mut() {
+        for a in &mut out {
             if cnt.get(&a.name).copied().unwrap_or(0) > 1 {
                 a.name = format!("{} ({})", a.name, a.road);
             }
@@ -611,6 +620,7 @@ pub struct MovementRow {
 
 impl MovementRow {
     /// The row as JSON, keys as the prototype's row object.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut o = serde_json::Map::new();
         o.insert("approach".into(), json!(self.approach));
@@ -668,6 +678,7 @@ fn is_mv(mv: &str) -> bool {
 
 /// `rowsFor(sc, res, nodeId, links)`: a junction's movements from `res.turns[node]`, arms coded, rows sorted by arm, movement
 /// and turn angle. With no turns for the node the arms alone come back (named, not coded).
+#[must_use]
 pub fn rows_for(
     sc: &Scenario,
     res: Option<&Res>,
@@ -781,7 +792,7 @@ pub fn rows_for(
     for r in &rows {
         *tot.entry(r.row.approach.clone()).or_insert(0.0) += r.row.v;
     }
-    for r in rows.iter_mut() {
+    for r in &mut rows {
         let t = tot[&r.row.approach];
         r.row.share = if t > 0.0 { r.row.v / t } else { 0.0 };
     }
@@ -805,6 +816,7 @@ pub fn rows_for(
 /// `siteRows(sc, res, siteId)`: the movements of a junction site (`res.sites`, `res.siteTurns` from the engine): the legs are the
 /// site's legs (both carriageways of a divided road on one side are one leg) and the movements run from entry to exit through the
 /// site. Without such a site both lists are empty.
+#[must_use]
 pub fn site_rows(sc: &Scenario, res: Option<&Res>, s: &Settings, site_id: &str) -> Movements {
     let Some(site) = res
         .and_then(|r| r.sites.as_ref())
@@ -931,7 +943,7 @@ pub fn site_rows(sc: &Scenario, res: Option<&Res>, s: &Settings, site_id: &str) 
     for r in &rows {
         *tot.entry(r.leg).or_insert(0.0) += r.v;
     }
-    for r in rows.iter_mut() {
+    for r in &mut rows {
         let t = tot[r.leg];
         r.share = if t > 0.0 { r.v / t } else { 0.0 };
     }
@@ -952,6 +964,7 @@ pub fn site_rows(sc: &Scenario, res: Option<&Res>, s: &Settings, site_id: &str) 
 }
 
 /// `Turns.movements(sc, res, id)`: the movement rows for a node, or for a junction site when the id is a site id in `res.sites`.
+#[must_use]
 pub fn movements(sc: &Scenario, res: Option<&Res>, s: &Settings, id: &str) -> Vec<MovementRow> {
     let is_site = res
         .and_then(|r| r.sites.as_ref())
@@ -965,6 +978,7 @@ pub fn movements(sc: &Scenario, res: Option<&Res>, s: &Settings, id: &str) -> Ve
 
 /// `Turns.junctionName(sc, nodeId, links)`: the junction's own name, or the roads that meet there, highest class first
 /// ("Great South Road / Waihoehoe Road"); "Unnamed junction" with none, "Unknown junction" for a node that is not there.
+#[must_use]
 pub fn junction_name(sc: &Scenario, node_id: &str, links: Option<&[&Link]>) -> String {
     let Some(n) = sc.nodes.get(node_id) else {
         return "Unknown junction".to_string();
@@ -975,12 +989,9 @@ pub fn junction_name(sc: &Scenario, node_id: &str, links: Option<&[&Link]>) -> S
         return crate::jsnum::value_to_js_string(v);
     }
     let at_node: Vec<&Link>;
-    let all: &[&Link] = match links {
-        Some(l) => l,
-        None => {
-            at_node = crate::edit::net::links_at(sc, node_id);
-            &at_node
-        }
+    let all: &[&Link] = if let Some(l) = links { l } else {
+        at_node = crate::edit::net::links_at(sc, node_id);
+        &at_node
     };
     let mut ls: Vec<&Link> = all
         .iter()
@@ -1010,6 +1021,7 @@ pub fn junction_name(sc: &Scenario, node_id: &str, links: Option<&[&Link]>) -> S
 }
 
 /// `Turns.emptyText(sc, res, nodeId)`: why a junction has nothing to show, and what to do about it.
+#[must_use]
 pub fn empty_text(sc: Option<&Scenario>, res: Option<&Res>, node_id: &str) -> String {
     let Some(res) = res else {
         return "Run the model to see turning volumes.".to_string();

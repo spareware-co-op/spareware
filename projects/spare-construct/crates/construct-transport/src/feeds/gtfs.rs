@@ -60,7 +60,7 @@ fn area4(b: &[f64; 4]) -> f64 {
 
 // Catalogue boxes can be far too big (the AT feed's reaches the Chathams because of stray stops), so a feed whose Spare Construct coverage box holds the study-area centre comes first; then the smallest box.
 fn rank(f: &GtfsFeed, b: &Bounds) -> f64 {
-    let (cy, cx) = ((b.south + b.north) / 2.0, (b.west + b.east) / 2.0);
+    let (cy, cx) = (f64::midpoint(b.south, b.north), f64::midpoint(b.west, b.east));
     match NZ_FEEDS.iter().find(|x| Some(x.id) == f.id.as_deref()) {
         Some(k) if cy >= k.box_[0] && cy <= k.box_[2] && cx >= k.box_[1] && cx <= k.box_[3] => 0.0,
         _ => 1.0,
@@ -70,7 +70,7 @@ fn rank(f: &GtfsFeed, b: &Bounds) -> f64 {
 fn sort_feeds(mut hit: Vec<GtfsFeed>, b: &Bounds) -> Vec<GtfsFeed> {
     js_sort_by(&mut hit, |p, q| {
         let d = rank(p, b) - rank(q, b);
-        if d != 0.0 { d } else { area4(&p.box_) - area4(&q.box_) }
+        if d == 0.0 { area4(&p.box_) - area4(&q.box_) } else { d }
     });
     hit
 }
@@ -79,7 +79,7 @@ fn covers(f: &[f64; 4], b: &Bounds) -> bool {
     f[0] <= b.north && f[2] >= b.south && f[1] <= b.east && f[3] >= b.west
 }
 
-/// `parseCatalogue(text)`: the active GTFS feeds of the Mobility Database list (feeds_v2.csv) that have a coverage box.
+/// `parseCatalogue(text)`: the active GTFS feeds of the Mobility Database list (`feeds_v2.csv`) that have a coverage box.
 pub fn parse_catalogue(text: &str) -> Result<Vec<GtfsFeed>, String> {
     let rows = crate::calibrate::parse_csv(text);
     let Some(h0) = rows.first() else { return Err("Cannot read properties of undefined (reading 'map')".to_string()) };
@@ -125,6 +125,7 @@ pub struct CatalogueResult {
 }
 
 /// The feeds of a catalogue that cover the study area, best first, else (as the prototype does on any problem) the built-in list.
+#[must_use]
 pub fn find_feeds(catalogue: Result<&[GtfsFeed], String>, b: &Bounds) -> CatalogueResult {
     let attempt = match catalogue {
         Ok(list) => {
@@ -162,6 +163,7 @@ impl Catalogue {
         Catalogue { bounds, timeout_ms: t * 1000.0, fresh: false, sent: cached.is_some(), list: cached.map(Ok) }
     }
     /// The feeds covering the area, once done.
+    #[must_use]
     pub fn result(&self) -> CatalogueResult {
         match self.list.as_ref().expect("the list was read") {
             Ok(l) => find_feeds(Ok(l), &self.bounds),
@@ -169,6 +171,7 @@ impl Catalogue {
         }
     }
     /// The list as downloaded, to keep for the session (None when it was not downloaded or could not be read).
+    #[must_use]
     pub fn fresh_list(&self) -> Option<&[GtfsFeed]> {
         match (&self.list, self.fresh) {
             (Some(Ok(l)), true) => Some(l),
@@ -225,6 +228,7 @@ pub struct GtfsOpts {
 }
 
 /// `feedUrl(f)`: where a feed's zip is: its own latest address, else the Mobility Database mirror.
+#[must_use]
 pub fn feed_url(f: &GtfsFeed) -> String {
     match &f.latest {
         Some(l) if !l.is_empty() => l.clone(),
@@ -233,6 +237,7 @@ pub fn feed_url(f: &GtfsFeed) -> String {
 }
 
 /// The options `loadGTFS` gives the reader: the study area widened by 500 m, today, the holidays of last year, this year and next (with the feed's region), every school term, and the peak windows.
+#[must_use]
 pub fn gtfs_opts(feed: &GtfsFeed, b: &Bounds, now_ms: f64) -> GtfsOpts {
     let bb = pad_box(&box_of_bounds(b), GTFS_BUFFER_M);
     let d = today(now_ms);
@@ -322,7 +327,7 @@ pub struct GtfsResult {
     pub services: usize,
     /// Bus trips that day.
     pub trips: usize,
-    /// Rows of stop_times.txt.
+    /// Rows of `stop_times.txt`.
     pub stop_times: usize,
     /// The feed's description.
     pub feed_info: Option<GtfsFeedInfo>,
@@ -491,12 +496,9 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
             let d = cell(c, h, "date").map(str::to_string);
             let sid = cell(c, h, "service_id").map(str::to_string);
             let ty = cell(c, h, "exception_type").map(str::to_string);
-            let m = match ex.iter_mut().find(|(k, _)| *k == d) {
-                Some(m) => m,
-                None => {
-                    ex.push((d, Vec::new()));
-                    ex.last_mut().expect("just pushed")
-                }
+            let m = if let Some(m) = ex.iter_mut().find(|(k, _)| *k == d) { m } else {
+                ex.push((d, Vec::new()));
+                ex.last_mut().expect("just pushed")
             };
             match m.1.iter_mut().find(|(k, _)| *k == sid) {
                 Some(e) => e.1 = ty,
@@ -539,7 +541,7 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
     for need_term in [true, false] {
         let mut k = 0;
         while k < 200 && date.is_none() {
-            let n = t + k as f64;
+            let n = t + f64::from(k);
             k += 1;
             let day = ymd(n);
             if (n + 4.0) % 7.0 != 2.0 || hol.contains(day.as_str()) || (need_term && term_of(&day) == Some(false)) {
@@ -554,7 +556,7 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
     }
     let mut k = 1;
     while k < 400 && date.is_none() {
-        let n = t - k as f64;
+        let n = t - f64::from(k);
         k += 1;
         let day = ymd(n);
         if (n + 4.0) % 7.0 != 2.0 || hol.contains(day.as_str()) {
@@ -597,12 +599,9 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
                     am: 0.0,
                     pm: 0.0,
                 };
-                match stop_ix.get(&id) {
-                    Some(&i) => stops[i] = s,
-                    None => {
-                        stop_ix.insert(id, stops.len());
-                        stops.push(s);
-                    }
+                if let Some(&i) = stop_ix.get(&id) { stops[i] = s } else {
+                    stop_ix.insert(id, stops.len());
+                    stops.push(s);
                 }
             }
         });
@@ -611,7 +610,7 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
     if let Some(t) = rows_of("routes.txt", true)? {
         for_each_row(&t, |c, h| {
             let ty = num_cell(c, h, "route_type");
-            if ty == 3.0 || (ty >= 700.0 && ty < 800.0) {
+            if ty == 3.0 || (700.0..800.0).contains(&ty) {
                 routes.insert(cell(c, h, "route_id").map(str::to_string), (cell_or_empty(c, h, "route_short_name"), cell_or_empty(c, h, "route_long_name")));
             }
         });
@@ -630,12 +629,9 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
                     head: if h.contains_key("trip_headsign") { cell_or_empty(c, h, "trip_headsign") } else { String::new() },
                     st: Vec::new(),
                 };
-                match trip_ix.get(&id) {
-                    Some(&i) => trips[i] = trip,
-                    None => {
-                        trip_ix.insert(id, trips.len());
-                        trips.push(trip);
-                    }
+                if let Some(&i) = trip_ix.get(&id) { trips[i] = trip } else {
+                    trip_ix.insert(id, trips.len());
+                    trips.push(trip);
                 }
             }
         });
@@ -657,13 +653,13 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
     let win = |x: f64, w: [f64; 2]| x >= w[0] * 3600.0 && x < w[1] * 3600.0;
     let mut pats: Vec<GtfsPattern> = Vec::new();
     let mut pat_ix: HashMap<String, usize> = HashMap::new();
-    for tr in trips.iter_mut() {
+    for tr in &mut trips {
         if tr.st.is_empty() {
             continue;
         }
         js_sort_by(&mut tr.st, |x, y| x.0 - y.0);
         let (short, long) = routes[&tr.r].clone();
-        let label = if !short.is_empty() { short.clone() } else { long.clone() };
+        let label = if short.is_empty() { long.clone() } else { short.clone() };
         let t1 = tr.st.iter().find(|x| x.2.is_finite()).map_or(f64::NAN, |x| x.2);
         for x in &tr.st {
             let s = &mut stops[stop_ix[&x.1]];
@@ -685,13 +681,10 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
             continue;
         }
         let key = format!("{}|{}|{}", tr.r.clone().unwrap_or_else(|| "undefined".to_string()), tr.dir, seq.iter().map(|s| s.clone().unwrap_or_default()).collect::<Vec<_>>().join(">"));
-        let i = match pat_ix.get(&key) {
-            Some(&i) => i,
-            None => {
-                pat_ix.insert(key, pats.len());
-                pats.push(GtfsPattern { route: tr.r.clone(), short, long, dir: tr.dir.clone(), head: tr.head.clone(), stops: seq, am: 0.0, pm: 0.0 });
-                pats.len() - 1
-            }
+        let i = if let Some(&i) = pat_ix.get(&key) { i } else {
+            pat_ix.insert(key, pats.len());
+            pats.push(GtfsPattern { route: tr.r.clone(), short, long, dir: tr.dir.clone(), head: tr.head.clone(), stops: seq, am: 0.0, pm: 0.0 });
+            pats.len() - 1
         };
         if am {
             pats[i].am += 1.0;
@@ -753,7 +746,7 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
 
 /// `loadGTFS(feed, b)`: the download of a feed's timetable (with the optional HEAD request that tells when it was last changed) and its reading.
 ///
-/// The feed's own cache (the prototype keeps parsed feeds in IndexedDB) is the host's affair: when the HEAD answer shows a
+/// The feed's own cache (the prototype keeps parsed feeds in `IndexedDB`) is the host's affair: when the HEAD answer shows a
 /// copy it holds is current, it can stop the flow after the first answer and use its own result.
 pub struct GtfsLoad {
     feed: GtfsFeed,
@@ -798,20 +791,24 @@ pub struct GtfsFeedRef {
 
 impl GtfsLoad {
     /// A download for a feed and an area. `timeout_s` is the settings time limit in seconds (the zip is allowed at least 120 s).
+    #[must_use]
     pub fn new(feed: GtfsFeed, b: &Bounds, now_ms: f64, timeout_s: f64) -> GtfsLoad {
         let url = feed_url(&feed);
         let opts = gtfs_opts(&feed, b, now_ms);
         GtfsLoad { feed, opts, url, timeout_ms: (if timeout_s > 120.0 { timeout_s } else { 120.0 }) * 1000.0, stage: 0, last_modified: None, result: None, statuses: Vec::new() }
     }
     /// The options the reader was given.
+    #[must_use]
     pub fn opts(&self) -> &GtfsOpts {
         &self.opts
     }
     /// The progress lines the prototype passes to its status callback, in order.
+    #[must_use]
     pub fn statuses(&self) -> &[String] {
         &self.statuses
     }
     /// The reading, with the feed and the time the file was last changed.
+    #[must_use]
     pub fn finish(self) -> Option<GtfsLoaded> {
         let result = self.result?;
         Some(GtfsLoaded {
@@ -868,18 +865,19 @@ impl Flow for GtfsLoad {
 
 impl GtfsFeed {
     fn provider_or_id(&self) -> String {
-        if !self.provider.is_empty() { self.provider.clone() } else { self.id.clone().unwrap_or_else(|| "undefined".to_string()) }
+        if self.provider.is_empty() { self.id.clone().unwrap_or_else(|| "undefined".to_string()) } else { self.provider.clone() }
     }
 }
 
 /// `hashStr(s)`: a short text from a text (32-bit FNV-1a, in base 36).
+#[must_use]
 pub fn hash_str(s: &str) -> String {
     let mut h: u32 = 2_166_136_261;
     for u in s.encode_utf16() {
-        h ^= u as u32;
+        h ^= u32::from(u);
         h = h.wrapping_mul(16_777_619);
     }
-    crate::edit::ids::integer_radix36(h as f64)
+    crate::edit::ids::integer_radix36(f64::from(h))
 }
 
 /// A bus route made from a pattern (`gtfsRoutes` entry).
@@ -908,6 +906,7 @@ pub struct GtfsRoute {
 /// Each stop snaps to the nearest road (not a motorway or ramp) within 60 m, and the route passes the end of that road
 /// towards the next stop, so stops in the middle of long rural links still count. Stops outside the network are skipped.
 /// Patterns that give the same waypoints are merged (their frequencies add). Busiest first.
+#[must_use]
 pub fn gtfs_routes(sc: &Scenario, g: &GtfsLoaded) -> Vec<GtfsRoute> {
     let by_stop: HashMap<Option<String>, &GtfsStop> = g.result.stops.iter().map(|s| (s.id.clone(), s)).collect();
     let mut snap: HashMap<Option<String>, Option<String>> = HashMap::new();
@@ -954,15 +953,12 @@ pub fn gtfs_routes(sc: &Scenario, g: &GtfsLoaded) -> Vec<GtfsRoute> {
             continue;
         }
         let key = format!("{}|{}|{}", p.route.clone().unwrap_or_else(|| "undefined".to_string()), p.dir, wp.join(">"));
-        match m_ix.get(&key) {
-            Some(&i) => {
-                merged[i].p.am += p.am;
-                merged[i].p.pm += p.pm;
-            }
-            None => {
-                m_ix.insert(key, merged.len());
-                merged.push(Merged { p: p.clone(), wp });
-            }
+        if let Some(&i) = m_ix.get(&key) {
+            merged[i].p.am += p.am;
+            merged[i].p.pm += p.pm;
+        } else {
+            m_ix.insert(key, merged.len());
+            merged.push(Merged { p: p.clone(), wp });
         }
     }
     js_sort_by(&mut merged, |x, y| (y.p.am + y.p.pm) - (x.p.am + x.p.pm));
@@ -1003,6 +999,7 @@ pub fn apply_gtfs(sc: &mut Scenario, routes: &[GtfsRoute]) -> usize {
 }
 
 /// `feedDate(g)`: the feed's own date: the download's Last-Modified, then the feed's version and validity ("feed dated 21 Oct 2026; version 3, valid 20260101\u{2013}20261231").
+#[must_use]
 pub fn feed_date(g: &GtfsLoaded) -> String {
     let fi = g.result.feed_info.as_ref();
     let lm = match &g.last_modified {
@@ -1065,7 +1062,7 @@ pub fn keep_gtfs(p: &mut Project, g: &GtfsLoaded, routes: &[GtfsRoute], now_ms: 
         }),
     );
     let d = &g.result.date;
-    let pub_or_provider = if !publisher.is_empty() { publisher.clone() } else { g.feed.provider.clone() };
+    let pub_or_provider = if publisher.is_empty() { g.feed.provider.clone() } else { publisher.clone() };
     let tail = if g.result.stale {
         " (the feed has no later Tuesday: it may be out of date)"
     } else if g.result.term == Some(false) {
@@ -1087,7 +1084,7 @@ pub fn keep_gtfs(p: &mut Project, g: &GtfsLoaded, routes: &[GtfsRoute], now_ms: 
     let mut extra = Map::new();
     extra.insert("key".into(), json!("gtfs"));
     extra.insert("url".into(), json!(g.feed.url));
-    extra.insert("licence".into(), json!(if !g.feed.licence.is_empty() { g.feed.licence.clone() } else { SRC_GTFS.licence.to_string() }));
+    extra.insert("licence".into(), json!(if g.feed.licence.is_empty() { SRC_GTFS.licence.to_string() } else { g.feed.licence.clone() }));
     extra.insert("n".into(), json!(g.result.stops.len()));
     extra.insert("note".into(), json!(note));
     stamp(p, "gtfs", &extra, now_ms);

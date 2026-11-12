@@ -44,6 +44,7 @@ pub struct PackOutput {
 }
 
 /// `new Date(ms).toISOString()`: the full UTC date and time.
+#[must_use]
 pub fn iso_full(ms: f64) -> String {
     let day = iso_day_of_ms(ms).unwrap_or_default();
     let t = ms.trunc().rem_euclid(86_400_000.0) as i64;
@@ -55,6 +56,7 @@ fn d1_line(name: &str) -> String {
 }
 
 /// `csvFile(name, rows, cols)`: a BOM, Disclaimer D1 as the first row, then the header and rows.
+#[must_use]
 pub fn csv_file(name: &str, cols: &[&str], rows: &[Vec<Cell>]) -> String {
     let mut all: Vec<Vec<Cell>> = vec![vec![Cell::S(d1_line(name))], cols.iter().map(|c| Cell::s(c)).collect()];
     all.extend(rows.iter().cloned());
@@ -73,7 +75,7 @@ fn n(x: f64) -> Cell {
     Cell::N(x)
 }
 
-impl<'a> Rep<'a> {
+impl Rep<'_> {
     /// `Report.packFiles(P)`: the data pack's files, README first.
     pub fn pack_files(&self) -> PackOutput {
         let mut ctx: Ctx = self.context(&BuildOpts::default());
@@ -320,11 +322,11 @@ impl<'a> Rep<'a> {
                     if project_slug.is_empty() { "project".to_string() } else { project_slug.clone() },
                     {
                         let a = slug(sname);
-                        if !a.is_empty() {
-                            a
-                        } else {
+                        if a.is_empty() {
                             let b = slug(&s.id);
                             if b.is_empty() { "scenario".to_string() } else { b }
+                        } else {
+                            a
                         }
                     },
                     p.to_lowercase(),
@@ -364,7 +366,7 @@ impl<'a> Rep<'a> {
                     if z.kind.is("gateway") {
                         let gf = crate::standards::growth(s_set, Some(s));
                         let g = |suffix: &str| -> f64 {
-                            let v = z.gw.get().and_then(|m| m.get(&format!("{p}{suffix}"))).map_or(0.0, |x| x.num());
+                            let v = z.gw.get().and_then(|m| m.get(&format!("{p}{suffix}"))).map_or(0.0, crate::jsnum::Maybe::num);
                             (if v == 0.0 || v.is_nan() { 0.0 } else { v }) * gf
                         };
                         tg.push(vec![
@@ -614,7 +616,7 @@ impl<'a> Rep<'a> {
                         _ => t(""),
                     },
                     s.pr.map_or(t(""), |p| n(r1(p))),
-                    Cell::S(s.pband.label.to_string()),
+                    Cell::S(s.pband.label.clone()),
                     Cell::B(s.pband.reliable),
                 ]
             })
@@ -670,15 +672,15 @@ impl<'a> Rep<'a> {
             let l = v.as_ref().ok().map(|_| tools.loader_py(sc, None, None, &opts));
             match (v, l) {
                 (Ok(v), Some(Ok(l))) => {
-                    if !crate::jsnum::js_trim(&v).is_empty() {
+                    if crate::jsnum::js_trim(&v).is_empty() {
+                        missing.push("corridor-sidra-volumes.csv: the junctions feature produced no rows".to_string());
+                    } else {
                         files.push(PackFile {
                             name: "corridor-sidra-volumes.csv".to_string(),
                             data: format!("\u{feff}{}", v.strip_prefix('\u{feff}').unwrap_or(&v)),
                             of: None,
                             handover: true,
                         });
-                    } else {
-                        missing.push("corridor-sidra-volumes.csv: the junctions feature produced no rows".to_string());
                     }
                     if !crate::jsnum::js_trim(&l).is_empty() {
                         files.push(PackFile { name: "load_corridor_volumes.py".to_string(), data: l, of: None, handover: false });

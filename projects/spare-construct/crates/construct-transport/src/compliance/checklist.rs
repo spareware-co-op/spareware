@@ -53,6 +53,7 @@ pub struct X<'a> {
 
 impl<'a> X<'a> {
     /// `X` for a project.
+    #[must_use]
     pub fn new(p: &'a V) -> X<'a> {
         let c = state(p);
         let sc = active_sc(p);
@@ -170,7 +171,7 @@ pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
         }
         "X-05" => {
             let l: Vec<String> = x.lint().items().iter().filter(|l| rx(r"count-|rates$", "").test(&l.g("id").s())).map(|l| l.g("text").s()).collect();
-            if !l.is_empty() { r("warn", l.join("; ")) } else { r("done", "Data sources are dated (data vintage table in Appendix G).") }
+            if l.is_empty() { r("done", "Data sources are dated (data vintage table in Appendix G).") } else { r("warn", l.join("; ")) }
         }
         "X-06" => if x.lint().items().iter().any(|l| l.g("id").eq_s("sens")) { r("todo", "No sensitivity scenario yet.") } else { r("done", "A sensitivity scenario exists.") },
         "X-07" => {
@@ -256,7 +257,7 @@ pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
         }
         "SH-01" => {
             let t = x.shc().g("triggers");
-            r(if t.jlen() > 0 { "warn" } else { "done" }, if t.jlen() > 0 { format!("{}: seek NZTA written approval (s95E(3)(a)).", t.items().iter().map(|v| v.s()).collect::<Vec<_>>().join("; ")) } else { "No NZTA trigger case found.".into() })
+            r(if t.jlen() > 0 { "warn" } else { "done" }, if t.jlen() > 0 { format!("{}: seek NZTA written approval (s95E(3)(a)).", t.items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join("; ")) } else { "No NZTA trigger case found.".into() })
         }
         "SH-04" => {
             let t = x.shc().g("tech");
@@ -289,6 +290,7 @@ pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
 }
 
 /// `checklist(P)`: every checklist item with whether it applies, its status (the author's record wins over the automatic one), the finding and the author's note, by and date.
+#[must_use]
 pub fn checklist(p: &V) -> V {
     let x = X::new(p);
     let c = &x.c;
@@ -322,6 +324,7 @@ pub fn checklist(p: &V) -> V {
 }
 
 /// `checklistCSV(P)`: the checklist as a stamped CSV.
+#[must_use]
 pub fn checklist_csv(p: &V, now: &V) -> String {
     let _ = now;
     let mut rows: Vec<Vec<V>> = vec![["ID", "Pathway", "Item", "Source", "Spare Construct fills", "Applies", "Status", "Spare Construct finding", "Author note", "By", "Date", "Evidence"].iter().map(|s| st(*s)).collect()];

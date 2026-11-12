@@ -15,6 +15,7 @@ use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 
 /// `names(sc, id)`: the names of the roads at a junction node, each once, joined with " | " (a road with no name is an empty name).
+#[must_use]
 pub fn names(sc: &Scenario, id: &str) -> String {
     let mut seen: Vec<&str> = Vec::new();
     for l in links_at(sc, id) {
@@ -32,6 +33,7 @@ fn has_word(text: &str, word: &str) -> bool {
 }
 
 /// `nodeOn(sc, ll, road, maxM)`: the junction node nearest to a point, within `max_m` metres, on a road whose name has `road` in it (a plain word, any case).
+#[must_use]
 pub fn node_on(sc: &Scenario, ll: LatLng, road: &str, max_m: f64) -> Option<String> {
     let mut ids: HashSet<&str> = HashSet::new();
     for l in sc.links.values() {
@@ -53,6 +55,7 @@ pub struct SiteHit {
 }
 
 /// `siteWith(sc, pats, ll)`: the junction site (`Sites.detect`) whose roads include every word, nearest to the point.
+#[must_use]
 pub fn site_with(sc: &Scenario, pats: &[&str], ll: LatLng) -> Option<SiteHit> {
     let sites = sc.sites.get()?;
     let mut list: Vec<SiteHit> = Vec::new();
@@ -76,6 +79,7 @@ pub fn site_with(sc: &Scenario, pats: &[&str], ll: LatLng) -> Option<SiteHit> {
 }
 
 /// `compass(b)`: the compass side N, E, S or W a bearing points to (the prototype's "undefined" for a bearing that is not a number).
+#[must_use]
 pub fn compass(b: f64) -> &'static str {
     const COMPASS: [&str; 4] = ["N", "E", "S", "W"];
     let i = math_round((((b % 360.0) + 360.0) % 360.0) / 90.0) % 4.0;
@@ -263,7 +267,7 @@ pub fn clip_ways(elements: &[Value], b: &Bx) -> Clipped {
         let (plat, plon, qlat, qlon) = (num(p, "lat"), num(p, "lon"), num(q, "lat"), num(q, "lon"));
         let (mut lo, mut hi) = (0.0f64, 1.0f64);
         for _ in 0..30 {
-            let m = (lo + hi) / 2.0;
+            let m = f64::midpoint(lo, hi);
             if in_box(b, plat + (qlat - plat) * m, plon + (qlon - plon) * m) {
                 lo = m;
             } else {

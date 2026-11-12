@@ -20,7 +20,7 @@ pub const TURN_DEF_RIGHT_SIGNALS: f64 = 4.0;
 /// Movement names by index (`MVC`): 1 L, 2 T, 3 R, 4 U.
 pub const MVC: [&str; 5] = ["", "L", "T", "R", "U"];
 
-/// Turn penalty settings (`turnSet(S)`): TURN_DEF with settings.turns over it, values as saved.
+/// Turn penalty settings (`turnSet(S)`): `TURN_DEF` with settings.turns over it, values as saved.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TurnSet {
     /// Left turn (s).
@@ -34,6 +34,7 @@ pub struct TurnSet {
 }
 
 /// `turnSet(S)`: `{ ...TURN_DEF, ...S.turns }`.
+#[must_use]
 pub fn turn_set(s: &Settings) -> TurnSet {
     let t = s.turns.get();
     let pick = |v: Option<&Num>, d: Num| match v {
@@ -55,6 +56,7 @@ pub fn turn_set(s: &Settings) -> TurnSet {
 }
 
 /// `uPen(T)`: the U-turn penalty (s) when U-turns are allowed, None when they are banned ("ban", "", null or not a number).
+#[must_use]
 pub fn u_pen(t: &TurnSet) -> Option<f64> {
     match &t.uturn {
         Maybe::Set(JsNum::Text(s)) if s == "ban" || s.is_empty() => None,
@@ -71,6 +73,7 @@ pub fn u_pen(t: &TurnSet) -> Option<f64> {
 }
 
 /// `turnType(inB, outB)`: movement from an arrival heading to a departure heading: "T" within 30 degrees, "U" over 150, else "R" or "L".
+#[must_use]
 pub fn turn_type(in_b: f64, out_b: f64) -> &'static str {
     let t = turn(in_b, out_b);
     let m = t.abs();
@@ -211,28 +214,34 @@ impl Graph {
     ///
     /// Reversing onto the same link is a U-turn, and so is a hairpin onto another link at a
     /// junction of 3 or more links; at a 2-link node a hairpin is a bend.
+    #[must_use]
     pub fn movement(&self, a: usize, b: usize) -> Option<&'static str> {
         self.turn_ctx().movement(&self.arcs[a], &self.arcs[b])
     }
     /// `turnPenalty(G, a, b)`: seconds added going from arc a into arc b (bans are separate).
+    #[must_use]
     pub fn turn_penalty(&self, a: usize, b: usize) -> f64 {
         self.turn_ctx().penalty(&self.arcs[a], &self.arcs[b])
     }
     /// `banned(G, a, b)`: an explicit ban, or a U-turn while U-turns are banned (not at dead ends or where node.allowU).
+    #[must_use]
     pub fn banned(&self, a: usize, b: usize) -> bool {
         self.turn_ctx().banned(&self.arcs[a], &self.arcs[b])
     }
     /// `turnIdx(G, a, b)`: index of the turn from arc a into arc b, or -1.
+    #[must_use]
     pub fn turn_idx(&self, a: usize, b: usize) -> i32 {
         self.search.turns.index(&self.search.net, a, b)
     }
     /// `turnBanned(G, a, b)`: true when there is no such turn or it is banned.
+    #[must_use]
     pub fn turn_banned(&self, a: usize, b: usize) -> bool {
         self.search.turns.banned(&self.search.net, a, b)
     }
 }
 
 /// `approachName(inB, eight)`: compass side traffic arriving on heading inB comes from (heading north is the South approach).
+#[must_use]
 pub fn approach_name(in_b: f64, eight: bool) -> &'static str {
     let s = ((or_default(in_b, 0.0) + 180.0) % 360.0 + 360.0) % 360.0;
     let n = if eight { 8.0 } else { 4.0 };

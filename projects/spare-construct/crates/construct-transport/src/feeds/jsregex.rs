@@ -54,6 +54,7 @@ pub struct Match {
 
 impl Match {
     /// The text of group `i` (0 is the whole match), or None when it did not take part.
+    #[must_use]
     pub fn text(&self, s: &[u16], i: usize) -> Option<String> {
         let (a, b) = if i == 0 { (self.start, self.end) } else { (*self.groups.get(i - 1)?)?.to_owned() };
         Some(String::from_utf16_lossy(&s[a..b]))
@@ -67,7 +68,7 @@ struct Parser<'a> {
 }
 
 fn is_word_unit(c: u16) -> bool {
-    (c >= b'0' as u16 && c <= b'9' as u16) || (c >= b'a' as u16 && c <= b'z' as u16) || (c >= b'A' as u16 && c <= b'Z' as u16) || c == b'_' as u16
+    (c >= u16::from(b'0') && c <= u16::from(b'9')) || (c >= u16::from(b'a') && c <= u16::from(b'z')) || (c >= u16::from(b'A') && c <= u16::from(b'Z')) || c == u16::from(b'_')
 }
 
 impl Parser<'_> {
@@ -92,7 +93,7 @@ impl Parser<'_> {
     fn seq(&mut self) -> Result<Node, String> {
         let mut items = Vec::new();
         while let Some(c) = self.peek() {
-            if c == b'|' as u16 || c == b')' as u16 {
+            if c == u16::from(b'|') || c == u16::from(b')') {
                 break;
             }
             let before = self.ncaps;
@@ -104,7 +105,7 @@ impl Parser<'_> {
     }
     fn number(&mut self) -> Option<usize> {
         let s = self.i;
-        while self.peek().is_some_and(|c| (b'0' as u16..=b'9' as u16).contains(&c)) {
+        while self.peek().is_some_and(|c| (u16::from(b'0')..=u16::from(b'9')).contains(&c)) {
             self.i += 1;
         }
         if self.i == s {
@@ -129,20 +130,17 @@ impl Parser<'_> {
             Some('{') => {
                 let save = self.i;
                 self.i += 1;
-                match self.number() {
-                    Some(lo) => {
-                        let hi = if self.eat(',') { self.number() } else { Some(lo) };
-                        if self.eat('}') {
-                            (lo, hi)
-                        } else {
-                            self.i = save;
-                            return Ok(atom);
-                        }
-                    }
-                    None => {
+                if let Some(lo) = self.number() {
+                    let hi = if self.eat(',') { self.number() } else { Some(lo) };
+                    if self.eat('}') {
+                        (lo, hi)
+                    } else {
                         self.i = save;
                         return Ok(atom);
                     }
+                } else {
+                    self.i = save;
+                    return Ok(atom);
                 }
             }
             _ => return Ok(atom),
@@ -220,30 +218,30 @@ impl Parser<'_> {
                 loop {
                     let c = self.peek().ok_or("missing ]")?;
                     self.i += 1;
-                    if c == b']' as u16 {
+                    if c == u16::from(b']') {
                         break;
                     }
-                    let lo = if c == b'\\' as u16 {
+                    let lo = if c == u16::from(b'\\') {
                         let e = self.peek().ok_or("bad escape")?;
                         self.i += 1;
                         if let Some(it) = self.escape_item(e) {
                             items.push(it);
                             continue;
                         }
-                        if e == b'b' as u16 { 8 } else { Self::escaped_char(e) }
+                        if e == u16::from(b'b') { 8 } else { Self::escaped_char(e) }
                     } else {
                         c
                     };
-                    if self.peek() == Some(b'-' as u16) && self.p.get(self.i + 1).is_some_and(|n| *n != b']' as u16) {
+                    if self.peek() == Some(u16::from(b'-')) && self.p.get(self.i + 1).is_some_and(|n| *n != u16::from(b']')) {
                         self.i += 1;
                         let mut hi = self.peek().ok_or("bad range")?;
                         self.i += 1;
-                        if hi == b'\\' as u16 {
+                        if hi == u16::from(b'\\') {
                             let e = self.peek().ok_or("bad escape")?;
                             self.i += 1;
                             if let Some(it) = self.escape_item(e) {
                                 items.push(Item::Range(lo, lo));
-                                items.push(Item::Range(b'-' as u16, b'-' as u16));
+                                items.push(Item::Range(u16::from(b'-'), u16::from(b'-')));
                                 items.push(it);
                                 continue;
                             }
@@ -275,9 +273,9 @@ impl Parser<'_> {
 
 fn canon(c: u16) -> u16 {
     if c < 128 {
-        if (b'a' as u16..=b'z' as u16).contains(&c) { c - 32 } else { c }
+        if (u16::from(b'a')..=u16::from(b'z')).contains(&c) { c - 32 } else { c }
     } else {
-        match char::from_u32(c as u32) {
+        match char::from_u32(u32::from(c)) {
             Some(ch) => {
                 let mut up = ch.to_uppercase();
                 match (up.next(), up.next()) {
@@ -302,14 +300,14 @@ impl Run<'_> {
         let one = |c: u16| {
             items.iter().any(|it| match it {
                 Item::Range(a, b) => *a <= c && c <= *b,
-                Item::Digit(p) => ((b'0' as u16..=b'9' as u16).contains(&c)) == *p,
+                Item::Digit(p) => ((u16::from(b'0')..=u16::from(b'9')).contains(&c)) == *p,
                 Item::Word(p) => is_word_unit(c) == *p,
-                Item::Space(p) => char::from_u32(c as u32).is_some_and(is_js_space) == *p,
+                Item::Space(p) => char::from_u32(u32::from(c)).is_some_and(is_js_space) == *p,
             })
         };
         let mut hit = one(c);
-        if !hit && self.icase {
-            if let Some(ch) = char::from_u32(c as u32) {
+        if !hit && self.icase
+            && let Some(ch) = char::from_u32(u32::from(c)) {
                 for alt in ch.to_lowercase().chain(ch.to_uppercase()) {
                     if (alt as u32) < 0x10000 && one(alt as u16) {
                         hit = true;
@@ -317,7 +315,6 @@ impl Run<'_> {
                     }
                 }
             }
-        }
         hit != neg
     }
     fn word_at(&self, i: usize) -> bool {
@@ -395,7 +392,7 @@ impl Run<'_> {
         let more = |caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool| -> bool {
             // each step starts with the groups inside the repeated part empty
             let saved: Vec<Option<(usize, usize)>> = caps[cr.0..cr.1].to_vec();
-            for c in caps[cr.0..cr.1].iter_mut() {
+            for c in &mut caps[cr.0..cr.1] {
                 *c = None;
             }
             let hit = self.m(node, pos, caps, &mut |p2, caps: &mut Caps| {
@@ -436,10 +433,12 @@ impl Regex {
         Ok(Regex { node, ncaps: parser.ncaps, icase: flags.contains('i'), global: flags.contains('g') })
     }
     /// Compiles a pattern that is part of the program (a mistake in it is a bug).
+    #[must_use]
     pub fn lit(pattern: &str, flags: &str) -> Regex {
         Regex::new(pattern, flags).unwrap_or_else(|e| panic!("pattern {pattern}: {e}"))
     }
     /// `re.exec(s)` from a position: the leftmost match starting at or after `from` (code unit index).
+    #[must_use]
     pub fn exec_units(&self, s: &[u16], from: usize) -> Option<Match> {
         let run = Run { s, icase: self.icase };
         for start in from..=s.len() {
@@ -455,15 +454,18 @@ impl Regex {
         None
     }
     /// `re.exec(s)` on text from the start.
+    #[must_use]
     pub fn exec(&self, s: &str) -> Option<Match> {
         let u: Vec<u16> = s.encode_utf16().collect();
         self.exec_units(&u, 0)
     }
     /// `re.test(s)`.
+    #[must_use]
     pub fn test(&self, s: &str) -> bool {
         self.exec(s).is_some()
     }
     /// All matches as a global regex finds them one after another (`s.matchAll(re)`); an empty match moves on by one.
+    #[must_use]
     pub fn matches(&self, s: &[u16]) -> Vec<Match> {
         let mut out = Vec::new();
         let mut at = 0;

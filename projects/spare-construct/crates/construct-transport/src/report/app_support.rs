@@ -76,7 +76,7 @@ fn setting_text(x: Option<&JsonValue>) -> String {
         None => fmt::DASH.to_string(),
         Some(JsonValue::Null) => "none".to_string(),
         Some(JsonValue::Array(a)) => {
-            if a.iter().all(|e| e.is_object_like()) {
+            if a.iter().all(crate::edit::json::JsonValue::is_object_like) {
                 a.iter().map(seg).collect::<Vec<_>>().join("; ")
             } else {
                 a.iter()

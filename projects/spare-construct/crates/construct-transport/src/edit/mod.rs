@@ -27,7 +27,7 @@ use crate::project::{Project, Scenario};
 
 use std::fmt;
 
-/// An edit that cannot be made (the JavaScript throws a TypeError where this returns one).
+/// An edit that cannot be made (the JavaScript throws a `TypeError` where this returns one).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EditError(pub String);
 
@@ -67,12 +67,12 @@ pub const SPEEDS: [f64; 11] = [
     10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 110.0,
 ];
 
-/// model.js ROUTE_COLOURS: the colours new bus routes take in turn.
+/// model.js `ROUTE_COLOURS`: the colours new bus routes take in turn.
 pub const ROUTE_COLOURS: [&str; 7] = [
     "#7048e8", "#0c8599", "#e8590c", "#c2255c", "#2f9e44", "#1971c2", "#9c36b5",
 ];
 
-/// A scenario role of model.js SCENARIO_ROLES.
+/// A scenario role of model.js `SCENARIO_ROLES`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ScenarioRole {
     /// Key ("baseline").
@@ -89,7 +89,7 @@ pub struct ScenarioRole {
     pub side: &'static str,
 }
 
-/// model.js SCENARIO_ROLES, in its order.
+/// model.js `SCENARIO_ROLES`, in its order.
 pub const SCENARIO_ROLES: [ScenarioRole; 6] = [
     ScenarioRole {
         key: "existing",
@@ -142,11 +142,12 @@ pub const SCENARIO_ROLES: [ScenarioRole; 6] = [
 ];
 
 /// `SCENARIO_ROLES[key]`.
+#[must_use]
 pub fn scenario_role(key: &str) -> Option<&'static ScenarioRole> {
     SCENARIO_ROLES.iter().find(|r| r.key == key)
 }
 
-/// model.js ZONE_ROLES: zone roles and their names.
+/// model.js `ZONE_ROLES`: zone roles and their names.
 pub const ZONE_ROLES: [(&str, &str); 3] = [
     ("existing", "Existing land use"),
     (
@@ -156,7 +157,7 @@ pub const ZONE_ROLES: [(&str, &str); 3] = [
     ("development", "Proposed development"),
 ];
 
-/// model.js LINK_STAGES: link stages and their names.
+/// model.js `LINK_STAGES`: link stages and their names.
 pub const LINK_STAGES: [(&str, &str); 5] = [
     ("existing", "Existing road"),
     ("committed", "Committed network project"),
@@ -180,7 +181,7 @@ pub const PATHWAYS: [(&str, &str); 4] = [
     ("ftaa", "Fast-track application"),
 ];
 
-/// model.js REGISTER_TYPES: committed-development register row types and their names.
+/// model.js `REGISTER_TYPES`: committed-development register row types and their names.
 pub const REGISTER_TYPES: [(&str, &str); 5] = [
     ("consent", "Granted resource consent"),
     ("ftaa", "Fast-track (FTAA) approval"),
@@ -190,6 +191,7 @@ pub const REGISTER_TYPES: [(&str, &str); 5] = [
 ];
 
 /// The name for a key in one of the tables above.
+#[must_use]
 pub fn name_of(table: &[(&'static str, &'static str)], key: &str) -> Option<&'static str> {
     table.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
 }

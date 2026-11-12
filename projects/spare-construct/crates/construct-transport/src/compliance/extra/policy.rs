@@ -22,6 +22,7 @@ use std::collections::HashMap;
 pub type SkimMap = HashMap<String, HashMap<String, f64>>;
 
 /// `skim(sc, res, fromIds, toIds)`: shortest paths between zones on the times a result assigned (free-flow where an arc has no result).
+#[must_use]
 pub fn skim(p: &V, sc: &V, res: Option<&V>, from_ids: &[String], to_ids: &[String]) -> SkimMap {
     let g = engine::build_graph(p, sc, None);
     let proj = engine::project(p);
@@ -31,7 +32,7 @@ pub fn skim(p: &V, sc: &V, res: Option<&V>, from_ids: &[String], to_ids: &[Strin
         .iter()
         .map(|a| {
             let r = res.map_or(&NULL, |r| r.g("arcs").g(&a.key));
-            if r.t() { r.get("t").map_or(f64::NAN, |t| t.n()) } else { crate::junction::arc_time(a, 0.0, &perf) }
+            if r.t() { r.get("t").map_or(f64::NAN, crate::compliance::jv::Jx::n) } else { crate::junction::arc_time(a, 0.0, &perf) }
         })
         .collect();
     let mut w = g.workspace();
@@ -41,11 +42,10 @@ pub fn skim(p: &V, sc: &V, res: Option<&V>, from_ids: &[String], to_ids: &[Strin
         g.spt(&cost, s, &mut w, -1, -1);
         let mut m: HashMap<String, f64> = HashMap::new();
         for t in to_ids {
-            if let Some(&i) = g.idx.get(&format!("z:{t}")) {
-                if w.nd[i].is_finite() {
+            if let Some(&i) = g.idx.get(&format!("z:{t}"))
+                && w.nd[i].is_finite() {
                     m.insert(t.clone(), w.nd[i]);
                 }
-            }
         }
         out.insert(f.clone(), m);
     }
@@ -53,6 +53,7 @@ pub fn skim(p: &V, sc: &V, res: Option<&V>, from_ids: &[String], to_ids: &[Strin
 }
 
 /// `jobsOf(z)`: the jobs in a zone (`jobs.n`, else `employees`, else 0).
+#[must_use]
 pub fn jobs_of(z: &V) -> f64 {
     if z.g("jobs").t() {
         let a = z.g("jobs").g("n").n();
@@ -64,6 +65,7 @@ pub fn jobs_of(z: &V) -> f64 {
 }
 
 /// `placeOf(L)`: the RASF place level (1 to 3) of a road: the one entered, else the one named in its RASF text.
+#[must_use]
 pub fn place_of(l: &V) -> Option<f64> {
     let x = if l.g("cx").t() { l.g("cx") } else { &NULL };
     if nn(x.g("place")).is_some() {
@@ -74,14 +76,13 @@ pub fn place_of(l: &V) -> Option<f64> {
 }
 
 /// `limitOf(L)`: the limit the author proposes for a road, else its posted limit.
+#[must_use]
 pub fn limit_of(l: &V) -> f64 {
-    if l.g("cx").t() {
-        if let Some(v) = nn(l.g("cx").g("limit")) {
-            if truthy_number(v) {
+    if l.g("cx").t()
+        && let Some(v) = nn(l.g("cx").g("limit"))
+            && truthy_number(v) {
                 return v;
             }
-        }
-    }
     posted(l)
 }
 
@@ -101,6 +102,7 @@ fn push_unique(ids: &mut Vec<V>, v: V) {
 
 /// `affectedLinks(P)`: the roads the option affects: those of the stored extent-of-effects test, else those whose flow changes by at least 20 veh/h
 /// and the assumed percentage, plus every changed road.
+#[must_use]
 pub fn affected_links(p: &V) -> Affected {
     let pr = pair(p);
     let sc = pr.opt;
@@ -145,6 +147,7 @@ pub fn affected_links(p: &V) -> Affected {
 
 /// `accessibility(P)`: the jobs and services reachable from the development zones within the catchment, by mode: `{ rows, unit, text, basis }`
 /// (`{ text, rows }` alone when there are no development zones).
+#[must_use]
 pub fn accessibility(p: &V) -> V {
     let pr = pair(p);
     let sc = pr.opt;
@@ -193,12 +196,11 @@ pub fn accessibility(p: &V) -> V {
                 cycle[1] += svc(o);
             }
             let t = car.as_ref().and_then(|c| c.get(&z.g("id").s())).and_then(|m| m.get(&o.g("id").s()));
-            if let Some(t) = t {
-                if *t <= lim {
+            if let Some(t) = t
+                && *t <= lim {
                     carv[0] += wt;
                     carv[1] += svc(o);
                 }
-            }
         }
     }
     let n = dz.len() as f64;
@@ -221,6 +223,7 @@ pub fn accessibility(p: &V) -> V {
 }
 
 /// `policy(P)`: the policy alignment: `{ rows, basis, modes, policy, accessibility, fds, label, inconsistencies }`.
+#[must_use]
 pub fn policy(p: &V) -> V {
     let pr = pair(p);
     let sc = pr.opt;
@@ -261,12 +264,11 @@ pub fn policy(p: &V) -> V {
                 x.t() && y.t() && x.g("spd").n() - y.g("spd").n() >= speed_up
             })
         }) || (b.t() && (l.g("speed").n() > b.g("speed").n() || limit_of(l) > posted(b)));
-        if let Some(pl) = place {
-            if pl >= 3.0 && spd_up {
+        if let Some(pl) = place
+            && pl >= 3.0 && spd_up {
                 flags.push(format!("The proposal raises vehicle speed on a high-Place (P{}) RASF section", ns(pl)));
             }
-        }
-        let lanes = |x: &V| to_int32(x.g("lanesAB").n()) as f64 + to_int32(x.g("lanesBA").n()) as f64;
+        let lanes = |x: &V| f64::from(to_int32(x.g("lanesAB").n())) + f64::from(to_int32(x.g("lanesBA").n()));
         if b.t() && lanes(l) > lanes(b) && fc.g("gt").t() && !rx("arterial|motorway", "i").test(&fc.g("gt").s()) {
             flags.push(format!("Adds traffic lanes where Future Connect classes the road {}", fc.g("gt").s()));
         }
@@ -303,7 +305,7 @@ pub fn policy(p: &V) -> V {
     }
     js_sort_by(&mut rows, |x, y| {
         let d = y.flags as f64 - x.flags as f64;
-        if d != 0.0 { d } else { crate::edit::collate::locale_compare_f64(&x.name, &y.name) }
+        if d == 0.0 { crate::edit::collate::locale_compare_f64(&x.name, &y.name) } else { d }
     });
     // conclusion checklist: alignment by mode from the ANOP results
     let score = xdata("STD.anop.score");
@@ -381,7 +383,7 @@ pub fn policy(p: &V) -> V {
         jobj! { "ref" => "NPS-UD Policy 1(c)", "policy" => "Accessibility to jobs and services by walking, cycling, public transport and car", "text" => acc.g("text") },
         jobj! {
             "ref" => "NPS-UD Policy 1(e)", "policy" => "Supports reductions in greenhouse gas emissions",
-            "text" => if !ps.is_empty() { format!("\u{394}VKT {} and \u{394}CO2e {} per modelled peak hour: {}.", pp_text(&d_vkt, 0, "veh-km"), pp_text(&d_co2, 2, "t"), labels_vkt) } else { "Run the base and the option.".to_string() },
+            "text" => if ps.is_empty() { "Run the base and the option.".to_string() } else { format!("\u{394}VKT {} and \u{394}CO2e {} per modelled peak hour: {}.", pp_text(&d_vkt, 0, "veh-km"), pp_text(&d_co2, 2, "t"), labels_vkt) },
             "info" => true,
         },
         jobj! { "ref" => "NPS-I Policy 3", "policy" => "Infrastructure identified in a strategic planning document", "text" => npsi },
@@ -395,7 +397,7 @@ pub fn policy(p: &V) -> V {
         },
         jobj! {
             "ref" => "GPS 2024", "policy" => "Economic growth and productivity",
-            "text" => if !ps.is_empty() { format!("{} saved per modelled peak hour", pp_text(&d_vht_saved, 1, "veh\u{b7}h")) } else { "\u{2013}".to_string() },
+            "text" => if ps.is_empty() { "\u{2013}".to_string() } else { format!("{} saved per modelled peak hour", pp_text(&d_vht_saved, 1, "veh\u{b7}h")) },
         },
         jobj! {
             "ref" => "GPS 2024", "policy" => "Maintenance and resilience",
@@ -428,6 +430,7 @@ pub fn policy(p: &V) -> V {
 }
 
 /// `policyCSV(P)`: the policy alignment, the GPS metrics and the funding attribution as a stamped CSV.
+#[must_use]
 pub fn policy_csv(p: &V) -> String {
     let po = policy(p);
     let g = gps_metrics(p);
@@ -442,7 +445,7 @@ pub fn policy_csv(p: &V) -> String {
         row.extend(r.g("fc").items().iter().cloned());
         row.push(r.g("rasf").clone());
         row.push(r.g("onf").clone());
-        row.push(V::String(r.g("flags").items().iter().map(|x| x.s()).collect::<Vec<_>>().join("; ")));
+        row.push(V::String(r.g("flags").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("; ")));
         rows.push(row);
     }
     rows.push(vec![]);
@@ -466,7 +469,7 @@ pub fn policy_csv(p: &V) -> String {
         rows.push(vec![d.g("name").clone(), d.g("significance").clone(), r3(d.g("minutes"))]);
     }
     rows.push(vec![s("Houses enabled (75% complete by 2035)"), g.g("houses").g("total").clone(), g.g("houses").g("basis").clone()]);
-    rows.push(vec![s("DSI reduction per NZ$100m"), if !g.g("dsi").g("per100m").nullish() { r1(g.g("dsi").g("per100m")) } else { s("enter the DSI reduction") }]);
+    rows.push(vec![s("DSI reduction per NZ$100m"), if g.g("dsi").g("per100m").nullish() { s("enter the DSI reduction") } else { r1(g.g("dsi").g("per100m")) }]);
     rows.push(vec![]);
     rows.push(vec![s("Funding attribution"), f.g("caveat").clone(), f.g("assetsBasis").clone()]);
     rows.push(head(&["Asset", "Period", "Existing (veh/h)", "Committed (veh/h)", "Development (veh/h)", "Development share"]));
@@ -485,7 +488,7 @@ pub fn policy_csv(p: &V) -> String {
         }
     }
     let gr = f.g("growth");
-    rows.push(vec![s("Growth share"), if !gr.g("share").nullish() { r3(gr.g("share")) } else { s("") }, gr.g("formula").clone(), gr.g("label").clone()]);
+    rows.push(vec![s("Growth share"), if gr.g("share").nullish() { s("") } else { r3(gr.g("share")) }, gr.g("formula").clone(), gr.g("label").clone()]);
     let inc = f.g("incidence");
     rows.push(vec![
         s("Benefit inside the levy area"),
@@ -503,6 +506,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-policy"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id != "compliance-extra-policy" {
         return None;
@@ -520,7 +524,7 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
                 .items()
                 .iter()
                 .filter(|r| !r.g("flags").items().is_empty())
-                .map(|r| vec![esc(r.g("name")), esc_s(&r.g("flags").items().iter().map(|f| f.s()).collect::<Vec<_>>().join("; "))])
+                .map(|r| vec![esc(r.g("name")), esc_s(&r.g("flags").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("; "))])
                 .collect(),
             "",
         );
@@ -535,11 +539,13 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-policy"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     (id == "compliance-extra-policy").then(|| policy_csv(p))
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     (id == "compliance-extra-policy").then(|| res_ok(p))
 }

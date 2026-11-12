@@ -254,6 +254,7 @@ pub struct Gate {
 
 impl<'a> Tools<'a> {
     /// `gate(sc, resList)`: the export gate for these results.
+    #[must_use]
     pub fn gate(&self, sc: &Scenario, res_list: &[&Res]) -> Gate {
         let r = sidra_export(
             Some(sc),
@@ -269,12 +270,14 @@ impl<'a> Tools<'a> {
     }
 
     /// `bothRes(sc)`: the stored results in period order.
+    #[must_use]
     pub fn both_res(&self, s: Sc<'a>) -> Vec<&'a Res> {
         s.periods().iter().filter_map(|p| s.res_of(p)).collect()
     }
 
     /// `targets(sc, res, ids, scope)`: the junctions that go to SIDRA: the ids given, else the scope: 'auto' (the sites of the
     /// extent test, else every controlled junction), 'controlled' or 'all'.
+    #[must_use]
     pub fn targets(
         &self,
         sc: &Scenario,
@@ -321,6 +324,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `phfOf(sc, e, period)`: the peak hour factor of an imported turning count at any node of the junction, when there is one.
+    #[must_use]
     pub fn phf_of(&self, sc: &Scenario, e: &Entry, period: &str) -> Option<f64> {
         for id in &e.nodes {
             if let Some(f) = self.host.count_phf(sc, id, period)
@@ -334,6 +338,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `volumeRows(sc, resList, ids, opts)`: every movement of the target junctions as SIDRA volumes.
+    #[must_use]
     pub fn volume_rows(
         &self,
         sc: &Scenario,
@@ -404,7 +409,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `volumesCSV(sc, resList, ids, opts)`: the SIDRA volumes CSV; a forced export of an unconverged run gains a last column,
-    /// export_note, saying NOT CONVERGED on its rows. The error is the gate's reason.
+    /// `export_note`, saying NOT CONVERGED on its rows. The error is the gate's reason.
     pub fn volumes_csv(
         &self,
         s: Sc<'a>,
@@ -446,7 +451,7 @@ impl<'a> Tools<'a> {
                 let id = if i < 0 { &k[..] } else { &k[..i as usize] };
                 if let Some(l) = sc.links.get(id) {
                     let lanes = if k.ends_with(":ab") { l.lanes_ab.int32() } else { l.lanes_ba.int32() };
-                    n = math_max(n, lanes as f64);
+                    n = math_max(n, f64::from(lanes));
                 }
             }
             let v = math_max(1.0, math_min(3.0, n));
@@ -459,7 +464,7 @@ impl<'a> Tools<'a> {
         out
     }
 
-    /// `loaderPy(sc, resList, ids, opts)`: load_corridor_volumes.py, a SIDRA INTERSECTION 11 .NET API loader (pythonnet) with the
+    /// `loaderPy(sc, resList, ids, opts)`: `load_corridor_volumes.py`, a SIDRA INTERSECTION 11 .NET API loader (pythonnet) with the
     /// New Zealand setup and a --dry-run. The error is the gate's reason.
     pub fn loader_py(
         &self,
@@ -486,12 +491,9 @@ impl<'a> Tools<'a> {
             for e in self.targets(sc, res, ids, &opts.scope) {
                 let x = xid(&e);
                 let new = self.leg_lanes(sc, res, &e);
-                let p = match legs.iter().position(|(k, _)| *k == x) {
-                    Some(p) => p,
-                    None => {
-                        legs.push((x.clone(), Vec::new()));
-                        legs.len() - 1
-                    }
+                let p = if let Some(p) = legs.iter().position(|(k, _)| *k == x) { p } else {
+                    legs.push((x.clone(), Vec::new()));
+                    legs.len() - 1
                 };
                 for (k, v) in new {
                     match legs[p].1.iter().position(|(a, _)| *a == k) {
@@ -630,6 +632,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `gridsHtml(sc, resList, ids, opts)`: printable volume grids per site and period: rows are legs, columns turn by class.
+    #[must_use]
     pub fn grids_html(
         &self,
         s: Sc<'a>,
@@ -674,7 +677,7 @@ impl<'a> Tools<'a> {
                         .iter()
                         .filter(|y| y.origin_leg == o && y.turn == t)
                         .fold(0.0, |s, y| s + if lv { y.lv_veh_h } else { y.hv_veh_h });
-                    if x != 0.0 { number_to_js_string(x) } else { String::new() }
+                    if x == 0.0 { String::new() } else { number_to_js_string(x) }
                 };
                 let body: String = legs
                     .iter()
@@ -704,7 +707,7 @@ impl<'a> Tools<'a> {
                         .iter()
                         .filter(|x| x.turn == t)
                         .fold(0.0, |s, x| s + if lv { x.lv_veh_h } else { x.hv_veh_h });
-                    if v != 0.0 { number_to_js_string(v) } else { String::new() }
+                    if v == 0.0 { String::new() } else { number_to_js_string(v) }
                 };
                 let when_h = if r.period == "IP" {
                     "inter-peak average hour".to_string()
@@ -802,7 +805,7 @@ fn py_unicode(s: &str) -> String {
             out.push(c);
         } else {
             for u in c.encode_utf16(&mut buf) {
-                out.push_str(&format!("\\u{:04x}", u));
+                out.push_str(&format!("\\u{u:04x}"));
             }
         }
     }
@@ -818,10 +821,10 @@ fn split_ws(t: &str) -> Vec<&str> {
     for (i, c) in t.char_indices() {
         let ws = crate::jsnum::is_js_space(c);
         if ws && !in_ws {
-            if !(first && i == 0) {
-                out.push(&t[start..i]);
-            } else {
+            if first && i == 0 {
                 out.push("");
+            } else {
+                out.push(&t[start..i]);
             }
             in_ws = true;
         } else if !ws && in_ws {
@@ -830,10 +833,10 @@ fn split_ws(t: &str) -> Vec<&str> {
         }
         first = false;
     }
-    if !in_ws {
-        out.push(&t[start..]);
-    } else {
+    if in_ws {
         out.push("");
+    } else {
+        out.push(&t[start..]);
     }
     out
 }
@@ -853,6 +856,7 @@ pub enum CsvValue {
 pub type CsvRow = Vec<(String, CsvValue)>;
 
 /// `parseVolumesCSV(text)`: reads the volumes CSV back, with numbers where the column is numeric.
+#[must_use]
 pub fn parse_volumes_csv(text: &str) -> Vec<CsvRow> {
     const NUM: [&str; 11] = [
         "lat",
@@ -961,9 +965,9 @@ fn count_rows(src: &VolumeSource) -> Vec<CountRow> {
     }
 }
 
-impl<'a> Tools<'a> {
-    /// `asCountCSV(src, date)`: the volumes in Spare Construct's turning-count layout (long: site_id, lat, lng, time_start,
-    /// interval_min, from_leg, movement, class, count), so it re-imports as a one-hour count at the start of each period's
+impl Tools<'_> {
+    /// `asCountCSV(src, date)`: the volumes in Spare Construct's turning-count layout (long: `site_id`, lat, lng, `time_start`,
+    /// `interval_min`, `from_leg`, movement, class, count), so it re-imports as a one-hour count at the start of each period's
     /// peak-hour window.
     pub fn as_count_csv(&self, src: &VolumeSource, date: &str) -> String {
         let windows: Option<Value> = self
@@ -984,12 +988,9 @@ impl<'a> Tools<'a> {
                     .and_then(|p| p.get(0))
                     .filter(|x| crate::jsnum::value_truthy(x))
                     .map(js_str);
-                let start = match w0 {
-                    Some(t) => t,
-                    None => {
-                        let d = window_start(&r.period);
-                        if d.is_empty() { "07:00".to_string() } else { d.to_string() }
-                    }
+                let start = if let Some(t) = w0 { t } else {
+                    let d = window_start(&r.period);
+                    if d.is_empty() { "07:00".to_string() } else { d.to_string() }
                 };
                 let leg = if r.origin_leg >= 0.0 && r.origin_leg.fract() == 0.0 && (r.origin_leg as usize) < LEG_CODES.len() {
                     txt(LEG_CODES[r.origin_leg as usize])

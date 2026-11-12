@@ -23,6 +23,7 @@ fn sig_label(k: &V) -> V {
 }
 
 /// `freightRating(saving, sig)`: the draft IPM rating of a heavy-vehicle travel-time saving (%) for a route significance.
+#[must_use]
 pub fn freight_rating(saving: f64, sig: &str) -> &'static str {
     if sig == "national" && saving > 30.0 {
         return "Very High";
@@ -40,6 +41,7 @@ pub fn freight_rating(saving: f64, sig: &str) -> &'static str {
 }
 
 /// `gtRating(saving)`: the draft IPM rating of a general traffic travel-time saving (%).
+#[must_use]
 pub fn gt_rating(saving: f64) -> &'static str {
     if saving > 5.0 {
         "High"
@@ -51,6 +53,7 @@ pub fn gt_rating(saving: f64) -> &'static str {
 }
 
 /// `roadsToLinks(sc, names)`: the ids of the open roads whose names are in a list separated by commas, semicolons or new lines (case ignored).
+#[must_use]
 pub fn roads_to_links(sc: &V, names: &V) -> Vec<V> {
     let text = if names.t() { names.s() } else { String::new() };
     let mut want: Vec<String> = Vec::new();
@@ -73,6 +76,7 @@ pub fn roads_to_links(sc: &V, names: &V) -> Vec<V> {
 
 /// `gpsRoutes(P)`: the routes the author entered (links by id or by road names), else the scheme network (arterials and motorways) with its
 /// significance not set.
+#[must_use]
 pub fn gps_routes(p: &V) -> Vec<V> {
     let sc = active_sc(p);
     let cx = data(p);
@@ -161,7 +165,7 @@ pub fn gps_metrics(p: &V) -> V {
     if !dests.is_empty() && !ps.is_empty() {
         let per = ps[0];
         let (ro, rb) = (res_of(pr.opt, per).expect("option results"), res_of(pr.base, per).expect("base results"));
-        let zone_ids: Vec<String> = ro.g("zoneIds").items().iter().map(|x| x.s()).collect();
+        let zone_ids: Vec<String> = ro.g("zoneIds").items().iter().map(crate::compliance::jv::Jx::s).collect();
         let orig: Vec<String> = zone_ids.iter().filter(|id| pr.base.g("zones").g(id).t()).cloned().collect();
         let to_ids: Vec<String> = dests.iter().map(|d| d.g("zoneId").s()).collect();
         let sb = skim(p, pr.base, Some(rb), &orig, &to_ids);
@@ -198,9 +202,7 @@ pub fn gps_metrics(p: &V) -> V {
     // houses enabled by stage, counted when 75% complete by 2035
     let by = std.g("by").n();
     let derived = cx.g("stages").items().is_empty();
-    let stages: Vec<V> = if !derived {
-        cx.g("stages").items().to_vec()
-    } else {
+    let stages: Vec<V> = if derived {
         dev_zones(pr.opt)
             .iter()
             .map(|z| {
@@ -208,6 +210,8 @@ pub fn gps_metrics(p: &V) -> V {
                 jobj! { "name" => if z.g("name").t() { z.g("name").clone() } else { z.g("id").clone() }, "dwellings" => dwellings(z, pr.opt), "year75" => if truthy_number(y) { Some(y) } else { None }, "derived" => true }
             })
             .collect()
+    } else {
+        cx.g("stages").items().to_vec()
     };
     let rows: Vec<V> = stages
         .iter()
@@ -241,6 +245,7 @@ pub fn gps_metrics(p: &V) -> V {
 /* ---------- funding attribution ---------- */
 
 /// `inPoly(pt, poly)`: whether a point `[lat, lng]` is inside a polygon of `[lat, lng]` points (even-odd rule).
+#[must_use]
 pub fn in_poly(pt: [f64; 2], poly: &[[f64; 2]]) -> bool {
     let mut c = false;
     let n = poly.len();
@@ -257,11 +262,13 @@ pub fn in_poly(pt: [f64; 2], poly: &[[f64; 2]]) -> bool {
 }
 
 /// The points of a stored polygon: the entries that are pairs, as numbers (`polygon.filter(x => Array.isArray(x) && x.length === 2)`).
+#[must_use]
 pub fn polygon_of(v: &V) -> Vec<[f64; 2]> {
     v.items().iter().filter(|x| x.is_arr() && x.items().len() == 2).map(|x| [x.ix(0).n(), x.ix(1).n()]).collect()
 }
 
 /// `growthShare(P, sc)`: the growth share of the households and employment (`{ He, Hf, Ee, Ef, share, formula, label }`).
+#[must_use]
 pub fn growth_share(p: &V, sc: &V) -> V {
     let em = {
         let e = data(p).g("funding").g("employment").clone();
@@ -300,6 +307,7 @@ pub struct FundingAssets {
 }
 
 /// `fundingAssets(P, sc)`: the upgraded assets: the chosen link ids, else the roads named in the asset roads text, else the roads the option changes.
+#[must_use]
 pub fn funding_assets(p: &V, sc: &V) -> FundingAssets {
     let cx = data(p).g("funding").clone();
     let mut own: Vec<String> = Vec::new();
@@ -309,9 +317,7 @@ pub fn funding_assets(p: &V, sc: &V) -> FundingAssets {
             own.push(id.s());
         }
     }
-    if !own.is_empty() {
-        FundingAssets { ids: own, basis: "chosen assets" }
-    } else {
+    if own.is_empty() {
         let mut ids: Vec<String> = Vec::new();
         for id in changed_links(pair(p).base, sc) {
             if !ids.contains(&id) {
@@ -319,6 +325,8 @@ pub fn funding_assets(p: &V, sc: &V) -> FundingAssets {
             }
         }
         FundingAssets { ids, basis: "roads the option changes (choose the upgraded assets to change this)" }
+    } else {
+        FundingAssets { ids: own, basis: "chosen assets" }
     }
 }
 
@@ -331,7 +339,7 @@ pub fn funding_shares(p: &mut V, opts: &V) -> V {
         let sc = pr.opt;
         let fa = funding_assets(p, sc);
         let zs = dev_zones(sc);
-        let periods: Vec<String> = if opts.g("periods").t() { opts.g("periods").items().iter().map(|x| x.s()).collect() } else { periods_of(sc).into_iter().filter(|x| *x != "IP").map(|x| x.to_string()).collect() };
+        let periods: Vec<String> = if opts.g("periods").t() { opts.g("periods").items().iter().map(crate::compliance::jv::Jx::s).collect() } else { periods_of(sc).into_iter().filter(|x| *x != "IP").map(std::string::ToString::to_string).collect() };
         if fa.ids.is_empty() {
             return jobj! { "ok" => false, "why" => "No upgraded assets: choose them (road names) or make the option change a road." };
         }
@@ -350,12 +358,9 @@ pub fn funding_shares(p: &mut V, opts: &V) -> V {
         let mut assets: Vec<V> = Vec::new();
         for per in &periods {
             let owned;
-            let r: &V = match res_of(sc, per) {
-                Some(r) => r,
-                None => {
-                    owned = engine::assign(p, sc, None, &jobj! { "period" => per.as_str() });
-                    &owned
-                }
+            let r: &V = if let Some(r) = res_of(sc, per) { r } else {
+                owned = engine::assign(p, sc, None, &jobj! { "period" => per.as_str() });
+                &owned
             };
             let tot: HashMap<&String, f64> = fa.ids.iter().map(|id| (id, flow(r, id))).collect();
             let mut by: HashMap<&String, Vec<(f64, V)>> = fa.ids.iter().map(|id| (id, Vec::new())).collect();
@@ -441,8 +446,8 @@ pub fn funding(p: &V) -> V {
     if poly.len() >= 3 && p0.is_some() && !pr.same {
         let p0 = p0.expect("period");
         let (ro, rb) = (res_of(sc, p0).expect("option results"), res_of(pr.base, p0).expect("base results"));
-        let zo: Vec<String> = ro.g("zoneIds").items().iter().map(|x| x.s()).collect();
-        let zb: Vec<String> = rb.g("zoneIds").items().iter().map(|x| x.s()).collect();
+        let zo: Vec<String> = ro.g("zoneIds").items().iter().map(crate::compliance::jv::Jx::s).collect();
+        let zb: Vec<String> = rb.g("zoneIds").items().iter().map(crate::compliance::jv::Jx::s).collect();
         let (zon, zbn) = (zo.len(), zb.len());
         if ro.g("T").t() && rb.g("T").t() {
             let ids2: Vec<String> = zo.iter().filter(|id| sc.g("zones").g(id).t()).cloned().collect();
@@ -466,17 +471,14 @@ pub fn funding(p: &V) -> V {
                         (Some(ib), Some(jb)) => n0(rb.g("T").ix(ib * zbn + jb)),
                         _ => 0.0,
                     };
-                    let ben = 0.5 * (qb + qo) * (t0 - t1) / 3600.0;
+                    let ben = f64::midpoint(qb, qo) * (t0 - t1) / 3600.0;
                     if !truthy_number(ben) {
                         continue;
                     }
                     for z in [i, j] {
-                        match pos.get(z) {
-                            Some(&k) => by[k].1 = { let cur = by[k].1; (if truthy_number(cur) { cur } else { 0.0 }) + ben / 2.0 },
-                            None => {
-                                pos.insert(z.clone(), by.len());
-                                by.push((z.clone(), 0.0 + ben / 2.0));
-                            }
+                        if let Some(&k) = pos.get(z) { by[k].1 = { let cur = by[k].1; (if truthy_number(cur) { cur } else { 0.0 }) + ben / 2.0 } } else {
+                            pos.insert(z.clone(), by.len());
+                            by.push((z.clone(), 0.0 + ben / 2.0));
                         }
                     }
                 }
@@ -521,10 +523,12 @@ pub fn funding(p: &V) -> V {
     };
     let appr = {
         let a = day(cx.g("approval"));
-        if !a.is_empty() { a } else { day(data(p).g("ftaa").g("approval")) }
+        if a.is_empty() { day(data(p).g("ftaa").g("approval")) } else { a }
     };
     let sh = if cx.g("shares").t() && cx.g("shares").g("ok").t() && cx.g("shares").g("scId").strict_eq(sc.g("id")) { cx.g("shares").clone() } else { V::Null };
-    let dc = if !appr.is_empty() {
+    let dc = if appr.is_empty() {
+        V::Null
+    } else {
         let months = xdata("STD.ftaa.dcMonths").n();
         let until = add_months(&V::String(appr.clone()), months);
         let until_v = until.map_or(V::Null, V::String);
@@ -536,8 +540,6 @@ pub fn funding(p: &V) -> V {
                 long_date(&until_v)
             ),
         }
-    } else {
-        V::Null
     };
     jobj! {
         "assets" => arr(assets), "assetsBasis" => fa.basis, "shares" => sh, "growth" => growth_share(p, sc), "incidence" => incidence, "bcrG" => bcr_g, "levy" => levy, "dc" => dc,
@@ -550,6 +552,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-gps", "compliance-extra-fund
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
     match id {
         "compliance-extra-gps" => {
@@ -562,7 +565,7 @@ pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
             let rows: Vec<Vec<String>> = vec![
                 vec![
                     "Scheme network travel-time saving".to_string(),
-                    if !net.g("saving").nullish() { format!("{}% ({})", num(net.g("saving"), 1), esc(net.g("significance"))) } else { dash() },
+                    if net.g("saving").nullish() { dash() } else { format!("{}% ({})", num(net.g("saving"), 1), esc(net.g("significance"))) },
                     format!(
                         "HCV {}; general traffic {}",
                         if net.g("hcv").t() { esc(net.g("hcv")) } else { dash() },
@@ -572,7 +575,7 @@ pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
                 vec!["Houses enabled (75% by 2035)".to_string(), fmt::int(g.g("houses").g("total").n()), String::new()],
                 vec![
                     "DSI reduction per NZ$100m".to_string(),
-                    if !g.g("dsi").g("per100m").nullish() { num(g.g("dsi").g("per100m"), 2) } else { dash() },
+                    if g.g("dsi").g("per100m").nullish() { dash() } else { num(g.g("dsi").g("per100m"), 2) },
                     esc(g.g("dsi").g("collective")),
                 ],
             ];
@@ -611,7 +614,7 @@ pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
             Some(format!(
                 "<p class=\"note\"><b>{}</b></p><p>Growth share {} ({}; {}). {} BCR_G with the levy as Cp: {}.</p>{}",
                 esc(f.g("caveat")),
-                if !gr.g("share").nullish() { fmt::pct(gr.g("share").n(), 1) } else { "\u{2013}".to_string() },
+                if gr.g("share").nullish() { "\u{2013}".to_string() } else { fmt::pct(gr.g("share").n(), 1) },
                 esc(gr.g("formula")),
                 esc(gr.g("label")),
                 if inc.t() && !inc.g("insideShare").nullish() { format!("Benefit inside the levy area {}.", fmt::pct(inc.g("insideShare").n(), 0)) } else { String::new() },
@@ -627,11 +630,13 @@ pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &[];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(_id: &str, _p: &V) -> Option<String> {
     None
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(_id: &str, _p: &V) -> Option<bool> {
     None
 }

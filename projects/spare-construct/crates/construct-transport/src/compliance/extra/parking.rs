@@ -27,6 +27,7 @@ pub fn blank_park() -> V {
 
 /// `cycleRates(act, q, row)`: the cycle parking required for a quantity of an activity (`E27.6.2.5`, residential and office only; the rate of any
 /// other activity is entered): `{ visitor, secure, src }` (null where not known).
+#[must_use]
 pub fn cycle_rates(act: &V, q: f64, row: &V) -> V {
     if act.eq_s("residential") {
         let secure = if nn(row.g("noGarage")).is_some() {
@@ -56,6 +57,7 @@ pub fn cycle_rates(act: &V, q: f64, row: &V) -> V {
 }
 
 /// `showersFor(g)`: the showers required for a non-residential gross floor area.
+#[must_use]
 pub fn showers_for(g: f64) -> f64 {
     if g <= 500.0 {
         0.0
@@ -69,6 +71,7 @@ pub fn showers_for(g: f64) -> f64 {
 }
 
 /// `accessibleFor(n)`: the accessible car parks NZS 4121:2001 Table 2 asks for with n car parks (1 up to 20, 2 for 21-50, then 1 more per 50 or part).
+#[must_use]
 pub fn accessible_for(n: f64) -> f64 {
     let n = if crate::jsnum::truthy_number(n) { n } else { 0.0 };
     if n <= 0.0 {
@@ -86,6 +89,7 @@ pub fn accessible_for(n: f64) -> f64 {
 }
 
 /// `loadingFor(grp, g)`: the loading spaces required for a gross floor area of a retail-type or other non-residential group.
+#[must_use]
 pub fn loading_for(grp: &str, g: f64) -> f64 {
     if grp == "retail" {
         if g <= 300.0 {
@@ -150,10 +154,10 @@ pub fn parking(p: &V) -> V {
         if grp != "res" {
             non_res += q;
         }
-        if !cyc.g("visitor").nullish() {
-            visitor += cyc.g("visitor").n();
-        } else {
+        if cyc.g("visitor").nullish() {
             unknown_cycle = true;
+        } else {
+            visitor += cyc.g("visitor").n();
         }
         if !cyc.g("secure").nullish() {
             secure += cyc.g("secure").n();
@@ -177,14 +181,14 @@ pub fn parking(p: &V) -> V {
         if n0(r.g("loading")) < load_req {
             why.push("Too few loading spaces".to_string());
         }
-        let induced = if over != 0.0 {
+        let induced = if over == 0.0 {
+            V::Null
+        } else {
             jobj! {
                 "trips" => over * trips_per_space,
                 "text" => format!("About {} induced peak commuter trips from {} extra spaces at {} trips/space ({})", numf(over * trips_per_space, 0), ns(over), ns(trips_per_space), std.g("tripsPerSpaceBasis").s()),
                 "status" => "Restricted discretionary (E27.4.1); assess the E27.8.1(5) matters and E27.8.2(4)(c): effects of the extra parking on the transport network, public transport, walking and cycling, and the trips it induces",
             }
-        } else {
-            V::Null
         };
         let complies = why.is_empty();
         r.set("label", act.g("label").clone());
@@ -227,6 +231,7 @@ pub fn parking(p: &V) -> V {
 }
 
 /// `parkingCSV(P)`: Table P1 as a stamped CSV.
+#[must_use]
 pub fn parking_csv(p: &V) -> String {
     let pk = parking(p);
     let s = |x: &str| V::String(x.to_string());
@@ -242,7 +247,7 @@ pub fn parking_csv(p: &V) -> String {
     ];
     for r in pk.g("rows").items() {
         let acc = r.g("accReq");
-        let mut notes: Vec<String> = r.g("why").items().iter().map(|w| w.s()).collect();
+        let mut notes: Vec<String> = r.g("why").items().iter().map(crate::compliance::jv::Jx::s).collect();
         notes.push(if r.g("induced").t() { r.g("induced").g("text").s() } else { String::new() });
         let notes = notes.into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join("; ");
         let cv = r.g("cyc").g("visitor");
@@ -255,9 +260,9 @@ pub fn parking_csv(p: &V) -> String {
             r.g("cars").clone(),
             if acc.g("required").t() { V::String(format!("Yes ({})", acc.g("n").s())) } else { s("No") },
             r.g("accessible").clone(),
-            if !cv.nullish() { r1(cv) } else { s("enter") },
+            if cv.nullish() { s("enter") } else { r1(cv) },
             r.g("cycleVisitor").clone(),
-            if !cs.nullish() { r1(cs) } else { s("enter") },
+            if cs.nullish() { s("enter") } else { r1(cs) },
             r.g("cycleSecure").clone(),
             r.g("loadReq").clone(),
             r.g("loading").clone(),
@@ -268,7 +273,7 @@ pub fn parking_csv(p: &V) -> String {
     let need = pk.g("need");
     let have = pk.g("have");
     let mut tot_notes = vec![format!("Showers: {} required, {} proposed", need.g("showers").s(), have.g("showers").s())];
-    tot_notes.extend(pk.g("totalsWhy").items().iter().map(|w| w.s()));
+    tot_notes.extend(pk.g("totalsWhy").items().iter().map(crate::compliance::jv::Jx::s));
     rows.push(vec![
         s("Total (summed, then rounded 0.5 up: E27.6.2(9))"),
         s(""),
@@ -294,6 +299,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-parking"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id != "compliance-extra-parking" {
         return None;
@@ -317,8 +323,8 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
                 num(r.g("max"), 0),
                 num(r.g("cars"), 0),
                 if acc.g("required").t() { format!("Yes ({})", num(acc.g("n"), 0)) } else { "No".to_string() },
-                format!("{}/{}", if !cv.nullish() { num(cv, 1) } else { dash() }, num(r.g("cycleVisitor"), 0)),
-                format!("{}/{}", if !cs.nullish() { num(cs, 1) } else { dash() }, num(r.g("cycleSecure"), 0)),
+                format!("{}/{}", if cv.nullish() { dash() } else { num(cv, 1) }, num(r.g("cycleVisitor"), 0)),
+                format!("{}/{}", if cs.nullish() { dash() } else { num(cs, 1) }, num(r.g("cycleSecure"), 0)),
                 format!("{}/{}", num(r.g("loadReq"), 0), num(r.g("loading"), 0)),
                 if r.g("complies").t() { "Yes" } else { "No" }.to_string(),
             ]
@@ -347,7 +353,7 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
         esc(pk.g("label")),
         num(need.g("showers"), 0),
         num(have.g("showers"), 0),
-        esc_s(&pk.g("totalsWhy").items().iter().map(|w| w.s()).collect::<Vec<_>>().join("; ")),
+        esc_s(&pk.g("totalsWhy").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("; ")),
         induced.join(" "),
         esc(xdata("STD.accessible.name")),
     );
@@ -358,11 +364,13 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-parking"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     (id == "compliance-extra-parking").then(|| parking_csv(p))
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     (id == "compliance-extra-parking").then(|| !data(p).g("parking").g("rows").items().is_empty())
 }

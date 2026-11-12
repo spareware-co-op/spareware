@@ -33,6 +33,7 @@ fn without_me(p: &Project, period: &str) -> Project {
 /* ---------------- k-means sectors ---------------- */
 
 /// `kmeans(pts, k)`: k-means labels with a deterministic farthest-point start (for the sector matrix).
+#[must_use]
 pub fn kmeans(pts: &[[f64; 2]], k: usize) -> Vec<usize> {
     if pts.is_empty() {
         return Vec::new();
@@ -82,8 +83,9 @@ pub fn kmeans(pts: &[[f64; 2]], k: usize) -> Vec<usize> {
 /// `meReport(sc, period)`: Table M1 (TMDG section 8, TAG M3.1 Table 5): the prior matrix against the estimated one on the base-year view, None when the period has no factors.
 ///
 /// Trip lengths use the free-flow shortest path; bins 0 to 2, 2 to 5, 5 to 10, 10 to 20, 20+ km. `date` is the time written into the report.
+#[must_use]
 pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option<M1> {
-    let has = p.me.get().and_then(|m| m.factors.get(period)).is_some_and(|f| f.is_set());
+    let has = p.me.get().and_then(|m| m.factors.get(period)).is_some_and(crate::jsnum::Maybe::is_set);
     if !has {
         return None;
     }
@@ -141,7 +143,7 @@ pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option
         }
     }
     let reg = regression(&cp, &ce);
-    let mean_cell = if !cp.is_empty() { tp / cp.len() as f64 } else { 0.0 };
+    let mean_cell = if cp.is_empty() { 0.0 } else { tp / cp.len() as f64 };
     let ends_of = |keep: &dyn Fn(usize) -> bool| -> M1Ends {
         let (mut x, mut y): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
         for i in 0..zn {
@@ -207,14 +209,14 @@ pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option
     }
     let t_p = fp.iter().fold(0.0f64, |a, b| a + b);
     let t_e = fe.iter().fold(0.0f64, |a, b| a + b);
-    let m_p = if t_p != 0.0 { sp / t_p } else { 0.0 };
-    let m_e = if t_e != 0.0 { se / t_e } else { 0.0 };
-    let sd_p = if t_p != 0.0 { math_max(0.0, sp2 / t_p - m_p * m_p).sqrt() } else { 0.0 };
-    let sd_e = if t_e != 0.0 { math_max(0.0, se2 / t_e - m_e * m_e).sqrt() } else { 0.0 };
+    let m_p = if t_p == 0.0 { 0.0 } else { sp / t_p };
+    let m_e = if t_e == 0.0 { 0.0 } else { se / t_e };
+    let sd_p = if t_p == 0.0 { 0.0 } else { math_max(0.0, sp2 / t_p - m_p * m_p).sqrt() };
+    let sd_e = if t_e == 0.0 { 0.0 } else { math_max(0.0, se2 / t_e - m_e * m_e).sqrt() };
     let (mut mn, mut mx) = (0.0f64, 0.0f64);
     for k in 0..bins.len() {
-        let a = if t_p != 0.0 { fp[k] / t_p } else { 0.0 };
-        let c = if t_e != 0.0 { fe[k] / t_e } else { 0.0 };
+        let a = if t_p == 0.0 { 0.0 } else { fp[k] / t_p };
+        let c = if t_e == 0.0 { 0.0 } else { fe[k] / t_e };
         mn += math_min(a, c);
         mx += math_max(a, c);
     }
@@ -233,7 +235,7 @@ pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option
     for (k, &i) in inner.iter().enumerate() {
         sec[i] = lab[k] + 1;
     }
-    let n_s = lab.iter().copied().max().unwrap_or(0).max(0) + 2;
+    let n_s = lab.iter().copied().max().unwrap_or(0) + 2;
     let mut sm_p = vec![0.0f64; n_s * n_s];
     let mut sm_e = vec![0.0f64; n_s * n_s];
     for i in 0..zn {
@@ -269,20 +271,20 @@ pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option
         },
         ends: M1EndsBoth { all: ends_of(&|_| true), no_gateways: ends_of(&|i| !is_g[i]) },
         tld: M1Tld {
-            bins: ["0\u{2013}2 km", "2\u{2013}5 km", "5\u{2013}10 km", "10\u{2013}20 km", "20+ km"].iter().map(|s| s.to_string()).collect(),
-            prior: fp.iter().map(|v| if t_p != 0.0 { v / t_p } else { 0.0 }).collect(),
-            est: fe.iter().map(|v| if t_e != 0.0 { v / t_e } else { 0.0 }).collect(),
+            bins: ["0\u{2013}2 km", "2\u{2013}5 km", "5\u{2013}10 km", "10\u{2013}20 km", "20+ km"].iter().map(std::string::ToString::to_string).collect(),
+            prior: fp.iter().map(|v| if t_p == 0.0 { 0.0 } else { v / t_p }).collect(),
+            est: fe.iter().map(|v| if t_e == 0.0 { 0.0 } else { v / t_e }).collect(),
             mean_p: m_p,
             mean_e: m_e,
             sd_p,
             sd_e,
-            mean_pct: if m_p != 0.0 { (m_e / m_p - 1.0) * 100.0 } else { 0.0 },
-            sd_pct: if sd_p != 0.0 { (sd_e / sd_p - 1.0) * 100.0 } else { 0.0 },
-            cr: if mx != 0.0 { Some(mn / mx) } else { None },
+            mean_pct: if m_p == 0.0 { 0.0 } else { (m_e / m_p - 1.0) * 100.0 },
+            sd_pct: if sd_p == 0.0 { 0.0 } else { (sd_e / sd_p - 1.0) * 100.0 },
+            cr: if mx == 0.0 { None } else { Some(mn / mx) },
             basis: "free-flow shortest path, base-year network".to_string(),
         },
         trip_end_geh: M1TripEndGeh {
-            bands: ["< 2.5", "2.5\u{2013}5", "5\u{2013}7.5", "7.5\u{2013}10", "> 10"].iter().map(|s| s.to_string()).collect(),
+            bands: ["< 2.5", "2.5\u{2013}5", "5\u{2013}7.5", "7.5\u{2013}10", "> 10"].iter().map(std::string::ToString::to_string).collect(),
             n: tg,
         },
         cell_change: chg,
@@ -433,7 +435,7 @@ pub fn run_me(
         ..FitOpts::default()
     };
     let out = fit(p, sc_id, &fo, lend(&mut progress))?;
-    let has_info = p.me.get().and_then(|m| m.info.get()).and_then(|i| i.get(&period)).is_some_and(|i| i.is_set());
+    let has_info = p.me.get().and_then(|m| m.info.get()).and_then(|i| i.get(&period)).is_some_and(crate::jsnum::Maybe::is_set);
     let Some(res) = out.res.as_ref().filter(|_| has_info) else {
         let note = out.note.clone();
         return Ok(RunMe { ok: false, out: Some(out), note });
@@ -447,7 +449,7 @@ pub fn run_me(
         };
         (sel("valid"), sel("me"))
     };
-    let date = opts.date.map(str::to_string).unwrap_or_else(|| super::fit::iso_of_ms(crate::util::now_ms()));
+    let date = opts.date.map_or_else(|| super::fit::iso_of_ms(crate::util::now_ms()), str::to_string);
     let m1 = me_report(p, &sc, &period, &date);
     if let Some(info) = p.me.get_mut().and_then(|m| m.info.get_mut()).and_then(|i| i.get_mut(&period)).and_then(|i| i.get_mut()) {
         info.extra.insert("countIds".into(), Value::Array(ids.iter().map(|i| Value::String(i.clone())).collect()));

@@ -23,6 +23,7 @@ use std::collections::BTreeMap;
 pub const AGS_BASIS_TEXT: &str = "Land-use growth: AGS23 v1.1 by MSM zone, factor method";
 
 /// `agsYear(y)`: a year clamped to the years AGS23 covers (2022 to 2052); anything that is not a number reads as 2023.
+#[must_use]
 pub fn ags_year(y: f64) -> f64 {
     let t = if y == 0.0 || y.is_nan() { 2023.0 } else { y };
     clamp(math_round(t), AGS_YEARS[0], AGS_YEARS[1])
@@ -74,6 +75,7 @@ fn get3(a: &JsonValue, k: &str, y: f64) -> Option<f64> {
 }
 
 /// `loadAGS(b, years, base)` after the download: the zones that have outlines, with the values for the years asked.
+#[must_use]
 pub fn parse_ags(features: &[JsonValue], ys: &[f64]) -> Vec<AgsZone> {
     let empty = JsonValue::object();
     features
@@ -106,6 +108,7 @@ pub fn parse_ags(features: &[JsonValue], ys: &[f64]) -> Vec<AgsZone> {
 }
 
 /// The years `loadAGS` asks for: the base year and every forecast year, clamped and without repeats.
+#[must_use]
 pub fn ags_years(years: &[f64], base: f64) -> Vec<f64> {
     let mut ys = vec![ags_year(base)];
     for y in years {
@@ -128,6 +131,7 @@ pub struct AgsLoad {
 
 impl AgsLoad {
     /// A download for an area, the forecast years (`years`) and the base year.
+    #[must_use]
     pub fn new(bounds: Bounds, years: &[f64], base: f64, timeout_ms: f64, cache: &MetaCache) -> AgsLoad {
         AgsLoad { meta: LayerMeta::new(SRC_AGS.url, cache, timeout_ms), bounds, ys: ags_years(years, base), timeout_ms, query: None }
     }
@@ -219,6 +223,7 @@ pub struct AgsFactor {
 }
 
 /// `agsRangeText(base, year, f)`: the sentence that says a year outside 2022 to 2052 used the nearest AGS23 year.
+#[must_use]
 pub fn ags_range_text(base: &str, year: &str, f_base: f64, f_year: f64) -> String {
     format!(
         "AGS23 covers {}\u{2013}{}, so this uses growth from {} to {} (asked: {} to {})",
@@ -232,6 +237,7 @@ pub fn ags_range_text(base: &str, year: &str, f_base: f64, f_year: f64) -> Strin
 }
 
 /// `agsZoneFactor(ll, base, year, data)`: the factors of the MSM zone that holds a point ([lat, lng]); None outside every zone or without values for the years.
+#[must_use]
 pub fn ags_zone_factor(ll: LatLng, base: f64, year: f64, data: Option<&AgsData>) -> Option<AgsFactor> {
     let data = data?;
     let (b, y) = (ags_year(base), ags_year(year));
@@ -249,6 +255,7 @@ pub fn ags_zone_factor(ll: LatLng, base: f64, year: f64, data: Option<&AgsData>)
 }
 
 /// `existingZone(z)`: a zone that stands for existing land use.
+#[must_use]
 pub fn existing_zone(z: &Zone) -> bool {
     z.kind.is("zone") && (z.existing.is_true() || z.src.get().is_some_and(|s| s.as_str() == Some("existing-lu")))
 }
@@ -420,6 +427,7 @@ pub struct AgsGateway {
 /// `agsGateway(sc, z, base, year, data)`: households plus jobs of MSM zones whose centre lies outside the study area, within 10 km of the gateway and within 60 degrees of the direction from the study-area centre to the gateway.
 ///
 /// `base` and `year` are the settings' values as given (the sentence quotes them when they were clamped). None without data, a network, or with the same year twice.
+#[must_use]
 pub fn ags_gateway(sc: &Scenario, z: &Zone, base: &Num, year: f64, data: Option<&AgsData>) -> Option<AgsGateway> {
     let data = data?;
     let (b, y) = (ags_year(base.num()), ags_year(year));
@@ -427,7 +435,7 @@ pub fn ags_gateway(sc: &Scenario, z: &Zone, base: &Num, year: f64, data: Option<
     if y == b {
         return None;
     }
-    let c: LatLng = [(area.s + area.n) / 2.0, (area.w + area.e) / 2.0];
+    let c: LatLng = [f64::midpoint(area.s, area.n), f64::midpoint(area.w, area.e)];
     let g: LatLng = [z.lat.num(), z.lng.num()];
     let dir = bearing(&c, &g);
     let (mut b0, mut b1) = (0.0, 0.0);
@@ -513,7 +521,7 @@ pub fn ags_gateways(p: &mut Project, data: Option<&AgsData>, now_ms: f64) -> Vec
     let settings = p.settings.clone();
     let date = today(now_ms);
     let mut out = Vec::new();
-    for sc in p.scenarios.iter_mut() {
+    for sc in &mut p.scenarios {
         let y = year_of(Some(sc), &settings);
         let ids: Vec<String> = sc.zones.values().filter(|z| z.kind.is("gateway")).map(|z| z.id.clone()).collect();
         for id in ids {

@@ -16,11 +16,12 @@ fn crc_table() -> [u32; 256] {
 }
 
 /// `crc32(bytes)`: the CRC-32 of the bytes, as the ZIP format wants it.
+#[must_use]
 pub fn crc32(b: &[u8]) -> u32 {
     let t = crc_table();
     let mut c: u32 = 0xFFFF_FFFF;
     for &x in b {
-        c = t[((c ^ x as u32) & 0xFF) as usize] ^ (c >> 8);
+        c = t[((c ^ u32::from(x)) & 0xFF) as usize] ^ (c >> 8);
     }
     c ^ 0xFFFF_FFFF
 }
@@ -40,6 +41,7 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 }
 
 /// `zip(files, when)`: the files as a STORE-method ZIP archive, time-stamped with `when_ms` (milliseconds since 1970, read as UTC).
+#[must_use]
 pub fn zip(files: &[PackFile], when_ms: f64) -> Vec<u8> {
     let t = when_ms.trunc();
     let days = (t / 86_400_000.0).floor() as i64;
@@ -85,7 +87,7 @@ pub fn zip(files: &[PackFile], when_ms: f64) -> Vec<u8> {
         central.extend_from_slice(&[0u8; 12]);
         central.extend_from_slice(&off.to_le_bytes());
         central.extend_from_slice(name);
-        off += 30 + nlen as u32 + len;
+        off += 30 + u32::from(nlen) + len;
     }
     let cd = central.len() as u32;
     let n = files.len() as u16;

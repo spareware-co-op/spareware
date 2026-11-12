@@ -18,7 +18,7 @@ use crate::util::{self, LatLng, r7};
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 
-/// model.js OSM_CLASS: the OpenStreetMap `highway` values the import reads, in its order, with the road class each becomes.
+/// model.js `OSM_CLASS`: the OpenStreetMap `highway` values the import reads, in its order, with the road class each becomes.
 pub const OSM_CLASS: [(&str, &str); 14] = [
     ("motorway", "motorway"),
     ("trunk", "arterial"),
@@ -45,6 +45,7 @@ pub const OVERPASS: [&str; 4] = [
 ];
 
 /// `OSM_CLASS[highway]`: the road class a `highway` value becomes.
+#[must_use]
 pub fn osm_class(highway: &str) -> Option<&'static str> {
     OSM_CLASS
         .iter()
@@ -75,6 +76,7 @@ pub struct OverpassOpts {
 }
 
 /// The Overpass QL query of `Importers.overpass(b, opts)`: every way with one of the road `highway` values inside the box.
+#[must_use]
 pub fn overpass_query(b: &Bounds, opts: &OverpassOpts) -> String {
     let types: Vec<&str> = OSM_CLASS
         .iter()
@@ -121,7 +123,7 @@ fn tag<'a>(t: &'a Value, k: &str) -> Option<std::borrow::Cow<'a, str>> {
 
 /// `t[k] || ''` as text.
 fn tag_or_empty(t: &Value, k: &str) -> String {
-    tag(t, k).map(|s| s.into_owned()).unwrap_or_default()
+    tag(t, k).map(std::borrow::Cow::into_owned).unwrap_or_default()
 }
 
 /// `a.b.includes` on tags: the OpenStreetMap elements of one data set in file order, looked up by id.
@@ -236,23 +238,19 @@ pub fn osm_to_scenario(
                 Some("node") => {
                     // Map.set: a repeated id keeps its first place and takes the later element
                     if let Some(k) = e.get("id").and_then(key_of) {
-                        match nodes.index.get(&k) {
-                            Some(&i) => nodes.list[i] = e,
-                            None => {
-                                nodes.index.insert(k, nodes.list.len());
-                                nodes.list.push(e);
-                            }
+                        if let Some(&i) = nodes.index.get(&k) { nodes.list[i] = e } else {
+                            nodes.index.insert(k, nodes.list.len());
+                            nodes.list.push(e);
                         }
                     }
                 }
-                Some("way") => {
+                Some("way")
                     if e.get("nodes")
                         .and_then(Value::as_array)
                         .is_some_and(|n| n.len() > 1)
-                    {
+                    => {
                         ways.push(e);
                     }
-                }
                 _ => {}
             }
         }
@@ -328,11 +326,7 @@ pub fn osm_to_scenario(
         let c = road_class_exact(cls).expect("a known class");
         let junction = tag_or_empty(t, "junction");
         let ring = junction == "roundabout" || junction == "circular";
-        let mut ow: i32 = if ring || hw == "motorway" || hw == "motorway_link" {
-            1
-        } else {
-            0
-        };
+        let mut ow: i32 = i32::from(ring || hw == "motorway" || hw == "motorway_link");
         let oneway = tag_or_empty(t, "oneway");
         if is_yes(&oneway) {
             ow = 1;
@@ -648,7 +642,7 @@ pub fn auto_gateways(
         } else {
             1.0
         };
-        let k = 60.0 / 111000.0 / m;
+        let k = 60.0 / 111_000.0 / m;
         let label = l.name.str_or(c.label).to_string();
         let lat = r7(nlat + d_lat * k);
         let lng = r7(nlng + d_lng * k);
@@ -693,6 +687,7 @@ pub fn auto_gateways(
 }
 
 /// `parseInt` of the text of a tag, for callers that already hold it as text.
+#[must_use]
 pub fn parse_tag_int(s: &str) -> f64 {
     parse_int10(s)
 }

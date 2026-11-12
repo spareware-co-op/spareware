@@ -13,7 +13,7 @@ pub struct PeriodVol {
     pub v: f64,
     /// How the volume was made ("8.5% of daily", "counted peak hour (07:45)").
     pub how: String,
-    /// Observation method key: "measured_hour", "weekday_factored", "adt_factored", "ramm_estimate" or "virtual".
+    /// Observation method key: "`measured_hour`", "`weekday_factored`", "`adt_factored`", "`ramm_estimate`" or "virtual".
     pub basis: &'static str,
 }
 
@@ -74,10 +74,10 @@ pub fn period_vol(c: &Count, period: &str, s: &Settings) -> Option<PeriodVol> {
     if c.src_is("at") && c.peak.truthy() && c.peak_time.truthy() {
         let pt = c.peak_time.js_string();
         let h = slice_num(&pt, 0, Some(2)) + slice_num(&pt, 3, None) / 60.0;
-        if (am && h >= 6.0 && h < 10.0) || (pm && h >= 14.5 && h < 19.0) {
+        if (am && (6.0..10.0).contains(&h)) || (pm && (14.5..19.0).contains(&h)) {
             return pv(
                 c.peak.num(),
-                format!("counted peak hour ({})", pt),
+                format!("counted peak hour ({pt})"),
                 "measured_hour",
             );
         }
@@ -86,7 +86,7 @@ pub fn period_vol(c: &Count, period: &str, s: &Settings) -> Option<PeriodVol> {
         return if c.adt.num() > 0.0 {
             pv(
                 c.adt.num() * share,
-                format!("RAMM estimate \u{d7} {}", share_txt),
+                format!("RAMM estimate \u{d7} {share_txt}"),
                 "ramm_estimate",
             )
         } else {
@@ -168,6 +168,7 @@ pub fn period_vol(c: &Count, period: &str, s: &Settings) -> Option<PeriodVol> {
 }
 
 /// `DataHub.obsMethod(c, period)`: the observation method of a count in a period (an importer's own `obs_method` wins, then RAMM estimate, virtual, then what the volume rests on).
+#[must_use]
 pub fn obs_method(c: &Count, period: &str, s: &Settings) -> String {
     if let Some(m) = c.obs_method.as_text()
         && obs_method_of_key(m).is_some()
@@ -180,12 +181,11 @@ pub fn obs_method(c: &Count, period: &str, s: &Settings) -> String {
     if c.virtual_.truthy() {
         return "virtual".to_string();
     }
-    period_vol(c, period, s)
-        .map(|p| p.basis.to_string())
-        .unwrap_or_else(|| "adt_factored".to_string())
+    period_vol(c, period, s).map_or_else(|| "adt_factored".to_string(), |p| p.basis.to_string())
 }
 
 /// `DataHub.countWeight(c, period)`: the matrix-estimation weight of a count by its observation method (measured 1, weekday 0.7, ADT 0.4, RAMM 0.25, virtual 0).
+#[must_use]
 pub fn count_weight(c: &Count, period: &str, s: &Settings) -> f64 {
     obs_method_of_key(&obs_method(c, period, s)).map_or(0.4, |m| m.weight)
 }

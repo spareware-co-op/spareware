@@ -54,6 +54,7 @@ fn rule_level(r: &V, c: &V) -> String {
 
 /// The text the linter reads (`lintSources(P)`): the Compliance+ text box, the report's author text and free text in the mitigation and
 /// options registers: `[{ where, text }]`.
+#[must_use]
 pub fn lint_sources(p: &V) -> Vec<V> {
     let cx = ctx::data(p);
     let mut out: Vec<V> = Vec::new();
@@ -86,12 +87,14 @@ pub fn lint_sources(p: &V) -> Vec<V> {
 }
 
 /// `sentences(t)`: the text split after a full stop, exclamation or question mark and at line breaks, each trimmed, blanks left out.
+#[must_use]
 pub fn sentences(t: &V) -> Vec<String> {
     rx(r"(?<=[.!?])\s+|\n+", "").split(&t.s()).into_iter().map(|s| trim(&s).to_string()).filter(|s| !s.is_empty()).collect()
 }
 
 /// `lint(P, text)`: the findings of the statutory scope and wording linter for the project's texts (or only `text`): `{ findings, blocking, applies, context }`.
 /// Each finding is `{ id, key, rule, source, level, where, sentence, match, suggest, overridden }`.
+#[must_use]
 pub fn lint(p: &V, text: Option<&str>) -> V {
     let c = ctx::context(p);
     let cx = ctx::data(p);
@@ -147,16 +150,17 @@ pub fn override_lint(p: &mut V, key: &str, reason: &str) -> V {
     let cx = ctx::data_mut(p);
     let lx = obj_at(cx, "lint");
     let ov = obj_at(lx, "override");
-    if !trim(reason).is_empty() {
-        ov.set(key, jobj! { "reason" => trim(reason), "at" => ctx::today() });
-    } else {
+    if trim(reason).is_empty() {
         ov.remove(key);
+    } else {
+        ov.set(key, jobj! { "reason" => trim(reason), "at" => ctx::today() });
     }
     let held = ov.g(key);
     if held.t() { held.clone() } else { V::Null }
 }
 
 /// `exportBlock(P)`: why exports that carry author text are refused, None when none is blocked.
+#[must_use]
 pub fn export_block(p: &V) -> Option<String> {
     let l = lint(p, None);
     let f = l.g("blocking").items().first()?;
@@ -164,6 +168,7 @@ pub fn export_block(p: &V) -> Option<String> {
 }
 
 /// `lintCSV(P)`: the findings as a CSV with the version stamp and disclaimers in footer rows.
+#[must_use]
 pub fn lint_csv(p: &V) -> String {
     let l = lint(p, None);
     let s = |x: &str| V::String(x.to_string());
@@ -193,6 +198,7 @@ pub const REPORT_IDS: &[&str] = &[];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(_id: &str, _p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
     None
 }
@@ -201,11 +207,13 @@ pub fn report(_id: &str, _p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String>
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-lint"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     (id == "compliance-extra-lint").then(|| lint_csv(p))
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, _p: &V) -> Option<bool> {
     (id == "compliance-extra-lint").then_some(true)
 }

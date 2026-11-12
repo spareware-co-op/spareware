@@ -14,6 +14,7 @@ use crate::jsnum::{math_round, number_to_js_string};
 use crate::util::{self, fmt};
 
 /// `minLenFor(v)`: the Schedule 1 minimum length (m) of a section with this limit (km/h).
+#[must_use]
 pub fn min_len_for(v: f64) -> f64 {
     let t = xdata("STD.speed.minLen");
     for r in t.items() {
@@ -25,19 +26,19 @@ pub fn min_len_for(v: f64) -> f64 {
 }
 
 /// `limitOf(L)`: the proposed limit (km/h) of a road: the author's entered limit, otherwise its posted limit.
+#[must_use]
 pub fn limit_of(l: &V) -> f64 {
     let cx = l.g("cx");
-    if cx.t() {
-        if let Some(x) = nn(cx.g("limit")) {
-            if x != 0.0 {
+    if cx.t()
+        && let Some(x) = nn(cx.g("limit"))
+            && x != 0.0 {
                 return x;
             }
-        }
-    }
     posted(l)
 }
 
 /// `speedSections(sc)`: the road sections to validate: links sharing `cx.section`, otherwise connected links with the same name and limit (one section each).
+#[must_use]
 pub fn speed_sections(sc: &V) -> Vec<Vec<&V>> {
     let links: Vec<&V> = sc
         .g("links")
@@ -91,6 +92,7 @@ pub fn speed_sections(sc: &V) -> Vec<Vec<&V>> {
 
 /// `roadLen(sc, Ls)`: the road length (m) of a section: the two one-way carriageways of a divided road (same name, opposite heading, within 60 m)
 /// count once, as half their summed length.
+#[must_use]
 pub fn road_len(sc: &V, ls: &[&V]) -> f64 {
     let pair_m = xdata("PAIR_M").n();
     let one_way = |l: &V| (int32(l.g("lanesAB")) > 0.0) != (int32(l.g("lanesBA")) > 0.0);
@@ -126,12 +128,14 @@ pub fn road_len(sc: &V, ls: &[&V]) -> f64 {
 }
 
 /// `currentOf(P, L)`: the current (existing) limit of a road: from the do-minimum where the road exists there.
+#[must_use]
 pub fn current_of(p: &V, l: &V) -> f64 {
     let b = pair(p).base.g("links").g(&l.g("id").s());
     posted(if b.t() { b } else { l })
 }
 
 /// `speedCheck(P, sc)`: the speed limit validation of each road section: `[{ ids, name, ruleClass, classLabel, limit, current, len, minLen, exception, flags, ok, decision, onf }]`.
+#[must_use]
 pub fn speed_check(p: &V, sc: Option<&V>) -> V {
     let sc = sc.unwrap_or_else(|| active_sc(p));
     let sp = xdata("STD.speed");
@@ -192,15 +196,16 @@ pub fn speed_check(p: &V, sc: Option<&V>) -> V {
         rows.push(jobj! {
             "ids" => V::Array(ls.iter().map(|q| q.g("id").clone()).collect()), "name" => link_name(l), "ruleClass" => or_s(x.g("ruleClass"), ""),
             "classLabel" => if cls.t() { cls.g("label").clone() } else { V::String("Not set".into()) }, "limit" => limit, "current" => current_of(p, l), "len" => len, "minLen" => min,
-            "exception" => if !exc.is_empty() { sp.g("exceptions").g(&exc).clone() } else { V::String(String::new()) },
+            "exception" => if exc.is_empty() { V::String(String::new()) } else { sp.g("exceptions").g(&exc).clone() },
             "flags" => V::Array(flags), "ok" => ok, "decision" => auth.g("decision"),
-            "onf" => if !onf.is_empty() { format!("{} ({})", onf.join(" or "), label("onf")) } else { String::new() },
+            "onf" => if onf.is_empty() { String::new() } else { format!("{} ({})", onf.join(" or "), label("onf")) },
         });
     }
     V::Array(rows)
 }
 
 /// `schoolSpeeds(sc)`: school speed records from the NSLR variable layer: `[{ id, name, v, cat, windows, len }]`.
+#[must_use]
 pub fn school_speeds(sc: &V) -> V {
     let re = crate::compliance::rx::rx("school", "i");
     V::Array(
@@ -229,6 +234,7 @@ pub fn school_speeds(sc: &V) -> V {
    ===================================================================================== */
 
 /// `speedCSV(P)`: the speed limit validation and the stored cost benefit disclosure statement, with the version stamp.
+#[must_use]
 pub fn speed_csv(p: &V) -> String {
     let mut rows: Vec<Vec<V>> = vec![
         cells!["Speed limit validation (Setting of Speed Limits Rule 2024)"],
@@ -269,6 +275,7 @@ pub fn speed_csv(p: &V) -> String {
    ===================================================================================== */
 
 /// `cbdsHtml(cb)`: a cost benefit disclosure statement as the watermarked block of the report.
+#[must_use]
 pub fn cbds_html(cb: &V) -> String {
     let mut s = format!(
         "<div class=\"watermarked\" data-watermark=\"{}\"><p class=\"note\"><b>{}</b> \u{b7} {} \u{b7} decision-maker {}</p>",
@@ -328,6 +335,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-speed"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id == "compliance-extra-speed" { Some(report_speed(p, ctx)) } else { None }
 }
@@ -336,11 +344,13 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-speed"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     if id == "compliance-extra-speed" { Some(speed_csv(p)) } else { None }
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     if id == "compliance-extra-speed" { Some(speed_check(p, None).jlen() > 0 || data(p).g("speed").g("cbds").t()) } else { None }
 }

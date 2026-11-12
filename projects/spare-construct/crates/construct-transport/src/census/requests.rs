@@ -32,6 +32,7 @@ pub enum Failure {
 
 impl Failure {
     /// The text a failed `fetch` carries in the prototype ("host answered HTTP 429", the network error, the parser error).
+    #[must_use]
     pub fn message(&self, url: &str) -> String {
         match self {
             Failure::Timeout => "The operation was aborted".to_string(),
@@ -51,6 +52,7 @@ pub trait Net {
 }
 
 /// `new URL(url).host`: the host name (and port) of a web address.
+#[must_use]
 pub fn host_of(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, r)| r);
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
@@ -64,6 +66,7 @@ fn pct(out: &mut String, b: u8) {
 }
 
 /// `URLSearchParams` encoding of a name or value: letters, digits and `*-._` stay, a space is `+`, the rest is percent-encoded by UTF-8 byte.
+#[must_use]
 pub fn form_encode(s: &str) -> String {
     let mut out = String::new();
     for &b in s.as_bytes() {
@@ -79,6 +82,7 @@ pub fn form_encode(s: &str) -> String {
 }
 
 /// `encodeURIComponent(s)`: letters, digits and `-_.!~*'()` stay, the rest is percent-encoded by UTF-8 byte.
+#[must_use]
 pub fn encode_uri_component(s: &str) -> String {
     let mut out = String::new();
     for &b in s.as_bytes() {
@@ -92,6 +96,7 @@ pub fn encode_uri_component(s: &str) -> String {
 }
 
 /// `new URLSearchParams(pairs).toString()`.
+#[must_use]
 pub fn query_string(pairs: &[(&str, String)]) -> String {
     pairs.iter().map(|(k, v)| format!("{}={}", form_encode(k), form_encode(v))).collect::<Vec<_>>().join("&")
 }
@@ -107,7 +112,7 @@ pub fn checked_answer(url: &str, label: &str, timeout_ms: f64, got: Result<Value
     let secs = format!("{} s", crate::jsnum::math_round(timeout_ms / 1000.0));
     let j = match got {
         Ok(j) => j,
-        Err(Failure::Timeout) | Err(Failure::Cancelled(_)) => return Err(format!("{label}: {host} did not answer within {secs}. Try again later.")),
+        Err(Failure::Timeout | Failure::Cancelled(_)) => return Err(format!("{label}: {host} did not answer within {secs}. Try again later.")),
         Err(Failure::Unreachable(m)) => return Err(format!("{label}: {host} could not be reached ({m}). Check your connection and try again.")),
         Err(Failure::Http(s)) if (400..500).contains(&s) => return Err(format!("{label}: {host} answered HTTP {s}: {REJECTED}.")),
         Err(Failure::Http(s)) => return Err(format!("{label}: {host} answered HTTP {s}. Try again later.")),
@@ -120,7 +125,7 @@ pub fn checked_answer(url: &str, label: &str, timeout_ms: f64, got: Result<Value
             Some(m) if value_truthy(m) => value_to_js_string(m),
             _ => serde_json::to_string(e).unwrap_or_default(),
         };
-        return Err(if code >= 400.0 && code < 500.0 { format!("{label}: {msg}: {REJECTED}.") } else { format!("{label}: {msg}") });
+        return Err(if (400.0..500.0).contains(&code) { format!("{label}: {msg}: {REJECTED}.") } else { format!("{label}: {msg}") });
     }
     Ok(j)
 }
@@ -131,6 +136,7 @@ pub fn get_json(net: &mut dyn Net, url: &str, label: &str) -> Result<Value, Stri
 }
 
 /// The address of one page of `arcQuery`: every feature of a layer inside the box, from this offset.
+#[must_use]
 pub fn arc_query_url(url: &str, b: &Bx, out_fields: &[String], geometry: bool, offset: usize) -> String {
     let geom = [b.w, b.s, b.e, b.n].iter().map(|v| to_fixed(*v, 6)).collect::<Vec<_>>().join(",");
     let q = query_string(&[
@@ -150,6 +156,7 @@ pub fn arc_query_url(url: &str, b: &Bx, out_fields: &[String], geometry: bool, o
 }
 
 /// The address of a layer's description (its fields): `url?f=json`.
+#[must_use]
 pub fn arc_layer_url(url: &str) -> String {
     format!("{url}?f=json")
 }
@@ -255,6 +262,7 @@ pub fn fetch_employees(net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) 
 }
 
 /// The address of the Ministry of Education directory search for a box (`kind` is "schools" or "ece").
+#[must_use]
 pub fn moe_url(kind: &str, b: &Bx) -> String {
     let s = if kind == "ece" { &consts::ECE } else { &consts::SCHOOLS };
     let fields = moe_fields(kind).iter().map(|f| format!("\"{f}\"")).collect::<Vec<_>>().join(",");
@@ -291,7 +299,7 @@ pub fn fetch_aup(net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) -> Res
         ["ZONE", "GROUPZONE", "VERSIONSTATUS"]
             .iter()
             .filter(|n| fl.iter().any(|f| f.get("name").and_then(Value::as_str) == Some(**n)) || fl.is_empty())
-            .map(|n| n.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     };
     let l = arc_layer(net, consts::AUP.url, b, &pick, "Auckland Unitary Plan zones", true)?;

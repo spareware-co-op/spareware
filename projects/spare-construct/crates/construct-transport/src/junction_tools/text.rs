@@ -6,6 +6,7 @@ use crate::jsnum::{math_round, number_to_js_string, to_fixed};
 use crate::util::{esc, fmt};
 
 /// `n0(x)`: a whole number, or an en dash.
+#[must_use]
 pub fn n0(x: Option<f64>) -> String {
     match x {
         Some(v) if v.is_finite() => fmt::int(v),
@@ -14,6 +15,7 @@ pub fn n0(x: Option<f64>) -> String {
 }
 
 /// `d1(d)`: a delay in seconds to 1 decimal, "> 300" above 300, or an en dash.
+#[must_use]
 pub fn d1(d: Option<f64>) -> String {
     match d {
         Some(v) if v.is_finite() => {
@@ -28,6 +30,7 @@ pub fn d1(d: Option<f64>) -> String {
 }
 
 /// `x2(x)`: a ratio to 2 decimals, or an en dash.
+#[must_use]
 pub fn x2(x: Option<f64>) -> String {
     match x {
         Some(v) if v.is_finite() => to_fixed(v, 2),
@@ -36,6 +39,7 @@ pub fn x2(x: Option<f64>) -> String {
 }
 
 /// `p1(x)`: a number to 1 decimal, or an en dash.
+#[must_use]
 pub fn p1(x: Option<f64>) -> String {
     match x {
         Some(v) if v.is_finite() => to_fixed(v, 1),
@@ -44,6 +48,7 @@ pub fn p1(x: Option<f64>) -> String {
 }
 
 /// `sgn(x, u, dp)`: a signed change with its unit, or an en dash when it is missing or rounds to nothing.
+#[must_use]
 pub fn sgn(x: Option<f64>, u: &str, dp: usize) -> String {
     match x {
         Some(v) if v.is_finite() && v.abs() >= crate::jsmath::pow(10.0, -(dp as f64)) / 2.0 => {
@@ -59,6 +64,7 @@ pub fn sgn(x: Option<f64>, u: &str, dp: usize) -> String {
 }
 
 /// `dosCol(dos, xp)`: the colour of a degree of saturation against its practical limit, or none.
+#[must_use]
 pub fn dos_col(dos: Option<f64>, xp: Option<f64>) -> &'static str {
     match (dos, xp) {
         (Some(d), Some(x)) => {
@@ -75,6 +81,7 @@ pub fn dos_col(dos: Option<f64>, xp: Option<f64>) -> &'static str {
 }
 
 /// `dosCell(dos, xp)`: a degree of saturation, coloured against its practical limit.
+#[must_use]
 pub fn dos_cell(dos: Option<f64>, xp: Option<f64>) -> String {
     let c = dos_col(dos, xp);
     if c.is_empty() {
@@ -85,6 +92,7 @@ pub fn dos_cell(dos: Option<f64>, xp: Option<f64>) -> String {
 }
 
 /// `rqCell(rq, bay)`: a queue storage ratio, coloured amber or red with a hint.
+#[must_use]
 pub fn rq_cell(rq: Option<f64>, bay: bool) -> String {
     let Some(rq) = rq.filter(|v| v.is_finite()) else {
         return fmt::DASH.to_string();
@@ -124,6 +132,7 @@ pub fn rq_cell(rq: Option<f64>, bay: bool) -> String {
 }
 
 /// `r5(v)`: a figure rounded to the nearest 5 veh/h, "<5" for a small positive flow.
+#[must_use]
 pub fn r5(v: f64) -> String {
     let s = FIGURE_STEP;
     if v > 0.0 && v < s / 2.0 {
@@ -134,6 +143,7 @@ pub fn r5(v: f64) -> String {
 }
 
 /// `ctlName(t)`: the name of a control, the control itself when unknown, or "Uncontrolled".
+#[must_use]
 pub fn ctl_name(t: &str) -> String {
     for (k, v) in CONTROLS {
         if k == t {
@@ -148,6 +158,7 @@ pub fn ctl_name(t: &str) -> String {
 }
 
 /// `perName(p)`: the name of a period.
+#[must_use]
 pub fn per_name(p: &str) -> String {
     match p {
         "AM" => "AM peak".to_string(),
@@ -159,6 +170,7 @@ pub fn per_name(p: &str) -> String {
 }
 
 /// `Kit.losBadge(l)`: a level of service as a badge; an en dash badge for none.
+#[must_use]
 pub fn los_badge(l: Option<&str>) -> String {
     match l {
         Some(l) if !l.is_empty() && l != fmt::DASH => {
@@ -169,6 +181,7 @@ pub fn los_badge(l: Option<&str>) -> String {
 }
 
 /// `losText(l)`: the level of service or an en dash.
+#[must_use]
 pub fn los_text(l: Option<&str>) -> String {
     match l {
         Some(l) if !l.is_empty() && l != fmt::DASH => l.to_string(),
@@ -187,6 +200,7 @@ pub struct Head {
 
 impl Head {
     /// A text heading.
+    #[must_use]
     pub fn text(label: &str) -> Head {
         Head {
             label: label.to_string(),
@@ -194,6 +208,7 @@ impl Head {
         }
     }
     /// A numeric heading.
+    #[must_use]
     pub fn num(label: &str) -> Head {
         Head {
             label: label.to_string(),
@@ -212,6 +227,7 @@ pub struct TableRow {
 }
 
 /// `Kit.table({ head, rows })`: the compact results table of the interface kit.
+#[must_use]
 pub fn kit_table(head: &[Head], rows: &[TableRow]) -> String {
     let th = if head.is_empty() {
         String::new()
@@ -255,6 +271,7 @@ pub fn kit_table(head: &[Head], rows: &[TableRow]) -> String {
 }
 
 /// `esc(LABEL)` and friends: the junction label.
+#[must_use]
 pub fn label() -> &'static str {
     LABEL
 }

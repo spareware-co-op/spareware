@@ -58,7 +58,7 @@ pub(crate) fn engine_view(p: &V) -> std::borrow::Cow<'_, V> {
     }
     let mut q = p.clone();
     if let Some(rs) = q.get_mut("settings").and_then(|s| s.get_mut("rates")) {
-        let keys: Vec<String> = rs.keys().iter().map(|k| k.to_string()).collect();
+        let keys: Vec<String> = rs.keys().iter().map(std::string::ToString::to_string).collect();
         for k in keys {
             let r = rs.g(&k).clone();
             if r.is_obj() {
@@ -83,6 +83,7 @@ pub(crate) fn rate_of(settings: &V, k: &str) -> V {
 
 /// `Compliance.lint(P)`: what to fix before lodging: `[{ id, text, fix }]` (counts without a date or source, an unmodelled observed peak, the default heavy vehicle share, altered junctions without pedestrian volumes, an uncalibrated base model, no sensitivity or cumulative scenario, trip rates without a source or year, unevidenced trip discounts, unfunded projects in an option).
 #[allow(clippy::neg_cmp_op_on_partial_ord)] // a number that is not a number fails `x > 0` and passes `!(x > 0)`, as in the prototype
+#[must_use]
 pub fn lint(p: &V) -> V {
     let c = state(p);
     let s = p.g("settings");

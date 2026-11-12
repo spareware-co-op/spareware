@@ -1,5 +1,5 @@
 //! Trip generation (AT ITA Guidelines 2025 v2 Appendix 1): person and vehicle trips per zone and activity, the adjustments in sequence,
-//! how a zone's table reaches the assignment, the tables T1 to T4b data, the RR 422 check and trip_generation.csv (landuse-plus.js "trip generation").
+//! how a zone's table reaches the assignment, the tables T1 to T4b data, the RR 422 check and `trip_generation.csv` (landuse-plus.js "trip generation").
 
 use super::consts::{self, DEFAULT_RATE_SOURCE, MODES, PERIODS, group_of, ita, mode_src, rr422, std as std_};
 use super::fill::num_json;
@@ -14,6 +14,7 @@ use crate::util::{self, clamp, fmt, r1, r3};
 use serde_json::{Map, Value, json};
 
 /// The land use settings (`conf(S)`): the default mode split, students per car and the source and year of each trip rate, merged with the project's own.
+#[must_use]
 pub fn conf(s: &Settings) -> Value {
     let defaults = json!({ "split": { "driver": std_::SPLIT_DRIVER, "passenger": std_::SPLIT_PASSENGER, "pt": std_::SPLIT_PT, "walk": std_::SPLIT_WALK, "cycle": std_::SPLIT_CYCLE },
         "eduOcc": std_::EDU_OCC, "rateMeta": {} });
@@ -44,6 +45,7 @@ pub struct Split {
 
 impl Split {
     /// The share of a mode ("driver", "passenger", "pt", "walk" or "cycle").
+    #[must_use]
     pub fn get(&self, m: &str) -> f64 {
         MODES.iter().position(|x| *x == m).map_or(f64::NAN, |i| self.modes[i])
     }
@@ -223,6 +225,7 @@ pub struct RateFlag {
 }
 
 /// `rateFlag(year)`: a note on a rate's survey year: none for a rate surveyed after 2022.
+#[must_use]
 pub fn rate_flag(year: f64) -> Option<RateFlag> {
     let y = year;
     if !(y > 1900.0) {
@@ -238,6 +241,7 @@ pub fn rate_flag(year: f64) -> Option<RateFlag> {
 }
 
 /// `unitOne(L)`: the unit of a trip rate ("dwelling", "100 m\u{b2} GFA").
+#[must_use]
 pub fn unit_one(l: &LandUse) -> String {
     if l.per == 100.0 {
         return "100 m\u{b2} GFA".to_string();
@@ -280,6 +284,7 @@ impl Dir {
         Dir { r#in: self.r#in * f, out: self.out * f }
     }
     /// The pair as JSON.
+    #[must_use]
     pub fn to_value(self) -> Value {
         json!({ "in": json_number(self.r#in), "out": json_number(self.out) })
     }
@@ -474,6 +479,7 @@ impl TripGen {
 }
 
 /// `syncState(z)`: how a switched-on table reaches the engine: "tgLoad", "extra" or None.
+#[must_use]
 pub fn sync_state(z: &Zone) -> Option<String> {
     let tg = z.tg.get().filter(|t| value_truthy(t))?;
     match tg.get("synced").filter(|x| value_truthy(x)) {
@@ -502,7 +508,7 @@ pub fn trip_gen(z: &Zone, s: &Settings, period: &str, sc: &Scenario) -> TripGen 
     let tg_val = if on { z.tg.get().cloned().unwrap_or_else(|| json!({})) } else { json!({}) };
     let cfg = conf(s);
     let mut rows: Vec<TripRow> = Vec::new();
-    for l in LANDUSES.iter() {
+    for l in &LANDUSES {
         let k = l.key;
         let q = or_default(z.lu.get().map_or(f64::NAN, |lu| lu.num_at(k).num()), 0.0);
         if q == 0.0 {
@@ -677,7 +683,7 @@ pub fn trip_gen(z: &Zone, s: &Settings, period: &str, sc: &Scenario) -> TripGen 
     let stage = stage_of(Some(z), Some(sc));
     let kf = if open { stage } else { 0.0 };
     let loaded = Dir { r#in: (net.r#in + if lost { 0.0 } else { freight.r#in }) * kf, out: (net.out + if lost { 0.0 } else { freight.out }) * kf };
-    for r in rows.iter_mut() {
+    for r in &mut rows {
         let si = if gross.r#in > 0.0 { r.vin / gross.r#in } else { 0.0 };
         let so = if gross.out > 0.0 { r.vout / gross.out } else { 0.0 };
         let both = |a: Dir| a.r#in * si + a.out * so;
@@ -767,7 +773,7 @@ pub fn sync(z: &mut Zone, s: &Settings, sc: &Scenario) -> bool {
         tg_obj(z).remove("other");
     }
     if !native && state.as_deref() != Some("extra") {
-        let other = z.extra_trips.get().filter(|e| e.len() > 0 || true).map_or(Value::Null, |e| serde_json::to_value(e).unwrap_or(Value::Null));
+        let other = z.extra_trips.get().filter(|e| !e.is_empty() || true).map_or(Value::Null, |e| serde_json::to_value(e).unwrap_or(Value::Null));
         tg_obj(z).insert("other".into(), other);
     }
     tg_obj(z).insert("synced".into(), json!(if native { "tgLoad" } else { "extra" }));
@@ -778,7 +784,7 @@ pub fn sync(z: &mut Zone, s: &Settings, sc: &Scenario) -> bool {
     for p in PERIODS {
         let t = trip_gen(z, s, p, sc);
         let (mut lu_in, mut lu_out) = (0.0f64, 0.0f64);
-        for l in LANDUSES.iter() {
+        for l in &LANDUSES {
             let q = or_default(z.lu.get().map_or(f64::NAN, |lu| lu.num_at(l.key).num()), 0.0);
             if q == 0.0 {
                 continue;
@@ -822,7 +828,7 @@ pub fn sync_all(p: &mut Project) -> usize {
 
 /// `setTable(z, on, S, sc)`: switches a zone's table on (the user's `extra` stays as "other trips") or off (`extra` is the user's again).
 pub fn set_table(z: &mut Zone, on: bool, s: &Settings, sc: &Scenario) {
-    if !z.tg.get().is_some_and(|t| value_truthy(t)) {
+    if !z.tg.get().is_some_and(value_truthy) {
         z.tg = Maybe::Set(json!({}));
     }
     let is_on = tg_on(z).is_some();
@@ -849,6 +855,7 @@ pub fn set_table(z: &mut Zone, on: bool, s: &Settings, sc: &Scenario) {
 }
 
 /// `tableZones(sc, scope)`: the ids of the zones the tables cover: development zones (scope "dev"), or every land-use zone (scope "all").
+#[must_use]
 pub fn table_zones(sc: &Scenario, scope: &str) -> Vec<String> {
     sc.zones.values().filter(|z| !z.kind.is("gateway") && (scope == "all" || zone_class(Some(z)) == "development")).map(|z| z.id.clone()).collect()
 }
@@ -892,6 +899,7 @@ pub struct ZoneTrips {
 
 impl ZoneTrips {
     /// The trips of a period.
+    #[must_use]
     pub fn of(&self, period: &str) -> &TripGen {
         if period == "AM" { &self.am } else { &self.pm }
     }
@@ -912,6 +920,7 @@ pub struct Tables {
 
 impl Tables {
     /// The tables as JSON (zone ids, trips, flags and the check).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({
             "zones": self.zones,
@@ -937,6 +946,7 @@ pub fn project_scope(p: &Project) -> String {
 }
 
 /// `tables(sc, S, opts)`: the trip generation for the development zones (or every land-use zone) in both periods, the rate flags and the RR 422 check.
+#[must_use]
 pub fn tables(p: &Project, sc: &Scenario, s: &Settings, opts: &TablesOpts) -> Tables {
     let zones = opts.zones.clone().unwrap_or_else(|| table_zones(sc, &opts.scope.clone().unwrap_or_else(|| project_scope(p))));
     let tg: Vec<ZoneTrips> = zones
@@ -973,13 +983,13 @@ pub fn tables(p: &Project, sc: &Scenario, s: &Settings, opts: &TablesOpts) -> Ta
                 }
             }
             let rate = if dw > 0.0 { Some(veh / dw) } else { None };
-            Sanity { period: per, dwellings: dw, veh: r1(veh), rate: rate.map(r3), ok: rate.map(|r| r >= rr422::BAND[0] && r <= rr422::BAND[1]) }
+            Sanity { period: per, dwellings: dw, veh: r1(veh), rate: rate.map(r3), ok: rate.map(|r| (rr422::BAND[0]..=rr422::BAND[1]).contains(&r)) }
         })
         .collect();
     Tables { zones, tg, flags, sanity }
 }
 
-/// `csv(sc, S, opts)`: trip_generation.csv, one row per zone, period and activity.
+/// `csv(sc, S, opts)`: `trip_generation.csv`, one row per zone, period and activity.
 pub fn csv(p: &Project, sc: &Scenario, s: &Settings, opts: &TablesOpts) -> String {
     let t = tables(p, sc, s, opts);
     let mut out: Vec<Vec<Value>> = vec![consts::CSV_HEAD.iter().map(|h| json!(h)).collect()];
@@ -1019,6 +1029,7 @@ pub fn csv(p: &Project, sc: &Scenario, s: &Settings, opts: &TablesOpts) -> Strin
 }
 
 /// A mode as a share of a split, for callers that read it by key.
+#[must_use]
 pub fn mode_share(sp: &Split, m: &str) -> f64 {
     sp.get(m)
 }

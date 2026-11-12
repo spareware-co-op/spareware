@@ -16,7 +16,7 @@ fn to_exponential2(x: f64) -> String {
     if !x.is_finite() {
         return number_to_js_string(x);
     }
-    let t = format!("{:.2e}", x);
+    let t = format!("{x:.2e}");
     let (m, e) = t.split_once('e').expect("exponent");
     let e: i32 = e.parse().expect("exponent digits");
     format!("{}e{}{}", m, if e < 0 { "-" } else { "+" }, e.abs())
@@ -94,6 +94,7 @@ pub fn sh_pack(p: &V) -> String {
 }
 
 /// `mbcmPack(P)`: the MBCM transport modelling checks worksheet, the SP workbook inputs and the IER tool fields (CSV).
+#[must_use]
 pub fn mbcm_pack(p: &V) -> String {
     let pr = pair(p);
     let mut checks: Vec<Vec<V>> = Vec::new();
@@ -106,7 +107,7 @@ pub fn mbcm_pack(p: &V) -> String {
             let row = |check: &str, value: V, crit: V, status: V| vec![name.clone(), sv(per), sv(check), value, crit, status];
             checks.push(row(
                 "Convergence (relative gap)",
-                if !r.g("gap").nullish() { V::String(to_exponential2(r.g("gap").n())) } else { sv("") },
+                if r.g("gap").nullish() { sv("") } else { V::String(to_exponential2(r.g("gap").n())) },
                 sv("\u{2264} 1e-4 (TAG)"),
                 sv(if r.g("converged").strict_eq(&V::Bool(false)) { "Not converged" } else { "Converged" }),
             ));
@@ -161,6 +162,7 @@ pub fn mbcm_pack(p: &V) -> String {
 }
 
 /// `rltpSheet(P)`: the RLTP activity sheet (CSV, LTMA s16(3)(e)).
+#[must_use]
 pub fn rltp_sheet(p: &V) -> String {
     let st = record::state(p);
     let x = crate::compliance::extra::ctx::data(p).g("rltp").clone();
@@ -184,13 +186,14 @@ pub fn rltp_sheet(p: &V) -> String {
 }
 
 /// `msmPack(P)`: the MSM / Auckland Forecasting Centre request pack (CSV): zone land use, scenario definitions and the links of interest.
+#[must_use]
 pub fn msm_pack(p: &V) -> String {
     let pr = pair(p);
     let sc = pr.opt;
     let landuses = model("LANDUSES");
     let keys = landuses.keys();
     let aff = affected_links(p);
-    let mut head: Vec<String> = ["Zone", "Latitude", "Longitude", "Class", "Opening year", "Build-out (%)"].iter().map(|x| x.to_string()).collect();
+    let mut head: Vec<String> = ["Zone", "Latitude", "Longitude", "Class", "Opening year", "Build-out (%)"].iter().map(std::string::ToString::to_string).collect();
     for k in &keys {
         head.push(format!("{} ({})", landuses.g(k).g("label").s(), landuses.g(k).g("unit").s()));
     }
@@ -239,7 +242,7 @@ pub fn msm_pack(p: &V) -> String {
             ]
         })
         .collect();
-    let head_refs: Vec<&str> = head.iter().map(|h| h.as_str()).collect();
+    let head_refs: Vec<&str> = head.iter().map(std::string::String::as_str).collect();
     pack_csv(
         p,
         "MSM / Auckland Forecasting Centre request pack",
@@ -253,12 +256,13 @@ pub fn msm_pack(p: &V) -> String {
 }
 
 /// `handoverManifest(P)`: the hand-over packs and whether each is ready: `[{ id, pack, tool, exportId, ready, why? }]`.
+#[must_use]
 pub fn handover_manifest(p: &V) -> V {
     let pr = pair(p);
     let sidra = {
         let sc = pr.opt;
         let r: Vec<&V> = [res_of(sc, "AM"), res_of(sc, "PM")].into_iter().flatten().collect();
-        if !r.is_empty() { engine::sidra_export(p, sc, &r) } else { jobj! { "ok" => false, "why" => "Run the model" } }
+        if r.is_empty() { jobj! { "ok" => false, "why" => "Run the model" } } else { engine::sidra_export(p, sc, &r) }
     };
     let ready_res = !periods_of(pr.opt).is_empty();
     let sidra_ok = sidra.t() && sidra.g("ok").t();

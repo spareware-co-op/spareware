@@ -52,12 +52,13 @@ fn hier_label(h: &str) -> V {
 
 /// The link ids of a corridor (`c.links`).
 fn ids_of(c: &V) -> Vec<String> {
-    c.g("links").items().iter().map(|x| x.s()).collect()
+    c.g("links").items().iter().map(crate::compliance::jv::Jx::s).collect()
 }
 
 /// `hierOf(sc, c, mode)`: the hierarchy of a corridor for a mode, length-weighted over the links conflated with AT Future Connect (`L.fc`); links without
 /// Future Connect data are left out of the tally and the share is stated. With no Future Connect on the corridor, general traffic uses the road class and the
 /// other modes a stated default. Walking is entered by the author. `{ h, src, assumed? }`.
+#[must_use]
 pub fn hier_of(sc: &V, c: &V, mode: &str) -> V {
     if mode == "walk" {
         let w = c.g("walk");
@@ -176,6 +177,7 @@ pub fn hier_of(sc: &V, c: &V, mode: &str) -> V {
 
 /// `anopPref(mode, h, lu)`: the preferred and acceptable level of service for a hierarchy and land use (the tool's hidden sheet, with the land-use adjustment
 /// for freight and general traffic): `{ pref, acc, adj }`, or null when the tool has no row for them.
+#[must_use]
 pub fn anop_pref(mode: &str, h: &str, lu: &str) -> V {
     let row = xdata("PREF").g(mode).g(h);
     if !row.t() {
@@ -230,7 +232,7 @@ fn band_rel(r: &V) -> Option<String> {
 fn worse_of(ls: &[Option<String>]) -> Option<String> {
     let mut v: Vec<&String> = ls.iter().filter_map(|x| x.as_ref()).filter(|x| !x.is_empty()).collect();
     js_sort_by(&mut v, |a, b| score(a) - score(b));
-    v.first().map(|x| x.to_string())
+    v.first().map(|x| (*x).clone())
 }
 
 /// The posted limit of a link and where it comes from (`postedOf`): the legal limit, the NSLR limit, the modelled link speed or the road class default.
@@ -252,6 +254,7 @@ fn posted_of(l: &V) -> Posted {
 }
 
 /// `corridorAxis(sc, ids)`: the corridor's axis: the bearing between its two furthest-apart junctions (None when it has fewer than two or they are 1 m apart or less).
+#[must_use]
 pub fn corridor_axis(sc: &V, ids: &[String]) -> Option<f64> {
     let mut pts: Vec<util::LatLng> = Vec::new();
     for id in ids {
@@ -278,12 +281,13 @@ pub fn corridor_axis(sc: &V, ids: &[String]) -> Option<f64> {
 /// `bound(b)`: the compass name of a heading ("Northbound").
 fn bound(b: f64) -> String {
     let i = math_round((((b % 360.0) + 360.0) % 360.0) / 90.0) % 4.0;
-    ["Northbound", "Eastbound", "Southbound", "Westbound"].get(i as usize).map_or_else(|| "undefined".to_string(), |s| s.to_string())
+    ["Northbound", "Eastbound", "Southbound", "Westbound"].get(i as usize).map_or_else(|| "undefined".to_string(), std::string::ToString::to_string)
 }
 
 /// `corridorSpeed(sc, res, ids, pt)`: the speed as a share of the posted limit, per direction: `Σlength / Σ(link time incl. junction delay)` against the
 /// length-weighted limit (a bus lane at free-flow time when `pt`). `{ spd, limit, pct, dirs [{ name, spd, limit, len, pct }], worst, limitSrc, fallback }` for
 /// the worse direction, or null when there is no result; `fallback` is true when a posted limit had to come from the modelled link speed.
+#[must_use]
 pub fn corridor_speed(sc: &V, res: &V, ids: &[String], pt: bool) -> V {
     let axis = corridor_axis(sc, ids);
     let mut acc = [(0.0f64, 0.0f64, 0.0f64); 2];
@@ -302,7 +306,7 @@ pub fn corridor_speed(sc: &V, res: &V, ids: &[String], pt: bool) -> V {
                 continue;
             }
             let b = if k == "ab" { b_ab } else { (b_ab + 180.0) % 360.0 };
-            let i = if axis.is_none_or(|a| util::ang_diff(b, a) <= 90.0) { 0 } else { 1 };
+            let i = usize::from(!axis.is_none_or(|a| util::ang_diff(b, a) <= 90.0));
             acc[i].0 += x.g("len").n();
             acc[i].1 += if pt && l.g("busLane").t() { x.g("ff").n() } else { x.g("t").n() };
             acc[i].2 += x.g("len").n() * ps.v;
@@ -363,6 +367,7 @@ fn dir_text(g: &V, suffix: &str) -> String {
 /// `anopLoS(sc, res, c)`: the level of service of a corridor by mode (`{ gt, freight, pt, walk, cycle }`, each `{ los, metric, ... }`): speed as a share of the
 /// posted limit and the author's reliability ratio for general traffic, freight and public transport, crossing spacing and delay for walking, and the cycle
 /// facility for cycling.
+#[must_use]
 pub fn anop_los(sc: &V, res: &V, c: &V) -> V {
     let ids = ids_of(c);
     let g = corridor_speed(sc, res, &ids, false);
@@ -447,6 +452,7 @@ pub fn anop_los(sc: &V, res: &V, c: &V) -> V {
 /// `anopFit(modes)`: the fit rule. `modes` are `[{ base, pref, proj }]` (letters; null = not assessed). "High" when the proposal improves a mode and worsens
 /// none, or lowers the total deficit against the preferred level without raising any mode's; "Moderate" when it does either of those; otherwise "Low".
 /// None when no mode could be assessed.
+#[must_use]
 pub fn anop_fit(modes: &[V]) -> Option<String> {
     let m: Vec<(f64, f64, f64)> =
         modes.iter().filter(|x| x.g("base").t() && x.g("pref").t() && x.g("proj").t()).map(|x| (score(&x.g("base").s()), score(&x.g("pref").s()), score(&x.g("proj").s()))).collect();
@@ -469,6 +475,7 @@ pub fn anop_fit(modes: &[V]) -> Option<String> {
 }
 
 /// `anopCorridors(P)`: the corridors assessed: the author's list, or the named arterials and collectors at least 300 m long in the active scenario (the 12 longest).
+#[must_use]
 pub fn anop_corridors(p: &V) -> V {
     let cx = data(p);
     let cx = cx.g("anop");
@@ -551,6 +558,7 @@ pub fn anop(p: &V) -> V {
 }
 
 /// `anopCSV(P)`: the ANOP inputs in the order of the tool's v10.2 input sheet (no version stamp: see the export, which adds it).
+#[must_use]
 pub fn anop_csv(p: &V) -> String {
     let cxd = data(p);
     let cx = cxd.g("anop");
@@ -582,6 +590,7 @@ pub fn anop_csv(p: &V) -> String {
 }
 
 /// `anopTable(a)`: Table ANOP-1: the multimodal level of service and fit of each corridor.
+#[must_use]
 pub fn anop_table(a: &V) -> String {
     let head = [th("Spare Construct"), th("Period"), th("Mode"), th("Future Connect"), th("Baseline LoS"), th("Preferred"), th("Acceptable"), th("With proposal"), th("\u{394} deficit"), th("Fit")];
     let mut rows: Vec<Vec<String>> = Vec::new();
@@ -627,6 +636,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-anop"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id == "compliance-extra-anop" { Some(report_anop(p, ctx)) } else { None }
 }
@@ -636,11 +646,13 @@ pub const EXPORT_IDS: &[&str] = &["compliance-extra-anop"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's. The export is the ANOP inputs stamped as a hand-over
 /// file for the AT ANOP tool v10.2.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     if id == "compliance-extra-anop" { Some(stamped(&anop_csv(p), p, Some("the AT ANOP tool v10.2"))) } else { None }
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     if id == "compliance-extra-anop" { Some(anop(p).g("rows").jlen() > 0) } else { None }
 }

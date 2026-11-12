@@ -14,17 +14,19 @@ use crate::edit::json::JsonValue;
 pub const DAY_MS: f64 = 86_400_000.0;
 
 /// Days since 1970-01-01 of a proleptic Gregorian date (month 1 to 12).
+#[must_use]
 pub fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = y.div_euclid(400);
     let yoe = y.rem_euclid(400);
-    let mp = (m as i64 + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+    let mp = (i64::from(m) + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + i64::from(d) - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     era * 146_097 + doe - 719_468
 }
 
 /// The (year, month 1 to 12, day 1 to 31) of a day count since 1970-01-01.
+#[must_use]
 pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let z = z + 719_468;
     let era = z.div_euclid(146_097);
@@ -39,6 +41,7 @@ pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
 }
 
 /// `Date.UTC(year, month0, day)`: month 0 to 11 and day 1 to 31, either may run over into the next period.
+#[must_use]
 pub fn date_utc(year: f64, month0: f64, day: f64) -> f64 {
     let y = year + (month0 / 12.0).floor();
     let m = month0 - (month0 / 12.0).floor() * 12.0;
@@ -46,6 +49,7 @@ pub fn date_utc(year: f64, month0: f64, day: f64) -> f64 {
 }
 
 /// Day of the week of a day count since 1970-01-01, 0 = Sunday.
+#[must_use]
 pub fn weekday_of_days(days: i64) -> i64 {
     (days + 4).rem_euclid(7)
 }
@@ -75,6 +79,7 @@ fn dst_end_ms(y: i64) -> f64 {
 }
 
 /// Hours New Zealand is ahead of UTC at an instant (12, or 13 in daylight saving time).
+#[must_use]
 pub fn nz_offset_hours(utc_ms: f64) -> f64 {
     let (y, _, _) = civil_from_days((utc_ms / DAY_MS).floor() as i64);
     if utc_ms < dst_end_ms(y) || utc_ms >= dst_start_ms(y) { 13.0 } else { 12.0 }
@@ -98,6 +103,7 @@ pub struct NzParts {
 }
 
 /// The New Zealand date, time and weekday of an instant.
+#[must_use]
 pub fn nz_parts(utc_ms: f64) -> NzParts {
     let local = utc_ms + nz_offset_hours(utc_ms) * 3_600_000.0;
     let days = (local / DAY_MS).floor();
@@ -109,6 +115,7 @@ pub fn nz_parts(utc_ms: f64) -> NzParts {
 }
 
 /// The UTC instant of midnight at the start of a New Zealand date (`new Date(y, m0, d)` in a New Zealand browser).
+#[must_use]
 pub fn nz_midnight_ms(year: f64, month0: f64, day: f64) -> f64 {
     let local = date_utc(year, month0, day);
     // The offset in force at that local time: try summer time first, and take it when the instant agrees
@@ -117,28 +124,31 @@ pub fn nz_midnight_ms(year: f64, month0: f64, day: f64) -> f64 {
 }
 
 /// `today(now)` of feeds.js: the New Zealand date as YYYY-MM-DD.
+#[must_use]
 pub fn today(utc_ms: f64) -> String {
     let p = nz_parts(utc_ms);
     format!("{:04}-{:02}-{:02}", p.year, p.month, p.day)
 }
 
 /// `nzYear(now)`: the New Zealand year.
+#[must_use]
 pub fn nz_year(utc_ms: f64) -> i64 {
     nz_parts(utc_ms).year
 }
 
 /// What a JavaScript `Date` holds: whole milliseconds within 8.64e15 of 1970, else invalid (None).
+#[must_use]
 pub fn time_clip(ms: f64) -> Option<f64> {
     if ms.is_finite() && ms.abs() <= 8.64e15 { Some(ms.trunc() + 0.0) } else { None }
 }
 
 fn digits(s: &[u8], from: usize, n: usize) -> Option<f64> {
-    if from + n > s.len() || !s[from..from + n].iter().all(|b| b.is_ascii_digit()) {
+    if from + n > s.len() || !s[from..from + n].iter().all(u8::is_ascii_digit) {
         return None;
     }
     let mut v = 0.0;
     for b in &s[from..from + n] {
-        v = v * 10.0 + (b - b'0') as f64;
+        v = v * 10.0 + f64::from(b - b'0');
     }
     Some(v)
 }
@@ -168,7 +178,7 @@ fn parse_header_date(text: &str) -> Option<f64> {
     }
     let local = date_utc(year, month, day) + h * 3_600_000.0 + mi * 60_000.0 + sec * 1000.0;
     let ms = match zone.map(str::to_ascii_uppercase).as_deref() {
-        Some("GMT") | Some("UTC") | Some("Z") | Some("UT") => local,
+        Some("GMT" | "UTC" | "Z" | "UT") => local,
         Some(z) if (z.starts_with('+') || z.starts_with('-')) && z.len() == 5 => {
             let oh: f64 = z[1..3].parse().ok()?;
             let om: f64 = z[3..5].parse().ok()?;
@@ -185,6 +195,7 @@ fn parse_header_date(text: &str) -> Option<f64> {
 /// hours, minutes, optional seconds and milliseconds, and Z or +hh:mm; a time with no offset is New Zealand time) and for the
 /// date of an HTTP header ("Wed, 21 Oct 2026 07:28:00 GMT"). Other spellings the browser accepts (a padded text, month names in
 /// other orders, and so on) are not read (None).
+#[must_use]
 pub fn parse_date(text: &str) -> Option<f64> {
     let s = text.as_bytes();
     let Some(year) = digits(s, 0, 4) else { return parse_header_date(text) };
@@ -223,7 +234,7 @@ pub fn parse_date(text: &str) -> Option<f64> {
             let mut frac = 0.0;
             let mut scale = 100.0;
             while j < s.len() && s[j].is_ascii_digit() {
-                frac += (s[j] - b'0') as f64 * scale;
+                frac += f64::from(s[j] - b'0') * scale;
                 scale /= 10.0;
                 j += 1;
             }
@@ -262,6 +273,7 @@ fn nz_offset_for_local(local_as_utc: f64) -> f64 {
 
 /// `new Date(v).getTime()` for a value read from JSON: a number is milliseconds, text is parsed, true is 1 and null is 0;
 /// None for an invalid date (`NaN`).
+#[must_use]
 pub fn date_of(v: &JsonValue) -> Option<f64> {
     match v {
         JsonValue::Number(n) => time_clip(*n),
@@ -275,23 +287,27 @@ pub fn date_of(v: &JsonValue) -> Option<f64> {
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
 
 /// The short month name `toLocaleDateString('en-NZ', { month: 'short' })` gives (September is "Sept").
+#[must_use]
 pub fn month_short(month: u32) -> &'static str {
     MONTHS[(month as usize).saturating_sub(1).min(11)]
 }
 
 /// `toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })` in New Zealand: "9 Oct 2026".
+#[must_use]
 pub fn day_month_year(ms: f64) -> String {
     let p = nz_parts(ms);
     format!("{} {} {}", p.day, month_short(p.month), p.year)
 }
 
 /// `toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' })` in New Zealand: "Mar 2025".
+#[must_use]
 pub fn month_year(ms: f64) -> String {
     let p = nz_parts(ms);
     format!("{} {}", month_short(p.month), p.year)
 }
 
 /// `dateText(iso)` of feeds.js: "9 Oct 2026"; nothing (or an empty text) gives "", an unreadable date the text as stored (first 10 characters).
+#[must_use]
 pub fn date_text(v: Option<&JsonValue>) -> String {
     let Some(v) = v else { return String::new() };
     if matches!(v, JsonValue::Null) {
@@ -309,17 +325,20 @@ pub fn date_text(v: Option<&JsonValue>) -> String {
 }
 
 /// `new Date(ms).toISOString().slice(0, 10)`: the UTC date as YYYY-MM-DD.
+#[must_use]
 pub fn utc_date(ms: f64) -> String {
     let (y, m, d) = civil_from_days((ms / DAY_MS).floor() as i64);
     format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// A number as JavaScript prints it (`String(n)`).
+#[must_use]
 pub fn num_text(x: f64) -> String {
     number_to_js_string(x)
 }
 
 /// `+text`: the number a text reads as (NaN when it is not one).
+#[must_use]
 pub fn to_num(text: &str) -> f64 {
     string_to_number(text)
 }

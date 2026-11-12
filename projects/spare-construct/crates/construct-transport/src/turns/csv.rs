@@ -10,7 +10,7 @@ use crate::util::csv;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
-/// turns.js SIDRA_HEAD: the columns of the SIDRA-friendly CSV.
+/// turns.js `SIDRA_HEAD`: the columns of the SIDRA-friendly CSV.
 pub const SIDRA_HEAD: [&str; 11] = [
     "Site",
     "Junction",
@@ -25,7 +25,7 @@ pub const SIDRA_HEAD: [&str; 11] = [
     "Scenario",
 ];
 
-/// turns.js CODE_HEAD: the extra columns with `codes`.
+/// turns.js `CODE_HEAD`: the extra columns with `codes`.
 pub const CODE_HEAD: [&str; 3] = ["Leg", "Turn designation", "Movement ID"];
 
 /// What `Turns.sidraCSV(sc, res, nodeIds, opts)` is given beyond the junctions.
@@ -91,7 +91,7 @@ pub fn sidra_csv(
     } else {
         None
     };
-    let want: Option<Vec<String>> = node_ids.map(|n| n.to_vec()).or(ext);
+    let want: Option<Vec<String>> = node_ids.map(<[std::string::String]>::to_vec).or(ext);
     for r in res {
         let is_site = |id: &str| r.sites.as_ref().is_some_and(|m| m.contains_key(id));
         let nm = |id: &str| -> String {
@@ -186,6 +186,7 @@ pub struct SidraExport {
 
 /// `Turns.sidraExport(sc, res, nodeIds, opts)`: the export gate (docs/spec/convergence): turn volumes for SIDRA need a well-converged
 /// run (gap 0.01% or better) that is not out of date. With `opts.force` the CSV is made anyway and `why` still explains the problem.
+#[must_use]
 pub fn sidra_export(
     sc: Option<&Scenario>,
     res: &[&Res],
@@ -231,6 +232,7 @@ pub fn sidra_export(
 
 /// `Turns.turnCountCSV(sc, res, nodeId)`: a classic turning-count sheet for one junction: a row per approach with its left, through,
 /// right and U-turn counts, totals and heavy vehicles, and a total row.
+#[must_use]
 pub fn turn_count_csv(
     sc: Option<&Scenario>,
     res: Option<&Res>,

@@ -11,13 +11,14 @@ use super::rx::rx;
 use crate::util;
 
 /// A 16-character fingerprint of a text (FNV-1a over its UTF-16 units with two seeds), the sign-off fingerprint.
+#[must_use]
 pub fn hash(text: &str) -> String {
-    let b_mul: i32 = 2246822519u32 as i32;
+    let b_mul: i32 = 2_246_822_519u32 as i32;
     let mut a: i32 = 0x811c9dc5u32 as i32;
     let mut b: i32 = (0x01000193u32 ^ 0x5bd1e995u32) as i32;
     for c in text.encode_utf16() {
-        let c = c as i32;
-        a = (a ^ c).wrapping_mul(16777619);
+        let c = i32::from(c);
+        a = (a ^ c).wrapping_mul(16_777_619);
         b = (b ^ c).wrapping_mul(b_mul);
     }
     format!("{:08x}{:08x}", a as u32, b as u32)
@@ -25,6 +26,7 @@ pub fn hash(text: &str) -> String {
 
 /// `inputsOf(P)`: the text of everything a sign-off covers: the settings (without the view settings), every scenario's network, zones,
 /// routes and matrix, the matrix estimation, the register and the counts.
+#[must_use]
 pub fn inputs_of(p: &V) -> String {
     let mut s = if p.g("settings").is_obj() { p.g("settings").clone() } else { V::object() };
     for k in ["period", "basemap", "linzKey", "sim"] {
@@ -63,11 +65,13 @@ pub fn inputs_of(p: &V) -> String {
 }
 
 /// `fingerprint(P)`: the fingerprint of the inputs a sign-off covers.
+#[must_use]
 pub fn fingerprint(p: &V) -> String {
     hash(&inputs_of(p))
 }
 
 /// `signState(P)`: whether the inputs are signed off. Sign-offs whose fingerprint no longer matches are stale.
+#[must_use]
 pub fn sign_state(p: &V) -> V {
     let c = state(p);
     let signoffs = c.g("expert").g("signoffs");
@@ -90,18 +94,18 @@ pub fn sign_state(p: &V) -> V {
 
 /// `disclaimer(id, P, opts)`: the text of a standing disclaimer for the project (the version date filled in, the tool named for
 /// D12, and anything the author added after it). Empty for an id that is not one.
+#[must_use]
 pub fn disclaimer(id: &str, p: Option<&V>, tool: Option<&str>) -> String {
     let d = table("DISCLAIMERS").g(id);
     if !d.t() {
         return String::new();
     }
     let mut t = replace_first(&d.g("text").s(), "[version date]", &long_date(version()));
-    if id == "D12" {
-        if let Some(tool) = tool.filter(|t| !t.is_empty()) {
+    if id == "D12"
+        && let Some(tool) = tool.filter(|t| !t.is_empty()) {
             t = rx(r"\[[^\]]+\]", "").replace_with(&t, tool);
         }
-    }
-    let add = p.map(|p| state(p).g("notes").g(id).clone()).unwrap_or(V::Null);
+    let add = p.map_or(V::Null, |p| state(p).g("notes").g(id).clone());
     if add.t() { format!("{t} {}", add.s()) } else { t }
 }
 
@@ -114,6 +118,7 @@ fn replace_first(s: &str, from: &str, to: &str) -> String {
 }
 
 /// `disclaimerHtml(id, P, opts)`: the disclaimer as a paragraph, with its title.
+#[must_use]
 pub fn disclaimer_html(id: &str, p: Option<&V>, tool: Option<&str>) -> String {
     format!(
         "<p class=\"note disclaimer\" data-disclaimer=\"{id}\"><b>{} ({id}).</b> {}</p>",
@@ -124,6 +129,7 @@ pub fn disclaimer_html(id: &str, p: Option<&V>, tool: Option<&str>) -> String {
 
 /// `csvFooter(P, opts)`: the footer comment rows of a CSV export: D1, the DRAFT watermark while unsigned, the version stamp, the model
 /// status of both peaks and, for a hand-over file, D12 naming the tool.
+#[must_use]
 pub fn csv_footer(p: &V, handover: Option<&str>) -> String {
     let sg = sign_state(p);
     let mut rows: Vec<Vec<V>> = vec![vec![st(format!("# {}", disclaimer("D1", Some(p), None)))]];
@@ -140,6 +146,7 @@ pub fn csv_footer(p: &V, handover: Option<&str>) -> String {
 }
 
 /// `stampCSV(csv, P, opts)`: a CSV with the footer rows added; one that already carries the version stamp is returned as it is.
+#[must_use]
 pub fn stamp_csv(csv: &str, p: &V, handover: Option<&str>) -> String {
     if rx(r#"^"?# Version stamp: "#, "m").test(csv) {
         return csv.to_string();
@@ -149,6 +156,7 @@ pub fn stamp_csv(csv: &str, p: &V, handover: Option<&str>) -> String {
 }
 
 /// `todayText(now)`: today as the stamp prints it (see [`today`]).
+#[must_use]
 pub fn day_text(now: &V) -> String {
     today(now)
 }

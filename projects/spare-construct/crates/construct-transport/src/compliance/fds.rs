@@ -10,6 +10,7 @@ use super::rx::rx;
 use crate::util;
 
 /// `fdsCheck(P)` for the active scenario.
+#[must_use]
 pub fn fds_check(p: &V) -> V {
     fds_check_sc(p, active_sc(p))
 }
@@ -68,7 +69,7 @@ pub fn fds_check_sc(p: &V, sc: &V) -> V {
         let row = p.g("register").items().iter().find(|x| x.g("id").strict_eq(i.g("reg")));
         let inc = row.map(|r| engine::in_baseline(p, r));
         let mut o = i.clone();
-        o.set("name", if i.g("name").t() { i.g("name").clone() } else if row.is_some_and(|r| r.g("name").t()) { row.map(|r| r.g("name").clone()).unwrap_or(V::Null) } else { st("Unnamed project") });
+        o.set("name", if i.g("name").t() { i.g("name").clone() } else if row.is_some_and(|r| r.g("name").t()) { row.map_or(V::Null, |r| r.g("name").clone()) } else { st("Unnamed project") });
         let funding = match row {
             Some(r) if r.g("funding").t() => {
                 let f = model("FUNDING").g(&r.g("funding").s());
@@ -107,29 +108,29 @@ pub fn fds_check_sc(p: &V, sc: &V) -> V {
         Some(ci) => format!("RMA {ci}, inserted by the Planning Act 2026 Sch 12 Pt 2, requires {who} whether the proposal is consistent with {reference}."),
         None => format!("The AT ITA Guidelines 2025 v2 (s5.1) ask out-of-sequence development to show how its transport needs will be met, with {reference} as the reference."),
     };
-    let infra_text = if !infra.is_empty() {
-        format!("The proposal relies on {} FDS-assumed infrastructure item{}: {}.", infra.len(), if infra.len() == 1 { "" } else { "s" }, infra.iter().map(|i| format!("{} ({})", i.g("name").s(), i.g("funding").s())).collect::<Vec<_>>().join("; "))
-    } else {
+    let infra_text = if infra.is_empty() {
         "No FDS-assumed infrastructure has been listed yet.".to_string()
+    } else {
+        format!("The proposal relies on {} FDS-assumed infrastructure item{}: {}.", infra.len(), if infra.len() == 1 { "" } else { "s" }, infra.iter().map(|i| format!("{} ({})", i.g("name").s(), i.g("funding").s())).collect::<Vec<_>>().join("; "))
     };
     let body = format!("{lead} {text}{page}{} {infra_text} [Author to complete.]", if red { " The FDS red-flags this area." } else { "" });
     jobj! { "status" => status, "text" => text.as_str(), "occupation" => occ, "timing" => timing.as_str(), "start" => start, "red" => red, "infra" => V::Array(infra), "cite" => cite.map_or(V::Null, st), "heading" => heading, "paragraph" => body,
         "outOfSequence" => status == "out", "fundingPrompt" => if status == "out" || status == "removal" { "Explain how the capital and operating funding gap for the infrastructure this site needs early will be met (AT ITA s5.1)." } else { "" },
-        "reference" => reference, "applies" => pe.is_none() || pe.is_some_and(|e| e.g("proc").t()), "source" => if f.t() && f.g("src").t() { f.g("src").clone() } else { V::Null } }
+        "reference" => reference, "applies" => pe.is_none_or(|e| e.g("proc").t()), "source" => if f.t() && f.g("src").t() { f.g("src").clone() } else { V::Null } }
 }
 
 /// `fdsPair(P, opts)`: runs the scenario with and without the FDS-assumed infrastructure (the links of the register rows), not saved as scenarios, and keeps the comparison in the project: `{ at, period, removed, rows, gap }`.
 pub fn fds_pair(p: &mut V, period: Option<&str>) -> Result<V, String> {
     let c = state(p);
     let sc = active_sc(p).clone();
-    let per = period.map(String::from).unwrap_or_else(|| {
+    let per = period.map_or_else(|| {
         let x = p.g("settings").g("period");
         if x.t() { x.s() } else { "AM".into() }
-    });
+    }, String::from);
     let mut ids: Vec<String> = Vec::new();
     let push = |id: String, ids: &mut Vec<String>| {
         if !ids.contains(&id) {
-            ids.push(id)
+            ids.push(id);
         }
     };
     for i in c.g("fds").g("infra").items() {

@@ -84,14 +84,17 @@ fn active_index(p: &Project) -> Option<usize> {
 
 impl History {
     /// No steps.
+    #[must_use]
     pub fn new() -> History {
         History::default()
     }
     /// Steps that can be undone.
+    #[must_use]
     pub fn undo_len(&self) -> usize {
         self.undo.len()
     }
     /// Steps that can be redone.
+    #[must_use]
     pub fn redo_len(&self) -> usize {
         self.redo.len()
     }

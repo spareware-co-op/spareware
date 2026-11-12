@@ -92,7 +92,7 @@ impl Bits<'_> {
         while self.cnt < n {
             let b = *self.data.get(self.pos).ok_or("The compressed data ends too soon.")?;
             self.pos += 1;
-            self.buf |= (b as u32) << self.cnt;
+            self.buf |= u32::from(b) << self.cnt;
             self.cnt += 8;
         }
         let v = self.buf & ((1u32 << n) - 1);
@@ -130,7 +130,7 @@ fn decode(b: &mut Bits, h: &Huffman) -> Result<u16, String> {
     let (mut code, mut first, mut index) = (0i32, 0i32, 0i32);
     for len in 1..16 {
         code |= b.need(1)? as i32;
-        let count = h.count[len] as i32;
+        let count = i32::from(h.count[len]);
         if code - count < first {
             return Ok(h.symbol[(index + (code - first)) as usize]);
         }
@@ -159,12 +159,12 @@ fn codes(b: &mut Bits, out: &mut Vec<u8>, lit: &Huffman, dist: &Huffman) -> Resu
             if s >= 29 {
                 return Err("The compressed data is corrupted.".to_string());
             }
-            let len = LBASE[s] as usize + b.need(LEXT[s] as u32)? as usize;
+            let len = LBASE[s] as usize + b.need(u32::from(LEXT[s]))? as usize;
             let ds = decode(b, dist)? as usize;
             if ds >= 30 {
                 return Err("The compressed data is corrupted.".to_string());
             }
-            let d = DBASE[ds] as usize + b.need(DEXT[ds] as u32)? as usize;
+            let d = DBASE[ds] as usize + b.need(u32::from(DEXT[ds]))? as usize;
             if d > out.len() {
                 return Err("The compressed data is corrupted.".to_string());
             }

@@ -40,6 +40,7 @@ use run::Run;
 /// own link flows (and development its own turn flows) on the same costs, averaged with the same
 /// steps. The period must be given by the options or the settings (a settings object without one
 /// reads as "AM", where the prototype would read undefined).
+#[must_use]
 pub fn assign(
     p: &Project,
     sc: &Scenario,
@@ -56,7 +57,7 @@ pub fn assign(
     let mut dem = demand(p, sc, &g, period, s);
     let df = if opts.demand_factor.num() > 0.0 { opts.demand_factor.num() } else { 1.0 };
     if df != 1.0 {
-        for v in dem.t.iter_mut() {
+        for v in &mut dem.t {
             *v *= df;
         }
     }

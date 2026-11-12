@@ -36,6 +36,7 @@ fn utf16_slice(s: &str, end: usize) -> String {
 /// `Turns.diagram(sc, res, nodeId, opts)`: the junction as SVG text: road bands, centre lines, road names, one arrow per movement
 /// (width by volume) with the volumes by movement beside each approach, and a north point. Without movements the reason is written
 /// on the diagram ([`empty_text`]).
+#[must_use]
 pub fn diagram(
     sc: Option<&Scenario>,
     res: Option<&Res>,

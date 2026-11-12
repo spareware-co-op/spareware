@@ -1,7 +1,7 @@
 //! Screenline suggestions from OpenStreetMap (`suggestScreenlines`, `joinWays`, `addSuggested`).
 //!
 //! Rivers, canals and main railways funnel traffic onto their crossings, so each makes a natural screenline. The
-//! features come from the Overpass API (OpenStreetMap contributors, ODbL) for the network's bounding box; fetching them
+//! features come from the Overpass API (OpenStreetMap contributors, `ODbL`) for the network's bounding box; fetching them
 //! is the caller's job ([`osm_bbox`] and [`osm_query`] say what to ask), and [`suggest_screenlines`] works on the reply.
 
 use super::common::hash;
@@ -26,6 +26,7 @@ pub const OSM_LICENCE: &str = "ODbL 1.0";
 pub const OSM_TIMEOUT_MS: f64 = 30000.0;
 
 /// `OSM_SL.query(bb)`: the Overpass query for rivers, canals and main railways in a bounding box ("south,west,north,east" with six decimals).
+#[must_use]
 pub fn osm_query(bb: &str) -> String {
     format!(
         "[out:json][timeout:50];(way[\"waterway\"~\"^(river|canal)$\"]({bb});way[\"railway\"=\"rail\"][!\"service\"]({bb}););out geom;"
@@ -33,6 +34,7 @@ pub fn osm_query(bb: &str) -> String {
 }
 
 /// The network's bounding box as [south, west, north, east], or None with fewer than two nodes.
+#[must_use]
 pub fn osm_bbox(sc: &Scenario) -> Option<[f64; 4]> {
     if sc.nodes.len() < 2 {
         return None;
@@ -77,6 +79,7 @@ fn same(p: &LatLng, q: &LatLng) -> bool {
 /// `joinWays(ways)`: joins ways (Overpass elements with `id` and `geometry` as [{lat, lon}]) that share an end point into polylines, longest first.
 ///
 /// Ways with a point that is not a finite number are left out; a way with no points is left out too (the prototype stops with an error on one).
+#[must_use]
 pub fn join_ways(ways: &[&Value]) -> Vec<JoinedWay> {
     let mut left: Vec<(Value, Vec<LatLng>)> = ways
         .iter()
@@ -157,6 +160,7 @@ pub struct Suggestions {
 }
 
 /// The sentence for a failed fetch (`suggestScreenlines` when no server answered).
+#[must_use]
 pub fn osm_failure_note(message: &str) -> String {
     format!(
         "Could not get rivers and railways from OpenStreetMap: {message}. Draw screenlines with the Screenline tool (S) instead, or try again later."
@@ -196,12 +200,9 @@ pub fn suggest_screenlines(sc: &Scenario, store: &CalibStore, reply: &Value) -> 
             let Some(kind) = kind else { continue };
             let name = js_trim(&text_of(tags.get("name"))).to_string();
             let k = format!("{kind}\u{0}{name}");
-            match keys.iter().position(|x| *x == k) {
-                Some(i) => groups[i].push(e),
-                None => {
-                    keys.push(k);
-                    groups.push(vec![e]);
-                }
+            if let Some(i) = keys.iter().position(|x| *x == k) { groups[i].push(e) } else {
+                keys.push(k);
+                groups.push(vec![e]);
             }
         }
     }

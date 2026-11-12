@@ -31,6 +31,7 @@ pub const CAS_FIELDS: [&str; 8] = [
 ];
 
 /// `CAS_POS[field]`: where a field sits in a crash tuple (7 and up), None for a field a tuple does not keep.
+#[must_use]
 pub fn cas_pos(field: &str) -> Option<usize> {
     CAS_FIELDS.iter().position(|f| *f == field).map(|i| 7 + i)
 }
@@ -64,15 +65,17 @@ pub struct CasWindow {
 }
 
 /// `nzDate(now)`: the New Zealand year, month and day of an instant (milliseconds since 1970).
+#[must_use]
 pub fn nz_date(now_ms: f64) -> (f64, f64, f64) {
     let p = nz_parts(now_ms);
-    (p.year as f64, p.month as f64, p.day as f64)
+    (p.year as f64, f64::from(p.month), f64::from(p.day))
 }
 
 /// `casWindow(now, years)`: the last `years` full calendar years (the year before this one back), plus this year to date.
 ///
 /// `years` is rounded and at least 1; None (or a value that is not a number, or 0) gives 5. Before 1 April the last full
 /// year is flagged as possibly incomplete.
+#[must_use]
 pub fn cas_window(now_ms: f64, years: Option<f64>) -> CasWindow {
     let (y, m, _) = nz_date(now_ms);
     let want = match years {
@@ -119,6 +122,7 @@ fn is_word_char(c: char) -> bool {
 }
 
 /// `title(s)` of data.js: lower case, then a capital on every a to z letter that starts a word (after anything but a letter, digit or underscore, so "mary's" is "Mary'S").
+#[must_use]
 pub fn title(s: &str) -> String {
     let lower = s.to_lowercase();
     let mut out = String::with_capacity(lower.len());
@@ -237,6 +241,7 @@ pub struct Crash {
 
 impl Crash {
     /// Reads a tuple (a saved crash record), as loosely as the prototype's code reads it.
+    #[must_use]
     pub fn from_tuple(t: &[Value]) -> Crash {
         let num = |i: usize| t.get(i).map_or(f64::NAN, value_to_number);
         let text = |i: usize| match t.get(i) {

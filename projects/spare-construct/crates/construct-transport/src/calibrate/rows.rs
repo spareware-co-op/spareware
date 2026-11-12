@@ -119,6 +119,7 @@ fn same(a: &Maybe<String>, b: &Maybe<String>) -> bool {
 }
 
 /// `inCore(core, ll)`: a point inside the area of influence (everywhere when there is none).
+#[must_use]
 pub fn in_core(core: &Core, ll: &LatLng) -> bool {
     match core.kind {
         "none" => true,
@@ -144,7 +145,7 @@ pub struct CountRow {
     pub how: String,
     /// GEH.
     pub geh: f64,
-    /// Observation method of the panel ("measured_hour", "weekday_factored", "adt_factored", "virtual").
+    /// Observation method of the panel ("`measured_hour`", "`weekday_factored`", "`adt_factored`", "virtual").
     pub method: &'static str,
     /// Role: "me", "valid", "gateway" or "off".
     pub role: &'static str,
@@ -160,7 +161,7 @@ pub struct CountRow {
 ///
 /// `raw` gives roles without the rules that turn a validation count seen by estimation into a calibration count.
 /// Note: unlike `DataHub.calibration` and `Calibrate.report`, this includes RAMM centreline estimates (as
-/// "adt_factored" sites): the prototype does not leave them out here.
+/// "`adt_factored`" sites): the prototype does not leave them out here.
 pub fn count_rows(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, raw: bool) -> Vec<CountRow> {
     let Some(res) = res else { return Vec::new() };
     let m = ctx.matches(sc);
@@ -199,6 +200,7 @@ pub fn count_rows(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, raw
 }
 
 /// `inSet(r, set)`: a site belongs to a set of counts ("valid", "calib" or all).
+#[must_use]
 pub fn in_set(r: &CountRow, set: &str) -> bool {
     r.scored
         && match set {
@@ -209,6 +211,7 @@ pub fn in_set(r: &CountRow, set: &str) -> bool {
 }
 
 /// `inArea(r, area)`: a site belongs to an area ("inside", "outside" or all).
+#[must_use]
 pub fn in_area(r: &CountRow, area: &str) -> bool {
     match area {
         "inside" => r.in_core,
@@ -218,6 +221,7 @@ pub fn in_area(r: &CountRow, area: &str) -> bool {
 }
 
 /// `SET_LABEL[set]`.
+#[must_use]
 pub fn set_label(set: &str) -> &'static str {
     match set {
         "valid" => "validation counts",
@@ -322,6 +326,7 @@ pub struct CalStats {
 
 impl CalStats {
     /// `cnt[key]` by name.
+    #[must_use]
     pub fn cnt_of(&self, key: &str) -> Option<usize> {
         let c = &self.cnt;
         Some(match key {
@@ -339,6 +344,7 @@ impl CalStats {
         })
     }
     /// The statistic with this name (a share, or b0, r2, r2Excel, r2Ols, rmse), as `ev.link[t.stat]` reads it.
+    #[must_use]
     pub fn stat(&self, key: &str) -> Option<f64> {
         match key {
             "geh5" => self.geh5,
@@ -362,6 +368,7 @@ impl CalStats {
 }
 
 /// `statsOf(rows)` for sites given as (counted, modelled, GEH): the shares under each criterion, %RMSE and the regressions.
+#[must_use]
 pub fn stats_of_rows(rows: &[(f64, f64, f64)]) -> CalStats {
     use super::criteria::{tag_band, tmdg_band};
     let n = rows.len();
@@ -440,6 +447,7 @@ pub fn stats_of_rows(rows: &[(f64, f64, f64)]) -> CalStats {
 }
 
 /// `statsOf(rows)` for count rows.
+#[must_use]
 pub fn stats_of_count_rows(rows: &[&CountRow]) -> CalStats {
     let v: Vec<(f64, f64, f64)> = rows.iter().map(|r| (r.obs, r.model, r.geh)).collect();
     stats_of_rows(&v)
@@ -558,6 +566,7 @@ pub struct JtStats {
 }
 
 /// `jtStats(rows)`: the routes with an observed time (else those with a predicted one) against the two tiers.
+#[must_use]
 pub fn jt_stats(rows: &[JourneyRow]) -> JtStats {
     let with_obs: Vec<&JourneyRow> = rows.iter().filter(|r| r.chk.is_some() && r.obs.is_some()).collect();
     let usable: Vec<&JourneyRow> = if with_obs.is_empty() {

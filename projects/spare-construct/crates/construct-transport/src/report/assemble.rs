@@ -406,10 +406,11 @@ fn number_tables(body: &str, f: &mut dyn FnMut(Option<&str>) -> String) -> Strin
 
 impl<'a> Rep<'a> {
     /// `context(P, opts)`: the context every section is given.
+    #[must_use]
     pub fn context<'r>(&'r self, opts: &BuildOpts) -> Ctx<'a, 'r> {
         let sel = pick(&self.tools());
         let periods: Vec<String> = match sel.with {
-            Some(w) if !self.rep_periods(w).is_empty() => self.rep_periods(w).iter().map(|p| p.to_string()).collect(),
+            Some(w) if !self.rep_periods(w).is_empty() => self.rep_periods(w).iter().map(std::string::ToString::to_string).collect(),
             _ => vec!["AM".to_string(), "PM".to_string()],
         };
         Ctx {
@@ -428,6 +429,7 @@ impl<'a> Rep<'a> {
     }
 
     /// `Report.build(P, opts)`: the report body, the figures it asks for and its contents.
+    #[must_use]
     pub fn build(&self, opts: &BuildOpts) -> Built {
         let mut ctx = self.context(opts);
         let foreign: Vec<ForeignSection> = self.host.foreign_sections();
@@ -492,7 +494,7 @@ impl<'a> Rep<'a> {
                         .order
                         .partial_cmp(&defs[*b].order)
                         .unwrap_or(std::cmp::Ordering::Equal)
-                        .then_with(|| (defs[*b].at.is_some() as i32).cmp(&(defs[*a].at.is_some() as i32)))
+                        .then_with(|| i32::from(defs[*b].at.is_some()).cmp(&i32::from(defs[*a].at.is_some())))
                 });
             }
             ctx.chapter = ChapterState { id: ch.id.to_string(), num: ch.num.to_string() };

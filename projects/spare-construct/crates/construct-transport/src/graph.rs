@@ -58,6 +58,7 @@ pub enum Ctrl {
 
 impl Ctrl {
     /// "free", "sig", "rbt" or "minor".
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Ctrl::Free => "free",
@@ -315,37 +316,45 @@ pub struct Graph {
 
 impl Graph {
     /// Zone centroid flags (`G.isC`).
+    #[must_use]
     pub fn is_c(&self) -> &[u8] {
         &self.search.stop
     }
     /// Row offsets (`G.head`).
+    #[must_use]
     pub fn head(&self) -> &[i32] {
         &self.search.net.head
     }
     /// Arcs grouped by start node (`G.out`).
+    #[must_use]
     pub fn out(&self) -> &[i32] {
         &self.search.net.out
     }
     /// End node of each arc (`G.to`).
+    #[must_use]
     pub fn to(&self) -> &[i32] {
         &self.search.net.to
     }
     /// Turn offsets per arc (`G.tOff`).
+    #[must_use]
     pub fn t_off(&self) -> &[i32] {
         &self.search.turns.off
     }
     /// Turn penalties, infinity for banned (`G.tpen`).
+    #[must_use]
     pub fn tpen(&self) -> &[f64] {
         &self.search.turns.pen
     }
     /// Arc each turn enters (`G.tTo`).
+    #[must_use]
     pub fn t_to(&self) -> &[i32] {
         &self.search.turns.to
     }
     /// The controller at node n (`G.ctl.get(n)`).
+    #[must_use]
     pub fn ctl_of(&self, n: usize) -> Option<&Ctl> {
         match self.ctl_at.get(n) {
-            Some(&k) if k >= 0 => self.ctl.get(k as usize),
+            Some(&k) => usize::try_from(k).ok().and_then(|k| self.ctl.get(k)),
             _ => None,
         }
     }

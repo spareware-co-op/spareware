@@ -177,7 +177,7 @@ pub struct JunctionInfo {
     /// 95th-percentile queue factor.
     #[serde(with = "plain")]
     pub f95: f64,
-    /// JUNCTION_LABEL.
+    /// `JUNCTION_LABEL`.
     pub honest: String,
     /// "arc" or "movement".
     pub cap_method: String,
@@ -572,7 +572,7 @@ pub struct Select {
     /// Total selected trips (veh/h) (left out with an error).
     #[serde(default, skip_serializing_if = "Option::is_none", with = "plain")]
     pub tot: Option<f64>,
-    /// SELECT_LABEL (left out with an error).
+    /// `SELECT_LABEL` (left out with an error).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// Why the selection is not in the network (left out otherwise).

@@ -112,6 +112,7 @@ pub struct CasLoad {
 
 impl CasLoad {
     /// Reads `loaded.cas` as saved (an object, or anything else for none).
+    #[must_use]
     pub fn from_value(v: Option<&serde_json::Value>) -> CasLoad {
         let Some(serde_json::Value::Object(o)) = v else { return CasLoad { at: None, from: f64::NAN, to: f64::NAN, ytd: f64::NAN, lag_year: f64::NAN } };
         let num = |k: &str| o.get(k).map_or(f64::NAN, crate::jsnum::value_to_number);
@@ -152,6 +153,7 @@ pub struct Years {
 ///
 /// With a load time the window is `from` to the load year, the load year counted to the load date (at least one
 /// month of it); a project without one falls back to the years that have crashes. Years and dates are New Zealand time.
+#[must_use]
 pub fn crash_years(cr: &[Crash], cas: &CasLoad) -> Years {
     let (mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY);
     for c in cr {
@@ -393,12 +395,9 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
     let mut group_of_root: HashMap<usize, usize> = HashMap::new();
     for i in 0..jids.len() {
         let r = find(&mut par, i);
-        match group_of_root.get(&r) {
-            Some(&g) => groups[g].push(i),
-            None => {
-                group_of_root.insert(r, groups.len());
-                groups.push(vec![i]);
-            }
+        if let Some(&g) = group_of_root.get(&r) { groups[g].push(i) } else {
+            group_of_root.insert(r, groups.len());
+            groups.push(vec![i]);
         }
     }
     let mut jn: Vec<JunctionTally> = Vec::new();

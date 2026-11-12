@@ -159,6 +159,7 @@ struct Mv {
 impl<'a> Tools<'a> {
     /// `figure(sc, resA, resB, id, opts)`: the junction's turning diagram for reports: peak-hour volumes by movement, 'AM (PM)'
     /// labels rounded to 5 veh/h, and its note.
+    #[must_use]
     pub fn figure(
         &self,
         sc: &Scenario,
@@ -216,12 +217,9 @@ impl<'a> Tools<'a> {
         for (side, p) in [(0usize, &pa), (1usize, &pb)] {
             if let Some(p) = p {
                 for (r, v) in &p.rows {
-                    let i = match mv.iter().position(|m| m.r.id == r.id) {
-                        Some(i) => i,
-                        None => {
-                            mv.push(Mv { r: r.clone(), a: 0.0, b: 0.0 });
-                            mv.len() - 1
-                        }
+                    let i = if let Some(i) = mv.iter().position(|m| m.r.id == r.id) { i } else {
+                        mv.push(Mv { r: r.clone(), a: 0.0, b: 0.0 });
+                        mv.len() - 1
                     };
                     if side == 0 {
                         mv[i].a += v;
@@ -440,6 +438,7 @@ pub struct MoveRow {
 
 impl MoveRow {
     /// As JSON (the arms by id).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         use crate::jsnum::plain_number;
         json!({
@@ -450,9 +449,10 @@ impl MoveRow {
     }
 }
 
-impl<'a> Tools<'a> {
+impl Tools<'_> {
     /// `moves(sc, res, nodeId, set)`: the turns a junction allows (every entry arm to every exit arm), with their flows and
     /// whether each is banned (by the node's list, or by the default no-U-turn rule). Empty below three roads.
+    #[must_use]
     pub fn moves(&self, sc: &Scenario, res: Option<&Res>, node_id: &str) -> Vec<MoveRow> {
         let Some(n) = sc.nodes.get(node_id) else {
             return Vec::new();
@@ -524,10 +524,10 @@ impl<'a> Tools<'a> {
         let ix = |t: &str| TURN_ORDER.iter().position(|x| *x == t).map_or(-1.0, |i| i as f64);
         js_sort_by(&mut out, |p, q| {
             let d = p.from.o as f64 - q.from.o as f64;
-            if d != 0.0 {
-                d
-            } else {
+            if d == 0.0 {
                 ix(p.turn) - ix(q.turn)
+            } else {
+                d
             }
         });
         out
@@ -535,6 +535,7 @@ impl<'a> Tools<'a> {
 
     /// `banSvg(sc, nodeId, list, size)`: the turn ban editor's diagram: an arrow for each turn, dashed and crossed when banned
     /// (U-turns banned by the default rule are not drawn).
+    #[must_use]
     pub fn ban_svg(&self, node_id: &str, list: &[MoveRow], size: Option<f64>) -> String {
         let size = match size {
             Some(s) if s != 0.0 && !s.is_nan() => s,
@@ -688,6 +689,7 @@ pub struct ApproachInfo {
 
 impl ApproachInfo {
     /// As JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         use crate::jsnum::plain_number;
         let mut m = Map::new();
@@ -743,7 +745,7 @@ pub fn node_approaches(sc: &Scenario, node_id: &str) -> Vec<ApproachInfo> {
         let Some(l) = sc.links.get(link_id) else {
             continue;
         };
-        let lanes = if l.a == node_id { l.lanes_ba.int32() } else { l.lanes_ab.int32() } as f64;
+        let lanes = f64::from(if l.a == node_id { l.lanes_ba.int32() } else { l.lanes_ab.int32() });
         let gl = math_max(1.0, if l.bus_lane.truthy() && lanes >= 2.0 { lanes - 1.0 } else { lanes });
         let site_raw = site.and_then(|s| s.lanes.get()).and_then(|m| m.get(&l.id));
         let on_site = site_raw.is_some_and(value_truthy);

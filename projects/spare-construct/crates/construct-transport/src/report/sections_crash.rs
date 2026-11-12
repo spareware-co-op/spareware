@@ -114,7 +114,7 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
         let Some(n) = home.nodes.get(id) else {
             continue;
         };
-        let members: Vec<String> = g.nodes.iter().filter(|x| home.nodes.contains_key(*x)).cloned().collect();
+        let members: Vec<String> = g.nodes.iter().filter(|x| home.nodes.contains_key(x)).cloned().collect();
         let pts: Vec<[f64; 2]> = members.iter().map(|x| home.nodes[x].ll()).collect();
         let (mut f, mut s, mut m, mut nn, mut injury, mut p, mut cc, mut mc, mut dsi) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0f64);
         let mut list: Vec<(usize, f64)> = Vec::new();
@@ -201,7 +201,7 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
                 }
             }
         }
-        let base_name = if !g.name.is_empty() { g.name.clone() } else { kit_junction_name(home, id) };
+        let base_name = if g.name.is_empty() { kit_junction_name(home, id) } else { g.name.clone() };
         out.push(CrashSite {
             id: id.clone(),
             ids: g.ids.clone(),
@@ -243,7 +243,7 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
     }
     // two sites with one name (a road with unnamed side roads) are told apart by their position
     let names: Vec<String> = out.iter().map(|s| s.name.clone()).collect();
-    for s in out.iter_mut() {
+    for s in &mut out {
         if names.iter().filter(|n| **n == s.name).count() > 1
             && let Some(nd) = scw_n.nodes.get(&s.id).or_else(|| sc_n.nodes.get(&s.id))
         {
@@ -275,7 +275,7 @@ fn access_long(c: &mut Ctx) -> String {
         .iter()
         .map(|s| {
             let home = if r.scenario(sc).nodes.contains_key(&s.id) { r.scenario(sc) } else { r.scenario(sc0) };
-            let pts: Vec<[f64; 2]> = s.nodes.iter().filter_map(|x| home.nodes.get(x)).map(|n| n.ll()).collect();
+            let pts: Vec<[f64; 2]> = s.nodes.iter().filter_map(|x| home.nodes.get(x)).map(crate::project::Node::ll).collect();
             let mut t = [0.0f64; 4];
             for k in js::items(Some(long)) {
                 if pts.is_empty() {
@@ -375,7 +375,7 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
             Row::new(vec![
                 esc(&s.name),
                 esc(&s.control.as_deref().map_or(String::new(), control_label)),
-                if s.speed != 0.0 { number_to_js_string(s.speed) } else { fmt::DASH.to_string() },
+                if s.speed == 0.0 { fmt::DASH.to_string() } else { number_to_js_string(s.speed) },
                 count_text(s.f),
                 count_text(s.s),
                 count_text(s.m),
@@ -553,11 +553,11 @@ pub(crate) fn receiving(c: &mut Ctx) -> String {
                 esc(&or_dash("funding")),
                 esc(&s("source")),
                 esc(&s("asAt")),
-                if g("included").and_then(|v| v.as_bool()) == Some(true) { "Yes".to_string() } else { "No".to_string() },
+                if g("included").and_then(serde_json::Value::as_bool) == Some(true) { "Yes".to_string() } else { "No".to_string() },
                 format!(
                     "{}{}",
                     esc(&s("reason")),
-                    if g("verify").and_then(|v| v.as_bool()) == Some(true) { " <span class=\"warn\">(verify)</span>" } else { "" }
+                    if g("verify").and_then(serde_json::Value::as_bool) == Some(true) { " <span class=\"warn\">(verify)</span>" } else { "" }
                 ),
             ])
         })

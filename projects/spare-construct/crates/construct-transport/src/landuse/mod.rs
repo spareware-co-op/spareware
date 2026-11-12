@@ -25,9 +25,9 @@ use serde_json::Value;
 
 /// landuse.js TILE: the edge (m) of a building query tile.
 pub const TILE: f64 = 3000.0;
-/// landuse.js LU_TILE: the edge (m) of a land-use, amenity and shop query tile.
+/// landuse.js `LU_TILE`: the edge (m) of a land-use, amenity and shop query tile.
 pub const LU_TILE: f64 = 9000.0;
-/// landuse.js MAX_AREA: the largest study area (m2); anything bigger than 20 by 20 km is refused.
+/// landuse.js `MAX_AREA`: the largest study area (m2); anything bigger than 20 by 20 km is refused.
 pub const MAX_AREA: f64 = 400e6;
 
 /// A study area: south and north latitudes, west and east longitudes (degrees).
@@ -45,6 +45,7 @@ pub struct StudyBox {
 
 impl StudyBox {
     /// The box of two corners [lat, lng] in any order (`[[lat, lng], [lat, lng]]`).
+    #[must_use]
     pub fn from_corners(a: LatLng, b: LatLng) -> StudyBox {
         StudyBox {
             s: crate::jsnum::math_min(a[0], b[0]),
@@ -54,6 +55,7 @@ impl StudyBox {
         }
     }
     /// True when all four edges are finite numbers and the box has a positive size.
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         [self.s, self.w, self.n, self.e]
             .iter()
@@ -62,13 +64,15 @@ impl StudyBox {
             && !(self.e <= self.w)
     }
     /// landuse.js `size(B)`: the width and height in metres, on a flat projection at the box's middle latitude.
+    #[must_use]
     pub fn size_m(&self) -> (f64, f64) {
-        let f = util::flat((self.s + self.n) / 2.0);
+        let f = util::flat(f64::midpoint(self.s, self.n));
         ((self.e - self.w) * f.kx, (self.n - self.s) * f.ky)
     }
 }
 
 /// landuse.js `tiles(b, edge)`: splits a box into near-square tiles no larger than `edge` metres, south to north, west to east.
+#[must_use]
 pub fn tiles(b: &StudyBox, edge: f64) -> Vec<StudyBox> {
     let (w, h) = b.size_m();
     let nx = math_max(1.0, (w / edge - 1e-9).ceil());
@@ -100,6 +104,7 @@ fn bbox_str(t: &StudyBox) -> String {
 }
 
 /// landuse.js `qBuildings(t)`: the Overpass query for the buildings in a tile (ways and multipolygon relations).
+#[must_use]
 pub fn query_buildings(t: &StudyBox) -> String {
     let bb = bbox_str(t);
     format!(
@@ -109,11 +114,12 @@ pub fn query_buildings(t: &StudyBox) -> String {
 
 /// landuse.js `qLanduse(t)`: the Overpass query for land-use areas, schools, clinics, hotels, fast food and shops in a tile, including
 /// the areas that enclose the whole tile (asked through the tile's centre and corners).
+#[must_use]
 pub fn query_landuse(t: &StudyBox) -> String {
     let bb = bbox_str(t);
     let lu = "\"landuse\"~\"^(residential|commercial|retail|industrial|education)$\"";
     let pts = [
-        [(t.s + t.n) / 2.0, (t.w + t.e) / 2.0],
+        [f64::midpoint(t.s, t.n), f64::midpoint(t.w, t.e)],
         [t.s, t.w],
         [t.s, t.e],
         [t.n, t.w],
@@ -232,6 +238,7 @@ pub fn merge_elements(batches: &[Vec<Value>]) -> Vec<Value> {
 }
 
 /// The named roads `build` may use to name zones: the scenario's links that have a name and more than one shape point (`L.pts`).
+#[must_use]
 pub fn road_lines(sc: &Scenario) -> Vec<RoadLine> {
     sc.links
         .values()

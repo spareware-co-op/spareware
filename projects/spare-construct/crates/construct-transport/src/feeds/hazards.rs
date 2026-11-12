@@ -44,7 +44,7 @@ pub fn flood_label(a: &JsonValue) -> String {
     let t = crate::jsnum::js_trim(&cc);
     let adj = !cc.is_empty() && !Regex::lit("^none$", "i").test(t) && !Regex::lit(r"^no\b", "i").test(t);
     let ev = a.get("RAINFALL_EVENT").map_or(f64::NAN, JsonValue::to_number);
-    let aep = if ev > 0.0 { format!("{}% AEP", fmt::num(100.0 / ev, if ev > 100.0 { 1 } else { 0 })) } else { "event not stated".to_string() };
+    let aep = if ev > 0.0 { format!("{}% AEP", fmt::num(100.0 / ev, usize::from(ev > 100.0))) } else { "event not stated".to_string() };
     format!("Flood plain, {}, {}", aep, if adj { "climate-change adjusted" } else { "current climate" })
 }
 
@@ -128,6 +128,7 @@ pub struct HazardsLoad {
 
 impl HazardsLoad {
     /// A download for an area.
+    #[must_use]
     pub fn new(bounds: Bounds, timeout_ms: f64, cache: &MetaCache) -> HazardsLoad {
         let mut l = HazardsLoad {
             bounds,
@@ -150,6 +151,7 @@ impl HazardsLoad {
         l
     }
     /// The progress lines the prototype passes to its status callback, in order.
+    #[must_use]
     pub fn statuses(&self) -> &[String] {
         &self.statuses
     }
@@ -482,7 +484,7 @@ fn seg_inside(g: &PolyGrid, ax: f64, ay: f64, bx: f64, by: f64) -> Vec<[f64; 2]>
                     }
                     let s = ((x1 - ax) * ey - (y1 - ay) * ex) / den;
                     let u = ((x1 - ax) * dy - (y1 - ay) * dx) / den;
-                    if s > 0.0 && s < 1.0 && u >= 0.0 && u <= 1.0 {
+                    if s > 0.0 && s < 1.0 && (0.0..=1.0).contains(&u) {
                         ts.push(s);
                     }
                 }
@@ -497,7 +499,7 @@ fn seg_inside(g: &PolyGrid, ax: f64, ay: f64, bx: f64, by: f64) -> Vec<[f64; 2]>
         if ts[k + 1] - ts[k] < 1e-9 {
             continue;
         }
-        let m = (ts[k] + ts[k + 1]) / 2.0;
+        let m = f64::midpoint(ts[k], ts[k + 1]);
         if pip_flat(g, ax + dx * m, ay + dy * m) {
             out.push([ts[k], ts[k + 1]]);
         }
@@ -551,13 +553,10 @@ pub struct HazardRow {
 /// The flat projection is the first measured scenario's first junction, kept in `data` for every scenario after it
 /// (as the prototype keeps it on `mem.hazards`); `s` is the project's settings.
 pub fn hazard_links(sc: &Scenario, data: &Hazards, s: &Settings) -> Vec<HazardRow> {
-    let lat0 = match data.lat0.get() {
-        Some(l) => l,
-        None => {
-            let l = sc.nodes.values().next().map_or(-36.85, |n| n.lat.num());
-            data.lat0.set(Some(l));
-            l
-        }
+    let lat0 = if let Some(l) = data.lat0.get() { l } else {
+        let l = sc.nodes.values().next().map_or(-36.85, |n| n.lat.num());
+        data.lat0.set(Some(l));
+        l
     };
     let fl = flat(lat0);
     let mut grids: HashMap<(usize, usize), PolyGrid> = HashMap::new();
@@ -636,7 +635,7 @@ pub fn hazard_links(sc: &Scenario, data: &Hazards, s: &Settings) -> Vec<HazardRo
             });
             only.insert(r.link.clone(), v);
         }
-        for r in rows.iter_mut() {
+        for r in &mut rows {
             r.only = *only.get(&r.link).unwrap_or(&false);
         }
     }

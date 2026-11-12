@@ -89,6 +89,7 @@ pub type SiteTraces = Vec<(String, Vec<(String, String, f64)>)>;
 /// `siteTraces(sc, res)`: the movements through each junction site, from what was kept for this result (`sc.calib.siteTurns`), else traced along the result's paths (the entry arc and exit arc of each path through the site, flows in veh/h to 0.01). None when the result has no sites, or no paths and nothing was kept.
 ///
 /// The prototype also keeps the traced movements in the scenario for its own current result; [`keep_site_traces`] does that.
+#[must_use]
 pub fn site_traces(sc: &Scenario, res: Option<&Res>, s: &crate::project::Settings) -> Option<SiteTraces> {
     let res = res?;
     let sites_res = res.sites.as_ref()?;
@@ -148,12 +149,9 @@ pub fn site_traces(sc: &Scenario, res: Option<&Res>, s: &crate::project::Setting
                     }
                     let Some(pos) = open.iter().position(|(x, _)| x == site) else { continue };
                     let e = open[pos].1.clone();
-                    let fi = match flow.iter().position(|(x, _)| x == site) {
-                        Some(i) => i,
-                        None => {
-                            flow.push((site.clone(), Vec::new()));
-                            flow.len() - 1
-                        }
+                    let fi = if let Some(i) = flow.iter().position(|(x, _)| x == site) { i } else {
+                        flow.push((site.clone(), Vec::new()));
+                        flow.len() - 1
                     };
                     let m = &mut flow[fi].1;
                     let add = p.w / pf;
@@ -174,6 +172,7 @@ pub fn site_traces(sc: &Scenario, res: Option<&Res>, s: &crate::project::Setting
 }
 
 /// `traceKey(res)`: what identifies a result for the kept traces.
+#[must_use]
 pub fn trace_key(res: &Res) -> String {
     format!(
         "{}|{}|{}|{}",
@@ -252,7 +251,7 @@ fn traced_rows(arms: &[Arm], rows: &[MovementRow], list: &[(String, String, f64)
 /// defined is not scored: one ring node carries only part of each movement. Otherwise the node's own arms and movements.
 /// None when the node is missing.
 pub fn junction_view(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, node_id: Option<&str>) -> Option<JunctionView> {
-    let node = node_id.filter(|n| sc.nodes.contains_key(*n))?.to_string();
+    let node = node_id.filter(|n| sc.nodes.contains_key(n))?.to_string();
     if let Some(site) = sites::of(sc, &node) {
         let rs = res.and_then(|r| r.sites.as_ref()).and_then(|m| m.get(&site.id));
         let mut base = JunctionView {
@@ -325,7 +324,7 @@ pub fn junction_view(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, node_id: Optio
             name: None,
         });
     }
-    let list = res.and_then(|r| r.turns.get(&node)).map(|v| v.as_slice()).unwrap_or(&[]);
+    let list = res.and_then(|r| r.turns.get(&node)).map(std::vec::Vec::as_slice).unwrap_or(&[]);
     let arms: Vec<ViewArm> = crate::turns::arms(sc, &node, list, None)
         .into_iter()
         .filter(|a| !a.conn)
@@ -344,12 +343,14 @@ pub struct LegMap {
 
 impl LegMap {
     /// `map[leg]`.
+    #[must_use]
     pub fn get(&self, leg: &str) -> Option<usize> {
         self.map.iter().find(|(l, _)| l == leg).map(|(_, i)| *i)
     }
 }
 
 /// `legArms(sc, nodeId, s, res, view)`: counted legs onto model arms: outward bearing within 30 degrees, else the leg's road name.
+#[must_use]
 pub fn leg_arms(s: &TurnSite, view: Option<&JunctionView>) -> LegMap {
     let arms: &[ViewArm] = view.map_or(&[], |v| v.arms.as_slice());
     let mut legs: Vec<String> = Vec::new();
@@ -407,6 +408,7 @@ fn canon(c: char) -> f64 {
 }
 
 /// `exitArm(arms, from, mv)`: the arm a movement leaves by (left-hand traffic: a turn above 0 is a right turn).
+#[must_use]
 pub fn exit_arm(arms: &[ViewArm], from: usize, mv: &str) -> Option<usize> {
     let m0 = mv.chars().next().unwrap_or('T');
     let in_b = (arms[from].b + 180.0) % 360.0;
@@ -446,6 +448,7 @@ pub struct FurnessResult {
 /// `seed[i][j]` = model turn shares where the model has traffic on that approach, else T 70 / L 15 / R 15 (0 for U).
 /// Rows and columns are scaled in turn until the largest relative error is under `tol` (0.1%) or `max_it` (50)
 /// rounds. Out totals are scaled to the in total first.
+#[must_use]
 pub fn furness(ins: &[f64], outs: &[f64], seed: &[Vec<f64>], tol: f64, max_it: usize) -> FurnessResult {
     let n = ins.len();
     let mut m: Vec<Vec<f64>> = seed.iter().map(|r| r.iter().map(|&v| math_max(0.0, crate::jsnum::or_default(v, 0.0))).collect()).collect();
@@ -530,7 +533,7 @@ pub fn site_volumes(ctx: &Ctx, sc: &Scenario, s: &TurnSite, period: &str, res: O
     }
     let ins: Vec<f64> = legs.iter().map(|l| pk.mv.get(&format!("{l}-IN")).copied().unwrap_or(0.0)).collect();
     let outs: Vec<f64> = legs.iter().map(|l| pk.mv.get(&format!("{l}-OUT")).copied().unwrap_or(0.0)).collect();
-    let node = s.node.as_str().filter(|n| sc.nodes.contains_key(*n));
+    let node = s.node.as_str().filter(|n| sc.nodes.contains_key(n));
     let view = node.and_then(|n| junction_view(ctx, sc, res, Some(n)));
     let la = view.as_ref().filter(|v| !v.arms.is_empty()).map(|v| leg_arms(s, Some(v)));
     let rows: &[ViewRow] = match (&view, res) {
@@ -627,7 +630,7 @@ fn num_text(x: f64, d: usize) -> String {
 
 /// `siteRows(sc, s, period, res)`: turn validation rows for one site: counted against modelled, per movement.
 pub fn site_rows(ctx: &Ctx, sc: &Scenario, s: &TurnSite, period: &str, res: Option<&Res>) -> SiteRowsResult {
-    let node: Option<String> = s.node.as_str().filter(|n| sc.nodes.contains_key(*n)).map(String::from);
+    let node: Option<String> = s.node.as_str().filter(|n| sc.nodes.contains_key(n)).map(String::from);
     let (Some(node), Some(res)) = (node.clone(), res) else {
         return SiteRowsResult {
             rows: Vec::new(),
@@ -904,7 +907,7 @@ pub fn balance(p: &mut Project, sc_id: &str, period: &str, no_sinks: Option<bool
             if !(e_tot > 0.0) || !(a_tot > 0.0) {
                 continue;
             }
-            let f = if no_sinks { math_max(e_tot, a_tot) } else { (e_tot + a_tot) / 2.0 };
+            let f = if no_sinks { math_max(e_tot, a_tot) } else { f64::midpoint(e_tot, a_tot) };
             let gap = (e_tot - a_tot).abs() > math_max(corridor::BALANCE_ABS, corridor::BALANCE_REL * math_max(e_tot, a_tot));
             let name_s = ctx.store.turn_sites[si].name.js_string();
             let name_t = ctx.store.turn_sites[ti_idx].name.js_string();
@@ -976,6 +979,7 @@ pub fn balance(p: &mut Project, sc_id: &str, period: &str, no_sinks: Option<bool
 }
 
 /// `atJunction(sc, s, id)`: whether a turning-count site is at this node, or at the junction site (id or any of its nodes) the node belongs to.
+#[must_use]
 pub fn at_junction(sc: &Scenario, s: &TurnSite, id: &str) -> bool {
     let n = match s.node.as_str() {
         Some(n) => Some(n.to_string()),
@@ -989,6 +993,7 @@ pub fn at_junction(sc: &Scenario, s: &TurnSite, id: &str) -> bool {
 }
 
 /// `phf(id, period, sc)`: the peak hour factor of the turning count at a junction (node or junction-site id), for the SIDRA export.
+#[must_use]
 pub fn phf(store: &CalibStore, sc: &Scenario, id: &str, period: &str) -> Option<f64> {
     let s = store.turn_sites.iter().find(|x| {
         !x.role.as_text_is("off") && x.peak.get().and_then(|p| p.get(period)).is_some() && at_junction(sc, x, id)

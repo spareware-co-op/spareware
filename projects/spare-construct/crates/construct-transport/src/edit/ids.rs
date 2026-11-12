@@ -79,6 +79,7 @@ impl<R: Rng> IdSource for Ids<R> {
 const DIGITS: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
 
 /// `x.toString(36)` for a whole number below 2^53 (a negative number gets a minus sign).
+#[must_use]
 pub fn integer_radix36(x: f64) -> String {
     let neg = x < 0.0;
     let mut n = x.abs().floor() as u64;
@@ -101,6 +102,7 @@ pub fn integer_radix36(x: f64) -> String {
 /// fraction run until the remaining fraction is below half the gap to the next double, with round-half-even carry.
 ///
 /// The whole part must be below 2^53. NaN, infinities and 0 give "NaN", "Infinity", "-Infinity" and "0".
+#[must_use]
 pub fn number_to_radix36(x: f64) -> String {
     if x.is_nan() {
         return "NaN".to_string();
@@ -166,6 +168,7 @@ pub fn number_to_radix36(x: f64) -> String {
 }
 
 /// `new Date(ms).toISOString()`: "2026-10-21T00:00:00.000Z" (years outside 0 to 9999 get a sign and six digits).
+#[must_use]
 pub fn iso_string(ms: f64) -> String {
     // A Date holds whole milliseconds: the time is cut toward zero (TimeClip)
     let ms = ms.trunc();

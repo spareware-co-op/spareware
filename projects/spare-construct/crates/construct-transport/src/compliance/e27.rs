@@ -100,7 +100,7 @@ pub fn quantities(p: &V, sc: &V) -> V {
         unlisted.set(per, V::Number(r1(u)));
     }
     let peak = trips.vals().iter().fold(0.0, |a, v| math_max(a, v.n()));
-    let peak_p = trips.entries().iter().find(|(_, v)| v.n() == peak).map(|(k, _)| st(*k)).unwrap_or(V::Null);
+    let peak_p = trips.entries().iter().find(|(_, v)| v.n() == peak).map_or(V::Null, |(k, _)| st(*k));
     let unlisted_peak = unlisted.vals().iter().fold(0.0, |a, v| math_max(a, v.n()));
     let mut unlisted_uses: Vec<String> = lu.iter().filter(|e| e.1 > 0.0 && !e27_map(&e.0)).map(|e| lu_label(&e.0)).collect();
     if direct_only {
@@ -116,6 +116,7 @@ pub fn quantities(p: &V, sc: &V) -> V {
 }
 
 /// `exemptionOf(zoneName, cfoc, status)`: the E27.6.1(2) exemption that applies, or null.
+#[must_use]
 pub fn exemption_of(zone_name: &V, cfoc: bool, status: &str) -> V {
     let zn = if zone_name.t() { zone_name.s() } else { String::new() };
     if zone_name.t() && re_of(table("E27.exemptZone")).test(&zn) {
@@ -131,6 +132,7 @@ pub fn exemption_of(zone_name: &V, cfoc: bool, status: &str) -> V {
 }
 
 /// `e27(P)` for the active scenario.
+#[must_use]
 pub fn e27(p: &V) -> V {
     e27_sc(p, active_sc(p))
 }
@@ -143,6 +145,7 @@ fn set_cons(rows: &mut [V], f: &dyn Fn(&V) -> String) {
 }
 
 /// `e27(P, sc)`: the Auckland Unitary Plan E27 trigger screening.
+#[must_use]
 pub fn e27_sc(p: &V, sc: &V) -> V {
     let c = state(p);
     let site = site_info(p);
@@ -188,28 +191,28 @@ pub fn e27_sc(p: &V, sc: &V) -> V {
     let peak_u = if c.g("site").g("unlisted").t() { qn.g("peak").n() } else { qn.g("unlistedPeak").n() };
     let thr = e.g("catchAll").g("thr").n();
     let mut ca = jobj! { "id" => e.g("catchAll").g("id"), "thr" => thr, "peak" => r1(peak_u), "unlisted" => unlisted, "status" => status.as_str(), "applies" => false, "exceeded" => false, "why" => "" };
-    let why: String;
-    if !applies {
-        why = format!("Not applied ({}).", if redirect.t() { "precinct" } else { "exempt" });
+    
+    let why: String = if !applies {
+        format!("Not applied ({}).", if redirect.t() { "precinct" } else { "exempt" })
     } else if !unlisted {
-        why = "Every activity is listed in Table E27.6.1.1.".into();
+        "Every activity is listed in Table E27.6.1.1.".into()
     } else if status == "P" {
-        why = "Does not apply to activities permitted in the zone.".into();
+        "Does not apply to activities permitted in the zone.".into()
     } else if status != "C" && status != "RD" {
-        why = if !status.is_empty() {
+        if status.is_empty() {
+            "Set the activity status to test it (it applies only to controlled or restricted discretionary activities).".into()
+        } else {
             let a = table("ACTIVITY").g(&status);
             format!("Applies only to controlled or restricted discretionary activities (this one is {}).", if a.t() { a.s() } else { status.clone() }.to_lowercase())
-        } else {
-            "Set the activity status to test it (it applies only to controlled or restricted discretionary activities).".into()
-        };
+        }
     } else if c.g("site").g("zoneTA").t() {
-        why = "The zone already requires a transport assessment.".into();
+        "The zone already requires a transport assessment.".into()
     } else {
         let ex = peak_u > thr;
         ca.set("applies", V::Bool(true));
         ca.set("exceeded", V::Bool(ex));
-        why = if ex { format!("Exceeded: {} veh/h in the busiest modelled hour (more than 100). Restricted discretionary (A3).", numf(peak_u, 0)) } else { format!("Not exceeded: {} veh/h in the busiest modelled hour.", numf(peak_u, 0)) };
-    }
+        if ex { format!("Exceeded: {} veh/h in the busiest modelled hour (more than 100). Restricted discretionary (A3).", numf(peak_u, 0)) } else { format!("Not exceeded: {} veh/h in the busiest modelled hour.", numf(peak_u, 0)) }
+    };
     ca.set("why", st(why));
     let ca_ex = ca.g("exceeded").t();
     let mut tier = V::Null;
@@ -220,9 +223,9 @@ pub fn e27_sc(p: &V, sc: &V) -> V {
     let all_t1 = hit.iter().all(|r| r.g("tier").n() == 1.0);
     if applies && (!hit.is_empty() || ca_ex) {
         let t = if !ca_ex && all_t1 { 1 } else { 2 };
-        tier = V::Number(t as f64);
+        tier = V::Number(f64::from(t));
         set_cons(&mut rows, &|r| if r.g("exceeded").t() { format!("RD (Table E27.4.1 (A3)); {}", if t == 1 { "E27.8.2(3A)" } else { "E27.8.2(3)" }) } else { "Not exceeded".into() });
-        let parts: Vec<&str> = [if !hit.is_empty() { "Table E27.6.1.1" } else { "" }, if ca_ex { "E27.6.1(1)(b)" } else { "" }].into_iter().filter(|s| !s.is_empty()).collect();
+        let parts: Vec<&str> = [if hit.is_empty() { "" } else { "Table E27.6.1.1" }, if ca_ex { "E27.6.1(1)(b)" } else { "" }].into_iter().filter(|s| !s.is_empty()).collect();
         exceeded_text = st(format!("{} exceeded", parts.join(" and ")));
         let vic = settings(p).g("vicinity").clone();
         consequence = st(if t == 1 {
@@ -295,6 +298,7 @@ pub fn e27_sc(p: &V, sc: &V) -> V {
 }
 
 /// `linkChange(P, sc)`: the largest percentage change on a link between the base scenario and the active one (`{ p, name, link, period, included, cls, extent }`), or null.
+#[must_use]
 pub fn link_change(p: &V, sc: &V) -> V {
     let base = base_sc(p);
     if std::ptr::eq(sc, base) || sc.g("id").strict_eq(base.g("id")) {
@@ -318,6 +322,7 @@ pub fn link_change(p: &V, sc: &V) -> V {
 }
 
 /// `shInvolved(P, sc)`: whether the proposal involves a state highway and why: `{ involved, why, inArea, links }`.
+#[must_use]
 pub fn sh_involved(p: &V, sc: &V) -> V {
     let c = state(p);
     let sh_ids: Vec<String> = sc.g("links").vals().into_iter().filter(|l| super::authority::sh_of(p, l).g("sh").t()).map(|l| l.g("id").s()).collect();
@@ -345,8 +350,8 @@ pub fn sh_involved(p: &V, sc: &V) -> V {
             break;
         }
     }
-    if let Some(pt) = site_point(p, sc) {
-        if !sh_ids.is_empty() {
+    if let Some(pt) = site_point(p, sc)
+        && !sh_ids.is_empty() {
             let lat = pt.g("lat").n();
             let f = flat_at(lat);
             let mut d = f64::INFINITY;
@@ -360,11 +365,11 @@ pub fn sh_involved(p: &V, sc: &V) -> V {
                 why.push(format!("the site is within {} m of a state highway ({} m)", ns(nm), numf(d, 0)));
             }
         }
-    }
     jobj! { "involved" => !why.is_empty(), "why" => strs(why), "inArea" => !sh_ids.is_empty(), "links" => strs(sh_ids) }
 }
 
 /// `table1(Q)`: the NZTA G00907 Table 1 ITA Lite and Full test for the proposal quantities.
+#[must_use]
 pub fn table1(qn: &V) -> V {
     let q = qn.g("q");
     let g = |k: &str| q.g(k).n();
@@ -420,6 +425,7 @@ pub fn table1(qn: &V) -> V {
 }
 
 /// `depthOf(result, consistent, context)`: the G00907 Table 2 depth of assessment.
+#[must_use]
 pub fn depth_of(result: &str, consistent: bool, context: &str) -> V {
     if result == "None" {
         return jobj! { "depth" => V::Null, "text" => "No Table 2 depth (below Table 1): the district plan and council guidance still apply." };
@@ -440,6 +446,7 @@ pub fn depth_of(result: &str, consistent: bool, context: &str) -> V {
 }
 
 /// `crashFlags(P, sc)`: the crash flags for the scope: `{ n, text }` (and `dsi` when crash analysis is loaded).
+#[must_use]
 pub fn crash_flags(p: &V, sc: &V) -> V {
     let none = jobj! { "n" => V::Null, "text" => "crash data not loaded" };
     if p.g("data").g("crashes").jlen() == 0 {
@@ -456,6 +463,7 @@ pub fn crash_flags(p: &V, sc: &V) -> V {
 }
 
 /// `proportionality(P, o)`: the proportionality paragraph (the author confirms or edits it).
+#[must_use]
 pub fn proportionality(p: &V, o: &V) -> V {
     let c = state(p);
     let pr = c.g("proportion");
@@ -483,11 +491,13 @@ pub fn proportionality(p: &V, o: &V) -> V {
 }
 
 /// `itaScope(P)` for the active scenario.
+#[must_use]
 pub fn ita_scope(p: &V) -> V {
     ita_scope_sc(p, active_sc(p))
 }
 
 /// `itaScope(P, sc)`: the ITA trigger, scope and proportionality: the AUP, AT and NZTA tests, the recommended level, the drivers and the proportionality paragraph.
+#[must_use]
 pub fn ita_scope_sc(p: &V, sc: &V) -> V {
     let c = state(p);
     let ctx = c.g("ctx");
@@ -544,7 +554,7 @@ pub fn ita_scope_sc(p: &V, sc: &V) -> V {
     let depth = if nzta.t() { depth_of(&nzta.g("result").s(), consistent, &context) } else { V::Null };
     let cuts = table("LEVEL_TRIPS.cuts");
     let pk = qn.g("peak").n();
-    let mut lvl: usize = if pk >= cuts.ix(2).n() { 3 } else if pk >= cuts.ix(1).n() { 2 } else if pk >= cuts.ix(0).n() { 1 } else { 0 };
+    let mut lvl: usize = if pk >= cuts.ix(2).n() { 3 } else if pk >= cuts.ix(1).n() { 2 } else { usize::from(pk >= cuts.ix(0).n()) };
     let mut reasons: Vec<String> = vec![format!("{} veh/h in the busiest hour (bands 20 / 100 / 500 veh/h, {})", numf(pk, 0), assumption())];
     let raise = |n: usize, why: String, lvl: &mut usize, reasons: &mut Vec<String>| {
         if n > *lvl {
@@ -569,7 +579,7 @@ pub fn ita_scope_sc(p: &V, sc: &V) -> V {
     }
     let crash = crash_flags(p, sc);
     let precinct = if e.g("redirect").t() { format!("{} {}", e.g("redirect").g("precinct").g("id").s(), e.g("redirect").g("precinct").g("name").s()) } else if e.g("site").g("precinct").t() { e.g("site").g("precinct").s() } else { "none".into() };
-    let sh_text = if sh_i.g("involved").t() { sh_i.g("why").items().iter().map(|x| x.s()).collect::<Vec<_>>().join("; ") } else if sh_i.g("inArea").t() { "state highway in the study area, not used by the development in the results".into() } else { "none found".into() };
+    let sh_text = if sh_i.g("involved").t() { sh_i.g("why").items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join("; ") } else if sh_i.g("inArea").t() { "state highway in the study area, not used by the development in the results".into() } else { "none found".into() };
     let drivers = V::Array(vec![
         jarr!["Net vehicle trips, busiest modelled hour", format!("{} veh/h{}", numf(pk, 0), if qn.g("peakPeriod").t() { format!(" ({})", qn.g("peakPeriod").s()) } else { String::new() })],
         jarr!["Largest % change on a modelled link", if ch.t() { format!("+{}% on {} ({})", numf(ch_p * 100.0, 1), ch.g("name").s(), ch.g("period").s()) } else { "not computed (needs results for a base and a with-development scenario)".into() }],
@@ -584,6 +594,7 @@ pub fn ita_scope_sc(p: &V, sc: &V) -> V {
 }
 
 /// `scopingMemo(P, sc)`: the scoping memo items, proposed from the project; each can be locked with who agreed and when.
+#[must_use]
 pub fn scoping_memo(p: &V, sc: &V) -> V {
     let c = state(p);
     let b = bounds_of(sc);
@@ -605,7 +616,7 @@ pub fn scoping_memo(p: &V, sc: &V) -> V {
         .map(|(k, n)| format!("{} ({})", n, today(loaded.g(k).g("at"))))
         .collect();
     let auth = authorities(p, &V::Null);
-    let periods = if assessment.t() && assessment.g("periods").t() { assessment.g("periods").items().iter().map(|x| x.s()).collect::<Vec<_>>().join(", ") } else { "AM, PM".into() };
+    let periods = if assessment.t() && assessment.g("periods").t() { assessment.g("periods").items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join(", ") } else { "AM, PM".into() };
     let reg = p.g("register");
     let proposed = jobj! {
         "area" => match b { Some((s, w, n, e)) => format!("Network extent {} \u{d7} {} km; extend to links over the AT 5%/10% test", numf(util::dist(&[s, w], &[s, e]) / 1000.0, 1), numf(util::dist(&[s, w], &[n, w]) / 1000.0, 1)), None => "not set".into() },

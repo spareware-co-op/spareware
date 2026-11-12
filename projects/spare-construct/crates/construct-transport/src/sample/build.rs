@@ -26,6 +26,7 @@ use std::collections::HashSet;
 
 /// What a build is asked to do (`opts` of `Sample.build`).
 #[derive(Clone, Copy)]
+#[derive(Default)]
 pub struct BuildOpts<'a> {
     /// False leaves the bus timetable out (`opts.gtfs === false`); the default loads it when the feeds are there.
     pub gtfs: Option<bool>,
@@ -39,11 +40,6 @@ pub struct BuildOpts<'a> {
     pub cancel: Option<&'a dyn Fn() -> bool>,
 }
 
-impl Default for BuildOpts<'_> {
-    fn default() -> Self {
-        BuildOpts { gtfs: None, run: false, extras: None, modules: Modules::default(), cancel: None }
-    }
-}
 
 /// The ids of the four assessment scenarios.
 #[derive(Clone, Debug, PartialEq)]
@@ -211,8 +207,8 @@ pub fn build(
     // The new nodes on the edge have text ids ("edge1"); the road importer reads numeric ids only, so they go in as numbers and come back as text on the junctions made
     let mut els = clipped.elements;
     let edge_num = |s: &str| -> Option<f64> { s.strip_prefix("edge").and_then(|n| n.parse::<f64>().ok()).filter(|n| n.fract() == 0.0).map(|n| -1e12 - n) };
-    let numbered = |v: &Value| -> Option<Value> { v.as_str().and_then(edge_num).map(|n| json_number(n)) };
-    for e in els.iter_mut() {
+    let numbered = |v: &Value| -> Option<Value> { v.as_str().and_then(edge_num).map(json_number) };
+    for e in &mut els {
         if let Some(n) = e.get("id").and_then(numbered) {
             e["id"] = n;
         }
@@ -244,7 +240,7 @@ pub fn build(
             stage: Some("roads".to_string()),
         });
     }
-    if p.scenarios[si].sites.get().is_none_or(|s| s.is_empty()) {
+    if p.scenarios[si].sites.get().is_none_or(crate::project::OrderedMap::is_empty) {
         detect(&mut p.scenarios[si], ids, &DetectOpts::default());
     }
     auto_gateways(&mut p.scenarios[si], ids, &bounds_of(&bounds), None);
@@ -484,7 +480,7 @@ pub fn build(
             design: Some(DESIGN_YEAR),
             from: Some(src_id.clone()),
             mitigation: Some(true),
-            periods: Some(PERIODS.iter().map(|x| x.to_string()).collect()),
+            periods: Some(PERIODS.iter().map(std::string::ToString::to_string).collect()),
             ..Default::default()
         },
     )

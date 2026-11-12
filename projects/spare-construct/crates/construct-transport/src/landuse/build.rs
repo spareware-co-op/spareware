@@ -125,6 +125,7 @@ impl Stats {
         }
     }
     /// The statistics as JSON, in the prototype's shape.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let obj = |v: &[(String, f64)]| {
             Value::Object(
@@ -294,12 +295,9 @@ pub fn build(
             value_to_js_string(&e["type"]),
             value_to_js_string(&e["id"])
         );
-        match by_ix.get(&key) {
-            Some(&i) => by_id[i].1 = e,
-            None => {
-                by_ix.insert(key.clone(), by_id.len());
-                by_id.push((key, e));
-            }
+        if let Some(&i) = by_ix.get(&key) { by_id[i].1 = e } else {
+            by_ix.insert(key.clone(), by_id.len());
+            by_id.push((key, e));
         }
     }
     let mut els: Vec<&Value> = by_id.into_iter().map(|(_, e)| e).collect();
@@ -359,7 +357,7 @@ pub fn build(
             stats,
         };
     }
-    let f = util::flat((bx.s + bx.n) / 2.0);
+    let f = util::flat(f64::midpoint(bx.s, bx.n));
     let (kx, ky) = (f.kx, f.ky);
     let w = (bx.e - bx.w) * kx;
     let h = (bx.n - bx.s) * ky;
@@ -974,7 +972,7 @@ pub fn build(
             set_use!("education");
             orphans.push(bi);
         // (4) outside any mapped area: rural houses by size, shops by proximity
-        } else if bt == "residential" || (barea >= HOUSE_MIN && barea <= HOUSE_MAX) {
+        } else if bt == "residential" || (HOUSE_MIN..=HOUSE_MAX).contains(&barea) {
             residential(&mut blds);
             if blds[bi].cls == Some("residential") {
                 rural.push(bi);
@@ -1342,24 +1340,21 @@ pub fn build(
         let j = math_min(ny - 1.0, (it.y / cell).floor());
         let key = j * nx + i;
         let at = cell_ix.get(&key.to_bits()).copied();
-        let at = match at {
-            Some(a) => a,
-            None => {
-                cell_ix.insert(key.to_bits(), cells.len());
-                cells.push((
-                    key,
-                    Cell {
-                        i,
-                        j,
-                        w: 0.0,
-                        sx: 0.0,
-                        sy: 0.0,
-                        lu: vec![0.0; nk],
-                        streets: Vec::new(),
-                    },
-                ));
-                cells.len() - 1
-            }
+        let at = if let Some(a) = at { a } else {
+            cell_ix.insert(key.to_bits(), cells.len());
+            cells.push((
+                key,
+                Cell {
+                    i,
+                    j,
+                    w: 0.0,
+                    sx: 0.0,
+                    sy: 0.0,
+                    lu: vec![0.0; nk],
+                    streets: Vec::new(),
+                },
+            ));
+            cells.len() - 1
         };
         let c = &mut cells[at].1;
         let wt = it.q * weight(it.k);
@@ -1501,15 +1496,12 @@ pub fn build(
             area_n += 1.0;
             base = format!("Area {}", number_to_js_string(area_n));
         }
-        let n = match used.iter_mut().find(|(k, _)| *k == base) {
-            Some((_, n)) => {
-                *n += 1.0;
-                *n
-            }
-            None => {
-                used.push((base.clone(), 1.0));
-                1.0
-            }
+        let n = if let Some((_, n)) = used.iter_mut().find(|(k, _)| *k == base) {
+            *n += 1.0;
+            *n
+        } else {
+            used.push((base.clone(), 1.0));
+            1.0
         };
         let name = format!(
             "Existing \u{b7} {}{}",
@@ -1597,19 +1589,17 @@ fn ign_fn(b: &mut Bld, why: &str) {
 
 fn set_fn(b: &mut Bld, cls: &'static str, kq: Option<(&'static str, f64)>) {
     b.cls = Some(cls);
-    match kq {
-        Some((k, q)) => {
-            b.k = Some(k);
-            b.q = Some(q);
-        }
-        None => {
-            b.k = None;
-            b.q = None;
-        }
+    if let Some((k, q)) = kq {
+        b.k = Some(k);
+        b.q = Some(q);
+    } else {
+        b.k = None;
+        b.q = None;
     }
 }
 
 /// Every constant of the build: the numbers and the tag sets, as JSON (sets sorted), for checking against the prototype's source.
+#[must_use]
 pub fn constants() -> Value {
     let mut m = Map::new();
     let numbers: [(&str, f64); 25] = [

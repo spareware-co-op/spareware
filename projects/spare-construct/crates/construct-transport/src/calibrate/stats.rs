@@ -213,18 +213,18 @@ pub const RULES: [(&str, Rule); 11] = [
 ];
 
 /// `Calibrate.RULES[id]`; panics for an id that is not a rule.
+#[must_use]
 pub fn rule_of(id: &str) -> &'static Rule {
     RULES
         .iter()
-        .find(|(k, _)| *k == id)
-        .map(|(_, r)| r)
-        .unwrap_or_else(|| panic!("no calibration rule {id:?}"))
+        .find(|(k, _)| *k == id).map_or_else(|| panic!("no calibration rule {id:?}"), |(_, r)| r)
 }
 
 /// `Calibrate.MIN_SITES`: fewer sites than this are "Indicative", never pass or fail (Spare Construct convention).
 pub const MIN_SITES: usize = 10;
 
 /// `flowOK(m, o)`: within the TAG M3.1 Table 2 flow band (100 veh/h below 700, 15% to 2,700, 400 veh/h above).
+#[must_use]
 pub fn flow_ok(m: f64, o: f64) -> bool {
     if o < 700.0 {
         (m - o).abs() <= 100.0
@@ -236,6 +236,7 @@ pub fn flow_ok(m: f64, o: f64) -> bool {
 }
 
 /// `bandOK(m, o)`: within the TMDG count band (50 veh/h below 400, 12.5% to 2,000, 250 veh/h above).
+#[must_use]
 pub fn band_ok(m: f64, o: f64) -> bool {
     if o < 400.0 {
         (m - o).abs() <= 50.0
@@ -247,6 +248,7 @@ pub fn band_ok(m: f64, o: f64) -> bool {
 }
 
 /// `pearson2(x, y)`: the square of Pearson's r, None for fewer than two pairs or no spread.
+#[must_use]
 pub fn pearson2(x: &[f64], y: &[f64]) -> Option<f64> {
     let n = x.len();
     if n < 2 {
@@ -289,6 +291,7 @@ pub struct OriginFit {
 }
 
 /// `Calibrate.origin(x, y)`: fits y = b0 x through the origin.
+#[must_use]
 pub fn origin(x: &[f64], y: &[f64]) -> OriginFit {
     let none = OriginFit {
         b0: None,
@@ -337,6 +340,7 @@ pub struct OlsFit {
 }
 
 /// `Calibrate.ols(x, y)`: ordinary least squares, reported beside the through-origin fit (never the pass or fail test).
+#[must_use]
 pub fn ols(x: &[f64], y: &[f64]) -> OlsFit {
     let n = x.len();
     if n < 2 {
@@ -390,6 +394,7 @@ pub struct GehBand {
 pub const GEH_BANDS: [(f64, f64); 5] = [(0.0, 5.0), (5.0, 7.5), (7.5, 10.0), (10.0, 12.0), (12.0, f64::INFINITY)];
 
 /// `Calibrate.gehBands(rows)`: count and cumulative share of sites per GEH band.
+#[must_use]
 pub fn geh_bands(gehs: &[f64]) -> Vec<GehBand> {
     use crate::jsnum::number_to_js_string as t;
     let n = gehs.len();
@@ -473,6 +478,7 @@ pub struct Stats {
 }
 
 /// `Calibrate.stats(rows)` for sites given as (counted, modelled, GEH): shares under each GEH limit, within the bands, mean GEH, the fits and %RMSE.
+#[must_use]
 pub fn stats_of(obs_model_geh: &[(f64, f64, f64)]) -> Stats {
     let n = obs_model_geh.len();
     if n == 0 {

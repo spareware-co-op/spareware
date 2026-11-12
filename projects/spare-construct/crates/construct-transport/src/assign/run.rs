@@ -212,7 +212,7 @@ impl<'a, 'p> Run<'a, 'p> {
             let a = t.first().and_then(|v| v.as_str()).and_then(|k| g.key_idx.get(k));
             let b = t.get(1).and_then(|v| v.as_str()).and_then(|k| g.key_idx.get(k));
             if let (Some(&a), Some(&b)) = (a, b) {
-                sel_turn = g.turn_idx(a, b) as i64;
+                sel_turn = i64::from(g.turn_idx(a, b));
             }
         }
         let sel_on = req.is_some() && (sel_zone >= 0 || sel_arc >= 0 || sel_turn >= 0);
@@ -405,7 +405,7 @@ impl Run<'_, '_> {
     // `caps()`: junction capacities from the current flows; MSA damping (1 / kCap) after the first update of a phase
     fn caps(&mut self) {
         self.k_cap += 1;
-        let w = if self.cv.msa && self.k_cap > 1 { 1.0 / self.k_cap as f64 } else { 1.0 };
+        let w = if self.cv.msa && self.k_cap > 1 { 1.0 / f64::from(self.k_cap) } else { 1.0 };
         self.sync_sm();
         update_node_caps(&mut self.g, &self.xt, w, Some(&self.x_t));
     }
@@ -490,7 +490,7 @@ impl Run<'_, '_> {
                     if !hit {
                         let mut a2 = self.w.na[dn];
                         while a2 >= 0 {
-                            if a2 as i64 == sel_arc || (sel_turn >= 0 && self.w.pt[a2 as usize] as i64 == sel_turn) {
+                            if i64::from(a2) == sel_arc || (sel_turn >= 0 && i64::from(self.w.pt[a2 as usize]) == sel_turn) {
                                 hit = true;
                                 break;
                             }
@@ -546,7 +546,7 @@ impl Run<'_, '_> {
                 num += ds * hs * (self.y[a] - self.x[a]);
                 den += ds * hs * (self.y[a] - self.s_dir[a]);
             }
-            al = if den != 0.0 { num / den } else { 0.0 };
+            al = if den == 0.0 { 0.0 } else { num / den };
             al = if al > 0.99 {
                 0.99
             } else if al > 0.0 {
@@ -602,14 +602,14 @@ impl Run<'_, '_> {
         }
         let (mut lo, mut hi) = (0.0f64, 1.0f64);
         for _ in 0..20 {
-            let m = (lo + hi) / 2.0;
+            let m = f64::midpoint(lo, hi);
             if self.derivative(m) > 0.0 {
                 hi = m;
             } else {
                 lo = m;
             }
         }
-        (lo + hi) / 2.0
+        f64::midpoint(lo, hi)
     }
 
     /// `iterate(maxIt, tol, final)`: equilibrium iterations until the gap is under tol (and, for the final phase under the stability rule, the flows are stable) or maxIt is reached.
@@ -648,7 +648,7 @@ impl Run<'_, '_> {
             self.gap = if den > 0.0 { (num / den).abs() } else { 0.0 };
             self.it += 1;
             self.conv.push(ConvRow {
-                it: self.it as f64,
+                it: f64::from(self.it),
                 gap: string_to_number(&to_precision(self.gap, 3)),
                 p: self.last_p.map(r3),
                 vht: r1(vh / self.pf / 3600.0),
@@ -683,7 +683,7 @@ impl Run<'_, '_> {
                     ok_p += 1;
                 }
             }
-            let last_p = if n_p > 0 { ok_p as f64 / n_p as f64 } else { 1.0 };
+            let last_p = if n_p > 0 { f64::from(ok_p) / f64::from(n_p) } else { 1.0 };
             self.last_p = Some(last_p);
             self.consec_p = if last_p > self.cv.share { self.consec_p + 1.0 } else { 0.0 };
             self.hist.push_back(self.x.clone());
@@ -754,7 +754,7 @@ impl Run<'_, '_> {
                     for &ai in &self.g.ctl[k].arcs {
                         let a = &self.g.arcs[ai];
                         let ph = a.phase.unwrap_or(0) as usize;
-                        yv[ph] = math_max(yv[ph], self.xt[ai] / (a.gl as f64 * self.s.sat_flow.num()));
+                        yv[ph] = math_max(yv[ph], self.xt[ai] / (f64::from(a.gl) * self.s.sat_flow.num()));
                     }
                     let yy = math_min(0.92, yv[0] + yv[1]);
                     let cycle = self.g.ctl[k].src.cycle.num();
@@ -772,7 +772,7 @@ impl Run<'_, '_> {
                 } else if round == 0 {
                     self.iterate(third, loose, false);
                 } else {
-                    self.iterate(math_max(third, cv.max_iter - self.it as f64 + 1.0), cv.gap_tol, true);
+                    self.iterate(math_max(third, cv.max_iter - f64::from(self.it) + 1.0), cv.gap_tol, true);
                 }
             }
         }

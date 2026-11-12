@@ -21,7 +21,7 @@ pub const NZTA_CAS: &str = "https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/
 pub const AT_COUNTS: &str = "https://services2.arcgis.com/JkPEgZJGxhSjYOo0/arcgis/rest/services/TrafficService/FeatureServer/0";
 /// `AT_FC`: the Auckland Transport Future Connect integrated network layer.
 pub const AT_FC: &str = "https://services2.arcgis.com/JkPEgZJGxhSjYOo0/arcgis/rest/services/FutureConnect_IntegratedNetwork/FeatureServer/0";
-/// `AT_CI`: the Auckland Transport controlled intersections layer (RoadingService layer 2).
+/// `AT_CI`: the Auckland Transport controlled intersections layer (`RoadingService` layer 2).
 pub const AT_CI: &str = "https://services2.arcgis.com/JkPEgZJGxhSjYOo0/arcgis/rest/services/RoadingService/FeatureServer/2";
 /// `AT_LICENCE`: the licence text kept with Auckland Transport data.
 pub const AT_LICENCE: &str = "Auckland Transport open data, CC BY 4.0 as stated on the AT open data portal (confirm before publishing)";
@@ -268,6 +268,7 @@ pub fn parse_cas(features: &[JsonValue]) -> Vec<Vec<Value>> {
 }
 
 /// `loadFutureConnect(b)` after the download: Future Connect sections that have polylines, with their classes now and in the first decade.
+#[must_use]
 pub fn parse_future_connect(features: &[JsonValue]) -> Vec<FutureConnect> {
     let empty = JsonValue::object();
     features
@@ -353,6 +354,7 @@ pub(crate) fn strip_site_prefix(s: &str) -> String {
 }
 
 /// `loadControlled(b)` after the download: the controlled intersections that have a position.
+#[must_use]
 pub fn parse_controlled(features: &[JsonValue]) -> Vec<ControlledSite> {
     let empty = JsonValue::object();
     features
@@ -417,10 +419,11 @@ pub struct LoadAll {
 
 impl LoadAll {
     /// A load of these sources (the prototype's default is nzta, at and cas) for an area, at a time (ms since 1970).
+    #[must_use]
     pub fn new(bounds: Bounds, which: &[&str], opts: &LoadOptions, now_ms: f64) -> LoadAll {
         LoadAll {
             bounds,
-            which: which.iter().map(|s| s.to_string()).collect(),
+            which: which.iter().map(std::string::ToString::to_string).collect(),
             idx: 0,
             timeout_ms: match opts.timeout_ms {
                 Some(t) if t > 0.0 => t,
@@ -440,10 +443,12 @@ impl LoadAll {
         self.cancelled = true;
     }
     /// What the load reports so far, one line per source.
+    #[must_use]
     pub fn messages(&self) -> &[String] {
         &self.msgs
     }
     /// The progress lines the prototype passes to its `status` callback, in order.
+    #[must_use]
     pub fn statuses(&self) -> &[String] {
         &self.statuses
     }

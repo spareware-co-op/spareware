@@ -12,12 +12,13 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
 /// `hashOffset(s)`: a signal offset (0 to 96 s) from a controller key.
+#[must_use]
 pub fn hash_offset(s: &str) -> i32 {
     let mut h: i32 = 7;
     for c in s.encode_utf16() {
-        h = (h as i64 * 31 + c as i64) as i32;
+        h = (i64::from(h) * 31 + i64::from(c)) as i32;
     }
-    ((h as i64).abs() % 97) as i32
+    (i64::from(h).abs() % 97) as i32
 }
 
 fn ctl_rank(c: &str) -> Option<i32> {
@@ -32,6 +33,7 @@ fn ctl_rank(c: &str) -> Option<i32> {
 }
 
 /// `siteControl(sc, s)`: the site's own control, or the strongest of its nodes' controls.
+#[must_use]
 pub fn site_control(sc: &Scenario, s: &Site) -> &'static str {
     const NAMES: [&str; 5] = ["none", "priority", "stop", "roundabout", "signals"];
     if let Some(c) = s.control.as_str()
@@ -77,10 +79,11 @@ fn array_index(s: &str) -> Option<u32> {
     if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) || (s.len() > 1 && s.starts_with('0')) {
         return None;
     }
-    s.parse::<u64>().ok().filter(|&v| v < 4294967295).map(|v| v as u32)
+    s.parse::<u64>().ok().filter(|&v| v < 4_294_967_295).map(|v| v as u32)
 }
 
 /// `siteLegs(G, inc, exits)`: the legs of a site, its entering and leaving arcs grouped by road name (within 90 degrees) or bearing (35 degrees).
+#[must_use]
 pub fn site_legs(g: &Graph, inc: &[usize], exits: &[usize]) -> Vec<Leg> {
     struct It {
         i: usize,
@@ -251,7 +254,7 @@ pub(crate) fn setup_controls(sc: &Scenario, g: &mut Graph, s: &Settings) {
         }
         let mut sorted = members.clone();
         js_sort_by(&mut sorted, |&a, &b| {
-            let d = (g.deg[b] - g.deg[a]) as f64;
+            let d = f64::from(g.deg[b] - g.deg[a]);
             if d != 0.0 {
                 d
             } else if js_str_lt(&g.ids[a], &g.ids[b]) {
@@ -337,7 +340,7 @@ fn make_ctl(
         let mut phases: HashSet<u8> = HashSet::new();
         for &i in &inc {
             let d = ang_diff(g.arcs[i].in_b, ref_in_b);
-            let ph = if math_min(d, 180.0 - d) < 45.0 { 0 } else { 1 };
+            let ph = u8::from(math_min(d, 180.0 - d) >= 45.0);
             g.arcs[i].phase = Some(ph);
             phases.insert(ph);
         }

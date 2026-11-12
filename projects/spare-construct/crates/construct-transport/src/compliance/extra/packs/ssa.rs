@@ -17,6 +17,7 @@ pub(super) fn control_label(control: &V) -> V {
 
 /// `ssaPack(P)`: the Safe System Audit briefing pack (CSV): layout changes, volumes by turn, legal and operating speeds, crash history and
 /// conflict points for the roads and junctions the proposal changes.
+#[must_use]
 pub fn ssa_pack(p: &V) -> String {
     let pr = pair(p);
     let sc = pr.mit.unwrap_or(pr.opt);

@@ -21,6 +21,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 /// A typed value out of loose JSON (panics when the JSON is not what the type reads, which a project the prototype saved always is).
+#[must_use]
 pub fn typed<T: DeserializeOwned>(v: &V) -> T {
     serde_json::from_str(&v.stringify()).unwrap_or_else(|e| panic!("compliance: cannot read {} as {}: {e}", short(v), std::any::type_name::<T>()))
 }
@@ -36,21 +37,25 @@ pub fn loose<T: Serialize>(t: &T) -> V {
 }
 
 /// The typed project (`Store.P`).
+#[must_use]
 pub fn project(p: &V) -> Project {
     typed(p)
 }
 
 /// A typed scenario out of a scenario value.
+#[must_use]
 pub fn scenario(sc: &V) -> Scenario {
     typed(sc)
 }
 
 /// The scenario's results by period, typed.
+#[must_use]
 pub fn results_of(sc: &V) -> Results {
     if sc.g("res").is_obj() { typed(sc.g("res")) } else { Results::new() }
 }
 
 /// One result value, typed.
+#[must_use]
 pub fn res_typed(r: &V) -> Res {
     typed(r)
 }
@@ -67,28 +72,33 @@ pub fn assign(p: &V, sc: &V, settings: Option<&V>, opts: &V) -> V {
 }
 
 /// `Engine.modelStatus(P, period)`.
+#[must_use]
 pub fn model_status(p: &V, period: &str) -> V {
     loose(&results::model_status(&project(p), period))
 }
 
 /// `Engine.yearOf(sc, S)` with the project's settings.
+#[must_use]
 pub fn year_of(p: &V, sc: &V) -> f64 {
     standards::year_of(Some(&scenario(sc)), &project(p).settings)
 }
 
 /// `Engine.stageOf(z, sc)`: the share of a zone built out in the scenario.
+#[must_use]
 pub fn stage_of(z: &V, sc: &V) -> f64 {
     let zone: Zone = typed(z);
     demand::stage_of(Some(&zone), Some(&scenario(sc)))
 }
 
 /// `Engine.zoneClass(z)`: "development", "committed" or "existing".
+#[must_use]
 pub fn zone_class(z: &V) -> String {
     let zone: Zone = typed(z);
     graph::zone_class(Some(&zone)).to_string()
 }
 
 /// `Engine.tripEnds(z, S, period, sc)`: the zone's trips (`O` leaving, `D` arriving).
+#[must_use]
 pub fn trip_ends(p: &V, z: &V, period: &str, sc: &V) -> (f64, f64) {
     let proj = project(p);
     let zone: Zone = typed(z);
@@ -106,6 +116,7 @@ pub fn extent_test(sc: &V, without: &V, with: &V, sc_without: Option<&V>) -> V {
 }
 
 /// `Engine.econ(base, opt, period)`: the indicative economics of an option against a base scenario, or null without results for both.
+#[must_use]
 pub fn econ(p: &V, base: &V, opt: &V, period: &str) -> V {
     let proj = project(p);
     let (bs, os) = (scenario(base), scenario(opt));
@@ -113,47 +124,56 @@ pub fn econ(p: &V, base: &V, opt: &V, period: &str) -> V {
 }
 
 /// `Engine.capital(sc)`: capital cost of the proposed roads and upgraded junctions (NZ$m), as the engine reports it.
+#[must_use]
 pub fn capital(p: &V, sc: &V) -> V {
     loose(&econ::capital(&scenario(sc), &project(p).settings))
 }
 
 /// `Engine.pwf(rates, n)`: present worth factors of a discount schedule.
+#[must_use]
 pub fn pwf(rates: &V, n: f64) -> V {
     loose(&econ::pwf(&rates.to_value(), n))
 }
 
-/// `Engine.ef(v, S)`: the CO2e emission factor at an average speed (g per veh-km).
+/// `Engine.ef(v, S)`: the `CO2e` emission factor at an average speed (g per veh-km).
+#[must_use]
 pub fn ef(p: &V, v: f64) -> f64 {
     standards::ef(v, &project(p).settings)
 }
 
 /// `Engine.STANDARDS` (the standards table as loose JSON).
+#[must_use]
 pub fn standards_table() -> V {
     V::from_value(&standards::STANDARDS.to_value())
 }
 
 /// `Engine.buildGraph(sc, S)`: the routing graph of a scenario (for searches).
+#[must_use]
 pub fn build_graph(p: &V, sc: &V, period: Option<&str>) -> Graph {
     graph::build_graph(&scenario(sc), &project(p).settings, period)
 }
 
 /// `Engine.arcTime(a, x, S)`: the travel time on an arc of a graph carrying x pcu/h.
+#[must_use]
 pub fn arc_time(p: &V, a: &graph::Arc, x: f64) -> f64 {
     let perf = crate::junction::PerfSet::new(&project(p).settings);
     crate::junction::arc_time(a, x, &perf)
 }
 
 /// `Scenarios.check(sc, P)`: the checks on a scenario (blocks, warnings), as an array of `{ level, code, id, text }`.
+#[must_use]
 pub fn scenario_check(p: &V, sc: &V) -> V {
     loose(&scenarios::check(&scenario(sc), &project(p)))
 }
 
 /// `Scenarios.describe(sc, P)`: what a scenario contains, in words.
+#[must_use]
 pub fn scenario_describe(p: &V, sc: &V) -> V {
     loose(&scenarios::describe(&scenario(sc), &project(p)))
 }
 
 /// `Scenarios.copy(sc, { links })`: a copy of a scenario without the links `drop` names (junctions left unused are pruned; no results).
+#[must_use]
 pub fn scenario_copy_without_links(sc: &V, drop: &std::collections::HashSet<String>) -> V {
     struct Ids(u32);
     impl crate::edit::IdSource for Ids {
@@ -172,18 +192,21 @@ pub fn scenario_copy_without_links(sc: &V, drop: &std::collections::HashSet<Stri
 }
 
 /// `Scenarios.zoneRole(z)`: "development", "committed" or "existing".
+#[must_use]
 pub fn zone_role(z: &V) -> String {
     let zone: Zone = typed(z);
     scenarios::zone_role(&zone).to_string()
 }
 
 /// `Scenarios.linkStage(L)`.
+#[must_use]
 pub fn link_stage(l: &V) -> String {
     let link: Link = typed(l);
     crate::project::link_stage(&link).to_string()
 }
 
 /// `Scenarios.unfunded(L)`.
+#[must_use]
 pub fn link_unfunded(l: &V) -> bool {
     let link: Link = typed(l);
     crate::project::link_unfunded(&link)
@@ -195,22 +218,21 @@ pub fn register_table(p: &V) -> V {
 }
 
 /// `Register.inBaseline(row)`: `{ included, reason }`.
+#[must_use]
 pub fn in_baseline(p: &V, row: &V) -> V {
     let proj = project(p);
     let found = row.g("id").as_str().and_then(|id| proj.register_row(id));
     let typed_row;
-    let r = match found {
-        Some(r) => Some(r),
-        None => {
-            typed_row = typed::<crate::project::RegisterRow>(row);
-            Some(&typed_row)
-        }
+    let r = if let Some(r) = found { Some(r) } else {
+        typed_row = typed::<crate::project::RegisterRow>(row);
+        Some(&typed_row)
     };
     let (included, reason) = crate::project::in_baseline(r);
     super::jv::jobj! { "included" => included, "reason" => reason }
 }
 
 /// `Calibrate.report(sc, period)`: the calibration report of a scenario in a period (for the MBCM checks worksheet).
+#[must_use]
 pub fn calibrate_report(p: &V, sc: &V, period: &str) -> V {
     let proj = project(p);
     let s = scenario(sc);
@@ -220,6 +242,7 @@ pub fn calibrate_report(p: &V, sc: &V, period: &str) -> V {
 }
 
 /// `Turns.sidraExport(sc, res, null, {})`: the SIDRA volume export of a scenario for the results given; `{ ok, why, csv }`.
+#[must_use]
 pub fn sidra_export(p: &V, sc: &V, res: &[&V]) -> V {
     let proj = project(p);
     let s = scenario(sc);
@@ -230,16 +253,19 @@ pub fn sidra_export(p: &V, sc: &V, res: &[&V]) -> V {
 }
 
 /// `DataHub.safetySummary(sc)`: the crash analysis of a scenario, or None (the crash analysis lives in the safety module).
+#[must_use]
 pub fn safety_summary(_p: &V, _sc: &V) -> Option<V> {
     None
 }
 
 /// `DataHub.linkRisk(sc)`: crash risk by link id, or None (the crash analysis lives in the safety module).
+#[must_use]
 pub fn link_risk(_p: &V, _sc: &V) -> Option<V> {
     None
 }
 
 /// `DataHub.norm(s)`: a road name normalised for matching.
+#[must_use]
 pub fn norm(s: &str) -> String {
     crate::datahub::norm(s)
 }

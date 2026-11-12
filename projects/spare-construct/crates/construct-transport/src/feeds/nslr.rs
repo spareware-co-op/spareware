@@ -41,6 +41,7 @@ fn year_text(year: f64) -> String {
 }
 
 /// `nslrWhere(year, now)`: the where clause for versions in force now, or on 1 July of a later scenario year.
+#[must_use]
 pub fn nslr_where(year: Option<f64>, now_ms: f64) -> String {
     let t = match year {
         Some(y) if y != 0.0 && y > nz_year(now_ms) as f64 => format!("TIMESTAMP '{}-{} 00:00:00'", year_text(y), NSLR_FUTURE_DAY),
@@ -50,6 +51,7 @@ pub fn nslr_where(year: Option<f64>, now_ms: f64) -> String {
 }
 
 /// `asOfMs(year, now)`: the instant the register is read at: 1 July of a later scenario year, else now.
+#[must_use]
 pub fn as_of_ms(year: Option<f64>, now_ms: f64) -> f64 {
     match year {
         Some(y) if y != 0.0 && y > nz_year(now_ms) as f64 => super::nztime::date_utc(y, 6.0, 1.0),
@@ -77,6 +79,7 @@ fn unit_text(u: &[u16], g: Option<(usize, usize)>) -> Option<String> {
 /// `varPeriods(desc)`: the peak windows a variable (school) limit applies in: '08:30 \u{2013} 9:15am and 2:45 \u{2013} 3:30pm' gives AM true and PM false.
 ///
 /// Minutes are optional when am or pm is given ('8am \u{2013} 9.15am'); bare numbers ('40 - 50') are not times. None when no time range is named.
+#[must_use]
 pub fn var_periods(desc: &str) -> Option<VarPeriods> {
     let re = Regex::lit(r"(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\s*(?:–|-|to)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?", "gi");
     let u: Vec<u16> = desc.encode_utf16().collect();
@@ -296,6 +299,7 @@ pub struct NslrLoad {
 
 impl NslrLoad {
     /// Loads the limits in force now (`year` None) or on 1 July of a later scenario year, for an area.
+    #[must_use]
     pub fn new(bounds: Bounds, year: Option<f64>, now_ms: f64, timeout_ms: f64, cache: &MetaCache) -> NslrLoad {
         NslrLoad {
             meta: LayerMeta::new(src("nslr").expect("source").url, cache, timeout_ms),
@@ -317,6 +321,7 @@ impl NslrLoad {
         self.query = Some(ArcQuery::new(src("nslr").expect("source").url, p, 30, self.timeout_ms));
     }
     /// The register's polygons once the download is done.
+    #[must_use]
     pub fn finish(self) -> NslrSet {
         let q = self.query.expect("the download finished");
         let complete = q.complete();
@@ -403,7 +408,7 @@ pub fn assign_nslr(sc: &mut Scenario, set: &NslrSet) -> NslrStats {
             let p = util::along(&g, &cum, len * fr).p;
             let hit: Vec<&NslrPoly> = find.find(&set.polys, p[1], p[0]).into_iter().map(|n| &set.polys[n]).collect();
             let perm: Vec<&NslrPoly> = hit.iter().copied().filter(|h| !h.variable).collect();
-            picks.push(latest(if !perm.is_empty() { &perm } else { &hit }));
+            picks.push(latest(if perm.is_empty() { &hit } else { &perm }));
             let vz_list: Vec<&NslrPoly> = hit.iter().copied().filter(|h| h.variable && h.var_v.is_some()).collect();
             if let Some(vz) = latest(&vz_list) {
                 vars.push(vz);
@@ -498,6 +503,7 @@ pub struct SpeedProposal {
 }
 
 /// `userSpeed(L)`: a modelled speed the user changed after the legal limit was applied.
+#[must_use]
 pub fn user_speed(l: &Link) -> bool {
     match l.extra.get("speedApplied") {
         None | Some(Value::Null) => false,
@@ -514,6 +520,7 @@ fn strict_eq_num(speed: &crate::jsnum::Num, x: &Value) -> bool {
 }
 
 /// `speedProposals(sc)`: existing roads that have a legal limit different from their modelled speed.
+#[must_use]
 pub fn speed_proposals(sc: &Scenario) -> Vec<SpeedProposal> {
     live_links(sc)
         .into_iter()
@@ -562,6 +569,7 @@ pub fn apply_speeds(sc: &mut Scenario, ids: &[String]) -> usize {
 
 /// The scenario years a speed limit download covers (`nslrAll`): 0 for the limits in force now, or a later scenario's year (when the project
 /// settings ask for gazetted future limits), once each, in the order the scenarios list them.
+#[must_use]
 pub fn nslr_years(p: &Project, now_ms: f64, nslr_future: bool) -> Vec<f64> {
     let y_now = nz_year(now_ms) as f64;
     let mut years: Vec<f64> = Vec::new();
@@ -576,11 +584,12 @@ pub fn nslr_years(p: &Project, now_ms: f64, nslr_future: bool) -> Vec<f64> {
 }
 
 /// The progress line for one year of the download.
+#[must_use]
 pub fn nslr_status(year: f64) -> String {
-    if year != 0.0 {
-        format!("Downloading speed limits in force on 1 July {}\u{2026}", year_text(year))
-    } else {
+    if year == 0.0 {
         "Downloading current speed limits (NZTA register)\u{2026}".to_string()
+    } else {
+        format!("Downloading speed limits in force on 1 July {}\u{2026}", year_text(year))
     }
 }
 
@@ -623,7 +632,7 @@ pub fn apply_nslr_all(p: &mut Project, sets: &[(f64, NslrSet)], now_ms: f64, nsl
         out.complete = out.complete && s.complete;
     }
     let settings = p.settings.clone();
-    for sc in p.scenarios.iter_mut() {
+    for sc in &mut p.scenarios {
         let y = year_of(Some(sc), &settings);
         let k = if nslr_future && y > y_now { y } else { 0.0 };
         let set = &sets.iter().find(|(yy, _)| *yy == k).expect("a set for the scenario's year").1;

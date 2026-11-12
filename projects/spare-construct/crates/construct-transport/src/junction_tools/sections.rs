@@ -23,16 +23,19 @@ pub struct SectionMeta {
 }
 
 /// The flow-scale test's percentage over the flows (`PCT`).
+#[must_use]
 pub fn pct() -> f64 {
     math_round((FLOW_SCALE_FACTOR - 1.0) * 100.0)
 }
 
 /// The title of the flow-scale section (`PERF_TITLE`).
+#[must_use]
 pub fn perf_title() -> String {
     format!("Junction flow-scale test (+{}%)", number_to_js_string(pct()))
 }
 
 /// The ids of the report sections this feature registers.
+#[must_use]
 pub fn report_section_ids() -> [&'static str; 4] {
     [
         "junctions-performance",
@@ -43,6 +46,7 @@ pub fn report_section_ids() -> [&'static str; 4] {
 }
 
 /// The sections' chapter and order, as `Registry.report` holds them (the flow-scale title is [`perf_title`]).
+#[must_use]
 pub fn report_section_meta(id: &str) -> Option<SectionMeta> {
     Some(match id {
         "junctions-performance" => SectionMeta {
@@ -100,6 +104,7 @@ impl<'a> Tools<'a> {
     /// `reportSel(P, ctx)`: the scenarios a report section covers: the report's assessed set (ctx.sel, else the report's
     /// choice: existing, without, with, mitigation), so a sensitivity or option run the author did not choose stays out.
     /// Comparisons run without to with and with to mitigation (existing to with when there is no same-year without).
+    #[must_use]
     pub fn report_sel(&self, ctx: &ReportCtx) -> ReportSelection {
         let sel: Option<Sel> = if ctx.scenarios.is_some() {
             None
@@ -147,6 +152,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `keyJunctions(sc, n)`: the junctions worth a full table: the extent-of-effects sites, else the worst by delay (at most n).
+    #[must_use]
     pub fn key_junctions(&self, s: Sc<'a>, n: usize) -> Vec<String> {
         let periods = s.periods();
         let res = s
@@ -165,18 +171,15 @@ impl<'a> Tools<'a> {
             .filter(|a| !a.is_empty())
             .map(|a| a.iter().map(super::js_str).collect());
         let es = entries(s.sc, res, false);
-        let mut chosen: Vec<&super::Entry> = match &ext {
-            Some(ext) => es
-                .iter()
-                .filter(|e| ext.contains(&e.id) || e.nodes.iter().any(|x| ext.contains(x)))
-                .collect(),
-            None => {
-                let mut v: Vec<&super::Entry> = es.iter().collect();
-                crate::graph::js_sort_by(&mut v, |a, b| {
-                    or0(b.nr.map_or(0.0, |x| x.delay)) - or0(a.nr.map_or(0.0, |x| x.delay))
-                });
-                v
-            }
+        let mut chosen: Vec<&super::Entry> = if let Some(ext) = &ext { es
+        .iter()
+        .filter(|e| ext.contains(&e.id) || e.nodes.iter().any(|x| ext.contains(x)))
+        .collect() } else {
+            let mut v: Vec<&super::Entry> = es.iter().collect();
+            crate::graph::js_sort_by(&mut v, |a, b| {
+                or0(b.nr.map_or(0.0, |x| x.delay)) - or0(a.nr.map_or(0.0, |x| x.delay))
+            });
+            v
         };
         chosen.truncate(n);
         chosen.into_iter().map(|e| e.id.clone()).collect()
@@ -188,6 +191,7 @@ impl<'a> Tools<'a> {
     }
 
     /// The report section with this id (`render(P, ctx)`): the HTML, or an empty text when there is nothing to print.
+    #[must_use]
     pub fn report_section(&self, id: &str, ctx: &ReportCtx) -> Option<String> {
         Some(match id {
             "junctions-performance" => self.sec_performance(ctx),
@@ -277,8 +281,7 @@ impl<'a> Tools<'a> {
             }
         }
         format!(
-            "<h3>Movement summaries by turn</h3><p>SIDRA-style Movement Summary tables, turn by turn, for the key junctions (the extent-of-effects sites, or the most delayed). {}.</p>\n        {}",
-            LABEL, body
+            "<h3>Movement summaries by turn</h3><p>SIDRA-style Movement Summary tables, turn by turn, for the key junctions (the extent-of-effects sites, or the most delayed). {LABEL}.</p>\n        {body}"
         )
     }
 
@@ -340,13 +343,10 @@ fn strip_fly(h: &str) -> String {
     while let Some(i) = rest.find(pat) {
         out.push_str(&rest[..i]);
         let after = &rest[i + pat.len()..];
-        match after.find('"') {
-            Some(j) => rest = &after[j + 1..],
-            None => {
-                out.push_str(&rest[i..]);
-                rest = "";
-                break;
-            }
+        if let Some(j) = after.find('"') { rest = &after[j + 1..] } else {
+            out.push_str(&rest[i..]);
+            rest = "";
+            break;
         }
     }
     out.push_str(rest);

@@ -21,6 +21,7 @@ use std::collections::{BTreeMap, HashMap};
 pub const LEGS: [&str; 8] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 /// `legBearing(l)`: the bearing of a leg's compass point (N 0, NE 45, ...); -45 for an unknown leg (`indexOf` is -1).
+#[must_use]
 pub fn leg_bearing(l: &str) -> f64 {
     LEGS.iter().position(|x| *x == l).map_or(-45.0, |i| i as f64 * 45.0)
 }
@@ -49,6 +50,7 @@ pub fn class_of(v: &str) -> Option<&'static str> {
 }
 
 /// `U.parseCSV(text)`: the rows of a CSV text (quoted fields, doubled quotes, any line ending), rows with only blank cells left out.
+#[must_use]
 pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
     let cs: Vec<char> = text.chars().collect();
     let mut rows: Vec<Vec<String>> = Vec::new();
@@ -107,6 +109,7 @@ pub struct ParsedTurnCsv {
 const SHARED_LANE_FLAG: &str = "shared-lane detector counts split equally (Spare Construct assumption)";
 
 /// `JSON.stringify(cfg().windows)`: the peak-hour windows as text, in the order they are given.
+#[must_use]
 pub fn windows_json(cfg: &CalibCfg) -> String {
     let mut out = String::from("{");
     for (k, (p, w)) in cfg.windows.iter().enumerate() {
@@ -142,7 +145,7 @@ fn col(h: &[String], names: &[&str]) -> Option<usize> {
 // /\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4}/.test(s)
 fn looks_dated(s: &str) -> bool {
     let c: Vec<char> = s.chars().collect();
-    let digs = |from: usize, n: usize| -> bool { from + n <= c.len() && c[from..from + n].iter().all(|x| x.is_ascii_digit()) };
+    let digs = |from: usize, n: usize| -> bool { from + n <= c.len() && c[from..from + n].iter().all(char::is_ascii_digit) };
     let sep = |i: usize| i < c.len() && matches!(c[i], '-' | '/' | '.');
     for i in 0..c.len() {
         for a in 1..=4usize {
@@ -184,8 +187,8 @@ fn add(s: &mut TurnSite, t: f64, iv: f64, leg: &str, mv: &str, cls: &str, n: f64
 
 /// `parseTurnCSV(text, name)`: reads a turning-count file.
 ///
-/// Long layout (site_id, site_name, lat, lng, date, time_start, interval_min, from_leg, movement, class, count), wide
-/// layout (time_start plus `<leg>_<movement>_<class>` columns) or SCATS (a detector column; a shared-lane movement such
+/// Long layout (`site_id`, `site_name`, lat, lng, date, `time_start`, `interval_min`, `from_leg`, movement, class, count), wide
+/// layout (`time_start` plus `<leg>_<movement>_<class>` columns) or SCATS (a detector column; a shared-lane movement such
 /// as "LT" is split equally between its movements, a Spare Construct assumption). `from_leg` is where vehicles come
 /// FROM; movement IN or OUT gives leg totals for turn estimation. Counts in 5- or 10-minute intervals fold into
 /// 15-minute bins. Each site gets its peak hours (`cfg.windows`), flags for weekend and school-holiday counts, and the
@@ -288,9 +291,7 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
             None => {
                 let lat = num_cell(r, i_lat);
                 let lng = num_cell(r, i_lng);
-                if !(lat.is_finite() && lng.is_finite()) {
-                    None
-                } else {
+                if lat.is_finite() && lng.is_finite() {
                     let nm = cell(r, i_name);
                     let mut s = TurnSite {
                         id: ids.uid("tc"),
@@ -321,6 +322,8 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
                     }
                     sites.push((key.clone(), s));
                     Some(sites.len() - 1)
+                } else {
+                    None
                 }
             }
         };
@@ -329,7 +332,7 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
             continue;
         };
         let s = &mut sites[pos].1;
-        let Some(t) = to_min(r.get(i_t).map(String::as_str).unwrap_or("")) else {
+        let Some(t) = to_min(r.get(i_t).map_or("", String::as_str)) else {
             skip(li, "time not readable (use HH:MM)", &mut errs, &mut why);
             continue;
         };
@@ -391,7 +394,7 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
             if reasons.is_empty() { String::new() } else { format!(" ({})", reasons.join("; ")) }
         ));
     }
-    for s in list.iter_mut() {
+    for s in &mut list {
         s.interval = if s.interval.truthy() { s.interval.clone() } else { Num::number(15.0) };
         if s.interval.num() > 15.0 {
             s.flags.push(format!("{}-minute intervals: no peak hour factor", s.interval.js_string()));
@@ -447,7 +450,7 @@ pub fn flag_date(s: &mut TurnSite) {
     let d: i64 = date[8..10].parse().unwrap_or(0);
     let t = school_terms(y);
     let dow = weekday(y, m, d);
-    if matches!(dow, Some(0) | Some(6)) {
+    if matches!(dow, Some(0 | 6)) {
         s.flags.push("weekend count".to_string());
     }
     if let Some(t) = &t
@@ -514,9 +517,9 @@ pub fn peaks(s: &mut TurnSite, windows: &[(String, [String; 2])]) {
         };
         let fine = step == 15;
         let mut keys: Vec<u32> = tot.keys().copied().collect();
-        keys.sort();
+        keys.sort_unstable();
         for t in keys {
-            let tf = t as f64;
+            let tf = f64::from(t);
             if tf < a || tf + 60.0 > b {
                 continue;
             }
@@ -541,7 +544,7 @@ pub fn peaks(s: &mut TurnSite, windows: &[(String, [String; 2])]) {
         for t in &best.ts {
             if let Some(bin) = s.bins.get(t) {
                 for (k, e) in bin.iter() {
-                    let sum = VEH.iter().fold(0.0f64, |q, c| q + e.get(*c).copied().unwrap_or(0.0));
+                    let sum = VEH.iter().fold(0.0f64, |q, c| q + e.get(c).copied().unwrap_or(0.0));
                     let cur = mv.get(k).copied().unwrap_or(0.0);
                     mv.insert(k.to_string(), cur + sum);
                     let hvs = e.get("HV").copied().unwrap_or(0.0) + e.get("BUS").copied().unwrap_or(0.0);
@@ -553,8 +556,8 @@ pub fn peaks(s: &mut TurnSite, windows: &[(String, [String; 2])]) {
         peak.insert(
             p.clone(),
             Peak {
-                start: hhmm(best.start as f64),
-                end: hhmm(best.start as f64 + 60.0),
+                start: hhmm(f64::from(best.start)),
+                end: hhmm(f64::from(best.start) + 60.0),
                 total: best.v,
                 phf: match best.v15 {
                     Some(v15) if v15 != 0.0 && !v15.is_nan() => Some(r3(best.v / (4.0 * v15))),
@@ -575,7 +578,7 @@ pub fn repeak(p: &mut Project) -> usize {
     let w = windows_json(&cfg);
     let mut st = CalibStore::read(p);
     let mut n = 0;
-    for s in st.turn_sites.iter_mut() {
+    for s in &mut st.turn_sites {
         if s.peak_win.as_str() == Some(w.as_str()) || s.bins.is_empty() {
             continue;
         }
@@ -627,7 +630,7 @@ pub fn ci_of(c: &Count) -> Option<(String, Value)> {
         let x = value_to_number(ci);
         if x.is_finite() {
             let mean = t.get("mean").map_or(f64::NAN, value_to_number);
-            let n = t.get("n").map(crate::jsnum::value_to_js_string).unwrap_or_else(|| "undefined".to_string());
+            let n = t.get("n").map_or_else(|| "undefined".to_string(), crate::jsnum::value_to_js_string);
             return Some((
                 format!("\u{b1} {} veh/day on the TMS mean of {} veh/day ({} weekdays)", fmt::int(x), fmt::int(mean), n),
                 Value::String(format!("\u{b1}{} veh/day (TMS)", crate::jsnum::number_to_js_string(crate::jsnum::math_round(x)))),
@@ -640,6 +643,7 @@ pub fn ci_of(c: &Count) -> Option<(String, Value)> {
 /* ---------------- matching sites to junctions ---------------- */
 
 /// `siteNode(sc, s)`: the junction a turning count sits on: the nearest node with three or more roads within 40 m.
+#[must_use]
 pub fn site_node(sc: &Scenario, s: &TurnSite) -> Option<String> {
     let deg = degree(sc);
     nearest_node(
@@ -651,6 +655,7 @@ pub fn site_node(sc: &Scenario, s: &TurnSite) -> Option<String> {
 }
 
 /// `multiNode(sc, id)`: a node that is one of several making up a junction: on a roundabout ring, or joined to another junction node by a short link.
+#[must_use]
 pub fn multi_node(sc: &Scenario, id: &str) -> bool {
     let deg = degree(sc);
     let near = 35.0;
@@ -665,7 +670,7 @@ pub fn multi_node(sc: &Scenario, id: &str) -> bool {
 pub fn match_sites(p: &mut Project, sc_id: &str) {
     let mut st = CalibStore::read(p);
     let Some(sc) = p.scenario(sc_id) else { return };
-    for s in st.turn_sites.iter_mut() {
+    for s in &mut st.turn_sites {
         let node = site_node(sc, s);
         let site = node.as_deref().and_then(|n| sites::of(sc, n)).map(|x| x.id.clone());
         s.node = node.map_or(Maybe::Null, Maybe::Set);

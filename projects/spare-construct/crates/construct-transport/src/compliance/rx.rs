@@ -61,10 +61,12 @@ pub struct Captures {
 
 impl Captures {
     /// The whole matched text (`m[0]`).
+    #[must_use]
     pub fn text(&self) -> &str {
         self.groups[0].as_deref().unwrap_or("")
     }
     /// Capture group n as text (`m[n]`), empty for a group that did not take part.
+    #[must_use]
     pub fn get(&self, n: usize) -> &str {
         self.groups.get(n).and_then(|g| g.as_deref()).unwrap_or("")
     }
@@ -90,7 +92,7 @@ fn is_space(c: char) -> bool {
     crate::jsnum::is_js_space(c)
 }
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     fn peek(&self) -> Option<char> {
         self.s.get(self.i).copied()
     }
@@ -163,15 +165,12 @@ impl<'a> Parser<'a> {
                     }
                     None => None,
                 };
-                match r {
-                    Some(p) => {
-                        self.i -= 1; // the closing brace is consumed below with the other quantifier characters
-                        p
-                    }
-                    None => {
-                        self.i = save;
-                        return Ok(atom);
-                    }
+                if let Some(p) = r {
+                    self.i -= 1; // the closing brace is consumed below with the other quantifier characters
+                    p
+                } else {
+                    self.i = save;
+                    return Ok(atom);
                 }
             }
             _ => return Ok(atom),
@@ -286,8 +285,8 @@ impl<'a> Parser<'a> {
                 Item::Ch(c)
             };
             // a range a-b (a '-' just before the closing bracket is a literal)
-            if let Item::Ch(a) = lo {
-                if self.peek() == Some('-') && self.s.get(self.i + 1).is_some_and(|&n| n != ']') {
+            if let Item::Ch(a) = lo
+                && self.peek() == Some('-') && self.s.get(self.i + 1).is_some_and(|&n| n != ']') {
                     self.i += 1;
                     let n = self.peek().ok_or("unterminated class")?;
                     self.i += 1;
@@ -302,7 +301,6 @@ impl<'a> Parser<'a> {
                     items.push(Item::Range(a, b));
                     continue;
                 }
-            }
             items.push(lo);
         }
         Ok(Node::Class(items, neg))
@@ -337,6 +335,7 @@ impl Regex {
     }
 
     /// The pattern text (`re.source`).
+    #[must_use]
     pub fn source(&self) -> &str {
         &self.source
     }
@@ -477,6 +476,7 @@ impl Regex {
     }
 
     /// The match that starts exactly at character `at`, as a sticky expression would find it.
+    #[must_use]
     pub fn match_at(&self, text: &[char], at: usize) -> Option<(usize, Caps)> {
         let mut caps: Caps = vec![None; self.groups + 1];
         let mut end = 0usize;
@@ -498,6 +498,7 @@ impl Regex {
     }
 
     /// `re.exec(text)` from character `from` (the first match at or after it).
+    #[must_use]
     pub fn exec_from(&self, text: &[char], from: usize) -> Option<Captures> {
         for st in from..=text.len() {
             let mut caps: Caps = vec![None; self.groups + 1];
@@ -516,12 +517,14 @@ impl Regex {
     }
 
     /// `re.exec(s)`: the first match in the text.
+    #[must_use]
     pub fn exec(&self, s: &str) -> Option<Captures> {
         let t: Vec<char> = s.chars().collect();
         self.exec_from(&t, 0)
     }
 
     /// `re.test(s)`.
+    #[must_use]
     pub fn test(&self, s: &str) -> bool {
         self.exec(s).is_some()
     }
@@ -549,11 +552,13 @@ impl Regex {
     }
 
     /// `s.replace(re, text)` with a plain replacement string (no `$` patterns).
+    #[must_use]
     pub fn replace_with(&self, s: &str, with: &str) -> String {
         self.replace(s, |_| with.to_string())
     }
 
     /// `s.split(re)` (capture groups are not spliced in: the rules' expressions have none).
+    #[must_use]
     pub fn split(&self, s: &str) -> Vec<String> {
         let t: Vec<char> = s.chars().collect();
         if t.is_empty() {
@@ -586,6 +591,7 @@ thread_local! {
 }
 
 /// A compiled expression from a cache (the rules use the same few patterns on every call). Panics on a pattern that does not parse.
+#[must_use]
 pub fn rx(source: &str, flags: &str) -> Rc<Regex> {
     CACHE.with(|c| {
         let key = (source.to_string(), flags.to_string());
@@ -599,6 +605,7 @@ pub fn rx(source: &str, flags: &str) -> Rc<Regex> {
 }
 
 /// `new RegExp(pattern, flags)` for a pattern that may come from data (a settings line): None when it does not parse.
+#[must_use]
 pub fn try_rx(source: &str, flags: &str) -> Option<Rc<Regex>> {
     CACHE.with(|c| {
         let key = (source.to_string(), flags.to_string());

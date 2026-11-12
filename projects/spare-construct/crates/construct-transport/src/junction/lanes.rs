@@ -20,6 +20,7 @@ pub struct Lmv {
 
 impl Lmv {
     /// The value for movement 'L', 'T' or 'R'.
+    #[must_use]
     pub fn get(&self, m: char) -> f64 {
         match m {
             'L' => self.l,
@@ -36,6 +37,7 @@ impl Lmv {
         }
     }
     /// As JSON { L, T, R } (non-finite numbers as text, as the truth files hold them).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({ "L": plain_number(self.l), "T": plain_number(self.t), "R": plain_number(self.r) })
     }
@@ -58,6 +60,7 @@ pub struct Lane {
 
 impl Lane {
     /// A lane with movements d and bay length len.
+    #[must_use]
     pub fn new(d: &str, len: f64) -> Lane {
         Lane {
             d: d.to_string(),
@@ -68,6 +71,7 @@ impl Lane {
         }
     }
     /// As the lane model writes it: { d, len } and slip: true on a slip lane.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("d".into(), self.d.clone().into());
@@ -108,6 +112,7 @@ fn field<'a>(v: &'a Value, k: &str) -> Option<&'a Value> {
 }
 
 /// `laneModel(raw, gl)`: the stored lane model (lanes of L T R U; "L+T" style accepted) or NZ default markings (one lane LTR; two or more LT, T..., TR).
+#[must_use]
 pub fn lane_model(raw: Option<&Value>, gl: f64) -> LaneModel {
     let raw = raw.filter(|r| value_truthy(r));
     let gl = (to_int32(gl)).max(1) as usize;
@@ -317,6 +322,7 @@ pub struct LaneRow {
 
 impl LaneRow {
     /// As JSON { d, len, slip?, v, X, c, use, blocked? }.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("d".into(), self.d.clone().into());
@@ -350,9 +356,9 @@ pub struct ApproachCap {
     pub lanes: Option<Vec<LaneRow>>,
 }
 
-/// `approachCap(lanes, v, cap, T, qs, detail)`: capacity (pcu/h) of a set of lanes; short lanes interpolate between separate and shared operation by min(1, N_s / Q95).
+/// `approachCap(lanes, v, cap, T, qs, detail)`: capacity (pcu/h) of a set of lanes; short lanes interpolate between separate and shared operation by min(1, `N_s` / Q95).
 ///
-/// N_s is floor(bay length / queue space qs). detail false leaves out the lane rows (the
+/// `N_s` is floor(bay length / queue space qs). detail false leaves out the lane rows (the
 /// assignment's iterations do not need them).
 pub fn approach_cap(
     lanes: &[Lane],
@@ -464,6 +470,7 @@ pub fn approach_cap(
 
 impl ApproachCap {
     /// As JSON { X, cap, r, q95short?, lanes }.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("X".into(), plain_number(self.x));

@@ -26,6 +26,7 @@ fn class_label(cls: &V) -> String {
 }
 
 /// `degrees(sc)`: the open links at each node.
+#[must_use]
 pub fn degrees(sc: &V) -> HashMap<String, usize> {
     let mut m: HashMap<String, usize> = HashMap::new();
     for l in sc.g("links").vals() {
@@ -41,6 +42,7 @@ pub fn degrees(sc: &V) -> HashMap<String, usize> {
 }
 
 /// `nearestLink(sc, ll, f)`: the nearest open road; among roads within 1 m of the nearest, an existing one wins. (link, distance).
+#[must_use]
 pub fn nearest_link<'a>(sc: &'a V, ll: &LatLng) -> Option<(&'a V, f64)> {
     let f = flat_at(ll[0]);
     let mut all: Vec<(&V, f64)> = Vec::new();
@@ -65,6 +67,7 @@ pub fn nearest_link<'a>(sc: &'a V, ll: &LatLng) -> Option<(&'a V, f64)> {
 }
 
 /// `accessPoint(sc, a)`: where an access is: its junction, or its own position.
+#[must_use]
 pub fn access_point(sc: &V, a: &V) -> Option<LatLng> {
     if a.g("node").t() && sc.g("nodes").has(&a.g("node").s()) {
         return Some(net::ll_of(sc.g("nodes").g(&a.g("node").s())));
@@ -145,6 +148,7 @@ pub fn access_geo(p: &V, sc: &V, a: &V) -> V {
 }
 
 /// `zoneGroup(name)`: the zone group the access width table uses.
+#[must_use]
 pub fn zone_group(name: &V) -> V {
     if !name.t() {
         return V::Null;
@@ -166,6 +170,7 @@ fn val(a: &V, k: &str) -> Option<f64> {
 }
 
 /// `accessCheck(P, a, sc)`: the E27.6.4 check of one access: `{ id, name, geo, flags, worst, unchecked, uncheckedText, max, basis, frontageLink, sh, evidence }`.
+#[must_use]
 pub fn access_check(p: &V, a: &V, sc: &V) -> V {
     let c = state(p);
     let gv = access_geo(p, sc, a);
@@ -175,7 +180,7 @@ pub fn access_check(p: &V, a: &V, sc: &V) -> V {
     let city_centre = site.g("zone").t() && rx("City Centre Zone", "i").test(&site.g("zone").g("name").sn());
     let d_int = val(a, "intersectionDist").or(if g.g("intersectionDist").nullish() { None } else { Some(g.g("intersectionDist").n()) });
     let d_lx = val(a, "lxDist").or(if g.g("lxDist").nullish() { None } else { Some(g.g("lxDist").n()) });
-    let mut controls: Vec<String> = g.g("controls").items().iter().map(|x| x.s()).collect();
+    let mut controls: Vec<String> = g.g("controls").items().iter().map(super::jv::Jx::s).collect();
     let addc = |s: String, controls: &mut Vec<String>| {
         if !controls.contains(&s) {
             controls.push(s);
@@ -209,11 +214,10 @@ pub fn access_check(p: &V, a: &V, sc: &V) -> V {
     }
     let int_m = acc.g("intersectionM").n();
     let lx_m = acc.g("levelCrossingM").n();
-    if let Some(d) = d_int {
-        if d < int_m {
+    if let Some(d) = d_int
+        && d < int_m {
             add("E27.6.4.1(3)(a)", "RD", format!("{} m from the nearest intersection (under 10 m): restricted discretionary (A5).", numf(d, 1)));
         }
-    }
     for cname in &controls {
         if cname.starts_with("VAR ") && !(city_centre && cname == "VAR General") {
             add("E27.6.4.1(3)(b)", "RD", format!("Mapped Vehicle Access Restriction ({}): restricted discretionary (A5).", &cname[4..]));
@@ -222,11 +226,10 @@ pub fn access_check(p: &V, a: &V, sc: &V) -> V {
     if arterial {
         add("E27.6.4.1(3)(c)", "RD", "Frontage to an arterial road on the AUP planning maps: restricted discretionary (A5).".into());
     }
-    if let Some(d) = d_lx {
-        if d < lx_m {
+    if let Some(d) = d_lx
+        && d < lx_m {
             add("E27.6.4.1(3)(d)", "RD", format!("{} m from a level crossing (under 30 m from the limit line): restricted discretionary (A5). KiwiRail is an affected operator.", numf(d, 1)));
         }
-    }
     let frontage = val(a, "frontage");
     let n = val(a, "crossings");
     let mut max: Option<f64> = None;
@@ -242,25 +245,22 @@ pub fn access_check(p: &V, a: &V, sc: &V) -> V {
             max = Some((fr / acc.g("perM").g("normal").n()).ceil());
             basis = "1 per 25 m of frontage or part thereof (T146)".into();
         }
-        if let (Some(n), Some(m)) = (n, max) {
-            if n > m {
+        if let (Some(n), Some(m)) = (n, max)
+            && n > m {
                 add("Table E27.6.4.2.1", "RD", format!("{} crossings on a {} m frontage: breach (maximum {}, {}).", ns(n), numf(fr, 0), ns(m), basis));
             }
-        }
     }
     let sep_adj = val(a, "sepAdj");
     let sep_same = val(a, "sepSame");
     let comb = val(a, "combinedWidth");
-    if let Some(s) = sep_adj {
-        if s < acc.g("sepAdj").n() && !comb.is_some_and(|c| c <= acc.g("combined").n()) {
+    if let Some(s) = sep_adj
+        && s < acc.g("sepAdj").n() && !comb.is_some_and(|c| c <= acc.g("combined").n()) {
             add("Table E27.6.4.2.1", "RD", format!("{} m from a crossing on the adjacent site: breach (minimum 2 m unless the combined width is 6 m or less).", numf(s, 1)));
         }
-    }
-    if let Some(s) = sep_same {
-        if s < acc.g("sepSame").n() {
+    if let Some(s) = sep_same
+        && s < acc.g("sepSame").n() {
             add("Table E27.6.4.2.1", "RD", format!("{} m between crossings on the same site: breach (minimum 6 m).", numf(s, 1)));
         }
-    }
     let zg = if a.g("zoneGroup").t() { a.g("zoneGroup").clone() } else { let z = zone_group(site.g("zone").g("name")); if z.t() { z } else { st("centres") } };
     let grp = zg.s();
     let spaces = val(a, "spaces");
@@ -274,11 +274,10 @@ pub fn access_check(p: &V, a: &V, sc: &V) -> V {
             add(&format!("Table E27.6.4.3.2 ({})", b.g("ref").s()), "RD", format!("Crossing width {} m: outside {}\u{2013}{} m for {} parking spaces ({}).", numf(w, 2), numf(b.g("min").n(), 2), numf(mx, 2), ns(spaces.unwrap_or(f64::NAN)), grp));
         }
     }
-    if let (Some(b), Some(f)) = (band, formed) {
-        if b.g("formed").t() && f < b.g("formed").n() {
+    if let (Some(b), Some(f)) = (band, formed)
+        && b.g("formed").t() && f < b.g("formed").n() {
             add(&format!("Table E27.6.4.3.2 ({})", b.g("ref").s()), "RD", format!("Formed access width {} m: under the {} m minimum.", numf(f, 2), numf(b.g("formed").n(), 2)));
         }
-    }
     if let Some(len) = val(a, "length") {
         let rural = grp == "rural";
         let pb = if rural { acc.g("passing").g("rural") } else { acc.g("passing").g("other") };
@@ -287,11 +286,10 @@ pub fn access_check(p: &V, a: &V, sc: &V) -> V {
             add(&format!("Table E27.6.4.3.1 ({})", pb.g("ref").s()), "RD", format!("Access {} m long{}: passing bays needed at no more than {} m intervals{}. Tick 'passing bays provided' if they are.", numf(len, 0), if rural { " and under 5.5 m wide" } else { "" }, pb.g("every").s(), if rural { "" } else { " (Spare Construct reading: not needed where the formed width is already 5.5 m)" }));
         }
     }
-    if let (Some(q95), Some(stack)) = (val(a, "q95"), val(a, "stacking")) {
-        if q95 > stack {
+    if let (Some(q95), Some(stack)) = (val(a, "q95"), val(a, "stacking"))
+        && q95 > stack {
             add("E27.6.4.3(2)", "RD", format!("Queues into road reserve: E27.6.4.3(2) (95th-percentile queue {} m against {} m stacking). Breach, restricted discretionary; matters of discretion E27.8.1(9).", numf(q95, 1), numf(stack, 1)));
         }
-    }
     let o = c.g("overlays");
     let layers = table("LAYERS");
     let loaded = |k: &str| o.t() && o.g("sources").items().iter().any(|s| s.g("source").strict_eq(layers.g(k).g("name")));
@@ -322,6 +320,7 @@ pub fn access_check(p: &V, a: &V, sc: &V) -> V {
 }
 
 /// `evidencePack(P, sc, a, g)`: the E27.8.2(11)(a) evidence for an access: `[[item, value, source]]`, or null without a frontage road.
+#[must_use]
 pub fn evidence_pack(p: &V, sc: &V, a: &V, g: &V) -> V {
     if !g.t() || !g.g("link").t() {
         return V::Null;
@@ -367,6 +366,7 @@ pub fn evidence_pack(p: &V, sc: &V, a: &V, g: &V) -> V {
 }
 
 /// `sisd(speed, measured85)`: the stopping sight distance required: `{ design, m, basis, source }`.
+#[must_use]
 pub fn sisd(speed: &V, measured85: f64) -> V {
     let sh = table("SH");
     let add = sh.g("sisdAdd").n();
@@ -376,6 +376,7 @@ pub fn sisd(speed: &V, measured85: f64) -> V {
 }
 
 /// `accessType({ daily, peak, hcvWeek, sisdOk })`: the NZTA Table 9-1 access type: `{ type, text }`.
+#[must_use]
 pub fn access_type(daily: f64, peak: f64, hcv_week: f64, sisd_ok: Option<bool>) -> V {
     let sh = table("SH");
     if daily > sh.g("design").g("daily").n() || peak > sh.g("design").g("hourly").n() {
@@ -392,6 +393,7 @@ pub fn access_type(daily: f64, peak: f64, hcv_week: f64, sisd_ok: Option<bool>) 
 }
 
 /// `pavement(hv0, hv1)`: the change in heavy vehicles a day: `{ change, flagged, text }`.
+#[must_use]
 pub fn pavement(hv0: f64, hv1: f64) -> V {
     let ch = if hv0 > 0.0 { (hv1 - hv0) / hv0 } else if hv1 > 0.0 { f64::INFINITY } else { 0.0 };
     let flagged = if hv0 > 0.0 { (hv1 - hv0) / hv0 > table("SH.pavement").n() } else { hv1 > 0.0 };
@@ -399,6 +401,7 @@ pub fn pavement(hv0: f64, hv1: f64) -> V {
 }
 
 /// `accessVolume(sc, a)`: the modelled movements through an access placed at a node: `{ peak, period }`, or null.
+#[must_use]
 pub fn access_volume(sc: &V, a: &V) -> V {
     if !a.t() || !a.g("node").t() {
         return V::Null;
@@ -422,6 +425,7 @@ pub fn access_volume(sc: &V, a: &V) -> V {
 }
 
 /// `motorwayConnectors(sc, P)`: zones pinned straight to motorway nodes (GRPA s84), with the author's confirmation.
+#[must_use]
 pub fn motorway_connectors(sc: &V, p: &V) -> V {
     let ok = state(p);
     let ok = ok.g("mwConfirm");
@@ -474,7 +478,7 @@ pub fn sh_check(p: &V, sc: &V) -> V {
     let car_days = table("SH.carDays").s();
     let mut approvals: Vec<V> = vec![
         jobj! { "id" => "s95E", "label" => "Written approval from NZTA as an affected party (RMA s95E(3)(a))", "needed" => !triggers.is_empty() },
-        jobj! { "id" => "s176", "label" => if !desig.is_empty() { format!("Requiring authority consent on designated land (RMA s176(1)(b), or s178 if not yet confirmed): {}", desig.iter().map(|d| format!("{} {}", d.g("by").sn(), d.g("name").sn()).trim().to_string()).collect::<Vec<_>>().join("; ")) } else { "Requiring authority consent on designated land (RMA s176(1)(b) / s178): no NZTA or KiwiRail designation found at the site point; check the planning maps".to_string() }, "needed" => !desig.is_empty(), "check" => desig.is_empty() },
+        jobj! { "id" => "s176", "label" => if desig.is_empty() { "Requiring authority consent on designated land (RMA s176(1)(b) / s178): no NZTA or KiwiRail designation found at the site point; check the planning maps".to_string() } else { format!("Requiring authority consent on designated land (RMA s176(1)(b), or s178 if not yet confirmed): {}", desig.iter().map(|d| format!("{} {}", d.g("by").sn(), d.g("name").sn()).trim().to_string()).collect::<Vec<_>>().join("; ")) }, "needed" => !desig.is_empty(), "check" => desig.is_empty() },
         jobj! { "id" => "grpa91", "label" => "Crossing place authorised by NZTA notice (GRPA s91) and s93 approval before the s224(c) certificate, where the frontage is a limited access road (no open LAR layer: check the LAR status)", "needed" => !acc.is_empty(), "check" => true },
         jobj! { "id" => "grpa84", "label" => "Motorway special access authorisation (GRPA s84)", "needed" => motorway_acc },
         jobj! { "id" => "car", "label" => format!("Spare Construct access request to NZTA at least {car_days} working days before works (PPM Access guide s7.4)"), "needed" => !acc.is_empty() },
@@ -482,7 +486,7 @@ pub fn sh_check(p: &V, sc: &V) -> V {
     if pe.is_some_and(|e| e.g("kind").eq_s("ftaa")) {
         approvals.push(jobj! { "id" => "ftaa", "label" => "GRPA crossing-place (s91) and s93 approvals and corridor access approvals are outside Fast-track (FTAA s42(4)): seek them from NZTA separately", "needed" => !acc.is_empty() || !triggers.is_empty() });
     }
-    let sh_ids: Vec<String> = inv.g("links").items().iter().map(|x| x.s()).collect();
+    let sh_ids: Vec<String> = inv.g("links").items().iter().map(super::jv::Jx::s).collect();
     let dh = c.g("ctx").g("devHvPct");
     let dev_hv: Option<f64> = if dh.entered() { Some(util::clamp(dh.n(), 0.0, 100.0)) } else { None };
     let mut rows: Vec<V> = Vec::new();
@@ -613,11 +617,13 @@ fn put(idx: &mut HashMap<String, usize>, list: &mut Vec<V>, id: &str, row: &V, s
 }
 
 /// `operators(P)`: the affected operators for the active scenario against the base, in both peaks.
+#[must_use]
 pub fn operators(p: &V) -> V {
     operators_with(p, active_sc(p), base_sc(p), None)
 }
 
 /// `operators(P, opts)`: the affected operators: links and junctions whose with-development change passes the threshold in either modelled peak (or only `period`). `{ period, periods, periodText, compared, withName, withoutName, rows, thresholds, label, note }`.
+#[must_use]
 pub fn operators_with(p: &V, sc: &V, base: &V, period: Option<&str>) -> V {
     let s = settings(p);
     let c = state(p);
@@ -738,6 +744,7 @@ pub fn operators_with(p: &V, sc: &V, base: &V, period: Option<&str>) -> V {
 }
 
 /// A helper for callers: the level-crossing distance of a link (see [`level_crossing_dist`]).
+#[must_use]
 pub fn lx_dist(p: &V, sc: &V, l: &V) -> Option<f64> {
     level_crossing_dist(p, sc, l)
 }

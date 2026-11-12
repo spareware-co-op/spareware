@@ -1,4 +1,4 @@
-//! Live traffic from TomTom and traffic-aware travel times from Google (the end of data.js).
+//! Live traffic from `TomTom` and traffic-aware travel times from Google (the end of data.js).
 //!
 //! Both need the user's own key (never saved in a project file). Each has a function that builds the request and one that
 //! reads the answer; the host sends the request.
@@ -13,7 +13,8 @@ use crate::util::LatLng;
 use serde::Serialize;
 use serde_json::Value;
 
-/// `tomtomTiles()`: the address pattern of TomTom's traffic flow map tiles ({z}, {x} and {y} are filled in by the map), or None without a key.
+/// `tomtomTiles()`: the address pattern of `TomTom`'s traffic flow map tiles ({z}, {x} and {y} are filled in by the map), or None without a key.
+#[must_use]
 pub fn tomtom_tiles(key: Option<&str>) -> Option<String> {
     let key = key.filter(|k| !k.is_empty())?;
     Some(format!("https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{{z}}/{{x}}/{{y}}.png?key={}&tileSize=256", encode_uri_component(key)))
@@ -37,7 +38,7 @@ pub fn tomtom_speed_request(ll: LatLng, key: Option<&str>) -> Result<HttpRequest
     })
 }
 
-/// What `tomtomSpeed` gives: the speed now, the free-flow speed, how sure TomTom is, and whether the road is closed.
+/// What `tomtomSpeed` gives: the speed now, the free-flow speed, how sure `TomTom` is, and whether the road is closed.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TomtomSpeed {
     /// Current speed (km/h).
@@ -82,18 +83,19 @@ pub fn tomtom_speed_result(a: Result<&JsonValue, FetchFailure>, now_ms: f64) -> 
 }
 
 /// `nextWeekdayNZ(hour)`: the next Tuesday, Wednesday or Thursday (from tomorrow) at hh:00 New Zealand time, as an ISO instant and a label ("Thu, 22 Oct, 8:00 am"); None when none of the next nine days is one.
+#[must_use]
 pub fn next_weekday_nz(now_ms: f64, hour: f64) -> Option<(String, String)> {
     for add in 1..10 {
-        let t = now_ms + add as f64 * DAY_MS;
+        let t = now_ms + f64::from(add) * DAY_MS;
         let p = nz_parts(t);
         if !matches!(p.weekday, 2..=4) {
             continue;
         }
-        let (y, mo, dd) = (p.year as f64, p.month as f64 - 1.0, p.day as f64);
+        let (y, mo, dd) = (p.year as f64, f64::from(p.month) - 1.0, f64::from(p.day));
         let mut guess = date_utc(y, mo, dd) + hour * 3_600_000.0 - 12.0 * 3_600_000.0;
         for _ in 0..3 {
             let q = nz_parts(guess);
-            let diff_h = hour - q.hour as f64 + if q.day as f64 != dd { if q.day as f64 > dd { -24.0 } else { 24.0 } } else { 0.0 };
+            let diff_h = hour - f64::from(q.hour) + if f64::from(q.day) != dd { if f64::from(q.day) > dd { -24.0 } else { 24.0 } } else { 0.0 };
             if diff_h == 0.0 {
                 break;
             }
@@ -101,7 +103,7 @@ pub fn next_weekday_nz(now_ms: f64, hour: f64) -> Option<(String, String)> {
         }
         let q = nz_parts(guess);
         let wk = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][q.weekday as usize];
-        let h12 = if q.hour % 12 == 0 { 12 } else { q.hour % 12 };
+        let h12 = if q.hour.is_multiple_of(12) { 12 } else { q.hour % 12 };
         let label = format!("{}, {} {}, {}:{:02} {}", wk, q.day, super::nztime::month_short(q.month), h12, q.minute, if q.hour >= 12 { "pm" } else { "am" });
         return Some((iso_string(guess), label));
     }

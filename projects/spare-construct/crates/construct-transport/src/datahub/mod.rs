@@ -9,7 +9,7 @@
 //! (`regression`), the journey-time check (`jtCheck`), gateway flows from counts (`gatewaysFromCounts`) and the
 //! import of your own counts from a CSV file (`importCSV`).
 //!
-//! Network fetching (the ArcGIS loaders, TomTom, Google) and crash analysis stay outside: the downloaded counts are
+//! Network fetching (the `ArcGIS` loaders, `TomTom`, Google) and crash analysis stay outside: the downloaded counts are
 //! input, as saved in `P.data.counts`. [`Data::read`] reads them from a project without changing it (the prototype's
 //! `D()` also fills in the keys a project lacks; a read here does not; [`ensure_data`] does that when a caller needs it).
 //!
@@ -78,6 +78,7 @@ pub const SOURCES: [Source; 4] = [
 ];
 
 /// `DataHub.SOURCES[key]`.
+#[must_use]
 pub fn source(key: &str) -> Option<&'static Source> {
     SOURCES.iter().find(|s| s.key == key)
 }
@@ -85,7 +86,7 @@ pub fn source(key: &str) -> Option<&'static Source> {
 /// One count observation method with its matrix-estimation weight (`DataHub.OBS_METHODS`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ObsMethod {
-    /// Key ("measured_hour", "weekday_factored", "adt_factored", "ramm_estimate", "virtual").
+    /// Key ("`measured_hour`", "`weekday_factored`", "`adt_factored`", "`ramm_estimate`", "virtual").
     pub key: &'static str,
     /// Display name.
     pub label: &'static str,
@@ -140,11 +141,13 @@ pub const OBS_METHODS: [ObsMethod; 5] = [
 pub const OBS_METHODS_SOURCE: &str = "docs/spec/count-roles (weights: Spare Construct suggestion); docs/spec/local-road-counts (RAMM estimates)";
 
 /// `DataHub.OBS_METHODS[key]` for the five methods (the prototype's object also holds a `source` text and a `verified` flag, which are not methods).
+#[must_use]
 pub fn obs_method_of_key(key: &str) -> Option<&'static ObsMethod> {
     OBS_METHODS.iter().find(|m| m.key == key)
 }
 
 /// `DIR_BEARING[dir]`: the heading of a count direction (NB 0, EB 90, SB 180, WB 270); NaN for anything else (undefined in the prototype).
+#[must_use]
 pub fn dir_bearing(dir: &str) -> f64 {
     match dir {
         "NB" => 0.0,
@@ -156,11 +159,13 @@ pub fn dir_bearing(dir: &str) -> f64 {
 }
 
 /// True when the value is the text `s` (`x === s` for a value that may be anything).
+#[must_use]
 pub fn is_text(x: &Num, s: &str) -> bool {
     matches!(x, Maybe::Set(JsNum::Text(t)) if t == s)
 }
 
 /// `x || y` read as text (`String(x || y || '')`): the first of the two that is truthy, as the prototype's text, else "".
+#[must_use]
 pub fn or_text(a: &Num, b: &Num) -> String {
     if a.truthy() {
         a.js_string()
@@ -231,7 +236,7 @@ pub struct Count {
     /// AT count: start of the peak hour ("07:45").
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub peak_time: Num,
-    /// "ramm_estimate" for a RAMM centreline estimate.
+    /// "`ramm_estimate`" for a RAMM centreline estimate.
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub kind: Num,
     /// An importer's own observation method.
@@ -265,6 +270,7 @@ pub struct Count {
 
 impl Count {
     /// A count with only an id and a source; the rest unset (for building counts in code).
+    #[must_use]
     pub fn new(id: &str, src: &str) -> Count {
         let blank: Count = serde_json::from_value(Value::Object(Map::new())).expect("an empty count reads");
         Count {
@@ -274,16 +280,19 @@ impl Count {
         }
     }
     /// `c.src === s`.
+    #[must_use]
     pub fn src_is(&self, s: &str) -> bool {
         is_text(&self.src, s)
     }
     /// `[c.lat, c.lng]` as the arithmetic reads them.
+    #[must_use]
     pub fn ll(&self) -> [f64; 2] {
         [self.lat.num(), self.lng.num()]
     }
 }
 
 /// `DataHub.isEstimate(c)`: a RAMM centreline estimate (`obs_method`, `kind` or `src` says so).
+#[must_use]
 pub fn is_estimate(c: &Count) -> bool {
     is_text(&c.obs_method, "ramm_estimate") || is_text(&c.kind, "ramm_estimate") || c.src_is("ramm")
 }
@@ -333,6 +342,7 @@ pub struct Data {
 
 impl Data {
     /// Reads the project's data the way `D()` shows it (missing keys read as empty; nothing is written to the project).
+    #[must_use]
     pub fn read(p: &Project) -> Data {
         let d = p.data.get();
         let extra = d.map(|d| &d.extra);
@@ -375,6 +385,7 @@ impl Data {
         }
     }
     /// A data set of these counts with the default switches (for building inputs in code).
+    #[must_use]
     pub fn with_counts(counts: Vec<Count>) -> Data {
         let mut p = crate::project::new_project("p", "p", "s");
         let mut extra = Map::new();
@@ -416,7 +427,7 @@ impl Data {
                             && x.lat.num().is_finite()
                             && x.lng.num().is_finite()
                     })
-                    .map(|x| x.as_ref())
+                    .map(std::convert::AsRef::as_ref)
                     .collect();
                 let r = obs_method_of_key("ramm_estimate")
                     .and_then(|m| m.override_m)
@@ -450,6 +461,7 @@ impl Data {
 }
 
 /// A saved JSON value as a [`Num`]: null is `Maybe::Null`, anything else a set value.
+#[must_use]
 pub fn value_num(v: &Value) -> Num {
     match v {
         Value::Null => Maybe::Null,
@@ -458,6 +470,7 @@ pub fn value_num(v: &Value) -> Num {
 }
 
 /// `DataHub.validationOK(c)`: a count that may stand in validation statistics: not virtual, not a RAMM estimate, and its own method (if it names one) is not barred from validation.
+#[must_use]
 pub fn validation_ok(c: &Count) -> bool {
     let method_ok = match c.obs_method.as_text() {
         Some(m) if c.obs_method.truthy() => match obs_method_of_key(m) {

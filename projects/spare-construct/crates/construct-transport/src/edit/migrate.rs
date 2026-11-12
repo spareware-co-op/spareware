@@ -13,7 +13,7 @@ use crate::jsnum::{math_round, number_to_js_string, string_to_number, to_precisi
 use crate::project::{Project, SETTINGS_VERSION, Settings, default_settings, new_scenario};
 use serde_json::Value;
 
-/// One default that changed after settings version 1 (model.js SETTINGS_V2).
+/// One default that changed after settings version 1 (model.js `SETTINGS_V2`).
 struct Change {
     /// Path in the settings ("conv.stable").
     key: &'static str,
@@ -135,10 +135,11 @@ const SETTINGS_V2: [Change; 9] = [
     },
 ];
 
-/// model.js SETTINGS_NOTICE: what the notice says.
+/// model.js `SETTINGS_NOTICE`: what the notice says.
 pub const SETTINGS_NOTICE: &str = "Spare Construct's defaults changed to match NZ guidance (growth, discounting, convergence, buses). This project keeps its own settings until you choose.";
 
 /// `getPath(o, k)`: the value at a dotted path, None where any step is missing or not an object.
+#[must_use]
 pub fn get_path<'a>(o: &'a JsonValue, k: &str) -> Option<&'a JsonValue> {
     let mut a = o;
     for p in k.split('.') {
@@ -212,7 +213,10 @@ fn legacy_settings(p: &mut JsonValue, saved: &JsonValue, ver: f64) {
         changed.push(o);
     }
     let sv_now;
-    if !changed.is_empty() {
+    if changed.is_empty() {
+        sv_now = SETTINGS_VERSION;
+        p.remove("settingsNotice");
+    } else {
         sv_now = ver;
         let mut n = JsonValue::object();
         n.set("from", ver.into());
@@ -220,16 +224,13 @@ fn legacy_settings(p: &mut JsonValue, saved: &JsonValue, ver: f64) {
         n.set("text", SETTINGS_NOTICE.into());
         n.set("changed", JsonValue::Array(changed));
         p.set("settingsNotice", n);
-    } else {
-        sv_now = SETTINGS_VERSION;
-        p.remove("settingsNotice");
     }
     p.get_mut("settings")
         .expect("settings are set")
         .set("sv", sv_now.into());
 }
 
-/// model.js OLD_RATES: the discount schedule saved before NZTA GC 25/01, as JSON text.
+/// model.js `OLD_RATES`: the discount schedule saved before NZTA GC 25/01, as JSON text.
 const OLD_RATES: &str = r#"[{"to":30,"r":2},{"to":60,"r":1.5}]"#;
 
 /// model.js upgradeRates(S): a saved copy of the pre-GC 25/01 schedule becomes the full schedule when the analysis period is 100
@@ -277,7 +278,7 @@ fn or_assign(o: &mut JsonValue, k: &str, b: JsonValue) {
 }
 
 /// model.js `migrate(P)`: brings a parsed project up to date. Settings merge onto the current defaults (the saved keys win),
-/// a project saved before a default changed keeps its own value (see SETTINGS_V2 in model.js), years read as text become numbers, a
+/// a project saved before a default changed keeps its own value (see `SETTINGS_V2` in model.js), years read as text become numbers, a
 /// missing id or scenario list is made, junction sites are checked, and the active and base scenarios must exist.
 pub fn migrate_json(mut p: JsonValue, ids: &mut dyn IdSource) -> Result<JsonValue, EditError> {
     if !p.is_object() {
@@ -487,6 +488,7 @@ pub fn migrate_project(p: &Project, ids: &mut dyn IdSource) -> Result<Project, E
 }
 
 /// The notice `migrate` left on a project (`P.settingsNotice`): the keys whose defaults changed, if any.
+#[must_use]
 pub fn settings_notice(p: &Project) -> Option<&Value> {
     p.extra.get("settingsNotice")
 }
@@ -519,7 +521,7 @@ pub fn adopt_defaults(p: &mut Project, keys: Option<&[String]>) -> Result<usize,
         .map_err(|e| EditError(format!("the settings do not read as settings: {e}")))?;
     p.extra.remove("settingsNotice");
     if picked > 0 {
-        for sc in p.scenarios.iter_mut() {
+        for sc in &mut p.scenarios {
             super::history::mark_stale(sc);
         }
     }

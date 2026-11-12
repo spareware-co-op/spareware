@@ -44,12 +44,14 @@ pub struct Estimate {
 
 impl Estimate {
     /// The estimate as JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({ "km2": json_number(self.km2), "warn": self.warn, "ok": self.ok, "minutes": json_number(self.minutes) })
     }
 }
 
 /// `estimate(bounds)`: the area of a box in km\u{b2}; warns above 36 km\u{b2} (with a rough time) and refuses above 120 km\u{b2}.
+#[must_use]
 pub fn estimate(b: &Bx) -> Estimate {
     let c = center(b);
     let w = dist(&[c[0], b.w], &[c[0], b.e]);
@@ -143,6 +145,7 @@ pub struct SetupOut {
 
 impl SetupOut {
     /// The answer as JSON, in the prototype's shape.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let obj = |l: &[(String, Value)]| Value::Object(l.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Map<_, _>>());
         json!({
@@ -280,10 +283,10 @@ pub fn setup(
     // This area's roads: the ones this setup imported, else those around the box (never roads elsewhere)
     let fresh: Vec<String> = p.scenarios[sc_idx].nodes.keys().filter(|id| !before_n.contains(*id)).map(str::to_string).collect();
     let far = pad(&b, 2.0);
-    let local: Vec<String> = if !fresh.is_empty() {
-        fresh
-    } else {
+    let local: Vec<String> = if fresh.is_empty() {
         p.scenarios[sc_idx].nodes.values().filter(|n| contains(&far, n.lat.num(), n.lng.num())).map(|n| n.id.clone()).collect()
+    } else {
+        fresh
     };
     let local_set: HashSet<String> = local.iter().cloned().collect();
 
@@ -382,7 +385,7 @@ pub fn setup(
             }
             let me_hit = !removed.is_empty()
                 && p.me.get().is_some_and(|me| {
-                    ["AM", "PM"].iter().any(|per| me.factors.get(*per).and_then(|f| f.get()).is_some_and(|f| f.keys().any(|k| removed.iter().any(|id| k.split('>').any(|part| part == id)))))
+                    ["AM", "PM"].iter().any(|per| me.factors.get(per).and_then(|f| f.get()).is_some_and(|f| f.keys().any(|k| removed.iter().any(|id| k.split('>').any(|part| part == id)))))
                 });
             if me_hit {
                 out.warnings.push("Existing land use was replaced, so matrix estimation factors for the old zones no longer apply. Fit to counts again.".to_string());
@@ -424,11 +427,10 @@ pub fn setup(
             }
             if let Maybe::Set(Value::Object(res)) = &mut s.res {
                 for r in res.values_mut() {
-                    if value_truthy(r) {
-                        if let Some(m) = r.as_object_mut() {
+                    if value_truthy(r)
+                        && let Some(m) = r.as_object_mut() {
                             m.insert("stale".to_string(), json!(true));
                         }
-                    }
                 }
             }
         }
@@ -462,7 +464,7 @@ pub fn setup(
     let can_run = !p.scenarios[sc_idx].links.is_empty() && !p.scenarios[sc_idx].zones.is_empty();
     if o.run && !can_run {
         out.warnings.push(
-            if !p.scenarios[sc_idx].links.is_empty() { "There are no zones or gateways, so the model was not run." } else { "There are no roads, so the model was not run." }.to_string(),
+            if p.scenarios[sc_idx].links.is_empty() { "There are no roads, so the model was not run." } else { "There are no zones or gateways, so the model was not run." }.to_string(),
         );
     }
     // Fitting to counts runs the model itself, so the plain runs are only needed without it
@@ -559,6 +561,7 @@ fn null_non_finite(v: &mut Value) {
 }
 
 /// A [`Failure`] as the text of its message for a download that has no label (re-exported so hosts can word their own failures the same way).
+#[must_use]
 pub fn failure_text(f: &Failure, url: &str) -> String {
     f.message(url)
 }

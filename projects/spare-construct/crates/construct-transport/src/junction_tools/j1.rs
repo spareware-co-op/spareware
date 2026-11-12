@@ -20,7 +20,8 @@ pub(crate) fn los_method(method: &str) -> &'static LosMethod {
     STANDARDS.los.get(method).unwrap_or(&STANDARDS.los.hcm6)
 }
 
-/// `footer(res)`: how the results were made (LoS method, capacity methods, peak flow factor, analysis period, queue space).
+/// `footer(res)`: how the results were made (`LoS` method, capacity methods, peak flow factor, analysis period, queue space).
+#[must_use]
 pub fn footer(res: &Res) -> String {
     let j = &res.junction;
     let l = los_method(&j.method);
@@ -51,6 +52,7 @@ pub fn footer(res: &Res) -> String {
 /// `upstreamLen(sc, res, key, side)`: the distance back to the upstream stop line from an approach arc: through uncontrolled
 /// nodes with two roads (OSM splits roads mid-block) and a splitter island's one-way entry, stopping at a junction, a controlled
 /// node, a dead end or a one-way road the wrong way. None when there is nothing upstream or the arc is a zone connector.
+#[must_use]
 pub fn upstream_len(
     sc: &Scenario,
     res: &Res,
@@ -97,7 +99,7 @@ pub fn upstream_len(
         let u = if k.ends_with(":ab") { &lk.a } else { &lk.b };
         let nu = sc.nodes.get(u);
         let ctl = nu.map(|n| n.control.str_or("none"));
-        let controlled = !matches!(ctl, Some("none") | Some("priority"));
+        let controlled = !matches!(ctl, Some("none" | "priority"));
         let Some(_) = nu else {
             break;
         };
@@ -146,6 +148,7 @@ pub struct Storage {
 }
 
 /// `storageOf(ap, mv, L)`: storage for a movement.
+#[must_use]
 pub fn storage_of(ap: &Approach, mv: &str, l: Option<f64>) -> Storage {
     let ls: Vec<&crate::results::LaneRow> = ap
         .lanes
@@ -344,6 +347,7 @@ fn on(x: Option<f64>) -> Value {
 
 impl J1Row {
     /// As JSON, with the keys the prototype's row has.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("ids".into(), json!(self.ids));
@@ -375,6 +379,7 @@ impl J1Row {
 
 impl J1Sub {
     /// As JSON, with the keys the prototype's approach row has (the leg total carries fewer).
+    #[must_use]
     pub fn to_value(&self, leg_total: bool) -> Value {
         let mut m = Map::new();
         m.insert("v".into(), n(self.v));
@@ -418,6 +423,7 @@ impl J1Sub {
 
 impl J1<'_> {
     /// As JSON, without the result and the junction's own result: what the prototype's `j1` returns less its object references.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let groups: Vec<Value> = self
             .groups
@@ -483,6 +489,7 @@ fn max0(xs: impl IntoIterator<Item = f64>) -> f64 {
 
 impl<'a> Tools<'a> {
     /// `j1(sc, res, id, e0)`: the Movement Summary of a junction, looked up by id (or node id) unless the entry is given.
+    #[must_use]
     pub fn j1(
         &self,
         sc: &Scenario,
@@ -491,17 +498,14 @@ impl<'a> Tools<'a> {
         e0: Option<&Entry<'a>>,
     ) -> Option<J1<'a>> {
         let found;
-        let e: &Entry<'a> = match e0 {
-            Some(e) => e,
-            None => {
-                let es = entries(sc, res, false);
-                let i = es
-                    .iter()
-                    .position(|x| x.id == id)
-                    .or_else(|| es.iter().position(|x| x.nodes.iter().any(|n| n == id)))?;
-                found = es.into_iter().nth(i)?;
-                &found
-            }
+        let e: &Entry<'a> = if let Some(e) = e0 { e } else {
+            let es = entries(sc, res, false);
+            let i = es
+                .iter()
+                .position(|x| x.id == id)
+                .or_else(|| es.iter().position(|x| x.nodes.iter().any(|n| n == id)))?;
+            found = es.into_iter().nth(i)?;
+            &found
         };
         let nr = e.nr?;
         let set = self.st();
@@ -529,30 +533,27 @@ impl<'a> Tools<'a> {
                 Some(a) => a.o as f64,
                 None => 8.0 + groups.len() as f64,
             };
-            let gi = match codes.iter().position(|c| *c == code) {
-                Some(i) => i,
-                None => {
-                    codes.push(code);
-                    groups.push(J1Group {
-                        o: code,
-                        leg: a.map_or(String::new(), |a| a.leg.to_string()),
-                        label: match a {
-                            Some(a) => a.leg_label.clone(),
-                            None => format!(
-                                "{}: {}",
-                                if ap.approach.is_empty() { "Approach" } else { &ap.approach },
-                                if ap.name.is_empty() { "Unnamed road" } else { &ap.name }
-                            ),
-                        },
-                        road: match a {
-                            Some(a) => a.road.clone(),
-                            None => ap.name.clone(),
-                        },
-                        appr: Vec::new(),
-                        leg_sub: None,
-                    });
-                    groups.len() - 1
-                }
+            let gi = if let Some(i) = codes.iter().position(|c| *c == code) { i } else {
+                codes.push(code);
+                groups.push(J1Group {
+                    o: code,
+                    leg: a.map_or(String::new(), |a| a.leg.to_string()),
+                    label: match a {
+                        Some(a) => a.leg_label.clone(),
+                        None => format!(
+                            "{}: {}",
+                            if ap.approach.is_empty() { "Approach" } else { &ap.approach },
+                            if ap.name.is_empty() { "Unnamed road" } else { &ap.name }
+                        ),
+                    },
+                    road: match a {
+                        Some(a) => a.road.clone(),
+                        None => ap.name.clone(),
+                    },
+                    appr: Vec::new(),
+                    leg_sub: None,
+                });
+                groups.len() - 1
             };
             let rows: Vec<&crate::turns::MovementRow> =
                 mvs.iter().filter(|r| r.approach == ap.key).collect();
@@ -639,7 +640,7 @@ impl<'a> Tools<'a> {
             });
         }
         groups.sort_by(|p, q| p.o.partial_cmp(&q.o).unwrap_or(std::cmp::Ordering::Equal));
-        for g in groups.iter_mut() {
+        for g in &mut groups {
             if g.appr.len() > 1 {
                 let a: Vec<&J1Sub> = g.appr.iter().map(|x| &x.sub).collect();
                 let ctl: Vec<&&J1Sub> = a.iter().filter(|x| !x.free).collect();
@@ -669,10 +670,10 @@ impl<'a> Tools<'a> {
                     dos,
                     xp: a[0].xp,
                     delay: dly,
-                    los: if !ctl.is_empty() {
-                        super::scale::los_from(dly, dos, &method, nr.kind).to_string()
-                    } else {
+                    los: if ctl.is_empty() {
                         "\u{2013}".to_string()
+                    } else {
+                        super::scale::los_from(dly, dos, &method, nr.kind).to_string()
                     },
                     q95veh: max0(a.iter().map(|x| x.q95veh)),
                     q95: max0(a.iter().map(|x| x.q95)),
@@ -885,6 +886,7 @@ impl J1<'_> {
 }
 
 /// `j1Html(D, opts)`: the Movement Summary as a table, with its notes and the footer. None gives the "no junction results" note.
+#[must_use]
 pub fn j1_html(t: &Tools, d: Option<&J1>, opts: J1HtmlOpts) -> String {
     let Some(d) = d else {
         return "<p class=\"note\">No junction results here. Run the model, then pick a junction with a give-way, stop, roundabout or signal control.</p>".to_string();
@@ -942,38 +944,35 @@ pub fn j1_html(t: &Tools, d: Option<&J1>, opts: J1HtmlOpts) -> String {
             body.push(cells(&cell_of_sub(ls, true), "Leg total", "", true));
         }
     }
-    match &d.all {
-        Some(a) => {
-            let c = Cell {
-                v: a.v,
-                hv_pct: a.hv_pct,
-                cap: None,
-                dos: Some(a.dos),
-                free: false,
-                xp: a.xp,
-                delay: Some(a.delay),
-                los: Some(&a.los),
-                q95veh: Some(a.q95veh),
-                q95: Some(a.q95),
-                psc: None,
-                rq: None,
-                bay: false,
-            };
-            body.push(cells(&c, "Intersection (all vehicles)", "", true));
-        }
-        None => {
-            let lt = if !d.nr.los_text.is_empty() {
-                d.nr.los_text
-            } else if !d.nr.los.is_empty() {
-                d.nr.los
-            } else {
-                "\u{2013}"
-            };
-            body.push(format!(
-                "<tr><td colspan=\"12\" class=\"note\">Two-way sign control: no intersection level of service. Worst movement: {}.</td></tr>",
-                esc(lt)
-            ));
-        }
+    if let Some(a) = &d.all {
+        let c = Cell {
+            v: a.v,
+            hv_pct: a.hv_pct,
+            cap: None,
+            dos: Some(a.dos),
+            free: false,
+            xp: a.xp,
+            delay: Some(a.delay),
+            los: Some(&a.los),
+            q95veh: Some(a.q95veh),
+            q95: Some(a.q95),
+            psc: None,
+            rq: None,
+            bay: false,
+        };
+        body.push(cells(&c, "Intersection (all vehicles)", "", true));
+    } else {
+        let lt = if !d.nr.los_text.is_empty() {
+            d.nr.los_text
+        } else if !d.nr.los.is_empty() {
+            d.nr.los
+        } else {
+            "\u{2013}"
+        };
+        body.push(format!(
+            "<tr><td colspan=\"12\" class=\"note\">Two-way sign control: no intersection level of service. Worst movement: {}.</td></tr>",
+            esc(lt)
+        ));
     }
     let head = if opts.head {
         format!(

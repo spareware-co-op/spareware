@@ -231,7 +231,7 @@ pub(crate) fn app_zones(c: &mut Ctx) -> String {
                 esc(&if lu.is_empty() { fmt::DASH.to_string() } else { lu.join(", ") }),
                 year_cell(&z.year),
                 if z.reduction.truthy() { rfmt::pct(z.reduction.num()) } else { fmt::DASH.to_string() },
-                if !matches!(z.buildout, Maybe::Missing | Maybe::Null) { rfmt::pct(z.buildout.num()) } else { fmt::DASH.to_string() },
+                if matches!(z.buildout, Maybe::Missing | Maybe::Null) { fmt::DASH.to_string() } else { rfmt::pct(z.buildout.num()) },
                 esc(&maybe_text(&z.src, "user")),
             ])
         })
@@ -492,7 +492,7 @@ pub(crate) fn app_convergence(c: &mut Ctx) -> String {
                 int(Some(&JsonValue::Number(res.it))),
                 format!("{}%", fmt::num(res.gap * 100.0, 4)),
                 pm.map_or(fmt::DASH.to_string(), |v| rfmt::pct(v * 100.0)),
-                if !res.converged { "<b class=\"bad\">No</b>" } else { "Yes" }.to_string(),
+                if res.converged { "Yes" } else { "<b class=\"bad\">No</b>" }.to_string(),
                 esc(&res.conv_note),
             ]));
             if Some(i) == c.sel.with && res.conv.len() > 1 {
@@ -605,15 +605,12 @@ pub(crate) fn app_counts(c: &mut Ctx) -> String {
                     _ => fmt::DASH.to_string(),
                 },
                 rfmt::num(reference, 0),
-                match &ob {
-                    Some(o) => format!("{} (observed)", esc(&o.1)),
-                    None => {
-                        let when = js::text_or_empty(g.and_then(|x| x.get("when")));
-                        format!(
-                            "Google Routes typical time (predicted, not observed{})",
-                            if when.is_empty() { String::new() } else { format!(", {}", esc(&when)) }
-                        )
-                    }
+                if let Some(o) = &ob { format!("{} (observed)", esc(&o.1)) } else {
+                    let when = js::text_or_empty(g.and_then(|x| x.get("when")));
+                    format!(
+                        "Google Routes typical time (predicted, not observed{})",
+                        if when.is_empty() { String::new() } else { format!(", {}", esc(&when)) }
+                    )
                 },
                 mt.map_or(fmt::DASH.to_string(), |m| rfmt::num(m, 0)),
                 k.as_ref().map_or(fmt::DASH.to_string(), |k| rfmt::pct(k.pct * 100.0)),

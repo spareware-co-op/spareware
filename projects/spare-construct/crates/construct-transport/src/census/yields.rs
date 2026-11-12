@@ -80,7 +80,7 @@ pub fn yield_def(code: f64, p: Option<&Project>) -> YieldDef {
     d.net_pct = num("netPct").unwrap_or(std_::YIELDS_NET_PCT);
     let use_ = over.get("use").and_then(Value::as_str).filter(|u| GFA_USES.contains(u));
     d.user = ["dph", "far", "netPct"].iter().any(|k| num(k).is_some()) || use_.is_some();
-    if d.far.is_some_and(|f| f > 0.0) && !base.is_some_and(|b| b.mix.is_some()) {
+    if d.far.is_some_and(|f| f > 0.0) && base.is_none_or(|b| b.mix.is_none()) {
         match use_ {
             Some(u) => d.mix = Some(vec![(u.to_string(), 1.0)]),
             None => d.needs_use = true,
@@ -124,6 +124,7 @@ pub struct Yield {
 
 impl Yield {
     /// The answer as JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let n = |x: Option<f64>| x.map_or(Value::Null, json_number);
         json!({
@@ -190,7 +191,7 @@ pub fn yield_of(code: f64, ha: f64, p: Option<&Project>, name: Option<&str>) -> 
     }
     Yield {
         code,
-        name: name.filter(|n| !n.is_empty()).map(str::to_string).unwrap_or_else(|| aup_name(code).map_or_else(|| format!("AUP zone {}", number_to_js_string(code)), str::to_string)),
+        name: name.filter(|n| !n.is_empty()).map_or_else(|| aup_name(code).map_or_else(|| format!("AUP zone {}", number_to_js_string(code)), str::to_string), str::to_string),
         ha: hav,
         net_pct: d.net_pct,
         dph: d.dph.filter(|x| crate::jsnum::truthy_number(*x)),
@@ -243,10 +244,12 @@ pub struct ZonedCapacity {
 
 impl ZonedCapacity {
     /// The rows of a kind.
+    #[must_use]
     pub fn of_kind(&self, kind: &str) -> Vec<&CapRow> {
         self.rows.iter().filter(|r| r.kind == kind).collect()
     }
     /// The answer as JSON, in the prototype's shape.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let row = |r: &CapRow| -> Value {
             let mut v = r.y.to_value();
@@ -275,6 +278,7 @@ fn no_yield(code: f64, group: &str) -> bool {
 }
 
 /// `proposedOf(code, P)`: the zone code the user proposes in place of an operative one, if it has a yield.
+#[must_use]
 pub fn proposed_of(code: f64, p: &Project) -> Option<f64> {
     let l = landuse_of(p)?;
     let t = l.get("proposed").filter(|x| value_truthy(x)).and_then(|x| x.get(key_of(code)))?;
@@ -298,6 +302,7 @@ pub fn aup_summary(p: &Project) -> Vec<Value> {
 /// `zonedCapacity(summary, opts)`: every zoned area in the study area with a kind: 'zoned' (a yield counted in full build-out), 'missing' (no
 /// default and none entered), 'assumed' (Future Urban: a structure-plan assumption, totalled separately) or 'none' (roads, water, open space).
 /// `codes` limits the zones.
+#[must_use]
 pub fn zoned_capacity(p: &Project, summary: &[Value], codes: Option<&[f64]>) -> ZonedCapacity {
     let rows: Vec<CapRow> = summary
         .iter()

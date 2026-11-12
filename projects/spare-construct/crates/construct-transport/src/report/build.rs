@@ -114,7 +114,7 @@ pub fn chapter_of(name: &str, title: &str) -> String {
     let appendix_letter = |x: &str, ci: bool| -> Option<char> {
         let x = if ci { x.to_ascii_lowercase() } else { x.to_string() };
         let rest = x.strip_prefix("appendix")?;
-        let e = ws_end(&rest, 0);
+        let e = ws_end(rest, 0);
         if e == 0 {
             return None;
         }
@@ -181,6 +181,7 @@ pub fn chapter_of(name: &str, title: &str) -> String {
 
 /// `fixTables(h)`: a table without a head gets a <thead> from its first row when that row has header cells, so headers
 /// repeat on every printed page.
+#[must_use]
 pub fn fix_tables(h: &str) -> String {
     let mut out = String::with_capacity(h.len() + 64);
     let mut rest = h;
@@ -464,25 +465,22 @@ pub(crate) fn number_figcaptions(body: &str) -> String {
     while let Some(i) = rest.find("<figcaption") {
         out.push_str(&rest[..i]);
         let after = &rest[i + "<figcaption".len()..];
-        match after.find('>') {
-            Some(g) => {
-                let attrs = &after[..g];
-                let tail = &after[g + 1..];
-                let w = ws_end(tail, 0);
-                let already = tail[w..].starts_with("<span class=\"tno\">");
-                out.push_str("<figcaption");
-                out.push_str(attrs);
-                out.push('>');
-                if !already {
-                    out.push_str("<span class=\"tno\">%%FNO%%</span>");
-                }
-                rest = tail;
+        if let Some(g) = after.find('>') {
+            let attrs = &after[..g];
+            let tail = &after[g + 1..];
+            let w = ws_end(tail, 0);
+            let already = tail[w..].starts_with("<span class=\"tno\">");
+            out.push_str("<figcaption");
+            out.push_str(attrs);
+            out.push('>');
+            if !already {
+                out.push_str("<span class=\"tno\">%%FNO%%</span>");
             }
-            None => {
-                out.push_str(&rest[i..]);
-                rest = "";
-                break;
-            }
+            rest = tail;
+        } else {
+            out.push_str(&rest[i..]);
+            rest = "";
+            break;
         }
     }
     out.push_str(rest);

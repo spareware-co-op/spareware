@@ -57,7 +57,7 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
         .iter()
         .any(|s| s.links.values().any(|lk| lk.osm.get().is_some_and(value_truthy)));
     let mut seen: Vec<&str> = Vec::new();
-    for (k, src, ds, lic) in VINTAGE.iter() {
+    for (k, src, ds, lic) in &VINTAGE {
         seen.push(k);
         let x = js::get(l, k).filter(|v| v.truthy());
         let feed_key = if *k == "ags23" { "ags" } else { k };
@@ -366,10 +366,10 @@ pub(crate) fn model_status(c: &mut Ctx) -> String {
         para(&format!(
             "Model purpose: NZTA TMDG category <b>{}</b>. {}",
             esc(&cat),
-            if !just.is_empty() {
-                format!("Justification: {}", esc(&just))
-            } else {
+            if just.is_empty() {
                 "<span class=\"warn\">The justification for this category has not been given (Settings \u{203a} Calibration and validation \u{203a} Why this category).</span>".to_string()
+            } else {
+                format!("Justification: {}", esc(&just))
             }
         )),
         c.table("Calibration and validation status", Tbl::new(vec![h("Period"), h("Status"), h("Date")], rows), &TableOpts::default()),
@@ -467,7 +467,7 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
             out.push(format!(
                 "{} assessed{}; the highest degree of saturation is {} in the {} peak (DoS {}, LoS {}). Indicative, not SIDRA output.",
                 plural(junctions as f64, "junction", "junctions"),
-                if junctions != nodes { format!(" ({})", plural(nodes as f64, "modelled node", "modelled nodes")) } else { String::new() },
+                if junctions == nodes { String::new() } else { format!(" ({})", plural(nodes as f64, "modelled node", "modelled nodes")) },
                 esc(&wr.name),
                 wr.p,
                 r_dos(s.dos),

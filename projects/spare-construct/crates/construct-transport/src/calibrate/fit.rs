@@ -83,6 +83,7 @@ pub struct FitResult {
 }
 
 /// The ISO text of a time in ms since 1970 (`new Date(ms).toISOString()`).
+#[must_use]
 pub fn iso_of_ms(ms: f64) -> String {
     let total = ms.floor() as i64;
     let days = total.div_euclid(86_400_000);
@@ -288,7 +289,7 @@ pub fn fit(
         _ => None,
     };
     let rejected: Vec<Rejected> = chk.as_ref().map(|c| c.rejected.clone()).unwrap_or_default();
-    let old_len = old.as_ref().map_or(0, |o| o.len());
+    let old_len = old.as_ref().map_or(0, crate::project::OrderedMap::len);
     let kept = old.is_some();
     macro_rules! none {
         ($note:expr, $history:expr) => {{
@@ -489,7 +490,7 @@ pub fn fit(
     if !rejected.is_empty() {
         extra.insert("rejected".to_string(), to_plain(&rejected));
     }
-    let date = opts.date.map(str::to_string).unwrap_or_else(now_iso);
+    let date = opts.date.map_or_else(now_iso, str::to_string);
     let info = MeInfo {
         base_year: Num::number(s.base_year.num()),
         delta: Maybe::Set(Value::Object(delta)),
@@ -598,8 +599,8 @@ pub fn clear(p: &mut Project, period: Option<&str>) -> usize {
         _ => vec!["AM".to_string(), "PM".to_string()],
     };
     for pd in &periods {
-        let k = me.factors.get(pd).and_then(|f| f.get()).map_or(0, |f| f.len());
-        if me.factors.get(pd).is_some_and(|f| f.is_set()) {
+        let k = me.factors.get(pd).and_then(|f| f.get()).map_or(0, crate::project::OrderedMap::len);
+        if me.factors.get(pd).is_some_and(crate::jsnum::Maybe::is_set) {
             n += k;
             me.factors.remove(pd);
         }
@@ -612,7 +613,7 @@ pub fn clear(p: &mut Project, period: Option<&str>) -> usize {
     }
     // Only results that used factors are out of date
     for pd in &hit {
-        for sc in p.scenarios.iter_mut() {
+        for sc in &mut p.scenarios {
             if let Some(Value::Object(r)) = sc.res.get_mut()
                 && let Some(Value::Object(x)) = r.get_mut(pd)
             {
@@ -621,7 +622,7 @@ pub fn clear(p: &mut Project, period: Option<&str>) -> usize {
         }
     }
     let me = p.me.get_mut().expect("still there");
-    if me.info.get().is_some_and(|i| i.is_empty()) {
+    if me.info.get().is_some_and(crate::project::OrderedMap::is_empty) {
         me.info = Maybe::Missing;
     }
     if me.info.is_missing() && me.factors.is_empty() {
@@ -631,6 +632,7 @@ pub fn clear(p: &mut Project, period: Option<&str>) -> usize {
 }
 
 /// `Store.res(sc, period)`: the scenario's saved result for a period, read back as a typed result (None when it has none).
+#[must_use]
 pub fn stored_res(sc: &crate::project::Scenario, period: &str) -> Option<Res> {
     match sc.res.get() {
         Some(Value::Object(m)) => m

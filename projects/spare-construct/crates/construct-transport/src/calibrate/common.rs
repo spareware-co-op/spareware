@@ -36,34 +36,42 @@ pub struct CalibCfg {
 
 impl CalibCfg {
     /// `cfg().minComplete` as a number.
+    #[must_use]
     pub fn min_complete_n(&self) -> f64 {
         value_to_number(&self.min_complete)
     }
     /// `cfg().coreBuffer` as a number.
+    #[must_use]
     pub fn core_buffer_n(&self) -> f64 {
         value_to_number(&self.core_buffer)
     }
     /// `cfg().xamax` as a number.
+    #[must_use]
     pub fn xamax_n(&self) -> f64 {
         value_to_number(&self.xamax)
     }
     /// `cfg().priorQuality !== 'low'`.
+    #[must_use]
     pub fn prior_high(&self) -> bool {
         self.prior_quality != Value::String("low".to_string())
     }
     /// `cfg().freezeGG !== false`.
+    #[must_use]
     pub fn freeze_gg_on(&self) -> bool {
         self.freeze_gg != Value::Bool(false)
     }
     /// `!!cfg().useBalanced`.
+    #[must_use]
     pub fn use_balanced_on(&self) -> bool {
         value_truthy(&self.use_balanced)
     }
     /// `!!cfg().noSinks`.
+    #[must_use]
     pub fn no_sinks_on(&self) -> bool {
         value_truthy(&self.no_sinks)
     }
     /// The window of a period (`cfg().windows[period]`).
+    #[must_use]
     pub fn window(&self, period: &str) -> Option<&[String; 2]> {
         self.windows.iter().find(|(p, _)| p == period).map(|(_, w)| w)
     }
@@ -147,11 +155,10 @@ fn num_value(n: &Num) -> Value {
 }
 
 /// `category(S)`: the TMDG purpose category the project is assessed against (settings.tmdg.category, upper-cased; E when missing or not A to G).
+#[must_use]
 pub fn category(s: Option<&Settings>) -> char {
     let raw = s
-        .and_then(|s| s.tmdg.get())
-        .map(|t| if t.category.truthy() { t.category.js_string() } else { "E".to_string() })
-        .unwrap_or_else(|| "E".to_string());
+        .and_then(|s| s.tmdg.get()).map_or_else(|| "E".to_string(), |t| if t.category.truthy() { t.category.js_string() } else { "E".to_string() });
     let up = raw.to_uppercase();
     let mut cs = up.chars();
     match (cs.next(), cs.next()) {
@@ -161,21 +168,24 @@ pub fn category(s: Option<&Settings>) -> char {
 }
 
 /// `hash(s)`: FNV-1a over the UTF-16 units of the text (used to order counts deterministically).
+#[must_use]
 pub fn hash(s: &str) -> u32 {
     let mut h: u32 = 0x811c_9dc5;
     for u in s.encode_utf16() {
-        h ^= u as u32;
+        h ^= u32::from(u);
         h = h.wrapping_mul(0x0100_0193);
     }
     h
 }
 
 /// `isMw(L)`: a motorway or ramp.
+#[must_use]
 pub fn is_mw(l: Option<&Link>) -> bool {
     l.is_some_and(|l| l.cls.is("motorway") || l.cls.is("ramp"))
 }
 
 /// `dirOf(b)`: the compass direction code of a heading: "NB", "EB", "SB" or "WB".
+#[must_use]
 pub fn dir_of(b: f64) -> &'static str {
     const D: [&str; 4] = ["NB", "EB", "SB", "WB"];
     let k = crate::jsnum::math_round((((b % 360.0) + 360.0) % 360.0) / 90.0);
@@ -183,6 +193,7 @@ pub fn dir_of(b: f64) -> &'static str {
 }
 
 /// `hhmm(m)`: minutes after midnight as "HH:MM".
+#[must_use]
 pub fn hhmm(m: f64) -> String {
     let h = ((m / 60.0).floor()) % 24.0;
     let mm = m % 60.0;
@@ -198,6 +209,7 @@ fn digits(s: &[char], from: usize, min: usize, max: usize) -> Option<(usize, usi
 }
 
 /// `toMin(t)`: minutes after midnight from "HH:MM", "H.MM", "HHMM", "7:15 am" or a date-time such as "2026-03-10 07:15:00" (the last time in the text); None when no valid time can be read.
+#[must_use]
 pub fn to_min(t: &str) -> Option<f64> {
     let s: Vec<char> = js_trim(t).chars().collect();
     // /(\d{1,2})[:.](\d{2})(?::\d{2}(?:\.\d+)?)?\s*([ap]\.?m\.?)?/gi: the last match in the text
@@ -237,7 +249,7 @@ pub fn to_min(t: &str) -> Option<f64> {
                 if q < s.len() && s[q] == '.' {
                     q += 1;
                 }
-                if q < s.len() && s[q].to_ascii_lowercase() == 'm' {
+                if q < s.len() && s[q].eq_ignore_ascii_case(&'m') {
                     q += 1;
                     if q < s.len() && s[q] == '.' {
                         q += 1;
@@ -256,7 +268,7 @@ pub fn to_min(t: &str) -> Option<f64> {
         Some((h, m, ap)) => (h.parse::<f64>().ok()?, m.parse::<f64>().ok()?, ap),
         None => {
             // /^(\d{1,2})(\d{2})$/
-            if s.len() >= 3 && s.len() <= 4 && s.iter().all(|c| c.is_ascii_digit()) {
+            if s.len() >= 3 && s.len() <= 4 && s.iter().all(char::is_ascii_digit) {
                 let split = s.len() - 2;
                 let h: String = s[..split].iter().collect();
                 let m: String = s[split..].iter().collect();
@@ -277,6 +289,7 @@ pub fn to_min(t: &str) -> Option<f64> {
 }
 
 /// `isoDate(v)`: a count date as ISO "yyyy-mm-dd" from ISO, yyyy/mm/dd, or NZ dd/mm/yyyy (also d-m-yy and dd.mm.yyyy); Some("") for an empty cell; None when the text is not a real date.
+#[must_use]
 pub fn iso_date(v: &str) -> Option<String> {
     let s: Vec<char> = js_trim(v).chars().collect();
     if s.is_empty() {
@@ -369,10 +382,11 @@ pub fn iso_date(v: &str) -> Option<String> {
     if !ok {
         return None;
     }
-    Some(format!("{}-{:0>2}-{:0>2}", y, mo, d))
+    Some(format!("{y}-{mo:0>2}-{d:0>2}"))
 }
 
 /// `pointInPoly(ll, poly)`: a [lat, lng] point inside a polygon (even-odd rule).
+#[must_use]
 pub fn point_in_poly(ll: &LatLng, poly: &[LatLng]) -> bool {
     let mut inside = false;
     let n = poly.len();
@@ -392,6 +406,7 @@ pub fn point_in_poly(ll: &LatLng, poly: &[LatLng]) -> bool {
 }
 
 /// `distToLine(ll, pts)`: distance (m) from a point to a polyline of [lat, lng].
+#[must_use]
 pub fn dist_to_line(ll: &LatLng, pts: &[LatLng]) -> f64 {
     let f = flat(ll[0]);
     let (px, py) = (f.x(ll), f.y(ll));

@@ -70,6 +70,7 @@ fn arrs(o: &JsonValue, keys: &[&str]) -> Option<JsonValue> {
 
 impl Rs {
     /// `rs(P)`: the author's inputs from the project's JSON.
+    #[must_use]
     pub fn read(raw: &JsonValue) -> Rs {
         let r = js::get(Some(raw), "report").filter(|r| r.is_object());
         let g = |k: &str| js::get(r, k);
@@ -113,16 +114,19 @@ impl Rs {
     }
 
     /// `details[k]`.
+    #[must_use]
     pub fn detail(&self, k: &str) -> Option<&JsonValue> {
         self.details.get(k)
     }
 
     /// `text[id]`: the author's text for a box, as the loose value.
+    #[must_use]
     pub fn text_of(&self, id: &str) -> Option<&JsonValue> {
         self.text.get(id)
     }
 
     /// `!!String(text[id] || '').trim()`: the box has text.
+    #[must_use]
     pub fn has_text(&self, id: &str) -> bool {
         match self.text.get(id) {
             Some(v) if v.truthy() => !crate::jsnum::js_trim(&v.js_string()).is_empty(),
@@ -131,6 +135,7 @@ impl Rs {
     }
 
     /// `signedOff(P)`: a named reviewer has ticked the report off.
+    #[must_use]
     pub fn signed_off(&self) -> bool {
         self.signoff.get("reviewed").is_some_and(|v| matches!(v, JsonValue::Bool(true)))
             && !crate::jsnum::js_trim(&js::text_or_empty(self.signoff.get("reviewer"))).is_empty()

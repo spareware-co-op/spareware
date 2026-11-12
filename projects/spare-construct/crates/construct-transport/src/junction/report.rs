@@ -20,6 +20,7 @@ const LETTERS: &str = "ABCDEF";
 const DASH: &str = "\u{2013}";
 
 /// `CAP_SRC[type]`: the name results give a controller type as the source of an arc's capacity (None for other types).
+#[must_use]
 pub fn cap_src(kind: &str) -> Option<&'static str> {
     match kind {
         "signals" => Some("signals"),
@@ -89,7 +90,7 @@ pub struct MovRows {
     pub short_lane_factor: Option<f64>,
 }
 
-/// `movRows(A, mv, ...)`: an approach's movement rows: demand, capacity and DoS at the peak flow rate, delay, LoS and Q95, and its lane rows.
+/// `movRows(A, mv, ...)`: an approach's movement rows: demand, capacity and `DoS` at the peak flow rate, delay, `LoS` and Q95, and its lane rows.
 #[allow(clippy::too_many_arguments)]
 pub fn mov_rows(
     a: &Arc,
@@ -459,12 +460,13 @@ impl JunctionResult {
 /// `junctionResult(G, ctl, xt, arcsRes, S, J, pf)`: one junction's approaches and summary.
 ///
 /// v and cap are veh/h (cap = PCU capacity / pf); dos is the PCU ratio at the peak flow rate.
-/// An approach over capacity (DoS > 1) is F whatever its delay; signals and roundabouts report
-/// the volume-weighted mean delay and its LoS; give way and stop report the worst movement.
+/// An approach over capacity (`DoS` > 1) is F whatever its delay; signals and roundabouts report
+/// the volume-weighted mean delay and its `LoS`; give way and stop report the worst movement.
 /// Back of queue (95th percentile): signals per lane Q1 + Q2 (HCM 2000 / Akcelik) times f95;
-/// unsignalised and roundabout entries by HCM 6 eq. 20-68. arcs_res holds each arc's flow and
+/// unsignalised and roundabout entries by HCM 6 eq. 20-68. `arcs_res` holds each arc's flow and
 /// junction delay by arc index.
 #[allow(clippy::too_many_arguments)]
+#[must_use]
 pub fn junction_result(
     g: &Graph,
     ctl: &Ctl,
@@ -516,7 +518,7 @@ pub fn junction_result(
         let flow_p = xt[ai] / j.pff;
         let dos = flow_p / cap_p;
         let cap_v = cap_p / pf;
-        let gl = math_max(1.0, a.gl as f64);
+        let gl = math_max(1.0, f64::from(a.gl));
         let mut qv = 0.0;
         if let Some(m) = mv.filter(|_| !free && a.ctrl != Ctrl::Sig) {
             let lanes = m.lanes.as_deref().unwrap_or(&[]);
@@ -692,7 +694,8 @@ pub fn junction_result(
     }
 }
 
-/// `delayText(d, dos)`: delay for display, never above 300 s; over-capacity approaches say so ("> 300 s · over capacity (DoS 1.42)"). NaN stands for a missing delay.
+/// `delayText(d, dos)`: delay for display, never above 300 s; over-capacity approaches say so ("> 300 s · over capacity (`DoS` 1.42)"). NaN stands for a missing delay.
+#[must_use]
 pub fn delay_text(d: f64, dos: f64) -> String {
     if !d.is_finite() {
         return DASH.to_string();
@@ -731,6 +734,7 @@ pub struct ConvInfo {
 }
 
 /// `convText(o)`: "Converged: gap 0.01% (target 0.01%), flows stable (P > 98%) for 4 iterations, 37 iterations." and the not-converged forms.
+#[must_use]
 pub fn conv_text(o: &ConvInfo) -> String {
     let pct = |g: f64| {
         let s = if g * 100.0 >= 0.005 || !(g > 0.0) {

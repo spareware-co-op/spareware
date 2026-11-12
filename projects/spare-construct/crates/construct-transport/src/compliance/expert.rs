@@ -99,6 +99,7 @@ pub fn clear_stale(p: &mut V, now: &V) -> usize {
 }
 
 /// `dataSources(P)`: every data source with its date and basis: `[{ source, date, detail, basis }]`.
+#[must_use]
 pub fn data_sources(p: &V) -> V {
     let c = state(p);
     let loaded = or_obj(p.g("data").g("loaded"));
@@ -119,7 +120,7 @@ pub fn data_sources(p: &V) -> V {
             } else {
                 names.iter().find(|n| n.0 == k).map_or_else(|| st(k), |n| st(n.1))
             };
-            let detail = [if !v.g("n").nullish() { format!("{} records", v.g("n").s()) } else { String::new() }, or_blank(v.g("label")), or_blank(v.g("licence"))]
+            let detail = [if v.g("n").nullish() { String::new() } else { format!("{} records", v.g("n").s()) }, or_blank(v.g("label")), or_blank(v.g("licence"))]
                 .into_iter()
                 .filter(|x| !x.is_empty())
                 .collect::<Vec<_>>()
@@ -196,6 +197,7 @@ pub fn data_sources(p: &V) -> V {
 }
 
 /// `appendixG(P)`: the expert disclosure material: `{ title, disclaimer, sections, signoffs, watermark, prompt }`.
+#[must_use]
 pub fn appendix_g(p: &V) -> V {
     let c = state(p);
     let e = c.g("expert");
@@ -427,21 +429,18 @@ fn child_mut<'a>(t: &'a mut V, k: &str) -> Option<&'a mut V> {
 
 /// `t[k] = v` on an object or array (false for a name on an array, which a JSON copy would not keep).
 fn set_child(t: &mut V, k: &str, v: V) -> bool {
-    match t {
-        V::Array(a) => match k.parse::<usize>() {
-            Ok(i) => {
-                while a.len() <= i {
-                    a.push(V::Null);
-                }
-                a[i] = v;
-                true
+    if let V::Array(a) = t { match k.parse::<usize>() {
+        Ok(i) => {
+            while a.len() <= i {
+                a.push(V::Null);
             }
-            Err(_) => false,
-        },
-        _ => {
-            t.set(k, v);
+            a[i] = v;
             true
         }
+        Err(_) => false,
+    } } else {
+        t.set(k, v);
+        true
     }
 }
 
@@ -453,7 +452,7 @@ fn kit_set_path(o: &mut V, k: &str, v: V) -> bool {
     }
     let mut t: &mut V = o;
     for seg in &p[..p.len() - 1] {
-        if !child(t, seg).is_some_and(|x| x.t()) && !set_child(t, seg, V::object()) {
+        if !child(t, seg).is_some_and(super::jv::Jx::t) && !set_child(t, seg, V::object()) {
             return false;
         }
         t = child_mut(t, seg).expect("step set above");
@@ -488,6 +487,7 @@ fn metric(r: &V) -> V {
 /// `runDiff(P, diffs, opts)`: runs each difference alone against the project and ranks them by effect: `{ period, central, rows, ms, note }`.
 ///
 /// `opts` can hold `sc` (the scenario, the active one by default), `period` (the project's by default) and `maxIter` for the assignments.
+#[must_use]
 pub fn run_diff(p: &V, diffs: &V, opts: &V) -> V {
     let sc = if opts.g("sc").t() { opts.g("sc").clone() } else { active_sc(p).clone() };
     let period = if opts.g("period").t() {
@@ -529,6 +529,7 @@ pub fn run_diff(p: &V, diffs: &V, opts: &V) -> V {
 }
 
 /// `jwsCSV(P, result)`: the joint witness statement input table as a stamped CSV.
+#[must_use]
 pub fn jws_csv(p: &V, result: &V) -> String {
     let mut rows: Vec<Vec<V>> = vec![["Item", "Party A (this project)", "Party B", "Effect", "Agreed?"].iter().map(|x| st(*x)).collect()];
     for r in result.g("rows").items() {
@@ -548,6 +549,7 @@ pub fn jws_csv(p: &V, result: &V) -> String {
    ==================================================================================================== */
 
 /// `badge(P, period)`: the model status badge: the model status with `html` and `text`.
+#[must_use]
 pub fn badge(p: &V, period: &str) -> V {
     let m = engine::model_status(&engine_view(p), period);
     let tone = if m.g("status").eq_s("validated") {
@@ -569,6 +571,7 @@ fn decode(h: &str) -> String {
 ///
 /// A disclaimer counts as present when the HTML marks it (`data-disclaimer` or `data-d`) or carries its opening words. The HTML is decoded
 /// first and only the text before any placeholder is compared. A kind that is not one of the known ones asks for nothing.
+#[must_use]
 pub fn missing_disclaimers(html: &str, kinds: &[&str]) -> Vec<String> {
     let map: [(&str, &str); 11] =
         [("junction", "D3"), ("economics", "D4"), ("anop", "D5"), ("validation", "D6"), ("model", "D7"), ("safety", "D8"), ("cbds", "D9"), ("regulatory", "D10"), ("authority", "D11"), ("handover", "D12"), ("assumption", "D13")];
@@ -592,11 +595,12 @@ pub fn missing_disclaimers(html: &str, kinds: &[&str]) -> Vec<String> {
             let head = slice(trim(&spaces.replace_with(before, " ")), 0, Some(60));
             !text.contains(&head)
         })
-        .map(|id| id.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 
 /// `supersession(P, now)`: the standards that changed since the project's outputs were stamped: `[{ id, doc, edition, next, used, text }]`.
+#[must_use]
 pub fn supersession(p: &V, now: &V) -> V {
     let c = state(p);
     let d = today(now);

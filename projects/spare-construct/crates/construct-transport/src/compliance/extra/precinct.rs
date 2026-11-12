@@ -33,6 +33,7 @@ fn r3t(v: &V) -> String {
 }
 
 /// `precinctList(P)`: the precincts the tracker knows: I450 and I451 as data, then the author's own (`precinct.custom`), keyed by id.
+#[must_use]
 pub fn precinct_list(p: &V) -> V {
     let mut out = xdata("PRECINCTS").clone();
     let cx = ctx::data(p);
@@ -47,6 +48,7 @@ pub fn precinct_list(p: &V) -> V {
 }
 
 /// `precinctOf(P)`: the project's precinct: the author's choice, or the one the Compliance tab found for the site; None when there is none.
+#[must_use]
 pub fn precinct_of(p: &V) -> Option<V> {
     let cx = ctx::data(p);
     let list = precinct_list(p);
@@ -67,12 +69,14 @@ pub fn precinct_of(p: &V) -> Option<V> {
 }
 
 /// `deemedMet(st, augier)`: an upgrade counts as in place when it is operational, or under construction or delivered by the applicant with the Augier agreement.
+#[must_use]
 pub fn deemed_met(st: &V, augier: &V) -> bool {
     st.eq_s("operational") || ((st.eq_s("construction") || st.eq_s("applicant")) && augier.t())
 }
 
 /// `precinctNode(P, sc, pr)`: the junction of the I450.9(4) inter-peak test in a scenario: the author's pick, or the junction whose roads carry
 /// both names (the one with most roads when several do); null when none is found.
+#[must_use]
 pub fn precinct_node(p: &V, sc: &V, pr: &V) -> V {
     let cx = ctx::data(p);
     let pick = cx.g("precinct").g("ipNode");
@@ -98,6 +102,7 @@ pub fn precinct_node(p: &V, sc: &V, pr: &V) -> V {
 
 /// `mixTrips(mix, sc)`: the trips (leaving plus arriving) of a mix of dwellings and floor area for the AM and PM peaks, from the engine's trip
 /// rates on a made-up zone with the project's settings: `[{ p, trips }]`.
+#[must_use]
 pub fn mix_trips(p: &V, mix: &V, sc: &V) -> V {
     let z = jobj! { "id" => "_mix", "kind" => "zone", "lu" => jobj! { "residential" => n0(mix.g("dw")), "retail" => n0(mix.g("retail")), "office" => n0(mix.g("commercial")), "medical" => n0(mix.g("community")) } };
     V::Array(
@@ -114,6 +119,7 @@ pub fn mix_trips(p: &V, mix: &V, sc: &V) -> V {
 /// `precinctCheck(P, sc)`: the staging check of the project's precinct: `{ precinct, rows (with upgrade states), cumulative, proposal, total, row
 /// (applicable), rowIndex, breach, why, status, statusText, headroom, ip, trips, banner, pc120Note, warnings, register, monitorText }`, or null when no
 /// precinct applies.
+#[must_use]
 pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
     let Some(pr) = precinct_of(p) else { return V::Null };
     let sc = sc.unwrap_or_else(|| ctx::active_sc(p));
@@ -163,7 +169,7 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
             merge(r, &jobj! { "up" => up })
         })
         .collect();
-    for r in rows.iter_mut() {
+    for r in &mut rows {
         let m = r.g("up").items().iter().all(|u| u.g("met").t());
         r.set("met", V::Bool(m));
     }
@@ -231,11 +237,10 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
     for (i, x) in a.items().iter().enumerate() {
         let (xt, bt) = (x.g("trips").n(), b.ix(i).g("trips").n());
         let ratio = if bt > 0.0 { Some(xt / bt) } else { None };
-        if let Some(r) = ratio {
-            if !(r <= similar) {
+        if let Some(r) = ratio
+            && !(r <= similar) {
                 all_similar = false;
             }
-        }
         rr.push(jobj! { "period" => x.g("p"), "proposed" => xt, "table" => bt, "ratio" => ratio });
     }
     let trips = jobj! { "rows" => rr, "pass" => all_similar, "basis" => xdata("STD.precinctTest.similarBasis"),
@@ -274,6 +279,7 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
 }
 
 /// `precinctCSV(P)`: the precinct staging table, register, proposal and tests as a CSV with the version stamp and disclaimers in footer rows.
+#[must_use]
 pub fn precinct_csv(p: &V) -> String {
     let c = precinct_check(p, None);
     let s = |x: &str| V::String(x.to_string());
@@ -325,7 +331,7 @@ pub fn precinct_csv(p: &V) -> String {
     rows.push(vec![s("Total"), total.g("dw").clone(), total.g("retail").clone(), total.g("commercial").clone(), total.g("community").clone()]);
     rows.push(vec![]);
     rows.push(vec![s("Applicable row"), c.g("row").g("row").clone()]);
-    let why = c.g("why").items().iter().map(|w| w.s()).collect::<Vec<_>>().join("; ");
+    let why = c.g("why").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("; ");
     rows.push(vec![s("Result"), s(&if c.g("breach").t() { format!("Breach: {why}") } else { "Within the caps".to_string() })]);
     rows.push(vec![s("Activity status"), c.g("statusText").clone()]);
     let ip = c.g("ip");
@@ -364,7 +370,7 @@ fn precinct_report(p: &V, rctx: Option<&dyn ReportCtx>) -> String {
         })
         .collect();
     let (total, cum, prop) = (x.g("total"), x.g("cumulative"), x.g("proposal"));
-    let why = x.g("why").items().iter().map(|w| w.s()).collect::<Vec<_>>().join("; ");
+    let why = x.g("why").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("; ");
     let verdict = if x.g("breach").t() {
         ctx::esc_s(&format!("Breach of row ({}): {}. {}.", tstr(x.g("row"), "row"), why, tstr(&x, "statusText")))
     } else {
@@ -391,6 +397,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-precinct"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, rctx: Option<&dyn ReportCtx>) -> Option<String> {
     (id == "compliance-extra-precinct").then(|| precinct_report(p, rctx))
 }
@@ -399,11 +406,13 @@ pub fn report(id: &str, p: &V, rctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-precinct"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     (id == "compliance-extra-precinct").then(|| precinct_csv(p))
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     (id == "compliance-extra-precinct").then(|| precinct_of(p).is_some())
 }

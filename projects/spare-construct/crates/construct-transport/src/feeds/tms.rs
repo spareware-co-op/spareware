@@ -23,16 +23,19 @@ use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// `dnum(iso)`: days since 1970-01-01 of a date written YYYY-MM-DD.
+#[must_use]
 pub fn dnum(iso: &str) -> f64 {
     math_round(super::nztime::parse_date(&format!("{iso}T00:00:00Z")).unwrap_or(f64::NAN) / DAY_MS)
 }
 
 /// `diso(n)`: the date (YYYY-MM-DD) of a day count since 1970-01-01.
+#[must_use]
 pub fn diso(n: f64) -> String {
     super::nztime::utc_date(n * DAY_MS)
 }
 
 /// `dow(n)`: the weekday of a day count, 0 = Sunday.
+#[must_use]
 pub fn dow(n: f64) -> f64 {
     (n + 4.0) % 7.0
 }
@@ -42,6 +45,7 @@ fn md(y: f64, m: f64, d: f64) -> f64 {
 }
 
 /// `easter(y)`: Easter Sunday of a year as a day count (the Gregorian computus).
+#[must_use]
 pub fn easter(y: f64) -> f64 {
     let a = y % 19.0;
     let b = (y / 100.0).floor();
@@ -61,6 +65,7 @@ pub fn easter(y: f64) -> f64 {
 }
 
 /// `nthMonday(y, m, nth)`: the nth Monday of a month (m counted from 0) as a day count.
+#[must_use]
 pub fn nth_monday(y: f64, m: f64, nth: f64) -> f64 {
     let mut d = math_round(date_utc(y, m, 1.0) / DAY_MS);
     while dow(d) != 1.0 {
@@ -72,6 +77,7 @@ pub fn nth_monday(y: f64, m: f64, nth: f64) -> f64 {
 /// `holidays(y, region)`: New Zealand public holidays of a year as day counts, Mondayised (Holidays Act 2003), in the order the prototype adds them.
 ///
 /// Auckland Anniversary (the Monday nearest 29 January) is added for the Auckland region. Matariki only for the years entered in [`MATARIKI_DATES`].
+#[must_use]
 pub fn holidays(y: i64, region: &str) -> Vec<f64> {
     let yf = y as f64;
     let mut out: Vec<f64> = Vec::new();
@@ -114,7 +120,7 @@ pub fn holidays(y: i64, region: &str) -> Vec<f64> {
     add(&mut out, e + 1.0);
     add(&mut out, nth_monday(yf, 5.0, 1.0)); // King's Birthday: first Monday in June
     add(&mut out, nth_monday(yf, 9.0, 4.0)); // Labour Day: fourth Monday in October
-    if let Some((_, d)) = MATARIKI_DATES.iter().find(|(yy, _)| *yy as i64 == y) {
+    if let Some((_, d)) = MATARIKI_DATES.iter().find(|(yy, _)| i64::from(*yy) == y) {
         let m: f64 = d[..2].parse().unwrap_or(f64::NAN);
         let dd: f64 = d[3..].parse().unwrap_or(f64::NAN);
         add(&mut out, md(yf, m, dd));
@@ -129,6 +135,7 @@ pub fn holidays(y: i64, region: &str) -> Vec<f64> {
 }
 
 /// `inTerm(n)`: whether a day is inside a school term, or None when the term dates of its year are not entered.
+#[must_use]
 pub fn in_term(n: f64) -> Option<bool> {
     let y: i64 = diso(n)[..4].parse().ok()?;
     let t = term_dates(y)?;
@@ -142,7 +149,7 @@ fn median(xs: &[f64]) -> Option<f64> {
     let mut s = xs.to_vec();
     js_sort_by(&mut s, |p, q| p - q);
     let m = s.len() >> 1;
-    Some(if s.len() % 2 == 1 { s[m] } else { (s[m - 1] + s[m]) / 2.0 })
+    Some(if s.len() % 2 == 1 { s[m] } else { f64::midpoint(s[m - 1], s[m]) })
 }
 
 fn mean(xs: &[f64]) -> Option<f64> {
@@ -169,6 +176,7 @@ pub struct Ols {
 }
 
 /// `ols(pts)`: the least squares line through [x, y] points; None with fewer than two points or no spread in x.
+#[must_use]
 pub fn ols(pts: &[[f64; 2]]) -> Option<Ols> {
     if pts.len() < 2 {
         return None;
@@ -283,7 +291,7 @@ pub struct TmsStats {
     pub series: TmsSeries,
     /// "veh/day".
     pub units: String,
-    /// "weekday_factored".
+    /// "`weekday_factored`".
     pub method: String,
     /// When the statistics were made.
     pub at: String,
@@ -298,7 +306,7 @@ struct Day {
     o: f64,
 }
 
-/// `tmsStats(rows, opts)`: the statistics of one site from deduplicated rows ({ SiteRef, startDate, laneNumber, flowDirection, classWeight, v }).
+/// `tmsStats(rows, opts)`: the statistics of one site from deduplicated rows ({ `SiteRef`, startDate, laneNumber, flowDirection, classWeight, v }).
 ///
 /// `hist` is the site's five years of AADT, oldest first; `region` decides the regional holidays (Auckland by default); `now_ms` is the date the growth is
 /// counted to and `clock_ms` the time the statistics are stamped with (the same in the prototype's own use). Gives
@@ -309,7 +317,7 @@ pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Opti
     let mut day: HashMap<i64, Day> = HashMap::new();
     let mut dirs: Vec<JsonValue> = Vec::new();
     for r in rows {
-        let ms = r.get("startDate").map_or(None, date_of).ok_or_else(|| "Invalid time value".to_string())?;
+        let ms = r.get("startDate").and_then(date_of).ok_or_else(|| "Invalid time value".to_string())?;
         let n = dnum(&today(ms)) as i64;
         let v = {
             let x = r.get("v").map_or(f64::NAN, JsonValue::to_number);
@@ -328,11 +336,10 @@ pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Opti
         } else {
             t.o += v;
         }
-        if let Some(fd) = r.get("flowDirection").filter(|d| !d.is_null()) {
-            if !dirs.iter().any(|d| d.strict_eq(fd)) {
+        if let Some(fd) = r.get("flowDirection").filter(|d| !d.is_null())
+            && !dirs.iter().any(|d| d.strict_eq(fd)) {
                 dirs.push(fd.clone());
             }
-        }
     }
     if day.is_empty() {
         return Ok(None);
@@ -394,7 +401,9 @@ pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Opti
     let tm = mean(&tv);
     let sd = sdev(&tv);
     let unknown_term = used.iter().any(|&n| in_term(n).is_none());
-    let target = if !used.is_empty() {
+    let target = if used.is_empty() {
+        None
+    } else {
         let nw = weeks.len();
         Some(TmsTarget {
             mean: tm.expect("a mean"),
@@ -419,15 +428,13 @@ pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Opti
                 String::new()
             },
         })
-    } else {
-        None
     };
     let l: f64 = valid.iter().fold(0.0, |s, n| s + day[&(*n as i64)].l);
     let h: f64 = valid.iter().fold(0.0, |s, n| s + day[&(*n as i64)].h);
     let all = mean(&vals(&valid));
     let dow_f: Vec<Option<f64>> = (0..7)
         .map(|k| {
-            let x = vals(&valid.iter().copied().filter(|&n| dow(n) == k as f64).collect::<Vec<_>>());
+            let x = vals(&valid.iter().copied().filter(|&n| dow(n) == f64::from(k)).collect::<Vec<_>>());
             match all {
                 Some(a) if !x.is_empty() && a != 0.0 && !a.is_nan() => Some(mean(&x).expect("a mean") / a),
                 _ => None,
@@ -484,9 +491,9 @@ pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Opti
         adt: all,
         aadt,
         aawdt,
-        wdt: if !wk.is_empty() { Some(TmsWeekday { mean: mean(&vals(&wk)).expect("a mean"), n: wk.len() }) } else { None },
+        wdt: if wk.is_empty() { None } else { Some(TmsWeekday { mean: mean(&vals(&wk)).expect("a mean"), n: wk.len() }) },
         target,
-        hcv: if l + h != 0.0 { Some(h / (l + h)) } else { None },
+        hcv: if l + h == 0.0 { None } else { Some(h / (l + h)) },
         dow: dow_f,
         madt,
         growth,
@@ -509,6 +516,7 @@ pub struct TmsSite {
 }
 
 /// `tmsSites(counts)`: the project's NZTA count sites that are real sites (not virtual) with an 8-character reference.
+#[must_use]
 pub fn tms_sites(p: &Project) -> Vec<TmsSite> {
     let re = Regex::lit("^[0-9A-Z]{8}$", "i");
     let Some(Value::Array(counts)) = p.data.get().and_then(|d| d.extra.get("counts")) else { return Vec::new() };
@@ -564,6 +572,7 @@ pub struct TmsLoad {
 
 impl TmsLoad {
     /// A download for these sites. `days` is the "days to download" setting (a cleared or text value gives 400).
+    #[must_use]
     pub fn new(sites: Vec<TmsSite>, days: &Value, now_ms: f64, timeout_ms: f64) -> TmsLoad {
         let d = math_round(value_to_number(days));
         let days = if d > 0.0 { d } else { 400.0 };
@@ -606,6 +615,7 @@ impl TmsLoad {
         self.query = Some(ArcQuery::new(SRC_TMS.url, params, TMS_MAX_PAGES, self.timeout_ms));
     }
     /// The progress lines the prototype passes to its status callback, in order.
+    #[must_use]
     pub fn statuses(&self) -> &[String] {
         &self.statuses
     }
@@ -678,6 +688,7 @@ impl Flow for TmsLoad {
 }
 
 /// `periodUsesTMS()`: whether the model turns a count's TMS weekday mean into its peak volume (true for this port).
+#[must_use]
 pub fn period_uses_tms(s: &Settings) -> bool {
     let mut a = Count::new("a", "nzta");
     a.adt = Maybe::number(1000.0);
@@ -691,6 +702,7 @@ pub fn period_uses_tms(s: &Settings) -> bool {
 }
 
 /// `periodUsesShare()`: whether the model reads a site's own peak shares (`share`) (true for this port).
+#[must_use]
 pub fn period_uses_share(s: &Settings) -> bool {
     let mut a = Count::new("a", "nzta");
     a.adt = Maybe::number(1000.0);
@@ -700,7 +712,7 @@ pub fn period_uses_share(s: &Settings) -> bool {
 
 /// `attachTMS()`: puts TMS results (and peak profiles) on the NZTA counts; gives how many counts got results.
 ///
-/// A count whose TMS mean the model uses gets `obs_method` "weekday_factored" and `n_days`; one it does not use (an indicative mean) keeps the AADT basis.
+/// A count whose TMS mean the model uses gets `obs_method` "`weekday_factored`" and `n_days`; one it does not use (an indicative mean) keeps the AADT basis.
 /// The prototype counts a count as changed when its `tms` is not the same object as the result; a project read from a file never holds the same object, so every count with a result counts.
 pub fn attach_tms(p: &mut Project) -> usize {
     let feeds = p.extra.get("feeds").cloned();
@@ -762,7 +774,8 @@ pub fn attach_tms(p: &mut Project) -> usize {
     n
 }
 
-/// `loadProfiles()`: the request for the peak profiles file (data/tms_profiles.json on the host's own site).
+/// `loadProfiles()`: the request for the peak profiles file (`data/tms_profiles.json` on the host's own site).
+#[must_use]
 pub fn profiles_request() -> GetOnce {
     GetOnce::new(HttpRequest::get_json(SRC_PROFILES.url.to_string(), 8000.0))
 }

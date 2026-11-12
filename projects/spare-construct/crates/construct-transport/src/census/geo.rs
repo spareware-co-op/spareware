@@ -22,15 +22,18 @@ pub struct Bx {
 
 impl Bx {
     /// A box with no basis.
+    #[must_use]
     pub fn new(s: f64, w: f64, n: f64, e: f64) -> Bx {
         Bx { s, w, n, e, basis: None }
     }
     /// The same box with a basis.
+    #[must_use]
     pub fn with_basis(mut self, basis: &str) -> Bx {
         self.basis = Some(basis.to_string());
         self
     }
     /// The box as JSON, `{ s, w, n, e, basis }` (the basis only when there is one).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut o = serde_json::Map::new();
         for (k, v) in [("s", self.s), ("w", self.w), ("n", self.n), ("e", self.e)] {
@@ -44,11 +47,13 @@ impl Bx {
 }
 
 /// `isFinite(x)` of a loose value (`Number(x)` is finite).
+#[must_use]
 pub fn finite_value(v: Option<&Value>) -> bool {
     v.is_some_and(|v| value_to_number(v).is_finite())
 }
 
 /// `box(b)`: a box from `[[s, w], [n, e]]` (corners in any order), `{ south, west, north, east }` or `{ s, w, n, e }`; None for anything else.
+#[must_use]
 pub fn box_of(b: &Value) -> Option<Bx> {
     if !value_truthy(b) {
         return None;
@@ -99,17 +104,20 @@ pub fn area_box(p: &Project, sc: &Scenario) -> Option<Bx> {
 }
 
 /// `boxText(B)`: the size of a box in kilometres, "1.4 \u{d7} 1.1 km".
+#[must_use]
 pub fn box_text(b: &Bx) -> String {
-    let f = util::flat((b.s + b.n) / 2.0);
+    let f = util::flat(f64::midpoint(b.s, b.n));
     format!("{} \u{d7} {} km", fmt::num((b.e - b.w) * f.kx / 1000.0, 1), fmt::num((b.n - b.s) * f.ky / 1000.0, 1))
 }
 
 /// `inBox(B, lat, lng)`.
+#[must_use]
 pub fn in_box(b: &Bx, lat: f64, lng: f64) -> bool {
     lat >= b.s && lat <= b.n && lng >= b.w && lng <= b.e
 }
 
 /// `boxKey(B)`: the box as text to four decimals, the cache key of a download.
+#[must_use]
 pub fn box_key(b: &Bx) -> String {
     [b.s, b.w, b.n, b.e].iter().map(|v| to_fixed(*v, 4)).collect::<Vec<_>>().join(",")
 }
@@ -117,6 +125,7 @@ pub fn box_key(b: &Bx) -> String {
 /// `parseNum(v)`: '12,000', '5000 m2', '5 000 m\u{b2}' and '250 sqm' become numbers; '' gives None; anything else NaN (Some).
 ///
 /// A number is returned as it is when finite and NaN otherwise.
+#[must_use]
 pub fn parse_num(v: &Value) -> Option<f64> {
     if let Value::Number(n) = v {
         let x = n.as_f64().unwrap_or(f64::NAN);
@@ -126,6 +135,7 @@ pub fn parse_num(v: &Value) -> Option<f64> {
 }
 
 /// `parseNum` of text.
+#[must_use]
 pub fn parse_num_text(text: &str) -> Option<f64> {
     // .replace(/m²|m2|sqm/gi, '') then .replace(/[\s, ]/g, '')
     let low = text.to_lowercase();
@@ -196,6 +206,7 @@ fn numlike(s: &str) -> bool {
 }
 
 /// `lr(total, weights)`: largest-remainder split of an integer total by weights (it sums exactly).
+#[must_use]
 pub fn lr(total: f64, weights: &[f64]) -> Vec<f64> {
     let s = weights.iter().fold(0.0, |a, b| a + b);
     if !(s > 0.0) || !(total > 0.0) {
@@ -218,7 +229,7 @@ pub fn lr(total: f64, weights: &[f64]) -> Vec<f64> {
     out
 }
 
-/// A ring of a polygon: [lng, lat] points (ArcGIS order).
+/// A ring of a polygon: [lng, lat] points (`ArcGIS` order).
 pub type Ring = Vec<[f64; 2]>;
 
 /// A polygon with its bounding box [west, south, east, north].
@@ -232,6 +243,7 @@ pub struct Poly {
 
 impl Poly {
     /// A polygon from rings, with its bounding box.
+    #[must_use]
     pub fn new(rings: Vec<Ring>) -> Poly {
         let bb = bb_of(&rings);
         Poly { rings, bb }
@@ -239,6 +251,7 @@ impl Poly {
 }
 
 /// `bbOf(rings)`: [west, south, east, north] over every point.
+#[must_use]
 pub fn bb_of(rings: &[Ring]) -> [f64; 4] {
     let mut bb = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
     for r in rings {
@@ -253,6 +266,7 @@ pub fn bb_of(rings: &[Ring]) -> [f64; 4] {
 }
 
 /// `inRings(x, y, rings)`: even-odd over every ring, so holes work.
+#[must_use]
 pub fn in_rings(x: f64, y: f64, rings: &[Ring]) -> bool {
     let mut c = false;
     for r in rings {
@@ -273,21 +287,25 @@ pub fn in_rings(x: f64, y: f64, rings: &[Ring]) -> bool {
 }
 
 /// `inPoly(f, lng, lat)`: the point is inside the polygon (bounding box first).
+#[must_use]
 pub fn in_poly(f: &Poly, lng: f64, lat: f64) -> bool {
     lng >= f.bb[0] && lng <= f.bb[2] && lat >= f.bb[1] && lat <= f.bb[3] && in_rings(lng, lat, &f.rings)
 }
 
 /// `bbInBox(bb, B)`: the bounding box lies wholly inside the study box.
+#[must_use]
 pub fn bb_in_box(bb: &[f64; 4], b: &Bx) -> bool {
     bb[0] >= b.w && bb[2] <= b.e && bb[1] >= b.s && bb[3] <= b.n
 }
 
 /// `bbMeets(bb, B)`: the bounding box touches the study box.
+#[must_use]
 pub fn bb_meets(bb: &[f64; 4], b: &Bx) -> bool {
     bb[0] <= b.e && bb[2] >= b.w && bb[1] <= b.n && bb[3] >= b.s
 }
 
-/// `ringsArea(rings)`: area in m\u{b2}, holes subtracted (ArcGIS winds holes the other way).
+/// `ringsArea(rings)`: area in m\u{b2}, holes subtracted (`ArcGIS` winds holes the other way).
+#[must_use]
 pub fn rings_area(rings: &[Ring]) -> f64 {
     if rings.is_empty() {
         return 0.0;
@@ -316,6 +334,7 @@ pub struct Sample {
 }
 
 /// `sampleShare(f, B, n)`: the sampled share of a polygon's area inside box B, and the sample points inside both.
+#[must_use]
 pub fn sample_share(f: &Poly, b: &Bx, n: usize) -> Sample {
     let [w, s, e, nn] = f.bb;
     let mut pts = Vec::new();
@@ -338,7 +357,8 @@ pub fn sample_share(f: &Poly, b: &Bx, n: usize) -> Sample {
     Sample { share, pts, inside }
 }
 
-/// `ringsOf(g)`: the rings of an ArcGIS geometry that have more than two points, each point as [lng, lat].
+/// `ringsOf(g)`: the rings of an `ArcGIS` geometry that have more than two points, each point as [lng, lat].
+#[must_use]
 pub fn rings_of(g: Option<&Value>) -> Vec<Ring> {
     let Some(Value::Array(rs)) = g.and_then(|g| g.get("rings")) else {
         return Vec::new();
@@ -356,6 +376,7 @@ pub fn rings_of(g: Option<&Value>) -> Vec<Ring> {
 }
 
 /// `n1(x)`: one decimal, "\u{2013}" for a missing value.
+#[must_use]
 pub fn n1(x: Option<f64>) -> String {
     match x {
         Some(v) if v.is_finite() => fmt::num(v, 1),
@@ -364,6 +385,7 @@ pub fn n1(x: Option<f64>) -> String {
 }
 
 /// `n0(x)`: a whole number, "\u{2013}" for a missing value.
+#[must_use]
 pub fn n0(x: Option<f64>) -> String {
     match x {
         Some(v) if v.is_finite() => fmt::int(v),
@@ -372,6 +394,7 @@ pub fn n0(x: Option<f64>) -> String {
 }
 
 /// `r2(x)`: rounded to two decimals.
+#[must_use]
 pub fn r2(x: f64) -> f64 {
     math_round(x * 100.0) / 100.0
 }
@@ -382,6 +405,7 @@ pub fn plus(v: Option<&Value>) -> f64 {
 }
 
 /// `Num` helper: a number field set to a number.
+#[must_use]
 pub fn set_num(x: f64) -> crate::jsnum::Num {
     Maybe::Set(JsNum::Number(x))
 }

@@ -28,7 +28,7 @@ pub(crate) fn control_label(t: &str) -> String {
     t.to_string()
 }
 
-fn sc_of<'a>(c: &Ctx<'a, '_>, i: Option<usize>) -> usize {
+fn sc_of(c: &Ctx<'_, '_>, i: Option<usize>) -> usize {
     i.or(c.sel.base).unwrap_or(0)
 }
 
@@ -298,7 +298,7 @@ pub(crate) fn aup_of(r: &Rep, sc: usize) -> Aup {
     let ov = js::get(comp, "overlays").filter(|o| o.truthy());
     let art = js::get(net, "aupArterial")
         .filter(|a| a.truthy() && a.is_object())
-        .map(|a| a.to_value())
+        .map(crate::edit::json::JsonValue::to_value)
         .and_then(|v| match v {
             Value::Object(m) => Some(m),
             _ => None,
@@ -363,7 +363,7 @@ pub(crate) fn roads(c: &mut Ctx) -> String {
             let lanes = g
                 .links
                 .iter()
-                .map(|l| math_max(l.lanes_ab.int32() as f64, l.lanes_ba.int32() as f64))
+                .map(|l| math_max(f64::from(l.lanes_ab.int32()), f64::from(l.lanes_ba.int32())))
                 .fold(f64::NEG_INFINITY, math_max);
             let ar: Vec<Option<bool>> = g.links.iter().map(|l| a.art(l)).collect();
             let aup = if ar.contains(&Some(true)) {
@@ -605,7 +605,7 @@ pub(crate) fn active(c: &mut Ctx) -> String {
                     _ => fmt::DASH.to_string(),
                 };
                 let fc = js::text_or_empty(g("fcPt"));
-                let fc = if !fc.is_empty() { fc } else { fc_pt_near(scn, s).unwrap_or_else(|| fmt::DASH.to_string()) };
+                let fc = if fc.is_empty() { fc_pt_near(scn, s).unwrap_or_else(|| fmt::DASH.to_string()) } else { fc };
                 Row::new(vec![
                     esc(&js::text(g("name"))),
                     esc(&if code.is_empty() { js::text(g("id")) } else { code }),
@@ -655,7 +655,7 @@ pub(crate) fn active(c: &mut Ctx) -> String {
             Row::new(vec![
                 esc(&g.name),
                 esc(at_facility(l.cycle.as_str())),
-                if lts != 0 { format!("LTS {}", lts) } else { "Not allowed".to_string() },
+                if lts != 0 { format!("LTS {lts}") } else { "Not allowed".to_string() },
                 anop_cycle(l, aadt).to_string(),
             ])
         })
@@ -780,7 +780,7 @@ fn count_rows<'a>(r: &Rep<'a>) -> Vec<CountRow<'a>> {
 fn src_short(v: Option<&JsonValue>) -> String {
     let key = js::text(v);
     match crate::datahub::source(&key) {
-        Some(s) if v.is_some_and(JsonValue::is_object_like) == false => s.short.to_string(),
+        Some(s) if !v.is_some_and(JsonValue::is_object_like) => s.short.to_string(),
         _ => key,
     }
 }
@@ -972,22 +972,16 @@ pub(crate) fn j2_table(c: &mut Ctx, sc: usize, title: &str) -> String {
     if rows.is_empty() {
         return note(&format!("{} has no junction results. Run the model.", esc(r.sc(sc).name())), false);
     }
-    let ri = match c.refs.iter().position(|(k, _)| *k == scn.id) {
-        Some(i) => i,
-        None => {
-            c.refs.push((scn.id.clone(), Vec::new()));
-            c.refs.len() - 1
-        }
+    let ri = if let Some(i) = c.refs.iter().position(|(k, _)| *k == scn.id) { i } else {
+        c.refs.push((scn.id.clone(), Vec::new()));
+        c.refs.len() - 1
     };
     let mut body: Vec<Row> = Vec::new();
     for id in &ids {
-        let reff = match c.refs[ri].1.iter().find(|(k, _)| k == id) {
-            Some((_, v)) => v.clone(),
-            None => {
-                let v = format!("J{}", c.refs[ri].1.len() + 1);
-                c.refs[ri].1.push((id.clone(), v.clone()));
-                v
-            }
+        let reff = if let Some((_, v)) = c.refs[ri].1.iter().find(|(k, _)| k == id) { v.clone() } else {
+            let v = format!("J{}", c.refs[ri].1.len() + 1);
+            c.refs[ri].1.push((id.clone(), v.clone()));
+            v
         };
         let first = rows.iter().find(|x| x.id == *id).expect("a row");
         let ctl = match &first.s {
@@ -1068,12 +1062,9 @@ pub(crate) fn speeds(c: &mut Ctx) -> String {
         for l in &g.links {
             let s = speed_of(l);
             let k = format!("{}|{}", s.v.map_or("null".to_string(), number_to_js_string), s.src);
-            let i = match by.iter().position(|x| x.0 == k) {
-                Some(i) => i,
-                None => {
-                    by.push((k, s.v, s.src.clone(), Vec::new(), 0.0));
-                    by.len() - 1
-                }
+            let i = if let Some(i) = by.iter().position(|x| x.0 == k) { i } else {
+                by.push((k, s.v, s.src.clone(), Vec::new(), 0.0));
+                by.len() - 1
             };
             by[i].3.push(l);
             by[i].4 += scn.link_len(l) / 1000.0;
@@ -1112,7 +1103,7 @@ pub(crate) fn speeds(c: &mut Ctx) -> String {
                             }
                         }
                     }
-                    if n != 0.0 { Some(s / n) } else { None }
+                    if n == 0.0 { None } else { Some(s / n) }
                 })
                 .collect();
             let obs = g
@@ -1184,7 +1175,7 @@ pub(crate) fn speeds(c: &mut Ctx) -> String {
         String::new()
     };
     let t2 = j2_table(c, sc, "Table J2 \u{b7} Existing junction performance");
-    format!("{}\n      {}\n      {}", t1, figs, t2)
+    format!("{t1}\n      {figs}\n      {t2}")
 }
 
 fn _unused(_: Head, _: &[&str], _: Maybe<JsNum>) -> Vec<String> {

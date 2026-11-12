@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 /// `arr.sort(cmp)` as V8 sorts: the comparator returns a number (below 0: a first; NaN counts as 0) and the sort is stable.
 ///
-/// Arrays shorter than 64 take V8's exact path (TimSort's first run, then binary insertion), so
+/// Arrays shorter than 64 take V8's exact path (`TimSort`'s first run, then binary insertion), so
 /// even a comparator that is not a consistent order (NaN keys) gives V8's order. Longer arrays
 /// use a binary insertion sort over the whole array, which equals V8 for consistent comparators.
 pub fn js_sort_by<T>(v: &mut [T], mut cmp: impl FnMut(&T, &T) -> f64) {
@@ -56,6 +56,7 @@ pub fn js_sort_by<T>(v: &mut [T], mut cmp: impl FnMut(&T, &T) -> f64) {
 }
 
 /// `a < b` for JavaScript strings: compares UTF-16 code units.
+#[must_use]
 pub fn js_str_lt(a: &str, b: &str) -> bool {
     a.encode_utf16().cmp(b.encode_utf16()) == Ordering::Less
 }

@@ -7,6 +7,7 @@ use crate::jsnum::math_min;
 use crate::util::{self, Flat, LatLng};
 
 /// `flatAt(lat)`: the flat projection around a latitude.
+#[must_use]
 pub fn flat_at(lat: f64) -> Flat {
     util::flat(lat)
 }
@@ -25,6 +26,7 @@ pub struct ToLine {
 }
 
 /// `toLine(P, pts, f)`: the distance (m) from a point to a polyline, with the bearing of the nearest segment.
+#[must_use]
 pub fn to_line(p: &LatLng, pts: &[LatLng], f: &Flat) -> ToLine {
     let q = xy(f, p);
     let mut best = ToLine { d: f64::INFINITY, b: None };
@@ -39,6 +41,7 @@ pub fn to_line(p: &LatLng, pts: &[LatLng], f: &Flat) -> ToLine {
 }
 
 /// `inRing(ll, ring)`: a point is inside a ring of `[lat, lng]` points (even-odd rule).
+#[must_use]
 pub fn in_ring(ll: &LatLng, ring: &[LatLng]) -> bool {
     let mut inside = false;
     let n = ring.len();
@@ -57,6 +60,7 @@ pub fn in_ring(ll: &LatLng, ring: &[LatLng]) -> bool {
 }
 
 /// `toPolys(P, rings, f)`: the distance from a point to the nearest of several rings, 0 inside one.
+#[must_use]
 pub fn to_polys(p: &LatLng, rings: &[Vec<LatLng>], f: &Flat) -> f64 {
     let mut d = f64::INFINITY;
     for r in rings {
@@ -69,6 +73,7 @@ pub fn to_polys(p: &LatLng, rings: &[Vec<LatLng>], f: &Flat) -> f64 {
 }
 
 /// `lineToLine(A, B, f)`: the shortest distance (m) between two polylines (0 where they cross).
+#[must_use]
 pub fn line_to_line(a: &[LatLng], b: &[LatLng], f: &Flat) -> f64 {
     let a: Vec<[f64; 2]> = a.iter().map(|p| xy(f, p)).collect();
     let b: Vec<[f64; 2]> = b.iter().map(|p| xy(f, p)).collect();
@@ -96,6 +101,7 @@ pub fn line_to_line(a: &[LatLng], b: &[LatLng], f: &Flat) -> f64 {
 }
 
 /// The bounding box of a polyline: (south, north, west, east).
+#[must_use]
 pub fn box_of(pts: &[LatLng]) -> (f64, f64, f64, f64) {
     let (mut s, mut n, mut w, mut e) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
     for p in pts {
@@ -109,9 +115,10 @@ pub fn box_of(pts: &[LatLng]) -> (f64, f64, f64, f64) {
 
 /// `lineToPolys(pts, shapes, f, within, open)`: the shortest distance (m) from a polyline to rings (0 when a vertex is inside one or the
 /// line crosses an edge), or to open lines when `open` is true. Shapes further than `within` m (by bounding box) are skipped.
+#[must_use]
 pub fn line_to_polys(pts: &[LatLng], shapes: &[Vec<LatLng>], f: &Flat, within: f64, open: bool) -> f64 {
     let (ls, ln, lw, le) = box_of(pts);
-    let pad = within.min(1e5) / 111320.0;
+    let pad = within.min(1e5) / 111_320.0;
     let pad_lng = pad / crate::jsnum::math_max(0.2, crate::jsmath::cos(ls * std::f64::consts::PI / 180.0));
     let mut d = f64::INFINITY;
     for r in shapes {
@@ -138,6 +145,7 @@ pub fn line_to_polys(pts: &[LatLng], shapes: &[Vec<LatLng>], f: &Flat, within: f
 }
 
 /// `boundsOf(sc)`: the extent of the scenario's junctions as `{ s, w, n, e }`, None without any.
+#[must_use]
 pub fn bounds_of(sc: &V) -> Option<(f64, f64, f64, f64)> {
     let (mut s, mut w, mut n, mut e) = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
     for nd in sc.g("nodes").vals() {
@@ -153,6 +161,7 @@ pub fn bounds_of(sc: &V) -> Option<(f64, f64, f64, f64)> {
 /// `conflate(sc, lines, { radius, bearing })`: map polylines conflated to model links. A link matches a line when 2 of its 3 points
 /// (a quarter, half and three quarters along) are within `radius` m of the line with the line's bearing within `bearing` degrees (either
 /// direction). `lines` are (tag, points); the answer is (link id, tag) in link order.
+#[must_use]
 pub fn conflate(sc: &V, lines: &[(V, Vec<LatLng>)], radius: f64, bearing: f64) -> Vec<(String, V)> {
     let mut out = Vec::new();
     let Some(b) = bounds_of(sc) else { return out };
@@ -160,10 +169,10 @@ pub fn conflate(sc: &V, lines: &[(V, Vec<LatLng>)], radius: f64, bearing: f64) -
         return out;
     }
     let (bs, bw, bn, be) = b;
-    let mid = (bs + bn) / 2.0;
+    let mid = f64::midpoint(bs, bn);
     let f = flat_at(mid);
-    let pad_lat = 200.0 / 111320.0;
-    let pad_lng = 200.0 / (111320.0 * crate::jsmath::cos(mid * std::f64::consts::PI / 180.0));
+    let pad_lat = 200.0 / 111_320.0;
+    let pad_lng = 200.0 / (111_320.0 * crate::jsmath::cos(mid * std::f64::consts::PI / 180.0));
     let near: Vec<(&V, Vec<LatLng>)> = lines
         .iter()
         .map(|(tag, pts)| (tag, pts.iter().filter(|p| p[0] > bs - pad_lat && p[0] < bn + pad_lat && p[1] > bw - pad_lng && p[1] < be + pad_lng).copied().collect::<Vec<_>>()))
@@ -207,7 +216,8 @@ pub fn conflate(sc: &V, lines: &[(V, Vec<LatLng>)], radius: f64, bearing: f64) -
     out
 }
 
-/// `paths(g)`: the lines or rings of an ArcGIS geometry as `[lat, lng]` points rounded to 7 places.
+/// `paths(g)`: the lines or rings of an `ArcGIS` geometry as `[lat, lng]` points rounded to 7 places.
+#[must_use]
 pub fn paths(g: &V) -> Vec<Vec<LatLng>> {
     let src = if g.g("paths").t() { g.g("paths") } else { g.g("rings") };
     src.items().iter().map(|p| p.items().iter().map(|q| [util::r7(q.ix(1).n()), util::r7(q.ix(0).n())]).collect()).collect()

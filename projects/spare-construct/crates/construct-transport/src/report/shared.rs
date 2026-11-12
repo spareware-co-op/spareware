@@ -63,10 +63,10 @@ pub(crate) fn reg_ctx(r: &Rep) -> RegCtx {
     let d = &r.rs.details;
     let pw = {
         let p = js::text_or_empty(d.get("pathway"));
-        if !p.is_empty() {
-            p
-        } else {
+        if p.is_empty() {
             js::text_or_empty(js::path(Some(r.raw), &["assessment", "type"]))
+        } else {
+            p
         }
     };
     let lodgement = d.get("lodgement");
@@ -148,7 +148,7 @@ pub(crate) fn site_name(sc: &Scenario, res: Option<&Res>, id: &str) -> String {
         if let Some(n) = st.name.as_str().filter(|n| !n.is_empty()) {
             return n.to_string();
         }
-        if let Some(n0) = st.nodes.iter().find(|x| sc.nodes.contains_key(*x)) {
+        if let Some(n0) = st.nodes.iter().find(|x| sc.nodes.contains_key(x)) {
             return kit_junction_name(sc, n0);
         }
     }
@@ -165,7 +165,7 @@ pub struct Assessed {
 }
 
 /// `assessedSites(P, sel)`: the extent-of-effects sites when the test has been stored, otherwise signals, roundabouts and
-/// upgraded junctions, then the busiest give-way junctions (DoS 0.5 or more), up to 20.
+/// upgraded junctions, then the busiest give-way junctions (`DoS` 0.5 or more), up to 20.
 pub(crate) fn assessed_sites(r: &Rep, with: Option<usize>) -> Assessed {
     let Some(w) = with else {
         return Assessed {
@@ -191,7 +191,7 @@ pub(crate) fn assessed_sites(r: &Rep, with: Option<usize>) -> Assessed {
         .and_then(|e| e.get("sites"))
         .and_then(|s| s.as_array())
         .filter(|a| !a.is_empty())
-        .map(|a| a.iter().map(|v| crate::jsnum::value_to_js_string(v)).collect());
+        .map(|a| a.iter().map(crate::jsnum::value_to_js_string).collect());
     if let Some(ext) = ext {
         let mut ids: Vec<String> = Vec::new();
         for id in &ext {
@@ -206,8 +206,7 @@ pub(crate) fn assessed_sites(r: &Rep, with: Option<usize>) -> Assessed {
         return Assessed {
             ids,
             basis: format!(
-                "The {} junctions inside the extent of effects (AT ITA Guidelines 2025 v2 s4.2.1.1).",
-                n
+                "The {n} junctions inside the extent of effects (AT ITA Guidelines 2025 v2 s4.2.1.1)."
             ),
         };
     }
@@ -246,8 +245,7 @@ pub(crate) fn assessed_sites(r: &Rep, with: Option<usize>) -> Assessed {
     Assessed {
         ids,
         basis: format!(
-            "Spare Construct selection: upgraded junctions, then the busiest signals, roundabouts and give-way junctions (give way at DoS 0.5 or more), up to {}. Run the extent of effects test to set the assessed sites by AT ITA s4.2.1.1.",
-            MAX_SITES
+            "Spare Construct selection: upgraded junctions, then the busiest signals, roundabouts and give-way junctions (give way at DoS 0.5 or more), up to {MAX_SITES}. Run the extent of effects test to set the assessed sites by AT ITA s4.2.1.1."
         ),
     }
 }
@@ -301,7 +299,7 @@ pub(crate) fn j_sum(nr: &NodeRes) -> JSum {
         delay,
         los: nr.los.clone(),
         los_text: if nr.los_text.is_empty() { nr.los.clone() } else { nr.los_text.clone() },
-        basis: if !nr.los_basis.is_empty() { nr.los_basis.clone() } else { nr.delay_basis.clone() },
+        basis: if nr.los_basis.is_empty() { nr.delay_basis.clone() } else { nr.los_basis.clone() },
         q95: q,
         leg,
         xp: nr.xp,
@@ -344,7 +342,7 @@ pub(crate) fn junction_rows<'a>(r: &Rep<'a>, sel: &Sel, sc: usize, ids: Option<&
         let own = assessed_sites(r, Some(sc)).ids;
         use_ids = if !list.is_empty() {
             list.iter()
-                .filter(|id| rl.iter().any(|p| r.results[sc].get(p).is_some_and(|res| res.nodes.contains_key(*id))))
+                .filter(|id| rl.iter().any(|p| r.results[sc].get(p).is_some_and(|res| res.nodes.contains_key(id))))
                 .cloned()
                 .collect()
         } else {
@@ -426,7 +424,7 @@ pub(crate) fn junction_groups(r: &Rep, sc: usize, scw: usize, ids: &[String]) ->
                         .keys()
                         .filter(|k| {
                             rl.iter()
-                                .any(|x| x.nodes.get(*k).is_some_and(|n| n.site.as_deref() == Some(site.as_str())))
+                                .any(|x| x.nodes.get(k).is_some_and(|n| n.site.as_deref() == Some(site.as_str())))
                         })
                         .map(str::to_string)
                         .collect()
@@ -609,7 +607,7 @@ pub(crate) fn crash_years(r: &Rep) -> Option<CrashYears> {
     for c in cr {
         let yy = js::num(js::idx(Some(c), 3));
         let sev = js::idx(Some(c), 2);
-        let sev_s = sev.map(|v| v.js_string()).unwrap_or_default();
+        let sev_s = sev.map(crate::edit::json::JsonValue::js_string).unwrap_or_default();
         let in_years = yy >= from && yy <= to;
         // the target: a full year, or the year to date
         let target_is_years = in_years;
@@ -763,17 +761,14 @@ pub(crate) fn road_groups(sc: &Scenario) -> Vec<RoadGroup<'_>> {
         }
         let cls = l.cls.as_str().unwrap_or("").to_string();
         let k = format!("{name}|{cls}");
-        let i = match g.iter().position(|x| format!("{}|{}", x.name, x.cls) == k) {
-            Some(i) => i,
-            None => {
-                g.push(RoadGroup {
-                    name: name.to_string(),
-                    cls: cls.clone(),
-                    links: Vec::new(),
-                    km: 0.0,
-                });
-                g.len() - 1
-            }
+        let i = if let Some(i) = g.iter().position(|x| format!("{}|{}", x.name, x.cls) == k) { i } else {
+            g.push(RoadGroup {
+                name: name.to_string(),
+                cls: cls.clone(),
+                links: Vec::new(),
+                km: 0.0,
+            });
+            g.len() - 1
         };
         g[i].links.push(l);
         g[i].km += sc.link_len(l) / 1000.0;

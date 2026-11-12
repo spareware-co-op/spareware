@@ -11,11 +11,13 @@ use crate::util::{self, fmt, r1, r3, r7, seg_dist};
 use serde_json::{Map, Value, json};
 
 /// `isExisting(z)`: a land-use zone (not a gateway) marked existing whose class is existing.
+#[must_use]
 pub fn is_existing(z: &Zone) -> bool {
     !z.kind.is("gateway") && z.existing.is_true() && zone_class(Some(z)) == "existing"
 }
 
 /// `landZones(sc, B)`: the ids of the zones (not gateways) with a finite position, inside the box when there is one.
+#[must_use]
 pub fn land_zone_ids(sc: &Scenario, b: Option<&Bx>) -> Vec<String> {
     sc.zones
         .values()
@@ -118,6 +120,7 @@ pub fn prep_buildings(els: &[Value], b: &Bx) -> Vec<Building> {
 }
 
 /// `prov(src, extra)`: the provenance record of a derived value: source, licence, date, basis "derived", then the extra members.
+#[must_use]
 pub fn prov(src: &consts::Source, today: &str, extra: Vec<(&str, Value)>) -> Value {
     let mut o = Map::new();
     o.insert("source".into(), json!(src.name));
@@ -131,6 +134,7 @@ pub fn prov(src: &consts::Source, today: &str, extra: Vec<(&str, Value)>) -> Val
 }
 
 /// `isCensus(s)`: a provenance record whose source starts with the Census name.
+#[must_use]
 pub fn is_census(s: Option<&Value>) -> bool {
     s.is_some_and(|s| {
         value_truthy(s) && {
@@ -141,6 +145,7 @@ pub fn is_census(s: Option<&Value>) -> bool {
 }
 
 /// `nearestRoad(sc, lat, lng)`: the name of the road within 800 m that is nearest, if any.
+#[must_use]
 pub fn nearest_road(sc: &Scenario, lat: f64, lng: f64) -> Option<String> {
     let f = util::flat(lat);
     let mut best: Option<String> = None;
@@ -238,6 +243,7 @@ pub struct CensusRow {
 
 impl CensusRow {
     /// The row as JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut o = Map::new();
         o.insert("code".into(), json!(self.code));
@@ -369,7 +375,7 @@ pub fn census_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, c: &CensusData
     let zone_ids: Vec<String> = land_zone_ids(sc, Some(b)).into_iter().filter(|id| sc.zones.get(id).is_some_and(is_existing)).collect();
     // (id, lat, lng) of each existing zone: nearest() looks only at these, in this order
     let mut zones: Vec<(String, f64, f64)> = zone_ids.iter().map(|id| { let z = &sc.zones[id]; (id.clone(), z.lat.num(), z.lng.num()) }).collect();
-    let f = util::flat((b.s + b.n) / 2.0);
+    let f = util::flat(f64::midpoint(b.s, b.n));
     let dw_ok = !c.missing.iter().any(|m| m == "dw layer");
     let nearest_n = zones.len();
     let nearest = |zones: &[(String, f64, f64)], lat: f64, lng: f64| -> (Option<usize>, f64) {
@@ -399,14 +405,14 @@ pub fn census_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, c: &CensusData
             continue;
         }
         let bl: Vec<&Building> = blds.iter().filter(|x| in_poly(&a.poly, x.lng, x.lat)).collect();
-        let (pts, basis): (Vec<[f64; 3]>, String) = if !bl.is_empty() {
+        let (pts, basis): (Vec<[f64; 3]>, String) = if bl.is_empty() {
+            let sp = smp.unwrap_or_else(|| sample_share(&a.poly, b, 24));
+            (sp.pts.iter().map(|p| [p[1], p[0], 1.0]).collect(), "area overlap (no residential buildings mapped)".to_string())
+        } else {
             (
                 bl.iter().map(|x| [x.lat, x.lng, x.w]).collect(),
                 if within { "building footprints".to_string() } else { "area overlap at the study-area edge, then building footprints".to_string() },
             )
-        } else {
-            let sp = smp.unwrap_or_else(|| sample_share(&a.poly, b, 24));
-            (sp.pts.iter().map(|p| [p[1], p[0], 1.0]).collect(), "area overlap (no residential buildings mapped)".to_string())
         };
         if pts.is_empty() {
             continue;
@@ -419,12 +425,9 @@ pub fn census_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, c: &CensusData
                 _ => format!("new:{}", a.code),
             };
             let z_of = if key.starts_with("new:") { None } else { zi.map(|i| zones[i].0.clone()) };
-            let bi = match buckets.iter().position(|(k, _)| *k == key) {
-                Some(i) => i,
-                None => {
-                    buckets.push((key.clone(), Bucket { z: z_of, res: 0.0, apt: 0.0, sa1: Vec::new(), attrs: Map::new(), sx: 0.0, sy: 0.0, sw: 0.0 }));
-                    buckets.len() - 1
-                }
+            let bi = if let Some(i) = buckets.iter().position(|(k, _)| *k == key) { i } else {
+                buckets.push((key.clone(), Bucket { z: z_of, res: 0.0, apt: 0.0, sa1: Vec::new(), attrs: Map::new(), sx: 0.0, sy: 0.0, sw: 0.0 }));
+                buckets.len() - 1
             };
             let bk = &mut buckets[bi].1;
             bk.sx += lng * wt;
@@ -486,7 +489,7 @@ pub fn census_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, c: &CensusData
         });
     }
     // Zones for Census dwellings far from any existing zone (or when there are none)
-    for (k, bk) in buckets.iter_mut() {
+    for (k, bk) in &mut buckets {
         if bk.z.is_some() || !(bk.res + bk.apt > 0.0) {
             continue;
         }
@@ -511,7 +514,7 @@ pub fn census_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, c: &CensusData
     let mut flagged: Vec<Flagged> = Vec::new();
     let when = ids.today();
     let (mut osm_total, mut census_total) = (0.0f64, 0.0f64);
-    for (zid, _, _) in zones.iter() {
+    for (zid, _, _) in &zones {
         let (res, apt, sa1, attrs) = match buckets.iter().find(|(_, bk)| bk.z.as_deref() == Some(zid.as_str())) {
             Some((_, bk)) => (bk.res, bk.apt, bk.sa1.clone(), bk.attrs.clone()),
             None => (0.0, 0.0, Vec::new(), Map::new()),
@@ -540,7 +543,18 @@ pub fn census_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, c: &CensusData
             if o_t != 0.0 && !z.extra.get("osm").is_some_and(value_truthy) {
                 z.extra.insert("osm".into(), json!({ "residential": json_number(osm_res), "apartment": json_number(osm_apt) }));
             }
-            if !keep {
+            if keep {
+                let mut rec = Map::new();
+                rec.insert("source".into(), json!(consts::OSM.name));
+                rec.insert("licence".into(), json!(consts::OSM.licence));
+                rec.insert("basis".into(), json!("estimated"));
+                rec.insert("date".into(), json!(when));
+                if z.lu.get().is_some_and(|l| l.contains_key("residential")) {
+                    rec.insert("q".into(), super::fill::num_json(z.lu.get().expect("lu").num_at("residential")).unwrap_or(Value::Null));
+                }
+                rec.insert("note".into(), json!("Kept: OSM shows more dwellings than the 2023 Census (likely built since March 2023)"));
+                json_obj(&mut z.extra, "luSrc").insert("residential".into(), Value::Object(rec));
+            } else {
                 for (k, q) in [("residential", res), ("apartment", apt)] {
                     if q > 0.0 {
                         lu_map(z).insert(k, Num::number(q));
@@ -556,23 +570,12 @@ pub fn census_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, c: &CensusData
                     let p = prov(&consts::CENSUS, &when, vec![("q", json_number(q)), ("vintage", json!(consts::CENSUS.vintage)), ("note", json!(note))]);
                     json_obj(&mut z.extra, "luSrc").insert(k.to_string(), p);
                 }
-            } else {
-                let mut rec = Map::new();
-                rec.insert("source".into(), json!(consts::OSM.name));
-                rec.insert("licence".into(), json!(consts::OSM.licence));
-                rec.insert("basis".into(), json!("estimated"));
-                rec.insert("date".into(), json!(when));
-                if z.lu.get().is_some_and(|l| l.contains_key("residential")) {
-                    rec.insert("q".into(), super::fill::num_json(z.lu.get().expect("lu").num_at("residential")).unwrap_or(Value::Null));
-                }
-                rec.insert("note".into(), json!("Kept: OSM shows more dwellings than the 2023 Census (likely built since March 2023)"));
-                json_obj(&mut z.extra, "luSrc").insert("residential".into(), Value::Object(rec));
             }
         }
         let mut v = attrs;
         round_counts(&mut v);
         let veh = v.get("veh").cloned().unwrap_or_else(|| json!({}));
-        let vehicles = [0, 1, 2, 3, 4, 5].iter().fold(0.0, |s, i| s + *i as f64 * crate::jsnum::or_default(veh.get(i.to_string()).map_or(0.0, value_to_number), 0.0));
+        let vehicles = [0, 1, 2, 3, 4, 5].iter().fold(0.0, |s, i| s + f64::from(*i) * crate::jsnum::or_default(veh.get(i.to_string()).map_or(0.0, value_to_number), 0.0));
         let nul = |x: Option<&Value>| x.filter(|x| !x.is_null()).cloned().unwrap_or(Value::Null);
         let obj_or_null = |x: Option<&Value>| x.filter(|x| value_truthy(x)).cloned().unwrap_or(Value::Null);
         z.extra.insert(

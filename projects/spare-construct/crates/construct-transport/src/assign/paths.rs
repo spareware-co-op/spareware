@@ -60,7 +60,7 @@ impl<K: Hash + Eq + Clone, V> OMap<K, V> {
         }
         // Dropping the empty slots keeps the order and the walk short
         if self.slots.iter().filter(|s| s.is_none()).count() * 2 > self.slots.len() {
-            self.slots.retain(|s| s.is_some());
+            self.slots.retain(std::option::Option::is_some);
             for (i, s) in self.slots.iter().enumerate() {
                 if let Some(e) = s {
                     self.index.insert(e.0.clone(), i);

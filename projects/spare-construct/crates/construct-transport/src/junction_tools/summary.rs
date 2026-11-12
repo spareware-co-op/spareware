@@ -12,7 +12,7 @@ use crate::util::esc;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 
-/// One period's summary of a junction: worst DoS, delay, level of service, longest queue and its leg.
+/// One period's summary of a junction: worst `DoS`, delay, level of service, longest queue and its leg.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Summary {
     /// Worst degree of saturation.
@@ -39,6 +39,7 @@ pub struct Summary {
 
 impl Summary {
     /// As JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("dos".into(), plain_number(self.dos));
@@ -164,6 +165,7 @@ pub struct J3 {
 
 impl J3 {
     /// As JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let rows: Vec<Value> = self
             .rows
@@ -213,6 +215,7 @@ fn role_rank(p: &Project, s: &Sc) -> i32 {
 /// `compareOrder(P, active, other, swap)`: which way a comparison runs, as (from, to) positions in the scenario list: from
 /// the existing or without-development side to the proposal or mitigation side. Equal ranks measure the active scenario
 /// against the other one. `swap` reverses it.
+#[must_use]
 pub fn compare_order(p: &Project, active: &Sc, other: &Sc, swap: bool) -> (usize, usize) {
     let o = if role_rank(p, active) < role_rank(p, other) {
         (active.idx, other.idx)
@@ -223,7 +226,8 @@ pub fn compare_order(p: &Project, active: &Sc, other: &Sc, swap: bool) -> (usize
 }
 
 impl<'a> Tools<'a> {
-    /// `summary(sc, res, e)`: one period's summary of an entry: worst DoS, delay, level of service, longest Q95 and its leg.
+    /// `summary(sc, res, e)`: one period's summary of an entry: worst `DoS`, delay, level of service, longest Q95 and its leg.
+    #[must_use]
     pub fn summary(&self, sc: &crate::project::Scenario, res: &Res, e: &Entry) -> Option<Summary> {
         let nr = e.nr?;
         let legs = legs_of(sc, self.st(), res, e);
@@ -257,10 +261,10 @@ impl<'a> Tools<'a> {
                 "average".to_string()
             },
             los: nr.los.to_string(),
-            los_text: if !nr.los_text.is_empty() {
-                nr.los_text.to_string()
-            } else {
+            los_text: if nr.los_text.is_empty() {
                 nr.los.to_string()
+            } else {
+                nr.los_text.to_string()
             },
             twsc,
             q95: qa.map_or(0.0, |a| or0(a.q95)),
@@ -276,6 +280,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `j2(sc, periods)`: each junction across the periods, the biggest delay first.
+    #[must_use]
     pub fn j2(&self, s: Sc<'a>, periods: &[String]) -> Vec<J2Row> {
         let mut by: Vec<J2Row> = Vec::new();
         for p in periods {
@@ -283,21 +288,18 @@ impl<'a> Tools<'a> {
                 continue;
             };
             for e in entries(s.sc, res, false) {
-                let i = match by.iter().position(|r| r.id == e.id) {
-                    Some(i) => i,
-                    None => {
-                        by.push(J2Row {
-                            id: e.id.clone(),
-                            xid: xid(&e),
-                            is_site: e.is_site,
-                            name: e.name.clone(),
-                            kind: e.kind.clone(),
-                            node: e.node.clone(),
-                            nodes: e.nodes.clone(),
-                            p: Vec::new(),
-                        });
-                        by.len() - 1
-                    }
+                let i = if let Some(i) = by.iter().position(|r| r.id == e.id) { i } else {
+                    by.push(J2Row {
+                        id: e.id.clone(),
+                        xid: xid(&e),
+                        is_site: e.is_site,
+                        name: e.name.clone(),
+                        kind: e.kind.clone(),
+                        node: e.node.clone(),
+                        nodes: e.nodes.clone(),
+                        p: Vec::new(),
+                    });
+                    by.len() - 1
                 };
                 let sm = self.summary(s.sc, res, &e);
                 match by[i].p.iter().position(|(k, _)| k == p) {
@@ -319,6 +321,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `j2Html(sc, periods, opts)`: the junction summary table; `fly` false leaves out the map links.
+    #[must_use]
     pub fn j2_html(&self, s: Sc<'a>, periods: &[String], fly: bool) -> String {
         let rows = self.j2(s, periods);
         let ps: Vec<&String> = periods.iter().filter(|p| s.res_of(p).is_some()).collect();
@@ -395,6 +398,7 @@ impl<'a> Tools<'a> {
     /// `j3(from, to, periods)`: the same layout with changes from scenario `from` to `to`. Junctions are matched by id, then by
     /// member nodes, then by the most shared nodes (flagged 'regrouped'); one left without a partner is 'new' or 'gone'
     /// unless it still shares nodes with one in the other scenario.
+    #[must_use]
     pub fn j3(&self, from: Sc<'a>, to: Sc<'a>, periods: &[String]) -> J3 {
         let a_rows = self.j2(from, periods);
         let b_rows = self.j2(to, periods);
@@ -532,6 +536,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `j3Html(from, to, periods, opts)`: the comparison as a table with its notes.
+    #[must_use]
     pub fn j3_html(&self, from: Option<Sc<'a>>, to: Option<Sc<'a>>, periods: Option<&[String]>) -> String {
         let (Some(from), Some(to)) = (from, to) else {
             return "<p class=\"note\">Add a second scenario and run both to compare junctions.</p>".to_string();

@@ -39,7 +39,7 @@ pub type Results = OrderedMap<Res>;
 /// writes them); reading accepts both. Works for `f64`, `Option<f64>` (null), `Vec`,
 /// `OrderedMap` and `[f64; 2]` of those.
 pub mod plain {
-    use super::*;
+    use super::{Serializer, Deserializer, Serialize, Deserialize, Visitor, fmt, de, plain_number, OrderedMap};
 
     /// A value whose numbers are written and read the plain way.
     pub trait Plain: Sized {

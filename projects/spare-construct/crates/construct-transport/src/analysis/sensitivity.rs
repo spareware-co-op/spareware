@@ -1,4 +1,4 @@
-//! The sensitivity pack (engine.js SENS, SENS_DEFAULT, scaleRates, scaleTg, dropUnfunded and
+//! The sensitivity pack (engine.js SENS, `SENS_DEFAULT`, scaleRates, scaleTg, dropUnfunded and
 //! sensitivity; docs/spec/sensitivity-pack).
 //!
 //! Each test runs the with-proposal scenario again on a copy of the scenario and of the
@@ -189,10 +189,11 @@ pub const SENS: [SensTest; 11] = [
     },
 ];
 
-/// engine.js SENS_DEFAULT: the tests run when none are named (8 runs per period).
+/// engine.js `SENS_DEFAULT`: the tests run when none are named (8 runs per period).
 pub const SENS_DEFAULT: [&str; 8] = ["T1+", "T1-", "T2", "T3+", "T3-", "T4+", "T4-", "T5"];
 
 /// `SENS.find(t => t.id === id)`.
+#[must_use]
 pub fn sens_test(id: &str) -> Option<&'static SensTest> {
     SENS.iter().find(|t| t.id == id)
 }
@@ -256,13 +257,13 @@ impl SensTest {
         match self.settings {
             Some(SettingsChange::ScaleRates(f)) => scale_rates(s, f),
             Some(SettingsChange::ScaleGravityBeta(f)) => {
-                s.gravity_beta = Num::number(s.gravity_beta.num() * f)
+                s.gravity_beta = Num::number(s.gravity_beta.num() * f);
             }
             Some(SettingsChange::ScaleGrowth(f)) => s.growth = Num::number(s.growth.or(0.0) * f),
             None => {}
         }
     }
-    /// Applies the test's change to a scenario copy (`t.sc(sc, P, opts)`); mode_share is `opts.modeShare` (T6).
+    /// Applies the test's change to a scenario copy (`t.sc(sc, P, opts)`); `mode_share` is `opts.modeShare` (T6).
     pub fn apply_scenario(&self, sc: &mut Scenario, p: Option<&Project>, mode_share: &Num) {
         match self.scenario {
             Some(ScenarioChange::ScaleTg(f)) => scale_tg(sc, f),
@@ -304,7 +305,7 @@ pub type Progress<'a> = &'a mut dyn FnMut(usize, usize, &str);
 pub struct SensOpts<'a> {
     /// Periods (None: the scenario's, otherwise AM and PM).
     pub periods: Option<Vec<String>>,
-    /// Test ids (None: SENS_DEFAULT).
+    /// Test ids (None: `SENS_DEFAULT`).
     pub tests: Option<Vec<String>>,
     /// The do-minimum scenario: adds the links over 5% / 10% (each run is made without too).
     pub without: Option<&'a Scenario>,
@@ -324,7 +325,7 @@ pub struct SensOpts<'a> {
     pub now: Option<&'a dyn Fn() -> f64>,
 }
 
-/// The junction with the largest DoS over the periods.
+/// The junction with the largest `DoS` over the periods.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SensWorst {
     /// Site or node id.
@@ -348,9 +349,9 @@ pub struct SensCentral {
     /// VHT over the periods, 0.1.
     #[serde(with = "plain")]
     pub vht: f64,
-    /// The junction with the largest DoS; null without junctions.
+    /// The junction with the largest `DoS`; null without junctions.
     pub worst: Option<SensWorst>,
-    /// Junctions at LoS E or F.
+    /// Junctions at `LoS` E or F.
     #[serde(rename = "losEF", with = "plain")]
     pub los_ef: f64,
     /// Links over the 5% test (with a without scenario; null otherwise).
@@ -396,9 +397,9 @@ pub struct SensTestRow {
     /// Change in VHT from the central run (fraction), 0.001.
     #[serde(with = "plain")]
     pub d_vht: f64,
-    /// The junction with the largest DoS.
+    /// The junction with the largest `DoS`.
     pub worst: Option<SensWorst>,
-    /// Junctions at LoS E or F.
+    /// Junctions at `LoS` E or F.
     #[serde(rename = "losEF", with = "plain")]
     pub los_ef: f64,
     /// Links over the 5% test, or null.
@@ -409,7 +410,7 @@ pub struct SensTestRow {
     pub over10: Option<f64>,
     /// Elasticities, for tests with a relative change.
     pub elasticity: Option<Elasticity>,
-    /// A junction crosses its practical DoS or capacity, or changes LoS.
+    /// A junction crosses its practical `DoS` or capacity, or changes `LoS`.
     pub sensitive: bool,
     /// What changed.
     pub changes: Vec<String>,
@@ -539,7 +540,7 @@ pub fn sensitivity(
     let ids: Vec<String> = opts
         .tests
         .clone()
-        .unwrap_or_else(|| SENS_DEFAULT.iter().map(|s| s.to_string()).collect());
+        .unwrap_or_else(|| SENS_DEFAULT.iter().map(std::string::ToString::to_string).collect());
     let tests: Vec<&SensTest> = ids.iter().filter_map(|id| sens_test(id)).collect();
     // +opts.modeShare >= 0 && opts.modeShare !== '' && opts.modeShare != null
     let ms = &opts.mode_share;
@@ -583,13 +584,13 @@ pub fn sensitivity(
             };
             k += 1;
             if let Some(f) = opts.on_progress.as_mut() {
-                f(k, n_runs, &format!("{}: {}", label, per));
+                f(k, n_runs, &format!("{label}: {per}"));
             }
             out.with.insert(per.clone(), assign(&s1, &s, &ao));
             if let Some(w) = &w1 {
                 k += 1;
                 if let Some(f) = opts.on_progress.as_mut() {
-                    f(k, n_runs, &format!("{}: {} (without)", label, per));
+                    f(k, n_runs, &format!("{label}: {per} (without)"));
                 }
                 out.without.insert(per.clone(), assign(w, &s, &ao));
             }
@@ -637,7 +638,7 @@ pub fn sensitivity(
                     math_max(m, b)
                 });
                 state.insert(
-                    format!("{}|{}", per, key),
+                    format!("{per}|{key}"),
                     State {
                         band,
                         los: nr.los.clone(),
@@ -827,7 +828,7 @@ pub fn sensitivity(
             rows.push(SensRow::Discount(SensDiscountRow {
                 id: "R8".to_string(),
                 test: "R8".to_string(),
-                label: format!("Discount rate {}% (MBCM sensitivity)", sens),
+                label: format!("Discount rate {sens}% (MBCM sensitivity)"),
                 input: format!("{}% for all {} years", sens, number_to_js_string(ec.years)),
                 bcr: ec.bcr,
                 bcr8: ec.bcr8,
@@ -864,6 +865,7 @@ pub fn sensitivity(
 }
 
 /// engine.js cloneSc: a copy of the scenario with no results (`{ ...sc, res: {} }` through JSON).
+#[must_use]
 pub fn clone_sc(sc: &Scenario) -> Scenario {
     let mut c = sc.clone();
     c.res = Maybe::Set(json!({}));

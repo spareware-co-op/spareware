@@ -70,6 +70,7 @@ pub const SOURCES: [CriteriaSource; 6] = [
 ];
 
 /// `SOURCES[id]`.
+#[must_use]
 pub fn criteria_source(id: &str) -> Option<&'static CriteriaSource> {
     SOURCES.iter().find(|s| s.id == id)
 }
@@ -78,6 +79,7 @@ pub fn criteria_source(id: &str) -> Option<&'static CriteriaSource> {
 pub const CATS: [char; 7] = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
 /// `CAT_NAMES[cat]`.
+#[must_use]
 pub fn cat_name(c: char) -> &'static str {
     match c {
         'A' => "regional",
@@ -91,6 +93,7 @@ pub fn cat_name(c: char) -> &'static str {
 }
 
 /// `STANDARDS[id]`: the names of the criteria sets the panel offers.
+#[must_use]
 pub fn standard_name(id: &str) -> Option<&'static str> {
     match id {
         "tmdg" => Some("NZTA TMDG 2019"),
@@ -111,6 +114,7 @@ pub enum TmdgValue {
 
 impl TmdgValue {
     /// The number (the first of a pair).
+    #[must_use]
     pub fn one(self) -> f64 {
         match self {
             TmdgValue::One(x) => x,
@@ -155,6 +159,7 @@ pub const TMDG_TABLE: [TmdgRow; 17] = [
 ];
 
 /// `TMDG[key]`.
+#[must_use]
 pub fn tmdg_row(key: &str) -> &'static TmdgRow {
     TMDG_TABLE
         .iter()
@@ -164,12 +169,14 @@ pub fn tmdg_row(key: &str) -> &'static TmdgRow {
 
 impl TmdgRow {
     /// `TMDG[key].v[cat]`.
+    #[must_use]
     pub fn at(&self, cat: char) -> Option<TmdgValue> {
         self.v.iter().find(|(c, _)| *c == cat).map(|(_, v)| *v)
     }
 }
 
 /// `FIG5`: TMDG Figure 5 applicability by category A to G (e expected, u potentially useful, n not expected) for a test group.
+#[must_use]
 pub fn fig5(group: &str) -> &'static str {
     match group {
         "link" | "turn" | "scatter" => "eeeeeee",
@@ -181,6 +188,7 @@ pub fn fig5(group: &str) -> &'static str {
 }
 
 /// `FIG5_OK[cat]`: the groups whose applicability for the category comes from rules read so far (verified).
+#[must_use]
 pub fn fig5_ok(cat: char, group: &str) -> bool {
     match cat {
         'E' => ["link", "turn", "band", "scatter", "rmse", "screen"].contains(&group),
@@ -190,6 +198,7 @@ pub fn fig5_ok(cat: char, group: &str) -> bool {
 }
 
 /// `USE[letter]`: "expected", "useful" or "not-expected".
+#[must_use]
 pub fn use_of_letter(c: char) -> &'static str {
     match c {
         'e' => "expected",
@@ -225,16 +234,19 @@ pub const BAND_TMDG: Band = Band { lo: 400.0, hi: 2000.0, abs_lo: 50.0, rel: 0.1
 pub const BAND_TAG: Band = Band { lo: 700.0, hi: 2700.0, abs_lo: 100.0, rel: 0.15, abs_hi: 400.0, src: "tag", table: "Table 2", verified: true };
 
 /// `inBand(B, m, c)`: the modelled flow m is within the band of the counted flow c.
+#[must_use]
 pub fn in_band(b: &Band, m: f64, c: f64) -> bool {
     (m - c).abs() <= (if c < b.lo { b.abs_lo } else if c <= b.hi { b.rel * c } else { b.abs_hi })
 }
 
 /// `tmdgBand(m, c)`.
+#[must_use]
 pub fn tmdg_band(m: f64, c: f64) -> bool {
     in_band(&BAND_TMDG, m, c)
 }
 
 /// `tagBand(m, c)`.
+#[must_use]
 pub fn tag_band(m: f64, c: f64) -> bool {
     in_band(&BAND_TAG, m, c)
 }
@@ -333,7 +345,7 @@ pub mod corridor {
     pub const ME_INTERCEPT: f64 = 0.01;
     /// ME sector cells tested only with a prior of this many trips or more.
     pub const ME_SECTOR_PRIOR: f64 = 50.0;
-    /// Model DoS above this: a stop-line count understates demand.
+    /// Model `DoS` above this: a stop-line count understates demand.
     pub const DOS_V: f64 = 0.95;
     /// Turning-count balancing: gaps above max(abs, rel) are a midblock source or sink (veh/h).
     pub const BALANCE_ABS: f64 = 50.0;
@@ -341,7 +353,7 @@ pub mod corridor {
     pub const BALANCE_REL: f64 = 0.1;
     /// Stress test: demand factors.
     pub const STRESS_FACTORS: [f64; 2] = [1.1, 1.2];
-    /// Stress test: flag a DoS rising more than this times the demand increase.
+    /// Stress test: flag a `DoS` rising more than this times the demand increase.
     pub const STRESS_RISE: f64 = 2.0;
 }
 
@@ -367,11 +379,13 @@ pub const METHODS: [PanelMethod; 4] = [
 ];
 
 /// `METHODS[key]`.
+#[must_use]
 pub fn panel_method(key: &str) -> Option<&'static PanelMethod> {
     METHODS.iter().find(|m| m.key == key)
 }
 
 /// `ROLES[key]`: the names of the count roles (me, valid, gateway, off).
+#[must_use]
 pub fn role_name(key: &str) -> Option<&'static str> {
     match key {
         "me" => Some("Calibration"),
@@ -457,12 +471,13 @@ fn tag_t(id: &str, group: &'static str, on: &'static str, stat: &'static str, ki
 }
 
 /// `bandCrit(B)`: a band rule in words.
+#[must_use]
 pub fn band_crit(b: &Band) -> String {
     format!(
         "within {} veh/h (< {}), {}% ({}\u{2013}{}), {} veh/h (> {})",
         n(b.abs_lo),
         fmt::int(b.lo),
-        fmt::num(b.rel * 100.0, if (b.rel * 100.0) % 1.0 != 0.0 { 1 } else { 0 }),
+        fmt::num(b.rel * 100.0, usize::from((b.rel * 100.0) % 1.0 != 0.0)),
         fmt::int(b.lo),
         fmt::int(b.hi),
         n(b.abs_hi),
@@ -471,6 +486,7 @@ pub fn band_crit(b: &Band) -> String {
 }
 
 /// `TAGT.band(on)`: TAG Table 2 flow band on links or turning movements.
+#[must_use]
 pub fn tag_band_test(on: &'static str) -> Test {
     let turn = on == "turn";
     Test {
@@ -483,6 +499,7 @@ pub fn tag_band_test(on: &'static str) -> Test {
 }
 
 /// `TAGT.either(on)`: TAG Table 2, GEH < 5 or within the flow band, on links or turning movements.
+#[must_use]
 pub fn tag_either_test(on: &'static str) -> Test {
     let turn = on == "turn";
     Test {
@@ -495,6 +512,7 @@ pub fn tag_either_test(on: &'static str) -> Test {
 }
 
 /// `TAGT.screen()`: TAG Table 1, screenline totals within 5%.
+#[must_use]
 pub fn tag_screen_test() -> Test {
     Test {
         min: Some(tag::SCREEN_V),
@@ -506,6 +524,7 @@ pub fn tag_screen_test() -> Test {
 }
 
 /// `TAGT.jt()`: TAG Table 3, journey times.
+#[must_use]
 pub fn tag_jt_test() -> Test {
     Test {
         min: Some(tag::JT_V),
@@ -517,6 +536,7 @@ pub fn tag_jt_test() -> Test {
 }
 
 /// The convergence and matrix-estimation rows (`commonTests(cat)`), shown with every standard; `prior_high` is the prior quality setting (anything but "low").
+#[must_use]
 pub fn common_tests(cat: char, prior_high: bool) -> Vec<Test> {
     let me = tmdg_row("meTotal").at(cat);
     let cr = tmdg_row("meCR").at(cat);
@@ -571,7 +591,7 @@ pub fn common_tests(cat: char, prior_high: bool) -> Vec<Test> {
             ..tag_t("meTld", "me", "me", "tld", "pair")
         },
         Test {
-            min: cr.map(|v| v.one()),
+            min: cr.map(TmdgValue::one),
             label: "Trip-length coincidence ratio".to_string(),
             crit: "\u{3a3}min / \u{3a3}max over distance bands".to_string(),
             table: tmdg_row("meCR").table.to_string(),
@@ -582,6 +602,7 @@ pub fn common_tests(cat: char, prior_high: bool) -> Vec<Test> {
 }
 
 /// `tmdgTests(cat)`: every test of TMDG 2019 for a purpose category, then the TAG, RMS and convergence rows beside them.
+#[must_use]
 pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
     let i = CATS.iter().position(|&c| c == cat).expect("a category A to G");
     let use_of = |g: &str| use_of_letter(fig5(g).as_bytes()[i] as char);
@@ -591,7 +612,7 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
     let tb = |key: &str| tmdg_row(key).table.to_string();
     let share = |id: &str, group: &'static str, on: &'static str, key: &str, stat: &'static str, label: &str, crit: &str| -> Test {
         Test {
-            min: v(key).map(|x| x.one()),
+            min: v(key).map(TmdgValue::one),
             label: label.to_string(),
             crit: crit.to_string(),
             table: tb(key),
@@ -646,7 +667,7 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         ..t0("r2Ols", "scatter", "link", "r2Ols", "none")
     });
     out.push(Test {
-        min: v("r2").map(|x| x.one()),
+        min: v("r2").map(TmdgValue::one),
         label: "R\u{b2} through the origin".to_string(),
         crit: "centred on the mean (the TMDG test)".to_string(),
         table: tb("r2"),
@@ -693,7 +714,7 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         ..t0("rmse", "rmse", "link", "rmse", if rm.is_some() { "rmse" } else { "none" })
     });
     out.push(Test {
-        min: v("jt1").map(|x| x.one()),
+        min: v("jt1").map(TmdgValue::one),
         label: "Journey times, tier 1".to_string(),
         crit: "within 15% or 1 minute, % of routes".to_string(),
         table: tb("jt1"),
@@ -701,7 +722,7 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         ..t0("jt1", "jt", "jt", "jt1", "share")
     });
     out.push(Test {
-        min: v("jt2").map(|x| x.one()),
+        min: v("jt2").map(TmdgValue::one),
         label: "Journey times, tier 2".to_string(),
         crit: "within 25% or 1.5 minutes, % of routes".to_string(),
         table: tb("jt2"),
@@ -713,6 +734,7 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
 }
 
 /// `presetTests(std)`: the tests of the RMS 2013 preset ("rms") or the ATAP preset (anything else), with the convergence and matrix rows.
+#[must_use]
 pub fn preset_tests(std: &str, prior_high: bool) -> Vec<Test> {
     if std == "rms" {
         let r = |t: Test| Test {
@@ -754,6 +776,7 @@ pub fn preset_tests(std: &str, prior_high: bool) -> Vec<Test> {
 }
 
 /// `tagPeer(t)`: the TAG M3.1 test beside a row (Table 2 for link and turn rows, Table 1 for screenlines, Table 3 for journey times), None where TAG sets no criterion.
+#[must_use]
 pub fn tag_peer(t: &Test) -> Option<Test> {
     if t.src == "tag" {
         return Some(t.clone());
@@ -771,6 +794,7 @@ pub fn tag_peer(t: &Test) -> Option<Test> {
 }
 
 /// `targetText(t)`: the target of a test in words ("> 85%", "0.95 to 1.05", "< 15% (15\u{2013}25% explain)").
+#[must_use]
 pub fn target_text(t: &Test) -> String {
     match t.kind {
         "share" => {
@@ -778,7 +802,7 @@ pub fn target_text(t: &Test) -> String {
             if m >= 1.0 {
                 "100%".to_string()
             } else {
-                format!("> {}%", fmt::num(m * 100.0, if (m * 100.0) % 1.0 != 0.0 { 1 } else { 0 }))
+                format!("> {}%", fmt::num(m * 100.0, usize::from((m * 100.0) % 1.0 != 0.0)))
             }
         }
         "min" => format!("> {}", n(t.min.unwrap_or(f64::NAN))),
@@ -801,6 +825,7 @@ pub fn target_text(t: &Test) -> String {
 }
 
 /// `tooltip(t)`: where a test's criterion comes from and whether it has been checked against the source.
+#[must_use]
 pub fn tooltip(t: &Test) -> String {
     let s = criteria_source(t.src).unwrap_or(&SOURCES[0]);
     let mut out = format!(
@@ -828,6 +853,7 @@ pub fn tooltip(t: &Test) -> String {
 }
 
 /// `need(target, n)`: counts needed for a share target. TMDG and TAG targets are strict ("E > 85"), so 17 of 20 (85.0%) is not enough; 100% means all.
+#[must_use]
 pub fn need(target: f64, n: usize) -> usize {
     if target >= 1.0 {
         n
@@ -837,6 +863,7 @@ pub fn need(target: f64, n: usize) -> usize {
 }
 
 /// `SCHOOL_TERMS.years[year]`: New Zealand school terms (Ministry of Education), each as (first day, last day) in ISO; a count inside the holidays is flagged. Term 1 uses the latest permitted start. To be checked against education.govt.nz each year (the prototype marks them unverified).
+#[must_use]
 pub fn school_terms(year: i64) -> Option<[(&'static str, &'static str); 4]> {
     Some(match year {
         2023 => [("2023-02-07", "2023-04-06"), ("2023-04-24", "2023-06-30"), ("2023-07-17", "2023-09-22"), ("2023-10-09", "2023-12-20")],
@@ -847,7 +874,7 @@ pub fn school_terms(year: i64) -> Option<[(&'static str, &'static str); 4]> {
     })
 }
 
-/// `CORRIDOR.dos.src`'s source: QLDC TTOC-06 (a model DoS above this makes a stop-line count understate demand).
+/// `CORRIDOR.dos.src`'s source: QLDC TTOC-06 (a model `DoS` above this makes a stop-line count understate demand).
 pub const DOS_SOURCE: &str = "ttoc";
 
 /// `GEH_BANDS` of the panel: the bands of the criteria library, lower limit included, upper excluded.

@@ -171,7 +171,7 @@ pub fn analyse(
                 }
             }
             let last = tries.last().cloned().expect("a try");
-            let info = p.me.get().and_then(|me| me.info.get()).and_then(|i| i.get(period)).is_some_and(|i| i.is_set());
+            let info = p.me.get().and_then(|me| me.info.get()).and_then(|i| i.get(period)).is_some_and(crate::jsnum::Maybe::is_set);
             let entry = json!({
                     "at": ids.now_iso(), "ok": last.1,
                     "tries": tries.iter().map(|(x, ok, note)| json!({ "xamax": json_number(*x), "ok": ok, "note": note })).collect::<Vec<_>>(),

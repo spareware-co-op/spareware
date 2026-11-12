@@ -45,6 +45,7 @@ pub struct ConvStats {
 }
 
 /// `convStats(res)`: the gap and the TAG stability rule of a result.
+#[must_use]
 pub fn conv_stats(res: Option<&Res>) -> ConvStats {
     let Some(res) = res else {
         return ConvStats {
@@ -348,6 +349,7 @@ fn show(t: &Test, ev: &Ev, v: &Val) -> String {
 }
 
 /// `evaluate(t, ev)`: one test against the evidence.
+#[must_use]
 pub fn evaluate(t: &Test, evidence: &Evidence) -> Eval {
     let ev = Ev(evidence);
     let n = ev.n_of(t.on);
@@ -387,7 +389,7 @@ pub fn evaluate(t: &Test, evidence: &Evidence) -> Eval {
     }
     let vnum = match &val_ref {
         Val::Num(x) => *x,
-        Val::Bool(b) => *b as i32 as f64,
+        Val::Bool(b) => i32::from(*b) as f64,
         Val::Pair(_) => f64::NAN,
     };
     match t.kind {
@@ -411,14 +413,11 @@ pub fn evaluate(t: &Test, evidence: &Evidence) -> Eval {
                 Val::Bool(b) => *b,
                 Val::Num(x) => *x != 0.0 && !x.is_nan(),
                 Val::Pair(_) => true,
-            })
+            });
         }
-        "pair" => match &val {
-            Some(Val::Pair(p)) => out.ok = Some(p.ok),
-            _ => {
-                out.status = "No data".to_string();
-                return out;
-            }
+        "pair" => if let Some(Val::Pair(p)) = &val { out.ok = Some(p.ok) } else {
+            out.status = "No data".to_string();
+            return out;
         },
         _ => {}
     }
@@ -456,6 +455,7 @@ pub fn evaluate(t: &Test, evidence: &Evidence) -> Eval {
 }
 
 /// `expected(r)`: a row of the tests that decide the status: expected, with a verdict, on counts, not predicted.
+#[must_use]
 pub fn expected(r: &Eval) -> bool {
     r.t.use_ == "expected"
         && r.t.kind != "none"
@@ -466,6 +466,7 @@ pub fn expected(r: &Eval) -> bool {
 }
 
 /// `gating(r)`: an expected row with enough observations to decide the status.
+#[must_use]
 pub fn gating(r: &Eval) -> bool {
     expected(r) && !r.indicative
 }
@@ -604,10 +605,10 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
     let who = format!("{}{}, n={}", set_label(&ev.set), where_, ev.link.n);
     match a.status.as_str() {
         "none" => {
-            return if !ev.has_res {
-                format!("Run the model for the {} peak to compare it with the counts.", a.period)
-            } else {
+            return if ev.has_res {
                 format!("No {}{} match the network for the {} peak.", set_label(&ev.set), where_, a.period)
+            } else {
+                format!("Run the model for the {} peak to compare it with the counts.", a.period)
             }
         }
         "info" => {
@@ -617,7 +618,7 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
             )
         }
         "indicative" => {
-            return format!("Indicative only: {} (fewer than {}), so no pass or fail is given.", who, MIN_SITES)
+            return format!("Indicative only: {who} (fewer than {MIN_SITES}), so no pass or fail is given.")
         }
         "not base year" => {
             return format!(
@@ -636,7 +637,7 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
         who
     );
     if !a.also.is_empty() {
-        s.push_str(&format!(" Also meets Category {}.", a.also.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(", ")));
+        s.push_str(&format!(" Also meets Category {}.", a.also.iter().map(std::string::ToString::to_string).collect::<Vec<_>>().join(", ")));
     }
     if !a.fails.is_empty() && a.standard == "tmdg" {
         s.push_str(&format!(
@@ -686,6 +687,7 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
 /* ---------------- the model-status record ---------------- */
 
 /// `reportScenario(P)`: the scenario the validation chapter reports: the base scenario when it has base-year results, else another scenario with base-year results, else the base scenario.
+#[must_use]
 pub fn report_scenario(p: &Project) -> Option<&Scenario> {
     let runs = |s: &Scenario, f: &dyn Fn(f64) -> bool| -> bool {
         ["AM", "PM"].iter().any(|pd| match s.res.get() {

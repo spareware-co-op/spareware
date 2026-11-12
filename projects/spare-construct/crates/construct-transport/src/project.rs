@@ -49,6 +49,7 @@ pub struct OrderedMap<V> {
 
 impl<V> OrderedMap<V> {
     /// An empty map.
+    #[must_use]
     pub fn new() -> Self {
         OrderedMap {
             entries: Vec::new(),
@@ -56,14 +57,17 @@ impl<V> OrderedMap<V> {
         }
     }
     /// Number of keys.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
     /// True when there are no keys.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
     /// `obj[key]`.
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&V> {
         self.index.get(key).map(|&i| &self.entries[i].1)
     }
@@ -75,14 +79,17 @@ impl<V> OrderedMap<V> {
         }
     }
     /// `key in obj` (own keys only).
+    #[must_use]
     pub fn contains_key(&self, key: &str) -> bool {
         self.index.contains_key(key)
     }
     /// Position of a key in iteration order.
+    #[must_use]
     pub fn index_of(&self, key: &str) -> Option<usize> {
         self.index.get(key).copied()
     }
     /// The entry at a position in iteration order.
+    #[must_use]
     pub fn get_index(&self, i: usize) -> Option<(&str, &V)> {
         self.entries.get(i).map(|(k, v)| (k.as_str(), v))
     }
@@ -144,6 +151,7 @@ impl<V> OrderedMap<V> {
 
 impl OrderedMap<Num> {
     /// `obj[key]` as a [`Num`]: missing when the key is absent.
+    #[must_use]
     pub fn num_at(&self, key: &str) -> &Num {
         self.get(key).unwrap_or(&crate::jsnum::MISSING)
     }
@@ -361,6 +369,7 @@ pub const CLASSES: [RoadClass; 5] = [
 ];
 
 /// `CLASSES[cls]`: the class with this key, if any.
+#[must_use]
 pub fn road_class_exact(cls: &str) -> Option<&'static RoadClass> {
     CLASSES.iter().find(|c| c.key == cls)
 }
@@ -456,6 +465,7 @@ pub const LANDUSES: [LandUse; 14] = [
 ];
 
 /// `LANDUSES[key]`.
+#[must_use]
 pub fn land_use(key: &str) -> Option<&'static LandUse> {
     LANDUSES.iter().find(|l| l.key == key)
 }
@@ -469,7 +479,7 @@ pub fn land_use(key: &str) -> Option<&'static LandUse> {
 #[derive(Clone, Debug, PartialEq, DeriveSerialize, DeriveDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
-    /// Settings version (3 = current; 1 and 2 keep older defaults, see model.js SETTINGS_V2).
+    /// Settings version (3 = current; 1 and 2 keep older defaults, see model.js `SETTINGS_V2`).
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub sv: Num,
     /// Peak period shown: "AM" or "PM".
@@ -526,7 +536,7 @@ pub struct Settings {
     /// Convergence rule (TAG stability, MSA capacity damping).
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub conv: Maybe<ConvSettings>,
-    /// Junction analysis (LoS method, peak flow factor, analysis period, queues, capacity method).
+    /// Junction analysis (`LoS` method, peak flow factor, analysis period, queues, capacity method).
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub junction: Maybe<JunctionSettings>,
     /// Model status: TMDG category and justification.
@@ -693,7 +703,7 @@ pub struct TurnSettings {
 }
 
 /// `settings.econ`: indicative economics.
-#[derive(Clone, Debug, PartialEq, DeriveSerialize, DeriveDeserialize)]
+#[derive(Clone, Debug, Default, PartialEq, DeriveSerialize, DeriveDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EconSettings {
     /// "mbcm" (MBCM v1.7.5, GC 25/01 discounting) or "uniform" (older projects).
@@ -831,6 +841,7 @@ fn num_map(items: &[(&str, f64)]) -> Maybe<OrderedMap<Num>> {
 }
 
 /// model.js `defaultSettings()`: the settings of a new project, every nested object included, keys in its order.
+#[must_use]
 pub fn default_settings() -> Settings {
     let rates: OrderedMap<Maybe<PeriodRates>> = [
         ("residential", (0.85, 20.0), (0.95, 65.0)),
@@ -1383,7 +1394,7 @@ pub struct Zone {
     /// Node a gateway (or pinned zone) connects to.
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub node: Maybe<String>,
-    /// Gateway counts { AMin, AMout, PMin, PMout } (veh/h).
+    /// Gateway counts { `AMin`, `AMout`, `PMin`, `PMout` } (veh/h).
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub gw: Maybe<OrderedMap<Num>>,
     /// Source of gateway counts (set: counted, so land-use factors do not apply).
@@ -1392,10 +1403,10 @@ pub struct Zone {
     /// Trip-generation table ({ on, ... }).
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub tg: Maybe<Value>,
-    /// Trip-generation loads { AMin, AMout, PMin, PMout } used when tg.on.
+    /// Trip-generation loads { `AMin`, `AMout`, `PMin`, `PMout` } used when tg.on.
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub tg_load: Maybe<OrderedMap<Num>>,
-    /// Extra trips { AMin, AMout, PMin, PMout } on top of land use (the saved key is "extra").
+    /// Extra trips { `AMin`, `AMout`, `PMin`, `PMout` } on top of land use (the saved key is "extra").
     #[serde(default, skip_serializing_if = "Maybe::is_missing", rename = "extra")]
     pub extra_trips: Maybe<OrderedMap<Num>>,
     /// Trips replaced by public transport and active modes (%).
@@ -1502,6 +1513,7 @@ pub struct SiteSource {
 /* ---------------- new projects and network edits ---------------- */
 
 /// model.js `newScenario(name)`, with the id given (the JavaScript makes a random one); year is left unset.
+#[must_use]
 pub fn new_scenario(id: &str, name: &str) -> Scenario {
     Scenario {
         id: id.to_string(),
@@ -1528,6 +1540,7 @@ pub fn new_scenario(id: &str, name: &str) -> Scenario {
 }
 
 /// model.js `newProject(name)`, with the project and base-case ids given: one "Base case" scenario, default settings.
+#[must_use]
 pub fn new_project(id: &str, name: &str, scenario_id: &str) -> Project {
     let sc = new_scenario(scenario_id, "Base case");
     Project {
@@ -1551,6 +1564,7 @@ pub fn new_project(id: &str, name: &str, scenario_id: &str) -> Project {
 
 impl Node {
     /// The fields of `Net.addNode(sc, ll)`: position rounded to 7 decimals, control "none".
+    #[must_use]
     pub fn new(id: &str, ll: LatLng) -> Node {
         Node {
             id: id.to_string(),
@@ -1570,6 +1584,7 @@ impl Node {
         }
     }
     /// `[n.lat, n.lng]` as the engine's arithmetic reads it (`Number()` of each).
+    #[must_use]
     pub fn ll(&self) -> LatLng {
         [self.lat.num(), self.lng.num()]
     }
@@ -1579,6 +1594,7 @@ impl Link {
     /// The fields of `Net.addLink(sc, a, b, pts, { cls })`: the class's lanes and speed, existing, no bus lane or cycleway.
     ///
     /// cls None is local; an unknown key is kept on the link and reads as local, as in the JavaScript.
+    #[must_use]
     pub fn new(id: &str, a: &str, b: &str, pts: &[LatLng], cls: Option<&str>) -> Link {
         let t = road_class(cls);
         Link {
@@ -1606,6 +1622,7 @@ impl Link {
         }
     }
     /// `CLASSES[L.cls] || CLASSES.local`.
+    #[must_use]
     pub fn class(&self) -> &'static RoadClass {
         road_class(self.cls.as_str())
     }
@@ -1613,6 +1630,7 @@ impl Link {
 
 impl Zone {
     /// A gateway or zone's `[z.lat, z.lng]` as the engine's arithmetic reads it.
+    #[must_use]
     pub fn ll(&self) -> LatLng {
         [self.lat.num(), self.lng.num()]
     }
@@ -1654,6 +1672,7 @@ impl Scenario {
         g
     }
     /// `Net.len(sc, L)`: link length along its shape (m).
+    #[must_use]
     pub fn link_len(&self, l: &Link) -> f64 {
         poly_len(&self.geom(l))
     }
@@ -1665,20 +1684,24 @@ impl Project {
         serde_json::from_str(text)
     }
     /// The project as a JSON value (every key it was read with, `extra` included).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         serde_json::to_value(self).expect("a project always serialises")
     }
     /// `Store.serialise(P)`: JSON text without the keys "paths", "arcKeys" and "settingsNotice" at any depth.
+    #[must_use]
     pub fn serialise(&self) -> String {
         let mut v = self.to_value();
         strip_keys(&mut v, &["paths", "arcKeys", "settingsNotice"]);
         serde_json::to_string(&v).expect("a JSON value always serialises")
     }
     /// The scenario with this id.
+    #[must_use]
     pub fn scenario(&self, id: &str) -> Option<&Scenario> {
         self.scenarios.iter().find(|s| s.id == id)
     }
     /// `Store.sc`: the active scenario, otherwise the first.
+    #[must_use]
     pub fn active_scenario(&self) -> Option<&Scenario> {
         self.active
             .as_str()
@@ -1686,6 +1709,7 @@ impl Project {
             .or(self.scenarios.first())
     }
     /// `Store.baseSc`: the base scenario, otherwise the first.
+    #[must_use]
     pub fn base_scenario(&self) -> Option<&Scenario> {
         self.base
             .as_str()
@@ -1693,6 +1717,7 @@ impl Project {
             .or(self.scenarios.first())
     }
     /// A register row by id (`(P.register || []).find(r => r.id === id)`).
+    #[must_use]
     pub fn register_row(&self, id: &str) -> Option<&RegisterRow> {
         self.register
             .get()
@@ -1728,6 +1753,7 @@ const LINK_STAGES: [&str; 5] = [
 ];
 
 /// `Scenarios.linkStage(L)`: the link's stage, or "proposal" for a proposed link and "existing" otherwise.
+#[must_use]
 pub fn link_stage(l: &Link) -> &str {
     if let Some(s) = l.stage.as_str()
         && LINK_STAGES.contains(&s)
@@ -1742,17 +1768,20 @@ pub fn link_stage(l: &Link) -> &str {
 }
 
 /// `Scenarios.unfunded(L)`: stage "unfunded", or committed with funding "unfunded" (sensitivity scenarios only).
+#[must_use]
 pub fn link_unfunded(l: &Link) -> bool {
     let s = link_stage(l);
     s == "unfunded" || (s == "committed" && l.funding.is("unfunded"))
 }
 
 /// `Scenarios.programmed(L)`: committed, programmed but not funded.
+#[must_use]
 pub fn link_programmed(l: &Link) -> bool {
     link_stage(l) == "committed" && l.funding.is("programmed")
 }
 
 /// `Register.inBaseline(row)`: whether a register row belongs in the future baseline (do-minimum), and why (AT ITA s3.6.1).
+#[must_use]
 pub fn in_baseline(row: Option<&RegisterRow>) -> (bool, String) {
     let Some(row) = row else {
         return (false, "Not in the register.".to_string());
@@ -1763,7 +1792,7 @@ pub fn in_baseline(row: Option<&RegisterRow>) -> (bool, String) {
         } else {
             String::new()
         };
-        return (row.include.is_true(), format!("Author's decision{}.", note));
+        return (row.include.is_true(), format!("Author's decision{note}."));
     }
     if row.row_type.is("network") {
         if row.funding.is("funded") {
@@ -1791,7 +1820,7 @@ pub fn in_baseline(row: Option<&RegisterRow>) -> (bool, String) {
         } else {
             status
         };
-        return (false, format!("Not granted ({}).", shown));
+        return (false, format!("Not granted ({shown})."));
     }
     if !(matches!(&row.likely, Maybe::Set(crate::jsnum::JsNum::Text(t)) if t == "likely")) {
         let rated = if row.likely.truthy() {
@@ -1801,7 +1830,7 @@ pub fn in_baseline(row: Option<&RegisterRow>) -> (bool, String) {
         };
         return (
             false,
-            format!("Granted, but implementation is rated {}.", rated),
+            format!("Granted, but implementation is rated {rated}."),
         );
     }
     (true, "Granted and likely to be implemented.".to_string())

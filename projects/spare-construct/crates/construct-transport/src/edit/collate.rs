@@ -7,7 +7,7 @@
 //! Latin-1 and Latin Extended-A letters (including the macron vowels of Maori place names), the common
 //! punctuation and symbols of Latin-1 and General Punctuation, and falls back on code point order after the
 //! letters for anything else (other scripts, emoji), which ICU orders by script. Accent order and punctuation
-//! order were read from Node 24 (ICU 78, CLDR 48) and are checked against it in tests/edit_truth.rs.
+//! order were read from Node 24 (ICU 78, CLDR 48) and are checked against it in `tests/edit_truth.rs`.
 
 use std::cmp::Ordering;
 
@@ -276,6 +276,7 @@ fn level(ces: &[Ce], pick: impl Fn(&Ce) -> u32) -> Vec<u32> {
 
 /// `a.localeCompare(b)` as an ordering: primary weights first (letters without case or accent), then
 /// accents, then case; equal strings (including a letter with its accent written as two characters) are Equal.
+#[must_use]
 pub fn locale_compare(a: &str, b: &str) -> Ordering {
     if a == b {
         return Ordering::Equal;
@@ -291,6 +292,7 @@ pub fn locale_compare(a: &str, b: &str) -> Ordering {
 }
 
 /// `a.localeCompare(b)` as the number the JavaScript returns (below 0, 0 or above 0), for sort comparators.
+#[must_use]
 pub fn locale_compare_f64(a: &str, b: &str) -> f64 {
     match locale_compare(a, b) {
         Ordering::Less => -1.0,

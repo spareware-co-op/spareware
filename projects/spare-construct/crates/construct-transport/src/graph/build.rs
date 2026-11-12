@@ -55,7 +55,7 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
     for (i, id) in ids.iter().enumerate() {
         idx.insert(id.clone(), i);
     }
-    let mut ll: Vec<[f64; 2]> = sc.nodes.values().map(|n| n.ll()).collect();
+    let mut ll: Vec<[f64; 2]> = sc.nodes.values().map(crate::project::Node::ll).collect();
     let mut arcs: Vec<Arc> = Vec::new();
     let mut ok_node = vec![0u8; n0];
     let (site_of0, sites) = site_index(sc, &idx);
@@ -111,7 +111,7 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
                 bus,
                 two,
                 ff: len / v,
-                cap_mid: gl as f64 * cap_lane,
+                cap_mid: f64::from(gl) * cap_lane,
                 cls: l.cls.as_str().map(str::to_string),
                 rank: c.rank,
                 speed: spd,

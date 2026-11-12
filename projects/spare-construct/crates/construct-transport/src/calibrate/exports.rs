@@ -39,6 +39,7 @@ fn or_cell(a: &crate::jsnum::Num, b: &crate::jsnum::Num) -> Value {
 }
 
 /// `nDays(c)`: the number of counted days: `n_days`, else the number in a note such as "7 counted days"; None when there is none.
+#[must_use]
 pub fn n_days(c: &Count) -> Option<Value> {
     if !c.n_days.is_nullish() {
         return Some(raw(&c.n_days));

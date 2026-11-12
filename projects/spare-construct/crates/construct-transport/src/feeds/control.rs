@@ -98,6 +98,7 @@ fn nn(v: Option<&JsonValue>) -> Value {
 }
 
 /// The sites and signs of the download's two layers.
+#[must_use]
 pub fn parse_control(ctl: &[JsonValue], signs: &[JsonValue]) -> ControlData {
     let empty = JsonValue::object();
     let pedestrian = Regex::lit("pedestrian", "i");
@@ -171,6 +172,7 @@ pub struct ControlLoad {
 
 impl ControlLoad {
     /// A download for an area.
+    #[must_use]
     pub fn new(bounds: Bounds, timeout_ms: f64, cache: &MetaCache) -> ControlLoad {
         ControlLoad {
             stage: ControlStage::MetaControlled,
@@ -203,13 +205,10 @@ impl Flow for ControlLoad {
                     Some(r) => return Some(r),
                     None => self.stage = ControlStage::MetaSigns,
                 },
-                ControlStage::MetaSigns => match self.meta_s.next_request() {
-                    Some(r) => return Some(r),
-                    None => {
-                        let cf = resolve_fields(self.meta_c.meta(), &["OBJECTID", "intersection_id", "intersection_no", "intersection_desc", "intersection_type", "controlled", "ped_crossing_flg"]);
-                        self.query = Some(self.query_for(SRC_CONTROLLED.url, "controlled='Yes'", cf));
-                        self.stage = ControlStage::Controlled;
-                    }
+                ControlStage::MetaSigns => if let Some(r) = self.meta_s.next_request() { return Some(r) } else {
+                    let cf = resolve_fields(self.meta_c.meta(), &["OBJECTID", "intersection_id", "intersection_no", "intersection_desc", "intersection_type", "controlled", "ped_crossing_flg"]);
+                    self.query = Some(self.query_for(SRC_CONTROLLED.url, "controlled='Yes'", cf));
+                    self.stage = ControlStage::Controlled;
                 },
                 ControlStage::Controlled | ControlStage::Signs => {
                     let q = self.query.as_mut().expect("query");
@@ -284,6 +283,7 @@ pub fn apply_control_load(p: &mut Project, data: &ControlData, now_ms: f64) {
 }
 
 /// `CTL_RANK`: how strong a control is (none 0, priority 1, stop 2, roundabout 3, signals 4).
+#[must_use]
 pub fn control_rank(c: &str) -> Option<f64> {
     match c {
         "none" => Some(0.0),
@@ -296,6 +296,7 @@ pub fn control_rank(c: &str) -> Option<f64> {
 }
 
 /// `SIGN_CTL[type]`: the control a sign type gives.
+#[must_use]
 pub fn sign_control(kind: &str) -> Option<&'static str> {
     match kind {
         "RG 5" => Some("stop"),
@@ -639,7 +640,7 @@ pub fn apply_controls(sc: &mut Scenario, ids: &mut dyn IdSource, rows: &[Row], p
         let mut id: String = r.get("node").and_then(Value::as_str).unwrap_or("").to_string();
         if let Some(Value::Object(sp)) = r.get("split").filter(|v| value_truthy(v)) {
             let link = sp.get("link").and_then(Value::as_str).unwrap_or("");
-            let ll = sp.get("ll").and_then(Value::as_array).map(|a| [a[0].as_f64().unwrap_or(f64::NAN), a[1].as_f64().unwrap_or(f64::NAN)]).unwrap_or([f64::NAN, f64::NAN]);
+            let ll = sp.get("ll").and_then(Value::as_array).map_or([f64::NAN, f64::NAN], |a| [a[0].as_f64().unwrap_or(f64::NAN), a[1].as_f64().unwrap_or(f64::NAN)]);
             match split_link(sc, ids, link, ll) {
                 Ok(nid) if !nid.is_empty() => id = nid,
                 _ => continue,
@@ -703,6 +704,7 @@ pub struct RestrictionsLoad {
 
 impl RestrictionsLoad {
     /// A download for an area.
+    #[must_use]
     pub fn new(b: &Bounds, timeout_ms: f64) -> RestrictionsLoad {
         let bb = [b.south, b.west, b.north, b.east].iter().map(|v| to_fixed(*v, 6)).collect::<Vec<_>>().join(",");
         RestrictionsLoad {
@@ -782,6 +784,7 @@ pub fn apply_restrictions(p: &mut Project, rels: &[JsonValue], url: &str, now_ms
 }
 
 /// `RESTRICT_TEXT[kind]`: how a restriction is worded.
+#[must_use]
 pub fn restrict_text(kind: &str) -> Option<&'static str> {
     Some(match kind {
         "no_left_turn" => "no left turn",
@@ -805,7 +808,7 @@ pub struct BanRow {
     pub node: String,
     /// The junction's name.
     pub name: String,
-    /// The restriction kind (no_left_turn, only_straight_on, ...).
+    /// The restriction kind (`no_left_turn`, `only_straight_on`, ...).
     pub kind: String,
     /// The movements to ban, "<in link>><out link>".
     pub bans: Vec<String>,

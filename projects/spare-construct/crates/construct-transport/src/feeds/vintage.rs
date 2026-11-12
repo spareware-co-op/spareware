@@ -81,6 +81,7 @@ pub fn fail_stamp(p: &mut Project, id: &str, error: &str, extra: &Map<String, Va
 }
 
 /// `safeHref(h)`: the text when it is a web address or a plain path on this site, else "" (a project file could carry `javascript:` in a URL field).
+#[must_use]
 pub fn safe_href(h: &str) -> String {
     let s = crate::jsnum::js_trim(h);
     let web = super::jsregex::Regex::lit(r#"^https?:\/\/[^\s"'<>]+$"#, "i");
@@ -110,6 +111,7 @@ pub struct VintageRow {
 }
 
 /// `vintageRows()`: the entries of `P.feeds.vintage` as table rows, sorted by the source's name.
+#[must_use]
 pub fn vintage_rows(p: &Project) -> Vec<VintageRow> {
     let Some(Value::Object(v)) = p.extra.get("feeds").and_then(|f| f.get("vintage")) else { return Vec::new() };
     let get = |e: &Value, k: &str| e.get(k).cloned();

@@ -16,7 +16,8 @@ use crate::util::{esc, r1, r3};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 
-/// `losFrom(d, dos, method, type)`: level of service from delay (and DoS) with the method's thresholds.
+/// `losFrom(d, dos, method, type)`: level of service from delay (and `DoS`) with the method's thresholds.
+#[must_use]
 pub fn los_from(d: f64, dos: f64, method: &str, kind: &str) -> &'static str {
     let l = los_method(method);
     let th = match kind {
@@ -73,6 +74,7 @@ pub struct Checks {
 
 impl Checks {
     /// As JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({
             "balanced": self.balanced,
@@ -83,6 +85,7 @@ impl Checks {
 }
 
 /// `checks(sc, res, e)`: whether the turns balance the approach flows, and the U-turns over the flag.
+#[must_use]
 pub fn checks(sc: &Scenario, st: &crate::project::Settings, res: &Res, e: &Entry) -> Checks {
     let mvs = moves_of(sc, st, res, e);
     let legs = legs_of(sc, st, res, e);
@@ -128,7 +131,7 @@ pub fn checks(sc: &Scenario, st: &crate::project::Settings, res: &Res, e: &Entry
     }
 }
 
-/// A DoS at one approach (or movement) of a junction, before or after the flow rises.
+/// A `DoS` at one approach (or movement) of a junction, before or after the flow rises.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScaleHit {
     /// Degree of saturation.
@@ -139,7 +142,7 @@ pub struct ScaleHit {
     pub key: String,
     /// Movement ("" for the approach).
     pub mv: String,
-    /// DoS before the flows rise (the crossing only).
+    /// `DoS` before the flows rise (the crossing only).
     pub before: Option<f64>,
     /// Where: the leg and movement.
     pub where_: String,
@@ -171,13 +174,13 @@ pub struct FlowScaleRow {
     pub name: String,
     /// Control.
     pub kind: String,
-    /// Worst DoS as run.
+    /// Worst `DoS` as run.
     pub dos: f64,
-    /// Worst DoS at the raised flows.
+    /// Worst `DoS` at the raised flows.
     pub dos_f: f64,
-    /// Practical DoS.
+    /// Practical `DoS`.
     pub xp: Option<f64>,
-    /// The junction crosses its practical DoS.
+    /// The junction crosses its practical `DoS`.
     pub crosses: bool,
     /// Where it first crosses.
     pub first: Option<ScaleHit>,
@@ -215,7 +218,8 @@ pub struct FlowScale {
 }
 
 impl FlowScale {
-    /// The junctions that cross their practical DoS.
+    /// The junctions that cross their practical `DoS`.
+    #[must_use]
     pub fn crossing(&self) -> Vec<&FlowScaleRow> {
         self.rows.iter().filter(|r| r.crosses).collect()
     }
@@ -303,6 +307,7 @@ fn el_list_after(appr: &[crate::junction::ApproachRow]) -> Vec<(String, El)> {
 
 impl<'a> Tools<'a> {
     /// `flowScale(sc, res, f)`: junctions only re-evaluated at the flows times f with the run's signal timings (no re-assignment).
+    #[must_use]
     pub fn flow_scale(&self, sc: &Scenario, res: &'a Res, f: f64) -> Option<FlowScale> {
         let set = self.st();
         let mut g = build_graph(sc, set, None);
@@ -412,7 +417,7 @@ impl<'a> Tools<'a> {
                 }
             }
             let name = |x: &El| {
-                let base = by_in.get(x.key.as_str()).map_or(x.key.clone(), |l| l.to_string());
+                let base = by_in.get(x.key.as_str()).map_or(x.key.clone(), std::string::ToString::to_string);
                 if x.mv.is_empty() {
                     base
                 } else {
@@ -491,11 +496,11 @@ impl<'a> Tools<'a> {
             });
         }
         crate::graph::js_sort_by(&mut rows, |p, q| {
-            let c = (q.crosses as i32 - p.crosses as i32) as f64;
+            let c = (i32::from(q.crosses) - i32::from(p.crosses)) as f64;
             if c != 0.0 {
                 return c;
             }
-            let a = (q.already.is_some() as i32 - p.already.is_some() as i32) as f64;
+            let a = (i32::from(q.already.is_some()) - i32::from(p.already.is_some())) as f64;
             if a != 0.0 {
                 return a;
             }
@@ -515,6 +520,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `scaleHtml(sc, res, opts)`: the flow-scale test as a note and a table. None for no result.
+    #[must_use]
     pub fn scale_html(&self, sc: &Scenario, res: Option<&'a Res>) -> String {
         let Some(res) = res else {
             return "<p class=\"note\">Run the model to test junctions at higher flows.</p>".to_string();
@@ -578,6 +584,7 @@ impl<'a> Tools<'a> {
 }
 
 /// `losTable(method)`: the level of service definitions as a table with their source.
+#[must_use]
 pub fn los_table(method: &str) -> String {
     let l = los_method(method);
     let op = if method == "rta" { "<" } else { "\u{2264}" };
@@ -631,6 +638,7 @@ pub fn los_table(method: &str) -> String {
 /// Convenience: [`Sc`]'s flow-scale test for a period, as the report sections call it.
 impl<'a> Tools<'a> {
     /// `resOf(sc, p) ? flowScale(sc, resOf(sc, p)) : null` at the default factor.
+    #[must_use]
     pub fn flow_scale_of(&self, s: Sc<'a>, p: &str) -> Option<FlowScale> {
         s.res_of(p)
             .and_then(|r| self.flow_scale(s.sc, r, FLOW_SCALE_FACTOR))

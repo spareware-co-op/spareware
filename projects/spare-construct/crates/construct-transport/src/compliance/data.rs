@@ -17,32 +17,36 @@ pub fn core() -> &'static V {
     CORE.get_or_init(|| V::parse(include_str!("data/compliance.json")).expect("compliance.json"))
 }
 
-/// The tables of packs/nz/compliance-extra.js (STD, SRC, D, ASSUME, LINT, PRECINCTS, PARK_ACT, PREF ...).
+/// The tables of packs/nz/compliance-extra.js (STD, SRC, D, ASSUME, LINT, PRECINCTS, `PARK_ACT`, PREF ...).
 pub fn extra() -> &'static V {
     EXTRA.get_or_init(|| V::parse(include_str!("data/extra.json")).expect("extra.json"))
 }
 
-/// The labels of model.js the checks print (CLASSES, LANDUSES, CONTROLS, STATUS, CYCLE, SCENARIO_ROLES, FUNDING, REGISTER_TYPES).
+/// The labels of model.js the checks print (CLASSES, LANDUSES, CONTROLS, STATUS, CYCLE, `SCENARIO_ROLES`, FUNDING, `REGISTER_TYPES`).
 pub fn model() -> &'static V {
     MODEL.get_or_init(|| V::parse(include_str!("data/model.json")).expect("model.json"))
 }
 
 /// A value of the compliance tables by dotted path ("E27.rows", "SRC.rma.url"); null when missing.
+#[must_use]
 pub fn c(p: &str) -> &'static V {
     super::jv::path(core(), p)
 }
 
 /// A value of the compliance-extra tables by dotted path.
+#[must_use]
 pub fn x(p: &str) -> &'static V {
     super::jv::path(extra(), p)
 }
 
 /// A value of the model.js labels by dotted path.
+#[must_use]
 pub fn m(p: &str) -> &'static V {
     super::jv::path(model(), p)
 }
 
 /// The expression a table holds (`{ "$re", "$flags" }`).
+#[must_use]
 pub fn re_of(v: &V) -> Rc<Regex> {
     rx(&v.g("$re").s(), &v.g("$flags").sn())
 }

@@ -27,6 +27,7 @@ pub struct OptionEntry<'a> {
 }
 
 /// `optionList(P)`: the author's tagged options, or every scenario other than the do-minimum when none are tagged.
+#[must_use]
 pub fn option_list(p: &V) -> Vec<OptionEntry<'_>> {
     let cx = data(p);
     let base = pair(p).base;
@@ -179,14 +180,12 @@ pub fn alternatives(p: &V) -> V {
 }
 
 /// `alternativeSections(P, c)`: which alternatives sections the document needs, by pathway and the author's flags: `[{ id, title, ref, include, why }]`.
+#[must_use]
 pub fn alternative_sections(p: &V, c: Option<&V>) -> V {
     let own;
-    let c = match c {
-        Some(c) => c,
-        None => {
-            own = context(p);
-            &own
-        }
+    let c = if let Some(c) = c { c } else {
+        own = context(p);
+        &own
     };
     let mut out: Vec<V> = Vec::new();
     let mut add = |id: &str, title: &str, rf: &str, include: V, why: &str| out.push(jobj! { "id" => id, "title" => title, "ref" => rf, "include" => include, "why" => why });
@@ -231,6 +230,7 @@ pub fn alternative_sections(p: &V, c: Option<&V>) -> V {
    ===================================================================================== */
 
 /// `zonedOf(z, proposed)`: a zone's entered zoned capacity (operative, or PC120 proposed) when it is an object, else null.
+#[must_use]
 pub fn zoned_of(z: &V, proposed: bool) -> V {
     let x = z.g("cx").g(if proposed { "zonedProposed" } else { "zoned" });
     if x.is_obj() { x.clone() } else { V::Null }
@@ -242,6 +242,7 @@ pub const DW_KEYS: [&str; 3] = ["residential", "apartment", "retirement"];
 /// `mergeZoned(current, zoned)`: a zone's full build-out land use: the entered zoned capacity merged over its current land use. Entered
 /// dwelling capacity (of any type) replaces all of the zone's dwellings; every other land use without an entered capacity is kept. Blank
 /// entries are ignored. `{ lu, replaced, kept }`.
+#[must_use]
 pub fn merge_zoned(current: &V, zoned: &V) -> V {
     let landuses = model("LANDUSES");
     let mut entered = V::object();
@@ -261,21 +262,22 @@ pub fn merge_zoned(current: &V, zoned: &V) -> V {
     for (k, v) in entered.entries() {
         out.set(k, v.clone());
     }
-    let mut replaced: Vec<String> = entered.keys().iter().map(|k| k.to_string()).collect();
+    let mut replaced: Vec<String> = entered.keys().iter().map(std::string::ToString::to_string).collect();
     if dw_in {
-        replaced.extend(DW_KEYS.iter().filter(|k| !entered.has(k) && cur.g(k).n() > 0.0).map(|k| k.to_string()));
+        replaced.extend(DW_KEYS.iter().filter(|k| !entered.has(k) && cur.g(k).n() > 0.0).map(std::string::ToString::to_string));
     }
     let kept: Vec<String> = cur
         .keys()
         .into_iter()
         .filter(|k| !entered.has(k) && !(dw_in && DW_KEYS.contains(k)) && cur.g(k).n() > 0.0)
-        .map(|k| k.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     jobj! { "lu" => out, "replaced" => strs(replaced.iter()), "kept" => strs(kept.iter()) }
 }
 
 /// `fullBuildout(P, sc)`: every zone with entered zoned capacity takes that capacity at 100% (PC120 proposed capacity when selected, labelled
 /// proposed): `{ zones, dwellings, gfa, proposed, label, rule }`.
+#[must_use]
 pub fn full_buildout(p: &V, sc: Option<&V>) -> V {
     let sc = sc.unwrap_or_else(|| active_sc(p));
     let proposed = data(p).g("planChange").g("useProposed").t();
@@ -314,7 +316,7 @@ pub fn full_buildout(p: &V, sc: Option<&V>) -> V {
 /// build-out) and returns it; null when no zone has entered capacity. `sc` is the scenario to copy (the active one by default); pass a copy
 /// when it belongs to the project being changed. The new scenario's id is a counter-based one.
 pub fn create_full_buildout(p: &mut V, sc: Option<&V>) -> V {
-    let sc: V = sc.map_or_else(|| active_sc(p).clone(), |s| s.clone());
+    let sc: V = sc.map_or_else(|| active_sc(p).clone(), std::clone::Clone::clone);
     let fb = full_buildout(p, Some(&sc));
     if fb.g("zones").jlen() == 0 {
         return V::Null;
@@ -322,12 +324,11 @@ pub fn create_full_buildout(p: &mut V, sc: Option<&V>) -> V {
     let mut ns = engine::scenario_copy_without_links(&sc, &HashSet::new());
     for z in fb.g("zones").items() {
         let id = z.g("id").s();
-        if let Some(nz) = ns.get_mut("zones").and_then(|zs| zs.get_mut(&id)) {
-            if nz.t() {
+        if let Some(nz) = ns.get_mut("zones").and_then(|zs| zs.get_mut(&id))
+            && nz.t() {
                 nz.set("lu", merge(&V::object(), z.g("lu")));
                 nz.remove("buildout");
             }
-        }
     }
     let taken: Vec<String> = p.g("scenarios").items().iter().map(|s| s.g("id").s()).collect();
     let mut n = 1;
@@ -352,6 +353,7 @@ pub fn create_full_buildout(p: &mut V, sc: Option<&V>) -> V {
 }
 
 /// `rltpRelied(P)`: the network projects the assessment relies on, in words: the committed roads of the active scenario and the transport rows of the register.
+#[must_use]
 pub fn rltp_relied(p: &V) -> String {
     let sc = active_sc(p);
     let funding = model("FUNDING");
@@ -401,7 +403,7 @@ pub fn plan_change(p: &V) -> V {
             jobj! { "level" => "warn", "text" => format!("Notified {}: Ministerial exemption required (s80YA).", long_date_s(&n)) }
         } else {
             jobj! { "level" => "info", "text" => format!("A private plan change request notified on or after {} needs a Ministerial exemption (s80YA){}.", long_date_s(&private_bar),
-                if !n.is_empty() { format!("; this one is notified {}", long_date_s(&n)) } else { "; enter the notification date".to_string() }) }
+                if n.is_empty() { "; enter the notification date".to_string() } else { format!("; this one is notified {}", long_date_s(&n)) }) }
         });
     }
     if kind.is_empty() {
@@ -442,7 +444,7 @@ pub fn plan_change(p: &V) -> V {
             format!(
                 "{} crashes ({} DSI) on changed roads in the CAS window; predicted change {}",
                 cas.g("crashes").s(), cas.g("dsi").s(),
-                if !r.g("dsi").nullish() { format!("{} DSI/yr", fmt::signed(r.g("dsi").n(), 1)) } else { "not modelled".to_string() }
+                if r.g("dsi").nullish() { "not modelled".to_string() } else { format!("{} DSI/yr", fmt::signed(r.g("dsi").n(), 1)) }
             )
         } else {
             "CAS not loaded".to_string()
@@ -454,11 +456,11 @@ pub fn plan_change(p: &V) -> V {
             "travel" => format!("{}; about {} veh\u{b7}h a year", pp_text(&neg_pp(r.g("pp").g("vht")), 1, "veh\u{b7}h saved per modelled peak hour"), fmt::signed(-ann_h, 0)),
             "safety" => safety,
             "voc" => format!("{} NZ$m a year ({} M veh-km \u{d7} NZ${}/km, {})", fmt::signed(ann_vkt * voc.n() / 1e6, 2), fmt::signed(ann_vkt / 1e6, 2), voc.s(), assumption()),
-            "cost" => if !r.g("cost").nullish() { format!("{}{}", fmt::money(r.g("cost").n()), if timing.t() { format!(", {}", timing.s()) } else { String::new() }) } else { "Not costed".to_string() },
+            "cost" => if r.g("cost").nullish() { "Not costed".to_string() } else { format!("{}{}", fmt::money(r.g("cost").n()), if timing.t() { format!(", {}", timing.s()) } else { String::new() }) },
             "timing" => or_s(timing, ""),
-            "acting" => if !unf.is_empty() {
+            "acting" => if unf.is_empty() { "Relies on no unfunded project".to_string() } else {
                 format!("Relies on {} unfunded project{} ({}): effects return if they are not funded", unf.len(), if unf.len() == 1 { "" } else { "s" }, names.iter().take(3).cloned().collect::<Vec<_>>().join(", "))
-            } else { "Relies on no unfunded project".to_string() },
+            },
             "notActing" => format!("Do-minimum: {} effects screened in {}", mitigation::effects(p, Some(base)).jlen(), base.g("name").s()),
         });
     }
@@ -532,6 +534,7 @@ pub fn plan_change(p: &V) -> V {
    ===================================================================================== */
 
 /// `optionsCSV(P)`: the options appraisal, ready for the EAST and AST tools, with the version stamp.
+#[must_use]
 pub fn options_csv(p: &V) -> String {
     let a = alternatives(p);
     let pv = |r: &V, k: &str, pd: &str, f: &dyn Fn(f64) -> f64| -> V {
@@ -554,11 +557,11 @@ pub fn options_csv(p: &V) -> String {
         rows.push(cells![
             r.g("name"), r.g("label"), r.g("scName"), pv(r, "vht", "AM", &r1), pv(r, "vht", "PM", &r1), or_s(r.g("worst"), ""),
             pv(r, "route", "AM", &|x| r1(x / 60.0)), pv(r, "route", "PM", &|x| r1(x / 60.0)),
-            if !r.g("cycleKm").nullish() { V::Number(r3(r.g("cycleKm").n())) } else { blank() },
+            if r.g("cycleKm").nullish() { blank() } else { V::Number(r3(r.g("cycleKm").n())) },
             if cas.t() { cas.g("crashes").clone() } else { blank() }, if cas.t() { cas.g("dsi").clone() } else { blank() },
-            if !r.g("dsi").nullish() { r.g("dsi").clone() } else { V::String("not modelled".into()) },
+            if r.g("dsi").nullish() { V::String("not modelled".into()) } else { r.g("dsi").clone() },
             pv(r, "vkt", "AM", &r1), pv(r, "vkt", "PM", &r1), pv(r, "co2", "AM", &r3), pv(r, "co2", "PM", &r3), or_s(r.g("bcr"), ""), or_s(r.g("ipm"), ""),
-            if !r.g("cost").nullish() { V::Number(r3(r.g("cost").n())) } else { blank() }, r.g("notes")
+            if r.g("cost").nullish() { blank() } else { V::Number(r3(r.g("cost").n())) }, r.g("notes")
         ]);
     }
     rows.push(vec![]);
@@ -571,6 +574,7 @@ pub fn options_csv(p: &V) -> String {
 }
 
 /// `planChangeCSV(P)`: the plan change s32 pack: process, s32 table, policy rows, road function table, full build-out and the cl 23 pack.
+#[must_use]
 pub fn plan_change_csv(p: &V) -> String {
     let pc = plan_change(p);
     let bo = pc.g("buildout");
@@ -612,6 +616,7 @@ pub fn plan_change_csv(p: &V) -> String {
    ===================================================================================== */
 
 /// `altTable(a)`: the multi-criteria table of the options (against the do-minimum).
+#[must_use]
 pub fn alt_table(a: &V) -> String {
     let head = [
         th("Option"), th("Hierarchy"), th("\u{394}VHT veh\u{b7}h/h"), th("Worst junction"), th("Bus time \u{394} min"), thn("New cycle km"), th("CAS (DSI)"), th("Predicted DSI"),
@@ -633,7 +638,7 @@ pub fn alt_table(a: &V) -> String {
                 vec![
                     esc(r.g("name")), esc(r.g("label")), esc_s(&pp_text(r.g("pp").g("vht"), 1, "")), esc(r.g("worst")), esc_s(&pp_text(&route_pp, 1, "")), num(r.g("cycleKm"), 2),
                     if cas.t() { format!("{} ({})", cas.g("crashes").s(), cas.g("dsi").s()) } else { dash() },
-                    if !r.g("dsi").nullish() { fmt::signed(r.g("dsi").n(), 1) } else { "not modelled".to_string() },
+                    if r.g("dsi").nullish() { "not modelled".to_string() } else { fmt::signed(r.g("dsi").n(), 1) },
                     esc_s(&pp_text(r.g("pp").g("vkt"), 0, "")), esc_s(&pp_text(r.g("pp").g("co2"), 2, "")), esc(r.g("bcr")), esc(r.g("ipm")),
                     fmt::money(if r.g("cost").nullish() { f64::NAN } else { r.g("cost").n() }),
                 ]
@@ -696,6 +701,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-alternatives", "compliance-e
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     match id {
         "compliance-extra-alternatives" => Some(report_alternatives(p, ctx)),
@@ -708,6 +714,7 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-options", "compliance-extra-planchange"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     match id {
         "compliance-extra-options" => Some(options_csv(p)),
@@ -717,6 +724,7 @@ pub fn export_build(id: &str, p: &V) -> Option<String> {
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     match id {
         "compliance-extra-options" => Some(alternatives(p).g("rows").jlen() > 0),

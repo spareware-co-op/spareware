@@ -31,6 +31,7 @@ pub struct Crossing {
 }
 
 /// `slCrossings(sc, sl)`: every link crossing a screenline, or the boundary of a cordon or core area (a closed area is read counter-clockwise, so crossing an edge to its left means going inside).
+#[must_use]
 pub fn sl_crossings(sc: &Scenario, sl: &Screenline) -> Vec<Crossing> {
     let closed = !sl.is_type("screen");
     let mut pts: Vec<LatLng> = sl.pts.iter().map(|p| p.0).collect();
@@ -104,9 +105,10 @@ pub fn sl_crossings(sc: &Scenario, sl: &Screenline) -> Vec<Crossing> {
 }
 
 /// `slLeft(sl)`: the heading of the screenline's left side (traffic crossing in the + sense heads this way).
+#[must_use]
 pub fn sl_left(sl: &Screenline) -> f64 {
-    let a = sl.pts.first().map(|p| p.0).unwrap_or([f64::NAN, f64::NAN]);
-    let b = sl.pts.last().map(|p| p.0).unwrap_or([f64::NAN, f64::NAN]);
+    let a = sl.pts.first().map_or([f64::NAN, f64::NAN], |p| p.0);
+    let b = sl.pts.last().map_or([f64::NAN, f64::NAN], |p| p.0);
     (bearing(&a, &b) + 270.0) % 360.0
 }
 
@@ -365,11 +367,13 @@ pub const SL_KEYS: [&str; 7] = ["sgeh5", "sgeh75", "sgeh10", "sgeh4", "sw5", "sw
 
 impl SlSummary {
     /// `s[key]`: the share of observations meeting a criterion (None without observations).
+    #[must_use]
     pub fn share(&self, key: &str) -> Option<f64> {
         let i = SL_KEYS.iter().position(|k| *k == key)?;
         if self.n > 0 { Some(self.cnt[i] as f64 / self.n as f64) } else { None }
     }
     /// `s.cnt[key]`.
+    #[must_use]
     pub fn cnt_of(&self, key: &str) -> Option<usize> {
         SL_KEYS.iter().position(|k| *k == key).map(|i| self.cnt[i])
     }
@@ -428,14 +432,14 @@ pub fn sl_observations(ctx: &Ctx, sc: &Scenario, period: &str, set: &str, res: O
     }
 }
 
-/// The OD matrix of trips across a cordon (`cordonOD`): as PTV Visum ($O), a long CSV and the boundary zones as GeoJSON.
+/// The OD matrix of trips across a cordon (`cordonOD`): as PTV Visum ($O), a long CSV and the boundary zones as `GeoJSON`.
 #[derive(Clone, Debug)]
 pub struct CordonOd {
     /// The matrix in PTV $O format.
     pub o: String,
     /// The matrix as CSV (with a byte order mark).
     pub csv: String,
-    /// The boundary zones as GeoJSON text.
+    /// The boundary zones as `GeoJSON` text.
     pub geojson: String,
     /// Zones in the matrix.
     pub zones: usize,
@@ -527,12 +531,9 @@ pub fn cordon_od(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, sl: Option<&Screen
             }
             let key = format!("{o}\u{0}{d}");
             let add = p.w / pf;
-            match t_idx.get(&key) {
-                Some(&i) => t_order[i].1 += add,
-                None => {
-                    t_idx.insert(key.clone(), t_order.len());
-                    t_order.push((key, add));
-                }
+            if let Some(&i) = t_idx.get(&key) { t_order[i].1 += add } else {
+                t_idx.insert(key.clone(), t_order.len());
+                t_order.push((key, add));
             }
         }
     }
@@ -546,13 +547,13 @@ pub fn cordon_od(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, sl: Option<&Screen
         }
     }
     crate::graph::js_sort_by(&mut zones, |a, b| {
-        let ab = a.starts_with("b:") as i32 as f64;
-        let bb = b.starts_with("b:") as i32 as f64;
+        let ab = i32::from(a.starts_with("b:")) as f64;
+        let bb = i32::from(b.starts_with("b:")) as f64;
         let d = ab - bb;
-        if d != 0.0 {
-            d
-        } else {
+        if d == 0.0 {
             js_locale_compare(a, b)
+        } else {
+            d
         }
     });
     let mut num0: HashMap<String, usize> = HashMap::new();

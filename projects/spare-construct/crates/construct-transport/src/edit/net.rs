@@ -26,6 +26,7 @@ impl Default for NodeProps {
 
 impl NodeProps {
     /// No keys set.
+    #[must_use]
     pub fn new() -> NodeProps {
         NodeProps(Node {
             id: String::new(),
@@ -45,11 +46,13 @@ impl NodeProps {
         })
     }
     /// Sets the control ("none", "priority", "stop", "roundabout" or "signals").
+    #[must_use]
     pub fn control(mut self, control: &str) -> Self {
         self.0.control = Maybe::Set(control.to_string());
         self
     }
     /// Sets the OpenStreetMap node id.
+    #[must_use]
     pub fn osm(mut self, osm: Value) -> Self {
         self.0.osm = Maybe::Set(osm);
         self
@@ -69,6 +72,7 @@ impl Default for LinkProps {
 
 impl LinkProps {
     /// No keys set.
+    #[must_use]
     pub fn new() -> LinkProps {
         LinkProps(Link {
             id: String::new(),
@@ -95,6 +99,7 @@ impl LinkProps {
         })
     }
     /// Everything a link has except its id, ends and shape points (`const { id, a, b, pts, ...props } = L`).
+    #[must_use]
     pub fn of_link(l: &Link) -> LinkProps {
         let mut p = l.clone();
         p.id = String::new();
@@ -104,47 +109,56 @@ impl LinkProps {
         LinkProps(p)
     }
     /// Sets the road class key.
+    #[must_use]
     pub fn cls(mut self, cls: &str) -> Self {
         self.0.cls = Maybe::Set(cls.to_string());
         self
     }
     /// Sets the road name.
+    #[must_use]
     pub fn name(mut self, name: &str) -> Self {
         self.0.name = Maybe::Set(name.to_string());
         self
     }
     /// Sets the lanes each way (from a to b, from b to a).
+    #[must_use]
     pub fn lanes(mut self, ab: f64, ba: f64) -> Self {
         self.0.lanes_ab = Num::number(ab);
         self.0.lanes_ba = Num::number(ba);
         self
     }
     /// Sets the speed limit (km/h).
+    #[must_use]
     pub fn speed(mut self, speed: f64) -> Self {
         self.0.speed = Num::number(speed);
         self
     }
     /// Sets the status ("existing", "proposed" or "closed").
+    #[must_use]
     pub fn status(mut self, status: &str) -> Self {
         self.0.status = Maybe::Set(status.to_string());
         self
     }
     /// Sets the bus lane flag.
+    #[must_use]
     pub fn bus_lane(mut self, on: bool) -> Self {
         self.0.bus_lane = on.into();
         self
     }
     /// Sets the cycling provision ("none", "painted" or "separated").
+    #[must_use]
     pub fn cycle(mut self, cycle: &str) -> Self {
         self.0.cycle = Maybe::Set(cycle.to_string());
         self
     }
     /// Sets the roundabout ring flag.
+    #[must_use]
     pub fn ring(mut self, on: bool) -> Self {
         self.0.ring = on.into();
         self
     }
     /// Sets the OpenStreetMap way segment key.
+    #[must_use]
     pub fn osm(mut self, osm: Value) -> Self {
         self.0.osm = Maybe::Set(osm);
         self
@@ -214,11 +228,13 @@ fn overlay_link(l: &mut Link, p: &Link) {
 /* ---------------- geometry ---------------- */
 
 /// `Net.geom(sc, L)`: [node a, shape points..., node b] (both end nodes must exist).
+#[must_use]
 pub fn geom(sc: &Scenario, l: &Link) -> Vec<LatLng> {
     sc.geom(l)
 }
 
 /// `Net.len(sc, L)`: length of a link along its shape (m).
+#[must_use]
 pub fn len(sc: &Scenario, l: &Link) -> f64 {
     sc.link_len(l)
 }
@@ -237,6 +253,7 @@ pub struct Projection {
 }
 
 /// `Net.project(sc, L, ll)`: the point on a link nearest to ll, with its segment index.
+#[must_use]
 pub fn project(sc: &Scenario, l: &Link, ll: LatLng) -> Projection {
     let g = sc.geom(l);
     let f = util::flat(ll[0]);
@@ -285,6 +302,7 @@ pub struct NearestLink {
 }
 
 /// `Net.nearestLink(sc, ll, maxM, filter)`: the link nearest to ll within maxM metres (pass infinity for no limit).
+#[must_use]
 pub fn nearest_link(
     sc: &Scenario,
     ll: LatLng,
@@ -335,6 +353,7 @@ pub fn nearest_link(
 }
 
 /// `Net.nearestNode(sc, ll, maxM, filter)`: the id of the node nearest to ll within maxM metres (pass infinity for no limit).
+#[must_use]
 pub fn nearest_node(
     sc: &Scenario,
     ll: LatLng,
@@ -399,6 +418,7 @@ pub fn add_link(
 }
 
 /// `Net.linksAt(sc, nid)`: the links that start or end at a junction, in the order the scenario lists them.
+#[must_use]
 pub fn links_at<'a>(sc: &'a Scenario, nid: &str) -> Vec<&'a Link> {
     sc.links
         .values()
@@ -407,6 +427,7 @@ pub fn links_at<'a>(sc: &'a Scenario, nid: &str) -> Vec<&'a Link> {
 }
 
 /// `Net.degree(sc)`: how many link ends meet at each junction (a link that starts and ends there counts twice).
+#[must_use]
 pub fn degree(sc: &Scenario) -> HashMap<String, usize> {
     let mut d: HashMap<String, usize> = HashMap::new();
     for l in sc.links.values() {

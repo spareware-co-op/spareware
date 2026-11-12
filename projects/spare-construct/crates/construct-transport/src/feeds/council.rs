@@ -1,4 +1,4 @@
-//! Council count layers (section 6 of feeds.js): a generic ArcGIS importer for traffic counts.
+//! Council count layers (section 6 of feeds.js): a generic `ArcGIS` importer for traffic counts.
 //!
 //! The layer is read first ([`CouncilRead`]), the fields that hold each value are guessed from the field names and the
 //! user confirms them, and then the counts in the study area are downloaded and turned into the user's own counts ([`CouncilImport`]).
@@ -38,11 +38,12 @@ pub struct GuessedFields {
     pub dir: String,
     /// The flag of a site's latest count.
     pub latest: String,
-    /// Year columns (year_2023 ...), newest first.
+    /// Year columns (`year_2023` ...), newest first.
     pub years: Vec<String>,
 }
 
 /// `guessFields(meta)`: which field of a layer holds the daily volume, peak hour and so on, from the field names and aliases.
+#[must_use]
 pub fn guess_fields(meta: &JsonValue) -> GuessedFields {
     let skip = Regex::lit("oid|geometry|globalid", "i");
     let fields: Vec<&JsonValue> = match meta.get("fields") {
@@ -163,6 +164,7 @@ impl Flow for CouncilRead {
 }
 
 /// `yearOfVal(v)`: the year of a count date: the UTC year of a timestamp in ms, else the first four digits of the text; None when there is none.
+#[must_use]
 pub fn year_of_val(v: Option<&JsonValue>) -> Option<f64> {
     let v = v?;
     match v {
@@ -222,7 +224,7 @@ impl CouncilImport {
             }
         }
         let latest = map_str(&map, "latest");
-        let where_ = if !latest.is_empty() { format!("{latest} IN ('Y','Yes','YES','y')") } else { "1=1".to_string() };
+        let where_ = if latest.is_empty() { "1=1".to_string() } else { format!("{latest} IN ('Y','Yes','YES','y')") };
         let want: Vec<&str> = uniq.iter().map(String::as_str).collect();
         let resolved = resolve_fields(Some(&layer.meta), &want).join(",");
         let mut params: Vec<(String, String)> = vec![("where".into(), where_), ("outFields".into(), if resolved.is_empty() { "*".to_string() } else { resolved })];
@@ -231,6 +233,7 @@ impl CouncilImport {
         CouncilImport { layer, map, preset: preset.map(str::to_string), now_ms, query }
     }
     /// How many features have been downloaded (for a progress line).
+    #[must_use]
     pub fn count(&self) -> usize {
         self.query.features().len()
     }
@@ -285,8 +288,8 @@ impl CouncilImport {
             };
             let Some(ll) = ll else { continue };
             let oid = at("OBJECTID").filter(|v| !v.is_null());
-            let mut adt: Option<f64> = if !m_adt.is_empty() { Some(at(&m_adt).map_or(f64::NAN, JsonValue::to_number)) } else { None };
-            let mut year: Option<f64> = if !m_date.is_empty() { year_of_val(at(&m_date)) } else { None };
+            let mut adt: Option<f64> = if m_adt.is_empty() { None } else { Some(at(&m_adt).map_or(f64::NAN, JsonValue::to_number)) };
+            let mut year: Option<f64> = if m_date.is_empty() { None } else { year_of_val(at(&m_date)) };
             if !adt.is_some_and(|v| v > 0.0) && !year_cols.is_empty() {
                 for f in &year_cols {
                     let v = at(f).map_or(f64::NAN, JsonValue::to_number);
@@ -304,7 +307,9 @@ impl CouncilImport {
             {
                 continue;
             }
-            let dir: Option<String> = if !m_dir.is_empty() {
+            let dir: Option<String> = if m_dir.is_empty() {
+                None
+            } else {
                 let t = match at(&m_dir) {
                     Some(v) if v.truthy() => v.js_string(),
                     _ => String::new(),
@@ -312,16 +317,16 @@ impl CouncilImport {
                 .to_uppercase();
                 let u: Vec<u16> = t.encode_utf16().collect();
                 dir_re.exec_units(&u, 0).and_then(|m| m.text(&u, 1)).filter(|s| !s.is_empty())
-            } else {
-                None
             };
-            let peak: Option<f64> = if !m_peak.is_empty() {
+            let peak: Option<f64> = if m_peak.is_empty() {
+                None
+            } else {
                 let v = at(&m_peak).map_or(f64::NAN, JsonValue::to_number);
                 if v == 0.0 || v.is_nan() { None } else { Some(v) }
-            } else {
-                None
             };
-            let pt: String = if !m_ptime.is_empty() {
+            let pt: String = if m_ptime.is_empty() {
+                String::new()
+            } else {
                 let t = match at(&m_ptime) {
                     Some(v) if !v.is_null() => v.js_string(),
                     _ => String::new(),
@@ -329,8 +334,6 @@ impl CouncilImport {
                 let digits = digits_re.replace(&t, |_, _| String::new());
                 let n = digits.encode_utf16().count();
                 if n >= 4 { digits } else { format!("{}{}", "0".repeat(4 - n), digits) }
-            } else {
-                String::new()
             };
             let h: Option<f64> = if pt.is_empty() {
                 None
@@ -354,8 +357,8 @@ impl CouncilImport {
                 Value::Null
             };
             let yr_text = year.filter(|y| *y != 0.0).map(number_to_js_string);
-            let in_am = peak.is_some() && h.is_some_and(|h| h >= 6.0 && h < 10.0);
-            let in_pm = peak.is_some() && h.is_some_and(|h| h >= 14.5 && h < 19.0);
+            let in_am = peak.is_some() && h.is_some_and(|h| (6.0..10.0).contains(&h));
+            let in_pm = peak.is_some() && h.is_some_and(|h| (14.5..19.0).contains(&h));
             let mut o = Map::new();
             o.insert("id".into(), json!(format!("feeds:{key}:{oid_text}")));
             o.insert("src".into(), json!("user"));
@@ -416,6 +419,7 @@ impl CouncilImport {
         CouncilImported { n: list.len(), of_: n_features, complete }
     }
     /// The layer being imported.
+    #[must_use]
     pub fn layer(&self) -> &CouncilLayer {
         &self.layer
     }

@@ -2,8 +2,8 @@
 //!
 //! Priority junctions (HCM 6 two-way stop control, mirrored for left-hand traffic): rank 1
 //! major T and L; rank 2 major R (opposed by the opposing T + L) and minor L; rank 3 minor T;
-//! rank 4 minor R. Potential capacity c_p = v_c e^(-v_c t_c / 3600) / (1 - e^(-v_c t_f / 3600));
-//! rank impedance c_m = c_p times the product of p0 (rank 4 through HCM's p'). A flush median
+//! rank 4 minor R. Potential capacity `c_p` = `v_c` e^(-v_c `t_c` / 3600) / (1 - e^(-v_c `t_f` / 3600));
+//! rank impedance `c_m` = `c_p` times the product of p0 (rank 4 through HCM's p'). A flush median
 //! makes minor T and R two-stage. Flows are PCU at the peak flow rate.
 
 use super::lanes::{ApproachCap, Lane, LaneRow, Lmv, alloc_lanes, approach_cap, lane_rows_value};
@@ -15,6 +15,7 @@ use crate::util::ang_diff;
 use serde_json::{Map, Value, json};
 
 /// `cpot(vc, tc, tf)`: potential capacity (pcu/h) against conflicting flow vc; 3600 / tf when vc is 0.01 or less.
+#[must_use]
 pub fn cpot(vc: f64, tc: f64, tf: f64) -> f64 {
     if vc > 0.01 {
         vc * jsmath::exp(-vc * tc / 3600.0) / (1.0 - jsmath::exp(-vc * tf / 3600.0))
@@ -24,11 +25,13 @@ pub fn cpot(vc: f64, tc: f64, tf: f64) -> f64 {
 }
 
 /// `p0of(v, c)`: probability of a queue-free state, max(0, 1 - v / c) (0 when c is not positive).
+#[must_use]
 pub fn p0of(v: f64, c: f64) -> f64 {
     if c > 0.0 { math_max(0.0, 1.0 - v / c) } else { 0.0 }
 }
 
 /// `pPrime(p)`: HCM's rank-4 impedance adjustment p' = 0.65 p - p / (p + 3) + 0.6 sqrt(p), within 0 to 1.
+#[must_use]
 pub fn p_prime(p: f64) -> f64 {
     math_min(
         1.0,
@@ -37,6 +40,7 @@ pub fn p_prime(p: f64) -> f64 {
 }
 
 /// `twoStage(cI, cII, cm, vL, k)`: two-stage gap acceptance (HCM 6 / Brilon): stage capacities, one-stage capacity, major right turners vL using the median, storage k.
+#[must_use]
 pub fn two_stage(c_i: f64, c_ii: f64, cm: f64, v_l: f64, k: f64) -> f64 {
     let a = if k > 0.0 {
         1.0 - 0.32 * jsmath::exp(-1.3 * k.sqrt())
@@ -58,6 +62,7 @@ pub fn two_stage(c_i: f64, c_ii: f64, cm: f64, v_l: f64, k: f64) -> f64 {
 }
 
 /// `q95v(v, c, T)`: 95th-percentile queue (veh) of an unsignalised lane (HCM 6 eq. 20-68).
+#[must_use]
 pub fn q95v(v: f64, c: f64, t: f64) -> f64 {
     if !(v > 0.0) || !(c > 0.0) {
         return 0.0;
@@ -71,6 +76,7 @@ pub fn q95v(v: f64, c: f64, t: f64) -> f64 {
 }
 
 /// `dHCM(v, c, T)`: control delay (s) of an unsignalised lane without the stop or give-way constant (HCM 6 eq. 20-64).
+#[must_use]
 pub fn d_hcm(v: f64, c: f64, t: f64) -> f64 {
     let c = math_max(1.0, c);
     let x = v / c;
@@ -91,6 +97,7 @@ pub struct CapOpts {
 
 impl CapOpts {
     /// `{ T, qs, detail }` read as the functions read it: T 0.25 and qs the standard queue space when 0 or not a number.
+    #[must_use]
     pub fn new(t: f64, qs: f64, detail: bool) -> CapOpts {
         CapOpts {
             t: or_default(t, 0.25),
@@ -115,6 +122,7 @@ pub struct EntGaps {
 
 impl EntGaps {
     /// As JSON { majorR: { tc, tf }, ... }.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let g = |x: &Gap| json!({ "tc": plain_number(x.tc), "tf": plain_number(x.tf) });
         json!({ "majorR": g(&self.major_r), "minorL": g(&self.minor_l), "minorT": g(&self.minor_t), "minorR": g(&self.minor_r) })
@@ -140,6 +148,7 @@ pub struct MoveCap {
 
 impl MoveCap {
     /// As JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("vc".into(), plain_number(self.vc));
@@ -167,6 +176,7 @@ pub struct Movs {
 
 impl Movs {
     /// The movement's capacity, if computed.
+    #[must_use]
     pub fn get(&self, m: char) -> Option<&MoveCap> {
         match m {
             'L' => self.l.as_ref(),
@@ -175,6 +185,7 @@ impl Movs {
         }
     }
     /// As JSON { L?, T?, R? }.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         for (k, v) in [("L", &self.l), ("T", &self.t), ("R", &self.r)] {
@@ -260,6 +271,7 @@ impl EntryRes {
         }
     }
     /// As JSON, with the keys the prototype's result object has.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("mov".into(), self.mov.to_value());
@@ -316,6 +328,7 @@ pub struct MajorState {
 
 impl MajorState {
     /// As JSON { sR, shTL, cmR, rb }.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({ "sR": plain_number(self.s_r), "shTL": plain_number(self.sh_tl), "cmR": plain_number(self.cm_r), "rb": plain_number(self.rb) })
     }
@@ -362,7 +375,7 @@ pub struct MoveEntry {
     pub l_to: Vec<(String, f64)>,
     /// The result of the last update.
     pub res: Option<EntryRes>,
-    /// Gap values (set by prio_geom).
+    /// Gap values (set by `prio_geom`).
     pub g: Option<EntGaps>,
     /// Near-side major approach (minor entries).
     pub near: Option<usize>,
@@ -376,6 +389,7 @@ pub struct MoveEntry {
 
 impl MoveEntry {
     /// Left-turn flow into a leg (`Lto[leg] || 0`).
+    #[must_use]
     pub fn l_to(&self, leg: &str) -> f64 {
         self.l_to
             .iter()
@@ -638,9 +652,7 @@ pub fn priority_caps(ent: &mut [MoveEntry], o: &CapOpts) {
         let cap_t = tl_l
             .iter()
             .fold(0.0, |s, l| s + if l.d.contains('T') { l.c } else { 0.0 });
-        let lanes = if !o.detail {
-            None
-        } else {
+        let lanes = if o.detail {
             let mut rows: Vec<LaneRow> = tl_l
                 .iter()
                 .enumerate()
@@ -673,6 +685,8 @@ pub fn priority_caps(ent: &mut [MoveEntry], o: &CapOpts) {
                 });
             }
             Some(rows)
+        } else {
+            None
         };
         let res = EntryRes {
             mov: mov[m],

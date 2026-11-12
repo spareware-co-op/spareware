@@ -32,6 +32,7 @@ pub struct MergeCandidate {
 
 impl MergeCandidate {
     /// As JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         serde_json::json!({ "id": self.id, "kind": if self.is_site { "site" } else { "node" }, "name": self.name, "d": self.d })
     }
@@ -39,6 +40,7 @@ impl MergeCandidate {
 
 /// `mergeCandidates(sc, nodeId)`: nearby junction nodes and sites this node could be merged with (within the site diameter),
 /// nearest first, at most six.
+#[must_use]
 pub fn merge_candidates(sc: &Scenario, node_id: &str) -> Vec<MergeCandidate> {
     let Some(n) = sc.nodes.get(node_id) else {
         return Vec::new();
@@ -89,9 +91,10 @@ fn kit_fld(label: &str, inner: &str, unit: &str) -> String {
     )
 }
 
-impl<'a> Tools<'a> {
+impl Tools<'_> {
     /// `sitePanel(sc, sel)`: the junction-site panel: its name, control, results by period, the zones pinned to its nodes and the
     /// nodes. `inspector_sections` is what the interface adds below the results (`Inspector.SECTIONS`). Empty for no such site.
+    #[must_use]
     pub fn site_panel(&self, i: usize, site_id: &str, inspector_sections: &str) -> String {
         let sc_run = self.sc(i);
         let sc = sc_run.sc;
@@ -177,7 +180,7 @@ impl<'a> Tools<'a> {
         let nodes: String = s
             .nodes
             .iter()
-            .filter(|id| sc.nodes.contains_key(*id))
+            .filter(|id| sc.nodes.contains_key(id))
             .map(|id| {
                 format!(
                     "<div class=\"lg-row\"><a href=\"#\" data-fly=\"node:{}\">{}</a> <span class=\"note\">{}</span><button class=\"btn small\" style=\"margin-left:auto\" data-jx-do=\"unsite\" data-site=\"{}\" data-node=\"{}\">Remove</button></div>",
@@ -218,7 +221,7 @@ impl<'a> Tools<'a> {
         } else {
             String::new()
         };
-        let auto = s.src.get().is_some_and(|x| x.nodes.is(&"auto".to_string().as_str().to_string()));
+        let auto = s.src.get().is_some_and(|x| x.nodes.is("auto".to_string().as_str()));
         let rules = SiteRules::default();
         let results = if per.is_empty() {
             "<div class=\"ins-sec\"><p class=\"note\">Run the model to see this site's results.</p></div>".to_string()
@@ -277,6 +280,7 @@ fn link(u: Option<&str>, t: &str) -> String {
 
 /// `Registry.about` rows of the junction analysis: (what, source as a link, notes). Used by Settings, About the data and
 /// the report's data appendix.
+#[must_use]
 pub fn about_rows() -> Vec<[String; 3]> {
     let st = &STANDARDS;
     let hcm = &st.los.hcm6;
@@ -333,6 +337,7 @@ pub fn about_rows() -> Vec<[String; 3]> {
 }
 
 /// The turns balance standard, as the U-turn and balance rows of the standards register read it.
+#[must_use]
 pub const fn balance_standard() -> &'static Standard {
     &BALANCE
 }

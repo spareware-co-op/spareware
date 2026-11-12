@@ -18,6 +18,7 @@ use std::collections::{HashMap, HashSet};
 
 /// `touCharged(sc, poly, kind)`: the roads the charge applies to and how: for an area, the roads inside it ("inside"); for a cordon, the roads that
 /// cross it ("leaves" or "enters"). In the scenario's road order.
+#[must_use]
 pub fn tou_charged(sc: &V, poly: &[[f64; 2]], kind: &str) -> Vec<(String, &'static str)> {
     let mut out: Vec<(String, &'static str)> = Vec::new();
     for l in sc.g("links").vals() {
@@ -64,6 +65,7 @@ pub struct TouTime {
 /// `touSkim(G, r, charged, applied, pen, zs, S)`: zone-to-zone generalised and real times on a time-of-use run: each arc costs its real time in the result
 /// plus the charge (`pen`, s) on charged roads, so the shortest route sees the true charge. `applied` is the time an earlier method added to an
 /// arc, taken off with its congestion factor (older callers).
+#[must_use]
 pub fn tou_skim(p: &V, g: &Graph, r: Option<&V>, charged: Option<&[(String, &'static str)]>, applied: Option<&HashMap<String, f64>>, pen: f64, zs: &[String]) -> HashMap<String, HashMap<String, TouTime>> {
     let proj = engine::project(p);
     let perf = crate::junction::PerfSet::new(&proj.settings);
@@ -73,16 +75,15 @@ pub fn tou_skim(p: &V, g: &Graph, r: Option<&V>, charged: Option<&[(String, &'st
     for (i, a) in g.arcs.iter().enumerate() {
         let x = r.map_or(&NULL, |r| r.g("arcs").g(&a.key));
         let ap = applied.map_or(0.0, |m| { let v = m.get(&a.key).copied().unwrap_or(0.0); if truthy_number(v) { v } else { 0.0 } });
-        let mut t = if x.t() { x.get("t").map_or(f64::NAN, |t| t.n()) } else { crate::junction::arc_time(a, 0.0, &perf) };
+        let mut t = if x.t() { x.get("t").map_or(f64::NAN, crate::compliance::jv::Jx::n) } else { crate::junction::arc_time(a, 0.0, &perf) };
         if x.t() && ap > 0.0 && x.g("ff").n() > 0.0 {
             t = math_max(0.1, t - ap * math_max(1.0, (x.g("t").n() - n0(x.g("nd"))) / x.g("ff").n()));
         }
-        if let Some(s) = &set {
-            if !a.conn && s.contains(a.link.as_str()) {
+        if let Some(s) = &set
+            && !a.conn && s.contains(a.link.as_str()) {
                 chg[i] = true;
                 t += pen;
             }
-        }
         cost[i] = t;
     }
     let mut w = g.workspace();
@@ -200,12 +201,9 @@ fn tou_compute(p: &V, opts: &V) -> V {
         return jobj! { "ok" => false, "why" => "No road crosses (or lies inside) the charging area." };
     }
     let owned0;
-    let r0: &V = match res_of(sc, &period) {
-        Some(r) => r,
-        None => {
-            owned0 = engine::assign(p, sc, None, &jobj! { "period" => period.as_str() });
-            &owned0
-        }
+    let r0: &V = if let Some(r) = res_of(sc, &period) { r } else {
+        owned0 = engine::assign(p, sc, None, &jobj! { "period" => period.as_str() });
+        &owned0
     };
     if !r0.g("T").t() || r0.g("zoneIds").items().is_empty() {
         return jobj! { "ok" => false, "why" => "The screening needs the OD matrix, which Spare Construct keeps for 150 zones or fewer." };
@@ -216,7 +214,7 @@ fn tou_compute(p: &V, opts: &V) -> V {
         arc_penalty.set(id.as_str(), V::Number(pen));
     }
     let g1 = engine::build_graph(p, sc, None);
-    let zone_ids: Vec<String> = r0.g("zoneIds").items().iter().map(|x| x.s()).collect();
+    let zone_ids: Vec<String> = r0.g("zoneIds").items().iter().map(crate::compliance::jv::Jx::s).collect();
     let zs: Vec<String> = zone_ids.iter().filter(|id| sc.g("zones").g(id).t()).cloned().collect();
     let zn = zone_ids.len();
     let zi: HashMap<&String, usize> = zone_ids.iter().enumerate().map(|(k, id)| (id, k)).collect();
@@ -255,29 +253,26 @@ fn tou_compute(p: &V, opts: &V) -> V {
     // rule of half per OD on generalised cost; revenue and the deadweight loss of priced-off trips (NZ$ per modelled hour)
     let (mut user, mut time, mut revenue, mut dwl) = (0.0, 0.0, 0.0, 0.0);
     let mut inc: Vec<Inc> = Vec::new();
-    for o in ods.iter_mut() {
+    for o in &mut ods {
         let Some(b) = s2.get(&o.i).and_then(|m| m.get(&o.j)) else { continue };
         let pay = b.n * charge;
         o.after = Some((b.real, b.n, b.n > 0.0, pay));
-        user += 0.5 * (o.q0 + o.q1) * (o.t0 - b.gc) / 3600.0 * vot;
-        time += 0.5 * (o.q0 + o.q1) * (o.t0 - b.real) / 3600.0 * vot;
+        user += f64::midpoint(o.q0, o.q1) * (o.t0 - b.gc) / 3600.0 * vot;
+        time += f64::midpoint(o.q0, o.q1) * (o.t0 - b.real) / 3600.0 * vot;
         revenue += o.q1 * pay;
         dwl += 0.5 * (o.q0 - o.q1) * pay;
-        let k = match inc.iter().position(|z| z.id == o.i) {
-            Some(k) => k,
-            None => {
-                let cxz = sc.g("zones").g(&o.i).g("cx");
-                inc.push(Inc {
-                    id: o.i.clone(),
-                    name: o.from.clone(),
-                    trips: 0.0,
-                    paid_trips: 0.0,
-                    d_gc: 0.0,
-                    d_real: 0.0,
-                    income: if cxz.t() && cxz.has("income") { Some(cxz.g("income").clone()) } else { None },
-                });
-                inc.len() - 1
-            }
+        let k = if let Some(k) = inc.iter().position(|z| z.id == o.i) { k } else {
+            let cxz = sc.g("zones").g(&o.i).g("cx");
+            inc.push(Inc {
+                id: o.i.clone(),
+                name: o.from.clone(),
+                trips: 0.0,
+                paid_trips: 0.0,
+                d_gc: 0.0,
+                d_real: 0.0,
+                income: if cxz.t() && cxz.has("income") { Some(cxz.g("income").clone()) } else { None },
+            });
+            inc.len() - 1
         };
         let z = &mut inc[k];
         z.trips += o.q0;
@@ -396,6 +391,7 @@ fn tou_compute(p: &V, opts: &V) -> V {
 }
 
 /// `touCSV(P)`: the stored time-of-use screening as a stamped CSV (a note when it has not been run).
+#[must_use]
 pub fn tou_csv(p: &V) -> String {
     let r = data(p).g("tou").g("result").clone();
     if !r.t() || !r.g("ok").t() {
@@ -420,7 +416,7 @@ pub fn tou_csv(p: &V) -> String {
             r1(o.g("q1")),
             r1(&V::Number(o.g("t0").n() / 60.0)),
             r1(&V::Number(o.g("t1").n() / 60.0)),
-            if !o.g("pay").nullish() { r3(o.g("pay")) } else { s("") },
+            if o.g("pay").nullish() { s("") } else { r3(o.g("pay")) },
             s(if o.g("paid").t() { "yes" } else { "no" }),
         ]);
     }
@@ -454,7 +450,7 @@ pub fn tou_csv(p: &V) -> String {
     ]));
     rows.push(vec![s(""), r3(a.g("user")), r3(a.g("time")), r3(a.g("charges")), r3(a.g("revenue")), r3(a.g("deadweight")), r3(a.g("voc")), r3(a.g("co2")), r3(a.g("safety")), r3(a.g("total"))]);
     rows.push(vec![s("Appraisal"), r.g("appraisal").clone()]);
-    rows.push(vec![s("BCR_N"), if !r.g("bcrN").nullish() { r1(r.g("bcrN")) } else { s("enter the scheme cost") }]);
+    rows.push(vec![s("BCR_N"), if r.g("bcrN").nullish() { s("enter the scheme cost") } else { r1(r.g("bcrN")) }]);
     rows.push(vec![s("BCR_G (revenue as Cp)"), if !r.g("bcrG").nullish() { r1(r.g("bcrG")) } else if r.g("bcrGText").t() { r.g("bcrGText").clone() } else { s("enter the scheme cost") }]);
     stamped(&csv(&rows), p, None)
 }
@@ -464,6 +460,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-tou"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id != "compliance-extra-tou" {
         return None;
@@ -496,11 +493,13 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-tou"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     (id == "compliance-extra-tou").then(|| tou_csv(p))
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     (id == "compliance-extra-tou").then(|| {
         let r = data(p).g("tou").g("result").clone();

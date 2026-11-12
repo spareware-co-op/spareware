@@ -29,11 +29,13 @@ use serde_json::{Map, Value};
 use std::borrow::Cow;
 
 /// `eligible(z)`: a gateway or an existing-land-use zone (the only ones matrix estimation changes).
+#[must_use]
 pub fn eligible(z: Option<&Zone>) -> bool {
     z.is_some_and(|z| z.kind.is("gateway") || z.existing.is_true())
 }
 
 /// `keyOf(a, b)`: the key of an OD pair in the factors, "<origin id>><destination id>".
+#[must_use]
 pub fn key_of(a: &str, b: &str) -> String {
     format!("{a}>{b}")
 }
@@ -48,6 +50,7 @@ pub struct WFit {
 }
 
 /// `wfit(rows)`: what a pass is judged on: the weighted share of sites with GEH < 5, then the weighted mean GEH (with every weight 1 these are the plain statistics).
+#[must_use]
 pub fn wfit(rows: &[SiteRow]) -> WFit {
     let (mut sw, mut p5, mut g) = (0.0f64, 0.0f64, 0.0f64);
     for r in rows {
@@ -75,11 +78,13 @@ pub fn wfit(rows: &[SiteRow]) -> WFit {
 }
 
 /// `better(a, b)`: pass a has more weighted sites under GEH 5 than b, or the same and a lower weighted mean GEH (by at least 0.5%).
+#[must_use]
 pub fn better(a: &WFit, b: &WFit) -> bool {
     a.pass > b.pass + 1e-9 || (a.pass > b.pass - 1e-9 && a.geh < b.geh * 0.995)
 }
 
 /// `Stats` of a set of site rows (`Calibrate.stats(rows)`).
+#[must_use]
 pub fn stats(rows: &[SiteRow]) -> Stats {
     let v: Vec<(f64, f64, f64)> = rows.iter().map(|r| (r.obs, r.model, r.geh)).collect();
     stats_of(&v)
@@ -197,6 +202,7 @@ pub fn step(
 }
 
 /// `toObj(f)`: the factors as they are stored: only pairs that moved more than 0.001%, rounded towards 1 so a stored factor never passes the clamp.
+#[must_use]
 pub fn to_obj(f: &OrderedMap<f64>) -> OrderedMap<Num> {
     let mut o = OrderedMap::new();
     for (k, &v) in f.iter() {
@@ -256,6 +262,7 @@ pub struct MatrixChange {
 }
 
 /// `Calibrate.matrixChange(G, prior, est)`: prior against estimated over `z` zones (matrices row by row).
+#[must_use]
 pub fn matrix_change(z: usize, prior: &[f64], est: &[f64]) -> MatrixChange {
     let mut ro = vec![0.0f64; z];
     let mut re = vec![0.0f64; z];
@@ -315,6 +322,7 @@ pub fn matrix_change(z: usize, prior: &[f64], est: &[f64]) -> MatrixChange {
 }
 
 /// `breach(mc)`: the limit a pass broke ("matrix total" or "trip ends"), or "" when within them (TMDG section 8 total, TAG Table 5 trip-end R²).
+#[must_use]
 pub fn breach(mc: &MatrixChange) -> &'static str {
     if mc.total_pct.abs() > rule_of("matrixTotal").max.unwrap_or(f64::NAN) {
         return "matrix total";
@@ -337,6 +345,7 @@ pub struct BaseView<'a> {
 }
 
 /// `Calibrate.baseView(sc, S)`: the scenario in the base year (no background growth), existing land use and gateways open by then, and no proposed links.
+#[must_use]
 pub fn base_view<'a>(sc: &'a Scenario, s: &Settings) -> BaseView<'a> {
     let by = s.base_year.num();
     let mut zones: OrderedMap<Zone> = OrderedMap::new();
