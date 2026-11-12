@@ -842,7 +842,11 @@ fn query_digest(name: &str, class: Class) -> Option<Digest> {
             )
             .map(|v| {
                 let r = &v.result;
-                (r.passed(), r.deferred(), u32::try_from(r.ran().count()).unwrap())
+                (
+                    r.passed(),
+                    r.deferred(),
+                    u32::try_from(r.ran().count()).unwrap(),
+                )
             })
         })),
         _ => return None,

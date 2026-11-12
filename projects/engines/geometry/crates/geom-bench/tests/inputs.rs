@@ -2321,17 +2321,24 @@ fn query_typical_batches_all_succeed() {
     // Each body is valid, so the reports pass, and its box is the tight box of its vertices.
     let mut reports = Vec::new();
     k::reports(&m::bodies(Typical), &mut reports);
-    assert!(reports.iter().all(|r| r.as_ref().is_ok_and(|(_, passed, _)| *passed)));
+    assert!(
+        reports
+            .iter()
+            .all(|r| r.as_ref().is_ok_and(|(_, passed, _)| *passed))
+    );
     let mut valid = Vec::new();
     k::validities(&m::bodies(Typical), &mut valid);
-    assert!(valid.iter().all(|r| r.as_ref().is_ok_and(|(passed, _, _)| *passed)));
+    assert!(
+        valid
+            .iter()
+            .all(|r| r.as_ref().is_ok_and(|(passed, _, _)| *passed))
+    );
     let mut boxes = Vec::new();
     k::boxes(&m::bodies(Typical), &mut boxes);
-    assert!(
-        boxes
-            .iter()
-            .all(|r| r.as_ref().is_ok_and(|(b, _)| b.is_some_and(|(_, tight)| tight)))
-    );
+    assert!(boxes.iter().all(|r| {
+        r.as_ref()
+            .is_ok_and(|(b, _)| b.is_some_and(|(_, tight)| tight))
+    }));
 }
 
 /// Every typical batch of `geom-bvh`'s benchmarks (decision 32.46) builds every scene and answers

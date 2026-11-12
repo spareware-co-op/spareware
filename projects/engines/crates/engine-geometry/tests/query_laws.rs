@@ -194,20 +194,26 @@ fn laws(asked: &Asked, ask: Ask<'_>) -> Result<Answers, String> {
     // record by the checker's cheap groups.
     let report = first.exactness.as_ref().map_err(|e| format!("{e:?}"))?;
     let r = &report.result;
-    let counted = (r.flat_faces, r.curved_faces, r.straight_edges, r.curved_edges);
+    let counted = (
+        r.flat_faces,
+        r.curved_faces,
+        r.straight_edges,
+        r.curved_edges,
+    );
     if r.recorded != asked.exactness || counted != flat_and_straight(&asked.body) {
         return Err(format!("the exactness report is not the body's: {r:?}"));
     }
-    let checker = |level| {
-        geom_check::check(&asked.body, asked.exactness, level, &mut meter())
-            .unwrap()
-    };
+    let checker =
+        |level| geom_check::check(&asked.body, asked.exactness, level, &mut meter()).unwrap();
     if r.report != checker(Level::Cheap) {
         return Err("the exactness report's judgement is not the checker's".to_owned());
     }
     // The validity report is the checker's own, at each level.
     for (got, level) in first.validity.iter().zip([Level::Cheap, Level::Full]) {
-        let got = got.as_ref().map(|o| &o.result).map_err(|e| format!("{e:?}"))?;
+        let got = got
+            .as_ref()
+            .map(|o| &o.result)
+            .map_err(|e| format!("{e:?}"))?;
         if *got != checker(level) {
             return Err(format!("validity at {level:?} is not the checker's report"));
         }
@@ -258,7 +264,11 @@ fn flat_oracles(asked: &Asked, answers: &Answers, six: i128) -> Result<(), Strin
         return Err(format!("box {boxed:?}, not {want:?}"));
     }
     let listed = &answers.faces.as_ref().map_err(|e| format!("{e:?}"))?.result;
-    let names = asked.body.names().map(|n| n.faces.clone()).unwrap_or_default();
+    let names = asked
+        .body
+        .names()
+        .map(|n| n.faces.clone())
+        .unwrap_or_default();
     let named: Vec<Option<NameId>> = listed.iter().map(|f| f.name).collect();
     let want: Vec<Option<NameId>> = names
         .iter()
@@ -465,7 +475,11 @@ fn a_query_that_claims_a_class_of_its_own_is_caught() {
         }
         answers
     };
-    assert!(laws(&loose, &boasting).unwrap_err().contains("stated Exact"));
+    assert!(
+        laws(&loose, &boasting)
+            .unwrap_err()
+            .contains("stated Exact")
+    );
 }
 
 #[test]
@@ -529,7 +543,11 @@ fn a_wrong_volume_area_box_or_face_list_is_caught() {
     if let Ok(b) = &mut loose.bounding_box {
         b.result = b.result.map(|bb| BoundingBox { tight: false, ..bb });
     }
-    assert!(flat_oracles(&box_, &loose, six).unwrap_err().starts_with("box"));
+    assert!(
+        flat_oracles(&box_, &loose, six)
+            .unwrap_err()
+            .starts_with("box")
+    );
     let mut shuffled = answers;
     if let Ok(f) = &mut shuffled.faces {
         f.result.swap(0, 1);

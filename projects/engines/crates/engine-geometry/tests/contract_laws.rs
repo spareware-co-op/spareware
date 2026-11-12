@@ -38,9 +38,7 @@ use engine_geometry::operations::{
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Scale, TypedTransform};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::history::History;
-use geom_op::{
-    ErrorKind, Family, NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath,
-};
+use geom_op::{ErrorKind, Family, NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath};
 use geom_run::{Budget, WorkMeter};
 use geom_test::Seed;
 use geom_test::contract::{
@@ -815,21 +813,33 @@ fn filling() -> Held {
 /// The box with a face list that comes back on itself.
 fn ringed_faces() -> Held {
     edited(BodyKind::Solid, |b| {
-        b.arenas.faces.next.set(Ix::new(1).unwrap(), Some(Ix::new(0).unwrap())).unwrap();
+        b.arenas
+            .faces
+            .next
+            .set(Ix::new(1).unwrap(), Some(Ix::new(0).unwrap()))
+            .unwrap();
     })
 }
 
 /// The box with a loop list that comes back on itself.
 fn ringed_loops() -> Held {
     edited(BodyKind::Solid, |b| {
-        b.arenas.loops.next.set(Ix::new(0).unwrap(), Some(Ix::new(0).unwrap())).unwrap();
+        b.arenas
+            .loops
+            .next
+            .set(Ix::new(0).unwrap(), Some(Ix::new(0).unwrap()))
+            .unwrap();
     })
 }
 
 /// The box with its first face's loops taken off.
 fn loopless() -> Held {
     edited(BodyKind::Solid, |b| {
-        b.arenas.faces.first_loop.set(Ix::new(0).unwrap(), None).unwrap();
+        b.arenas
+            .faces
+            .first_loop
+            .set(Ix::new(0).unwrap(), None)
+            .unwrap();
     })
 }
 
@@ -871,7 +881,13 @@ fn drive_area() -> Driver {
     let round = curved();
     let cyl = &round[0];
     let example = Held::new(a_box_at_origin());
-    let listed = faces(&ctx(), &example.body, &[&example.history], example.exactness).unwrap();
+    let listed = faces(
+        &ctx(),
+        &example.body,
+        &[&example.history],
+        example.exactness,
+    )
+    .unwrap();
     let min_z = listed
         .result
         .iter()
@@ -904,12 +920,7 @@ fn volume_of(held: &Held) -> S {
 fn drive_volume() -> Driver {
     let round = curved();
     let (cyl, ball) = (&round[0], &round[2]);
-    let shown = six_volume(
-        &ctx(),
-        &a_box_at_origin().result.body,
-        Exactness::Exact,
-    )
-    .unwrap();
+    let shown = six_volume(&ctx(), &a_box_at_origin().result.body, Exactness::Exact).unwrap();
     assert_eq!(shown.result, geom_num::I256::from_i64(36_000));
     Driver {
         good: flat()
@@ -959,7 +970,10 @@ fn drive_bounding_box() -> Driver {
     let shown = bounding_box(&ctx(), &a_box_at_origin().result.body, Exactness::Exact).unwrap();
     let boxed = shown.result.unwrap();
     assert!(boxed.tight);
-    assert_eq!((boxed.bound.min(), boxed.bound.max()), (p(0, 0, 0), p(10, 20, 30)));
+    assert_eq!(
+        (boxed.bound.min(), boxed.bound.max()),
+        (p(0, 0, 0), p(10, 20, 30))
+    );
     Driver {
         good: every_body()
             .iter()
@@ -1010,7 +1024,13 @@ fn faces_of(held: &Held) -> S {
 
 fn drive_faces() -> Driver {
     let made = a_box_at_origin();
-    let shown = faces(&ctx(), &made.result.body, &[&made.result.history], made.exactness).unwrap();
+    let shown = faces(
+        &ctx(),
+        &made.result.body,
+        &[&made.result.history],
+        made.exactness,
+    )
+    .unwrap();
     let roles: BTreeSet<String> = shown
         .result
         .iter()
@@ -1041,8 +1061,13 @@ fn validity_of(held: &Held, level: Level) -> S {
 }
 
 fn drive_validity() -> Driver {
-    let shown = validity(&ctx(), &a_box_at_origin().result.body, Exactness::Exact, Level::Full)
-        .unwrap();
+    let shown = validity(
+        &ctx(),
+        &a_box_at_origin().result.body,
+        Exactness::Exact,
+        Level::Full,
+    )
+    .unwrap();
     let r = &shown.result;
     Driver {
         good: every_body()

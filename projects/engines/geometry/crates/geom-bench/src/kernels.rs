@@ -2340,9 +2340,8 @@ pub mod query {
     ) {
         let ctx = context();
         run(batch, out, |(body, face)| {
-            let face = Ix::new(*face).ok_or_else(|| {
-                OpError::new(ctx.path().clone(), geom_op::QueryDetail::Malformed)
-            })?;
+            let face = Ix::new(*face)
+                .ok_or_else(|| OpError::new(ctx.path().clone(), geom_op::QueryDetail::Malformed))?;
             let area = twice_area(&ctx, &body.result.body, face, body.exactness)?;
             Ok((area.result, rank(area.exactness)))
         });
@@ -2367,9 +2366,7 @@ pub mod query {
         let ctx = context();
         run(batch, out, |body| {
             let b = bounding_box(&ctx, &body.result.body, body.exactness)?;
-            let corners = b
-                .result
-                .map(|b| ([b.bound.min(), b.bound.max()], b.tight));
+            let corners = b.result.map(|b| ([b.bound.min(), b.bound.max()], b.tight));
             Ok((corners, rank(b.exactness)))
         });
     }
@@ -2409,7 +2406,12 @@ pub mod query {
             let rows = listed
                 .result
                 .iter()
-                .map(|f| [f.row.loops, u32::try_from(f.roles.len()).unwrap_or(u32::MAX)])
+                .map(|f| {
+                    [
+                        f.row.loops,
+                        u32::try_from(f.roles.len()).unwrap_or(u32::MAX),
+                    ]
+                })
                 .collect();
             Ok((rows, rank(listed.exactness)))
         });
@@ -2418,10 +2420,7 @@ pub mod query {
     /// `query.validity` of each body in full: whether it passed, how much was deferred, and how
     /// many groups ran.
     #[inline(never)]
-    pub fn validities(
-        batch: &[OpOutput<Made>],
-        out: &mut Vec<Result<(bool, u64, u32), OpError>>,
-    ) {
+    pub fn validities(batch: &[OpOutput<Made>], out: &mut Vec<Result<(bool, u64, u32), OpError>>) {
         let ctx = context();
         run(batch, out, |body| {
             let v = validity(&ctx, &body.result.body, body.exactness, Level::Full)?;

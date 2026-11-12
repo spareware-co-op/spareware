@@ -46,9 +46,7 @@ use geom_make::{
     BoxInput, Instance, Made, Moved, PrismInput, RoundInput, SphereInput, TorusInput, cone,
     cylinder, make_box, mirror, move_by, pattern, prism, rotate, scale, sphere, torus,
 };
-use geom_math::{
-    Axis, Box3, GridTransform, RationalTransform, Rotation, Scale, TypedTransform,
-};
+use geom_math::{Axis, Box3, GridTransform, RationalTransform, Rotation, Scale, TypedTransform};
 use geom_name::NamedFace;
 use geom_num::wide::I256;
 use geom_num::{Exactness, GridStep, P3, Steps};
@@ -655,7 +653,12 @@ pub fn answers_hold(out: &OpOutput<Made>, answers: &Answers) -> Result<(), Findi
             answers.exactness.as_ref().map(|o| o.exactness),
             answers.faces.as_ref().map(|o| o.exactness),
         ])
-        .chain(answers.validity.iter().map(|r| r.as_ref().map(|o| o.exactness)));
+        .chain(
+            answers
+                .validity
+                .iter()
+                .map(|r| r.as_ref().map(|o| o.exactness)),
+        );
     let mut flat = true;
     for (at, answer) in classes.enumerate() {
         match answer {
@@ -742,7 +745,12 @@ pub fn answers_hold(out: &OpOutput<Made>, answers: &Answers) -> Result<(), Findi
     }
     let corners: Vec<P3> = (0..a.rows(Arena::Vertex))
         .filter_map(Ix::new)
-        .filter_map(|v| a.vertices.get(v).and_then(|vx| a.points.get(vx.point)).copied())
+        .filter_map(|v| {
+            a.vertices
+                .get(v)
+                .and_then(|vx| a.points.get(vx.point))
+                .copied()
+        })
         .collect();
     let Some(b) = boxed.result else {
         return law("a solid has a bounding box");
