@@ -18,8 +18,11 @@
 //! - **Two faces meet only along shared edges and at shared vertices.** Every pair of faces is
 //!   tested. Two faces exactly on integer planes, or on planes their grid corners fix, are tested
 //!   exactly by `crate::planar`, whatever their shape. Two integer planes are compared exactly, in
-//!   320-bit integers, and other planes by certified intervals. Parallel planes certainly apart
-//!   cannot meet. A plane perpendicular to a cylinder's or cone's axis, or a plane and a sphere,
+//!   320-bit integers, and other planes by certified intervals. Faces on parallel planes cannot
+//!   meet when the planes are certainly farther apart than the two faces may stray from them:
+//!   nothing for a face whose corners and edges lie on its plane exactly, and the body's bound
+//!   for any other, since group 2 held it no nearer. Nearer planes say nothing of where their
+//!   faces lie, and such a pair is unchecked. A plane perpendicular to a cylinder's or cone's axis, or a plane and a sphere,
 //!   meet in one circle at most, so faces on them that share a full circle edge meet only along
 //!   it. Any other pair is reported unchecked.
 //! - **Edges with a vertex where three planes meet** are tested by `crate::planar` too.
@@ -69,7 +72,7 @@ use geom_topo::{Arenas, Body, Ix};
 
 use crate::combinatorial::{edge_fins, face_fins, fin_edge, fin_face, rows};
 use crate::curved::{self, Pair};
-use crate::geometric::{Ends, corner, surface};
+use crate::geometric::{Ends, Surface, corner, limit, surface};
 use crate::planar::{self, Outline};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
@@ -82,6 +85,7 @@ pub(crate) fn check(
 ) -> Result<(), Stopped> {
     let a = body.arenas();
     let exact = matches!(exactness, Exactness::Exact);
+    let reach = limit(exactness);
     let outlines = planar::outlines(a, exact, sink)?;
     let pieces = |f: Ix<Face>| -> &[Outline] {
         outlines
@@ -110,7 +114,7 @@ pub(crate) fn check(
                 continue;
             }
             let found = if pieces(f).is_empty() || pieces(g).is_empty() {
-                other_faces_meet(a, f, g, exact)
+                other_faces_meet(a, f, g, exact, reach)
             } else {
                 planar::slots_meet(a, pieces(f), pieces(g), sink)?
             };
@@ -144,11 +148,24 @@ fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
     runs(a, f) == turned
 }
 
-/// How two faces meet that are not both outlines, as far as their carriers say.
-fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool) -> Meet {
+/// How two faces meet that are not both outlines, as far as their carriers say of two faces that
+/// may stray from them. A face whose vertices and edges lie on its surface exactly cannot; any
+/// other may by `reach`, the body's bound, which is all group 2 held it to. The distance between
+/// two written planes must clear what both faces may stray before it keeps them apart: a face
+/// bent within its bound, written under a plane a step above a face it ran through, was once
+/// passed as apart from it (issue #783). In a body recorded Exact (`exact`) group 2 has held every
+/// face to its surface exactly already, so no face is asked again.
+fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool, reach: f64) -> Meet {
+    let stray = |on: &Surface, face| {
+        if exact || on.holds_face(a, face) {
+            0.0
+        } else {
+            reach
+        }
+    };
     let lie = surface(a, f, exact)
         .zip(surface(a, g, exact))
-        .map(|(p, q)| p.lies_with(&q));
+        .map(|(p, q)| p.lies_with(&q, stray(&p, f) + stray(&q, g)));
     match lie {
         Some(Pair::Apart) => Meet::Apart,
         Some(Pair::Circle) if shares_full_circle(a, f, g) => Meet::Apart,

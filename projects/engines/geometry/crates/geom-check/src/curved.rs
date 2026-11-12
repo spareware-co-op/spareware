@@ -337,7 +337,8 @@ impl Torus {
 /// How two faces' carriers lie, as far as group 3 can certify.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Pair {
-    /// Two parallel planes, certainly apart: their faces cannot meet.
+    /// Two parallel planes, certainly farther apart than their faces can stray from them: the
+    /// faces cannot meet.
     Apart,
     /// Two planes that certainly cross along a line.
     Crossing,
@@ -348,8 +349,15 @@ pub(crate) enum Pair {
     Unknown,
 }
 
-/// How the carriers `first` and `second` lie.
-pub(crate) fn pair(first: &Carrier, second: &Carrier) -> Pair {
+/// How the carriers `first` and `second` lie, for two faces that between them may lie `stray`
+/// steps off their own carriers: the sum of how far each may.
+///
+/// Two parallel planes keep their faces apart only when they are more than `stray` apart. A face
+/// group 2 has held within b of its plane lies within b of it, every point of it a mix of corners
+/// that do, so two such faces can meet wherever their planes are 2b apart or nearer, however the
+/// planes are written. For faces that lie on their planes exactly, `stray` is nothing, and any
+/// two parallel planes that are not one keep them apart.
+pub(crate) fn pair(first: &Carrier, second: &Carrier, stray: f64) -> Pair {
     match (first, second) {
         (
             Carrier::Flat { origin, normal },
@@ -364,7 +372,7 @@ pub(crate) fn pair(first: &Carrier, second: &Carrier) -> Pair {
                 Some((turn, offset))
             };
             match planes() {
-                Some((turn, offset)) if zero(turn) && away(offset) => Pair::Apart,
+                Some((turn, offset)) if zero(turn) && clear(offset, *normal, stray) => Pair::Apart,
                 Some((turn, _)) if turn.into_iter().any(away) => Pair::Crossing,
                 _ => Pair::Unknown,
             }
@@ -454,6 +462,17 @@ fn same_side(a: Interval, b: Interval) -> bool {
         .into_iter()
         .fold(f64::INFINITY, tight::smaller)
         > 0.0
+}
+
+/// Whether two parallel planes are certainly more than `stray` apart, `offset` being (o' − o) · n
+/// for a point of each and the normal `normal` of one: ((o' − o) · n)² > stray² · |n|², exact on
+/// exact data, as [`flat`] compares a point's distance. A distance that cannot be formed certifies
+/// nothing.
+fn clear(offset: Interval, normal: V3, stray: f64) -> bool {
+    let room = || times(square(at(stray)?)?, dot(normal, normal)?);
+    square(offset)
+        .zip(room())
+        .is_some_and(|(have, room)| have.lo() > room.hi())
 }
 
 /// Whether every coordinate of `v` is exactly zero.
@@ -631,11 +650,35 @@ mod tests {
     fn parallel_planes_apart_are_apart_and_coinciding_ones_are_not() {
         let floor = flat_through(v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0));
         let ceiling = flat_through(v(0.0, 0.0, 5.0), v(0.0, 0.0, 1.0));
-        assert!(matches!(pair(&floor, &ceiling), Pair::Apart));
-        assert!(matches!(pair(&ceiling, &floor), Pair::Apart));
+        assert!(matches!(pair(&floor, &ceiling, 0.0), Pair::Apart));
+        assert!(matches!(pair(&ceiling, &floor, 0.0), Pair::Apart));
         // The same plane again: nothing is certified, the faces may meet anywhere.
         let again = flat_through(v(3.0, 4.0, 0.0), v(0.0, 0.0, 2.0));
-        assert!(matches!(pair(&floor, &again), Pair::Unknown));
+        assert!(matches!(pair(&floor, &again, 0.0), Pair::Unknown));
+    }
+
+    /// Faces that may stray from two parallel planes can meet unless the planes are farther apart
+    /// than the two may stray together.
+    #[test]
+    fn parallel_planes_are_apart_only_beyond_what_their_faces_may_stray() {
+        let floor = flat_through(v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0));
+        // Five apart, by a normal that is not of unit length, written from either side.
+        let ceiling = flat_through(v(7.0, 1.0, 5.0), v(0.0, 0.0, -3.0));
+        for (stray, apart) in [
+            (0.0, true),
+            (4.0, true),
+            (4.5, true),
+            (5.0, false),
+            (6.0, false),
+        ] {
+            for (first, second) in [(&floor, &ceiling), (&ceiling, &floor)] {
+                let found = pair(first, second, stray);
+                assert_eq!(matches!(found, Pair::Apart), apart, "{stray}");
+                assert_eq!(matches!(found, Pair::Unknown), !apart, "{stray}");
+            }
+        }
+        // A distance that is no number certifies nothing.
+        assert!(matches!(pair(&floor, &ceiling, f64::NAN), Pair::Unknown));
     }
 
     /// Two planes whose normals differ certainly cross along a line.
@@ -643,10 +686,10 @@ mod tests {
     fn planes_with_different_normals_cross() {
         let floor = flat_through(v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0));
         let wall = flat_through(v(2.0, 0.0, 0.0), v(1.0, 0.0, 0.0));
-        assert!(matches!(pair(&floor, &wall), Pair::Crossing));
-        assert!(matches!(pair(&wall, &floor), Pair::Crossing));
+        assert!(matches!(pair(&floor, &wall, 0.0), Pair::Crossing));
+        assert!(matches!(pair(&wall, &floor, 1.0), Pair::Crossing));
         let slant = flat_through(v(0.0, 0.0, 0.0), v(0.0, 1.0, 1.0));
-        assert!(matches!(pair(&floor, &slant), Pair::Crossing));
+        assert!(matches!(pair(&floor, &slant, 0.0), Pair::Crossing));
     }
 
     /// A plane's normal that is not certain (an interval across zero) certifies nothing.
@@ -659,6 +702,6 @@ mod tests {
             v(0.0, 0.0, 1.0),
             [spread, zero_i, Interval::point(1.0).unwrap()],
         );
-        assert!(matches!(pair(&floor, &vague), Pair::Unknown));
+        assert!(matches!(pair(&floor, &vague, 0.0), Pair::Unknown));
     }
 }

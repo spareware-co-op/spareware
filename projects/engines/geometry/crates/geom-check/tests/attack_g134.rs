@@ -25,7 +25,8 @@
 mod common;
 
 use common::{
-    CUBE_FACES, Rows, certified, faces_into, ix, kinds, level, line, meter, polyhedron, report,
+    CUBE_FACES, Rows, certified, faces_into, ix, kinds, level, line, meter, parallel, polyhedron,
+    report, round_cylinder,
 };
 use geom_check::{Entity, Fault, FaultKind, Level, Report, check};
 use geom_curve::CurveKind;
@@ -1559,6 +1560,50 @@ fn a_box_with_a_corner_lifted_is_a_star_on_each_bent_face() {
         step: GridStep::Q0,
     };
     assert_eq!(report(&r, BodyKind::Solid, room).faults(), []);
+}
+
+#[test]
+fn faces_on_parallel_planes_nearer_than_they_may_stray_are_not_passed_as_apart() {
+    // Issue #783. The notched bent ring no star stands for, written under z = 1: three corners
+    // are a step below that plane, inside a bound of one. Its edge from (0, 0, 0) to (10, 0, 0)
+    // runs through the middle of a square on z = 0. The two written planes are parallel and a
+    // step apart, which says nothing of a face that may lie a step from its own: the pair waits,
+    // where it was once passed.
+    let notched = [[0, 0, 0], [10, 0, 0], [10, 10, 1], [8, 2, 0]];
+    // The square at height `at`, its last corner `dip` steps lower, under a bound of `bound`.
+    let found = |above: f64, at: i64, dip: i64, bound: u64| {
+        let square = [[4, -1, at], [6, -1, at], [6, 1, at], [4, 1, at - dip]];
+        let mut r = sheets(&[&notched, &square]);
+        r.surfaces[0] = level(above);
+        kinds(report(&r, BodyKind::General, within(bound)).faults())
+    };
+    assert_eq!(found(1.0, 0, 0, 1), [FaultKind::PairUnchecked]);
+    // Written under the square's own plane, it waits as it always did.
+    assert_eq!(found(0.0, 0, 0, 1), [FaultKind::PairUnchecked]);
+    // The square lies on its plane exactly, so only the ring may stray, by a step. Just beyond
+    // that, with the planes two steps apart, the faces cannot meet, and the body passes.
+    assert_eq!(found(1.0, -1, 0, 1), []);
+    // A wider bound takes the room back, and a third step gives it again.
+    assert_eq!(found(1.0, -1, 0, 2), [FaultKind::PairUnchecked]);
+    assert_eq!(found(1.0, -2, 0, 2), []);
+    // A square with a corner a step off its own plane may stray too: the planes must clear two
+    // steps, one for each face.
+    assert_eq!(found(1.0, -1, 1, 1), [FaultKind::PairUnchecked]);
+    assert_eq!(found(1.0, -2, 1, 1), []);
+}
+
+#[test]
+fn the_caps_of_a_cylinder_shorter_than_its_bound_are_apart() {
+    // A cylinder two steps high, recorded within a bound of one or of four. Its caps are discs
+    // whose circles lie on their planes exactly, so neither can stray from its plane, and two
+    // planes that are not one keep them apart however wide the bound is.
+    let mut r = round_cylinder();
+    r.curves[0] = parallel(2.0, 5.0);
+    r.surfaces[0] = level(2.0);
+    for bound in [1, 4] {
+        let found = report(&r, BodyKind::Solid, within(bound));
+        assert_eq!(found.faults(), [], "{bound}");
+    }
 }
 
 #[test]
