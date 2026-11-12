@@ -84,6 +84,11 @@ fn the_kept_tree_clones_compares_prints_and_drops_a_hundred_levels_deep() {
         arrange_reusing(&exec, cell, Winding::new(), &list, 1, &[], None, meter).unwrap();
     let copy = solved.clone();
     assert_eq!(copy, solved);
+    // A second arrangement of the same polygons builds a tree of its own, box for box the same,
+    // so comparing the two walks every level of both.
+    let (_, again) =
+        arrange_reusing(&exec, cell, Winding::new(), &list, 1, &[], None, meter).unwrap();
+    assert_eq!(again, solved);
     assert!(format!("{copy:?}").contains("Split"));
     // Every division of the copy is the original's, so this counts the tree's boxes: two for each
     // split along the paths to the two corners, and the root.

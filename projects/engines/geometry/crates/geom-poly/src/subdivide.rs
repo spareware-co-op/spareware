@@ -34,7 +34,8 @@
 //!   so there every level is a phase and every leaf a task; the boxes, the pieces and the work
 //!   are the same either way, as both divide and solve a box by the same steps.
 //! - **No recursion.** The top levels are walked level by level and each subtree on an explicit
-//!   stack, so the tree's depth never threatens a WebAssembly stack (principle 13). A box holding polygons that a split no longer separates,
+//!   stack, so the tree's depth never threatens a WebAssembly stack (principle 13); the kept tree
+//!   is printed, compared and dropped on explicit stacks too. A box holding polygons that a split no longer separates,
 //!   such as many faces on one plane, stops as a leaf instead of dividing down to the grid.
 //! - **A reused box is the box solved again.** A leaf is keyed by SHA-256, under its own domain
 //!   prefix, of everything its answer depends on, so a cache from any other inputs only misses:
@@ -65,6 +66,12 @@
 //!   its faces on odd half steps, a split leaves each part at most half the width plus one, and
 //!   after 42 splits along an axis the width is 2, which no odd half step lies strictly inside.
 //!   Test: `the_kept_tree_clones_compares_prints_and_drops_a_hundred_levels_deep`.
+//! - Cycle: `<Divided as Drop>::drop`.
+//!   Bound: 2.
+//!   Why: the drop walks the tree below its box on a stack, and each box it holds last gives up
+//!   its halves before it goes, so the drop that box starts finds no split, holds nothing and
+//!   drops no other box.
+//!   Test: `the_kept_tree_clones_compares_prints_and_drops_a_hundred_levels_deep`.
 //!
 //! Cost: O(n) clips per level for n polygons across the level's boxes, and at most 126 levels:
 //! a box of the frame halves at most 42 times along each axis (the recursion statement above).
@@ -78,6 +85,7 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cmp::Reverse;
+use core::fmt;
 
 use geom_num::grid::Coord;
 use geom_num::plane::{Plane, Tpi};
@@ -161,7 +169,10 @@ struct Trail {
 
 /// A divided box, kept for a later call (G139): the box, the vector at its reference point, the
 /// polygons it held, what dividing it gave and the work that charged.
-#[derive(Debug, PartialEq, Eq)]
+///
+/// Printed, compared and dropped on explicit stacks, never a call a level, so a tree as deep as
+/// its bound fits the WebAssembly stack (principle 13); its `Debug` text is the derived form's.
+#[derive(Eq)]
 struct Divided {
     cell: Cell,
     reference: Winding,
@@ -193,6 +204,282 @@ struct Halves {
 struct Child {
     from: Vec<usize>,
     divided: Arc<Divided>,
+}
+
+impl PartialEq for Divided {
+    /// Whether the two trees are the same, box by box: what `#[derive(PartialEq)]` answers, on a
+    /// stack of the pairs of boxes still to compare.
+    fn eq(&self, other: &Self) -> bool {
+        let mut stack: Vec<(&Divided, &Divided)> = alloc::vec![(self, other)];
+        while let Some((a, b)) = stack.pop() {
+            if a.cell != b.cell
+                || a.reference != b.reference
+                || a.polygons != b.polygons
+                || a.work != b.work
+            {
+                return false;
+            }
+            match (&a.shape, &b.shape) {
+                (Shape::Dropped, Shape::Dropped) => {}
+                (Shape::Leaf(a), Shape::Leaf(b)) if a == b => {}
+                (Shape::Split(a), Shape::Split(b)) => {
+                    for (a, b) in [(&a.lower, &b.lower), (&a.upper, &b.upper)] {
+                        if a.from != b.from {
+                            return false;
+                        }
+                        stack.push((&a.divided, &b.divided));
+                    }
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+}
+
+impl Drop for Divided {
+    /// Drops the tree below the box on a stack: a box this drop holds last gives up its halves
+    /// before it goes, so the drop that box starts finds no split and walks nothing; a box held
+    /// elsewhere too only loses this holder.
+    fn drop(&mut self) {
+        let mut shape = core::mem::replace(&mut self.shape, Shape::Dropped);
+        let mut stack: Vec<Arc<Divided>> = Vec::new();
+        loop {
+            if let Shape::Split(halves) = shape {
+                let Halves { lower, upper } = *halves;
+                stack.push(lower.divided);
+                stack.push(upper.divided);
+            }
+            let Some(next) = stack.pop() else {
+                return;
+            };
+            shape = match Arc::into_inner(next) {
+                Some(mut last) => core::mem::replace(&mut last.shape, Shape::Dropped),
+                None => Shape::Dropped,
+            };
+        }
+    }
+}
+
+impl fmt::Debug for Divided {
+    /// The text `#[derive(Debug)]` writes for the tree, plain or pretty (`{:#?}`), written from a
+    /// stack of its parts. The plain form passes the formatter to each field outside the tree, as
+    /// the derived form does, so every flag is kept; the pretty form prints those fields with
+    /// `{:#?}`, as no stable way gives a field the formatter's other flags under an indent.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut printer = Printer {
+            pretty: f.alternate(),
+            f,
+            depth: 0,
+            on_newline: false,
+            open: Vec::new(),
+        };
+        let mut stack = alloc::vec![Part::Box(self)];
+        while let Some(part) = stack.pop() {
+            printer.put(part, &mut stack)?;
+        }
+        Ok(())
+    }
+}
+
+/// A part of a tree's `Debug` text, in the order the derived form writes it.
+#[derive(Clone, Copy)]
+enum Part<'a> {
+    /// A box, which stands for its own parts.
+    Box(&'a Divided),
+    /// A struct's or a tuple variant's name, which opens it.
+    Open(&'static str),
+    /// The start of a struct's field of this name.
+    Field(&'static str),
+    /// The start of a tuple variant's field.
+    Item,
+    /// The end of a field.
+    End,
+    /// The end of a struct.
+    CloseStruct,
+    /// The end of a tuple variant.
+    CloseTuple,
+    /// A variant without fields.
+    Name(&'static str),
+    /// A field whose type is not the tree's.
+    Value(Value<'a>),
+}
+
+/// A field of a box whose type is not the tree's, printed by its own `Debug`.
+#[derive(Clone, Copy)]
+enum Value<'a> {
+    Cell(&'a Cell),
+    Reference(&'a Winding),
+    Polygons(&'a [Polygon]),
+    Key(&'a [u8; 32]),
+    From(&'a [usize]),
+    Work(u64),
+}
+
+impl fmt::Debug for Value<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Cell(v) => fmt::Debug::fmt(v, f),
+            Value::Reference(v) => fmt::Debug::fmt(v, f),
+            Value::Polygons(v) => fmt::Debug::fmt(v, f),
+            Value::Key(v) => fmt::Debug::fmt(v, f),
+            Value::From(v) => fmt::Debug::fmt(v, f),
+            Value::Work(v) => fmt::Debug::fmt(v, f),
+        }
+    }
+}
+
+/// The parts of box `d`, in order: its children stand as [`Part::Box`].
+fn parts(d: &Divided) -> Vec<Part<'_>> {
+    let mut out = alloc::vec![
+        Part::Open("Divided"),
+        Part::Field("cell"),
+        Part::Value(Value::Cell(&d.cell)),
+        Part::End,
+        Part::Field("reference"),
+        Part::Value(Value::Reference(&d.reference)),
+        Part::End,
+        Part::Field("polygons"),
+        Part::Value(Value::Polygons(d.polygons.as_slice())),
+        Part::End,
+        Part::Field("shape"),
+    ];
+    match &d.shape {
+        Shape::Dropped => out.push(Part::Name("Dropped")),
+        Shape::Leaf(key) => out.extend([
+            Part::Open("Leaf"),
+            Part::Item,
+            Part::Value(Value::Key(key)),
+            Part::End,
+            Part::CloseTuple,
+        ]),
+        Shape::Split(halves) => {
+            out.extend([Part::Open("Split"), Part::Item, Part::Open("Halves")]);
+            for (name, child) in [("lower", &halves.lower), ("upper", &halves.upper)] {
+                out.extend([
+                    Part::Field(name),
+                    Part::Open("Child"),
+                    Part::Field("from"),
+                    Part::Value(Value::From(child.from.as_slice())),
+                    Part::End,
+                    Part::Field("divided"),
+                    Part::Box(&child.divided),
+                    Part::End,
+                    Part::CloseStruct,
+                    Part::End,
+                ]);
+            }
+            out.extend([Part::CloseStruct, Part::End, Part::CloseTuple]);
+        }
+    }
+    out.extend([
+        Part::End,
+        Part::Field("work"),
+        Part::Value(Value::Work(d.work)),
+        Part::End,
+        Part::CloseStruct,
+    ]);
+    out
+}
+
+/// Spaces for the pretty form's indent, written a run at a time.
+const SPACES: &str = "                                                                ";
+
+/// Writes a tree's parts as the formatting builders of `core::fmt` do (`debug_struct`,
+/// `debug_tuple`): the plain form `Name { a: 1, b: 2 }` and `Name(x)`, the pretty form one field
+/// a line, each line four spaces in for every field it is inside.
+struct Printer<'f, 'g> {
+    f: &'f mut fmt::Formatter<'g>,
+    pretty: bool,
+    /// How many fields the text is inside, below the box printed: the pretty form only.
+    depth: usize,
+    /// Whether the last text written ended a line.
+    on_newline: bool,
+    /// For each struct or tuple variant open, whether it has a field yet.
+    open: Vec<bool>,
+}
+
+impl Printer<'_, '_> {
+    /// Writes `part`, or puts a box's parts on `stack`, the first on top.
+    fn put<'a>(&mut self, part: Part<'a>, stack: &mut Vec<Part<'a>>) -> fmt::Result {
+        match part {
+            Part::Box(d) => {
+                stack.extend(parts(d).into_iter().rev());
+                Ok(())
+            }
+            Part::Open(name) => {
+                self.open.push(false);
+                self.text(name)
+            }
+            Part::Field(name) => {
+                self.begin(" {\n", " { ")?;
+                self.text(name)?;
+                self.text(": ")
+            }
+            Part::Item => self.begin("(\n", "("),
+            Part::End if self.pretty => {
+                self.text(",\n")?;
+                self.depth = self.depth.saturating_sub(1);
+                Ok(())
+            }
+            Part::End => Ok(()),
+            Part::CloseStruct => match self.open.pop() {
+                Some(true) => self.text(if self.pretty { "}" } else { " }" }),
+                _ => Ok(()),
+            },
+            Part::CloseTuple => match self.open.pop() {
+                Some(true) => self.text(")"),
+                _ => Ok(()),
+            },
+            Part::Name(name) => self.text(name),
+            // Made whole before it is indented: a formatter that wrote into the printer itself
+            // would make its writing a cycle through `core::fmt`.
+            Part::Value(v) if self.pretty => self.text(&alloc::format!("{v:#?}")),
+            Part::Value(v) => fmt::Debug::fmt(&v, self.f),
+        }
+    }
+
+    /// The start of a field: `pretty` before the first in the pretty form, then one field deeper;
+    /// `plain` before the first in the plain form, and a comma before each other.
+    fn begin(&mut self, pretty: &str, plain: &str) -> fmt::Result {
+        let first = self
+            .open
+            .last_mut()
+            .is_none_or(|has| !core::mem::replace(has, true));
+        if self.pretty {
+            if first {
+                self.text(pretty)?;
+            }
+            self.depth = self.depth.saturating_add(1);
+            Ok(())
+        } else {
+            self.text(if first { plain } else { ", " })
+        }
+    }
+
+    /// Writes `s`, each line that starts in it indented to the depth.
+    fn text(&mut self, s: &str) -> fmt::Result {
+        let mut rest = s;
+        while !rest.is_empty() {
+            // A line runs to just past its newline, or to the end; a newline is one byte, so the
+            // split is on a character boundary.
+            let newline = rest.as_bytes().iter().position(|b| *b == b'\n');
+            let end = newline.map_or(rest.len(), |at| at.saturating_add(1));
+            let (line, after) = rest.split_at(end);
+            if self.on_newline {
+                let mut left = self.depth.saturating_mul(4);
+                while left > 0 {
+                    let run = left.min(SPACES.len());
+                    self.f.write_str(SPACES.get(..run).unwrap_or_default())?;
+                    left = left.saturating_sub(run);
+                }
+            }
+            self.on_newline = newline.is_some();
+            self.f.write_str(line)?;
+            rest = after;
+        }
+        Ok(())
+    }
 }
 
 /// A box this call divides, until the tree is built: what [`Divided`] holds, its shape waiting on
@@ -1173,4 +1460,342 @@ fn take(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::arithmetic_side_effects,
+        clippy::panic,
+        clippy::unwrap_used,
+        reason = "tests: native arithmetic, and a failure stops the test"
+    )]
+
+    use alloc::boxed::Box;
+    use alloc::sync::Arc;
+    use alloc::vec::Vec;
+    use core::fmt::{self, Write as _};
+
+    use geom_num::plane::Plane;
+    use geom_run::{Budget, Exec, WorkMeter};
+
+    use super::{Child, Divided, Halves, Shape, around, arrange_reusing};
+    use crate::convex::Piece;
+    use crate::trace::{Cell, Polygon};
+    use crate::winding::{Winding, WindingTest};
+
+    /// How deep the trees of the deep tests go, far past the tree's bound of 127.
+    const DEEP: usize = 100_000;
+
+    /// How deep the pretty text's deep test goes: its indent grows with the depth, so its length
+    /// grows with the square.
+    const DEEP_PRETTY: usize = 1_000;
+
+    /// The tree's types as `#[derive]` writes them, the same names, fields and order: the text and
+    /// the answers the tree's own walks must give. The derived walks recurse a level a call, so
+    /// they run only on trees that fit the stack.
+    mod derived {
+        #![allow(
+            dead_code,
+            reason = "the fields are read by the derived implementations alone"
+        )]
+
+        use alloc::boxed::Box;
+
+        use crate::trace::{Cell, Polygon};
+        use crate::winding::Winding;
+
+        #[derive(Debug, PartialEq)]
+        pub struct Divided<'a> {
+            pub cell: &'a Cell,
+            pub reference: &'a Winding,
+            pub polygons: &'a [Polygon],
+            pub shape: Shape<'a>,
+            pub work: u64,
+        }
+
+        #[derive(Debug, PartialEq)]
+        pub enum Shape<'a> {
+            Dropped,
+            Leaf(&'a [u8; 32]),
+            Split(Box<Halves<'a>>),
+        }
+
+        #[derive(Debug, PartialEq)]
+        pub struct Halves<'a> {
+            pub lower: Child<'a>,
+            pub upper: Child<'a>,
+        }
+
+        #[derive(Debug, PartialEq)]
+        pub struct Child<'a> {
+            pub from: &'a [usize],
+            pub divided: Divided<'a>,
+        }
+    }
+
+    /// The derived form of `d`, made a level a call as the derived walks go: for shallow trees.
+    fn mirror(d: &Divided) -> derived::Divided<'_> {
+        fn child(c: &Child) -> derived::Child<'_> {
+            derived::Child {
+                from: c.from.as_slice(),
+                divided: mirror(&c.divided),
+            }
+        }
+        derived::Divided {
+            cell: &d.cell,
+            reference: &d.reference,
+            polygons: d.polygons.as_slice(),
+            shape: match &d.shape {
+                Shape::Dropped => derived::Shape::Dropped,
+                Shape::Leaf(key) => derived::Shape::Leaf(key),
+                Shape::Split(h) => derived::Shape::Split(Box::new(derived::Halves {
+                    lower: child(&h.lower),
+                    upper: child(&h.upper),
+                })),
+            },
+            work: d.work,
+        }
+    }
+
+    fn up(axis: usize, at: i64) -> Plane {
+        let mut n = [0i128; 3];
+        n[axis] = 1;
+        Plane::new(n, -i128::from(at)).unwrap()
+    }
+
+    fn down(axis: usize, at: i64) -> Plane {
+        let mut n = [0i128; 3];
+        n[axis] = -1;
+        Plane::new(n, i128::from(at)).unwrap()
+    }
+
+    /// The six faces of the block from `low` to `high`, each facing out, as operand `entry`.
+    fn block(low: [i64; 3], high: [i64; 3], entry: u32, out: &mut Vec<Polygon>) {
+        for axis in 0..3 {
+            let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+            let rim = |flip: bool| {
+                if flip {
+                    alloc::vec![
+                        up(u, low[u]),
+                        down(v, high[v]),
+                        down(u, high[u]),
+                        up(v, low[v])
+                    ]
+                } else {
+                    alloc::vec![
+                        up(v, low[v]),
+                        down(u, high[u]),
+                        down(v, high[v]),
+                        up(u, low[u])
+                    ]
+                }
+            };
+            for (face, flip) in [(up(axis, high[axis]), false), (down(axis, low[axis]), true)] {
+                out.push(Polygon {
+                    piece: Piece {
+                        face,
+                        bounds: rim(flip),
+                    },
+                    entry: Some(entry),
+                });
+            }
+        }
+    }
+
+    /// The tree an arrangement of `list` keeps.
+    fn kept(list: &[Polygon], leaf: usize, tests: &[WindingTest]) -> Arc<Divided> {
+        let cell = around(list).unwrap();
+        let meter = &mut WorkMeter::new(Budget::UNLIMITED);
+        let exec = Exec::serial();
+        let (_, solved) =
+            arrange_reusing(&exec, cell, Winding::new(), list, leaf, tests, None, meter).unwrap();
+        solved.tree.unwrap()
+    }
+
+    /// A box without polygons, the same at every level but for `shape`.
+    fn one(shape: Shape) -> Arc<Divided> {
+        Arc::new(Divided {
+            cell: Cell {
+                low: [0, -1, 2],
+                high: [3, 4, 5],
+            },
+            reference: Winding::new(),
+            polygons: Arc::new(Vec::new()),
+            shape,
+            work: 6,
+        })
+    }
+
+    /// A tree `depth` splits deep: each split's lower box is the next split, its upper a leaf, and
+    /// the lowest box has `bottom`.
+    fn chain(depth: usize, bottom: Shape) -> Arc<Divided> {
+        let mut tree = one(bottom);
+        for _ in 0..depth {
+            tree = one(Shape::Split(Box::new(Halves {
+                lower: Child {
+                    from: alloc::vec![0, 1],
+                    divided: tree,
+                },
+                upper: Child {
+                    from: alloc::vec![1],
+                    divided: one(Shape::Leaf([7; 32])),
+                },
+            })));
+        }
+        tree
+    }
+
+    /// The length of a text, not kept.
+    fn length(text: fmt::Arguments<'_>) -> usize {
+        struct Count(usize);
+        impl fmt::Write for Count {
+            fn write_str(&mut self, s: &str) -> fmt::Result {
+                self.0 += s.len();
+                Ok(())
+            }
+        }
+        let mut count = Count(0);
+        count.write_fmt(text).unwrap();
+        count.0
+    }
+
+    /// The tree's text against the derived form's, plain, pretty, with a flag, and inside another
+    /// value's pretty text, where the formatter it is given already indents.
+    fn prints_as_derived(tree: &Divided) {
+        let want = mirror(tree);
+        assert_eq!(format!("{tree:?}"), format!("{want:?}"));
+        assert_eq!(format!("{tree:#?}"), format!("{want:#?}"));
+        assert_eq!(format!("{tree:x?}"), format!("{want:x?}"));
+        assert_eq!(
+            format!("{:#?}", (1, Some(tree))),
+            format!("{:#?}", (1, Some(&want)))
+        );
+    }
+
+    #[test]
+    fn the_kept_tree_prints_what_the_derived_form_prints() {
+        let mut list = Vec::new();
+        block([0; 3], [4; 3], 0, &mut list);
+        block([2; 3], [6; 3], 1, &mut list);
+        let split = kept(&list, 4, &[]);
+        let leaf = kept(&list, 64, &[]);
+        let dropped = kept(&list, 4, &[WindingTest::intersect(2)]);
+        assert!(matches!(split.shape, Shape::Split(_)));
+        assert!(matches!(leaf.shape, Shape::Leaf(_)));
+        assert!(format!("{dropped:?}").contains("Dropped"));
+        for tree in [&split, &leaf, &dropped, &chain(3, Shape::Dropped)] {
+            prints_as_derived(tree);
+        }
+    }
+
+    #[test]
+    fn the_kept_tree_compares_as_the_derived_form_does() {
+        let mut list = Vec::new();
+        block([0; 3], [4; 3], 0, &mut list);
+        block([2; 3], [6; 3], 1, &mut list);
+        let mut moved = Vec::new();
+        block([0; 3], [4; 3], 0, &mut moved);
+        block([2; 3], [7, 6, 6], 1, &mut moved);
+        let trees = [
+            kept(&list, 4, &[]),
+            kept(&list, 4, &[]),
+            kept(&list, 2, &[]),
+            kept(&list, 64, &[]),
+            kept(&list, 4, &[WindingTest::intersect(2)]),
+            kept(&moved, 4, &[]),
+            chain(3, Shape::Dropped),
+            chain(3, Shape::Leaf([7; 32])),
+            chain(3, Shape::Leaf([8; 32])),
+            chain(4, Shape::Dropped),
+        ];
+        // Each tree is built on its own, so no box is shared and every pair is compared whole.
+        assert_eq!(*trees[0], *trees[1]);
+        for a in &trees {
+            for b in &trees {
+                assert_eq!(**a == **b, mirror(a) == mirror(b));
+            }
+        }
+        // A box that differs from its twin in one field only, below the top.
+        let twin = |change: &dyn Fn(&mut Divided)| {
+            let mut low = Divided {
+                cell: Cell {
+                    low: [0, -1, 2],
+                    high: [3, 4, 5],
+                },
+                reference: Winding::new(),
+                polygons: Arc::new(list.clone()),
+                shape: Shape::Leaf([7; 32]),
+                work: 6,
+            };
+            change(&mut low);
+            one(Shape::Split(Box::new(Halves {
+                lower: Child {
+                    from: alloc::vec![0],
+                    divided: Arc::new(low),
+                },
+                upper: Child {
+                    from: alloc::vec![1],
+                    divided: one(Shape::Dropped),
+                },
+            })))
+        };
+        let base = twin(&|_| {});
+        let changes: [&dyn Fn(&mut Divided); 6] = [
+            &|d: &mut Divided| d.cell.high[2] = 9,
+            &|d: &mut Divided| d.reference.add(0, 1).unwrap(),
+            &|d: &mut Divided| d.polygons = Arc::new(list[1..].to_vec()),
+            &|d: &mut Divided| d.shape = Shape::Leaf([8; 32]),
+            &|d: &mut Divided| d.shape = Shape::Dropped,
+            &|d: &mut Divided| d.work = 7,
+        ];
+        assert_eq!(*base, *twin(&|_| {}));
+        for change in changes {
+            let other = twin(change);
+            assert_ne!(*base, *other);
+            assert_ne!(mirror(&base), mirror(&other));
+        }
+    }
+
+    #[test]
+    fn the_kept_tree_prints_compares_and_drops_a_hundred_levels_deep() {
+        let tree = chain(100, Shape::Dropped);
+        prints_as_derived(&tree);
+        assert_eq!(*tree, *chain(100, Shape::Dropped));
+        assert_ne!(*tree, *chain(100, Shape::Leaf([7; 32])));
+        assert_ne!(*tree, *chain(99, Shape::Dropped));
+        drop(tree);
+    }
+
+    #[test]
+    fn the_kept_tree_prints_compares_and_drops_far_past_its_bound() {
+        // Every level's text is the same, so the plain text grows by the same length a level,
+        // and the pretty text, whose indent grows by the same length a level, by a length that
+        // grows by the same length a level.
+        let plain = |depth| length(format_args!("{:?}", chain(depth, Shape::Dropped)));
+        let pretty = |depth| length(format_args!("{:#?}", chain(depth, Shape::Dropped)));
+        let deep = chain(DEEP, Shape::Dropped);
+        let (one, two) = (plain(1), plain(2));
+        assert_eq!(
+            length(format_args!("{deep:?}")),
+            one + (DEEP - 1) * (two - one)
+        );
+        let (one, two, three) = (pretty(1), pretty(2), pretty(3));
+        let n = DEEP_PRETTY - 1;
+        assert_eq!(
+            pretty(DEEP_PRETTY),
+            one + n * (two - one) + n * (n - 1) / 2 * (three + one - 2 * two)
+        );
+        assert_eq!(*deep, *chain(DEEP, Shape::Dropped));
+        assert_ne!(*deep, *chain(DEEP, Shape::Leaf([7; 32])));
+        // A box held elsewhere outlives the tree it was in, and is whole.
+        let held = match &deep.shape {
+            Shape::Split(halves) => Arc::clone(&halves.lower.divided),
+            _ => panic!("the top box is split"),
+        };
+        drop(deep);
+        assert_eq!(Arc::strong_count(&held), 1);
+        assert_eq!(*held, *chain(DEEP - 1, Shape::Dropped));
+        drop(held);
+    }
 }
