@@ -9,9 +9,9 @@
 //! arithmetic, which says so only while every product in their normals is exact in doubles. The
 //! operation reported that as `ResultInvalid`, a defect. The tests here hold the rule that
 //! replaced it, arm by arm, on the smallest cases found and on a seeded sweep.
-//! From G134 the checker certifies a rounded flat face by its fan of triangles, so the fuzzer's
-//! cases themselves now pass, and their tests say so; what still waits is a transform that is not
-//! exact (G417 for flat bodies) and curved geometry (G177).
+//! From G134 the checker certifies a rounded flat face by the star of triangles from the mean of
+//! its corners, so the fuzzer's cases themselves now pass, and their tests say so; what still waits
+//! is a transform that is not exact (G417 for flat bodies) and curved geometry (G177).
 //!
 //! Covers: `transform.mirror`, `transform.move`, `transform.pattern`, `transform.rotate`,
 //! `transform.scale`.
@@ -155,7 +155,7 @@ fn edited(body: &Body, edit: impl FnOnce(&mut Builder)) -> Body {
 /// The smallest case: one scale that rounds, then one by whole numbers. The second rounds
 /// nothing and moves every plane exactly. The caps' normals are then no longer doubles (their one
 /// coordinate is 3 × 7/3), so until G134 the checker could not certify the caps apart and the
-/// scale waited. From G134 a rounded flat face stands for its fan of triangles, whose planes are
+/// scale waited. From G134 a rounded flat face stands for its star of triangles, whose planes are
 /// integers, and the result is certified.
 #[test]
 fn an_exact_scale_of_a_rounded_box_is_certified() {
@@ -196,7 +196,7 @@ fn an_exact_scale_of_a_rounded_box_is_certified() {
 
 /// The fuzzer's first finding (crash-dc639a8b..., cut to four corners): two scales by 5/2, then
 /// one by 5. Its sides on the lines of slope 3 lie on parallel planes off the integers, which
-/// the checker certifies from G134 by each face's fan of triangles.
+/// the checker certifies from G134 by each face's star of triangles.
 #[test]
 fn the_fuzzers_prism_scaled_by_five_halves_twice_then_by_five_is_certified() {
     let c = ctx();
@@ -418,11 +418,12 @@ fn a_box_with_caps_off_the_doubles() -> (Body, Exactness) {
 
 /// The rule is the body's record and the checker's report, not which transform ran. This body
 /// was the one the checker could not certify (one `PairUnchecked`), so a move, a mirror or a
-/// quarter turn of it waited for G134. From G134 its faces stand for their fans of triangles,
-/// the checker passes it, and so do its exact transforms. A flat body no fan can stand for (a
-/// face with a hole or a reflex corner, piece G417) is not built here yet: the flat arm of that
-/// wait is held by `a_transform_that_is_not_exact_waits_whatever_the_checker_finds` and the
-/// sweep, and the curved arm (G177) by the sweep.
+/// quarter turn of it waited for G134. From G134 its faces stand for their stars of triangles,
+/// the checker passes it, and so do its exact transforms. A flat body no star can stand for (a
+/// face with a hole or a notch past the mean of its corners, piece G417) is not built here yet:
+/// the flat arm of that wait is held by
+/// `a_transform_that_is_not_exact_waits_whatever_the_checker_finds` and by the sweep's uneven
+/// scales, and the curved arm (G177) by the sweep.
 #[test]
 fn a_move_of_the_body_the_checker_could_not_certify_is_certified() {
     let (body, record) = a_box_with_caps_off_the_doubles();
@@ -547,6 +548,10 @@ fn inexact(
     }
 }
 
+/// The name [`exact`] gives a scale by whole factors that are not all one factor. It is the one
+/// exact transform here that does not keep a body's shape.
+const UNEVEN: &str = "uneven scale";
+
 /// A transform that is exact, of `body` recorded `record`: its name, and its result's record or
 /// its refusal. A result is held to the full checker.
 fn exact(
@@ -591,13 +596,13 @@ fn exact(
         }
         3 | 4 => {
             let first = whole(rng);
-            let factors = if flat && rng.coin() {
-                [first, whole(rng), s(1, 1)]
+            let (what, factors) = if flat && rng.coin() {
+                (UNEVEN, [first, whole(rng), s(1, 1)])
             } else {
-                [first; 3]
+                ("scale", [first; 3])
             };
             let scaled = scale(&c, input, factors, point(rng));
-            ("scale", checked("scale", scaled))
+            (what, checked(what, scaled))
         }
         5 => {
             let by = [coordinate(rng), coordinate(rng), coordinate(rng)];
@@ -619,6 +624,21 @@ fn exact(
 /// of every sort, as recorded and recorded Approximate. Whatever comes back passes the full
 /// checker or is a typed refusal; none is a defect. On the default seed it reaches the rule on
 /// both sides: exact transforms the checker certifies, and ones it cannot.
+///
+/// Which ones it cannot: every body here passed the full checker before its exact transform, and
+/// what the checker finds of a flat body depends on where the body lies and on nothing else
+/// (G134's star; `geom-check`'s `ring_start` test). A move, a quarter turn, a mirror, a scale by
+/// one whole factor and a pattern's copy of each keep a body's shape, and such a scale stretches
+/// the bound as much as the body, so their results pass as their inputs did: one of a flat body
+/// that waits fails this test, on any seed. That leaves the uneven scale, the one exact
+/// transform here that changes a body's shape. It stretches the bound by its largest factor and
+/// the body, along its other axes, by less, so a thin body can come out thinner than its bound,
+/// and a bent face's triangles can come out turned against its ring. Until the star, 27 waited
+/// on the default seed and case 434 was a defect: a bent face was read as the fan of triangles
+/// from its ring's first corner, which a mirror and a pattern's copy move to another corner, and
+/// which a ring with a straight first corner does not have. All of those but two uneven scales
+/// pass now, so the floor asks only that the arm is reached. A curved body's tests are bounds in
+/// doubles, not exact signs, so this test asks no such law of one.
 #[test]
 fn exact_transforms_of_bodies_less_than_exact_pass_or_refuse_with_a_type() {
     let label = "exact transforms of rounded bodies";
@@ -667,6 +687,11 @@ fn exact_transforms_of_bodies_less_than_exact_pass_or_refuse_with_a_type() {
                             "case {case}, {what}: an exact body waits for nothing"
                         );
                         assert_eq!(*piece, if flat { "G417" } else { "G177" }, "case {case}");
+                        assert!(
+                            !flat || what == UNEVEN,
+                            "case {case}: {what} keeps the shape of a flat body that passed: {}",
+                            e.message()
+                        );
                         waited += 1;
                     }
                 }
@@ -678,6 +703,6 @@ fn exact_transforms_of_bodies_less_than_exact_pass_or_refuse_with_a_type() {
     );
     if seed == Seed::DEFAULT {
         assert!(passed > 100, "{passed}");
-        assert!(waited > 10, "{waited}");
+        assert!(waited > 0, "{waited}");
     }
 }

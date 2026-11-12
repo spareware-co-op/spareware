@@ -1222,6 +1222,32 @@ fn a_bent_face_whose_mean_sees_an_edge_from_outside_has_no_star() {
 }
 
 #[test]
+fn a_face_is_read_on_the_plane_of_its_corners_however_its_own_is_written() {
+    // The same notch on a flat face, which no star stands for, under a plane written half a step
+    // above its corners and one written a whole step above. The first is no plane of integers
+    // and the second is one, as the first scaled by two would be. Both times the face is read on
+    // the plane its corners fix, as the polygon it is: beside a face through its notch, which is
+    // inside its hull and outside it, and crossing a face through its inside.
+    let notched = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [8, 2, 0]];
+    let through_the_notch = [[4, 2, -5], [4, 4, -5], [4, 4, 5], [4, 2, 5]];
+    let through_the_inside = [[9, 1, -5], [9, 2, -5], [9, 2, 5], [9, 1, 5]];
+    for above in [0.5, 1.0] {
+        let found = |other: &[[i64; 3]]| {
+            let mut r = sheets(&[&notched, other]);
+            r.surfaces[0] = level(above);
+            kinds(report(&r, BodyKind::General, within(1)).faults())
+        };
+        assert_eq!(found(&ASIDE), [], "{above}");
+        assert_eq!(found(&through_the_notch), [], "{above}");
+        assert_eq!(
+            found(&through_the_inside),
+            [FaultKind::FacesCross],
+            "{above}"
+        );
+    }
+}
+
+#[test]
 fn two_bent_faces_touching_at_their_means_are_found() {
     // Two saddles with one mean, the origin, the second above the first everywhere else. The
     // origin is a corner of every triangle of both stars and a vertex of neither face, so

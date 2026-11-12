@@ -445,8 +445,9 @@ pub(crate) fn moved_copy(
     }
     let exactness = record(ctx, input, stretch, rounded, deviation)?;
     // What a checker failure means (`Unpassed`): the piece is the one that widens the checker for
-    // the body's kind of geometry. From G134 a rounded flat face stands for its fan of triangles,
-    // so what still waits is a flat face no fan can stand for: one with a hole or a reflex corner.
+    // the body's kind of geometry. From G134 a rounded flat face stands for the star of triangles
+    // from the mean of its corners, so what still waits is a flat face no star can stand for: one
+    // with a hole, or with an edge the mean does not see from inside.
     let piece = if curved(input.body) { "G177" } else { "G417" };
     let unpassed = if rounded || deviation > 0.0 {
         Unpassed::Rounded { piece }
