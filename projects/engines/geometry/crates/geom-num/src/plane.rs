@@ -1115,8 +1115,8 @@ fn tpi_filtered(t: &Tpi, s: &Plane) -> Option<Sign> {
 /// paths. The only caller comes here after [`tpi_filtered`], [`tpi_narrow`] and [`tpi_axis`] could
 /// not decide these same four planes, so neither the filter nor machine words are asked again:
 /// planes too long for the narrow path are, within the frame, almost always too long for the
-/// determinant in words, and its failed attempt cost a degenerate meeting point 8% more than the
-/// exact path alone (23.13).
+/// determinant in words, and its failed attempt took a degenerate meeting point's count from 4%
+/// over the exact path alone to 8% (23.13).
 fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     let [p, q, r] = &t.planes;
     Some(determinant_exact(p, q, r, s)?.mul(t.weight))

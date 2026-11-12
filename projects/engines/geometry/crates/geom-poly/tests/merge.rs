@@ -1453,7 +1453,7 @@ fn exact_point(t: &Tpi) -> ([BigInt; 3], BigInt) {
     let with = |i: usize| {
         let mut r = rows.clone();
         for (row, v) in r.iter_mut().zip(&minus_d) {
-            row[i] = v.clone();
+            row[i].clone_from(v);
         }
         det(&r[0], &r[1], &r[2])
     };

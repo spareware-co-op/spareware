@@ -744,7 +744,10 @@ pub fn answers_hold(out: &OpOutput<Made>, answers: &Answers) -> Result<(), Findi
     if rows != names || !ordered {
         return law("query.faces lists the body's faces by name, in arena order");
     }
-    let corners: Vec<P3> = (0..a.rows(Arena::Vertex))
+    // A vertex where three planes meet has no grid point (G129's PointKind): the laws below read
+    // the vertices' grid points, and only a body whose vertices are all grid points is held to
+    // the box of its vertices.
+    let kinds: Vec<_> = (0..a.rows(Arena::Vertex))
         .filter_map(Ix::new)
         .filter_map(|v| {
             a.vertices
@@ -753,6 +756,8 @@ pub fn answers_hold(out: &OpOutput<Made>, answers: &Answers) -> Result<(), Findi
                 .copied()
         })
         .collect();
+    let corners: Vec<P3> = kinds.iter().filter_map(|k| k.grid()).collect();
+    let on_grid = corners.len() == kinds.len();
     let Some(b) = boxed.result else {
         return law("a solid has a bounding box");
     };
@@ -766,7 +771,7 @@ pub fn answers_hold(out: &OpOutput<Made>, answers: &Answers) -> Result<(), Findi
             Ok(())
         };
     }
-    if Box3::from_points(corners) != Some(b.bound) {
+    if on_grid && Box3::from_points(corners) != Some(b.bound) {
         return law("a flat body's box is its vertices' box");
     }
     let mut sum = [0i128; 3];
