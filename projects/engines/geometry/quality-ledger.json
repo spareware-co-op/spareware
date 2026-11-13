@@ -6985,6 +6985,38 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Without the box around the shells sides_of_first takes around_on's box for the same polygons, also a step clear of every one with its faces on odd half steps. classify_inside gives the same vectors for any box that holds every polygon strictly inside (the path runs along its walls just inside, where no polygon is), around_on charges nothing and the trace charges by polygon, so the counts and the work are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace == with != in Chain::roots",
+      "line_text": "if negative && p.degree % 2 == 1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sign of every element at minus infinity flips with this test, and a sign vector and its negation have the same changes, so the count of changes is the same for either parity."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace == with != in filtered",
+      "line_text": "*slot = if negative && d % 2 == 1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "As in `Chain::roots`: flipping the sign of every element at minus infinity leaves the number of changes where it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace > with >= in filtered_between",
+      "line_text": "let exact = at.num.unsigned_abs() <= LIMIT && at.den.unsigned_abs() <= LIMIT && at.den > 0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A denominator of zero then goes on to the division by zero, which is refused, and the refusal is the same `None`."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace | with ^ in shifted",
+      "line_text": "(low >> part) | (high << 64usize.saturating_sub(part))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two parts of a shifted limb share no bit: the low part holds the top `64 - part` bits and the high part the bottom `part`, so or and exclusive or are the same word."
     }
   ],
   "coverage_off": [

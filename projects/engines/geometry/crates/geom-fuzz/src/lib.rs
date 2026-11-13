@@ -255,6 +255,7 @@ pub mod operations;
 pub mod orient2d;
 pub mod planes;
 pub mod predicates;
+pub mod quadric;
 pub mod prune;
 pub mod records;
 pub mod references;

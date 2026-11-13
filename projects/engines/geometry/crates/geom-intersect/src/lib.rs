@@ -29,6 +29,8 @@
 //! - [`result`]: what an intersection returns, its items and contact types, in canonical order.
 //! - [`order`]: the canonical operand order, and pairs run one by one or as a batch.
 //! - [`error`]: why an intersection could not be computed.
+//! - [`closed`] (piece G159): exact decisions for a line with a quadric or torus, and the special
+//!   positions of two quadrics.
 //!
 //! Status: the result types and canonical order built by piece G158; the methods come with G159,
 //! G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292,
@@ -38,6 +40,7 @@
 
 extern crate alloc;
 
+pub mod closed;
 pub mod error;
 pub mod order;
 pub mod result;

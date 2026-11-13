@@ -508,6 +508,14 @@ pub static OPS: &[Op] = &[
     Op { group: "prune", name: "record_write", measures: "geom_format::pruned::pruned_record", classes: T, prepare: |c| bind(inputs::naming::pruned(c), kernels::naming::record_write) },
     Op { group: "prune", name: "record_read", measures: "geom_format::pruned::read_pruned", classes: T, prepare: |c| bind(inputs::naming::pruned_payloads(c), kernels::naming::record_read) },
     // Root finding and quadrature (piece G51; decision 32.46).
+    // The exact decisions on lines and quadrics (piece G159; decision 32.44).
+    Op { group: "quadric", name: "line_sphere", measures: "quadric::line_sphere", classes: T, prepare: |c| bind(inputs::quadric::spheres(c), kernels::quadric::spheres) },
+    Op { group: "quadric", name: "line_cylinder", measures: "quadric::line_cylinder", classes: T, prepare: |c| bind(inputs::quadric::cylinders(c), kernels::quadric::cylinders) },
+    Op { group: "quadric", name: "line_cone", measures: "quadric::line_cone", classes: T, prepare: |c| bind(inputs::quadric::cones(c), kernels::quadric::cones) },
+    Op { group: "quadric", name: "line_torus", measures: "quadric::roots", classes: T, prepare: |c| bind(inputs::quadric::tori(c), kernels::quadric::tori) },
+    Op { group: "quadric", name: "parallel", measures: "quadric::parallel", classes: T, prepare: |c| bind(inputs::quadric::directions(c), kernels::quadric::directions) },
+    Op { group: "quadric", name: "axis_gap", measures: "quadric::axis_gap", classes: T, prepare: |c| bind(inputs::quadric::gaps(c), kernels::quadric::gaps) },
+    Op { group: "quadric", name: "tangent", measures: "quadric::tangent_cylinder_cone", classes: T, prepare: |c| bind(inputs::quadric::tangents(c), kernels::quadric::tangents) },
     // geom-intersect's canonical order (piece G158; decision 32.44): a list of items sorted and
     // proven disjoint, a key read through a circle's NURBS form, and a pair of keys put in order.
     Op { group: "intersect", name: "sort_items", measures: "geom_intersect::Intersection::new", classes: T, prepare: |c| bind(inputs::intersect::items(c), kernels::intersect::sorted) },
@@ -591,7 +599,7 @@ pub fn full_scenario(op: &str) -> Option<Prepared> {
 }
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 51] = [
+pub const GROUPS: [&str; 52] = [
     "predicate",
     "sign",
     "wide",
@@ -643,6 +651,7 @@ pub const GROUPS: [&str; 51] = [
     "resolve",
     "prune",
     "intersect",
+    "quadric",
 ];
 
 /// The group of the growth checks.
@@ -800,6 +809,48 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Step::name", "a table of names"),
     ("Step::route", "a table of the steps, for the twins that count"),
     ("distance::dot_from", "one dot product of differences, inside mesh/closest_dots"),
+    ("generated::line_sphere::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::line_sphere::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::line_sphere::exact", "one call to `value`, and the sign of the value"),
+    ("generated::line_cylinder::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::line_cylinder::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::line_cylinder::exact", "one call to `value`, and the sign of the value"),
+    ("generated::line_cone::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::line_cone::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::line_cone::exact", "one call to `value`, and the sign of the value"),
+    ("generated::line_cone_lead::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::line_cone_lead::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::line_cone_lead::exact", "one call to `value`, and the sign of the value"),
+    ("generated::cross_norm::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::cross_norm::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::cross_norm::exact", "one call to `value`, and the sign of the value"),
+    ("generated::axis_gap::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::axis_gap::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::axis_gap::exact", "one call to `value`, and the sign of the value"),
+    ("quadric::line_cone_steep", "one generated predicate, like `quadric::line_cone`, measured"),
+    ("quadric::tangent_cone_cone", "the same interval then exact path as `quadric::tangent_cylinder_cone`, measured"),
+    ("quadric::polar", "a few products; the Bernstein coefficients it feeds are charged to their meter"),
+    ("quadric::polynomial", "the first step of `quadric::roots`, measured"),
+    ("quadric::roots_between", "`quadric::roots` with the chain read at two points"),
+    ("generated::plain::line_sphere_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::line_sphere_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::line_cylinder_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::line_cylinder_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::line_cone_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::line_cone_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::line_cone_lead_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::line_cone_lead_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::cross_norm_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::cross_norm_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::axis_gap_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::axis_gap_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("Point::whole", "a constructor"),
+    ("Chain::of", "the slow path of `quadric::roots`, measured through it near repeated roots only"),
+    ("Chain::roots", "reads a built chain"),
+    ("Chain::roots_between", "reads a built chain at two points"),
+    ("sturm::filtered", "the first step of `quadric::roots`, measured"),
+    ("sturm::filtered_between", "the first step of `quadric::roots_between`"),
+    ("sturm::div_exact", "part of `sturm::Chain::of`"),
     ("Coord::get", "field accessor"),
     ("Steps::get", "field accessor"),
     ("Real::get", "field accessor"),
