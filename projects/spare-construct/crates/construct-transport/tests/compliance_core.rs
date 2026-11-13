@@ -118,7 +118,7 @@ fn run_case(case: &serde_json::Value) -> Option<V> {
         "csv" => {
             if id == "csv true" {
                 let fp = cx::docs::fingerprint(&p);
-                cx::state_mut(&mut p).get_mut("expert").unwrap().set("signoffs", arr(vec![jobj! { "role" => "prepared", "name" => "A", "quals" => "B", "date" => "2026-10-01", "fp" => fp }, jobj! { "role" => "reviewed", "name" => "C", "quals" => "D", "date" => "2026-10-01", "fp" => "old" }]));
+                cx::state_mut(&mut p).unwrap().get_mut("expert").unwrap().set("signoffs", arr(vec![jobj! { "role" => "prepared", "name" => "A", "quals" => "B", "date" => "2026-10-01", "fp" => fp }, jobj! { "role" => "reviewed", "name" => "C", "quals" => "D", "date" => "2026-10-01", "fp" => "old" }]));
             }
             let twice = cx::docs::stamp_csv(&cx::docs::stamp_csv("a,b", &p, None), &p, None);
             jobj! { "footer" => cx::docs::csv_footer(&p, None), "handover" => cx::docs::csv_footer(&p, Some("SIDRA")), "stamp" => cx::docs::stamp_csv("a,b\r\n1,2\r\n\r\n", &p, None), "stamp2" => cx::docs::stamp_csv("", &p, Some("X")), "twice" => twice,

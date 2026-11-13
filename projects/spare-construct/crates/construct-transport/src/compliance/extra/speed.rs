@@ -12,6 +12,7 @@ use crate::compliance::jv::{Jx, V, csv, jobj};
 use crate::compliance::net;
 use crate::jsnum::{math_round, number_to_js_string};
 use crate::util::{self, fmt};
+use std::fmt::Write as _;
 
 /// `minLenFor(v)`: the Schedule 1 minimum length (m) of a section with this limit (km/h).
 #[must_use]
@@ -98,10 +99,10 @@ pub fn road_len(sc: &V, ls: &[&V]) -> f64 {
     let one_way = |l: &V| (int32(l.g("lanesAB")) > 0.0) != (int32(l.g("lanesBA")) > 0.0);
     let head = |l: &V| -> f64 {
         let g = net::geom(sc, l).unwrap_or_default();
-        if g.is_empty() {
+        let (Some(first), Some(last)) = (g.first(), g.last()) else {
             return f64::NAN;
-        }
-        let b = util::bearing(&g[0], &g[g.len() - 1]);
+        };
+        let b = util::bearing(first, last);
         if int32(l.g("lanesAB")) > 0.0 { b } else { (b + 180.0) % 360.0 }
     };
     let mut len = 0.0;
@@ -141,7 +142,8 @@ pub fn speed_check(p: &V, sc: Option<&V>) -> V {
     let sp = xdata("STD.speed");
     let mut rows: Vec<V> = Vec::new();
     for ls in speed_sections(sc) {
-        let l = ls[0];
+        // a section always holds at least one road
+        let Some(&l) = ls.first() else { continue };
         let empty = V::object();
         let x = if l.g("cx").t() { l.g("cx") } else { &empty };
         let limit = limit_of(l);
@@ -286,16 +288,17 @@ pub fn cbds_html(cb: &V) -> String {
     );
     for x in cb.g("headings").items() {
         let rows: Vec<Vec<String>> = x.g("rows").items().iter().map(|r| vec![esc(r.ix(0)), esc(r.ix(1))]).collect();
-        s.push_str(&format!("<h4>{} <span class=\"note\">{}</span></h4>", esc(x.g("title")), esc(x.g("rule"))));
+        // Writing to a String cannot fail
+        let _ = write!(s, "<h4>{} <span class=\"note\">{}</span></h4>", esc(x.g("title")), esc(x.g("rule")));
         s.push_str(&tbl(&["Item", "Value"], rows, ""));
         if x.g("basis").t() {
-            s.push_str(&format!("<p class=\"note\">{}</p>", esc(x.g("basis"))));
+            let _ = write!(s, "<p class=\"note\">{}</p>", esc(x.g("basis")));
         }
     }
     for w in cb.g("warn").items() {
         s.push_str(&note(&esc(w), true));
     }
-    s.push_str(&format!("<p class=\"note disclaimer\" data-disclaimer=\"D9\"><b>D9.</b> {}</p></div>", esc(cb.g("disclaimer"))));
+    let _ = write!(s, "<p class=\"note disclaimer\" data-disclaimer=\"D9\"><b>D9.</b> {}</p></div>", esc(cb.g("disclaimer")));
     s
 }
 

@@ -3,6 +3,7 @@
 //! does with `esc`), markup passed in is written as it is.
 
 use crate::util::esc as esc_text;
+use std::fmt::Write as _;
 
 /// A report context the report lane passes to a section (`ctx.table(title, html, { note })`); without one a table is a plain figure.
 pub trait ReportCtx {
@@ -72,7 +73,7 @@ pub fn kit_table(head: &[Th], rows: &[Tr], compact: bool, cls: &str, empty: &str
     };
     let body: String = rows
         .iter()
-        .map(|o| {
+        .fold(String::new(), |mut out, o| {
             let attrs = format!(
                 "{}{}",
                 if o.fly.is_some() || !o.cls.is_empty() { format!(" class=\"{}{}\"", if o.fly.is_some() { "click " } else { "" }, esc_text(&o.cls)) } else { String::new() },
@@ -87,9 +88,10 @@ pub fn kit_table(head: &[Th], rows: &[Tr], compact: bool, cls: &str, empty: &str
                     if o.fly.is_some() && i == o.fly_col { format!("{td}<button type=\"button\" class=\"rowlink\">{c}</button></td>") } else { format!("{td}{c}</td>") }
                 })
                 .collect();
-            format!("<tr{attrs}>{cells}</tr>")
-        })
-        .collect();
+            // Writing to a String cannot fail
+            let _ = write!(out, "<tr{attrs}>{cells}</tr>");
+            out
+        });
     let body = if body.is_empty() && !empty.is_empty() { format!("<tr><td class=\"note\" colspan=\"{}\">{empty}</td></tr>", head.len().max(1)) } else { body };
     format!(
         "<div class=\"tbl-wrap\"><table class=\"t{}{}\">{th_row}{body}</table></div>",
@@ -100,11 +102,22 @@ pub fn kit_table(head: &[Th], rows: &[Tr], compact: bool, cls: &str, empty: &str
 
 /// The report tables of the Compliance module (`T(head, rows)`): headings are escaped, cells are written as given.
 #[must_use]
-pub fn report_table(head: &[&str], rows: &[Vec<String>]) -> String {
+pub fn report_table(head: &[&str], rows: Vec<Vec<String>>) -> String {
     format!(
         "<table class=\"rt\"><thead><tr>{}</tr></thead><tbody>{}</tbody></table>",
-        head.iter().map(|h| format!("<th>{}</th>", esc_text(h))).collect::<String>(),
-        rows.iter().map(|r| format!("<tr>{}</tr>", r.iter().map(|c| format!("<td>{c}</td>")).collect::<String>())).collect::<String>()
+        // Writing to a String cannot fail
+        head.iter().fold(String::new(), |mut out, h| {
+            let _ = write!(out, "<th>{}</th>", esc_text(h));
+            out
+        }),
+        rows.into_iter().fold(String::new(), |mut out, r| {
+            let cells = r.iter().fold(String::new(), |mut row, c| {
+                let _ = write!(row, "<td>{c}</td>");
+                row
+            });
+            let _ = write!(out, "<tr>{cells}</tr>");
+            out
+        })
     )
 }
 

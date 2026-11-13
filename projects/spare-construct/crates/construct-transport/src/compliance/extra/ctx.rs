@@ -102,14 +102,16 @@ pub fn data(p: &V) -> V {
 }
 
 /// `data(P)` for changing: the record, created and filled with the defaults first.
-pub fn data_mut(p: &mut V) -> &mut V {
+///
+/// Always Some for a project (an object); None when `p` is not an object (no field can be set on it).
+pub fn data_mut(p: &mut V) -> Option<&mut V> {
     if !p.g("complianceExtra").is_obj() {
         p.set("complianceExtra", V::object());
     }
     let b = blank();
-    let c = p.get_mut("complianceExtra").expect("set above");
+    let c = p.get_mut("complianceExtra")?;
     record::fill(c, &b);
-    c
+    Some(c)
 }
 
 /* =====================================================================================
@@ -152,7 +154,8 @@ pub fn long_date(v: &V) -> String {
         return "\u{2013}".to_string();
     }
     match parts(d_of(&day(v))) {
-        Some((y, m0, d, _)) => format!("{} {} {}", d, SHORT_MONTHS[m0 as usize], y),
+        // parts gives a month in 0..=11, so the name is always there
+        Some((y, m0, d, _)) => format!("{} {} {}", d, usize::try_from(m0).ok().and_then(|i| SHORT_MONTHS.get(i)).copied().unwrap_or(""), y),
         None => "\u{2013}".to_string(),
     }
 }
@@ -172,12 +175,13 @@ pub fn add_months(v: &V, m: f64) -> Option<String> {
     let (y, m0, d, _) = parts(d_of(&day(v)))?;
     // d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + m); then the last day of that month caps the day
     let total = f64::from(m0) + m;
-    let ty = y as f64 + (total / 12.0).floor();
+    let ty = crate::jsnum::i64_to_f64(y) + (total / 12.0).floor();
     let tm = total.rem_euclid(12.0);
     let t1 = date_utc(ty, tm, 1.0);
     let last = parts(date_utc(ty, tm + 1.0, 0.0)).map_or(28, |p| p.2);
-    let (ry, rm, rd, _) = parts(t1 + f64::from(d.min(last) - 1) * DAY)?;
-    Some(format!("{}-{:02}-{:02}", ry, rm + 1, rd))
+    // parts gives days from 1 and months from 0, so neither step leaves its range
+    let (ry, rm, rd, _) = parts(t1 + f64::from(d.min(last).saturating_sub(1)) * DAY)?;
+    Some(format!("{}-{:02}-{:02}", ry, rm.saturating_add(1), rd))
 }
 
 /// `addWorkingDays(s, n, kind)`: the day n working days on (Legislation Act s13 days for "ftaa", RMA s2 days for "rma") and the basis.
@@ -490,7 +494,8 @@ pub fn pct(a: f64, b: f64) -> Option<f64> {
 /// `LETTERS.indexOf(a) > LETTERS.indexOf(b)`: level of service a is worse than b.
 #[must_use]
 pub fn los_worse(a: &str, b: &str) -> bool {
-    let idx = |x: &str| ["A", "B", "C", "D", "E", "F"].iter().position(|l| *l == x).map_or(-1, |i| i as i32);
+    // None (indexOf's -1) orders below every Some, as -1 is below every index
+    let idx = |x: &str| ["A", "B", "C", "D", "E", "F"].iter().position(|l| *l == x);
     idx(a) > idx(b)
 }
 

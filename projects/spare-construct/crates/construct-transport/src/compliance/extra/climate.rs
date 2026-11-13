@@ -12,15 +12,14 @@ use crate::util::fmt;
 #[must_use]
 pub fn climate(p: &V, sc: Option<&V>) -> V {
     let sc = sc.unwrap_or_else(|| active_sc(p));
-    let f = p.g("feeds").g("hazards").g(&sc.g("id").s());
-    let rows: Option<&V> = if f.t() && f.g("rows").is_arr() { Some(f.g("rows")) } else { None };
+    let feed = p.g("feeds").g("hazards").g(&sc.g("id").s());
+    let rows: Option<&V> = if feed.t() && feed.g("rows").is_arr() { Some(feed.g("rows")) } else { None };
     let out: Vec<V> = rows
-        .map(crate::compliance::jv::Jx::items)
-        .unwrap_or(&[])
+        .map_or(&[][..], crate::compliance::jv::Jx::items)
         .iter()
         .map(|r| {
-            let l = sc.g("links").g(&r.g("link").s());
-            let vest = if l.t() { Some(l.g("status").eq_s("proposed")) } else { None };
+            let link = sc.g("links").g(&r.g("link").s());
+            let vest = if link.t() { Some(link.g("status").eq_s("proposed")) } else { None };
             let assess = if r.g("only").t() {
                 "Only access: confirm an alternative route in a flood event or raise the road above the design flood level"
             } else if vest == Some(true) {
@@ -28,15 +27,15 @@ pub fn climate(p: &V, sc: Option<&V>) -> V {
             } else {
                 "Relied-on road: note the hazard and the detour"
             };
-            let mut o = if r.is_obj() { r.clone() } else { V::object() };
+            let mut row = if r.is_obj() { r.clone() } else { V::object() };
             match vest {
-                Some(v) => o.set("vest", V::Bool(v)),
+                Some(v) => row.set("vest", V::Bool(v)),
                 None => {
-                    o.remove("vest");
+                    row.remove("vest");
                 }
             }
-            o.set("assess", st(assess));
-            o
+            row.set("assess", st(assess));
+            row
         })
         .collect();
     jobj! {

@@ -16,10 +16,12 @@ use super::html::{ReportCtx, p_, report_table};
 use super::jv::{Jx, V, csv, st};
 use super::record::{active_sc, num, numf, recheck, regime, stamp, state};
 use super::{extra, record};
+use crate::jsnum::{f64_to_usize, usize_to_f64};
 use crate::util::{esc, fmt};
+use std::fmt::Write as _;
 
 fn t(head: &[&str], rows: Vec<Vec<String>>) -> String {
-    report_table(head, &rows)
+    report_table(head, rows)
 }
 
 fn d_(id: &str, p: &V) -> String {
@@ -49,170 +51,228 @@ pub const REPORT_IDS: &[&str] = &[
     "compliance-operators", "compliance-standards", "compliance-expert", "compliance-timeline", "compliance-checklist",
 ];
 
+/// The report section "report-regulatory".
+fn sec_regulatory(p: &V) -> String {
+    let s = stamp(p, &V::Null);
+    let a = authorities(p, &V::Null);
+    let sg = sign_state(p);
+    format!("{}{}{}\n        <h3>Authorities</h3>{}{}{}{}{}{}",
+        if sg.g("watermark").t() { format!("<p class=\"warn\"><b>{}</b></p>", e(sg.g("watermark"))) } else { String::new() },
+        t(&["Item", "Value"], s.g("lines").items().iter().map(|l| vec![e(l.ix(0)), e(l.ix(1))]).collect()),
+        if recheck(p).g("show").t() { format!("<p class=\"warn\"><b>{}.</b></p>", e(table("REGIME.recheck"))) } else { String::new() },
+        t(&["Role", "Body", "Basis"], a.g("rows").items().iter().map(|r| vec![e(r.g("role")), e(r.g("name")), e(r.g("basis"))]).collect()),
+        if a.g("transitionalText").t() { p_(&a.g("transitionalText").s()) } else { String::new() },
+        if a.g("requiring").t() { p_(&a.g("requiring").s()) } else { String::new() },
+        p_(&a.g("arcf").s()), d_("D10", p), d_("D11", p))
+}
+
+/// The report section "compliance-model-status".
+fn sec_model_status(p: &V) -> String {
+    let m: Vec<V> = ["AM", "PM"].iter().map(|per| engine::model_status(p, per)).collect();
+    let s = p.g("settings").g("tmdg");
+    let std = engine::standards_table();
+    let cat = if s.g("category").t() { s.g("category").s() } else { "E".into() }.to_uppercase();
+    let just = if s.g("justification").t() { s.g("justification").s() } else { "[author to justify the TMDG category (Settings \u{203a} Calibration and validation \u{203a} Why this category)]".into() };
+    format!("{}{}\n        {}{}{}{}",
+        t(&["Period", "Status", "TMDG category", "Date"], m.iter().map(|x| vec![x.g("period").sn(), e(x.g("label")), e(x.g("category")), esc(&if x.g("date").t() { x.g("date").s() } else { "\u{2013}".into() })]).collect()),
+        p_(&format!("TMDG category {cat}. Justification: {just}")), p_(&std.g("tmdg").g("standing").s()),
+        if p.g("data").g("msm").g("links").t() { String::new() } else { p_(&std.g("msm").g("notChecked").s()) }, d_("D6", p), d_("D7", p))
+}
+
+/// The report section "compliance-e27".
+fn sec_e27(p: &V) -> String {
+    let ee = e27(p);
+    let a: Vec<V> = state(p).g("access").items().iter().map(|x| access_check(p, x, active_sc(p))).collect();
+    let rows: Vec<Vec<String>> = ee.g("rows").items().iter().filter(|r| r.g("q").n() > 0.0 || r.g("exceeded").t()).map(|r| vec![r.g("id").sn(), format!("{} {}", num(r.g("thr"), 0), e(r.g("unit"))), num(r.g("q"), 0), if r.g("exceeded").t() { "Yes".into() } else { "No".into() }, r.g("tier").sn(), e(r.g("consequence"))]).collect();
+    let infr: Vec<Vec<String>> = a.iter().flat_map(|x| x.g("flags").items().iter().map(|f| vec![e(x.g("name")), e(f.g("rule")), f.g("status").sn(), e(f.g("text"))]).collect::<Vec<_>>()).collect();
+    format!("{}{}{}\n        {}\n        {}{}{}{}<p class=\"note\"><em>{}</em></p>\n        {}{}",
+        if ee.g("redirect").t() { p_(&format!("{}.", ee.g("redirect").g("text").s())) } else { String::new() },
+        if ee.g("exempt").t() { p_(&format!("{}.", ee.g("exempt").g("text").s())) } else { String::new() },
+        if ee.g("pc120").t() { format!("{}<p class=\"note\">{}</p>", p_(&ee.g("pc120").g("text").s()), e(ee.g("pc120").g("status"))) } else { String::new() },
+        t(&["Rule", "Threshold", "Proposal quantity", "Exceeded", "Tier", "Consequence"], rows),
+        p_(&format!("{}: {}", ee.g("catchAll").g("id").s(), ee.g("catchAll").g("why").s())),
+        if ee.g("tier").t() { p_(&ee.g("consequence").s()) } else { String::new() },
+        ee.g("notes").items().iter().map(|n| p_(&n.s())).collect::<String>(), p_(&ee.g("wording").s()), e(ee.g("version")),
+        if a.iter().any(|x| x.g("flags").jlen() > 0) { format!("<h3>Access infringements (E27.6.4)</h3>{}", t(&["Access", "Rule", "Status", "Finding"], infr)) } else { String::new() }, d_("D13", p))
+}
+
+/// The report section "compliance-discretion".
+fn sec_discretion(p: &V) -> String {
+    let ee = e27(p);
+    let r = regime(p);
+    let tier = ee.g("tier").n();
+    let a = if ee.g("tier").t() && tier == 1.0 { p_(&format!("{}. {}", table("E27.tier1Scope").s(), ee.g("consequence").s())) } else if ee.g("tier").t() && tier == 2.0 { p_(&format!("{}.", table("E27.tier2Scope").s())) } else { p_("No E27.6.1 matters of discretion are triggered.") };
+    format!("{}{}{}\n        {}\n        <h3>Objectives and policies (E27.2, E27.3)</h3>{}\n        <p class=\"note\">The objectives and policies are paraphrased; quote the plan text in the evaluation.</p>",
+        a, if ee.g("supplementary").t() { p_(&format!("Network level-of-service sections are {}.", table("E27.supplementary").s())) } else { String::new() }, p_(&format!("{}.", table("E27.s104C").s())),
+        if r.g("side").eq_s("transition") { p_("For a district land use consent lodged from 30 October 2026, the effects listed in s104(1A) are disregarded (s104(1A), s92(2AA)), and Planning Act and NEA instruments are not relied on (s104(1C)).") } else { String::new() },
+        t(&["Provision", "Applies", "Evidence"], ee.g("matrix").items().iter().map(|m| vec![format!("{} {}", m.g("ref").sn(), e(m.g("text"))), if m.g("applies").t() { "Yes".into() } else { format!("No ({})", e(m.g("why"))) }, esc(&m.g("evidence").items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join("; "))]).collect()))
+}
+
+/// The report section "compliance-scope".
+fn sec_scope(p: &V) -> String {
+    let i = ita_scope(p);
+    let memo = scoping_memo(p, active_sc(p));
+    let pa = i.g("paragraph");
+    format!("{}{}\n        {}\n        <h3>Proportionality statement</h3>{}{}\n        {}{}\n        <h3>Scoping memo</h3>{}{}",
+        i.g("aup").items().iter().map(|x| p_(&x.s())).collect::<String>(),
+        if i.g("at").jlen() > 0 { format!("<h3>AT ITA Guidelines 2025 v2: ITA likely</h3><ul>{}</ul>", i.g("at").items().iter().fold(String::new(), |mut out, x| {
+        // Writing to a String cannot fail
+        let _ = write!(out, "<li>{}</li>", esc(&x.s()));
+        out
+    })) } else { String::new() },
+        if i.g("nzta").t() { format!("<h3>{} Table 1</h3>{}{}{}", e(table("NZTA_T1.label")), p_(&i.g("nzta").g("text").s()), if i.g("depth").t() { p_(&i.g("depth").g("text").s()) } else { String::new() }, p_(&i.g("nzta").g("order").s())) } else { String::new() },
+        p_(&pa.g("text").s()),
+        if pa.g("confirmed").t() { p_(&format!("Confirmed by {}{}.", if pa.g("by").t() { pa.g("by").s() } else { "the author".into() }, if pa.g("date").t() { format!(" on {}", long_date_v(pa.g("date"))) } else { String::new() })) } else { "<p class=\"warn\">[Not yet confirmed by the author.]</p>".to_string() },
+        t(&["Driver", "Value"], i.g("drivers").items().iter().map(|d| vec![e(d.ix(0)), e(d.ix(1))]).collect()),
+        p_(&format!("Recommended level: {} ({} bands).", i.g("level").s(), record::assumption())),
+        t(&["Item", "Proposed", "Agreed by", "Date"], memo.items().iter().map(|m| vec![e(m.g("label")), e(m.g("value")), e(m.g("by")), e(m.g("date"))]).collect()),
+        d_("D13", p))
+}
+
+/// The report section "compliance-access".
+fn sec_access(p: &V) -> String {
+    let a: Vec<V> = state(p).g("access").items().iter().map(|x| access_check(p, x, active_sc(p))).collect();
+    if a.is_empty() {
+        return String::new();
+    }
+    let rows = a.iter().map(|x| {
+        let mut parts: Vec<String> = x.g("flags").items().iter().map(|f| esc(&format!("{}: {}", f.g("rule").s(), f.g("text").s()))).collect();
+        if x.g("uncheckedText").t() {
+            parts.push(format!("<i>{}</i>", e(x.g("uncheckedText"))));
+        }
+        vec![e(x.g("name")), esc(acc_status(x)), if parts.is_empty() { "No breach found".into() } else { parts.join("<br>") }]
+    }).collect();
+    format!("{}{}{}", t(&["Access", "Status", "Findings"], rows), p_(&format!("{}.", table("ACCESS.nearBasis").s())), d_("D13", p))
+}
+
+/// The report section "compliance-network-scope".
+fn sec_network_scope(p: &V) -> String {
+    let ee = e27(p);
+    if !ee.g("supplementary").t() {
+        return String::new();
+    }
+    let scope = table("E27.tier1Scope").s();
+    let short = super::rx::rx(r"^[^:]+: ", "").replace_with(&scope, "");
+    format!("{}{}", p_(&format!("E27 tier 1: only TA1, T1A, T2A or T3A is exceeded, so the matters of discretion are {short} (E27.8.1(4A), E27.8.2(3A)).")),
+        p_(&format!("The network level-of-service sections that follow (extent of effects, junction performance) are marked \"{}\". {}.", table("E27.supplementary").s(), table("E27.s104C").s())))
+}
+
+/// The report section "compliance-sh".
+fn sec_sh(p: &V) -> String {
+    let x = sh_check(p, active_sc(p));
+    if !x.g("inArea").t() && !x.g("involved").t() {
+        return String::new();
+    }
+    let rows = x.g("rows");
+    let d12 = super::rx::rx(r"\[[^\]]*\]", "").replace_with(&d_("D12", p), "an NZTA access application");
+    format!("{}\n        {}\n        {}\n        {}{}\n        {}{}",
+        if x.g("triggers").jlen() > 0 { format!("<ul>{}</ul>", x.g("triggers").items().iter().fold(String::new(), |mut out, v| {
+        // Writing to a String cannot fail
+        let _ = write!(out, "<li>{}</li>", esc(&v.s()));
+        out
+    })) } else { p_("No NZTA trigger case found.") },
+        t(&["Approval", "Needed"], x.g("approvals").items().iter().map(|a| vec![e(a.g("label")), if a.g("needed").t() { "Yes".into() } else if a.g("check").t() { "Check".into() } else { "No".into() }]).collect()),
+        if rows.jlen() > 0 {
+            t(&["Link", "AM with (veh/h)", "AM without (veh/h)", "PM with (veh/h)", "PM without (veh/h)", "With (veh/day)", "HCV %", "Pavement"],
+                rows.items().iter().take(40).map(|r| vec![esc(&format!("{} {}", r.g("ref").sn(), r.g("name").sn())), nvalue(r.g("per").g("AM").g("with")), nvalue(r.g("per").g("AM").g("without")), nvalue(r.g("per").g("PM").g("with")), nvalue(r.g("per").g("PM").g("without")), nvalue(r.g("dayWith")), num(r.g("hvPct"), 1),
+                    if r.g("pavement").t() { format!("{}{}{}", e(r.g("pavement").g("text")), if r.g("pavement").g("flagged").t() { ": pavement assessment needed" } else { "" }, if r.g("pavement").g("proxy").t() { " (total-traffic proxy)" } else { "" }) } else { "\u{2013}".into() }]).collect()) + &p_(&x.g("pavementBasis").s())
+        } else { String::new() },
+        if x.g("tech").jlen() > 0 { t(&["Access", "Required SISD (m)", "Basis", "Movements a day", "Access type"], x.g("tech").items().iter().map(|a| vec![e(a.g("name")), e(a.g("sisd").g("m")), e(a.g("sisd").g("basis")), format!("{} ({})", nvalue(a.g("daily")), e(a.g("volBasis"))), e(a.g("type").g("text"))]).collect()) } else { String::new() },
+        if x.g("noise").t() { p_("A noise-sensitive activity is within 100 m of a state highway: assess reverse sensitivity and acoustic design (NZTA PPM Managing effects s5.2.2).") } else { String::new() },
+        p_(&x.g("labels").items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join("; ")), d12)
+}
+
+/// The report section "compliance-fds".
+fn sec_fds(p: &V) -> String {
+    let x = fds_check(p);
+    let c = state(p);
+    if !x.g("applies").t() {
+        return String::new();
+    }
+    format!("<p><b>{}</b></p>{}{}{}", e(x.g("heading")), p_(&x.g("paragraph").s()),
+        if x.g("fundingPrompt").t() { p_(&if c.g("fds").g("fundingGap").t() { c.g("fds").g("fundingGap").s() } else { format!("[{}]", x.g("fundingPrompt").s()) }) } else { String::new() },
+        if c.g("fds").g("pair").t() { t(&["Measure", "With", "Without", "Change"], c.g("fds").g("pair").g("rows").items().iter().map(|r| vec![e(r.g("label")), num(r.g("with"), f64_to_usize(r.g("dp").n())), num(r.g("without"), f64_to_usize(r.g("dp").n())), if r.g("d").nullish() { "\u{2013}".into() } else { fmt::signed(r.g("d").n(), f64_to_usize(r.g("dp").n())) }]).collect()) } else { String::new() })
+}
+
+/// The report section "compliance-operators".
+fn sec_operators(p: &V) -> String {
+    let o = operators(p);
+    format!("{}{}{}\n        {}{}{}", p_(&o.g("label").s()), if o.g("note").t() { format!("<p class=\"warn\">{}</p>", e(o.g("note"))) } else { String::new() },
+        t(&["Operator", "Links in area", "Links over threshold", "Junctions over threshold", "Affected"], o.g("rows").items().iter().map(|r| vec![e(r.g("name")), num(r.g("assets"), 0), numf(usize_to_f64(r.g("links").jlen()), 0), numf(usize_to_f64(r.g("nodes").jlen()), 0), if r.g("affected").t() { "Yes".into() } else { "No".into() }]).collect()),
+        if regime(p).g("side").eq_s("transition") { p_("For applications lodged from 30 October 2026, AUP cross-references to s95A(9) have no target (repealed); s95B(10) remains.") } else { String::new() }, d_("D11", p), d_("D13", p))
+}
+
+/// The report section "compliance-standards".
+fn sec_standards(p: &V) -> String {
+    let sup = supersession(p, &V::Null);
+    format!("{}{}{}", sup.items().iter().fold(String::new(), |mut out, s| {
+        // Writing to a String cannot fail
+        let _ = write!(out, "<p class=\"warn\">{}</p>", e(s.g("text")));
+        out
+    }),
+        t(&["Document", "Edition", "Effective", "Next known change", "Checked against source"], table("STANDARDS").items().iter().map(|s| vec![e(s.g("doc")), e(s.g("edition")), esc(&if s.g("effective").t() { super::dates::long_date(&s.g("effective").s()) } else { "\u{2013}".into() }),
+            esc(&if s.g("next").t() { format!("{}{}", if s.g("next").g("date").t() { format!("{}: ", super::dates::long_date(&s.g("next").g("date").s())) } else { String::new() }, s.g("next").g("what").s()) } else { "\u{2013}".into() }), if s.g("verified").t() { "Yes".into() } else { "No".into() }]).collect()),
+        p_(&table("PLANNING_ONLY").s()))
+}
+
+/// The report section "compliance-expert".
+fn sec_expert(p: &V) -> String {
+    let g = appendix_g(p);
+    let roles = table("ROLES");
+    format!("{}{}{}\n        <h3>Sign-off</h3>{}{}",
+        if g.g("watermark").t() { format!("<p class=\"warn\"><b>{}</b></p>", e(g.g("watermark"))) } else { String::new() },
+        if g.g("prompt").t() { format!("<p class=\"warn\">{}</p>", e(g.g("prompt"))) } else { String::new() },
+        g.g("sections").items().iter().fold(String::new(), |mut out, s| {
+            // Writing to a String cannot fail
+            let _ = write!(out, "<h3>{}</h3><p>{}</p>", esc(&s.ix(0).s()), esc(&s.ix(1).s()).replace('\n', "<br>"));
+            out
+        }),
+        if g.g("signoffs").jlen() > 0 { t(&["Role", "Name", "Qualifications", "Date"], g.g("signoffs").items().iter().map(|s| vec![roles.g(&s.g("role").s()).sn(), e(s.g("name")), e(s.g("quals")), esc(&long_date_v(s.g("date")))]).collect()) } else { p_("Not signed off.") }, d_("D2", p))
+}
+
+/// The report section "compliance-timeline".
+fn sec_timeline(p: &V) -> String {
+    let k = clocks(p);
+    if k.jlen() > 0 {
+        t(&["Event", "Date", "Rule", "Due", "What"], k.items().iter().flat_map(|c| c.g("rows").items().iter().map(|r| vec![e(c.g("label")), esc(&long_date_v(c.g("date"))), e(r.g("id")), esc(&long_date_v(r.g("date"))), e(r.g("text"))]).collect::<Vec<_>>()).collect())
+            + &p_("Working days exclude weekends, public holidays and the statutory Christmas period (RMA s2; Legislation Act 2019 s13 for the FTAA).")
+    } else {
+        p_("No statutory events recorded.")
+    }
+}
+
+/// The report section "compliance-checklist".
+fn sec_checklist(p: &V) -> String {
+    let all = checklist(p);
+    let l: Vec<&V> = all.items().iter().filter(|i| i.g("applies").t()).collect();
+    let ck_state = |s: &str| match s { "done" => "Done", "todo" => "To do", "warn" => "Check", "na" => "Not applicable", o => o }.to_string();
+    format!("{}<p class=\"note\">Items that do not apply to the {} pathway are left out ({} of {}).</p>",
+        t(&["ID", "Item", "Source", "Status", "Spare Construct finding or note"], l.iter().map(|i| {
+            let src = format!("{}{}", i.g("source").s(), if i.g("refNote").t() { format!(" (checked: {})", i.g("refNote").s()) } else { String::new() });
+            let note: Vec<String> = [i.g("text").s(), i.g("note").s()].into_iter().filter(|s| !s.is_empty()).collect();
+            vec![i.g("id").sn(), e(i.g("item")), esc(&src), esc(&ck_state(&i.g("state").s())), esc(&note.join(" \u{b7} "))]
+        }).collect()),
+        esc(&regime(p).g("pathwayLabel").s().to_lowercase()), all.jlen().saturating_sub(l.len()), table("CHECKLIST").jlen())
+}
+
 /// The HTML of a Compliance report section (`REPORT[id].render(P)`), None when the id is not one of this module's. A section with nothing to say gives an empty string.
 #[must_use]
 pub fn report(id: &str, p: &V) -> Option<String> {
     Some(match id {
-        "report-regulatory" => {
-            let s = stamp(p, &V::Null);
-            let a = authorities(p, &V::Null);
-            let sg = sign_state(p);
-            format!("{}{}{}\n        <h3>Authorities</h3>{}{}{}{}{}{}",
-                if sg.g("watermark").t() { format!("<p class=\"warn\"><b>{}</b></p>", e(sg.g("watermark"))) } else { String::new() },
-                t(&["Item", "Value"], s.g("lines").items().iter().map(|l| vec![e(l.ix(0)), e(l.ix(1))]).collect()),
-                if recheck(p).g("show").t() { format!("<p class=\"warn\"><b>{}.</b></p>", e(table("REGIME.recheck"))) } else { String::new() },
-                t(&["Role", "Body", "Basis"], a.g("rows").items().iter().map(|r| vec![e(r.g("role")), e(r.g("name")), e(r.g("basis"))]).collect()),
-                if a.g("transitionalText").t() { p_(&a.g("transitionalText").s()) } else { String::new() },
-                if a.g("requiring").t() { p_(&a.g("requiring").s()) } else { String::new() },
-                p_(&a.g("arcf").s()), d_("D10", p), d_("D11", p))
-        }
-        "compliance-model-status" => {
-            let m: Vec<V> = ["AM", "PM"].iter().map(|per| engine::model_status(p, per)).collect();
-            let s = p.g("settings").g("tmdg");
-            let std = engine::standards_table();
-            let cat = if s.g("category").t() { s.g("category").s() } else { "E".into() }.to_uppercase();
-            let just = if s.g("justification").t() { s.g("justification").s() } else { "[author to justify the TMDG category (Settings \u{203a} Calibration and validation \u{203a} Why this category)]".into() };
-            format!("{}{}\n        {}{}{}{}",
-                t(&["Period", "Status", "TMDG category", "Date"], m.iter().map(|x| vec![x.g("period").sn(), e(x.g("label")), e(x.g("category")), esc(&if x.g("date").t() { x.g("date").s() } else { "\u{2013}".into() })]).collect()),
-                p_(&format!("TMDG category {cat}. Justification: {just}")), p_(&std.g("tmdg").g("standing").s()),
-                if p.g("data").g("msm").g("links").t() { String::new() } else { p_(&std.g("msm").g("notChecked").s()) }, d_("D6", p), d_("D7", p))
-        }
-        "compliance-e27" => {
-            let ee = e27(p);
-            let a: Vec<V> = state(p).g("access").items().iter().map(|x| access_check(p, x, active_sc(p))).collect();
-            let rows: Vec<Vec<String>> = ee.g("rows").items().iter().filter(|r| r.g("q").n() > 0.0 || r.g("exceeded").t()).map(|r| vec![r.g("id").sn(), format!("{} {}", num(r.g("thr"), 0), e(r.g("unit"))), num(r.g("q"), 0), if r.g("exceeded").t() { "Yes".into() } else { "No".into() }, r.g("tier").sn(), e(r.g("consequence"))]).collect();
-            let infr: Vec<Vec<String>> = a.iter().flat_map(|x| x.g("flags").items().iter().map(|f| vec![e(x.g("name")), e(f.g("rule")), f.g("status").sn(), e(f.g("text"))]).collect::<Vec<_>>()).collect();
-            format!("{}{}{}\n        {}\n        {}{}{}{}<p class=\"note\"><em>{}</em></p>\n        {}{}",
-                if ee.g("redirect").t() { p_(&format!("{}.", ee.g("redirect").g("text").s())) } else { String::new() },
-                if ee.g("exempt").t() { p_(&format!("{}.", ee.g("exempt").g("text").s())) } else { String::new() },
-                if ee.g("pc120").t() { format!("{}<p class=\"note\">{}</p>", p_(&ee.g("pc120").g("text").s()), e(ee.g("pc120").g("status"))) } else { String::new() },
-                t(&["Rule", "Threshold", "Proposal quantity", "Exceeded", "Tier", "Consequence"], rows),
-                p_(&format!("{}: {}", ee.g("catchAll").g("id").s(), ee.g("catchAll").g("why").s())),
-                if ee.g("tier").t() { p_(&ee.g("consequence").s()) } else { String::new() },
-                ee.g("notes").items().iter().map(|n| p_(&n.s())).collect::<String>(), p_(&ee.g("wording").s()), e(ee.g("version")),
-                if a.iter().any(|x| x.g("flags").jlen() > 0) { format!("<h3>Access infringements (E27.6.4)</h3>{}", t(&["Access", "Rule", "Status", "Finding"], infr)) } else { String::new() }, d_("D13", p))
-        }
-        "compliance-discretion" => {
-            let ee = e27(p);
-            let r = regime(p);
-            let tier = ee.g("tier").n();
-            let a = if ee.g("tier").t() && tier == 1.0 { p_(&format!("{}. {}", table("E27.tier1Scope").s(), ee.g("consequence").s())) } else if ee.g("tier").t() && tier == 2.0 { p_(&format!("{}.", table("E27.tier2Scope").s())) } else { p_("No E27.6.1 matters of discretion are triggered.") };
-            format!("{}{}{}\n        {}\n        <h3>Objectives and policies (E27.2, E27.3)</h3>{}\n        <p class=\"note\">The objectives and policies are paraphrased; quote the plan text in the evaluation.</p>",
-                a, if ee.g("supplementary").t() { p_(&format!("Network level-of-service sections are {}.", table("E27.supplementary").s())) } else { String::new() }, p_(&format!("{}.", table("E27.s104C").s())),
-                if r.g("side").eq_s("transition") { p_("For a district land use consent lodged from 30 October 2026, the effects listed in s104(1A) are disregarded (s104(1A), s92(2AA)), and Planning Act and NEA instruments are not relied on (s104(1C)).") } else { String::new() },
-                t(&["Provision", "Applies", "Evidence"], ee.g("matrix").items().iter().map(|m| vec![format!("{} {}", m.g("ref").sn(), e(m.g("text"))), if m.g("applies").t() { "Yes".into() } else { format!("No ({})", e(m.g("why"))) }, esc(&m.g("evidence").items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join("; "))]).collect()))
-        }
-        "compliance-scope" => {
-            let i = ita_scope(p);
-            let memo = scoping_memo(p, active_sc(p));
-            let pa = i.g("paragraph");
-            format!("{}{}\n        {}\n        <h3>Proportionality statement</h3>{}{}\n        {}{}\n        <h3>Scoping memo</h3>{}{}",
-                i.g("aup").items().iter().map(|x| p_(&x.s())).collect::<String>(),
-                if i.g("at").jlen() > 0 { format!("<h3>AT ITA Guidelines 2025 v2: ITA likely</h3><ul>{}</ul>", i.g("at").items().iter().map(|x| format!("<li>{}</li>", esc(&x.s()))).collect::<String>()) } else { String::new() },
-                if i.g("nzta").t() { format!("<h3>{} Table 1</h3>{}{}{}", e(table("NZTA_T1.label")), p_(&i.g("nzta").g("text").s()), if i.g("depth").t() { p_(&i.g("depth").g("text").s()) } else { String::new() }, p_(&i.g("nzta").g("order").s())) } else { String::new() },
-                p_(&pa.g("text").s()),
-                if pa.g("confirmed").t() { p_(&format!("Confirmed by {}{}.", if pa.g("by").t() { pa.g("by").s() } else { "the author".into() }, if pa.g("date").t() { format!(" on {}", long_date_v(pa.g("date"))) } else { String::new() })) } else { "<p class=\"warn\">[Not yet confirmed by the author.]</p>".to_string() },
-                t(&["Driver", "Value"], i.g("drivers").items().iter().map(|d| vec![e(d.ix(0)), e(d.ix(1))]).collect()),
-                p_(&format!("Recommended level: {} ({} bands).", i.g("level").s(), record::assumption())),
-                t(&["Item", "Proposed", "Agreed by", "Date"], memo.items().iter().map(|m| vec![e(m.g("label")), e(m.g("value")), e(m.g("by")), e(m.g("date"))]).collect()),
-                d_("D13", p))
-        }
-        "compliance-access" => {
-            let a: Vec<V> = state(p).g("access").items().iter().map(|x| access_check(p, x, active_sc(p))).collect();
-            if a.is_empty() {
-                return Some(String::new());
-            }
-            let rows = a.iter().map(|x| {
-                let mut parts: Vec<String> = x.g("flags").items().iter().map(|f| esc(&format!("{}: {}", f.g("rule").s(), f.g("text").s()))).collect();
-                if x.g("uncheckedText").t() {
-                    parts.push(format!("<i>{}</i>", e(x.g("uncheckedText"))));
-                }
-                vec![e(x.g("name")), esc(acc_status(x)), if parts.is_empty() { "No breach found".into() } else { parts.join("<br>") }]
-            }).collect();
-            format!("{}{}{}", t(&["Access", "Status", "Findings"], rows), p_(&format!("{}.", table("ACCESS.nearBasis").s())), d_("D13", p))
-        }
-        "compliance-network-scope" => {
-            let ee = e27(p);
-            if !ee.g("supplementary").t() {
-                return Some(String::new());
-            }
-            let scope = table("E27.tier1Scope").s();
-            let short = super::rx::rx(r"^[^:]+: ", "").replace_with(&scope, "");
-            format!("{}{}", p_(&format!("E27 tier 1: only TA1, T1A, T2A or T3A is exceeded, so the matters of discretion are {short} (E27.8.1(4A), E27.8.2(3A)).")),
-                p_(&format!("The network level-of-service sections that follow (extent of effects, junction performance) are marked \"{}\". {}.", table("E27.supplementary").s(), table("E27.s104C").s())))
-        }
-        "compliance-sh" => {
-            let x = sh_check(p, active_sc(p));
-            if !x.g("inArea").t() && !x.g("involved").t() {
-                return Some(String::new());
-            }
-            let rows = x.g("rows");
-            let d12 = super::rx::rx(r"\[[^\]]*\]", "").replace_with(&d_("D12", p), "an NZTA access application");
-            format!("{}\n        {}\n        {}\n        {}{}\n        {}{}",
-                if x.g("triggers").jlen() > 0 { format!("<ul>{}</ul>", x.g("triggers").items().iter().map(|v| format!("<li>{}</li>", esc(&v.s()))).collect::<String>()) } else { p_("No NZTA trigger case found.") },
-                t(&["Approval", "Needed"], x.g("approvals").items().iter().map(|a| vec![e(a.g("label")), if a.g("needed").t() { "Yes".into() } else if a.g("check").t() { "Check".into() } else { "No".into() }]).collect()),
-                if rows.jlen() > 0 {
-                    t(&["Link", "AM with (veh/h)", "AM without (veh/h)", "PM with (veh/h)", "PM without (veh/h)", "With (veh/day)", "HCV %", "Pavement"],
-                        rows.items().iter().take(40).map(|r| vec![esc(&format!("{} {}", r.g("ref").sn(), r.g("name").sn())), nvalue(r.g("per").g("AM").g("with")), nvalue(r.g("per").g("AM").g("without")), nvalue(r.g("per").g("PM").g("with")), nvalue(r.g("per").g("PM").g("without")), nvalue(r.g("dayWith")), num(r.g("hvPct"), 1),
-                            if r.g("pavement").t() { format!("{}{}{}", e(r.g("pavement").g("text")), if r.g("pavement").g("flagged").t() { ": pavement assessment needed" } else { "" }, if r.g("pavement").g("proxy").t() { " (total-traffic proxy)" } else { "" }) } else { "\u{2013}".into() }]).collect()) + &p_(&x.g("pavementBasis").s())
-                } else { String::new() },
-                if x.g("tech").jlen() > 0 { t(&["Access", "Required SISD (m)", "Basis", "Movements a day", "Access type"], x.g("tech").items().iter().map(|a| vec![e(a.g("name")), e(a.g("sisd").g("m")), e(a.g("sisd").g("basis")), format!("{} ({})", nvalue(a.g("daily")), e(a.g("volBasis"))), e(a.g("type").g("text"))]).collect()) } else { String::new() },
-                if x.g("noise").t() { p_("A noise-sensitive activity is within 100 m of a state highway: assess reverse sensitivity and acoustic design (NZTA PPM Managing effects s5.2.2).") } else { String::new() },
-                p_(&x.g("labels").items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join("; ")), d12)
-        }
-        "compliance-fds" => {
-            let x = fds_check(p);
-            let c = state(p);
-            if !x.g("applies").t() {
-                return Some(String::new());
-            }
-            format!("<p><b>{}</b></p>{}{}{}", e(x.g("heading")), p_(&x.g("paragraph").s()),
-                if x.g("fundingPrompt").t() { p_(&if c.g("fds").g("fundingGap").t() { c.g("fds").g("fundingGap").s() } else { format!("[{}]", x.g("fundingPrompt").s()) }) } else { String::new() },
-                if c.g("fds").g("pair").t() { t(&["Measure", "With", "Without", "Change"], c.g("fds").g("pair").g("rows").items().iter().map(|r| vec![e(r.g("label")), num(r.g("with"), r.g("dp").n() as usize), num(r.g("without"), r.g("dp").n() as usize), if r.g("d").nullish() { "\u{2013}".into() } else { fmt::signed(r.g("d").n(), r.g("dp").n() as usize) }]).collect()) } else { String::new() })
-        }
-        "compliance-operators" => {
-            let o = operators(p);
-            format!("{}{}{}\n        {}{}{}", p_(&o.g("label").s()), if o.g("note").t() { format!("<p class=\"warn\">{}</p>", e(o.g("note"))) } else { String::new() },
-                t(&["Operator", "Links in area", "Links over threshold", "Junctions over threshold", "Affected"], o.g("rows").items().iter().map(|r| vec![e(r.g("name")), num(r.g("assets"), 0), numf(r.g("links").jlen() as f64, 0), numf(r.g("nodes").jlen() as f64, 0), if r.g("affected").t() { "Yes".into() } else { "No".into() }]).collect()),
-                if regime(p).g("side").eq_s("transition") { p_("For applications lodged from 30 October 2026, AUP cross-references to s95A(9) have no target (repealed); s95B(10) remains.") } else { String::new() }, d_("D11", p), d_("D13", p))
-        }
-        "compliance-standards" => {
-            let sup = supersession(p, &V::Null);
-            format!("{}{}{}", sup.items().iter().map(|s| format!("<p class=\"warn\">{}</p>", e(s.g("text")))).collect::<String>(),
-                t(&["Document", "Edition", "Effective", "Next known change", "Checked against source"], table("STANDARDS").items().iter().map(|s| vec![e(s.g("doc")), e(s.g("edition")), esc(&if s.g("effective").t() { super::dates::long_date(&s.g("effective").s()) } else { "\u{2013}".into() }),
-                    esc(&if s.g("next").t() { format!("{}{}", if s.g("next").g("date").t() { format!("{}: ", super::dates::long_date(&s.g("next").g("date").s())) } else { String::new() }, s.g("next").g("what").s()) } else { "\u{2013}".into() }), if s.g("verified").t() { "Yes".into() } else { "No".into() }]).collect()),
-                p_(&table("PLANNING_ONLY").s()))
-        }
-        "compliance-expert" => {
-            let g = appendix_g(p);
-            let roles = table("ROLES");
-            format!("{}{}{}\n        <h3>Sign-off</h3>{}{}",
-                if g.g("watermark").t() { format!("<p class=\"warn\"><b>{}</b></p>", e(g.g("watermark"))) } else { String::new() },
-                if g.g("prompt").t() { format!("<p class=\"warn\">{}</p>", e(g.g("prompt"))) } else { String::new() },
-                g.g("sections").items().iter().map(|s| format!("<h3>{}</h3><p>{}</p>", esc(&s.ix(0).s()), esc(&s.ix(1).s()).replace('\n', "<br>"))).collect::<String>(),
-                if g.g("signoffs").jlen() > 0 { t(&["Role", "Name", "Qualifications", "Date"], g.g("signoffs").items().iter().map(|s| vec![roles.g(&s.g("role").s()).sn(), e(s.g("name")), e(s.g("quals")), esc(&long_date_v(s.g("date")))]).collect()) } else { p_("Not signed off.") }, d_("D2", p))
-        }
-        "compliance-timeline" => {
-            let k = clocks(p);
-            if k.jlen() > 0 {
-                t(&["Event", "Date", "Rule", "Due", "What"], k.items().iter().flat_map(|c| c.g("rows").items().iter().map(|r| vec![e(c.g("label")), esc(&long_date_v(c.g("date"))), e(r.g("id")), esc(&long_date_v(r.g("date"))), e(r.g("text"))]).collect::<Vec<_>>()).collect())
-                    + &p_("Working days exclude weekends, public holidays and the statutory Christmas period (RMA s2; Legislation Act 2019 s13 for the FTAA).")
-            } else {
-                p_("No statutory events recorded.")
-            }
-        }
-        "compliance-checklist" => {
-            let all = checklist(p);
-            let l: Vec<&V> = all.items().iter().filter(|i| i.g("applies").t()).collect();
-            let ck_state = |s: &str| match s { "done" => "Done", "todo" => "To do", "warn" => "Check", "na" => "Not applicable", o => o }.to_string();
-            format!("{}<p class=\"note\">Items that do not apply to the {} pathway are left out ({} of {}).</p>",
-                t(&["ID", "Item", "Source", "Status", "Spare Construct finding or note"], l.iter().map(|i| {
-                    let src = format!("{}{}", i.g("source").s(), if i.g("refNote").t() { format!(" (checked: {})", i.g("refNote").s()) } else { String::new() });
-                    let note: Vec<String> = [i.g("text").s(), i.g("note").s()].into_iter().filter(|s| !s.is_empty()).collect();
-                    vec![i.g("id").sn(), e(i.g("item")), esc(&src), esc(&ck_state(&i.g("state").s())), esc(&note.join(" \u{b7} "))]
-                }).collect()),
-                esc(&regime(p).g("pathwayLabel").s().to_lowercase()), all.jlen() - l.len(), table("CHECKLIST").jlen())
-        }
+        "report-regulatory" => sec_regulatory(p),
+        "compliance-model-status" => sec_model_status(p),
+        "compliance-e27" => sec_e27(p),
+        "compliance-discretion" => sec_discretion(p),
+        "compliance-scope" => sec_scope(p),
+        "compliance-access" => sec_access(p),
+        "compliance-network-scope" => sec_network_scope(p),
+        "compliance-sh" => sec_sh(p),
+        "compliance-fds" => sec_fds(p),
+        "compliance-operators" => sec_operators(p),
+        "compliance-standards" => sec_standards(p),
+        "compliance-expert" => sec_expert(p),
+        "compliance-timeline" => sec_timeline(p),
+        "compliance-checklist" => sec_checklist(p),
         _ => return None,
     })
 }

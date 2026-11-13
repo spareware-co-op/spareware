@@ -30,11 +30,12 @@ pub struct ToLine {
 pub fn to_line(p: &LatLng, pts: &[LatLng], f: &Flat) -> ToLine {
     let q = xy(f, p);
     let mut best = ToLine { d: f64::INFINITY, b: None };
-    for i in 1..pts.len() {
-        let (a, c) = (xy(f, &pts[i - 1]), xy(f, &pts[i]));
-        let r = util::seg_dist(q[0], q[1], a[0], a[1], c[0], c[1]);
-        if r.d < best.d {
-            best = ToLine { d: r.d, b: Some(util::bearing(&pts[i - 1], &pts[i])) };
+    for seg in pts.windows(2) {
+        let [start, end] = seg else { continue };
+        let (s0, s1) = (xy(f, start), xy(f, end));
+        let hit = util::seg_dist(q[0], q[1], s0[0], s0[1], s1[0], s1[1]);
+        if hit.d < best.d {
+            best = ToLine { d: hit.d, b: Some(util::bearing(start, end)) };
         }
     }
     best
@@ -44,17 +45,17 @@ pub fn to_line(p: &LatLng, pts: &[LatLng], f: &Flat) -> ToLine {
 #[must_use]
 pub fn in_ring(ll: &LatLng, ring: &[LatLng]) -> bool {
     let mut inside = false;
-    let n = ring.len();
-    let mut j = n.wrapping_sub(1);
-    for i in 0..n {
-        let (yi, xi) = (ring[i][0], ring[i][1]);
-        let (yj, xj) = (ring[j][0], ring[j][1]);
+    // Each point is paired with the one before it, the first with the last
+    let Some(mut prev) = ring.last() else { return false };
+    for cur in ring {
+        let (yi, xi) = (cur[0], cur[1]);
+        let (yj, xj) = (prev[0], prev[1]);
         let den = yj - yi;
         let den = if den == 0.0 || den.is_nan() { 1e-12 } else { den };
         if ((yi > ll[0]) != (yj > ll[0])) && ll[1] < (xj - xi) * (ll[0] - yi) / den + xi {
             inside = !inside;
         }
-        j = i;
+        prev = cur;
     }
     inside
 }
@@ -75,29 +76,32 @@ pub fn to_polys(p: &LatLng, rings: &[Vec<LatLng>], f: &Flat) -> f64 {
 /// `lineToLine(A, B, f)`: the shortest distance (m) between two polylines (0 where they cross).
 #[must_use]
 pub fn line_to_line(a: &[LatLng], b: &[LatLng], f: &Flat) -> f64 {
-    let a: Vec<[f64; 2]> = a.iter().map(|p| xy(f, p)).collect();
-    let b: Vec<[f64; 2]> = b.iter().map(|p| xy(f, p)).collect();
-    let o = |p: [f64; 2], q: [f64; 2], r: [f64; 2]| (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
-    let pt = |p: [f64; 2], s: [f64; 2], e: [f64; 2]| util::seg_dist(p[0], p[1], s[0], s[1], e[0], e[1]).d;
-    if a.len() == 1 || b.len() == 1 {
-        let (p, l) = if a.len() == 1 { (a[0], &b) } else { (b[0], &a) };
-        let mut d = f64::INFINITY;
-        for i in 1..l.len() {
-            d = math_min(d, pt(p, l[i - 1], l[i]));
+    let line_a: Vec<[f64; 2]> = a.iter().map(|ll| xy(f, ll)).collect();
+    let line_b: Vec<[f64; 2]> = b.iter().map(|ll| xy(f, ll)).collect();
+    let orient = |p0: [f64; 2], p1: [f64; 2], p2: [f64; 2]| (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]);
+    let pt = |at: [f64; 2], s0: [f64; 2], s1: [f64; 2]| util::seg_dist(at[0], at[1], s0[0], s0[1], s1[0], s1[1]).d;
+    if let ([one], other) | (other, [one]) = (line_a.as_slice(), line_b.as_slice()) {
+        let one = *one;
+        let mut dist = f64::INFINITY;
+        for seg in other.windows(2) {
+            if let &[s0, s1] = seg {
+                dist = math_min(dist, pt(one, s0, s1));
+            }
         }
-        return if l.len() == 1 { crate::jsnum::math_hypot(&[p[0] - l[0][0], p[1] - l[0][1]]) } else { d };
+        return if let [only] = other { crate::jsnum::math_hypot(&[one[0] - only[0], one[1] - only[1]]) } else { dist };
     }
-    let mut d = f64::INFINITY;
-    for i in 1..a.len() {
-        for j in 1..b.len() {
-            let (p1, p2, q1, q2) = (a[i - 1], a[i], b[j - 1], b[j]);
-            if (o(q1, q2, p1) > 0.0) != (o(q1, q2, p2) > 0.0) && (o(p1, p2, q1) > 0.0) != (o(p1, p2, q2) > 0.0) {
+    let mut dist = f64::INFINITY;
+    for seg_a in line_a.windows(2) {
+        let &[p1, p2] = seg_a else { continue };
+        for seg_b in line_b.windows(2) {
+            let &[q1, q2] = seg_b else { continue };
+            if (orient(q1, q2, p1) > 0.0) != (orient(q1, q2, p2) > 0.0) && (orient(p1, p2, q1) > 0.0) != (orient(p1, p2, q2) > 0.0) {
                 return 0.0;
             }
-            d = math_min(d, math_min(math_min(pt(p1, q1, q2), pt(p2, q1, q2)), math_min(pt(q1, p1, p2), pt(q2, p1, p2))));
+            dist = math_min(dist, math_min(math_min(pt(p1, q1, q2), pt(p2, q1, q2)), math_min(pt(q1, p1, p2), pt(q2, p1, p2))));
         }
     }
-    d
+    dist
 }
 
 /// The bounding box of a polyline: (south, north, west, east).
@@ -132,12 +136,13 @@ pub fn line_to_polys(pts: &[LatLng], shapes: &[Vec<LatLng>], f: &Flat, within: f
         if !open && pts.iter().any(|p| in_ring(p, r)) {
             return 0.0;
         }
-        let closed: Vec<LatLng> = if !open && r.len() > 2 && (r[0][0] != r[r.len() - 1][0] || r[0][1] != r[r.len() - 1][1]) {
-            let mut c = r.clone();
-            c.push(r[0]);
-            c
-        } else {
-            r.clone()
+        let closed: Vec<LatLng> = match (r.first(), r.last()) {
+            (Some(first), Some(last)) if !open && r.len() > 2 && (first[0] != last[0] || first[1] != last[1]) => {
+                let mut c = r.clone();
+                c.push(*first);
+                c
+            }
+            _ => r.clone(),
         };
         d = math_min(d, line_to_line(pts, &closed, f));
     }
@@ -164,13 +169,13 @@ pub fn bounds_of(sc: &V) -> Option<(f64, f64, f64, f64)> {
 #[must_use]
 pub fn conflate(sc: &V, lines: &[(V, Vec<LatLng>)], radius: f64, bearing: f64) -> Vec<(String, V)> {
     let mut out = Vec::new();
-    let Some(b) = bounds_of(sc) else { return out };
+    let Some(bounds) = bounds_of(sc) else { return out };
     if lines.is_empty() {
         return out;
     }
-    let (bs, bw, bn, be) = b;
+    let (bs, bw, bn, be) = bounds;
     let mid = f64::midpoint(bs, bn);
-    let f = flat_at(mid);
+    let flat = flat_at(mid);
     let pad_lat = 200.0 / 111_320.0;
     let pad_lng = 200.0 / (111_320.0 * crate::jsmath::cos(mid * std::f64::consts::PI / 180.0));
     let near: Vec<(&V, Vec<LatLng>)> = lines
@@ -181,27 +186,33 @@ pub fn conflate(sc: &V, lines: &[(V, Vec<LatLng>)], radius: f64, bearing: f64) -
     if near.is_empty() {
         return out;
     }
-    for l in sc.g("links").vals() {
-        if !sc.g("nodes").has(&l.g("a").s()) || !sc.g("nodes").has(&l.g("b").s()) {
+    for link in sc.g("links").vals() {
+        if !sc.g("nodes").has(&link.g("a").s()) || !sc.g("nodes").has(&link.g("b").s()) {
             continue;
         }
-        let Some(g) = net::geom(sc, l) else { continue };
-        let cum = util::cum_len(&g);
-        let len = cum[cum.len() - 1];
-        if !(len > 0.0) {
+        let Some(geo) = net::geom(sc, link) else { continue };
+        let cum = util::cum_len(&geo);
+        // cum_len always gives at least one entry; NaN (never) would skip the link as a zero length does
+        let len = cum.last().copied().unwrap_or(f64::NAN);
+        if len <= 0.0 || len.is_nan() {
             continue;
         }
         let mut best: Option<&V> = None;
         for (tag, pts) in &near {
-            let mut hits = 0;
-            for s in [0.25, 0.5, 0.75] {
-                let a = util::along(&g, &cum, len * s);
-                let i = a.i.max(0) as usize;
-                let lb = util::bearing(&g[i], &g[i + 1]);
-                let r = to_line(&a.p, pts, &f);
-                let rb = r.b.unwrap_or(f64::NAN);
-                if r.d <= radius && (util::ang_diff(lb, rb) <= bearing || util::ang_diff(lb, rb) >= 180.0 - bearing) {
-                    hits += 1;
+            // Bound: at most one hit for each of the three points
+            let mut hits = 0u32;
+            for frac in [0.25, 0.5, 0.75] {
+                let at = util::along(&geo, &cum, len * frac);
+                let seg = at.i.max(0).unsigned_abs();
+                // A line of positive length has at least two points, so the segment's ends are there; NaN (never) gives no hit
+                let lb = match (geo.get(seg), geo.get(seg.saturating_add(1))) {
+                    (Some(p0), Some(p1)) => util::bearing(p0, p1),
+                    _ => f64::NAN,
+                };
+                let hit = to_line(&at.p, pts, &flat);
+                let rb = hit.b.unwrap_or(f64::NAN);
+                if hit.d <= radius && (util::ang_diff(lb, rb) <= bearing || util::ang_diff(lb, rb) >= 180.0 - bearing) {
+                    hits = hits.saturating_add(1);
                 }
             }
             if hits >= 2 {
@@ -210,7 +221,7 @@ pub fn conflate(sc: &V, lines: &[(V, Vec<LatLng>)], radius: f64, bearing: f64) -
             }
         }
         if let Some(tag) = best {
-            out.push((l.g("id").s(), tag.clone()));
+            out.push((link.g("id").s(), tag.clone()));
         }
     }
     out

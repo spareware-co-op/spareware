@@ -63,7 +63,7 @@ impl Captures {
     /// The whole matched text (`m[0]`).
     #[must_use]
     pub fn text(&self) -> &str {
-        self.groups[0].as_deref().unwrap_or("")
+        self.get(0)
     }
     /// Capture group n as text (`m[n]`), empty for a group that did not take part.
     #[must_use]
@@ -96,9 +96,13 @@ impl Parser<'_> {
     fn peek(&self) -> Option<char> {
         self.s.get(self.i).copied()
     }
+    // Bound: a position in the pattern, which is far shorter than usize::MAX
+    fn advance(&mut self) {
+        self.i = self.i.saturating_add(1);
+    }
     fn eat(&mut self, c: char) -> bool {
         if self.peek() == Some(c) {
-            self.i += 1;
+            self.advance();
             true
         } else {
             false
@@ -109,7 +113,13 @@ impl Parser<'_> {
         while self.eat('|') {
             alts.push(self.cat()?);
         }
-        Ok(if alts.len() == 1 { alts.pop().unwrap() } else { Node::Alt(alts) })
+        Ok(if alts.len() == 1
+            && let Some(only) = alts.pop()
+        {
+            only
+        } else {
+            Node::Alt(alts)
+        })
     }
     fn cat(&mut self) -> Result<Node, String> {
         let mut v = Vec::new();
@@ -118,33 +128,34 @@ impl Parser<'_> {
                 break;
             }
             let atom = self.atom()?;
-            v.push(self.quant(atom)?);
+            v.push(self.quant(atom));
         }
-        Ok(match v.len() {
-            0 => Node::Empty,
-            1 => v.pop().unwrap(),
-            _ => Node::Cat(v),
-        })
+        if v.len() == 1
+            && let Some(only) = v.pop()
+        {
+            return Ok(only);
+        }
+        Ok(if v.is_empty() { Node::Empty } else { Node::Cat(v) })
     }
     fn number(&mut self) -> Option<usize> {
         let st = self.i;
         while self.peek().is_some_and(|c| c.is_ascii_digit()) {
-            self.i += 1;
+            self.advance();
         }
         if self.i == st {
             None
         } else {
-            self.s[st..self.i].iter().collect::<String>().parse().ok()
+            self.s.get(st..self.i)?.iter().collect::<String>().parse().ok()
         }
     }
-    fn quant(&mut self, atom: Node) -> Result<Node, String> {
+    fn quant(&mut self, atom: Node) -> Node {
         let (min, max) = match self.peek() {
             Some('*') => (0, usize::MAX),
             Some('+') => (1, usize::MAX),
             Some('?') => (0, 1),
             Some('{') => {
                 let save = self.i;
-                self.i += 1;
+                self.advance();
                 let lo = self.number();
                 let r = match lo {
                     Some(lo) => {
@@ -166,22 +177,23 @@ impl Parser<'_> {
                     None => None,
                 };
                 if let Some(p) = r {
-                    self.i -= 1; // the closing brace is consumed below with the other quantifier characters
+                    // the closing brace is consumed below with the other quantifier characters (it was just eaten, so i >= 1)
+                    self.i = self.i.saturating_sub(1);
                     p
                 } else {
                     self.i = save;
-                    return Ok(atom);
+                    return atom;
                 }
             }
-            _ => return Ok(atom),
+            _ => return atom,
         };
-        self.i += 1;
+        self.advance();
         let greedy = !self.eat('?');
-        Ok(Node::Repeat { node: Box::new(atom), min, max, greedy })
+        Node::Repeat { node: Box::new(atom), min, max, greedy }
     }
     fn atom(&mut self) -> Result<Node, String> {
         let c = self.peek().ok_or("unexpected end")?;
-        self.i += 1;
+        self.advance();
         Ok(match c {
             '.' => Node::Any,
             '^' => Node::Start,
@@ -189,7 +201,7 @@ impl Parser<'_> {
             '(' => {
                 if self.eat('?') {
                     let k = self.peek().ok_or("bad group")?;
-                    self.i += 1;
+                    self.advance();
                     let node = match k {
                         ':' => {
                             let n = self.alt()?;
@@ -201,7 +213,7 @@ impl Parser<'_> {
                         }
                         '<' => {
                             let k2 = self.peek().ok_or("bad group")?;
-                            self.i += 1;
+                            self.advance();
                             if k2 != '=' && k2 != '!' {
                                 return Err("named groups are not supported".into());
                             }
@@ -215,7 +227,8 @@ impl Parser<'_> {
                     }
                     node
                 } else {
-                    self.groups += 1;
+                    // Bound: one for each group of the pattern
+                    self.groups = self.groups.saturating_add(1);
                     let idx = self.groups;
                     let n = self.alt()?;
                     if !self.eat(')') {
@@ -232,7 +245,7 @@ impl Parser<'_> {
     }
     fn escape(&mut self, in_class: bool) -> Result<Node, String> {
         let c = self.peek().ok_or("bad escape")?;
-        self.i += 1;
+        self.advance();
         Ok(match c {
             'd' => Node::Class(vec![Item::Digit(true)], false),
             'D' => Node::Class(vec![Item::Digit(false)], false),
@@ -251,16 +264,19 @@ impl Parser<'_> {
             '0' => Node::Char('\0'),
             'x' => Node::Char(self.hex(2)?),
             'u' => Node::Char(self.hex(4)?),
-            '1'..='9' if !in_class => Node::BackRef(c as usize - '0' as usize),
+            // c is a digit 1 to 9 here, so to_digit always gives it
+            '1'..='9' if !in_class => Node::BackRef(c.to_digit(10).and_then(|d| usize::try_from(d).ok()).unwrap_or(0)),
             c => Node::Char(c),
         })
     }
     fn hex(&mut self, n: usize) -> Result<char, String> {
-        if self.i + n > self.s.len() {
+        // Bound: a position in the pattern plus at most 4
+        let end = self.i.saturating_add(n);
+        let Some(digits) = self.s.get(self.i..end) else {
             return Err("bad escape".into());
-        }
-        let t: String = self.s[self.i..self.i + n].iter().collect();
-        self.i += n;
+        };
+        let t: String = digits.iter().collect();
+        self.i = end;
         u32::from_str_radix(&t, 16).ok().and_then(char::from_u32).ok_or_else(|| "bad escape".to_string())
     }
     fn class(&mut self) -> Result<Node, String> {
@@ -268,7 +284,7 @@ impl Parser<'_> {
         let mut items: Vec<Item> = Vec::new();
         loop {
             let c = self.peek().ok_or("unterminated class")?;
-            self.i += 1;
+            self.advance();
             if c == ']' {
                 break;
             }
@@ -286,10 +302,10 @@ impl Parser<'_> {
             };
             // a range a-b (a '-' just before the closing bracket is a literal)
             if let Item::Ch(a) = lo
-                && self.peek() == Some('-') && self.s.get(self.i + 1).is_some_and(|&n| n != ']') {
-                    self.i += 1;
+                && self.peek() == Some('-') && self.s.get(self.i.saturating_add(1)).is_some_and(|&n| n != ']') {
+                    self.advance();
                     let n = self.peek().ok_or("unterminated class")?;
-                    self.i += 1;
+                    self.advance();
                     let b = if n == '\\' {
                         match self.escape(true)? {
                             Node::Char(x) => x,
@@ -317,6 +333,11 @@ fn canon(c: char) -> char {
 
 impl Regex {
     /// Compiles a pattern with flags (any of "i", "g", "m"; others are ignored).
+    ///
+    /// # Errors
+    ///
+    /// A message naming what is wrong when the pattern does not parse or uses syntax this engine does not read (a named
+    /// group, an unknown group kind, a missing `)` or `]`, a bad escape, a quantifier with nothing to repeat).
     pub fn new(source: &str, flags: &str) -> Result<Regex, String> {
         let chars: Vec<char> = source.chars().collect();
         let mut p = Parser { s: &chars, i: 0, groups: 0 };
@@ -332,6 +353,18 @@ impl Regex {
             global: flags.contains('g'),
             source: source.to_string(),
         })
+    }
+
+    /// An expression that matches nothing (an empty class matches no character), standing in for a pattern that does not parse.
+    fn never(source: &str, flags: &str) -> Regex {
+        Regex {
+            node: Node::Class(Vec::new(), false),
+            groups: 0,
+            icase: flags.contains('i'),
+            multiline: flags.contains('m'),
+            global: flags.contains('g'),
+            source: source.to_string(),
+        }
     }
 
     /// The pattern text (`re.source`).
@@ -368,53 +401,60 @@ impl Regex {
         hit != neg
     }
 
-    fn m(&self, n: &Node, s: &[char], i: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
-        match n {
+    fn m(&self, pat: &Node, text: &[char], i: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
+        // Bound: a position in the text, at most its length, so one past it stays far below usize::MAX
+        let next = i.saturating_add(1);
+        match pat {
             Node::Empty => k(i, caps),
-            Node::Char(c) => i < s.len() && self.ch_eq(*c, s[i]) && k(i + 1, caps),
-            Node::Any => i < s.len() && !is_line_term(s[i]) && k(i + 1, caps),
-            Node::Class(items, neg) => i < s.len() && self.class_has(items, *neg, s[i]) && k(i + 1, caps),
-            Node::Start => (i == 0 || (self.multiline && is_line_term(s[i - 1]))) && k(i, caps),
-            Node::End => (i == s.len() || (self.multiline && is_line_term(s[i]))) && k(i, caps),
+            Node::Char(c) => text.get(i).is_some_and(|&ch| self.ch_eq(*c, ch)) && k(next, caps),
+            Node::Any => text.get(i).is_some_and(|&ch| !is_line_term(ch)) && k(next, caps),
+            Node::Class(items, neg) => text.get(i).is_some_and(|&ch| self.class_has(items, *neg, ch)) && k(next, caps),
+            Node::Start => (i == 0 || (self.multiline && i.checked_sub(1).and_then(|prev| text.get(prev)).is_some_and(|&ch| is_line_term(ch)))) && k(i, caps),
+            Node::End => (i == text.len() || (self.multiline && text.get(i).is_some_and(|&ch| is_line_term(ch)))) && k(i, caps),
             Node::WordB(want) => {
-                let a = i > 0 && is_word(s[i - 1]);
-                let b = i < s.len() && is_word(s[i]);
-                ((a != b) == *want) && k(i, caps)
+                let before = i.checked_sub(1).and_then(|prev| text.get(prev)).is_some_and(|&ch| is_word(ch));
+                let after = text.get(i).is_some_and(|&ch| is_word(ch));
+                ((before != after) == *want) && k(i, caps)
             }
             Node::Group(inner, idx) => match idx {
-                None => self.m(inner, s, i, caps, k),
-                Some(g) => {
-                    let g = *g;
-                    self.m(inner, s, i, caps, &mut |e, c2: &mut Caps| {
-                        let old = c2[g];
-                        c2[g] = Some((i, e));
-                        if k(e, c2) {
+                None => self.m(inner, text, i, caps, k),
+                Some(slot) => {
+                    let slot = *slot;
+                    // caps has a slot for every group (match_at and exec_from size it so)
+                    self.m(inner, text, i, caps, &mut |end, c2: &mut Caps| {
+                        let old = c2.get(slot).copied().flatten();
+                        if let Some(cell) = c2.get_mut(slot) {
+                            *cell = Some((i, end));
+                        }
+                        if k(end, c2) {
                             true
                         } else {
-                            c2[g] = old;
+                            if let Some(cell) = c2.get_mut(slot) {
+                                *cell = old;
+                            }
                             false
                         }
                     })
                 }
             },
-            Node::Cat(v) => self.seq(v, 0, s, i, caps, k),
-            Node::Alt(v) => {
-                for a in v {
+            Node::Cat(items) => self.seq(items, 0, text, i, caps, k),
+            Node::Alt(alts) => {
+                for alt in alts {
                     let saved = caps.clone();
-                    if self.m(a, s, i, caps, k) {
+                    if self.m(alt, text, i, caps, k) {
                         return true;
                     }
                     *caps = saved;
                 }
                 false
             }
-            Node::Repeat { node, min, max, greedy } => self.rep(node, *min, *max, *greedy, 0, s, i, caps, k),
+            Node::Repeat { node, min, max, greedy } => self.rep(node, *min, *max, *greedy, 0, text, i, caps, k),
             Node::Look { node, behind, neg } => {
                 let mut c2 = caps.clone();
                 let found = if *behind {
-                    (0..=i).rev().any(|j| self.m(node, s, j, &mut c2, &mut |e, _| e == i))
+                    (0..=i).rev().any(|start| self.m(node, text, start, &mut c2, &mut |end, _| end == i))
                 } else {
-                    self.m(node, s, i, &mut c2, &mut |_, _| true)
+                    self.m(node, text, i, &mut c2, &mut |_, _| true)
                 };
                 if *neg {
                     !found && k(i, caps)
@@ -425,21 +465,29 @@ impl Regex {
                     false
                 }
             }
-            Node::BackRef(g) => match caps.get(*g).copied().flatten() {
+            Node::BackRef(group) => match caps.get(*group).copied().flatten() {
                 None => k(i, caps),
-                Some((a, b)) => {
-                    let len = b - a;
-                    i + len <= s.len() && (0..len).all(|t| self.ch_eq(s[a + t], s[i + t])) && k(i + len, caps)
+                Some((from, to)) => {
+                    // Bound: a capture lies inside the text (from <= to <= its length), so these stay far below usize::MAX
+                    let len = to.saturating_sub(from);
+                    let end = i.saturating_add(len);
+                    // the captured text and the text at i compared character by character (None past the end: no match)
+                    let same = match (text.get(from..to), text.get(i..end)) {
+                        (Some(want), Some(got)) => want.iter().zip(got).all(|(&wc, &gc)| self.ch_eq(wc, gc)),
+                        _ => false,
+                    };
+                    same && k(end, caps)
                 }
             },
         }
     }
 
-    fn seq(&self, v: &[Node], j: usize, s: &[char], i: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
-        if j == v.len() {
+    fn seq(&self, items: &[Node], j: usize, text: &[char], i: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
+        let Some(item) = items.get(j) else {
             return k(i, caps);
-        }
-        self.m(&v[j], s, i, caps, &mut |e, c2: &mut Caps| self.seq(v, j + 1, s, e, c2, k))
+        };
+        // Bound: j is below the number of items here
+        self.m(item, text, i, caps, &mut |end, c2: &mut Caps| self.seq(items, j.saturating_add(1), text, end, c2, k))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -451,7 +499,7 @@ impl Regex {
                     if e == i && count >= min {
                         return false;
                     }
-                    self.rep(node, min, max, greedy, count + 1, s, e, c2, k)
+                    self.rep(node, min, max, greedy, count.saturating_add(1), s, e, c2, k)
                 });
                 if ok {
                     return true;
@@ -468,7 +516,7 @@ impl Regex {
                     if e == i && count >= min {
                         return false;
                     }
-                    self.rep(node, min, max, greedy, count + 1, s, e, c2, k)
+                    self.rep(node, min, max, greedy, count.saturating_add(1), s, e, c2, k)
                 });
             }
             false
@@ -478,21 +526,23 @@ impl Regex {
     /// The match that starts exactly at character `at`, as a sticky expression would find it.
     #[must_use]
     pub fn match_at(&self, text: &[char], at: usize) -> Option<(usize, Caps)> {
-        let mut caps: Caps = vec![None; self.groups + 1];
+        // Bound: a count of the pattern's groups
+        let mut caps: Caps = vec![None; self.groups.saturating_add(1)];
         let mut end = 0usize;
         let mut snapshot: Caps = Vec::new();
         let ok = self.m(&self.node, text, at, &mut caps, &mut |e, c| {
             end = e;
-            snapshot = c.clone();
+            snapshot.clone_from(c);
             true
         });
         if ok { Some((end, snapshot)) } else { None }
     }
 
     fn captures_from(&self, text: &[char], start: usize, end: usize, caps: &Caps) -> Captures {
-        let mut groups: Vec<Option<String>> = vec![Some(text[start..end].iter().collect())];
-        for g in 1..=self.groups {
-            groups.push(caps[g].map(|(a, b)| text[a..b].iter().collect()));
+        // A match and its captures lie inside the text, and caps has a slot for the match and each group
+        let mut groups: Vec<Option<String>> = vec![Some(text.get(start..end).unwrap_or_default().iter().collect())];
+        for &slot in caps.iter().skip(1).take(self.groups) {
+            groups.push(slot.map(|(from, to)| text.get(from..to).unwrap_or_default().iter().collect()));
         }
         Captures { index: start, end, groups }
     }
@@ -501,12 +551,13 @@ impl Regex {
     #[must_use]
     pub fn exec_from(&self, text: &[char], from: usize) -> Option<Captures> {
         for st in from..=text.len() {
-            let mut caps: Caps = vec![None; self.groups + 1];
+            // Bound: a count of the pattern's groups
+            let mut caps: Caps = vec![None; self.groups.saturating_add(1)];
             let mut end = 0usize;
             let mut snapshot: Caps = Vec::new();
             let ok = self.m(&self.node, text, st, &mut caps, &mut |e, c| {
                 end = e;
-                snapshot = c.clone();
+                snapshot.clone_from(c);
                 true
             });
             if ok {
@@ -537,16 +588,18 @@ impl Regex {
         let mut from = 0usize;
         while from <= t.len() {
             let Some(m) = self.exec_from(&t, from) else { break };
-            out.extend(&t[pos..m.index]);
+            // Matches come in order and do not overlap, so pos..m.index lies inside the text
+            out.extend(t.get(pos..m.index).unwrap_or_default());
             out.push_str(&f(&m));
             pos = m.end;
-            from = if m.end == m.index { m.end + 1 } else { m.end };
+            // Bound: a position at most one past the end of the text
+            from = if m.end == m.index { m.end.saturating_add(1) } else { m.end };
             if !self.global {
                 break;
             }
         }
         if pos <= t.len() {
-            out.extend(&t[pos..]);
+            out.extend(t.get(pos..).unwrap_or_default());
         }
         out
     }
@@ -560,28 +613,29 @@ impl Regex {
     /// `s.split(re)` (capture groups are not spliced in: the rules' expressions have none).
     #[must_use]
     pub fn split(&self, s: &str) -> Vec<String> {
-        let t: Vec<char> = s.chars().collect();
-        if t.is_empty() {
-            return if self.match_at(&t, 0).is_some() { vec![] } else { vec![String::new()] };
+        let chars: Vec<char> = s.chars().collect();
+        if chars.is_empty() {
+            return if self.match_at(&chars, 0).is_some() { vec![] } else { vec![String::new()] };
         }
         let mut out = Vec::new();
-        let (mut p, mut q) = (0usize, 0usize);
-        while q < t.len() {
-            match self.match_at(&t, q) {
-                None => q += 1,
-                Some((e, _)) => {
-                    let e = e.min(t.len());
-                    if e == p {
-                        q += 1;
+        // Bound: last <= at <= the text's length, far below usize::MAX, so the ranges below are inside the text
+        let (mut last, mut at) = (0usize, 0usize);
+        while at < chars.len() {
+            match self.match_at(&chars, at) {
+                None => at = at.saturating_add(1),
+                Some((end, _)) => {
+                    let end = end.min(chars.len());
+                    if end == last {
+                        at = at.saturating_add(1);
                     } else {
-                        out.push(t[p..q].iter().collect());
-                        p = e;
-                        q = p;
+                        out.push(chars.get(last..at).unwrap_or_default().iter().collect());
+                        last = end;
+                        at = last;
                     }
                 }
             }
         }
-        out.push(t[p..].iter().collect());
+        out.push(chars.get(last..).unwrap_or_default().iter().collect());
         out
     }
 }
@@ -590,7 +644,10 @@ thread_local! {
     static CACHE: RefCell<HashMap<(String, String), Rc<Regex>>> = RefCell::new(HashMap::new());
 }
 
-/// A compiled expression from a cache (the rules use the same few patterns on every call). Panics on a pattern that does not parse.
+/// A compiled expression from a cache (the rules use the same few patterns on every call).
+///
+/// The patterns passed here are the program's own, and every one parses (the tests run each); one that did not would
+/// give an expression that matches nothing.
 #[must_use]
 pub fn rx(source: &str, flags: &str) -> Rc<Regex> {
     CACHE.with(|c| {
@@ -598,7 +655,7 @@ pub fn rx(source: &str, flags: &str) -> Rc<Regex> {
         if let Some(r) = c.borrow().get(&key) {
             return r.clone();
         }
-        let r = Rc::new(Regex::new(source, flags).unwrap_or_else(|e| panic!("bad pattern /{source}/: {e}")));
+        let r = Rc::new(Regex::new(source, flags).unwrap_or_else(|_| Regex::never(source, flags)));
         c.borrow_mut().insert(key, r.clone());
         r
     })

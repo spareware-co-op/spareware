@@ -17,8 +17,11 @@ fn to_exponential2(x: f64) -> String {
         return number_to_js_string(x);
     }
     let t = format!("{x:.2e}");
-    let (m, e) = t.split_once('e').expect("exponent");
-    let e: i32 = e.parse().expect("exponent digits");
+    // Rust's `{:e}` always writes one 'e' and a decimal exponent
+    let Some((m, e)) = t.split_once('e') else {
+        return t;
+    };
+    let e: i32 = e.parse().unwrap_or(0);
     format!("{}e{}{}", m, if e < 0 { "-" } else { "+" }, e.abs())
 }
 
@@ -28,8 +31,8 @@ pub fn sh_pack(p: &V) -> String {
     let pr = pair(p);
     let mut rows: Vec<Vec<V>> = Vec::new();
     for per in periods_of(pr.opt).into_iter().filter(|x| res_of(pr.base, x).is_some()) {
-        let rb = res_of(pr.base, per).expect("base results");
-        let ro = res_of(pr.opt, per).expect("option results");
+        // periods_of gives the periods with option results, and the filter those with base results
+        let (Some(rb), Some(ro)) = (res_of(pr.base, per), res_of(pr.opt, per)) else { continue };
         for l in pr.opt.g("links").vals() {
             if !is_sh(p, l) {
                 continue;
@@ -58,7 +61,8 @@ pub fn sh_pack(p: &V) -> String {
     }
     let mut nodes: Vec<Vec<V>> = Vec::new();
     for per in periods_of(pr.opt) {
-        let ro = res_of(pr.opt, per).expect("option results");
+        // periods_of gives the periods with option results
+        let Some(ro) = res_of(pr.opt, per) else { continue };
         for (id, nr) in ro.g("nodes").entries() {
             if net::road_links(pr.opt, id).iter().any(|l| is_sh(p, l)) {
                 nodes.push(vec![V::String(node_name(pr.opt, id)), sv(per), r3(nr.g("dos")), if nr.g("losText").t() { nr.g("losText").clone() } else { nr.g("los").clone() }, r1(nr.g("delay"))]);
@@ -101,7 +105,8 @@ pub fn mbcm_pack(p: &V) -> String {
     let mut sp: Vec<Vec<V>> = Vec::new();
     for s in distinct(&[Some(pr.base), Some(pr.opt)]) {
         for per in periods_of(s) {
-            let r = res_of(s, per).expect("results");
+            // periods_of gives the periods with results
+            let Some(r) = res_of(s, per) else { continue };
             let cal = engine::calibrate_report(p, s, per);
             let name = s.g("name").clone();
             let row = |check: &str, value: V, crit: V, status: V| vec![name.clone(), sv(per), sv(check), value, crit, status];

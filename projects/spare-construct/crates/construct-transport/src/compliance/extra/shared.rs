@@ -40,7 +40,7 @@ pub fn per_period(base: &V, opt: &V, f: &dyn Fn(&V, &str) -> f64, ps: &[&str], d
             vals.push(x);
         }
     }
-    let mean = if vals.is_empty() { V::Null } else { V::Number(vals.iter().fold(0.0, |s, x| s + x) / vals.len() as f64) };
+    let mean = if vals.is_empty() { V::Null } else { V::Number(vals.iter().fold(0.0, |s, x| s + x) / crate::jsnum::usize_to_f64(vals.len())) };
     let text = if vals.is_empty() { fmt::DASH.to_string() } else { format!("{}{}", pp_entries(&by, d), if unit.is_empty() { String::new() } else { format!(" {unit}") }) };
     jobj! { "by" => by, "mean" => mean, "text" => text }
 }
@@ -126,7 +126,8 @@ pub fn network_diff(a: &V, b: &V) -> V {
     }
     for l in b.g("links").vals() {
         let o = a.g("links").g(&l.g("id").s());
-        let lanes = |x: &V| (x.g("lanesAB").n() as i64 as i32) as f64 + (x.g("lanesBA").n() as i64 as i32) as f64;
+        // `(x.lanesAB | 0) + (x.lanesBA | 0)`
+        let lanes = |x: &V| f64::from(crate::jsnum::to_int32(x.g("lanesAB").n())) + f64::from(crate::jsnum::to_int32(x.g("lanesBA").n()));
         if !o.t() && !l.g("status").eq_s("closed") {
             out.push(jobj! { "kind" => "link", "id" => l.g("id"), "text" => format!("New road: {} ({})", link_name(l), fmt::len(net::len(b, l))) });
         } else if o.t() && lanes(l) > lanes(o) {

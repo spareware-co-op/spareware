@@ -12,19 +12,24 @@ static CORE: OnceLock<V> = OnceLock::new();
 static EXTRA: OnceLock<V> = OnceLock::new();
 static MODEL: OnceLock<V> = OnceLock::new();
 
+// The embedded tables are generated JSON checked by the truth tests, so they always parse; null is only the total fallback.
+fn embedded(text: &str) -> V {
+    V::parse(text).unwrap_or(V::Null)
+}
+
 /// The tables of packs/nz/compliance.js (SRC, REGIME, PATHWAYS, E27, ACCESS, SH, CLOCKS, DISCLAIMERS, STANDARDS, CHECKLIST ...).
 pub fn core() -> &'static V {
-    CORE.get_or_init(|| V::parse(include_str!("data/compliance.json")).expect("compliance.json"))
+    CORE.get_or_init(|| embedded(include_str!("data/compliance.json")))
 }
 
 /// The tables of packs/nz/compliance-extra.js (STD, SRC, D, ASSUME, LINT, PRECINCTS, `PARK_ACT`, PREF ...).
 pub fn extra() -> &'static V {
-    EXTRA.get_or_init(|| V::parse(include_str!("data/extra.json")).expect("extra.json"))
+    EXTRA.get_or_init(|| embedded(include_str!("data/extra.json")))
 }
 
 /// The labels of model.js the checks print (CLASSES, LANDUSES, CONTROLS, STATUS, CYCLE, `SCENARIO_ROLES`, FUNDING, `REGISTER_TYPES`).
 pub fn model() -> &'static V {
-    MODEL.get_or_init(|| V::parse(include_str!("data/model.json")).expect("model.json"))
+    MODEL.get_or_init(|| embedded(include_str!("data/model.json")))
 }
 
 /// A value of the compliance tables by dotted path ("E27.rows", "SRC.rma.url"); null when missing.

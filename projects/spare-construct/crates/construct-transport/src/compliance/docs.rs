@@ -13,15 +13,16 @@ use crate::util;
 /// A 16-character fingerprint of a text (FNV-1a over its UTF-16 units with two seeds), the sign-off fingerprint.
 #[must_use]
 pub fn hash(text: &str) -> String {
-    let b_mul: i32 = 2_246_822_519u32 as i32;
-    let mut a: i32 = 0x811c9dc5u32 as i32;
-    let mut b: i32 = (0x01000193u32 ^ 0x5bd1e995u32) as i32;
+    // The prototype works in 32-bit integers (Math.imul); the same bits in u32 give the same text
+    let b_mul: u32 = 2_246_822_519;
+    let mut a: u32 = 0x811c_9dc5;
+    let mut b: u32 = 0x0100_0193 ^ 0x5bd1_e995;
     for c in text.encode_utf16() {
-        let c = i32::from(c);
+        let c = u32::from(c);
         a = (a ^ c).wrapping_mul(16_777_619);
         b = (b ^ c).wrapping_mul(b_mul);
     }
-    format!("{:08x}{:08x}", a as u32, b as u32)
+    format!("{a:08x}{b:08x}")
 }
 
 /// `inputsOf(P)`: the text of everything a sign-off covers: the settings (without the view settings), every scenario's network, zones,
@@ -111,8 +112,8 @@ pub fn disclaimer(id: &str, p: Option<&V>, tool: Option<&str>) -> String {
 
 /// `String.prototype.replace(text, text)`: the first occurrence only.
 fn replace_first(s: &str, from: &str, to: &str) -> String {
-    match s.find(from) {
-        Some(i) => format!("{}{}{}", &s[..i], to, &s[i + from.len()..]),
+    match s.split_once(from) {
+        Some((before, after)) => format!("{before}{to}{after}"),
         None => s.to_string(),
     }
 }

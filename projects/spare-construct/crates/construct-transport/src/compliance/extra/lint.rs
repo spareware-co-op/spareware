@@ -18,7 +18,8 @@ fn u16_len(s: &str) -> usize {
 fn u16_slice(s: &str, a: usize, b: usize) -> String {
     let u: Vec<u16> = s.encode_utf16().collect();
     let (a, b) = (a.min(u.len()), b.min(u.len()));
-    if a >= b { String::new() } else { String::from_utf16_lossy(&u[a..b]) }
+    // Both bounds are clamped to the length above, so the range is inside the text
+    if a >= b { String::new() } else { String::from_utf16_lossy(u.get(a..b).unwrap_or_default()) }
 }
 
 /// `modelValidated(P)`: the model is validated for the AM or PM peak (false when the status cannot be read).
@@ -147,9 +148,10 @@ pub fn lint(p: &V, text: Option<&str>) -> V {
 /// `overrideLint(P, key, reason)`: records (or, with an empty reason, clears) the author's reason for releasing a blocking finding. Changes the project.
 /// Returns the override now held for the key (`{ reason, at }`), or null.
 pub fn override_lint(p: &mut V, key: &str, reason: &str) -> V {
-    let cx = ctx::data_mut(p);
-    let lx = obj_at(cx, "lint");
-    let ov = obj_at(lx, "override");
+    // A project is an object, so the record and its lint part are always there
+    let Some(ov) = ctx::data_mut(p).and_then(|cx| obj_at(cx, "lint")).and_then(|lx| obj_at(lx, "override")) else {
+        return V::Null;
+    };
     if trim(reason).is_empty() {
         ov.remove(key);
     } else {

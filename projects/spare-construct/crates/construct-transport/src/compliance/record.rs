@@ -63,14 +63,16 @@ pub fn state(p: &V) -> V {
 }
 
 /// `state(P)` for changing: the project's compliance record, created and filled with the defaults first.
-pub fn state_mut(p: &mut V) -> &mut V {
+///
+/// Always Some for a project (an object); None when `p` is not an object (no field can be set on it).
+pub fn state_mut(p: &mut V) -> Option<&mut V> {
     if !p.g("compliance").is_obj() {
         p.set("compliance", V::object());
     }
     let b = blank();
-    let c = p.get_mut("compliance").expect("set above");
+    let c = p.get_mut("compliance")?;
     fill(c, &b);
-    c
+    Some(c)
 }
 
 /// `S_(P)`: the regulatory settings (affected operator thresholds, tier 1 area, evidence radius, extra precincts), filled with the defaults.
@@ -227,37 +229,37 @@ pub fn regime(p: &V) -> V {
 /// `now` is the date the stamp is made on (see [`today`]): a day as text, a timestamp, or null for the clock.
 #[must_use]
 pub fn stamp(p: &V, now: &V) -> V {
-    let r = regime(p);
-    let c = state(p);
-    let d = today(now);
-    let side = r.g("side");
-    let rma: String = if side.eq_s("pre") { "as in force immediately before 30 Sep 2026".into() } else if side.eq_s("transition") { format!("as at {}", long_date_v(r.g("date"))) } else { "\u{2013}".into() };
+    let reg = regime(p);
+    let cs = state(p);
+    let day = today(now);
+    let side = reg.g("side");
+    let rma: String = if side.eq_s("pre") { "as in force immediately before 30 Sep 2026".into() } else if side.eq_s("transition") { format!("as at {}", long_date_v(reg.g("date"))) } else { "\u{2013}".into() };
     let ftaa = "as at 10 Jul 2026";
     // an edition whose next known change has passed is marked, so a stamp printed later does not look current
-    let ed = |id: &str, e: &str| -> String {
-        let s = table("STANDARDS").items().iter().find(|x| x.g("id").eq_s(id));
-        let n = s.map_or(&super::jv::NULL, |s| s.g("next"));
-        if n.t() && n.g("date").t() && d.as_str() >= n.g("date").s().as_str() { format!("{e} (changed {}: check)", long_date_v(n.g("date"))) } else { e.to_string() }
+    let ed = |id: &str, edition: &str| -> String {
+        let row = table("STANDARDS").items().iter().find(|item| item.g("id").eq_s(id));
+        let next = row.map_or(&super::jv::NULL, |found| found.g("next"));
+        if next.t() && next.g("date").t() && day.as_str() >= next.g("date").s().as_str() { format!("{edition} (changed {}: check)", long_date_v(next.g("date"))) } else { edition.to_string() }
     };
-    let docs: Vec<(String, String)> = table("STAMP_DOCS").items().iter().map(|r| (r.ix(1).s(), ed(&r.ix(0).s(), &r.ix(2).s()))).collect();
+    let docs: Vec<(String, String)> = table("STAMP_DOCS").items().iter().map(|row| (row.ix(1).s(), ed(&row.ix(0).s(), &row.ix(2).s()))).collect();
     let mut lines: Vec<V> = vec![
-        jarr!["Pathway", r.g("pathwayLabel")],
-        jarr!["Lodgement", if r.g("date").t() { format!("{}{}", long_date_v(r.g("date")), if c.g("ctx").g("lodgementActual").t() { "" } else { " (planned)" }) } else { "not set".into() }],
-        jarr!["Regime", r.g("text")],
+        jarr!["Pathway", reg.g("pathwayLabel")],
+        jarr!["Lodgement", if reg.g("date").t() { format!("{}{}", long_date_v(reg.g("date")), if cs.g("ctx").g("lodgementActual").t() { "" } else { " (planned)" }) } else { "not set".into() }],
+        jarr!["Regime", reg.g("text")],
         jarr!["RMA version", rma.as_str()],
         jarr!["FTAA version", ftaa],
-        jarr!["Planning Act", r.g("transitionText")],
+        jarr!["Planning Act", reg.g("transitionText")],
     ];
-    for (n, e) in &docs {
-        lines.push(jarr![n.as_str(), e.as_str()]);
+    for (name, edition) in &docs {
+        lines.push(jarr![name.as_str(), edition.as_str()]);
     }
     lines.push(jarr!["Spare Construct regulatory data", format!("as at {}", long_date(version()))]);
-    let clause = if r.g("clause").t() { format!(" ({})", r.g("clause").s()) } else { String::new() };
+    let clause = if reg.g("clause").t() { format!(" ({})", reg.g("clause").s()) } else { String::new() };
     let rma_part = if rma == "\u{2013}" { String::new() } else { format!("RMA {rma} \u{b7} ") };
-    let text = format!("{}{} \u{b7} {}FTAA {} \u{b7} {} \u{b7} ", r.g("short").sn(), clause, rma_part, ftaa, r.g("transitionText").sn())
-        + &docs.iter().map(|(n, e)| format!("{n} {e}")).collect::<Vec<_>>().join(" \u{b7} ")
+    let text = format!("{}{} \u{b7} {}FTAA {} \u{b7} {} \u{b7} ", reg.g("short").sn(), clause, rma_part, ftaa, reg.g("transitionText").sn())
+        + &docs.iter().map(|(name, edition)| format!("{name} {edition}")).collect::<Vec<_>>().join(" \u{b7} ")
         + &format!(" \u{b7} Spare Construct regulatory data {}", version());
-    jobj! { "regime" => r, "lines" => V::Array(lines), "text" => &text, "footer" => format!("Version stamp: {text}"), "at" => d }
+    jobj! { "regime" => reg, "lines" => V::Array(lines), "text" => &text, "footer" => format!("Version stamp: {text}"), "at" => day }
 }
 
 /// `usedDocs(P)`: the standards an output relies on: the stamped documents plus the pathway's own law.
@@ -289,11 +291,15 @@ pub fn record_outputs(p: &mut V, now: &V) -> V {
     let r = regime(p);
     let d = today(now);
     let ids = used_docs(p);
-    let c = state_mut(p);
+    // A project is an object, so its record is always there
+    let Some(c) = state_mut(p) else {
+        return V::Null;
+    };
     c.set("outputs", jobj! { "at" => d.as_str(), "lodgement" => r.g("date"), "side" => r.g("side"), "regime" => r.g("code") });
-    let used = obj_at(c, "used");
-    for id in ids {
-        used.set(id, st(d.clone()));
+    if let Some(used) = obj_at(c, "used") {
+        for id in ids {
+            used.set(id, st(d.clone()));
+        }
     }
     c.g("outputs").clone()
 }

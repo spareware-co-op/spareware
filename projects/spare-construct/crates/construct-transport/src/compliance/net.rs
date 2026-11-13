@@ -50,18 +50,19 @@ pub struct Projection {
 /// `Net.project(sc, L, ll)`: the nearest point on a link to a position.
 #[must_use]
 pub fn project(sc: &V, l: &V, ll: LatLng) -> Option<Projection> {
-    let g = geom(sc, l)?;
-    let f = util::flat(ll[0]);
-    let (px, py) = (f.x(&ll), f.y(&ll));
+    let geo = geom(sc, l)?;
+    let flat = util::flat(ll[0]);
+    let (px, py) = (flat.x(&ll), flat.y(&ll));
     let mut best: Option<(f64, usize, f64, f64)> = None;
-    for i in 0..g.len().saturating_sub(1) {
-        let r = util::seg_dist(px, py, f.x(&g[i]), f.y(&g[i]), f.x(&g[i + 1]), f.y(&g[i + 1]));
-        if best.is_none_or(|b| r.d < b.0) {
-            best = Some((r.d, i, r.x, r.y));
+    for (seg, pair) in geo.windows(2).enumerate() {
+        let [from, to] = pair else { continue };
+        let res = util::seg_dist(px, py, flat.x(from), flat.y(from), flat.x(to), flat.y(to));
+        if best.is_none_or(|bst| res.d < bst.0) {
+            best = Some((res.d, seg, res.x, res.y));
         }
     }
-    let (d, i, x, y) = best.unwrap_or((f64::INFINITY, 0, f64::NAN, f64::NAN));
-    Some(Projection { d, i, p: [y / f.ky, x / f.kx] })
+    let (dist, seg, x, y) = best.unwrap_or((f64::INFINITY, 0, f64::NAN, f64::NAN));
+    Some(Projection { d: dist, i: seg, p: [y / flat.ky, x / flat.kx] })
 }
 
 /// `Object.values(sc.links)` that are open (`L.status !== 'closed'`).

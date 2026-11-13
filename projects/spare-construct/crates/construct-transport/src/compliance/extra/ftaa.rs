@@ -14,6 +14,7 @@ use crate::compliance::{dates, engine, net};
 use crate::graph::js_sort_by;
 use crate::jsnum::to_fixed;
 use crate::util::fmt;
+use std::fmt::Write as _;
 
 /// `invitees(P)`: who the Fast-track panel invites to comment (s53): the council, NZTA when a state highway is near the site or the author
 /// marks a designation, and `KiwiRail` when the author marks one: `[{ who, basis, auto }]`.
@@ -22,30 +23,30 @@ pub fn invitees(p: &V) -> V {
     let cx = data(p);
     let cx = cx.g("ftaa");
     let sc = super::ctx::active_sc(p);
-    let a = assumptions(p);
-    let buffer = a.g("shBuffer").n();
+    let asm = assumptions(p);
+    let buffer = asm.g("shBuffer").n();
     let mut out: Vec<V> = vec![jobj! { "who" => "Auckland Council", "basis" => "FTAA s53(2) (relevant local authority)", "auto" => true }];
     // the nearest state highway to a development zone
     let mut near: Option<(f64, &V, &V)> = None;
     let zs = super::ctx::dev_zones(sc);
-    for l in sc.g("links").vals() {
-        if l.g("status").eq_s("closed") || !is_sh(p, l) {
+    for link in sc.g("links").vals() {
+        if link.g("status").eq_s("closed") || !is_sh(p, link) {
             continue;
         }
         // point-to-segment distance, so a sparsely digitised motorway is still found
-        for z in &zs {
-            let d = net::project(sc, l, [z.g("lat").n(), z.g("lng").n()]).map_or(f64::NAN, |x| x.d);
-            if d <= buffer && near.is_none_or(|n| d < n.0) {
-                near = Some((d, l, z));
+        for zone in &zs {
+            let dist = net::project(sc, link, [zone.g("lat").n(), zone.g("lng").n()]).map_or(f64::NAN, |proj| proj.d);
+            if dist <= buffer && near.is_none_or(|nearest| dist < nearest.0) {
+                near = Some((dist, link, zone));
             }
         }
     }
     let marked = cx.g("nztaDesignation").t();
     if near.is_some() || marked {
         let why = match (marked, near) {
-            (false, Some((d, l, z))) => format!(
+            (false, Some((dist, link, zone))) => format!(
                 "{} is {} m from {}; within {} m ({})",
-                link_name(l), fmt::int(d), if z.g("name").t() { z.g("name").s() } else { "a development zone".to_string() }, a.g("shBuffer").s(), assumption()
+                link_name(link), fmt::int(dist), if zone.g("name").t() { zone.g("name").s() } else { "a development zone".to_string() }, asm.g("shBuffer").s(), assumption()
             ),
             _ => "marked by the author".to_string(),
         };
@@ -105,14 +106,8 @@ fn matrix_result(result: &V) -> Option<String> {
     if t.has(&k) && t.g(&k).t() { Some(t.g(&k).s()) } else { None }
 }
 
-/// `ftaaPackage(P)`: the Fast-track package: `{ matrix, aee, conditions, s85, s84a, invitees, timeline, reviewer, notes, conditionsLabel, ftaa }`.
-pub fn ftaa_package(p: &V) -> V {
-    let c = context(p);
-    let pr = pair(p);
-    let cx = data(p);
-    let (opt, base) = (pr.opt, pr.base);
-    let after = pr.mit.unwrap_or(opt);
-    let ps: Vec<&str> = periods_of(opt).into_iter().filter(|x| res_of(base, x).is_some()).collect();
+/// The compliance matrix of the Fast-track package (the E27, parking and precinct rules, then the objectives and policies), and the precinct check.
+fn ftaa_matrix(p: &V, cx: &V) -> (Vec<V>, V) {
     let mut matrix: Vec<V> = Vec::new();
     let e = crate::compliance::e27(p);
     let result = if e.g("redirect").t() {
@@ -157,20 +152,12 @@ pub fn ftaa_package(p: &V) -> V {
     if matrix.is_empty() {
         matrix.push(jobj! { "rule" => "AUP E27 rules and standards", "req" => "Set the site and pathway in the Compliance tab", "result" => "Not assessed", "evidence" => fmt::DASH });
     }
-    let mut aee: Vec<V> = [
-        ("Description of the activity and its transport components", "FTAA Sch 5 cl 6(1)(a)"),
-        ("Assessment of actual and potential transport effects", "FTAA Sch 5 cl 6-7"),
-        ("Mitigation and monitoring", "FTAA Sch 5 cl 6(1)"),
-        ("Persons affected and consultation", "FTAA Sch 5 cl 6(1)"),
-    ]
-    .iter()
-    .map(|(t, r)| jobj! { "title" => *t, "ref" => *r })
-    .collect();
-    if c.g("pathway").eq_s("ftaa-nor") {
-        aee.push(jobj! { "title" => "Alternatives", "ref" => "FTAA Sch 5 cl 12(1)(g)" });
-        aee.push(jobj! { "title" => "Reasonable necessity", "ref" => "FTAA Sch 5 cl 12(1)(h)" });
-    }
-    let dv = neg_pp(&per_period(base, opt, &|s, pd| kpi_p("vht", s, pd), &ps, 1, ""));
+    (matrix, pc)
+}
+
+/// The s85 panel of the Fast-track package: the regional benefits against the residual impacts after mitigation.
+fn ftaa_s85(p: &V, cx: &V, ps: &[&str], base: &V, opt: &V, after: &V) -> V {
+    let dv = neg_pp(&per_period(base, opt, &|s, pd| kpi_p("vht", s, pd), ps, 1, ""));
     let ps_after: Vec<&str> = periods_of(after).into_iter().filter(|x| res_of(base, x).is_some()).collect();
     let d_pt = per_period(base, after, &|s, pd| route_p(s, pd), &ps_after, 1, "");
     let ec = econ_of(p, base, opt);
@@ -241,11 +228,15 @@ pub fn ftaa_package(p: &V) -> V {
             if d_pt.g("by").keys().is_empty() { fmt::DASH.to_string() } else { pp_text(&pt_min, 1, "min per modelled peak hour, summed over the modelled bus routes") }
         ],
     ];
-    let s85 = jobj! {
+    jobj! {
         "benefits" => V::Array(benefits), "impacts" => V::Array(impacts),
         "note" => format!("FTAA s85(3): regional or national benefits are weighed against residual adverse impacts after mitigation, so both are shown. Junction results: {junction}."),
         "junctionLabel" => junction.as_str(),
-    };
+    }
+}
+
+/// The s84A staging rows of the Fast-track package: the trigger finder's rows, the mitigation triggers and the precinct rows.
+fn ftaa_s84a(p: &V, cx: &V, pc: &V) -> Vec<V> {
     let mut s84a: Vec<V> = Vec::new();
     let trig_rows = if cx.g("triggers").t() { cx.g("triggers").g("rows") } else { &V::Null };
     for r in trig_rows.items() {
@@ -269,6 +260,11 @@ pub fn ftaa_package(p: &V) -> V {
             });
         }
     }
+    s84a
+}
+
+/// The reviewer's part of the Fast-track package: the assumptions, the data sources and the sensitivity tests.
+fn ftaa_reviewer(p: &V) -> V {
     let sens = if p.g("report").g("sens").g("rows").t() { p.g("report").g("sens").clone() } else { V::Null };
     let loaded = if p.g("data").g("loaded").t() { p.g("data").g("loaded").clone() } else { V::object() };
     let labels = xdata("SET_LABELS");
@@ -297,12 +293,40 @@ pub fn ftaa_package(p: &V) -> V {
         })
         .collect();
     jobj! {
+        "assumptions" => V::Array(assumptions_rows), "sources" => V::Array(sources), "sensitivity" => sens,
+        "model" => "project.json (the full Spare Construct project: network, zones, settings, counts and results)",
+    }
+}
+
+/// `ftaaPackage(P)`: the Fast-track package: `{ matrix, aee, conditions, s85, s84a, invitees, timeline, reviewer, notes, conditionsLabel, ftaa }`.
+#[must_use]
+pub fn ftaa_package(p: &V) -> V {
+    let c = context(p);
+    let pr = pair(p);
+    let cx = data(p);
+    let (opt, base) = (pr.opt, pr.base);
+    let after = pr.mit.unwrap_or(opt);
+    let ps: Vec<&str> = periods_of(opt).into_iter().filter(|x| res_of(base, x).is_some()).collect();
+    let (matrix, pc) = ftaa_matrix(p, &cx);
+    let mut aee: Vec<V> = [
+        ("Description of the activity and its transport components", "FTAA Sch 5 cl 6(1)(a)"),
+        ("Assessment of actual and potential transport effects", "FTAA Sch 5 cl 6-7"),
+        ("Mitigation and monitoring", "FTAA Sch 5 cl 6(1)"),
+        ("Persons affected and consultation", "FTAA Sch 5 cl 6(1)"),
+    ]
+    .iter()
+    .map(|(t, r)| jobj! { "title" => *t, "ref" => *r })
+    .collect();
+    if c.g("pathway").eq_s("ftaa-nor") {
+        aee.push(jobj! { "title" => "Alternatives", "ref" => "FTAA Sch 5 cl 12(1)(g)" });
+        aee.push(jobj! { "title" => "Reasonable necessity", "ref" => "FTAA Sch 5 cl 12(1)(h)" });
+    }
+    let s85 = ftaa_s85(p, &cx, &ps, base, opt, after);
+    let s84a = ftaa_s84a(p, &cx, &pc);
+    jobj! {
         "matrix" => V::Array(matrix), "aee" => V::Array(aee), "conditions" => mitigation::condition_table(p), "s85" => s85, "s84a" => V::Array(s84a), "invitees" => invitees(p),
         "timeline" => ftaa_timeline(p),
-        "reviewer" => jobj! {
-            "assumptions" => V::Array(assumptions_rows), "sources" => V::Array(sources), "sensitivity" => sens,
-            "model" => "project.json (the full Spare Construct project: network, zones, settings, counts and results)",
-        },
+        "reviewer" => ftaa_reviewer(p),
         "notes" => strs([
             "GRPA approvals sit outside Fast-track: NZTA consent under GRPA s91 and s93 (crossing places) and s176 consent on designated land cannot be granted by the panel (FTAA s42(4)). Apply to NZTA separately.".to_string(),
             format!("Lapse: a Fast-track approval lapses {} years after it commences unless the panel sets another period (FTAA Sch 5 cl 26).", xdata("STD.ftaa.lapseYears").s()),
@@ -335,36 +359,36 @@ pub fn serialise(p: &V) -> String {
 /// `ftaaFiles(P)`: the Fast-track package as files, file name to content, in the order the package lists them.
 #[must_use]
 pub fn ftaa_files(p: &V) -> Vec<(String, String)> {
-    let f = ftaa_package(p);
+    let pkg = ftaa_package(p);
     let s84a_label = label("s84a");
     let mut files: Vec<(String, String)> = Vec::new();
-    let mut m = vec![cells!["Rule", "Requirement", "Comply / infringe", "Evidence"]];
-    m.extend(f.g("matrix").items().iter().map(|r| cells![r.g("rule"), r.g("req"), r.g("result"), r.g("evidence")]));
-    files.push(("compliance-matrix.csv".into(), csv(&m)));
-    let mut a = vec![cells!["Section", "Reference"]];
-    a.extend(f.g("aee").items().iter().map(|s| cells![s.g("title"), s.g("ref")]));
-    files.push(("aee-outline.csv".into(), csv(&a)));
+    let mut mx = vec![cells!["Rule", "Requirement", "Comply / infringe", "Evidence"]];
+    mx.extend(pkg.g("matrix").items().iter().map(|r| cells![r.g("rule"), r.g("req"), r.g("result"), r.g("evidence")]));
+    files.push(("compliance-matrix.csv".into(), csv(&mx)));
+    let mut aee = vec![cells!["Section", "Reference"]];
+    aee.extend(pkg.g("aee").items().iter().map(|sec| cells![sec.g("title"), sec.g("ref")]));
+    files.push(("aee-outline.csv".into(), csv(&aee)));
     let mut cd = vec![cells!["Ref", "Measure", "Metric", "Threshold", "Survey", "Frequency", "Response", "Nexus", "Label"]];
-    cd.extend(f.g("conditions").items().iter().map(|r| {
+    cd.extend(pkg.g("conditions").items().iter().map(|r| {
         cells![r.g("ref"), r.g("measure"), r.g("metric"), r.g("threshold"), r.g("survey"), r.g("frequency"), r.g("response"), r.g("basis"), s84a_label.as_str()]
     }));
     files.push(("conditions.csv".into(), csv(&cd)));
-    let mut s = vec![cells!["Side", "Item", "Value"]];
-    s.extend(f.g("s85").g("benefits").items().iter().map(|r| cells!["Benefit", r.ix(0), r.ix(1)]));
-    s.extend(f.g("s85").g("impacts").items().iter().map(|r| cells!["Residual impact", r.ix(0), r.ix(1)]));
-    s.push(cells!["Label", "Junction results", label("junction")]);
-    files.push(("s85-panel.csv".into(), csv(&s)));
+    let mut panel = vec![cells!["Side", "Item", "Value"]];
+    panel.extend(pkg.g("s85").g("benefits").items().iter().map(|r| cells!["Benefit", r.ix(0), r.ix(1)]));
+    panel.extend(pkg.g("s85").g("impacts").items().iter().map(|r| cells!["Residual impact", r.ix(0), r.ix(1)]));
+    panel.push(cells!["Label", "Junction results", label("junction")]);
+    files.push(("s85-panel.csv".into(), csv(&panel)));
     let mut st = vec![cells!["Stage", "Trigger", "Measure"]];
-    st.extend(f.g("s84a").items().iter().map(|r| cells![r.g("stage"), r.g("trigger"), r.g("measure")]));
+    st.extend(pkg.g("s84a").items().iter().map(|r| cells![r.g("stage"), r.g("trigger"), r.g("measure")]));
     files.push(("s84a-staging.csv".into(), csv(&st)));
     let mut iv = vec![cells!["Invitee", "Basis"]];
-    iv.extend(f.g("invitees").items().iter().map(|i| cells![i.g("who"), i.g("basis")]));
+    iv.extend(pkg.g("invitees").items().iter().map(|inv| cells![inv.g("who"), inv.g("basis")]));
     files.push(("invitees.csv".into(), csv(&iv)));
     let mut tl = vec![cells!["Step", "Date", "Rule", "Basis"]];
-    tl.extend(f.g("timeline").items().iter().map(|t| cells![t.g("step"), or_s(t.g("date"), ""), t.g("rule"), or_s(t.g("basis"), "")]));
+    tl.extend(pkg.g("timeline").items().iter().map(|step| cells![step.g("step"), or_s(step.g("date"), ""), step.g("rule"), or_s(step.g("basis"), "")]));
     files.push(("timeline.csv".into(), csv(&tl)));
-    files.push(("notes.txt".into(), f.g("notes").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("\n")));
-    let rv = f.g("reviewer");
+    files.push(("notes.txt".into(), pkg.g("notes").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("\n")));
+    let rv = pkg.g("reviewer");
     let mut asm = vec![cells!["Assumption", "Value", "Unit", "Basis"]];
     asm.extend(rv.g("assumptions").items().iter().map(|r| r.items().to_vec()));
     files.push(("reviewer/assumptions.csv".into(), csv(&asm)));
@@ -455,7 +479,8 @@ fn report_ftaa(p: &V, ctx: Option<&dyn ReportCtx>) -> String {
     let irows: Vec<Vec<String>> = f.g("invitees").items().iter().map(|i| vec![esc(i.g("who")), esc(i.g("basis"))]).collect();
     out.push_str(&rt(ctx, "s53 invitees", &tbl(&["Invitee", "Basis"], irows, ""), ""));
     for n in f.g("notes").items() {
-        out.push_str(&format!("<p class=\"note\">{}</p>", esc(n)));
+        // Writing to a String cannot fail
+        let _ = write!(out, "<p class=\"note\">{}</p>", esc(n));
     }
     out
 }

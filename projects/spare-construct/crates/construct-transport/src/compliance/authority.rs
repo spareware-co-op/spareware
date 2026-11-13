@@ -110,7 +110,8 @@ pub fn authorities(p: &V, now: &V) -> V {
         ends.push(ctx.g("cl82Date").s());
     }
     ends.sort();
-    let end_by = ends[0].clone();
+    // ends always holds the transitional end, so first() is always Some
+    let end_by = ends.first().cloned().unwrap_or_default();
     let transitional = in_auckland(p) && d.as_str() >= transfer.as_str() && d.as_str() < end_by.as_str();
     let mut requiring = V::Null;
     if in_auckland(p) && pathway_entry(ctx.g("pathway")).is_some_and(|e| e.g("proc").eq_s("nor")) {
@@ -136,11 +137,11 @@ pub fn authorities(p: &V, now: &V) -> V {
 /// still counts), or the motorway or ramp class. `{ sh, ref, basis }`.
 #[must_use]
 pub fn sh_of(p: &V, l: &V) -> V {
-    let c = state(p);
-    let n = c.g("net");
+    let cs = state(p);
+    let n = cs.g("net");
     let id = l.g("id").s();
     let has = n.g("sh").has(&id);
-    let tag = if has { let t = n.g("sh").g(&id); if t.t() { t.s() } else { String::new() } } else { String::new() };
+    let tag = if has { let tag_v = n.g("sh").g(&id); if tag_v.t() { tag_v.s() } else { String::new() } } else { String::new() };
     let user = n.g("shUser").g(&id);
     let sh_ref = if tag.is_empty() { "SH".to_string() } else { format!("SH{tag}") };
     if user.strict_eq(&V::Bool(true)) {
@@ -185,18 +186,19 @@ pub fn auth_ctx(p: &V, sc: &V) -> AuthCtx {
 /// `levelCrossingDist(P, sc, L)`: the shortest distance (m) from anywhere on the link to a level-crossing control area or VAR line, None when
 /// the AUP controls are not loaded or none is near.
 pub fn level_crossing_dist(p: &V, sc: &V, l: &V) -> Option<f64> {
-    let c = state(p);
-    let o = c.g("overlays");
-    let has_var_level = o.g("var").items().iter().any(|v| rx("Level", "").test(&v.g("type").s()));
-    if !o.t() || !(o.g("lx").jlen() > 0 || has_var_level) {
+    let cs = state(p);
+    let overlays = cs.g("overlays");
+    let has_var_level = overlays.g("var").items().iter().any(|v| rx("Level", "").test(&v.g("type").s()));
+    if !overlays.t() || !(overlays.g("lx").jlen() > 0 || has_var_level) {
         return None;
     }
-    let g = net::geom(sc, l)?;
-    let f = flat_at(g[0][0]);
-    let lines: Vec<Vec<LatLng>> = o.g("var").items().iter().filter(|v| rx("Level", "").test(&v.g("type").s())).map(|v| pts_of(v.g("pts"))).collect();
-    let lx: Vec<Vec<LatLng>> = o.g("lx").items().iter().map(pts_of).collect();
-    let d = crate::jsnum::math_min(line_to_polys(&g, &lx, &f, 200.0, false), line_to_polys(&g, &lines, &f, 200.0, true));
-    if d.is_finite() { Some(d) } else { None }
+    let geo = net::geom(sc, l)?;
+    // A link's geometry always holds its two end nodes
+    let flat = flat_at(geo.first()?[0]);
+    let lines: Vec<Vec<LatLng>> = overlays.g("var").items().iter().filter(|v| rx("Level", "").test(&v.g("type").s())).map(|v| pts_of(v.g("pts"))).collect();
+    let lx: Vec<Vec<LatLng>> = overlays.g("lx").items().iter().map(pts_of).collect();
+    let dist = crate::jsnum::math_min(line_to_polys(&geo, &lx, &flat, 200.0, false), line_to_polys(&geo, &lines, &flat, 200.0, true));
+    if dist.is_finite() { Some(dist) } else { None }
 }
 
 /// A stored polyline as points.
@@ -260,7 +262,7 @@ pub fn site_point(p: &V, sc: &V) -> Option<V> {
     }
     let dev = net::dev_zones(sc);
     if !dev.is_empty() {
-        let n = dev.len() as f64;
+        let n = crate::jsnum::usize_to_f64(dev.len());
         let lat = dev.iter().fold(0.0, |a, z| a + z.g("lat").n()) / n;
         let lng = dev.iter().fold(0.0, |a, z| a + z.g("lng").n()) / n;
         return Some(jobj! { "lat" => lat, "lng" => lng, "src" => format!("centre of {} development zone{}", dev.len(), if dev.len() == 1 { "" } else { "s" }) });

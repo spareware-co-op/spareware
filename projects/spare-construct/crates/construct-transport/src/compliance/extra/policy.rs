@@ -14,7 +14,7 @@ use crate::compliance::html::{ReportCtx, rt};
 use crate::compliance::jv::{Jx, NULL, V, arr, csv, jobj, ns, strs};
 use crate::compliance::rx::rx;
 use crate::graph::js_sort_by;
-use crate::jsnum::{math_round, number_to_js_string, to_int32, truthy_number};
+use crate::jsnum::{math_round, number_to_js_string, to_int32, truthy_number, usize_to_f64};
 use crate::util::fmt;
 use std::collections::HashMap;
 
@@ -24,30 +24,32 @@ pub type SkimMap = HashMap<String, HashMap<String, f64>>;
 /// `skim(sc, res, fromIds, toIds)`: shortest paths between zones on the times a result assigned (free-flow where an arc has no result).
 #[must_use]
 pub fn skim(p: &V, sc: &V, res: Option<&V>, from_ids: &[String], to_ids: &[String]) -> SkimMap {
-    let g = engine::build_graph(p, sc, None);
+    let graph = engine::build_graph(p, sc, None);
     let proj = engine::project(p);
     let perf = crate::junction::PerfSet::new(&proj.settings);
-    let cost: Vec<f64> = g
+    let cost: Vec<f64> = graph
         .arcs
         .iter()
-        .map(|a| {
-            let r = res.map_or(&NULL, |r| r.g("arcs").g(&a.key));
-            if r.t() { r.get("t").map_or(f64::NAN, crate::compliance::jv::Jx::n) } else { crate::junction::arc_time(a, 0.0, &perf) }
+        .map(|arc| {
+            let r = res.map_or(&NULL, |r| r.g("arcs").g(&arc.key));
+            if r.t() { r.get("t").map_or(f64::NAN, crate::compliance::jv::Jx::n) } else { crate::junction::arc_time(arc, 0.0, &perf) }
         })
         .collect();
-    let mut w = g.workspace();
+    let mut ws = graph.workspace();
     let mut out: SkimMap = HashMap::new();
-    for f in from_ids {
-        let Some(&s) = g.idx.get(&format!("z:{f}")) else { continue };
-        g.spt(&cost, s, &mut w, -1, -1);
-        let mut m: HashMap<String, f64> = HashMap::new();
-        for t in to_ids {
-            if let Some(&i) = g.idx.get(&format!("z:{t}"))
-                && w.nd[i].is_finite() {
-                    m.insert(t.clone(), w.nd[i]);
+    for from in from_ids {
+        let Some(&src) = graph.idx.get(&format!("z:{from}")) else { continue };
+        graph.spt(&cost, src, &mut ws, -1, -1);
+        let mut row: HashMap<String, f64> = HashMap::new();
+        for to in to_ids {
+            // a node index from graph.idx is always inside the workspace
+            if let Some(&i) = graph.idx.get(&format!("z:{to}"))
+                && let Some(&nd) = ws.nd.get(i)
+                && nd.is_finite() {
+                    row.insert(to.clone(), nd);
                 }
         }
-        out.insert(f.clone(), m);
+        out.insert(from.clone(), row);
     }
     out
 }
@@ -126,12 +128,13 @@ pub fn affected_links(p: &V) -> Affected {
     let mut ids: Vec<V> = Vec::new();
     let affected_pct = a.g("affectedPct").n();
     for per in periods_of(sc).into_iter().filter(|x| res_of(pr.base, x).is_some() && !pr.same) {
-        let rb = res_of(pr.base, per).expect("base results");
-        let ro = res_of(sc, per).expect("option results");
+        // per is one of the option's periods that the base also ran, so both results are there
+        let (Some(rb), Some(ro)) = (res_of(pr.base, per), res_of(sc, per)) else { continue };
         for (k, x) in ro.g("arcs").entries() {
             let b = rb.g("arcs").g(k);
             let d = x.g("v").n() - if b.t() { b.g("v").n() } else { 0.0 };
-            if d >= 20.0 && (!b.t() || !(b.g("v").n() > 0.0) || d / b.g("v").n() * 100.0 >= affected_pct) {
+            // !(v > 0.0), NaN included
+            if d >= 20.0 && (!b.t() || b.g("v").n() <= 0.0 || b.g("v").n().is_nan() || d / b.g("v").n() * 100.0 >= affected_pct) {
                 push_unique(&mut ids, V::String(arc_link(k)));
             }
         }
@@ -151,7 +154,7 @@ pub fn affected_links(p: &V) -> Affected {
 pub fn accessibility(p: &V) -> V {
     let pr = pair(p);
     let sc = pr.opt;
-    let a = assumptions(p);
+    let asm = assumptions(p);
     let dz = dev_zones(sc);
     let dests: Vec<&V> = sc.g("zones").vals().into_iter().filter(|z| !z.g("kind").eq_s("gateway")).collect();
     if dz.is_empty() {
@@ -163,50 +166,51 @@ pub fn accessibility(p: &V) -> V {
     };
     let svc = |z: &V| -> f64 { if lu_of(z, "school") > 0.0 || lu_of(z, "medical") > 0.0 || lu_of(z, "retail") + lu_of(z, "supermarket") > 0.0 { 1.0 } else { 0.0 } };
     let have_jobs = dests.iter().any(|z| jobs(z) > 0.0);
-    let w: Vec<(&V, f64)> = dests.iter().map(|z| (*z, if have_jobs { jobs(z) } else { GFA_KEYS.iter().fold(0.0, |s, k| s + lu_of(z, k)) })).collect();
-    let lim = a.g("catchMin").n() * 60.0;
-    let walk_speed = a.g("walkSpeed").n();
-    let cycle_speed = a.g("cycleSpeed").n();
+    let weights: Vec<(&V, f64)> = dests.iter().map(|z| (*z, if have_jobs { jobs(z) } else { GFA_KEYS.iter().fold(0.0, |sum, k| sum + lu_of(z, k)) })).collect();
+    let lim = asm.g("catchMin").n() * 60.0;
+    let walk_speed = asm.g("walkSpeed").n();
+    let cycle_speed = asm.g("cycleSpeed").n();
     let dz_ids: Vec<String> = dz.iter().map(|z| format!("z:{}", z.g("id").s())).collect();
     let dist = dist_skim(p, sc, &dz_ids);
     let periods = periods_of(sc);
-    let r = periods.first().and_then(|per| res_of(sc, per));
-    let car = r.map(|r| {
+    let res0 = periods.first().and_then(|per| res_of(sc, per));
+    let car = res0.map(|res| {
         let from: Vec<String> = dz.iter().map(|z| z.g("id").s()).collect();
         let to: Vec<String> = dests.iter().map(|z| z.g("id").s()).collect();
-        skim(p, sc, Some(r), &from, &to)
+        skim(p, sc, Some(res), &from, &to)
     });
     let mut walk = [0.0, 0.0];
     let mut cycle = [0.0, 0.0];
     let mut carv = [0.0, 0.0];
     for z in &dz {
-        let d = dist.nd.get(&format!("z:{}", z.g("id").s()));
-        for (o, wt) in &w {
-            let i = d.and_then(|_| dist.g.idx.get(&format!("z:{}", o.g("id").s())).copied());
-            let m = match (i, d) {
-                (Some(i), Some(nd)) => nd[i],
+        let dnd = dist.nd.get(&format!("z:{}", z.g("id").s()));
+        for (dest, wt) in &weights {
+            let di = dnd.and_then(|_| dist.g.idx.get(&format!("z:{}", dest.g("id").s())).copied());
+            // a node index from the skim's graph is always inside its distances; JavaScript's undefined compares false, as Infinity does here
+            let metres = match (di, dnd) {
+                (Some(di), Some(nd)) => nd.get(di).copied().unwrap_or(f64::INFINITY),
                 _ => f64::INFINITY,
             };
-            if m / walk_speed <= lim {
+            if metres / walk_speed <= lim {
                 walk[0] += wt;
-                walk[1] += svc(o);
+                walk[1] += svc(dest);
             }
-            if m / (cycle_speed / 3.6) <= lim {
+            if metres / (cycle_speed / 3.6) <= lim {
                 cycle[0] += wt;
-                cycle[1] += svc(o);
+                cycle[1] += svc(dest);
             }
-            let t = car.as_ref().and_then(|c| c.get(&z.g("id").s())).and_then(|m| m.get(&o.g("id").s()));
-            if let Some(t) = t
-                && *t <= lim {
+            let secs = car.as_ref().and_then(|cm| cm.get(&z.g("id").s())).and_then(|row| row.get(&dest.g("id").s()));
+            if let Some(secs) = secs
+                && *secs <= lim {
                     carv[0] += wt;
-                    carv[1] += svc(o);
+                    carv[1] += svc(dest);
                 }
         }
     }
-    let n = dz.len() as f64;
+    let n = usize_to_f64(dz.len());
     let unit = if have_jobs { "jobs" } else { "m\u{b2} commercial GFA (no job data: fill employment in the Land use tab)" };
     let table: [(&str, Option<[f64; 2]>); 4] = [("Walking", Some(walk)), ("Cycling", Some(cycle)), ("Public transport", None), ("Car", if car.is_some() { Some(carv) } else { None })];
-    let rows: Vec<V> = table.iter().map(|(m, t)| jobj! { "mode" => *m, "value" => t.map(|t| t[0] / n), "services" => t.map(|t| t[1] / n) }).collect();
+    let rows: Vec<V> = table.iter().map(|(mode, sums)| jobj! { "mode" => *mode, "value" => sums.map(|t| t[0] / n), "services" => sums.map(|t| t[1] / n) }).collect();
     let parts: Vec<String> = rows
         .iter()
         .map(|x| {
@@ -218,67 +222,56 @@ pub fn accessibility(p: &V) -> V {
             format!("{}: {}", x.g("mode").s(), body)
         })
         .collect();
-    let text = format!("{} within {} min (average over development zones; {} speeds).", parts.join("; "), a.g("catchMin").s(), xdata("ASSUMPTION").s());
+    let text = format!("{} within {} min (average over development zones; {} speeds).", parts.join("; "), asm.g("catchMin").s(), xdata("ASSUMPTION").s());
     jobj! { "rows" => arr(rows), "unit" => unit, "text" => text, "basis" => unit }
 }
 
-/// `policy(P)`: the policy alignment: `{ rows, basis, modes, policy, accessibility, fds, label, inconsistencies }`.
-#[must_use]
-pub fn policy(p: &V) -> V {
-    let pr = pair(p);
-    let sc = pr.opt;
-    let base = pr.base;
-    let a = assumptions(p);
-    let aff = affected_links(p);
-    let fds = crate::compliance::fds_check(p);
-    let an = anop(p);
-    let mut fit_low: Vec<V> = Vec::new();
-    for r in an.g("rows").items().iter().filter(|r| r.g("fit").eq_s("Low")) {
-        for id in r.g("corridor").g("links").items() {
-            fit_low.push(id.clone());
-        }
-    }
-    let ps: Vec<&'static str> = periods_of(sc).into_iter().filter(|x| res_of(base, x).is_some()).collect();
-    let speed_up = a.g("speedUp").n();
-    struct Row {
-        v: V,
-        flags: usize,
-        name: String,
-    }
-    let mut rows: Vec<Row> = Vec::new();
+// One road of the policy alignment table, with its count of inconsistencies and its name for sorting
+struct PolicyRow {
+    v: V,
+    flags: usize,
+    name: String,
+}
+
+// The policy alignment rows of `policy`: each affected road's Future Connect, RASF and ONF classes and its inconsistencies,
+// most inconsistencies first. ps holds the periods both scenarios ran, so their results are there (a missing one counts as
+// no change).
+fn policy_rows(sc: &V, base: &V, aff: &Affected, ps: &[&'static str], fit_low: &[V], speed_up: f64) -> Vec<PolicyRow> {
+    let mut rows: Vec<PolicyRow> = Vec::new();
     for idv in &aff.ids {
         let id = idv.s();
-        let l = sc.g("links").g(&id);
-        if !l.t() {
+        let link = sc.g("links").g(&id);
+        if !link.t() {
             continue;
         }
-        let b = base.g("links").g(&id);
-        let fc = if l.g("fc").t() { l.g("fc") } else { &NULL };
+        let base_l = base.g("links").g(&id);
+        let fc = if link.g("fc").t() { link.g("fc") } else { &NULL };
         let mut flags: Vec<String> = Vec::new();
-        let place = place_of(l);
+        let place = place_of(link);
         let spd_up = ps.iter().any(|per| {
-            let (o, bb) = (res_of(sc, per).expect("option results"), res_of(base, per).expect("base results"));
-            ["ab", "ba"].iter().any(|d| {
-                let k = format!("{id}:{d}");
-                let (x, y) = (o.g("arcs").g(&k), bb.g("arcs").g(&k));
-                x.t() && y.t() && x.g("spd").n() - y.g("spd").n() >= speed_up
+            let (Some(ro), Some(rb)) = (res_of(sc, per), res_of(base, per)) else { return false };
+            ["ab", "ba"].iter().any(|dir| {
+                let key = format!("{id}:{dir}");
+                let (xo, xb) = (ro.g("arcs").g(&key), rb.g("arcs").g(&key));
+                xo.t() && xb.t() && xo.g("spd").n() - xb.g("spd").n() >= speed_up
             })
-        }) || (b.t() && (l.g("speed").n() > b.g("speed").n() || limit_of(l) > posted(b)));
+        }) || (base_l.t() && (link.g("speed").n() > base_l.g("speed").n() || limit_of(link) > posted(base_l)));
         if let Some(pl) = place
             && pl >= 3.0 && spd_up {
                 flags.push(format!("The proposal raises vehicle speed on a high-Place (P{}) RASF section", ns(pl)));
             }
         let lanes = |x: &V| f64::from(to_int32(x.g("lanesAB").n())) + f64::from(to_int32(x.g("lanesBA").n()));
-        if b.t() && lanes(l) > lanes(b) && fc.g("gt").t() && !rx("arterial|motorway", "i").test(&fc.g("gt").s()) {
+        if base_l.t() && lanes(link) > lanes(base_l) && fc.g("gt").t() && !rx("arterial|motorway", "i").test(&fc.g("gt").s()) {
             flags.push(format!("Adds traffic lanes where Future Connect classes the road {}", fc.g("gt").s()));
         }
         if fc.g("pt").t()
             && rx("rapid|frequent|ftn|rtn", "i").test(&fc.g("pt").s())
-            && !l.g("busLane").t()
+            && !link.g("busLane").t()
             && ps.iter().any(|per| {
-                let k = format!("{id}:ab");
-                let (x, y) = (res_of(sc, per).expect("option results").g("arcs").g(&k), res_of(base, per).expect("base results").g("arcs").g(&k));
-                x.t() && y.t() && x.g("t").n() > y.g("t").n() * 1.1
+                let key = format!("{id}:ab");
+                let (Some(ro), Some(rb)) = (res_of(sc, per), res_of(base, per)) else { return false };
+                let (xo, xb) = (ro.g("arcs").g(&key), rb.g("arcs").g(&key));
+                xo.t() && xb.t() && xo.g("t").n() > xb.g("t").n() * 1.1
             })
         {
             flags.push(format!("Slows a {} link by more than 10% without bus priority", fc.g("pt").s()));
@@ -286,8 +279,8 @@ pub fn policy(p: &V) -> V {
         if fit_low.iter().any(|x| x.strict_eq(idv)) {
             flags.push("ANOP fit is Low on this corridor".to_string());
         }
-        let name = link_name(l);
-        let cx = l.g("cx");
+        let name = link_name(link);
+        let cx = link.g("cx");
         let rasf = if cx.t() && cx.g("rasf").t() {
             cx.g("rasf").clone()
         } else if let Some(pl) = place {
@@ -297,20 +290,24 @@ pub fn policy(p: &V) -> V {
         };
         let onf = if cx.t() && cx.g("onf").t() { cx.g("onf").clone() } else { sv("\u{2013}") };
         let fcs: Vec<V> = ["gt", "pt", "freight", "cycle"].iter().map(|k| if fc.g(k).t() { fc.g(k).clone() } else { sv("\u{2013}") }).collect();
-        rows.push(Row {
+        rows.push(PolicyRow {
             v: jobj! { "id" => idv, "name" => name.as_str(), "fc" => arr(fcs), "rasf" => rasf, "onf" => onf, "flags" => strs(flags.clone()) },
             flags: flags.len(),
             name,
         });
     }
     js_sort_by(&mut rows, |x, y| {
-        let d = y.flags as f64 - x.flags as f64;
+        let d = usize_to_f64(y.flags) - usize_to_f64(x.flags);
         if d == 0.0 { crate::edit::collate::locale_compare_f64(&x.name, &y.name) } else { d }
     });
-    // conclusion checklist: alignment by mode from the ANOP results
+    rows
+}
+
+// The conclusion checklist of `policy`: alignment by mode from the ANOP results
+fn mode_alignment(an: &V) -> Vec<V> {
     let score = xdata("STD.anop.score");
     let mode_label = xdata("MODE_LABEL");
-    let modes: Vec<V> = MODES
+    MODES
         .iter()
         .map(|m| {
             let ms: Vec<&V> = an
@@ -345,17 +342,11 @@ pub fn policy(p: &V) -> V {
             };
             jobj! { "mode" => &label, "state" => state, "why" => why }
         })
-        .collect();
-    // NPS-UD 1(c): jobs and services reachable from the development zones within the catchment, by mode
-    let acc = accessibility(p);
-    // per modelled peak hour, each period on its own (never AM + PM)
-    let d_vkt = per_period(base, sc, &|s: &V, per: &str| kpi_p("vkt", s, per), &ps, 1, "");
-    let d_co2 = per_period(base, sc, &|s: &V, per: &str| kpi_p("co2", s, per), &ps, 1, "");
-    let d_vht_saved = neg_pp(&per_period(base, sc, &|s: &V, per: &str| kpi_p("vht", s, per), &ps, 1, ""));
-    let e = econ_of(p, base, sc);
-    let haz = climate(p, None);
-    let labels_vkt = xdata("STD.labels.vkt").s();
-    let mode_text = modes.iter().map(|m| format!("{}: {}", m.g("mode").s(), m.g("state").s())).collect::<Vec<_>>().join("; ");
+        .collect()
+}
+
+// The GPS 2024 maintenance and resilience text of `policy`: the assessed roads in a flood or coastal hazard area
+fn resilience_text(haz: &V) -> String {
     let haz_rows = haz.g("rows").items();
     let mut hazard_links: Vec<&V> = Vec::new();
     for r in haz_rows {
@@ -363,21 +354,70 @@ pub fn policy(p: &V) -> V {
             hazard_links.push(r.g("link"));
         }
     }
-    let crash_text = {
-        let c = crashes_on(p, base, &changed_links(base, sc));
-        if c.t() { format!("{} crashes ({} DSI) on changed roads in the CAS window", c.g("crashes").s(), c.g("dsi").s()) } else { "Load CAS crashes".to_string() }
-    };
-    let npsi = {
-        let d = data(p).g("policy").g("npsiDoc").clone();
-        if d.t() { d } else { V::String(rltp_relied(p)) }
-    };
-    let value_text: V = if e.t() && !e.g("mismatch").t() && !e.g("bcr").nullish() {
-        V::String(format!("Indicative BCR {} ({})", if e.g("bcrText").t() { e.g("bcrText").s() } else { num(e.g("bcr"), 1) }, xdata("D4short").s()))
-    } else if e.t() && e.g("mismatch").t() {
-        e.g("note").clone()
+    if !haz_rows.is_empty() {
+        format!(
+            "{} assessed roads in flood or coastal hazard areas{}",
+            hazard_links.len(),
+            if haz_rows.iter().any(|r| r.g("only").t()) { ", including an only access" } else { "" }
+        )
+    } else if haz.g("loaded").t() {
+        "No assessed road in a mapped hazard area".to_string()
+    } else {
+        "Check hazards (Traffic data \u{203a} Data sources)".to_string()
+    }
+}
+
+// The GPS 2024 value for money text of `policy`, from the economics of the option against the base
+fn value_text_of(econ: &V) -> V {
+    if econ.t() && !econ.g("mismatch").t() && !econ.g("bcr").nullish() {
+        V::String(format!("Indicative BCR {} ({})", if econ.g("bcrText").t() { econ.g("bcrText").s() } else { num(econ.g("bcr"), 1) }, xdata("D4short").s()))
+    } else if econ.t() && econ.g("mismatch").t() {
+        econ.g("note").clone()
     } else {
         sv("Not available")
+    }
+}
+
+/// `policy(P)`: the policy alignment: `{ rows, basis, modes, policy, accessibility, fds, label, inconsistencies }`.
+#[must_use]
+pub fn policy(p: &V) -> V {
+    let pr = pair(p);
+    let sc = pr.opt;
+    let base = pr.base;
+    let asm = assumptions(p);
+    let aff = affected_links(p);
+    let fds = crate::compliance::fds_check(p);
+    let an = anop(p);
+    let mut fit_low: Vec<V> = Vec::new();
+    for r in an.g("rows").items().iter().filter(|r| r.g("fit").eq_s("Low")) {
+        for id in r.g("corridor").g("links").items() {
+            fit_low.push(id.clone());
+        }
+    }
+    let ps: Vec<&'static str> = periods_of(sc).into_iter().filter(|x| res_of(base, x).is_some()).collect();
+    let speed_up = asm.g("speedUp").n();
+    let rows = policy_rows(sc, base, &aff, &ps, &fit_low, speed_up);
+    // conclusion checklist: alignment by mode from the ANOP results
+    let modes = mode_alignment(&an);
+    // NPS-UD 1(c): jobs and services reachable from the development zones within the catchment, by mode
+    let acc = accessibility(p);
+    // per modelled peak hour, each period on its own (never AM + PM)
+    let d_vkt = per_period(base, sc, &|s: &V, per: &str| kpi_p("vkt", s, per), &ps, 1, "");
+    let d_co2 = per_period(base, sc, &|s: &V, per: &str| kpi_p("co2", s, per), &ps, 1, "");
+    let d_vht_saved = neg_pp(&per_period(base, sc, &|s: &V, per: &str| kpi_p("vht", s, per), &ps, 1, ""));
+    let econ = econ_of(p, base, sc);
+    let haz = climate(p, None);
+    let labels_vkt = xdata("STD.labels.vkt").s();
+    let mode_text = modes.iter().map(|m| format!("{}: {}", m.g("mode").s(), m.g("state").s())).collect::<Vec<_>>().join("; ");
+    let crash_text = {
+        let crashes = crashes_on(p, base, &changed_links(base, sc));
+        if crashes.t() { format!("{} crashes ({} DSI) on changed roads in the CAS window", crashes.g("crashes").s(), crashes.g("dsi").s()) } else { "Load CAS crashes".to_string() }
     };
+    let npsi = {
+        let doc = data(p).g("policy").g("npsiDoc").clone();
+        if doc.t() { doc } else { V::String(rltp_relied(p)) }
+    };
+    let value_text = value_text_of(&econ);
     let policy_rows = arr([
         jobj! { "ref" => "AT ITA s4.4, s6", "policy" => "Network alignment conclusion, every mode", "text" => mode_text },
         jobj! { "ref" => "NPS-UD Policy 1(c)", "policy" => "Accessibility to jobs and services by walking, cycling, public transport and car", "text" => acc.g("text") },
@@ -401,17 +441,7 @@ pub fn policy(p: &V) -> V {
         },
         jobj! {
             "ref" => "GPS 2024", "policy" => "Maintenance and resilience",
-            "text" => if !haz_rows.is_empty() {
-                format!(
-                    "{} assessed roads in flood or coastal hazard areas{}",
-                    hazard_links.len(),
-                    if haz_rows.iter().any(|r| r.g("only").t()) { ", including an only access" } else { "" }
-                )
-            } else if haz.g("loaded").t() {
-                "No assessed road in a mapped hazard area".to_string()
-            } else {
-                "Check hazards (Traffic data \u{203a} Data sources)".to_string()
-            },
+            "text" => resilience_text(&haz),
         },
         jobj! { "ref" => "GPS 2024", "policy" => "Safety", "text" => crash_text },
         jobj! { "ref" => "GPS 2024", "policy" => "Value for money", "text" => value_text },

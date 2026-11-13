@@ -10,7 +10,8 @@ use super::jv::{Jx, V, jarr, jobj, ns, st, strs};
 use super::net;
 use super::record::{active_sc, assumption, base_sc, in_auckland, num, numf, pathway_entry, regime, res_of, settings, state};
 use super::rx::rx;
-use crate::jsnum::{math_max, math_min, truthy_number};
+use crate::jsnum::{math_max, math_min, truthy_number, usize_to_f64};
+use std::fmt::Write as _;
 use crate::util;
 
 fn or0(v: &V) -> f64 {
@@ -33,34 +34,34 @@ fn lu_label(k: &str) -> String {
 
 /// `quantities(P, sc)`: the proposal quantities from the development zones (full yield) with the author's overrides, and the busiest-hour trips from the rates.
 pub fn quantities(p: &V, sc: &V) -> V {
-    let c = state(p);
-    let s = p.g("settings");
+    let cs = state(p);
+    let sets = p.g("settings");
     let zones = net::dev_zones(sc);
     let mut lu: Vec<(String, f64)> = Vec::new();
-    for z in &zones {
-        for (k, v) in z.g("lu").entries() {
+    for zone in &zones {
+        for (k, v) in zone.g("lu").entries() {
             let add = or0(v);
-            match lu.iter_mut().find(|e| e.0 == k) {
-                Some(e) => e.1 = if truthy_number(e.1) { e.1 } else { 0.0 } + add,
+            match lu.iter_mut().find(|ent| ent.0 == k) {
+                Some(ent) => ent.1 = if truthy_number(ent.1) { ent.1 } else { 0.0 } + add,
                 None => lu.push((k.to_string(), 0.0 + add)),
             }
         }
     }
-    let l = |k: &str| lu.iter().find(|e| e.0 == k).map_or(0.0, |e| if truthy_number(e.1) { e.1 } else { 0.0 });
-    let sub = c.g("ctx").g("pathway").eq_s("rc-subdivision");
-    let dt = c.g("site").g("driveThrough").t();
-    let sec = c.g("site").g("school").eq_s("secondary");
-    let mut q = jobj! { "dwellings" => if sub { 0.0 } else { l("residential") + l("apartment") }, "ird" => l("retirement"), "visitor" => l("hotel"),
-        "subdivision" => if sub { l("residential") + l("apartment") } else { 0.0 },
-        "primary" => if sec { 0.0 } else { l("school") }, "secondary" => if sec { l("school") } else { 0.0 }, "tertiary" => l("tertiary"), "office" => l("office"),
-        "retail" => l("retail") + l("supermarket") + if dt { 0.0 } else { l("fastfood") }, "retailDT" => if dt { l("fastfood") } else { 0.0 }, "warehouse" => l("warehouse"), "industrial" => l("industrial") };
+    let lu_of = |k: &str| lu.iter().find(|ent| ent.0 == k).map_or(0.0, |ent| if truthy_number(ent.1) { ent.1 } else { 0.0 });
+    let sub = cs.g("ctx").g("pathway").eq_s("rc-subdivision");
+    let dt = cs.g("site").g("driveThrough").t();
+    let sec = cs.g("site").g("school").eq_s("secondary");
+    let mut qty = jobj! { "dwellings" => if sub { 0.0 } else { lu_of("residential") + lu_of("apartment") }, "ird" => lu_of("retirement"), "visitor" => lu_of("hotel"),
+        "subdivision" => if sub { lu_of("residential") + lu_of("apartment") } else { 0.0 },
+        "primary" => if sec { 0.0 } else { lu_of("school") }, "secondary" => if sec { lu_of("school") } else { 0.0 }, "tertiary" => lu_of("tertiary"), "office" => lu_of("office"),
+        "retail" => lu_of("retail") + lu_of("supermarket") + if dt { 0.0 } else { lu_of("fastfood") }, "retailDT" => if dt { lu_of("fastfood") } else { 0.0 }, "warehouse" => lu_of("warehouse"), "industrial" => lu_of("industrial") };
     let mut src = V::object();
-    for k in q.keys().into_iter().map(String::from).collect::<Vec<_>>() {
+    for k in qty.keys().into_iter().map(String::from).collect::<Vec<_>>() {
         src.set(k, st("development zones"));
     }
-    for (k, v) in c.g("q").entries() {
-        if v.entered() && q.has(k) {
-            q.set(k, V::Number(v.n()));
+    for (k, v) in cs.g("q").entries() {
+        if v.entered() && qty.has(k) {
+            qty.set(k, V::Number(v.n()));
             src.set(k, st("entered"));
         }
     }
@@ -68,41 +69,42 @@ pub fn quantities(p: &V, sc: &V) -> V {
     let mut unlisted = V::object();
     let (mut direct, mut direct_only) = (false, false);
     for per in ["AM", "PM"] {
-        let (mut t, mut u) = (0.0, 0.0);
-        for z in &zones {
-            let red = 1.0 - util::clamp(or0(z.g("reduction")), 0.0, 100.0) / 100.0;
+        let (mut total, mut unl) = (0.0, 0.0);
+        for zone in &zones {
+            let red = 1.0 - util::clamp(or0(zone.g("reduction")), 0.0, 100.0) / 100.0;
             let (mut zl, mut zu) = (0.0, 0.0);
-            for (k, v) in z.g("lu").entries() {
-                let r = s.g("rates").g(k).g(per);
+            for (k, v) in zone.g("lu").entries() {
+                let rate = sets.g("rates").g(k).g(per);
                 let lm = model("LANDUSES").g(k);
-                if !r.t() || !lm.t() {
+                if !rate.t() || !lm.t() {
                     continue;
                 }
-                let x = or0(v) / lm.g("per").n() * r.g("rate").n();
-                zl += x;
+                let made = or0(v) / lm.g("per").n() * rate.g("rate").n();
+                zl += made;
                 if !e27_map(k) {
-                    zu += x;
+                    zu += made;
                 }
             }
-            let ex = or0(z.g("extra").g(&format!("{per}in"))) + or0(z.g("extra").g(&format!("{per}out")));
+            let ex = or0(zone.g("extra").g(&format!("{per}in"))) + or0(zone.g("extra").g(&format!("{per}out")));
             if ex != 0.0 {
                 direct = true;
-                if !(zl > 0.0) {
+                // !(zl > 0.0), NaN included
+                if zl <= 0.0 || zl.is_nan() {
                     direct_only = true;
                 }
             }
             let zt = math_max(0.0, zl + ex);
             let share = if zl > 0.0 { zu / zl } else { 1.0 };
-            t += zt * red;
-            u += zt * share * red;
+            total += zt * red;
+            unl += zt * share * red;
         }
-        trips.set(per, V::Number(r1(t)));
-        unlisted.set(per, V::Number(r1(u)));
+        trips.set(per, V::Number(r1(total)));
+        unlisted.set(per, V::Number(r1(unl)));
     }
-    let peak = trips.vals().iter().fold(0.0, |a, v| math_max(a, v.n()));
+    let peak = trips.vals().iter().fold(0.0, |m, v| math_max(m, v.n()));
     let peak_p = trips.entries().iter().find(|(_, v)| v.n() == peak).map_or(V::Null, |(k, _)| st(*k));
-    let unlisted_peak = unlisted.vals().iter().fold(0.0, |a, v| math_max(a, v.n()));
-    let mut unlisted_uses: Vec<String> = lu.iter().filter(|e| e.1 > 0.0 && !e27_map(&e.0)).map(|e| lu_label(&e.0)).collect();
+    let unlisted_peak = unlisted.vals().iter().fold(0.0, |m, v| math_max(m, v.n()));
+    let mut unlisted_uses: Vec<String> = lu.iter().filter(|ent| ent.1 > 0.0 && !e27_map(&ent.0)).map(|ent| lu_label(&ent.0)).collect();
     if direct_only {
         unlisted_uses.push("Trips entered directly (no land use)".into());
     }
@@ -110,7 +112,7 @@ pub fn quantities(p: &V, sc: &V) -> V {
     for (k, v) in &lu {
         lu_v.set(k.as_str(), V::Number(*v));
     }
-    jobj! { "q" => q, "src" => src, "lu" => lu_v, "zones" => zones.len(), "trips" => trips, "peak" => peak, "peakPeriod" => peak_p, "unlistedPeak" => unlisted_peak,
+    jobj! { "q" => qty, "src" => src, "lu" => lu_v, "zones" => zones.len(), "trips" => trips, "peak" => peak, "peakPeriod" => peak_p, "unlistedPeak" => unlisted_peak,
         "unlistedUses" => strs(unlisted_uses), "direct" => direct,
         "basis" => format!("busiest modelled hour (AM or PM) from the trip rates in Settings{}, after trip reductions, at full build-out; indicative unless the rates are replaced", if direct { " plus trips entered directly" } else { "" }) }
 }
@@ -144,136 +146,75 @@ fn set_cons(rows: &mut [V], f: &dyn Fn(&V) -> String) {
     }
 }
 
-/// `e27(P, sc)`: the Auckland Unitary Plan E27 trigger screening.
-#[must_use]
-pub fn e27_sc(p: &V, sc: &V) -> V {
-    let c = state(p);
-    let site = site_info(p);
-    let qn = quantities(p, sc);
-    let status = if c.g("ctx").g("activityStatus").t() { c.g("ctx").g("activityStatus").s() } else { String::new() };
-    let e = table("E27");
-    let mut rows: Vec<V> = e
-        .g("rows")
+// The Table E27.6.1.1 rows of `e27`, each with the proposal's quantity and whether it exceeds the threshold
+fn e27_rows(tbl: &V, qn: &V) -> Vec<V> {
+    tbl.g("rows")
         .items()
         .iter()
         .map(|r| {
-            let x = qn.g("q").g(&r.g("key").s());
-            let q = if x.t() { x.n() } else { 0.0 };
-            let mut o = r.clone();
-            o.set("q", V::Number(q));
+            let qv = qn.g("q").g(&r.g("key").s());
+            let qty = if qv.t() { qv.n() } else { 0.0 };
+            let mut row = r.clone();
+            row.set("q", V::Number(qty));
             if qn.g("src").has(&r.g("key").s()) {
-                o.set("src", qn.g("src").g(&r.g("key").s()).clone());
+                row.set("src", qn.g("src").g(&r.g("key").s()).clone());
             }
-            o.set("exceeded", V::Bool(q > r.g("thr").n()));
-            o
+            row.set("exceeded", V::Bool(qty > r.g("thr").n()));
+            row
         })
-        .collect();
-    let mut applies = true;
-    let mut exempt = V::Null;
-    let mut redirect = V::Null;
-    if site.g("transportPrecinct").t() {
-        let pr = site.g("transportPrecinct");
-        applies = false;
-        redirect = jobj! { "precinct" => pr, "text" => format!("E27.6.1 does not apply ({}): use the precinct staging tracker", pr.g("rule").s()), "cite" => format!("E27.4; {}", pr.g("rule").s()) };
-        set_cons(&mut rows, &|_| "Not applied (precinct)".into());
-    } else {
-        exempt = exemption_of(site.g("zone").g("name"), site.g("cfoc").t(), &status);
-        if !exempt.t() && c.g("site").g("zoneTA").t() {
-            exempt = jobj! { "rule" => "E27.6.1(2)(d)", "text" => "Exempt E27.6.1(2)(d): the zone or precinct rules already require trip generation effects to be assessed" };
-        }
-        if exempt.t() {
-            applies = false;
-            set_cons(&mut rows, &|_| "Not applied (exempt)".into());
-        }
-    }
-    let hit: Vec<V> = rows.iter().filter(|r| r.g("exceeded").t()).cloned().collect();
-    let unlisted = c.g("site").g("unlisted").t() || qn.g("unlistedUses").jlen() > 0;
-    let peak_u = if c.g("site").g("unlisted").t() { qn.g("peak").n() } else { qn.g("unlistedPeak").n() };
-    let thr = e.g("catchAll").g("thr").n();
-    let mut ca = jobj! { "id" => e.g("catchAll").g("id"), "thr" => thr, "peak" => r1(peak_u), "unlisted" => unlisted, "status" => status.as_str(), "applies" => false, "exceeded" => false, "why" => "" };
-    
-    let why: String = if !applies {
-        format!("Not applied ({}).", if redirect.t() { "precinct" } else { "exempt" })
+        .collect()
+}
+
+// Why the E27.6.1(1)(b) catch-all of `e27` does or does not apply, with Some(exceeded) when it applies
+// (not_applied: None when the rule applies, otherwise why not: "precinct" or "exempt")
+fn catch_all(not_applied: Option<&str>, unlisted: bool, status: &str, zone_ta: bool, peak_u: f64, thr: f64) -> (String, Option<bool>) {
+    if let Some(why_not) = not_applied {
+        (format!("Not applied ({why_not})."), None)
     } else if !unlisted {
-        "Every activity is listed in Table E27.6.1.1.".into()
+        ("Every activity is listed in Table E27.6.1.1.".into(), None)
     } else if status == "P" {
-        "Does not apply to activities permitted in the zone.".into()
+        ("Does not apply to activities permitted in the zone.".into(), None)
     } else if status != "C" && status != "RD" {
         if status.is_empty() {
-            "Set the activity status to test it (it applies only to controlled or restricted discretionary activities).".into()
+            ("Set the activity status to test it (it applies only to controlled or restricted discretionary activities).".into(), None)
         } else {
-            let a = table("ACTIVITY").g(&status);
-            format!("Applies only to controlled or restricted discretionary activities (this one is {}).", if a.t() { a.s() } else { status.clone() }.to_lowercase())
+            let act = table("ACTIVITY").g(status);
+            (format!("Applies only to controlled or restricted discretionary activities (this one is {}).", if act.t() { act.s() } else { status.to_string() }.to_lowercase()), None)
         }
-    } else if c.g("site").g("zoneTA").t() {
-        "The zone already requires a transport assessment.".into()
+    } else if zone_ta {
+        ("The zone already requires a transport assessment.".into(), None)
     } else {
         let ex = peak_u > thr;
-        ca.set("applies", V::Bool(true));
-        ca.set("exceeded", V::Bool(ex));
-        if ex { format!("Exceeded: {} veh/h in the busiest modelled hour (more than 100). Restricted discretionary (A3).", numf(peak_u, 0)) } else { format!("Not exceeded: {} veh/h in the busiest modelled hour.", numf(peak_u, 0)) }
+        let why = if ex { format!("Exceeded: {} veh/h in the busiest modelled hour (more than 100). Restricted discretionary (A3).", numf(peak_u, 0)) } else { format!("Not exceeded: {} veh/h in the busiest modelled hour.", numf(peak_u, 0)) };
+        (why, Some(ex))
+    }
+}
+
+// The PC120 note of `e27`: both zonings, and whether the E27.6.1(2) exemption differs; None when PC120 shows no zone
+fn pc120_note(site: &V, status: &str, tbl: &V) -> Option<V> {
+    if !site.g("pc120").g("zone").t() {
+        return None;
+    }
+    let op = site.g("zone").g("name");
+    let pr = site.g("pc120").g("zone");
+    let ex_op = exemption_of(op, site.g("cfoc").t(), status).t();
+    let ex_pr = exemption_of(pr, site.g("cfoc").t(), status).t();
+    let op_s = if op.t() { op.s() } else { String::new() };
+    let text = if ex_op != ex_pr {
+        format!("PC120 changes the E27.6.1(2) position: operative {} is {}, PC120 proposed {} would be {}. Test both until PC120 is decided (due by June 2027).", if op.t() { op_s.clone() } else { "?".into() }, if ex_op { "exempt" } else { "not exempt" }, pr.s(), if ex_pr { "exempt" } else { "not exempt" })
+    } else if op.t() && op_s != pr.s() {
+        format!("PC120 proposes {} (operative: {}). The E27.6.1(2) exemption is the same under both.", pr.s(), op_s)
+    } else {
+        format!("PC120 shows {}; no zoning change at the site.", pr.s())
     };
-    ca.set("why", st(why));
-    let ca_ex = ca.g("exceeded").t();
-    let mut tier = V::Null;
-    let mut exceeded_text = V::Null;
-    let mut consequence = V::Null;
-    let mut supplementary = false;
-    let mut notes: Vec<String> = Vec::new();
-    let all_t1 = hit.iter().all(|r| r.g("tier").n() == 1.0);
-    if applies && (!hit.is_empty() || ca_ex) {
-        let t = if !ca_ex && all_t1 { 1 } else { 2 };
-        tier = V::Number(f64::from(t));
-        set_cons(&mut rows, &|r| if r.g("exceeded").t() { format!("RD (Table E27.4.1 (A3)); {}", if t == 1 { "E27.8.2(3A)" } else { "E27.8.2(3)" }) } else { "Not exceeded".into() });
-        let parts: Vec<&str> = [if hit.is_empty() { "" } else { "Table E27.6.1.1" }, if ca_ex { "E27.6.1(1)(b)" } else { "" }].into_iter().filter(|s| !s.is_empty()).collect();
-        exceeded_text = st(format!("{} exceeded", parts.join(" and ")));
-        let vic = settings(p).g("vicinity").clone();
-        consequence = st(if t == 1 {
-            format!("Restricted discretionary. Tier 1: {}. Study area defaults to a {} m walking catchment ({}).", e.g("tier1Scope").s(), vic.s(), e.g("tier1Area").g("basis").s())
-        } else {
-            format!("Restricted discretionary. Tier 2: {}.{}", e.g("tier2Scope").s(), if ca_ex && !hit.is_empty() && all_t1 { " The E27.6.1(1)(b) catch-all is not a tier 1 row, so the all-mode network assessment applies." } else { "" })
-        });
-        supplementary = t == 1;
-    } else if applies {
-        set_cons(&mut rows, &|_| "Not exceeded".into());
-    }
-    if applies && (!hit.is_empty() || ca_ex) {
-        notes.push("E27.9(2): the council may require a travel plan.".into());
-        notes.push("E27.9(4): the council may require a transport assessment prepared by a suitably qualified transport planner or traffic engineer.".into());
-    }
-    if (status == "NC" || status == "U") && qn.g("peak").n() >= 100.0 {
-        notes.push("E27.9(5): may need an ITA under the AT ITA Guidelines in force (a non-complying or unprovided activity generating 100 veh/h or more in any hour).".into());
-        notes.push(format!("E27.9(5) footnote: the AUP names the Auckland Transport ITA Guidelines (2025 Version 2 is the version in force); {}", table("AUTH.footnote").s()));
-    }
-    notes.push(format!("{}.", e.g("s104C").s()));
-    let mut out = jobj! { "version" => e.g("version"), "wording" => e.g("wording"), "source" => e.g("source"), "rows" => V::Array(rows), "quantities" => qn.clone(), "site" => site.clone(),
-        "applies" => applies, "exempt" => exempt, "redirect" => redirect, "tier" => tier.clone(), "notes" => V::Null, "s104C" => e.g("s104C"), "supplementary" => supplementary };
-    out.set("catchAll", ca);
-    if tier.t() {
-        out.set("exceededText", exceeded_text);
-        out.set("consequence", consequence);
-    }
-    // PC120 overlay: both zonings, and whether the exemption differs
-    if site.g("pc120").g("zone").t() {
-        let op = site.g("zone").g("name");
-        let pr = site.g("pc120").g("zone");
-        let ex_op = exemption_of(op, site.g("cfoc").t(), &status).t();
-        let ex_pr = exemption_of(pr, site.g("cfoc").t(), &status).t();
-        let op_s = if op.t() { op.s() } else { String::new() };
-        let text = if ex_op != ex_pr {
-            format!("PC120 changes the E27.6.1(2) position: operative {} is {}, PC120 proposed {} would be {}. Test both until PC120 is decided (due by June 2027).", if op.t() { op_s.clone() } else { "?".into() }, if ex_op { "exempt" } else { "not exempt" }, pr.s(), if ex_pr { "exempt" } else { "not exempt" })
-        } else if op.t() && op_s != pr.s() {
-            format!("PC120 proposes {} (operative: {}). The E27.6.1(2) exemption is the same under both.", pr.s(), op_s)
-        } else {
-            format!("PC120 shows {}; no zoning change at the site.", pr.s())
-        };
-        out.set("pc120", jobj! { "operative" => if op.t() { op.clone() } else { st("not known") }, "proposed" => pr, "differs" => op.t() && op_s != pr.s(), "exemptDiffers" => ex_op != ex_pr, "text" => text, "status" => e.g("pc120Status") });
-    }
-    // E27.2 / E27.3 policy matrix
+    Some(jobj! { "operative" => if op.t() { op.clone() } else { st("not known") }, "proposed" => pr, "differs" => op.t() && op_s != pr.s(), "exemptDiffers" => ex_op != ex_pr, "text" => text, "status" => tbl.g("pc120Status") })
+}
+
+// The E27.2 / E27.3 policy matrix of `e27`: whether each policy applies, and why
+fn policy_matrix(site: &V, tbl: &V, status: &str, major: bool) -> Vec<V> {
     let zone_name = site.g("zone").g("name");
-    let exempt_zone = exemption_of(zone_name, site.g("cfoc").t(), "").t() && !(site.g("zone").t() && re_of(e.g("openSpace")).test(&zone_name.sn()));
-    let major = out.g("tier").n() == 2.0 || qn.g("peak").n() >= 100.0;
-    let matrix: Vec<V> = table("POLICY")
+    let exempt_zone = exemption_of(zone_name, site.g("cfoc").t(), "").t() && !(site.g("zone").t() && re_of(tbl.g("openSpace")).test(&zone_name.sn()));
+    table("POLICY")
         .items()
         .iter()
         .map(|pp| {
@@ -286,12 +227,98 @@ pub fn e27_sc(p: &V, sc: &V) -> V {
             } else {
                 "Applies"
             };
-            let mut o = pp.clone();
-            o.set("applies", V::Bool(ap));
-            o.set("why", st(why));
-            o
+            let mut row = pp.clone();
+            row.set("applies", V::Bool(ap));
+            row.set("why", st(why));
+            row
         })
-        .collect();
+        .collect()
+}
+
+/// `e27(P, sc)`: the Auckland Unitary Plan E27 trigger screening.
+#[must_use]
+pub fn e27_sc(p: &V, sc: &V) -> V {
+    let cs = state(p);
+    let site = site_info(p);
+    let qn = quantities(p, sc);
+    let status = if cs.g("ctx").g("activityStatus").t() { cs.g("ctx").g("activityStatus").s() } else { String::new() };
+    let tbl = table("E27");
+    let mut rows: Vec<V> = e27_rows(tbl, &qn);
+    let mut applies = true;
+    let mut exempt = V::Null;
+    let mut redirect = V::Null;
+    if site.g("transportPrecinct").t() {
+        let pr = site.g("transportPrecinct");
+        applies = false;
+        redirect = jobj! { "precinct" => pr, "text" => format!("E27.6.1 does not apply ({}): use the precinct staging tracker", pr.g("rule").s()), "cite" => format!("E27.4; {}", pr.g("rule").s()) };
+        set_cons(&mut rows, &|_| "Not applied (precinct)".into());
+    } else {
+        exempt = exemption_of(site.g("zone").g("name"), site.g("cfoc").t(), &status);
+        if !exempt.t() && cs.g("site").g("zoneTA").t() {
+            exempt = jobj! { "rule" => "E27.6.1(2)(d)", "text" => "Exempt E27.6.1(2)(d): the zone or precinct rules already require trip generation effects to be assessed" };
+        }
+        if exempt.t() {
+            applies = false;
+            set_cons(&mut rows, &|_| "Not applied (exempt)".into());
+        }
+    }
+    let hit: Vec<V> = rows.iter().filter(|r| r.g("exceeded").t()).cloned().collect();
+    let unlisted = cs.g("site").g("unlisted").t() || qn.g("unlistedUses").jlen() > 0;
+    let peak_u = if cs.g("site").g("unlisted").t() { qn.g("peak").n() } else { qn.g("unlistedPeak").n() };
+    let thr = tbl.g("catchAll").g("thr").n();
+    let mut ca = jobj! { "id" => tbl.g("catchAll").g("id"), "thr" => thr, "peak" => r1(peak_u), "unlisted" => unlisted, "status" => status.as_str(), "applies" => false, "exceeded" => false, "why" => "" };
+    let (why, ca_applies) = catch_all((!applies).then(|| if redirect.t() { "precinct" } else { "exempt" }), unlisted, &status, cs.g("site").g("zoneTA").t(), peak_u, thr);
+    if let Some(ex) = ca_applies {
+        ca.set("applies", V::Bool(true));
+        ca.set("exceeded", V::Bool(ex));
+    }
+    ca.set("why", st(why));
+    let ca_ex = ca.g("exceeded").t();
+    let mut tier = V::Null;
+    let mut exceeded_text = V::Null;
+    let mut consequence = V::Null;
+    let mut supplementary = false;
+    let mut notes: Vec<String> = Vec::new();
+    let all_t1 = hit.iter().all(|r| r.g("tier").n() == 1.0);
+    if applies && (!hit.is_empty() || ca_ex) {
+        let tier_n = if !ca_ex && all_t1 { 1 } else { 2 };
+        tier = V::Number(f64::from(tier_n));
+        set_cons(&mut rows, &|r| if r.g("exceeded").t() { format!("RD (Table E27.4.1 (A3)); {}", if tier_n == 1 { "E27.8.2(3A)" } else { "E27.8.2(3)" }) } else { "Not exceeded".into() });
+        let parts: Vec<&str> = [if hit.is_empty() { "" } else { "Table E27.6.1.1" }, if ca_ex { "E27.6.1(1)(b)" } else { "" }].into_iter().filter(|s| !s.is_empty()).collect();
+        exceeded_text = st(format!("{} exceeded", parts.join(" and ")));
+        let vic = settings(p).g("vicinity").clone();
+        consequence = st(if tier_n == 1 {
+            format!("Restricted discretionary. Tier 1: {}. Study area defaults to a {} m walking catchment ({}).", tbl.g("tier1Scope").s(), vic.s(), tbl.g("tier1Area").g("basis").s())
+        } else {
+            format!("Restricted discretionary. Tier 2: {}.{}", tbl.g("tier2Scope").s(), if ca_ex && !hit.is_empty() && all_t1 { " The E27.6.1(1)(b) catch-all is not a tier 1 row, so the all-mode network assessment applies." } else { "" })
+        });
+        supplementary = tier_n == 1;
+    } else if applies {
+        set_cons(&mut rows, &|_| "Not exceeded".into());
+    }
+    if applies && (!hit.is_empty() || ca_ex) {
+        notes.push("E27.9(2): the council may require a travel plan.".into());
+        notes.push("E27.9(4): the council may require a transport assessment prepared by a suitably qualified transport planner or traffic engineer.".into());
+    }
+    if (status == "NC" || status == "U") && qn.g("peak").n() >= 100.0 {
+        notes.push("E27.9(5): may need an ITA under the AT ITA Guidelines in force (a non-complying or unprovided activity generating 100 veh/h or more in any hour).".into());
+        notes.push(format!("E27.9(5) footnote: the AUP names the Auckland Transport ITA Guidelines (2025 Version 2 is the version in force); {}", table("AUTH.footnote").s()));
+    }
+    notes.push(format!("{}.", tbl.g("s104C").s()));
+    let mut out = jobj! { "version" => tbl.g("version"), "wording" => tbl.g("wording"), "source" => tbl.g("source"), "rows" => V::Array(rows), "quantities" => qn.clone(), "site" => site.clone(),
+        "applies" => applies, "exempt" => exempt, "redirect" => redirect, "tier" => tier.clone(), "notes" => V::Null, "s104C" => tbl.g("s104C"), "supplementary" => supplementary };
+    out.set("catchAll", ca);
+    if tier.t() {
+        out.set("exceededText", exceeded_text);
+        out.set("consequence", consequence);
+    }
+    // PC120 overlay: both zonings, and whether the exemption differs
+    if let Some(pc) = pc120_note(&site, &status, tbl) {
+        out.set("pc120", pc);
+    }
+    // E27.2 / E27.3 policy matrix
+    let major = out.g("tier").n() == 2.0 || qn.g("peak").n() >= 100.0;
+    let matrix = policy_matrix(&site, tbl, &status, major);
     out.set("notes", strs(notes));
     out.set("matrix", V::Array(matrix));
     out
@@ -315,7 +342,7 @@ pub fn link_change(p: &V, sc: &V) -> V {
             }
         }
         if x.t() && best.t() && best.g("period").eq_s(per) {
-            best.set("included", V::Number(x.g("links").jlen() as f64));
+            best.set("included", V::Number(usize_to_f64(x.g("links").jlen())));
         }
     }
     best
@@ -413,10 +440,10 @@ pub fn table1(qn: &V) -> V {
         text = format!("{}: the proposal has a drive-through component.", t1.g("driveThrough").s());
     } else if f >= 1.0 {
         result = "Full";
-        text = if used.len() == 1 { format!("ITA Full threshold ({}) reached: {} {}.", numf(used[0].g("full").n(), 0), numf(used[0].g("q").n(), 0), used[0].g("unit").s()) } else { format!("ITA Full threshold reached in aggregate ({}% of Full, mixed use assessed proportionately).", numf(f * 100.0, 0)) };
+        text = if let [only] = used.as_slice() { format!("ITA Full threshold ({}) reached: {} {}.", numf(only.g("full").n(), 0), numf(only.g("q").n(), 0), only.g("unit").s()) } else { format!("ITA Full threshold reached in aggregate ({}% of Full, mixed use assessed proportionately).", numf(f * 100.0, 0)) };
     } else if l >= 1.0 {
         result = "Lite";
-        text = if used.len() == 1 { format!("ITA Lite threshold ({}) reached: {} {}.", numf(used[0].g("lite").n(), 0), numf(used[0].g("q").n(), 0), used[0].g("unit").s()) } else { format!("ITA Lite threshold reached in aggregate ({}% of Lite, mixed use assessed proportionately).", numf(l * 100.0, 0)) };
+        text = if let [only] = used.as_slice() { format!("ITA Lite threshold ({}) reached: {} {}.", numf(only.g("lite").n(), 0), numf(only.g("q").n(), 0), only.g("unit").s()) } else { format!("ITA Lite threshold reached in aggregate ({}% of Lite, mixed use assessed proportionately).", numf(l * 100.0, 0)) };
     } else {
         result = "None";
         text = format!("Below the Table 1 ITA Lite thresholds ({}% of Lite in aggregate).", numf(l * 100.0, 0));
@@ -454,8 +481,9 @@ pub fn crash_flags(p: &V, sc: &V) -> V {
     }
     let Some(s) = engine::safety_summary(p, sc) else { return none };
     let band = |b: &V| rx("high", "").test(&b.sn());
+    // Bound: counts of items in memory, far below usize::MAX
     let hi = s.g("topLinks").items().iter().filter(|l| l.g("collective").t() && band(l.g("collective").g("band"))).count()
-        + s.g("topNodes").items().iter().filter(|n| n.g("band").t() && band(n.g("band").g("band"))).count();
+        .saturating_add(s.g("topNodes").items().iter().filter(|n| n.g("band").t() && band(n.g("band").g("band"))).count());
     let yrs = s.g("years");
     let window = if yrs.t() && yrs.g("from").t() { format!("{}\u{2013}{}", yrs.g("from").s(), yrs.g("to").s()) } else { "CAS window".into() };
     let pl = if hi == 1 { "" } else { "s" };
@@ -477,16 +505,17 @@ pub fn proportionality(p: &V, o: &V) -> V {
     let level = o.g("level").s();
     let nz = o.g("nzta");
     let mut text = format!("The depth of this transport assessment is set in proportion to the scale and significance of the proposal's transport effects, as {} require{}. ", law, if ftaa { "s" } else { "" });
-    text.push_str(&format!("The proposal generates about {} of net vehicle trips. The largest change on any modelled link is {}. ", d("Net vehicle trips, busiest modelled hour"), d("Largest % change on a modelled link")));
-    text.push_str(&format!("Crash flags: {}. State highway involvement: {}. Precinct: {}. ", d("Crash flags"), d("State highway involvement"), d("Precinct")));
+    // Writing to a String cannot fail
+    let _ = write!(text, "The proposal generates about {} of net vehicle trips. The largest change on any modelled link is {}. ", d("Net vehicle trips, busiest modelled hour"), d("Largest % change on a modelled link"));
+    let _ = write!(text, "Crash flags: {}. State highway involvement: {}. Precinct: {}. ", d("Crash flags"), d("State highway involvement"), d("Precinct"));
     if nz.t() {
-        text.push_str(&format!("{} ", nz.g("text").s()));
+        let _ = write!(text, "{} ", nz.g("text").s());
         if o.g("depth").t() && o.g("depth").g("depth").t() {
-            text.push_str(&format!("{} ", o.g("depth").g("text").s()));
+            let _ = write!(text, "{} ", o.g("depth").g("text").s());
         }
     }
     let an = if rx(r"^[AEIOU]", "").test(&level) { "n" } else { "" };
-    text.push_str(&format!("On that basis a{an} {} is proposed. [Author to confirm and record agreement at scoping.]", level.to_lowercase().replacen("ita", "ITA", 1)));
+    let _ = write!(text, "On that basis a{an} {} is proposed. [Author to confirm and record agreement at scoping.]", level.to_lowercase().replacen("ita", "ITA", 1));
     jobj! { "text" => text, "edited" => false, "confirmed" => pr.g("confirmed").t(), "by" => pr.g("by"), "date" => pr.g("date") }
 }
 
@@ -596,13 +625,13 @@ pub fn ita_scope_sc(p: &V, sc: &V) -> V {
 /// `scopingMemo(P, sc)`: the scoping memo items, proposed from the project; each can be locked with who agreed and when.
 #[must_use]
 pub fn scoping_memo(p: &V, sc: &V) -> V {
-    let c = state(p);
-    let b = bounds_of(sc);
+    let cs = state(p);
+    let bounds = bounds_of(sc);
     let loaded = p.g("data").g("loaded");
     let assessment = p.g("assessment");
     let mut years: Vec<f64> = Vec::new();
-    for s in p.g("scenarios").items() {
-        let y = engine::year_of(p, s);
+    for scn in p.g("scenarios").items() {
+        let y = engine::year_of(p, scn);
         if !years.contains(&y) {
             years.push(y);
         }
@@ -612,14 +641,14 @@ pub fn scoping_memo(p: &V, sc: &V) -> V {
     let years_s = ys.join(", ");
     let data: Vec<String> = [("nzta", "NZTA counts"), ("at", "AT counts"), ("cas", "NZTA CAS crashes"), ("fc", "AT Future Connect"), ("user", "own counts")]
         .iter()
-        .filter(|(k, _)| loaded.g(k).t() && loaded.g(k).g("at").t())
-        .map(|(k, n)| format!("{} ({})", n, today(loaded.g(k).g("at"))))
+        .filter(|(key, _)| loaded.g(key).t() && loaded.g(key).g("at").t())
+        .map(|(key, name)| format!("{} ({})", name, today(loaded.g(key).g("at"))))
         .collect();
     let auth = authorities(p, &V::Null);
     let periods = if assessment.t() && assessment.g("periods").t() { assessment.g("periods").items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join(", ") } else { "AM, PM".into() };
     let reg = p.g("register");
     let proposed = jobj! {
-        "area" => match b { Some((s, w, n, e)) => format!("Network extent {} \u{d7} {} km; extend to links over the AT 5%/10% test", numf(util::dist(&[s, w], &[s, e]) / 1000.0, 1), numf(util::dist(&[s, w], &[n, w]) / 1000.0, 1)), None => "not set".into() },
+        "area" => match bounds { Some((south, west, north, east)) => format!("Network extent {} \u{d7} {} km; extend to links over the AT 5%/10% test", numf(util::dist(&[south, west], &[south, east]) / 1000.0, 1), numf(util::dist(&[south, west], &[north, west]) / 1000.0, 1)), None => "not set".into() },
         "periods" => format!("{periods} peak hour (one hour each)"),
         "years" => if years_s.is_empty() { "\u{2013}".to_string() } else { years_s },
         "data" => if data.is_empty() { "none loaded yet".to_string() } else { data.join("; ") },
@@ -634,7 +663,7 @@ pub fn scoping_memo(p: &V, sc: &V) -> V {
             .iter()
             .map(|it| {
                 let k = it.ix(0).s();
-                let s = c.g("scoping").g(&k);
+                let s = cs.g("scoping").g(&k);
                 jobj! { "key" => k.as_str(), "label" => it.ix(1), "value" => if s.g("value").t() { s.g("value").clone() } else { proposed.g(&k).clone() }, "proposed" => proposed.g(&k), "edited" => s.g("value").t(), "locked" => s.g("locked").t(), "by" => if s.g("by").t() { s.g("by").clone() } else { st("") }, "date" => if s.g("date").t() { s.g("date").clone() } else { st("") } }
             })
             .collect(),

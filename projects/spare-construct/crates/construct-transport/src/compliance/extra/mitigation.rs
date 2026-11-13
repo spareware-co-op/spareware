@@ -107,7 +107,7 @@ pub fn effects(p: &V, sc: Option<&V>) -> V {
     };
     let base = pr.base;
     let eff = xdata("EFFECT");
-    let (e_dos, e_dd, e_vc, e_dvc) = (eff.g("dos").n(), eff.g("dDelay").n(), eff.g("vc").n(), eff.g("dvc").n());
+    let (e_dos, e_dd, e_vc, e_rise) = (eff.g("dos").n(), eff.g("dDelay").n(), eff.g("vc").n(), eff.g("dvc").n());
     let mut out: Vec<V> = Vec::new();
     for per in ctx::periods_of(opt) {
         let ro = opt.g("res").g(per);
@@ -140,7 +140,7 @@ pub fn effects(p: &V, sc: Option<&V>) -> V {
                 Some(b) => a.g("vc").n() - b.g("vc").n(),
                 None => a.g("vc").n(),
             };
-            if !(a.g("vc").n() > e_vc && dvc >= e_dvc) {
+            if !(a.g("vc").n() > e_vc && dvc >= e_rise) {
                 continue;
             }
             let l = opt.g("links").g(&ctx::arc_link(key));
@@ -198,7 +198,8 @@ pub fn mitigation_table(p: &V) -> V {
         let limited: Option<V> = if m.get("committed").is_some_and(|c| matches!(c, V::Bool(false))) { Some(V::Bool(true)) } else { third };
         let is_limited = limited.as_ref().is_some_and(crate::compliance::jv::Jx::t);
         let mut o = m.clone();
-        o.set("ref", if m.g("ref").t() { m.g("ref").clone() } else { V::String(format!("M{}", i + 1)) });
+        // Bound: a row index of the register, far below usize::MAX
+        o.set("ref", if m.g("ref").t() { m.g("ref").clone() } else { V::String(format!("M{}", i.saturating_add(1))) });
         o.set(
             "effectText",
             match e {
@@ -253,7 +254,8 @@ pub fn condition_table(p: &V) -> V {
         let metric = if r.g("metric").t() { r.g("metric").s() } else { "metric".to_string() };
         let threshold = if r.g("threshold").t() { r.g("threshold").s() } else { "the threshold".to_string() };
         let mut o = r.clone();
-        o.set("ref", V::String(format!("C{}", i + 1)));
+        // Bound: a row index of the conditions, far below usize::MAX
+        o.set("ref", V::String(format!("C{}", i.saturating_add(1))));
         match m {
             Some(m) => set_opt(&mut o, "measure", m.get("measure")),
             None => o.set("measure", V::String(String::new())),
@@ -280,7 +282,7 @@ pub fn seed_mitigation(p: &mut V) -> usize {
         let cx = ctx::data(pv);
         let pr = ctx::pair(pv);
         let eff = effects(pv, None);
-        let seen: Vec<String> = cx.g("mitigation").items().iter().map(|m| m.g("seed")).filter(|s| s.t()).map(crate::compliance::jv::Jx::s).collect();
+        let already: Vec<String> = cx.g("mitigation").items().iter().map(|m| m.g("seed")).filter(|s| s.t()).map(crate::compliance::jv::Jx::s).collect();
         let mut linked: Vec<String> = cx.g("mitigation").items().iter().filter_map(|m| m.g("effect").as_str().map(std::string::ToString::to_string)).collect();
         let econ = pv.g("settings").g("econ");
         // the capital cost of a change in the mitigation scenario (NZ$m), null when it cannot be priced
@@ -302,7 +304,7 @@ pub fn seed_mitigation(p: &mut V) -> usize {
         if let Some(mit) = pr.mit.filter(|m| !std::ptr::eq(*m, pr.opt)) {
             for d in network_diff(pr.opt, mit).items() {
                 let seed = format!("diff:{}:{}", d.g("kind").s(), d.g("id").s());
-                if seen.contains(&seed) {
+                if already.contains(&seed) {
                     continue;
                 }
                 let e = if d.g("kind").eq_s("node") {
@@ -324,7 +326,7 @@ pub fn seed_mitigation(p: &mut V) -> usize {
         }
         for e in eff.items() {
             let seed = format!("eff:{}", e.g("id").s());
-            if seen.contains(&seed) || linked.contains(&e.g("id").s()) {
+            if already.contains(&seed) || linked.contains(&e.g("id").s()) {
                 continue;
             }
             let mut r = blank_mit();
@@ -338,7 +340,10 @@ pub fn seed_mitigation(p: &mut V) -> usize {
         rows
     };
     let n = added.len();
-    arr_at(ctx::data_mut(p), "mitigation").extend(added);
+    // A project is an object, so the record is always there
+    if let Some(list) = ctx::data_mut(p).and_then(|cx| arr_at(cx, "mitigation")) {
+        list.extend(added);
+    }
     n
 }
 
@@ -371,7 +376,10 @@ pub fn seed_conditions(p: &mut V) -> usize {
         rows
     };
     let n = added.len();
-    arr_at(ctx::data_mut(p), "conditions").extend(added);
+    // A project is an object, so the record is always there
+    if let Some(list) = ctx::data_mut(p).and_then(|cx| arr_at(cx, "conditions")) {
+        list.extend(added);
+    }
     n
 }
 
@@ -398,11 +406,11 @@ fn mval(x: &V) -> String {
 /// deficiencies as a CSV with the version stamp and disclaimers in footer rows.
 #[must_use]
 pub fn mitigation_csv(p: &V) -> String {
-    let m = mitigation_table(p);
-    let c = condition_table(p);
-    let t = ctx::data(p).g("triggers").clone();
-    let s = |x: &str| V::String(x.to_string());
-    let strs = |xs: &[&str]| -> Vec<V> { xs.iter().map(|x| s(x)).collect() };
+    let mits = mitigation_table(p);
+    let conds = condition_table(p);
+    let trig = ctx::data(p).g("triggers").clone();
+    let txt = |x: &str| V::String(x.to_string());
+    let strs = |xs: &[&str]| -> Vec<V> { xs.iter().map(|x| txt(x)).collect() };
     let responsible = xdata("RESPONSIBLE");
     let mut rows: Vec<Vec<V>> = vec![
         strs(&["Table M1 \u{b7} Mitigation register"]),
@@ -411,60 +419,60 @@ pub fn mitigation_csv(p: &V) -> String {
             "Committed by applicant", "Land outside applicant control", "Tag",
         ]),
     ];
-    for r in m.items() {
+    for r in mits.items() {
         let tags: Vec<String> = [r.g("tag"), r.g("s84a")].iter().filter(|x| x.t()).map(|x| x.s()).collect();
         rows.push(vec![
             r.g("ref").clone(),
             r.g("measure").clone(),
             r.g("effectText").clone(),
             r.g("options").clone(),
-            s(if r.g("nonInfra").t() { "Y" } else { "N" }),
+            txt(if r.g("nonInfra").t() { "Y" } else { "N" }),
             r.g("trigger").clone(),
             r.g("responsibleText").clone(),
             r.g("cost").clone(),
             label_or(responsible, r.g("funder"), ""),
             r.g("rltp").clone(),
             r.g("mechanismText").clone(),
-            s(committed_text(r.g("committed"))),
-            s(if r.g("landOutside").t() { "Y" } else { "N" }),
-            s(&tags.join("; ")),
+            txt(committed_text(r.g("committed"))),
+            txt(if r.g("landOutside").t() { "Y" } else { "N" }),
+            txt(&tags.join("; ")),
         ]);
     }
     rows.push(vec![]);
     rows.push(strs(&["Condition parameters (Spare Construct never writes condition wording)"]));
     rows.push(strs(&["Ref", "Measure", "Trigger metric", "Threshold", "Survey method", "Frequency", "Response", "Nexus or agreement", "Review clause suggestion", "Label"]));
-    for r in c.items() {
+    for r in conds.items() {
         rows.push(["ref", "measure", "metric", "threshold", "survey", "frequency", "response", "basis", "review", "ftaa"].iter().map(|k| r.g(k).clone()).collect());
     }
-    if t.t() {
+    if trig.t() {
         rows.push(vec![]);
-        rows.push(vec![s("Table M2 \u{b7} Trigger finder"), t.g("basis").clone(), t.g("label").clone()]);
+        rows.push(vec![txt("Table M2 \u{b7} Trigger finder"), trig.g("basis").clone(), trig.g("label").clone()]);
         rows.push(strs(&["Variant", "First failing build-out (%)", "Dwellings at trigger", "Before dwelling", "Site", "Period", "Why", "Resolved by the upgrade"]));
-        for r in t.g("rows").items() {
-            let f = r.g("first");
-            let or_blank = |k: &str| if f.t() { f.g(k).clone() } else { s("") };
+        for r in trig.g("rows").items() {
+            let first = r.g("first");
+            let or_blank = |k: &str| if first.t() { first.g(k).clone() } else { txt("") };
             rows.push(vec![
                 r.g("label").clone(),
-                if f.t() { f.g("pct").clone() } else { s("none") },
+                if first.t() { first.g("pct").clone() } else { txt("none") },
                 or_blank("dwellings"),
                 or_blank("before"),
                 or_blank("name"),
                 or_blank("period"),
-                if f.t() { f.g("why").clone() } else { r.g("text").clone() },
-                if r.g("resolved").t() { r.g("resolved").g("text").clone() } else { s("") },
+                if first.t() { first.g("why").clone() } else { r.g("text").clone() },
+                if r.g("resolved").t() { r.g("resolved").g("text").clone() } else { txt("") },
             ]);
         }
         let mut ex: Vec<Vec<V>> = Vec::new();
-        for r in t.g("rows").items() {
-            for e in r.g("existing").items() {
+        for r in trig.g("rows").items() {
+            for item in r.g("existing").items() {
                 ex.push(vec![
                     r.g("label").clone(),
-                    e.g("name").clone(),
-                    e.g("period").clone(),
-                    s(&mval(e.g("at0"))),
-                    s(&mval(e.g("at100"))),
-                    if e.g("worsenedAt").nullish() { s("not worsened beyond the threshold") } else { s(&format!("{}%", e.g("worsenedAt").s())) },
-                    e.g("why").clone(),
+                    item.g("name").clone(),
+                    item.g("period").clone(),
+                    txt(&mval(item.g("at0"))),
+                    txt(&mval(item.g("at100"))),
+                    if item.g("worsenedAt").nullish() { txt("not worsened beyond the threshold") } else { txt(&format!("{}%", item.g("worsenedAt").s())) },
+                    item.g("why").clone(),
                 ]);
             }
         }
