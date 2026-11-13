@@ -5032,7 +5032,7 @@
       "line_text": "if x > 0.0 && ay * NEAR_AXIS <= ax {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "x > 0.0 and x >= 0.0 differ only for x = 0.0 or x = −0.0, and dear excludes both before this line: dear is private, its one caller is angle (line 295, `if dear(cy, cx)`), which passes every corner unfiltered, but dear's own first lines (251 to 253, `let (ay, ax) = (y.abs(), x.abs()); if ay == 0.0 || ax == 0.0 { return false; }`) return for any corner with x = 0.0 or −0.0, whose |x| is 0.0. So line 254 is reached only with x nonzero, where the two comparisons agree; for a NaN x both are false. Every corner reaching it takes the same branch, and dear returns the same answer for every input."
+      "reason": "x > 0.0 and x >= 0.0 differ only for x = 0.0 or x = −0.0, and dear excludes both before this line: dear is private, its one caller is angle (line 310, `if dear(cy, cx)`), which passes every corner unfiltered, but dear's own first lines (265 to 268, `let (ay, ax) = (y.abs(), x.abs()); if ay == 0.0 || ax == 0.0 { return false; }`) return for any corner with x = 0.0 or −0.0, whose |x| is 0.0. So line 269 is reached only with x nonzero, where the two comparisons agree; for a NaN x both are false. Every corner reaching it takes the same branch, and dear returns the same answer for every input."
     },
     {
       "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
