@@ -27,15 +27,17 @@
 //! (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`). The paper bounds a triangle
 //! by a prism with caps; here the same inscribed body is a Minkowski sum, the triangle and a cube,
 //! whose facets have closed-form normals: the cube's, the triangle's, and each edge crossed with
-//! each axis, both ways. A body with normal m reaches m · v + h·|m|₁ at its furthest, so each
+//! each axis, on the side away from the third corner (a facet of a Minkowski sum is a sum of
+//! faces, here an edge and a cube edge, so on the other side there is none). A body with normal m reaches m · v + h·|m|₁ at its furthest, so each
 //! facet's plane is known without a hull. The triangle test asks the paper's points: the triangle's
 //! corners, where its edges cross the bodies' facets, and where two facets cross it, each a grid
 //! point, a line-plane point or a three-plane point, as 19.8 lists.
 //!
-//! Cost: 26 planes a triangle at most, each one or two greatest common divisors. A containment test
-//! is a tree query and up to 26 signs for each triangle whose box holds the point. A triangle test
-//! against k bodies that meet it, l of whose facets cross it, makes at most 3 + 3l + l²/2 points
-//! and up to 26k signs for each.
+//! Cost: 17 planes a triangle at most (both ways along the axes and the triangle's normal, the one
+//! way that bounds a face for each edge crossed with an axis), each one or two greatest common
+//! divisors. A containment test is a tree query and up to 17 signs for each triangle whose box
+//! holds the point. A triangle test against k bodies that meet it, l of whose facets cross it,
+//! makes at most 3 + 3l + l²/2 points and up to 17k signs for each, most decided by intervals.
 
 #![allow(
     clippy::many_single_char_names,
@@ -266,22 +268,40 @@ impl TriangleEnvelope {
     pub fn new(t: [P3; 3], h: u64) -> Result<Self, NumError> {
         let [a, b, c] = t;
         let axes: [[i128; 3]; 3] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
-        let edges = [run(a, b), run(b, c), run(c, a)];
-        let mut normals: Vec<[i128; 3]> = Vec::with_capacity(13);
-        normals.extend(axes);
-        normals.push(cross(run(a, b), run(a, c)));
-        for edge in edges {
+        // Each normal with the directions to keep: both for the axes and the triangle's normal.
+        let mut normals: Vec<([i128; 3], bool, bool)> = Vec::with_capacity(13);
+        normals.extend(axes.map(|n| (n, true, true)));
+        normals.push((cross(run(a, b), run(a, c)), true, true));
+        // An edge crossed with an axis bounds a face only on the side away from the third corner:
+        // on the other side the triangle touches the plane at that corner alone, so the plane
+        // meets the body in a segment and bounds nothing the other planes do not.
+        for (p, q, r) in [(a, b, c), (b, c, a), (c, a, b)] {
             for axis in axes {
-                normals.push(cross(edge, axis));
+                let n = cross(run(p, q), axis);
+                // Each part of n is below 2^42 and of r − p below 2^41: the dot fits.
+                let [x, y, z] = run(p, r);
+                let behind = n[0]
+                    .wrapping_mul(x)
+                    .wrapping_add(n[1].wrapping_mul(y))
+                    .wrapping_add(n[2].wrapping_mul(z));
+                normals.push((n, behind <= 0, behind >= 0));
             }
         }
         let mut planes = Vec::with_capacity(26);
-        for n in normals {
+        for (n, forward, backward) in normals {
             if let Some(m) = primitive(n) {
-                planes.push(facet(m, t, h)?);
-                planes.push(facet(m.map(i128::wrapping_neg), t, h)?);
+                if forward {
+                    planes.push(facet(m, t, h)?);
+                }
+                if backward {
+                    planes.push(facet(m.map(i128::wrapping_neg), t, h)?);
+                }
             }
         }
+        // A normal met twice (an edge crossed with an axis along the triangle's normal, say)
+        // gives the same plane twice.
+        planes.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+        planes.dedup();
         let approx = planes.iter().map(approximate).collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
             planes,
@@ -411,6 +431,9 @@ impl TriangleEnvelope {
 
     /// Whether `p` is inside or on the polyhedron, or, `strictly`, inside and on no facet.
     fn holds(&self, p: &Asked, strictly: bool) -> Result<bool, NumError> {
+        if p.outside(self.bounds()) {
+            return Ok(false);
+        }
         for (plane, approx) in self.planes.iter().zip(&self.approx) {
             match p.side(plane, approx)? {
                 Sign::Positive => return Ok(false),
@@ -455,6 +478,38 @@ impl Point {
     }
 }
 
+/// Intervals round the point where three planes meet, by Cramer's rule on the planes'
+/// coefficients as intervals (the formula on [`Tpi::homogeneous`]): `None` where the weight's
+/// interval holds zero or a step fails, and the exact coordinates are needed.
+fn cramer(planes: [&Approx; 3]) -> Option<[Interval; 3]> {
+    let [[a1, b1, c1, d1], [a2, b2, c2, d2], [a3, b3, c3, d3]] = planes.map(|p| *p);
+    let cross = |[x1, y1, z1]: [Interval; 3], [x2, y2, z2]: [Interval; 3]| -> Option<[Interval; 3]> {
+        Some([
+            y1.mul(z2).ok()?.sub(z1.mul(y2).ok()?).ok()?,
+            z1.mul(x2).ok()?.sub(x1.mul(z2).ok()?).ok()?,
+            x1.mul(y2).ok()?.sub(y1.mul(x2).ok()?).ok()?,
+        ])
+    };
+    let (n1, n2, n3) = ([a1, b1, c1], [a2, b2, c2], [a3, b3, c3]);
+    let (u, v, w) = (cross(n2, n3)?, cross(n3, n1)?, cross(n1, n2)?);
+    let dot = |[x1, y1, z1]: [Interval; 3], [x2, y2, z2]: [Interval; 3]| -> Option<Interval> {
+        x1.mul(x2).ok()?.add(y1.mul(y2).ok()?).ok()?.add(z1.mul(z2).ok()?).ok()
+    };
+    let weight = dot(n1, u)?;
+    weight.certain_sign().filter(|s| *s != Sign::Zero)?;
+    let part = |k: usize| -> Option<Interval> {
+        let sum = d1
+            .mul(*u.get(k)?)
+            .ok()?
+            .add(d2.mul(*v.get(k)?).ok()?)
+            .ok()?
+            .add(d3.mul(*w.get(k)?).ok()?)
+            .ok()?;
+        sum.neg().div(weight).ok()
+    };
+    Some([part(0)?, part(1)?, part(2)?])
+}
+
 /// A point asked about, with intervals round its coordinates where it is not a grid point: a
 /// sign the intervals decide is the exact sign, since they hold the exact values; a sign they
 /// leave open is decided exactly.
@@ -465,8 +520,10 @@ struct Asked {
 }
 
 impl Asked {
-    /// `point`, with its coordinates' intervals: X / w from its exact homogeneous coordinates.
-    fn new(point: Point) -> Result<Asked, NumError> {
+    /// `point`, with its coordinates' intervals: for a three-plane point by Cramer's rule on
+    /// `approx`, its planes' intervals, when given and decisive; otherwise X / w from its exact
+    /// homogeneous coordinates.
+    fn new(point: Point, approx: Option<[&Approx; 3]>) -> Result<Asked, NumError> {
         let divide = |x: Interval, w: Interval| x.div(w).ok();
         let at = match point {
             Point::Grid(_) => None,
@@ -479,15 +536,39 @@ impl Asked {
                     .map(|((x, y), z)| [x, y, z])
             }
             Point::Planes(t) => {
-                let ([x, y, z], w) = t.homogeneous()?;
-                let w = enclose(&w)?;
-                divide(enclose(&x)?, w)
-                    .zip(divide(enclose(&y)?, w))
-                    .zip(divide(enclose(&z)?, w))
-                    .map(|((x, y), z)| [x, y, z])
+                if let Some(at) = approx.and_then(cramer) {
+                    Some(at)
+                } else {
+                    let ([x, y, z], w) = t.homogeneous()?;
+                    let w = enclose(&w)?;
+                    divide(enclose(&x)?, w)
+                        .zip(divide(enclose(&y)?, w))
+                        .zip(divide(enclose(&z)?, w))
+                        .map(|((x, y), z)| [x, y, z])
+                }
             }
         };
         Ok(Asked { point, at })
+    }
+
+    /// Whether the point is certainly outside the box from `low` to `high`.
+    fn outside(&self, (low, high): ([i64; 3], [i64; 3])) -> bool {
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "a box corner below 2^41 in magnitude, a double exactly"
+        )]
+        let past = |v: Interval, l: i64, h: i64| v.hi() < l as f64 || v.lo() > h as f64;
+        match (self.point, self.at) {
+            (Point::Grid(p), _) => [p.x.get(), p.y.get(), p.z.get()]
+                .iter()
+                .zip(low.iter().zip(&high))
+                .any(|(v, (l, h))| v < l || v > h),
+            (_, Some(at)) => at
+                .iter()
+                .zip(low.iter().zip(&high))
+                .any(|(v, (l, h))| past(*v, *l, *h)),
+            _ => false,
+        }
     }
 
     /// Which side of `plane` the point is on: by the intervals when they decide a strict sign,
@@ -676,11 +757,11 @@ pub fn covers_within(
             }
         }
     }
-    let mut lines: Vec<(usize, Plane)> = Vec::new();
+    let mut lines: Vec<(usize, Plane, Approx)> = Vec::new();
     for (i, body) in near.iter().enumerate() {
-        for plane in body.planes() {
+        for (plane, approx) in body.planes.iter().zip(&body.approx) {
             if crosses(plane)? && within.is_none_or(|region| !region.misses(plane)) {
-                lines.push((i, *plane));
+                lines.push((i, *plane, *approx));
             }
         }
     }
@@ -692,11 +773,17 @@ pub fn covers_within(
         if sp == Sign::Zero || sq == Sign::Zero || sp == sq {
             return Ok(None);
         }
-        Ok(Some(Asked::new(Point::Line(Lpi::new(p, q, *plane)?))?))
+        Ok(Some(Asked::new(Point::Line(Lpi::new(p, q, *plane)?), None)?))
     };
-    let meeting = |f: &Plane, g: &Plane| -> Result<Option<Asked>, NumError> {
+    let base_approx = approximate(&base)?;
+    let meeting = |(f, fa): (&Plane, &Approx),
+                   (g, ga): (&Plane, &Approx)|
+     -> Result<Option<Asked>, NumError> {
         match Tpi::meeting(base, *f, *g) {
-            Ok(tpi) => Ok(Some(Asked::new(Point::Planes(tpi))?)),
+            Ok(tpi) => Ok(Some(Asked::new(
+                Point::Planes(tpi),
+                Some([&base_approx, fa, ga]),
+            )?)),
             // Parallel lines, or one line twice: no point.
             Err(NumError::Degenerate) => Ok(None),
             Err(e) => Err(e),
@@ -706,7 +793,7 @@ pub fn covers_within(
     // C's corners: the triangle's, its edges' crossings with the region's facets, and two of the
     // region's facet lines' crossings.
     for p in t {
-        let point = Asked::new(Point::Grid(p))?;
+        let point = Asked::new(Point::Grid(p), None)?;
         if in_part(&point, true)? && !held(&near, &point, none, meter)? {
             return Ok(false);
         }
@@ -722,10 +809,10 @@ pub fn covers_within(
             }
         }
     }
-    for (k, (f, _)) in cut.iter().enumerate() {
-        for (g, _) in cut.get(k.saturating_add(1)..).unwrap_or(&[]) {
+    for (k, (f, fa)) in cut.iter().enumerate() {
+        for (g, ga) in cut.get(k.saturating_add(1)..).unwrap_or(&[]) {
             meter.charge(1)?;
-            if let Some(point) = meeting(f, g)?
+            if let Some(point) = meeting((f, fa), (g, ga))?
                 && in_part(&point, false)?
                 && !held(&near, &point, none, meter)?
             {
@@ -734,7 +821,8 @@ pub fn covers_within(
         }
     }
     // C's sides crossing the bodies' facet lines.
-    for &(i, plane) in &lines {
+    for (i, plane, plane_approx) in &lines {
+        let (i, plane) = (*i, *plane);
         let Some(body) = near.get(i) else {
             continue;
         };
@@ -748,9 +836,9 @@ pub fn covers_within(
                 return Ok(false);
             }
         }
-        for (f, _) in &cut {
+        for (f, fa) in &cut {
             meter.charge(1)?;
-            if let Some(point) = meeting(f, &plane)?
+            if let Some(point) = meeting((f, fa), (&plane, plane_approx))?
                 && body.holds(&point, false)?
                 && in_part(&point, false)?
                 && !held(&near, &point, [i, i], meter)?
@@ -766,19 +854,19 @@ pub fn covers_within(
             if !body_i.reaches_body(body_j) {
                 continue;
             }
-            let of = |k: usize, other: &TriangleEnvelope| -> Vec<Plane> {
+            let of = |k: usize, other: &TriangleEnvelope| -> Vec<(Plane, Approx)> {
                 lines
                     .iter()
-                    .filter(|(b, plane)| *b == k && (i == j || !other.misses(plane)))
-                    .map(|(_, plane)| *plane)
+                    .filter(|(b, plane, _)| *b == k && (i == j || !other.misses(plane)))
+                    .map(|(_, plane, approx)| (*plane, *approx))
                     .collect()
             };
             let (fs, gs) = (of(i, body_j), of(j, body_i));
-            for (k, f) in fs.iter().enumerate() {
+            for (k, (f, fa)) in fs.iter().enumerate() {
                 let start = if i == j { k.saturating_add(1) } else { 0 };
-                for g in gs.get(start..).unwrap_or(&[]) {
+                for (g, ga) in gs.get(start..).unwrap_or(&[]) {
                     meter.charge(1)?;
-                    if let Some(point) = meeting(f, g)?
+                    if let Some(point) = meeting((f, fa), (g, ga))?
                         && body_i.holds(&point, false)?
                         && body_j.holds(&point, false)?
                         && in_part(&point, false)?

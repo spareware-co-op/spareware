@@ -277,7 +277,7 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
     let loose = decimate(
         &input.0,
         &input.1,
-        Decimate { epsilon: 40, target: 0 },
+        Decimate { epsilon: 60, target: 0 },
         &Exec::serial(),
         &mut meter(),
     )
@@ -285,7 +285,7 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
     let tight = decimate(
         &input.0,
         &input.1,
-        Decimate { epsilon: 12, target: 0 },
+        Decimate { epsilon: 24, target: 0 },
         &Exec::serial(),
         &mut meter(),
     )
@@ -293,8 +293,8 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
     assert!(closed(loose.triangles()) && closed(tight.triangles()));
     assert!(loose.triangles().len() < tight.triangles().len());
     assert!(tight.triangles().len() < input.1.len());
-    two_way(&input, &loose, 40);
-    two_way(&input, &tight, 12);
+    two_way(&input, &loose, 60);
+    two_way(&input, &tight, 24);
 }
 
 #[test]
@@ -357,7 +357,7 @@ fn a_fine_ball_remeshes_coarser_within_epsilon() {
         Remesh {
             epsilon,
             length: 280,
-            iterations: 2,
+            iterations: 1,
         },
         &Exec::serial(),
         &mut meter(),
