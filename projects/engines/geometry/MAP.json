@@ -2955,7 +2955,7 @@
           "target": "lib"
         },
         {
-          "cost": "an outline is linear in its face's fins, a pair of faces linear in their sides plus the sorting of their crossings, a pair of faces on one plane the product of their sides. A pair one of whose faces keeps to one side of the other's plane costs a sign for each of its corners and reserves nothing. Each other test allocates a short list, reserved fallibly with its logical bytes on the meter. Recursion: none.",
+          "cost": "an outline is linear in its face's fins, a pair of faces linear in their sides plus the sorting of their crossings, a pair of faces on one plane the product of their sides. A face is first read without keeping its outline ([`read`]), and a pair of faces whose corners are grid points is tested from their fins as far as their boxes, planes and corners go ([`look`]): a pair one of whose faces keeps to one side of the other's plane costs a sign for each of its corners and reserves nothing, so a convex body's faces keep no outline. Outlines are kept for the tests that need them; they and each other test's short lists are reserved fallibly, with their logical bytes on the meter. Recursion: none.",
           "does": "an [`Outline`] is a flat face as this module reads it: its integer plane, and for each fin, ring by ring, the corner the edge starts at (it ends at the next fin's) and a plane that crosses the face's along the edge. That plane is the other face's across the edge, or, along a seam, a plane the edge's ends both lie on, or for two grid points one stood on them; so a side of the polygon is a pair of planes, as EMBER keeps it, and no test here ever needs the orientation of three implicit points, about 840 bits a term (19.2).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
@@ -3061,7 +3061,7 @@
             "**Exact on segments and polygons.** Their tests are integer predicates on the vertices (`geom_num::predicate::orient3d`, 2D orientations in `i128`, checked, and `crate::planar`'s signs of planes).",
             "**Certified elsewhere, and fails closed.** A pair no exact or certified test separates is a [`FaultKind::PairUnchecked`] fault, never a pass (8.3: \"certified with bounds, not sampled\").",
             "**A segment is its vertices.** A line edge is tested as the segment between its vertices, which group 2 has certified within the body's bound of the line's ends.",
-            "**One outline per flat face.** Every list is walked again where it is needed, but for the flat faces' outlines, read once and reserved on the meter."
+            "**Each flat face read once.** Every list is walked again where it is needed. A flat face's outline is read once, and charged, before any pair is tested; what the reading finds settles most pairs (`crate::planar::look`). The outlines are kept, and reserved on the meter, only when a test needs them, read again then without a second charge, so a box or a prism keeps none and allocates nothing here."
           ],
           "job": "Group 3 of chapter 8.3, self-intersection, for primitive bodies: no face crosses itself, and no two faces cross except along shared edges.",
           "method": {

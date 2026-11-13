@@ -361,8 +361,20 @@ fn a_stopped_meter_stops_it() {
     ));
 }
 
+/// The properties' runner: 64 cases, and at most 32 steps of shrinking a failure. A triangulation
+/// that stops advancing runs to the meter's budget, a tenth of a second or so here, on every input
+/// shrinking tries: unbounded, the 150 to 200 tries a failure took ran past the mutation gate's
+/// timeout, so a change that made the flips go round for ever was reported as a hang rather than
+/// caught (the `&&` of `still` in `Mesh::clear`), though this and three other tests fail on it.
+fn runner() -> ProptestConfig {
+    ProptestConfig {
+        max_shrink_iters: 32,
+        ..ProptestConfig::with_cases(64)
+    }
+}
+
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(runner())]
 
     #[test]
     fn random_points_and_constraints_are_valid_and_one_answer(
