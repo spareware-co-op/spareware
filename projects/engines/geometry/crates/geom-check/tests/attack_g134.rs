@@ -805,7 +805,8 @@ fn a_bent_face_with_a_second_loop_has_no_star() {
 #[test]
 fn what_a_check_reserves_is_what_its_lists_hold() {
     // Logical memory is budgeted as work is: a face's lists are reserved by their lengths, here to
-    // the byte.
+    // the byte. The ring of meetings keeps its outline, on which its edges are tested; the ring
+    // on the grid, a face of grid corners with no other face, keeps none.
     for (body, bytes) in [
         (ring_on_the_grid().body(BodyKind::Sheet), RING_BYTES),
         (ring_of_meetings().body(BodyKind::Sheet), MEETINGS_BYTES),
@@ -986,8 +987,8 @@ const TETRA: Spec<'_> = Spec {
     regions: &[&[&TETRA_SHELL]],
 };
 
-/// What a check of [`ring_on_the_grid`] reserves.
-const RING_BYTES: u128 = 2_360;
+/// What a check of [`ring_on_the_grid`] reserves: nothing, as it keeps no outline.
+const RING_BYTES: u128 = 0;
 
 /// What a check of [`ring_of_meetings`] reserves.
 const MEETINGS_BYTES: u128 = 7_608;
@@ -1994,19 +1995,82 @@ fn the_faces_of_a_convex_body_are_told_apart_by_their_corners_alone() {
     // Two faces of a box that share an edge each lie to one side of the other's plane and reach
     // it only along that edge, so the first face's four corners settle the pair: a unit for the
     // pair and one for each corner. Two opposite faces are settled by their boxes, for the pair's
-    // unit alone. No line is cut for any of the fifteen pairs, so nothing is sorted and no list
-    // is reserved but each face's outline. The numbers are the whole check's, so that a pair
-    // sent on to the cut, which finds the same answer, is seen here.
+    // unit alone. No line is cut for any of the fifteen pairs, so nothing is sorted, and the
+    // corners are read from the faces' fins: no outline is kept and nothing is reserved. The
+    // numbers are the whole check's, so that a pair sent on to the cut, which finds the same
+    // answer, is seen here.
     let cube = polyhedron(&BOX_POINTS, &CUBE_FACES);
+    let ell: Vec<&[u32]> = ELL_SHELL.iter().map(|loops| loops[0]).collect();
     let got = [
         cost(&cube.body(BodyKind::Solid)),
         // The same of a box whose corners are meetings of its faces' planes, each tilted a step.
+        // Its edges are tested on its faces' outlines, which it keeps: a list of six, and for
+        // each face a list of its one outline and of its four sides.
         cost(&tilted(BOX, &jog(7)).body(BodyKind::Solid)),
         // An L is not convex, but of each two of its faces one keeps to one side of the other's
-        // plane: a wall under a cap, a wall beside a wall. So no line is cut for it either.
+        // plane: a wall under a cap, a wall beside a wall. So no line is cut for it either, and
+        // on grid corners it keeps no outline.
+        cost(&polyhedron(&ELL_POINTS, &ell).body(BodyKind::Solid)),
         cost(&tilted(ELL, &still).body(BodyKind::Solid)),
     ];
-    assert_eq!(got, [(546, 7_440), (675, 23_184), (1_068, 34_656)]);
+    assert_eq!(got, [(546, 0), (675, 23_184), (863, 0), (1_068, 34_656)]);
+}
+
+#[test]
+fn a_body_of_many_faces_reserves_their_reads() {
+    // A prism on a polygon of 16 corners has 18 faces, more than a check holds on the stack: it
+    // reserves a list of their reads, 80 bytes each, and keeps no outline. Every face's pair is
+    // settled by its boxes or its corners. The corners are a regular polygon's of radius 1000,
+    // rounded to the grid, which leaves it convex.
+    let corners: [[i64; 2]; 16] = [
+        [1000, 0],
+        [924, 383],
+        [707, 707],
+        [383, 924],
+        [0, 1000],
+        [-383, 924],
+        [-707, 707],
+        [-924, 383],
+        [-1000, 0],
+        [-924, -383],
+        [-707, -707],
+        [-383, -924],
+        [0, -1000],
+        [383, -924],
+        [707, -707],
+        [924, -383],
+    ];
+    let mut points: Vec<[i64; 3]> = corners.iter().map(|p| [p[0], p[1], 0]).collect();
+    points.extend(corners.iter().map(|p| [p[0], p[1], 300]));
+    let bottom: Vec<u32> = (0..16).rev().collect();
+    let top: Vec<u32> = (16..32).collect();
+    let walls: Vec<Vec<u32>> = (0..16)
+        .map(|k| vec![k, (k + 1) % 16, (k + 1) % 16 + 16, k + 16])
+        .collect();
+    let mut faces: Vec<&[u32]> = vec![&bottom, &top];
+    faces.extend(walls.iter().map(Vec::as_slice));
+    let prism = polyhedron(&points, &faces);
+    assert_eq!(cost(&prism.body(BodyKind::Solid)), (2_772, 18 * 80));
+}
+
+#[test]
+fn faces_whose_corners_do_not_settle_them_are_kept_and_cut() {
+    // Each of these two sheets has corners on both sides of the other's plane, so their line is
+    // cut, on their outlines, kept then: a list of two slots, and for each a list of its one
+    // outline and of its six sides, then the lists of the cut.
+    let wall = [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, 0, -5],
+        [15, 0, -5],
+        [15, 0, 10],
+        [0, 0, 10],
+    ];
+    let body = sheets(&[&FLOOR_PAST_THE_AXIS, &wall]).body(BodyKind::General);
+    let mut m = WorkMeter::new(Budget::UNLIMITED);
+    let found = check(&body, Exactness::Exact, Level::Full, &mut m).unwrap();
+    assert_eq!(found.faults(), []);
+    assert_eq!((m.used().work, m.used().logical_bytes), (268, 8_208));
 }
 
 /// On z = 0, a face along the x axis from 0 to 10 that also holds the axis from −5 to 0, so that

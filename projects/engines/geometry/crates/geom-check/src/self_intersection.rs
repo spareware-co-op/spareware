@@ -39,8 +39,11 @@
 //!   [`FaultKind::PairUnchecked`] fault, never a pass (8.3: "certified with bounds, not sampled").
 //! - **A segment is its vertices.** A line edge is tested as the segment between its vertices,
 //!   which group 2 has certified within the body's bound of the line's ends.
-//! - **One outline per flat face.** Every list is walked again where it is needed, but for the
-//!   flat faces' outlines, read once and reserved on the meter.
+//! - **Each flat face read once.** Every list is walked again where it is needed. A flat face's
+//!   outline is read once, and charged, before any pair is tested; what the reading finds settles
+//!   most pairs (`crate::planar::look`). The outlines are kept, and reserved on the meter, only
+//!   when a test needs them, read again then without a second charge, so a box or a prism keeps
+//!   none and allocates nothing here.
 //!
 //! Method: chapter 8.3's group 3 (`projects/engines/geometry/architecture/08-topology.md`), on
 //! J. R. Shewchuk's exact orientation predicates ("Adaptive precision floating-point arithmetic and
@@ -62,6 +65,7 @@ use alloc::vec::Vec;
 use geom_curve::{Circle, ParamCurve};
 use geom_num::predicate::orient3d;
 use geom_num::{Coord, Exactness, P3, Sign};
+use geom_op::run::reserve;
 use geom_run::Stopped;
 use geom_topo::BodyKind;
 use geom_topo::Sense;
@@ -73,7 +77,7 @@ use geom_topo::{Arenas, Body, Ix};
 use crate::combinatorial::{edge_fins, face_fins, fin_edge, fin_face, rows};
 use crate::curved::{self, Pair};
 use crate::geometric::{Ends, Surface, corner, limit, surface};
-use crate::planar::{self, Outline};
+use crate::planar::{self, Look, Outline, Read, Slot};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
 
@@ -86,15 +90,29 @@ pub(crate) fn check(
     let a = body.arenas();
     let exact = matches!(exactness, Exactness::Exact);
     let reach = limit(exactness);
-    let outlines = planar::outlines(a, exact, sink)?;
-    let pieces = |f: Ix<Face>| -> &[Outline] {
-        outlines
-            .get(f.to_usize())
-            .map_or(&[], |slot| slot.0.as_slice())
+    let faces = a.rows(Arena::Face);
+    let mut few = [Read::Bare; FEW];
+    let mut many: Vec<Read>;
+    let reads: &mut [Read] = if let Some(on_stack) = few.get_mut(..to_usize(faces)) {
+        on_stack
+    } else {
+        many = reserve(sink.meter(), u64::from(faces))?;
+        many.resize(to_usize(faces), Read::Bare);
+        &mut many
     };
-    for f in rows::<Face>(a.rows(Arena::Face)) {
+    for (slot, f) in reads.iter_mut().zip(rows::<Face>(faces)) {
+        *slot = planar::read(a, f, exact, sink)?;
+    }
+    let read = |f: Ix<Face>| reads.get(f.to_usize()).copied().unwrap_or(Read::Bare);
+    let mut kept: Option<Vec<Slot>> = None;
+    for f in rows::<Face>(faces) {
         sink.charge()?;
-        let implicit = pieces(f).first().filter(|o| o.implicit);
+        let mut implicit = None;
+        if matches!(read(f), Read::Kept) {
+            implicit = pieces(keep(&mut kept, a, exact, sink)?, f)
+                .first()
+                .filter(|o| o.implicit);
+        }
         for (i, first) in edges(a, f).enumerate() {
             for second in edges(a, f).skip(i).skip(1) {
                 sink.charge()?;
@@ -107,21 +125,67 @@ pub(crate) fn check(
         }
     }
     let cells = body.kind() == BodyKind::General;
-    for (i, f) in rows::<Face>(a.rows(Arena::Face)).enumerate() {
-        for g in rows::<Face>(a.rows(Arena::Face)).skip(i).skip(1) {
+    for (i, f) in rows::<Face>(faces).enumerate() {
+        for g in rows::<Face>(faces).skip(i).skip(1) {
             sink.charge()?;
             if cells && back_to_back(a, f, g) {
                 continue;
             }
-            let found = if pieces(f).is_empty() || pieces(g).is_empty() {
-                other_faces_meet(a, f, g, exact, reach)
-            } else {
-                planar::slots_meet(a, pieces(f), pieces(g), sink)?
+            let found = match (read(f), read(g)) {
+                (Read::Bare, _) | (_, Read::Bare) => other_faces_meet(a, f, g, exact, reach),
+                (Read::Plain(p), Read::Plain(q)) => {
+                    match planar::look(a, (f, &p), (g, &q), sink)? {
+                        Look::Found(found) => found,
+                        Look::Left(left) => {
+                            let slots = keep(&mut kept, a, exact, sink)?;
+                            planar::finish(left, pieces(slots, f), pieces(slots, g), sink)?
+                        }
+                    }
+                }
+                _ => {
+                    let slots = keep(&mut kept, a, exact, sink)?;
+                    let (first, second) = (pieces(slots, f), pieces(slots, g));
+                    if first.is_empty() || second.is_empty() {
+                        other_faces_meet(a, f, g, exact, reach)
+                    } else {
+                        planar::slots_meet(a, first, second, sink)?
+                    }
+                }
             };
             report(sink, found, Entity::Face(f), Entity::Face(g));
         }
     }
     Ok(())
+}
+
+/// How many faces' reads ([`Read`]) a check holds on the stack; a body of more reserves a list
+/// for them. A box has six faces, and a prism on a polygon of n corners n + 2.
+const FEW: usize = 16;
+
+/// A count of rows as a length.
+fn to_usize(rows: u32) -> usize {
+    usize::try_from(rows).unwrap_or(usize::MAX)
+}
+
+/// The outlines of every face, kept the first time a test needs them: a body whose pairs its
+/// faces' reads settle ([`planar::look`]) keeps none.
+fn keep<'k>(
+    kept: &'k mut Option<Vec<Slot>>,
+    a: &Arenas,
+    exact: bool,
+    sink: &mut Sink<'_, '_>,
+) -> Result<&'k [Slot], Stopped> {
+    if kept.is_none() {
+        *kept = Some(planar::outlines(a, exact, sink)?);
+    }
+    Ok(kept.as_deref().unwrap_or(&[]))
+}
+
+/// The outlines face `f` is made of, in `slots`, one slot per face.
+fn pieces(slots: &[Slot], f: Ix<Face>) -> &[Outline] {
+    slots
+        .get(f.to_usize())
+        .map_or(&[], |slot| slot.0.as_slice())
 }
 
 /// The edges of `f`, each with the way its fin runs, sorted.
