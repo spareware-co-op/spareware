@@ -1358,6 +1358,16 @@
               "shape": "struct"
             },
             {
+              "doc": "Two pieces leaving a vertex of a face whose order round it is not proven: their tangents and their curvatures cannot be told apart (G244).",
+              "name": "UndecidedOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "A loop of a face being split whose sense is not proven: its area's enclosure holds zero (G244).",
+              "name": "UndecidedArea",
+              "shape": "struct"
+            },
+            {
               "doc": "Two paves of a section line whose order is not proven.",
               "name": "SectionOrder",
               "shape": "struct"
@@ -1674,8 +1684,8 @@
           "target": "lib"
         },
         {
-          "cost": "one broad phase over the vertices, edges and faces; per vertex-face pair one certified distance and at most one placing; per edge-face pair one hull and at most one run of the crossing engine, and a placing per crossing; per face pair the vertices of both faces, sorted once, and two placings per piece of the line; all charged to the meter. No recursion.",
-          "does": "after the vertices and edges have met ([`crate::interfere`]), the faces meet them, lowest dimension first. **Vertex with face:** a vertex of another operand that touches a flat face's plane, by the contact rule, and lies inside the face ([`crate::inside`]) is In it. **Edge with face:** where an edge of another operand crosses a flat face's plane ([`crate::crossing::crossings`]), a point that touches a vertex already on the edge or on the face (its boundary's paves, or a vertex In it) is that vertex, so a meeting through an existing corner ends at the corner; any other point inside the face, or on its boundary, is a new vertex, certified against the edge's curve and the face's plane (and the boundary edges it touches), and a pave on the edge (and on those boundary edges). An edge lying on the plane, by its hull, is kept whole, and once the edges are split, each piece of it whose middle lies inside the face is In. **Face with face:** two flat faces of different operands on distinct planes that are not parallel meet along the line of the two planes, the exact `CurveGeom::Line`; its paves are the vertices the earlier stages put on both faces (on the boundary or In), ordered along the line, and each piece between neighbouring paves whose middle lies inside both faces is a section edge. Each face's information then holds its boundary's split edges and vertices (On), the other operands' vertices and pieces of edges inside it (In), and the section edges across it. A face whose carrier is curved is not placed here: the vertices touching its carrier, and the edges and faces whose boxes meet it, are kept as pending for face splitting, which places them in the face's parameter space (pieces G244 and G245).",
+          "cost": "one broad phase over the vertices, edges and faces; per vertex-face pair one certified distance and at most one placing; per edge-face pair one hull and at most one run of the crossing engine (with a cylinder's or cone's face, one curve and surface intersection), and a placing per crossing; per face pair the vertices of both faces, sorted once, and two placings per piece of the line; all charged to the meter. No recursion.",
+          "does": "after the vertices and edges have met ([`crate::interfere`]), the faces meet them, lowest dimension first. **Vertex with face:** a vertex of another operand that touches a flat face's plane, by the contact rule, and lies inside the face ([`crate::inside`]) is In it. **Edge with face:** where an edge of another operand crosses a flat face's plane ([`crate::crossing::crossings`]), a point that touches a vertex already on the edge or on the face (its boundary's paves, or a vertex In it) is that vertex, so a meeting through an existing corner ends at the corner; any other point inside the face, or on its boundary, is a new vertex, certified against the edge's curve and the face's plane (and the boundary edges it touches), and a pave on the edge (and on those boundary edges). An edge lying on the plane, by its hull, is kept whole, and once the edges are split, each piece of it whose middle lies inside the face is In. **Face with face:** two flat faces of different operands on distinct planes that are not parallel meet along the line of the two planes, the exact `CurveGeom::Line`; its paves are the vertices the earlier stages put on both faces (on the boundary or In), ordered along the line, and each piece between neighbouring paves whose middle lies inside both faces is a section edge. Each face's information then holds its boundary's split edges and vertices (On), the other operands' vertices and pieces of edges inside it (In), and the section edges across it. **A face on a cylinder or a cone** (G244) is placed in as a flat one is, in its own picture (`crate::picture`): a vertex of another operand touching its carrier and inside it is In, and so is each piece of an edge of a face of another operand on the same carrier (two faces on one carrier, as two on one plane, found exactly for cylinders given by whole numbers and by their stored data for cones). Any other edge meets the carrier where the curve and surface intersection finds (`geom_intersect::curve_surface`, G164): each point inside the face, or on its boundary, is a vertex as on a flat face, and an edge found to lie on the carrier is placed piece by piece. What is not yet met with such a face, a face of another operand on another carrier whose box meets it, is kept as pending, as is everything about a face on any other curved carrier; a face with something pending is not split (pieces G244 and G245).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
           "guarantees": [
@@ -1733,7 +1743,7 @@
         },
         {
           "cost": "[`FlatFace::new`] converts each boundary edge to its NURBS form once. [`FlatFace::place`] is one certified distance per boundary edge whose box is within reach, then per direction tried an interval test per join and, per boundary edge not proven on one side of the ray's plane by its hull, one run of the crossing engine; all charged to the meter. No recursion.",
-          "does": "a [`FlatFace`] is a face whose carrier is a plane of the table, with its boundary edges and the joins between them. [`FlatFace::place`] says where a grid point, known within a bound, lies. **On** when it touches a boundary edge by the contact rule, measured in space from the edge's curve ([`crate::distance::Carriers::distance`]), so the decision is the one vertex with edge takes. Otherwise **In** or **Out** by the parity of a ray's crossings in the plane's own picture: the coordinate the plane's normal is largest in is dropped, an affine bijection from the plane onto the other two coordinates that keeps inside and outside. A ray runs from the point along a fixed sequence of small whole directions in that picture. Lifted back to space, the ray's line is the meeting of the face's plane with the plane through the point that holds the ray and the dropped axis, a plane of whole numbers, so each boundary edge crosses the ray where it crosses that plane ([`crate::crossing::crossings`]), on the ray's side of the point. A direction is kept only when its answer is proven: every crossing a simple root ahead of the point or behind it, no boundary edge lying in the ray's plane, no flagged region ahead, and no join within a step of the ray ahead of the point: a join is the box round the end points of the curves that meet at a vertex (or a closed curve's two ends), where a crossing could fall between two curves, or be counted on both.",
+          "does": "a [`FlatFace`] is a face whose carrier is a plane of the table, with its boundary edges and the joins between them. [`FlatFace::place`] says where a grid point, known within a bound, lies. **On** when it touches a boundary edge by the contact rule, measured in space from the edge's curve ([`crate::distance::Carriers::distance`]), so the decision is the one vertex with edge takes. Otherwise **In** or **Out** by the parity of a ray's crossings in the plane's own picture: the coordinate the plane's normal is largest in is dropped, an affine bijection from the plane onto the other two coordinates that keeps inside and outside. A ray runs from the point along a fixed sequence of small whole directions in that picture. Lifted back to space, the ray's line is the meeting of the face's plane with the plane through the point that holds the ray and the dropped axis, a plane of whole numbers, so each boundary edge crosses the ray where it crosses that plane ([`crate::crossing::crossings`]), on the ray's side of the point. A direction is kept only when its answer is proven: every crossing a simple root ahead of the point or behind it, no boundary edge lying in the ray's plane, no flagged region ahead, and no join within a step of the ray ahead of the point: a join is the box round the end points of the curves that meet at a vertex (or a closed curve's two ends), where a crossing could fall between two curves, or be counted on both. A [`RoundFace`] is a face on a cylinder or on one nappe of a cone, placed in the same way in its own picture, the carrier seen from a point inside it (`crate::picture`): there a ray's line is the meeting of the carrier with a plane through that point, again a plane of whole numbers.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
           "guarantees": [
@@ -1743,7 +1753,7 @@
             "**Refused, never guessed.** When no direction of [`DIRECTIONS`] qualifies, the point's picture lies on the boundary's picture while the point itself is proven apart from the boundary in space, and [`FlatFace::place`] fails with [`BuildError::Unclassified`].",
             "**Deterministic.** The directions are tried in their fixed order, and the edges in loop order."
           ],
-          "job": "Where a point lies in a flat face: on its boundary, inside it or outside it, certified (11.4 step 4, G243a).",
+          "job": "Where a point lies in a flat face, or in one on a cylinder or a cone: on its boundary, inside it or outside it, certified (11.4 step 4, G243a; the curved faces G244).",
           "method": {
             "links": [
               "https://doi.org/10.1016/B978-0-12-336156-1.50013-6",
@@ -1875,6 +1885,40 @@
           "target": "lib"
         },
         {
+          "cost": "[`Central::of_face`] bounds each boundary edge once; every other function is a few interval or wide products. No recursion.",
+          "does": "a face's loops are ordered, measured and tested in a picture, a map from the face onto part of a plane that is one to one and keeps what lies inside a loop inside it. A flat face's picture drops the coordinate its plane's normal is largest in ([`Picture::Flat`], as [`crate::inside`] does). A face on a cylinder, or on one nappe of a cone, is seen from a grid point C inside the carrier, on its axis beyond the face's end ([`Central`]): the picture of a point P is (X₁, X₂) / w, with X = P − C, X₁ and X₂ its two coordinates the axis is smallest in, and w its depth, the distance from C in the third. Every ray from C meets the carrier once, because the carrier bounds a convex solid and C lies inside it, and the face lies on one side of the plane through C across the depth, so no two points of the face have one picture. **A line of the picture is a plane through C**, so the ray test of a flat face ([`crate::inside::ray_parity`]) serves a curved one with nothing changed but the plane. A cylinder's whole side is a ring between two closed curves, and a cone's apex is an ordinary point: the picture has no seam and no pole, and no angle is computed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/picture.rs",
+          "guarantees": [
+            "**One to one, by proof.** [`Central::of_face`] gives a picture only when it has proven, with enclosures, that C lies inside the carrier's solid and that the whole face lies in front of C. A face it cannot prove this for gets none, and waits.",
+            "**Seen from outside.** The first coordinate is mirrored where needed, so a loop that runs counter-clockwise in the picture runs counter-clockwise on the carrier seen from outside it.",
+            "**Whole numbers where they can be.** The ray's plane is a plane of whole numbers through C and the point, and a straight line's tangent in the picture is exact whenever its origin and direction are whole.",
+            "**Deterministic.** C is fixed by the carrier and the face's boundary alone."
+          ],
+          "job": "The picture a face is split in: a plane's own, or a cylinder's or cone's seen from a point inside it (11.4 step 5, G244).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "the central projection of a convex surface from a point inside it (a gnomonic chart), which takes planes through the centre to lines; the architecture's \"its own parameter space\" for a face (chapter 11.4, step 5, `projects/engines/geometry/architecture/11-booleans.md`), chosen in place of (u, v) so that chapter 11.17's rule holds (no angle function in a topology module) and a seam or a pole never cuts a face. `SMLib` splits a face at its surface's seams and works on trim curves in (u, v) (`SmTrimmingTools::SplitAtSeams`, read in solidcore's Rust port, where the split itself is not ported); that is not taken."
+          },
+          "path": "geom_bool::picture",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/ae70d1c03d8664e3392bd7c38dd2a8e51a7bf845/crates/solidcore/src/topology/trimming_tools.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for how seams are treated; no code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "linear in what [`merge`] returns, after its cost.",
           "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge`] make them faces, edges and shells, and writes those into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are.",
           "family": [],
@@ -1920,6 +1964,42 @@
           "path": "geom_bool::rule",
           "provenance": [],
           "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "per face, its pieces sorted round each vertex (at most 16 side tests per piece there to find the reference, then O(k²) comparisons at a vertex of k pieces, each a few wide multiplications or interval products), one walk over the pieces, an area per loop (on a curved face 16 to 4,096 bounds of each piece that is not straight), and a ray test per hole and loop pair; all charged to the meter. No recursion.",
+          "does": "[`split`] takes the interferences of an arrangement ([`crate::interfere`]) and, for each face whose carrier is a plane of the table, a cylinder or one nappe of a cone, gathers its pieces: its boundary's split edges (On), other operands' split edges lying inside it (In) and its section edges, a common block once. In the face's picture (a plane's with the coordinate its normal is largest in dropped, as [`crate::inside`] does; a cylinder's or cone's seen from a point inside the carrier, `crate::picture`), the pieces leaving each vertex are put in turning order by their tangents, counted from a whole reference direction that no tangent there can lie along; the loops are then traced with each piece's left side as the face it bounds. A loop running counter-clockwise, by the sign of its certified area, bounds a split face; one running clockwise is the outside of a connected group of pieces, a hole of the innermost split face that holds it (by the certified ray test), or, held by none, the outside of the face itself. Vertices of other operands inside the face that no piece reaches are given to the split face that holds them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
+          "guarantees": [
+            "**The turning order is proven or refused.** Two tangents are ordered by the side of a whole reference direction each leaves on and the sign of their cross product, exactly in wide integers where both are whole (a line between grid points, a section's n₁ × n₂), from enclosures otherwise. The reference at a vertex is the first ray direction of [`crate::inside::DIRECTIONS`] whose line no tangent's enclosure there meets, so a tangent along an axis, as a circle's at its top, is ordered as any other. Two pieces along one tangent, a pair whose cross product is not proven, and a vertex no direction serves fail with [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance compares two.",
+            "**Each loop's sense is proven.** A loop's area is enclosed piece by piece: a straight piece's exactly from its ends, a circle's or ellipse's arc on a flat face in closed form with certified sines and cosines of half-turns; an area that holds zero fails with [`BuildError::UndecidedArea`]. On a curved face a piece that is not straight is summed over parts of its parameter, each part's share enclosed by the mean value theorem, over more parts until the sign is proven or 4,096 parts leave it open.",
+            "**Holes go to the face that holds them, by proof.** A clockwise loop's point is placed in each counter-clockwise loop of another group by the certified ray test. Two that hold it are nested, and the inner is the one whose own point the other holds, again by the ray test: no two areas are compared. No direction qualifying fails with [`BuildError::Unclassified`].",
+            "**What this piece does not split, it says.** A face on a sphere, a torus or any other curved carrier, a cylinder's or cone's face with something pending, and a face bounded on a plane by a curve other than a line, circle or ellipse are listed as waiting: for the rest of G244's analytic carriers and G245's NURBS and procedural ones.",
+            "**Deterministic.** Faces in order, pieces in index order, vertices' pieces in turning order, loops in the order their first pieces come."
+          ],
+          "job": "Face splitting for flat and analytic carriers: each face cut along its In and section edges into the faces it splits into, its loops traced in the face's picture by exact orientation (11.4 step 5, G244).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1007/978-3-540-77974-2"
+            ],
+            "text": "chapter 11.4, step 5 (`projects/engines/geometry/architecture/11-booleans.md`): each face cut along its In and section edges in its own parameter space, the loops traced by ordering the edges around each vertex, flat faces by exact orientation predicates. The loop walk is the face traversal of a planar graph's rotation system (the next piece round each vertex from the one arriving), as in M. de Berg, O. Cheong, M. van Kreveld and M. Overmars, *Computational Geometry*, 3rd edition, Springer (2008), section 2.2, <https://doi.org/10.1007/978-3-540-77974-2>. The order round a vertex by tangents is `SMLib`'s `sm_NextRoundTheVertex` (`SmTrimmingTools::OrderCurvesIntoLoops`), read in solidcore's Rust port; it compares tangents in doubles within a tolerance, and where they agree goes on to curvature, and its outer loops are found by the areas of tessellations. None of that is taken: tangents are compared by proven signs, and two along one tangent are refused, the curvature step waiting for the analytic carriers, whose tangents can be proven to agree. The order is counted from a reference direction chosen to avoid every tangent at the vertex, so no tangent sits where the count starts and ends: counted from a fixed axis, a curve leaving along the axis could belong at either end."
+          },
+          "path": "geom_bool::split",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/topology/trimming_tools.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the order round a vertex and the grouping of outer loops and holes; no code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -14218,6 +14298,17 @@
     },
     {
       "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/ae70d1c03d8664e3392bd7c38dd2a8e51a7bf845/crates/solidcore/src/topology/trimming_tools.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-bool/src/picture.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
       "link": "https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/boolean/topology_intersector/p1.rs",
       "method_note": null,
       "name": "solidcore",
@@ -14226,6 +14317,17 @@
       "used_by": [
         "projects/engines/geometry/crates/geom-bool/src/face.rs",
         "projects/engines/geometry/crates/geom-bool/src/inside.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/topology/trimming_tools.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-bool/src/split.rs"
       ]
     },
     {

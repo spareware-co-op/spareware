@@ -38,10 +38,12 @@
 //! - [`face`]: face information: vertices, edges and faces met with faces; On, In and sections (G243a).
 //! - [`merge`]: touching entities become one, checked against their carriers (G242).
 //! - [`half_space`]: everything on one side of a plane, as a solid operand (G130).
-//! - [`inside`]: where a point lies in a flat face, certified (G243a).
+//! - [`inside`]: where a point lies in a flat face, or one on a cylinder or cone, certified (G243a).
 //! - [`interfere`]: interferences, lowest dimension first, as paves on the edges (G243).
 //! - [`pave`]: paves in their proven order, pave blocks and split edges (G243).
+//! - `picture`: the picture a face is split in: a plane's, or a cylinder's or cone's from inside (G244).
 //! - [`rule`]: the contact rule at `ε_fit`, `NearContact` and `CoincidenceChain` (G242).
+//! - [`split`]: face splitting for flat and analytic carriers, loops traced by exact orientation (G244).
 //! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
 //! Status: the rebuild (G129), operands and selections (G130) and the entry (G131) built; the
@@ -68,6 +70,8 @@ pub mod interfere;
 pub mod merge;
 pub mod operand;
 pub mod pave;
+mod picture;
 pub mod rebuild;
 pub mod rule;
+pub mod split;
 mod wires;

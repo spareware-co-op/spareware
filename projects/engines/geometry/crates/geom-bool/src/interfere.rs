@@ -185,6 +185,20 @@ pub enum BuildError {
         /// The point.
         at: P3,
     },
+    /// Two pieces leaving a vertex of a face whose order round it is not proven: their tangents
+    /// and their curvatures cannot be told apart (G244).
+    UndecidedOrder {
+        /// The face being split.
+        face: usize,
+        /// The vertex.
+        vertex: usize,
+    },
+    /// A loop of a face being split whose sense is not proven: its area's enclosure holds zero
+    /// (G244).
+    UndecidedArea {
+        /// The face being split.
+        face: usize,
+    },
     /// Two paves of a section line whose order is not proven.
     SectionOrder {
         /// The two faces whose planes meet in the line.
@@ -213,6 +227,14 @@ impl fmt::Display for BuildError {
             BuildError::Undecided { edge, face, .. } => write!(
                 f,
                 "where edge {edge} meets the plane of face {face} has a region the crossing engine could not decide"
+            ),
+            BuildError::UndecidedOrder { face, vertex } => write!(
+                f,
+                "the order of the pieces leaving vertex {vertex} of face {face} is not proven"
+            ),
+            BuildError::UndecidedArea { face } => write!(
+                f,
+                "a loop of face {face} has an area whose sign is not proven"
             ),
             BuildError::Unclassified { face, .. } => write!(
                 f,

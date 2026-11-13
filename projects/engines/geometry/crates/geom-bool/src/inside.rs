@@ -1,5 +1,5 @@
-//! Where a point lies in a flat face: on its boundary, inside it or outside it, certified (11.4
-//! step 4, G243a).
+//! Where a point lies in a flat face, or in one on a cylinder or a cone: on its boundary, inside it
+//! or outside it, certified (11.4 step 4, G243a; the curved faces G244).
 //!
 //! What it does: a [`FlatFace`] is a face whose carrier is a plane of the table, with its boundary
 //! edges and the joins between them. [`FlatFace::place`] says where a grid point, known within a bound, lies.
@@ -16,7 +16,10 @@
 //! it, no boundary edge lying in the ray's plane, no flagged region ahead, and no join within a step
 //! of the ray ahead of the point: a join is the box round the end points of the curves that meet at
 //! a vertex (or a closed curve's two ends), where a crossing could fall between two curves, or be
-//! counted on both.
+//! counted on both. A [`RoundFace`] is a face on a cylinder or on one nappe of a cone, placed
+//! in the same way in its own picture, the carrier seen from a point inside it (`crate::picture`):
+//! there a ray's line is the meeting of the carrier with a plane through that point, again a plane
+//! of whole numbers.
 //!
 //! Guarantees:
 //!
@@ -66,13 +69,14 @@ use geom_num::interval::Interval;
 use geom_num::plane::Plane;
 use geom_num::{NumError, P3};
 use geom_run::WorkMeter;
-use geom_topo::{CurveIx, ParamCurve};
+use geom_topo::{CurveIx, CurveKind, ParamCurve};
 
 use crate::carrier::{Bound, CarrierIx};
-use crate::crossing::{Enclosed, Hull, crossings};
+use crate::crossing::{Enclosed, Hull, crossings_over};
 use crate::distance::Carriers;
-use crate::interfere::{Arrangement, BuildError, Entity, widened};
-use crate::rule::{Contact, EPS_FIT, Verdict, decide, judge};
+use crate::interfere::{Arrangement, BuildError, Entity, FaceIn, widened};
+use crate::picture::{Central, Picture, Round};
+use crate::rule::{Contact, ContactError, EPS_FIT, Verdict, decide, judge};
 
 /// The ray directions tried, in order, in the plane's own picture: whole and primitive, no two
 /// parallel.
@@ -138,7 +142,7 @@ pub struct FlatFace {
 }
 
 /// The box round two enclosed points.
-fn hull(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], NumError> {
+pub(crate) fn hull(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], NumError> {
     let [a0, a1, a2] = a;
     let [b0, b1, b2] = b;
     let span = |x: Interval, y: Interval| {
@@ -216,11 +220,52 @@ fn least(x: Interval) -> f64 {
     }
 }
 
-/// `a` times `b` plus `c` times `d`, in whole numbers.
-fn dot2(a: i128, b: i128, c: i128, d: i128) -> Result<i128, NumError> {
-    a.checked_mul(b)
-        .and_then(|x| x.checked_add(c.checked_mul(d)?))
-        .ok_or(NumError::BudgetExceeded)
+/// The boundary edges of `face`, loop by loop, ready for the tests, and its joins: for each vertex
+/// of its boundary the box round the end points of the curves that meet there, and for each closed
+/// edge the box round its two ends.
+fn boundary(
+    arr: &Arrangement,
+    face: &FaceIn,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Vec<Side>, Vec<[Interval; 3]>), BuildError> {
+    let mut sides = Vec::new();
+    let mut at_vertex: BTreeMap<usize, [Interval; 3]> = BTreeMap::new();
+    let mut joins = Vec::new();
+    for &e in face.loops.iter().flatten() {
+        let edge = arr
+            .edges
+            .get(e)
+            .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+        let curve = arr
+            .carriers
+            .curve(edge.curve)
+            .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+        let (t0, t1) = curve.domain();
+        let whole = curve
+            .bound((t0, t1), meter)
+            .map_err(geom_intersect::IntersectError::from)?;
+        let (start, end) = (end_point(curve, t0, meter)?, end_point(curve, t1, meter)?);
+        match edge.ends {
+            Some(pair) => {
+                for (v, point) in pair.into_iter().zip([start, end]) {
+                    let joined = match at_vertex.get(&v) {
+                        Some(&box_so_far) => hull(box_so_far, point)?,
+                        None => point,
+                    };
+                    at_vertex.insert(v, joined);
+                }
+            }
+            None => joins.push(hull(start, end)?),
+        }
+        sides.push(Side {
+            edge: e,
+            curve: edge.curve,
+            hull: Hull::of(curve, meter)?,
+            reach: (whole.lo, whole.hi),
+        });
+    }
+    joins.extend(at_vertex.into_values());
+    Ok((sides, joins))
 }
 
 impl FlatFace {
@@ -263,43 +308,7 @@ impl FlatFace {
             1 => [0, 2],
             _ => [0, 1],
         };
-        let mut sides = Vec::new();
-        let mut at_vertex: BTreeMap<usize, [Interval; 3]> = BTreeMap::new();
-        let mut joins = Vec::new();
-        for &e in this.loops.iter().flatten() {
-            let edge = arr
-                .edges
-                .get(e)
-                .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-            let curve = arr
-                .carriers
-                .curve(edge.curve)
-                .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-            let (t0, t1) = curve.domain();
-            let whole = curve
-                .bound((t0, t1), meter)
-                .map_err(geom_intersect::IntersectError::from)?;
-            let (start, end) = (end_point(curve, t0, meter)?, end_point(curve, t1, meter)?);
-            match edge.ends {
-                Some(pair) => {
-                    for (v, point) in pair.into_iter().zip([start, end]) {
-                        let joined = match at_vertex.get(&v) {
-                            Some(&box_so_far) => hull(box_so_far, point)?,
-                            None => point,
-                        };
-                        at_vertex.insert(v, joined);
-                    }
-                }
-                None => joins.push(hull(start, end)?),
-            }
-            sides.push(Side {
-                edge: e,
-                curve: edge.curve,
-                hull: Hull::of(curve, meter)?,
-                reach: (whole.lo, whole.hi),
-            });
-        }
-        joins.extend(at_vertex.into_values());
+        let (sides, joins) = boundary(arr, this, meter)?;
         // The face lies inside its boundary's box, and its picture inside that box's picture.
         let mut area = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
         for side in &sides {
@@ -358,6 +367,12 @@ impl FlatFace {
             );
             high < a || low > b
         })
+    }
+
+    /// The two coordinates of the plane's picture, in order; the third is the one dropped.
+    #[must_use]
+    pub fn keep(&self) -> [usize; 2] {
+        self.keep
     }
 
     /// The face's plane.
@@ -429,100 +444,250 @@ impl FlatFace {
         direction: (i64, i64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<bool>, BuildError> {
-        let [first, second] = self.keep;
-        let at = coords(point);
-        let (from_first, from_second) =
-            (i128::from(coord(at, first)), i128::from(coord(at, second)));
-        let (run, rise) = (i128::from(direction.0), i128::from(direction.1));
-        let fall = rise.checked_neg().ok_or(NumError::BudgetExceeded)?;
-        // The ray's plane holds the dropped axis and the direction: its normal is the direction
-        // turned a quarter, (−rise, run), in the picture's coordinates.
-        let mut normal = [0_i128; 3];
-        if let Some(slot) = normal.get_mut(first) {
-            *slot = fall;
-        }
-        if let Some(slot) = normal.get_mut(second) {
-            *slot = run;
-        }
-        let offset = dot2(fall, from_first, run, from_second)?
-            .checked_neg()
-            .ok_or(NumError::BudgetExceeded)?;
-        let ray_plane = Plane::new(normal, offset)?;
-        let enclosed = Enclosed::of(&ray_plane)?;
-
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "the direction's parts are at most 3, and the point's coordinates at most 2^40"
-        )]
-        let (run_f, rise_f, first_f, second_f) = (
-            run as f64,
-            rise as f64,
-            from_first as f64,
-            from_second as f64,
-        );
-        let along = |lo: [f64; 3], hi: [f64; 3]| -> Result<Interval, NumError> {
-            let part = |k: usize, scale: f64, origin: f64| -> Result<Interval, NumError> {
-                let span = Interval::new(
-                    lo.get(k).copied().unwrap_or(0.0),
-                    hi.get(k).copied().unwrap_or(0.0),
-                )?;
-                Interval::point(scale)?.mul(span.sub(Interval::point(origin)?)?)
-            };
-            part(first, run_f, first_f)?.add(part(second, rise_f, second_f)?)
-        };
-        // A step, in the units of the ray plane's value and of the distance along the ray: both are
-        // lengths times the direction's length.
-        let step = Interval::point(run_f)?
-            .square()?
-            .add(Interval::point(rise_f)?.square()?)?
-            .sqrt()?
-            .hi();
-        // A join within a step of the ray's line, ahead of the point or within a step behind it:
-        // the direction fails.
-        for join in &self.joins {
-            let across = enclosed.value(join)?;
-            let ahead = along(join.map(Interval::lo), join.map(Interval::hi))?;
-            if least(across) <= step && ahead.hi() >= -step {
-                return Ok(None);
-            }
-        }
-        let mut count = 0_u32;
+        let mut sides = Vec::with_capacity(self.sides.len());
         for side in &self.sides {
-            match judge(side.hull.spread(&enclosed)?) {
-                // Proven on one side of the ray's plane: no crossing.
-                Verdict::Decided(_) => continue,
-                // Lying in the ray's plane: the ray runs along it.
-                Verdict::Touch => return Ok(None),
-                Verdict::Near => {}
+            let curve = carriers
+                .curve(side.curve)
+                .ok_or(BuildError::Missing(Entity::Edge(side.edge)))?;
+            sides.push(Crossable {
+                curve,
+                span: curve.domain(),
+                hull: &side.hull,
+            });
+        }
+        let picture = Picture::Flat { keep: self.keep };
+        ray_parity(&picture, (&sides, &self.joins), point, direction, meter)
+    }
+}
+
+/// A face on a cylinder or on one nappe of a cone, ready to place points in (G244): its boundary
+/// edges and joins as a flat face's, and its picture seen from inside the carrier
+/// (`crate::picture`).
+#[derive(Clone, Debug)]
+pub struct RoundFace {
+    /// The face, by its index in the arrangement.
+    face: usize,
+    /// Its carrier.
+    round: Round,
+    /// Its picture.
+    picture: Central,
+    /// How far the picture's centre lies from the carrier.
+    centre_gap: Interval,
+    /// Its boundary edges, loop by loop.
+    sides: Vec<Side>,
+    /// Its joins.
+    joins: Vec<[Interval; 3]>,
+}
+
+impl RoundFace {
+    /// The face `face` of `arr`, ready to place points in: `None` when its carrier is not a
+    /// cylinder or a cone, or its picture is not proven one to one.
+    ///
+    /// # Errors
+    ///
+    /// [`BuildError::Missing`] for a face, edge or carrier that is not there; a boundary curve's
+    /// bound's or conversion's errors.
+    pub fn new(
+        arr: &Arrangement,
+        face: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<RoundFace>, BuildError> {
+        let this = arr
+            .faces
+            .get(face)
+            .ok_or(BuildError::Missing(Entity::Face(face)))?;
+        let (Some(round), Some(picture)) = (
+            Round::of_face(arr, face)?,
+            Central::of_face(arr, face, meter)?,
+        ) else {
+            return Ok(None);
+        };
+        let (sides, joins) = boundary(arr, this, meter)?;
+        let centre_gap = round.gap(picture.centre())?;
+        Ok(Some(RoundFace {
+            face,
+            round,
+            picture,
+            centre_gap,
+            sides,
+            joins,
+        }))
+    }
+
+    /// How far the grid point `point` lies from the face's carrier, the whole cylinder or nappe,
+    /// enclosed in closed form: the distance the contact rule reads for a vertex with this face.
+    ///
+    /// # Errors
+    ///
+    /// An enclosure's.
+    pub fn gap(&self, point: P3) -> Result<Interval, NumError> {
+        self.round.gap(point)
+    }
+
+    /// Where the grid point `point`, within `bound` of a point of the face's carrier, lies in the
+    /// face: On by the contact rule against each boundary edge, as [`FlatFace::place`], and
+    /// otherwise In or Out by the parity of a ray's crossings in the face's picture.
+    ///
+    /// The picture puts `point` where the ray from its centre through `point` meets the carrier,
+    /// which is not `point`'s nearest point of the carrier. Both lie within a reach of `point`
+    /// (`Central::reach`), and so does the point of the carrier `point` stands for, within
+    /// `bound`. The carrier's points within a distance of a point form one patch: on a cylinder or
+    /// cone the nearest point's ruling holds a stretch of them, and each circle about the axis an
+    /// arc round that ruling. So when every boundary edge is proven further from `point` than the
+    /// reach and the bound, the patch's picture meets no boundary edge's, and all three points lie
+    /// on one side of the boundary. A boundary edge not proven so far leaves the point
+    /// [`BuildError::Unclassified`].
+    ///
+    /// # Errors
+    ///
+    /// [`BuildError::Contact`] for a contact the rule cannot decide, or a stopped meter;
+    /// [`BuildError::Unclassified`] when no ray direction qualifies, or the reach is not proven
+    /// clear of the boundary.
+    pub fn place(
+        &self,
+        carriers: &Carriers,
+        point: P3,
+        bound: Bound,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Place, BuildError> {
+        let mut touched = Vec::new();
+        let mut sides = Vec::with_capacity(self.sides.len());
+        for side in &self.sides {
+            let carrier = CarrierIx::Curve(side.curve);
+            let contact = decide(|level: u32| {
+                let distance = carriers.distance(point, carrier, level, meter)?;
+                Ok(widened(distance, bound)?)
+            })?;
+            if let Contact::Touch(_) = contact {
+                touched.push(side.edge);
             }
             let curve = carriers
                 .curve(side.curve)
                 .ok_or(BuildError::Missing(Entity::Edge(side.edge)))?;
-            let found = crossings(curve, &ray_plane, meter)?;
-            for zero in &found.zeros {
-                let [param] = zero.enclosure;
-                let at = curve
-                    .bound((param.lo(), param.hi()), meter)
-                    .map_err(geom_intersect::IntersectError::from)?;
-                let ahead = along(at.lo, at.hi)?;
-                if ahead.lo() > 0.0 {
-                    count = count.checked_add(1).ok_or(NumError::BudgetExceeded)?;
-                } else if ahead.hi() >= 0.0 {
-                    return Ok(None);
-                }
-            }
-            for flag in &found.flagged {
-                let [param] = flag.region;
-                let at = curve
-                    .bound((param.lo(), param.hi()), meter)
-                    .map_err(geom_intersect::IntersectError::from)?;
-                if along(at.lo, at.hi)?.hi() >= 0.0 {
-                    return Ok(None);
+            sides.push(Crossable {
+                curve,
+                span: curve.domain(),
+                hull: &side.hull,
+            });
+        }
+        if !touched.is_empty() {
+            return Ok(Place::On(touched));
+        }
+        let unclassified = BuildError::Unclassified {
+            face: self.face,
+            at: point,
+        };
+        let Some(reach) = self.picture.reach(&self.round, self.centre_gap, point)? else {
+            return Err(unclassified);
+        };
+        let wide = Bound::of(reach).ok_or(NumError::BudgetExceeded)?;
+        if wide.steps() > bound.steps() {
+            for side in &self.sides {
+                let carrier = CarrierIx::Curve(side.curve);
+                match decide(|level: u32| {
+                    let distance = carriers.distance(point, carrier, level, meter)?;
+                    Ok(widened(distance, wide)?)
+                }) {
+                    Ok(Contact::Apart(_)) => {}
+                    Ok(Contact::Touch(_)) | Err(ContactError::NearContact(_)) => {
+                        return Err(unclassified);
+                    }
+                    Err(other) => return Err(other.into()),
                 }
             }
         }
-        Ok(Some(count % 2 == 1))
+        let picture = Picture::Central(self.picture);
+        for direction in DIRECTIONS {
+            if let Some(inside) =
+                ray_parity(&picture, (&sides, &self.joins), point, direction, meter)?
+            {
+                return Ok(if inside { Place::In } else { Place::Out });
+            }
+        }
+        Err(BuildError::Unclassified {
+            face: self.face,
+            at: point,
+        })
     }
+}
+
+/// A boundary curve over a span of its parameter, for the ray test.
+pub(crate) struct Crossable<'a> {
+    /// The curve.
+    pub(crate) curve: &'a CurveKind<3>,
+    /// The span of its parameter searched for crossings. The rest of the stretch that bounds, if
+    /// any, lies in the joins at its ends.
+    pub(crate) span: (f64, f64),
+    /// A hull of the curve over at least that span.
+    pub(crate) hull: &'a Hull,
+}
+
+/// The parity of the crossings of the ray from `point` along `direction` in `picture`, with the
+/// boundary `sides` and their `joins`, or `None` when the
+/// direction does not qualify (module documentation): a join within a step of the ray ahead of
+/// the point, a side lying in the ray's plane, or a crossing or flagged region that cannot be put
+/// ahead or behind. Each side is searched only over its span, whose ends lie in joins. A crossing
+/// counts only when its position along the ray is proven above 0: one enclosed from exactly 0 is
+/// not proven ahead, and the direction fails.
+///
+/// # Errors
+///
+/// The crossing engine's, an enclosure's, or the meter's stop.
+pub(crate) fn ray_parity(
+    picture: &Picture,
+    (sides, joins): (&[Crossable<'_>], &[[Interval; 3]]),
+    point: P3,
+    direction: (i64, i64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<bool>, BuildError> {
+    let ray_plane = picture.ray_plane(point, direction)?;
+    let enclosed = Enclosed::of(&ray_plane)?;
+    let along = |lo: [f64; 3], hi: [f64; 3]| picture.along(point, direction, (lo, hi));
+    let (reach, back) = picture.clearance(direction, &enclosed)?;
+    // A join within a step of the ray's line, ahead of the point or within a step behind it:
+    // the direction fails.
+    for join in joins {
+        let across = enclosed.value(join)?;
+        let ahead = along(join.map(Interval::lo), join.map(Interval::hi))?;
+        if least(across) <= reach && ahead.hi() >= -back {
+            return Ok(None);
+        }
+    }
+    let mut count = 0_u32;
+    for side in sides {
+        match judge(side.hull.spread(&enclosed)?) {
+            // Proven on one side of the ray's plane: no crossing.
+            Verdict::Decided(_) => continue,
+            // Lying in the ray's plane: the ray runs along it.
+            Verdict::Touch => return Ok(None),
+            Verdict::Near => {}
+        }
+        let curve = side.curve;
+        // Only the side's own span of its curve: a crossing beyond it is no crossing of this side.
+        let found = crossings_over(curve, side.span, &ray_plane, meter)?;
+        for zero in &found.zeros {
+            let [param] = zero.enclosure;
+            let at = curve
+                .bound((param.lo(), param.hi()), meter)
+                .map_err(geom_intersect::IntersectError::from)?;
+            let ahead = along(at.lo, at.hi)?;
+            if ahead.lo() > 0.0 {
+                count = count.checked_add(1).ok_or(NumError::BudgetExceeded)?;
+            } else if ahead.hi() >= 0.0 {
+                return Ok(None);
+            }
+        }
+        for flag in &found.flagged {
+            let [param] = flag.region;
+            let at = curve
+                .bound((param.lo(), param.hi()), meter)
+                .map_err(geom_intersect::IntersectError::from)?;
+            if along(at.lo, at.hi)?.hi() >= 0.0 {
+                return Ok(None);
+            }
+        }
+    }
+    Ok(Some(count % 2 == 1))
 }
 
 #[cfg(test)]

@@ -186,7 +186,21 @@ pub fn crossings(
     plane: &Plane,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Solved<1>, IntersectError> {
-    let (a, b) = curve.domain();
+    crossings_over(curve, curve.domain(), plane, meter)
+}
+
+/// Every parameter of the stretch `(a, b)` of `curve`'s domain where it meets `plane`, as
+/// [`crossings`] finds them over the whole domain.
+///
+/// # Errors
+///
+/// As [`crossings`].
+pub(crate) fn crossings_over(
+    curve: &CurveKind<3>,
+    (a, b): (f64, f64),
+    plane: &Plane,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Solved<1>, IntersectError> {
     let enclosed = Enclosed::of(plane)?;
     if let CurveKind::Line(line) = curve {
         return line_crossing(line.origin(), line.direction(), (a, b), &enclosed);
