@@ -2357,6 +2357,7 @@ pub mod intersect {
     use geom_intersect::quadrics::natural;
     use geom_intersect::quartic::meet;
     use geom_intersect::general::{Subdivided, subdivide};
+    use geom_intersect::march::{Traced, march};
     use geom_intersect::{
         CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, LevelCurves, OnImplicit,
         Operand, Projection, Silhouette, pair, project_curve, project_surface, trace,
@@ -2538,6 +2539,21 @@ pub mod intersect {
             let domain = ((0.0, 1.875), (-0.45, 0.45));
             let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 5.0, frame, domain)?);
             subdivide(surface, &sphere, 1.0, &mut meter())
+        });
+    }
+
+    /// `march` through what `subdivide` leaves of a sphere and its plane patch.
+    #[inline(never)]
+    pub fn marched(
+        batch: &[(SurfaceKind, [f64; 3])],
+        out: &mut Vec<Result<Traced, IntersectError>>,
+    ) {
+        run(batch, out, |(surface, centre)| {
+            let frame = geom_curve::Frame::standard().map_err(|_| IntersectError::Internal)?;
+            let domain = ((0.0, 1.875), (-0.45, 0.45));
+            let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 5.0, frame, domain)?);
+            let found = subdivide(surface, &sphere, 1.0, &mut meter())?;
+            march(surface, &sphere, &found, 1.0, 1.0, &mut meter())
         });
     }
 

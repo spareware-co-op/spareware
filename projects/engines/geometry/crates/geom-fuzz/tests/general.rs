@@ -29,9 +29,12 @@ mod common;
 use common::holds;
 
 use geom_curve::Frame;
-use geom_fuzz::general::{Case, MAX_INPUT_BYTES, Outcome, check, decode, harness, judge, surface};
+use geom_fuzz::general::{
+    Case, MAX_INPUT_BYTES, Outcome, check, decode, harness, judge, judge_march, surface,
+};
 use geom_fuzz::seeded;
 use geom_intersect::general::{Subdivided, subdivide};
+use geom_intersect::march::march;
 use geom_num::interval::Interval;
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{ImplicitBound, Sphere, SurfaceKind};
@@ -172,5 +175,22 @@ fn a_start_point_off_a_surface_is_a_finding() {
     found.settled[0].starts[0][3] = far;
     let implicit: &dyn ImplicitBound = &sphere;
     let law = judge(&plane, &other, implicit, &found).unwrap_err();
+    assert!(law.law.contains("both surfaces"), "{law}");
+}
+
+#[test]
+fn a_march_is_held_to_its_laws() {
+    let (plane, other, _, found) = pair();
+    let mut meter = WorkMeter::new(Budget::of_work(1 << 22));
+    let mut traced = march(&plane, &other, &found, 1e-2, 1e-1, &mut meter).unwrap();
+    judge_march(&plane, &other, &traced).unwrap();
+    traced.branches[0].deviation = 1.0;
+    let law = judge_march(&plane, &other, &traced).unwrap_err();
+    assert!(law.law.contains("ceiling"), "{law}");
+    traced.branches[0].deviation = 0.0;
+    let far = Interval::point(0.25).unwrap();
+    traced.branches[0].vertices[0][2] = far;
+    traced.branches[0].vertices[0][3] = far;
+    let law = judge_march(&plane, &other, &traced).unwrap_err();
     assert!(law.law.contains("both surfaces"), "{law}");
 }
