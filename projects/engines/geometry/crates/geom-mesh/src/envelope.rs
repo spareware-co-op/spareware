@@ -244,7 +244,11 @@ pub(crate) fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError>
 
 /// The interval round an `i128`.
 fn enclose_i128(v: i128) -> Result<Interval, NumError> {
-    enclose(&I256::from_i128(v).resize::<2>().ok_or(NumError::BudgetExceeded)?)
+    enclose(
+        &I256::from_i128(v)
+            .resize::<2>()
+            .ok_or(NumError::BudgetExceeded)?,
+    )
 }
 
 /// A plane's coefficients as intervals.
@@ -302,7 +306,10 @@ impl TriangleEnvelope {
         // gives the same plane twice.
         planes.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
         planes.dedup();
-        let approx = planes.iter().map(approximate).collect::<Result<Vec<_>, _>>()?;
+        let approx = planes
+            .iter()
+            .map(approximate)
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
             planes,
             approx,
@@ -392,7 +399,9 @@ impl TriangleEnvelope {
         };
         let width = n
             .iter()
-            .try_fold(0_i128, |s, v| s.checked_add(i128::try_from(v.unsigned_abs()).ok()?))
+            .try_fold(0_i128, |s, v| {
+                s.checked_add(i128::try_from(v.unsigned_abs()).ok()?)
+            })
             .and_then(|s| s.checked_mul(i128::from(self.h)));
         let [a, b, c] = self.t;
         let (Some(x), Some(y), Some(z), Some(w)) = (at(a), at(b), at(c), width) else {
@@ -426,7 +435,11 @@ impl TriangleEnvelope {
                 whole = false;
             }
         }
-        Ok(if whole { Against::Whole } else { Against::Partly })
+        Ok(if whole {
+            Against::Whole
+        } else {
+            Against::Partly
+        })
     }
 
     /// Whether `p` is inside or on the polyhedron, or, `strictly`, inside and on no facet.
@@ -483,17 +496,23 @@ impl Point {
 /// interval holds zero or a step fails, and the exact coordinates are needed.
 fn cramer(planes: [&Approx; 3]) -> Option<[Interval; 3]> {
     let [[a1, b1, c1, d1], [a2, b2, c2, d2], [a3, b3, c3, d3]] = planes.map(|p| *p);
-    let cross = |[x1, y1, z1]: [Interval; 3], [x2, y2, z2]: [Interval; 3]| -> Option<[Interval; 3]> {
-        Some([
-            y1.mul(z2).ok()?.sub(z1.mul(y2).ok()?).ok()?,
-            z1.mul(x2).ok()?.sub(x1.mul(z2).ok()?).ok()?,
-            x1.mul(y2).ok()?.sub(y1.mul(x2).ok()?).ok()?,
-        ])
-    };
+    let cross =
+        |[x1, y1, z1]: [Interval; 3], [x2, y2, z2]: [Interval; 3]| -> Option<[Interval; 3]> {
+            Some([
+                y1.mul(z2).ok()?.sub(z1.mul(y2).ok()?).ok()?,
+                z1.mul(x2).ok()?.sub(x1.mul(z2).ok()?).ok()?,
+                x1.mul(y2).ok()?.sub(y1.mul(x2).ok()?).ok()?,
+            ])
+        };
     let (n1, n2, n3) = ([a1, b1, c1], [a2, b2, c2], [a3, b3, c3]);
     let (u, v, w) = (cross(n2, n3)?, cross(n3, n1)?, cross(n1, n2)?);
     let dot = |[x1, y1, z1]: [Interval; 3], [x2, y2, z2]: [Interval; 3]| -> Option<Interval> {
-        x1.mul(x2).ok()?.add(y1.mul(y2).ok()?).ok()?.add(z1.mul(z2).ok()?).ok()
+        x1.mul(x2)
+            .ok()?
+            .add(y1.mul(y2).ok()?)
+            .ok()?
+            .add(z1.mul(z2).ok()?)
+            .ok()
     };
     let weight = dot(n1, u)?;
     weight.certain_sign().filter(|s| *s != Sign::Zero)?;
@@ -773,7 +792,10 @@ pub fn covers_within(
         if sp == Sign::Zero || sq == Sign::Zero || sp == sq {
             return Ok(None);
         }
-        Ok(Some(Asked::new(Point::Line(Lpi::new(p, q, *plane)?), None)?))
+        Ok(Some(Asked::new(
+            Point::Line(Lpi::new(p, q, *plane)?),
+            None,
+        )?))
     };
     let base_approx = approximate(&base)?;
     let meeting = |(f, fa): (&Plane, &Approx),

@@ -224,8 +224,14 @@ fn euler(points: usize, triangles: &[[u32; 3]]) -> i64 {
 fn two_way(input: &(Vec<P3>, Vec<[u32; 3]>), out: &Modelled, epsilon: u64) {
     let a = soup(&input.0, &input.1);
     let b = soup(out.points(), out.triangles());
-    assert!(samples_within(&b, &a, epsilon, 4), "result strays from the input");
-    assert!(samples_within(&a, &b, epsilon, 4), "input strays from the result");
+    assert!(
+        samples_within(&b, &a, epsilon, 4),
+        "result strays from the input"
+    );
+    assert!(
+        samples_within(&a, &b, epsilon, 4),
+        "input strays from the result"
+    );
 }
 
 #[test]
@@ -240,7 +246,11 @@ fn a_flat_sheet_decimates_to_few_triangles_on_the_same_plane() {
         &mut meter(),
     )
     .unwrap();
-    assert!(out.triangles().len() < input.1.len() / 4, "{}", out.triangles().len());
+    assert!(
+        out.triangles().len() < input.1.len() / 4,
+        "{}",
+        out.triangles().len()
+    );
     assert!(out.points().iter().all(|q| q.z.get() == 0));
     assert_eq!(euler(out.points().len(), out.triangles()), 1);
     two_way(&input, &out, epsilon);
@@ -260,14 +270,21 @@ fn a_closed_cube_stays_closed_and_within_epsilon() {
     let out = decimate(
         &input.0,
         &input.1,
-        Decimate { epsilon, target: 12 },
+        Decimate {
+            epsilon,
+            target: 12,
+        },
         &Exec::serial(),
         &mut meter(),
     )
     .unwrap();
     assert!(closed(out.triangles()));
     assert_eq!(euler(out.points().len(), out.triangles()), 2);
-    assert!(out.triangles().len() < input.1.len() / 2, "{}", out.triangles().len());
+    assert!(
+        out.triangles().len() < input.1.len() / 2,
+        "{}",
+        out.triangles().len()
+    );
     two_way(&input, &out, epsilon);
 }
 
@@ -277,7 +294,10 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
     let loose = decimate(
         &input.0,
         &input.1,
-        Decimate { epsilon: 60, target: 0 },
+        Decimate {
+            epsilon: 60,
+            target: 0,
+        },
         &Exec::serial(),
         &mut meter(),
     )
@@ -285,7 +305,10 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
     let tight = decimate(
         &input.0,
         &input.1,
-        Decimate { epsilon: 24, target: 0 },
+        Decimate {
+            epsilon: 24,
+            target: 0,
+        },
         &Exec::serial(),
         &mut meter(),
     )
@@ -304,7 +327,10 @@ fn decimation_is_deterministic() {
         decimate(
             &input.0,
             &input.1,
-            Decimate { epsilon: 20, target: 0 },
+            Decimate {
+                epsilon: 20,
+                target: 0,
+            },
             &Exec::serial(),
             &mut meter(),
         )
@@ -330,7 +356,11 @@ fn a_coarse_sheet_remeshes_toward_the_target_length() {
         &mut meter(),
     )
     .unwrap();
-    assert!(out.triangles().len() > 4 * input.1.len(), "{}", out.triangles().len());
+    assert!(
+        out.triangles().len() > 4 * input.1.len(),
+        "{}",
+        out.triangles().len()
+    );
     let longest = out
         .triangles()
         .iter()
@@ -378,7 +408,10 @@ fn inputs_that_are_not_surfaces_are_refused() {
         decimate(
             points,
             triangles,
-            Decimate { epsilon: 2, target: 0 },
+            Decimate {
+                epsilon: 2,
+                target: 0,
+            },
             &Exec::serial(),
             &mut meter(),
         )
@@ -387,7 +420,10 @@ fn inputs_that_are_not_surfaces_are_refused() {
         run(&points, &[[0, 1, 9]]),
         Err(ModelError::Index { face: 0 })
     );
-    assert_eq!(run(&points, &[[0, 1, 1]]), Err(ModelError::Flat { face: 0 }));
+    assert_eq!(
+        run(&points, &[[0, 1, 1]]),
+        Err(ModelError::Flat { face: 0 })
+    );
     let line = [p(0, 0, 0), p(1, 1, 1), p(2, 2, 2)];
     assert_eq!(run(&line, &[[0, 1, 2]]), Err(ModelError::Flat { face: 0 }));
     assert!(run(&points, &triangles).is_ok());
@@ -398,7 +434,13 @@ fn inputs_that_are_not_surfaces_are_refused() {
         Err(ModelError::NotSurface { face: 2 })
     );
     // Two triangles meeting only at a vertex: a bow tie.
-    let bow = [p(0, 0, 0), p(10, 0, 0), p(10, 10, 0), p(-10, 0, 0), p(-10, -10, 0)];
+    let bow = [
+        p(0, 0, 0),
+        p(10, 0, 0),
+        p(10, 10, 0),
+        p(-10, 0, 0),
+        p(-10, -10, 0),
+    ];
     assert!(matches!(
         run(&bow, &[[0, 1, 2], [0, 3, 4]]),
         Err(ModelError::NotSurface { .. })
@@ -412,7 +454,10 @@ fn a_budget_ends_the_run_with_an_error() {
     let r = decimate(
         &input.0,
         &input.1,
-        Decimate { epsilon: 20, target: 0 },
+        Decimate {
+            epsilon: 20,
+            target: 0,
+        },
         &Exec::serial(),
         &mut small,
     );

@@ -560,7 +560,12 @@ impl Surface {
             meter.charge(1)?;
             let corners = self.corners(f).ok_or(ModelError::Full)?;
             before.push(normal(corners));
-            gone.push(self.shell.get(f as usize).cloned().ok_or(ModelError::Full)?);
+            gone.push(
+                self.shell
+                    .get(f as usize)
+                    .cloned()
+                    .ok_or(ModelError::Full)?,
+            );
             for p in corners {
                 widen(&mut low, &mut high, p);
             }
@@ -865,7 +870,10 @@ fn check_surface(
                 break;
             };
             walked = walked.saturating_add(1);
-            at = link.get(k).map(|(_, y, _)| *y).filter(|y| Some(*y) != start);
+            at = link
+                .get(k)
+                .map(|(_, y, _)| *y)
+                .filter(|y| Some(*y) != start);
             if walked > link.len() {
                 break;
             }
