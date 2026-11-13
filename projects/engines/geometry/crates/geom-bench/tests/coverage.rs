@@ -662,6 +662,8 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     (
         "geom_sketch",
         &[
+            ("motions", include_str!("../../geom-sketch/src/motions.rs")),
+            ("diagnose", include_str!("../../geom-sketch/src/diagnose.rs")),
             ("length", include_str!("../../geom-sketch/src/length.rs")),
             ("smooth", include_str!("../../geom-sketch/src/smooth.rs")),
             ("fit", include_str!("../../geom-sketch/src/fit.rs")),

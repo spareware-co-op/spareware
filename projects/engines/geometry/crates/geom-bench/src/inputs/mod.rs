@@ -76,6 +76,7 @@ pub mod rng;
 pub mod roots;
 pub mod scenario;
 pub mod sign;
+pub mod sketch;
 pub mod spline;
 pub mod surface;
 pub mod topo;

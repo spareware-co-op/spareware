@@ -410,6 +410,12 @@
               "kind": "corpus",
               "piece": "G220a",
               "why": "2 new count benchmarks on geom-sketch's solver with splines (decision 32.44): a cut cubic pulled off its join and solved with its joins measured, and a fit-point spline with a dragged point settled; no existing digest moved"
+            },
+            {
+              "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1",
+              "kind": "corpus",
+              "piece": "G224",
+              "why": "2 new count benchmarks on geom-sketch's hot paths (decision 32.44): a chain diagnosed and the free motions of a chain by the sparse form; no existing digest moved"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"
@@ -995,6 +1001,16 @@
             "function": "solved_splines_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "e4cff9338fb7ef18533588fdde8296d578243c472d12b8ad41dbf6ab83e27bab"
+        },
+        {
+          "id": "geom-sketch/diagnose",
+          "what": "The diagnosis of geom-sketch (piece G224): 51 sketches (a free pair, a triangle, three collinear points under a triangle's distances, and 48 chains with an extra distance that is the chain's own or not), each diagnosed, the report text, every pivot's equation, size bits and verdict, and every group's defect bits and equations.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "diagnose_determinism",
+            "function": "diagnose_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "f4698e6ab9dd38a2ac8d0c0545353fbc493398314e6f869b05127e232dfe5c70"
         }
       ]
     }

@@ -9642,6 +9642,102 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The two differ only when the line is exactly at a right angle to the spline, and then the angle between them is a half-turn either way: the measure reports its size, and the sign of an angle of half a turn is not one the measure promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in walk",
+      "line_text": "let mut step = RANGE_FIRST * if at.abs() > 1.0 { at.abs() } else { 1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when the value is exactly 1 or -1, and then both branches give the same size: |at| and 1.0 are the same number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+      "mutant": "replace > with >= in MotionFinder::motion",
+      "line_text": "if value.abs() > NEGLIGIBLE {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The forms differ only for an entry of exactly 1e-12 in size. That cut-off is a convenience that keeps rounding dust out of a motion, and the crate promises nothing about an entry at the cut-off itself: the dense form it is held to uses the same cut, and entries are either dust far below it or amounts of a step."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+      "mutant": "replace < with == in MotionFinder::motion",
+      "line_text": "let place = solved.partition_point(|&(j, _)| j < index);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every other entry of a motion lies after its leading variable (a leading column is dead because it is a combination of the live columns after it, and the least-squares solve is unique), so the predicate is false for all of them and the insertion point is 0 for <, <= and ==."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+      "mutant": "replace < with <= in MotionFinder::motion",
+      "line_text": "let place = solved.partition_point(|&(j, _)| j < index);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every other entry of a motion lies after its leading variable, and none is the leading variable itself, so < and <= are the same predicate on every entry: the insertion point is 0 for both."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in Thresholds::for_block",
+      "line_text": "let wanted = if size > 1.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At a size of exactly 1 both arms give 1/64, since 1/(64 x 1) is 1/64, so taking size 1 into the first arm changes no threshold."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in larger",
+      "line_text": "if b > a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With b equal to a both arms return the same number. The only equal numbers that differ are +0 and -0, and every call compares norms, absolute values, squares and their bounds, or a square less its error (never -0, since x - x is +0 and no square is -0) with +0 or with each other."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace below -> Option<bool> with None",
+      "line_text": "if y_high < low {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "below lets a choice be made on the carried bounds only when they settle it: y_high < low puts every y in its range under every largest in its range, y_low >= high the opposite, and NormBound's proof puts the y and the largest that norms computed afresh give inside those ranges, so its answer is theirs. With None every choice is made by settle on norms computed afresh, which is that same answer, and a pivot's size is tail_norm's value either way (a norm computed this step is tail_norm's, and otherwise tail_norm is called). So the pivot order, the pivots and the verdicts are the same to the bit, as the tests' independent factorisation that computes every norm afresh shows; only the work differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace * with / in factor",
+      "line_text": "below(lo * PREFERRED_WITHIN, hi * PREFERRED_WITHIN, low, high)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With lo / 2 for 2 lo, below answers Some(false) only when lo / 2 >= high. lo is at most the column's norm and high at least the largest norm (NormBound's proof), and high is above 0 here (a zero high returns before the choice), so lo / 2 < high always and that answer never comes; Some(true) reads hi * 2, unchanged. Where the original answers Some(false) the mutant answers None, and the choice is made on norms computed afresh, which by the same proof gives the same answer. The pivot order, pivots and verdicts are unchanged to the bit; only the work differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace < with <= in smaller",
+      "line_text": "if b < a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With b equal to a both arms return the same number. The only equal numbers that differ are +0 and -0, and the calls compare a positive threshold with sigma_ind, or singular values (never -0) with infinity and each other."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in factor",
+      "line_text": "if vv > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The reflector's vector is never zero: its first entry alpha - beta has magnitude |alpha| plus the chosen column's tail norm, and that norm is within a factor of 2 of the largest remaining norm (a choice the carried bounds prove, or else made on the norms computed afresh), which is positive (when every remaining norm is zero the factorisation returns before any reflection). After the exact division by a power of two its largest entry is at least 1, so vv is at least 1 and never 0, where > and >= would differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in suggest_removals",
+      "line_text": "Some(b) => key > b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The key ends with the constraint's id, and a group lists each constraint once, so no two keys compared here are equal; > and >= then agree on every pair."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace < with <= in analyse_columns",
+      "line_text": "if k < rows",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At k equal to rows no row is left below the last step, so the pivot is 0, and a pivot of 0 is near no positive threshold (0 times 16 is below it), so the confirmation is not entered either way."
     }
   ],
   "coverage_off": [

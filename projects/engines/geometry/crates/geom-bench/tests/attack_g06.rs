@@ -2085,6 +2085,34 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 Ok::<_, geom_sketch::model::SketchError>([sum, sizes])
             }))
         }
+        ("sketch", "diagnose_chain") => {
+            fold(inputs::sketch::determined_chains(class).iter().map(|text| {
+                let sketch = geom_sketch::text::parse(text)?;
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let r = geom_sketch::diagnose::diagnose(&sketch, 10_000.0, &mut meter)?;
+                Ok::<_, geom_sketch::model::SketchError>([
+                    u32::try_from(r.dof_least).unwrap_or(u32::MAX),
+                    u32::try_from(r.dof_most).unwrap_or(u32::MAX),
+                    u32::try_from(r.redundant.len()).unwrap_or(u32::MAX),
+                    u32::try_from(r.conflicting.len()).unwrap_or(u32::MAX),
+                ])
+            }))
+        }
+        ("sketch", "free_motions_chain") => {
+            fold(inputs::sketch::free_chains(class).iter().map(|text| {
+                let sketch = geom_sketch::text::parse(text)?;
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let finder = geom_sketch::motions::MotionFinder::new(&sketch, &mut meter)?;
+                let all = finder.all(&mut meter)?;
+                let moved: usize = all.iter().map(|m| m.moves.len()).sum();
+                Ok::<_, geom_sketch::model::SketchError>([
+                    u32::try_from(finder.dof()).unwrap_or(u32::MAX),
+                    u32::try_from(all.len()).unwrap_or(u32::MAX),
+                    u32::try_from(moved).unwrap_or(u32::MAX),
+                    0,
+                ])
+            }))
+        }
         ("nurbs", "bernstein_bound") => fold(
             inputs::nurbs::bernstein_bound(class)
                 .into_iter()

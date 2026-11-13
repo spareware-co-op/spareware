@@ -54,6 +54,11 @@ harness = false
 name = "cluster"
 harness = false
 
+# Dependency groups and free motions (piece G224), the same way.
+[[bench]]
+name = "diagnose"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

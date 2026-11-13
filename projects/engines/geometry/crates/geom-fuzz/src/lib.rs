@@ -295,6 +295,7 @@ pub mod seeded;
 pub mod sketch_text;
 pub mod snap;
 pub mod sequence;
+pub mod sketch_motions;
 pub mod sketch_splines;
 pub mod surfaces;
 pub mod transforms;

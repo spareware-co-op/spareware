@@ -4111,6 +4111,30 @@ pub mod make {
     );
 }
 
+/// geom-sketch's hot paths (piece G224; decision 32.44).
+pub mod sketch {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("sketch/diagnose_chain/typical"))]
+    fn diagnose_chain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("sketch/free_motions_chain/typical"))]
+    fn free_motions_chain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = sketch;
+        benchmarks = diagnose_chain, free_motions_chain
+    );
+}
+
 /// The flat boolean's scenarios at reduced scale (piece G140; 23.13): each one whole job at about a
 /// tenth of its full size.
 pub mod scenario {

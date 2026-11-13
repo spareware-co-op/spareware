@@ -906,3 +906,24 @@ fn a_symmetric_order_reads_only_above_the_diagonal() {
         );
     }
 }
+
+/// The dead columns of a natural-order factorisation are the columns that are combinations of the
+/// columns before them (piece G224: the free variables of chapter 15.8's canonical null space are
+/// found from the right-hand end this way).
+#[test]
+fn dead_columns_are_the_combinations_of_earlier_columns() {
+    // Columns: e0, e1, e0 + e1 (dead), e2, 2·e0 (dead).
+    let t = [
+        (0, 0, 1.0),
+        (1, 1, 1.0),
+        (0, 2, 1.0),
+        (1, 2, 1.0),
+        (2, 3, 1.0),
+        (0, 4, 2.0),
+    ];
+    let a = Sparse::from_triplets(3, 5, &t).unwrap();
+    let symbolic = SymbolicQr::natural(&a, &mut work()).unwrap();
+    let qr = SparseQr::factor(&symbolic, &a, Real::new(1e-12).unwrap(), &mut work()).unwrap();
+    assert_eq!(qr.dead_columns(), vec![2, 4]);
+    assert_eq!(qr.rank(), 3);
+}

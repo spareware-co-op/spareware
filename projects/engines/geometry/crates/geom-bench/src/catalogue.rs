@@ -543,6 +543,10 @@ pub static OPS: &[Op] = &[
     Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
     Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
     Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
+    // geom-sketch's hot paths (piece G224; decision 32.44): a sketch diagnosed and its free motions
+    // found by the sparse form.
+    Op { group: "sketch", name: "diagnose_chain", measures: "geom_sketch::diagnose::diagnose", classes: T, prepare: |c| bind(inputs::sketch::determined_chains(c), kernels::sketch::diagnosed) },
+    Op { group: "sketch", name: "free_motions_chain", measures: "geom_sketch::MotionFinder::new", classes: T, prepare: |c| bind(inputs::sketch::free_chains(c), kernels::sketch::motions) },
     // geom-format's CBOR decoder and text form (piece G91; decision 32.46).
     Op { group: "cbor", name: "check", measures: "geom_format::decode::check", classes: T, prepare: |c| bind(inputs::cbor::check(c), kernels::cbor::check) },
     Op { group: "cbor", name: "int_column", measures: "geom_format::column::int_column", classes: T, prepare: |c| bind(inputs::cbor::int_column(c), kernels::cbor::int_column) },
@@ -725,7 +729,7 @@ pub fn full_scenario(op: &str) -> Option<Prepared> {
 }
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 54] = [
+pub const GROUPS: [&str; 55] = [
     "predicate",
     "sign",
     "wide",
@@ -765,6 +769,7 @@ pub const GROUPS: [&str; 54] = [
     "spline",
     "helper",
     "make",
+    "sketch",
     "scenario",
     "cbor",
     "record",
