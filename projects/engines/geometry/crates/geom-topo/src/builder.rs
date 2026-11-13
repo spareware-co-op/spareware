@@ -21,7 +21,8 @@
 //!   with the body; each write copies only the chunk it lands in, so a version made by editing ten
 //!   faces of a million-face body shares all but at most ten chunks per column written (23.9).
 //! - **Metered.** Publishing charges one work unit for every chunk of every link column it
-//!   checks, to the caller's meter, which polls the caller's cancellation (23.10).
+//!   checks, and of the meetings of planes in the point pool, which are links too, to the caller's
+//!   meter, which polls the caller's cancellation (23.10).
 //!
 //! Bounded proofs, and what is only tested: Kani proves (piece G112, chapter 28.7) the two checks
 //! publishing makes: the link check accepts a column exactly when every index it holds, present
@@ -52,7 +53,7 @@ use geom_run::WorkMeter;
 use crate::arenas::Arenas;
 use crate::body::{Body, BodyKind};
 use crate::column::{CHUNK_ROWS, Column};
-use crate::entity::{Link, RegionIx, RegionKind};
+use crate::entity::{Link, PointKind, RegionIx, RegionKind};
 use crate::error::TopoError;
 use crate::ix::{Arena, Ix};
 
@@ -202,7 +203,30 @@ pub(crate) fn inside(arenas: &Arenas, meter: &mut WorkMeter<'_>) -> Result<(), T
     links(&edges.end, Link::EdgeEnd, arenas, meter)?;
     links(&edges.curve, Link::EdgeCurve, arenas, meter)?;
     links(&arenas.vertices.point, Link::VertexPoint, arenas, meter)?;
+    meets(arenas, meter)
+}
 
+/// [`TopoError::NoSuchRow`] for the first meeting of planes, by row, that names a plane past the
+/// end of the plane pool, charging one unit to `meter` for each chunk's worth of meetings, so a
+/// body of grid points costs what it did (26.2).
+fn meets(arenas: &Arenas, meter: &mut WorkMeter<'_>) -> Result<(), TopoError> {
+    let rows = arenas.rows(Arena::Plane);
+    let mut seen = 0_u32;
+    for point in arenas.points.iter() {
+        let PointKind::Meet(planes) = point else {
+            continue;
+        };
+        if seen.is_multiple_of(CHUNK_ROWS) {
+            meter.charge(1)?;
+        }
+        seen = seen.saturating_add(1);
+        if let Some(far) = planes.iter().find(|p| p.row() >= rows) {
+            return Err(TopoError::NoSuchRow {
+                arena: Arena::Plane,
+                row: far.row(),
+            });
+        }
+    }
     Ok(())
 }
 

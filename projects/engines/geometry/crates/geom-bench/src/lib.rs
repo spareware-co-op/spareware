@@ -35,6 +35,14 @@
 //! `geom-op`'s batch driver and the flat arrays of points, and `geom-format`'s file readers and
 //! writers: the CBOR decoder and text form, the record layer and files, body, name, history and
 //! operation records, and containers read and opened at either trust.
+//! With them, `geom-mesh`'s triangulation (piece G153).
+//! From piece G140 it also runs the flat boolean's scenarios (23.13's scenarios at reduced scale):
+//! a wall's openings cut in one call, a door moved and cut again from the arrangement cache, a
+//! slab's holes, a union of many boxes, one and three selections from one arrangement, and a
+//! storey's rooms, each batch one whole job ([`inputs::scenario`]), and times them at full size
+//! for the nightly run.
+//! Beside the gates, [`steps`] tallies which step of chapter 23.2's ladder settled each call, per
+//! corpus.
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which
@@ -301,6 +309,7 @@ pub mod inputs;
 pub mod kernels;
 pub mod rng;
 pub mod sha256;
+pub mod steps;
 // Unix and Windows only, with the `reference` feature (on by default): the reference runner's
 // nightly records and report (piece G107), which run where the runner does. Like the judge, it is
 // left out of the WebAssembly guest, whose fuel the gate measures, and out of the gate's measured

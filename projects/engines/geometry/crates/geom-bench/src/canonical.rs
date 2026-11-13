@@ -795,6 +795,84 @@ impl<T: Canonical> Canonical for Result<T, geom_name::AttrError> {
     }
 }
 
+impl Canonical for crate::inputs::mesh::Terrain {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::boolean::Outcome {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::mesh::Pair {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::mesh::Probe {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::exact::build::Polygons {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::exact::ExactMesh {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::classify::Located {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::exact::MeshError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_mesh::Cdt<u32> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::CdtError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // `geom-bvh`'s types (decision 32.46's count benchmarks for pieces G54 and G55).
 
 impl<const D: usize> Canonical for geom_bvh::Aabb<D> {
@@ -1124,7 +1202,9 @@ impl Canonical for geom_op::OpOutput<geom_make::Made> {
     // A built body, as a transform's input: its corners, then its class's rank.
     fn encode(&self, h: &mut Sha256) {
         for point in self.result.body.arenas().points.iter() {
-            point.encode(h);
+            if let Some(p) = point.grid() {
+                p.encode(h);
+            }
         }
         u32::from(self.exactness.rank()).encode(h);
     }
@@ -1167,6 +1247,73 @@ impl<T: Canonical> Canonical for Result<T, geom_num::quadrature::QuadError> {
                 debug_text(e, h);
             }
         }
+    }
+}
+
+// The flat boolean's scenarios (piece G140).
+
+/// A body, as a scenario's input: its faces, edges and vertices counted, then its corners on the
+/// grid, in row order.
+fn body(b: &geom_topo::Body, h: &mut Sha256) {
+    let a = b.arenas();
+    for arena in [
+        geom_topo::Arena::Face,
+        geom_topo::Arena::Edge,
+        geom_topo::Arena::Vertex,
+    ] {
+        a.rows(arena).encode(h);
+    }
+    for point in a.points.iter() {
+        if let Some(p) = point.grid() {
+            p.encode(h);
+        }
+    }
+}
+
+/// Bodies, as a scenario's input: how many, then each.
+fn bodies(list: &[geom_topo::Body], h: &mut Sha256) {
+    u64::try_from(list.len()).unwrap_or(u64::MAX).encode(h);
+    for b in list {
+        body(b, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Host {
+    fn encode(&self, h: &mut Sha256) {
+        body(&self.host, h);
+        bodies(&self.tools, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Recut {
+    // The host and its tools after the move: the cache follows from the first cut of the same
+    // wall, which the tools before the move would give.
+    fn encode(&self, h: &mut Sha256) {
+        self.host.encode(h);
+        u64::try_from(self.cache.boxes().len())
+            .unwrap_or(u64::MAX)
+            .encode(h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Picks {
+    fn encode(&self, h: &mut Sha256) {
+        self.host.encode(h);
+        u64::try_from(self.count).unwrap_or(u64::MAX).encode(h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Many {
+    fn encode(&self, h: &mut Sha256) {
+        bodies(&self.bodies, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Storey {
+    fn encode(&self, h: &mut Sha256) {
+        body(&self.envelope, h);
+        bodies(&self.walls, h);
+        self.seeds.encode(h);
     }
 }
 

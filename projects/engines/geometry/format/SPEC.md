@@ -144,7 +144,7 @@ A chunk's payload (CDDL `chunk`):
 | `columns` | `[+ refs / i64-column / bstr / [+ surface] / [+ curve]]` | the table's columns over those rows, in the table's order |
 <!-- end generated -->
 
-The tables, by code, and their columns. A reference to a row is stored as the row plus one, and 0 for none; a sense as 0 (forward) or 1 (reversed). Each column but the faces' bounds, the points and the names is an array of one unsigned integer per row; the surface, curve and pcurve columns are arrays of one kind (section 11) per row.
+The tables, by code, and their columns. A reference to a row is stored as the row plus one, and 0 for none; a sense as 0 (forward) or 1 (reversed). Each column but the faces' bounds, the points' coordinates, the names and the planes is an array of one unsigned integer per row; the surface, curve and pcurve columns are arrays of one kind (section 11) per row.
 
 <!-- generated: tables -->
 | Code | Table | Columns |
@@ -156,7 +156,7 @@ The tables, by code, and their columns. A reference to a row is stored as the ro
 | 5 | fins | loop, next, previous, edge, sense, radial, pcurve |
 | 6 | edges | first fin, start, end, curve |
 | 7 | vertices | point |
-| 8 | points | x, y, z in grid steps (an `i64` column of three per point) |
+| 8 | points | x, y, z in grid steps (an `i64` column of three per point); in a chunk holding a meeting, first a kind per row (0 grid point, 1 meeting), then x, y, z for the grid points only, then three plane references per meeting |
 | 9 | surfaces | one surface kind per row |
 | 10 | curves | one 3D curve kind per row |
 | 11 | pcurves | one 2D curve kind per row |
@@ -164,9 +164,12 @@ The tables, by code, and their columns. A reference to a row is stored as the ro
 | 13 | face names | 16 bytes per face, one byte string |
 | 14 | edge names | 16 bytes per edge, one byte string |
 | 15 | vertex names | 16 bytes per vertex, one byte string |
+| 16 | planes | n_x, n_y, n_z and d of each plane, reduced: four integers per plane, one array; listed only when the body has a meeting |
 <!-- end generated -->
 
-A reader checks the index against its chunks before anything is built: each listed chunk is present, has the content ID listed, and names its own table and place; its row count is 4,096 unless it is its table's last; the tables are exactly 1 to 11, and 12 to 15 when `named` is 1; no chunk is given that the index does not list; `depends` is the listed IDs. It then rebuilds the arenas and publishes them through the kernel's builder, which checks the topology again (by name when `named` is 1), so a stored body is trusted no further than a built one. A body read back equals the one written, row for row, and the next operation on it gives the same bits.
+**Points and planes (decided 2026-11-02, for piece G129).** A body's point pool holds where each vertex lies: a grid point, or the meeting of three planes of the body's plane pool, exact and never rounded (architecture 8.2 and 24.3). A meeting is stored as the three planes' references, never as coordinates, so a reload names the same planes row for row; a plane as its four integers n_x, n_y, n_z and d, divided by their greatest common divisor without changing sign (24.3), each a CBOR integer or, past 64 bits, a bignum. A points chunk of grid points alone keeps its single `i64` column of x, y and z, so a body without meetings is stored exactly as before meetings existed, and its content ID is unchanged; a chunk that holds a meeting has three columns: each row's kind (0 grid point, 1 meeting), the grid points' x, y and z in row order, and the meetings' three plane references in row order. The planes are table 16, listed after the names and only when the pool has rows, for the same reason. A writer refuses a pool plane that is not reduced rather than reduce it, since the body read back must equal the one written. The geometry's content ID (23.8) leaves out tables 12 to 15 alone, so the planes count as geometry. Considered and set aside: a kind column in every points chunk (every stored body and golden would change for nothing), and a meeting's coordinates written as rationals (24.3 forbids storing them).
+
+A reader checks the index against its chunks before anything is built: each listed chunk is present, has the content ID listed, and names its own table and place; its row count is 4,096 unless it is its table's last; the tables are exactly 1 to 11, then 12 to 15 when `named` is 1, then 16 when the body has a meeting, never an empty 16; a points chunk has its kind column exactly when it holds a meeting; each plane is reduced, its normal within 83 bits and its offset within 125, and each meeting's three planes meet in one point, an exact determinant that is not zero (24.7); no chunk is given that the index does not list; `depends` is the listed IDs. It then rebuilds the arenas and publishes them through the kernel's builder, which checks the topology again (by name when `named` is 1), so a stored body is trusted no further than a built one. A body read back equals the one written, row for row, and the next operation on it gives the same bits.
 
 ## 11. Geometry kinds
 

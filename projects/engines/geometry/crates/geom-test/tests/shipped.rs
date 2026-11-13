@@ -21,9 +21,10 @@
 //!   each result transformed again: every body an operation returns passes the full checker
 //!   (principle 4), no operation reports a defect, and the numbers of results returned and
 //!   refused are the ones written here, which are the full-checker build's.
-//! - The cases that were returned by a shipped build and refused by a test build are refused:
-//!   a box turned 35 degrees (the Workshop hinge), a cylinder turned the same way, and a thin
-//!   prism halved, whose rounded corners meet.
+//! - The cases that were returned unchecked by a shipped build and refused by a test build are
+//!   judged by the full set in every build: a box turned 35 degrees (the Workshop hinge), which
+//!   the full set passes from G134 and every build returns; a cylinder turned the same way,
+//!   refused; and a thin prism halved, whose rounded corners meet, refused.
 
 #![allow(
     clippy::unwrap_used,
@@ -387,9 +388,13 @@ fn every_returned_body_passes_the_full_checker_and_the_answers_are_the_full_buil
     // The full-checker build's answers. A shipped build that gives others answers differently
     // by build, which principle 5 and 28.4 forbid; one that returns a body the full checker does
     // not pass has already failed above.
+    // Before G134 the checker certified no plane off the integers: of 1590 operations 1263
+    // bodies were returned and 123 waited for it. With it a rounded flat face stands for its
+    // star of triangles and those 123 are returned. Fifteen of them are a primitive's first
+    // transform, so each is transformed again ten ways: 150 operations more, every one returned.
     let expected = Tally {
-        returned: 1263,
-        waits: [("G134", 123), ("G177", 96)].into(),
+        returned: 1536,
+        waits: [("G177", 96)].into(),
         refused: 108,
     };
     assert_eq!(tally, expected);
@@ -404,7 +409,8 @@ fn units(out: &OpOutput<Made>, level: Level) -> u128 {
 
 /// What decision 32.48 costs a shipped build, in the checker's own work units, the same on every
 /// machine: the full set in place of the cheap groups on a result that is less than exact. The
-/// record cites these numbers.
+/// record cites these numbers, as they stand with G134's check of flat faces (its note "With
+/// G134"); the ones it measured before that are in its table.
 #[test]
 fn the_full_set_on_a_result_less_than_exact_costs_what_the_record_says() {
     let c = ctx();
@@ -433,27 +439,30 @@ fn the_full_set_on_a_result_less_than_exact_costs_what_the_record_says() {
         }
     }
     // Thirty bodies: twelve round primitives moved and all eighteen primitives scaled by 3/2.
-    assert_eq!((bodies, cheap, full), (30, 2088, 4320));
     let expected: BTreeMap<String, (u128, u128)> = [
-        ("box", (227, 520)),
+        ("box", (227, 522)),
         ("cone", (27, 46)),
-        ("cylinder", (48, 79)),
-        ("prism", (227, 536)),
-        ("sphere", (6, 13)),
+        ("cylinder", (48, 80)),
+        ("prism", (227, 522)),
+        ("sphere", (6, 12)),
         ("torus", (40, 54)),
     ]
     .into_iter()
     .map(|(kind, units)| (kind.to_owned(), units))
     .collect();
     assert_eq!(by_kind, expected);
+    assert_eq!((bodies, cheap, full), (30, 2088, 4275));
 }
 
 #[test]
-fn what_a_shipped_build_used_to_return_is_refused_in_every_build() {
+fn what_a_shipped_build_used_to_return_unchecked_is_judged_in_full_in_every_build() {
     let c = ctx();
     let origin = p(0, 0, 0);
     // The Workshop hinge: a box turned 35 degrees. Its corners round and its planes leave the
-    // integers, which the checker cannot certify until G134.
+    // integers. Before G134 the checker could not certify that, so a test build refused the
+    // turn and a shipped build returned it unchecked. From G134 each of its faces stands for
+    // its star of triangles, the full set passes it, and every build returns it on that
+    // verdict, recorded within the two steps its corners rounded by.
     let leaf = make_box(
         &c,
         &BoxInput {
@@ -462,9 +471,15 @@ fn what_a_shipped_build_used_to_return_is_refused_in_every_build() {
         },
     )
     .unwrap();
-    let turned = rotate(&c, moved(&leaf), Axis::Z, thirty_five_degrees(), origin);
-    let e = refused("a box turned 35 degrees", turned);
-    assert_eq!(waits_for(&e), Some("G134"), "{}", e.message());
+    let turned = rotate(&c, moved(&leaf), Axis::Z, thirty_five_degrees(), origin)
+        .unwrap_or_else(|e| panic!("a box turned 35 degrees: {}", e.message()));
+    let within_two = Exactness::Certified {
+        bound: Steps(2),
+        step: GridStep::Q0,
+    };
+    assert_eq!(turned.exactness, within_two);
+    let report = full_check(&turned.result.body, turned.exactness).unwrap();
+    assert!(report.passed(), "{:?}", report.faults().first());
     // The same turn of a cylinder waits for the curved checker, G177.
     let pin = cylinder(
         &c,
@@ -492,7 +507,7 @@ fn what_a_shipped_build_used_to_return_is_refused_in_every_build() {
     .unwrap();
     let halved = scale(&c, moved(&thin), [s(1, 2); 3], origin);
     let e = refused("a thin prism halved", halved);
-    assert_eq!(waits_for(&e), Some("G134"), "{}", e.message());
+    assert_eq!(waits_for(&e), Some("G417"), "{}", e.message());
     assert!(
         e.message().contains("two edges of the face meet"),
         "{}",

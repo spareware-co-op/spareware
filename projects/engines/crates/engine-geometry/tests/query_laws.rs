@@ -244,7 +244,8 @@ fn flat_oracles(asked: &Asked, answers: &Answers, six: i128) -> Result<(), Strin
     let corners: Vec<P3> = (0..a.rows(Arena::Vertex))
         .map(|v| {
             let vertex = a.vertices.get(Ix::new(v).unwrap()).unwrap();
-            *a.points.get(vertex.point).unwrap()
+            // A built box's or prism's vertices are grid points (G129's PointKind::Grid).
+            a.points.get(vertex.point).unwrap().grid().unwrap()
         })
         .collect();
     let axis = |get: &dyn Fn(&P3) -> i64| {

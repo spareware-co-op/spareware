@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 5b6e9dd5bbc7117cbcb396bc907b8e9218f78bd27d8e8a835f55148bee977d55 # shrinks to solids = [[[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]]], leaf = 1
+cc ede335c917e50a0408f68a5c07e6b7503777ec96a9e3b4e25aa21ef1a54c01af # shrinks to solids = [[[17, -2, -24], [0, 0, 0], [0, 0, -14], [0, 1, 0]], [[38, 2, -35], [0, 0, -12], [-16, 33, 20], [-13, -33, -21]]], leaf = 1

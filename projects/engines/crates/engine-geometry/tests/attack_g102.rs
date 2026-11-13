@@ -81,6 +81,7 @@ fn each_listed_detail_has_the_kind_the_kernel_gives_it() {
     let details = [
         ("Malformed", QueryDetail::Malformed),
         ("CurvedEdge", QueryDetail::CurvedEdge { edge: 0 }),
+        ("ImplicitVertex", QueryDetail::ImplicitVertex { vertex: 0 }),
         ("CurvedFace", QueryDetail::CurvedFace { face: 0 }),
         ("NoLoops", QueryDetail::NoLoops { face: 0 }),
         ("NotSolid", QueryDetail::NotSolid),

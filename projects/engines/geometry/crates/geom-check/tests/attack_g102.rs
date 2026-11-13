@@ -205,8 +205,8 @@ fn a_shell_is_judged_only_once_its_loops_are_sound() {
 
 #[test]
 fn a_shell_that_encloses_nothing_never_reaches_orientation() {
-    // A pillow: two triangles on one plane, back to back, their edges shared. Faces on one plane
-    // are a pair group 3 has no test for, so it fails closed there.
+    // A pillow: two triangles on one plane, back to back, their edges shared: they lie on one side
+    // of each edge, so group 3 finds them crossing.
     let mut r = Rows::empty();
     let region = r.region(RegionKind::Solid);
     let s = r.shell(region);
@@ -214,7 +214,7 @@ fn a_shell_that_encloses_nothing_never_reaches_orientation() {
         r.vertex(p);
     }
     faces_into(&mut r, s, &[&[0, 1, 2], &[0, 2, 1]]);
-    assert_eq!(kinds(exact(&r).faults()), [FaultKind::PairUnchecked],);
+    assert_eq!(kinds(exact(&r).faults()), [FaultKind::FacesCross]);
 }
 
 #[test]
@@ -528,6 +528,11 @@ fn every_row_is_charged_and_a_stop_stops_it() {
     let full = check(&body, Exactness::Exact, Level::Full, &mut m).unwrap();
     assert!(full.passed(), "{:?}", full.faults());
     let total = m.used().work;
+    // The loop below runs the check once for each unit, so it costs the square of `total`. These
+    // three boxes cost 2478 units, each flat face read as one outline. A checker that reads them
+    // a costlier way (a face as triangles, or two crossing planes as one) is held here, at about
+    // twice that, and not after the square of its cost.
+    assert!(total < 5_000, "{total}");
     // The last unit is charged; one less stops the check.
     let mut stopped = 0;
     for work in 0..total as u64 {

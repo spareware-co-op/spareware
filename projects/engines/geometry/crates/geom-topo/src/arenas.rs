@@ -1,9 +1,11 @@
-//! Every arena of one body: the seven entity arenas and the four geometry pools.
+//! Every arena of one body: the seven entity arenas and the five geometry pools.
 //!
 //! What it does: [`Arenas`] holds a body's entities ([`crate::entity`]) and the pools their
 //! geometry is kept in: surfaces ([`SurfaceKind`]), 3D curves ([`CurveKind<3>`]), pcurves
-//! ([`CurveKind<2>`]) and points ([`P3`]), each a [`Pool`], a column whose rows are the geometry
-//! itself. Faces, edges, fins and vertices attach to geometry by index into these pools (8.1).
+//! ([`CurveKind<2>`]), points ([`PointKind`]) and integer planes ([`Plane`]), each a [`Pool`], a
+//! column whose rows are the geometry itself. Faces, edges, fins and vertices attach to geometry by
+//! index into these pools (8.1), and a vertex where three planes meet names them in the plane pool
+//! through its point (6.3).
 //! [`crate::Builder`] edits arenas and publishes them as an immutable [`crate::Body`].
 //!
 //! Guarantees:
@@ -22,11 +24,11 @@
 //! Cost: [`Arenas::rows`] is constant time; [`Arenas::memory`] is linear in the number of chunks.
 
 use geom_curve::CurveKind;
-use geom_num::grid::P3;
+use geom_num::plane::Plane;
 use geom_surface::SurfaceKind;
 
 use crate::column::{Column, Memory};
-use crate::entity::{Edges, Faces, Fins, Loops, Regions, Shells, Vertices};
+use crate::entity::{Edges, Faces, Fins, Loops, PointKind, Regions, Shells, Vertices};
 use crate::ix::Arena;
 
 /// A geometry pool: a column whose rows are the geometry of kind `T` itself.
@@ -55,8 +57,10 @@ pub struct Arenas {
     pub curves: Pool<CurveKind<3>>,
     /// The pcurves fins lie on, each in its face's parameter space.
     pub pcurves: Pool<CurveKind<2>>,
-    /// The points vertices lie at.
-    pub points: Pool<P3>,
+    /// Where vertices lie.
+    pub points: Pool<PointKind>,
+    /// The planes vertices meet on.
+    pub planes: Pool<Plane>,
 }
 
 impl Arenas {
@@ -75,6 +79,7 @@ impl Arenas {
             curves: Column::new(),
             pcurves: Column::new(),
             points: Column::new(),
+            planes: Column::new(),
         }
     }
 
@@ -93,6 +98,7 @@ impl Arenas {
             Arena::Curve => self.curves.len(),
             Arena::Pcurve => self.pcurves.len(),
             Arena::Point => self.points.len(),
+            Arena::Plane => self.planes.len(),
         }
     }
 
@@ -111,6 +117,7 @@ impl Arenas {
             .plus(self.curves.memory())
             .plus(self.pcurves.memory())
             .plus(self.points.memory())
+            .plus(self.planes.memory())
     }
 }
 

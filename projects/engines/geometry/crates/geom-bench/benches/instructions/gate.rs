@@ -808,6 +808,32 @@ pub mod plane {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/tpi_meeting/typical"))]
+    #[bench::degenerate(leak("plane/tpi_meeting/degenerate"))]
+    #[bench::extreme(leak("plane/tpi_meeting/extreme"))]
+    fn tpi_meeting(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/normals_sign/typical"))]
+    #[bench::degenerate(leak("plane/normals_sign/degenerate"))]
+    #[bench::extreme(leak("plane/normals_sign/extreme"))]
+    fn normals_sign(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/normals_sign_faces/typical"))]
+    #[bench::degenerate(leak("plane/normals_sign_faces/degenerate"))]
+    fn normals_sign_faces(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("plane/tpi_homogeneous/typical"))]
     #[bench::extreme(leak("plane/tpi_homogeneous/extreme"))]
     fn tpi_homogeneous(run: &'static mut Named) -> &'static mut Named {
@@ -821,6 +847,24 @@ pub mod plane {
     #[bench::nearly_degenerate(leak("plane/side_of_tpi/nearly_degenerate"))]
     #[bench::extreme(leak("plane/side_of_tpi/extreme"))]
     fn side_of_tpi(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/determinant_sign/typical"))]
+    #[bench::degenerate(leak("plane/determinant_sign/degenerate"))]
+    #[bench::nearly_degenerate(leak("plane/determinant_sign/nearly_degenerate"))]
+    #[bench::extreme(leak("plane/determinant_sign/extreme"))]
+    fn determinant_sign(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/determinant_sign_faces/typical"))]
+    #[bench::degenerate(leak("plane/determinant_sign_faces/degenerate"))]
+    fn determinant_sign_faces(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
@@ -874,8 +918,9 @@ pub mod plane {
 
     library_benchmark_group!(
         name = plane;
-        benchmarks = through, side, tpi_new, tpi_homogeneous, side_of_tpi, to_grid, lpi_new,
-            lpi_homogeneous, side_of_lpi, lpi_to_grid
+        benchmarks = through, side, tpi_new, tpi_meeting, normals_sign, normals_sign_faces,
+            tpi_homogeneous, side_of_tpi, determinant_sign, determinant_sign_faces, to_grid,
+            lpi_new, lpi_homogeneous, side_of_lpi, lpi_to_grid
     );
 }
 
@@ -2643,6 +2688,94 @@ pub mod batch {
     );
 }
 
+/// The triangulation's hot path (piece G153; decision 32.46).
+pub mod mesh {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/cdt/typical"))]
+    fn cdt(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/exact_build/typical"))]
+    fn exact_build(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/point_point/typical"))]
+    fn point_point(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/point_line/typical"))]
+    fn point_line(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/point_plane/typical"))]
+    fn point_plane(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/line_line/typical"))]
+    fn line_line(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/closest_dots/typical"))]
+    fn closest_dots(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/triangles/typical"))]
+    fn triangles(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/locate/typical"))]
+    fn locate(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/envelope/typical"))]
+    fn envelope(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/boolean/typical"))]
+    fn boolean(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = mesh;
+        benchmarks = cdt, exact_build, locate, boolean, point_point, point_line, point_plane, line_line,
+            closest_dots, triangles, envelope
+    );
+}
+
 /// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.46).
 pub mod nurbs {
     use super::*;
@@ -2888,6 +3021,66 @@ pub mod make {
     library_benchmark_group!(
         name = make;
         benchmarks = build_box, cylinder, move_box, turn_box
+    );
+}
+
+/// The flat boolean's scenarios at reduced scale (piece G140; 23.13): each one whole job at about a
+/// tenth of its full size.
+pub mod scenario {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/openings/typical"))]
+    fn openings(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/moved_door/typical"))]
+    fn moved_door(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/slab_holes/typical"))]
+    fn slab_holes(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/union/typical"))]
+    fn union(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/one_selection/typical"))]
+    fn one_selection(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/three_selections/typical"))]
+    fn three_selections(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/storey/typical"))]
+    fn storey(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = scenario;
+        benchmarks = openings, moved_door, slab_holes, union, one_selection, three_selections, storey
     );
 }
 

@@ -952,6 +952,7 @@ name = "geom-bench"
 version = "0.0.0"
 dependencies = [
  "divan",
+ "geom-bool",
  "geom-bvh",
  "geom-check",
  "geom-curve",
@@ -959,10 +960,12 @@ dependencies = [
  "geom-linalg",
  "geom-make",
  "geom-math",
+ "geom-mesh",
  "geom-name",
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-poly",
  "geom-run",
  "geom-surface",
  "geom-test",
@@ -998,12 +1001,15 @@ dependencies = [
  "geom-bvh",
  "geom-check",
  "geom-intersect",
+ "geom-make",
  "geom-name",
  "geom-num",
  "geom-op",
  "geom-poly",
  "geom-run",
+ "geom-surface",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]
@@ -1211,10 +1217,12 @@ dependencies = [
  "geom-linalg",
  "geom-make",
  "geom-math",
+ "geom-mesh",
  "geom-name",
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-poly",
  "geom-run",
  "geom-surface",
  "geom-test",
@@ -1359,9 +1367,12 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-pool",
  "geom-run",
  "geom-surface",
+ "geom-test",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]
@@ -1490,7 +1501,10 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
  "geom-topo",
+ "num-bigint",
+ "proptest",
 ]
 
 [[package]]
@@ -1654,14 +1668,18 @@ dependencies = [
  "clap",
  "dashu-int",
  "dashu-ratio",
+ "geom-bool",
  "geom-check",
  "geom-curve",
  "geom-format",
  "geom-make",
  "geom-math",
+ "geom-mesh",
+ "geom-name",
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-poly",
  "geom-run",
  "geom-surface",
  "geom-topo",
