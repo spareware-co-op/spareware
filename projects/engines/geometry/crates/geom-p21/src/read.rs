@@ -607,19 +607,14 @@ impl<'m, 'c, S: ByteSource> Reader<'m, 'c, S> {
             }
             State::InHeader => {
                 self.ws()?;
-                if self.lx.peek()?.is_none() {
-                    return self.fail(ErrorKind::UnexpectedEnd);
-                }
-                let (at, len) = self.keyword()?;
+                let name = self.name()?;
                 if self.tokens.text == "ENDSEC" {
                     self.tokens.clear();
                     self.expect(b';')?;
                     self.state = State::Between;
                     return Ok(Some(Event::EndSection));
                 }
-                self.expect(b'(')?;
-                self.push(Item::Record(at, len))?;
-                self.list()?;
+                self.params(name)?;
                 self.expect(b';')?;
                 Ok(Some(Event::HeaderRecord))
             }
@@ -771,33 +766,37 @@ impl<'m, 'c, S: ByteSource> Reader<'m, 'c, S> {
         self.ws()?;
         if let Some(c @ b'(') = self.lx.peek()? {
             self.lx.bump(c);
-            // Each part pushes its record's item at least, and `push` refuses more than
-            // `options.items`, so `)` or an error ends the loop inside this bound. The bound
-            // also ends a loop whose parts read nothing, which would otherwise never end.
-            for _ in 0..=self.options.items {
+            // Each part takes its name here, so a part that reads nothing more still moves on.
+            loop {
                 self.ws()?;
                 if let Some(c @ b')') = self.lx.peek()? {
                     self.lx.bump(c);
                     break;
                 }
-                self.record()?;
+                let name = self.name()?;
+                self.params(name)?;
             }
             if self.tokens.is_empty() {
                 return self.fail(ErrorKind::EmptyInstance);
             }
         } else {
-            self.record()?;
+            let name = self.name()?;
+            self.params(name)?;
         }
         self.expect(b';')?;
         Ok(Some(Event::Instance(id)))
     }
 
-    /// `NAME(...)`.
-    fn record(&mut self) -> Result<(), Error> {
+    /// A record's name, its span in the tokens' text.
+    fn name(&mut self) -> Result<(u32, u32), Error> {
         if self.lx.peek()?.is_none() {
             return self.fail(ErrorKind::UnexpectedEnd);
         }
-        let (at, len) = self.keyword()?;
+        self.keyword()
+    }
+
+    /// `(...)`, the parameters of the record named by the span `name`.
+    fn params(&mut self, (at, len): (u32, u32)) -> Result<(), Error> {
         self.expect(b'(')?;
         self.push(Item::Record(at, len))?;
         self.list()
@@ -876,20 +875,26 @@ impl<'m, 'c, S: ByteSource> Reader<'m, 'c, S> {
 
     /// Takes bytes onto the scratch while `keep` holds; `keep` never holds for a line feed.
     fn run(&mut self, keep: impl Fn(u8) -> bool) -> Result<(), Error> {
+        // `peek` fills a drained buffer.
+        self.lx.peek()?;
         loop {
-            // `peek` fills a drained buffer. A pass that keeps nothing ends the run: the next
-            // byte is one `keep` refuses, or the source has ended. Every other pass grows the
-            // scratch, which `check_text` bounds, so the loop ends whatever the buffer holds.
-            self.lx.peek()?;
+            // The run ends at a byte `keep` refuses, at the source's end (an empty buffer), or
+            // after a pass that keeps nothing. Otherwise every byte buffered was kept, and the
+            // next pass reads on from the source, so the loop ends with the source.
             let chunk = self.lx.chunk();
             let n = chunk.iter().position(|c| !keep(*c)).unwrap_or(chunk.len());
             let kept = chunk.get(..n).unwrap_or(&[]);
             if kept.is_empty() {
                 return Ok(());
             }
+            let refused = chunk.get(n).is_some();
             self.scratch.extend_from_slice(kept);
             self.lx.advance(n);
             self.check_text()?;
+            if refused {
+                return Ok(());
+            }
+            self.lx.refill()?;
         }
     }
 
