@@ -137,6 +137,10 @@ fn every_kind_is_reached() {
     }
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the corpus folders from the host, which WASI cannot without a preopened folder"
+)]
 #[test]
 fn no_stored_file_of_this_target_is_an_offset() {
     // This target passes an offset without building it, so an offset stored here would test
