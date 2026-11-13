@@ -594,6 +594,8 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_bool",
         &[
             ("batch", include_str!("../../geom-bool/src/batch.rs")),
+            ("broad", include_str!("../../geom-bool/src/broad.rs")),
+            ("classify", include_str!("../../geom-bool/src/classify.rs")),
             ("combine", include_str!("../../geom-bool/src/combine.rs")),
         ],
     ),
@@ -608,13 +610,6 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
                 "transform",
                 include_str!("../../geom-make/src/transform.rs"),
             ),
-        ],
-    ),
-    (
-        "geom_bool",
-        &[
-            ("broad", include_str!("../../geom-bool/src/broad.rs")),
-            ("classify", include_str!("../../geom-bool/src/classify.rs")),
         ],
     ),
     (
