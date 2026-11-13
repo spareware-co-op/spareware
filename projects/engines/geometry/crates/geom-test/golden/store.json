@@ -350,6 +350,12 @@
               "kind": "corpus",
               "piece": "G166",
               "why": "3 new count benchmarks on pencils of quadrics (decision 32.44): a sphere and a cylinder in general position and touching inside, and the walk of their curve; no existing digest moved"
+            },
+            {
+              "sha256": "48921a5db7dd64f8a2a64cbb000838a4f040653bc13a7222f92e74d6c2c4872d",
+              "kind": "corpus",
+              "piece": "G167",
+              "why": "3 new count benchmarks on the reductions of 12.7 (decision 32.44): a plane square to a torus's axis through its tube, a cylinder about its axis through its tube, and a sloping plane across a wall; no existing digest moved"
             }
           ],
           "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b"

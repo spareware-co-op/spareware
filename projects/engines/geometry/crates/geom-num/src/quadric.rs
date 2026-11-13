@@ -512,6 +512,36 @@ fn sign_of(v: &Wide<14>) -> Sign {
     }
 }
 
+fn tilt_of_torus<R: Ring>(plane: &Plane, p: P3, q: P3, major: Steps, minor: Steps) -> Option<R> {
+    let n = normal::<R>(plane)?;
+    let e: [R; 3] = minus(q, p)?;
+    let (big, small) = (size::<R>(major.0)?, size::<R>(minor.0)?);
+    let (r2, s2) = (big.times(big)?, small.times(small)?);
+    let tilt = inner(n, e)?;
+    let spread = inner(n, n)?.times(inner(e, e)?)?.times(r2.minus(s2)?)?;
+    spread.minus(tilt.times(tilt)?.times(r2)?)
+}
+
+/// How a plane leans to the axis p to q of a torus of radii `major` and `minor`: the sign of
+/// |n|²|e|²(R² − r²) − (n·e)²R². Zero is Villarceau's angle, sin θ = r/R from the equator.
+///
+/// Budget: |n|² < 2^172, |e|² < 2^85 and R² < 2^106, so each side is below 2^364. `Wide<8>` holds it.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] for a radius that does not fit an `i64`.
+pub fn villarceau(
+    plane: &Plane,
+    p: P3,
+    q: P3,
+    major: Steps,
+    minor: Steps,
+) -> Result<Sign, NumError> {
+    signed(tilt_of_torus::<Interval>(plane, p, q, major, minor), || {
+        tilt_of_torus::<Wide<8>>(plane, p, q, major, minor)
+    })
+}
+
 /// What [`polynomial`] computes in: exact integers, or intervals that enclose them.
 pub trait Ring: Copy {
     /// The number `v`, for a |v| of at most 2^53.

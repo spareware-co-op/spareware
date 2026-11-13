@@ -1,8 +1,8 @@
-//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G166, decision 32.44): a list of
+//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G167, decision 32.44): a list of
 //! items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a
 //! point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5
 //! once, curves through surfaces, each path of 12.6 once, natural quadrics, four rows of 12.7, and a
-//! sphere and a cylinder in general position, whose curve is walked.
+//! sphere and a cylinder in general position, whose curve is walked, and three reductions of 12.7.
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -24,7 +24,7 @@ use geom_math::Box3;
 use geom_num::Exactness;
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve, Surface};
-use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
+use geom_surface::{Cone, Cylinder, Extrusion, Plane, Sphere, SurfaceKind, Torus};
 
 use super::{Class, batch_of, p3, rng, within};
 use crate::rng::SplitMix64;
@@ -406,5 +406,73 @@ pub fn walks(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
         )
         .ok()?;
         Some((SurfaceKind::Sphere(sphere), SurfaceKind::Cylinder(tube)))
+    })
+}
+
+/// A torus about z.
+fn ring_about(at: [f64; 3], major: f64, minor: f64) -> Option<SurfaceKind> {
+    let frame = Frame::standard().ok()?;
+    let torus = Torus::new(at, major, minor, frame, (TURN, TURN)).ok()?;
+    Some(SurfaceKind::Torus(torus))
+}
+
+/// A plane square to a torus's axis, through its tube.
+#[must_use]
+pub fn torus_cuts(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
+    typical(class, "intersect::torus_cuts", |g| {
+        let [a, b, c] = point(g);
+        let minor = 1024.0 + plain(g).abs() / 8.0;
+        let sheet = Plane::new(
+            [a, b, c + minor * 0.5],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            (TALL, TALL),
+        )
+        .ok()?;
+        Some((
+            SurfaceKind::Plane(sheet),
+            ring_about([a, b, c], minor * 3.0, minor)?,
+        ))
+    })
+}
+
+/// A cylinder about a torus's axis, through its tube.
+#[must_use]
+pub fn torus_tubes(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
+    typical(class, "intersect::torus_tubes", |g| {
+        let [a, b, c] = point(g);
+        let minor = 1024.0 + plain(g).abs() / 8.0;
+        let tube = Cylinder::new(
+            [a, b, c],
+            minor * 3.5,
+            Frame::standard().ok()?,
+            (TURN, TALL),
+        )
+        .ok()?;
+        Some((
+            SurfaceKind::Cylinder(tube),
+            ring_about([a, b, c], minor * 3.0, minor)?,
+        ))
+    })
+}
+
+/// A sloping plane across a wall: a segment pushed along z.
+#[must_use]
+pub fn wall_cuts(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
+    typical(class, "intersect::wall_cuts", |g| {
+        let [a, b, c] = point(g);
+        let run = 1024.0 + plain(g).abs() / 8.0;
+        let line = Line::segment([a, b, c], [a + run, b, c]).ok()?.value;
+        let (lo, hi) = geom_curve::ParamCurve::domain(&line);
+        let profile = geom_curve::Trimmed::new(geom_curve::Basis::Line(line), (lo, hi)).ok()?;
+        let wall = Extrusion::new(profile, [0.0, 0.0, 1.0], (0.0, run)).ok()?;
+        let sheet = Plane::new(
+            [a, b, c + run * 0.25],
+            [1.0, 0.0, 0.125],
+            [0.0, 1.0, 0.0],
+            (TALL, TALL),
+        )
+        .ok()?;
+        Some((SurfaceKind::Plane(sheet), SurfaceKind::Extrusion(wall)))
     })
 }
