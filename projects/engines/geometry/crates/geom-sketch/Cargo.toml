@@ -44,6 +44,11 @@ harness = false
 name = "spline"
 harness = false
 
+# A family sketch and a floor outline solved (piece G222), the same way.
+[[bench]]
+name = "solve"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

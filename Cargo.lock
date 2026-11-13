@@ -1691,6 +1691,7 @@ dependencies = [
  "geom-op",
  "geom-poly",
  "geom-run",
+ "geom-sketch",
  "geom-surface",
  "geom-topo",
  "hex",

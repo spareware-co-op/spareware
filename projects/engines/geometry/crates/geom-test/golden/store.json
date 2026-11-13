@@ -380,6 +380,24 @@
               "kind": "corpus",
               "piece": "G220",
               "why": "2 new count benchmarks on geom-sketch's spline rules (decision 32.44): the arc length of a cubic spline with its proven error bound, and the assembly of rational spline rules (a G2 join, a G3 end against a line, a pinned point and a stated length); no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G105",
+              "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
+            },
+            {
+              "sha256": "5775a677d1dc165be37085b18d3bfd09e1c02a95a0b9661fc1305914ea731812",
+              "kind": "corpus",
+              "piece": "G158",
+              "why": "3 new count benchmarks on geom-intersect's canonical order (decision 32.44): a list of items sorted and proven disjoint, a circle's key, a pair of lines put in order; no existing digest moved"
+            },
+            {
+              "sha256": "71d5020c80411fdbcffcc856ab61ead6142460d6afde64e30b08e01bea0ad627",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"
@@ -945,6 +963,16 @@
             "function": "spline_more_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "2973f22a918646a7c3cae627a992a239db8656edf9be15b27e6023a0c65b82db"
+        },
+        {
+          "id": "geom-sketch/solve",
+          "what": "The block solver of geom-sketch (piece G222): ezpz's 28 test problems in sketch v1, each solved from its own start, every solved variable's bits and the iterations taken; the inconsistent one, which is refused, by its name alone.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "solve",
+            "function": "solved_values_are_the_same_on_every_target"
+          },
+          "sha256": "b835783ee649429b7f0a426e22bf0c28b9a42ae8d9da57aff43efe9acbd3def1"
         }
       ]
     }

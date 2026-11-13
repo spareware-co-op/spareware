@@ -48,8 +48,8 @@ use geom_test::golden::store::Store;
 use geom_test::map::repo::workspace_root;
 use geom_test::oracle::catalogue::{self, Catalogue, audit, linked};
 use geom_test::oracle::geomdl::{self, Answer, Compared, Job, judge_for};
-use geom_test::oracle::smlib;
 use geom_test::oracle::triage::{self, Record, Register, Signature, fixture as fixture_of, group};
+use geom_test::oracle::{sketches, smlib};
 use geom_test::seed::Seed;
 
 /// The outside oracles' tool.
@@ -207,17 +207,31 @@ fn check(repository: Option<&Path>, root: &Root) -> Result<ExitCode, String> {
 }
 
 fn known(oracle: &str) -> Result<(), String> {
-    if oracle == geomdl::ID || oracle == smlib::ID {
+    if oracle == geomdl::ID || oracle == smlib::ID || sketch(oracle) {
         Ok(())
     } else {
         Err(format!("no jobs for {oracle}"))
     }
 }
 
+/// Whether `oracle` is a sketch solver, whose jobs are sketches (G222).
+fn sketch(oracle: &str) -> bool {
+    oracle == sketches::EZPZ || oracle == sketches::FIKSI
+}
+
 fn jobs(oracle: &str, seed: &str, count: u64) -> Result<ExitCode, String> {
     known(oracle)?;
     let seed = u64::from_str_radix(seed, 16).map_err(|e| format!("the seed {seed:?}: {e}"))?;
     eprintln!("seed: {seed:016x}");
+    if let Some(drawn) = sketches::jobs(oracle, Seed(seed), count) {
+        for job in drawn {
+            println!(
+                "{}",
+                serde_json::to_string(&job).map_err(|e| e.to_string())?
+            );
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
     let drawn = if oracle == smlib::ID {
         smlib::jobs(Seed(seed), count)
     } else {
@@ -241,19 +255,25 @@ fn lines<T: serde::de::DeserializeOwned>(text: &str, what: &str) -> Result<Vec<T
 
 fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String> {
     known(oracle)?;
-    let jobs: Vec<Job> = lines(&read(jobs)?, "a job")?;
-    let answers: Vec<Answer> = lines(&read(answers)?, "an answer")?;
-    if jobs.len() != answers.len() {
-        return Err(format!(
-            "{} jobs and {} answers: the harness stopped early",
-            jobs.len(),
-            answers.len()
-        ));
-    }
+    let (count, judged) = if sketch(oracle) {
+        let jobs: Vec<sketches::Job> = lines(&read(jobs)?, "a job")?;
+        let answers: Vec<sketches::Answer> = lines(&read(answers)?, "an answer")?;
+        let judged = paired(&jobs, &answers)?
+            .map(|(job, answer)| Ok((job.id, sketches::judge(oracle, job, answer)?)))
+            .collect::<Result<Vec<_>, String>>()?;
+        (jobs.len(), judged)
+    } else {
+        let jobs: Vec<Job> = lines(&read(jobs)?, "a job")?;
+        let answers: Vec<Answer> = lines(&read(answers)?, "an answer")?;
+        let judged = paired(&jobs, &answers)?
+            .map(|(job, answer)| Ok((job.id, judge_for(oracle, job, answer)?)))
+            .collect::<Result<Vec<_>, String>>()?;
+        (jobs.len(), judged)
+    };
     let mut differences = Vec::new();
-    for (job, answer) in jobs.iter().zip(&answers) {
-        if let Compared::Differ { signature, settled } = judge_for(oracle, job, answer)? {
-            println!("job {}: {signature}: {settled}", job.id);
+    for (id, compared) in judged {
+        if let Compared::Differ { signature, settled } = compared {
+            println!("job {id}: {signature}: {settled}");
             differences.push(signature);
         }
     }
@@ -264,7 +284,7 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String
     let new = register.new_signatures(&differences);
     println!(
         "oracle compare: {} jobs, {} differences, {} new signatures",
-        jobs.len(),
+        count,
         differences.len(),
         new.len()
     );
@@ -278,8 +298,30 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String
     })
 }
 
+/// Each job with its answer, refusing answers that stop early.
+fn paired<'a, J, A>(
+    jobs: &'a [J],
+    answers: &'a [A],
+) -> Result<impl Iterator<Item = (&'a J, &'a A)>, String> {
+    if jobs.len() == answers.len() {
+        Ok(jobs.iter().zip(answers))
+    } else {
+        Err(format!(
+            "{} jobs and {} answers: the harness stopped early",
+            jobs.len(),
+            answers.len()
+        ))
+    }
+}
+
 fn triage_command(t: &Triaging) -> Result<ExitCode, String> {
     known(&t.oracle)?;
+    if sketch(&t.oracle) {
+        return Err(format!(
+            "{}: a sketch job is triaged by hand until G231 writes its fixtures",
+            t.oracle
+        ));
+    }
     let root = match &t.root.root {
         Some(r) => r.clone(),
         None => workspace_root().map_err(|e| e.to_string())?,

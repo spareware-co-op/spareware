@@ -169,6 +169,7 @@
 //!   and their meter.
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
+//! - `geom-sketch` (MPL-2.0, ours), the code the [`sketch_text`] target tests.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
 //!   the work meter it reads with, and of the [`cache`] target with `geom-op`.
 //! - `geom-topo`, `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), the code under

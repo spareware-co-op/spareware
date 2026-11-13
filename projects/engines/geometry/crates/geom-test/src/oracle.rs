@@ -17,6 +17,8 @@
 //!
 //! - [`smlib`]: the second, `SMLib`'s `NLib` layer, on the same lines: evaluation, knot insertion and
 //!   removal, and degree elevation.
+//! - [`sketches`]: ezpz and fiksi, two sketch solvers, against the block solver on sketches drawn
+//!   from a known truth (G222).
 //!
 //! The binary `oracle` lists the catalogue, checks it (`-- check`), writes a night's jobs
 //! (`-- jobs`), compares the answers (`-- compare`) and records a triage (`-- triage`).
@@ -41,5 +43,6 @@ pub mod catalogue;
 pub mod compare;
 pub mod exact;
 pub mod geomdl;
+pub mod sketches;
 pub mod smlib;
 pub mod triage;

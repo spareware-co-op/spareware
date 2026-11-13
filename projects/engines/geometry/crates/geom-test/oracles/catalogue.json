@@ -221,15 +221,31 @@
     },
     {
       "id": "ezpz",
-      "what": "ezpz",
+      "what": "ezpz, Zoo's sketch solver",
       "licence": "MIT",
-      "run": "dev-dependency",
-      "state": "planned",
-      "checks": "Sketch solutions, degrees of freedom, redundant and conflicting constraints",
-      "source": "crates.io: ezpz",
-      "pin": null,
-      "never_linked": [],
-      "piece": "G231"
+      "run": "out-of-process",
+      "state": "live",
+      "checks": "Sketch solutions, compared with the block solver's and the truth they were drawn from (G222); degrees of freedom and conflicts come with G231",
+      "source": "https://github.com/KittyCAD/ezpz",
+      "pin": "0.2.29",
+      "never_linked": [
+        "ezpz"
+      ],
+      "piece": "G222"
+    },
+    {
+      "id": "fiksi",
+      "what": "fiksi, Linebender's sketch solver",
+      "licence": "Apache-2.0 OR MIT",
+      "run": "out-of-process",
+      "state": "live",
+      "checks": "Sketch solutions on the kinds it states, compared with the block solver's and the truth they were drawn from (G222)",
+      "source": "https://github.com/endoli/fiksi",
+      "pin": "ff4850546738fb82e95ff27c4db63e924d938473",
+      "never_linked": [
+        "fiksi"
+      ],
+      "piece": "G222"
     },
     {
       "id": "solvespace",
