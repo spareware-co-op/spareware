@@ -987,10 +987,10 @@ const TETRA: Spec<'_> = Spec {
 };
 
 /// What a check of [`ring_on_the_grid`] reserves.
-const RING_BYTES: u128 = 3_960;
+const RING_BYTES: u128 = 2_360;
 
 /// What a check of [`ring_of_meetings`] reserves.
-const MEETINGS_BYTES: u128 = 9_208;
+const MEETINGS_BYTES: u128 = 7_608;
 
 /// Every budget short of what checking `body` costs stops it, cleanly, and that much does not.
 fn stops_wherever_its_budget_ends(body: &Body) {
@@ -1978,4 +1978,58 @@ fn a_solid_with_caps_written_off_their_corners_is_judged_by_its_corners() {
     // Two steps off under a bound of one: group 2 speaks.
     let far = report(&ell_with_caps_off(2.0), BodyKind::Solid, within(1));
     assert!(kinds(far.faults()).contains(&FaultKind::VertexOffSurface));
+}
+
+/// What a full check of `body`, recorded Exact and found valid, charges: its work units and the
+/// logical bytes it reserves.
+fn cost(body: &Body) -> (u128, u128) {
+    let mut m = WorkMeter::new(Budget::UNLIMITED);
+    let found = check(body, Exactness::Exact, Level::Full, &mut m).unwrap();
+    assert_eq!(found.faults(), []);
+    (m.used().work, m.used().logical_bytes)
+}
+
+#[test]
+fn the_faces_of_a_convex_body_are_told_apart_by_their_corners_alone() {
+    // Two faces of a box that share an edge each lie to one side of the other's plane and reach
+    // it only along that edge, so the first face's four corners settle the pair: a unit for the
+    // pair and one for each corner. Two opposite faces are settled by their boxes, for the pair's
+    // unit alone. No line is cut for any of the fifteen pairs, so nothing is sorted and no list
+    // is reserved but each face's outline. The numbers are the whole check's, so that a pair
+    // sent on to the cut, which finds the same answer, is seen here.
+    let cube = polyhedron(&BOX_POINTS, &CUBE_FACES);
+    let got = [
+        cost(&cube.body(BodyKind::Solid)),
+        // The same of a box whose corners are meetings of its faces' planes, each tilted a step.
+        cost(&tilted(BOX, &jog(7)).body(BodyKind::Solid)),
+        // An L is not convex: its caps and the two walls of its notch are cut.
+        cost(&tilted(ELL, &still).body(BodyKind::Solid)),
+    ];
+    assert_eq!(got, [(546, 7_440), (675, 23_184), (1_068, 34_656)]);
+}
+
+#[test]
+fn two_edges_between_the_same_two_corners_are_not_one_shared_edge() {
+    // Two triangles on crossing planes, each with an edge of its own from (0, 0, 0) to
+    // (10, 0, 0). Each lies to one side of the other's plane and reaches it along that edge, but
+    // they share only its two ends, which excuse their own places and nothing between them.
+    let mut r = Rows::empty();
+    let corner = [[0, 0, 0], [10, 0, 0], [5, 5, 0], [5, 0, 5]].map(|p| r.vertex(p));
+    for apex in [2, 3] {
+        let s = r.shell(0);
+        let ring = [(0, 1), (1, apex), (apex, 0)]
+            .map(|(a, b)| (r.edge(Some((corner[a], corner[b]))), Sense::Forward));
+        r.face(s, &[&ring]);
+    }
+    let found = report(&r, BodyKind::General, Exactness::Exact);
+    assert_eq!(kinds(found.faults()), [FaultKind::FacesCross]);
+    // With the one edge between them shared, the same two triangles pass.
+    let shared = sheets(&[
+        &[[0, 0, 0], [10, 0, 0], [5, 5, 0]],
+        &[[0, 0, 0], [10, 0, 0], [5, 0, 5]],
+    ]);
+    assert_eq!(
+        report(&shared, BodyKind::General, Exactness::Exact).faults(),
+        []
+    );
 }

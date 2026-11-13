@@ -498,16 +498,17 @@ fn groups_2_and_3_charge_one_unit_per_row_and_pair_visited() {
     // each loop and fin for the faces' area vectors and each fin again for the corners that
     // bracket the volume. The cube: 6 faces, 24 fins and 12
     // edges and 8 vertices, 6 and 24; each fin outlined, 6 faces, 6 pairs of edges in each, 15
-    // pairs of faces, and each of the 12 pairs that meet at an edge crosses its 4 sides each way
-    // for each face, compares its one stretch and looks for what its faces share, the parallel
-    // pairs' boxes settling them, then 6 and 24, and 1, 6, 6, 24 and 1, or 1, 6, 24, 24 and 1. The
+    // pairs of faces, and each of the 12 pairs that meet at an edge takes the side of the second
+    // face's plane each of the first's 4 corners lies on, which settles it with no line cut, the
+    // parallel pairs' boxes settling them, then 6 and 24, and 1, 6, 6, 24 and 1, or 1, 6, 24, 24
+    // and 1. The
     // cylinder with a seam: 2 vertices, 3 faces, 6 fins and 3 edges, 3 and the caps' 2 fins; the
     // caps' 2 fins, which no outline takes, 3 faces, the 3
     // pairs of the side's edges, 3 pairs of faces (parallel caps, and caps that share a circle with
     // the side, tested without their edges), then 3 and the caps' 2, and the shell, its first
     // cap's loop and circle, and 1.
     let cube_before_its_volume =
-        (8 + 6 + 24 + 12) + (6 + 24) + (24 + 6 + 6 * 6 + 15 + 12 * (16 + 1 + 4)) + (6 + 24);
+        (8 + 6 + 24 + 12) + (6 + 24) + (24 + 6 + 6 * 6 + 15 + 12 * 4) + (6 + 24);
     for (rows, record, rows_visited) in [
         (
             cube(),

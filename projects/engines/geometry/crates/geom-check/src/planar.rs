@@ -2,17 +2,22 @@
 //! whether their vertices are grid points or the meetings of three planes (G134).
 //!
 //! What it does: an [`Outline`] is a flat face as this module reads it: its integer plane, and for
-//! each fin the edge's two ends and a plane that crosses the face's along the edge. That plane is
-//! the other face's across the edge, or, along a seam, a plane the edge's ends both lie on, or for
-//! two grid points one stood on them; so a side of the polygon is a pair of planes, as EMBER keeps
-//! it, and no test here ever needs the orientation of three implicit points, about 840 bits a term
-//! (19.2).
+//! each fin, ring by ring, the corner the edge starts at (it ends at the next fin's) and a plane
+//! that crosses the face's along the edge. That plane is the other face's across the edge, or,
+//! along a seam, a plane the edge's ends both lie on, or for two grid points one stood on them; so
+//! a side of the polygon is a pair of planes, as EMBER keeps it, and no test here ever needs the
+//! orientation of three implicit points, about 840 bits a term (19.2).
 //!
 //! - **A face and a line.** Where a face's plane meets another plane, [`Cut`] names each point of
 //!   the line by a plane that crosses it there. Moved infinitely little off the other plane, the
 //!   line crosses the face's boundary at sorted marks that pair up into stretches; the stretches on
 //!   the two sides together are the whole of the closed face on the line, with no special case for
 //!   a vertex or an edge lying on it.
+//! - **A face that keeps to one side of another's plane.** If its corners are all on one side of
+//!   that plane or on it, each one on it a vertex of the other face and each side along it an
+//!   edge of the other, it holds nothing else of the plane, so the two meet only at what they
+//!   share. One sign for each corner settles such a pair, with no line cut: every pair of faces
+//!   of a convex body.
 //! - **Two crossing faces.** Their stretches on their planes' line may overlap only where the two
 //!   faces share edges and vertices.
 //! - **Two faces on one plane.** Each side of each face, as a stretch of its own line, against the
@@ -81,8 +86,10 @@
 //! to the query alone, as `geom_topo::query` applies it.
 //!
 //! Cost: an outline is linear in its face's fins, a pair of faces linear in their sides plus the
-//! sorting of their crossings, a pair of faces on one plane the product of their sides. Each test
-//! allocates a short list, reserved fallibly with its logical bytes on the meter. Recursion: none.
+//! sorting of their crossings, a pair of faces on one plane the product of their sides. A pair
+//! one of whose faces keeps to one side of the other's plane costs a sign for each of its corners
+//! and reserves nothing. Each other test allocates a short list, reserved fallibly with its
+//! logical bytes on the meter. Recursion: none.
 
 use alloc::vec::Vec;
 use core::cmp::Ordering;
@@ -93,7 +100,7 @@ use geom_num::wide::I256;
 use geom_num::{P3, Sign};
 use geom_op::run::reserve;
 use geom_run::{LogicalSize, Stopped};
-use geom_topo::entity::{Edge, Face, Shell, Vertex};
+use geom_topo::entity::{Edge, Face, Loop, Shell, Vertex};
 use geom_topo::ix::Arena;
 use geom_topo::mass::Corner;
 use geom_topo::query::Side as ShellSide;
@@ -146,20 +153,22 @@ struct End {
     at: Corner,
 }
 
-/// One side of an outline.
+/// One side of an outline, from the corner it starts at. It ends where the next side round its
+/// ring starts ([`Outline::rounds`]), so that corner is kept once.
 #[derive(Clone)]
 struct Side {
     /// The edge; `None` for a spoke of a star.
     edge: Option<Ix<Edge>>,
+    /// The loop it runs round; `None` round a triangle of a star, which is one ring.
+    ring: Option<Ix<Loop>>,
     start: End,
-    end: End,
     /// A plane through the edge that crosses the face's plane: the edge's line is where they meet.
     across: Plane,
 }
 
 impl LogicalSize for Side {
-    /// Two corners of 200 bytes with their vertices, a plane of 64, and the edge.
-    const LOGICAL_BYTES: u64 = 480;
+    /// A corner of 200 bytes with its vertex, a plane of 64, the edge and the loop.
+    const LOGICAL_BYTES: u64 = 280;
 }
 
 /// A flat face, as this module reads it.
@@ -443,14 +452,11 @@ fn side_of(
     let (start, end) = (corner(a, first)?, corner(a, last)?);
     Some(Side {
         edge: Some(edge),
+        ring: a.fins.loop_.get(fin).copied(),
         across: across(a, (face, edge), plane, [&start, &end], exact)?,
         start: End {
             vertex: Some(first),
             at: start,
-        },
-        end: End {
-            vertex: Some(last),
-            at: end,
         },
     })
 }
@@ -686,7 +692,7 @@ fn triangle(
     (p, q): (&Spoke, &Spoke),
     sink: &mut Sink<'_, '_>,
 ) -> Result<Outline, Stopped> {
-    let middle = || End {
+    let middle = End {
         vertex: None,
         at: hub.at.clone(),
     };
@@ -697,20 +703,20 @@ fn triangle(
     let mut sides: Vec<Side> = reserve(sink.meter(), 3)?;
     sides.push(Side {
         edge: None,
-        start: middle(),
-        end: rim(p),
+        ring: None,
+        start: middle,
         across: wedge.out,
     });
     sides.push(Side {
         edge: Some(p.edge),
+        ring: None,
         start: rim(p),
-        end: rim(q),
         across: wedge.along,
     });
     sides.push(Side {
         edge: None,
+        ring: None,
         start: rim(q),
-        end: middle(),
         across: wedge.back,
     });
     Ok(Outline {
@@ -788,6 +794,17 @@ pub(crate) fn outlines(
 }
 
 impl Outline {
+    /// Each side with the corner it ends at: where the next side round its ring starts, and the
+    /// ring's first side after its last. The sides are kept ring by ring, in the order each ring
+    /// runs, and group 1 has held every loop closed, each fin ending at the vertex the next
+    /// starts from; a star's triangle is one ring of three.
+    fn rounds(&self) -> impl Iterator<Item = (&Side, &End)> {
+        self.sides
+            .chunk_by(|before, after| before.ring == after.ring)
+            .flat_map(|ring| ring.iter().zip(ring.iter().cycle().skip(1)))
+            .map(|(side, next)| (side, &next.start))
+    }
+
     /// Where its boundary crosses `cut`, on its plane where it meets `against`, moved infinitely
     /// little to the side of `against` that `above` names: a vertex on `against` counts as below
     /// the moved line, so one that only touches it gives two crossings or none. Sorted.
@@ -799,15 +816,15 @@ impl Outline {
         sink: &mut Sink<'_, '_>,
     ) -> Result<Vec<Mark>, Stuck> {
         let mut marks: Vec<Mark> = reserve(sink.meter(), count(self.sides.len()))?;
-        for side in &self.sides {
+        for (side, end) in self.rounds() {
             sink.charge()?;
             let from = known(side.start.at.side(against).ok())?;
-            let to = known(side.end.at.side(against).ok())?;
+            let to = known(end.at.side(against).ok())?;
             if (from == above) != (to == above) {
                 let mark = if from == Sign::Zero {
                     cut.mark(&side.start.at)?
                 } else if to == Sign::Zero {
-                    cut.mark(&side.end.at)?
+                    cut.mark(&end.at)?
                 } else {
                     Mark(side.across)
                 };
@@ -866,10 +883,10 @@ fn joins(
     sink: &mut Sink<'_, '_>,
 ) -> Result<Vec<Stretch>, Stuck> {
     let mut out: Vec<Stretch> = reserve(sink.meter(), count(f.sides.len().saturating_mul(2)))?;
-    for s in &f.sides {
+    for (s, end) in f.rounds() {
         let shared = s.edge.is_some() && g.sides.iter().any(|t| t.edge == s.edge);
-        if shared && cut.holds(&s.start.at) && cut.holds(&s.end.at) {
-            let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&s.end.at)?);
+        if shared && cut.holds(&s.start.at) && cut.holds(&end.at) {
+            let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&end.at)?);
             out.push(cut.stretch(from, to)?);
         }
         // A star's hub is no vertex, so it is shared with nothing: not with another star's hub
@@ -911,6 +928,60 @@ fn along(
         }
     }
     Ok(Meet::Apart)
+}
+
+impl Outline {
+    /// Whether a corner of this face is at vertex `vertex`. A star's hub is at none.
+    fn has_vertex(&self, vertex: Option<Ix<Vertex>>) -> bool {
+        vertex.is_some() && self.sides.iter().any(|s| s.start.vertex == vertex)
+    }
+
+    /// Whether a side of this face runs along edge `edge`. A star's spoke runs along none.
+    fn has_edge(&self, edge: Option<Ix<Edge>>) -> bool {
+        edge.is_some() && self.sides.iter().any(|s| s.edge == edge)
+    }
+
+    /// Whether this face reaches the plane of `other` only where the two faces share a vertex or
+    /// an edge: its corners on one side of that plane or on it, and not all on it; each corner on
+    /// the plane a vertex of `other`; and each side along the plane an edge of `other`. Two such
+    /// faces meet nowhere else, since they can meet only on `other`'s plane.
+    ///
+    /// Why the corners decide it. A face is a closed, bounded piece of its plane whose boundary is
+    /// its sides, so it lies inside the convex hull of its corners, and the other plane's
+    /// equation, which is zero or of one sign at every corner, is so over the whole face. A corner
+    /// off the other plane means the face's own plane is not that plane, so on it the equation is
+    /// either never zero (the planes are parallel) or zero along one line and of both signs about
+    /// every point of that line (they cross). So it is zero at no point with a neighbourhood in
+    /// the face, only on a side. Along a side it runs evenly from one end's value to the other's,
+    /// neither of the other sign, so it is zero at an end that is on the plane, along the whole
+    /// side if both ends are, and nowhere else. What the face holds of the other plane is
+    /// therefore its corners on it and its sides along it and nothing more, whatever its shape:
+    /// not convex, with holes, or one triangle of a star.
+    ///
+    /// Every pair of faces of a convex body is settled here, by one sign for each corner. The
+    /// answer is the one [`crossing`]'s cut gives, which finds the same corners and sides on the
+    /// planes' line and the same shared vertices and edges to excuse them, and for parallel planes
+    /// the one [`planes_lie`] gives. A face with corners on both sides of the plane, with a corner
+    /// or a side on it that the other does not share, or wholly on it, is left to them.
+    fn rests_on(&self, other: &Outline, sink: &mut Sink<'_, '_>) -> Result<bool, Stuck> {
+        let (mut above, mut below) = (false, false);
+        for (side, end) in self.rounds() {
+            sink.charge()?;
+            match known(side.start.at.side(&other.plane).ok())? {
+                Sign::Positive => above = true,
+                Sign::Negative => below = true,
+                Sign::Zero => {
+                    let along = known(end.at.side(&other.plane).ok())? == Sign::Zero;
+                    let shared = other.has_vertex(side.start.vertex)
+                        && (!along || other.has_edge(side.edge));
+                    if !shared {
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+        Ok(above != below)
+    }
 }
 
 /// How two faces on crossing planes meet.
@@ -958,13 +1029,13 @@ fn same_side(
 /// other; then each side, which must keep them on opposite sides of it if they both reach it.
 fn coplanar(f: &Outline, g: &Outline, sink: &mut Sink<'_, '_>) -> Result<Meet, Stuck> {
     for (one, other) in [(f, g), (g, f)] {
-        for side in &one.sides {
+        for (side, end) in one.rounds() {
             let cut = Cut {
                 first: one.plane,
                 second: side.across,
             };
             let from = cut.mark(&side.start.at)?;
-            let to = cut.mark(&side.end.at)?;
+            let to = cut.mark(&end.at)?;
             let own = [cut.stretch(from, to)?];
             let cuts = other.stretches(&side.across, &cut, sink)?;
             if along((one, other), &cut, &own, &cuts, sink)? == Meet::Cross {
@@ -997,7 +1068,8 @@ pub(crate) fn slots_meet(
 }
 
 /// How faces `f` and `g` meet, exactly. Stored boxes that do not overlap settle it: group 2 has
-/// held each face's vertices to its box.
+/// held each face's vertices to its box. So does either face reaching the other's plane only at
+/// what they share ([`Outline::rests_on`]), before any line is cut.
 fn faces_meet(
     a: &Arenas,
     f: &Outline,
@@ -1008,22 +1080,28 @@ fn faces_meet(
     if boxes.is_some_and(|(p, q)| !p.overlaps(q)) {
         return Ok(Meet::Apart);
     }
-    let found = match planes_lie(&f.plane, &g.plane) {
-        Pair::Crossing => crossing(f, g, sink),
-        Pair::Apart => Ok(Meet::Apart),
-        _ => coplanar(f, g, sink),
-    };
+    let found = (|| -> Result<Meet, Stuck> {
+        if f.rests_on(g, sink)? || g.rests_on(f, sink)? {
+            return Ok(Meet::Apart);
+        }
+        match planes_lie(&f.plane, &g.plane) {
+            Pair::Crossing => crossing(f, g, sink),
+            Pair::Apart => Ok(Meet::Apart),
+            _ => coplanar(f, g, sink),
+        }
+    })();
     settled(found, Meet::Unknown)
 }
 
-/// Where two sides meet on the line of the first: `None` if the second keeps to one side of it.
-fn contact(cut: &Cut, s: &Side, t: &Side) -> Result<Option<Stretch>, Stuck> {
+/// Where two sides meet on the line of the first: `None` if the second, which ends at `end`,
+/// keeps to one side of it.
+fn contact(cut: &Cut, s: &Side, (t, end): (&Side, &End)) -> Result<Option<Stretch>, Stuck> {
     let from = known(t.start.at.side(&s.across).ok())?;
-    let to = known(t.end.at.side(&s.across).ok())?;
+    let to = known(end.at.side(&s.across).ok())?;
     let point = |at: Mark| Stretch { from: at, to: at };
     Ok(match (from, to) {
         (Sign::Zero, Sign::Zero) => {
-            let (p, q) = (cut.mark(&t.start.at)?, cut.mark(&t.end.at)?);
+            let (p, q) = (cut.mark(&t.start.at)?, cut.mark(&end.at)?);
             Some(cut.stretch(p, q)?)
         }
         (p, q) if p == q => None,
@@ -1042,15 +1120,15 @@ pub(crate) fn edges_meet(
 ) -> Result<Meet, Stopped> {
     let found = (|| -> Result<Meet, Stuck> {
         sink.charge()?;
-        let side = |e| known(o.sides.iter().find(|s| s.edge == Some(e)));
-        let (s, t) = (side(first)?, side(second)?);
+        let side = |e| known(o.rounds().find(|(s, _)| s.edge == Some(e)));
+        let ((s, s_end), (t, t_end)) = (side(first)?, side(second)?);
         let cut = Cut {
             first: o.plane,
             second: s.across,
         };
-        let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&s.end.at)?);
+        let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&s_end.at)?);
         let own = cut.stretch(from, to)?;
-        let Some(touch) = contact(&cut, s, t)? else {
+        let Some(touch) = contact(&cut, s, (t, t_end))? else {
             return Ok(Meet::Apart);
         };
         let Some(common) = cut.overlap(&own, &touch)? else {
@@ -1058,8 +1136,8 @@ pub(crate) fn edges_meet(
         };
         let mut runs: Vec<Stretch> = reserve(sink.meter(), 2)?;
         // Both sides are edges, so each of their ends is a vertex, never a star's hub.
-        for end in [&s.start, &s.end] {
-            if [&t.start, &t.end].iter().any(|e| e.vertex == end.vertex) {
+        for end in [&s.start, s_end] {
+            if [&t.start, t_end].iter().any(|e| e.vertex == end.vertex) {
                 let at = cut.mark(&end.at)?;
                 runs.push(Stretch { from: at, to: at });
             }

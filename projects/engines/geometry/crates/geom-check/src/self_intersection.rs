@@ -149,6 +149,12 @@ fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
 /// bent within its bound, written under a plane a step above a face it ran through, was once
 /// passed as apart from it (issue #783). In a body recorded Exact (`exact`) group 2 has held every
 /// face to its surface exactly already, so no face is asked again.
+///
+/// The carriers are first asked for the most the two faces may stray, twice `reach`. Only two
+/// parallel planes read it, and planes that clear the most clear what the faces do stray, which
+/// is no more; every other answer but unknown does not depend on it. So the faces are asked
+/// whether they hold to their surfaces, a certified test of each of their edges, only where the
+/// most leaves the pair unknown, and the answer is the one their own stray gives.
 fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool, reach: f64) -> Meet {
     let stray = |on: &Surface, face| {
         if exact || on.holds_face(a, face) {
@@ -159,7 +165,10 @@ fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool, reach: f6
     };
     let lie = surface(a, f, exact)
         .zip(surface(a, g, exact))
-        .map(|(p, q)| p.lies_with(&q, stray(&p, f) + stray(&q, g)));
+        .map(|(p, q)| match p.lies_with(&q, reach + reach) {
+            Pair::Unknown => p.lies_with(&q, stray(&p, f) + stray(&q, g)),
+            settled => settled,
+        });
     match lie {
         Some(Pair::Apart) => Meet::Apart,
         Some(Pair::Circle) if shares_full_circle(a, f, g) => Meet::Apart,
