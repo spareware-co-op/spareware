@@ -43,7 +43,10 @@ use geom_test::fixture::{
 use geom_test::oracle::catalogue::{Catalogue, CatalogueError, Oracle, Run, State, audit, linked};
 use geom_test::oracle::compare::{Allowance, exact, within};
 use geom_test::oracle::exact::{float, read_float, steps, to_millimetres};
-use geom_test::oracle::geomdl::{Answer, Compared, ID, Job, Op, bound, gamma, jobs, judge, settle};
+use geom_test::oracle::geomdl::{
+    Answer, Compared, ID, Job, Op, bound, gamma, jobs, judge, judge_for, settle,
+};
+use geom_test::oracle::smlib;
 use geom_test::oracle::triage::{Record, Register, Signature, TriageError, fixture, group};
 use geom_test::seed::Seed;
 
@@ -758,7 +761,7 @@ fn a_gap_of_exactly_the_limit_is_within_it() {
     let settled = settle(&job, &edge, &past, limit).unwrap();
     assert!(settled.starts_with("theirs"), "{settled}");
     let settled = settle(&job, &past, &edge, limit).unwrap();
-    assert!(settled.starts_with("ours: geomdl"), "{settled}");
+    assert!(settled.starts_with("ours: the oracle"), "{settled}");
 }
 
 #[test]
@@ -794,7 +797,7 @@ fn truth_settles_either_way() {
         let theirs_off = settle(job, &right, wrong, limit).unwrap();
         assert!(theirs_off.starts_with("theirs"), "{theirs_off}");
         let ours_off = settle(job, wrong, &right, limit).unwrap();
-        assert!(ours_off.starts_with("ours: geomdl"), "{ours_off}");
+        assert!(ours_off.starts_with("ours: the oracle"), "{ours_off}");
         let neither = settle(job, wrong, wrong, limit).unwrap();
         assert!(neither.starts_with("ours: neither"), "{neither}");
     }
@@ -833,4 +836,149 @@ fn a_triaged_job_replays_as_a_fixture() {
         replay(&mut Kernel::new(), &log),
         Replayed::Broken(_)
     ));
+}
+
+#[test]
+fn smlibs_jobs_are_the_layers_32_23_allows() {
+    let all = smlib::jobs(Seed(11), 400);
+    assert_eq!(all, smlib::jobs(Seed(11), 400));
+    for op in [Op::Point, Op::Insert, Op::Remove, Op::Elevate] {
+        assert!(all.iter().any(|j| j.op == op), "{op:?}");
+    }
+    assert!(all.iter().all(|j| j.op != Op::Basis));
+    // A removal's knot is one of its curve's, on a curve of the job's family, and it can go: the
+    // kernel takes it out, so an oracle's refusal is a difference.
+    for job in all.iter().filter(|j| j.op == Op::Remove) {
+        assert!(job.knots.contains(&job.at), "{}", job.id);
+        let dimension = if job.family.contains("-2d") { 2 } else { 3 };
+        assert!(
+            job.points.iter().all(|p| p.len() == dimension),
+            "{}",
+            job.id
+        );
+        let refused = Answer {
+            id: job.id,
+            values: None,
+        };
+        assert!(
+            matches!(
+                judge_for(smlib::ID, job, &refused).unwrap(),
+                Compared::Differ { .. }
+            ),
+            "{}",
+            job.id
+        );
+    }
+}
+
+#[test]
+fn a_knot_that_cannot_go_is_refused_by_the_kernel() {
+    // Half a unit of kink at the knot is far more than a removal's tolerance.
+    let written = |x: f64| float(x).unwrap();
+    let job = Job {
+        id: 0,
+        family: "degree-1-2d".to_owned(),
+        op: Op::Remove,
+        degree: 1,
+        knots: [0.0, 0.0, 0.5, 1.0, 1.0].map(written).to_vec(),
+        points: [[0.0, 0.0], [1.0, 0.5], [2.0, 0.0]]
+            .map(|p| p.map(written).to_vec())
+            .to_vec(),
+        weights: None,
+        at: written(0.5),
+    };
+    let refused = Answer {
+        id: 0,
+        values: None,
+    };
+    assert!(matches!(
+        judge_for(smlib::ID, &job, &refused).unwrap(),
+        Compared::Agree
+    ));
+}
+
+#[test]
+fn the_kernel_agrees_with_itself_on_every_smlib_job() {
+    let mut judged = 0;
+    for job in smlib::jobs(Seed(12), 300) {
+        let log = OpLog::new(
+            Vec::new(),
+            vec![geom_test::oracle::geomdl::operation(&job).unwrap()],
+        );
+        let got =
+            geom_test::fixture::run::replay(&mut geom_test::fixture::kernel::Kernel::new(), &log);
+        assert!(matches!(got, Replayed::Done { .. }), "{job:?}: {got:?}");
+        judged += 1;
+    }
+    assert_eq!(judged, 300);
+}
+
+#[test]
+fn a_changed_curve_is_settled_against_the_exact_one() {
+    let mut line = straight();
+    line.op = Op::Elevate;
+    // Degree two on one span: the line's three points, at the ends and the middle.
+    let right = [0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.0, 1.0, 0.0];
+    let mut wrong = right;
+    wrong[8] = 0.75;
+    let answer = |values: &[f64]| Answer {
+        id: line.id,
+        values: Some(values.iter().map(|x| float(*x).unwrap()).collect()),
+    };
+    assert_eq!(
+        judge_for(smlib::ID, &line, &answer(&right)).unwrap(),
+        Compared::Agree
+    );
+    let Compared::Differ { signature, settled } =
+        judge_for(smlib::ID, &line, &answer(&wrong)).unwrap()
+    else {
+        panic!("a wrong point agrees");
+    };
+    assert_eq!(signature.oracle, smlib::ID);
+    assert_eq!(signature.operation, "nurbs.elevate");
+    assert!(settled.starts_with("theirs"), "{settled}");
+    // An insertion at the middle: the knot, and the point it adds.
+    let mut split = straight();
+    split.op = Op::Insert;
+    let right = [0.0, 0.0, 0.5, 1.0, 1.0, 0.0, 0.0, 0.5, 0.0, 1.0, 0.0];
+    assert_eq!(
+        judge_for(
+            smlib::ID,
+            &split,
+            &Answer {
+                id: split.id,
+                values: Some(right.iter().map(|x| float(*x).unwrap()).collect()),
+            }
+        )
+        .unwrap(),
+        Compared::Agree
+    );
+    let mut off = right;
+    off[7] = 0.25;
+    let Compared::Differ { settled, .. } = judge_for(
+        smlib::ID,
+        &split,
+        &Answer {
+            id: split.id,
+            values: Some(off.iter().map(|x| float(*x).unwrap()).collect()),
+        },
+    )
+    .unwrap() else {
+        panic!("a wrong point agrees");
+    };
+    assert!(settled.starts_with("theirs"), "{settled}");
+    // A removal has no exact answer to settle against, and says so.
+    let job = smlib::jobs(Seed(13), 100)
+        .into_iter()
+        .find(|j| j.op == Op::Remove)
+        .unwrap();
+    let size = job.knots.len() - 1 + (job.points.len() - 1) * job.points[0].len();
+    let bogus = Answer {
+        id: job.id,
+        values: Some(vec![float(1e9).unwrap(); size]),
+    };
+    let Compared::Differ { settled, .. } = judge_for(smlib::ID, &job, &bogus).unwrap() else {
+        panic!("a wrong removal agrees");
+    };
+    assert!(settled.contains("does not settle"), "{settled}");
 }
