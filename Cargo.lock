@@ -948,6 +948,7 @@ name = "geom-bench"
 version = "0.0.0"
 dependencies = [
  "divan",
+ "engine-geometry",
  "geom-bvh",
  "geom-check",
  "geom-curve",
@@ -1211,6 +1212,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-p21",
  "geom-run",
  "geom-surface",
  "geom-test",
