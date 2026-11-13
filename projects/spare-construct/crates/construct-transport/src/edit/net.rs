@@ -5,7 +5,7 @@
 //! Positions are `[lat, lng]` pairs rounded to 7 decimals when stored. Ids come from an [`IdSource`].
 
 use super::{EditError, IdSource};
-use crate::jsnum::{Maybe, Num, math_max, math_min};
+use crate::jsnum::{Maybe, Num, f64_to_usize, math_max, math_min, usize_to_f64};
 use crate::project::{Link, Node, Scenario, road_class, road_class_exact};
 use crate::util::{self, LatLng};
 use serde_json::{Map, Value};
@@ -256,29 +256,26 @@ pub struct Projection {
 #[must_use]
 pub fn project(sc: &Scenario, l: &Link, ll: LatLng) -> Projection {
     let g = sc.geom(l);
-    let f = util::flat(ll[0]);
-    let (px, py) = (f.x(&ll), f.y(&ll));
+    let fl = util::flat(ll[0]);
+    let (px, py) = (fl.x(&ll), fl.y(&ll));
     let mut best_d = f64::INFINITY;
     let mut best: Option<(usize, f64, f64)> = None;
-    for i in 0..g.len().saturating_sub(1) {
-        let r = util::seg_dist(
-            px,
-            py,
-            f.x(&g[i]),
-            f.y(&g[i]),
-            f.x(&g[i + 1]),
-            f.y(&g[i + 1]),
-        );
-        if r.d < best_d {
-            best_d = r.d;
-            best = Some((i, r.x, r.y));
+    // Each segment in order, from point i to point i + 1
+    for (i, w) in g.windows(2).enumerate() {
+        let [p0, p1] = w else {
+            continue;
+        };
+        let seg = util::seg_dist(px, py, fl.x(p0), fl.y(p0), fl.x(p1), fl.y(p1));
+        if seg.d < best_d {
+            best_d = seg.d;
+            best = Some((i, seg.x, seg.y));
         }
     }
     match best {
-        Some((i, x, y)) => Projection {
+        Some((seg_i, sx, sy)) => Projection {
             d: best_d,
-            i: Some(i),
-            p: [y / f.ky, x / f.kx],
+            i: Some(seg_i),
+            p: [sy / fl.ky, sx / fl.kx],
             g,
         },
         None => Projection {
@@ -322,21 +319,21 @@ pub fn nearest_link(
         // quick reject on bounding box
         let pad = max_m / 90000.0 + 0.0005;
         let (alat, alng, blat, blng) = (a.lat.num(), a.lng.num(), b.lat.num(), b.lng.num());
-        let (mut min_la, mut max_la) = (math_min(alat, blat), math_max(alat, blat));
-        let (mut min_ln, mut max_ln) = (math_min(alng, blng), math_max(alng, blng));
+        let (mut min_lat, mut max_lat) = (math_min(alat, blat), math_max(alat, blat));
+        let (mut min_lng, mut max_lng) = (math_min(alng, blng), math_max(alng, blng));
         if let Some(pts) = l.pts.get() {
             for p in pts {
-                min_la = math_min(min_la, p.0[0]);
-                max_la = math_max(max_la, p.0[0]);
-                min_ln = math_min(min_ln, p.0[1]);
-                max_ln = math_max(max_ln, p.0[1]);
+                min_lat = math_min(min_lat, p.0[0]);
+                max_lat = math_max(max_lat, p.0[0]);
+                min_lng = math_min(min_lng, p.0[1]);
+                max_lng = math_max(max_lng, p.0[1]);
             }
         }
         if max_m.is_finite()
-            && (ll[0] < min_la - pad
-                || ll[0] > max_la + pad
-                || ll[1] < min_ln - pad * 1.3
-                || ll[1] > max_ln + pad * 1.3)
+            && (ll[0] < min_lat - pad
+                || ll[0] > max_lat + pad
+                || ll[1] < min_lng - pad * 1.3
+                || ll[1] > max_lng + pad * 1.3)
         {
             continue;
         }
@@ -431,8 +428,11 @@ pub fn links_at<'a>(sc: &'a Scenario, nid: &str) -> Vec<&'a Link> {
 pub fn degree(sc: &Scenario) -> HashMap<String, usize> {
     let mut d: HashMap<String, usize> = HashMap::new();
     for l in sc.links.values() {
-        *d.entry(l.a.clone()).or_insert(0) += 1;
-        *d.entry(l.b.clone()).or_insert(0) += 1;
+        // Bound: at most twice the number of links in memory
+        for end in [&l.a, &l.b] {
+            let c = d.entry(end.clone()).or_insert(0);
+            *c = c.saturating_add(1);
+        }
     }
     d
 }
@@ -441,7 +441,7 @@ pub fn degree(sc: &Scenario) -> HashMap<String, usize> {
 
 /// `s.slice(start, end)` with the JavaScript's index rules for a number that may be negative or NaN.
 fn js_slice<T: Clone>(v: &[T], start: f64, end: f64) -> Vec<T> {
-    let n = v.len() as f64;
+    let n = usize_to_f64(v.len());
     let rel = |x: f64| {
         let x = if x.is_nan() { 0.0 } else { x.trunc() };
         if x < 0.0 {
@@ -454,7 +454,9 @@ fn js_slice<T: Clone>(v: &[T], start: f64, end: f64) -> Vec<T> {
     if s >= e {
         Vec::new()
     } else {
-        v[s as usize..e as usize].to_vec()
+        // s and e are whole numbers in 0..=len, so the range is always inside v
+        v.get(f64_to_usize(s)..f64_to_usize(e))
+            .map_or_else(Vec::new, <[T]>::to_vec)
     }
 }
 
@@ -462,6 +464,10 @@ fn js_slice<T: Clone>(v: &[T], start: f64, end: f64) -> Vec<T> {
 ///
 /// Within 2.5 m of an end of the road, no split is made and that end's junction is returned. Otherwise a new junction is
 /// added, the road now ends at it, and a new road (a copy of the road's other keys) runs from it to the old end.
+///
+/// # Errors
+///
+/// When there is no road `id`, or one of its end junctions is missing.
 pub fn split_link(
     sc: &mut Scenario,
     ids: &mut dyn IdSource,
@@ -478,19 +484,21 @@ pub fn split_link(
     }
     let r = project(sc, &l, ll);
     let g = &r.g;
-    if util::dist(&r.p, &g[0]) < 2.5 {
+    // A road's geometry always holds its two ends, so first and last are always there
+    if g.first().is_some_and(|first| util::dist(&r.p, first) < 2.5) {
         return Ok(l.a);
     }
-    if util::dist(&r.p, &g[g.len() - 1]) < 2.5 {
+    if g.last().is_some_and(|last| util::dist(&r.p, last) < 2.5) {
         return Ok(l.b);
     }
     let nid = add_node(sc, ids, r.p, &NodeProps::new());
-    let i = r.i.map_or(f64::NAN, |i| i as f64);
+    let i = r.i.map_or(f64::NAN, usize_to_f64);
     let pts1 = js_slice(g, 1.0, i + 1.0);
-    let pts2 = js_slice(g, i + 1.0, (g.len() - 1) as f64);
+    // `g.length - 1`
+    let pts2 = js_slice(g, i + 1.0, usize_to_f64(g.len()) - 1.0);
     let props = LinkProps::of_link(&l);
     if let Some(m) = sc.links.get_mut(id) {
-        m.b = nid.clone();
+        m.b.clone_from(&nid);
         m.pts = Maybe::Set(
             pts1.iter()
                 .map(|p| crate::project::Point(*p))
@@ -601,6 +609,10 @@ pub fn delete_node(sc: &mut Scenario, nid: &str) {
 }
 
 /// `Net.reverse(sc, id)`: swaps the lanes each way of a road (a one-way road then runs the other way).
+///
+/// # Errors
+///
+/// When there is no road `id`.
 pub fn reverse(sc: &mut Scenario, id: &str) -> Result<(), EditError> {
     let l = sc
         .links

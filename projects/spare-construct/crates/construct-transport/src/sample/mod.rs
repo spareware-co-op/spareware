@@ -262,6 +262,10 @@ impl Failed {
 
 /// Which optional modules the page has loaded (the prototype's `MODS()`): a step whose module is not loaded is left out and said so.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the prototype's MODS() object: nine independent loaded-or-not flags, none derived from or excluding another"
+)]
 pub struct Modules {
     /// The land use feature (Census, employees, schools, zoning, trip-generation tables).
     pub lp: bool,

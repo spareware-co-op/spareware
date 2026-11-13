@@ -272,11 +272,36 @@ impl Count {
     /// A count with only an id and a source; the rest unset (for building counts in code).
     #[must_use]
     pub fn new(id: &str, src: &str) -> Count {
-        let blank: Count = serde_json::from_value(Value::Object(Map::new())).expect("an empty count reads");
+        // What an empty JSON object reads as, with the id and source set
         Count {
             id: id.to_string(),
             src: Maybe::Set(JsNum::Text(src.to_string())),
-            ..blank
+            reference: Maybe::Missing,
+            name: Maybe::Missing,
+            road: Maybe::Missing,
+            lat: Maybe::Missing,
+            lng: Maybe::Missing,
+            adt: Maybe::Missing,
+            hv: Maybe::Missing,
+            dir: Maybe::Missing,
+            directional: Maybe::Missing,
+            virtual_: Maybe::Missing,
+            ramp: Maybe::Missing,
+            off: Maybe::Missing,
+            am: Maybe::Missing,
+            pm: Maybe::Missing,
+            peak: Maybe::Missing,
+            peak_time: Maybe::Missing,
+            kind: Maybe::Missing,
+            obs_method: Maybe::Missing,
+            tms: Maybe::Missing,
+            share: Maybe::Missing,
+            role: Maybe::Missing,
+            date: Maybe::Missing,
+            note: Maybe::Missing,
+            n_days: Maybe::Missing,
+            ci95: Maybe::Missing,
+            extra: Map::new(),
         }
     }
     /// `c.src === s`.
@@ -389,9 +414,10 @@ impl Data {
     pub fn with_counts(counts: Vec<Count>) -> Data {
         let mut p = crate::project::new_project("p", "p", "s");
         let mut extra = Map::new();
+        // A count always serialises (string keys, numbers written as JSON numbers or null), so none is dropped
         extra.insert(
             "counts".to_string(),
-            serde_json::to_value(&counts).expect("counts serialise"),
+            Value::Array(counts.into_iter().filter_map(|c| serde_json::to_value(c).ok()).collect()),
         );
         p.data = Maybe::Set(crate::project::ProjectData {
             loaded: Maybe::Missing,

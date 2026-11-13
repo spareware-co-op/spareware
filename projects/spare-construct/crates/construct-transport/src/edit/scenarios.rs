@@ -18,6 +18,7 @@ use crate::util::clamp;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 pub use crate::project::{
     link_programmed as programmed, link_stage as stage_of, link_unfunded as unfunded,
@@ -62,10 +63,10 @@ pub fn zone_in_baseline(z: &Zone, p: &Project) -> bool {
 pub fn design_year(pathway: &str, opening: f64) -> f64 {
     let d = &STANDARDS.design;
     let years = match pathway {
-        "consent" => d.consent,
         "planchange" => d.planchange,
         "nor" => d.nor,
         "ftaa" => d.ftaa,
+        // "consent", and anything else
         _ => d.consent,
     };
     or_default(opening, 0.0) + years
@@ -183,6 +184,10 @@ pub struct CreateSetResult {
 /// `Scenarios.createSet(P, opts)`: S0 existing (count year), then for the opening and design years S1 future baseline
 /// (existing plus committed developments and funded projects), S2 = S1 plus the proposal, S3 = S2 plus mitigation.
 /// Unfunded and not-granted items stay out of S1 and are listed in `excluded`. Adds the scenarios to the project.
+///
+/// # Errors
+///
+/// When the project has no scenarios.
 pub fn create_set(
     p: &mut Project,
     ids: &mut dyn IdSource,
@@ -220,8 +225,160 @@ pub fn create_set(
         }
     }
     js_sort_by(&mut years, |a, b| a - b);
-    let mut excluded: Vec<Value> = Vec::new();
+    let excluded = excluded_items(&src, p);
+    let mut out: Vec<Scenario> = Vec::new();
+    let maker = SetMaker {
+        p: &*p,
+        src: &src,
+        periods: &periods,
+        set_id: &set_id,
+        pathway: &pathway,
+    };
+    let ex = ["existing"];
+    let base = ["existing", "committed"];
+    let prop = ["existing", "committed", "proposal"];
+    let mit = ["existing", "committed", "proposal", "mitigation"];
+    let lu_base = ["existing", "committed"];
+    let lu_dev = ["existing", "committed", "development"];
+    out.extend(maker.make(ids, "existing", count_year, &ex, &["existing"], None));
+    for &y in &years {
+        let b = match opts.buildout.get(&number_to_js_string(y)) {
+            Some(v) => clamp(*v, 0.0, 100.0),
+            None => 100.0,
+        };
+        out.extend(maker.make(ids, "baseline", y, &base, &lu_base, None));
+        out.extend(maker.make(ids, "proposal", y, &prop, &lu_dev, Some(b)));
+        if opts.mitigation != Some(false) {
+            out.extend(maker.make(ids, "mitigation", y, &mit, &lu_dev, Some(b)));
+        }
+    }
+    let warnings = set_warnings(p, base_year, count_year, opening, design);
+    let made_ids: Vec<String> = out.iter().map(|s| s.id.clone()).collect();
+    p.scenarios.extend(out);
+    let set = json!({
+        "id": set_id,
+        "type": pathway,
+        "pathway": name_of(&PATHWAYS, &pathway).unwrap_or(""),
+        "countYear": count_year,
+        "opening": opening,
+        "design": design,
+        "periods": periods,
+        "created": ids.now_iso(),
+        "excluded": excluded,
+        "warnings": warnings,
+        "scenarios": made_ids,
+    });
+    p.assessment = Maybe::Set(set.clone());
+    Ok(CreateSetResult {
+        scenarios: made_ids,
+        excluded,
+        warnings,
+        set,
+    })
+}
+
+/// What every scenario of one assessment set shares (`make` in `Scenarios.createSet`).
+struct SetMaker<'a> {
+    p: &'a Project,
+    src: &'a Scenario,
+    periods: &'a [String],
+    set_id: &'a str,
+    pathway: &'a str,
+}
+
+impl SetMaker<'_> {
+    /// `make(role, year, net, lu, buildout)`: a copy of the source scenario with the roads of the `net` stages and the
+    /// zones of the `lu` roles. None for an unknown role (the wizard passes only known ones).
+    fn make(
+        &self,
+        ids: &mut dyn IdSource,
+        role: &str,
+        year: f64,
+        net: &[&str],
+        lu: &[&str],
+        buildout: Option<f64>,
+    ) -> Option<Scenario> {
+        let project = self.p;
+        let role_info = scenario_role(role)?;
+        let keep_link =
+            |l: &Link| net.contains(&link_stage(l)) && !link_unfunded(l) && !link_programmed(l);
+        let keep_zone = |z: &Zone| {
+            let zr = zone_role(z);
+            zr == "external" || (lu.contains(&zr) && (zr != "committed" || zone_in_baseline(z, project)))
+        };
+        let mut sc = copy(
+            self.src,
+            ids,
+            &CopyFilter {
+                links: Some(&keep_link),
+                zones: Some(&keep_zone),
+            },
+        );
+        sc.name = Maybe::Set(format!(
+            "{} \u{b7} {} {}",
+            role_info.code,
+            number_to_js_string(year),
+            role_info.short.to_lowercase()
+        ));
+        sc.role = Maybe::Set(role.to_string());
+        sc.year = Num::number(year);
+        sc.periods = Maybe::Set(self.periods.to_vec());
+        sc.code = Maybe::Set(role_info.code.to_string());
+        sc.set_id = Maybe::Set(self.set_id.to_string());
+        sc.network = Maybe::Set(
+            if net.contains(&"mitigation") {
+                "mitigation"
+            } else if net.contains(&"committed") {
+                "committed"
+            } else {
+                "existing"
+            }
+            .to_string(),
+        );
+        sc.notes = Maybe::Set(JsNum::Text(format!(
+            "Created by the assessment-set wizard ({}).",
+            name_of(&PATHWAYS, self.pathway).unwrap_or("")
+        )));
+        if let Some(pct) = buildout {
+            sc.buildout = Num::number(pct);
+        }
+        Some(sc)
+    }
+}
+
+/// The warnings of `Scenarios.createSet`: a design year far ahead without a validated forecast, an opening before the counts.
+fn set_warnings(p: &Project, base_year: f64, count_year: f64, opening: f64, design: f64) -> Vec<String> {
     let mut warnings: Vec<String> = Vec::new();
+    let ahead = design - or_default(base_year, count_year);
+    let warn_ahead = or_default(STANDARDS.design.warn_ahead, 10.0);
+    let validated = p
+        .data
+        .get()
+        .and_then(|d| d.msm.get())
+        .and_then(|m| m.get("validated"))
+        .is_some_and(value_truthy);
+    if ahead > warn_ahead && !validated {
+        warnings.push(format!(
+            "The design year {} is {} years after the base year and no validated regional forecast is loaded. Check forecasts more than {} years ahead against MSM or Auckland Forecasting Centre outputs.",
+            number_to_js_string(design),
+            number_to_js_string(ahead),
+            number_to_js_string(warn_ahead)
+        ));
+    }
+    if opening < count_year {
+        warnings.push(format!(
+            "The opening year {} is before the count year {}. Check both years.",
+            number_to_js_string(opening),
+            number_to_js_string(count_year)
+        ));
+    }
+    warnings
+}
+
+/// The roads and zones `Scenarios.createSet` leaves out of the baseline: unfunded or programmed roads, and committed zones
+/// that are not granted and likely.
+fn excluded_items(src: &Scenario, p: &Project) -> Vec<Value> {
+    let mut excluded: Vec<Value> = Vec::new();
     for l in src.links.values() {
         if (link_unfunded(l) || link_programmed(l)) && !l.status.is("closed") {
             excluded.push(json!({
@@ -249,123 +406,7 @@ pub fn create_set(
             }));
         }
     }
-    let mut out: Vec<Scenario> = Vec::new();
-    // make(role, year, net, lu, buildout)
-    let mut make = |p: &Project,
-                    ids: &mut dyn IdSource,
-                    role: &str,
-                    year: f64,
-                    net: &[&str],
-                    lu: &[&str],
-                    buildout: Option<f64>| {
-        let r = scenario_role(role).expect("a known role");
-        let keep_link =
-            |l: &Link| net.contains(&link_stage(l)) && !link_unfunded(l) && !link_programmed(l);
-        let keep_zone = |z: &Zone| {
-            let zr = zone_role(z);
-            zr == "external" || (lu.contains(&zr) && (zr != "committed" || zone_in_baseline(z, p)))
-        };
-        let mut sc = copy(
-            &src,
-            ids,
-            &CopyFilter {
-                links: Some(&keep_link),
-                zones: Some(&keep_zone),
-            },
-        );
-        sc.name = Maybe::Set(format!(
-            "{} \u{b7} {} {}",
-            r.code,
-            number_to_js_string(year),
-            r.short.to_lowercase()
-        ));
-        sc.role = Maybe::Set(role.to_string());
-        sc.year = Num::number(year);
-        sc.periods = Maybe::Set(periods.clone());
-        sc.code = Maybe::Set(r.code.to_string());
-        sc.set_id = Maybe::Set(set_id.clone());
-        sc.network = Maybe::Set(
-            if net.contains(&"mitigation") {
-                "mitigation"
-            } else if net.contains(&"committed") {
-                "committed"
-            } else {
-                "existing"
-            }
-            .to_string(),
-        );
-        sc.notes = Maybe::Set(JsNum::Text(format!(
-            "Created by the assessment-set wizard ({}).",
-            name_of(&PATHWAYS, &pathway).unwrap_or("")
-        )));
-        if let Some(b) = buildout {
-            sc.buildout = Num::number(b);
-        }
-        out.push(sc);
-    };
-    let ex = ["existing"];
-    let base = ["existing", "committed"];
-    let prop = ["existing", "committed", "proposal"];
-    let mit = ["existing", "committed", "proposal", "mitigation"];
-    let lu_base = ["existing", "committed"];
-    let lu_dev = ["existing", "committed", "development"];
-    make(p, ids, "existing", count_year, &ex, &["existing"], None);
-    for &y in &years {
-        let b = match opts.buildout.get(&number_to_js_string(y)) {
-            Some(v) => clamp(*v, 0.0, 100.0),
-            None => 100.0,
-        };
-        make(p, ids, "baseline", y, &base, &lu_base, None);
-        make(p, ids, "proposal", y, &prop, &lu_dev, Some(b));
-        if opts.mitigation != Some(false) {
-            make(p, ids, "mitigation", y, &mit, &lu_dev, Some(b));
-        }
-    }
-    let ahead = design - or_default(base_year, count_year);
-    let warn_ahead = or_default(STANDARDS.design.warn_ahead, 10.0);
-    let validated = p
-        .data
-        .get()
-        .and_then(|d| d.msm.get())
-        .and_then(|m| m.get("validated"))
-        .is_some_and(value_truthy);
-    if ahead > warn_ahead && !validated {
-        warnings.push(format!(
-            "The design year {} is {} years after the base year and no validated regional forecast is loaded. Check forecasts more than {} years ahead against MSM or Auckland Forecasting Centre outputs.",
-            number_to_js_string(design),
-            number_to_js_string(ahead),
-            number_to_js_string(warn_ahead)
-        ));
-    }
-    if opening < count_year {
-        warnings.push(format!(
-            "The opening year {} is before the count year {}. Check both years.",
-            number_to_js_string(opening),
-            number_to_js_string(count_year)
-        ));
-    }
-    let made: Vec<String> = out.iter().map(|s| s.id.clone()).collect();
-    p.scenarios.extend(out);
-    let set = json!({
-        "id": set_id,
-        "type": pathway,
-        "pathway": name_of(&PATHWAYS, &pathway).unwrap_or(""),
-        "countYear": count_year,
-        "opening": opening,
-        "design": design,
-        "periods": periods,
-        "created": ids.now_iso(),
-        "excluded": excluded,
-        "warnings": warnings,
-        "scenarios": made,
-    });
-    p.assessment = Maybe::Set(set.clone());
-    Ok(CreateSetResult {
-        scenarios: made,
-        excluded,
-        warnings,
-        set,
-    })
+    excluded
 }
 
 /// `Scenarios.sensitivityOf(P, scId, opts)`: adds a sensitivity copy of a scenario to the project and returns its id (None when
@@ -451,59 +492,67 @@ pub struct Description {
     pub text: String,
 }
 
-/// `Scenarios.describe(sc, P)`: what a scenario contains, in words, with its year and growth basis.
-pub fn describe(sc: &Scenario, p: &Project) -> Description {
-    let s = &p.settings;
-    let role = role_of(sc);
-    let r = role.and_then(scenario_role);
-    let lu: Vec<&str> = {
-        let mut v: Vec<&str> = Vec::new();
-        for z in sc.zones.values() {
-            let zr = zone_role(z);
-            if zr != "external" && !v.contains(&zr) {
-                v.push(zr);
+/// The zone roles in a scenario (gateways aside), in the order its zones first show them.
+fn land_uses(sc: &Scenario) -> Vec<&str> {
+    let mut roles: Vec<&str> = Vec::new();
+    for z in sc.zones.values() {
+        let zr = zone_role(z);
+        if zr != "external" && !roles.contains(&zr) {
+            roles.push(zr);
+        }
+    }
+    roles
+}
+
+/// The stages of the open roads in a scenario, in the order its links first show them.
+fn stages(sc: &Scenario) -> Vec<&str> {
+    let mut found: Vec<&str> = Vec::new();
+    for l in sc.links.values() {
+        if !l.status.is("closed") {
+            let stage = link_stage(l);
+            if !found.contains(&stage) {
+                found.push(stage);
             }
         }
-        v
-    };
-    let st: Vec<&str> = {
-        let mut v: Vec<&str> = Vec::new();
-        for l in sc.links.values() {
-            if !l.status.is("closed") {
-                let k = link_stage(l);
-                if !v.contains(&k) {
-                    v.push(k);
-                }
-            }
-        }
-        v
-    };
-    let year = year_of(Some(sc), s);
+    }
+    found
+}
+
+/// Text with its first character in upper case ("existing" gives "Existing").
+fn capitalised(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().to_string() + chars.as_str(),
+        None => String::new(),
+    }
+}
+
+/// The land uses in words ("Existing + committed + development (50% built)"), or "None".
+fn land_use_text(sc: &Scenario, lu: &[&str]) -> String {
     let mut parts: Vec<String> = Vec::new();
     for rr in ["existing", "committed", "development"] {
         if lu.contains(&rr) {
-            let i = parts.len();
-            let mut t = if i == 0 {
-                let mut c = rr.chars();
-                let first = c.next().expect("non-empty").to_uppercase().to_string();
-                first + c.as_str()
+            let mut part = if parts.is_empty() {
+                capitalised(rr)
             } else {
                 rr.to_string()
             };
             if rr == "development" && !sc.buildout.is_nullish() && sc.buildout.num() != 100.0 {
-                t.push_str(&format!(
-                    " ({}% built)",
-                    number_to_js_string(sc.buildout.num())
-                ));
+                // Writing to a String cannot fail
+                let _ = write!(part, " ({}% built)", number_to_js_string(sc.buildout.num()));
             }
-            parts.push(t);
+            parts.push(part);
         }
     }
-    let land_use = if parts.is_empty() {
+    if parts.is_empty() {
         "None".to_string()
     } else {
         parts.join(" + ")
-    };
+    }
+}
+
+/// The network stages in words ("Existing + committed (funded)"), or "None".
+fn network_text(st: &[&str]) -> String {
     let nw = [
         ("existing", "Existing"),
         ("committed", "committed (funded)"),
@@ -513,16 +562,27 @@ pub fn describe(sc: &Scenario, p: &Project) -> Description {
     ];
     let net: Vec<&str> = nw
         .iter()
-        .filter(|(k, _)| st.contains(k))
-        .map(|(_, v)| *v)
+        .filter(|(key, _)| st.contains(key))
+        .map(|(_, label)| *label)
         .collect();
-    let network = if net.is_empty() {
+    if net.is_empty() {
         "None".to_string()
     } else {
         net.join(" + ")
-    };
-    let gb = growth_basis(s);
-    let gf = growth(s, Some(sc));
+    }
+}
+
+/// `Scenarios.describe(sc, P)`: what a scenario contains, in words, with its year and growth basis.
+pub fn describe(sc: &Scenario, p: &Project) -> Description {
+    let settings = &p.settings;
+    let role = role_of(sc);
+    let role_info = role.and_then(scenario_role);
+    let lu = land_uses(sc);
+    let year = year_of(Some(sc), settings);
+    let land_use = land_use_text(sc, &lu);
+    let network = network_text(&stages(sc));
+    let gb = growth_basis(settings);
+    let gf = growth(settings, Some(sc));
     let periods = match sc.periods.get() {
         Some(v) => v.join(", "),
         None => "AM, PM".to_string(),
@@ -532,7 +592,7 @@ pub fn describe(sc: &Scenario, p: &Project) -> Description {
         sc_id: sc.id.clone(),
         name: sc.name.clone(),
         role: role.map(str::to_string),
-        role_label: r.map_or("Role not set".to_string(), |r| r.label.to_string()),
+        role_label: role_info.map_or("Role not set".to_string(), |ri| ri.label.to_string()),
         year,
         land_use,
         network,
@@ -549,14 +609,11 @@ pub fn describe(sc: &Scenario, p: &Project) -> Description {
         growth_basis: gb.clone(),
         growth_factor: gf,
         text: format!(
-            "{}: background growth {}{}",
+            "{}: background growth {} (\u{d7} {} from {})",
             number_to_js_string(year),
             gb,
-            format!(
-                " (\u{d7} {} from {})",
-                to_fixed(gf, 3),
-                s.base_year.js_string()
-            )
+            to_fixed(gf, 3),
+            settings.base_year.js_string()
         ),
     }
 }
@@ -611,17 +668,21 @@ pub fn groups(p: &Project) -> Vec<YearGroup> {
                 with_proposal: Vec::new(),
                 other: Vec::new(),
             });
-            g.len() - 1
+            g.len().saturating_sub(1)
         };
         let side = r
             .role
             .as_deref()
             .and_then(scenario_role)
             .map_or("other", |x| x.side);
+        // k is the group found or the one just pushed, so it is always in g
+        let Some(grp) = g.get_mut(k) else {
+            continue;
+        };
         match side {
-            "without" => g[k].without.push(r.sc_id.clone()),
-            "with" => g[k].with_proposal.push(r.sc_id.clone()),
-            _ => g[k].other.push(r.sc_id.clone()),
+            "without" => grp.without.push(r.sc_id.clone()),
+            "with" => grp.with_proposal.push(r.sc_id.clone()),
+            _ => grp.other.push(r.sc_id.clone()),
         }
     }
     g
@@ -670,34 +731,7 @@ pub fn check(sc: &Scenario, p: &Project) -> Vec<Check> {
                 });
             }
         }
-        if let Some(rows) = p.register.get() {
-            for r in rows {
-                if !r.row_type.is("network") || in_baseline(Some(r)).0 {
-                    continue;
-                }
-                let found: Vec<&String> = r
-                    .links
-                    .get()
-                    .map(|ls| {
-                        ls.iter()
-                            .filter(|id| sc.links.get(id).is_some_and(|l| !l.status.is("closed")))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if !found.is_empty()
-                    && !out
-                        .iter()
-                        .any(|o| o.id.as_ref().is_some_and(|oid| found.contains(&oid)))
-                {
-                    out.push(Check {
-                        level: "block".into(),
-                        code: "unfunded".into(),
-                        id: r.id.get().cloned(),
-                        text: format!("{} (register) is in {} but is not funded. Use it in a sensitivity scenario only (AT ITA s3.6.1).", r.name.js_string(), sc_name),
-                    });
-                }
-            }
-        }
+        check_register(sc, p, &sc_name, &mut out);
     }
     if role == Some("baseline") || role == Some("existing") {
         let short = role
@@ -750,6 +784,40 @@ pub fn check(sc: &Scenario, p: &Project) -> Vec<Check> {
         });
     }
     out
+}
+
+/// The register part of [`check`]: a network row that is not in the baseline but has open roads in the scenario blocks,
+/// unless a road of it is already listed.
+fn check_register(sc: &Scenario, p: &Project, sc_name: &str, out: &mut Vec<Check>) {
+    let Some(rows) = p.register.get() else {
+        return;
+    };
+    for r in rows {
+        if !r.row_type.is("network") || in_baseline(Some(r)).0 {
+            continue;
+        }
+        let found: Vec<&String> = r
+            .links
+            .get()
+            .map(|ls| {
+                ls.iter()
+                    .filter(|id| sc.links.get(id).is_some_and(|l| !l.status.is("closed")))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !found.is_empty()
+            && !out
+                .iter()
+                .any(|o| o.id.as_ref().is_some_and(|oid| found.contains(&oid)))
+        {
+            out.push(Check {
+                level: "block".into(),
+                code: "unfunded".into(),
+                id: r.id.get().cloned(),
+                text: format!("{} (register) is in {} but is not funded. Use it in a sensitivity scenario only (AT ITA s3.6.1).", r.name.js_string(), sc_name),
+            });
+        }
+    }
 }
 
 /// `String(x)` of a text field that may be missing or null.

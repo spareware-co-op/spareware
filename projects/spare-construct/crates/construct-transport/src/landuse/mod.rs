@@ -22,6 +22,7 @@ use crate::jsnum::{math_max, to_fixed, value_to_js_string, value_to_number, valu
 use crate::project::Scenario;
 use crate::util::{self, LatLng, fmt};
 use serde_json::Value;
+use std::fmt::Write as _;
 
 /// landuse.js TILE: the edge (m) of a building query tile.
 pub const TILE: f64 = 3000.0;
@@ -57,11 +58,12 @@ impl StudyBox {
     /// True when all four edges are finite numbers and the box has a positive size.
     #[must_use]
     pub fn is_valid(&self) -> bool {
+        // The edges are finite once the first test passes, so `!(n <= s)` is `n > s`
         [self.s, self.w, self.n, self.e]
             .iter()
             .all(|v| v.is_finite())
-            && !(self.n <= self.s)
-            && !(self.e <= self.w)
+            && self.n > self.s
+            && self.e > self.w
     }
     /// landuse.js `size(B)`: the width and height in metres, on a flat projection at the box's middle latitude.
     #[must_use]
@@ -74,9 +76,9 @@ impl StudyBox {
 /// landuse.js `tiles(b, edge)`: splits a box into near-square tiles no larger than `edge` metres, south to north, west to east.
 #[must_use]
 pub fn tiles(b: &StudyBox, edge: f64) -> Vec<StudyBox> {
-    let (w, h) = b.size_m();
-    let nx = math_max(1.0, (w / edge - 1e-9).ceil());
-    let ny = math_max(1.0, (h / edge - 1e-9).ceil());
+    let (width, height) = b.size_m();
+    let nx = math_max(1.0, (width / edge - 1e-9).ceil());
+    let ny = math_max(1.0, (height / edge - 1e-9).ceil());
     let mut out = Vec::new();
     let mut j = 0.0;
     while j < ny {
@@ -125,14 +127,16 @@ pub fn query_landuse(t: &StudyBox) -> String {
         [t.n, t.w],
         [t.n, t.e],
     ];
-    let is_in: String = pts
-        .iter()
-        .enumerate()
-        .map(|(i, p)| format!("is_in({},{})->.a{i};", to_fixed(p[0], 6), to_fixed(p[1], 6)))
-        .collect();
-    let enc: String = (0..pts.len())
-        .map(|i| format!("way(pivot.a{i})[{lu}];rel(pivot.a{i})[{lu}];"))
-        .collect();
+    let mut is_in = String::new();
+    let mut enc = String::new();
+    for (i, p) in pts.iter().enumerate() {
+        // Writing to a String cannot fail
+        let _ = write!(is_in, "is_in({},{})->.a{i};", to_fixed(p[0], 6), to_fixed(p[1], 6));
+    }
+    for i in 0..pts.len() {
+        // Writing to a String cannot fail
+        let _ = write!(enc, "way(pivot.a{i})[{lu}];rel(pivot.a{i})[{lu}];");
+    }
     format!(
         "[out:json][timeout:90];{is_in}(way[{lu}]({bb});relation[{lu}]({bb});{enc}nwr[\"amenity\"~\"^(school|college|university|kindergarten|childcare|doctors|clinic|dentist|hospital|fast_food)$\"]({bb});nwr[\"shop\"]({bb});nwr[\"tourism\"~\"^(hotel|motel)$\"]({bb}););out tags geom;"
     )
@@ -148,7 +152,11 @@ pub struct DownloadJob {
 }
 
 /// The requests `ExistingLU.fetch(bounds)` sends, in order: the buildings by 3 km tile, then the land-use areas, schools and shops by
-/// 9 km tile. Fails with the prototype's message when the area is not usable or is bigger than about 20 by 20 km.
+/// 9 km tile.
+///
+/// # Errors
+///
+/// The prototype's message when the area is not usable or is bigger than about 20 by 20 km.
 pub fn download_jobs(bounds: &StudyBox) -> Result<Vec<DownloadJob>, String> {
     if !bounds.is_valid() {
         return Err(
@@ -171,7 +179,8 @@ pub fn download_jobs(bounds: &StudyBox) -> Result<Vec<DownloadJob>, String> {
             label: format!(
                 "Downloading buildings{}",
                 if bt.len() > 1 {
-                    format!(" {}/{}", i + 1, bt.len())
+                    // Bound: a tile's position, far below usize::MAX
+                    format!(" {}/{}", i.saturating_add(1), bt.len())
                 } else {
                     String::new()
                 }
@@ -185,7 +194,7 @@ pub fn download_jobs(bounds: &StudyBox) -> Result<Vec<DownloadJob>, String> {
             label: format!(
                 "Downloading land-use areas, schools and shops{}",
                 if lt.len() > 1 {
-                    format!(" {}/{}", i + 1, lt.len())
+                    format!(" {}/{}", i.saturating_add(1), lt.len())
                 } else {
                     String::new()
                 }
@@ -197,6 +206,10 @@ pub fn download_jobs(bounds: &StudyBox) -> Result<Vec<DownloadJob>, String> {
 
 /// The elements of one Overpass answer (`j.elements || []`), or the server's complaint: an answer whose `remark` says error, timed out
 /// or out of memory is a failure even though it came back with status 200.
+///
+/// # Errors
+///
+/// "host: remark" when the answer's remark reports an error, a timeout or running out of memory.
 pub fn overpass_elements(answer: &Value, host: &str) -> Result<Vec<Value>, String> {
     if let Some(remark) = answer.get("remark").filter(|r| value_truthy(r)) {
         let text = value_to_js_string(remark);
@@ -231,9 +244,10 @@ pub fn merge_elements(batches: &[Vec<Value>]) -> Vec<Value> {
             seen.insert(key, e.clone());
         }
     }
+    // Every key in `order` was put in `seen` and is listed once, so each removal finds its feature
     order
         .into_iter()
-        .map(|k| seen.remove(&k).expect("a key"))
+        .filter_map(|k| seen.remove(&k))
         .collect()
 }
 

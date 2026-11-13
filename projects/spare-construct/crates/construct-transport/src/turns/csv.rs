@@ -95,16 +95,10 @@ pub fn sidra_csv(
     for r in res {
         let is_site = |id: &str| r.sites.as_ref().is_some_and(|m| m.contains_key(id));
         let nm = |id: &str| -> String {
-            if is_site(id) {
-                r.sites
-                    .as_ref()
-                    .expect("a site")
-                    .get(id)
-                    .expect("site")
-                    .name
-                    .clone()
-            } else {
-                junction_name(sc, id, Some(idx.get(id).map_or(&[][..], |v| &v[..])))
+            // a site (is_site) by its own name, else the junction's
+            match r.sites.as_ref().and_then(|m| m.get(id)) {
+                Some(site) => site.name.clone(),
+                None => junction_name(sc, id, Some(idx.get(id).map_or(&[][..], |v| &v[..]))),
             }
         };
         let candidates: Vec<String> = match &want {
@@ -120,7 +114,11 @@ pub fn sidra_csv(
         if want.is_none() {
             let names: HashMap<String, String> = ids.iter().map(|i| (i.clone(), nm(i))).collect();
             js_sort_by(&mut ids, |p, q| {
-                let d = locale_compare_f64(&names[p], &names[q]);
+                // every id has its name in names (made just above)
+                let d = locale_compare_f64(
+                    names.get(p).map_or("", String::as_str),
+                    names.get(q).map_or("", String::as_str),
+                );
                 if d != 0.0 {
                     d
                 } else if js_str_lt(p, q) {
@@ -239,7 +237,7 @@ pub fn turn_count_csv(
     s: &Settings,
     node_id: &str,
 ) -> String {
-    let m = match sc {
+    let mvs = match sc {
         Some(sc) => rows_for(sc, res, s, node_id, None),
         None => super::Movements {
             rows: Vec::new(),
@@ -251,7 +249,7 @@ pub fn turn_count_csv(
         _ => "Unknown junction".to_string(),
     };
     let period = match res {
-        Some(r) if !r.period.is_empty() => format!("{} peak hour", r.period),
+        Some(rs) if !rs.period.is_empty() => format!("{} peak hour", rs.period),
         _ => String::new(),
     };
     let mut out: Vec<Vec<Value>> = vec![
@@ -267,31 +265,35 @@ pub fn turn_count_csv(
         ],
         vec![],
         {
-            let mut h = vec![json!("Approach"), json!("Road")];
-            h.extend(MV.iter().map(|m| json!(m)));
-            h.push(json!("Total"));
-            h.push(json!("Heavy vehicles"));
-            h
+            let mut hdr = vec![json!("Approach"), json!("Road")];
+            hdr.extend(MV.iter().map(|mv| json!(mv)));
+            hdr.push(json!("Total"));
+            hdr.push(json!("Heavy vehicles"));
+            hdr
         },
     ];
     // sum: L, T, R, U, total, heavy
     let mut sum = [0.0f64; 6];
-    for a in m.arms.iter().filter(|x| x.is_in) {
-        let mut c = [0.0f64; 6];
-        for r in &m.rows {
-            if r.approach == a.in_key {
-                let (_, hv, t) = split(r);
-                let k = MV.iter().position(|x| *x == r.mv).expect("a movement");
-                c[k] += t;
-                c[4] += t;
-                c[5] += hv;
+    for arm in mvs.arms.iter().filter(|x| x.is_in) {
+        let mut counts = [0.0f64; 6];
+        for mr in &mvs.rows {
+            if mr.approach == arm.in_key {
+                let (_, hv, tot) = split(mr);
+                // `c[MV.indexOf(r.mv)] += t`: every movement is one of MV; one that was not would add to no column
+                if let Some(k) = MV.iter().position(|mv| *mv == mr.mv)
+                    && let Some(slot) = counts.get_mut(k)
+                {
+                    *slot += tot;
+                }
+                counts[4] += tot;
+                counts[5] += hv;
             }
         }
-        for k in 0..6 {
-            sum[k] += c[k];
+        for (acc, cnt) in sum.iter_mut().zip(counts) {
+            *acc += cnt;
         }
-        let mut row = vec![json!(a.name), json!(a.road)];
-        row.extend(c.iter().map(|x| json!(x)));
+        let mut row = vec![json!(arm.name), json!(arm.road)];
+        row.extend(counts.iter().map(|x| json!(x)));
         out.push(row);
     }
     let mut total = vec![json!("Total"), json!("")];

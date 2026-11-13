@@ -17,19 +17,16 @@ pub struct PeriodVol {
     pub basis: &'static str,
 }
 
-fn pv(v: f64, how: String, basis: &'static str) -> Option<PeriodVol> {
-    Some(PeriodVol { v, how, basis })
+fn pv(v: f64, how: String, basis: &'static str) -> PeriodVol {
+    PeriodVol { v, how, basis }
 }
 
 // `+s.slice(a, b)` for text read as UTF-16 code units (counts hold ASCII times)
 fn slice_num(s: &str, a: usize, b: Option<usize>) -> f64 {
     let u: Vec<u16> = s.encode_utf16().collect();
     let end = b.unwrap_or(u.len()).min(u.len());
-    let part = if a >= end {
-        String::new()
-    } else {
-        String::from_utf16_lossy(&u[a..end])
-    };
+    // a start at or past the end gives ""
+    let part = u.get(a..end).map_or_else(String::new, String::from_utf16_lossy);
     string_to_number(&part)
 }
 
@@ -48,6 +45,7 @@ fn obj_num(v: &Maybe<Value>, key: &str) -> f64 {
 /// times the share. A RAMM estimate gives its daily volume times the share. An NZTA count gives the TMS Tue to Thu
 /// term-time mean (not flagged indicative) or the AADT, times the site's own TMS peak share when it has one, else
 /// the Settings share. `period` is "AM" or "PM" (anything else reads as PM, as the prototype does).
+#[must_use]
 pub fn period_vol(c: &Count, period: &str, s: &Settings) -> Option<PeriodVol> {
     let am = period == "AM";
     let pm = period == "PM";
@@ -63,10 +61,10 @@ pub fn period_vol(c: &Count, period: &str, s: &Settings) -> Option<PeriodVol> {
     if c.src_is("user") {
         let v = if am { &c.am } else { &c.pm };
         if v.truthy() {
-            return pv(v.num(), "your count".to_string(), "measured_hour");
+            return Some(pv(v.num(), "your count".to_string(), "measured_hour"));
         }
         return if c.adt.truthy() {
-            pv(c.adt.num() * share, share_txt, "adt_factored")
+            Some(pv(c.adt.num() * share, share_txt, "adt_factored"))
         } else {
             None
         };
@@ -75,85 +73,29 @@ pub fn period_vol(c: &Count, period: &str, s: &Settings) -> Option<PeriodVol> {
         let pt = c.peak_time.js_string();
         let h = slice_num(&pt, 0, Some(2)) + slice_num(&pt, 3, None) / 60.0;
         if (am && (6.0..10.0).contains(&h)) || (pm && (14.5..19.0).contains(&h)) {
-            return pv(
+            return Some(pv(
                 c.peak.num(),
                 format!("counted peak hour ({pt})"),
                 "measured_hour",
-            );
+            ));
         }
     }
     if is_estimate(c) {
         return if c.adt.num() > 0.0 {
-            pv(
+            Some(pv(
                 c.adt.num() * share,
                 format!("RAMM estimate \u{d7} {share_txt}"),
                 "ramm_estimate",
-            )
+            ))
         } else {
             None
         };
     }
     if c.src_is("nzta") {
-        // const t = c.tms && typeof c.tms === 'object' ? c.tms.target : null
-        let t: Option<&Value> = match c.tms.get() {
-            Some(Value::Object(m)) => m.get("target"),
-            Some(Value::Array(_)) => None,
-            _ => None,
-        };
-        let t_truthy = t.is_some_and(value_truthy);
-        let t_obj = match t {
-            Some(Value::Object(m)) if t_truthy => Some(m),
-            _ => None,
-        };
-        let mean = t_obj.map_or(f64::NAN, |m| m.get("mean").map_or(f64::NAN, value_to_number));
-        let ok_not_false = t_obj.is_none_or(|m| m.get("ok") != Some(&Value::Bool(false)));
-        let tm = if t_truthy && mean > 0.0 && mean.is_finite() && ok_not_false {
-            Some(mean)
-        } else {
-            None
-        };
-        let ps = obj_num(&c.share, period);
-        let own = if ps > 0.0 && ps < 1.0 { Some(ps) } else { None };
-        let daily = match tm {
-            Some(m) => m,
-            None => c.adt.num(),
-        };
-        if !(daily > 0.0) {
-            return None;
-        }
-        let virt = c.virtual_.truthy();
-        if tm.is_none() && own.is_none() {
-            return pv(
-                daily * share,
-                share_txt,
-                if virt { "virtual" } else { "adt_factored" },
-            );
-        }
-        let how = format!(
-            "{} \u{d7} {}",
-            match tm {
-                Some(m) => format!("TMS Tue\u{2013}Thu term-time mean ({}/day)", fmt::int(m)),
-                None => "AADT".to_string(),
-            },
-            match own {
-                Some(o) => format!("{}% (TMS peak profile)", fmt::num(o * 100.0, 1)),
-                None => share_txt,
-            }
-        );
-        return pv(
-            daily * own.unwrap_or(share),
-            how,
-            if virt {
-                "virtual"
-            } else if tm.is_some() {
-                "weekday_factored"
-            } else {
-                "adt_factored"
-            },
-        );
+        return nzta_vol(c, period, share, share_txt);
     }
     if c.adt.truthy() {
-        pv(
+        Some(pv(
             c.adt.num() * share,
             share_txt,
             if c.virtual_.truthy() {
@@ -161,10 +103,71 @@ pub fn period_vol(c: &Count, period: &str, s: &Settings) -> Option<PeriodVol> {
             } else {
                 "adt_factored"
             },
-        )
+        ))
     } else {
         None
     }
+}
+
+// The NZTA branch of `periodVol`: the TMS mean or the AADT, times the site's own peak share or the Settings share.
+fn nzta_vol(c: &Count, period: &str, share: f64, share_txt: String) -> Option<PeriodVol> {
+    // const t = c.tms && typeof c.tms === 'object' ? c.tms.target : null (an array has no target)
+    let t: Option<&Value> = match c.tms.get() {
+        Some(Value::Object(m)) => m.get("target"),
+        _ => None,
+    };
+    let t_truthy = t.is_some_and(value_truthy);
+    let t_obj = match t {
+        Some(Value::Object(m)) if t_truthy => Some(m),
+        _ => None,
+    };
+    let mean = t_obj.map_or(f64::NAN, |m| m.get("mean").map_or(f64::NAN, value_to_number));
+    let ok_not_false = t_obj.is_none_or(|m| m.get("ok") != Some(&Value::Bool(false)));
+    let tm = if t_truthy && mean > 0.0 && mean.is_finite() && ok_not_false {
+        Some(mean)
+    } else {
+        None
+    };
+    let ps = obj_num(&c.share, period);
+    let own = if ps > 0.0 && ps < 1.0 { Some(ps) } else { None };
+    let daily = match tm {
+        Some(m) => m,
+        None => c.adt.num(),
+    };
+    // `!(daily > 0)`: NaN gives none too
+    if daily <= 0.0 || daily.is_nan() {
+        return None;
+    }
+    let virt = c.virtual_.truthy();
+    if tm.is_none() && own.is_none() {
+        return Some(pv(
+            daily * share,
+            share_txt,
+            if virt { "virtual" } else { "adt_factored" },
+        ));
+    }
+    let how = format!(
+        "{} \u{d7} {}",
+        match tm {
+            Some(m) => format!("TMS Tue\u{2013}Thu term-time mean ({}/day)", fmt::int(m)),
+            None => "AADT".to_string(),
+        },
+        match own {
+            Some(o) => format!("{}% (TMS peak profile)", fmt::num(o * 100.0, 1)),
+            None => share_txt,
+        }
+    );
+    Some(pv(
+        daily * own.unwrap_or(share),
+        how,
+        if virt {
+            "virtual"
+        } else if tm.is_some() {
+            "weekday_factored"
+        } else {
+            "adt_factored"
+        },
+    ))
 }
 
 /// `DataHub.obsMethod(c, period)`: the observation method of a count in a period (an importer's own `obs_method` wins, then RAMM estimate, virtual, then what the volume rests on).

@@ -2,7 +2,7 @@
 
 use crate::edit::json::JsonValue;
 use crate::feeds::nztime::nz_parts;
-use crate::jsnum::{math_max, number_to_js_string, value_to_number};
+use crate::jsnum::{i64_to_f64, math_max, number_to_js_string, value_to_number};
 use crate::util::r7;
 use serde::Serialize;
 use serde_json::Value;
@@ -33,7 +33,8 @@ pub const CAS_FIELDS: [&str; 8] = [
 /// `CAS_POS[field]`: where a field sits in a crash tuple (7 and up), None for a field a tuple does not keep.
 #[must_use]
 pub fn cas_pos(field: &str) -> Option<usize> {
-    CAS_FIELDS.iter().position(|f| *f == field).map(|i| 7 + i)
+    // Bound: i is below CAS_FIELDS.len() (8)
+    CAS_FIELDS.iter().position(|f| *f == field).map(|i| i.saturating_add(7))
 }
 
 /// `CAS_OUT`: the fields asked of the crash service.
@@ -68,7 +69,7 @@ pub struct CasWindow {
 #[must_use]
 pub fn nz_date(now_ms: f64) -> (f64, f64, f64) {
     let p = nz_parts(now_ms);
-    (p.year as f64, f64::from(p.month), f64::from(p.day))
+    (i64_to_f64(p.year), f64::from(p.month), f64::from(p.day))
 }
 
 /// `casWindow(now, years)`: the last `years` full calendar years (the year before this one back), plus this year to date.
@@ -148,76 +149,76 @@ fn val(v: Option<&JsonValue>) -> Value {
 /// `[0]` latitude, `[1]` longitude, `[2]` severity F, S, M or N, `[3]` year, `[4]` location, `[5]` flags (p walking, c cycling,
 /// m motorcycle), `[6]` speed limit, then at fixed positions the extra fields of [`CAS_FIELDS`] (counts are numbers, the rest
 /// text, unknown is null, and trailing nulls are left off). `x` is one feature of the answer (`attributes` and `geometry` with x and y).
-pub fn cas_tuple(x: &JsonValue) -> Vec<Value> {
+pub fn cas_tuple(feature: &JsonValue) -> Vec<Value> {
     let empty = JsonValue::object();
-    let a = match x.get("attributes") {
+    let attrs = match feature.get("attributes") {
         Some(v) if v.truthy() => v,
         _ => &empty,
     };
     let sev_text = {
-        let v = a.get("crashSeverity");
-        match v {
+        let sev = attrs.get("crashSeverity");
+        match sev {
             Some(v) if v.truthy() => v.js_string(),
             _ => "N".to_string(),
         }
     };
     // String(...)[0].toUpperCase(): the first UTF-16 unit
     let first: String = sev_text.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
-    let s = if "FSMN".contains(first.as_str()) && !first.is_empty() { first } else { "N".to_string() };
-    let geom = x.get("geometry");
-    let coord = |k: &str| -> f64 { r7(geom.and_then(|g| g.get(k)).map_or(f64::NAN, JsonValue::to_number)) };
+    let severity = if "FSMN".contains(first.as_str()) && !first.is_empty() { first } else { "N".to_string() };
+    let geom = feature.get("geometry");
+    let coord = |key: &str| -> f64 { r7(geom.and_then(|g| g.get(key)).map_or(f64::NAN, JsonValue::to_number)) };
     let locations: Vec<String> = ["crashLocation1", "crashLocation2"]
         .iter()
-        .filter_map(|k| a.get(k))
+        .filter_map(|key| attrs.get(key))
         .filter(|v| v.truthy())
         .map(|v| title(&v.js_string()))
         .collect();
     let mut flags = String::new();
-    for (k, f) in [("pedestrian", 'p'), ("bicycle", 'c'), ("motorcycle", 'm')] {
-        if a.get(k).is_some_and(JsonValue::truthy) {
-            flags.push(f);
+    for (key, flag) in [("pedestrian", 'p'), ("bicycle", 'c'), ("motorcycle", 'm')] {
+        if attrs.get(key).is_some_and(JsonValue::truthy) {
+            flags.push(flag);
         }
     }
-    let mut t: Vec<Value> = vec![
+    let mut tuple: Vec<Value> = vec![
         crate::jsnum::json_number(coord("y")),
         crate::jsnum::json_number(coord("x")),
-        Value::String(s),
-        val(a.get("crashYear")),
+        Value::String(severity),
+        val(attrs.get("crashYear")),
         Value::String(locations.join(" / ")),
         Value::String(flags),
-        val(a.get("speedLimit")),
+        val(attrs.get("speedLimit")),
     ];
     // num: null for a missing, empty or non-finite value, else the number; txt: null for missing or empty, else the text
     let mut extra: Vec<Value> = CAS_FIELDS
         .iter()
-        .map(|k| {
-            let v = a.get(k);
-            let missing = match v {
+        .map(|key| {
+            let field = attrs.get(key);
+            let missing = match field {
                 None | Some(JsonValue::Null) => true,
-                Some(JsonValue::String(s)) => s.is_empty(),
+                Some(JsonValue::String(text)) => text.is_empty(),
                 _ => false,
             };
-            if k.ends_with("Count") || *k == "OBJECTID" {
-                match v {
+            if key.ends_with("Count") || *key == "OBJECTID" {
+                match field {
                     _ if missing => Value::Null,
                     Some(v) => {
-                        let n = v.to_number();
-                        if n.is_finite() { crate::jsnum::json_number(n) } else { Value::Null }
+                        let num = v.to_number();
+                        if num.is_finite() { crate::jsnum::json_number(num) } else { Value::Null }
                     }
                     None => Value::Null,
                 }
             } else if missing {
                 Value::Null
             } else {
-                Value::String(v.map(JsonValue::js_string).unwrap_or_default())
+                Value::String(field.map(JsonValue::js_string).unwrap_or_default())
             }
         })
         .collect();
     while extra.last().is_some_and(Value::is_null) {
         extra.pop();
     }
-    t.extend(extra);
-    t
+    tuple.extend(extra);
+    tuple
 }
 
 /// A crash tuple read for the analysis: its position, severity, year, location text and flags, and the tuple itself.

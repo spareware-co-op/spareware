@@ -151,7 +151,10 @@ pub fn get_path<'a>(o: &'a JsonValue, k: &str) -> Option<&'a JsonValue> {
 /// `setPath(o, k, v)`: sets the value at a dotted path, making an object of any step that is missing, null or not an object.
 pub fn set_path(o: &mut JsonValue, k: &str, v: JsonValue) {
     let mut parts: Vec<&str> = k.split('.').collect();
-    let last = parts.pop().expect("a path has a last step");
+    // split always yields at least one part, so there is always a last step
+    let Some(last) = parts.pop() else {
+        return;
+    };
     let mut a = o;
     for q in parts {
         let make = !a.get(q).is_some_and(JsonValue::is_object_like);
@@ -166,51 +169,56 @@ pub fn set_path(o: &mut JsonValue, k: &str, v: JsonValue) {
     a.set(last, v);
 }
 
-fn default_settings_json() -> JsonValue {
+fn default_settings_json() -> Result<JsonValue, EditError> {
     settings_to_json(&default_settings())
 }
 
-fn settings_to_json(s: &Settings) -> JsonValue {
-    let text = serde_json::to_string(s).expect("settings always serialise");
-    JsonValue::parse(&text).expect("settings text is JSON")
+// Settings always serialise to JSON text; the errors only keep this total
+fn settings_to_json(s: &Settings) -> Result<JsonValue, EditError> {
+    let text = serde_json::to_string(s)
+        .map_err(|e| EditError(format!("the settings do not serialise: {e}")))?;
+    JsonValue::parse(&text).map_err(EditError)
 }
 
 /// model.js legacySettings(P, saved, ver): fills the keys a project never saved with their version-1 values and lists the
-/// differences from the current defaults in `P.settingsNotice` (or clears it when there are none).
-fn legacy_settings(p: &mut JsonValue, saved: &JsonValue, ver: f64) {
+/// differences from the current defaults (`defaults`) in `P.settingsNotice` (or clears it when there are none).
+fn legacy_settings(p: &mut JsonValue, saved: &JsonValue, ver: f64, defaults: &JsonValue) {
     let list: Vec<&Change> = SETTINGS_V2.iter().filter(|c| c.since > ver).collect();
+    // migrate_json set the settings just before this runs, so every lookup of them below finds them
     for c in &list {
-        if get_path(saved, c.key).is_none() {
-            let s = p.get_mut("settings").expect("settings are set");
-            set_path(s, c.key, (c.v1)());
+        if get_path(saved, c.key).is_none()
+            && let Some(settings) = p.get_mut("settings")
+        {
+            set_path(settings, c.key, (c.v1)());
         }
     }
-    let d = default_settings_json();
-    let s = p.get("settings").expect("settings are set").clone();
+    let Some(settings) = p.get("settings").cloned() else {
+        return;
+    };
     let mut changed: Vec<JsonValue> = Vec::new();
     for c in &list {
-        let yours = get_path(&s, c.key);
-        let now = get_path(&d, c.key);
+        let yours = get_path(&settings, c.key);
+        let now = get_path(defaults, c.key);
         let same = match (yours, now) {
             (None, None) => true,
-            (Some(a), Some(b)) => a.strict_eq(b),
+            (Some(mine), Some(cur)) => mine.strict_eq(cur),
             _ => false,
         };
         if same {
             continue;
         }
-        let mut o = JsonValue::object();
-        o.set("key", c.key.into());
-        o.set("label", c.label.into());
-        if let Some(y) = yours {
-            o.set("yours", y.clone());
+        let mut entry = JsonValue::object();
+        entry.set("key", c.key.into());
+        entry.set("label", c.label.into());
+        if let Some(yours_v) = yours {
+            entry.set("yours", yours_v.clone());
         }
-        if let Some(n) = now {
-            o.set("now", n.clone());
+        if let Some(now_v) = now {
+            entry.set("now", now_v.clone());
         }
-        o.set("yoursText", (c.text)(yours, &s).into());
-        o.set("nowText", (c.text)(now, &d).into());
-        changed.push(o);
+        entry.set("yoursText", (c.text)(yours, &settings).into());
+        entry.set("nowText", (c.text)(now, defaults).into());
+        changed.push(entry);
     }
     let sv_now;
     if changed.is_empty() {
@@ -218,16 +226,16 @@ fn legacy_settings(p: &mut JsonValue, saved: &JsonValue, ver: f64) {
         p.remove("settingsNotice");
     } else {
         sv_now = ver;
-        let mut n = JsonValue::object();
-        n.set("from", ver.into());
-        n.set("to", SETTINGS_VERSION.into());
-        n.set("text", SETTINGS_NOTICE.into());
-        n.set("changed", JsonValue::Array(changed));
-        p.set("settingsNotice", n);
+        let mut notice = JsonValue::object();
+        notice.set("from", ver.into());
+        notice.set("to", SETTINGS_VERSION.into());
+        notice.set("text", SETTINGS_NOTICE.into());
+        notice.set("changed", JsonValue::Array(changed));
+        p.set("settingsNotice", notice);
     }
-    p.get_mut("settings")
-        .expect("settings are set")
-        .set("sv", sv_now.into());
+    if let Some(settings) = p.get_mut("settings") {
+        settings.set("sv", sv_now.into());
+    }
 }
 
 /// model.js `OLD_RATES`: the discount schedule saved before NZTA GC 25/01, as JSON text.
@@ -235,7 +243,7 @@ const OLD_RATES: &str = r#"[{"to":30,"r":2},{"to":60,"r":1.5}]"#;
 
 /// model.js upgradeRates(S): a saved copy of the pre-GC 25/01 schedule becomes the full schedule when the analysis period is 100
 /// years or less (the results are identical; past 100 years GC 25/01 uses 1%).
-fn upgrade_rates(s: &mut JsonValue) {
+fn upgrade_rates(s: &mut JsonValue, defaults: &JsonValue) {
     let years = s
         .get("econ")
         .and_then(|e| e.get("years"))
@@ -246,11 +254,12 @@ fn upgrade_rates(s: &mut JsonValue) {
     let old = e
         .get("rates")
         .is_some_and(|r| r.is_array() && r.stringify() == OLD_RATES);
-    if old && !(years > 100.0) {
-        let d = default_settings_json();
-        if let Some(r) = d.get("econ").and_then(|e| e.get("rates")) {
-            e.set("rates", r.clone());
-        }
+    // `!(years > 100)`: NaN years count as 100 or less
+    if old
+        && (years <= 100.0 || years.is_nan())
+        && let Some(r) = defaults.get("econ").and_then(|e| e.get("rates"))
+    {
+        e.set("rates", r.clone());
     }
 }
 
@@ -261,11 +270,12 @@ fn mig_year(v: Option<&JsonValue>, d: Option<f64>) -> Option<f64> {
         Some(JsonValue::String(s)) => !crate::jsnum::js_trim(s).is_empty(),
         _ => false,
     };
-    if ok {
-        let x = v.expect("checked").to_number();
-        if x.is_finite() && x > 0.0 {
-            return Some(math_round(x));
-        }
+    if ok
+        && let Some(x) = v.map(JsonValue::to_number)
+        && x.is_finite()
+        && x > 0.0
+    {
+        return Some(math_round(x));
     }
     d
 }
@@ -280,52 +290,30 @@ fn or_assign(o: &mut JsonValue, k: &str, b: JsonValue) {
 /// model.js `migrate(P)`: brings a parsed project up to date. Settings merge onto the current defaults (the saved keys win),
 /// a project saved before a default changed keeps its own value (see `SETTINGS_V2` in model.js), years read as text become numbers, a
 /// missing id or scenario list is made, junction sites are checked, and the active and base scenarios must exist.
+///
+/// # Errors
+///
+/// When the value is not an object; also (never in practice) when the default settings or a new scenario do not
+/// serialise.
 pub fn migrate_json(mut p: JsonValue, ids: &mut dyn IdSource) -> Result<JsonValue, EditError> {
     if !p.is_object() {
         return Err(EditError("a project file holds an object".to_string()));
     }
+    let defaults = default_settings_json()?;
     let saved: Option<JsonValue> = p.get("settings").filter(|s| s.is_object()).cloned();
-    // The saved settings version (1 when a project predates versions); a project without settings is new
-    let ver = match &saved {
-        Some(s) => {
-            let sv = s.get("sv").map_or(f64::NAN, JsonValue::to_number);
-            if sv >= 1.0 {
-                crate::jsnum::math_min(SETTINGS_VERSION, sv.floor())
-            } else {
-                1.0
-            }
-        }
-        None => SETTINGS_VERSION,
-    };
+    let ver = saved_version(saved.as_ref());
     let empty = JsonValue::object();
-    let merged = deep_merge(&default_settings_json(), saved.as_ref().unwrap_or(&empty));
+    let merged = deep_merge(&defaults, saved.as_ref().unwrap_or(&empty));
     p.set("settings", merged);
-    if ver < SETTINGS_VERSION {
-        legacy_settings(
-            &mut p,
-            saved.as_ref().expect("older settings were saved"),
-            ver,
-        );
+    // A version below the current one comes only from saved settings, so saved is always Some here
+    if ver < SETTINGS_VERSION
+        && let Some(old) = &saved
+    {
+        legacy_settings(&mut p, old, ver, &defaults);
     } else {
         p.remove("settingsNotice");
     }
-    // Years from a file can be text ('2036'): numbers from here on
-    let d0 = default_settings_json();
-    {
-        let s = p.get_mut("settings").expect("settings are set");
-        let by = mig_year(
-            s.get("baseYear"),
-            d0.get("baseYear").and_then(JsonValue::as_f64),
-        );
-        if let Some(by) = by {
-            s.set("baseYear", by.into());
-        }
-        let y = mig_year(s.get("year"), by);
-        if let Some(y) = y {
-            s.set("year", y.into());
-        }
-        upgrade_rates(s);
-    }
+    migrate_years(&mut p, &defaults);
     if !p
         .get("id")
         .is_some_and(|v| v.as_str().is_some() && v.truthy())
@@ -339,12 +327,11 @@ pub fn migrate_json(mut p: JsonValue, ids: &mut dyn IdSource) -> Result<JsonValu
         .is_some_and(|a| !a.is_empty());
     if !have {
         let s = new_scenario(&ids.uid("s"), "Base case");
-        let text = serde_json::to_string(&s).expect("a scenario serialises");
+        let text = serde_json::to_string(&s)
+            .map_err(|e| EditError(format!("a new scenario does not serialise: {e}")))?;
         p.set(
             "scenarios",
-            JsonValue::Array(vec![
-                JsonValue::parse(&text).expect("scenario text is JSON"),
-            ]),
+            JsonValue::Array(vec![JsonValue::parse(&text).map_err(EditError)?]),
         );
     }
     if let Some(JsonValue::Array(scenarios)) = p.get_mut("scenarios") {
@@ -352,7 +339,86 @@ pub fn migrate_json(mut p: JsonValue, ids: &mut dyn IdSource) -> Result<JsonValu
             migrate_scenario(s);
         }
     }
-    // The register
+    migrate_register(&mut p);
+    if p.get("me")
+        .is_some_and(|m| !m.is_null() && !m.is_object_like())
+    {
+        p.remove("me");
+    }
+    check_active_base(&mut p);
+    if !p.get("view").is_some_and(JsonValue::truthy) {
+        let mut v = JsonValue::object();
+        v.set(
+            "c",
+            JsonValue::Array(vec![(-36.8485).into(), 174.7633.into()]),
+        );
+        v.set("z", 14.0.into());
+        p.set("view", v);
+    }
+    Ok(p)
+}
+
+/// The saved settings version (1 when a project predates versions); a project without settings is new.
+fn saved_version(saved: Option<&JsonValue>) -> f64 {
+    match saved {
+        Some(s) => {
+            let sv = s.get("sv").map_or(f64::NAN, JsonValue::to_number);
+            if sv >= 1.0 {
+                crate::jsnum::math_min(SETTINGS_VERSION, sv.floor())
+            } else {
+                1.0
+            }
+        }
+        None => SETTINGS_VERSION,
+    }
+}
+
+/// Years from a file can be text ('2036'): numbers from here on. Also upgrades the saved discount schedule.
+fn migrate_years(p: &mut JsonValue, defaults: &JsonValue) {
+    // migrate_json set the settings just before this runs
+    let Some(s) = p.get_mut("settings") else {
+        return;
+    };
+    let by = mig_year(
+        s.get("baseYear"),
+        defaults.get("baseYear").and_then(JsonValue::as_f64),
+    );
+    if let Some(by) = by {
+        s.set("baseYear", by.into());
+    }
+    let y = mig_year(s.get("year"), by);
+    if let Some(y) = y {
+        s.set("year", y.into());
+    }
+    upgrade_rates(s, defaults);
+}
+
+/// The active and base scenarios must exist: otherwise the first scenario (or neither key when there are none).
+fn check_active_base(p: &mut JsonValue) {
+    let first_id: Option<JsonValue> = p
+        .get("scenarios")
+        .and_then(JsonValue::as_array)
+        .and_then(|a| a.first())
+        .and_then(|s| s.get("id").cloned());
+    for key in ["active", "base"] {
+        let ok = match (p.get(key), p.get("scenarios").and_then(JsonValue::as_array)) {
+            (Some(v), Some(list)) => list
+                .iter()
+                .any(|s| s.get("id").is_some_and(|id| id.strict_eq(v))),
+            _ => false,
+        };
+        if !ok {
+            if let Some(id) = &first_id {
+                p.set(key, id.clone());
+            } else {
+                p.remove(key);
+            }
+        }
+    }
+}
+
+/// The register: dropped when it is not an array; saved preset rows gain their designation record.
+fn migrate_register(p: &mut JsonValue) {
     if p.get("register")
         .is_some_and(|r| !r.is_null() && !r.is_array())
     {
@@ -380,41 +446,6 @@ pub fn migrate_json(mut p: JsonValue, ids: &mut dyn IdSource) -> Result<JsonValu
             }
         }
     }
-    if p.get("me")
-        .is_some_and(|m| !m.is_null() && !m.is_object_like())
-    {
-        p.remove("me");
-    }
-    let first_id: Option<JsonValue> = p
-        .get("scenarios")
-        .and_then(JsonValue::as_array)
-        .and_then(|a| a.first())
-        .and_then(|s| s.get("id").cloned());
-    for key in ["active", "base"] {
-        let ok = match (p.get(key), p.get("scenarios").and_then(JsonValue::as_array)) {
-            (Some(v), Some(list)) => list
-                .iter()
-                .any(|s| s.get("id").is_some_and(|id| id.strict_eq(v))),
-            _ => false,
-        };
-        if !ok {
-            if let Some(id) = &first_id {
-                p.set(key, id.clone());
-            } else {
-                p.remove(key);
-            }
-        }
-    }
-    if !p.get("view").is_some_and(JsonValue::truthy) {
-        let mut v = JsonValue::object();
-        v.set(
-            "c",
-            JsonValue::Array(vec![(-36.8485).into(), 174.7633.into()]),
-        );
-        v.set("z", 14.0.into());
-        p.set("view", v);
-    }
-    Ok(p)
 }
 
 /// The per-scenario part of `migrate`: containers, results without paths, the year, sites and build-out.
@@ -472,6 +503,10 @@ fn migrate_scenario(s: &mut JsonValue) {
 
 /// `migrate(JSON.parse(text))` as a typed project: reads the text (keeping the order of every object's keys), upgrades it
 /// and returns the project. Fails when the text is not JSON or the upgraded project does not read as a [`Project`].
+///
+/// # Errors
+///
+/// When the text is not JSON, [`migrate_json`] fails, or the upgraded project does not read as a [`Project`].
 pub fn migrate_text(text: &str, ids: &mut dyn IdSource) -> Result<Project, EditError> {
     let v = JsonValue::parse(text).map_err(|e| EditError(format!("not JSON: {e}")))?;
     let m = migrate_json(v, ids)?;
@@ -480,9 +515,14 @@ pub fn migrate_text(text: &str, ids: &mut dyn IdSource) -> Result<Project, EditE
 }
 
 /// `migrate(P)` of a project already in memory (`Store.setProject`): the project written out, upgraded and read back.
+///
+/// # Errors
+///
+/// As [`migrate_text`]; also (never in practice) when the project does not serialise.
 pub fn migrate_project(p: &Project, ids: &mut dyn IdSource) -> Result<Project, EditError> {
     migrate_text(
-        &serde_json::to_string(p).expect("a project serialises"),
+        &serde_json::to_string(p)
+            .map_err(|e| EditError(format!("the project does not serialise: {e}")))?,
         ids,
     )
 }
@@ -495,12 +535,16 @@ pub fn settings_notice(p: &Project) -> Option<&Value> {
 
 /// `Store.adoptDefaults(keys)`: adopts the new defaults the notice lists (all of them, or those named), marks the project's
 /// results out of date when any were adopted, and clears the notice. Returns how many settings changed.
+///
+/// # Errors
+///
+/// When the settings with the defaults adopted do not read back as settings.
 pub fn adopt_defaults(p: &mut Project, keys: Option<&[String]>) -> Result<usize, EditError> {
     let Some(notice) = p.extra.get("settingsNotice").cloned() else {
         return Ok(0);
     };
-    let d = default_settings_json();
-    let mut s = settings_to_json(&p.settings);
+    let d = default_settings_json()?;
+    let mut s = settings_to_json(&p.settings)?;
     let mut picked = 0usize;
     if let Some(list) = notice.get("changed").and_then(Value::as_array) {
         for c in list {
@@ -513,7 +557,8 @@ pub fn adopt_defaults(p: &mut Project, keys: Option<&[String]>) -> Result<usize,
             if let Some(v) = get_path(&d, key) {
                 set_path(&mut s, key, v.clone());
             }
-            picked += 1;
+            // Bound: at most the number of notice entries
+            picked = picked.saturating_add(1);
         }
     }
     s.set("sv", SETTINGS_VERSION.into());

@@ -2,7 +2,9 @@
 //! school rolls, and the tag sets that classify a building, an amenity or a shop.
 
 use crate::importers::jsparse::parse_float;
-use crate::jsnum::{js_trim, math_max, math_min, math_round, value_to_js_string, value_truthy};
+use crate::jsnum::{
+    js_trim, math_max, math_min, math_round, split_digits, value_to_js_string, value_truthy,
+};
 use serde_json::Value;
 
 /// A tag's value as text, `String(v ?? '')`: missing and null are "".
@@ -32,26 +34,22 @@ pub fn num(v: &str) -> Option<f64> {
 
 /// True for `/^\d{1,3}([, ]\d{3})+$/`: a count written with thousands separators ("1,200", "1 450").
 fn has_thousands_separators(s: &str) -> bool {
-    let b = s.as_bytes();
-    let mut i = 0;
-    while i < b.len() && b[i].is_ascii_digit() {
-        i += 1;
-    }
-    if !(1..=3).contains(&i) {
+    let (lead, mut rest) = split_digits(s.as_bytes());
+    if !(1..=3).contains(&lead.len()) {
         return false;
     }
-    let mut groups = 0;
-    while i < b.len() {
-        if i + 4 > b.len()
-            || !(b[i] == b',' || b[i] == b' ')
-            || !b[i + 1..i + 4].iter().all(u8::is_ascii_digit)
-        {
+    let mut any_group = false;
+    while !rest.is_empty() {
+        let Some((&[sep, d1, d2, d3], after)) = rest.split_first_chunk::<4>() else {
+            return false;
+        };
+        if !(sep == b',' || sep == b' ') || ![d1, d2, d3].iter().all(u8::is_ascii_digit) {
             return false;
         }
-        i += 4;
-        groups += 1;
+        rest = after;
+        any_group = true;
     }
-    groups >= 1
+    any_group
 }
 
 /// landuse.js `count(v)`: a count (rolls, capacities, rooms) that may carry thousands separators ("1,200" or "1 450"); None when it
@@ -98,13 +96,17 @@ fn has_word(s: &str, words: &[&str]) -> bool {
     }
     for w in words {
         let wc: Vec<char> = w.chars().collect();
-        if wc.len() > lower.len() {
+        let Some(last_start) = lower.len().checked_sub(wc.len()) else {
             continue;
-        }
-        for i in 0..=(lower.len() - wc.len()) {
-            if lower[i..i + wc.len()] == wc[..]
-                && (i == 0 || !is_w(chars[i - 1]))
-                && (i + wc.len() == chars.len() || !is_w(chars[i + wc.len()]))
+        };
+        for i in 0..=last_start {
+            // Bound: i + wc.len() is at most lower.len(), which chars.len() equals
+            let end = i.saturating_add(wc.len());
+            if lower.get(i..end) == Some(wc.as_slice())
+                && i.checked_sub(1)
+                    .and_then(|prev| chars.get(prev))
+                    .is_none_or(|&ch| !is_w(ch))
+                && chars.get(end).is_none_or(|&ch| !is_w(ch))
             {
                 return true;
             }
@@ -121,12 +123,13 @@ fn digit_runs(s: &str) -> Vec<f64> {
         if c.is_ascii_digit() {
             cur.push(c);
         } else if !cur.is_empty() {
-            out.push(cur.parse::<f64>().expect("digits"));
+            // A run of ASCII digits always parses; NaN is what Number gives text that does not
+            out.push(cur.parse::<f64>().unwrap_or(f64::NAN));
             cur.clear();
         }
     }
     if !cur.is_empty() {
-        out.push(cur.parse::<f64>().expect("digits"));
+        out.push(cur.parse::<f64>().unwrap_or(f64::NAN));
     }
     out
 }

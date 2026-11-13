@@ -1,12 +1,13 @@
 //! The model runs, matrix estimation and report tests on a built sample (`Sample.analyse`).
 
+use super::helpers::object_at;
 use super::hooks::SampleHooks;
 use super::{MAX_SIZE, Modules, PERIODS, STAGING_STEPS, SENS_TESTS, SampleError};
 use crate::assign::assign;
 use crate::calibrate::{Ctx, EvOpts, RunMeOpts, assess, keep_site_traces, match_sites, refresh_validation, run_me, site_traces, stored_res};
 use crate::edit::IdSource;
 use crate::graph::js_sort_by;
-use crate::jsnum::{Maybe, json_number, number_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{Maybe, json_number, number_to_js_string, usize_to_f64, value_to_number, value_truthy};
 use crate::project::Project;
 use crate::results::AssignOpts;
 use serde_json::{Map, Value, json};
@@ -35,12 +36,15 @@ pub struct AnalyseOut {
     pub size: f64,
 }
 
+/// The progress callback of [`assign_period`]: (iteration, gap, message).
+pub type AssignProgress<'a> = &'a mut dyn FnMut(f64, f64, &str);
+
 fn stop(cancel: Option<&dyn Fn() -> bool>) -> Result<(), SampleError> {
     if cancel.is_some_and(|c| c()) { Err(SampleError::Cancelled) } else { Ok(()) }
 }
 
-/// `Engine.assign` for one scenario and period, kept as the scenario's result; gives the result.
-pub fn assign_period(p: &mut Project, idx: usize, period: &str, progress: Option<&mut dyn FnMut(f64, f64, &str)>) -> crate::results::Res {
+/// `Engine.assign` for one scenario and period, kept as the scenario's result; gives the result (None when `idx` is not a scenario of the project).
+pub fn assign_period(p: &mut Project, idx: usize, period: &str, progress: Option<AssignProgress<'_>>) -> Option<crate::results::Res> {
     let opts = AssignOpts { period: Some(period.to_string()), ..Default::default() };
     let s = p.settings.clone();
     let mut adapt = progress;
@@ -49,14 +53,18 @@ pub fn assign_period(p: &mut Project, idx: usize, period: &str, progress: Option
             f(f64::from(it), gap, msg);
         }
     };
-    let res = assign(p, &p.scenarios[idx], &s, &opts, Some(&mut cb));
-    if !matches!(p.scenarios[idx].res, Maybe::Set(Value::Object(_))) {
-        p.scenarios[idx].res = Maybe::Set(Value::Object(Map::new()));
+    let res = assign(p, p.scenarios.get(idx)?, &s, &opts, Some(&mut cb));
+    let sc = p.scenarios.get_mut(idx)?;
+    if !matches!(sc.res, Maybe::Set(Value::Object(_))) {
+        sc.res = Maybe::Set(Value::Object(Map::new()));
     }
-    if let Maybe::Set(Value::Object(m)) = &mut p.scenarios[idx].res {
-        m.insert(period.to_string(), serde_json::to_value(&res).expect("a result serialises"));
+    // A result is plain data with text keys, so serialising it cannot fail
+    if let Maybe::Set(Value::Object(m)) = &mut sc.res
+        && let Ok(v) = serde_json::to_value(&res)
+    {
+        m.insert(period.to_string(), v);
     }
-    res
+    Some(res)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -64,10 +72,12 @@ fn engine_runs(p: &mut Project, scs: &[usize], status: &mut dyn FnMut(&str), can
     for &si in scs {
         for period in PERIODS {
             stop(cancel)?;
-            let name = p.scenarios[si].name.str_or("").to_string();
+            // si is a position found in p.scenarios, so the scenario is always there
+            let Some(sc) = p.scenarios.get(si) else { continue };
+            let name = sc.name.str_or("").to_string();
             status(&format!("{name} \u{b7} {period} peak\u{2026}"));
             let aborted = Cell::new(false);
-            let old = match &p.scenarios[si].res {
+            let old = match &sc.res {
                 Maybe::Set(Value::Object(r)) => r.get(period).cloned(),
                 _ => None,
             };
@@ -85,7 +95,7 @@ fn engine_runs(p: &mut Project, scs: &[usize], status: &mut dyn FnMut(&str), can
                 assign_period(p, si, period, Some(&mut prog))
             };
             if aborted.get() {
-                if let Maybe::Set(Value::Object(r)) = &mut p.scenarios[si].res {
+                if let Some(Maybe::Set(Value::Object(r))) = p.scenarios.get_mut(si).map(|s| &mut s.res) {
                     match old {
                         Some(v) => r.insert(period.to_string(), v),
                         None => r.remove(period),
@@ -93,11 +103,16 @@ fn engine_runs(p: &mut Project, scs: &[usize], status: &mut dyn FnMut(&str), can
                 }
                 return Err(SampleError::Cancelled);
             }
+            // the scenario was found above, so the run gave a result
+            let Some(res) = res else { continue };
             // the results listeners: the calibration feature keeps the traced site movements and re-records validation; the others are the host's
             if m.cal {
                 let s = p.settings.clone();
-                if let Some(t) = site_traces(&p.scenarios[si], Some(&res), &s) {
-                    keep_site_traces(&mut p.scenarios[si], &res, &t);
+                let traces = p.scenarios.get(si).and_then(|sc| site_traces(sc, Some(&res), &s));
+                if let Some(t) = traces
+                    && let Some(sc) = p.scenarios.get_mut(si)
+                {
+                    keep_site_traces(sc, &res, &t);
                 }
                 refresh_validation(p, &ids.now_iso());
             }
@@ -107,7 +122,142 @@ fn engine_runs(p: &mut Project, scs: &[usize], status: &mut dyn FnMut(&str), can
     Ok(())
 }
 
+// Matrix estimation on the calibration counts only: a first fit that makes no change is tried once more with smaller steps (XAMAX 1.5). The outcome of every
+// attempt is kept in P.sample.me.
+fn estimate_matrices(p: &mut Project, s0: &str, ids: &dyn IdSource, cancel: Option<&dyn Fn() -> bool>, status: &mut dyn FnMut(&str), notes: &mut Vec<String>) -> Result<(), SampleError> {
+    for period in PERIODS {
+        let mut tries: Vec<(f64, bool, String)> = Vec::new();
+        for xamax in [2.0, 1.5] {
+            stop(cancel)?;
+            status(&format!("Fitting the {period} peak to the calibration counts{}\u{2026}", if xamax < 2.0 { " (smaller steps)" } else { "" }));
+            let aborted = Cell::new(false);
+            let date = ids.now_iso();
+            // a cancel ends the estimation before it changes anything (the prototype's first progress call throws), so the project is put back
+            let snap = if cancel.is_some() { Some(p.clone()) } else { None };
+            let r = {
+                let mut prog = |_k: f64, _n: f64, msg: &str| {
+                    if cancel.is_some_and(|c| c()) {
+                        aborted.set(true);
+                        return;
+                    }
+                    status(&format!("Matrix estimation, {period} peak: {msg}"));
+                };
+                run_me(p, s0, &RunMeOpts { period: Some(period), xamax: Some(xamax), date: Some(&date) }, Some(&mut prog))
+            };
+            if aborted.get() {
+                if let Some(s) = snap {
+                    *p = s;
+                }
+                return Err(SampleError::Cancelled);
+            }
+            let (ok, note) = match r {
+                Ok(r) => (r.ok, r.note),
+                Err(e) => (false, format!("failed: {e}")),
+            };
+            let shown = if !note.is_empty() { note.clone() } else if ok { String::new() } else { "no calibration counts".to_string() };
+            tries.push((xamax, ok, shown.trim_end_matches('.').to_string()));
+            if ok || !note.to_lowercase().contains("no pass improved") {
+                break;
+            }
+        }
+        // the loop above always makes a try before it ends (a cancel returns instead)
+        let Some(last) = tries.last().cloned() else { continue };
+        let info = p.me.get().and_then(|me| me.info.get()).and_then(|i| i.get(period)).is_some_and(crate::jsnum::Maybe::is_set);
+        let entry = json!({
+                "at": ids.now_iso(), "ok": last.1,
+                "tries": tries.iter().map(|(x, ok, note)| json!({ "xamax": json_number(*x), "ok": ok, "note": note })).collect::<Vec<_>>(),
+                "info": info,
+            });
+        if let Some(me) = object_at(&mut p.extra, "sample").and_then(|sample| object_at(sample, "me")) {
+            me.insert(period.to_string(), entry);
+        }
+        notes.push(format!(
+            "{period} peak: {}.{}",
+            last.2,
+            if last.1 { String::new() } else { format!(" The {period} model uses the prior matrix{}.", if tries.len() > 1 { " (smaller steps were tried too)" } else { "" }) }
+        ));
+    }
+    Ok(())
+}
+
+// The validation line the report prints for each peak: independent (held-out) counts only, TMDG Category E
+fn validation_notes(p: &Project, i0: usize, notes: &mut Vec<String>) {
+    // i0 is a position found in p.scenarios, so the scenario is always there
+    let Some(sc) = p.scenarios.get(i0) else { return };
+    for period in PERIODS {
+        let line = {
+            let ctx = Ctx::new(p);
+            let res = stored_res(sc, period);
+            assess(&ctx, sc, period, res.as_ref(), &EvOpts { set: Some("valid".into()), area: Some("auto".into()), standard: Some("tmdg".into()), ..EvOpts::default() }).line
+        };
+        notes.push(format!("Validation ({period}, held-out counts): {line}"));
+    }
+}
+
+// The mitigation register and condition parameters, seeded from the modelled effects and the mitigation scenario
+fn seed_register(p: &mut Project, hooks: &mut dyn SampleHooks, notes: &mut Vec<String>) -> Result<(), SampleError> {
+    hooks.seed_mitigation(p)?;
+    let list = hooks.mitigation(p);
+    let eff: HashMap<String, Value> = hooks.effects(p)?.into_iter().filter_map(|e| e.get("id").map(|i| (crate::jsnum::value_to_js_string(i), e.clone()))).collect();
+    let size = |x: &Value| -> f64 {
+        let e = x.get("effect").and_then(|i| eff.get(&crate::jsnum::value_to_js_string(i)));
+        match e {
+            Some(e) => {
+                let pick = |k: &str| e.get(k).filter(|v| value_truthy(v));
+                pick("dos").or_else(|| pick("vc")).map_or(0.0, value_to_number)
+            }
+            None => 0.0,
+        }
+    };
+    let seed = |x: &Value| x.get("seed").filter(|s| value_truthy(s)).map(crate::jsnum::value_to_js_string).unwrap_or_default();
+    let measures: Vec<Value> = list.iter().filter(|x| seed(x).starts_with("diff:")).cloned().collect();
+    let mut open: Vec<Value> = list.iter().filter(|x| seed(x).starts_with("eff:")).cloned().collect();
+    js_sort_by(&mut open, |a, b| size(b) - size(a));
+    let others: Vec<Value> = list.iter().filter(|x| !(seed(x).starts_with("diff:") || seed(x).starts_with("eff:"))).cloned().collect();
+    let mut out = measures;
+    out.extend(open.iter().take(10).cloned());
+    out.extend(others);
+    hooks.set_mitigation(p, out);
+    if open.len() > 10 {
+        notes.push(format!("The mitigation register lists the ten largest of {} modelled effects not yet addressed; the Compliance+ tab lists them all.", open.len()));
+    }
+    hooks.seed_conditions(p)
+}
+
+// The report's staging and sensitivity tests; a failure is noted and a cancel stops the work
+fn report_tests(p: &mut Project, hooks: &mut dyn SampleHooks, cancel: Option<&dyn Fn() -> bool>, status: &mut dyn FnMut(&str), notes: &mut Vec<String>) -> Result<(), SampleError> {
+    stop(cancel)?;
+    status("Staging test: the proposal at 0, 50 and 100% build-out\u{2026}");
+    let r = hooks.staging(p, &STAGING_STEPS, &mut |k, n, t| {
+        stop(cancel)?;
+        status(&format!("Staging test: {t} ({k} of {n})"));
+        Ok(())
+    });
+    match r {
+        Err(SampleError::Cancelled) => return Err(SampleError::Cancelled),
+        Err(e) => notes.push(format!("The staging test did not run: {}", e.message())),
+        Ok(()) => {}
+    }
+    stop(cancel)?;
+    status("Sensitivity tests: trip rates +10% and background growth +50%\u{2026}");
+    let r = hooks.sensitivity(p, &SENS_TESTS, &mut |k, n, t| {
+        stop(cancel)?;
+        status(&format!("Sensitivity tests: {t} ({k} of {n})"));
+        Ok(())
+    });
+    match r {
+        Err(SampleError::Cancelled) => return Err(SampleError::Cancelled),
+        Err(e) => notes.push(format!("The sensitivity tests did not run: {}", e.message())),
+        Ok(()) => {}
+    }
+    Ok(())
+}
+
 /// `Sample.analyse(P, opts)`: the runs, hold-out, matrix estimation and report tests on a built project. Notes are added to `notes`.
+///
+/// # Errors
+/// [`SampleError::Cancelled`] when the work is cancelled; a [`SampleError::Failed`] when the project has no base-year (existing) scenario or a run
+/// fails. A failed matrix estimation, mitigation register or report test is noted and the work carries on.
 pub fn analyse(
     p: &mut Project,
     ids: &mut dyn IdSource,
@@ -120,9 +270,11 @@ pub fn analyse(
     let m = opts.modules;
     let t0 = ids.now_ms();
     let role = |p: &Project, r: &str| p.scenarios.iter().position(|s| s.role.is(r));
-    let Some(i0) = role(p, "existing") else { return Err(SampleError::msg("Cannot read properties of undefined (reading 'name')")) };
+    let no_base = || SampleError::msg("Cannot read properties of undefined (reading 'name')");
+    let Some(i0) = role(p, "existing") else { return Err(no_base()) };
     let rest: Vec<usize> = ["baseline", "proposal", "mitigation"].iter().filter_map(|r| role(p, r)).collect();
-    let s0 = p.scenarios[i0].id.clone();
+    // i0 is a position found in p.scenarios, so the scenario is always there
+    let Some(s0) = p.scenarios.get(i0).map(|s| s.id.clone()) else { return Err(no_base()) };
     let mut run = |p: &mut Project, scs: &[usize], status: &mut dyn FnMut(&str), hooks: &mut dyn SampleHooks, ids: &dyn IdSource| -> Result<(), SampleError> {
         match opts.runs.as_deref_mut() {
             Some(f) => f(p, scs, status),
@@ -131,59 +283,11 @@ pub fn analyse(
     };
     // base year first: matrix estimation needs it, and its factors then apply to every scenario
     run(p, &[i0], status, hooks, &*ids)?;
-    // Matrix estimation on the calibration counts only: a first fit that makes no change is tried once more with smaller steps (XAMAX 1.5). The outcome of every
-    // attempt is kept in P.sample.me.
-    super::helpers::object_at(&mut p.extra, "sample").insert("me".into(), Value::Object(Map::new()));
+    if let Some(sample) = object_at(&mut p.extra, "sample") {
+        sample.insert("me".into(), Value::Object(Map::new()));
+    }
     if m.cal && m.cb {
-        for period in PERIODS {
-            let mut tries: Vec<(f64, bool, String)> = Vec::new();
-            for xamax in [2.0, 1.5] {
-                stop(cancel)?;
-                status(&format!("Fitting the {period} peak to the calibration counts{}\u{2026}", if xamax < 2.0 { " (smaller steps)" } else { "" }));
-                let aborted = Cell::new(false);
-                let date = ids.now_iso();
-                // a cancel ends the estimation before it changes anything (the prototype's first progress call throws), so the project is put back
-                let snap = if cancel.is_some() { Some(p.clone()) } else { None };
-                let r = {
-                    let mut prog = |_k: f64, _n: f64, msg: &str| {
-                        if cancel.is_some_and(|c| c()) {
-                            aborted.set(true);
-                            return;
-                        }
-                        status(&format!("Matrix estimation, {period} peak: {msg}"));
-                    };
-                    run_me(p, &s0, &RunMeOpts { period: Some(period), xamax: Some(xamax), date: Some(&date) }, Some(&mut prog))
-                };
-                if aborted.get() {
-                    if let Some(s) = snap {
-                        *p = s;
-                    }
-                    return Err(SampleError::Cancelled);
-                }
-                let (ok, note) = match r {
-                    Ok(r) => (r.ok, r.note),
-                    Err(e) => (false, format!("failed: {e}")),
-                };
-                let shown = if !note.is_empty() { note.clone() } else if ok { String::new() } else { "no calibration counts".to_string() };
-                tries.push((xamax, ok, shown.trim_end_matches('.').to_string()));
-                if ok || !note.to_lowercase().contains("no pass improved") {
-                    break;
-                }
-            }
-            let last = tries.last().cloned().expect("a try");
-            let info = p.me.get().and_then(|me| me.info.get()).and_then(|i| i.get(period)).is_some_and(crate::jsnum::Maybe::is_set);
-            let entry = json!({
-                    "at": ids.now_iso(), "ok": last.1,
-                    "tries": tries.iter().map(|(x, ok, note)| json!({ "xamax": json_number(*x), "ok": ok, "note": note })).collect::<Vec<_>>(),
-                    "info": info,
-                });
-            super::helpers::object_at(super::helpers::object_at(&mut p.extra, "sample"), "me").insert(period.to_string(), entry);
-            notes.push(format!(
-                "{period} peak: {}.{}",
-                last.2,
-                if last.1 { String::new() } else { format!(" The {period} model uses the prior matrix{}.", if tries.len() > 1 { " (smaller steps were tried too)" } else { "" }) }
-            ));
-        }
+        estimate_matrices(p, &s0, &*ids, cancel, status, notes)?;
     }
     if m.cal {
         refresh_validation(p, &ids.now_iso());
@@ -192,83 +296,24 @@ pub fn analyse(
     if m.cal {
         match_sites(p, &s0);
         refresh_validation(p, &ids.now_iso());
-        // the validation line the report prints: independent (held-out) counts only, TMDG Category E
-        for period in PERIODS {
-            let line = {
-                let ctx = Ctx::new(p);
-                let sc = &p.scenarios[i0];
-                let res = stored_res(sc, period);
-                assess(&ctx, sc, period, res.as_ref(), &EvOpts { set: Some("valid".into()), area: Some("auto".into()), standard: Some("tmdg".into()), ..EvOpts::default() }).line
-            };
-            notes.push(format!("Validation ({period}, held-out counts): {line}"));
-        }
+        validation_notes(p, i0, notes);
     }
-    // the mitigation register and condition parameters, seeded from the modelled effects and the mitigation scenario
-    if m.cx {
-        let r = (|| -> Result<(), SampleError> {
-            hooks.seed_mitigation(p)?;
-            let list = hooks.mitigation(p);
-            let eff: HashMap<String, Value> = hooks.effects(p)?.into_iter().filter_map(|e| e.get("id").map(|i| (crate::jsnum::value_to_js_string(i), e.clone()))).collect();
-            let size = |x: &Value| -> f64 {
-                let e = x.get("effect").and_then(|i| eff.get(&crate::jsnum::value_to_js_string(i)));
-                match e {
-                    Some(e) => {
-                        let pick = |k: &str| e.get(k).filter(|v| value_truthy(v));
-                        pick("dos").or_else(|| pick("vc")).map_or(0.0, value_to_number)
-                    }
-                    None => 0.0,
-                }
-            };
-            let seed = |x: &Value| x.get("seed").filter(|s| value_truthy(s)).map(crate::jsnum::value_to_js_string).unwrap_or_default();
-            let measures: Vec<Value> = list.iter().filter(|x| seed(x).starts_with("diff:")).cloned().collect();
-            let mut open: Vec<Value> = list.iter().filter(|x| seed(x).starts_with("eff:")).cloned().collect();
-            js_sort_by(&mut open, |a, b| size(b) - size(a));
-            let others: Vec<Value> = list.iter().filter(|x| !(seed(x).starts_with("diff:") || seed(x).starts_with("eff:"))).cloned().collect();
-            let mut out = measures;
-            out.extend(open.iter().take(10).cloned());
-            out.extend(others);
-            hooks.set_mitigation(p, out);
-            if open.len() > 10 {
-                notes.push(format!("The mitigation register lists the ten largest of {} modelled effects not yet addressed; the Compliance+ tab lists them all.", open.len()));
-            }
-            hooks.seed_conditions(p)
-        })();
-        if let Err(e) = r {
-            notes.push(format!("The mitigation register could not be seeded: {}", e.message()));
-        }
+    if m.cx
+        && let Err(e) = seed_register(p, hooks, notes)
+    {
+        notes.push(format!("The mitigation register could not be seeded: {}", e.message()));
     }
     if opts.extras != Some(false) && m.rp {
-        stop(cancel)?;
-        status("Staging test: the proposal at 0, 50 and 100% build-out\u{2026}");
-        let r = hooks.staging(p, &STAGING_STEPS, &mut |k, n, t| {
-            stop(cancel)?;
-            status(&format!("Staging test: {t} ({k} of {n})"));
-            Ok(())
-        });
-        match r {
-            Err(SampleError::Cancelled) => return Err(SampleError::Cancelled),
-            Err(e) => notes.push(format!("The staging test did not run: {}", e.message())),
-            Ok(()) => {}
-        }
-        stop(cancel)?;
-        status("Sensitivity tests: trip rates +10% and background growth +50%\u{2026}");
-        let r = hooks.sensitivity(p, &SENS_TESTS, &mut |k, n, t| {
-            stop(cancel)?;
-            status(&format!("Sensitivity tests: {t} ({k} of {n})"));
-            Ok(())
-        });
-        match r {
-            Err(SampleError::Cancelled) => return Err(SampleError::Cancelled),
-            Err(e) => notes.push(format!("The sensitivity tests did not run: {}", e.message())),
-            Ok(()) => {}
-        }
+        report_tests(p, hooks, cancel, status, notes)?;
     }
     if m.co {
         hooks.record_outputs(p);
     }
     // the saved size (Store.serialise): the sample is built to stay under 3 MB; say so if a download made it larger
-    let size = p.serialise().encode_utf16().count() as f64;
-    super::helpers::object_at(&mut p.extra, "sample").insert("size".into(), json_number(size));
+    let size = usize_to_f64(p.serialise().encode_utf16().count());
+    if let Some(sample) = object_at(&mut p.extra, "sample") {
+        sample.insert("size".into(), json_number(size));
+    }
     if size > MAX_SIZE {
         notes.push(format!(
             "The saved project is {} MB, more than the sample's {} MB target. Save it to a file if browser storage refuses it.",

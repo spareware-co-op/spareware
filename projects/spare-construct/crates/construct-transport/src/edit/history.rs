@@ -105,10 +105,9 @@ impl History {
     }
     /// `Store.snapshot()`: saves the active scenario's editable parts before an edit and drops the redo steps.
     pub fn snapshot(&mut self, p: &Project) {
-        let Some(i) = active_index(p) else {
+        let Some(sc) = active_index(p).and_then(|i| p.scenarios.get(i)) else {
             return;
         };
-        let sc = &p.scenarios[i];
         self.undo.push(Step {
             sid: sc.id.clone(),
             data: editable(sc),
@@ -132,10 +131,9 @@ fn swap(from: &mut Vec<Step>, to: &mut Vec<Step>, p: &mut Project) -> bool {
     let Some(u) = from.pop() else {
         return false;
     };
-    let Some(i) = p.scenarios.iter().position(|s| s.id == u.sid) else {
+    let Some(sc) = p.scenarios.iter_mut().find(|s| s.id == u.sid) else {
         return false;
     };
-    let sc = &mut p.scenarios[i];
     to.push(Step {
         sid: sc.id.clone(),
         data: editable(sc),

@@ -7,11 +7,14 @@
 //! (`!!x`, `+x`, `String(x)`). Objects list whole-number keys (array indices) first in
 //! ascending order, as a JavaScript object does. The project upgrade ([`super::migrate`]) works on it.
 
-use crate::jsnum::{number_to_js_string, value_to_js_string, value_to_number};
+use crate::jsnum::{
+    i64_to_f64, json_u64_to_f64, number_to_js_string, value_to_js_string, value_to_number,
+};
 use crate::project::OrderedMap;
 use serde::de::{Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::Value;
 use std::fmt;
+use std::fmt::Write as _;
 
 /// A JSON value with ordered objects.
 #[derive(Clone, Debug, PartialEq)]
@@ -58,6 +61,10 @@ impl JsonValue {
         o
     }
     /// Reads JSON text (`JSON.parse`).
+    ///
+    /// # Errors
+    ///
+    /// The parser's message when the text is not valid JSON.
     pub fn parse(text: &str) -> Result<JsonValue, String> {
         serde_json::from_str(text).map_err(|e| e.to_string())
     }
@@ -147,20 +154,26 @@ impl JsonValue {
             m.insert(key, value);
             return;
         }
-        // A new array-index key: rebuild with it in sorted place among the leading index keys
-        let n: u64 = key.parse().expect("array index");
+        // A new array-index key: rebuild with it in sorted place among the leading index keys.
+        // is_array_index checked the key is at most ten digits, so it always parses as a u64.
+        let Ok(n) = key.parse::<u64>() else {
+            m.insert(key, value);
+            return;
+        };
         let old = std::mem::take(m);
-        let mut placed = false;
+        // Some until the new key is placed
         let mut value = Some(value);
         for (k, v) in old {
-            if !placed && (!is_array_index(&k) || k.parse::<u64>().expect("array index") > n) {
-                m.insert(key.clone(), value.take().expect("value"));
-                placed = true;
+            if value.is_some()
+                && (!is_array_index(&k) || k.parse::<u64>().is_ok_and(|kn| kn > n))
+                && let Some(val) = value.take()
+            {
+                m.insert(key.clone(), val);
             }
             m.insert(k, v);
         }
-        if !placed {
-            m.insert(key, value.take().expect("value"));
+        if let Some(val) = value {
+            m.insert(key, val);
         }
     }
     /// `delete obj[key]`: returns the value.
@@ -270,8 +283,8 @@ impl JsonValue {
                     if i > 0 {
                         out.push(',');
                     }
-                    newline(out, indent, depth + 1);
-                    v.write(out, indent, depth + 1);
+                    newline(out, indent, depth.saturating_add(1));
+                    v.write(out, indent, depth.saturating_add(1));
                 }
                 newline(out, indent, depth);
                 out.push(']');
@@ -286,13 +299,13 @@ impl JsonValue {
                     if i > 0 {
                         out.push(',');
                     }
-                    newline(out, indent, depth + 1);
+                    newline(out, indent, depth.saturating_add(1));
                     quote(out, k);
                     out.push(':');
                     if indent.is_some() {
                         out.push(' ');
                     }
-                    v.write(out, indent, depth + 1);
+                    v.write(out, indent, depth.saturating_add(1));
                 }
                 newline(out, indent, depth);
                 out.push('}');
@@ -304,7 +317,8 @@ impl JsonValue {
 fn newline(out: &mut String, indent: Option<usize>, depth: usize) {
     if let Some(n) = indent {
         out.push('\n');
-        for _ in 0..n * depth {
+        // Bound: an indent of at most 10 times the nesting depth of a value in memory
+        for _ in 0..n.saturating_mul(depth) {
             out.push(' ');
         }
     }
@@ -322,7 +336,10 @@ fn quote(out: &mut String, s: &str) {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c if (c as u32) < 0x20 => {
+                // Writing to a String cannot fail
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
             c => out.push(c),
         }
     }
@@ -362,10 +379,10 @@ impl<'de> Deserialize<'de> for JsonValue {
                 Ok(JsonValue::Bool(b))
             }
             fn visit_i64<E>(self, x: i64) -> Result<JsonValue, E> {
-                Ok(JsonValue::Number(x as f64))
+                Ok(JsonValue::Number(i64_to_f64(x)))
             }
             fn visit_u64<E>(self, x: u64) -> Result<JsonValue, E> {
-                Ok(JsonValue::Number(x as f64))
+                Ok(JsonValue::Number(json_u64_to_f64(x)))
             }
             fn visit_f64<E>(self, x: f64) -> Result<JsonValue, E> {
                 Ok(JsonValue::Number(x))

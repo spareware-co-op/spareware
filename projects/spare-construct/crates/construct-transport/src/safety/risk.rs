@@ -12,13 +12,14 @@ use crate::calibrate::stored_res;
 use crate::datahub::{matches, Data};
 use crate::edit::net::project;
 use crate::graph::js_sort_by;
-use crate::jsnum::number_to_js_string;
+use crate::jsnum::{number_to_js_string, usize_to_f64};
 use crate::project::{OrderedMap, Project, Scenario, Settings};
 use crate::results::Res;
 use crate::util::dist;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::hash::BuildHasher;
 
 /// A risk band (`riskBand`): which of five bands a value falls in, with its label, colour and where the cut-offs come from.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -58,11 +59,14 @@ pub fn risk_band(value: Option<f64>, kind: &str) -> Band {
     let b = bands_of(kind);
     match value {
         Some(v) if v.is_finite() => {
-            let mut i = 0;
-            while i < b.cuts.len() && v >= b.cuts[i] {
-                i += 1;
+            // The cut-offs passed, counted from the lowest: at most cuts.len() (4), so always a band of the five
+            let i = b.cuts.iter().take_while(|&&cut| v >= cut).count();
+            Band {
+                band: Some(BAND_NAMES.get(i).copied().unwrap_or("high")),
+                label: BAND_LABELS.get(i).copied().unwrap_or("High").to_string(),
+                colour: BAND_COLOURS.get(i).copied().unwrap_or("#e03131"),
+                basis: b.basis.to_string(),
             }
-            Band { band: Some(BAND_NAMES[i]), label: BAND_LABELS[i].to_string(), colour: BAND_COLOURS[i], basis: b.basis.to_string() }
         }
         _ => Band { band: None, label: "No data".to_string(), colour: NO_COLOUR, basis: b.basis.to_string() },
     }
@@ -233,7 +237,7 @@ pub struct SafetySummary {
 /// Two-way link: a two-way count wins, then both directions summed, then one direction doubled. One-way carriageway:
 /// counts in its own direction win; a count with no direction is a two-way total, so it is halved where the road's other
 /// carriageway runs alongside. Gives the volume and where it came from, by link id.
-pub fn link_aadt(sc: &Scenario, s: &Settings, data: &Data, pair: &HashMap<String, String>) -> HashMap<String, (f64, &'static str)> {
+pub fn link_aadt<H: BuildHasher>(sc: &Scenario, s: &Settings, data: &Data, pair: &HashMap<String, String, H>) -> HashMap<String, (f64, &'static str)> {
     #[derive(Default)]
     struct Entry {
         both: Vec<f64>,
@@ -244,7 +248,9 @@ pub fn link_aadt(sc: &Scenario, s: &Settings, data: &Data, pair: &HashMap<String
     let mut by: HashMap<String, Entry> = HashMap::new();
     let nzta_on = data.use_of("nzta").truthy();
     for c in &data.counts {
-        if c.off.truthy() || !(c.adt.num() > 0.0) || !(data.in_use(c) || (c.virtual_.truthy() && nzta_on)) {
+        // !(adt > 0): NaN is left out too
+        let adt = c.adt.num();
+        if c.off.truthy() || adt <= 0.0 || adt.is_nan() || !(data.in_use(c) || (c.virtual_.truthy() && nzta_on)) {
             continue;
         }
         let Some(mt) = m.get(&c.id) else { continue };
@@ -256,7 +262,7 @@ pub fn link_aadt(sc: &Scenario, s: &Settings, data: &Data, pair: &HashMap<String
         };
         list.push(c.adt.num());
     }
-    let mean = |a: &[f64]| a.iter().fold(0.0, |s, v| s + v) / a.len() as f64;
+    let mean = |a: &[f64]| a.iter().fold(0.0, |s, v| s + v) / usize_to_f64(a.len());
     let mut out = HashMap::new();
     for (id, e) in &by {
         let Some(lk) = sc.links.get(id) else { continue };
@@ -346,7 +352,8 @@ impl<'a> SafetyModel<'a> {
             Some(r) => vec![r.clone()],
             None => ["AM", "PM"].iter().filter_map(|p| stored_res(self.sc, p)).collect(),
         };
-        let forecast = if !rs.is_empty() && !rs.iter().any(current) { Some(rs[0].year) } else { None };
+        // An empty rs has no current result and no first one, which gives None as the emptiness test did
+        let forecast = if rs.iter().any(current) { None } else { rs.first().map(|r| r.year) };
         rs.retain(current);
         if rs.is_empty()
             && let Some(b) = self.base
@@ -372,7 +379,7 @@ impl<'a> SafetyModel<'a> {
                     let bv = r.arcs.get(&format!("{id}:ba")).map_or(0.0, |x| x.v);
                     s += av + bv;
                 }
-                vol = Some(s / rs.len() as f64 * ptd);
+                vol = Some(s / usize_to_f64(rs.len()) * ptd);
                 src = Some("model".to_string());
             } else if vol.is_none()
                 && let Some(f) = forecast
@@ -396,9 +403,9 @@ impl<'a> SafetyModel<'a> {
                     years: yrs,
                     aadt: vol,
                     aadt_src: src,
-                    per_km_yr: if ky > 0.0 { Some(t.injury as f64 / ky) } else { None },
-                    dsi_per_km_yr: if ky > 0.0 { Some(t.dsi as f64 / ky) } else { None },
-                    personal: if vkm > 0.0 { Some(t.dsi as f64 / vkm * 1e8) } else { None },
+                    per_km_yr: if ky > 0.0 { Some(usize_to_f64(t.injury) / ky) } else { None },
+                    dsi_per_km_yr: if ky > 0.0 { Some(usize_to_f64(t.dsi) / ky) } else { None },
+                    personal: if vkm > 0.0 { Some(usize_to_f64(t.dsi) / vkm * 1e8) } else { None },
                     short: it.km < SHORT_KM,
                     low_volume: !(vol.is_some() && v >= LOW_AADT),
                 },
@@ -420,8 +427,8 @@ impl<'a> SafetyModel<'a> {
                     nodes: j.nodes.clone(),
                     interchange: j.interchange,
                     years: yrs,
-                    dsi_per_yr: yrs.filter(|y| *y != 0.0).map(|y| j.t.dsi as f64 / y),
-                    inj_per_yr: yrs.filter(|y| *y != 0.0).map(|y| j.t.injury as f64 / y),
+                    dsi_per_yr: yrs.filter(|y| *y != 0.0).map(|y| usize_to_f64(j.t.dsi) / y),
+                    inj_per_yr: yrs.filter(|y| *y != 0.0).map(|y| usize_to_f64(j.t.injury) / y),
                     name: j.name.clone(),
                 },
             );
@@ -431,7 +438,8 @@ impl<'a> SafetyModel<'a> {
 
     /// `junctionOf(sc, nodeId)`: the junction (the `node_risk` key) a node belongs to, or None.
     pub fn junction_of(&self, node_id: &str) -> Option<&str> {
-        self.assignment.j_of_node.get(node_id).map(|&j| self.assignment.jn[j].id.as_str())
+        // j_of_node holds positions in jn
+        self.assignment.j_of_node.get(node_id).and_then(|&j| self.assignment.jn.get(j)).map(|j| j.id.as_str())
     }
 
     /// `safetySummary(sc, res)`: study-area totals by severity and year, vulnerable road users, the top ten links (500 m or longer) and junctions by DSI then injury crashes, and interchange merges apart.
@@ -439,42 +447,7 @@ impl<'a> SafetyModel<'a> {
         let a = &self.assignment;
         let lr = self.link_risk(res);
         let nr = self.node_risk();
-        let mut total = Tally::default();
-        let mut years: Vec<(Option<f64>, Tally)> = Vec::new();
-        let mut vul = Vulnerable { p: Tally::default(), c: Tally::default(), m: Tally::default(), any: Tally::default() };
-        for c in &self.crashes {
-            total.add(c);
-            let y = if c.year > 0.0 { Some(c.year) } else { None };
-            if let Some(e) = years.iter_mut().find(|(k, _)| *k == y) { e.1.add(c) } else {
-                let mut t = Tally::default();
-                t.add(c);
-                years.push((y, t));
-            }
-            let f = &c.flags;
-            if f.contains('p') {
-                vul.p.add(c);
-            }
-            if f.contains('c') {
-                vul.c.add(c);
-            }
-            if f.contains('m') {
-                vul.m.add(c);
-            }
-            if !f.is_empty() {
-                vul.any.add(c);
-            }
-        }
-        let rank = |x: &Tally, y: &Tally| -> f64 {
-            let d = y.dsi as f64 - x.dsi as f64;
-            if d != 0.0 {
-                return d;
-            }
-            let d = y.injury as f64 - x.injury as f64;
-            if d != 0.0 {
-                return d;
-            }
-            y.crashes as f64 - x.crashes as f64
-        };
+        let (total, years, vul) = tallies(&self.crashes);
         let mut top_links: Vec<TopLink> = lr
             .iter()
             .filter(|(_, r)| r.t.crashes > 0 && !r.short)
@@ -540,7 +513,8 @@ impl<'a> SafetyModel<'a> {
             vulnerable: vul,
             on_links,
             at_nodes,
-            unassigned: self.crashes.len() - on_links,
+            // on_links counts entries of link_of, which has one per crash
+            unassigned: self.crashes.len().saturating_sub(on_links),
             top_links,
             top_nodes,
             interchanges,
@@ -548,6 +522,50 @@ impl<'a> SafetyModel<'a> {
             basis,
         }
     }
+}
+
+// The study-area tallies of the summary: all crashes, crashes by year in the order years first appear (None for a
+// crash with no year), and crashes involving vulnerable road users
+fn tallies(crashes: &[Crash]) -> (Tally, Vec<(Option<f64>, Tally)>, Vulnerable) {
+    let mut total = Tally::default();
+    let mut years: Vec<(Option<f64>, Tally)> = Vec::new();
+    let mut vul = Vulnerable { p: Tally::default(), c: Tally::default(), m: Tally::default(), any: Tally::default() };
+    for c in crashes {
+        total.add(c);
+        let y = if c.year > 0.0 { Some(c.year) } else { None };
+        if let Some(e) = years.iter_mut().find(|(k, _)| *k == y) { e.1.add(c) } else {
+            let mut t = Tally::default();
+            t.add(c);
+            years.push((y, t));
+        }
+        let flags = &c.flags;
+        if flags.contains('p') {
+            vul.p.add(c);
+        }
+        if flags.contains('c') {
+            vul.c.add(c);
+        }
+        if flags.contains('m') {
+            vul.m.add(c);
+        }
+        if !flags.is_empty() {
+            vul.any.add(c);
+        }
+    }
+    (total, years, vul)
+}
+
+// The summary's order: most DSI crashes first, then most injury crashes, then most crashes
+fn rank(x: &Tally, y: &Tally) -> f64 {
+    let d = usize_to_f64(y.dsi) - usize_to_f64(x.dsi);
+    if d != 0.0 {
+        return d;
+    }
+    let d = usize_to_f64(y.injury) - usize_to_f64(x.injury);
+    if d != 0.0 {
+        return d;
+    }
+    usize_to_f64(y.crashes) - usize_to_f64(x.crashes)
 }
 
 /// `linkBand(r, kind)`: the band of one link's rate for display: no data without a risk, no band for a short link (or a quiet one for personal risk).
@@ -611,12 +629,13 @@ pub fn crashes_near(p: &Project, sc: &Scenario, sel: Near, r: f64, long: bool) -
         return None;
     }
     let mut out = CrashesNear { f: 0, s: 0, m: 0, n: 0, list: Vec::new() };
+    // Bound: these count crashes held in memory, far below usize::MAX
     let mut count = |c: &Crash| {
         match c.severity.as_str() {
-            "F" => out.f += 1,
-            "S" => out.s += 1,
-            "M" => out.m += 1,
-            "N" => out.n += 1,
+            "F" => out.f = out.f.saturating_add(1),
+            "S" => out.s = out.s.saturating_add(1),
+            "M" => out.m = out.m.saturating_add(1),
+            "N" => out.n = out.n.saturating_add(1),
             _ => {}
         }
         out.list.push(c.tuple.clone());

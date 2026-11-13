@@ -83,7 +83,7 @@ impl SampleHooks for Fakes {
             return Err(SampleError::msg(m));
         }
         status("Reading TMS");
-        for c in counts_of(p).iter_mut() {
+        for c in counts_of(p).unwrap().iter_mut() {
             if c.get("src").and_then(Value::as_str) == Some("nzta") {
                 c["tms"] = json!({ "n": 1 });
             }
