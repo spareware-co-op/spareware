@@ -38,6 +38,7 @@ pub mod arrange;
 pub mod carrier;
 pub mod commit;
 pub mod contact;
+pub mod edit;
 pub mod entity;
 pub mod index;
 pub mod fit;

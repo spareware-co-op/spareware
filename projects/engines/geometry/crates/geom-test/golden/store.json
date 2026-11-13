@@ -368,6 +368,12 @@
               "kind": "corpus",
               "piece": "G199",
               "why": "one zone-insert benchmark added (entity/zone_insert)"
+            },
+            {
+              "sha256": "7208d271d98e833acd7a8ad9e5974395dd546d19ef3cfd6135d8df0e6c18bebf",
+              "kind": "corpus",
+              "piece": "G206",
+              "why": "two edit benchmarks added (entity/place, entity/length)"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"

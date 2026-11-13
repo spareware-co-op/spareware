@@ -2769,6 +2769,8 @@ fn entity_typical_batches_all_succeed() {
         k::arrange_curves,
         &m::arrange_curves(Typical),
     );
+    all_ok("place", k::place, &m::place(Typical));
+    all_ok("length", k::length, &m::length(Typical));
 }
 
 /// Every typical batch of the batch runner's benchmarks (decision 32.46) runs every item and

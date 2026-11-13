@@ -3386,6 +3386,20 @@ pub mod entity {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("entity/place/typical"))]
+    fn place(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("entity/length/typical"))]
+    fn length(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("entity/under/typical"))]
     fn under(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
@@ -3394,7 +3408,7 @@ pub mod entity {
 
     library_benchmark_group!(
         name = entity;
-        benchmarks = polyline, arrange, arrange_curves, zone_insert, under
+        benchmarks = polyline, arrange, arrange_curves, zone_insert, place, length, under
     );
 }
 

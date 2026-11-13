@@ -2278,6 +2278,37 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 Ok((live.len() as u64) * 1_000_003 + (sources as u64) * 1_009 + found)
             },
         )),
+        ("entity", "place") => fold(inputs::entity::place(class).into_iter().map(
+            |((vertices, bulges), k)| -> Result<u64, geom_num::NumError> {
+                use geom_2d::edit::{Similarity, place_polyline};
+                let o = geom_num::grid::P2::new(0, 0)?;
+                let map = match k {
+                    0 => Similarity::quarter_turns(0, o),
+                    1 => Similarity::quarter_turns(1, o),
+                    2 => Similarity::quarter_turns(2, o),
+                    3 => Similarity::quarter_turns(3, o),
+                    4 => Similarity::mirror_in_row(7),
+                    5 => Similarity::mirror_in_column(-5),
+                    6 => Similarity::scaling(3, o),
+                    _ => Ok(Similarity::translation(11, -4)),
+                }
+                .map_err(|_| geom_num::NumError::Degenerate)?;
+                let poly = geom_2d::entity::Polyline::new(vertices, bulges, None, false)
+                    .map_err(|_| geom_num::NumError::Degenerate)?;
+                let placed =
+                    place_polyline(&poly, &map).map_err(|_| geom_num::NumError::Degenerate)?;
+                Ok(placed.vertices()[0].x.get().unsigned_abs() + placed.bulges().len() as u64)
+            },
+        )),
+        ("entity", "length") => fold(inputs::entity::length(class).into_iter().map(
+            |(vertices, bulges)| -> Result<u64, geom_num::NumError> {
+                let poly = geom_2d::entity::Polyline::new(vertices, bulges, None, false)
+                    .map_err(|_| geom_num::NumError::Degenerate)?;
+                geom_2d::edit::polyline_length(&poly)
+                    .map(|i| i.hi().to_bits())
+                    .map_err(|_| geom_num::NumError::Degenerate)
+            },
+        )),
         ("entity", "under") => fold(inputs::entity::under(class).iter().map(
             |(shape, class)| -> Result<u64, geom_num::NumError> {
                 let change = shape

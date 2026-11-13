@@ -41,6 +41,7 @@
 //! [`arrange`] and [`arrange_curves`], `geom-2d`'s arrangement of segments (G196a), and of
 //! segments, arcs and ellipses (G196b), has a pairwise oracle's vertices, keeps Euler's formula and
 //! does not depend on the input order, and
+//! [`edit`], `geom-2d`'s placements and lengths keep their definitions and certified bounds (G206), and
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
@@ -261,6 +262,7 @@ pub mod cbor;
 pub mod cdt;
 pub mod contract;
 pub mod curves;
+pub mod edit;
 pub mod entity;
 pub mod encoder;
 pub mod euler;
