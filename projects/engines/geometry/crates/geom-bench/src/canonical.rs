@@ -1304,6 +1304,12 @@ impl Canonical for geom_intersect::march::Traced {
     }
 }
 
+impl Canonical for geom_intersect::known::Known {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_intersect::LevelCurves {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
