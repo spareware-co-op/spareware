@@ -7726,6 +7726,40 @@
           "module": "geom_mesh::exact",
           "name": "MeshError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why a mesh could not be modelled.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/model/mod.rs",
+          "kinds": [
+            {
+              "doc": "Triangle `face` names a vertex that is not in the list.",
+              "name": "Index",
+              "shape": "struct"
+            },
+            {
+              "doc": "Triangle `face` repeats a corner or has no area.",
+              "name": "Flat",
+              "shape": "struct"
+            },
+            {
+              "doc": "Triangle `face` joins an edge that already has two triangles or runs it the way another does, or a vertex of it has triangles that are not one fan.",
+              "name": "NotSurface",
+              "shape": "struct"
+            },
+            {
+              "doc": "More vertices or triangles than a `u32` numbers.",
+              "name": "Full",
+              "shape": "unit"
+            },
+            {
+              "doc": "The envelope refused: a plane over budget, the tree, or the budget.",
+              "name": "Envelope",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_mesh::model",
+          "name": "ModelError",
+          "non_exhaustive": false
         }
       ],
       "family": [
@@ -7859,7 +7893,7 @@
           "target": "lib"
         },
         {
-          "cost": "26 planes a triangle at most, each one or two greatest common divisors. A containment test is a tree query and up to 26 signs for each triangle whose box holds the point.",
+          "cost": "17 planes a triangle at most (both ways along the axes and the triangle's normal, the one way that bounds a face for each edge crossed with an axis), each one or two greatest common divisors. A containment test is a tree query and up to 17 signs for each triangle whose box holds the point. A triangle test against k bodies that meet it, l of whose facets cross it, makes at most 3 + 3l + l²/2 points and up to 17k signs for each, most decided by intervals.",
           "does": "[`TriangleEnvelope`] is a convex polyhedron around one triangle, its corners on the grid, inscribed in the triangle's ε-offset. [`Envelope`] holds one for each triangle of a surface, behind a box tree. A point inside any of them is within ε of the surface.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
@@ -7867,7 +7901,8 @@
             "**Inside proves within ε.** Each polyhedron is the triangle swept by a cube of half side h, the largest whole number with 3h² ≤ ε². Its corners are a triangle's vertices moved by (±h, ±h, ±h), each within ε of the triangle, and the ε-offset of a triangle is convex, so the whole polyhedron is inside it. A point farther than ε is never inside.",
             "**Within h proves inside.** A point within h of the triangle is inside, since a ball of radius h fits in the cube. So the envelope is never more than a factor √3 narrower than ε.",
             "**Exact, within 384 bits.** Every test is the sign of a plane at a point: a grid point in `i128`, a line-plane or three-plane point in [`Plane::side_of_lpi`] and [`Plane::side_of_tpi`], chapter 6.2's deepest tests. The width is absolute, in grid steps, never a fraction of a model's size.",
-            "**Refused, never rounded.** A plane over 6.2's budget is an error. That takes an envelope reaching past the frame on a triangle whose normal is near its largest."
+            "**Refused, never rounded.** A plane over 6.2's budget is an error. That takes an envelope reaching past the frame on a triangle whose normal is near its largest.",
+            "**A whole triangle, proven.** [`covers`] and [`Envelope::covers`] answer whether a triangle lies inside a union of these bodies, and [`covers_within`] whether the part of it inside one more body does, never by sampling. `true` is proven by the argument on [`covers_within`]; `false` may also be a triangle that only touches the union's boundary from inside, so an operation that waits for `true` is never wrong, only sometimes cautious."
           ],
           "job": "The polyhedral envelope: a body that proves \"within ε of these triangles\" exactly (19.8).",
           "method": {
@@ -7875,7 +7910,7 @@
               "https://doi.org/10.1145/3386569.3392426",
               "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
             ],
-            "text": "the polyhedral envelope of Wang et al. (2020), <https://doi.org/10.1145/3386569.3392426>, as 19.8 asks, its corners on the grid (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`). The paper bounds a triangle by a prism with caps; here the same inscribed body is a Minkowski sum, the triangle and a cube, whose facets have closed-form normals: the cube's, the triangle's, and each edge crossed with each axis, both ways. A body with normal m reaches m · v + h·|m|₁ at its furthest, so each facet's plane is known without a hull."
+            "text": "the polyhedral envelope of Wang et al. (2020), <https://doi.org/10.1145/3386569.3392426>, as 19.8 asks, its corners on the grid (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`). The paper bounds a triangle by a prism with caps; here the same inscribed body is a Minkowski sum, the triangle and a cube, whose facets have closed-form normals: the cube's, the triangle's, and each edge crossed with each axis, on the side away from the third corner (a facet of a Minkowski sum is a sum of faces, here an edge and a cube edge, so on the other side there is none). A body with normal m reaches m · v + h·|m|₁ at its furthest, so each facet's plane is known without a hull. The triangle test asks the paper's points: the triangle's corners, where its edges cross the bodies' facets, and where two facets cross it, each a grid point, a line-plane point or a three-plane point, as 19.8 lists."
           },
           "path": "geom_mesh::envelope",
           "provenance": [],
@@ -8016,6 +8051,103 @@
           "path": "geom_mesh::exact::raw",
           "provenance": [],
           "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each popped candidate costs a collapse's checks (the module [`crate::model`]); the queue holds at most one candidate per edge and change, O(log n) each.",
+          "does": "[`decimate`] gives each vertex the sum of the squared-distance quadrics of its triangles' planes (and of planes across open boundaries, weighted), and collapses the edge whose ends meet at the point of least summed squared distance first, until the mesh has at most the target number of triangles or no edge can collapse. Each collapse is a local operation of the module [`crate::model`]: applied, checked against both envelopes, kept or rolled back.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/model/decimate.rs",
+          "guarantees": [
+            "**Certified(ε).** The result is within ε of the input both ways, by the checks of [`crate::model`]; the quadrics only choose the order and the place.",
+            "**On the grid.** A collapse's point is the quadric's best point committed to the grid, or an end or the middle of the edge, also on the grid; the candidates are tried cheapest first.",
+            "**Deterministic.** The queue pops the cheapest candidate, ties broken by the edge's ends, so the result never depends on the heap's order."
+          ],
+          "job": "Decimation to a bound: edge collapses ranked by quadric error, each kept only inside the two-way envelope (19.6).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/258734.258849",
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "Garland and Heckbert 1997, \"Surface simplification using quadric error metrics\", <https://doi.org/10.1145/258734.258849>, as chapter 19.6 names it (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`)."
+          },
+          "path": "geom_mesh::model::decimate",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/c248d5c69205f16cd0e492337c74c8ec7ad053bb/crates/solidcore-tess/src/simplify.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "the quadrics, the candidate queue with its stale stamps and its order, the boundary planes and the choice of point are solidcore's `Quadric` and `Collapser`; a unit normal's quadric is formed as n nᵀ / (n · n), so no square root is taken; points are grid points, the best point committed to the grid and tried with the ends and the middle in order of cost where solidcore takes only the cheapest; its fold test (a normal turning by more than about 80°) and its shared-neighbour test are replaced by the exact checks and the link condition of the module `model`, and every collapse must pass the two-way envelope; its corner welding and its levels with their measured error are dropped, since the input is already one vertex per point and the result is certified rather than measured.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "each operation costs its envelope tests: one [`crate::envelope::covers`] per new triangle against the input bodies near it, and one [`covers_within`] per input triangle and removed body that may meet, against the result triangles whose bodies' boxes meet that body's, found by a scan of every result triangle's box, so linear in the mesh for each. Each triangle's body is made once, when the triangle is. Memory is linear in the mesh.",
+          "does": "[`decimate`] collapses edges by quadric error until a triangle count is reached, and [`remesh`] splits, collapses, flips and smooths toward a target edge length. Both edit a triangle mesh on grid points one local operation at a time. Each operation is applied, checked and rolled back if a check fails, the pattern of wildmeshing-toolkit that 19.6 names. A [`Modelled`] mesh is what remains.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/model/mod.rs",
+          "guarantees": [
+            "**Certified(ε), both ways.** Every point of the result lies within ε of the input, and every point of the input within ε of the result. An operation is kept only when [`crate::envelope::covers`] proves each new triangle inside the input's envelope ([`Envelope`]), and [`covers_within`] proves the part of each input triangle inside each removed triangle's body inside the envelope of the result's triangles. Initially each triangle covers itself; an operation takes coverage away only inside the bodies it removed, and those parts are rechecked; so both inclusions hold after every operation, by induction. Inside an envelope proves within ε (the module [`crate::envelope`]), so the two-way (Hausdorff) distance is at most ε: [`Modelled::exactness`].",
+            "**Exact decisions.** Every check is exact: integer orientation and normal signs, and the envelope's plane signs. Floating point only ranks candidates and proposes positions, which are committed to the grid before anything is checked, so no rounding decides anything.",
+            "**The surface stays a surface.** The input must be an oriented surface, closed or with boundary: every edge in one or two triangles, run opposite ways, and the triangles at each vertex one fan. Every operation keeps that (the link condition and its boundary rules), never makes a triangle without area or a second triangle on the same corners, and never turns a triangle's normal by a right angle or more from the triangle it replaces. A self-crossing result is not ruled out: two sheets of the input closer than 2ε may cross.",
+            "**Deterministic.** Every list is ordered by vertex and triangle numbers; candidates tie by their ends; no hash table is iterated.",
+            "**Bounded.** Every operation is charged to the meter, so a budget ends a run with an error, never a hang."
+          ],
+          "job": "Mesh modelling on triangle meshes: decimation and remeshing inside a two-way envelope (19.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "chapter 19.6's table, \"Decimation to a bound\" and \"Isotropic remeshing\" (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`): local operations with invariant checks and rollback, as wildmeshing-toolkit builds them, under the exact envelope test of 19.8 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`). A collapse keeps the link condition of Dey, Edelsbrunner, Guha and Nekhayev (1999), with the boundary rule of the PMP library's remeshing (the module [`remesh`])."
+          },
+          "path": "geom_mesh::model",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each pass is linear in the edges or vertices, times each attempted operation's checks (the module [`crate::model`]); splits and collapses repeat at most 10 passes each, as PMP's.",
+          "does": "[`remesh`] runs PMP's uniform remeshing loop: split edges longer than 4/3 of the target, collapse edges shorter than 4/5 of it, flip edges to bring valences toward 6 (4 on the boundary), and move each vertex toward its triangles' area-weighted centroid in its tangent plane. Each split, collapse, flip and move is a local operation of the module [`crate::model`]: applied, checked against both envelopes, kept or rolled back.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/model/remesh.rs",
+          "guarantees": [
+            "**Certified(ε).** The result is within ε of the input both ways, by the checks of [`crate::model`]; nothing is projected back onto the input, since the envelope check keeps every step near it.",
+            "**Exact lengths.** \"Too long\" and \"too short\" compare squared lengths of grid vectors with the target's in integers: 9|e|² > 16L² and 25|e|² < 16L².",
+            "**On the grid.** A split's new vertex is the edge's middle, each coordinate rounded down; a move's point is committed to the grid before it is checked.",
+            "**Deterministic.** Every pass walks the edges or vertices in number order."
+          ],
+          "job": "Isotropic remeshing: split, collapse, flip and smooth toward a target edge length, each step kept only inside the two-way envelope (19.6).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/1057432.1057457",
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "Botsch and Kobbelt 2004, \"A remeshing approach to multiresolution modeling\", <https://doi.org/10.1145/1057432.1057457>, as chapter 19.6 names it (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`)."
+          },
+          "path": "geom_mesh::model::remesh",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/pmp-library/pmp-library/blob/215975ca1efafab97477b18187a4a23b87529036/src/pmp/algorithms/remeshing.cpp",
+              "method_note": null,
+              "name": "PMP",
+              "notice": [
+                "Copyright 2011-2020 the Polygon Mesh Processing Library developers."
+              ],
+              "pinned": true,
+              "purpose": "`uniform_remeshing`, `split_long_edges`, `collapse_short_edges`, `flip_edges`, `tangential_smoothing` and `weighted_centroid` on a triangle list instead of a half-edge mesh, with no feature edges or locked vertices; lengths compared exactly in integers; every edit applied as a local operation and kept only when the two-way envelope and the checks of the module `model` pass, in place of projecting onto the input with its kd-tree; smoothing moves one vertex at a time in number order, each move checked, where PMP moves all at once, and takes the vertex normal as the sum of its triangles' area vectors, with no least-squares area minimisation first; `remove_caps` is not ported.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MIT",
           "target": "lib"
         }
       ],
@@ -17726,6 +17858,28 @@
       "take": "port",
       "used_by": [
         "projects/engines/geometry/crates/geom-surface/src/frame_rule.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/pmp-library/pmp-library/blob/215975ca1efafab97477b18187a4a23b87529036/src/pmp/algorithms/remeshing.cpp",
+      "method_note": null,
+      "name": "PMP",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-mesh/src/model/remesh.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/c248d5c69205f16cd0e492337c74c8ec7ad053bb/crates/solidcore-tess/src/simplify.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-mesh/src/model/decimate.rs"
       ]
     },
     {

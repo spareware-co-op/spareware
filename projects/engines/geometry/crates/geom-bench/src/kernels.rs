@@ -2041,7 +2041,7 @@ pub mod mesh {
         });
     }
 
-    /// `geom_mesh::model::remesh` on each sheet, toward edges of 48 steps within 4, one round,
+    /// `geom_mesh::model::remesh` on each sheet, toward edges of 64 steps within 4, one round,
     /// serially, under an unlimited budget.
     #[inline(never)]
     pub fn remesh(
@@ -2052,7 +2052,7 @@ pub mod mesh {
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
             let settings = Remesh {
                 epsilon: 4,
-                length: 48,
+                length: 64,
                 iterations: 1,
             };
             geom_mesh::model::remesh(points, triangles, settings, &Exec::serial(), &mut meter)

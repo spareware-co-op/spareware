@@ -2069,7 +2069,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             let settings = geom_mesh::model::Remesh {
                 epsilon: 4,
-                length: 48,
+                length: 64,
                 iterations: 1,
             };
             geom_mesh::model::remesh(p, t, settings, &geom_run::Exec::serial(), &mut meter)

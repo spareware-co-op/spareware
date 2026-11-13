@@ -382,21 +382,22 @@ pub fn envelope(class: Class) -> Vec<([P3; 3], P3)> {
     })
 }
 
-/// A small bent sheet from `rng`: 2 × 2 cells of 64 steps, two triangles a cell, at heights of 0
-/// to 3 steps.
-fn bent_sheet(r: &mut SplitMix64) -> Option<(Vec<P3>, Vec<[u32; 3]>)> {
-    let mut points = Vec::with_capacity(9);
-    for y in 0..3_i64 {
-        for x in 0..3_i64 {
+/// A small bent sheet from `rng`: `cells` × `cells` cells of 64 steps, two triangles a cell, at
+/// heights of 0 to 3 steps.
+fn bent_sheet(r: &mut SplitMix64, cells: u32) -> Option<(Vec<P3>, Vec<[u32; 3]>)> {
+    let side = cells.saturating_add(1);
+    let mut points = Vec::new();
+    for y in 0..i64::from(side) {
+        for x in 0..i64::from(side) {
             let z = i64::try_from(r.next_u64() >> 62).ok()?;
             points.push(P3::new(x.saturating_mul(64), y.saturating_mul(64), z).ok()?);
         }
     }
-    let mut triangles = Vec::with_capacity(8);
-    for y in 0..2_u32 {
-        for x in 0..2_u32 {
-            let a = y.saturating_mul(3).saturating_add(x);
-            let (b, d) = (a.saturating_add(1), a.saturating_add(3));
+    let mut triangles = Vec::new();
+    for y in 0..cells {
+        for x in 0..cells {
+            let a = y.saturating_mul(side).saturating_add(x);
+            let (b, d) = (a.saturating_add(1), a.saturating_add(side));
             let c = d.saturating_add(1);
             triangles.push([a, b, c]);
             triangles.push([a, c, d]);
@@ -405,22 +406,22 @@ fn bent_sheet(r: &mut SplitMix64) -> Option<(Vec<P3>, Vec<[u32; 3]>)> {
     Some((points, triangles))
 }
 
-/// Small bent sheets for `geom_mesh::model::decimate`.
+/// Small bent sheets of 2 × 2 cells for `geom_mesh::model::decimate`.
 #[must_use]
 pub fn decimate(class: Class) -> Vec<(Vec<P3>, Vec<[u32; 3]>)> {
     if class != Class::Typical {
         return Vec::new();
     }
     let mut g = rng("mesh::decimate", class);
-    batch_of(|_| bent_sheet(&mut g))
+    batch_of(|_| bent_sheet(&mut g, 2))
 }
 
-/// Small bent sheets for `geom_mesh::model::remesh`.
+/// Bent cells, two triangles each, for `geom_mesh::model::remesh`.
 #[must_use]
 pub fn remesh(class: Class) -> Vec<(Vec<P3>, Vec<[u32; 3]>)> {
     if class != Class::Typical {
         return Vec::new();
     }
     let mut g = rng("mesh::remesh", class);
-    batch_of(|_| bent_sheet(&mut g))
+    batch_of(|_| bent_sheet(&mut g, 1))
 }
