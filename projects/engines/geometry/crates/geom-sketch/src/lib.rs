@@ -53,19 +53,19 @@
 #![forbid(unsafe_code)]
 
 pub mod author;
+pub mod cluster;
 pub mod commit;
 pub mod diagnose;
-pub mod cluster;
 pub mod equation;
-pub mod flow;
 pub mod fit;
+pub mod flow;
 pub mod length;
 mod linear;
 pub mod model;
 pub mod motions;
 pub mod place;
 pub mod plane;
-pub mod solve;
 pub mod smooth;
+pub mod solve;
 pub mod structure;
 pub mod text;

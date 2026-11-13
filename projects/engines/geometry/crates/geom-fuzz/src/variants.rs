@@ -40,7 +40,11 @@ use geom_bench::avnaim;
 use geom_gen::predicate_lang::{Axis, Expr, InputKind, Op, parse};
 use geom_gen::predicates::PREDICATES;
 use geom_num::generated::{
-    axis_gap, carrier_order, carrier_side, circle_gap, circle_line, circle_side, cross_norm, ellipse_line, ellipse_side, incircle, insphere, limbs, line_cone, line_cone_lead, line_cylinder, line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side, rational_cmp, rational_orient, round_grid, round_line, round_rational, ssi_side, ssi_weight, tpi_side, tpi_weight,
+    axis_gap, carrier_order, carrier_side, circle_gap, circle_line, circle_side, cross_norm,
+    ellipse_line, ellipse_side, incircle, insphere, limbs, line_cone, line_cone_lead,
+    line_cylinder, line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
+    rational_cmp, rational_orient, round_grid, round_line, round_rational, ssi_side, ssi_weight,
+    tpi_side, tpi_weight,
 };
 use geom_num::grid::{P2, P3};
 use geom_num::wide::Wide;
