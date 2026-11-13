@@ -146,6 +146,14 @@ jobs:
       - name: Every golden in release as shipped, without overflow checks
         if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: cargo run --locked -p geom-test --bin golden -- run --release
+      # The shipped-checker leg (chapters 8.3 and 28.4; decision 32.48). Every other test build
+      # turns the full checker on (geom-test's default feature `full-checker`), the golden steps
+      # above included. This one builds geom-test alone without it, so operations check their
+      # results with the cheap groups, as a shipped build does, and must answer as the full-checker
+      # legs do: the replay corpus's digest, and tests/shipped.rs's sweep of transforms.
+      - name: The replay corpus and the transform sweep with the checker as shipped
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
       - name: geom-num's every test vector in release as shipped
         if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: cargo test -p geom-num --release --locked --no-fail-fast
@@ -399,6 +407,10 @@ jobs:
       - name: Every golden on wasm32 in release as shipped, without overflow checks
         if: ${{ !cancelled() }}
         run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1 --release
+      # The shipped-checker leg on wasm32, the build a browser runs (the job `test` says what it is).
+      - name: The replay corpus and the transform sweep on wasm32 with the checker as shipped
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism --target wasm32-wasip1
       - name: Every golden on wasm32 in debug
         if: ${{ !cancelled() }}
         run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1
