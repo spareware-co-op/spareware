@@ -94,6 +94,8 @@ hex = "=0.4.3"
 # `judge` feature below.
 # The entity model of phase 6 (piece G194), for the same count benchmarks.
 geom-2d = { path = "../geom-2d" }
+# The sketch solver's spline rules of phase 6 (piece G220), for the same count benchmarks.
+geom-sketch = { path = "../geom-sketch" }
 
 [target.'cfg(any(unix, windows))'.dependencies]
 # Gungraun's summary model, the typed schema of the `summary.json` files the gate's runs write, which

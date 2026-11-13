@@ -142,7 +142,7 @@ This replaces section 5's three boxes (Numbers, Core, Operations) with thirteen 
 | `geom-make` (new, from 30.5) | 9 | The Make and Transform families of 10.2: primitives, transforms and patterns. They cannot live in `geom-topo`, because every operation runs the checker before it returns (principle 4) and `geom-check` sits above `geom-topo` | base, math, curve, surface, topo, check | 10.2, 30.5 |
 | `geom-blend` | 10 | Fillets, chamfers, vertex blends | base, bool, intersect, surface, **topo, check** | 13.10; OQ-13.3 |
 | `geom-offset` | 10 | Offsets, shells, thickening, drafts, face edits, defeaturing | base, bool, intersect, surface, **skeleton, topo** | 13.11, 13.13, 24.8; OQ-13.3 |
-| `geom-sketch` | 10 | The constraint solver, in 2D and 3D | base, math, curve, **linalg** | 15.6, 15.15 |
+| `geom-sketch` | 10 | The constraint solver, in 2D and 3D | base, math, curve, **nurbs, linalg** | 15.6, 15.15 |
 | `geom-profile` (new) | 10 | Carrying geometry between sketches and the model: references in, regions out, selection by name, profile checks and names | base, sketch, 2d, topo, name, check, intersect | 15.14; OQ-15.3 |
 | `geom-terrain` | 10 | TINs from points and breaklines, contours, volumes, terrain solids, grading, flow and sight, `OnSurface` references | base, math, 2d, mesh, topo, **poly, bool, skeleton, curve, surface, name, bvh** | 17.3 to 17.7, 17.11, 17.12; OQ-17.3 |
 | `geom-align` | 10 | Alignments, stationing, the corridor model (ranges, stations, names), `Station` references. Spiral kinds are `geom-curve`'s and corridor solids are `geom-sweep`'s | base, math, curve, sweep, **name** | 17.8, 17.9, 17.12; OQ-17.3 |

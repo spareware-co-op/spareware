@@ -34,7 +34,7 @@ const ITERATIONS: usize = 20_000;
 const SEEDED_CASES: u32 = 20_000;
 
 /// The words the grammar is made of, and some that are nearly its words.
-const WORDS: [&str; 44] = [
+const WORDS: [&str; 54] = [
     "entity",
     "constraint",
     "point",
@@ -43,6 +43,16 @@ const WORDS: [&str; 44] = [
     "arc",
     "ellipse",
     "spline",
+    "spline-join",
+    "spline-tangent-line",
+    "spline-against",
+    "spline-length",
+    "spline-through",
+    "start",
+    "finish",
+    "g1",
+    "g2",
+    "g3",
     "parameter",
     "scalar",
     "placement",

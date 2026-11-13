@@ -2615,6 +2615,20 @@ fn linalg_typical_batches_all_succeed() {
     all_ok("svd_jacobi", k::svd_jacobi, &m::svd_jacobi(Typical));
 }
 
+/// Every typical batch of `geom-sketch`'s spline benchmarks (decision 32.44) reads, measures and
+/// assembles every sketch.
+#[test]
+fn spline_typical_batches_all_succeed() {
+    use geom_bench::inputs::spline as m;
+    use geom_bench::kernels::spline as k;
+    all_ok("length", k::lengths, &m::lengths(Typical));
+    all_ok(
+        "rational_rules",
+        k::rational_rules,
+        &m::rational_rules(Typical),
+    );
+}
+
 /// Every typical batch of `geom-make`'s benchmarks (decision 32.46) builds or moves every body.
 #[test]
 fn make_typical_batches_all_succeed() {

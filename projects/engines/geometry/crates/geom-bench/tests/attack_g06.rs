@@ -2047,6 +2047,22 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
             )
         })),
+        ("spline", "length") => fold(inputs::spline::lengths(class).iter().map(|text| {
+            let sketch = geom_sketch::text::parse(text)?;
+            let l =
+                geom_sketch::length::spline_length(&sketch, geom_sketch::model::ItemId::new(2, 0))?;
+            Ok::<_, geom_sketch::model::SketchError>([l.value, l.error])
+        })),
+        ("spline", "rational_rules") => {
+            fold(inputs::spline::rational_rules(class).iter().map(|text| {
+                let sketch = geom_sketch::text::parse(text)?;
+                let mut a = geom_sketch::equation::Assembly::new(&sketch)?;
+                a.evaluate(&sketch)?;
+                let sum: f64 = a.residuals().iter().sum();
+                let sizes: f64 = a.residuals().iter().map(|r| r.abs()).sum();
+                Ok::<_, geom_sketch::model::SketchError>([sum, sizes])
+            }))
+        }
         ("nurbs", "bernstein_bound") => fold(
             inputs::nurbs::bernstein_bound(class)
                 .into_iter()

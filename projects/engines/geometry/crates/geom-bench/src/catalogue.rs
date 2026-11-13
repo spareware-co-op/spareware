@@ -526,6 +526,10 @@ pub static OPS: &[Op] = &[
     Op { group: "surface", name: "offset_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::offset_point(c), kernels::surface::offset_point) },
     Op { group: "surface", name: "torus_second_bound", measures: "geom_surface::ParamSurface::second_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_second_bound(c), kernels::surface::torus_second_bound) },
     Op { group: "surface", name: "torus_normal_bound", measures: "geom_surface::ParamSurface::normal_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_normal_bound(c), kernels::surface::torus_normal_bound) },
+    // geom-sketch's spline rules (piece G220; decision 32.44): a spline's arc length with its bound,
+    // and the assembly of rational spline rules.
+    Op { group: "spline", name: "length", measures: "geom_sketch::length::spline_length", classes: T, prepare: |c| bind(inputs::spline::lengths(c), kernels::spline::lengths) },
+    Op { group: "spline", name: "rational_rules", measures: "geom_sketch::Assembly::new", classes: T, prepare: |c| bind(inputs::spline::rational_rules(c), kernels::spline::rational_rules) },
     // geom-format's hot paths (piece G105; decision 32.46): a cache key, a memo store's lookup and
     // a body's next version.
     Op { group: "format", name: "cache_key", measures: "geom_format::CacheKey::new", classes: T, prepare: |c| bind(inputs::format::cache_key(c), kernels::format::cache_key) },
@@ -719,7 +723,7 @@ pub fn full_scenario(op: &str) -> Option<Prepared> {
 }
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 53] = [
+pub const GROUPS: [&str; 54] = [
     "predicate",
     "sign",
     "wide",
@@ -756,6 +760,7 @@ pub const GROUPS: [&str; 53] = [
     "brent",
     "quadrature",
     "linalg",
+    "spline",
     "helper",
     "make",
     "scenario",

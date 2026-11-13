@@ -3312,6 +3312,30 @@ pub mod bvh {
     );
 }
 
+/// geom-sketch's spline rules (piece G220; decision 32.44).
+pub mod spline {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("spline/length/typical"))]
+    fn length(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("spline/rational_rules/typical"))]
+    fn rational_rules(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = spline;
+        benchmarks = length, rational_rules
+    );
+}
+
 /// The attribute step's hot path (piece G90; decision 32.46).
 pub mod attributes {
     use super::*;

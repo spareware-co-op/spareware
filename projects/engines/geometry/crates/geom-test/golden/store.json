@@ -374,6 +374,12 @@
               "kind": "corpus",
               "piece": "G206",
               "why": "two edit benchmarks added (entity/place, entity/length)"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G220",
+              "why": "2 new count benchmarks on geom-sketch's spline rules (decision 32.44): the arc length of a cubic spline with its proven error bound, and the assembly of rational spline rules (a G2 join, a G3 end against a line, a pinned point and a stated length); no existing digest moved"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"
@@ -919,6 +925,26 @@
             "function": "sparse_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "e68d26596c3a333daec2af7e3acd4bccf86ea191b961f61a060777d96d8c3a8e"
+        },
+        {
+          "id": "geom-sketch/splines",
+          "what": "Spline joins of geom-sketch (piece G220): 64 pairs of cubic splines with a join of every order or a spline end along a line, each through sketch v1 and back, then assembled and measured, every byte of the text, every residual and Jacobian entry's bits and the measured smoothness.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "spline_determinism",
+            "function": "spline_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "d5829819091d2271145f5b094a3e80cb5119d327c9e6daf73b21f2661dcfcdb3"
+        },
+        {
+          "id": "geom-sketch/splines-more",
+          "what": "The rest of the spline rules of geom-sketch (piece G220): 48 drawings of two rational quadratic splines, a line and an arc with a join, a spline against a line or an arc, a length or a pinned point, each through sketch v1 and back, assembled and measured, every byte of the text, every residual and Jacobian entry's bits and both splines' arc length with its error bound; and 16 fit-point splines through seven points, with their control points, knots, parameters and certified error.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "spline_more_determinism",
+            "function": "spline_more_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "2973f22a918646a7c3cae627a992a239db8656edf9be15b27e6023a0c65b82db"
         }
       ]
     }

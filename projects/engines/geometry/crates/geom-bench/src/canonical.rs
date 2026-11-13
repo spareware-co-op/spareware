@@ -902,6 +902,23 @@ impl<T: Canonical> Canonical for Result<T, geom_linalg::LinalgError> {
 
 // `geom-topo`'s types (decision 32.46's count benchmarks for piece G80).
 
+impl<T: Canonical> Canonical for Result<T, geom_sketch::model::SketchError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-bvh`'s types (decision 32.44's count benchmarks for pieces G54 and G55).
+
 impl Canonical for geom_topo::Builder {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
