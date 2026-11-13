@@ -376,7 +376,8 @@ pub struct VarSpec {
 
 fn cats(pfx: &str, topic: &str, base: i32, list: &[(&str, i32, &str)]) -> Vec<VarSpec> {
     list.iter()
-        .map(|(k, o, c)| VarSpec { key: format!("{pfx}.{k}"), code: format!("VAR_2_{}", base + o), alias: format!("{topic} ({c})") })
+        // Bound: the VAR numbers are a few hundred, far inside i32
+        .map(|(k, o, c)| VarSpec { key: format!("{pfx}.{k}"), code: format!("VAR_2_{}", base.saturating_add(*o)), alias: format!("{topic} ({c})") })
         .collect()
 }
 
@@ -393,7 +394,7 @@ pub fn census_vars() -> Vec<(&'static str, Vec<VarSpec>)> {
     ind2.extend(cats("e", "Main means of travel to education, by education address", 195, &EDU_CATS));
     let mut hh = vec![var("hh", "VAR_4_3", "Count of households in occupied private dwellings (Total)")];
     for (i, c) in ["No motor vehicle", "One motor vehicle", "Two motor vehicles", "Three motor vehicles", "Four motor vehicles", "Five or more motor vehicles"].iter().enumerate() {
-        hh.push(VarSpec { key: format!("veh.{i}"), code: format!("VAR_4_{}", 136 + i), alias: format!("Number of motor vehicles ({c})") });
+        hh.push(VarSpec { key: format!("veh.{i}"), code: format!("VAR_4_{}", i.saturating_add(136)), alias: format!("Number of motor vehicles ({c})") });
     }
     hh.push(var("veh.stated", "VAR_4_144", "Number of motor vehicles (Total stated)"));
     vec![
@@ -436,7 +437,10 @@ pub fn constants() -> Value {
         layers.insert(k.into(), json!(census_layer(k)));
     }
     let mut census = source_json(&CENSUS);
-    census["layers"] = Value::Object(layers);
+    // source_json always gives an object
+    if let Some(obj) = census.as_object_mut() {
+        obj.insert("layers".into(), Value::Object(layers));
+    }
     let yields: serde_json::Map<String, Value> = YIELDS
         .iter()
         .map(|r| {

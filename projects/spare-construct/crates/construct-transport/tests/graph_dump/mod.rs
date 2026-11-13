@@ -90,7 +90,7 @@ fn lanes_value(l: &[Lane]) -> Value {
 /// A movement entry as gen-graph.mjs entOut writes it.
 pub fn ent_value(e: &MoveEntry) -> Value {
     json!({
-        "i": e.i, "major": e.major, "inB": n(e.in_b), "leg": e.leg, "gl": n(e.gl), "sLane": n(e.s_lane), "stop": e.stop,
+        "i": e.i, "major": e.major(), "inB": n(e.in_b), "leg": e.leg, "gl": n(e.gl), "sLane": n(e.s_lane), "stop": e.stop(),
         "gaps": e.gaps.clone().unwrap_or(Value::Null), "lanes": lanes_value(&e.lanes), "median": e.median, "slip": e.slip,
         "lmSrc": e.lm_src, "thru": n(e.thru),
         "mvT": e.mv_t.as_ref().map_or(Value::Null, |m| Value::Array(m.iter().map(|(t, mv, leg)| json!([t, mv, leg])).collect())),

@@ -69,7 +69,7 @@ pub fn resolve(fields: &[Value], spec: &[VarSpec], year: f64) -> Vec<Resolved> {
 fn is_code_field(name: &str, prefix: &str) -> bool {
     let Some(rest) = name.strip_prefix(prefix) else { return false };
     let b = rest.as_bytes();
-    if b.len() < 4 || !b[..4].iter().all(u8::is_ascii_digit) {
+    if !b.get(..4).is_some_and(|d| d.iter().all(u8::is_ascii_digit)) {
         return false;
     }
     let Some(rest) = rest[4..].strip_prefix("_V") else { return false };
@@ -113,7 +113,10 @@ fn set_p(o: &mut Map<String, Value>, k: &str, v: Option<f64>) {
             if !e.is_object() {
                 *e = Value::Object(Map::new());
             }
-            e.as_object_mut().expect("an object").insert(p1.to_string(), value);
+            // e is an object now, so this always inserts
+            if let Value::Object(obj) = e {
+                obj.insert(p1.to_string(), value);
+            }
         }
     }
 }
@@ -212,10 +215,12 @@ pub fn parse_census(layers: &CensusLayers) -> CensusData {
                 continue;
             }
             let i = *index.entry(code.clone()).or_insert_with(|| {
+                let at = by_code.len();
                 by_code.push((code.clone(), Sa1 { code: code.clone(), poly: Poly { rings: Vec::new(), bb: [f64::NAN; 4] }, v: Map::new() }));
-                by_code.len() - 1
+                at
             });
-            let o = &mut by_code[i].1;
+            // index holds positions in by_code, so this is always found
+            let Some((_, o)) = by_code.get_mut(i) else { continue };
             let rg = rings_of(f.get("geometry"));
             if !rg.is_empty() && o.poly.rings.is_empty() {
                 o.poly = Poly::new(rg);
@@ -365,28 +370,27 @@ fn find_ci(hay: &str, needle: &str) -> Option<usize> {
     if n.is_empty() || h.len() < n.len() {
         return None;
     }
-    (0..=h.len() - n.len()).find(|&i| h[i..i + n.len()].eq_ignore_ascii_case(n))
+    // The windows start at 0, 1, ..., h.len() - n.len(), in order; n is not empty
+    h.windows(n.len()).position(|w| w.eq_ignore_ascii_case(n))
 }
 
 // /\(Proposed opening date:\s*(\d{4})-(\d\d)-(\d\d)\)/i: the year of the first match
+// Bound (here and in strip_proposed): positions are byte offsets in the name, far below usize::MAX
 fn proposed_year(name: &str) -> Option<f64> {
     const LIT: &str = "(proposed opening date:";
-    let mut from = 0;
+    let mut from = 0usize;
     while let Some(i) = find_ci(&name[from..], LIT) {
-        let at = from + i + LIT.len();
+        let at = from.saturating_add(i).saturating_add(LIT.len());
         let rest = name[at..].trim_start_matches(crate::jsnum::is_js_space);
-        let b = rest.as_bytes();
-        let ok = b.len() >= 11
-            && b[..4].iter().all(u8::is_ascii_digit)
-            && b[4] == b'-'
-            && b[5..7].iter().all(u8::is_ascii_digit)
-            && b[7] == b'-'
-            && b[8..10].iter().all(u8::is_ascii_digit)
-            && b[10] == b')';
+        let ok = matches!(
+            rest.as_bytes(),
+            [y0, y1, y2, y3, b'-', m0, m1, b'-', d0, d1, b')', ..]
+                if [y0, y1, y2, y3, m0, m1, d0, d1].iter().all(|c| c.is_ascii_digit())
+        );
         if ok {
-            return rest[..4].parse().ok();
+            return rest.get(..4).and_then(|y| y.parse().ok());
         }
-        from = from + i + 1;
+        from = from.saturating_add(i).saturating_add(1);
     }
     None
 }
@@ -394,16 +398,16 @@ fn proposed_year(name: &str) -> Option<f64> {
 // name.replace(/\s*\(Proposed opening date:[^)]*\)/i, '')
 fn strip_proposed(name: &str) -> String {
     const LIT: &str = "(proposed opening date:";
-    let mut from = 0;
+    let mut from = 0usize;
     while let Some(i) = find_ci(&name[from..], LIT) {
-        let start = from + i;
-        let after = start + LIT.len();
+        let start = from.saturating_add(i);
+        let after = start.saturating_add(LIT.len());
         if let Some(close) = name[after..].find(')') {
-            let end = after + close + 1;
+            let end = after.saturating_add(close).saturating_add(1);
             let head = name[..start].trim_end_matches(crate::jsnum::is_js_space);
             return format!("{head}{}", &name[end..]);
         }
-        from = start + 1;
+        from = start.saturating_add(1);
     }
     name.to_string()
 }

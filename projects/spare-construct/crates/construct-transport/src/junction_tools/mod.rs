@@ -33,7 +33,7 @@ pub use text::*;
 
 use crate::edit::json::JsonValue;
 use crate::graph::{js_sort_by, js_str_lt};
-use crate::jsnum::{to_precision, value_to_js_string};
+use crate::jsnum::{to_precision, usize_to_f64, value_to_js_string};
 use crate::project::{Project, Scenario, Settings};
 use crate::results::{Approach, NodeRes, Res, Results, SiteResult, export_ready};
 use crate::standards::STANDARDS as ENGINE_STANDARDS;
@@ -41,6 +41,12 @@ use crate::turns::{Arm, arms, code_arms, junction_name, site_rows};
 use crate::util::LatLng;
 use serde_json::Value;
 use std::collections::HashSet;
+use std::sync::LazyLock;
+
+/// The scenario [`Tools::sc`] gives for an index past the project's scenarios.
+static NO_SCENARIO: LazyLock<Scenario> = LazyLock::new(|| crate::project::new_scenario("", ""));
+/// The results [`Tools::sc`] gives for an index past the stored results.
+static NO_RESULTS: LazyLock<Results> = LazyLock::new(Results::new);
 
 /* ---------------- the junctions feature's data ---------------- */
 
@@ -145,9 +151,8 @@ pub fn sidra_site_type(control: &str) -> Option<f64> {
     match control {
         "signals" => Some(0.0),
         "roundabout" => Some(1.0),
-        "priority" => Some(2.0),
+        "priority" | "none" => Some(2.0),
         "stop" => Some(3.0),
-        "none" => Some(2.0),
         _ => None,
     }
 }
@@ -267,9 +272,11 @@ impl<'a> Tools<'a> {
     /// Scenario i with its results.
     #[must_use]
     pub fn sc(&self, i: usize) -> Sc<'a> {
+        // Callers pass the index of a scenario in the project; one out of range (which the prototype would crash on) reads as
+        // an empty scenario with no results.
         Sc {
-            sc: &self.project.scenarios[i],
-            res: &self.results[i],
+            sc: self.project.scenarios.get(i).unwrap_or_else(|| LazyLock::force(&NO_SCENARIO)),
+            res: self.results.get(i).unwrap_or_else(|| LazyLock::force(&NO_RESULTS)),
             idx: i,
         }
     }
@@ -366,10 +373,10 @@ pub(crate) fn norm(b: f64) -> f64 {
 /// `hash(s)`: FNV-1a over the UTF-16 code units, as base 36 text.
 #[must_use]
 pub fn hash(s: &str) -> String {
-    let mut h: u32 = 0x811c9dc5;
+    let mut h: u32 = 0x811c_9dc5;
     for u in s.encode_utf16() {
         h ^= u32::from(u);
-        h = h.wrapping_mul(0x01000193);
+        h = h.wrapping_mul(0x0100_0193);
     }
     to_base36(h)
 }
@@ -378,14 +385,13 @@ fn to_base36(mut n: u32) -> String {
     if n == 0 {
         return "0".to_string();
     }
-    let mut d = Vec::new();
+    let mut d: Vec<char> = Vec::new();
     while n > 0 {
-        let r = (n % 36) as u8;
-        d.push(if r < 10 { b'0' + r } else { b'a' + r - 10 });
+        // n % 36 is below 36, so from_digit always gives a digit or a lowercase letter
+        d.extend(char::from_digit(n % 36, 36));
         n /= 36;
     }
-    d.reverse();
-    String::from_utf8(d).expect("ASCII")
+    d.iter().rev().collect()
 }
 
 /// `ncText(res)`: the convergence marker for exports forced past the gate, or an empty text.
@@ -516,7 +522,7 @@ pub(crate) fn centre(sc: &Scenario, ids: &[String]) -> Option<LatLng> {
     if ns.is_empty() {
         return None;
     }
-    let n = ns.len() as f64;
+    let n = usize_to_f64(ns.len());
     let lat = ns.iter().fold(0.0, |s, x| s + x.lat.num()) / n;
     let lng = ns.iter().fold(0.0, |s, x| s + x.lng.num()) / n;
     Some([lat, lng])
@@ -528,6 +534,32 @@ fn node_at_site_no(sc: &Scenario, id: &str) -> Value {
         .and_then(|n| n.extra.get("atSiteNo"))
         .cloned()
         .unwrap_or(Value::Null)
+}
+
+/// The uncontrolled junctions with turning traffic that `entries(sc, res, { all: true })` adds.
+fn push_uncontrolled<'a>(sc: &Scenario, res: &'a Res, in_site: &HashSet<&str>, out: &mut Vec<Entry<'a>>) {
+    for id in res.turns.keys() {
+        if res.nodes.contains_key(id) || in_site.contains(id) || !sc.nodes.contains_key(id) {
+            continue;
+        }
+        let Some(n) = sc.nodes.get(id) else {
+            continue;
+        };
+        out.push(Entry {
+            id: id.to_string(),
+            is_site: false,
+            name: junction_name(sc, id, None),
+            nr: None,
+            node: id.to_string(),
+            nodes: vec![id.to_string()],
+            kind: match n.control.as_str() {
+                Some(c) if !c.is_empty() => c.to_string(),
+                _ => "none".to_string(),
+            },
+            at_site_no: Value::Null,
+            ll: Some(n.ll()),
+        });
+    }
 }
 
 /// `entries(sc, res, opts)`: the junctions in a result, sorted by name then id. `all` adds uncontrolled junctions with turning traffic.
@@ -602,28 +634,7 @@ pub fn entries<'a>(sc: &Scenario, res: &'a Res, all: bool) -> Vec<Entry<'a>> {
         });
     }
     if all {
-        for id in res.turns.keys() {
-            if res.nodes.contains_key(id) || in_site.contains(id) || !sc.nodes.contains_key(id) {
-                continue;
-            }
-            let Some(n) = sc.nodes.get(id) else {
-                continue;
-            };
-            out.push(Entry {
-                id: id.to_string(),
-                is_site: false,
-                name: junction_name(sc, id, None),
-                nr: None,
-                node: id.to_string(),
-                nodes: vec![id.to_string()],
-                kind: match n.control.as_str() {
-                    Some(c) if !c.is_empty() => c.to_string(),
-                    _ => "none".to_string(),
-                },
-                at_site_no: Value::Null,
-                ll: Some(n.ll()),
-            });
-        }
+        push_uncontrolled(sc, res, &in_site, &mut out);
     }
     js_sort_by(&mut out, |p, q| {
         let c = crate::edit::collate::locale_compare_f64(&p.name, &q.name);

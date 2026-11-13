@@ -9,12 +9,13 @@ use super::{
     per_name, sidra_site_type, xid, LABEL,
 };
 use crate::edit::json::JsonValue;
-use crate::jsnum::{math_max, math_min, number_to_js_string, value_to_number};
+use crate::jsnum::{f64_to_usize, math_max, math_min, number_to_js_string, usize_to_f64, value_to_number};
 use crate::project::Scenario;
 use crate::results::Res;
 use crate::turns::{LEG_CODES, LEG_NAMES, leg_label, sidra_export, SidraOpts as TurnsSidraOpts};
 use crate::util::{esc, r7};
 use serde_json::Value;
+use std::fmt::Write as _;
 
 /// The columns of the SIDRA volumes CSV.
 pub const VOL_HEAD: [&str; 16] = [
@@ -54,9 +55,8 @@ pub const COUNT_HEAD: [&str; 11] = [
 fn window_start(period: &str) -> &'static str {
     match period {
         "AM" => "07:00",
-        "IP" => "11:00",
+        "IP" | "SAT" => "11:00",
         "PM" => "16:00",
-        "SAT" => "11:00",
         _ => "",
     }
 }
@@ -135,7 +135,7 @@ pub struct VolumeRow {
 }
 
 fn leg_index(code: &str) -> f64 {
-    LEG_CODES.iter().position(|c| *c == code).map_or(-1.0, |i| i as f64)
+    LEG_CODES.iter().position(|c| *c == code).map_or(-1.0, usize_to_f64)
 }
 
 fn num_cell(x: Option<f64>) -> Cell {
@@ -397,7 +397,7 @@ impl<'a> Tools<'a> {
                         growth_pct: SIDRA_GROWTH_PCT,
                         export_note: nc.clone(),
                         from: m.leg_label.clone(),
-                        to: leg_label(dd as usize, &m.to_road),
+                        to: leg_label(f64_to_usize(dd), &m.to_road),
                         year: res.year,
                         pff_src: if phf.is_some() { "turning count PHF" } else { "model setting" },
                         id: e.id.clone(),
@@ -410,6 +410,10 @@ impl<'a> Tools<'a> {
 
     /// `volumesCSV(sc, resList, ids, opts)`: the SIDRA volumes CSV; a forced export of an unconverged run gains a last column,
     /// `export_note`, saying NOT CONVERGED on its rows. The error is the gate's reason.
+    ///
+    /// # Errors
+    ///
+    /// Returns the export gate's reason when the runs are not fit for SIDRA and `opts.force` is false.
     pub fn volumes_csv(
         &self,
         s: Sc<'a>,
@@ -447,25 +451,62 @@ impl<'a> Tools<'a> {
         for a in legs_of(sc, self.st(), res, e) {
             let mut n = 1.0f64;
             for k in &a.in_keys {
-                let i = k.rfind(':').map_or(-1, |p| p as isize);
-                let id = if i < 0 { &k[..] } else { &k[..i as usize] };
+                // the link id is the key before its last ':' (the whole key when it has none)
+                let id = k.rfind(':').and_then(|p| k.get(..p)).unwrap_or(k.as_str());
                 if let Some(l) = sc.links.get(id) {
                     let lanes = if k.ends_with(":ab") { l.lanes_ab.int32() } else { l.lanes_ba.int32() };
                     n = math_max(n, f64::from(lanes));
                 }
             }
             let v = math_max(1.0, math_min(3.0, n));
-            let key = a.arm.o as i64;
-            match out.iter().position(|(k, _)| *k == key) {
-                Some(p) => out[p].1 = v,
+            // Bound: a leg code (0 to 7)
+            let key = i64::try_from(a.arm.o).unwrap_or(i64::MAX);
+            match out.iter_mut().find(|(k, _)| *k == key) {
+                Some(slot) => slot.1 = v,
                 None => out.push((key, v)),
             }
         }
         out
     }
 
+    /// The lanes on each leg's approach, by junction (its stable id) in the order first met, over every result.
+    fn legs_by_junction(
+        &self,
+        sc: &Scenario,
+        list: &[&'a Res],
+        ids: Option<&[String]>,
+        scope: &str,
+    ) -> Vec<(String, Vec<(i64, f64)>)> {
+        let mut legs: Vec<(String, Vec<(i64, f64)>)> = Vec::new();
+        for res in list {
+            for e in self.targets(sc, res, ids, scope) {
+                let x = xid(&e);
+                let new = self.leg_lanes(sc, res, &e);
+                let row = if let Some(p) = legs.iter().position(|(k, _)| *k == x) { legs.get_mut(p) } else {
+                    legs.push((x.clone(), Vec::new()));
+                    legs.last_mut()
+                };
+                // the junction's entry was found or just pushed
+                let Some((_, lanes)) = row else {
+                    continue;
+                };
+                for (k, v) in new {
+                    match lanes.iter_mut().find(|(a, _)| *a == k) {
+                        Some(slot) => slot.1 = v,
+                        None => lanes.push((k, v)),
+                    }
+                }
+            }
+        }
+        legs
+    }
+
     /// `loaderPy(sc, resList, ids, opts)`: `load_corridor_volumes.py`, a SIDRA INTERSECTION 11 .NET API loader (pythonnet) with the
     /// New Zealand setup and a --dry-run. The error is the gate's reason.
+    ///
+    /// # Errors
+    ///
+    /// Returns the export gate's reason when the runs are not fit for SIDRA and `opts.force` is false.
     pub fn loader_py(
         &self,
         s: Sc<'a>,
@@ -486,23 +527,7 @@ impl<'a> Tools<'a> {
         let sc = s.sc;
         let rows = self.volume_rows(sc, &list, ids, &opts.scope);
         // legs by junction: the lanes on each leg's approach
-        let mut legs: Vec<(String, Vec<(i64, f64)>)> = Vec::new();
-        for res in &list {
-            for e in self.targets(sc, res, ids, &opts.scope) {
-                let x = xid(&e);
-                let new = self.leg_lanes(sc, res, &e);
-                let p = if let Some(p) = legs.iter().position(|(k, _)| *k == x) { p } else {
-                    legs.push((x.clone(), Vec::new()));
-                    legs.len() - 1
-                };
-                for (k, v) in new {
-                    match legs[p].1.iter().position(|(a, _)| *a == k) {
-                        Some(i) => legs[p].1[i].1 = v,
-                        None => legs[p].1.push((k, v)),
-                    }
-                }
-            }
-        }
+        let legs = self.legs_by_junction(sc, &list, ids, &opts.scope);
         let rows_json = JsonValue::Array(rows.iter().map(VolumeRow::json).collect());
         let legs_json = JsonValue::from_pairs(legs.iter().map(|(k, lanes)| {
             let mut sorted = lanes.clone();
@@ -519,19 +544,7 @@ impl<'a> Tools<'a> {
         // JSON inside a Python raw string: no ''' can occur because ' is written as '
         let js = |x: &JsonValue| py_unicode(&x.stringify().replace('\'', "\\u0027"));
         let py_str = |t: &str| py_unicode(&JsonValue::from(t).stringify());
-        // Project data in a comment: one line, no control characters, so nothing from a shared project file can become code
-        let cm = |t: &str| -> String {
-            t.chars()
-                .map(|c| {
-                    let u = c as u32;
-                    if u <= 0x1f || (0x7f..=0x9f).contains(&u) || u == 0x2028 || u == 0x2029 {
-                        ' '
-                    } else {
-                        c
-                    }
-                })
-                .collect()
-        };
+        let cm = py_comment;
         let year = list
             .iter()
             .map(|r| number_to_js_string(r.year))
@@ -546,54 +559,10 @@ impl<'a> Tools<'a> {
             }
             seen.len()
         };
-        let periods = {
-            let mut seen: Vec<&str> = Vec::new();
-            for r in &rows {
-                if !seen.contains(&r.period.as_str()) {
-                    seen.push(&r.period);
-                }
-            }
-            let ok: Vec<&str> = seen
-                .into_iter()
-                .filter(|p| (1..=12).contains(&p.chars().count()) && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
-                .collect();
-            if ok.is_empty() { "none".to_string() } else { ok.join(", ") }
-        };
-        let nc = if opts.force {
-            let mut parts: Vec<String> = Vec::new();
-            for r in &list {
-                let t = nc_text(r);
-                if !t.is_empty() {
-                    let p = format!("{}: {}", per_name(&r.period), t);
-                    if !parts.contains(&p) {
-                        parts.push(p);
-                    }
-                }
-            }
-            parts.join("; ")
-        } else {
-            String::new()
-        };
+        let periods = loader_periods(&rows);
+        let nc = if opts.force { nc_summary(&list) } else { String::new() };
         // D1 and D12 as a comment block (wrapped, '# ' lines) and as a string the script prints once when it runs
-        let wrap_c = |t: &str| -> String {
-            let w = 112usize;
-            let mut out: Vec<String> = Vec::new();
-            let mut line = String::new();
-            for word in split_ws(t) {
-                if !line.is_empty() && line.encode_utf16().count() + word.encode_utf16().count() + 1 > w {
-                    out.push(std::mem::take(&mut line));
-                    line = word.to_string();
-                } else if line.is_empty() {
-                    line = word.to_string();
-                } else {
-                    line = format!("{line} {word}");
-                }
-            }
-            if !line.is_empty() {
-                out.push(line);
-            }
-            out.iter().map(|l| format!("#   {l}")).collect::<Vec<_>>().join("\n")
-        };
+        let wrap_c = wrap_comment;
         let notice = format!("D1 Screening status: {D1}\nD12 Hand-over: {D12}");
         let name = s.name_or_id();
         let nc_part = if nc.is_empty() {
@@ -650,100 +619,13 @@ impl<'a> Tools<'a> {
         let mut by: Vec<(String, Vec<&VolumeRow>)> = Vec::new();
         for r in &rows {
             let k = format!("{}|{}", r.site_id, r.period);
-            match by.iter().position(|(x, _)| *x == k) {
-                Some(p) => by[p].1.push(r),
+            match by.iter_mut().find(|(x, _)| *x == k) {
+                Some(group) => group.1.push(r),
                 None => by.push((k, vec![r])),
             }
         }
         let g0 = self.gate(sc, &list);
-        let parts: String = by
-            .iter()
-            .map(|(_, rs)| {
-                let r = rs[0];
-                let turns: Vec<&str> = TURN_ORDER
-                    .iter()
-                    .copied()
-                    .filter(|t| rs.iter().any(|x| x.turn == *t))
-                    .collect();
-                let mut legs: Vec<f64> = Vec::new();
-                for x in rs {
-                    if !legs.contains(&x.origin_leg) {
-                        legs.push(x.origin_leg);
-                    }
-                }
-                legs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                let cell = |o: f64, t: &str, lv: bool| -> String {
-                    let x = rs
-                        .iter()
-                        .filter(|y| y.origin_leg == o && y.turn == t)
-                        .fold(0.0, |s, y| s + if lv { y.lv_veh_h } else { y.hv_veh_h });
-                    if x == 0.0 { String::new() } else { number_to_js_string(x) }
-                };
-                let body: String = legs
-                    .iter()
-                    .map(|&o| {
-                        let lab = match rs.iter().find(|x| x.origin_leg == o) {
-                            Some(x) if !x.from.is_empty() => x.from.clone(),
-                            _ => leg_name_at(o),
-                        };
-                        let tot = rs
-                            .iter()
-                            .filter(|x| x.origin_leg == o)
-                            .fold(0.0, |s, x| s + x.lv_veh_h + x.hv_veh_h);
-                        format!(
-                            "<tr><th>{}</th>{}<td><b>{}</b></td></tr>",
-                            esc(&lab),
-                            turns
-                                .iter()
-                                .map(|t| format!("<td>{}</td><td>{}</td>", cell(o, t, true), cell(o, t, false)))
-                                .collect::<String>(),
-                            number_to_js_string(tot)
-                        )
-                    })
-                    .collect();
-                let tot = rs.iter().fold(0.0, |s, x| s + x.lv_veh_h + x.hv_veh_h);
-                let sum = |t: &str, lv: bool| {
-                    let v = rs
-                        .iter()
-                        .filter(|x| x.turn == t)
-                        .fold(0.0, |s, x| s + if lv { x.lv_veh_h } else { x.hv_veh_h });
-                    if v == 0.0 { String::new() } else { number_to_js_string(v) }
-                };
-                let when_h = if r.period == "IP" {
-                    "inter-peak average hour".to_string()
-                } else {
-                    format!("{} hour", per_name(&r.period))
-                };
-                format!(
-                    "<section><h2>{} \u{b7} {}{}</h2>\n        <p class=\"meta\">Site {}{} \u{b7} {} \u{b7} PFF {}% over {} min ({}) \u{b7} vehicles per hour</p>\n        <table><tr><th rowspan=\"2\">Approach leg</th>{}<th rowspan=\"2\">Total</th></tr><tr>{}</tr>{}\n        <tr><th>Total</th>{}<td><b>{}</b></td></tr></table></section>",
-                    esc(&r.site_name),
-                    esc(&when_h),
-                    if r.year != 0.0 && !r.year.is_nan() {
-                        format!(" {}", esc(&number_to_js_string(r.year)))
-                    } else {
-                        String::new()
-                    },
-                    esc(&r.site_id),
-                    if r.at_site_no.is_null() {
-                        String::new()
-                    } else {
-                        format!(" \u{b7} AT site {}", esc(&js_str(&r.at_site_no)))
-                    },
-                    esc(sidra_type_name(r.site_type)),
-                    esc(&number_to_js_string(r.pff_pct)),
-                    esc(&number_to_js_string(r.peak_flow_period_min)),
-                    esc(r.pff_src),
-                    turns.iter().map(|t| format!("<th colspan=\"2\">{t}</th>")).collect::<String>(),
-                    turns.iter().map(|_| "<th>LV</th><th>HV</th>").collect::<String>(),
-                    body,
-                    turns
-                        .iter()
-                        .map(|t| format!("<td>{}</td><td>{}</td>", sum(t, true), sum(t, false)))
-                        .collect::<String>(),
-                    number_to_js_string(tot)
-                )
-            })
-            .collect();
+        let parts: String = by.iter().map(|(_, rs)| grid_section(rs)).collect();
         let name = s.sc.name.as_str().unwrap_or("");
         let g = &GRIDS;
         let warn = if g0.ok {
@@ -779,21 +661,192 @@ impl<'a> Tools<'a> {
     }
 }
 
-fn leg_name_at(o: f64) -> String {
-    if o >= 0.0 && o.fract() == 0.0 && (o as usize) < LEG_NAMES.len() {
-        LEG_NAMES[o as usize].to_string()
+/// Project data in a comment: one line, no control characters, so nothing from a shared project file can become code.
+fn py_comment(t: &str) -> String {
+    t.chars()
+        .map(|c| {
+            let u = u32::from(c);
+            if u <= 0x1f || (0x7f..=0x9f).contains(&u) || u == 0x2028 || u == 0x2029 {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+/// The loader's periods line: the rows' periods in the order first met that are safe in a comment, or "none".
+fn loader_periods(rows: &[VolumeRow]) -> String {
+    let mut seen: Vec<&str> = Vec::new();
+    for r in rows {
+        if !seen.contains(&r.period.as_str()) {
+            seen.push(&r.period);
+        }
+    }
+    let ok: Vec<&str> = seen
+        .into_iter()
+        .filter(|p| (1..=12).contains(&p.chars().count()) && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .collect();
+    if ok.is_empty() { "none".to_string() } else { ok.join(", ") }
+}
+
+/// The NOT CONVERGED notes of the results, one a period, joined.
+fn nc_summary(list: &[&Res]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for r in list {
+        let t = nc_text(r);
+        if !t.is_empty() {
+            let p = format!("{}: {}", per_name(&r.period), t);
+            if !parts.contains(&p) {
+                parts.push(p);
+            }
+        }
+    }
+    parts.join("; ")
+}
+
+/// Text as a wrapped comment block of '#   ' lines, at most 112 UTF-16 units of text a line.
+fn wrap_comment(t: &str) -> String {
+    let w = 112usize;
+    let mut out: Vec<String> = Vec::new();
+    let mut line = String::new();
+    for word in split_ws(t) {
+        // Bound: lengths of text in memory, far below usize::MAX
+        if !line.is_empty()
+            && line
+                .encode_utf16()
+                .count()
+                .saturating_add(word.encode_utf16().count())
+                .saturating_add(1)
+                > w
+        {
+            out.push(std::mem::take(&mut line));
+            line = word.to_string();
+        } else if line.is_empty() {
+            line = word.to_string();
+        } else {
+            line = format!("{line} {word}");
+        }
+    }
+    if !line.is_empty() {
+        out.push(line);
+    }
+    out.iter().map(|l| format!("#   {l}")).collect::<Vec<_>>().join("\n")
+}
+
+/// One site and period of the printable volume grids: rows are legs, columns turn by class.
+fn grid_section(rs: &[&VolumeRow]) -> String {
+    // every group is made with its first row
+    let Some(&r) = rs.first() else {
+        return String::new();
+    };
+    let turns: Vec<&str> = TURN_ORDER
+        .iter()
+        .copied()
+        .filter(|t| rs.iter().any(|x| x.turn == *t))
+        .collect();
+    let mut legs: Vec<f64> = Vec::new();
+    for x in rs {
+        if !legs.contains(&x.origin_leg) {
+            legs.push(x.origin_leg);
+        }
+    }
+    legs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let cell = |o: f64, t: &str, lv: bool| -> String {
+        let x = rs
+            .iter()
+            .filter(|y| y.origin_leg == o && y.turn == t)
+            .fold(0.0, |s, y| s + if lv { y.lv_veh_h } else { y.hv_veh_h });
+        if x == 0.0 { String::new() } else { number_to_js_string(x) }
+    };
+    // Writing to a String cannot fail (the `let _ =` below)
+    let body: String = legs.iter().fold(String::new(), |mut out, &o| {
+        let lab = match rs.iter().find(|x| x.origin_leg == o) {
+            Some(x) if !x.from.is_empty() => x.from.clone(),
+            _ => leg_name_at(o),
+        };
+        let tot = rs
+            .iter()
+            .filter(|x| x.origin_leg == o)
+            .fold(0.0, |s, x| s + x.lv_veh_h + x.hv_veh_h);
+        let cells = turns.iter().fold(String::new(), |mut c, t| {
+            let _ = write!(c, "<td>{}</td><td>{}</td>", cell(o, t, true), cell(o, t, false));
+            c
+        });
+        let _ = write!(
+            out,
+            "<tr><th>{}</th>{}<td><b>{}</b></td></tr>",
+            esc(&lab),
+            cells,
+            number_to_js_string(tot)
+        );
+        out
+    });
+    let tot = rs.iter().fold(0.0, |s, x| s + x.lv_veh_h + x.hv_veh_h);
+    let sum = |t: &str, lv: bool| {
+        let v = rs
+            .iter()
+            .filter(|x| x.turn == t)
+            .fold(0.0, |s, x| s + if lv { x.lv_veh_h } else { x.hv_veh_h });
+        if v == 0.0 { String::new() } else { number_to_js_string(v) }
+    };
+    let when_h = if r.period == "IP" {
+        "inter-peak average hour".to_string()
     } else {
-        // `Turns.LEG_NAMES[o]` of an unknown code is undefined: esc(undefined) is empty
-        String::new()
+        format!("{} hour", per_name(&r.period))
+    };
+    let turn_heads = turns.iter().fold(String::new(), |mut h, t| {
+        let _ = write!(h, "<th colspan=\"2\">{t}</th>");
+        h
+    });
+    let totals = turns.iter().fold(String::new(), |mut h, t| {
+        let _ = write!(h, "<td>{}</td><td>{}</td>", sum(t, true), sum(t, false));
+        h
+    });
+    format!(
+        "<section><h2>{} \u{b7} {}{}</h2>\n        <p class=\"meta\">Site {}{} \u{b7} {} \u{b7} PFF {}% over {} min ({}) \u{b7} vehicles per hour</p>\n        <table><tr><th rowspan=\"2\">Approach leg</th>{}<th rowspan=\"2\">Total</th></tr><tr>{}</tr>{}\n        <tr><th>Total</th>{}<td><b>{}</b></td></tr></table></section>",
+        esc(&r.site_name),
+        esc(&when_h),
+        if r.year != 0.0 && !r.year.is_nan() {
+            format!(" {}", esc(&number_to_js_string(r.year)))
+        } else {
+            String::new()
+        },
+        esc(&r.site_id),
+        if r.at_site_no.is_null() {
+            String::new()
+        } else {
+            format!(" \u{b7} AT site {}", esc(&js_str(&r.at_site_no)))
+        },
+        esc(sidra_type_name(r.site_type)),
+        esc(&number_to_js_string(r.pff_pct)),
+        esc(&number_to_js_string(r.peak_flow_period_min)),
+        esc(r.pff_src),
+        turn_heads,
+        turns.iter().map(|_| "<th>LV</th><th>HV</th>").collect::<String>(),
+        body,
+        totals,
+        number_to_js_string(tot)
+    )
+}
+
+/// `table[o]` for a whole, non-negative code within the table; None as the JavaScript's undefined otherwise.
+fn code_at(table: &[&'static str], o: f64) -> Option<&'static str> {
+    if o >= 0.0 && o.fract() == 0.0 {
+        // a whole number at or above 0 converts exactly (or saturates past the table's end)
+        table.get(f64_to_usize(o)).copied()
+    } else {
+        None
     }
 }
 
+fn leg_name_at(o: f64) -> String {
+    // `Turns.LEG_NAMES[o]` of an unknown code is undefined: esc(undefined) is empty
+    code_at(&LEG_NAMES, o).map_or_else(String::new, str::to_string)
+}
+
 fn sidra_type_name(t: f64) -> &'static str {
-    if t >= 0.0 && t.fract() == 0.0 && (t as usize) < SIDRA_TYPE_NAME.len() {
-        SIDRA_TYPE_NAME[t as usize]
-    } else {
-        "give-way"
-    }
+    code_at(&SIDRA_TYPE_NAME, t).unwrap_or("give-way")
 }
 
 /// `.replace(/[\u007f-￿]/g, c => '\\u' + hex4)`: every UTF-16 code unit from U+007F becomes a `\uXXXX` escape.
@@ -805,7 +858,8 @@ fn py_unicode(s: &str) -> String {
             out.push(c);
         } else {
             for u in c.encode_utf16(&mut buf) {
-                out.push_str(&format!("\\u{u:04x}"));
+                // Writing to a String cannot fail
+                let _ = write!(out, "\\u{u:04x}");
             }
         }
     }
@@ -886,8 +940,8 @@ pub fn parse_volumes_csv(text: &str) -> Vec<CsvRow> {
                 } else {
                     CsvValue::Text(cell.cloned().unwrap_or_default())
                 };
-                match o.iter().position(|(k, _)| k == h) {
-                    Some(p) => o[p].1 = v,
+                match o.iter_mut().find(|(k, _)| k == h) {
+                    Some(slot) => slot.1 = v,
                     None => o.push((h.clone(), v)),
                 }
             }
@@ -979,7 +1033,7 @@ impl Tools<'_> {
         let mut out: Vec<Vec<Cell>> = vec![COUNT_HEAD.iter().map(|h| txt(h)).collect()];
         for r in count_rows(src) {
             for (cls, v) in [("LV", r.lv), ("HV", r.hv)] {
-                if !(v > 0.0) {
+                if v <= 0.0 || v.is_nan() {
                     continue;
                 }
                 let w0 = windows
@@ -992,11 +1046,7 @@ impl Tools<'_> {
                     let d = window_start(&r.period);
                     if d.is_empty() { "07:00".to_string() } else { d.to_string() }
                 };
-                let leg = if r.origin_leg >= 0.0 && r.origin_leg.fract() == 0.0 && (r.origin_leg as usize) < LEG_CODES.len() {
-                    txt(LEG_CODES[r.origin_leg as usize])
-                } else {
-                    blank()
-                };
+                let leg = code_at(&LEG_CODES, r.origin_leg).map_or_else(blank, txt);
                 out.push(vec![
                     r.site_id.clone(),
                     r.site_name.clone(),

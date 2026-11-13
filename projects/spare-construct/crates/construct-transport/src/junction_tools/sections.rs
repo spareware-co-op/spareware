@@ -8,6 +8,7 @@ use super::j1::J1HtmlOpts;
 use crate::jsnum::{math_round, number_to_js_string, to_fixed};
 use crate::report::Sel;
 use crate::util::esc;
+use std::fmt::Write as _;
 
 /// A report section the junctions feature registers: its id, chapter, order and title.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -120,7 +121,12 @@ impl<'a> Tools<'a> {
             let b = list
                 .iter()
                 .copied()
-                .find(|i| self.project.base.as_str() == Some(self.project.scenarios[*i].id.as_str()))
+                .find(|i| {
+                    self.project
+                        .scenarios
+                        .get(*i)
+                        .is_some_and(|s| self.project.base.as_str() == Some(s.id.as_str()))
+                })
                 .or_else(|| list.first().copied());
             let pairs = match b {
                 Some(b) => list
@@ -140,13 +146,14 @@ impl<'a> Tools<'a> {
             }
         }
         let mut pairs = Vec::new();
-        if self.has_run(sel.without) && self.has_run(sel.with) {
-            pairs.push((sel.without.expect("run"), sel.with.expect("run"), "Effect of the development", "development"));
-        } else if self.has_run(sel.existing) && self.has_run(sel.with) && sel.existing != sel.with {
-            pairs.push((sel.existing.expect("run"), sel.with.expect("run"), "Change from the existing network", "existing"));
+        // has_run(None) is false, so each pair below needs both scenarios set
+        if let (Some(wo), Some(w)) = (sel.without, sel.with) && self.has_run(Some(wo)) && self.has_run(Some(w)) {
+            pairs.push((wo, w, "Effect of the development", "development"));
+        } else if let (Some(ex), Some(w)) = (sel.existing, sel.with) && self.has_run(Some(ex)) && self.has_run(Some(w)) && ex != w {
+            pairs.push((ex, w, "Change from the existing network", "existing"));
         }
-        if self.has_run(sel.with) && self.has_run(sel.mitigation) {
-            pairs.push((sel.with.expect("run"), sel.mitigation.expect("run"), "Effect of the mitigation", "mitigation"));
+        if let (Some(w), Some(m)) = (sel.with, sel.mitigation) && self.has_run(Some(w)) && self.has_run(Some(m)) {
+            pairs.push((w, m, "Effect of the mitigation", "mitigation"));
         }
         ReportSelection { list, pairs }
     }
@@ -216,7 +223,9 @@ impl<'a> Tools<'a> {
                 if let Some(r) = r {
                     let crossing = r.crossing();
                     if !crossing.is_empty() {
-                        scale.push_str(&format!(
+                        // Writing to a String cannot fail
+                        let _ = write!(
+                            scale,
                             "<li>{}, {}: {}</li>",
                             esc(s.name()),
                             esc(&per_name(&p)),
@@ -229,7 +238,7 @@ impl<'a> Tools<'a> {
                                 )))
                                 .collect::<Vec<_>>()
                                 .join("; ")
-                        ));
+                        );
                     }
                 }
             }
@@ -270,13 +279,15 @@ impl<'a> Tools<'a> {
                         .filter(|n| !n.is_empty())
                         .unwrap_or_else(|| id.clone());
                     let d = self.j1(s.sc, res, &id, None);
-                    body.push_str(&format!(
+                    // Writing to a String cannot fail
+                    let _ = write!(
+                        body,
                         "<h4>{} \u{b7} {} \u{b7} {}</h4>{}",
                         esc(s.name()),
                         esc(&name),
                         esc(&per_name(&p)),
                         super::j1::j1_html(self, d.as_ref(), J1HtmlOpts { head: false })
-                    ));
+                    );
                 }
             }
         }
@@ -299,13 +310,15 @@ impl<'a> Tools<'a> {
         for (a, b, what, _) in pairs {
             let (sa, sb) = (self.sc(a), self.sc(b));
             let html = self.j3_html(Some(sa), Some(sb), None);
-            out.push_str(&format!(
+            // Writing to a String cannot fail
+            let _ = write!(
+                out,
                 "<h4>{}: {} to {}</h4>{}",
                 esc(what),
                 esc(sa.name()),
                 esc(sb.name()),
                 strip_fly(&html)
-            ));
+            );
         }
         out
     }
@@ -319,11 +332,13 @@ impl<'a> Tools<'a> {
         for &i in &scs {
             let s = self.sc(i);
             for id in self.key_junctions(s, 8) {
-                body.push_str(&format!(
+                // Writing to a String cannot fail
+                let _ = write!(
+                    body,
                     "<figure style=\"display:inline-block;margin:6px;break-inside:avoid\">{}<figcaption>{}</figcaption></figure>",
                     self.figure(s.sc, s.res_of("AM"), s.res_of("PM"), &id, FigureOpts::default()),
                     esc(s.name())
-                ));
+                );
             }
         }
         format!(
@@ -340,11 +355,12 @@ fn strip_fly(h: &str) -> String {
     let pat = " data-jx-fly=\"";
     let mut out = String::with_capacity(h.len());
     let mut rest = h;
-    while let Some(i) = rest.find(pat) {
-        out.push_str(&rest[..i]);
-        let after = &rest[i + pat.len()..];
-        if let Some(j) = after.find('"') { rest = &after[j + 1..] } else {
-            out.push_str(&rest[i..]);
+    while let Some((before, after)) = rest.split_once(pat) {
+        out.push_str(before);
+        if let Some((_, tail)) = after.split_once('"') { rest = tail } else {
+            // the unterminated attribute is kept as it was
+            out.push_str(pat);
+            out.push_str(after);
             rest = "";
             break;
         }

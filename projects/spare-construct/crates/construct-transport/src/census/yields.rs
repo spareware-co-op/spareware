@@ -6,6 +6,7 @@ use crate::jsnum::{Maybe, Num, json_number, math_round, number_to_js_string, val
 use crate::project::{OrderedMap, Project, Zone, land_use};
 use crate::util::fmt;
 use serde_json::{Map, Value, json};
+use std::fmt::Write as _;
 
 /// The yield of a zone code: the default row with the user's changes from `P.landuse.yields` (the answer of `yieldDef`).
 #[derive(Clone, Debug, PartialEq)]
@@ -106,8 +107,6 @@ pub struct Yield {
     pub far: Option<f64>,
     /// Land use quantities by key, in the order they were worked out.
     pub lu: Vec<(String, f64)>,
-    /// Spare Construct has a default yield for the zone.
-    pub known: bool,
     /// The user changed the yield.
     pub user: bool,
     /// A structure-plan assumption, not zoned capacity.
@@ -122,14 +121,24 @@ pub struct Yield {
     pub basis: String,
 }
 
+// Spare Construct has a default yield for the zone code
+fn has_default(code: f64) -> bool {
+    yield_row(code).is_some()
+}
+
 impl Yield {
+    /// Spare Construct has a default yield for the zone (worked out from the code).
+    #[must_use]
+    pub fn known(&self) -> bool {
+        has_default(self.code)
+    }
     /// The answer as JSON.
     #[must_use]
     pub fn to_value(&self) -> Value {
         let n = |x: Option<f64>| x.map_or(Value::Null, json_number);
         json!({
             "code": json_number(self.code), "name": self.name, "ha": json_number(self.ha), "netPct": json_number(self.net_pct), "dph": n(self.dph), "far": n(self.far),
-            "lu": lu_value(&self.lu), "known": self.known, "user": self.user, "assumed": self.assumed, "needsUse": self.needs_use, "label": self.label, "note": self.note, "basis": self.basis,
+            "lu": lu_value(&self.lu), "known": self.known(), "user": self.user, "assumed": self.assumed, "needsUse": self.needs_use, "label": self.label, "note": self.note, "basis": self.basis,
         })
     }
 }
@@ -151,8 +160,8 @@ pub fn yield_of(code: f64, ha: f64, p: Option<&Project>, name: Option<&str>) -> 
     let hav = crate::jsnum::or_default(ha, 0.0);
     let net = hav * d.net_pct / 100.0;
     let mut lu: Vec<(String, f64)> = Vec::new();
-    if d.dph.is_some_and(|x| x > 0.0) {
-        let n = math_round(net * d.dph.expect("dph"));
+    if let Some(dph) = d.dph.filter(|x| *x > 0.0) {
+        let n = math_round(net * dph);
         if d.homes.as_deref() == Some("mixed") {
             let r = math_round(n / 2.0);
             set(&mut lu, "residential", r);
@@ -161,16 +170,16 @@ pub fn yield_of(code: f64, ha: f64, p: Option<&Project>, name: Option<&str>) -> 
             set(&mut lu, d.homes.as_deref().unwrap_or("residential"), n);
         }
     }
-    if d.far.is_some_and(|x| x > 0.0) {
+    if let Some(far) = d.far.filter(|x| *x > 0.0) {
         for (k, s) in d.mix.iter().flatten() {
-            set(&mut lu, k, math_round(net * 1e4 * d.far.expect("far") * s / 10.0) * 10.0);
+            set(&mut lu, k, math_round(net * 1e4 * far * s / 10.0) * 10.0);
         }
     }
     for (k, per_ha) in d.per.iter().flatten() {
         set(&mut lu, k, math_round(net * per_ha));
     }
     lu.retain(|(_, v)| *v > 0.0);
-    let known = yield_row(code).is_some();
+    let known = has_default(code);
     let mut note_parts: Vec<String> = Vec::new();
     if let Some(n) = d.note.as_ref().filter(|n| !n.is_empty()) {
         note_parts.push(n.clone());
@@ -179,11 +188,12 @@ pub fn yield_of(code: f64, ha: f64, p: Option<&Project>, name: Option<&str>) -> 
         note_parts.push("Choose what the floor area is used for, so the GFA ratio gives a land use".to_string());
     }
     let mut basis = format!("{} ha \u{d7} {}% developable", fmt::num(hav, 2), number_to_js_string(d.net_pct));
-    if d.dph.is_some_and(crate::jsnum::truthy_number) {
-        basis.push_str(&format!(" \u{d7} {} dwellings/ha", number_to_js_string(d.dph.expect("dph"))));
+    // Writing to a String cannot fail
+    if let Some(dph) = d.dph.filter(|x| crate::jsnum::truthy_number(*x)) {
+        let _ = write!(basis, " \u{d7} {} dwellings/ha", number_to_js_string(dph));
     }
-    if d.far.is_some_and(crate::jsnum::truthy_number) {
-        basis.push_str(&format!(" \u{d7} GFA ratio {}", number_to_js_string(d.far.expect("far"))));
+    if let Some(far) = d.far.filter(|x| crate::jsnum::truthy_number(*x)) {
+        let _ = write!(basis, " \u{d7} GFA ratio {}", number_to_js_string(far));
     }
     if let Some(per) = &d.per {
         basis.push_str(" \u{d7} ");
@@ -197,7 +207,6 @@ pub fn yield_of(code: f64, ha: f64, p: Option<&Project>, name: Option<&str>) -> 
         dph: d.dph.filter(|x| crate::jsnum::truthy_number(*x)),
         far: d.far.filter(|x| crate::jsnum::truthy_number(*x)),
         lu,
-        known,
         user: d.user,
         assumed: d.assumed,
         needs_use: d.needs_use,
@@ -253,14 +262,22 @@ impl ZonedCapacity {
     pub fn to_value(&self) -> Value {
         let row = |r: &CapRow| -> Value {
             let mut v = r.y.to_value();
-            v["group"] = json!(r.group);
-            v["kind"] = json!(r.kind);
-            v["label"] = json!(r.label);
-            v["proposed"] = r.proposed.as_ref().map_or(Value::Null, |p| {
-                let mut pv = p.to_value();
-                pv["label"] = json!(std_::YIELDS_PROPOSED);
-                pv
-            });
+            // Yield::to_value always gives an object
+            if let Some(o) = v.as_object_mut() {
+                o.insert("group".into(), json!(r.group));
+                o.insert("kind".into(), json!(r.kind));
+                o.insert("label".into(), json!(r.label));
+                o.insert(
+                    "proposed".into(),
+                    r.proposed.as_ref().map_or(Value::Null, |p| {
+                        let mut pv = p.to_value();
+                        if let Some(po) = pv.as_object_mut() {
+                            po.insert("label".into(), json!(std_::YIELDS_PROPOSED));
+                        }
+                        pv
+                    }),
+                );
+            }
             v
         };
         let list = |k: &str| Value::Array(self.rows.iter().filter(|r| r.kind == k).map(row).collect());

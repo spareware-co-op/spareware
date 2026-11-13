@@ -4,18 +4,19 @@
 use super::summary::fly_of;
 use super::text::{ctl_name, d1, dos_cell, los_badge, n0, per_name};
 use super::{
-    BALANCE, FLOW_SCALE, FLOW_SCALE_FACTOR, LABEL, SIDRA, STORAGE, STORAGE_AMBER, STORAGE_RED, Standard, Tools, entries,
+    BALANCE, FLOW_SCALE, FLOW_SCALE_FACTOR, LABEL, SIDRA, STORAGE, STORAGE_AMBER, STORAGE_RED, Sc, Standard, Tools, entries,
 };
 use crate::edit::sites::{self, SiteRules};
 use crate::edit::net::links_at;
 use crate::edit::CONTROLS;
 use crate::graph::js_sort_by;
 use crate::jsnum::{Maybe, math_round, number_to_js_string, to_fixed, value_to_js_string, value_truthy};
-use crate::project::Scenario;
+use crate::project::{Scenario, Site};
 use crate::standards::STANDARDS;
 use crate::turns::junction_name;
 use crate::util::{dist, esc};
 use serde_json::Value;
+use std::fmt::Write as _;
 
 /// A junction or site near a node that it could be merged with.
 #[derive(Clone, Debug, PartialEq)]
@@ -101,126 +102,22 @@ impl Tools<'_> {
         let Some(s) = sc.sites.get().and_then(|m| m.get(site_id)) else {
             return String::new();
         };
-        let rank = |c: &str| match c {
-            "priority" => 1,
-            "stop" => 2,
-            "roundabout" => 3,
-            "signals" => 4,
-            _ => 0,
-        };
-        let mut derived = "none".to_string();
-        for id in &s.nodes {
-            let c = sc
-                .nodes
-                .get(id)
-                .map_or("none", |n| n.control.str_or("none"))
-                .to_string();
-            if rank(&c) > rank(&derived) {
-                derived = c;
-            }
-        }
+        let derived = derived_control(sc, s);
         // 'none' is not offered: the engine models a site set to 'none' with its strongest member control
         let own: Option<String> = match s.control.as_str() {
             Some(c) if !c.is_empty() && c != "none" => Some(c.to_string()),
             _ => None,
         };
         let ctl = own.clone().unwrap_or_else(|| derived.clone());
-        let mut c_opts = format!(
-            "<option value=\"\" {}>From its junctions ({})</option>",
-            if own.is_some() { "" } else { "selected" },
-            esc(&ctl_name(&derived))
-        );
-        for (k, l) in CONTROLS.iter().filter(|(k, _)| *k != "none") {
-            c_opts.push_str(&format!(
-                "<option value=\"{}\" {}>{}</option>",
-                esc(k),
-                if own.as_deref() == Some(*k) { "selected" } else { "" },
-                esc(l)
-            ));
-        }
-        let mut per = String::new();
-        for p in sc_run.periods() {
-            let Some(res) = sc_run.res_of(&p) else {
-                continue;
-            };
-            let e = entries(sc, res, false).into_iter().find(|x| x.id == s.id);
-            let m = e.and_then(|e| self.summary(sc, res, &e));
-            if let Some(m) = m {
-                per.push_str(&format!(
-                    "<tr><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td><td>{}</td><td class=\"n\">{} m</td></tr>",
-                    esc(&per_name(&p)),
-                    dos_cell(Some(m.dos), m.xp),
-                    d1(Some(m.delay)),
-                    los_badge(Some(&m.los)),
-                    n0(Some(m.q95))
-                ));
-            }
-        }
-        // zone connectors may not attach to site nodes (phantom movements); the engine skips them for automatic connectors,
-        // but a zone pinned to a node (z.node) still would
-        let pinned: Vec<String> = sc
-            .zones
-            .values()
-            .filter(|z| z.node.as_str().is_some_and(|n| s.nodes.iter().any(|x| x == n)))
-            .map(|z| match z.name.as_str() {
-                Some(n) if !n.is_empty() => n.to_string(),
-                _ => z.id.clone(),
-            })
-            .collect();
-        let zone_warn = if pinned.is_empty() {
-            String::new()
-        } else {
-            format!(
-                "<p class=\"note warn\">{} {} straight to a node inside this site, which adds movements SIDRA would not have. Connect {} part-way along a road, or add a driveway leg.</p>",
-                pinned.iter().map(|n| esc(n)).collect::<Vec<_>>().join(", "),
-                if pinned.len() == 1 { "connects" } else { "connect" },
-                if pinned.len() == 1 { "it" } else { "them" }
-            )
-        };
-        let nodes: String = s
-            .nodes
-            .iter()
-            .filter(|id| sc.nodes.contains_key(id))
-            .map(|id| {
-                format!(
-                    "<div class=\"lg-row\"><a href=\"#\" data-fly=\"node:{}\">{}</a> <span class=\"note\">{}</span><button class=\"btn small\" style=\"margin-left:auto\" data-jx-do=\"unsite\" data-site=\"{}\" data-node=\"{}\">Remove</button></div>",
-                    esc(id),
-                    esc(&junction_name(sc, id, None)),
-                    esc(&ctl_name(sc.nodes.get(id).and_then(|n| n.control.as_str()).unwrap_or(""))),
-                    esc(&s.id),
-                    esc(id)
-                )
-            })
-            .collect();
+        let c_opts = control_options(own.as_deref(), &derived);
+        let per = self.site_period_rows(&sc_run, s);
+        let zone_warn = pinned_zone_warning(sc, s);
+        let nodes = site_node_rows(sc, s);
         let name = s.name.as_str().unwrap_or("");
         let mut unnamed = s.clone();
         unnamed.name = Maybe::Set(String::new());
-        let cycle = match &s.cycle {
-            Maybe::Set(v) => v.to_js_string(),
-            _ => String::new(),
-        };
-        let at_site = match s.at_site_no.get() {
-            Some(Value::Array(a)) => a
-                .iter()
-                .map(|v| if v.is_null() { String::new() } else { value_to_js_string(v) })
-                .collect::<Vec<_>>()
-                .join(", "),
-            Some(Value::Null) | None => String::new(),
-            Some(v) => value_to_js_string(v),
-        };
-        let signals = if ctl == "signals" {
-            format!(
-                "{}<label class=\"check\"><input type=\"checkbox\" data-jsite=\"fixedTiming\" {}> Keep equal green splits (don\u{2019}t optimise)</label>",
-                kit_fld(
-                    "Cycle time",
-                    &format!("<input type=\"number\" min=\"40\" max=\"180\" step=\"5\" data-jsite=\"cycle\" value=\"{}\" placeholder=\"auto\">", esc(&cycle)),
-                    "s"
-                ),
-                if s.fixed_timing.truthy() { "checked" } else { "" }
-            )
-        } else {
-            String::new()
-        };
+        let at_site = at_site_text(s);
+        let signals = if ctl == "signals" { signal_fields(s) } else { String::new() };
         let auto = s.src.get().is_some_and(|x| x.nodes.is("auto".to_string().as_str()));
         let rules = SiteRules::default();
         let results = if per.is_empty() {
@@ -259,6 +156,150 @@ impl Tools<'_> {
             esc(&s.id)
         )
     }
+
+    /// The results rows of [`Tools::site_panel`], one per period the site has a summary for.
+    fn site_period_rows(&self, sc_run: &Sc<'_>, s: &Site) -> String {
+        let sc = sc_run.sc;
+        let mut per = String::new();
+        for p in sc_run.periods() {
+            let Some(res) = sc_run.res_of(&p) else {
+                continue;
+            };
+            let e = entries(sc, res, false).into_iter().find(|x| x.id == s.id);
+            let m = e.and_then(|e| self.summary(sc, res, &e));
+            if let Some(m) = m {
+                // Writing to a String cannot fail
+                let _ = write!(
+                    per,
+                    "<tr><td>{}</td><td class=\"n\">{}</td><td class=\"n\">{}</td><td>{}</td><td class=\"n\">{} m</td></tr>",
+                    esc(&per_name(&p)),
+                    dos_cell(Some(m.dos), m.xp),
+                    d1(Some(m.delay)),
+                    los_badge(Some(&m.los)),
+                    n0(Some(m.q95))
+                );
+            }
+        }
+        per
+    }
+}
+
+/// The strongest control among a site's nodes.
+fn derived_control(sc: &Scenario, s: &Site) -> String {
+    let rank = |c: &str| match c {
+        "priority" => 1,
+        "stop" => 2,
+        "roundabout" => 3,
+        "signals" => 4,
+        _ => 0,
+    };
+    let mut derived = "none".to_string();
+    for id in &s.nodes {
+        let c = sc
+            .nodes
+            .get(id)
+            .map_or("none", |n| n.control.str_or("none"))
+            .to_string();
+        if rank(&c) > rank(&derived) {
+            derived = c;
+        }
+    }
+    derived
+}
+
+/// The control choices of the site panel: from its junctions, then every control but 'none'.
+fn control_options(own: Option<&str>, derived: &str) -> String {
+    let mut c_opts = format!(
+        "<option value=\"\" {}>From its junctions ({})</option>",
+        if own.is_some() { "" } else { "selected" },
+        esc(&ctl_name(derived))
+    );
+    for (k, l) in CONTROLS.iter().filter(|(k, _)| *k != "none") {
+        // Writing to a String cannot fail
+        let _ = write!(
+            c_opts,
+            "<option value=\"{}\" {}>{}</option>",
+            esc(k),
+            if own == Some(*k) { "selected" } else { "" },
+            esc(l)
+        );
+    }
+    c_opts
+}
+
+/// The warning about zones pinned to a node inside the site, or nothing.
+fn pinned_zone_warning(sc: &Scenario, s: &Site) -> String {
+    // zone connectors may not attach to site nodes (phantom movements); the engine skips them for automatic connectors,
+    // but a zone pinned to a node (z.node) still would
+    let pinned: Vec<String> = sc
+        .zones
+        .values()
+        .filter(|z| z.node.as_str().is_some_and(|n| s.nodes.iter().any(|x| x == n)))
+        .map(|z| match z.name.as_str() {
+            Some(n) if !n.is_empty() => n.to_string(),
+            _ => z.id.clone(),
+        })
+        .collect();
+    if pinned.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<p class=\"note warn\">{} {} straight to a node inside this site, which adds movements SIDRA would not have. Connect {} part-way along a road, or add a driveway leg.</p>",
+            pinned.iter().map(|n| esc(n)).collect::<Vec<_>>().join(", "),
+            if pinned.len() == 1 { "connects" } else { "connect" },
+            if pinned.len() == 1 { "it" } else { "them" }
+        )
+    }
+}
+
+/// The site panel's list of the site's nodes, each with a Remove button.
+fn site_node_rows(sc: &Scenario, s: &Site) -> String {
+    // Writing to a String cannot fail (the `let _ =` below)
+    s.nodes
+        .iter()
+        .filter(|id| sc.nodes.contains_key(id))
+        .fold(String::new(), |mut out, id| {
+            let _ = write!(
+                out,
+                "<div class=\"lg-row\"><a href=\"#\" data-fly=\"node:{}\">{}</a> <span class=\"note\">{}</span><button class=\"btn small\" style=\"margin-left:auto\" data-jx-do=\"unsite\" data-site=\"{}\" data-node=\"{}\">Remove</button></div>",
+                esc(id),
+                esc(&junction_name(sc, id, None)),
+                esc(&ctl_name(sc.nodes.get(id).and_then(|n| n.control.as_str()).unwrap_or(""))),
+                esc(&s.id),
+                esc(id)
+            );
+            out
+        })
+}
+
+/// The site's AT site number(s) as the input shows them.
+fn at_site_text(s: &Site) -> String {
+    match s.at_site_no.get() {
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|v| if v.is_null() { String::new() } else { value_to_js_string(v) })
+            .collect::<Vec<_>>()
+            .join(", "),
+        Some(Value::Null) | None => String::new(),
+        Some(v) => value_to_js_string(v),
+    }
+}
+
+/// The cycle time and fixed-timing fields of a signalised site.
+fn signal_fields(s: &Site) -> String {
+    let cycle = match &s.cycle {
+        Maybe::Set(v) => v.to_js_string(),
+        _ => String::new(),
+    };
+    format!(
+        "{}<label class=\"check\"><input type=\"checkbox\" data-jsite=\"fixedTiming\" {}> Keep equal green splits (don\u{2019}t optimise)</label>",
+        kit_fld(
+            "Cycle time",
+            &format!("<input type=\"number\" min=\"40\" max=\"180\" step=\"5\" data-jsite=\"cycle\" value=\"{}\" placeholder=\"auto\">", esc(&cycle)),
+            "s"
+        ),
+        if s.fixed_timing.truthy() { "checked" } else { "" }
+    )
 }
 
 fn verified(v: bool) -> &'static str {

@@ -7,13 +7,16 @@ use super::{
 };
 use crate::edit::net::{len as net_len, links_at};
 use crate::edit::sites;
-use crate::jsnum::{math_round, number_to_js_string, plain_number, to_fixed};
-use crate::project::{Link, Scenario};
+use crate::jsnum::{math_round, number_to_js_string, plain_number, to_fixed, usize_to_f64};
+use crate::project::{Link, Scenario, Settings};
 use crate::results::{Approach, Res};
 use crate::standards::{STANDARDS, LosMethod};
+use crate::turns::{Arm, MovementRow};
 use crate::util::esc;
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
+use std::hash::BuildHasher;
 
 /// `STANDARDS.los[method] || STANDARDS.los.hcm6`.
 pub(crate) fn los_method(method: &str) -> &'static LosMethod {
@@ -53,11 +56,11 @@ pub fn footer(res: &Res) -> String {
 /// nodes with two roads (OSM splits roads mid-block) and a splitter island's one-way entry, stopping at a junction, a controlled
 /// node, a dead end or a one-way road the wrong way. None when there is nothing upstream or the arc is a zone connector.
 #[must_use]
-pub fn upstream_len(
+pub fn upstream_len<S: BuildHasher>(
     sc: &Scenario,
     res: &Res,
     key: &str,
-    side: Option<&HashSet<String>>,
+    side: Option<&HashSet<String, S>>,
 ) -> Option<f64> {
     if key.is_empty() || key.starts_with("c:") || !res.arcs.contains_key(key) {
         return None;
@@ -82,21 +85,21 @@ pub fn upstream_len(
             || sc.nodes.get(n).is_some_and(|x| x.control.is("roundabout"))
     };
     let mut len = 0.0f64;
-    let mut k = key.to_string();
+    let mut cur = key.to_string();
     let mut seen: HashSet<String> = HashSet::new();
-    while !k.is_empty() && !seen.contains(&k) && seen.len() < 500 {
-        seen.insert(k.clone());
-        let i = k.rfind(':').map_or(-1, |p| p as isize);
-        let link_id = if i < 0 { &k[..] } else { &k[..i as usize] };
-        let (Some(lk), Some(a)) = (sc.links.get(link_id), res.arcs.get(&k)) else {
+    while !cur.is_empty() && !seen.contains(&cur) && seen.len() < 500 {
+        seen.insert(cur.clone());
+        // the link id is the key before its last ':' (the whole key when it has none)
+        let link_id = cur.rfind(':').and_then(|p| cur.get(..p)).unwrap_or(cur.as_str());
+        let (Some(lk), Some(arc)) = (sc.links.get(link_id), res.arcs.get(&cur)) else {
             break;
         };
-        len += if a.len != 0.0 && !a.len.is_nan() {
-            a.len
+        len += if arc.len != 0.0 && !arc.len.is_nan() {
+            arc.len
         } else {
             net_len(sc, lk)
         };
-        let u = if k.ends_with(":ab") { &lk.a } else { &lk.b };
+        let u = if cur.ends_with(":ab") { &lk.a } else { &lk.b };
         let nu = sc.nodes.get(u);
         let ctl = nu.map(|n| n.control.str_or("none"));
         let controlled = !matches!(ctl, Some("none" | "priority"));
@@ -114,26 +117,26 @@ pub fn upstream_len(
         let others: Vec<&Link> = ls.iter().copied().filter(|m| m.id != lk.id).collect();
         let mut next: Option<&Link> = None;
         if ctl == "none" && ls.len() == 2 && others.len() == 1 {
-            next = Some(others[0]);
+            next = others.first().copied();
         } else if ls.len() == 3 && others.len() == 2 && !res.arcs.contains_key(&in_arc(lk, u)) {
             // a splitter island: lk is the one-way entry
-            let x = others.iter().copied().find(|m| {
+            let entry = others.iter().copied().find(|m| {
                 res.arcs.contains_key(&in_arc(m, u))
                     && !res.arcs.contains_key(&out_arc(m, u))
                     && own(&far(m, u))
             });
-            let m = x.and_then(|x| others.iter().copied().find(|m| m.id != x.id));
-            if let Some(m) = m
-                && res.arcs.contains_key(&in_arc(m, u))
-                && res.arcs.contains_key(&out_arc(m, u))
+            let exit = entry.and_then(|en| others.iter().copied().find(|m| m.id != en.id));
+            if let Some(ex) = exit
+                && res.arcs.contains_key(&in_arc(ex, u))
+                && res.arcs.contains_key(&out_arc(ex, u))
             {
-                next = Some(m);
+                next = Some(ex);
             }
         }
         let Some(next) = next else {
             break;
         };
-        k = in_arc(next, u);
+        cur = in_arc(next, u);
     }
     if len > 0.0 { Some(len) } else { None }
 }
@@ -487,6 +490,184 @@ fn max0(xs: impl IntoIterator<Item = f64>) -> f64 {
     xs.into_iter().fold(0.0, crate::jsnum::math_max)
 }
 
+/// A new leg of the summary for an approach: its coded arm, or the approach itself when it has no leg.
+fn new_group(code: f64, arm: Option<&Arm>, ap: &Approach) -> J1Group {
+    J1Group {
+        o: code,
+        leg: arm.map_or(String::new(), |a| a.leg.to_string()),
+        label: match arm {
+            Some(a) => a.leg_label.clone(),
+            None => format!(
+                "{}: {}",
+                if ap.approach.is_empty() { "Approach" } else { &ap.approach },
+                if ap.name.is_empty() { "Unnamed road" } else { &ap.name }
+            ),
+        },
+        road: match arm {
+            Some(a) => a.road.clone(),
+            None => ap.name.clone(),
+        },
+        appr: Vec::new(),
+        leg_sub: None,
+    }
+}
+
+/// An approach of the summary: its rows by movement (or by turn without movement capacity) and its own row.
+fn approach_summary(ap: &Approach, mvs: &[MovementRow], up_len: Option<f64>, set: &Settings) -> J1Appr {
+    let rows: Vec<&MovementRow> = mvs.iter().filter(|r| r.approach == ap.key).collect();
+    let v_t = sum(&rows, |r| r.v);
+    let hv_t = sum(&rows, |r| r.hv);
+    let hv_pct = if v_t > 0.0 {
+        hv_t / v_t * 100.0
+    } else {
+        set.hv_pct.or(0.0)
+    };
+    let free = ap.ctrl == "free";
+    let out = approach_rows(ap, &rows, up_len, hv_pct);
+    J1Appr {
+        rows: out,
+        sub: J1Sub {
+            v: ap.v,
+            hv_pct,
+            cap: ap.cap,
+            dos: ap.dos,
+            xp: ap.xp,
+            delay: ap.delay,
+            los: if free { "\u{2013}".to_string() } else { ap.los.clone() },
+            q95veh: ap.q95veh,
+            q95: ap.q95,
+            psc: ap.psc,
+            storage: up_len,
+            rq: if up_len.is_some() && !free { up_len.map(|l| ap.q95 / l) } else { None },
+            free,
+            key: ap.key.clone(),
+            name: ap.name.clone(),
+            cap_t: ap.cap_t,
+            bay: ap.bay,
+            right_block: ap.right_block,
+            lane_src: match &ap.lane_src {
+                crate::jsnum::Maybe::Missing => None,
+                crate::jsnum::Maybe::Null => Some(None),
+                crate::jsnum::Maybe::Set(s) => Some(Some(s.clone())),
+            },
+        },
+    }
+}
+
+/// The rows of an approach: one a movement with movement capacity, else one a turn.
+fn approach_rows(ap: &Approach, rows: &[&MovementRow], up_len: Option<f64>, hv_pct: f64) -> Vec<J1Row> {
+    let mut out: Vec<J1Row> = Vec::new();
+    if let Some(movs) = &ap.mov {
+        for m in movs {
+            let rs: Vec<&&MovementRow> = rows.iter().filter(|r| r.mv == m.mv).collect();
+            let sv = sum(&rs, |r| r.v);
+            let sh = sum(&rs, |r| r.hv);
+            let so = storage_of(ap, &m.mv, up_len);
+            out.push(J1Row {
+                ids: rs.iter().map(|r| r.id.clone()).collect(),
+                turns: rs.iter().map(|r| r.turn.to_string()).collect(),
+                mv: m.mv.clone(),
+                v: m.v,
+                hv_pct: if sv > 0.0 { sh / sv * 100.0 } else { hv_pct },
+                cap: Some(m.cap),
+                dos: Some(m.dos),
+                xp: ap.xp,
+                delay: Some(m.delay),
+                los: Some(m.los.clone()),
+                q95veh: Some(m.q95veh),
+                q95: Some(m.q95),
+                psc: m.psc,
+                storage: so.storage,
+                bay: so.bay,
+                rq: so.storage.map(|s| m.q95 / s),
+                full: true,
+                two_stage: m.two_stage.unwrap_or(false),
+                to_road: None,
+            });
+        }
+    } else {
+        for r in rows {
+            out.push(J1Row {
+                ids: vec![r.id.clone()],
+                turns: vec![r.turn.to_string()],
+                mv: r.mv.clone(),
+                v: r.v,
+                hv_pct: if r.v > 0.0 { r.hv / r.v * 100.0 } else { hv_pct },
+                full: false,
+                to_road: Some(r.to_road.clone()),
+                ..J1Row::default()
+            });
+        }
+    }
+    out
+}
+
+/// The leg total of a leg with more than one entry.
+fn leg_total(appr: &[J1Appr], method: &str, kind: &str) -> J1Sub {
+    let a: Vec<&J1Sub> = appr.iter().map(|x| &x.sub).collect();
+    let ctl: Vec<&&J1Sub> = a.iter().filter(|x| !x.free).collect();
+    let v = sum(&a, |x| x.v);
+    let cv = sum(&ctl, |x| x.v);
+    let dly = if cv > 0.0 {
+        sum(&ctl, |x| x.v * x.delay) / cv
+    } else {
+        0.0
+    };
+    let dos = max0(ctl.iter().map(|x| x.dos));
+    let psc = if ctl.is_empty() {
+        None
+    } else {
+        Some(ctl.iter().fold(f64::INFINITY, |m, x| {
+            crate::jsnum::math_min(m, x.psc.unwrap_or(f64::INFINITY))
+        }))
+    };
+    J1Sub {
+        v,
+        hv_pct: if v > 0.0 {
+            sum(&a, |x| x.v * x.hv_pct) / v
+        } else {
+            0.0
+        },
+        cap: sum(&a, |x| x.cap),
+        dos,
+        // the leg has more than one entry, so a first one is there
+        xp: a.first().and_then(|s| s.xp),
+        delay: dly,
+        los: if ctl.is_empty() {
+            "\u{2013}".to_string()
+        } else {
+            super::scale::los_from(dly, dos, method, kind).to_string()
+        },
+        q95veh: max0(a.iter().map(|x| x.q95veh)),
+        q95: max0(a.iter().map(|x| x.q95)),
+        psc,
+        ..J1Sub::default()
+    }
+}
+
+/// The intersection row of the summary.
+fn all_row(nr: &Nr<'_>, subs: &[&J1Sub]) -> J1All {
+    let v_all = sum(subs, |a| a.v);
+    let il = match nr.intersection_los {
+        Some(Some(s)) if !s.is_empty() => s,
+        _ => nr.los,
+    };
+    J1All {
+        v: v_all,
+        hv_pct: if v_all > 0.0 {
+            sum(subs, |a| a.v * a.hv_pct) / v_all
+        } else {
+            0.0
+        },
+        dos: nr.dos,
+        xp: nr.xp.or_else(|| subs.first().and_then(|s| s.xp)),
+        delay: nr.avg_delay,
+        los: il.to_string(),
+        q95veh: max0(subs.iter().map(|a| a.q95veh)),
+        q95: max0(subs.iter().map(|a| a.q95)),
+    }
+}
+
 impl<'a> Tools<'a> {
     /// `j1(sc, res, id, e0)`: the Movement Summary of a junction, looked up by id (or node id) unless the entry is given.
     #[must_use]
@@ -528,158 +709,27 @@ impl<'a> Tools<'a> {
         let mut groups: Vec<J1Group> = Vec::new();
         let side: HashSet<String> = e.nodes.iter().cloned().collect();
         for ap in nr.appr {
-            let a = by_in.get(ap.key.as_str()).map(|&i| &legs[i].arm);
-            let code = match a {
-                Some(a) => a.o as f64,
-                None => 8.0 + groups.len() as f64,
+            let arm = by_in.get(ap.key.as_str()).and_then(|&i| legs.get(i)).map(|l| &l.arm);
+            let code = match arm {
+                Some(arm) => usize_to_f64(arm.o),
+                None => 8.0 + usize_to_f64(groups.len()),
             };
-            let gi = if let Some(i) = codes.iter().position(|c| *c == code) { i } else {
+            let group = if let Some(i) = codes.iter().position(|c| *c == code) { groups.get_mut(i) } else {
                 codes.push(code);
-                groups.push(J1Group {
-                    o: code,
-                    leg: a.map_or(String::new(), |a| a.leg.to_string()),
-                    label: match a {
-                        Some(a) => a.leg_label.clone(),
-                        None => format!(
-                            "{}: {}",
-                            if ap.approach.is_empty() { "Approach" } else { &ap.approach },
-                            if ap.name.is_empty() { "Unnamed road" } else { &ap.name }
-                        ),
-                    },
-                    road: match a {
-                        Some(a) => a.road.clone(),
-                        None => ap.name.clone(),
-                    },
-                    appr: Vec::new(),
-                    leg_sub: None,
-                });
-                groups.len() - 1
+                groups.push(new_group(code, arm, ap));
+                groups.last_mut()
             };
-            let rows: Vec<&crate::turns::MovementRow> =
-                mvs.iter().filter(|r| r.approach == ap.key).collect();
-            let v_t = sum(&rows, |r| r.v);
-            let hv_t = sum(&rows, |r| r.hv);
-            let hv_pct = if v_t > 0.0 {
-                hv_t / v_t * 100.0
-            } else {
-                set.hv_pct.or(0.0)
+            // codes and groups grow together, so a code's position is its group's
+            let Some(group) = group else {
+                continue;
             };
-            let l = upstream_len(sc, res, &ap.key, Some(&side));
-            let free = ap.ctrl == "free";
-            let mut out: Vec<J1Row> = Vec::new();
-            if let Some(movs) = &ap.mov {
-                for m in movs {
-                    let rs: Vec<&&crate::turns::MovementRow> =
-                        rows.iter().filter(|r| r.mv == m.mv).collect();
-                    let sv = sum(&rs, |r| r.v);
-                    let sh = sum(&rs, |r| r.hv);
-                    let so = storage_of(ap, &m.mv, l);
-                    out.push(J1Row {
-                        ids: rs.iter().map(|r| r.id.clone()).collect(),
-                        turns: rs.iter().map(|r| r.turn.to_string()).collect(),
-                        mv: m.mv.clone(),
-                        v: m.v,
-                        hv_pct: if sv > 0.0 { sh / sv * 100.0 } else { hv_pct },
-                        cap: Some(m.cap),
-                        dos: Some(m.dos),
-                        xp: ap.xp,
-                        delay: Some(m.delay),
-                        los: Some(m.los.clone()),
-                        q95veh: Some(m.q95veh),
-                        q95: Some(m.q95),
-                        psc: m.psc,
-                        storage: so.storage,
-                        bay: so.bay,
-                        rq: so.storage.map(|s| m.q95 / s),
-                        full: true,
-                        two_stage: m.two_stage.unwrap_or(false),
-                        to_road: None,
-                    });
-                }
-            } else {
-                for r in &rows {
-                    out.push(J1Row {
-                        ids: vec![r.id.clone()],
-                        turns: vec![r.turn.to_string()],
-                        mv: r.mv.clone(),
-                        v: r.v,
-                        hv_pct: if r.v > 0.0 { r.hv / r.v * 100.0 } else { hv_pct },
-                        full: false,
-                        to_road: Some(r.to_road.clone()),
-                        ..J1Row::default()
-                    });
-                }
-            }
-            groups[gi].appr.push(J1Appr {
-                rows: out,
-                sub: J1Sub {
-                    v: ap.v,
-                    hv_pct,
-                    cap: ap.cap,
-                    dos: ap.dos,
-                    xp: ap.xp,
-                    delay: ap.delay,
-                    los: if free { "\u{2013}".to_string() } else { ap.los.clone() },
-                    q95veh: ap.q95veh,
-                    q95: ap.q95,
-                    psc: ap.psc,
-                    storage: l,
-                    rq: if l.is_some() && !free { l.map(|l| ap.q95 / l) } else { None },
-                    free,
-                    key: ap.key.clone(),
-                    name: ap.name.clone(),
-                    cap_t: ap.cap_t,
-                    bay: ap.bay,
-                    right_block: ap.right_block,
-                    lane_src: match &ap.lane_src {
-                        crate::jsnum::Maybe::Missing => None,
-                        crate::jsnum::Maybe::Null => Some(None),
-                        crate::jsnum::Maybe::Set(s) => Some(Some(s.clone())),
-                    },
-                },
-            });
+            let up_len = upstream_len(sc, res, &ap.key, Some(&side));
+            group.appr.push(approach_summary(ap, &mvs, up_len, set));
         }
         groups.sort_by(|p, q| p.o.partial_cmp(&q.o).unwrap_or(std::cmp::Ordering::Equal));
         for g in &mut groups {
             if g.appr.len() > 1 {
-                let a: Vec<&J1Sub> = g.appr.iter().map(|x| &x.sub).collect();
-                let ctl: Vec<&&J1Sub> = a.iter().filter(|x| !x.free).collect();
-                let v = sum(&a, |x| x.v);
-                let cv = sum(&ctl, |x| x.v);
-                let dly = if cv > 0.0 {
-                    sum(&ctl, |x| x.v * x.delay) / cv
-                } else {
-                    0.0
-                };
-                let dos = max0(ctl.iter().map(|x| x.dos));
-                let psc = if ctl.is_empty() {
-                    None
-                } else {
-                    Some(ctl.iter().fold(f64::INFINITY, |m, x| {
-                        crate::jsnum::math_min(m, x.psc.unwrap_or(f64::INFINITY))
-                    }))
-                };
-                g.leg_sub = Some(J1Sub {
-                    v,
-                    hv_pct: if v > 0.0 {
-                        sum(&a, |x| x.v * x.hv_pct) / v
-                    } else {
-                        0.0
-                    },
-                    cap: sum(&a, |x| x.cap),
-                    dos,
-                    xp: a[0].xp,
-                    delay: dly,
-                    los: if ctl.is_empty() {
-                        "\u{2013}".to_string()
-                    } else {
-                        super::scale::los_from(dly, dos, &method, nr.kind).to_string()
-                    },
-                    q95veh: max0(a.iter().map(|x| x.q95veh)),
-                    q95: max0(a.iter().map(|x| x.q95)),
-                    psc,
-                    ..J1Sub::default()
-                });
+                g.leg_sub = Some(leg_total(&g.appr, &method, nr.kind));
             }
         }
         let twsc = match nr.intersection_los {
@@ -691,29 +741,7 @@ impl<'a> Tools<'a> {
             .iter()
             .flat_map(|g| g.appr.iter().map(|x| &x.sub))
             .collect();
-        let v_all = sum(&subs, |a| a.v);
-        let all = if twsc {
-            None
-        } else {
-            let il = match nr.intersection_los {
-                Some(Some(s)) if !s.is_empty() => s,
-                _ => nr.los,
-            };
-            Some(J1All {
-                v: v_all,
-                hv_pct: if v_all > 0.0 {
-                    sum(&subs, |a| a.v * a.hv_pct) / v_all
-                } else {
-                    0.0
-                },
-                dos: nr.dos,
-                xp: nr.xp.or_else(|| subs.first().and_then(|s| s.xp)),
-                delay: nr.avg_delay,
-                los: il.to_string(),
-                q95veh: max0(subs.iter().map(|a| a.q95veh)),
-                q95: max0(subs.iter().map(|a| a.q95)),
-            })
-        };
+        let all = if twsc { None } else { Some(all_row(&nr, &subs)) };
         let movement = !subs.is_empty() && nr.appr.iter().any(|a| a.mov.is_some());
         Some(J1 {
             e: e.clone(),
@@ -774,8 +802,8 @@ struct Cell<'r> {
     q95veh: Option<f64>,
     q95: Option<f64>,
     psc: Option<f64>,
-    /// None for undefined, Some(None) for null.
-    rq: Option<Option<f64>>,
+    /// Storage ratio; None prints a dash, as both an undefined and a null ratio do (`rqCell(null)` is a dash).
+    rq: Option<f64>,
     bay: bool,
 }
 
@@ -827,13 +855,7 @@ fn cells(r: &Cell, lab: &str, turn: &str, bold: bool) -> String {
         }),
         true,
     ));
-    s.push_str(&td(
-        &match r.rq {
-            Some(q) => rq_cell(q, r.bay),
-            None => dash.to_string(),
-        },
-        true,
-    ));
+    s.push_str(&td(&rq_cell(r.rq, r.bay), true));
     s.push_str("</tr>");
     s
 }
@@ -851,7 +873,7 @@ fn cell_of_row(r: &J1Row) -> Cell<'_> {
         q95veh: r.q95veh,
         q95: r.q95,
         psc: r.psc,
-        rq: if r.full { Some(r.rq) } else { None },
+        rq: if r.full { r.rq } else { None },
         bay: r.bay,
     }
 }
@@ -869,7 +891,7 @@ fn cell_of_sub(s: &J1Sub, leg_total: bool) -> Cell<'_> {
         q95veh: Some(s.q95veh),
         q95: Some(s.q95),
         psc: s.psc,
-        rq: if leg_total { None } else { Some(s.rq) },
+        rq: if leg_total { None } else { s.rq },
         bay: false,
     }
 }
@@ -891,11 +913,73 @@ pub fn j1_html(t: &Tools, d: Option<&J1>, opts: J1HtmlOpts) -> String {
     let Some(d) = d else {
         return "<p class=\"note\">No junction results here. Run the model, then pick a junction with a give-way, stop, roundabout or signal control.</p>".to_string();
     };
-    let th: String = J1_HEAD
-        .iter()
-        .enumerate()
-        .map(|(i, h)| format!("<th{}>{}</th>", if i >= 2 { " class=\"n\"" } else { "" }, h))
-        .collect();
+    // Writing to a String cannot fail (the `let _ =` below)
+    let th: String = J1_HEAD.iter().enumerate().fold(String::new(), |mut out, (i, h)| {
+        let _ = write!(out, "<th{}>{}</th>", if i >= 2 { " class=\"n\"" } else { "" }, h);
+        out
+    });
+    let body = j1_body(d);
+    let head = if opts.head {
+        format!(
+            "<h4 style=\"margin:6px 0\">{} \u{b7} {} \u{b7} {} {}{}</h4>",
+            esc(&d.e.name),
+            esc(&ctl_name(&d.kind)),
+            esc(&per_name(&d.period)),
+            esc(&if d.year != 0.0 && !d.year.is_nan() { number_to_js_string(d.year) } else { String::new() }),
+            if d.stale { " <span class=\"pill stale\">out of date</span>" } else { "" }
+        )
+    } else {
+        String::new()
+    };
+    let cyc = match d.nr.c {
+        Some(c) if c != 0.0 && !c.is_nan() => format!(
+            "<p class=\"note\">Cycle time {} s; green split {}.</p>",
+            n0(Some(c)),
+            d.nr.split
+                .unwrap_or(&[])
+                .iter()
+                .map(|s| format!("{}%", n0(Some(s * 100.0))))
+                .collect::<Vec<_>>()
+                .join(" / ")
+        ),
+        _ => String::new(),
+    };
+    // a very short storage to a red queue usually means the next node is part of this junction (an ungrouped divided road)
+    let short = d.groups.iter().any(|g| {
+        g.appr.iter().any(|x| {
+            x.sub.storage.is_some_and(|s| s < 30.0) && x.sub.rq.is_some_and(|r| r > STORAGE_RED)
+        })
+    });
+    let near = if short {
+        "<p class=\"note\">An approach has less than 30 m to the next junction node. If those nodes are one junction (a divided road or an offset T), group them into a site with Merge junctions or Find junction sites, so the queue is measured to the real upstream junction.</p>"
+    } else {
+        ""
+    };
+    let lvl = if d.movement {
+        ""
+    } else {
+        "<p class=\"note\">Approach-level results: capacity, DoS, delay and queue are per approach. Switch to movement capacity in Settings \u{203a} Junction analysis for per-movement rows.</p>"
+    };
+    format!(
+        "{}{}<div class=\"tbl-wrap\"><table class=\"t compact\"><tr>{}</tr>{}</table></div>{}{}{}\n      <p class=\"note\">{} Storage ratio: amber above {}, red above {} ({}).</p>{}",
+        head,
+        t.supp_note(),
+        th,
+        body.join(""),
+        cyc,
+        lvl,
+        near,
+        esc(&d.footer),
+        number_to_js_string(STORAGE_AMBER),
+        number_to_js_string(STORAGE_RED),
+        STORAGE_BASIS,
+        d.res_footer_html()
+    )
+}
+
+/// `j1Html(D, opts)`'s table rows: each leg's heading, its rows, approach rows and leg total, then the intersection row
+/// (or the two-way sign control note).
+fn j1_body(d: &J1<'_>) -> Vec<String> {
     let mut body: Vec<String> = Vec::new();
     for g in &d.groups {
         body.push(format!(
@@ -974,61 +1058,6 @@ pub fn j1_html(t: &Tools, d: Option<&J1>, opts: J1HtmlOpts) -> String {
             esc(lt)
         ));
     }
-    let head = if opts.head {
-        format!(
-            "<h4 style=\"margin:6px 0\">{} \u{b7} {} \u{b7} {} {}{}</h4>",
-            esc(&d.e.name),
-            esc(&ctl_name(&d.kind)),
-            esc(&per_name(&d.period)),
-            esc(&if d.year != 0.0 && !d.year.is_nan() { number_to_js_string(d.year) } else { String::new() }),
-            if d.stale { " <span class=\"pill stale\">out of date</span>" } else { "" }
-        )
-    } else {
-        String::new()
-    };
-    let cyc = match d.nr.c {
-        Some(c) if c != 0.0 && !c.is_nan() => format!(
-            "<p class=\"note\">Cycle time {} s; green split {}.</p>",
-            n0(Some(c)),
-            d.nr.split
-                .unwrap_or(&[])
-                .iter()
-                .map(|s| format!("{}%", n0(Some(s * 100.0))))
-                .collect::<Vec<_>>()
-                .join(" / ")
-        ),
-        _ => String::new(),
-    };
-    // a very short storage to a red queue usually means the next node is part of this junction (an ungrouped divided road)
-    let short = d.groups.iter().any(|g| {
-        g.appr.iter().any(|x| {
-            x.sub.storage.is_some_and(|s| s < 30.0) && x.sub.rq.is_some_and(|r| r > STORAGE_RED)
-        })
-    });
-    let near = if short {
-        "<p class=\"note\">An approach has less than 30 m to the next junction node. If those nodes are one junction (a divided road or an offset T), group them into a site with Merge junctions or Find junction sites, so the queue is measured to the real upstream junction.</p>"
-    } else {
-        ""
-    };
-    let lvl = if d.movement {
-        ""
-    } else {
-        "<p class=\"note\">Approach-level results: capacity, DoS, delay and queue are per approach. Switch to movement capacity in Settings \u{203a} Junction analysis for per-movement rows.</p>"
-    };
-    format!(
-        "{}{}<div class=\"tbl-wrap\"><table class=\"t compact\"><tr>{}</tr>{}</table></div>{}{}{}\n      <p class=\"note\">{} Storage ratio: amber above {}, red above {} ({}).</p>{}",
-        head,
-        t.supp_note(),
-        th,
-        body.join(""),
-        cyc,
-        lvl,
-        near,
-        esc(&d.footer),
-        number_to_js_string(STORAGE_AMBER),
-        number_to_js_string(STORAGE_RED),
-        STORAGE_BASIS,
-        d.res_footer_html()
-    )
+    body
 }
 

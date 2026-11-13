@@ -1,6 +1,6 @@
 //! Study boxes, polygons and the small helpers of the land use feature (landuse-plus.js "small helpers" and "geometry").
 
-use crate::jsnum::{JsNum, Maybe, math_max_of, math_min, math_max, math_min_of, math_round, string_to_number, to_fixed, value_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{JsNum, Maybe, math_max_of, math_min, math_max, math_min_of, math_round, string_to_number, to_fixed, usize_to_f64, value_to_js_string, value_to_number, value_truthy};
 use crate::project::{Project, Scenario};
 use crate::util::{self, fmt};
 use serde_json::Value;
@@ -142,19 +142,20 @@ pub fn parse_num_text(text: &str) -> Option<f64> {
     let mut kept = String::new();
     let chars: Vec<char> = text.chars().collect();
     let lowc: Vec<char> = low.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let rest: String = lowc[i..].iter().take(3).collect();
+    let mut i = 0usize;
+    // Bound: i stays at most chars.len() + 2, so the steps never saturate
+    while let Some(&ch) = chars.get(i) {
+        let rest: String = lowc.get(i..).unwrap_or_default().iter().take(3).collect();
         if lowc.len() == chars.len() && (rest.starts_with("m\u{b2}") || rest.starts_with("m2")) {
-            i += 2;
+            i = i.saturating_add(2);
             continue;
         }
         if lowc.len() == chars.len() && rest.starts_with("sqm") {
-            i += 3;
+            i = i.saturating_add(3);
             continue;
         }
-        kept.push(chars[i]);
-        i += 1;
+        kept.push(ch);
+        i = i.saturating_add(1);
     }
     let s: String = kept.chars().filter(|c| !(crate::jsnum::is_js_space(*c) || *c == ',' || *c == ' ')).collect();
     if s.is_empty() {
@@ -167,34 +168,33 @@ pub fn parse_num_text(text: &str) -> Option<f64> {
 fn numlike(s: &str) -> bool {
     let b = s.as_bytes();
     let len = b.len();
-    let digits = |mut i: usize| {
-        while i < len && b[i].is_ascii_digit() {
-            i += 1;
-        }
-        i
-    };
-    let mut i = 0;
-    if i < len && (b[i] == b'-' || b[i] == b'+') {
-        i += 1;
+    let at = |i: usize| b.get(i).copied();
+    // The position after the run of digits from i. Bound: positions stay at most len, so the steps never saturate
+    let digits = |i: usize| i.saturating_add(b.get(i..).map_or(0, |r| r.iter().take_while(|c| c.is_ascii_digit()).count()));
+    let mut i = 0usize;
+    if matches!(at(i), Some(b'-' | b'+')) {
+        i = i.saturating_add(1);
     }
-    if i < len && b[i].is_ascii_digit() {
-        i = digits(i);
-        if i < len && b[i] == b'.' {
-            i = digits(i + 1);
+    match at(i) {
+        Some(c) if c.is_ascii_digit() => {
+            i = digits(i);
+            if at(i) == Some(b'.') {
+                i = digits(i.saturating_add(1));
+            }
         }
-    } else if i < len && b[i] == b'.' {
-        let start = i + 1;
-        i = digits(start);
-        if i == start {
-            return false;
+        Some(b'.') => {
+            let start = i.saturating_add(1);
+            i = digits(start);
+            if i == start {
+                return false;
+            }
         }
-    } else {
-        return false;
+        _ => return false,
     }
-    if i < len && (b[i] == b'e' || b[i] == b'E') {
-        i += 1;
-        if i < len && (b[i] == b'-' || b[i] == b'+') {
-            i += 1;
+    if matches!(at(i), Some(b'e' | b'E')) {
+        i = i.saturating_add(1);
+        if matches!(at(i), Some(b'-' | b'+')) {
+            i = i.saturating_add(1);
         }
         let start = i;
         i = digits(start);
@@ -209,20 +209,24 @@ fn numlike(s: &str) -> bool {
 #[must_use]
 pub fn lr(total: f64, weights: &[f64]) -> Vec<f64> {
     let s = weights.iter().fold(0.0, |a, b| a + b);
-    if !(s > 0.0) || !(total > 0.0) {
+    // !(s > 0) || !(total > 0), NaN included
+    if s <= 0.0 || s.is_nan() || total <= 0.0 || total.is_nan() {
         return weights.iter().map(|_| 0.0).collect();
     }
     let raw: Vec<f64> = weights.iter().map(|w| total * w / s).collect();
     let mut out: Vec<f64> = raw.iter().map(|r| r.floor()).collect();
     let mut left = total - out.iter().fold(0.0, |a, b| a + b);
-    let mut rem: Vec<(f64, usize)> = raw.iter().enumerate().map(|(i, r)| (r - out[i], i)).collect();
+    let mut rem: Vec<(f64, usize)> = raw.iter().zip(&out).enumerate().map(|(i, (r, o))| (r - o, i)).collect();
     crate::graph::js_sort_by(&mut rem, |a, b| {
         let d = b.0 - a.0;
-        if d != 0.0 && !d.is_nan() { d } else { a.1 as f64 - b.1 as f64 }
+        if d != 0.0 && !d.is_nan() { d } else { usize_to_f64(a.1) - usize_to_f64(b.1) }
     });
     for (_, i) in rem {
         if left > 0.0 {
-            out[i] += 1.0;
+            // i is an index of raw, which out matches in length
+            if let Some(slot) = out.get_mut(i) {
+                *slot += 1.0;
+            }
             left -= 1.0;
         }
     }
@@ -268,22 +272,21 @@ pub fn bb_of(rings: &[Ring]) -> [f64; 4] {
 /// `inRings(x, y, rings)`: even-odd over every ring, so holes work.
 #[must_use]
 pub fn in_rings(x: f64, y: f64, rings: &[Ring]) -> bool {
-    let mut c = false;
-    for r in rings {
-        let n = r.len();
-        if n == 0 {
+    let mut odd = false;
+    for ring in rings {
+        // j starts at the last point and then trails i by one
+        let Some(mut pj) = ring.last() else {
             continue;
-        }
-        let mut j = n - 1;
-        for i in 0..n {
-            let (xi, yi, xj, yj) = (r[i][0], r[i][1], r[j][0], r[j][1]);
+        };
+        for pi in ring {
+            let (xi, yi, xj, yj) = (pi[0], pi[1], pj[0], pj[1]);
             if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
-                c = !c;
+                odd = !odd;
             }
-            j = i;
+            pj = pi;
         }
     }
-    c
+    odd
 }
 
 /// `inPoly(f, lng, lat)`: the point is inside the polygon (bounding box first).
@@ -310,16 +313,16 @@ pub fn rings_area(rings: &[Ring]) -> f64 {
     if rings.is_empty() {
         return 0.0;
     }
-    let f = util::flat(rings[0][0][1]);
-    let mut a = 0.0;
-    for r in rings {
-        let n = r.len();
-        for i in 0..n {
-            let (p, q) = (r[i], r[(i + 1) % n]);
-            a += (p[0] * f.kx) * (q[1] * f.ky) - (q[0] * f.kx) * (p[1] * f.ky);
+    // rings_of keeps only rings of three or more points, so the first point is always there
+    let fl = util::flat(rings.first().and_then(|r| r.first()).map_or(f64::NAN, |p| p[1]));
+    let mut sum = 0.0;
+    for ring in rings {
+        // Each point with the next one, the last with the first (r[(i + 1) % n])
+        for (p, q) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+            sum += (p[0] * fl.kx) * (q[1] * fl.ky) - (q[0] * fl.kx) * (p[1] * fl.ky);
         }
     }
-    (a / 2.0).abs()
+    (sum / 2.0).abs()
 }
 
 /// What `sampleShare` finds: the share of a polygon in a box, the sample points inside both and how many samples fell inside the polygon.
@@ -336,24 +339,25 @@ pub struct Sample {
 /// `sampleShare(f, B, n)`: the sampled share of a polygon's area inside box B, and the sample points inside both.
 #[must_use]
 pub fn sample_share(f: &Poly, b: &Bx, n: usize) -> Sample {
-    let [w, s, e, nn] = f.bb;
+    let [west, south, east, north] = f.bb;
     let mut pts = Vec::new();
     let mut inside = 0usize;
-    let nf = n as f64;
-    for j in 0..n {
-        for i in 0..n {
-            let x = w + (e - w) * (i as f64 + 0.5) / nf;
-            let y = s + (nn - s) * (j as f64 + 0.5) / nf;
-            if !in_rings(x, y, &f.rings) {
+    let nf = usize_to_f64(n);
+    for row in 0..n {
+        for col in 0..n {
+            let px = west + (east - west) * (usize_to_f64(col) + 0.5) / nf;
+            let py = south + (north - south) * (usize_to_f64(row) + 0.5) / nf;
+            if !in_rings(px, py, &f.rings) {
                 continue;
             }
-            inside += 1;
-            if in_box(b, y, x) {
-                pts.push([x, y]);
+            // Bound: at most n * n sample points, each made one at a time
+            inside = inside.saturating_add(1);
+            if in_box(b, py, px) {
+                pts.push([px, py]);
             }
         }
     }
-    let share = if inside > 0 { pts.len() as f64 / inside as f64 } else if bb_meets(&f.bb, b) { 1.0 } else { 0.0 };
+    let share = if inside > 0 { usize_to_f64(pts.len()) / usize_to_f64(inside) } else if bb_meets(&f.bb, b) { 1.0 } else { 0.0 };
     Sample { share, pts, inside }
 }
 
@@ -364,11 +368,9 @@ pub fn rings_of(g: Option<&Value>) -> Vec<Ring> {
         return Vec::new();
     };
     rs.iter()
-        .filter(|r| r.as_array().is_some_and(|a| a.len() > 2))
-        .map(|r| {
-            r.as_array()
-                .expect("a ring")
-                .iter()
+        .filter_map(|r| r.as_array().filter(|a| a.len() > 2))
+        .map(|a| {
+            a.iter()
                 .map(|p| [p.get(0).map_or(f64::NAN, value_to_number), p.get(1).map_or(f64::NAN, value_to_number)])
                 .collect()
         })

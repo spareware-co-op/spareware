@@ -2,8 +2,9 @@
 
 use super::{LABEL, STORAGE_AMBER, STORAGE_RED, FIGURE_STEP};
 use crate::edit::CONTROLS;
-use crate::jsnum::{math_round, number_to_js_string, to_fixed};
+use crate::jsnum::{math_round, number_to_js_string, to_fixed, usize_to_f64};
 use crate::util::{esc, fmt};
+use std::fmt::Write as _;
 
 /// `n0(x)`: a whole number, or an en dash.
 #[must_use]
@@ -51,7 +52,7 @@ pub fn p1(x: Option<f64>) -> String {
 #[must_use]
 pub fn sgn(x: Option<f64>, u: &str, dp: usize) -> String {
     match x {
-        Some(v) if v.is_finite() && v.abs() >= crate::jsmath::pow(10.0, -(dp as f64)) / 2.0 => {
+        Some(v) if v.is_finite() && v.abs() >= crate::jsmath::pow(10.0, -usize_to_f64(dp)) / 2.0 => {
             format!(
                 "{}{}{}",
                 if v > 0.0 { "+" } else { "\u{2212}" },
@@ -234,18 +235,23 @@ pub fn kit_table(head: &[Head], rows: &[TableRow]) -> String {
     } else {
         format!(
             "<tr>{}</tr>",
+            // Writing to a String cannot fail
             head.iter()
-                .map(|h| format!(
-                    "<th{}>{}</th>",
-                    if h.n { " class=\"n\"" } else { "" },
-                    h.label
-                ))
-                .collect::<String>()
+                .fold(String::new(), |mut s, h| {
+                    let _ = write!(
+                        s,
+                        "<th{}>{}</th>",
+                        if h.n { " class=\"n\"" } else { "" },
+                        h.label
+                    );
+                    s
+                })
         )
     };
+    // Writing to a String cannot fail (the `let _ =` below)
     let tr: String = rows
         .iter()
-        .map(|r| {
+        .fold(String::new(), |mut out, r| {
             let attrs = match &r.fly {
                 Some(f) => format!(" class=\"click \" data-fly=\"{}\"", esc(f)),
                 None => String::new(),
@@ -254,19 +260,19 @@ pub fn kit_table(head: &[Head], rows: &[TableRow]) -> String {
                 .cells
                 .iter()
                 .enumerate()
-                .map(|(i, c)| {
+                .fold(String::new(), |mut s, (i, c)| {
                     let n = head.get(i).is_some_and(|h| h.n);
                     let inner = if r.fly.is_some() && i == 0 {
                         format!("<button type=\"button\" class=\"rowlink\">{c}</button>")
                     } else {
                         c.clone()
                     };
-                    format!("<td{}>{}</td>", if n { " class=\"n\"" } else { "" }, inner)
-                })
-                .collect();
-            format!("<tr{attrs}>{cells}</tr>")
-        })
-        .collect();
+                    let _ = write!(s, "<td{}>{}</td>", if n { " class=\"n\"" } else { "" }, inner);
+                    s
+                });
+            let _ = write!(out, "<tr{attrs}>{cells}</tr>");
+            out
+        });
     format!("<div class=\"tbl-wrap\"><table class=\"t compact\">{th}{tr}</table></div>")
 }
 

@@ -12,6 +12,7 @@ use crate::project::{LANDUSES, LandUse, OrderedMap, Project, Scenario, Settings,
 use crate::standards::year_of;
 use crate::util::{self, clamp, fmt, r1, r3};
 use serde_json::{Map, Value, json};
+use std::fmt::Write as _;
 
 /// The land use settings (`conf(S)`): the default mode split, students per car and the source and year of each trip rate, merged with the project's own.
 #[must_use]
@@ -47,13 +48,13 @@ impl Split {
     /// The share of a mode ("driver", "passenger", "pt", "walk" or "cycle").
     #[must_use]
     pub fn get(&self, m: &str) -> f64 {
-        MODES.iter().position(|x| *x == m).map_or(f64::NAN, |i| self.modes[i])
+        MODES.iter().position(|x| *x == m).and_then(|i| self.modes.get(i).copied()).unwrap_or(f64::NAN)
     }
     /// The answer as JSON.
     pub fn to_value(&self) -> Value {
         let mut o = Map::new();
-        for (i, m) in MODES.iter().enumerate() {
-            o.insert(m.to_string(), json_number(self.modes[i]));
+        for (m, x) in MODES.iter().zip(self.modes) {
+            o.insert(m.to_string(), json_number(x));
         }
         if let Some(n) = self.n {
             o.insert("n".into(), json_number(n));
@@ -103,7 +104,8 @@ pub fn shares_of(c: &Value, g: &str) -> Option<Shares> {
         [cnt(c, "drivePriv") + cnt(c, "driveCo"), raw("pass"), cnt(c, "bus") + cnt(c, "train") + cnt(c, "ferry"), raw("walk"), raw("bike")]
     };
     let n = m.iter().fold(0.0, |s, x| s + plus0(*x));
-    if !(n > 0.0) {
+    // !(n > 0), NaN included
+    if n <= 0.0 || n.is_nan() {
         return None;
     }
     let stated = c.get("stated").map_or(f64::NAN, value_to_number);
@@ -112,10 +114,7 @@ pub fn shares_of(c: &Value, g: &str) -> Option<Shares> {
     } else {
         None
     };
-    let mut modes = [0.0; 5];
-    for (i, x) in m.iter().enumerate() {
-        modes[i] = 100.0 * plus0(*x) / n;
-    }
+    let modes = m.map(|x| 100.0 * plus0(x) / n);
     Some(Shares { modes, n: math_round(n), car_spec })
 }
 
@@ -129,33 +128,29 @@ fn given(v: Option<&Value>) -> bool {
 }
 
 /// `splitFor(z, k, S)`: the mode split for an activity in a zone: the zone's own entry, else the Census for its SA1s, else the default.
+#[must_use]
 pub fn split_for(z: &Zone, k: &str, s: &Settings) -> Split {
     let tg = tg_on(z);
     let cfg = conf(s);
-    if let Some(sp) = tg.and_then(|t| t.get("split")).filter(|x| value_truthy(x))
-        && MODES.iter().any(|m| given(sp.get(*m)))
+    if let Some(own) = tg.and_then(|table| table.get("split")).filter(|x| value_truthy(x))
+        && MODES.iter().any(|mode| given(own.get(*mode)))
     {
-        let mut raw = [0.0; 5];
-        for (i, m) in MODES.iter().enumerate() {
-            raw[i] = math_max(0.0, plus0(sp.get(*m).map_or(f64::NAN, value_to_number)));
-        }
-        let sum = or_default(raw.iter().fold(0.0, |a, x| a + x), 1.0);
-        let mut modes = [0.0; 5];
-        for i in 0..5 {
-            modes[i] = 100.0 * raw[i] / sum;
-        }
+        let raw: [f64; 5] = MODES.map(|mode| math_max(0.0, plus0(own.get(mode).map_or(f64::NAN, value_to_number))));
+        let sum = or_default(raw.iter().fold(0.0, |acc, x| acc + x), 1.0);
+        let modes = raw.map(|x| 100.0 * x / sum);
         return Split { modes, basis: "user", source: "entered for this zone".into(), sum: Some(sum), n: None, car_spec: None };
     }
-    let g = group_of(k);
-    let census = z.extra.get("census").filter(|c| c.get("modes").and_then(|m| m.get(g)).is_some_and(value_truthy));
+    let topic = group_of(k);
+    let census = z.extra.get("census").filter(|rec| rec.get("modes").and_then(|ms| ms.get(topic)).is_some_and(value_truthy));
     let src = census.or_else(|| z.extra.get("censusLoc").filter(|x| value_truthy(x)));
-    let sh = src.and_then(|s| s.get("modes")).filter(|x| value_truthy(x)).and_then(|m| m.get(g)).and_then(|c| shares_of(c, g));
+    let sh = src.and_then(|rec| rec.get("modes")).filter(|x| value_truthy(x)).and_then(|ms| ms.get(topic)).and_then(|counts| shares_of(counts, topic));
+    // sh is only Some when src is
     if let Some(sh) = &sh
         && sh.n >= std_::CENSUS_MIN_N
+        && let Some(src) = src
     {
-        let src = src.expect("src");
         let codes: Vec<String> = match src.get("sa1") {
-            Some(Value::Array(a)) => a.iter().map(|s| s.get("code").map_or("undefined".to_string(), value_to_js_string)).collect(),
+            Some(Value::Array(list)) => list.iter().map(|rec| rec.get("code").map_or("undefined".to_string(), value_to_js_string)).collect(),
             Some(other) => vec![value_to_js_string(other)],
             None => vec!["undefined".to_string()],
         };
@@ -163,32 +158,26 @@ pub fn split_for(z: &Zone, k: &str, s: &Settings) -> Split {
         return Split {
             modes: sh.modes,
             basis: "derived",
-            source: format!("{}, SA1 {}{} ({} people)", mode_src(g), shown, if codes.len() > 4 { " \u{2026}" } else { "" }, number_to_js_string(sh.n)),
+            source: format!("{}, SA1 {}{} ({} people)", mode_src(topic), shown, if codes.len() > 4 { " \u{2026}" } else { "" }, number_to_js_string(sh.n)),
             sum: None,
             n: Some(sh.n),
             car_spec: Some(sh.car_spec),
         };
     }
-    let mut raw = [0.0; 5];
-    for (i, m) in MODES.iter().enumerate() {
-        raw[i] = cfg_split(&cfg, m);
-    }
-    let sum = raw.iter().fold(0.0, |a, x| a + x);
+    let raw: [f64; 5] = MODES.map(|mode| cfg_split(&cfg, mode));
+    let sum = raw.iter().fold(0.0, |acc, x| acc + x);
     let split: [f64; 5] = if sum > 0.0 {
-        let mut o = [0.0; 5];
-        for i in 0..5 {
-            o[i] = 100.0 * raw[i] / sum;
-        }
-        o
+        raw.map(|x| 100.0 * x / sum)
     } else {
         [std_::SPLIT_DRIVER, std_::SPLIT_PASSENGER, std_::SPLIT_PT, std_::SPLIT_WALK, std_::SPLIT_CYCLE]
     };
     let mut source = std_::SPLIT_LABEL.to_string();
+    // Writing to a String cannot fail
     if let Some(sh) = &sh {
-        source.push_str(&format!(" (the Census sample is only {} people)", number_to_js_string(sh.n)));
+        let _ = write!(source, " (the Census sample is only {} people)", number_to_js_string(sh.n));
     }
     if (sum - 100.0).abs() > 0.5 {
-        source.push_str(&format!(" (entered shares add up to {}%, rescaled to 100%)", fmt::num(sum, 0)));
+        let _ = write!(source, " (entered shares add up to {}%, rescaled to 100%)", fmt::num(sum, 0));
     }
     Split { modes: split, basis: "assumed", source, sum: Some(sum), n: None, car_spec: None }
 }
@@ -228,7 +217,8 @@ pub struct RateFlag {
 #[must_use]
 pub fn rate_flag(year: f64) -> Option<RateFlag> {
     let y = year;
-    if !(y > 1900.0) {
+    // !(y > 1900), NaN included
+    if y <= 1900.0 || y.is_nan() {
         return Some(RateFlag { level: "warn", text: "No survey year: an indicative default. Replace it with a surveyed or published rate (AT ITA Guidelines App 1).".into() });
     }
     if y < 2020.0 {
@@ -250,8 +240,8 @@ pub fn unit_one(l: &LandUse) -> String {
     if u.ends_with('s') {
         u.pop();
     }
-    if u.ends_with("places") {
-        u = format!("{}place", &u[..u.len() - 6]);
+    if let Some(stem) = u.strip_suffix("places") {
+        u = format!("{stem}place");
     }
     u
 }
@@ -438,8 +428,6 @@ pub struct TripGen {
     pub existing: Dir,
     /// Existing site trips as entered.
     pub existing_raw: Dir,
-    /// The existing site trips are larger than the new trips.
-    pub exceeds: bool,
     /// Internal trips.
     pub internal: Dir,
     /// Pass-by trips.
@@ -465,12 +453,17 @@ pub struct TripGen {
 }
 
 impl TripGen {
+    /// The existing site trips are larger than the new trips (as entered, by more than 1e-9 veh/h either way).
+    #[must_use]
+    pub fn exceeds(&self) -> bool {
+        self.existing_raw.r#in > self.gross.r#in + 1e-9 || self.existing_raw.out > self.gross.out + 1e-9
+    }
     /// The answer as JSON, in the prototype's shape.
     pub fn to_value(&self) -> Value {
         json!({
             "zone": self.zone, "name": self.name, "cls": self.cls, "period": self.period, "on": self.on,
             "rows": self.rows.iter().map(TripRow::to_value).collect::<Vec<_>>(),
-            "gross": self.gross.to_value(), "existing": self.existing.to_value(), "existingRaw": self.existing_raw.to_value(), "exceeds": self.exceeds,
+            "gross": self.gross.to_value(), "existing": self.existing.to_value(), "existingRaw": self.existing_raw.to_value(), "exceeds": self.exceeds(),
             "internal": self.internal.to_value(), "passby": self.passby.to_value(), "afterP": self.after_p.to_value(), "tdm": self.tdm.to_value(), "net": self.net.to_value(),
             "freight": self.freight.to_value(), "lost": self.lost, "open": self.open, "stage": json_number(self.stage), "loaded": self.loaded.to_value(),
             "pct": { "internal": json_number(self.pct.0), "passby": json_number(self.pct.1), "tdm": json_number(self.pct.2) },
@@ -502,161 +495,176 @@ fn other_trips(z: &Zone, period: &str) -> (f64, f64) {
     }
 }
 
+// Where a row's rate came from and its survey year: the zone's own entry, else (for a rate not entered for the zone) the settings'
+fn rate_source(spec: &Value, meta: &Value, custom: bool) -> (String, Option<f64>) {
+    let source = match spec.get("source") {
+        Some(x) if value_truthy(x) => value_to_js_string(x),
+        _ => {
+            if custom {
+                "entered for this zone (no source given)".to_string()
+            } else {
+                match meta.get("source") {
+                    Some(x) if value_truthy(x) => value_to_js_string(x),
+                    _ => DEFAULT_RATE_SOURCE.to_string(),
+                }
+            }
+        }
+    };
+    let year: Option<f64> = if given(spec.get("year")) {
+        Some(value_to_number(&spec["year"]))
+    } else if custom {
+        None
+    } else if given(meta.get("year")) {
+        Some(value_to_number(&meta["year"]))
+    } else {
+        None
+    };
+    (source, year)
+}
+
+// One land use's row of a zone in a period (the loop over LANDUSES in `tripGen`): None when the zone has none of it or the
+// settings have no rate for it. tg_val is the zone's table when it is switched on, else {} (so spec is then {}).
+fn land_use_row(z: &Zone, s: &Settings, period: &str, cfg: &Value, tg_val: &Value, lu_def: &LandUse) -> Option<TripRow> {
+    let key = lu_def.key;
+    let qty = or_default(z.lu.get().map_or(f64::NAN, |lu| lu.num_at(key).num()), 0.0);
+    if qty == 0.0 {
+        return None;
+    }
+    let rates = s.rates.get().and_then(|m| m.get(key)).and_then(|m| m.get()).and_then(|m| m.get(period)).and_then(|m| m.get())?;
+    let empty = json!({});
+    let spec = tg_val.get("rows").filter(|x| value_truthy(x)).and_then(|rw| rw.get(key)).filter(|x| value_truthy(x)).unwrap_or(&empty);
+    let units = qty / lu_def.per;
+    let meta = cfg.get("rateMeta").and_then(|m| m.get(key)).filter(|x| value_truthy(x)).unwrap_or(&empty);
+    // hours and the drive-through flag describe the activity (T1); they never switch the table on
+    let desc = z.tg.get().and_then(|table| table.get("rows")).filter(|x| value_truthy(x)).and_then(|rw| rw.get(key)).filter(|x| value_truthy(x)).unwrap_or(&empty);
+    let hours = match desc.get("hours") {
+        Some(h) if !h.is_null() => js_trim(&value_to_js_string(h)).to_string(),
+        _ => String::new(),
+    };
+    let drive = desc.get("driveThrough") == Some(&Value::Bool(true));
+    let sp = split_for(z, key, s);
+    let car = (sp.modes[0] + sp.modes[1]) / 100.0;
+    let oc = occ_for(z, key, &sp, cfg);
+    let occ = oc.v;
+    let (basis, rate, person, veh);
+    let mut rate_raw: Option<Value> = None;
+    if spec.get("basis").and_then(Value::as_str) == Some("person")
+        && let Some(rt) = pv(spec.get("person"), period)
+    {
+        basis = "person";
+        rate = rt;
+        let trips = units * rt;
+        person = Some(trips);
+        veh = if occ > 0.0 { trips * car / occ } else { 0.0 };
+    } else {
+        basis = "vehicle";
+        let rt = pv(spec.get("veh"), period).unwrap_or_else(|| rates.rate.num());
+        if pv(spec.get("veh"), period).is_none() {
+            rate_raw = num_json(&rates.rate);
+        }
+        rate = rt;
+        veh = units * rt;
+        person = if car > 0.0 { Some(veh * occ / car) } else { None };
+    }
+    let custom = basis == "person" || pv(spec.get("veh"), period).is_some();
+    let (source, year) = rate_source(spec, meta, custom);
+    let in_pct = pv(spec.get("inPct"), period).unwrap_or_else(|| rates.in_pct.num());
+    let in_pct_raw = if pv(spec.get("inPct"), period).is_none() { num_json(&rates.in_pct) } else { None };
+    let fr = or_default(pv(spec.get("freight"), period).unwrap_or(f64::NAN), 0.0);
+    let own_hv = spec.get("hvPct").filter(|h| given(Some(h)) && value_to_number(h).is_finite());
+    let hv_pct = own_hv.map_or_else(|| s.hv_pct.num(), value_to_number);
+    let hv_pct_raw = if own_hv.is_none() { num_json(&s.hv_pct) } else { None };
+    Some(TripRow {
+        k: key.to_string(),
+        label: lu_def.label.to_string(),
+        group: lu_def.group.to_string(),
+        q: Some(qty),
+        unit: lu_def.unit.to_string(),
+        basis,
+        rate: Some(rate),
+        rate_unit: format!("{} per {} per hour", if basis == "person" { "person trips" } else { "veh" }, unit_one(lu_def)),
+        source,
+        year,
+        flag: rate_flag(year.unwrap_or(0.0)),
+        person,
+        split: Some(sp),
+        occ: Some(occ),
+        occ_basis: Some(oc.basis),
+        veh,
+        in_pct,
+        vin: veh * in_pct / 100.0,
+        vout: veh * (1.0 - in_pct / 100.0),
+        freight: units * fr,
+        freight_rate: fr,
+        hv_pct,
+        hours,
+        drive_through: drive,
+        own_rate: custom,
+        adj: Adj::default(),
+        net_in: 0.0,
+        net_out: 0.0,
+        net: 0.0,
+        hv: 0.0,
+        rate_raw,
+        in_pct_raw,
+        hv_pct_raw,
+        occ_raw: if oc.basis == "assumed" { cfg.get("eduOcc").cloned() } else { None },
+    })
+}
+
+// Trips entered directly (the user's z.extra; while the engine loads the table through z.extra, they wait in tg.other); None when there are none
+fn other_row(z: &Zone, s: &Settings, period: &str) -> Option<TripRow> {
+    let (xin, xout) = other_trips(z, period);
+    if !(truthy_number(xin) || truthy_number(xout)) {
+        return None;
+    }
+    Some(TripRow {
+        k: "other".into(),
+        label: "Other trips (entered directly)".into(),
+        group: "Other".into(),
+        q: None,
+        unit: String::new(),
+        basis: "vehicle",
+        rate: None,
+        rate_unit: "veh/h".into(),
+        source: "entered directly".into(),
+        year: None,
+        flag: None,
+        person: None,
+        split: None,
+        occ: None,
+        occ_basis: None,
+        veh: xin + xout,
+        in_pct: if xin + xout > 0.0 { 100.0 * xin / (xin + xout) } else { 50.0 },
+        vin: xin,
+        vout: xout,
+        freight: 0.0,
+        freight_rate: 0.0,
+        hv_pct: s.hv_pct.num(),
+        hours: String::new(),
+        drive_through: false,
+        own_rate: false,
+        adj: Adj::default(),
+        net_in: 0.0,
+        net_out: 0.0,
+        net: 0.0,
+        hv: 0.0,
+        rate_raw: None,
+        in_pct_raw: None,
+        hv_pct_raw: num_json(&s.hv_pct),
+        occ_raw: None,
+    })
+}
+
 /// `tripGen(z, S, period, sc)`: trip generation for one zone and period.
 pub fn trip_gen(z: &Zone, s: &Settings, period: &str, sc: &Scenario) -> TripGen {
     let on = tg_on(z).is_some();
     let tg_val = if on { z.tg.get().cloned().unwrap_or_else(|| json!({})) } else { json!({}) };
     let cfg = conf(s);
-    let mut rows: Vec<TripRow> = Vec::new();
-    for l in &LANDUSES {
-        let k = l.key;
-        let q = or_default(z.lu.get().map_or(f64::NAN, |lu| lu.num_at(k).num()), 0.0);
-        if q == 0.0 {
-            continue;
-        }
-        let Some(r) = s.rates.get().and_then(|m| m.get(k)).and_then(|m| m.get()).and_then(|m| m.get(period)).and_then(|m| m.get()) else { continue };
-        let empty = json!({});
-        let spec = if on { tg_val.get("rows").filter(|x| value_truthy(x)).and_then(|r| r.get(k)).filter(|x| value_truthy(x)).unwrap_or(&empty) } else { &empty };
-        let units = q / l.per;
-        let meta = cfg.get("rateMeta").and_then(|m| m.get(k)).filter(|x| value_truthy(x)).unwrap_or(&empty);
-        // hours and the drive-through flag describe the activity (T1); they never switch the table on
-        let desc = z.tg.get().and_then(|t| t.get("rows")).filter(|x| value_truthy(x)).and_then(|r| r.get(k)).filter(|x| value_truthy(x)).unwrap_or(&empty);
-        let hours = match desc.get("hours") {
-            Some(h) if !h.is_null() => js_trim(&value_to_js_string(h)).to_string(),
-            _ => String::new(),
-        };
-        let drive = desc.get("driveThrough") == Some(&Value::Bool(true));
-        let sp = split_for(z, k, s);
-        let car = (sp.modes[0] + sp.modes[1]) / 100.0;
-        let oc = occ_for(z, k, &sp, &cfg);
-        let occ = oc.v;
-        let (basis, rate, person, veh);
-        let mut rate_raw: Option<Value> = None;
-        if spec.get("basis").and_then(Value::as_str) == Some("person") && pv(spec.get("person"), period).is_some() {
-            basis = "person";
-            let rt = pv(spec.get("person"), period).expect("rate");
-            rate = rt;
-            let p = units * rt;
-            person = Some(p);
-            veh = if occ > 0.0 { p * car / occ } else { 0.0 };
-        } else {
-            basis = "vehicle";
-            let rt = pv(spec.get("veh"), period).unwrap_or_else(|| r.rate.num());
-            if pv(spec.get("veh"), period).is_none() {
-                rate_raw = num_json(&r.rate);
-            }
-            rate = rt;
-            veh = units * rt;
-            person = if car > 0.0 { Some(veh * occ / car) } else { None };
-        }
-        let custom = basis == "person" || pv(spec.get("veh"), period).is_some();
-        let source = match spec.get("source") {
-            Some(x) if value_truthy(x) => value_to_js_string(x),
-            _ => {
-                if custom {
-                    "entered for this zone (no source given)".to_string()
-                } else {
-                    match meta.get("source") {
-                        Some(x) if value_truthy(x) => value_to_js_string(x),
-                        _ => DEFAULT_RATE_SOURCE.to_string(),
-                    }
-                }
-            }
-        };
-        let year: Option<f64> = if given(spec.get("year")) {
-            Some(value_to_number(&spec["year"]))
-        } else if custom {
-            None
-        } else if given(meta.get("year")) {
-            Some(value_to_number(&meta["year"]))
-        } else {
-            None
-        };
-        let in_pct = pv(spec.get("inPct"), period).unwrap_or_else(|| r.in_pct.num());
-        let in_pct_raw = if pv(spec.get("inPct"), period).is_none() { num_json(&r.in_pct) } else { None };
-        let fr = or_default(pv(spec.get("freight"), period).unwrap_or(f64::NAN), 0.0);
-        let own_hv = spec.get("hvPct").filter(|h| given(Some(h)) && value_to_number(h).is_finite());
-        let hv_pct = own_hv.map_or_else(|| s.hv_pct.num(), value_to_number);
-        let hv_pct_raw = if own_hv.is_none() { num_json(&s.hv_pct) } else { None };
-        rows.push(TripRow {
-            k: k.to_string(),
-            label: l.label.to_string(),
-            group: l.group.to_string(),
-            q: Some(q),
-            unit: l.unit.to_string(),
-            basis,
-            rate: Some(rate),
-            rate_unit: format!("{} per {} per hour", if basis == "person" { "person trips" } else { "veh" }, unit_one(l)),
-            source,
-            year,
-            flag: rate_flag(year.unwrap_or(0.0)),
-            person,
-            split: Some(sp),
-            occ: Some(occ),
-            occ_basis: Some(oc.basis),
-            veh,
-            in_pct,
-            vin: veh * in_pct / 100.0,
-            vout: veh * (1.0 - in_pct / 100.0),
-            freight: units * fr,
-            freight_rate: fr,
-            hv_pct,
-            hours,
-            drive_through: drive,
-            own_rate: custom,
-            adj: Adj::default(),
-            net_in: 0.0,
-            net_out: 0.0,
-            net: 0.0,
-            hv: 0.0,
-            rate_raw,
-            in_pct_raw,
-            hv_pct_raw,
-            occ_raw: if oc.basis == "assumed" { cfg.get("eduOcc").cloned() } else { None },
-        });
-    }
-    // Trips entered directly (the user's z.extra; while the engine loads the table through z.extra, they wait in tg.other)
-    let (xin, xout) = other_trips(z, period);
-    if truthy_number(xin) || truthy_number(xout) {
-        rows.push(TripRow {
-            k: "other".into(),
-            label: "Other trips (entered directly)".into(),
-            group: "Other".into(),
-            q: None,
-            unit: String::new(),
-            basis: "vehicle",
-            rate: None,
-            rate_unit: "veh/h".into(),
-            source: "entered directly".into(),
-            year: None,
-            flag: None,
-            person: None,
-            split: None,
-            occ: None,
-            occ_basis: None,
-            veh: xin + xout,
-            in_pct: if xin + xout > 0.0 { 100.0 * xin / (xin + xout) } else { 50.0 },
-            vin: xin,
-            vout: xout,
-            freight: 0.0,
-            freight_rate: 0.0,
-            hv_pct: s.hv_pct.num(),
-            hours: String::new(),
-            drive_through: false,
-            own_rate: false,
-            adj: Adj::default(),
-            net_in: 0.0,
-            net_out: 0.0,
-            net: 0.0,
-            hv: 0.0,
-            rate_raw: None,
-            in_pct_raw: None,
-            hv_pct_raw: num_json(&s.hv_pct),
-            occ_raw: None,
-        });
-    }
-    let tot = |f: &dyn Fn(&TripRow) -> f64| rows.iter().fold(0.0, |a, r| a + f(r));
-    let gross = Dir { r#in: tot(&|r| r.vin), out: tot(&|r| r.vout) };
+    let mut rows: Vec<TripRow> = LANDUSES.iter().filter_map(|lu_def| land_use_row(z, s, period, &cfg, &tg_val, lu_def)).collect();
+    rows.extend(other_row(z, s, period));
+    let tot = |get: &dyn Fn(&TripRow) -> f64| rows.iter().fold(0.0, |acc, row| acc + get(row));
+    let gross = Dir { r#in: tot(&|row| row.vin), out: tot(&|row| row.vout) };
     let eg = if on { tg_val.get("existing").filter(|x| value_truthy(x)).cloned().unwrap_or_else(|| json!({})) } else { json!({}) };
     let (ekin, ekout) = (format!("{period}in"), format!("{period}out"));
     let existing_raw = Dir {
@@ -664,8 +672,7 @@ pub fn trip_gen(z: &Zone, s: &Settings, period: &str, sc: &Scenario) -> TripGen 
         out: math_max(0.0, plus0(eg.get(&ekout).map_or(f64::NAN, value_to_number))),
     };
     let existing = Dir { r#in: math_min(gross.r#in, existing_raw.r#in), out: math_min(gross.out, existing_raw.out) };
-    let exceeds = existing_raw.r#in > gross.r#in + 1e-9 || existing_raw.out > gross.out + 1e-9;
-    let pct = |v: f64| clamp(plus0(v), 0.0, 100.0) / 100.0;
+    let pct = |share: f64| clamp(plus0(share), 0.0, 100.0) / 100.0;
     let i_p = if on { pct(tg_val.get("internal").map_or(f64::NAN, value_to_number)) } else { 0.0 };
     let p_p = if on { pct(tg_val.get("passby").map_or(f64::NAN, value_to_number)) } else { 0.0 };
     let t_p = pct(z.reduction.num());
@@ -676,26 +683,26 @@ pub fn trip_gen(z: &Zone, s: &Settings, period: &str, sc: &Scenario) -> TripGen 
     let after_p = after_i.sub(passby);
     let tdm = after_p.mul(t_p);
     let net = after_p.sub(tdm);
-    let fr = tot(&|r| r.freight);
+    let fr = tot(&|row| row.freight);
     let freight = Dir { r#in: fr / 2.0, out: fr / 2.0 };
     let lost = t_p >= 1.0 && fr > 0.0;
     let open = !(z.year.num() > 0.0 && year_of(Some(sc), s) < z.year.num());
     let stage = stage_of(Some(z), Some(sc));
     let kf = if open { stage } else { 0.0 };
     let loaded = Dir { r#in: (net.r#in + if lost { 0.0 } else { freight.r#in }) * kf, out: (net.out + if lost { 0.0 } else { freight.out }) * kf };
-    for r in &mut rows {
-        let si = if gross.r#in > 0.0 { r.vin / gross.r#in } else { 0.0 };
-        let so = if gross.out > 0.0 { r.vout / gross.out } else { 0.0 };
-        let both = |a: Dir| a.r#in * si + a.out * so;
-        r.adj = Adj { existing: both(existing), internal: both(internal), passby: both(passby), tdm: both(tdm) };
-        r.net_in = net.r#in * si;
-        r.net_out = net.out * so;
-        r.net = r.net_in + r.net_out;
-        r.hv = r.net * r.hv_pct / 100.0 + r.freight;
+    for row in &mut rows {
+        let si = if gross.r#in > 0.0 { row.vin / gross.r#in } else { 0.0 };
+        let so = if gross.out > 0.0 { row.vout / gross.out } else { 0.0 };
+        let both = |dir: Dir| dir.r#in * si + dir.out * so;
+        row.adj = Adj { existing: both(existing), internal: both(internal), passby: both(passby), tdm: both(tdm) };
+        row.net_in = net.r#in * si;
+        row.net_out = net.out * so;
+        row.net = row.net_in + row.net_out;
+        row.hv = row.net * row.hv_pct / 100.0 + row.freight;
     }
     TripGen {
         zone: z.id.clone(),
-        name: z.name.as_str().map_or(Value::Null, |n| json!(n)),
+        name: z.name.as_str().map_or(Value::Null, |name| json!(name)),
         cls: zone_class(Some(z)),
         period: period.to_string(),
         on,
@@ -703,7 +710,6 @@ pub fn trip_gen(z: &Zone, s: &Settings, period: &str, sc: &Scenario) -> TripGen 
         gross,
         existing,
         existing_raw,
-        exceeds,
         internal,
         passby,
         after_p,
@@ -718,12 +724,12 @@ pub fn trip_gen(z: &Zone, s: &Settings, period: &str, sc: &Scenario) -> TripGen 
     }
 }
 
-fn trips_text(m: &Option<&OrderedMap<Num>>) -> String {
+fn trips_text(m: Option<&OrderedMap<Num>>) -> String {
     serde_json::to_string(&m.map_or(Value::Null, |m| serde_json::to_value(m).unwrap_or(Value::Null))).unwrap_or_default()
 }
 
 fn state_text(z: &Zone) -> String {
-    format!("[{},{}]", trips_text(&z.extra_trips.get()), trips_text(&z.tg_load.get()))
+    format!("[{},{}]", trips_text(z.extra_trips.get()), trips_text(z.tg_load.get()))
 }
 
 fn load_map(pairs: &[(String, f64)]) -> OrderedMap<Num> {
@@ -733,11 +739,20 @@ fn load_map(pairs: &[(String, f64)]) -> OrderedMap<Num> {
 /// `tgNative()`: whether the engine reads a zone's `tgLoad` in place of land use times rates plus `extra`. The current engine does.
 pub const TG_NATIVE: bool = true;
 
+// z.tg as an object, made {} first when it is anything else
 fn tg_obj(z: &mut Zone) -> &mut Map<String, Value> {
-    if !z.tg.get().is_some_and(Value::is_object) {
-        z.tg = Maybe::Set(json!({}));
+    object_of(&mut z.tg)
+}
+
+fn object_of(tg: &mut Maybe<Value>) -> &mut Map<String, Value> {
+    match tg {
+        Maybe::Set(Value::Object(o)) => o,
+        other => {
+            // Now an object, so the second call returns at once
+            *other = Maybe::Set(Value::Object(Map::new()));
+            object_of(other)
+        }
     }
-    z.tg.get_mut().and_then(Value::as_object_mut).expect("tg")
 }
 
 // `{ ...z.tg.other }` as a trips map
@@ -764,16 +779,17 @@ pub fn sync(z: &mut Zone, s: &Settings, sc: &Scenario) -> bool {
     // move the user's own trips to where this route keeps them before the table is worked out
     if native && state.as_deref() != Some("tgLoad") {
         if state.as_deref() == Some("extra") {
-            let other = z.tg.get().and_then(|t| t.get("other")).filter(|o| value_truthy(o)).cloned();
+            let other = z.tg.get().and_then(|table| table.get("other")).filter(|own| value_truthy(own)).cloned();
             match other {
-                Some(o) => z.extra_trips = Maybe::Set(other_as_map(&o)),
+                Some(own) => z.extra_trips = Maybe::Set(other_as_map(&own)),
                 None => z.extra_trips = Maybe::Missing,
             }
         }
         tg_obj(z).remove("other");
     }
     if !native && state.as_deref() != Some("extra") {
-        let other = z.extra_trips.get().filter(|e| !e.is_empty() || true).map_or(Value::Null, |e| serde_json::to_value(e).unwrap_or(Value::Null));
+        // The prototype's `Object.keys(e).length || true` keeps every map, empty or not
+        let other = z.extra_trips.get().map_or(Value::Null, |trips| serde_json::to_value(trips).unwrap_or(Value::Null));
         tg_obj(z).insert("other".into(), other);
     }
     tg_obj(z).insert("synced".into(), json!(if native { "tgLoad" } else { "extra" }));
@@ -781,24 +797,24 @@ pub fn sync(z: &mut Zone, s: &Settings, sc: &Scenario) -> bool {
     let mut ex: Vec<(String, f64)> = Vec::new();
     let red = clamp(plus0(z.reduction.num()), 0.0, 100.0) / 100.0;
     let fk = if red < 1.0 { 1.0 / (1.0 - red) } else { 0.0 };
-    for p in PERIODS {
-        let t = trip_gen(z, s, p, sc);
+    for per in PERIODS {
+        let tg = trip_gen(z, s, per, sc);
         let (mut lu_in, mut lu_out) = (0.0f64, 0.0f64);
-        for l in &LANDUSES {
-            let q = or_default(z.lu.get().map_or(f64::NAN, |lu| lu.num_at(l.key).num()), 0.0);
-            if q == 0.0 {
+        for lu_def in &LANDUSES {
+            let qty = or_default(z.lu.get().map_or(f64::NAN, |lu| lu.num_at(lu_def.key).num()), 0.0);
+            if qty == 0.0 {
                 continue;
             }
-            let Some(r) = s.rates.get().and_then(|m| m.get(l.key)).and_then(|m| m.get()).and_then(|m| m.get(p)).and_then(|m| m.get()) else { continue };
-            let tt = q / l.per * r.rate.num();
-            lu_in += tt * r.in_pct.num() / 100.0;
-            lu_out += tt * (1.0 - r.in_pct.num() / 100.0);
+            let Some(rates) = s.rates.get().and_then(|m| m.get(lu_def.key)).and_then(|m| m.get()).and_then(|m| m.get(per)).and_then(|m| m.get()) else { continue };
+            let tt = qty / lu_def.per * rates.rate.num();
+            lu_in += tt * rates.in_pct.num() / 100.0;
+            lu_out += tt * (1.0 - rates.in_pct.num() / 100.0);
         }
-        let (lin, lout) = (t.after_p.r#in + t.freight.r#in * fk, t.after_p.out + t.freight.out * fk);
-        load.push((format!("{p}in"), lin));
-        load.push((format!("{p}out"), lout));
-        ex.push((format!("{p}in"), lin - lu_in));
-        ex.push((format!("{p}out"), lout - lu_out));
+        let (lin, lout) = (tg.after_p.r#in + tg.freight.r#in * fk, tg.after_p.out + tg.freight.out * fk);
+        load.push((format!("{per}in"), lin));
+        load.push((format!("{per}out"), lout));
+        ex.push((format!("{per}in"), lin - lu_in));
+        ex.push((format!("{per}out"), lout - lu_out));
     }
     if native {
         z.tg_load = Maybe::Set(load_map(&load));
@@ -812,15 +828,17 @@ pub fn sync(z: &mut Zone, s: &Settings, sc: &Scenario) -> bool {
 /// `syncAll()`: syncs every zone with its table on in every scenario; returns how many changed.
 pub fn sync_all(p: &mut Project) -> usize {
     let s = p.settings.clone();
-    let mut n = 0;
-    for si in 0..p.scenarios.len() {
-        let ids: Vec<String> = p.scenarios[si].zones.iter().filter(|(_, z)| tg_on(z).is_some()).map(|(k, _)| k.to_string()).collect();
+    let mut n = 0usize;
+    for sc in &mut p.scenarios {
+        let ids: Vec<String> = sc.zones.iter().filter(|(_, z)| tg_on(z).is_some()).map(|(k, _)| k.to_string()).collect();
         for id in ids {
-            let mut z = p.scenarios[si].zones.get(&id).cloned().expect("zone");
-            if sync(&mut z, &s, &p.scenarios[si]) {
-                n += 1;
+            // The ids were read from these zones just above
+            let Some(mut z) = sc.zones.get(&id).cloned() else { continue };
+            if sync(&mut z, &s, sc) {
+                // Bound: a count of zones held in memory, far below usize::MAX
+                n = n.saturating_add(1);
             }
-            p.scenarios[si].zones.insert(id, z);
+            sc.zones.insert(id, z);
         }
     }
     n

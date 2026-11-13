@@ -7,11 +7,12 @@ use super::consts::{self, CKAN, TIMEOUT_MS, census_layer};
 use super::geo::{Bx, box_key};
 use super::parse::{AupData, CensusData, CensusLayers, EmployeeData, Layer, Moe, census_fields, moe_fields, parse_aup, parse_census, parse_employees, parse_moe, sa2_code_field};
 use crate::importers::OVERPASS;
-use crate::jsnum::{to_fixed, value_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{to_fixed, usize_to_f64, value_to_js_string, value_to_number, value_truthy};
 use crate::landuse::{self, StudyBox};
 use crate::util::fmt;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 /// Why a download gave no JSON answer.
 #[derive(Clone, Debug, PartialEq)]
@@ -35,10 +36,9 @@ impl Failure {
     #[must_use]
     pub fn message(&self, url: &str) -> String {
         match self {
-            Failure::Timeout => "The operation was aborted".to_string(),
+            Failure::Timeout | Failure::ReadTimeout => "The operation was aborted".to_string(),
             Failure::Unreachable(m) | Failure::Unreadable(m) | Failure::Cancelled(m) => m.clone(),
             Failure::Http(s) => format!("{} answered HTTP {s}", host_of(url)),
-            Failure::ReadTimeout => "The operation was aborted".to_string(),
         }
     }
 }
@@ -46,8 +46,16 @@ impl Failure {
 /// The host's way to download: one GET or one form POST, giving the answer as JSON.
 pub trait Net {
     /// GETs a web address and reads the answer as JSON.
+    ///
+    /// # Errors
+    ///
+    /// A [`Failure`] when there is no JSON answer.
     fn get_json(&mut self, url: &str) -> Result<Value, Failure>;
     /// POSTs a form (`Content-Type: application/x-www-form-urlencoded`, an Overpass query as `data=...`) and reads the answer as JSON.
+    ///
+    /// # Errors
+    ///
+    /// A [`Failure`] when there is no JSON answer.
     fn post_form(&mut self, url: &str, body: &str) -> Result<Value, Failure>;
 }
 
@@ -62,7 +70,8 @@ pub fn host_of(url: &str) -> String {
 
 fn pct(out: &mut String, b: u8) {
     out.push('%');
-    out.push_str(&format!("{b:02X}"));
+    // Writing to a String cannot fail
+    let _ = write!(out, "{b:02X}");
 }
 
 /// `URLSearchParams` encoding of a name or value: letters, digits and `*-._` stay, a space is `+`, the rest is percent-encoded by UTF-8 byte.
@@ -107,6 +116,10 @@ const REJECTED: &str = "the service rejected the query; its fields may have chan
 ///
 /// A non-2xx status from 400 to 499 says the service rejected the query; other statuses say try again later; an answer with an
 /// `error` member is a failure worded with the service's own message.
+///
+/// # Errors
+///
+/// The prototype's message for a download that failed or an answer with an `error` member.
 pub fn checked_answer(url: &str, label: &str, timeout_ms: f64, got: Result<Value, Failure>) -> Result<Value, String> {
     let host = host_of(url);
     let secs = format!("{} s", crate::jsnum::math_round(timeout_ms / 1000.0));
@@ -131,6 +144,10 @@ pub fn checked_answer(url: &str, label: &str, timeout_ms: f64, got: Result<Value
 }
 
 /// `getJSON` through the host: the request is made and its answer checked.
+///
+/// # Errors
+///
+/// As [`checked_answer`].
 pub fn get_json(net: &mut dyn Net, url: &str, label: &str) -> Result<Value, String> {
     checked_answer(url, label, TIMEOUT_MS, net.get_json(url))
 }
@@ -162,6 +179,10 @@ pub fn arc_layer_url(url: &str) -> String {
 }
 
 /// `arcQuery(url, B, outFields, label, geometry)`: all the features, a page at a time (at most 30 pages).
+///
+/// # Errors
+///
+/// The prototype's message for a page that fails (see [`checked_answer`]) or a null answer.
 pub fn arc_query(net: &mut dyn Net, url: &str, b: &Bx, out_fields: &[String], label: &str, geometry: bool) -> Result<Vec<Value>, String> {
     let mut out = Vec::new();
     let mut offset = 0usize;
@@ -177,12 +198,17 @@ pub fn arc_query(net: &mut dyn Net, url: &str, b: &Bx, out_fields: &[String], la
         if !more || n == 0 {
             break;
         }
-        offset += n;
+        // Bound: a count of features held in memory, far below usize::MAX
+        offset = offset.saturating_add(n);
     }
     Ok(out)
 }
 
 /// `arcLayer(url, B, pick, label, geometry)`: the layer's description, then its features with only the fields `pick` asks for.
+///
+/// # Errors
+///
+/// The prototype's message for a request that fails (see [`checked_answer`]) or a null description.
 pub fn arc_layer(net: &mut dyn Net, url: &str, b: &Bx, pick: &dyn Fn(&[Value]) -> Vec<String>, label: &str, geometry: bool) -> Result<Layer, String> {
     let meta = get_json(net, &arc_layer_url(url), label)?;
     if meta.is_null() {
@@ -199,6 +225,10 @@ pub const CENSUS_FETCH: [(&str, &str); 4] = [("dw", "dwellings"), ("hh", "househ
 
 /// `fetchCensus(bounds)` without the cache: each layer fails soft on its own. The SA1 outlines come with the first of dwellings or
 /// households that loads; with neither, the whole download fails with the layers' messages.
+///
+/// # Errors
+///
+/// The layers' messages, joined, when neither the dwellings nor the households layer loads.
 pub fn fetch_census(net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<CensusData, String> {
     let mut layers = CensusLayers::default();
     let mut errors: Vec<String> = Vec::new();
@@ -232,6 +262,10 @@ pub fn fetch_census(net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) -> 
 }
 
 /// `fetchEmployees(bounds)` without the cache.
+///
+/// # Errors
+///
+/// The prototype's message for a download that fails (see [`arc_layer`]).
 pub fn fetch_employees(net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<EmployeeData, String> {
     status("Downloading Stats NZ employee counts for each SA2\u{2026}");
     let pick = |fl: &[Value]| -> Vec<String> {
@@ -278,6 +312,10 @@ pub fn moe_url(kind: &str, b: &Bx) -> String {
 }
 
 /// `fetchMoE(kind, bounds)` without the cache.
+///
+/// # Errors
+///
+/// The prototype's message for a download that fails (see [`checked_answer`]), a null answer, or a search that did not succeed.
 pub fn fetch_moe(net: &mut dyn Net, kind: &str, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<Vec<Moe>, String> {
     status(&format!("Downloading the Ministry of Education {} directory\u{2026}", if kind == "ece" { "early learning" } else { "school" }));
     let j = get_json(net, &moe_url(kind, b), "Ministry of Education directory")?;
@@ -288,11 +326,15 @@ pub fn fetch_moe(net: &mut dyn Net, kind: &str, b: &Bx, status: &mut dyn FnMut(&
     if !j.get("success").is_some_and(value_truthy) || !j.get("result").is_some_and(value_truthy) {
         return Err(fail());
     }
-    let recs = j["result"].get("records").and_then(Value::as_array).cloned().unwrap_or_default();
+    let recs = j.get("result").and_then(|r| r.get("records")).and_then(Value::as_array).cloned().unwrap_or_default();
     Ok(parse_moe(&recs, kind))
 }
 
 /// `fetchAUP(bounds)` without the cache.
+///
+/// # Errors
+///
+/// The prototype's message for a download that fails (see [`arc_layer`]).
 pub fn fetch_aup(net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<AupData, String> {
     status("Downloading Auckland Unitary Plan zones\u{2026}");
     let pick = |fl: &[Value]| -> Vec<String> {
@@ -329,6 +371,10 @@ impl Downloads {
         *self = Downloads::default();
     }
     /// `fetchCensus(bounds, onStatus)`: from the cache, else downloaded (and kept unless partial).
+    ///
+    /// # Errors
+    ///
+    /// As [`fetch_census`].
     pub fn census(&mut self, net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<CensusData, String> {
         let k = box_key(b);
         if let Some(c) = self.census.get(&k) {
@@ -341,6 +387,10 @@ impl Downloads {
         Ok(c)
     }
     /// `fetchEmployees(bounds, onStatus)`.
+    ///
+    /// # Errors
+    ///
+    /// As [`fetch_employees`].
     pub fn employees(&mut self, net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<EmployeeData, String> {
         let k = box_key(b);
         if let Some(c) = self.employees.get(&k) {
@@ -351,6 +401,10 @@ impl Downloads {
         Ok(c)
     }
     /// `fetchMoE(kind, bounds, onStatus)`.
+    ///
+    /// # Errors
+    ///
+    /// As [`fetch_moe`].
     pub fn moe(&mut self, net: &mut dyn Net, kind: &str, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<Vec<Moe>, String> {
         let k = format!("{kind}|{}", box_key(b));
         if let Some(c) = self.moe.get(&k) {
@@ -361,6 +415,10 @@ impl Downloads {
         Ok(c)
     }
     /// `cached('osm', B, () => ExistingLU.fetch(B, onStatus))`: the buildings and land-use areas of the study area, from the cache or downloaded.
+    ///
+    /// # Errors
+    ///
+    /// As [`existing_land_use_download`].
     pub fn existing_land_use(&mut self, net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<Vec<Value>, String> {
         let k = box_key(b);
         if let Some(c) = self.osm.get(&k) {
@@ -371,6 +429,10 @@ impl Downloads {
         Ok(c)
     }
     /// `fetchAUP(bounds, onStatus)`.
+    ///
+    /// # Errors
+    ///
+    /// As [`fetch_aup`].
     pub fn aup(&mut self, net: &mut dyn Net, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<AupData, String> {
         let k = box_key(b);
         if let Some(c) = self.aup.get(&k) {
@@ -384,6 +446,10 @@ impl Downloads {
 
 /// `ExistingLU.fetch(bounds, onStatus)`: downloads the buildings, land-use areas, schools and shops of a study area, a tile at a time, trying
 /// the Overpass servers in turn starting with the one that answered last (`good`). The features are merged (one that came back in two tiles is kept once).
+///
+/// # Errors
+///
+/// The prototype's message when the study area cannot be split into tiles, or when no server gives a tile.
 pub fn existing_land_use_download(net: &mut dyn Net, good: &mut usize, b: &Bx, status: &mut dyn FnMut(&str)) -> Result<Vec<Value>, String> {
     let sbox = StudyBox { s: b.s, w: b.w, n: b.n, e: b.e };
     let jobs = landuse::download_jobs(&sbox)?;
@@ -391,9 +457,8 @@ pub fn existing_land_use_download(net: &mut dyn Net, good: &mut usize, b: &Bx, s
     for job in &jobs {
         let mut last_err: Option<String> = None;
         let mut got: Option<Vec<Value>> = None;
-        for k in 0..OVERPASS.len() {
-            let i = (*good + k) % OVERPASS.len();
-            let url = OVERPASS[i];
+        // Each server once, starting at (good % length) and wrapping round: i is (good + k) % length
+        for (i, &url) in OVERPASS.iter().enumerate().cycle().skip(*good).take(OVERPASS.len()) {
             let host = host_of(url);
             status(&format!("{} from {host}\u{2026}", job.label));
             let body = format!("data={}", encode_uri_component(&job.query));
@@ -421,6 +486,6 @@ pub fn existing_land_use_download(net: &mut dyn Net, good: &mut usize, b: &Bx, s
         }
     }
     let merged = landuse::merge_elements(&batches);
-    status(&format!("Downloaded {} OpenStreetMap features", fmt::int(merged.len() as f64)));
+    status(&format!("Downloaded {} OpenStreetMap features", fmt::int(usize_to_f64(merged.len()))));
     Ok(merged)
 }

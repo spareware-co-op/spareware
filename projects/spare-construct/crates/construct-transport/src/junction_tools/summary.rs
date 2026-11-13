@@ -11,6 +11,7 @@ use crate::results::Res;
 use crate::util::esc;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 /// One period's summary of a junction: worst `DoS`, delay, level of service, longest queue and its leg.
 #[derive(Clone, Debug, PartialEq)]
@@ -288,7 +289,7 @@ impl<'a> Tools<'a> {
                 continue;
             };
             for e in entries(s.sc, res, false) {
-                let i = if let Some(i) = by.iter().position(|r| r.id == e.id) { i } else {
+                let row = if let Some(i) = by.iter().position(|r| r.id == e.id) { by.get_mut(i) } else {
                     by.push(J2Row {
                         id: e.id.clone(),
                         xid: xid(&e),
@@ -299,12 +300,16 @@ impl<'a> Tools<'a> {
                         nodes: e.nodes.clone(),
                         p: Vec::new(),
                     });
-                    by.len() - 1
+                    by.last_mut()
+                };
+                // the row was found or just pushed
+                let Some(row) = row else {
+                    continue;
                 };
                 let sm = self.summary(s.sc, res, &e);
-                match by[i].p.iter().position(|(k, _)| k == p) {
-                    Some(k) => by[i].p[k].1 = sm,
-                    None => by[i].p.push((p.clone(), sm)),
+                match row.p.iter_mut().find(|(k, _)| k == p) {
+                    Some(slot) => slot.1 = sm,
+                    None => row.p.push((p.clone(), sm)),
                 }
             }
         }
@@ -328,11 +333,13 @@ impl<'a> Tools<'a> {
         if rows.is_empty() {
             return "<p class=\"empty\">No controlled junctions with results. Set junction controls (give way, stop, roundabout or signals), then run the model.</p>".to_string();
         }
+        // Writing to a String cannot fail (the `let _ =` below)
         let grp: String = ps
             .iter()
-            .map(|p| {
+            .fold(String::new(), |mut out, p| {
                 let r = s.res_of(p);
-                format!(
+                let _ = write!(
+                    out,
                     "<th colspan=\"4\" style=\"text-align:center\">{} {}{}</th>",
                     esc(&per_name(p)),
                     esc(&r.map_or(String::new(), |r| year_text(r.year))),
@@ -341,16 +348,16 @@ impl<'a> Tools<'a> {
                     } else {
                         ""
                     }
-                )
-            })
-            .collect();
+                );
+                out
+            });
         let sub: String = ps
             .iter()
             .map(|_| "<th class=\"n\">Worst DoS</th><th class=\"n\">Delay (s)</th><th>LoS</th><th>Longest Q95 (m) and leg</th>")
             .collect();
         let body: String = rows
             .iter()
-            .map(|r| {
+            .fold(String::new(), |mut out, r| {
                 let cells: String = ps
                     .iter()
                     .map(|p| match r.get(p) {
@@ -371,7 +378,8 @@ impl<'a> Tools<'a> {
                         ),
                     })
                     .collect();
-                format!(
+                let _ = write!(
+                    out,
                     "<tr class=\"click\" {}><td>{}{}</td><td>{}</td>{}</tr>",
                     if fly {
                         format!("data-jx-fly=\"{}\"", esc(&fly_of(r.is_site, &r.id)))
@@ -382,9 +390,9 @@ impl<'a> Tools<'a> {
                     if r.is_site { " <span class=\"pill\">site</span>" } else { "" },
                     esc(&ctl_name(&r.kind)),
                     cells
-                )
-            })
-            .collect();
+                );
+                out
+            });
         format!(
             "{}<div class=\"tbl-wrap\"><table class=\"t compact\"><tr><th rowspan=\"2\">Junction</th><th rowspan=\"2\">Control</th>{}</tr><tr>{}</tr>{}</table></div>\n      <p class=\"note\">Delay is the volume-weighted average control delay (signals, roundabouts). \u{2020} Give way and stop: the worst movement, as there is no intersection level of service. DoS colours: green at or below practical DoS, amber above it, red over capacity. {}.</p>",
             self.supp_note(),
@@ -402,80 +410,21 @@ impl<'a> Tools<'a> {
     pub fn j3(&self, from: Sc<'a>, to: Sc<'a>, periods: &[String]) -> J3 {
         let a_rows = self.j2(from, periods);
         let b_rows = self.j2(to, periods);
-        let mut used = vec![false; a_rows.len()];
-        let share = |a: &J2Row, b: &J2Row| a.nodes.iter().filter(|n| b.nodes.contains(n)).count();
-        let mut got: Vec<Option<(Option<usize>, &'static str)>> = vec![None; b_rows.len()];
-        for (bi, b) in b_rows.iter().enumerate() {
-            let a = a_rows
-                .iter()
-                .enumerate()
-                .find(|(i, x)| !used[*i] && x.id == b.id)
-                .map(|(i, _)| i)
-                .or_else(|| {
-                    a_rows
-                        .iter()
-                        .enumerate()
-                        .find(|(i, x)| !used[*i] && x.xid == b.xid)
-                        .map(|(i, _)| i)
-                });
-            if let Some(a) = a {
-                used[a] = true;
-                got[bi] = Some((Some(a), ""));
-            }
-        }
-        let mut pairs: Vec<(Option<usize>, Option<usize>, &'static str)> = Vec::new();
-        for (bi, b) in b_rows.iter().enumerate() {
-            if got[bi].is_none() {
-                let (mut a, mut best) = (None, 0usize);
-                for (i, x) in a_rows.iter().enumerate() {
-                    let k = if used[i] { 0 } else { share(x, b) };
-                    if k > best {
-                        best = k;
-                        a = Some(i);
-                    }
-                }
-                if let Some(i) = a {
-                    used[i] = true;
-                }
-                let how = if a.is_some() || a_rows.iter().any(|x| share(x, b) > 0) {
-                    "regrouped"
-                } else {
-                    ""
-                };
-                got[bi] = Some((a, how));
-            }
-            let (a, how) = got[bi].expect("matched");
-            pairs.push((a, Some(bi), how));
-        }
-        for (i, a) in a_rows.iter().enumerate() {
-            if !used[i] {
-                let how = if b_rows.iter().any(|y| share(a, y) > 0) { "regrouped" } else { "" };
-                pairs.push((Some(i), None, how));
-            }
-        }
+        let pairs = match_rows(&a_rows, &b_rows);
         let mut rows: Vec<J3Row> = Vec::new();
         for (a, b, how) in pairs {
-            let ar = a.map(|i| &a_rows[i]);
-            let br = b.map(|i| &b_rows[i]);
-            let base = br.or(ar).expect("a junction");
+            let ar = a.and_then(|i| a_rows.get(i));
+            let br = b.and_then(|i| b_rows.get(i));
+            // match_rows gives every pair at least one side, by a position in its list
+            let Some(base) = br.or(ar) else {
+                continue;
+            };
             let mut p: Vec<(String, J3Cell)> = Vec::new();
             for per in periods {
                 let x = ar.and_then(|r| r.get(per));
                 let y = br.and_then(|r| r.get(per));
                 let d = match (x, y) {
-                    (Some(x), Some(y)) => Some(J3Delta {
-                        dos: y.dos - x.dos,
-                        dos_text: sgn(Some(y.dos - x.dos), "", 2),
-                        delay: y.delay - x.delay,
-                        delay_text: sgn(Some(y.delay - x.delay), " s", 1),
-                        los: if x.los == y.los {
-                            "\u{2013}".to_string()
-                        } else {
-                            format!("{} to {}", x.los, y.los)
-                        },
-                        q95: y.q95 - x.q95,
-                        q95_text: sgn(Some(y.q95 - x.q95), " m", 0),
-                    }),
+                    (Some(x), Some(y)) => Some(j3_delta(x, y)),
                     _ => None,
                 };
                 p.push((
@@ -557,10 +506,11 @@ impl<'a> Tools<'a> {
                 esc(to.name())
             );
         }
-        let grp: String = ps
-            .iter()
-            .map(|p| format!("<th colspan=\"4\" style=\"text-align:center\">{}</th>", esc(&per_name(p))))
-            .collect();
+        // Writing to a String cannot fail (the `let _ =` below)
+        let grp: String = ps.iter().fold(String::new(), |mut out, p| {
+            let _ = write!(out, "<th colspan=\"4\" style=\"text-align:center\">{}</th>", esc(&per_name(p)));
+            out
+        });
         let sub: String = ps
             .iter()
             .map(|_| "<th class=\"n\">Worst DoS</th><th class=\"n\">Delay (s)</th><th>LoS</th><th class=\"n\">Longest Q95 (m)</th>")
@@ -574,13 +524,17 @@ impl<'a> Tools<'a> {
         let body: String = c
             .rows
             .iter()
-            .map(|r| {
+            .fold(String::new(), |mut out, r| {
                 let cells: String = ps
                     .iter()
-                    .map(|p| {
-                        let c = &r.p.iter().find(|(k, _)| k == *p).expect("period").1;
+                    .fold(String::new(), |mut cells, p| {
+                        // every row has a cell for each period of the comparison (j3 builds one per period)
+                        let Some((_, c)) = r.p.iter().find(|(k, _)| k == *p) else {
+                            return cells;
+                        };
                         let dash = "\u{2013}";
-                        format!(
+                        let _ = write!(
+                            cells,
                             "<td class=\"n\">{} \u{2192} {}{}</td><td class=\"n\">{} \u{2192} {}{}</td><td>{}</td><td class=\"n\">{}</td>",
                             c.a.as_ref().map_or(dash.to_string(), |s| x2(Some(s.dos))),
                             c.b.as_ref().map_or(dash.to_string(), |s| dos_cell(Some(s.dos), s.xp)),
@@ -590,18 +544,19 @@ impl<'a> Tools<'a> {
                             c.d.as_ref().map_or(String::new(), |d| format!(" <span class=\"note\">{}</span>", d.delay_text)),
                             c.d.as_ref().map_or(dash.to_string(), |d| esc(&d.los)),
                             c.d.as_ref().map_or(dash.to_string(), |d| d.q95_text.clone())
-                        )
-                    })
-                    .collect();
-                format!(
+                        );
+                        cells
+                    });
+                let _ = write!(
+                    out,
                     "<tr class=\"click\" data-jx-fly=\"{}\"><td>{}{}</td>{}</tr>",
                     esc(&fly_of(r.is_site, &r.id)),
                     esc(&r.name),
                     pill(&r.only),
                     cells
-                )
-            })
-            .collect();
+                );
+                out
+            });
         format!(
             "{}<div class=\"tbl-wrap\"><table class=\"t compact\"><tr><th rowspan=\"2\">Junction</th>{}</tr><tr>{}</tr>{}</table></div>\n      {}<p class=\"note\">From {} to {}: each change is {} minus {}. LoS changes read 'B to D'; '\u{2013}' means unchanged. {}.</p>",
             self.supp_note(),
@@ -619,6 +574,88 @@ impl<'a> Tools<'a> {
             esc(from.name()),
             LABEL
         )
+    }
+}
+
+/// The pairing step of `j3`: (from row, to row, how) by position. Junctions are matched by id, then by member nodes, then
+/// by the most shared nodes (flagged 'regrouped'); one left without a partner is 'new' or 'gone' unless it still shares
+/// nodes with one in the other scenario.
+fn match_rows(a_rows: &[J2Row], b_rows: &[J2Row]) -> Vec<(Option<usize>, Option<usize>, &'static str)> {
+    let share = |a: &J2Row, b: &J2Row| a.nodes.iter().filter(|n| b.nodes.contains(n)).count();
+    // used has one flag per row of a_rows
+    let is_used = |used: &[bool], i: usize| used.get(i).copied().unwrap_or(false);
+    let mut used = vec![false; a_rows.len()];
+    let mut got: Vec<Option<(Option<usize>, &'static str)>> = vec![None; b_rows.len()];
+    for (b, slot) in b_rows.iter().zip(got.iter_mut()) {
+        let a = a_rows
+            .iter()
+            .enumerate()
+            .find(|(i, x)| !is_used(&used, *i) && x.id == b.id)
+            .map(|(i, _)| i)
+            .or_else(|| {
+                a_rows
+                    .iter()
+                    .enumerate()
+                    .find(|(i, x)| !is_used(&used, *i) && x.xid == b.xid)
+                    .map(|(i, _)| i)
+            });
+        if let Some(a) = a {
+            if let Some(u) = used.get_mut(a) {
+                *u = true;
+            }
+            *slot = Some((Some(a), ""));
+        }
+    }
+    let mut pairs: Vec<(Option<usize>, Option<usize>, &'static str)> = Vec::new();
+    for (bi, (b, slot)) in b_rows.iter().zip(&got).enumerate() {
+        let (a, how) = if let Some(m) = *slot {
+            m
+        } else {
+            let (mut a, mut best) = (None, 0usize);
+            for (i, x) in a_rows.iter().enumerate() {
+                let k = if is_used(&used, i) { 0 } else { share(x, b) };
+                if k > best {
+                    best = k;
+                    a = Some(i);
+                }
+            }
+            if let Some(i) = a
+                && let Some(u) = used.get_mut(i)
+            {
+                *u = true;
+            }
+            let how = if a.is_some() || a_rows.iter().any(|x| share(x, b) > 0) {
+                "regrouped"
+            } else {
+                ""
+            };
+            (a, how)
+        };
+        pairs.push((a, Some(bi), how));
+    }
+    for (i, (a, u)) in a_rows.iter().zip(&used).enumerate() {
+        if !*u {
+            let how = if b_rows.iter().any(|y| share(a, y) > 0) { "regrouped" } else { "" };
+            pairs.push((Some(i), None, how));
+        }
+    }
+    pairs
+}
+
+/// The change from one period's summary to another's (a J3 cell's `d`).
+fn j3_delta(x: &Summary, y: &Summary) -> J3Delta {
+    J3Delta {
+        dos: y.dos - x.dos,
+        dos_text: sgn(Some(y.dos - x.dos), "", 2),
+        delay: y.delay - x.delay,
+        delay_text: sgn(Some(y.delay - x.delay), " s", 1),
+        los: if x.los == y.los {
+            "\u{2013}".to_string()
+        } else {
+            format!("{} to {}", x.los, y.los)
+        },
+        q95: y.q95 - x.q95,
+        q95_text: sgn(Some(y.q95 - x.q95), " m", 0),
     }
 }
 

@@ -180,12 +180,17 @@ fn lmv(v: &Value) -> Lmv {
 fn entry_from(v: &Value) -> MoveEntry {
     MoveEntry {
         i: 0,
-        major: v["major"].as_bool().unwrap_or(false),
+        priority: if v["major"].as_bool().unwrap_or(false) {
+            construct_transport::graph::Priority::Major
+        } else if v["stop"].as_bool().unwrap_or(false) {
+            construct_transport::graph::Priority::Stop
+        } else {
+            construct_transport::graph::Priority::Neither
+        },
         in_b: opt_num(&v["inB"]),
         leg: v["leg"].as_str().unwrap_or("").to_string(),
         gl: num(&v["gl"]),
         s_lane: num(&v["sLane"]),
-        stop: v["stop"].as_bool().unwrap_or(false),
         gaps: if v["gaps"].is_null() { None } else { Some(v["gaps"].clone()) },
         lanes: lanes_from(&v["lanes"]),
         median: v["median"].as_bool().unwrap_or(false),

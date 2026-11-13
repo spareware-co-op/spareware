@@ -6,10 +6,12 @@
 //! rank impedance `c_m` = `c_p` times the product of p0 (rank 4 through HCM's p'). A flush median
 //! makes minor T and R two-stage. Flows are PCU at the peak flow rate.
 
-use super::lanes::{ApproachCap, Lane, LaneRow, Lmv, alloc_lanes, approach_cap, lane_rows_value};
-use crate::graph::js_sort_by;
+use super::lanes::{Alloc, ApproachCap, Lane, LaneRow, Lmv, alloc_lanes, approach_cap, lane_rows_value};
+use crate::graph::{Priority, js_sort_by};
 use crate::jsmath;
-use crate::jsnum::{math_max, math_max_of, math_min, or_default, plain_number, value_to_number, value_truthy};
+use crate::jsnum::{
+    math_max, math_max_of, math_min, or_default, plain_number, usize_to_f64, value_to_number, value_truthy,
+};
 use crate::standards::{Gap, STANDARDS};
 use crate::util::ang_diff;
 use serde_json::{Map, Value, json};
@@ -64,7 +66,7 @@ pub fn two_stage(c_i: f64, c_ii: f64, cm: f64, v_l: f64, k: f64) -> f64 {
 /// `q95v(v, c, T)`: 95th-percentile queue (veh) of an unsignalised lane (HCM 6 eq. 20-68).
 #[must_use]
 pub fn q95v(v: f64, c: f64, t: f64) -> f64 {
-    if !(v > 0.0) || !(c > 0.0) {
+    if v <= 0.0 || v.is_nan() || c <= 0.0 || c.is_nan() {
         return 0.0;
     }
     let x = v / c;
@@ -80,8 +82,8 @@ pub fn q95v(v: f64, c: f64, t: f64) -> f64 {
 pub fn d_hcm(v: f64, c: f64, t: f64) -> f64 {
     let c = math_max(1.0, c);
     let x = v / c;
-    let h = 3600.0 / c;
-    h + 900.0 * t * ((x - 1.0) + ((x - 1.0) * (x - 1.0) + h * x / (450.0 * t)).sqrt())
+    let hw = 3600.0 / c;
+    hw + 900.0 * t * ((x - 1.0) + ((x - 1.0) * (x - 1.0) + hw * x / (450.0 * t)).sqrt())
 }
 
 /// Options of the capacity functions: analysis period T (h), queue space (m) and whether to build lane rows.
@@ -283,7 +285,7 @@ impl EntryRes {
         if let Some(q) = self.q95short {
             m.insert("q95short".into(), plain_number(q));
         }
-        m.insert("lanes".into(), lane_rows_value(&self.lanes));
+        m.insert("lanes".into(), lane_rows_value(self.lanes.as_deref()));
         m.insert("v".into(), self.v.to_value());
         if let Some(j) = &self.major {
             for (k, x) in [
@@ -339,8 +341,8 @@ impl MajorState {
 pub struct MoveEntry {
     /// Arc index.
     pub i: usize,
-    /// A major road approach.
-    pub major: bool,
+    /// Standing at a give-way or stop junction: a major road approach, a stop-controlled minor approach, or neither.
+    pub priority: Priority,
     /// Arrival bearing.
     pub in_b: f64,
     /// Leg ("g<k>" at a site, else the link id).
@@ -349,8 +351,6 @@ pub struct MoveEntry {
     pub gl: f64,
     /// Mid-block capacity per lane (pcu/h).
     pub s_lane: f64,
-    /// Stop control.
-    pub stop: bool,
     /// Gap overrides as saved (site or node gaps), if any.
     pub gaps: Option<Value>,
     /// Lanes.
@@ -388,6 +388,16 @@ pub struct MoveEntry {
 }
 
 impl MoveEntry {
+    /// A major road approach.
+    #[must_use]
+    pub fn major(&self) -> bool {
+        self.priority == Priority::Major
+    }
+    /// Stop control.
+    #[must_use]
+    pub fn stop(&self) -> bool {
+        self.priority == Priority::Stop
+    }
     /// Left-turn flow into a leg (`Lto[leg] || 0`).
     #[must_use]
     pub fn l_to(&self, leg: &str) -> f64 {
@@ -415,16 +425,29 @@ fn gap_of(base: Gap, over: Option<&Value>, key: &str) -> Gap {
 /// `prioGeom(ent, GP)`: which major stream is near and far for each minor approach, the opposite minor, the opposing major, and each entry's gap values.
 pub fn prio_geom(ent: &mut [MoveEntry]) -> (Vec<usize>, Vec<usize>) {
     let gp = &STANDARDS.gaps;
-    let majors: Vec<usize> = (0..ent.len()).filter(|&i| ent[i].major).collect();
-    let minors: Vec<usize> = (0..ent.len()).filter(|&i| !ent[i].major).collect();
+    let majors: Vec<usize> = ent
+        .iter()
+        .enumerate()
+        .filter(|(_, en)| en.major())
+        .map(|(i, _)| i)
+        .collect();
+    let minors: Vec<usize> = ent
+        .iter()
+        .enumerate()
+        .filter(|(_, en)| !en.major())
+        .map(|(i, _)| i)
+        .collect();
+    // Every index here is an entry's, so the NaN fallback never applies
+    let bearing = |ent: &[MoveEntry], x: usize| ent.get(x).map_or(f64::NAN, |en| en.in_b);
     let far = |ent: &[MoveEntry], a: usize, list: &[usize]| -> Option<usize> {
+        let ib = ent.get(a)?.in_b;
         let mut c: Vec<usize> = list
             .iter()
             .copied()
-            .filter(|&x| x != a && ang_diff(ent[x].in_b, ent[a].in_b) > 120.0)
+            .filter(|&x| x != a && ang_diff(bearing(ent, x), ib) > 120.0)
             .collect();
         js_sort_by(&mut c, |&p, &q| {
-            ang_diff(ent[q].in_b, ent[a].in_b) - ang_diff(ent[p].in_b, ent[a].in_b)
+            ang_diff(bearing(ent, q), ib) - ang_diff(bearing(ent, p), ib)
         });
         c.first().copied()
     };
@@ -432,286 +455,389 @@ pub fn prio_geom(ent: &mut [MoveEntry]) -> (Vec<usize>, Vec<usize>) {
         let mut it = majors.iter().copied();
         let mut b = it.next()?;
         for m in it {
-            if ang_diff(ent[m].in_b, h) < ang_diff(ent[b].in_b, h) {
+            if ang_diff(bearing(ent, m), h) < ang_diff(bearing(ent, b), h) {
                 b = m;
             }
         }
         Some(b)
     };
     for e in 0..ent.len() {
-        let over = ent[e].gaps.clone();
-        let o = over.as_ref();
-        ent[e].g = Some(EntGaps {
-            major_r: gap_of(gp.major_r, o, "majorR"),
-            minor_l: gap_of(gp.minor_l, o, "minorL"),
-            minor_t: gap_of(gp.minor_t, o, "minorT"),
-            minor_r: gap_of(gp.minor_r, o, "minorR"),
-        });
-        if ent[e].major {
-            ent[e].opp = far(ent, e, &majors);
+        let Some(entry) = ent.get_mut(e) else {
+            continue;
+        };
+        let over = entry.gaps.as_ref();
+        let gaps = EntGaps {
+            major_r: gap_of(gp.major_r, over, "majorR"),
+            minor_l: gap_of(gp.minor_l, over, "minorL"),
+            minor_t: gap_of(gp.minor_t, over, "minorT"),
+            minor_r: gap_of(gp.minor_r, over, "minorR"),
+        };
+        entry.g = Some(gaps);
+        let ib = entry.in_b;
+        if entry.major() {
+            let opp = far(ent, e, &majors);
+            if let Some(entry) = ent.get_mut(e) {
+                entry.opp = opp;
+            }
             continue;
         }
-        let ib = ent[e].in_b;
         let mut n = pick(ent, ib - 90.0);
         let mut f = pick(ent, ib + 90.0);
         if let (Some(nn), Some(ff)) = (n, f)
             && nn == ff
         {
-            if ang_diff(ent[nn].in_b, ib - 90.0) <= ang_diff(ent[nn].in_b, ib + 90.0) {
+            let nb = bearing(ent, nn);
+            if ang_diff(nb, ib - 90.0) <= ang_diff(nb, ib + 90.0) {
                 f = None;
             } else {
                 n = None;
             }
         }
-        ent[e].near = n;
-        ent[e].far = f;
-        ent[e].opp_minor = far(ent, e, &minors);
+        let opp_minor = far(ent, e, &minors);
+        if let Some(entry) = ent.get_mut(e) {
+            entry.near = n;
+            entry.far = f;
+            entry.opp_minor = opp_minor;
+        }
     }
     (majors, minors)
 }
 
-/// `priorityCaps(ent, o)`: movement capacities at a give-way or stop junction; sets each entry's `res`.
-pub fn priority_caps(ent: &mut [MoveEntry], o: &CapOpts) {
+// Flow of movement mv on approach m (0 when there is none).
+fn flow_of(ent: &[MoveEntry], m: Option<usize>, mv: char) -> f64 {
+    m.and_then(|i| ent.get(i)).map_or(0.0, |e| e.v.get(mv))
+}
+
+// Left-turn flow of approach m into a leg (0 when there is none).
+fn left_into(ent: &[MoveEntry], m: Option<usize>, leg: &str) -> f64 {
+    m.and_then(|i| ent.get(i)).map_or(0.0, |e| e.l_to(leg))
+}
+
+// Queue-free probability of approach m's right turners (1 when there are none).
+fn p0_right(mov: &[Movs], m: Option<usize>) -> f64 {
+    m.and_then(|i| mov.get(i))
+        .and_then(|mv| mv.r.as_ref())
+        .map_or(1.0, |r| r.p0)
+}
+
+// Conflicting flow of a minor approach's first stage (the near-side major stream).
+fn stage_one(ent: &[MoveEntry], e: &MoveEntry) -> f64 {
+    let n = e.near;
+    let ln = left_into(ent, n, &e.leg);
+    2.0 * flow_of(ent, n, 'R') + flow_of(ent, n, 'T') + 0.5 * ln + math_max(0.0, flow_of(ent, n, 'L') - ln)
+}
+
+// Rank 2: major R, opposed by the opposing through and left flows.
+// prio_geom sets every entry's gaps and its indexes are entries', so the lookups in these rank
+// functions always succeed.
+fn major_right_caps(ent: &[MoveEntry], majors: &[usize], mov: &mut [Movs]) {
+    for &mi in majors {
+        let Some(e) = ent.get(mi) else {
+            continue;
+        };
+        let Some(gaps) = e.g else {
+            continue;
+        };
+        let vc = e.opp.and_then(|p| ent.get(p)).map_or(0.0, |op| op.v.t + op.v.l);
+        let gap = gaps.major_r;
+        let cp = cpot(vc, gap.tc, gap.tf);
+        if let Some(slot) = mov.get_mut(mi) {
+            slot.r = Some(MoveCap {
+                vc,
+                cp,
+                cm: cp,
+                p0: p0of(e.v.r, cp),
+                rank: 2,
+                two_stage: None,
+            });
+        }
+    }
+}
+
+// Rank 2: minor L.
+fn minor_left_caps(ent: &[MoveEntry], minors: &[usize], mov: &mut [Movs]) {
+    for &ai in minors {
+        let Some(e) = ent.get(ai) else {
+            continue;
+        };
+        let Some(gaps) = e.g else {
+            continue;
+        };
+        let near = e.near;
+        let thru = near
+            .and_then(|ni| ent.get(ni))
+            .map_or(1.0, |ne| or_default(ne.thru, 1.0));
+        let vc = flow_of(ent, near, 'T') / math_max(1.0, thru) + 0.5 * left_into(ent, near, &e.leg);
+        let gap = gaps.minor_l;
+        let cp = cpot(vc, gap.tc, gap.tf);
+        if let Some(slot) = mov.get_mut(ai) {
+            slot.l = Some(MoveCap {
+                vc,
+                cp,
+                cm: cp,
+                p0: p0of(e.v.l, cp),
+                rank: 2,
+                two_stage: None,
+            });
+        }
+    }
+}
+
+// Rank 3: minor T.
+fn minor_through_caps(ent: &[MoveEntry], minors: &[usize], mov: &mut [Movs]) {
     let gp = &STANDARDS.gaps;
-    let (t, qs) = (o.t, o.qs);
     let st = gp.stage;
     let k2 = gp.storage;
+    for &ai in minors {
+        let Some(e) = ent.get(ai) else {
+            continue;
+        };
+        let Some(gaps) = e.g else {
+            continue;
+        };
+        let far = e.far;
+        let vc_i = stage_one(ent, e);
+        let vc_ii = 2.0 * flow_of(ent, far, 'R') + flow_of(ent, far, 'T') + flow_of(ent, far, 'L');
+        let gap = gaps.minor_t;
+        let cp = cpot(vc_i + vc_ii, gap.tc, gap.tf);
+        let f_i = p0_right(mov, e.near);
+        let f_ii = p0_right(mov, far);
+        let mut cm = cp * f_i * f_ii;
+        if e.median {
+            cm = two_stage(
+                cpot(vc_i, gap.tc - st, gap.tf) * f_i,
+                cpot(vc_ii, gap.tc - st, gap.tf) * f_ii,
+                cm,
+                flow_of(ent, far, 'R'),
+                k2,
+            );
+        }
+        if let Some(slot) = mov.get_mut(ai) {
+            slot.t = Some(MoveCap {
+                vc: vc_i + vc_ii,
+                cp,
+                cm,
+                p0: p0of(e.v.t, cm),
+                rank: 3,
+                two_stage: Some(e.median),
+            });
+        }
+    }
+}
+
+// Rank 4: minor R.
+fn minor_right_caps(ent: &[MoveEntry], minors: &[usize], mov: &mut [Movs]) {
+    let gp = &STANDARDS.gaps;
+    let st = gp.stage;
+    let k2 = gp.storage;
+    for &ai in minors {
+        let Some(e) = ent.get(ai) else {
+            continue;
+        };
+        let Some(gaps) = e.g else {
+            continue;
+        };
+        let far = e.far;
+        let o2 = e.opp_minor;
+        let vc_i = stage_one(ent, e);
+        let vc_ii = 2.0 * flow_of(ent, far, 'R')
+            + flow_of(ent, far, 'T')
+            + 0.5 * flow_of(ent, far, 'L')
+            + 0.5 * o2.and_then(|oi| ent.get(oi)).map_or(0.0, |oe| oe.v.l + oe.v.t);
+        let gap = gaps.minor_r;
+        let cp = cpot(vc_i + vc_ii, gap.tc, gap.tf);
+        let f_i = p0_right(mov, e.near);
+        let o2_mov: Option<Movs> = o2.and_then(|oi| mov.get(oi)).copied();
+        let p2 = f_i * p0_right(mov, far) * o2_mov.and_then(|om| om.t).map_or(1.0, |mc| mc.p0);
+        let fac = p_prime(p2) * o2_mov.and_then(|om| om.l).map_or(1.0, |mc| mc.p0);
+        let mut cm = cp * fac;
+        if e.median {
+            cm = two_stage(
+                cpot(vc_i, gap.tc - st, gap.tf) * f_i,
+                cpot(vc_ii, gap.tc - st, gap.tf) * (if f_i > 0.0 { fac / f_i } else { fac }),
+                cm,
+                flow_of(ent, far, 'R'),
+                k2,
+            );
+        }
+        if let Some(slot) = mov.get_mut(ai) {
+            slot.r = Some(MoveCap {
+                vc: vc_i + vc_ii,
+                cp,
+                cm,
+                p0: p0of(e.v.r, cm),
+                rank: 4,
+                two_stage: Some(e.median),
+            });
+        }
+    }
+}
+
+/// `priorityCaps(ent, o)`: movement capacities at a give-way or stop junction; sets each entry's `res`.
+pub fn priority_caps(ent: &mut [MoveEntry], o: &CapOpts) {
     let (majors, minors) = prio_geom(ent);
     let mut mov: Vec<Movs> = vec![Movs::default(); ent.len()];
-    for &m in &majors {
-        let vc = ent[m].opp.map_or(0.0, |p| ent[p].v.t + ent[p].v.l);
-        let g = ent[m].g.expect("gaps").major_r;
-        let cp = cpot(vc, g.tc, g.tf);
-        mov[m].r = Some(MoveCap {
-            vc,
-            cp,
-            cm: cp,
-            p0: p0of(ent[m].v.r, cp),
-            rank: 2,
-            two_stage: None,
-        });
-    }
-    let vv = |m: Option<usize>, k: char| m.map_or(0.0, |m| ent[m].v.get(k));
-    let lin = |m: Option<usize>, leg: &str| m.map_or(0.0, |m| ent[m].l_to(leg));
-    let p0r = |mov: &[Movs], m: Option<usize>| m.and_then(|m| mov[m].r.as_ref()).map_or(1.0, |r| r.p0);
-    // rank 2: minor L
-    for &a in &minors {
-        let n = ent[a].near;
-        let thru = n.map_or(1.0, |n| or_default(ent[n].thru, 1.0));
-        let vc = vv(n, 'T') / math_max(1.0, thru) + 0.5 * lin(n, &ent[a].leg);
-        let g = ent[a].g.expect("gaps").minor_l;
-        let cp = cpot(vc, g.tc, g.tf);
-        mov[a].l = Some(MoveCap {
-            vc,
-            cp,
-            cm: cp,
-            p0: p0of(ent[a].v.l, cp),
-            rank: 2,
-            two_stage: None,
-        });
-    }
-    let stages = |a: usize| {
-        let n = ent[a].near;
-        let ln = lin(n, &ent[a].leg);
-        2.0 * vv(n, 'R') + vv(n, 'T') + 0.5 * ln + math_max(0.0, vv(n, 'L') - ln)
-    };
-    // rank 3: minor T
-    for &a in &minors {
-        let f = ent[a].far;
-        let vc_i = stages(a);
-        let vc_ii = 2.0 * vv(f, 'R') + vv(f, 'T') + vv(f, 'L');
-        let g = ent[a].g.expect("gaps").minor_t;
-        let cp = cpot(vc_i + vc_ii, g.tc, g.tf);
-        let f_i = p0r(&mov, ent[a].near);
-        let f_ii = p0r(&mov, f);
-        let mut cm = cp * f_i * f_ii;
-        if ent[a].median {
-            cm = two_stage(
-                cpot(vc_i, g.tc - st, g.tf) * f_i,
-                cpot(vc_ii, g.tc - st, g.tf) * f_ii,
-                cm,
-                vv(f, 'R'),
-                k2,
-            );
-        }
-        mov[a].t = Some(MoveCap {
-            vc: vc_i + vc_ii,
-            cp,
-            cm,
-            p0: p0of(ent[a].v.t, cm),
-            rank: 3,
-            two_stage: Some(ent[a].median),
-        });
-    }
-    // rank 4: minor R
-    for &a in &minors {
-        let f = ent[a].far;
-        let o2 = ent[a].opp_minor;
-        let vc_i = stages(a);
-        let vc_ii = 2.0 * vv(f, 'R')
-            + vv(f, 'T')
-            + 0.5 * vv(f, 'L')
-            + 0.5 * o2.map_or(0.0, |o| ent[o].v.l + ent[o].v.t);
-        let g = ent[a].g.expect("gaps").minor_r;
-        let cp = cpot(vc_i + vc_ii, g.tc, g.tf);
-        let f_i = p0r(&mov, ent[a].near);
-        let p2 = f_i * p0r(&mov, f) * o2.and_then(|o| mov[o].t.as_ref()).map_or(1.0, |m| m.p0);
-        let fac = p_prime(p2) * o2.and_then(|o| mov[o].l.as_ref()).map_or(1.0, |m| m.p0);
-        let mut cm = cp * fac;
-        if ent[a].median {
-            cm = two_stage(
-                cpot(vc_i, g.tc - st, g.tf) * f_i,
-                cpot(vc_ii, g.tc - st, g.tf) * (if f_i > 0.0 { fac / f_i } else { fac }),
-                cm,
-                vv(f, 'R'),
-                k2,
-            );
-        }
-        mov[a].r = Some(MoveCap {
-            vc: vc_i + vc_ii,
-            cp,
-            cm,
-            p0: p0of(ent[a].v.r, cm),
-            rank: 4,
-            two_stage: Some(ent[a].median),
-        });
-    }
-    for &a in &minors {
-        let ma = mov[a];
-        let cap = move |_: &Lane, m: char| ma.get(m).map_or(f64::NAN, |x| x.cm);
-        let r = approach_cap(&ent[a].lanes, &ent[a].v, &cap, t, qs, o.detail);
-        let v = ent[a].v;
-        ent[a].res = Some(EntryRes::from_cap(ma, r, v));
-    }
-    for &m in &majors {
-        let e = &ent[m];
-        let rr = mov[m].r.expect("major right turn");
-        let v_r = e.v.r;
-        let tot = e.v.l + e.v.t + v_r;
-        let p0 = p0of(v_r, rr.cm);
-        let ex: Vec<&Lane> = e.lanes.iter().filter(|l| l.d == "R").collect();
-        let shared = ex.is_empty();
-        let mut rb = if shared { 0.0 } else { 1.0 };
-        let mut q95r = 0.0;
-        let bay = if !ex.is_empty() && ex.iter().all(|l| l.len > 0.0) {
-            math_max_of(&ex.iter().map(|l| l.len).collect::<Vec<_>>())
-        } else {
-            0.0
+    major_right_caps(ent, &majors, &mut mov);
+    minor_left_caps(ent, &minors, &mut mov);
+    minor_through_caps(ent, &minors, &mut mov);
+    minor_right_caps(ent, &minors, &mut mov);
+    for &ai in &minors {
+        let (Some(e), Some(&ma)) = (ent.get_mut(ai), mov.get(ai)) else {
+            continue;
         };
-        if crate::jsnum::truthy_number(bay) {
-            q95r = q95v(v_r, rr.cm * ex.len() as f64, t);
-            rb = if q95r > 1e-9 {
-                math_min(1.0, (bay / qs).floor() / q95r)
-            } else {
-                1.0
-            };
+        let cap = move |_: &Lane, mv: char| ma.get(mv).map_or(f64::NAN, |mc| mc.cm);
+        let ac = approach_cap(&e.lanes, &e.v, &cap, o.t, o.qs, o.detail);
+        let v = e.v;
+        e.res = Some(EntryRes::from_cap(ma, ac, v));
+    }
+    for &mi in &majors {
+        // major_right_caps gives every major approach its right-turn capacity
+        let res = ent
+            .get(mi)
+            .zip(mov.get(mi))
+            .and_then(|(e, &movs)| major_result(e, movs, o));
+        if let (Some(res), Some(e)) = (res, ent.get_mut(mi)) {
+            e.res = Some(res);
         }
-        let p_eff = p0 + (1.0 - p0) * rb;
-        let tl: Vec<&Lane> = e.lanes.iter().filter(|l| l.d != "R").collect();
-        let last_t = tl.len() as i64 - 1;
-        let has_bay = crate::jsnum::truthy_number(bay);
-        let fallback = Lane::new("LT", 0.0);
-        let src: Vec<&Lane> = if tl.is_empty() { vec![&fallback] } else { tl };
-        let tl_l: Vec<Lane> = src
-            .iter()
-            .enumerate()
-            .map(|(i, l)| {
-                let blocked = l.d.contains('R') || (has_bay && i as i64 == last_t);
-                let d = l.d.replacen('R', "", 1);
-                Lane {
-                    d: if d.is_empty() { "T".to_string() } else { d },
-                    len: 0.0,
-                    slip: false,
-                    c: e.s_lane * if blocked { math_max(0.02, p_eff) } else { 1.0 },
-                    blk: blocked,
-                }
-            })
-            .collect();
-        let al = alloc_lanes(
-            &tl_l,
-            &Lmv {
-                l: e.v.l,
-                t: e.v.t,
-                r: 0.0,
+    }
+}
+
+// A major approach's through and left lanes as alloc_lanes takes them: right turns taken out, and
+// the capacity of a lane a right turner blocks scaled by the chance it is not blocked.
+fn major_through_lanes(e: &MoveEntry, has_bay: bool, p_eff: f64) -> Vec<Lane> {
+    let tl: Vec<&Lane> = e.lanes.iter().filter(|l| l.d != "R").collect();
+    let last_t = tl.len().checked_sub(1);
+    let fallback = Lane::new("LT", 0.0);
+    let src: Vec<&Lane> = if tl.is_empty() { vec![&fallback] } else { tl };
+    src.iter()
+        .enumerate()
+        .map(|(i, l)| {
+            let blocked = l.d.contains('R') || (has_bay && Some(i) == last_t);
+            let d = l.d.replacen('R', "", 1);
+            Lane {
+                d: if d.is_empty() { "T".to_string() } else { d },
+                len: 0.0,
+                slip: false,
+                c: e.s_lane * if blocked { math_max(0.02, p_eff) } else { 1.0 },
+                blk: blocked,
+            }
+        })
+        .collect()
+}
+
+// A major approach's lane rows: the through and left lanes, then the right-turn bays.
+fn major_lane_rows(tl_l: &[Lane], al: &Alloc, ex: &[&Lane], v_r: f64, xr: f64, cm_r: f64) -> Vec<LaneRow> {
+    // alloc_lanes gives one entry of x and use_ per lane, so the zip walks every lane
+    let mut rows: Vec<LaneRow> = tl_l
+        .iter()
+        .zip(al.use_.iter().zip(&al.x))
+        .map(|(l, (&lu, &lx))| LaneRow {
+            d: l.d.clone(),
+            len: 0.0,
+            slip: None,
+            v: lu.l + lu.t,
+            x: lx,
+            c: l.c,
+            use_: lu,
+            blocked: Some(l.blk),
+        })
+        .collect();
+    for l in ex {
+        let share = v_r / usize_to_f64(ex.len());
+        rows.push(LaneRow {
+            d: "R".to_string(),
+            len: l.len,
+            slip: None,
+            v: share,
+            x: xr,
+            c: cm_r,
+            use_: Lmv {
+                l: 0.0,
+                t: 0.0,
+                r: share,
             },
-            &|l: &Lane, _| l.c,
-        );
-        let xtl = math_max(0.0, math_max_of(&al.x));
-        let xr = if v_r > 0.0 {
-            v_r / (rr.cm * math_max(1.0, ex.len() as f64))
-        } else {
-            0.0
-        };
-        let x = math_max(xtl, xr);
-        let mut sh_tl = 0.0;
-        for (i, l) in tl_l.iter().enumerate() {
-            if l.blk {
-                sh_tl += al.use_[i].l + al.use_[i].t;
-            }
-        }
-        let cap_t = tl_l
-            .iter()
-            .fold(0.0, |s, l| s + if l.d.contains('T') { l.c } else { 0.0 });
-        let lanes = if o.detail {
-            let mut rows: Vec<LaneRow> = tl_l
-                .iter()
-                .enumerate()
-                .map(|(i, l)| LaneRow {
-                    d: l.d.clone(),
-                    len: 0.0,
-                    slip: None,
-                    v: al.use_[i].l + al.use_[i].t,
-                    x: al.x[i],
-                    c: l.c,
-                    use_: al.use_[i],
-                    blocked: Some(l.blk),
-                })
-                .collect();
-            for l in &ex {
-                let share = v_r / ex.len() as f64;
-                rows.push(LaneRow {
-                    d: "R".to_string(),
-                    len: l.len,
-                    slip: None,
-                    v: share,
-                    x: xr,
-                    c: rr.cm,
-                    use_: Lmv {
-                        l: 0.0,
-                        t: 0.0,
-                        r: share,
-                    },
-                    blocked: None,
-                });
-            }
-            Some(rows)
-        } else {
-            None
-        };
-        let res = EntryRes {
-            mov: mov[m],
-            x,
-            cap: if tot > 0.0 && x > 0.0 { tot / x } else { cap_t + rr.cm },
-            r: None,
-            q95short: None,
-            lanes,
-            v: e.v,
-            major: Some(MajorRes {
-                xr,
-                xtl,
-                cap_t,
-                p0,
-                p_eff,
-                rb,
-                bay,
-                q95r,
-                s_r: if tot > 0.0 { v_r / tot } else { 0.0 },
-                sh_tl: if tot > 0.0 { sh_tl / tot } else { 0.0 },
-            }),
-            rbt: None,
-        };
-        ent[m].res = Some(res);
+            blocked: None,
+        });
     }
+    rows
+}
+
+// A major approach's result: right turners against the opposing flow, and the through and left
+// lanes they block while waiting (None without a right-turn capacity, which never happens).
+fn major_result(e: &MoveEntry, movs: Movs, o: &CapOpts) -> Option<EntryRes> {
+    let rr = movs.r?;
+    let v_r = e.v.r;
+    let tot = e.v.l + e.v.t + v_r;
+    let p0 = p0of(v_r, rr.cm);
+    let ex: Vec<&Lane> = e.lanes.iter().filter(|l| l.d == "R").collect();
+    let shared = ex.is_empty();
+    let mut rb = if shared { 0.0 } else { 1.0 };
+    let mut q95r = 0.0;
+    let bay = if !ex.is_empty() && ex.iter().all(|l| l.len > 0.0) {
+        math_max_of(&ex.iter().map(|l| l.len).collect::<Vec<_>>())
+    } else {
+        0.0
+    };
+    if crate::jsnum::truthy_number(bay) {
+        q95r = q95v(v_r, rr.cm * usize_to_f64(ex.len()), o.t);
+        rb = if q95r > 1e-9 {
+            math_min(1.0, (bay / o.qs).floor() / q95r)
+        } else {
+            1.0
+        };
+    }
+    let p_eff = p0 + (1.0 - p0) * rb;
+    let has_bay = crate::jsnum::truthy_number(bay);
+    let tl_l = major_through_lanes(e, has_bay, p_eff);
+    let al = alloc_lanes(
+        &tl_l,
+        &Lmv {
+            l: e.v.l,
+            t: e.v.t,
+            r: 0.0,
+        },
+        &|l: &Lane, _| l.c,
+    );
+    let xtl = math_max(0.0, math_max_of(&al.x));
+    let xr = if v_r > 0.0 {
+        v_r / (rr.cm * math_max(1.0, usize_to_f64(ex.len())))
+    } else {
+        0.0
+    };
+    let x = math_max(xtl, xr);
+    let mut sh_tl = 0.0;
+    // alloc_lanes gives one use_ entry per lane, so the zip walks every lane
+    for (l, lu) in tl_l.iter().zip(&al.use_) {
+        if l.blk {
+            sh_tl += lu.l + lu.t;
+        }
+    }
+    let cap_t = tl_l
+        .iter()
+        .fold(0.0, |s, l| s + if l.d.contains('T') { l.c } else { 0.0 });
+    let lanes = o.detail.then(|| major_lane_rows(&tl_l, &al, &ex, v_r, xr, rr.cm));
+    Some(EntryRes {
+        mov: movs,
+        x,
+        cap: if tot > 0.0 && x > 0.0 { tot / x } else { cap_t + rr.cm },
+        r: None,
+        q95short: None,
+        lanes,
+        v: e.v,
+        major: Some(MajorRes {
+            xr,
+            xtl,
+            cap_t,
+            p0,
+            p_eff,
+            rb,
+            bay,
+            q95r,
+            s_r: if tot > 0.0 { v_r / tot } else { 0.0 },
+            sh_tl: if tot > 0.0 { sh_tl / tot } else { 0.0 },
+        }),
+        rbt: None,
+    })
 }
 
 /// `rbtCaps(ent, o)`: roundabout entries by HCM 6 lane equations against each entry's circulating flow `vc` and lanes `nc`; sets each entry's `res`.
@@ -723,7 +849,7 @@ pub fn rbt_caps(ent: &mut [MoveEntry], o: &CapOpts) {
         let ne = e.lanes.iter().filter(|l| !l.slip).count();
         let nc = e.nc.unwrap_or(f64::NAN);
         let vc = e.vc.unwrap_or(f64::NAN);
-        let mut j = 0;
+        let mut j = 0usize;
         let lanes: Vec<Lane> = e
             .lanes
             .iter()
@@ -737,12 +863,13 @@ pub fn rbt_caps(ent: &mut [MoveEntry], o: &CapOpts) {
                     if nc >= 2.0 { rl.one_of2 } else { rl.one }
                 } else if nc <= 1.0 {
                     rl.two_of1
-                } else if j == ne - 1 {
+                } else if j == ne.saturating_sub(1) {
                     rl.right2
                 } else {
                     rl.left2
                 };
-                j += 1;
+                // Bound: j counts lanes, at most ne
+                j = j.saturating_add(1);
                 l.c = q.a * jsmath::exp(-q.b * vc);
                 l
             })

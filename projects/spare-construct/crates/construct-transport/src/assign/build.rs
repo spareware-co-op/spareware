@@ -7,11 +7,11 @@ use super::run::{Run, T_C1, T_C2, T_TD};
 use super::sites::site_results;
 use crate::demand::Demand;
 use crate::graph::{js_sort_by, turn_type};
-use crate::jsnum::{Maybe, math_max, math_min, math_round, or_default};
+use crate::jsnum::{Maybe, f64_to_usize, math_max, math_min, math_round, or_default, usize_to_f64};
 use crate::junction::{ArcFlow, ConvInfo, JUNCTION_LABEL, cap_src, conv_text, eff_cap, junction_result};
 use crate::project::{OrderedMap, Project, Scenario, Settings};
 use crate::results::{ArcRes, TurnRow, ClassFlows, DevRes, DevZone, DevGateway, Select, OdFlow, SelectTurn, OdPaths, PathFlow, Res, NodeRes, KpiWorst, RouteRes, GrowthInfo, JunctionInfo, ScenarioInfo, model_meta, Convergence, Kpi};
-use crate::standards::{LOS_VC, STANDARDS, ef, growth, growth_basis, junction_set, los_of, year_of};
+use crate::standards::{JunctionSet, LOS_VC, STANDARDS, ef, growth, growth_basis, junction_set, los_of, year_of};
 use crate::util::{r1, r3};
 use crate::routes::bus_freq;
 use std::collections::HashMap;
@@ -33,12 +33,23 @@ struct Totals {
     charge_h: f64,
 }
 
+// v[i] of a per-arc or per-turn array. The run sizes every such array to the graph, so an index is
+// always in range; past the end reads as NaN, as an undefined element does in the JavaScript.
+fn at(v: &[f64], i: usize) -> f64 {
+    v.get(i).copied().unwrap_or(f64::NAN)
+}
+
+// run.trk[k].x[i]: a tracker's flow (NaN past the end, as at does)
+fn trk_at(run: &Run, k: usize, i: usize) -> f64 {
+    run.trk.get(k).map_or(f64::NAN, |tr| at(&tr.x, i))
+}
+
 /// Link results by arc key, the per-arc flows junctionResult reads, and the network totals before turn penalties.
 fn arc_results(run: &Run) -> (OrderedMap<ArcRes>, Vec<ArcFlow>, Totals) {
     let (g, s, pf) = (&run.g, run.s, run.pf);
     let mut arcs_res: OrderedMap<ArcRes> = OrderedMap::new();
     let mut flows = vec![ArcFlow::default(); run.m];
-    let mut k = Totals {
+    let mut tk = Totals {
         vkt: 0.0,
         vht: 0.0,
         dly: 0.0,
@@ -48,16 +59,17 @@ fn arc_results(run: &Run) -> (OrderedMap<ArcRes>, Vec<ArcFlow>, Totals) {
         lane_km: 0.0,
         charge_h: 0.0,
     };
-    for a in 0..run.m {
-        let arc = &g.arcs[a];
+    // run.m is the graph's arc count, so this visits every arc in order
+    for (ai, arc) in g.arcs.iter().enumerate().take(run.m) {
         if arc.conn() {
             continue;
         }
         // t is time only: a charge (apen) steers routes but is money, not time
-        let tot = run.xt[a];
-        let veh = run.x[a] / pf;
+        let tot = at(&run.xt, ai);
+        let veh = at(&run.x, ai) / pf;
         let cap = eff_cap(arc, &run.perf);
-        let t = run.cost[a] - run.apen[a];
+        let apen = at(&run.apen, ai);
+        let t = at(&run.cost, ai) - apen;
         let run_t = arc.ff * (1.0 + s.bpr_alpha.num() * crate::jsmath::pow(tot / arc.cap_mid, s.bpr_beta.num()));
         let vc = tot / cap;
         let spd = arc.len / t * 3.6;
@@ -69,7 +81,7 @@ fn arc_results(run: &Run) -> (OrderedMap<ArcRes>, Vec<ArcFlow>, Totals) {
             crate::graph::Ctrl::Minor | crate::graph::Ctrl::Rbt => or_default(arc.cap_n.unwrap_or(f64::NAN), arc.cap_mid),
             crate::graph::Ctrl::Free => f64::INFINITY,
         };
-        let cap_ctl = if node_cap < arc.cap_mid { arc.node.and_then(|n| g.ctl_of(n)) } else { None };
+        let cap_ctl = if node_cap < arc.cap_mid { arc.node.and_then(|node| g.ctl_of(node)) } else { None };
         let nd = r1(t - run_t) + 0.0;
         arcs_res.insert(
             arc.key.clone(),
@@ -84,33 +96,35 @@ fn arc_results(run: &Run) -> (OrderedMap<ArcRes>, Vec<ArcFlow>, Totals) {
                 nd,
                 len: math_round(arc.len),
                 los: los_of(vc, &LOS_VC).to_string(),
-                bus: r1(run.pre[a] / run.bus_pcu),
+                bus: r1(at(&run.pre, ai) / run.bus_pcu),
                 cap_mid: math_round(arc.cap_mid),
                 cap_src: match cap_ctl {
-                    Some(c) => cap_src(&c.kind).unwrap_or("junction").to_string(),
+                    Some(ctl) => cap_src(&ctl.kind).unwrap_or("junction").to_string(),
                     None => "mid-block".to_string(),
                 },
-                cap_node: cap_ctl.map(|c| g.ids[c.n].clone()),
-                toll: (run.apen[a] > 0.0).then(|| r1(run.apen[a])),
+                cap_node: cap_ctl.and_then(|ctl| g.ids.get(ctl.n).cloned()),
+                toll: (apen > 0.0).then(|| r1(apen)),
             },
         );
-        flows[a] = ArcFlow { v: r1(veh), nd };
-        if run.apen[a] > 0.0 {
-            k.charge_h += veh * run.apen[a] / 3600.0;
+        if let Some(slot) = flows.get_mut(ai) {
+            *slot = ArcFlow { v: r1(veh), nd };
         }
-        k.vkt += veh * arc.len / 1000.0;
-        k.vht += veh * t / 3600.0;
-        k.dly += veh * (t - arc.ff) / 3600.0;
-        k.co2 += veh * arc.len / 1000.0 * ef(spd, s) / 1e6;
-        k.lane_km += f64::from(arc.lanes) * arc.len / 1000.0;
+        if apen > 0.0 {
+            tk.charge_h += veh * apen / 3600.0;
+        }
+        tk.vkt += veh * arc.len / 1000.0;
+        tk.vht += veh * t / 3600.0;
+        tk.dly += veh * (t - arc.ff) / 3600.0;
+        tk.co2 += veh * arc.len / 1000.0 * ef(spd, s) / 1e6;
+        tk.lane_km += f64::from(arc.lanes) * arc.len / 1000.0;
         if vc > 1.0 {
-            k.over += 1.0;
+            tk.over += 1.0;
         }
-        if vc > k.max_vc {
-            k.max_vc = vc;
+        if vc > tk.max_vc {
+            tk.max_vc = vc;
         }
     }
-    (arcs_res, flows, k)
+    (arcs_res, flows, tk)
 }
 
 /// Turning movements with traffic at every junction: nodes with 3 or more links, or a road node where a zone connects and makes a third arm (a development access).
@@ -122,26 +136,40 @@ fn turn_results(run: &Run) -> OrderedMap<Vec<TurnRow>> {
     let mut turns: OrderedMap<Vec<TurnRow>> = OrderedMap::new();
     let mut conn_in: HashMap<usize, Vec<usize>> = HashMap::new();
     for a in &g.arcs {
-        if a.conn() && g.is_c()[a.to] == 0 {
+        if a.conn() && g.is_c().get(a.to) == Some(&0) {
             conn_in.entry(a.to).or_default().push(a.i);
         }
     }
     let none: Vec<usize> = Vec::new();
+    let off = g.t_off();
     for n in 0..g.n {
         let ci = conn_in.get(&n).unwrap_or(&none);
-        if g.is_c()[n] != 0 || (g.deg[n] < 3 && !(!ci.is_empty() && g.deg[n] >= 2)) {
+        // Node arrays hold one entry per node, so these are always found
+        let is_c = g.is_c().get(n).copied().unwrap_or(0);
+        let deg = g.deg.get(n).copied().unwrap_or(0);
+        if is_c != 0 || (deg < 3 && (ci.is_empty() || deg < 2)) {
             continue;
         }
+        let into = g.into.get(n).map_or(&[][..], Vec::as_slice);
         let mut list: Vec<TurnRow> = Vec::new();
-        for &a in g.into[n].iter().chain(ci.iter()) {
-            for t in g.t_off()[a] as usize..g.t_off()[a + 1] as usize {
-                let v = r1(run.x_t[t] / pf);
-                if !(v > 0.0) || g.tpen()[t] == f64::INFINITY {
+        for &a in into.iter().chain(ci.iter()) {
+            // tOff has one entry per arc and one more, never negative
+            let (Some(&t0), Some(&t1)) = (off.get(a), a.checked_add(1).and_then(|a1| off.get(a1))) else {
+                continue;
+            };
+            let (t0, t1) = (usize::try_from(t0).unwrap_or(0), usize::try_from(t1).unwrap_or(0));
+            for t in t0..t1 {
+                let v = r1(at(&run.x_t, t) / pf);
+                if !(v > 0.0) || g.tpen().get(t) == Some(&f64::INFINITY) {
                     continue;
                 }
-                let b = g.t_to()[t] as usize;
-                let (arc_a, arc_b) = (&g.arcs[a], &g.arcs[b]);
-                let dv = r1(run.trk[T_TD].x[t] / pf);
+                let Some(b) = g.t_to().get(t).and_then(|&b| usize::try_from(b).ok()) else {
+                    continue;
+                };
+                let (Some(arc_a), Some(arc_b)) = (g.arcs.get(a), g.arcs.get(b)) else {
+                    continue;
+                };
+                let dv = r1(trk_at(run, T_TD, t) / pf);
                 let mv = if arc_a.conn() || arc_b.conn() {
                     turn_type(arc_a.in_b, arc_b.out_b)
                 } else {
@@ -152,13 +180,15 @@ fn turn_results(run: &Run) -> OrderedMap<Vec<TurnRow>> {
                     to: arc_b.key.clone(),
                     mv: mv.to_string(),
                     v,
-                    pcu: r1(run.x_t[t]),
+                    pcu: r1(at(&run.x_t, t)),
                     dev: (dv > 0.0).then(|| math_min(v, dv)),
                 });
             }
         }
-        if !list.is_empty() {
-            turns.insert(g.ids[n].clone(), list);
+        if !list.is_empty()
+            && let Some(id) = g.ids.get(n)
+        {
+            turns.insert(id.clone(), list);
         }
     }
     turns
@@ -168,14 +198,13 @@ fn turn_results(run: &Run) -> OrderedMap<Vec<TurnRow>> {
 fn class_results(run: &Run) -> (ClassFlows, DevRes) {
     let (g, pf) = (&run.g, run.pf);
     let mut arcs: OrderedMap<Vec<f64>> = OrderedMap::new();
-    for a in 0..run.m {
-        let arc = &g.arcs[a];
+    for (a, arc) in g.arcs.iter().enumerate().take(run.m) {
         if arc.conn() {
             continue;
         }
-        let tot = run.x[a] / pf;
-        let c1 = run.trk[T_C1].x[a] / pf;
-        let c2 = run.trk[T_C2].x[a] / pf;
+        let tot = at(&run.x, a) / pf;
+        let c1 = trk_at(run, T_C1, a) / pf;
+        let c2 = trk_at(run, T_C2, a) / pf;
         if tot > 0.05 && (c1 > 0.05 || c2 > 0.05) {
             arcs.insert(arc.key.clone(), vec![r1(math_max(0.0, tot - c1 - c2)), r1(c1), r1(c2)]);
         }
@@ -191,11 +220,16 @@ fn class_results(run: &Run) -> (ClassFlows, DevRes) {
         gateways: OrderedMap::new(),
         via_gateways: 0.0,
     };
+    // The run lists zones by their index in g.zones
     for &(i, o, d) in &run.dev_zone {
-        dev.zones.insert(g.zones[i].id.clone(), DevZone { o: r1(o), d: r1(d) });
+        if let Some(zone) = g.zones.get(i) {
+            dev.zones.insert(zone.id.clone(), DevZone { o: r1(o), d: r1(d) });
+        }
     }
     for &(gi, inn, out) in &run.dev_gw {
-        dev.gateways.insert(g.zones[gi].id.clone(), DevGateway { r#in: r1(inn), out: r1(out) });
+        if let Some(zone) = g.zones.get(gi) {
+            dev.gateways.insert(zone.id.clone(), DevGateway { r#in: r1(inn), out: r1(out) });
+        }
         dev.via_gateways += inn + out;
     }
     dev.via_gateways = r1(dev.via_gateways);
@@ -227,31 +261,34 @@ fn select_result(run: &Run, turns: &OrderedMap<Vec<TurnRow>>) -> Option<Select> 
             error: Some("The selected zone, link or turn is not in this network (or the turn is banned).".to_string()),
         });
     }
-    let (xs, xts, xod) = (
-        run.ix.s.expect("selection"),
-        run.ix.ts.expect("selection"),
-        run.ix.od.expect("selection"),
-    );
+    // The run sets up all three trackers whenever the selection is on
+    let tracker = |ix: Option<usize>| ix.and_then(|k| run.trk.get(k));
+    let (Some(sel_link), Some(sel_turn), Some(sel_pair)) = (tracker(run.ix.s), tracker(run.ix.ts), tracker(run.ix.od)) else {
+        return None;
+    };
     let mut flows: OrderedMap<f64> = OrderedMap::new();
-    for a in 0..run.m {
-        if !g.arcs[a].conn() && run.trk[xs].x[a] / pf > 0.05 {
-            flows.insert(g.arcs[a].key.clone(), r1(run.trk[xs].x[a] / pf));
+    for (a, arc) in g.arcs.iter().enumerate().take(run.m) {
+        let q = at(&sel_link.x, a) / pf;
+        if !arc.conn() && q > 0.05 {
+            flows.insert(arc.key.clone(), r1(q));
         }
     }
     // tot counts every OD pair; the list keeps pairs over 0.05 veh/h, largest first, at most 2,000
     let (mut tot, mut n_sel) = (0.0f64, 0.0f64);
     let mut ods: Vec<OdFlow> = Vec::new();
-    for i in 0..run.zn {
-        for od in &run.od_list[i] {
-            let q = run.trk[xod].x[od.od] / pf;
+    for (i, list) in run.od_list.iter().enumerate().take(run.zn) {
+        for od in list {
+            let q = at(&sel_pair.x, od.pair) / pf;
             if q > 1e-6 {
                 tot += q;
                 n_sel += 1.0;
             }
-            if q > 0.05 {
+            if q > 0.05
+                && let (Some(orig), Some(dest)) = (g.zones.get(i), g.zones.get(od.j))
+            {
                 ods.push(OdFlow {
-                    o: g.zones[i].id.clone(),
-                    d: g.zones[od.j].id.clone(),
+                    o: orig.id.clone(),
+                    d: dest.id.clone(),
                     q: r1(q),
                 });
             }
@@ -261,20 +298,22 @@ fn select_result(run: &Run, turns: &OrderedMap<Vec<TurnRow>>) -> Option<Select> 
     for (id, list) in turns.iter() {
         for r in list {
             let t = match (g.key_idx.get(&r.from), g.key_idx.get(&r.to)) {
-                (Some(&a), Some(&b)) => g.turn_idx(a, b),
-                _ => -1,
+                (Some(&a), Some(&b)) => usize::try_from(g.turn_idx(a, b)).ok(),
+                _ => None,
             };
-            let v = if t >= 0 { run.trk[xts].x[t as usize] / pf } else { 0.0 };
+            let v = t.map_or(0.0, |t| at(&sel_turn.x, t) / pf);
             if v > 0.05 {
-                if s_turns.get(id).is_none() {
-                    s_turns.insert(id, Vec::new());
-                }
-                s_turns.get_mut(id).expect("just added").push(SelectTurn {
+                let row = SelectTurn {
                     from: r.from.clone(),
                     to: r.to.clone(),
                     mv: r.mv.clone(),
                     v: r1(v),
-                });
+                };
+                if let Some(rows) = s_turns.get_mut(id) {
+                    rows.push(row);
+                } else {
+                    s_turns.insert(id, vec![row]);
+                }
             }
         }
     }
@@ -304,10 +343,11 @@ fn select_result(run: &Run, turns: &OrderedMap<Vec<TurnRow>>) -> Option<Select> 
 
 /// The paths as `res.paths` lists them: per OD pair, the paths carrying over 0.01 pcu/h.
 fn path_list(set: &PathSet, zn: usize) -> Vec<OdPaths> {
+    // An OD pair is i * zn + j; there are paths only when there are zones, so zn is never 0
     set.iter()
         .map(|(od, m)| OdPaths {
-            i: od / zn,
-            j: od % zn,
+            i: od.checked_div(zn).unwrap_or(0),
+            j: od.checked_rem(zn).unwrap_or(0),
             list: m
                 .iter()
                 .filter(|(_, w)| **w > 0.01)
@@ -320,6 +360,163 @@ fn path_list(set: &PathSet, zn: usize) -> Vec<OdPaths> {
         .collect()
 }
 
+/// Assignment noise: 95th percentile of the change in arc flow (veh/h) over the last five updates.
+fn noise_95(run: &Run) -> Option<f64> {
+    if run.hist.len() != 6 {
+        return None;
+    }
+    let (Some(last), Some(first)) = (run.hist.get(5), run.hist.front()) else {
+        return None;
+    };
+    let mut diffs: Vec<f64> = Vec::new();
+    for (a, arc) in run.g.arcs.iter().enumerate().take(run.m) {
+        if !arc.conn() {
+            diffs.push((at(last, a) - at(first, a)).abs() / run.pf);
+        }
+    }
+    js_sort_by(&mut diffs, |da, db| da - db);
+    if diffs.is_empty() {
+        return None;
+    }
+    // diffs is not empty, so its last index is len - 1
+    let top = usize_to_f64(diffs.len().saturating_sub(1));
+    let pos = math_min(top, math_round(0.95 * top));
+    diffs.get(f64_to_usize(pos)).map(|&dv| r1(dv))
+}
+
+/// Hours spent at turn penalties: they are time spent at junctions, so they count in VHT and delay as they do in routing.
+fn turn_pen_hours(run: &Run) -> f64 {
+    let mut tpen_h = 0.0f64;
+    for (&pc, &xt) in run.pc.iter().zip(&run.x_t).take(run.nt) {
+        if crate::jsnum::truthy_number(pc) && xt > 0.0 {
+            tpen_h += xt / run.pf * pc / 3600.0;
+        }
+    }
+    tpen_h
+}
+
+/// Junction results by node id, and the junction with the most delay.
+fn node_results(run: &Run, s: &Settings, jset: &JunctionSet, flows: &[ArcFlow]) -> (OrderedMap<NodeRes>, Option<KpiWorst>) {
+    let g = &run.g;
+    let mut nodes_res: OrderedMap<NodeRes> = OrderedMap::new();
+    let mut worst: Option<KpiWorst> = None;
+    for ctl in &g.ctl {
+        let jr = junction_result(g, ctl, &run.xt, flows, s, jset, run.pf);
+        // A junction result has every field a NodeRes reads, and a controller sits on a graph node
+        let Ok(nr) = serde_json::from_value::<NodeRes>(jr.to_value()) else {
+            continue;
+        };
+        let Some(id) = g.ids.get(ctl.n).cloned() else {
+            continue;
+        };
+        if worst.as_ref().is_none_or(|wk| nr.delay > wk.delay) {
+            worst = Some(KpiWorst {
+                id: id.clone(),
+                delay: nr.delay,
+                los: nr.los.clone(),
+            });
+        }
+        nodes_res.insert(id, nr);
+    }
+    (nodes_res, worst)
+}
+
+/// Bus route results: length, time (running, turn penalties and 20 s a stop every 400 m), speed and frequency.
+fn route_results(run: &Run) -> OrderedMap<RouteRes> {
+    let g = &run.g;
+    let mut routes_res: OrderedMap<RouteRes> = OrderedMap::new();
+    let none: Vec<usize> = Vec::new();
+    for (idx, route) in run.routes.iter().enumerate() {
+        let (mut t, mut len) = (0.0f64, 0.0f64);
+        // One resolved arc list per route, of arcs in the graph
+        let ra = run.route_arcs.get(idx).unwrap_or(&none);
+        for (q, &ai) in ra.iter().enumerate() {
+            let Some(arc) = g.arcs.get(ai) else {
+                continue;
+            };
+            len += arc.len;
+            t += if arc.bus() { arc.ff * 1.1 } else { at(&run.cost, ai) - at(&run.apen, ai) };
+            if let Some(&prev) = q.checked_sub(1).and_then(|pq| ra.get(pq))
+                && let Ok(ti) = usize::try_from(g.turn_idx(prev, ai))
+                && let Some(&pen) = g.tpen().get(ti)
+                && pen.is_finite()
+            {
+                t += pen;
+            }
+        }
+        t += len / 400.0 * 20.0;
+        routes_res.insert(
+            route.id.clone(),
+            RouteRes {
+                len: math_round(len),
+                t: math_round(t),
+                spd: (len > 0.0).then(|| r1(len / t * 3.6)),
+                freq: bus_freq(route, Some(&run.period)),
+            },
+        );
+    }
+    routes_res
+}
+
+/// `res.junction`: the junction method and its labels.
+fn junction_info(jset: &JunctionSet) -> JunctionInfo {
+    JunctionInfo {
+        method: jset.method.to_string(),
+        label: jset.los().label.to_string(),
+        pff: jset.pff,
+        t: jset.t,
+        queue_space: jset.queue_space,
+        f95: jset.f95,
+        honest: JUNCTION_LABEL.to_string(),
+        cap_method: jset.cap_method.as_str().to_string(),
+        cap_label: (jset.cap_method == crate::standards::CapMethod::Movement).then(|| STANDARDS.gaps.label.to_string()),
+        rbt_label: (jset.cap_method == crate::standards::CapMethod::Movement).then(|| STANDARDS.rbt_lanes.label.to_string()),
+    }
+}
+
+/// `res.kpi`: the network totals.
+fn kpi_of(run: &Run, tk: &Totals, worst: Option<KpiWorst>) -> Kpi {
+    Kpi {
+        trips: run.trips,
+        vkt: tk.vkt,
+        vht: tk.vht,
+        dly: tk.dly,
+        spd: if tk.vht > 0.0 { tk.vkt / tk.vht } else { 0.0 },
+        co2: tk.co2,
+        over: tk.over,
+        max_vc: tk.max_vc,
+        unserved: run.unserved / run.pf,
+        worst,
+        lane_km: tk.lane_km,
+        charge_h: run.has_pen.then_some(tk.charge_h),
+    }
+}
+
+/// The convergence note convText writes for the run.
+fn conv_note_of(run: &Run, converged: bool) -> String {
+    let cv = run.cv;
+    conv_text(&ConvInfo {
+        converged,
+        hit_max: run.hit_max,
+        gap: run.gap,
+        it: f64::from(run.it),
+        gap_tol: cv.gap_tol,
+        stable: cv.stable,
+        share: cv.share,
+        consec: cv.consec,
+    })
+}
+
+/// `res.scenario`: the scenario's id, role, build-out and demand factor.
+fn scenario_info(sc: &Scenario, df: f64) -> ScenarioInfo {
+    ScenarioInfo {
+        id: sc.id.clone(),
+        role: sc.role.as_str().filter(|role| !role.is_empty()).map(String::from),
+        buildout: if sc.buildout.is_nullish() { Maybe::Null } else { sc.buildout.clone() },
+        demand_factor: df,
+    }
+}
+
 /// The result object of the run, from its final flows (what `Engine.assign` returns).
 pub(super) fn build_res(
     p: &Project,
@@ -330,98 +527,30 @@ pub(super) fn build_res(
     run: &Run,
     ms: f64,
 ) -> Res {
-    let (g, pf) = (&run.g, run.pf);
+    let g = &run.g;
     let cv = run.cv;
     let converged = !run.hit_max && run.gap <= cv.gap_tol;
-    // Assignment noise: 95th percentile of the change in arc flow (veh/h) over the last five updates
-    let mut noise95: Option<f64> = None;
-    if run.hist.len() == 6 {
-        let mut d: Vec<f64> = Vec::new();
-        for a in 0..run.m {
-            if !g.arcs[a].conn() {
-                d.push((run.hist[5][a] - run.hist[0][a]).abs() / pf);
-            }
-        }
-        js_sort_by(&mut d, |p, q| p - q);
-        if !d.is_empty() {
-            let at = math_min((d.len() - 1) as f64, math_round(0.95 * (d.len() - 1) as f64));
-            noise95 = Some(r1(d[at as usize]));
-        }
-    }
-    let conv_note = conv_text(&ConvInfo {
-        converged,
-        hit_max: run.hit_max,
-        gap: run.gap,
-        it: f64::from(run.it),
-        gap_tol: cv.gap_tol,
-        stable: cv.stable,
-        share: cv.share,
-        consec: cv.consec,
-    });
-    let (arcs_res, flows, mut k) = arc_results(run);
-    // Turn penalties are time spent at junctions, so they count in VHT and delay as they do in routing
-    let mut tpen_h = 0.0f64;
-    for t in 0..run.nt {
-        if crate::jsnum::truthy_number(run.pc[t]) && run.x_t[t] > 0.0 {
-            tpen_h += run.x_t[t] / pf * run.pc[t] / 3600.0;
-        }
-    }
-    k.vht += tpen_h;
-    k.dly += tpen_h;
-    let j = junction_set(s);
-    let mut nodes_res: OrderedMap<NodeRes> = OrderedMap::new();
-    let mut worst: Option<KpiWorst> = None;
-    for ctl in &g.ctl {
-        let jr = junction_result(g, ctl, &run.xt, &flows, s, &j, pf);
-        let nr: NodeRes = serde_json::from_value(jr.to_value()).expect("a junction result reads as a NodeRes");
-        let id = g.ids[ctl.n].clone();
-        if worst.as_ref().is_none_or(|w| nr.delay > w.delay) {
-            worst = Some(KpiWorst {
-                id: id.clone(),
-                delay: nr.delay,
-                los: nr.los.clone(),
-            });
-        }
-        nodes_res.insert(id, nr);
-    }
+    let noise95 = noise_95(run);
+    let conv_note = conv_note_of(run, converged);
+    let (arcs_res, flows, mut tk) = arc_results(run);
+    let tpen_h = turn_pen_hours(run);
+    tk.vht += tpen_h;
+    tk.dly += tpen_h;
+    let jn = junction_set(s);
+    let (nodes_res, worst) = node_results(run, s, &jn, &flows);
     let turns = turn_results(run);
     let (cls, dev) = class_results(run);
     let select = select_result(run, &turns);
-    let sm = match (run.ix.m, run.ix.md) {
-        (Some(xm), Some(xd)) => Some((run.trk[xm].x.as_slice(), run.trk[xd].x.as_slice())),
+    let tracker = |ix: Option<usize>| ix.and_then(|k| run.trk.get(k));
+    let sm = match (tracker(run.ix.m), tracker(run.ix.md)) {
+        (Some(traced), Some(traced_dev)) => Some((traced.x.as_slice(), traced_dev.x.as_slice())),
         _ => None,
     };
-    let site_out = site_results(sc, g, &run.x_t, pf, &nodes_res, sm);
-    let mut routes_res: OrderedMap<RouteRes> = OrderedMap::new();
-    for (idx, r) in run.routes.iter().enumerate() {
-        let (mut t, mut len) = (0.0f64, 0.0f64);
-        let ra = &run.route_arcs[idx];
-        for q in 0..ra.len() {
-            let ai = ra[q];
-            let arc = &g.arcs[ai];
-            len += arc.len;
-            t += if arc.bus() { arc.ff * 1.1 } else { run.cost[ai] - run.apen[ai] };
-            if q > 0 {
-                let ti = g.turn_idx(ra[q - 1], ai);
-                if ti >= 0 && g.tpen()[ti as usize].is_finite() {
-                    t += g.tpen()[ti as usize];
-                }
-            }
-        }
-        t += len / 400.0 * 20.0;
-        routes_res.insert(
-            r.id.clone(),
-            RouteRes {
-                len: math_round(len),
-                t: math_round(t),
-                spd: (len > 0.0).then(|| r1(len / t * 3.6)),
-                freq: bus_freq(r, Some(&run.period)),
-            },
-        );
-    }
+    let site_out = site_results(sc, g, &run.x_t, run.pf, &nodes_res, sm);
+    let routes_res = route_results(run);
     let zn = run.zn;
     let (sites, site_turns, basis) = match site_out {
-        Some(o) => (Some(o.sites), Some(o.site_turns), Some(if o.traced { "paths" } else { "shares" }.to_string())),
+        Some(out) => (Some(out.sites), Some(out.site_turns), Some(if out.traced { "paths" } else { "shares" }.to_string())),
         None => (None, None, None),
     };
     let ts = crate::util::now_ms();
@@ -445,18 +574,7 @@ pub(super) fn build_res(
             factor: growth(s, Some(sc)),
             basis: growth_basis(s),
         },
-        junction: JunctionInfo {
-            method: j.method.to_string(),
-            label: j.los().label.to_string(),
-            pff: j.pff,
-            t: j.t,
-            queue_space: j.queue_space,
-            f95: j.f95,
-            honest: JUNCTION_LABEL.to_string(),
-            cap_method: j.cap_method.as_str().to_string(),
-            cap_label: (j.cap_method == crate::standards::CapMethod::Movement).then(|| STANDARDS.gaps.label.to_string()),
-            rbt_label: (j.cap_method == crate::standards::CapMethod::Movement).then(|| STANDARDS.rbt_lanes.label.to_string()),
-        },
+        junction: junction_info(&jn),
         arcs: arcs_res,
         nodes: nodes_res,
         turns,
@@ -467,12 +585,7 @@ pub(super) fn build_res(
         sites,
         site_turns,
         site_turns_basis: basis,
-        scenario: ScenarioInfo {
-            id: sc.id.clone(),
-            role: sc.role.as_str().filter(|r| !r.is_empty()).map(String::from),
-            buildout: if sc.buildout.is_nullish() { Maybe::Null } else { sc.buildout.clone() },
-            demand_factor: df,
-        },
+        scenario: scenario_info(sc, df),
         meta: model_meta(
             p,
             Some(sc),
@@ -487,30 +600,17 @@ pub(super) fn build_res(
                 note: conv_note,
             },
         ),
-        kpi: Kpi {
-            trips: run.trips,
-            vkt: k.vkt,
-            vht: k.vht,
-            dly: k.dly,
-            spd: if k.vht > 0.0 { k.vkt / k.vht } else { 0.0 },
-            co2: k.co2,
-            over: k.over,
-            max_vc: k.max_vc,
-            unserved: run.unserved / pf,
-            worst,
-            lane_km: k.lane_km,
-            charge_h: run.has_pen.then_some(k.charge_h),
-        },
+        kpi: kpi_of(run, &tk, worst),
         bus_pcu: (!run.routes.is_empty()).then_some(run.bus_pcu),
-        zone_ids: g.zones.iter().map(|z| z.id.clone()).collect(),
+        zone_ids: g.zones.iter().map(|zone| zone.id.clone()).collect(),
         o: dem.o.clone(),
         d: dem.d.clone(),
         o0: dem.o0.clone(),
         d0: dem.d0.clone(),
-        t: (zn <= 150).then(|| dem.t.iter().map(|&v| r1(v)).collect()),
+        t: (zn <= 150).then(|| dem.t.iter().map(|&val| r1(val)).collect()),
         note: dem.note.clone(),
         manual: dem.manual,
-        arc_keys: Some(g.arcs.iter().map(|a| a.key.clone()).collect()),
+        arc_keys: Some(g.arcs.iter().map(|arc| arc.key.clone()).collect()),
         paths: match &run.paths {
             Some(set) => Maybe::Set(path_list(set, zn)),
             None => Maybe::Null,

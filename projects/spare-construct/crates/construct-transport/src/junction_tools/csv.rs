@@ -263,6 +263,10 @@ impl<'a> Tools<'a> {
     /// `turningMovementsCSV(P, which, periods, opts)`: every junction with turning traffic; site movements for sites. Turn-volume
     /// exports need the SIDRA gap: an unconverged run gives its reason as the error unless `force`, and a forced file gains a
     /// last column, `export_note`, that says NOT CONVERGED on every row from such a run.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first unconverged run's name, period and reason when any run is not export-ready and `force` is false.
     pub fn turning_movements_csv(
         &self,
         which: Option<&[Sc<'a>]>,
@@ -285,8 +289,7 @@ impl<'a> Tools<'a> {
             .iter()
             .filter(|(s, p)| !export_ready(s.res_of(p)).ok)
             .collect();
-        if !bad.is_empty() && !force {
-            let (s, p) = bad[0];
+        if !force && let Some(&(s, p)) = bad.first() {
             return Err(format!(
                 "{}, {}: {}",
                 s.name_or_id(),
@@ -300,7 +303,8 @@ impl<'a> Tools<'a> {
         }
         let mut out: Vec<Vec<Cell>> = vec![head];
         for (s, p) in &runs {
-            let res = s.res_of(p).expect("result");
+            // Every run was pushed above only when it had a result.
+            let Some(res) = s.res_of(p) else { continue; };
             let nc: Vec<Cell> = if bad.is_empty() {
                 Vec::new()
             } else {
