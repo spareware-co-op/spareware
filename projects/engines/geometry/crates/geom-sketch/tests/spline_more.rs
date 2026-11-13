@@ -451,6 +451,65 @@ fn every_spline_rule_is_enclosed_around_the_residual_it_stores() {
     }
 }
 
+/// G227's slopes and jets, joined with G220's spline rules, the length and the point pinned to a
+/// parameter among them: the slopes at a point are the Jacobian's entries over each variable's
+/// scale, the jet over the point as a box holds them, and a jet asked for one unknown has that
+/// variable's derivatives alone.
+#[test]
+fn every_spline_rule_has_the_slopes_and_jets_of_its_jacobian() {
+    let mut text = quarters();
+    text.push_str("entity 1.7 point 0 0\nentity 1.8 point 6 1\nentity 2.3 line 1.7 1.8 segment\n");
+    for rule in [
+        "spline-join 2.0 finish 2.1 start g1",
+        "spline-join 2.0 finish 2.1 start g2",
+        "spline-join 2.0 finish 2.1 start g3",
+        "spline-tangent-line 2.0 start 2.3",
+        "spline-against 2.0 finish 2.2 finish g1",
+        "spline-against 2.1 start 2.2 finish g2",
+        "spline-against 2.1 start 2.2 finish g3",
+        "spline-against 2.1 finish 2.3 start g1",
+        "spline-against 2.1 finish 2.3 start g2",
+        "spline-against 2.1 finish 2.3 start g3",
+        "spline-length 2.1 7",
+        "spline-through 2.0 1.7 0.3",
+    ] {
+        let s = with_rule(&text, rule);
+        let mut a = Assembly::new(&s).unwrap();
+        let mut x = a.start().unwrap();
+        jiggle(&mut x);
+        a.evaluate_at(&x).unwrap();
+        let jacobian = a.jacobian().to_dense().unwrap();
+        let rule_ix = a.rule_count() - 1;
+        let held: Vec<Interval> = x.iter().map(|v| Interval::point(*v).unwrap()).collect();
+        let all: Vec<usize> = (0..x.len()).collect();
+        let jet = a.jet(rule_ix, &held, &all).unwrap();
+        assert_eq!(jet.residuals.len(), rows_of(rule), "{rule}");
+        let slopes = a.slopes(rule_ix, &x).unwrap();
+        assert!(!slopes.is_empty(), "{rule}");
+        for (v, e, d) in &slopes {
+            let want = jacobian.get(jet.first + e, *v).unwrap() / a.variables()[*v].scale;
+            assert!(
+                (d - want).abs() <= 1e-12 * (1.0 + want.abs()),
+                "{rule}: {v} {e}: {d} {want}"
+            );
+            let (_, _, b) = jet
+                .partials
+                .iter()
+                .find(|(w, f, _)| w == v && f == e)
+                .unwrap();
+            assert!(
+                b.lo() <= *d && *d <= b.hi(),
+                "{rule}: {v} {e}: {d} outside {b:?}"
+            );
+        }
+        assert_eq!(jet.partials.len(), slopes.len(), "{rule}");
+        let one = slopes[0].0;
+        let narrow = a.jet(rule_ix, &held, &[one]).unwrap();
+        assert!(!narrow.partials.is_empty() && narrow.partials.iter().all(|(w, _, _)| *w == one));
+        assert_eq!(narrow.residuals, jet.residuals, "{rule}");
+    }
+}
+
 #[test]
 fn the_new_rules_round_trip_in_text() {
     let mut text = quarters();

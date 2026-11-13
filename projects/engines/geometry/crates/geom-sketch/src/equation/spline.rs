@@ -36,8 +36,8 @@ use geom_num::real::Real;
 use geom_num::scalar::Scalar;
 
 use super::{
-    Assembly, Residual, Row, Singular, SketchError, Slot, cross, curvature, curvature_rate, dot,
-    minus, sine,
+    Assembly, Residual, Row, Singular, SketchError, Slot, Wide, cross, curvature, curvature_rate,
+    dot, minus, sine,
 };
 
 /// The numbers of one spline end in the linear layout: its first `level` + 1 control points
@@ -450,7 +450,110 @@ pub(super) fn through_residuals<S: Scalar>(values: &[S], n: usize) -> Result<[S;
     Ok(out)
 }
 
+/// The residuals of a rule as wide as its spline, over any [`Scalar`]: one for a length, two for a
+/// point at a parameter.
+///
+/// # Errors
+///
+/// What the arithmetic refuses; [`SketchError::OutOfMemory`].
+pub(super) fn wide_residuals<S: Scalar>(
+    wide: Wide,
+    values: &[S],
+    n: usize,
+) -> Result<Vec<S>, SketchError> {
+    let mut out = Vec::new();
+    out.try_reserve_exact(2)
+        .map_err(|_| SketchError::OutOfMemory)?;
+    match wide {
+        Wide::Length => out.push(length_residual(values, n)?),
+        Wide::Through => out.extend(through_residuals(values, n)?),
+    }
+    Ok(out)
+}
+
+/// The variables of a wide row that `take` accepts, each once, in the order they first come.
+fn variables_of(list: &[Slot], take: impl Fn(usize) -> bool) -> Result<Vec<usize>, SketchError> {
+    let mut out: Vec<usize> = Vec::new();
+    for slot in list {
+        if let Slot::Variable(i) = *slot
+            && take(i)
+            && !out.contains(&i)
+        {
+            out.try_reserve(1).map_err(|_| SketchError::OutOfMemory)?;
+            out.push(i);
+        }
+    }
+    Ok(out)
+}
+
+/// A wide rule's residuals, then its derivatives: the variable, which residual, and the derivative.
+pub(super) type WideJet<S> = (Vec<S>, Vec<(usize, usize, S)>);
+
+/// A wide rule's residuals at `values` (one number per slot of `list`), and their derivatives with
+/// respect to each variable `take` accepts, in the forward mode one variable at a time on the same
+/// text: for each residual, then each variable in the order they first come, the variable, the
+/// residual and the derivative, summed where a variable comes twice. `seeds` are zero and one.
+///
+/// # Errors
+///
+/// What the arithmetic refuses; [`SketchError::OutOfMemory`].
+pub(super) fn wide_jet<S: Scalar>(
+    wide: Wide,
+    n: usize,
+    (list, values): (&[Slot], &[S]),
+    take: impl Fn(usize) -> bool,
+    seeds: (S, S),
+) -> Result<WideJet<S>, SketchError> {
+    let (zero, one) = seeds;
+    let residuals = wide_residuals(wide, values, n)?;
+    let owners = variables_of(list, take)?;
+    let mut lanes: Vec<Vec<S>> = Vec::new();
+    lanes
+        .try_reserve_exact(owners.len())
+        .map_err(|_| SketchError::OutOfMemory)?;
+    for &v in &owners {
+        let mut duals: Vec<Dual<S, 1>> = Vec::new();
+        duals
+            .try_reserve_exact(values.len())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        for (slot, value) in list.iter().zip(values) {
+            let unit = if *slot == Slot::Variable(v) {
+                one
+            } else {
+                zero
+            };
+            duals.push(Dual::new(*value, [unit]));
+        }
+        let mut lane = Vec::new();
+        lane.try_reserve_exact(residuals.len())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        for r in wide_residuals(wide, &duals, n)? {
+            let [d] = r.partials();
+            lane.push(d);
+        }
+        lanes.push(lane);
+    }
+    let mut partials = Vec::new();
+    partials
+        .try_reserve_exact(residuals.len().saturating_mul(owners.len()))
+        .map_err(|_| SketchError::OutOfMemory)?;
+    for e in 0..residuals.len() {
+        for (&v, lane) in owners.iter().zip(&lanes) {
+            partials.push((v, e, *lane.get(e).ok_or(SketchError::Internal)?));
+        }
+    }
+    Ok((residuals, partials))
+}
+
 impl Assembly {
+    /// A wide row's slots.
+    pub(super) fn row_slots(&self, row: &Row) -> Result<&[Slot], SketchError> {
+        self.slots
+            .get(row.at..)
+            .and_then(|tail| tail.get(..row.len))
+            .ok_or(SketchError::Internal)
+    }
+
     /// The inputs of a row, read at `x`.
     fn read_row(&self, row: &Row, x: &[f64]) -> Result<Vec<f64>, SketchError> {
         let list = self
@@ -475,11 +578,7 @@ impl Assembly {
         row: &Row,
         held: &[Interval],
     ) -> Result<Vec<Interval>, SketchError> {
-        let list = self
-            .slots
-            .get(row.at..)
-            .and_then(|tail| tail.get(..row.len))
-            .ok_or(SketchError::Internal)?;
+        let list = self.row_slots(row)?;
         let mut values: Vec<Interval> = Vec::new();
         values
             .try_reserve_exact(list.len())

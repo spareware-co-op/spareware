@@ -1171,6 +1171,19 @@ pub(crate) fn inputs_of(
     })
 }
 
+/// One rule's residuals and their derivatives over a box (piece G227): the interval Jacobian that
+/// Krawczyk's test needs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Jet {
+    /// The row of the rule's first residual.
+    pub first: usize,
+    /// The residuals over the box, in the rule's order.
+    pub residuals: Vec<Interval>,
+    /// The derivatives over the box: the variable, which of the rule's residuals, and the enclosure.
+    /// A variable that comes twice in one rule, as a shared corner does, is summed.
+    pub partials: Vec<(usize, usize, Interval)>,
+}
+
 /// Every rule's residuals enclosed, in authoring order, by the rule's id; `None` for a rule whose
 /// arithmetic the intervals refuse.
 pub type Enclosed = Vec<(ItemId, Option<Vec<Interval>>)>;
@@ -1495,6 +1508,15 @@ impl Assembly {
             .partition_point(|rule| rule.first <= row)
             .checked_sub(1)
             .ok_or(SketchError::Internal)
+    }
+
+    /// The row of rule `rule`'s first residual.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for a rule it does not have.
+    pub(crate) fn first_row(&self, rule: usize) -> Result<usize, SketchError> {
+        Ok(self.rows.get(rule).ok_or(SketchError::Internal)?.first)
     }
 
     /// The name of rule `rule`.
@@ -1947,6 +1969,99 @@ impl Assembly {
         )
     }
 
+    /// How many rules the assembly has.
+    #[must_use]
+    pub fn rule_count(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Rule `rule`'s residuals and their derivatives over the box `held` (one interval per
+    /// variable): the natural interval extension of the one text the kind is written in, on dual
+    /// intervals, so the derivatives are enclosures of the true ones over the whole box. The
+    /// derivatives are with respect to the columns in `unknown` (increasing) alone: the dual numbers
+    /// are as wide as the rule has unknowns among its inputs, up to four, and a rule with more is as
+    /// wide as its inputs.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for a rule it does not have or `held` of another length than the
+    /// variables; [`SketchError::Numeric`] where the interval arithmetic refuses.
+    pub fn jet(
+        &self,
+        rule: usize,
+        held: &[Interval],
+        unknown: &[usize],
+    ) -> Result<Jet, SketchError> {
+        if held.len() != self.variables.len() {
+            return Err(SketchError::Internal);
+        }
+        let row = *self.rows.get(rule).ok_or(SketchError::Internal)?;
+        let mut out = None;
+        dispatch(
+            &row,
+            &mut Jetter {
+                assembly: self,
+                held,
+                unknown,
+                out: &mut out,
+            },
+        )?;
+        out.ok_or(SketchError::Internal)
+    }
+
+    /// One rule's residuals over a box, without derivatives (piece G227): [`Assembly::jet`]'s
+    /// values at a fraction of its cost.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for `held` of another length than the variables; what the
+    /// intervals refuse.
+    pub fn rule_values(
+        &self,
+        rule: usize,
+        held: &[Interval],
+    ) -> Result<Vec<Interval>, SketchError> {
+        if held.len() != self.variables.len() {
+            return Err(SketchError::Internal);
+        }
+        let row = *self.rows.get(rule).ok_or(SketchError::Internal)?;
+        let mut out = Vec::new();
+        dispatch(
+            &row,
+            &mut Enclose {
+                assembly: self,
+                held,
+                out: &mut out,
+            },
+        )?;
+        Ok(out)
+    }
+
+    /// One rule's derivatives at the point `x` in doubles: the variable, which of the rule's
+    /// residuals, and the slope, summed where a variable comes twice in a rule. Plain doubles, not
+    /// enclosures: for a preconditioner, which is only ever an approximation (piece G227).
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for `x` of another length than the variables; what the arithmetic
+    /// refuses.
+    pub fn slopes(&self, rule: usize, x: &[f64]) -> Result<Vec<(usize, usize, f64)>, SketchError> {
+        if x.len() != self.variables.len() {
+            return Err(SketchError::Internal);
+        }
+        let row = *self.rows.get(rule).ok_or(SketchError::Internal)?;
+        let mut out = Vec::new();
+        dispatch(
+            &row,
+            &mut Sloper {
+                assembly: self,
+                x,
+                out: &mut out,
+            },
+        )?;
+        Ok(out)
+    }
+
     /// Every rule's residuals over a box: the natural interval extension of the one text each kind
     /// is written in, at `held` (one interval per variable). Each rule's id is given with its
     /// residuals, in authoring order, so a bound on a stored geometry is one call (piece G226).
@@ -2063,21 +2178,204 @@ impl Visit for Enclose<'_> {
 
     fn wide(&mut self, wide: Wide, row: &Row) -> Result<(), SketchError> {
         let inputs = self.assembly.held_row(row, self.held)?;
-        match wide {
-            Wide::Length => {
-                let r = spline::length_residual(&inputs, row.n)?;
-                self.out
-                    .try_reserve(1)
-                    .map_err(|_| SketchError::OutOfMemory)?;
-                self.out.push(r);
+        let r = spline::wide_residuals(wide, &inputs, row.n)?;
+        self.out
+            .try_reserve(r.len())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        self.out.extend(r);
+        Ok(())
+    }
+}
+
+/// Takes a rule's residuals and their derivatives over `held`, with respect to the variables in
+/// `unknown` alone.
+struct Jetter<'a> {
+    assembly: &'a Assembly,
+    held: &'a [Interval],
+    /// The columns to differentiate by, in increasing order.
+    unknown: &'a [usize],
+    out: &'a mut Option<Jet>,
+}
+
+impl Jetter<'_> {
+    /// The jet of one rule with `K` lanes, one for each of its inputs that is an unknown. The
+    /// other inputs are intervals with no derivative, so a rule of ten inputs and three unknowns
+    /// runs on dual numbers three wide.
+    fn lanes<R: Residual<N, E>, const N: usize, const E: usize, const K: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+        list: &[Slot; N],
+    ) -> Result<(), SketchError> {
+        let zero = Interval::point(0.0)?;
+        let one = Interval::point(1.0)?;
+        let mut seeds = [Dual::new(zero, [zero; K]); N];
+        // The variable each lane differentiates by.
+        let mut owner = [0_usize; K];
+        let mut lane = 0_usize;
+        for (seed, slot) in seeds.iter_mut().zip(list) {
+            let mut partials = [zero; K];
+            let value = match *slot {
+                Slot::Constant(c) => Interval::point(c)?,
+                Slot::Variable(i) => {
+                    if self.unknown.binary_search(&i).is_ok() {
+                        if let Some(unit) = partials.get_mut(lane) {
+                            *unit = one;
+                        }
+                        if let Some(own) = owner.get_mut(lane) {
+                            *own = i;
+                        }
+                        lane = lane.saturating_add(1);
+                    }
+                    *self.held.get(i).ok_or(SketchError::Internal)?
+                }
+            };
+            *seed = Dual::new(value, partials);
+        }
+        let result = kind.residuals(seeds)?;
+        let mut jet = Jet {
+            first: row.first,
+            residuals: Vec::new(),
+            partials: Vec::new(),
+        };
+        jet.residuals
+            .try_reserve_exact(E)
+            .map_err(|_| SketchError::OutOfMemory)?;
+        for (e, out) in result.iter().enumerate() {
+            jet.residuals.push(out.value());
+            for (partial, &v) in out.partials().iter().zip(&owner).take(lane) {
+                if let Some((_, _, sum)) =
+                    jet.partials.iter_mut().find(|(w, f, _)| *w == v && *f == e)
+                {
+                    *sum = sum.add(*partial)?;
+                } else {
+                    jet.partials
+                        .try_reserve(1)
+                        .map_err(|_| SketchError::OutOfMemory)?;
+                    jet.partials.push((v, e, *partial));
+                }
             }
-            Wide::Through => {
-                let r = spline::through_residuals(&inputs, row.n)?;
-                self.out
-                    .try_reserve(2)
-                    .map_err(|_| SketchError::OutOfMemory)?;
-                self.out.extend(r);
+        }
+        *self.out = Some(jet);
+        Ok(())
+    }
+}
+
+impl Visit for Jetter<'_> {
+    fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+    ) -> Result<(), SketchError> {
+        let list: &[Slot; N] = self.assembly.list_of(row)?;
+        let mut count = 0_usize;
+        for slot in list {
+            if let Slot::Variable(i) = *slot
+                && self.unknown.binary_search(&i).is_ok()
+            {
+                count = count.saturating_add(1);
             }
+        }
+        // Few lanes are the usual case; any more run as wide as the rule is.
+        match count {
+            0 => self.lanes::<R, N, E, 0>(kind, row, list),
+            1 => self.lanes::<R, N, E, 1>(kind, row, list),
+            2 => self.lanes::<R, N, E, 2>(kind, row, list),
+            3 => self.lanes::<R, N, E, 3>(kind, row, list),
+            4 => self.lanes::<R, N, E, 4>(kind, row, list),
+            _ => self.lanes::<R, N, E, N>(kind, row, list),
+        }
+    }
+
+    fn wide(&mut self, wide: Wide, row: &Row) -> Result<(), SketchError> {
+        let list = self.assembly.row_slots(row)?;
+        let values = self.assembly.held_row(row, self.held)?;
+        let unknown = self.unknown;
+        let (residuals, partials) = spline::wide_jet(
+            wide,
+            row.n,
+            (list, &values),
+            |i| unknown.binary_search(&i).is_ok(),
+            (Interval::point(0.0)?, Interval::point(1.0)?),
+        )?;
+        *self.out = Some(Jet {
+            first: row.first,
+            residuals,
+            partials,
+        });
+        Ok(())
+    }
+}
+
+/// Takes a rule's derivatives at a point, in doubles.
+struct Sloper<'a> {
+    assembly: &'a Assembly,
+    x: &'a [f64],
+    out: &'a mut Vec<(usize, usize, f64)>,
+}
+
+impl Visit for Sloper<'_> {
+    fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+    ) -> Result<(), SketchError> {
+        let list: &[Slot; N] = self.assembly.list_of(row)?;
+        let mut seeds = [Dual::new(Real::ZERO, [Real::ZERO; N]); N];
+        for (j, (seed, slot)) in seeds.iter_mut().zip(list).enumerate() {
+            let mut partials = [Real::ZERO; N];
+            let value = match *slot {
+                Slot::Constant(c) => Real::new(c)?,
+                Slot::Variable(i) => {
+                    if let Some(unit) = partials.get_mut(j) {
+                        *unit = Real::new(1.0)?;
+                    }
+                    Real::new(*self.x.get(i).ok_or(SketchError::Internal)?)?
+                }
+            };
+            *seed = Dual::new(value, partials);
+        }
+        let result = kind.residuals(seeds)?;
+        for (e, out) in result.iter().enumerate() {
+            for (partial, slot) in out.partials().iter().zip(list) {
+                if let Slot::Variable(v) = *slot {
+                    if let Some((_, _, sum)) =
+                        self.out.iter_mut().find(|(w, f, _)| *w == v && *f == e)
+                    {
+                        *sum += partial.get();
+                    } else {
+                        self.out
+                            .try_reserve(1)
+                            .map_err(|_| SketchError::OutOfMemory)?;
+                        self.out.push((v, e, partial.get()));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn wide(&mut self, wide: Wide, row: &Row) -> Result<(), SketchError> {
+        let list = self.assembly.row_slots(row)?;
+        let mut values = Vec::new();
+        values
+            .try_reserve_exact(list.len())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        for slot in list {
+            values.push(Real::new(Assembly::read(*slot, self.x)?)?);
+        }
+        let (_, partials) = spline::wide_jet(
+            wide,
+            row.n,
+            (list, &values),
+            |_| true,
+            (Real::ZERO, Real::new(1.0)?),
+        )?;
+        self.out
+            .try_reserve(partials.len())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        for (v, e, d) in partials {
+            self.out.push((v, e, d.get()));
         }
         Ok(())
     }
@@ -2229,5 +2527,129 @@ pub fn measure(sketch: &Sketch, constraint: &Constraint) -> Result<f64, SketchEr
             Ok(half_turns.mul(Real::pi())?.mul(radius)?.get())
         }
         _ => Err(SketchError::NotADimension(id)),
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::float_arithmetic,
+    reason = "the test widens each start value into a box"
+)]
+mod tests {
+    use super::*;
+    use crate::model::{Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Standing};
+    use crate::plane::{Lattice, PlaneFrame, SketchPlane};
+    use geom_num::{GridStep, P3};
+
+    /// For each rule, the jet [`Jetter`] takes in as few lanes as the rule has unknowns, and the
+    /// jet in as many lanes as it has inputs, for every count of unknowns up to five.
+    struct Lanes<'a> {
+        assembly: &'a Assembly,
+        held: &'a [Interval],
+        compared: usize,
+    }
+
+    impl Visit for Lanes<'_> {
+        fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+            &mut self,
+            kind: &R,
+            row: &Row,
+        ) -> Result<(), SketchError> {
+            let list: &[Slot; N] = self.assembly.list_of(row)?;
+            let mut vars: Vec<usize> = list
+                .iter()
+                .filter_map(|s| {
+                    if let Slot::Variable(i) = *s {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            vars.sort_unstable();
+            vars.dedup();
+            for k in 0..=vars.len().min(5) {
+                let unknown = &vars[..k];
+                let (mut narrow, mut wide) = (None, None);
+                Jetter {
+                    assembly: self.assembly,
+                    held: self.held,
+                    unknown,
+                    out: &mut narrow,
+                }
+                .go(kind, row)?;
+                Jetter {
+                    assembly: self.assembly,
+                    held: self.held,
+                    unknown,
+                    out: &mut wide,
+                }
+                .lanes::<R, N, E, N>(kind, row, list)?;
+                assert!(narrow.is_some());
+                assert_eq!(narrow, wide, "{k} unknowns");
+                self.compared = self.compared.saturating_add(1);
+            }
+            Ok(())
+        }
+
+        /// The sketch below has no spline, so no rule as wide as its spline.
+        fn wide(&mut self, _: Wide, _: &Row) -> Result<(), SketchError> {
+            Err(SketchError::Internal)
+        }
+    }
+
+    /// The narrow lanes are only for speed: a rule's jet in as few lanes as it has unknowns is the
+    /// jet in as many lanes as it has inputs, value for value, for none to five unknowns.
+    #[test]
+    fn a_jet_in_few_lanes_is_the_jet_in_full_width_lanes() {
+        let lattice = Lattice::new(P3::new(0, 0, 0).unwrap(), [1, 0, 0], [0, 1, 0]).unwrap();
+        let mut s = Sketch::new(SketchPlane::new(PlaneFrame::Lattice(lattice), GridStep::Q0));
+        for (key, x, y) in [(1, 0.0, 0.0), (2, 10.0, 1.0), (3, 3.0, 2.0), (4, 7.0, -1.0)] {
+            s.add_entity(Entity {
+                id: ItemId::new(1, key),
+                kind: EntityKind::Point { x, y },
+                construction: false,
+            })
+            .unwrap();
+        }
+        for (key, a, b) in [(1, 1, 2), (2, 3, 4)] {
+            s.add_entity(Entity {
+                id: ItemId::new(2, key),
+                kind: EntityKind::Line {
+                    start: ItemId::new(1, a),
+                    end: ItemId::new(1, b),
+                    extent: Extent::Segment,
+                },
+                construction: false,
+            })
+            .unwrap();
+        }
+        s.add_constraint(Constraint {
+            id: ItemId::new(3, 1),
+            kind: ConstraintKind::Collinear {
+                a: ItemId::new(2, 1),
+                b: ItemId::new(2, 2),
+            },
+            standing: Standing::Driving,
+            priority: 0,
+        })
+        .unwrap();
+        let assembly = Assembly::new(&s).unwrap();
+        let held: Vec<Interval> = assembly
+            .start()
+            .unwrap()
+            .iter()
+            .map(|v| Interval::new(v - 0.25, v + 0.5).unwrap())
+            .collect();
+        let mut lanes = Lanes {
+            assembly: &assembly,
+            held: &held,
+            compared: 0,
+        };
+        for row in &assembly.rows {
+            dispatch(row, &mut lanes).unwrap();
+        }
+        // The two lines' eight coordinates: none to five of them unknown.
+        assert_eq!(lanes.compared, 6);
     }
 }

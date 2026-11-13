@@ -74,6 +74,11 @@ harness = false
 name = "check"
 harness = false
 
+# The chained certificates of a 200-constraint family (piece G227), the same way.
+[[bench]]
+name = "certify"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
