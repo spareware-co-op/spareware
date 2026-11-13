@@ -820,14 +820,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
-      "mutant": "replace == with != in Offset::partials_of",
-      "line_text": "let point_u = u0 == u1;",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "Only regions of one u value or of one v value change. At a point the mutant takes the centred form, whose steps are 0 there, so it is the direct enclosure intersected with itself: the same. A line along u (one v value) then takes the direct enclosure alone instead of its intersection with the centred form: a wider enclosure of the same values, still certified. The cache certifies along lines of one u value, which keep their form."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
       "mutant": "replace > with >= in Offset::factor_sign",
       "line_text": "Ok(if det.lo() > 0.0 {",
       "occurrences": 1,
