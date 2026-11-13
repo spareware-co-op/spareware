@@ -453,7 +453,7 @@ fn run_detail(variant: u8, p: [u8; PAYLOAD]) -> RunDetail {
 /// The Make family's detail `variant` picks, from `p`.
 fn make_detail(variant: u8, p: [u8; PAYLOAD]) -> MakeDetail {
     let wide = u64::from_le_bytes(p);
-    match variant % 14 {
+    match variant % 15 {
         0 => MakeDetail::ZeroLength {
             input: pick(&INPUTS, "", at(p, 0)),
         },
@@ -473,6 +473,7 @@ fn make_detail(variant: u8, p: [u8; PAYLOAD]) -> MakeDetail {
         10 => MakeDetail::RepeatedKey,
         11 => MakeDetail::SingularTransform,
         12 => MakeDetail::ResultInvalid,
+        13 => MakeDetail::NoSuchPlacement { index: quad(p, 0) },
         _ => MakeDetail::BuildFailed,
     }
 }
@@ -480,18 +481,19 @@ fn make_detail(variant: u8, p: [u8; PAYLOAD]) -> MakeDetail {
 /// The Query family's detail `variant` picks, from `p`.
 fn query_detail(variant: u8, p: [u8; PAYLOAD]) -> QueryDetail {
     let row = quad(p, 0);
-    match variant % 6 {
+    match variant % 7 {
         0 => QueryDetail::Malformed,
         1 => QueryDetail::CurvedEdge { edge: row },
         2 => QueryDetail::CurvedFace { face: row },
         3 => QueryDetail::NoLoops { face: row },
         4 => QueryDetail::NotSolid,
+        5 => QueryDetail::ImplicitVertex { vertex: row },
         _ => QueryDetail::Overflow,
     }
 }
 
 /// The variants of each family, in [`detail`]'s order of families.
-const FAMILY_SIZES: [u8; 5] = [5, 11, 1, 14, 6];
+const FAMILY_SIZES: [u8; 5] = [5, 11, 1, 15, 7];
 
 /// The detail of family `family` and variant `variant`, from `p`.
 fn detail(family: u8, variant: u8, p: [u8; PAYLOAD]) -> OpErrorDetail {
@@ -1138,12 +1140,14 @@ fn data_texts(detail: &OpErrorDetail) -> Vec<String> {
             | MakeDetail::MinorNotBelowMajor { major: n } => {
                 vec![n.to_string()]
             }
+            MakeDetail::NoSuchPlacement { index } => vec![index.to_string()],
             MakeDetail::NotAccepted { would } => vec![format!("{would:?}")],
             MakeDetail::NotCertifiedYet { piece } => vec![(*piece).to_owned()],
             _ => Vec::new(),
         },
         OpErrorDetail::Query(
             QueryDetail::CurvedEdge { edge: row }
+            | QueryDetail::ImplicitVertex { vertex: row }
             | QueryDetail::CurvedFace { face: row }
             | QueryDetail::NoLoops { face: row },
         ) => vec![row.to_string()],
