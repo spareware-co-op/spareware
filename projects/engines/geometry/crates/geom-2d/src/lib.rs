@@ -43,6 +43,7 @@ pub mod index;
 pub mod fit;
 mod ideal;
 pub mod point;
+pub mod region;
 pub mod snap;
 pub mod tangent;
 pub mod update;
