@@ -30,7 +30,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 57] = [
+pub const GENERATORS: [Generator; 69] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
