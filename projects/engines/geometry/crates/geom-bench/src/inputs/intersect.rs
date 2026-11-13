@@ -1,6 +1,7 @@
-//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162, decision 32.44): a list of items
-//! put in canonical order, a circle's canonical key, a pair of lines put in canonical order, and a
-//! point projected on an arc and on a band of a sphere.
+//! Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G163, decision 32.44): a list of
+//! items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a
+//! point projected on an arc and on a band of a sphere, and pairs of curves that meet, each path of
+//! 12.5 once.
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -21,6 +22,7 @@ use geom_intersect::{Item, ParamBox, PointContact};
 use geom_math::Box3;
 use geom_num::Exactness;
 use geom_num::interval::Interval;
+use geom_nurbs::{Basis, Curve};
 use geom_surface::{Sphere, SurfaceKind};
 
 use super::{Class, batch_of, p3, rng, within};
@@ -153,5 +155,108 @@ pub fn spheres(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
             ((0.0, 1.5), (-0.4, 0.4)),
         );
         Some((SurfaceKind::Sphere(band.ok()?), point(&mut g)))
+    })
+}
+
+/// A coordinate of a 2D curve.
+fn plain(g: &mut SplitMix64) -> f64 {
+    coordinate(g)
+}
+
+/// A batch of `build`'s values, for the typical class alone.
+fn typical<T>(
+    class: Class,
+    name: &str,
+    mut build: impl FnMut(&mut SplitMix64) -> Option<T>,
+) -> Vec<T> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng(name, class);
+    batch_of(|_| build(&mut g))
+}
+
+/// The segment across `at`, its ends `run` either way.
+fn across(at: [f64; 2], [x, y]: [f64; 2]) -> Option<CurveKind<2>> {
+    let [a, b] = at;
+    let line = Line::segment([a - x, b - y], [a + x, b + y]).ok()?;
+    Some(CurveKind::Line(line.value))
+}
+
+/// A run of at least one.
+fn run(g: &mut SplitMix64) -> [f64; 2] {
+    [plain(g) + f64::from(1 << 21), plain(g)]
+}
+
+/// Two segments through one point.
+#[must_use]
+pub fn segment_pairs(class: Class) -> Vec<(CurveKind<2>, CurveKind<2>)> {
+    typical(class, "intersect::segment_pairs", |g| {
+        let at = [plain(g), plain(g)];
+        let [x, y] = run(g);
+        Some((across(at, [x, y])?, across(at, [y, -x])?))
+    })
+}
+
+/// A full circle.
+fn circle(at: [f64; 2], radius: f64) -> Option<CurveKind<2>> {
+    let frame = Frame::standard().ok()?;
+    Circle::full(at, radius, frame).ok().map(CurveKind::Circle)
+}
+
+/// Two circles of very different sizes, the second centred on the first.
+#[must_use]
+pub fn circle_pairs(class: Class) -> Vec<(CurveKind<2>, CurveKind<2>)> {
+    typical(class, "intersect::circle_pairs", |g| {
+        let at = [plain(g), plain(g)];
+        let big = f64::from(1 << 22) + plain(g).abs();
+        let small = 1.0 + plain(g).abs() / 8.0;
+        Some((circle(at, big)?, circle([at[0] + big, at[1]], small)?))
+    })
+}
+
+/// A segment through a circle's centre, and the circle.
+#[must_use]
+pub fn line_circles(class: Class) -> Vec<(CurveKind<2>, CurveKind<2>)> {
+    typical(class, "intersect::line_circles", |g| {
+        let at = [plain(g), plain(g)];
+        let radius = 1.0 + plain(g).abs();
+        Some((across(at, run(g))?, circle(at, radius)?))
+    })
+}
+
+/// A cubic Bézier curve with these points.
+fn cubic(points: &[[f64; 2]; 4]) -> Option<CurveKind<2>> {
+    let knots = vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0];
+    let basis = Basis::new(3, knots).ok()?;
+    Curve::new(basis, points).ok().map(CurveKind::Nurbs)
+}
+
+/// Two cubics across the same span, one rising through the other.
+#[must_use]
+pub fn cubic_pairs(class: Class) -> Vec<(CurveKind<2>, CurveKind<2>)> {
+    typical(class, "intersect::cubic_pairs", |g| {
+        let w = f64::from(1 << 12);
+        let mut height = || plain(g) / 256.0;
+        let (p, q) = ([height(), height()], [height(), height()]);
+        let [a, b] = p;
+        let [c, e] = q;
+        let first = cubic(&[[0.0, -w], [w, a], [2.0 * w, b], [3.0 * w, w]])?;
+        let second = cubic(&[[0.0, w], [w, c], [2.0 * w, e], [3.0 * w, -w]])?;
+        Some((first, second))
+    })
+}
+
+/// A cubic with a loop, its size drawn.
+#[must_use]
+pub fn loops(class: Class) -> Vec<CurveKind<2>> {
+    typical(class, "intersect::loops", |g| {
+        let s = 1024.0 + plain(g).abs() / 256.0;
+        cubic(&[
+            [0.0, 0.0],
+            [3.0 * s, 2.0 * s],
+            [-2.0 * s, 2.0 * s],
+            [s, 0.0],
+        ])
     })
 }

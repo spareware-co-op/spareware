@@ -230,6 +230,8 @@
 
 use core::fmt;
 
+pub mod crossings;
+
 pub mod intersect;
 
 pub mod adversarial;

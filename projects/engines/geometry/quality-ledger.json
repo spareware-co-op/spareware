@@ -7033,6 +7033,598 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Either change reverses which boxes each side keeps, so `hulls` returns its two hulls the other way round, the high side first. The one caller, `undecided`, does not read the order: it joins the images of the parts, which is commutative; it takes the whole as the smaller of the starts and the larger of the ends, also commutative; and it pushes every part with one shared point, distance and `Place::Foot`, after which `project_surface` hands them to `settle`, which joins touching enclosures (`joined` hulls the spans, points and distances, and the place is `Foot` whichever comes second, since both are) and sorts what is kept by parameter. The same two boxes come out in the same order either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace + with * in strip",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with + in strip",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in strip",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace / with * in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with + in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace == with != in strip",
+      "line_text": "if dx == 0.0 && dy == 0.0 {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in second_order",
+      "line_text": "let band = Interval::point(2.0 * RESOLUTION_FLOOR.get())?",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate: Real::ONE), so 2.0 * 1.0 and 2.0 / 1.0 are the same double and the band is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_line",
+      "line_text": "if lo.lo() < s_lo { s_lo } else { lo.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if hi.hi() > s_hi { s_hi } else { hi.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_line",
+      "line_text": "if x.lo() < lo { lo } else { x.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if x.hi() > hi { hi } else { x.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "let [low, high] = if sign > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is 1.0 or -1.0, set two lines above, never 0.0, so > and >= choose the same branch for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in one_circle",
+      "line_text": "if lo.lo() < s.0 { s.0 } else { lo.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "if hi.hi() > s.1 { s.1 } else { hi.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in self_crossings",
+      "line_text": "if s.lo() < t.lo() { s.lo() } else { t.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in self_crossings",
+      "line_text": "if s.hi() > t.hi() { s.hi() } else { t.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "let sign = if way.lo() > 0.0 { 1.0 } else { -1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "way is the product of the two circles' unit normals, and one_circle is called only for two circles of one circle, whose planes are one plane: the normals are equal or opposite, so way is enclosed within a few steps of 1 or -1 and its lower bound is never 0.0, the one value where > and >= differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "if start > end {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "start equals end only when an end of the enclosure of b's range on a, phi + sign t moved by whole turns, is exactly an end of a's domain. geom_num::interval widens every bound outward by a step, so where b truly ends at a's end the enclosure strictly holds that end and start < end; equality needs b's true end to lie past a's end by under a step, a miss. There the original reports the boundary touch its enclosure cannot rule out and the mutant reports nothing, which is the truth of the inputs; every touch and overlap that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in items_of",
+      "line_text": "if difference.lo() > 0.0 || difference.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when difference's lower bound is exactly 0.0, where the mutant reads a gap that may be zero as apart. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in items_of",
+      "line_text": "if difference.lo() > 0.0 || difference.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when difference's upper bound is exactly 0.0, where the mutant reads a gap that may be zero as apart. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace || with && in items_of",
+      "line_text": "} else if difference.lo() != 0.0 || difference.hi() != 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when exactly one bound of difference is 0.0, where the mutant takes a gap that may not be zero as no gap. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace != with == in items_of",
+      "line_text": "} else if difference.lo() != 0.0 || difference.hi() != 0.0 {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either mutant differs from the original only when a bound of difference is exactly 0.0. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in quadratic",
+      "line_text": "None if d.hi() < 0.0 => Meeting::Nowhere,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's upper bound is exactly 0.0, where the mutant counts no meeting and the original leaves the pair to the engine. geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: values within about 10^-308 of zero, which only data of that size gives, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in quadratic",
+      "line_text": "None if d.lo() > 0.0 => Meeting::Twice,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the discriminant's lower bound is exactly 0.0. On a discriminant that may be zero the mutant counts two roots, the root of max(d.lo, 0) is an enclosure reaching 0, and the two roots (-b - root) / a and (-b + root) / a both hold -b / a (each rounded outward), so low.hi() >= high.lo() and the function returns None, as the original's fall-through to None does; a, not holding 0, keeps the division defined."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace match guard d.lo() > 0.0 with true in quadratic",
+      "line_text": "None if d.lo() > 0.0 => Meeting::Twice,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard is reached only when d.hi() >= 0.0, the arm before having taken d.hi() < 0.0, so the mutant differs only on a discriminant whose enclosure holds 0. On a discriminant that may be zero the mutant counts two roots, the root of max(d.lo, 0) is an enclosure reaching 0, and the two roots (-b - root) / a and (-b + root) / a both hold -b / a (each rounded outward), so low.hi() >= high.lo() and the function returns None, as the original's fall-through to None does; a, not holding 0, keeps the division defined."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in quadratic",
+      "line_text": "let root = Interval::new(if d.lo() < 0.0 { 0.0 } else { d.lo() }, d.hi())?.sqrt()?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where d.lo() equals 0.0 both branches give 0.0, so the root is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_conic",
+      "line_text": "if s.hi() < domain.0 || s.lo() > domain.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when s.hi() equals the domain's start. s encloses a root of the line's quadratic, computed by geom_num::interval, which widens every bound outward by a step: where the line truly meets the conic at an end of its domain, s strictly holds that end. A bound of s equal to an end needs the root to lie past that end by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_conic",
+      "line_text": "if s.hi() < domain.0 || s.lo() > domain.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when s.lo() equals the domain's end. s encloses a root of the line's quadratic, computed by geom_num::interval, which widens every bound outward by a step: where the line truly meets the conic at an end of its domain, s strictly holds that end. A bound of s equal to an end needs the root to lie past that end by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_conic",
+      "line_text": "Shape::Branch if alpha.hi() < 0.0 => None,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when alpha's upper bound is exactly 0.0, where the mutant drops the root as one on the other branch. alpha is a0 + s a1 by geom_num::interval, which widens every bound outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of -2^-1074, the least subnormal: a hyperbola's first coordinate within about 10^-308 of its centre, though at any root of the branch's equation alpha^2 - beta^2 = 1, so |alpha| >= 1."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with == in self_crossings",
+      "line_text": "if s.hi() > t.hi() { s.hi() } else { t.hi() },",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant's hull ends at t.hi() even where s reaches past it. Pruning on that smaller hull is still sound: a crossing in the box has s0 < t0 <= t.hi() with s0 >= the hull's start, so the curve between them lies in it, and a stretch that runs along one heading cannot cross itself; a pair with s0 > t0 is the mirror of one in a box above the diagonal, which keeps its own full hull. So no crossing is lost, and only which boxes are pruned, and the work, can change; the tests' work pins see no change."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in self_crossings",
+      "line_text": "let join = s.contains(lo) && t.contains(hi);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant drops a zero whose enclosure holds lo or hi alone, the original only one holding both. solve proves a zero unique only when the Krawczyk image of a box lies inside that box, and the image, refined, is the zero's enclosure; every box lies inside the domain, so an enclosure holds an end of the domain only if an outward-rounded bound of the image lands exactly on it, a coincidence of rounding (a zero on the end itself comes out flagged in the tests: its image reaches past the box)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace || with && in self_crossings",
+      "line_text": "!(join || diagonal)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant keeps a zero that is the join but not on the diagonal, or on the diagonal but not the join. No proven zero meets the diagonal s = t: every point of the diagonal is a zero of a(s) - a(t), so a box meeting it holds a segment of zeros, while solve proves a zero only where its box holds exactly one (Krawczyk with contraction below 1). A zero at the join needs an enclosure holding both ends: solve proves a zero unique only when the Krawczyk image of a box lies inside that box, and the image, refined, is the zero's enclosure; every box lies inside the domain, so an enclosure holds an end of the domain only if an outward-rounded bound of the image lands exactly on it, a coincidence of rounding (a zero on the end itself comes out flagged in the tests: its image reaches past the box)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in self_crossings",
+      "line_text": "let diagonal = s.lo() <= t.hi() && t.lo() <= s.hi();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "No proven zero meets the diagonal s = t: every point of the diagonal is a zero of a(s) - a(t), so a box meeting it holds a segment of zeros, while solve proves a zero only where its box holds exactly one (Krawczyk with contraction below 1). So for every proven zero the original's diagonal is false; the mutant's needs s.lo() > t.hi(), a zero wholly below the diagonal, but the search keeps only boxes with s.lo() < t.hi() and proves none that meet the diagonal, so every proven zero lies wholly above it and the mutant's is false too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace || with && in second_order",
+      "line_text": "if speed_a.lo() <= 0.0 || speed_b.lo() <= 0.0 || along.contains(0.0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant of the first ||, (speed_a.lo() <= 0.0 && speed_b.lo() <= 0.0) || along.contains(0.0), is the original: a speed's bound ax^2 + ay^2 reaches 0 only when both components' boxes hold 0, and then each product of along = ax bx + ay by holds 0, so along holds 0 and the last test already holds. Both are along.contains(0.0). (The second ||'s mutant is killed by a_tangency_too_sharp_to_read_at_one_step_is_higher_order.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let difference = if along.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "along does not hold 0 here, the test before having returned where it does, so along.lo() is never 0.0 and > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let least = if difference.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "difference does not hold 0 here, the test before having returned where it does, so difference.lo() is never 0.0 and > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in lines_in_space",
+      "line_text": "let [wx, wy, wz] = w.map(|c| c.lo() * 0.5 + c.hi() * 0.5);",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "The midpoint of w, the step from one line's origin to the other's, is used only for parallel lines, to orient the plane they are read in: n = d x w, and across drops the coordinate where n is largest. This branch is reached only on whole-number data (grid_line), so w's enclosures are whole numbers widened by a step. Either mutant gives 2 lo + hi / 2 or lo / 2 + 2 hi, which is 2.5 w to within a few steps of a double, so n becomes 2.5 n to within those steps. The largest of n's components is at least 1, on whole data, and only components of that size can be the largest after so small a change. None of them is 0, the case where dropping that coordinate would read the two lines as one. So the plane keeps them apart, as the original's does, and line_line gives the same answer. (The other mutants of this line are killed by parallel_lines_in_space_apart_stay_apart_in_the_plane_they_are_read_in.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in lines_in_space",
+      "line_text": "n = if r <= p && r <= q {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in lines_in_space",
+      "line_text": "n = if r <= p && r <= q {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in lines_in_space",
+      "line_text": "} else if q <= p {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in circle_circle",
+      "line_text": "let small_first = r <= q;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "small_first only says which circle Crossing::of measures the crossings from. Swapped, its height is the same: Kahan's Heron area (d + l + s)(l + s - d)(d - (l - s))(d + (l - s)) has the same factors with l - s negated, multiplied in another order. So the tangent, merged and two-crossing decisions and the count are the same, and the points, reached from the other centre by the foot, are the same up to the rounding of their enclosures. That rounding is all the smaller circle's side improves, which the crate does not promise."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if start > end {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "start equals end only when an end of the enclosure of where b's ends fall on a, computed by geom_num::interval and widened outward by a step, is exactly an end of a's domain. Where two collinear segments truly share an end, the enclosure strictly holds it and start < end. Equality needs b to start past a's end by under a step, a miss, where the original reports the zero-length overlap its enclosure cannot rule out and the mutant reports nothing, which is the truth of the inputs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_line",
+      "line_text": "if s.hi() < s_lo || s.lo() > s_hi || t.hi() < t_lo || t.lo() > t_hi {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either mutant differs only when an upper bound of s or t equals the start of its domain. s and t are the crossing's parameters on each line, computed by geom_num::interval, which widens every bound outward by a step: where the lines truly meet at an end of a domain, the enclosure strictly holds that end. A bound equal to an end needs the crossing to lie past it by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if s.hi() < s_lo || s.lo() > s_hi || t.hi() < t_lo || t.lo() > t_hi {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either mutant differs only when a lower bound of s or t equals the end of its domain. s and t are the crossing's parameters on each line, computed by geom_num::interval, which widens every bound outward by a step: where the lines truly meet at an end of a domain, the enclosure strictly holds that end. A bound equal to an end needs the crossing to lie past it by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in Seam::wrapped",
+      "line_text": "if self.closed && t < lo {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant moves a parameter exactly at lo a turn on, to hi. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in Seam::wrapped",
+      "line_text": "} else if self.closed && t > hi {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant moves a parameter exactly at hi a turn back, to lo. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in Seam::spans",
+      "line_text": "(a < b).then_some((a, b))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant keeps a stretch of no length, a single point where a box moved by a turn just reaches the join; its bound is the curve's point there, which the box's other stretch already reaches at the other end of the domain, so the box's bound changes by rounding at most. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in Seam::onto",
+      "line_text": "let moved = if self.closed && x.hi() > hi {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant moves a box ending exactly at hi a turn back, where it ends at lo. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in Seam::onto",
+      "line_text": "} else if self.closed && x.hi() < lo {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant moves a box ending exactly at lo a turn on, where it ends at hi. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in widest",
+      "line_text": "if w > out {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in <impl Field<2> for Gap<'_, D>>::reach",
+      "line_text": "Ok(if a > b { a } else { b })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in held",
+      "line_text": "if x.lo() < lo { lo } else { x.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in held",
+      "line_text": "if x.hi() > hi { hi } else { x.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in Crossing::of",
+      "line_text": "let area = Interval::new(if area.lo() < 0.0 { 0.0 } else { area.lo() }, area.hi())?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where area.lo() equals 0.0 both branches give 0.0, so the area is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in length",
+      "line_text": "let zero = |v: Interval| v.lo() == 0.0 && v.hi() == 0.0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant takes an interval with either bound 0.0 for zero, the original only one with both. length is called only by Crossing::of, on dx and dy, each geom_curve::tight::sub of two doubles: the exact difference as a point where it is a double, else geom_num's interval widened outward by a step. A difference of doubles small enough to round to 0 is itself a double (subnormals are exact), so a bound of exactly 0.0 occurs only on [0, 0], the two coordinates equal. So both read zero exactly on [0, 0]."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in length",
+      "line_text": "let size = |v: Interval| if v.lo() < 0.0 { v.neg() } else { v };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when v.lo() is exactly 0.0. length is called only by Crossing::of, on dx and dy, each geom_curve::tight::sub of two doubles: the exact difference as a point where it is a double, else geom_num's interval widened outward by a step. A difference of doubles small enough to round to 0 is itself a double (subnormals are exact), so a bound of exactly 0.0 occurs only on [0, 0], the two coordinates equal. There v is [0, 0], and its negation is the same interval."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in turn_of",
+      "line_text": "if alpha.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when alpha's upper bound is exactly 0.0, which geom_num::interval's outward widening gives only by coincidence. There the mutant reads the turn as atan2(-beta, -alpha) + 1 and the original as atan2(beta, alpha): the same angle, one written a whole turn from the other where beta is negative. Every caller moves the turn onto its domain by whole turns (onto, one_circle), so the parameter reported is the same, up to rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in runs_along",
+      "line_text": "Ok(along.lo() > 0.0)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when along's lower bound is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of 2^-1074, the least subnormal: a derivative bound within about 10^-308 of perpendicular to the heading. Only there would the mutant prune a stretch whose heading may stop turning forward."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_span",
+      "line_text": "let (first, last) = if u.lo() < v.lo() { (u, v) } else { (v, u) };",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "u and v are the parameters where the line meets the grid's faces at -REACH and REACH along one axis, 2 REACH / |d| apart. Their lower bounds are equal only where that gap is below the doubles' step at those values, an origin so far beyond the grid that the line's span there is wider than the grid itself. There the mutant takes the two in the other order, and the span's ends move by the rounding of u and v; every line on the grid has u and v far apart, where < and <= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_span",
+      "line_text": "lo = if first.lo() > lo { first.lo() } else { lo };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_span",
+      "line_text": "hi = if last.hi() < hi { last.hi() } else { hi };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace + with * in plane",
+      "line_text": "Ok(across(widths.map(|w| 1.0 / (1.0 + w))))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "across drops the coordinate where its argument is largest, so only the order of the three matters. 1 / w orders non-negative widths as 1 / (1 + w) does: both fall as the width grows, and two widths tie under one exactly when they tie under the other (a zero width is infinite under 1 / w, and still the largest). So the same coordinate is dropped."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in curves",
+      "line_text": "if matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The turn only says the closed forms take the pair as (b, a), the answer swapped back. The mutant also turns pairs with no line, or two lines, and every closed form answers the pair one way round as it answers the other, swapped: the same items, up to the order the closed form computed them in and the rounding of their enclosures. One that cannot decide the pair one way cannot the other, so the route's record is the same too. The tests' pairs in either order give the same answers."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace > with >= in halves",
+      "line_text": "let share = if whole > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole is the width of the solver's domain on this coordinate: a curve's parameter domain, whose ends geom-curve's check_domain and geom-nurbs' Basis::new (EmptyDomain) require ordered and apart and which an infinite line is cut to at the grid's reach, widened by a seam's pad. Its ends differ, and the difference of two different doubles is never 0.0 (gradual underflow), so whole > 0.0 always and the two agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace > with >= in solve",
+      "line_text": "if range.is_some_and(|r| r.iter().any(|v| v.lo() > 0.0 || v.hi() < 0.0)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a residual's enclosure over the box has a lower bound of exactly 0.0, where the mutant drops a box whose residual may be zero on its edge. geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: values within about 10^-308 of zero, which only data of that size gives, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace < with <= in solve",
+      "line_text": "if range.is_some_and(|r| r.iter().any(|v| v.lo() > 0.0 || v.hi() < 0.0)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a residual's enclosure over the box has an upper bound of exactly 0.0, where the mutant drops a box whose residual may be zero on its edge. geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: values within about 10^-308 of zero, which only data of that size gives, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace > with >= in solve",
+      "line_text": ".any(|(a, b)| (a.hi() - a.lo()) * 2.0 <= b.hi() - b.lo() && b.hi() > b.lo());",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "b is a side of a box the solver holds or of its widened copy, and no such side is a single point: the domain's sides have ordered, different ends; halves cuts a side only strictly inside it; grown and widened add width; and BernsteinCurve::clip rounds its range's ends outward and clamps them to a domain of positive width. So b.hi() > b.lo() always, and > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace < with <= in step",
+      "line_text": "if contraction < 1.0 && x.iter().zip(&image).all(|(a, b)| inside(*b, *a)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when contraction is exactly 1.0, where the mutant takes the image as proof of one zero, which Krawczyk's test asks a contraction below 1 for. contraction is the largest row sum of the absolute bounds of I - Y.J(X), each entry an outward-rounded interval product and difference, so it is exactly 1.0 only by a coincidence of rounding. Every box whose contraction is below or above 1 is judged alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace < with <= in step",
+      "line_text": "let why = if contraction < 1.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when contraction is exactly 1.0, where the mutant names a box it could not prove Unproven where the original names it Singular. contraction is the largest row sum of the absolute bounds of I - Y.J(X), each entry an outward-rounded interval product and difference, so it is exactly 1.0 only by a coincidence of rounding. Only the reason a run is flagged with changes there."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace < with <= in refined",
+      "line_text": "if field.reach(&x, meter)? < floor {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a zero's box reaches exactly the floor, one grid step, where the mutant stops refining one step sooner. The zero stays proven, and only how tight its enclosure is changes (below a step either way, after at most one more step), which the crate does not promise; reach is a widest side of outward-rounded bounds, so it is exactly the floor only by coincidence."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in items_of",
+      "line_text": "apart |= difference.lo() > 0.0 || difference.hi() < 0.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A tie at the bound: the run is apart in a third coordinate only if the difference of the two enclosures is certainly one sign. Both enclosures are rounded outward, even at an exact value (a touch at z = 0 of a line at z = 0 and a cubic leaves z in [-3e-323, 0.0156], a_touch_at_a_shared_level_is_kept), so the difference ends exactly at 0 only by a coincidence of two rounded bounds, where either answer keeps the run's other checks."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in items_of",
+      "line_text": "apart |= difference.lo() > 0.0 || difference.hi() < 0.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A tie at the bound: the run is apart in a third coordinate only if the difference of the two enclosures is certainly one sign. Both enclosures are rounded outward, even at an exact value (a touch at z = 0 of a line at z = 0 and a cubic leaves z in [-3e-323, 0.0156], a_touch_at_a_shared_level_is_kept), so the difference ends exactly at 0 only by a coincidence of two rounded bounds, where either answer keeps the run's other checks."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace plane -> Result<[usize; 2], IntersectError> with Ok([1; 2])",
+      "line_text": "if D < 3 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Both coordinates of the solve the same: every pair in space projects onto one line, so no box ever proves a zero or its absence and the solver halves each to its floor, past the run's timeout (300 s on the full run of curve.rs)."
     }
   ],
   "coverage_off": [
