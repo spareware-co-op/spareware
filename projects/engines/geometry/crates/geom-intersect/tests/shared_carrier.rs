@@ -13,8 +13,9 @@
 
 use geom_curve::Frame;
 use geom_intersect::IntersectError;
+use geom_intersect::contact::{Reading, analyse};
 use geom_intersect::general::{Subdivided, subdivide};
-use geom_intersect::result::{StepsInterval, Unresolved};
+use geom_intersect::result::{Coincidence, StepsInterval, Unresolved};
 use geom_num::grid::Steps;
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cylinder, ParamSurface, Plane, Sphere, SurfaceKind, Torus};
@@ -181,4 +182,66 @@ fn nothing_is_claimed_where_two_patches_reach_the_same_pole_apart() {
         ),
         None
     );
+}
+
+/// What `analyse` says of a pair after `subdivide`, as the corpus runner calls them.
+fn readings(a: &SurfaceKind, b: &SurfaceKind) -> Vec<Reading> {
+    let found = subdivide(a, b, 8.0, &mut meter(1)).unwrap_or(Subdivided {
+        settled: Vec::new(),
+        flagged: Vec::new(),
+    });
+    analyse(a, b, &found, 8.0, 10.0, &mut meter(1 << 20)).unwrap()
+}
+
+#[test]
+fn analysis_reads_one_carrier_as_an_overlap_of_the_shared_parameters() {
+    let plane_a = plane(0.0, ((0.0, 3.0), (0.0, 3.0)));
+    let plane_b = plane(0.0, ((1.0, 4.0), (1.0, 4.0)));
+    let found = readings(&plane_a, &plane_b);
+    assert_eq!(
+        found,
+        vec![Reading::Overlap {
+            first: ((1.0, 3.0), (1.0, 3.0)),
+            second: ((1.0, 3.0), (1.0, 3.0)),
+            coincidence: Coincidence::Identical,
+        }]
+    );
+    let same = readings(&plane_a, &plane_a);
+    assert_eq!(
+        same,
+        vec![Reading::Overlap {
+            first: plane_a.domain(),
+            second: plane_a.domain(),
+            coincidence: Coincidence::Identical,
+        }]
+    );
+}
+
+#[test]
+fn analysis_claims_no_overlap_for_patches_that_only_touch_or_wrap() {
+    let cases = [
+        (
+            plane(0.0, ((0.0, 1.0), (0.0, 1.0))),
+            plane(0.0, ((1.0, 2.0), (0.0, 1.0))),
+        ),
+        (
+            cylinder(UNIT, ((0.0, 1.5), (0.0, UNIT))),
+            cylinder(UNIT, ((1.0, 2.5), (0.0, UNIT))),
+        ),
+        (
+            plane(0.0, ((0.0, 3.0), (0.0, 3.0))),
+            plane(1.0, ((0.0, 3.0), (0.0, 3.0))),
+        ),
+    ];
+    for (a, b) in cases {
+        let empty = Subdivided {
+            settled: Vec::new(),
+            flagged: Vec::new(),
+        };
+        let found = analyse(&a, &b, &empty, 8.0, 10.0, &mut meter(1 << 20)).unwrap();
+        assert!(
+            !found.iter().any(|r| matches!(r, Reading::Overlap { .. })),
+            "{found:?}"
+        );
+    }
 }

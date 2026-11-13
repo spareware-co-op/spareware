@@ -550,6 +550,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     (
         "geom_intersect",
         &[
+            ("contact", include_str!("../../geom-intersect/src/contact.rs")),
             ("curve", include_str!("../../geom-intersect/src/curve.rs")),
             (
                 "curve_surface",
