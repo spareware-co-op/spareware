@@ -58,7 +58,7 @@
 //!   [`Surface::bernstein`]), their boxes, hodographs and derivative boxes, slabs, fat lines and
 //!   fat planes, and Bezier clipping ([`BernsteinCurve`], [`BernsteinPatch`]); symbolic products
 //!   and the normal patch with collapsed edges divided out ([`Surface::normal_patches`]); and the
-//!   exact integer paths for grid pieces ([`exact::plane_coefficients`], [`exact::normal_patch`]).
+//!   exact integer paths for grid pieces ([`exact::plane_coefficients`], [`exact::quadric_coefficients`], [`exact::normal_patch`]).
 //! - [`NurbsError`], in [`error`].
 //!
 //! Status: basis, evaluation and knot operations (G56), fitting (G58) and the Bernstein toolkit

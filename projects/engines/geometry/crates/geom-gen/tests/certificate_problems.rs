@@ -77,7 +77,7 @@ struct Filter {
 }
 
 /// Every generated predicate, each with every problem committed for it.
-const FILTERS: [Filter; 11] = [
+const FILTERS: [Filter; 17] = [
     Filter {
         name: "orient2d",
         module: include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -187,6 +187,60 @@ const FILTERS: [Filter; 11] = [
         fptaylor: (
             "fptaylor-tpi-side.fpt",
             include_str!("../generated/fptaylor-tpi-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "line_sphere",
+        module: include_str!("../../geom-num/src/generated/line_sphere.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-line-sphere.fpt",
+            include_str!("../generated/fptaylor-line-sphere.fpt"),
+        ),
+    },
+    Filter {
+        name: "line_cylinder",
+        module: include_str!("../../geom-num/src/generated/line_cylinder.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-line-cylinder.fpt",
+            include_str!("../generated/fptaylor-line-cylinder.fpt"),
+        ),
+    },
+    Filter {
+        name: "line_cone",
+        module: include_str!("../../geom-num/src/generated/line_cone.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-line-cone.fpt",
+            include_str!("../generated/fptaylor-line-cone.fpt"),
+        ),
+    },
+    Filter {
+        name: "line_cone_lead",
+        module: include_str!("../../geom-num/src/generated/line_cone_lead.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-line-cone-lead.fpt",
+            include_str!("../generated/fptaylor-line-cone-lead.fpt"),
+        ),
+    },
+    Filter {
+        name: "cross_norm",
+        module: include_str!("../../geom-num/src/generated/cross_norm.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-cross-norm.fpt",
+            include_str!("../generated/fptaylor-cross-norm.fpt"),
+        ),
+    },
+    Filter {
+        name: "axis_gap",
+        module: include_str!("../../geom-num/src/generated/axis_gap.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-axis-gap.fpt",
+            include_str!("../generated/fptaylor-axis-gap.fpt"),
         ),
     },
     Filter {

@@ -39,10 +39,10 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, curves,
-    encoder, euler, exact, linalg, make, maths, names, naming, nurbs, open, operations, orient2d,
-    planes, predicates, prune, records, references, roots, sequence, surfaces, transforms,
-    variants, wide,
+    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, crossings,
+    curves, encoder, euler, exact, general, intersect, level, linalg, make, maths, names, naming,
+    nurbs, open, operations, orient2d, piercing, planes, predicates, project, prune, quadric,
+    records, references, roots, sequence, surfaces, transforms, variants, wide,
 };
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
@@ -54,7 +54,7 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 33] = [
+const TARGETS: [(&str, Harness); 40] = [
     ("arenas", arenas::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
@@ -64,10 +64,14 @@ const TARGETS: [(&str, Harness); 33] = [
     ("cbor", cbor::harness),
     ("cdt", cdt::harness),
     ("contract", contract::harness),
+    ("crossings", crossings::harness),
     ("curves", curves::harness),
     ("encoder", encoder::harness),
     ("euler", euler::harness),
     ("exact", exact::harness),
+    ("general", general::harness),
+    ("intersect", intersect::harness),
+    ("level", level::harness),
     ("linalg", linalg::harness),
     ("make", make::harness),
     ("maths", maths::harness),
@@ -77,9 +81,12 @@ const TARGETS: [(&str, Harness); 33] = [
     ("open", open::harness),
     ("operations", operations::harness),
     ("orient2d", orient2d::harness),
+    ("piercing", piercing::harness),
     ("planes", planes::harness),
     ("predicates", predicates::harness),
+    ("project", project::harness),
     ("prune", prune::harness),
+    ("quadric", quadric::harness),
     ("records", records::harness),
     ("references", references::harness),
     ("roots", roots::harness),
