@@ -15,6 +15,10 @@
 //!   the level asked for but which is not built yet is listed in [`Report::missing`], never
 //!   counted as passed, and what a curved face or shell leaves unjudged is counted in
 //!   [`Report::deferred`].
+//! - **Not certified is told from wrong.** A fault of a kind that says only that no certified
+//!   check exists yet ([`FaultKind::uncertified`]) is still a fault, and the report does not pass;
+//!   [`Report::uncertified`] says whether those are all it found, counting the faults past the
+//!   cap, so a caller can tell a body the checker could not follow from one it found wrong.
 //! - **One order.** Faults are listed in the order the checks find them, which is fixed (each
 //!   check runs over rows in ascending order), so the same body gives the same report everywhere.
 //! - **Plain words.** Every [`FaultKind`] has a sentence saying what is wrong ([`FaultKind::what`]),
@@ -33,6 +37,14 @@ use core::fmt;
 use geom_topo::entity::{
     CurveIx, EdgeIx, FaceIx, FinIx, LoopIx, PcurveIx, RegionIx, ShellIx, SurfaceIx, VertexIx,
 };
+
+/// The checker's version, which a validation stamp records (24.7): a stored body from a known
+/// source whose stamp comes from a checker at least this new, and lists every group this one has,
+/// needs only the cheap groups when it is opened. It rises with every group built and every check
+/// made stricter: G84's framework with groups 1 and 4 is version 1; version 2 adds groups 2 and 3
+/// (G85), the exact test of two integer planes (G101) and the checks of loop sense, shell
+/// orientation and nesting (G102), which no version-1 stamp vouches for.
+pub const VERSION: u64 = 2;
 
 /// One of chapter 8.3's four groups of checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -101,6 +113,11 @@ impl Level {
     /// The level this build runs after every operation: [`Level::Full`] in a debug build or with
     /// the crate's `full` feature (every test build turns it on, chapter 28.4), otherwise
     /// [`Level::Cheap`], as shipped release builds run.
+    ///
+    /// An operation checks at this level only a result that passes groups 2 and 3 by
+    /// construction, so that the level is a second look and never the operation's answer: where
+    /// a body those groups would refuse is an ordinary outcome, the operation checks at
+    /// [`Level::Full`] in every build (principle 5; chapter 8.3; decision 32.48).
     #[must_use]
     pub const fn of_build() -> Level {
         #[cfg(any(debug_assertions, feature = "full"))]
@@ -310,6 +327,14 @@ impl FaultKind {
         }
     }
 
+    /// Whether the kind says only that no certified check exists yet
+    /// ([`FaultKind::Unchecked`], [`FaultKind::PairUnchecked`]): the checker found nothing wrong
+    /// there, and could not certify that nothing is. Every other kind says what is wrong.
+    #[must_use]
+    pub const fn uncertified(self) -> bool {
+        matches!(self, FaultKind::Unchecked | FaultKind::PairUnchecked)
+    }
+
     /// What is wrong, in plain words.
     #[must_use]
     pub const fn what(self) -> &'static str {
@@ -431,6 +456,7 @@ impl fmt::Display for Fault {
 pub struct Report {
     pub(crate) faults: Vec<Fault>,
     pub(crate) more: u64,
+    pub(crate) wrong: bool,
     pub(crate) deferred: u64,
     pub(crate) ran: [bool; 4],
     pub(crate) missing: [bool; 4],
@@ -453,6 +479,15 @@ impl Report {
     #[must_use]
     pub const fn more(&self) -> u64 {
         self.more
+    }
+
+    /// Whether the check found nothing wrong and still could not pass the body: it has faults,
+    /// and every one, kept or counted past [`crate::MAX_FAULTS`], is of a kind that says only
+    /// that no certified check exists yet ([`FaultKind::uncertified`]). A check that runs only on
+    /// a body the ones before it passed did not run, so nothing is claimed about what it judges.
+    #[must_use]
+    pub fn uncertified(&self) -> bool {
+        !self.passed() && !self.wrong
     }
 
     /// How many faces and shells had their loop sense, stored box or orientation left unjudged

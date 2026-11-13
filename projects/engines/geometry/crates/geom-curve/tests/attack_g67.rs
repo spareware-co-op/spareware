@@ -46,6 +46,7 @@ use dashu_int::IBig;
 use dashu_ratio::RBig;
 use geom_curve::extent::{Scalar, extent};
 use geom_curve::transition::fresnel::fresnel;
+use geom_curve::transition::{NODE_WORK, NODES, units_work};
 use geom_curve::{
     Axes, Circle, CurvatureLaw, CurveError, DerivativeBound, Ellipse, Frame, Helix, HelixAxes,
     Hyperbola, Involute, Line, Parabola, ParamCurve, Transition,
@@ -1396,8 +1397,9 @@ fn coefficients_with_zero_at_an_end_are_held() {
     }
 }
 
-/// Claim: a gentle transition's box over a span costs three units of work (its one piece and the
-/// two certified points at its ends): no piece is cut in eight where no coordinate turns back.
+/// Claim: a gentle transition's box over a span costs one piece (its unit and its tangent's
+/// terms) and the two certified points at its ends, each its integral (issue #817): no piece is
+/// cut in eight where no coordinate turns back.
 #[test]
 fn a_gentle_transition_is_one_piece() {
     let law = CurvatureLaw::Clothoid {
@@ -1405,7 +1407,9 @@ fn a_gentle_transition_is_one_piece() {
         end: 0.001,
     };
     let c = Transition::<2>::new([3.0, -2.0], [3.0, 4.0], 100.0, law, &mut meter()).unwrap();
-    let b = c.bound((10.0, 70.0), &mut budget(3)).unwrap();
+    let work = 1 + units_work(1).unwrap() + 2 * (NODES as u64) * NODE_WORK;
+    assert_eq!(work, 163);
+    let b = c.bound((10.0, 70.0), &mut budget(work)).unwrap();
     let p = |t: f64| c.point(t, Limit::FromRight).unwrap();
     let (a, z) = (p(10.0), p(70.0));
     for d in 0..2 {
@@ -1415,7 +1419,7 @@ fn a_gentle_transition_is_one_piece() {
         );
     }
     assert!(matches!(
-        c.bound((10.0, 70.0), &mut budget(2)),
+        c.bound((10.0, 70.0), &mut budget(work - 1)),
         Err(CurveError::Stopped(_))
     ));
 }

@@ -39,9 +39,10 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, boxtree, crossings, curves, general, intersect, level, linalg, make, maths,
-    nurbs, orient2d, piercing, planes, predicates, project, quadric, roots, surfaces, transforms,
-    variants, wide,
+    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, contract, crossings, curves,
+    encoder, euler, general, intersect, level, linalg, make, maths, names, naming, nurbs, open,
+    operations, orient2d, piercing, planes, predicates, project, prune, quadric, records,
+    references, roots, sequence, surfaces, transforms, variants, wide,
 };
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
@@ -53,27 +54,43 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 22] = [
+const TARGETS: [(&str, Harness); 38] = [
+    ("arenas", arenas::harness),
+    ("attributes", attributes::harness),
+    ("batch", batch::harness),
+    ("bodies", bodies::harness),
     ("boxtree", boxtree::harness),
-    ("curves", curves::harness),
-    ("linalg", linalg::harness),
-    ("maths", maths::harness),
-    ("nurbs", nurbs::harness),
+    ("cache", cache::harness),
+    ("cbor", cbor::harness),
+    ("contract", contract::harness),
     ("crossings", crossings::harness),
-    ("intersect", intersect::harness),
-    ("project", project::harness),
-    ("level", level::harness),
+    ("curves", curves::harness),
+    ("encoder", encoder::harness),
+    ("euler", euler::harness),
     ("general", general::harness),
+    ("intersect", intersect::harness),
+    ("level", level::harness),
+    ("linalg", linalg::harness),
+    ("make", make::harness),
+    ("maths", maths::harness),
+    ("names", names::harness),
+    ("naming", naming::harness),
+    ("nurbs", nurbs::harness),
+    ("open", open::harness),
+    ("operations", operations::harness),
     ("orient2d", orient2d::harness),
     ("piercing", piercing::harness),
-    ("arenas", arenas::harness),
-    ("make", make::harness),
     ("planes", planes::harness),
     ("predicates", predicates::harness),
+    ("project", project::harness),
+    ("prune", prune::harness),
+    ("quadric", quadric::harness),
+    ("records", records::harness),
+    ("references", references::harness),
     ("roots", roots::harness),
+    ("sequence", sequence::harness),
     ("surfaces", surfaces::harness),
     ("transforms", transforms::harness),
-    ("quadric", quadric::harness),
     ("variants", variants::harness),
     ("wide", wide::harness),
 ];
@@ -288,6 +305,10 @@ fn target_modules() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for entry in std::fs::read_dir(crate_dir().join("src")).unwrap() {
         let path = entry.unwrap().path();
+        // `src/bin` holds the crate's tools, not targets.
+        if path.is_dir() {
+            continue;
+        }
         let text = std::fs::read_to_string(&path).unwrap();
         if text.contains("pub fn harness(") {
             out.insert(path.file_stem().unwrap().to_str().unwrap().to_owned());
@@ -558,10 +579,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
     );
 
     // Seeded violations: each must be reported.
-    let drop_fuzz = workflow.replace(
-        "[arenas_fuzz, boxtree_fuzz, crossings_fuzz, curves_fuzz, general_fuzz, intersect_fuzz, level_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, piercing_fuzz, planes_fuzz, predicates_fuzz, project_fuzz, quadric_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
-        "[arenas_fuzz, boxtree_fuzz, crossings_fuzz, curves_fuzz, general_fuzz, intersect_fuzz, level_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, piercing_fuzz, planes_fuzz, predicates_fuzz, project_fuzz, quadric_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
-    );
+    // orient2d_fuzz dropped from the libFuzzer matrix, the one list that names it inline.
+    let drop_fuzz = workflow.replacen(" orient2d_fuzz,", "", 1);
     assert_ne!(drop_fuzz, workflow);
     assert!(
         layout_violations(&targets, &tests, &drop_fuzz)

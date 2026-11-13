@@ -42,11 +42,10 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
-use geom_num::NumError;
+use geom_num::{Exactness, NumError};
 use geom_run::{Exceeded, Interrupted, ItemError, RunError};
 
-use geom_num::Exactness;
-
+use crate::batch::BatchDetail;
 use crate::evidence::Value;
 use crate::kind::ErrorKind;
 use crate::remedy::{Bound, Remedy};
@@ -61,6 +60,8 @@ pub enum OpErrorDetail {
     Run(RunDetail),
     /// A failure of the numbers layer, wrapped by meaning.
     Num(NumDetail),
+    /// A batch that could not run its items (piece G104).
+    Batch(BatchDetail),
     /// A failure of the Make and Transform families: primitives, transforms and patterns
     /// (`geom-make`, piece G101).
     Make(MakeDetail),
@@ -77,6 +78,7 @@ impl OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => detail.kind(),
             OpErrorDetail::Num(detail) => detail.kind(),
+            OpErrorDetail::Batch(detail) => detail.kind(),
             OpErrorDetail::Make(detail) => detail.kind(),
             OpErrorDetail::Query(detail) => detail.kind(),
             OpErrorDetail::Combine(detail) => detail.kind(),
@@ -89,6 +91,7 @@ impl OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => detail.remedies(),
             OpErrorDetail::Num(detail) => detail.remedies(),
+            OpErrorDetail::Batch(detail) => detail.remedies(),
             OpErrorDetail::Make(detail) => detail.remedies(),
             OpErrorDetail::Query(detail) => detail.remedies(),
             OpErrorDetail::Combine(detail) => detail.remedies(),
@@ -101,6 +104,7 @@ impl fmt::Display for OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Num(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Batch(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Make(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Query(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Combine(detail) => fmt::Display::fmt(detail, f),
@@ -382,9 +386,11 @@ pub enum MakeDetail {
     /// a scale that is not uniform makes cylinders, cones, spheres and tori affine surfaces and
     /// circles ellipses.
     KindNotCertified,
-    /// A transform that rounds corners or moves curved geometry by a certified deviation gave a
-    /// body the checker cannot certify yet: rounded corners leave their faces' planes, and a tilted
-    /// curved face meets its caps where only exact data is followed today.
+    /// A transform gave a body the checker cannot certify yet, from corners it rounded or curved
+    /// geometry it moved by a certified deviation, or from a body an earlier transform left so:
+    /// rounded corners leave their faces' planes, a tilted curved face meets its caps where only
+    /// exact data is followed today, and two planes off the integers are told apart only while
+    /// their normals stay exact in doubles.
     NotCertifiedYet {
         /// The piece that widens what the checker certifies, by its board number.
         piece: &'static str,

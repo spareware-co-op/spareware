@@ -24,6 +24,16 @@
 //!   checks, and of the meetings of planes in the point pool, which are links too, to the caller's
 //!   meter, which polls the caller's cancellation (23.10).
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G112, chapter 28.7) the two checks
+//! publishing makes: the link check accepts a column exactly when every index it holds, present
+//! or absent, is below the rows of the arena it points into, and otherwise names the first row
+//! that is not (every column of two links, any targets, any arena of up to three rows); and the
+//! length check accepts an arena exactly when its columns are even (any lengths). That publishing
+//! runs each check on the right column against the right arena, for all 22 links and every arena,
+//! is tested (`tests/body.rs`, at each arena's boundary), and so are whole bodies, the order of the
+//! faults and the meter (`tests/model.rs`): a whole body's geometry pools hold kinds whose
+//! constructors Kani cannot get through within a CI budget.
+//!
 //! Method: Parasolid's model structure, made immutable after building (chapter 8.2;
 //! `projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8), with the validation
 //! layer evidence report 03 recommends copying from Fornjot, every object checked as it enters
@@ -89,7 +99,17 @@ fn links<K, V: Target>(
     arenas: &Arenas,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(), TopoError> {
-    let rows = arenas.rows(link.to());
+    below(column, link, arenas.rows(link.to()), meter)
+}
+
+/// [`TopoError::Dangling`] for the first row of `column` whose index is `rows` or more, the rows of
+/// the arena `link` points into; one unit charged to `meter` for each chunk.
+fn below<K, V: Target>(
+    column: &Column<K, V>,
+    link: Link,
+    rows: u32,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), TopoError> {
     for (value, row) in column.iter().zip(0_u32..) {
         if row % CHUNK_ROWS == 0 {
             meter.charge(1)?;
@@ -254,5 +274,91 @@ impl Builder {
 impl Default for Builder {
     fn default() -> Self {
         Builder::new()
+    }
+}
+
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use geom_run::Budget;
+
+    use super::*;
+    use crate::entity::{Face, Shell};
+
+    /// The rows of a proof's link column. The count is fixed and the values symbolic: a whole
+    /// body's arenas hold geometry whose constructors Kani cannot get through in a CI budget
+    /// (their exact sums walk thousands of chunks), so the proofs take the checks themselves.
+    const ROWS: u32 = 2;
+
+    /// A row number of 0 to 3: inside an arena of up to three rows, or past it.
+    fn small() -> u32 {
+        let r: u32 = kani::any();
+        kani::assume(r <= 3);
+        r
+    }
+
+    /// The link check accepts a column exactly when every index it holds, present or absent, is
+    /// below the rows of the arena it points into, and otherwise names the first row that is not,
+    /// for every column of two links of either kind, any targets and any arena of up to three rows.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn the_link_check_accepts_exactly_the_links_inside_their_arena() {
+        let rows = small();
+        let mut required: Column<Face, Ix<Shell>> = Column::new();
+        let mut optional: Column<Face, Option<Ix<Shell>>> = Column::new();
+        let mut targets = [0_u32; ROWS as usize];
+        let mut present = [false; ROWS as usize];
+        for (t, p) in targets.iter_mut().zip(present.iter_mut()) {
+            *t = small();
+            *p = kani::any();
+            let ix = Ix::new(*t);
+            assert!(required.push(ix.unwrap_or_else(|| unreachable!())).is_ok());
+            assert!(optional.push(if *p { ix } else { None }).is_ok());
+        }
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let first = targets.iter().position(|&t| t >= rows);
+        assert_eq!(
+            below(&required, Link::FaceShell, rows, &mut meter),
+            match first {
+                Some(row) => Err(TopoError::Dangling {
+                    link: Link::FaceShell,
+                    row: row as u32,
+                }),
+                None => Ok(()),
+            }
+        );
+        let first = targets
+            .iter()
+            .zip(present)
+            .position(|(&t, p)| p && t >= rows);
+        assert_eq!(
+            below(&optional, Link::FaceNext, rows, &mut meter),
+            match first {
+                Some(row) => Err(TopoError::Dangling {
+                    link: Link::FaceNext,
+                    row: row as u32,
+                }),
+                None => Ok(()),
+            }
+        );
+    }
+
+    /// The length check accepts an arena exactly when every column holds as many rows as its first.
+    #[kani::proof]
+    fn the_length_check_accepts_exactly_even_columns() {
+        let first: u32 = kani::any();
+        let lengths: [u32; 3] = kani::any();
+        let even_all = lengths.iter().all(|&n| n == first);
+        assert_eq!(
+            even(Arena::Fin, first, &lengths),
+            if even_all {
+                Ok(())
+            } else {
+                Err(TopoError::Ragged(Arena::Fin))
+            }
+        );
     }
 }

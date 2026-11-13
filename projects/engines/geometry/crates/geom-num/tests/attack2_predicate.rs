@@ -279,7 +279,7 @@ mod copy {
         mod bounded {
             use super::Total;
             const ANY_I64_DIFFERENCE_BITS: usize = 64;
-            const fn magnitude_bits(limbs: usize) -> usize {
+            pub(super) const fn magnitude_bits(limbs: usize) -> usize {
                 let Some(bits) = limbs.checked_mul(64) else {
                     return 0;
                 };
@@ -452,21 +452,32 @@ mod copy {
             [p.x.get(), p.y.get(), p.z.get()]
         }
         pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
-            if ORIENT2D_FILTER_FIRST {
-                match generated::orient2d::filter(a, b, c) {
-                    Some(sign) => Ok(sign),
-                    None => orient2d_unfiltered(a, b, c),
-                }
-            } else {
-                orient2d_exact(a, b, c)
+            orient2d_routed(a, b, c)
+        }
+
+        #[cfg(not(all(target_pointer_width = "64", not(target_family = "wasm"))))]
+        #[inline]
+        fn orient2d_routed(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+            match filtered(|| generated::orient2d::filter(a, b, c)) {
+                Some(sign) => Ok(sign),
+                None => orient2d_unfiltered(a, b, c),
             }
         }
 
-        const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(
-            target_pointer_width = "64",
-            not(target_family = "wasm")
-        ));
+        #[cfg(all(target_pointer_width = "64", not(target_family = "wasm")))]
+        #[inline]
+        fn orient2d_routed(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+            orient2d_exact(a, b, c)
+        }
 
+        pub const FILTERS: bool = !cfg!(feature = "reference");
+
+        #[inline]
+        pub(crate) fn filtered<T>(filter: impl FnOnce() -> Option<T>) -> Option<T> {
+            FILTERS.then(filter).flatten()
+        }
+
+        #[cfg(any(test, not(all(target_pointer_width = "64", not(target_family = "wasm")))))]
         #[inline(never)]
         fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
             orient2d_exact(a, b, c)
@@ -480,7 +491,7 @@ mod copy {
             fast_else_total(fast, || orient2d_total(a, b, c))
         }
         pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
-            match generated::orient3d::filter(a, b, c, d) {
+            match filtered(|| generated::orient3d::filter(a, b, c, d)) {
                 Some(sign) => Ok(sign),
                 None => orient3d_unfiltered(a, b, c, d),
             }
@@ -494,7 +505,7 @@ mod copy {
             fast_else_total(fast, || orient3d_total(a, b, c, d))
         }
         pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
-            match generated::incircle::filter(a, b, c, d) {
+            match filtered(|| generated::incircle::filter(a, b, c, d)) {
                 Some(sign) => Ok(sign),
                 None => incircle_unfiltered(a, b, c, d),
             }
@@ -512,7 +523,7 @@ mod copy {
             reason = "a to e name the points of the documented formula"
         )]
         pub fn insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
-            match generated::insphere::filter(a, b, c, d, e) {
+            match filtered(|| generated::insphere::filter(a, b, c, d, e)) {
                 Some(sign) => Ok(sign),
                 None => insphere_unfiltered(a, b, c, d, e),
             }
@@ -562,6 +573,13 @@ mod copy {
     /// insphere's (lift, signed 3 × 3 cofactor) pairs in `i128`.
     pub(crate) fn is_terms([a, b, c, d, e]: [Pt3; 5]) -> Option<[(i128, i128); 4]> {
         insphere_terms(a, b, c, d, e)
+    }
+
+    /// orient2d's step when its filter cannot decide. The copy builds it for every target, as
+    /// predicate.rs does for its tests; `orient2d` itself calls it only where its filter runs
+    /// first.
+    pub(crate) fn o2_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+        orient2d_unfiltered(a, b, c)
     }
 
     /// orient2d's total path.
@@ -958,6 +976,7 @@ proptest! {
         let [f, g, h, k, _] = p2.map(g2);
         prop_assert_eq!(copy::orient2d(f, g, h), predicate::orient2d(f, g, h));
         prop_assert_eq!(copy::orient3d(a, b, c, d), predicate::orient3d(a, b, c, d));
+        prop_assert_eq!(copy::o2_unfiltered(f, g, h), predicate::orient2d(f, g, h));
         prop_assert_eq!(copy::incircle(f, g, h, k), predicate::incircle(f, g, h, k));
         prop_assert_eq!(copy::insphere(a, b, c, d, e), predicate::insphere(a, b, c, d, e));
     }

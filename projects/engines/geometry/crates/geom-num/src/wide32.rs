@@ -79,22 +79,25 @@ impl<const L: usize> Wide32<L> {
     #[must_use]
     pub fn max_value() -> Self {
         let () = Self::AT_LEAST_TWO_LIMBS;
-        let mut limbs = [u32::MAX; L];
-        if let Some(top) = limbs.last_mut() {
-            *top = !TOP_BIT;
-        }
-        Self(limbs)
+        // Every limb all ones, and the top limb without its sign bit. The top limb is the one
+        // whose index plus one is L; an index is below L, so the sum never wraps.
+        Self(core::array::from_fn(|i| {
+            if i.wrapping_add(1) == L {
+                !TOP_BIT
+            } else {
+                u32::MAX
+            }
+        }))
     }
 
     /// The smallest value, −2^(32L−1).
     #[must_use]
     pub fn min_value() -> Self {
         let () = Self::AT_LEAST_TWO_LIMBS;
-        let mut limbs = [0u32; L];
-        if let Some(top) = limbs.last_mut() {
-            *top = TOP_BIT;
-        }
-        Self(limbs)
+        // Every limb zero, and the top limb (as in `max_value`) only its sign bit.
+        Self(core::array::from_fn(|i| {
+            if i.wrapping_add(1) == L { TOP_BIT } else { 0 }
+        }))
     }
 
     /// From an `i64`, exactly: two limbs hold every `i64`.

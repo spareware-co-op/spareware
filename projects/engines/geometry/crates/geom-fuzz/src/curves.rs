@@ -6,7 +6,7 @@
 //! kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to
 //! (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode`
 //! then `check`, the function every fuzzing engine drives (the crate README sets out the layout).
-//! It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.44).
+//! It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.46).
 //!
 //! Guarantees:
 //!

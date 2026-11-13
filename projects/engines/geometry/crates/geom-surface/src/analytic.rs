@@ -601,6 +601,40 @@ macro_rules! round_kind {
                 $kind::build(round)
             }
 
+            /// The same surface with its axial sign negated, as reversing or mirroring leaves
+            /// it: what a stored surface whose sign is −1 is rebuilt from.
+            ///
+            /// # Errors
+            ///
+            /// Those of building the surface's terms.
+            pub fn flipped_axially(&self) -> Result<$kind, CurveError> {
+                $kind::build(Round {
+                    sign: -self.round.sign,
+                    ..self.round
+                })
+            }
+
+            /// The same surface with its axial factor set to `s`, as a similarity leaves a
+            /// cylinder or cone (the scale times the old factor): what a stored surface whose
+            /// factor is neither +1 nor −1 is rebuilt from.
+            ///
+            /// # Errors
+            ///
+            /// [`CurveError::NotFinite`] unless `s` is finite; [`CurveError::Degenerate`] for
+            /// zero; those of building the surface's terms.
+            pub fn with_axial_sign(&self, s: f64) -> Result<$kind, CurveError> {
+                if !s.is_finite() {
+                    return Err(CurveError::NotFinite);
+                }
+                if s == 0.0 {
+                    return Err(CurveError::Degenerate);
+                }
+                $kind::build(Round {
+                    sign: s,
+                    ..self.round
+                })
+            }
+
             fn build(round: Round) -> Result<$kind, CurveError> {
                 round.check($which)?;
                 let terms = round_terms($which, &round)?;
@@ -1259,10 +1293,63 @@ fn affine_image(
 }
 
 impl AffineSurface {
-    /// Whether u, then v, is an angle in half-turns, as in the kind it is the image of: an
-    /// angular parameter over a whole turn closes on itself (chapter 12.10).
+    /// The surface c + Σ fᵢ(u)·gᵢ(v)·Wᵢ over `domain`, `angular` saying which parameters are
+    /// angles in half-turns (each such side at most one turn long): what a stored affine image is
+    /// rebuilt from, term for term.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] for a value that is not finite; [`CurveError::Degenerate`] for no
+    /// terms; [`CurveError::SpanOutside`] for a side of the domain that is not finite and ordered,
+    /// or an angular side longer than a turn.
+    pub fn from_terms(
+        center: [f64; 3],
+        terms: &[(Fun, Fun, [f64; 3])],
+        domain: ParamBox,
+        angular: (bool, bool),
+    ) -> Result<AffineSurface, CurveError> {
+        if terms.is_empty() {
+            return Err(CurveError::Degenerate);
+        }
+        let (u, v) = domain;
+        for (side, turn) in [(u, angular.0), (v, angular.1)] {
+            if turn {
+                check_turn(side)?;
+            } else {
+                check_finite(side)?;
+            }
+        }
+        let [c0, c1, c2] = center;
+        let mut list = Vec::with_capacity(terms.len());
+        for &(f, g, w) in terms {
+            list.push(Term::exact(f, g, w)?);
+        }
+        Ok(AffineSurface {
+            terms: Terms {
+                c: center,
+                ce: [point(c0)?, point(c1)?, point(c2)?],
+                terms: list,
+            },
+            domain,
+            angular,
+        })
+    }
+
+    /// The centre c.
     #[must_use]
-    pub const fn angular(&self) -> (bool, bool) {
+    pub fn center(&self) -> [f64; 3] {
+        self.terms.c
+    }
+
+    /// The terms (fᵢ, gᵢ, Wᵢ), in order.
+    #[must_use]
+    pub fn terms(&self) -> Vec<(Fun, Fun, [f64; 3])> {
+        self.terms.terms.iter().map(|t| (t.u, t.v, t.w)).collect()
+    }
+
+    /// Which parameters are angles in half-turns, (u, v).
+    #[must_use]
+    pub fn angular(&self) -> (bool, bool) {
         self.angular
     }
 }

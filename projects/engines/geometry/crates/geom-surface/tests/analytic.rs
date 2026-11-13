@@ -4,6 +4,9 @@
 //! changes a kind to NURBS explicitly; a uniform whole-number scale moves every round kind exactly,
 //! a cylinder's and a cone's axial term with it; a sphere's pole keeps its normal; a torus knows
 //! its form.
+//!
+//! Covers: `SurfaceKind::Plane`, `SurfaceKind::Cylinder`, `SurfaceKind::Cone`,
+//! `SurfaceKind::Sphere`, `SurfaceKind::Torus`.
 
 #![allow(
     clippy::arithmetic_side_effects,

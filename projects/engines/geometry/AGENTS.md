@@ -10,7 +10,7 @@ This file is for every agent and person who changes anything in `projects/engine
 6. [How to add a predicate](#6-how-to-add-a-predicate).
 7. [How to add a crate](#7-how-to-add-a-crate).
 8. [The randomised-method rule](#8-the-randomised-method-rule): the rule every kernel method that uses random numbers follows.
-9. [Playbooks still to come](#9-playbooks-still-to-come).
+9. [Playbooks](#9-playbooks).
 10. [When something does not fit](#10-when-something-does-not-fit).
 
 Words you do not know are in [GLOSSARY.md](GLOSSARY.md). The ten-minute tour is [README.md](README.md). A path in backticks is written from the repository root when it starts with `projects/` or `.github/`, and from this folder, `projects/engines/geometry/`, otherwise.
@@ -19,7 +19,7 @@ Words you do not know are in [GLOSSARY.md](GLOSSARY.md). The ten-minute tour is 
 
 - **Your piece.** Read its entry in the work board, [architecture/30-build-order.md](architecture/30-build-order.md) (the same entries as data in `architecture/30-build-order.json`), its GitHub issue (`gh issue view <number> --repo spareware-co-op/spareware`), and every chapter of [architecture/](architecture/) it cites. "Done when" is the contract; 30.1's standard bar (tests, benchmark, determinism, readable headers, safe Rust) applies to every code piece on top of it.
 - **The stored research comes first.** The evidence behind every decision is in [../../kit/notes/G01-evidence/](../../kit/notes/G01-evidence/README.md). Read it before any web lookup. Follow the method it names, and read the actual source of anything you port, at a pinned commit.
-- **Existing code first: SMLib and solidcore.** Before you write any method, look for it in NVIDIA's USD BRep, SMLib ([NVIDIA-Omniverse/usd-brep](https://github.com/NVIDIA-Omniverse/usd-brep), Apache-2.0), and in its Rust port solidcore ([tangency-labs/solidcore](https://github.com/tangency-labs/solidcore)). Where either has it, use it rather than writing your own. Take solidcore's Rust first. Where only SMLib's C++ has it, convert that C++ into Rust. The same goes for any other good source under a licence of section 4: code that isn't Rust is converted into Rust, never rewritten from nothing. solidcore moves fast, so read it at its latest commit and pin that commit in the `Source:` record. The owner has settled their licensing (32.44): port them like any Apache-2.0 source, with the notice of section 2's checklist and [notices/usd-brep.txt](notices/usd-brep.txt), and don't reopen it. The bar is unchanged: what you port passes every gate of section 3, and their methods sit inside the kernel's exact and certified design, never bringing SMLib's tolerance-only decisions, nondeterminism or known defects with them.
+- **Existing code first: SMLib and solidcore.** Before you write any method, look for it in NVIDIA's USD BRep, SMLib ([NVIDIA-Omniverse/usd-brep](https://github.com/NVIDIA-Omniverse/usd-brep), Apache-2.0), and in its Rust port solidcore ([tangency-labs/solidcore](https://github.com/tangency-labs/solidcore)). Where either has it, use it rather than writing your own. Take solidcore's Rust first. Evidence report [16](../../kit/notes/G01-evidence/16-solidcore-start-map.md) names the file each unbuilt piece starts from. Where only SMLib's C++ has it, convert that C++ into Rust. The same goes for any other good source under a licence of section 4: code that isn't Rust is converted into Rust, never rewritten from nothing. solidcore moves fast, so read it at its latest commit and pin that commit in the `Source:` record. The owner has settled their licensing (32.44): port them like any Apache-2.0 source, with the notice of section 2's checklist and [notices/usd-brep.txt](notices/usd-brep.txt), and don't reopen it. The bar is unchanged: what you port passes every gate of section 3, and their methods sit inside the kernel's exact and certified design, never bringing SMLib's tolerance-only decisions, nondeterminism or known defects with them.
 - **Find where things are in `MAP.json`.** [MAP.json](MAP.json) is generated from every crate and module header (section 5). Each crate has its job, layer, invariants, sections and catalogue family; each module its job, guarantees, method and cost; each error enum its kinds; each outside source its licence and pinned link. Search it for a word ("interval", "Blend", "orient3d") to find the crate and file. [crates/README.md](crates/README.md) explains the crate scaffold, and chapter 27 ([architecture/27-crates-folders.md](architecture/27-crates-folders.md)) gives every crate its one job and layer.
 - **The toolchain is pinned.** `rust-toolchain.toml` at the repository root pins Rust 1.99.0 with rustfmt, clippy and the `wasm32-wasip1` and `wasm32-unknown-unknown` targets; the first `cargo` command in the repository installs it. The merge gate's build also needs `rustup target add wasm32v1-none`, and its licence check needs cargo-deny 0.20.2 (`cargo install --locked cargo-deny --version 0.20.2`). The workspace is edition 2024: `gen` is a reserved keyword.
 - **Stay in your piece.** If something outside it looks wrong, say so in the pull request; do not fix it there. Never put local paths, personal data, or any firm's or client's project in the repository.
@@ -121,6 +121,7 @@ Run everything from the repository root. The first build of the whole kernel tak
 | `cargo fmt --check $KERNEL_CRATES` | Formatting | `kernel.yml` |
 | `cargo clippy $KERNEL_CRATES --all-targets --locked -- -D warnings` | Any lint: the kernel's denials, chapter 21's bans, pedantic warnings, missing docs | `kernel.yml` |
 | `cargo test $KERNEL_CRATES --locked --no-fail-fast` | Any test, debug build | `kernel.yml` (also in release, with overflow checks on) |
+| `cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism` | An operation that answers differently when a build runs only the cheap checker groups, as a shipped build does, or returns a body the full checker refuses (chapter 8.3; decision 32.48). Every other test build runs the full checker | `kernel.yml`, natively and on wasm32 |
 | `cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast`, without `geom-test`, `geom-fuzz`, `geom-gen` and `geom-bench` | Any kernel test on 32-bit WebAssembly | `kernel.yml`, under wasmtime and Node |
 | `cargo test --locked -p geom-test -p geom-fuzz -p geom-gen --target wasm32-wasip1` | The development crates on WebAssembly | `kernel-dev.yml` |
 | `cargo run --locked -p geom-gen -- check` | A committed generated file differs from what its generator writes, or a generated folder holds an orphan | `kernel-dev.yml` |
@@ -132,7 +133,8 @@ Run everything from the repository root. The first build of the whole kernel tak
 | `cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_build --nocapture --test-threads 1` | A kernel crate that does not build for `wasm32v1-none` (no `std`) or `wasm32-unknown-unknown` | `kernel-gate.yml` |
 | `cargo test --locked -p geom-bench --release` | The benchmarks' inputs, golden digests and wiring; a public `geom-num` function neither measured nor excused | `kernel-bench.yml` (the count gates run there too, on Linux) |
 | `cargo test --locked --release -p geom-num --test verification` | A public predicate missing a class of chapter 28.6 from its matrix (each cited test must reach the predicate in its code), a wrong sign near an implicit-point filter's bound, a broken law of the line-plane point or the crossing, or a fixture that no longer replays | `kernel.yml`; every night with a fresh seed, with the predicates' attack tests, in `kernel-nightly.yml` |
-| `cargo bolero test orient2d_fuzz --package geom-fuzz --engine libfuzzer` and `cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact`, on Linux or macOS (the crate README says how to install both) | A fuzz target that finds a case breaking its law, or a bounded proof that fails | `kernel-fuzz.yml` (with ClusterFuzzLite); `kernel-fuzz-campaign.yml` runs every target for hours each night, and one on demand |
+| `cargo bolero test orient2d_fuzz --package geom-fuzz --engine libfuzzer` and `cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact`, on Linux or macOS (the crate README says how to install both) | A fuzz target that finds a case breaking its law, or a bounded proof that fails | `kernel-fuzz.yml` (with ClusterFuzzLite); `kernel-fuzz-campaign.yml` runs every target for hours each night, and on demand one target or, by hand, all of them |
+| `cargo run --locked --release -p geom-fuzz --bin replay-hashes` with and without `--features reference`, compared by `diff` | A filter or cache that changes a hash, a name or a measure (reference mode, chapter 23.13) | `kernel-golden.yml` |
 | `cargo run --locked -p geom-test --bin golden -- check` | A golden outside the store, a pinned file changed, or a golden edited without its record | `kernel-golden.yml` (and every golden on every target in `kernel.yml`) |
 | `cargo llvm-cov --locked -p <crate> --release --branch --lcov` into one LCOV file per crate, on the pinned nightly, then `cargo run --locked -p geom-test --bin kernel-quality -- coverage --all --lcov-dir <folder>`, on Linux or macOS (the workflow's header says how) | A foundation line or branch the tests do not run and the quality ledger does not list as awaiting its proof, a crate below 90% of lines, or a `coverage(off)` mark without its proof | `kernel-quality.yml` (with the mutation gate and Miri) |
 | `cargo run --locked --release -p geom-test --bin guard -- prove`, and with `--golden-run --target wasm32-wasip1 --release` added, through `golden run` on WebAssembly | The toolchain guard not tripping: `libm`'s `sin` changed by one bit must fail the golden `geom-num/determinism` | `kernel.yml` (the guard job, and each wasm leg first) |
@@ -299,15 +301,51 @@ still holds, because what a randomised method draws is a fixed function of its r
 That reading is piece G32's, not an owner's decision. It is raised for chapter 31.7's open
 questions, and the rule stands provisionally until it is decided.
 
-## 9. Playbooks still to come
+## 9. Playbooks
 
 Chapter 26.3 asks this file for a playbook for each kind of addition. Each arrives with the piece that builds what it adds to, and is proven by a dry run:
 
 | Playbook | Piece | Until then |
 | --- | --- | --- |
-| Add an operation, add a query | G117 | Chapter 26.1's table says what each must come with; chapter 28.2 lists what the completeness gate will require |
+| Add an operation, add a query | G117: below, "How to add an operation" and "How to add a query" | Done |
 | Add a curve or surface kind | G60: below, "How to add a curve or surface kind" | Done |
 | Add an exchange format, a representation or a domain toolkit | G480 | Chapter 26.1, and chapter 24 for formats |
+
+### How to add an operation
+
+An operation is a function in the crate of its family, with its schema in the facade's registry. The contract laws and the completeness gate read that registry, so registering an operation is what holds it to everything below. The first operations, `make.*` and `transform.*` in `geom-make`, are the worked example of every step. A dry run of these steps added a toy `make.cube`: it passed the laws and the gate as Preview, with `benchmark`, `fuzz`, `property` and `unit` listed as missing, and as Stable the gate refused it, naming those four.
+
+1. **Find its crate.** Chapter 10.2's family names it, and `MAP.json` says which crate holds the family. If no crate does, stop: section 7.
+2. **Write the operation.** `pub fn <name>(ctx: &OpContext<'_>, input: ...) -> Result<OpOutput<R>, OpError>`, in a module with a header (section 5). Do the work inside `ctx.run`, so nothing is published past a stop. Charge the meter as you go: what each phase charges is part of the version (`geom_op::Charge`). Reserve with `geom_op::reserve`, never with a bare `Vec::with_capacity`.
+3. **Refuse with a typed error.** Each refusal is a detail in the family's enum in `crates/geom-op/src/detail.rs`, with its base kind and, where it can give one, a remedy with a number. A coordinate past the grid is the numbers layer's `OutOfRange`, never a defect. `Internal` is for defects only.
+4. **Keep its promises.** Run `geom-check` on every body it returns. Record a history (chapter 20) that keeps the laws of `geom_test::history::check_laws`. State the exactness: no more exact than the least exact input, and refuse a less exact result with `ExactnessNotAccepted` unless the caller accepted it.
+5. **Register it.** Add its `OpSchema` to `projects/engines/crates/engine-geometry/src/operations.rs`, in name order, as `Tier::Preview { since }`: inputs with units, outputs, the roles it names, its errors, its exactness classes, its charges, and an example whose text after `gives` states what the call gives. List only errors it can return: the laws require a trigger for each. Re-export its function and input types there.
+6. **Regenerate.** `cargo run --locked -p geom-gen -- write` rewrites the API documentation and the MCP tool descriptions.
+7. **Drive it through the laws.** Add a `Driver` and a row of `drivers()` to `projects/engines/crates/engine-geometry/tests/contract_laws.rs`. An operation with no driver fails `every_registered_operation_has_a_driver`. The driver gives:
+   - calls that succeed, each with its inputs' exactness: `transactional` injects a cancellation at each read and every budget below the least that passes;
+   - a `Trigger` for each error the schema lists, except `Internal` and `BudgetExceeded`;
+   - each remedy that gives a number: the input, a failing value, and the call at a value, which must pass at the number and fail one step beyond it;
+   - for an operation that can round, the call under an accepted class;
+   - a call reaching 2^40 − 1 steps and one reaching 2^40;
+   - what the schema's example gave.
+8. **Write what the gate looks for.** Each file claims what it covers in its header, in a paragraph of its own, with the operation's registered name:
+   - unit and property tests: `Covers: make.box.` in `tests/<name>.rs`; a file holding `proptest!` counts as both;
+   - the family's laws (28.3): `Family laws: Make.` in the test that checks them;
+   - a fuzz target: `Covers:` in its module in `geom-fuzz/src`, one target may serve several;
+   - a benchmark: `Covers:` in `crates/geom-bench/src/catalogue.rs`, for the benchmark added there as `geom-bench`'s crate header says;
+   - the contract: `Covers:` in `projects/engines/crates/engine-geometry/tests/contract_laws.rs`.
+9. **Regenerate the map and read what is missing.** `cargo run --locked -p geom-test --bin map -- write` lists the operation in `MAP.json`, with `evidence` and `missing`. A Preview operation may ship with parts missing, each listed there; `crates/geom-test/tests/completeness.rs` refuses a Stable one that lacks any. It graduates to `Tier::Stable` by an owner's decision within 12 months, or it is dropped (chapter 25).
+10. **Run every gate** in section 3, then commit (`git commit -s`).
+
+### How to add a query
+
+A query reads a body and changes nothing, so it has no history and no budget of parts to publish, but it keeps the rest of the contract. Chapter 26.1 asks for less of it, and more of its cost.
+
+1. **Put it in the crate that owns the data** (chapter 27), and expose its schema from the facade with the operations (accepted in 32.13).
+2. **Follow steps 2, 3, 5 and 6 above.** Its `OpOutput` holds the answer, with its exactness.
+3. **State its cost bound** in the module header's `Cost:`, and benchmark it with a benchmark that checks that bound (section 6 of `geom-bench`'s header).
+4. **Write its tests**, one for each error its schema lists, and regenerate the map.
+5. **Run every gate** in section 3, then commit. The completeness gate reads queries once the registry lists them; until then, this list is the check.
 
 ### How to add a curve or surface kind
 

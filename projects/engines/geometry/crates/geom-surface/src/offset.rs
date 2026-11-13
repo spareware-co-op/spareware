@@ -89,6 +89,23 @@
 //! box cut into four by four), a normal bound up to 64 more per piece where the fold factor's
 //! sign needs smaller boxes (an explicit stack, three halvings deep: no recursion) and two of the
 //! base's normal bounds; the cache as `crate::cache` states.
+//!
+//! What the work costs: the cache certifies up to 1,024 boxes a cell, each from five evaluations
+//! of orders 4 to 8, so the meter is what bounds a conversion, and each evaluation is charged what
+//! it costs, as `geom-curve`'s offset charges. The base charges its own partials; the offset
+//! charges its jets' recurrences, a unit a term ([`Offset::jet_work`]). Measured, in
+//! instructions of a release build (callgrind on issue #765's offsets of a cylinder): the
+//! products, quotients and roots of two conversions' jets spent about 12,200 million on 43.5
+//! million terms, about 280 a term, which is one interval product and one interval sum; the
+//! rest of an evaluation (the jets' sums and scalings, and the base's partials over a box, which
+//! an analytic base charges a unit an extent) brings a term to between 480 and 600, and that is
+//! what a unit stands for here. `geom-curve`'s offset charges two units for a term of the same
+//! cost; this one charges one, because the cache of an ordinary offset of a cylinder takes two
+//! samplings (80 boxes, 1.3 million terms), the kind contract converts twice, and at two units a
+//! term that contract would no longer fit the 4,000,000 units the surfaces fuzz target gives it
+//! (it takes 2.7 million at one). Before issue #765 the jets were free, so one conversion of an
+//! offset of a cylinder spent 16 thousand million instructions under that budget without
+//! reaching it; now the budget runs out within about 2 thousand million.
 
 #![allow(
     clippy::many_single_char_names,
@@ -107,7 +124,7 @@ use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
 
 use crate::cache;
-use crate::jet::Jet;
+use crate::jet::{self, Jet};
 use crate::param::{
     ParamBox, ParamSurface, SurfaceForm, SurfaceKind, centred, offset_from, partial_index,
 };
@@ -127,6 +144,11 @@ fn nesting(k: &SurfaceKind) -> usize {
     }
     depth
 }
+
+/// The products, quotients and roots of jets in O = S + d·N/|N| with N = `S_u` × `S_v`: six
+/// products for the cross product, three squares for |N|², its root, and a quotient by |N| for
+/// each coordinate.
+const RECURRENCES: u64 = 13;
 
 /// How many pieces each smooth part of a box is cut into, per direction, for a bound.
 const PIECES: usize = 4;
@@ -269,6 +291,37 @@ impl Offset {
         })
     }
 
+    /// The same offset on `domain`, inside its own, without a cache: as a split leaves it, and
+    /// what a stored offset is rebuilt from.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::SpanOutside`] unless each side of `domain` is finite, ordered and inside this
+    /// offset's.
+    pub fn restricted(&self, domain: ParamBox) -> Result<Offset, CurveError> {
+        let ((u0, u1), (v0, v1)) = domain;
+        let ((a, b), (c, d)) = self.domain;
+        let inside = u0.is_finite()
+            && u1.is_finite()
+            && v0.is_finite()
+            && v1.is_finite()
+            && a <= u0
+            && u0 < u1
+            && u1 <= b
+            && c <= v0
+            && v0 < v1
+            && v1 <= d;
+        if !inside {
+            return Err(CurveError::SpanOutside);
+        }
+        Ok(Offset {
+            base: self.base.clone(),
+            domain,
+            distance: self.distance,
+            cache: None,
+        })
+    }
+
     /// The base.
     #[must_use]
     pub fn base(&self) -> &SurfaceKind {
@@ -321,6 +374,35 @@ impl Offset {
         cache::same_parameter(self, Some(tolerance), meter)
     }
 
+    /// The work units one evaluation of the offset's jets to `order` is charged: a unit for each
+    /// term of its recurrences (module documentation, "What the work costs").
+    ///
+    /// The formula takes thirteen products, quotients and roots of jets (the cross product, |N|²,
+    /// its root and three quotients), each a recurrence whose coefficient (k, l) sums
+    /// (k + 1)·(l + 1) terms (`crate::jet`): over k + l ≤ order that is the binomial coefficient
+    /// C(order + 4, 4), 70 terms at order 4 and 495 at order 8. So the count is fixed by the order,
+    /// whatever the numbers are; the sums and the scalings ride on those terms.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] for an order whose count passes `u64`, which no caller asks: the
+    /// offset's jets of an order from 18 up are refused first (the base's go one order higher, and
+    /// a jet holds 18 at most), and the count passes `u64` only from 65,534.
+    pub fn jet_work(order: usize) -> Result<u64, CurveError> {
+        let n = u64::try_from(order).map_err(|_| CurveError::Defect)?;
+        // C(n + 4, 4) = (n + 1)(n + 2)(n + 3)(n + 4)/24: a product of four consecutive whole
+        // numbers, which 24 divides.
+        let mut terms: u64 = 1;
+        for step in 1..=4 {
+            terms = n
+                .checked_add(step)
+                .and_then(|x| terms.checked_mul(x))
+                .ok_or(CurveError::Defect)?;
+        }
+        let terms = terms.checked_div(24).ok_or(CurveError::Defect)?;
+        terms.checked_mul(RECURRENCES).ok_or(CurveError::Defect)
+    }
+
     /// The offset's jets per coordinate to `order` over `region` (a point or a box inside the
     /// domain): S and its partials from the base's jets of order + 1, n = N/|N| with
     /// N = `S_u` × `S_v`, and O = S + d·n.
@@ -331,6 +413,12 @@ impl Offset {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Jet; 3], CurveError> {
+        // The base's jets go one order higher: an order they cannot hold is refused here as they
+        // refuse it, before the base is asked and before the charge, whose count would pass
+        // `u64` far beyond.
+        jet::check_order(order.saturating_add(1))?;
+        // Charged before the work, so a budget stops an evaluation it cannot pay for.
+        meter.charge(Offset::jet_work(order)?)?;
         let k = order.checked_add(1).ok_or(CurveError::Defect)?;
         let b = self.base.partials_over(region, sides, k, meter)?;
         let column = |d: usize| -> Result<Jet, CurveError> {
@@ -396,7 +484,8 @@ impl Offset {
         if (point_u && point_v) || in_u || in_v {
             return self.direct(region, sides, order, meter);
         }
-        let up = order.checked_add(1).ok_or(CurveError::Defect)?;
+        // No order this high is held: the jets refuse it by name.
+        let up = order.saturating_add(1);
         let wide = self.direct(region, sides, up, meter)?;
         let (cu, cv) = (f64::midpoint(u0, u1), f64::midpoint(v0, v1));
         let at = self.direct(((cu, cu), (cv, cv)), sides, order, meter)?;

@@ -25,6 +25,11 @@
 //!   wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused,
 //!   never guessed; a bound on the points still holds there, from the basis's bound widened by
 //!   the offset's largest size.
+//! - **A span of one break is bounded from both sides.** The offsets' slopes jump at a station
+//!   and the basis's tangent may turn at one of its breaks, so a derivative bound over one such
+//!   parameter alone holds the derivative from each side, and a bound on the points there holds
+//!   the offset of each side, as the trait's rule for a span of one parameter asks
+//!   ([`ParamCurve`]).
 //! - **Converted wherever it is defined.** Where the normal vanishes, or cannot be told from zero
 //!   even over the narrowest piece the conversion cuts (the domain's width times 2^−52, or two
 //!   neighbouring doubles where those are farther apart), the offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction),
@@ -51,6 +56,20 @@
 //! where even 128 cannot, only the pieces that need it are halved, each at most about 52 times
 //! (to 2^−52 of the domain, or to neighbouring doubles), depth first on an explicit stack of at
 //! most one piece per halving, every piece examined charged to the meter.
+//!
+//! What the work costs: an offset is the one curve kind whose conversion decides, from its data,
+//! how many times it evaluates itself, so the meter is what bounds it, and each evaluation is
+//! charged what it costs. The basis charges its own bounds (a unit an extent, and more where an
+//! arctangent is dear, `crate::extent::FAR_CORNER`); the offset charges its jets' recurrences,
+//! [`TERM_WORK`] units a term ([`Offset::jet_work`]). Measured, in instructions of a release build
+//! (callgrind on issue #765's offset of an ellipse in 3D): the 54,440 evaluations of order 10 its
+//! conversion made, 660 terms each, spent 9,328 million outside the basis's bounds, about 260 a
+//! term, which is one interval product and one interval sum; and each asked the basis for 36
+//! closed-form bounds, about 5,700 each where no arctangent is dear, which the basis charges one
+//! unit. So a term stands for about 570 instructions of an evaluation, its own and as much
+//! again for the basis, and a unit for about 285. Before issue #765 the jets were free and a
+//! piece examined cost a unit, so a budget of 2,000,000 units ran out only after 77 thousand
+//! million instructions; now it runs out within about 600 million.
 
 #![allow(
     clippy::many_single_char_names,
@@ -67,7 +86,7 @@ use geom_run::WorkMeter;
 use crate::affine::Entries;
 use crate::error::CurveError;
 use crate::form::check_parameter;
-use crate::jet::Jet;
+use crate::jet::{Jet, MAX_ORDER};
 use crate::map::NurbsForm;
 use crate::param::{CurveKind, DerivativeBound, ParamCurve};
 use crate::taylor;
@@ -116,11 +135,18 @@ pub struct Offset<const D: usize> {
 /// The degree of the cache's pieces.
 const CACHE_DEGREE: usize = 9;
 
-/// Where an offset is evaluated: one parameter from one side, or every parameter of a span.
+/// The work units a term of a jet recurrence is charged (module documentation, "What the work
+/// costs"): two, one for the term's own interval product and sum and one for its share of the
+/// basis's closed-form bounds, so that a unit stands for about 285 instructions of an evaluation.
+pub const TERM_WORK: u64 = 2;
+
+/// Where an offset is evaluated: one parameter from one side, or every parameter of a span. A
+/// span lies in one station piece; where it is one station alone, the side says which of the two
+/// pieces that meet there gives the offsets' slopes.
 #[derive(Clone, Copy)]
 enum At {
     Point(f64, Limit),
-    Span(f64, f64),
+    Span(f64, f64, Limit),
 }
 
 /// What the cache's halving makes of a piece (`Offset::halved`).
@@ -255,7 +281,7 @@ impl<const D: usize> Offset<D> {
         let mut d: Vec<[Interval; D]> = Vec::with_capacity(k.saturating_add(1));
         match at {
             At::Point(t, side) => d = self.basis.enclose(t, side, k, meter)?,
-            At::Span(lo, hi) => {
+            At::Span(lo, hi, _) => {
                 for j in 0..=k {
                     let b = if j == 0 {
                         self.basis.bound((lo, hi), meter)?
@@ -289,7 +315,7 @@ impl<const D: usize> Offset<D> {
     fn station_jets(stations: &[Station], at: At, order: usize) -> Result<(Jet, Jet), CurveError> {
         let (t, side) = match at {
             At::Point(t, side) => (Interval::point(t)?, side),
-            At::Span(lo, hi) => (Interval::new(lo, hi)?, Limit::FromRight),
+            At::Span(lo, hi, side) => (Interval::new(lo, hi)?, side),
         };
         let (first, last) = match (stations.first(), stations.last()) {
             (Some(f), Some(l)) => (*f, *l),
@@ -297,7 +323,7 @@ impl<const D: usize> Offset<D> {
         };
         let probe = match at {
             At::Point(x, _) => x,
-            At::Span(lo, hi) => f64::midpoint(lo, hi),
+            At::Span(lo, hi, _) => f64::midpoint(lo, hi),
         };
         let constant = |s: Station| -> Result<(Jet, Jet), CurveError> {
             Ok((
@@ -339,6 +365,39 @@ impl<const D: usize> Offset<D> {
         ))
     }
 
+    /// The work units one evaluation of the offset's jets to `order` is charged: [`TERM_WORK`]
+    /// for each term of its recurrences (module documentation, "What the work costs").
+    ///
+    /// The formula O = C + d·N/|N| takes 3·D + 1 products, quotients and roots of jets: D squares
+    /// for |N|², its root, and for each coordinate a quotient by |N| and a product with the
+    /// distance. Each is a recurrence of (order + 1)·(order + 2)/2 terms (`crate::jet`), so the
+    /// count is fixed by the dimension and the order, whatever the numbers are. The sums and the
+    /// scalings, linear in the order, ride on those terms.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] for an order whose count passes `u64`, which no caller asks: the
+    /// offset's jets of an order from 170 up are refused first (the basis's go one order higher,
+    /// and past 170 their factorials pass the doubles), and the count passes `u64` only from
+    /// about 1.4·10⁹.
+    pub fn jet_work(order: usize) -> Result<u64, CurveError> {
+        let wide = |x: usize| u64::try_from(x).map_err(|_| CurveError::Defect);
+        let n = wide(order)?.checked_add(1).ok_or(CurveError::Defect)?;
+        let terms = n
+            .checked_mul(n.checked_add(1).ok_or(CurveError::Defect)?)
+            .ok_or(CurveError::Defect)?
+            .checked_div(2)
+            .ok_or(CurveError::Defect)?;
+        let recurrences = wide(D)?
+            .checked_mul(3)
+            .and_then(|x| x.checked_add(1))
+            .ok_or(CurveError::Defect)?;
+        terms
+            .checked_mul(recurrences)
+            .and_then(|x| x.checked_mul(TERM_WORK))
+            .ok_or(CurveError::Defect)
+    }
+
     /// The offset's jets per coordinate, to `order`, at `at`.
     fn jets(
         &self,
@@ -346,6 +405,14 @@ impl<const D: usize> Offset<D> {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<Jet>, CurveError> {
+        // The basis's jets go one order higher, and past `jet::MAX_ORDER` building them is
+        // NotFinite whatever the basis gives: refused here as the jets refuse it, before the
+        // basis is asked and before the charge, whose count would pass `u64` far beyond.
+        if order >= MAX_ORDER {
+            return Err(CurveError::NotFinite);
+        }
+        // Charged before the work, so a budget stops an evaluation it cannot pay for.
+        meter.charge(Self::jet_work(order)?)?;
         let c = self.basis_jets(at, order, meter)?;
         let mut cp = Vec::with_capacity(D);
         let mut c0 = Vec::with_capacity(D);
@@ -428,13 +495,35 @@ impl<const D: usize> Offset<D> {
         Ok(out)
     }
 
-    /// The span cut at the breaks inside it and into a few pieces each, for tighter jets.
-    fn pieces(&self, (lo, hi): (f64, f64)) -> Result<Vec<(f64, f64)>, CurveError> {
+    /// The span cut at the breaks inside it and into a few pieces each, for tighter jets, each
+    /// with the side its stations are read from: the right. A span that is one station is read
+    /// from each side the domain has there when a derivative is asked (`order` above 0): the
+    /// offsets' slopes jump at a station, and the trait's rule for a span of one parameter asks
+    /// for both sides inside the domain, and at an end of it for the one side there is
+    /// ([`ParamCurve`]). The offsets themselves do not jump, so the points keep the one piece. A
+    /// break of the basis needs no second piece: the basis's own bounds over it hold both sides.
+    fn pieces(
+        &self,
+        (lo, hi): (f64, f64),
+        order: usize,
+    ) -> Result<Vec<(f64, f64, Limit)>, CurveError> {
+        let (a, b) = self.basis.interval();
+        if let OffsetLaw::Distances(s) = &self.law
+            && order > 0
+            && lo == hi
+            && s.iter().any(|x| x.at == lo)
+        {
+            let sides = [
+                (lo < b).then_some(Limit::FromRight),
+                (a < lo).then_some(Limit::FromLeft),
+            ];
+            return Ok(sides.into_iter().flatten().map(|s| (lo, hi, s)).collect());
+        }
         let c = taylor::cuts_between((lo, hi), &self.breaks(), 4)?;
         let mut out = Vec::with_capacity(c.len());
         for p in c.windows(2) {
             if let (Some(&x), Some(&y)) = (p.first(), p.get(1)) {
-                out.push((x, y));
+                out.push((x, y, Limit::FromRight));
             }
         }
         Ok(out)
@@ -448,8 +537,8 @@ impl<const D: usize> Offset<D> {
         span: (f64, f64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<bool, CurveError> {
-        for (lo, hi) in self.pieces(span)? {
-            match self.derivative_enclosures(At::Span(lo, hi), 0, meter) {
+        for (lo, hi, side) in self.pieces(span, 0)? {
+            match self.derivative_enclosures(At::Span(lo, hi, side), 0, meter) {
                 Ok(_) => {}
                 Err(CurveError::Unbounded) => return Ok(false),
                 Err(e) => return Err(e),
@@ -571,6 +660,11 @@ impl<const D: usize> Offset<D> {
 }
 
 impl<const D: usize> ParamCurve<D> for Offset<D> {
+    /// The basis's breaks and the stations.
+    fn breaks(&self) -> Vec<f64> {
+        Offset::breaks(self)
+    }
+
     fn domain(&self) -> (f64, f64) {
         self.basis.interval()
     }
@@ -608,8 +702,8 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
             lo: [f64::INFINITY; D],
             hi: [f64::NEG_INFINITY; D],
         };
-        for (lo, hi) in self.pieces(span)? {
-            let b = match self.derivative_enclosures(At::Span(lo, hi), 0, meter) {
+        for (lo, hi, side) in self.pieces(span, 0)? {
+            let b = match self.derivative_enclosures(At::Span(lo, hi, side), 0, meter) {
                 Ok(e) => {
                     let x = e.first().ok_or(CurveError::Defect)?;
                     Bounds {
@@ -660,8 +754,8 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
             lo: [f64::INFINITY; D],
             hi: [f64::NEG_INFINITY; D],
         };
-        for (lo, hi) in self.pieces(span)? {
-            let e = match self.derivative_enclosures(At::Span(lo, hi), order, meter) {
+        for (lo, hi, side) in self.pieces(span, order)? {
+            let e = match self.derivative_enclosures(At::Span(lo, hi, side), order, meter) {
                 Ok(e) => e,
                 Err(CurveError::Unbounded) => return Ok(DerivativeBound::Unbounded),
                 Err(e) => return Err(e),

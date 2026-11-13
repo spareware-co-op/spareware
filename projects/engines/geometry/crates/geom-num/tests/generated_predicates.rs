@@ -13,7 +13,8 @@
 //! - **The public predicates route through them** and agree with the exact path. Agreement
 //!   alone cannot show the route, since every path gives the same sign, so the route is read from
 //!   `predicate.rs`'s code: each public predicate calls its generated filter first (orient2d only
-//!   where `ORIENT2D_FILTER_FIRST` holds, as its documentation's measured routing says), and its
+//!   in the `orient2d_routed` built for targets where the filter pays, as its documentation's
+//!   measured routing says), and its
 //!   exact steps call the generated exact path before the hand-written one.
 //! - **A zero scale answers zero at once**: points on one axis line or axis plane.
 //!
@@ -651,15 +652,15 @@ fn function<'c>(code: &'c str, signature: &str) -> &'c str {
 }
 
 /// The public predicates route through the generated code, read from `predicate.rs`: each public
-/// function calls its generated filter first (orient2d behind `ORIENT2D_FILTER_FIRST`, which is
-/// false exactly on 64-bit targets other than WebAssembly), and its exact steps call the generated
+/// function calls its generated filter first (orient2d in the `orient2d_routed` built everywhere
+/// but on 64-bit targets other than WebAssembly), and its exact steps call the generated
 /// exact path before the hand-written fast path. Removing a call to the generated code would leave
 /// every answer the same, so only the code can show it.
 #[test]
 fn the_public_predicates_route_through_the_generated_code() {
     let code = predicate_code();
     for (name, signature, exact_steps) in [
-        ("orient2d", "pub fn orient2d(", "fn orient2d_exact("),
+        ("orient2d", "fn orient2d_routed(", "fn orient2d_exact("),
         ("orient3d", "pub fn orient3d(", "fn orient3d_unfiltered("),
         ("incircle", "pub fn incircle(", "fn incircle_unfiltered("),
         ("insphere", "pub fn insphere(", "fn insphere_unfiltered("),
@@ -685,13 +686,23 @@ fn the_public_predicates_route_through_the_generated_code() {
     // orient2d: the filter only under the switch, and the switch is off exactly on 64-bit targets
     // other than WebAssembly.
     let public = function(&code, "pub fn orient2d(");
-    let switch = public.find("if ORIENT2D_FILTER_FIRST {").unwrap();
-    assert!(switch < public.find("generated::orient2d::filter(").unwrap());
-    assert!(public.contains("orient2d_exact(a, b, c)"));
+    assert!(public.contains("orient2d_routed(a, b, c)"));
+    // Two routes, each built for its own targets: the filter first, and straight to the exact
+    // path. The first `fn orient2d_routed(` in the file is the filter-first one, read above.
+    let filter_first = "#[cfg(not(all(target_pointer_width = \"64\", not(target_family = \
+                        \"wasm\"))))]\n#[inline]\nfn orient2d_routed(";
+    let exact_only = "#[cfg(all(target_pointer_width = \"64\", not(target_family = \
+                      \"wasm\")))]\n#[inline]\nfn orient2d_routed(";
+    let first = code.find(filter_first).unwrap();
+    let second = code.find(exact_only).unwrap();
+    assert!(first < second);
+    assert_eq!(code.matches("fn orient2d_routed(").count(), 2);
+    let routed = function(&code, "fn orient2d_routed(");
+    assert!(routed.contains("None => orient2d_unfiltered(a, b, c)"));
+    let straight = function(&code[second..], "fn orient2d_routed(");
+    assert_eq!(straight.matches("orient2d_exact(a, b, c)").count(), 1);
+    assert!(!straight.contains("filter"));
     assert!(function(&code, "fn orient2d_unfiltered(").contains("orient2d_exact(a, b, c)"));
-    let condition = "const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(\n    target_pointer_width = \
-                     \"64\",\n    not(target_family = \"wasm\")\n));";
-    assert!(code.contains(condition));
     // And the public functions agree with the generated exact path on a few sets.
     let mut rng = Rng::for_test("route");
     for _ in 0..cases(20_000) {

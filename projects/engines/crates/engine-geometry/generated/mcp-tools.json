@@ -1115,7 +1115,7 @@
             "Certified",
             "Approximate"
           ],
-          "example": "query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, and a report that passed.",
+          "example": "query.exactness { body: the cylinder of radius 5 and height 10, exactness: Certified within 1 step } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, a report that passed, and Certified within 1 step.",
           "family": "Query",
           "roles": [],
           "tier": "Preview since 2026-10-31",
@@ -1204,7 +1204,7 @@
             "Certified",
             "Approximate"
           ],
-          "example": "query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z.",
+          "example": "query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives 6 rows with the roles min.x, max.x, min.y, max.y, min.z and max.z, and Exact.",
           "family": "Query",
           "roles": [],
           "tier": "Preview since 2026-10-31",
@@ -1292,7 +1292,7 @@
             "Certified",
             "Approximate"
           ],
-          "example": "query.validity { body: a box, exactness: Exact, level: Full } gives a report with no faults, all four groups run and nothing deferred.",
+          "example": "query.validity { body: a box, exactness: Exact, level: Full } gives a report with 0 faults, 4 groups run and 0 deferred, and Exact.",
           "family": "Query",
           "roles": [],
           "tier": "Preview since 2026-10-31",
@@ -1491,21 +1491,6 @@
               "kind": "InvalidInput"
             },
             {
-              "detail": "NotAccepted",
-              "doc": "The result would be less exact than the class the caller accepted.",
-              "kind": "ExactnessNotAccepted"
-            },
-            {
-              "detail": "KindNotCertified",
-              "doc": "A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet.",
-              "kind": "Unsupported"
-            },
-            {
-              "detail": "NotCertifiedYet",
-              "doc": "Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet.",
-              "kind": "Unsupported"
-            },
-            {
               "detail": "BudgetExceeded",
               "doc": "The operation's budget ran out; nothing is returned.",
               "kind": "BudgetExceeded"
@@ -1641,21 +1626,6 @@
               "detail": "BodyNotNamed",
               "doc": "The body was not published in name order, so its entities cannot keep their names.",
               "kind": "InvalidInput"
-            },
-            {
-              "detail": "NotAccepted",
-              "doc": "The result would be less exact than the class the caller accepted.",
-              "kind": "ExactnessNotAccepted"
-            },
-            {
-              "detail": "KindNotCertified",
-              "doc": "A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet.",
-              "kind": "Unsupported"
-            },
-            {
-              "detail": "NotCertifiedYet",
-              "doc": "Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet.",
-              "kind": "Unsupported"
             },
             {
               "detail": "BudgetExceeded",
@@ -1938,11 +1908,6 @@
               "detail": "NotAccepted",
               "doc": "The result would be less exact than the class the caller accepted.",
               "kind": "ExactnessNotAccepted"
-            },
-            {
-              "detail": "KindNotCertified",
-              "doc": "A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet.",
-              "kind": "Unsupported"
             },
             {
               "detail": "NotCertifiedYet",

@@ -2,6 +2,9 @@
 //! kind contract, and their own claims: a bulge arc lies on its circle and converts exactly; a
 //! trimmed NURBS curve keeps its knots; a composite's joints are exact and its NURBS form one
 //! curve; an offset of a circle is a circle; a curve on a surface carries its cache's error.
+//!
+//! Covers: `CurveKind::Bulge`, `CurveKind::Trimmed`, `CurveKind::Composite`, `CurveKind::Offset`,
+//! `CurveKind::OnSurface`.
 
 #![allow(
     clippy::arithmetic_side_effects,

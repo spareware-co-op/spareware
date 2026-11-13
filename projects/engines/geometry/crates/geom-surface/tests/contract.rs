@@ -2,6 +2,8 @@
 //! the `ImplicitBound` of an exact plane: every random NURBS surface keeps every law under exact,
 //! rational and certified transforms; a cone's apex keeps its normals' direction; a wrong normal
 //! bound is caught; and the plane's enclosure holds the exact value at every corner.
+//!
+//! Covers: `SurfaceKind::Nurbs`.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -114,6 +116,28 @@ fn every_nurbs_surface_keeps_the_contract() {
         check(&kind, &params(&s), t, &mut meter())
             .unwrap_or_else(|e| panic!("trial {trial} (enum): {e}"));
     }
+}
+
+#[test]
+fn a_meter_that_runs_out_anywhere_is_reported_as_the_stop() {
+    // On every budget short of what the whole check takes, the check ends with the meter's stop
+    // as the error of the law it was on: never a law broken with no error behind it, which the
+    // fuzz target reports as a finding. The repeat calls of the Deterministic law were once
+    // compared with the first answer as they came, so a stop on one read as a different answer.
+    let s = apex(false);
+    let (ps, t) = (params(&s), &transforms()[0]);
+    let mut m = meter();
+    check(&s, &ps, t, &mut m).unwrap();
+    let whole = u64::try_from(m.used().work).unwrap();
+    assert!(0 < whole && whole < 20_000, "{whole}");
+    for budget in 0..whole {
+        let e = check(&s, &ps, t, &mut WorkMeter::new(Budget::of_work(budget))).unwrap_err();
+        assert!(
+            matches!(e.error, Some(CurveError::Stopped(_))),
+            "budget {budget} of {whole}: {e}"
+        );
+    }
+    assert!(check(&s, &ps, t, &mut WorkMeter::new(Budget::of_work(whole))).is_ok());
 }
 
 /// A cone patch whose u = 0 edge is its apex, rational or not.

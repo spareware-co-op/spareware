@@ -1604,7 +1604,7 @@ pub mod ball {
     }
 }
 
-/// `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.44): the typed transforms, the
+/// `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.46): the typed transforms, the
 /// rational rotation and its search, the frame-to-map conversion and the decimal reader. Each
 /// kernel builds its fixed transform, rotation or frame once per batch, as `geom-math`'s
 /// `benches/transform.rs` does; were one ever refused, the kernel returns no results, which the
@@ -1713,7 +1713,7 @@ pub mod math_types {
     }
 }
 
-/// `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.44): the column-pivoted QR
+/// `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.46): the column-pivoted QR
 /// factorisation and the one-sided Jacobi singular value decomposition, each under an unlimited
 /// budget.
 pub mod linalg {
@@ -1736,7 +1736,7 @@ pub mod linalg {
     }
 }
 
-/// `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): building the box tree and the
+/// `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.46): building the box tree and the
 /// cell index of a scene and querying it, on the serial executor under an unlimited budget.
 pub mod bvh {
     use geom_bvh::{Aabb, BoxTree, BvhError, CellIndex, Entry, Point};
@@ -1771,7 +1771,7 @@ pub mod bvh {
     }
 }
 
-/// `geom-bool`'s broad phase (piece G242, decision 32.44): the pairs of padded point boxes that
+/// `geom-bool`'s broad phase (piece G242, decision 32.46): the pairs of padded point boxes that
 /// meet, from the box tree, under an unlimited budget on the serial executor.
 pub mod curved {
     use geom_bool::broad::candidate_pairs;
@@ -1815,7 +1815,156 @@ pub mod curved {
     }
 }
 
-/// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): evaluating a clamped cubic,
+/// The attribute step's hot path (piece G90, decision 32.46).
+pub mod attributes {
+    use geom_name::{AttrError, Step, apply as step};
+
+    use super::run;
+    use crate::inputs::attributes::Scene;
+
+    /// `geom_name::apply` on each scene; how many values come out.
+    #[inline(never)]
+    pub fn apply(batch: &[Scene], out: &mut Vec<Result<u64, AttrError>>) {
+        run(batch, out, |scene| {
+            let (after, notes) =
+                step(&scene.defs, &scene.before, &scene.history, &Step::default())?;
+            let values = after.iter().count().saturating_add(notes.len());
+            Ok(u64::try_from(values).unwrap_or(u64::MAX))
+        });
+    }
+}
+
+/// `geom-topo`'s hot paths (piece G80, decision 32.46): a column filled, copied and written, and
+/// a builder's arenas published.
+pub mod topo {
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::{Arena, BodyKind, Builder, Column, Face, Ix, TopoError};
+
+    use super::run;
+
+    /// Fills a column with [`Column::extend`], copies it, writes one row of the copy with
+    /// [`Column::set`], and sums what [`Column::get`] reads from both.
+    #[inline(never)]
+    pub fn column_edit(batch: &[(Vec<u64>, u32, u64)], out: &mut Vec<Result<u64, TopoError>>) {
+        run(batch, out, |(values, row, value)| {
+            let mut column: Column<Face, u64> = Column::new();
+            column.extend(values.iter().copied())?;
+            let mut copy = column.clone();
+            let missing = TopoError::Full(Arena::Face);
+            copy.set(Ix::new(*row).ok_or(missing)?, *value)?;
+            let mut sum = 0_u64;
+            for r in 0..column.len() {
+                let ix = Ix::new(r).ok_or(missing)?;
+                let (a, b) = (column.get(ix).ok_or(missing)?, copy.get(ix).ok_or(missing)?);
+                sum = sum.wrapping_add(*a).wrapping_add(*b);
+            }
+            Ok(sum)
+        });
+    }
+
+    /// [`Builder::publish`] on a copy of each builder, with its void region outside; the fins of
+    /// the body it gives.
+    #[inline(never)]
+    pub fn publish(batch: &[Builder], out: &mut Vec<Result<u32, TopoError>>) {
+        run(batch, out, |builder| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let outside = Ix::new(1).ok_or(TopoError::Full(Arena::Region))?;
+            let body = builder
+                .clone()
+                .publish(BodyKind::Solid, outside, &mut meter)?;
+            Ok(body.arenas().fins.len())
+        });
+    }
+}
+
+/// The batch runner's hot paths (piece G104, decision 32.46): `geom-op`'s driver over a list of
+/// items, on the serial executor, and the flat arrays of a curve's and a surface's points.
+pub mod batch {
+    use geom_curve::{CurveError, ParamCurve};
+    use geom_nurbs::Limit;
+    use geom_op::{Batch, Key, OpContext, OpError, OpId, OpPath, RunDetail};
+    use geom_run::{BatchBudget, Budget, ChunkPlan, Exec, Phase};
+    use geom_surface::ParamSurface;
+
+    use super::run;
+
+    /// The phase an item over its budget would be reported under; no benchmark's item is.
+    const PHASE: Phase = Phase::new("items");
+
+    /// Item `n`'s key.
+    fn key(n: u64) -> Key {
+        let mut k = [0_u8; 16];
+        let (high, low) = k.split_at_mut(8);
+        high.copy_from_slice(&n.to_be_bytes());
+        low.copy_from_slice(&(!n).to_le_bytes());
+        k
+    }
+
+    /// [`Batch::run`] on each list of items: each item charges a little work and gives its
+    /// number times three; the exclusive or of what they give.
+    #[inline(never)]
+    pub fn run_items(batch: &[Vec<u64>], out: &mut Vec<Result<u64, OpError>>) {
+        let ctx = OpContext::new(OpPath::new(OpId::from_bytes([7; 16])), Budget::UNLIMITED);
+        let driver = Batch::new(
+            &ctx,
+            BatchBudget::new(Budget::of_work(64)),
+            PHASE,
+            ChunkPlan::fixed::<4>(),
+        );
+        run(batch, out, |items| {
+            let results = driver.run(
+                &Exec::serial(),
+                items,
+                |&n| key(n),
+                |item, &n, meter| {
+                    meter
+                        .charge(n % 16)
+                        .map_err(|_| OpError::new(item.path().clone(), RunDetail::Cancelled))?;
+                    Ok(n.wrapping_mul(3))
+                },
+            )?;
+            results
+                .into_iter()
+                .try_fold(0_u64, |all, result| Ok(all ^ result?))
+        });
+    }
+
+    /// `ParamCurve::points` on [`crate::inputs::curve::helix`] at each list of parameters.
+    #[inline(never)]
+    pub fn curve_points(batch: &[Vec<f64>], out: &mut Vec<Result<Vec<f64>, CurveError>>) {
+        let Some(h) = crate::inputs::curve::helix() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |t| {
+            let mut points = vec![0.0; 3 * t.len()];
+            let mut results = vec![Ok(()); t.len()];
+            h.points(t, Limit::FromRight, &mut points, &mut results)?;
+            results.into_iter().collect::<Result<Vec<()>, _>>()?;
+            Ok(points)
+        });
+    }
+
+    /// `ParamSurface::points` on [`crate::inputs::surface::torus`] at each list of pairs.
+    #[inline(never)]
+    pub fn surface_points(batch: &[Vec<f64>], out: &mut Vec<Result<Vec<f64>, CurveError>>) {
+        let Some(s) = crate::inputs::surface::torus() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |uv| {
+            let n = uv.len() / 2;
+            let mut points = vec![0.0; 3 * n];
+            let mut results = vec![Ok(()); n];
+            let sides = (Limit::FromRight, Limit::FromRight);
+            s.points(uv, sides, &mut points, &mut results)?;
+            results.into_iter().collect::<Result<Vec<()>, _>>()?;
+            Ok(points)
+        });
+    }
+}
+
+/// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.46): evaluating a clamped cubic,
 /// chord-length interpolation, and the bound of a cubic Bernstein piece, each under an unlimited
 /// budget where it takes one.
 pub mod nurbs {
@@ -1864,7 +2013,7 @@ pub mod nurbs {
     }
 }
 
-/// `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.44), through the kind contract
+/// `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.46), through the kind contract
 /// (`ParamCurve`): an exact helix's point and certified enclosure, a bulge polyline's conversion
 /// to NURBS, and a clothoid transition's point and conversion to NURBS, each under an unlimited
 /// budget where it takes one. Were the helix or the transition ever refused, the kernel returns no
@@ -1944,7 +2093,7 @@ pub mod curve {
     }
 }
 
-/// `geom-surface`'s hot paths (pieces G65 to G67, decision 32.44), through the kind contract
+/// `geom-surface`'s hot paths (pieces G65 to G67, decision 32.46), through the kind contract
 /// (`ParamSurface`): a torus's point and certified enclosure, and an offset cylinder's point. Were
 /// a surface ever refused, the kernel returns no results, which the golden digests and
 /// `tests/inputs.rs` catch.
@@ -2034,7 +2183,7 @@ pub mod surface {
     }
 }
 
-/// Root finding and quadrature (piece G51, decision 32.44): Brent's zero search on a fixed cubic
+/// Root finding and quadrature (piece G51, decision 32.46): Brent's zero search on a fixed cubic
 /// and an eight-point Gauss-Legendre rule on a fixed quintic. The functions use the four basic
 /// operations only, so their cost is the methods' own plus a known number of evaluations.
 pub mod roots {
@@ -2070,7 +2219,268 @@ pub mod roots {
     }
 }
 
-/// `geom-run`'s parallel helper (decision 32.44): `Exec::map` over a list that fits one chunk, on
+/// `geom-format`'s hot paths (piece G105; decision 32.46): a cache key, a lookup in a memo store,
+/// and a new version of a body, which hashes the one chunk that changed. The keys and versions a
+/// batch holds are built before the measured run; the store each lookup reads is built inside it,
+/// once, since a lookup changes it.
+pub mod format {
+    use geom_format::body::BodyVersion;
+    use geom_format::cache::CacheKey;
+    use geom_format::content::ContentId;
+    use geom_op::Precision;
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::Body;
+
+    use super::run;
+    use crate::inputs::format as inputs;
+
+    /// `CacheKey::new` on each call: one operation, one input.
+    #[inline(never)]
+    pub fn cache_key(batch: &[(u64, u64)], out: &mut Vec<Option<CacheKey>>) {
+        let path = inputs::path();
+        run(batch, out, |&(edition, seed)| {
+            let input = inputs::input(seed);
+            CacheKey::new(
+                edition,
+                &inputs::SCHEMA,
+                &path,
+                Precision::Final,
+                core::slice::from_ref(&input),
+            )
+            .ok()
+        });
+    }
+
+    /// `MemoStore::get` on each key, a hit under an unlimited budget.
+    #[inline(never)]
+    pub fn memo_get(batch: &[CacheKey], out: &mut Vec<Option<u64>>) {
+        let mut store = inputs::store();
+        run(batch, out, |key| match store.get(key, Budget::UNLIMITED) {
+            Some(Ok(answer)) => Some(answer.result),
+            _ => None,
+        });
+    }
+
+    /// `BodyVersion::next` on each pair: the IDs of a body one chunk from its first version.
+    #[inline(never)]
+    pub fn next_version(batch: &[(BodyVersion, Body)], out: &mut Vec<Option<ContentId>>) {
+        run(batch, out, |(first, body)| {
+            first
+                .next(body, &mut WorkMeter::new(Budget::UNLIMITED))
+                .ok()
+                .map(|version| version.content_id())
+        });
+    }
+}
+
+/// `geom-make`'s hot paths (piece G101, decision 32.46): a primitive built and a body moved, named,
+/// published and checked as the operation does it, under an unlimited budget.
+pub mod make {
+    use geom_make::{BoxInput, Made, Moved, RoundInput, cylinder, make_box, move_by, rotate};
+    use geom_math::{Axis, Rotation};
+    use geom_num::grid::P3;
+    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
+    use geom_run::Budget;
+    use geom_topo::Arena;
+
+    use super::run;
+
+    /// A context of one operation, under no limit.
+    fn context() -> OpContext<'static> {
+        OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED)
+    }
+
+    /// What a result is read by: its faces, edges and vertices, and its class's rank.
+    fn counts(made: Result<OpOutput<Made>, OpError>) -> Result<[u32; 4], OpError> {
+        made.map(|out| {
+            let a = out.result.body.arenas();
+            [
+                a.rows(Arena::Face),
+                a.rows(Arena::Edge),
+                a.rows(Arena::Vertex),
+                u32::from(out.exactness.rank()),
+            ]
+        })
+    }
+
+    /// A body to move, recorded as it was built, accepting no less.
+    fn moved(out: &OpOutput<Made>) -> Moved<'_> {
+        Moved {
+            body: &out.result.body,
+            exactness: out.exactness,
+            accept: None,
+        }
+    }
+
+    /// `make_box` on each input.
+    #[inline(never)]
+    pub fn boxes(batch: &[BoxInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(make_box(&ctx, input)));
+    }
+
+    /// `cylinder` on each input.
+    #[inline(never)]
+    pub fn cylinders(batch: &[RoundInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(cylinder(&ctx, input)));
+    }
+
+    /// `move_by` on each body.
+    #[inline(never)]
+    pub fn moved_boxes(
+        batch: &[(OpOutput<Made>, [i64; 3])],
+        out: &mut Vec<Result<[u32; 4], OpError>>,
+    ) {
+        let ctx = context();
+        run(batch, out, |(body, offset)| {
+            counts(move_by(&ctx, moved(body), *offset))
+        });
+    }
+
+    /// A quarter turn about z by `rotate` on each body.
+    #[inline(never)]
+    pub fn turned_boxes(batch: &[(OpOutput<Made>, P3)], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        let turn = Rotation::quarter_turns(1);
+        run(batch, out, |(body, center)| {
+            counts(rotate(&ctx, moved(body), Axis::Z, turn, *center))
+        });
+    }
+}
+
+/// The core queries (piece G102; decision 32.46), each on a built body recorded with the class it
+/// was made with, under an unlimited budget. Each result is the query's answer as a program reads
+/// it, with its class's rank.
+pub mod query {
+    use geom_check::Level;
+    use geom_check::query::{exactness, validity};
+    use geom_make::Made;
+    use geom_num::Exactness;
+    use geom_num::grid::P3;
+    use geom_num::wide::I256;
+    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
+    use geom_run::Budget;
+    use geom_topo::Ix;
+    use geom_topo::query_ops::{bounding_box, six_volume, twice_area};
+
+    use super::run;
+
+    /// What a benchmark reads of `query.bounding_box`: the box's corners and whether it is tight,
+    /// with the class's rank.
+    pub type BoxRead = Result<(Option<([P3; 2], bool)>, u32), OpError>;
+
+    /// What a benchmark reads of `query.exactness`: the four counts, whether the cheap groups
+    /// passed, and the class's rank.
+    pub type ReportRead = Result<([u32; 4], bool, u32), OpError>;
+
+    /// What a benchmark reads of `query.faces`: each face's loops and roles, and the class's rank.
+    pub type FacesRead = Result<(Vec<[u32; 2]>, u32), OpError>;
+
+    /// A context of one query, under no limit.
+    fn context() -> OpContext<'static> {
+        OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED)
+    }
+
+    /// The rank of a result's class.
+    fn rank(class: Exactness) -> u32 {
+        u32::from(class.rank())
+    }
+
+    /// `query.area` of each body's face.
+    #[inline(never)]
+    pub fn areas(
+        batch: &[(OpOutput<Made>, u32)],
+        out: &mut Vec<Result<([i128; 3], u32), OpError>>,
+    ) {
+        let ctx = context();
+        run(batch, out, |(body, face)| {
+            let face = Ix::new(*face)
+                .ok_or_else(|| OpError::new(ctx.path().clone(), geom_op::QueryDetail::Malformed))?;
+            let area = twice_area(&ctx, &body.result.body, face, body.exactness)?;
+            Ok((area.result, rank(area.exactness)))
+        });
+    }
+
+    /// `query.volume` of each body.
+    #[inline(never)]
+    pub fn volumes(batch: &[OpOutput<Made>], out: &mut Vec<Result<(I256, u32), OpError>>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let v = six_volume(&ctx, &body.result.body, body.exactness)?;
+            Ok((v.result, rank(v.exactness)))
+        });
+    }
+
+    /// `query.bounding_box` of each body: its corners and whether it is tight.
+    #[inline(never)]
+    pub fn boxes(batch: &[OpOutput<Made>], out: &mut Vec<BoxRead>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let b = bounding_box(&ctx, &body.result.body, body.exactness)?;
+            let corners = b.result.map(|b| ([b.bound.min(), b.bound.max()], b.tight));
+            Ok((corners, rank(b.exactness)))
+        });
+    }
+
+    /// `query.exactness` of each body: its counts of flat and curved faces, straight and curved
+    /// edges, and whether the cheap groups passed it.
+    #[inline(never)]
+    pub fn reports(batch: &[OpOutput<Made>], out: &mut Vec<ReportRead>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let e = exactness(&ctx, &body.result.body, body.exactness)?;
+            let r = &e.result;
+            let counts = [
+                r.flat_faces,
+                r.curved_faces,
+                r.straight_edges,
+                r.curved_edges,
+            ];
+            Ok((counts, r.report.passed(), rank(e.exactness)))
+        });
+    }
+
+    /// `query.faces` of each body, with the history that made it: each face's loops and roles.
+    #[inline(never)]
+    pub fn faces(batch: &[OpOutput<Made>], out: &mut Vec<FacesRead>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let listed = geom_name::faces(
+                &ctx,
+                &body.result.body,
+                &[&body.result.history],
+                body.exactness,
+            )?;
+            let rows = listed
+                .result
+                .iter()
+                .map(|f| {
+                    [
+                        f.row.loops,
+                        u32::try_from(f.roles.len()).unwrap_or(u32::MAX),
+                    ]
+                })
+                .collect();
+            Ok((rows, rank(listed.exactness)))
+        });
+    }
+
+    /// `query.validity` of each body in full: whether it passed, how much was deferred, and how
+    /// many groups ran.
+    #[inline(never)]
+    pub fn validities(batch: &[OpOutput<Made>], out: &mut Vec<Result<(bool, u64, u32), OpError>>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let v = validity(&ctx, &body.result.body, body.exactness, Level::Full)?;
+            let r = &v.result;
+            let ran = u32::try_from(r.ran().count()).unwrap_or(u32::MAX);
+            Ok((r.passed(), r.deferred(), ran))
+        });
+    }
+}
+
+/// `geom-run`'s parallel helper (decision 32.46): `Exec::map` over a list that fits one chunk, on
 /// the serial executor and on a pool, under an unlimited budget. The pool runs its tasks on the
 /// calling thread, in order, so the two counts differ by the helper's own dispatch only, never by
 /// a thread's wake-up: a lone wave runs on the calling thread on either, so they should match.
@@ -2120,7 +2530,7 @@ pub mod helper {
     }
 }
 
-/// `geom-intersect`'s hot paths (pieces G158, G162 and G168, decision 32.44): items put in
+/// `geom-intersect`'s hot paths (pieces G158, G162 and G168, decision 32.46): items put in
 /// canonical order, a key read, a pair put in order, a point projected and a level curve traced,
 /// under an unlimited budget.
 pub mod intersect {
@@ -2384,7 +2794,7 @@ pub mod intersect {
     }
 }
 
-/// The exact decisions on lines and quadrics (piece G159, decision 32.44): each discriminant through
+/// The exact decisions on lines and quadrics (piece G159, decision 32.46): each discriminant through
 /// its filter, a torus's roots, and the tangent sphere of a cylinder and a cone.
 pub mod quadric {
     use geom_num::quadric::{
@@ -2441,78 +2851,381 @@ pub mod quadric {
     }
 }
 
-/// `geom-make`'s hot paths (piece G101, decision 32.44): a primitive built and a body moved, named,
-/// published and checked as the operation does it, under an unlimited budget.
-pub mod make {
-    use geom_make::{BoxInput, Made, Moved, RoundInput, cylinder, make_box, move_by, rotate};
-    use geom_math::{Axis, Rotation};
-    use geom_num::grid::P3;
-    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
-    use geom_run::Budget;
-    use geom_topo::Arena;
+/// `geom-format`'s CBOR decoder and text form (piece G91; decision 32.46): an item checked, read
+/// as text and read back from it, and a column's rows read, each under an unlimited budget. A
+/// refusal is stored as `None` or `false`; no typical input is refused.
+pub mod cbor {
+    use geom_format::cbor as c;
+    use geom_run::{Budget, WorkMeter};
 
     use super::run;
+    use crate::inputs::cbor::{DEPTH, ROWS};
 
-    /// A context of one operation, under no limit.
-    fn context() -> OpContext<'static> {
-        OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED)
+    /// A meter under no limit.
+    fn meter() -> WorkMeter<'static> {
+        WorkMeter::new(Budget::UNLIMITED)
     }
 
-    /// What a result is read by: its faces, edges and vertices, and its class's rank.
-    fn counts(made: Result<OpOutput<Made>, OpError>) -> Result<[u32; 4], OpError> {
-        made.map(|out| {
-            let a = out.result.body.arenas();
-            [
-                a.rows(Arena::Face),
-                a.rows(Arena::Edge),
-                a.rows(Arena::Vertex),
-                u32::from(out.exactness.rank()),
-            ]
-        })
-    }
-
-    /// A body to move, recorded as it was built, accepting no less.
-    fn moved(out: &OpOutput<Made>) -> Moved<'_> {
-        Moved {
-            body: &out.result.body,
-            exactness: out.exactness,
-            accept: None,
-        }
-    }
-
-    /// `make_box` on each input.
+    /// `check` on each item: whether the strict decoder accepts it.
     #[inline(never)]
-    pub fn boxes(batch: &[BoxInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
-        let ctx = context();
-        run(batch, out, |input| counts(make_box(&ctx, input)));
-    }
-
-    /// `cylinder` on each input.
-    #[inline(never)]
-    pub fn cylinders(batch: &[RoundInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
-        let ctx = context();
-        run(batch, out, |input| counts(cylinder(&ctx, input)));
-    }
-
-    /// `move_by` on each body.
-    #[inline(never)]
-    pub fn moved_boxes(
-        batch: &[(OpOutput<Made>, [i64; 3])],
-        out: &mut Vec<Result<[u32; 4], OpError>>,
-    ) {
-        let ctx = context();
-        run(batch, out, |(body, offset)| {
-            counts(move_by(&ctx, moved(body), *offset))
+    pub fn check(batch: &[Vec<u8>], out: &mut Vec<bool>) {
+        run(batch, out, |bytes| {
+            c::check(bytes, DEPTH, &mut meter()).is_ok()
         });
     }
 
-    /// A quarter turn about z by `rotate` on each body.
+    /// `int_column` on each column's rows.
     #[inline(never)]
-    pub fn turned_boxes(batch: &[(OpOutput<Made>, P3)], out: &mut Vec<Result<[u32; 4], OpError>>) {
-        let ctx = context();
-        let turn = Rotation::quarter_turns(1);
-        run(batch, out, |(body, center)| {
-            counts(rotate(&ctx, moved(body), Axis::Z, turn, *center))
+    pub fn int_column(batch: &[Vec<u8>], out: &mut Vec<Option<Vec<i64>>>) {
+        run(batch, out, |bytes| {
+            let mut rows = Vec::with_capacity(ROWS);
+            c::int_column(bytes, &mut rows, &mut meter())
+                .ok()
+                .map(|()| rows)
+        });
+    }
+
+    /// `float_column` on each column's rows.
+    #[inline(never)]
+    pub fn float_column(batch: &[Vec<u8>], out: &mut Vec<Option<Vec<f64>>>) {
+        run(batch, out, |bytes| {
+            let mut rows = Vec::with_capacity(ROWS);
+            c::float_column(bytes, &mut rows, &mut meter())
+                .ok()
+                .map(|()| rows)
+        });
+    }
+
+    /// `to_text` on each item.
+    #[inline(never)]
+    pub fn to_text(batch: &[Vec<u8>], out: &mut Vec<Option<String>>) {
+        run(batch, out, |bytes| {
+            c::to_text(bytes, DEPTH, &mut meter()).ok()
+        });
+    }
+
+    /// `from_text` on each item's text.
+    #[inline(never)]
+    pub fn from_text(batch: &[String], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |text| {
+            c::from_text(text, DEPTH, &mut meter()).ok()
+        });
+    }
+}
+
+/// `geom-format`'s file readers and writers (pieces G92, G94, G95, G96 and G108; decision 32.46):
+/// records and files, a body's records, names and history records, operation records, and a
+/// container read from a file and opened at each trust, each under an unlimited budget. A refusal
+/// is stored as `None`; no typical input is refused.
+pub mod records {
+    use geom_format::body::{StoredBody, read_body, write_body};
+    use geom_format::container::Container;
+    use geom_format::content::ContentId;
+    use geom_format::file::{ReadFile, read, write};
+    use geom_format::history::{history_record, read_history};
+    use geom_format::names::{names_record, read_names};
+    use geom_format::operation::{Operation, operation_record, read_operation};
+    use geom_format::record::Record;
+    use geom_format::source::SliceSource;
+    use geom_format::trust::{State, Trust, open};
+    use geom_name::NameGraph;
+    use geom_op::{History, OpPath};
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::Body;
+
+    use super::run;
+    use crate::inputs::records::Pass;
+
+    /// A meter under no limit.
+    fn meter() -> WorkMeter<'static> {
+        WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// The `NameScheme` every names record here is read under.
+    const NAME_SCHEME: u64 = 1;
+
+    /// `Record::encode` on each record.
+    #[inline(never)]
+    pub fn record_encode(batch: &[Record], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |record| record.encode(&mut meter()).ok());
+    }
+
+    /// `Record::decode` on each record's bytes: the record and the bytes it took.
+    #[inline(never)]
+    pub fn record_decode(batch: &[Vec<u8>], out: &mut Vec<Option<(Record, u64)>>) {
+        run(batch, out, |bytes| {
+            Record::decode(bytes, &mut meter())
+                .ok()
+                .map(|(record, used)| (record, used as u64))
+        });
+    }
+
+    /// `file::write` on each header and its records.
+    #[inline(never)]
+    pub fn file_write(batch: &[(Record, Vec<Record>)], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |(header, records)| {
+            write(header, records, &mut meter()).ok()
+        });
+    }
+
+    /// `file::read` on each file's bytes, keeping every record.
+    #[inline(never)]
+    pub fn file_read(batch: &[Vec<u8>], out: &mut Vec<Option<ReadFile>>) {
+        run(batch, out, |bytes| {
+            read(&mut SliceSource::new(bytes), |_, _| true, &mut meter()).ok()
+        });
+    }
+
+    /// `write_body` on each body.
+    #[inline(never)]
+    pub fn body_write(batch: &[Body], out: &mut Vec<Option<StoredBody>>) {
+        run(batch, out, |body| write_body(body, &mut meter()).ok());
+    }
+
+    /// `read_body` on each body's records.
+    #[inline(never)]
+    pub fn body_read(batch: &[StoredBody], out: &mut Vec<Option<Body>>) {
+        run(batch, out, |stored| read_body(stored, &mut meter()).ok());
+    }
+
+    /// `names_record` on each name graph.
+    #[inline(never)]
+    pub fn names_write(batch: &[NameGraph], out: &mut Vec<Option<Record>>) {
+        run(batch, out, |graph| names_record(graph).ok());
+    }
+
+    /// `read_names` on each names record's payload.
+    #[inline(never)]
+    pub fn names_read(batch: &[Vec<u8>], out: &mut Vec<Option<NameGraph>>) {
+        run(batch, out, |payload| {
+            read_names(payload, NAME_SCHEME, &mut meter()).ok()
+        });
+    }
+
+    /// `history_record` on each path and history.
+    #[inline(never)]
+    pub fn history_write(batch: &[(OpPath, History)], out: &mut Vec<Option<Record>>) {
+        run(batch, out, |(op, history)| history_record(op, history).ok());
+    }
+
+    /// `read_history` on each history record's payload.
+    #[inline(never)]
+    pub fn history_read(batch: &[Vec<u8>], out: &mut Vec<Option<(OpPath, History)>>) {
+        run(batch, out, |payload| {
+            read_history(payload, &mut meter()).ok()
+        });
+    }
+
+    /// `operation_record` on each operation.
+    #[inline(never)]
+    pub fn op_write(batch: &[Operation], out: &mut Vec<Option<Record>>) {
+        run(batch, out, |operation| {
+            operation_record(operation, &mut meter()).ok()
+        });
+    }
+
+    /// `read_operation` on each operation record's payload.
+    #[inline(never)]
+    pub fn op_read(batch: &[Vec<u8>], out: &mut Vec<Option<Operation>>) {
+        run(batch, out, |payload| {
+            read_operation(payload, &mut meter()).ok()
+        });
+    }
+
+    /// `Container::from_file` on each file as read.
+    #[inline(never)]
+    pub fn from_file(batch: &[ReadFile], out: &mut Vec<Option<Container>>) {
+        run(batch, out, |file| {
+            Container::from_file(file, &mut meter()).ok()
+        });
+    }
+
+    /// Each root as opened: its body's content ID and where it stands (0 usable, 1 pending, 2
+    /// damaged, 3 failed).
+    pub type Roots = Option<Vec<(Option<ContentId>, u64)>>;
+
+    /// `open` of each container at `trust`.
+    fn opened(container: &Container, trust: Trust) -> Roots {
+        let o = open(
+            container,
+            &container.document,
+            &container.roots,
+            trust,
+            &mut Pass,
+            &mut meter(),
+        )
+        .ok()?;
+        Some(
+            o.entries
+                .into_iter()
+                .map(|entry| {
+                    let state = match entry.state {
+                        State::Usable => 0,
+                        State::Pending => 1,
+                        State::Damaged(_) => 2,
+                        State::Failed(_) => 3,
+                    };
+                    (entry.id, state)
+                })
+                .collect(),
+        )
+    }
+
+    /// `open` of each container from a known source: its current stamp read, so the cheap check
+    /// alone makes the body usable.
+    #[inline(never)]
+    pub fn open_known(batch: &[Container], out: &mut Vec<Roots>) {
+        run(batch, out, |container| opened(container, Trust::Known));
+    }
+
+    /// `open` of each container from an unknown source: the cheap check run, the full check left
+    /// pending.
+    #[inline(never)]
+    pub fn open_unknown(batch: &[Container], out: &mut Vec<Roots>) {
+        run(batch, out, |container| opened(container, Trust::Unknown));
+    }
+}
+
+/// `geom-op`'s canonical CBOR encoder and SHA-256 (piece G86; decision 32.46): a map of every kind
+/// of scalar and a set written whole, a row of doubles each written as the shortest float that
+/// holds it, and a message hashed. A refusal is stored as `None`; no typical input is refused.
+pub mod encoder {
+    use geom_op::cbor::Encoder;
+    use geom_op::hash::sha256;
+
+    use super::run;
+
+    /// One map per input: key 0 its integer, 1 its double, 2 its text and 3 its set, each set item
+    /// written as an item of its own and the set sorted by their bytes.
+    #[inline(never)]
+    pub fn maps(batch: &[(i64, f64, String, Vec<u64>)], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |(int, float, text, set)| {
+            let mut items = Vec::with_capacity(set.len());
+            for &v in set {
+                let mut item = Encoder::new();
+                item.uint(v).ok()?;
+                items.push(item.finish().ok()?);
+            }
+            let mut e = Encoder::new();
+            e.map(4).ok()?;
+            e.key(0).ok()?;
+            e.int(i128::from(*int)).ok()?;
+            e.key(1).ok()?;
+            e.float(*float).ok()?;
+            e.key(2).ok()?;
+            e.text(text).ok()?;
+            e.key(3).ok()?;
+            e.set(items).ok()?;
+            Some(e.finish().ok()?.into_bytes())
+        });
+    }
+
+    /// One array of each row's doubles per input.
+    #[inline(never)]
+    pub fn floats(batch: &[Vec<f64>], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |row| {
+            let mut e = Encoder::new();
+            e.array(u64::try_from(row.len()).ok()?).ok()?;
+            for &x in row {
+                e.float(x).ok()?;
+            }
+            Some(e.finish().ok()?.into_bytes())
+        });
+    }
+
+    /// `sha256` of each message.
+    #[inline(never)]
+    pub fn hashes(batch: &[Vec<u8>], out: &mut Vec<[u8; 32]>) {
+        run(batch, out, |message| sha256(message));
+    }
+}
+
+/// Persistent names, history records, reference resolution and `PruneHistory` (pieces G87, G88,
+/// G89 and G109; decision 32.46), each on one small element's names and history, under an
+/// unlimited budget. A refusal is stored as `None` or `false`; no typical input is refused.
+pub mod naming {
+    use geom_format::pruned::{Pruned, pruned_record, read_pruned};
+    use geom_format::record::Record;
+    use geom_name::NameGraph;
+    use geom_name::resolve::{Body, Lookup, Resolution, Step, resolve};
+    use geom_op::{History, NameId, NameSet, OpContext, OpId, OpPath, Relations, TopoName};
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+    use crate::inputs::naming::Scene;
+
+    /// The `NameId` of each name.
+    #[inline(never)]
+    pub fn name_ids(batch: &[TopoName], out: &mut Vec<Option<NameId>>) {
+        run(batch, out, |name| name.id().ok());
+    }
+
+    /// A new graph per input, with each of its names interned in turn (each name is cloned into
+    /// the graph, as a program hands one over).
+    #[inline(never)]
+    pub fn interned(batch: &[Vec<TopoName>], out: &mut Vec<Option<NameGraph>>) {
+        run(batch, out, |names| {
+            let mut graph = NameGraph::new();
+            for name in names {
+                graph.intern(name.clone()).ok()?;
+            }
+            Some(graph)
+        });
+    }
+
+    /// `History::check` of each step against its inputs: whether it keeps the laws.
+    #[inline(never)]
+    pub fn checks(batch: &[(History, NameSet)], out: &mut Vec<bool>) {
+        run(batch, out, |(history, inputs)| {
+            history.check(inputs).is_ok()
+        });
+    }
+
+    /// `Relations::then` of each pair of steps.
+    #[inline(never)]
+    pub fn composed(batch: &[(Relations, Relations)], out: &mut Vec<Relations>) {
+        run(batch, out, |(first, next)| first.then(next));
+    }
+
+    /// `resolve` of each reference against its element.
+    #[inline(never)]
+    pub fn resolved(batch: &[Scene], out: &mut Vec<Resolution>) {
+        run(batch, out, |scene| {
+            let lookup = Lookup::Found {
+                body: Body {
+                    names: &scene.chain.body,
+                    carriers: &scene.chain.carriers,
+                    history: &scene.history,
+                    graph: &scene.chain.graph,
+                },
+                version: None,
+            };
+            resolve(&scene.reference, &lookup)
+        });
+    }
+
+    /// `prune` of each element's steps for the names held.
+    #[inline(never)]
+    pub fn pruned(batch: &[(Vec<Step>, NameSet)], out: &mut Vec<Option<Vec<Step>>>) {
+        let ctx = OpContext::new(OpPath::new(OpId::from_bytes([9; 16])), Budget::UNLIMITED);
+        run(batch, out, |(steps, held)| {
+            geom_name::prune(&ctx, steps, held).ok().map(|o| o.result)
+        });
+    }
+
+    /// `pruned_record` of each pruned element.
+    #[inline(never)]
+    pub fn record_write(batch: &[Pruned], out: &mut Vec<Option<Record>>) {
+        run(batch, out, |(by, held, steps)| {
+            pruned_record(by, held, steps).ok()
+        });
+    }
+
+    /// `read_pruned` of each pruned history record's payload.
+    #[inline(never)]
+    pub fn record_read(batch: &[Vec<u8>], out: &mut Vec<Option<Pruned>>) {
+        run(batch, out, |payload| {
+            read_pruned(payload, &mut WorkMeter::new(Budget::UNLIMITED)).ok()
         });
     }
 }

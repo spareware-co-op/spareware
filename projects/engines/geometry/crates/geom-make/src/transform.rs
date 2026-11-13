@@ -25,6 +25,21 @@
 //! - **Kinds change only where the checker can follow.** A transform that does not keep circles
 //!   turns them into ellipses and analytic surfaces into affine ones, which the checker cannot
 //!   certify yet: on a body with curved geometry it is [`MakeDetail::KindNotCertified`] (G177).
+//! - **Not certified is a refusal, never a defect.** The checker follows exact data in full, so
+//!   a result recorded Exact that it does not pass is a defect ([`MakeDetail::ResultInvalid`]).
+//!   Data less than exact it follows only as far as its certified tests reach. So a transform
+//!   that rounds a corner or moves curved geometry by a deviation, and gives a body the checker
+//!   does not pass, is [`MakeDetail::NotCertifiedYet`]; and so is an exact transform of a body
+//!   that was less than exact already (corners an earlier transform rounded, a round primitive)
+//!   when the checker finds nothing wrong and cannot certify the result: its interval tests of
+//!   planes not given by integers depend on the size of the numbers, so a whole-number scale of
+//!   a body it passed can leave a pair of parallel faces it cannot tell apart. A fault that says
+//!   something is wrong there is still a defect: an exact move of a body that passed breaks
+//!   nothing.
+//! - **Refused the same in every build.** Those refusals are groups 2 and 3's to give, so a
+//!   result that rounded, or whose input was less than exact, is checked with every group in a
+//!   shipped build too; only a result recorded Exact is checked at the build's level
+//!   (`build.rs`; decision 32.48).
 //! - **Mirrors keep the outside outside.** A mirror reverses orientation, so every face's sense
 //!   and every loop's direction is reversed with it.
 //!
@@ -49,7 +64,7 @@ use geom_math::{
 use geom_num::interval::Interval;
 use geom_num::{Exactness, GridStep, NumError, P3, Steps};
 use geom_op::history::{Origin, Record};
-use geom_op::{MakeDetail, NameId, NameSet, OpContext, OpError, OpErrorDetail, OpOutput, TopoName};
+use geom_op::{MakeDetail, NameId, NameSet, OpContext, OpError, OpOutput, TopoName};
 use geom_run::WorkMeter;
 use geom_surface::{ParamSurface, SurfaceKind};
 use geom_topo::ix::Arena;
@@ -58,7 +73,7 @@ use geom_topo::{
     Body, Builder, Edge, Face, Fin, Ix, Loop, PointKind, Region, Sense, Shell, TopoError, Vertex,
 };
 
-use crate::build::{Made, Motion, PER_ROW, PHASE, fail, finish, unbuilt};
+use crate::build::{Made, Motion, PHASE, Unpassed, charge_rows, fail, finish, unbuilt};
 
 /// The most a rotation held in doubles can stretch a length: 2^−34 (`geom_num::ladder::ANGULAR`,
 /// the `ε_ang` such a rotation keeps lengths within), as 1 + 2^−34 written over 2^34.
@@ -288,7 +303,7 @@ fn run(
     };
     ctx.run(|meter| {
         let copy = moved_copy(ctx, meter, input, &t, &names, &keep)?;
-        settle(ctx, meter, copy, Some(motion))
+        settle(ctx, copy, Some(motion))
     })
 }
 
@@ -296,41 +311,36 @@ fn run(
 /// its input's name and makes none).
 pub(crate) type Renamed = (NameId, Origin, Option<TopoName>);
 
-/// A moved copy before its check: the body, its records, the names it made, its exactness, and,
-/// when the transform rounded a corner or moved curved geometry by a deviation, the piece that
-/// widens what the checker certifies for it.
+/// A moved copy before its check: the body, its records, the names it made, its exactness, and
+/// what it means if the checker does not pass it.
 pub(crate) struct Copied {
     body: Body,
     records: Vec<Record>,
     names: Vec<TopoName>,
     exactness: Exactness,
-    awaits: Option<&'static str>,
+    unpassed: Unpassed,
 }
 
-/// Checks `copy` and returns it: a checker failure is a defect when the transform was exact, and
-/// [`MakeDetail::NotCertifiedYet`] when it rounded, since the checker certifies exact data only
-/// where groups 2 and 3 follow it today.
+/// Checks `copy` and returns it. A checker failure is a defect when the copy's data are exact;
+/// [`MakeDetail::NotCertifiedYet`] when the transform rounded; and, when the data were less than
+/// exact already and the transform moved them exactly, [`MakeDetail::NotCertifiedYet`] if the
+/// checker found nothing wrong and could not certify the copy, a defect if it found something
+/// wrong ([`Unpassed`]): the checker certifies data that are not exact only where groups 2 and 3
+/// follow them today.
 pub(crate) fn settle(
     ctx: &OpContext<'_>,
-    meter: &mut WorkMeter<'_>,
     copy: Copied,
     motion: Option<Motion>,
 ) -> Result<OpOutput<Made>, OpError> {
     finish(
         ctx,
-        meter,
         copy.body,
         copy.records,
         copy.names,
         motion,
         copy.exactness,
+        copy.unpassed,
     )
-    .map_err(|e| match (e.detail(), copy.awaits) {
-        (OpErrorDetail::Make(MakeDetail::ResultInvalid), Some(piece)) => {
-            fail(ctx, MakeDetail::NotCertifiedYet { piece }).with_message(e.message())
-        }
-        _ => e,
-    })
 }
 
 #[allow(
@@ -376,9 +386,7 @@ pub(crate) fn moved_copy(
     .into_iter()
     .try_fold(0u64, |n, k| n.checked_add(u64::from(a.rows(k))))
     .ok_or_else(defect)?;
-    PER_ROW
-        .charge(meter, rows)
-        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
+    charge_rows(ctx, meter, rows)?;
     let mut b = Builder::new();
     let out = &mut b.arenas;
     // Points: rounded once each.
@@ -426,12 +434,17 @@ pub(crate) fn moved_copy(
         bounds.push(moved_box(t, bound).map_err(num)?);
     }
     let exactness = record(ctx, input, stretch, rounded, deviation)?;
-    let awaits = (rounded || deviation > 0.0).then_some(if curved(input.body) {
-        "G177"
+    // What a checker failure means (`Unpassed`): the piece is the one that widens the checker for
+    // the body's kind of geometry. With G134 built, what still waits among flat bodies is a
+    // flat face no fan of triangles can stand for: one with a hole or a reflex corner.
+    let piece = if curved(input.body) { "G177" } else { "G417" };
+    let unpassed = if rounded || deviation > 0.0 {
+        Unpassed::Rounded { piece }
+    } else if matches!(exactness, Exactness::Exact) {
+        Unpassed::Defect
     } else {
-        // A flat face no fan of triangles can stand for: one with a hole or a reflex corner.
-        "G417"
-    });
+        Unpassed::Inherited { piece }
+    };
     // Rows: copied, each pointing at its moved geometry; a mirror reverses faces and loops.
     let flip = |s: Sense| match s {
         Sense::Forward => Sense::Reversed,
@@ -564,7 +577,7 @@ pub(crate) fn moved_copy(
         records,
         names: made,
         exactness,
-        awaits,
+        unpassed,
     })
 }
 

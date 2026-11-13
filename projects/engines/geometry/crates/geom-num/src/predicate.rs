@@ -92,7 +92,7 @@
 //! path is a handful of integer instructions, five times cheaper than its filter, so filtering
 //! first made exactly zero calls (the common case in buildings, chapter 23.2) slower than before
 //! this module was generated. There, and only there, [`orient2d`] goes straight to the exact
-//! path (`ORIENT2D_FILTER_FIRST`): switching a filter off where measurement shows it does not
+//! path (the second `orient2d_routed`): switching a filter off where measurement shows it does not
 //! pay is chapter 23.2's proposed amendment to 6.2, which an owner has yet to accept (section 32),
 //! applied only where principle 12 leaves no other choice. The width-aware exact path does less
 //! work than the hand-written one it replaced (64-bit differences and single widening products
@@ -520,7 +520,7 @@ mod bounded {
     /// 64L − 1 for a [`Wide`](crate::wide::Wide) of L limbs of 64 bits, which holds every value
     /// from −2^(64L − 1) to 2^(64L − 1) − 1, so every magnitude below 2^(64L − 1). Every step is
     /// checked; an overflow gives 0, which no bound fits.
-    const fn magnitude_bits(limbs: usize) -> usize {
+    pub(super) const fn magnitude_bits(limbs: usize) -> usize {
         let Some(bits) = limbs.checked_mul(64) else {
             return 0;
         };
@@ -806,28 +806,55 @@ fn xyz(p: P3) -> [i64; 3] {
 /// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
 /// (the module documentation): never a sign that was not computed.
 pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
-    if ORIENT2D_FILTER_FIRST {
-        match generated::orient2d::filter(a, b, c) {
-            Some(sign) => Ok(sign),
-            None => orient2d_unfiltered(a, b, c),
-        }
-    } else {
-        orient2d_exact(a, b, c)
+    orient2d_routed(a, b, c)
+}
+
+/// [`orient2d`]'s route where its generated filter runs first, as chapter 6.2 asks: on every
+/// target but a 64-bit one other than WebAssembly.
+///
+/// The two routes are two functions, each built only for its targets, not a branch on a constant:
+/// code a target never runs is then not in its build, so the coverage gate, which measures a
+/// 64-bit build, has no line of this one to count as never run, and the WebAssembly tests run it.
+#[cfg(not(all(target_pointer_width = "64", not(target_family = "wasm"))))]
+#[inline]
+fn orient2d_routed(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+    match filtered(|| generated::orient2d::filter(a, b, c)) {
+        Some(sign) => Ok(sign),
+        None => orient2d_unfiltered(a, b, c),
     }
 }
 
-/// Whether [`orient2d`] runs its generated filter first on this target: not on a 64-bit target
-/// other than WebAssembly, whose 64 × 64 → 128-bit multiply makes the exact path five times
-/// cheaper than the filter, so the filter would only slow every call it cannot decide (module
-/// documentation, routing); everywhere else, as chapter 6.2 asks. Either way the sign is the
-/// exact one.
-const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(
-    target_pointer_width = "64",
-    not(target_family = "wasm")
-));
+/// [`orient2d`]'s route on a 64-bit target other than WebAssembly: straight to the exact path.
+/// There a 64 × 64 → 128-bit multiply makes the exact path five times cheaper than the filter, so
+/// the filter would only slow every call it cannot decide (module documentation, routing). Either
+/// way the sign is the exact one.
+#[cfg(all(target_pointer_width = "64", not(target_family = "wasm")))]
+#[inline]
+fn orient2d_routed(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+    orient2d_exact(a, b, c)
+}
+
+/// Whether this build runs the generated filters: false in reference mode (23.13; piece G106), the
+/// `reference` feature, where every predicate answers from its exact path.
+pub const FILTERS: bool = !cfg!(feature = "reference");
+
+/// `filter`'s answer in a build that runs filters, and none in reference mode, which leaves the
+/// call to the exact path. Every call of a generated filter in this crate goes through here
+/// (`tests/attack_g106.rs`), so reference mode leaves none behind. `bool::then` calls the filter
+/// only where `FILTERS` holds, with no branch of this crate's own on a constant one build never
+/// takes the other way, which the coverage gate would count as an outcome never run.
+#[inline]
+pub(crate) fn filtered<T>(filter: impl FnOnce() -> Option<T>) -> Option<T> {
+    FILTERS.then(filter).flatten()
+}
 
 /// [`orient2d`] when its filter cannot decide. Out of line, so that a call the filter answers
-/// does not pay for the exact paths' stack frame.
+/// does not pay for the exact paths' stack frame. Built where the filter runs first, and for the
+/// tests of every target.
+#[cfg(any(
+    test,
+    not(all(target_pointer_width = "64", not(target_family = "wasm")))
+))]
 #[inline(never)]
 fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
     orient2d_exact(a, b, c)
@@ -860,7 +887,7 @@ fn orient2d_exact(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
 /// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
 /// (the module documentation): never a sign that was not computed.
 pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
-    match generated::orient3d::filter(a, b, c, d) {
+    match filtered(|| generated::orient3d::filter(a, b, c, d)) {
         Some(sign) => Ok(sign),
         None => orient3d_unfiltered(a, b, c, d),
     }
@@ -911,7 +938,7 @@ fn orient3d_unfiltered(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
 /// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
 /// (the module documentation): never a sign that was not computed.
 pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
-    match generated::incircle::filter(a, b, c, d) {
+    match filtered(|| generated::incircle::filter(a, b, c, d)) {
         Some(sign) => Ok(sign),
         None => incircle_unfiltered(a, b, c, d),
     }
@@ -979,7 +1006,7 @@ fn incircle_unfiltered(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
     reason = "a to e name the points of the documented formula"
 )]
 pub fn insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
-    match generated::insphere::filter(a, b, c, d, e) {
+    match filtered(|| generated::insphere::filter(a, b, c, d, e)) {
         Some(sign) => Ok(sign),
         None => insphere_unfiltered(a, b, c, d, e),
     }
@@ -1024,7 +1051,7 @@ mod tests {
     use num_bigint::BigInt;
     use proptest::prelude::*;
 
-    use super::bounded::{TOTAL_BITS, declarable, product_bits, sum_bits};
+    use super::bounded::{TOTAL_BITS, declarable, magnitude_bits, product_bits, sum_bits};
     use super::exponent_sum;
     use super::{
         Bounded, Diff, Total, fast_else_total, incircle_fast, incircle_terms, incircle_total,
@@ -1457,6 +1484,162 @@ mod tests {
         }
         let failed = fast_else_total::<64>(None, || None);
         assert_eq!(failed, Err(crate::error::NumError::BudgetExceeded));
+    }
+
+    /// What `magnitude_bits` documents for `limbs`: 64L − 1, or 0 when a step does not fit a
+    /// `usize` (the product 64L above `usize::MAX`, or the difference below zero).
+    fn documented_magnitude_bits(limbs: usize) -> BigInt {
+        let product = BigInt::from(limbs) * 64;
+        let difference = &product - 1;
+        if product > BigInt::from(usize::MAX) || difference < BigInt::from(0) {
+            BigInt::from(0)
+        } else {
+            difference
+        }
+    }
+
+    /// 2^`magnitude_bits(L)` is one more than the largest value a `Wide<L>` holds.
+    fn holds_every_magnitude_below<const L: usize>() {
+        let largest = big(&Wide::<L>::max_value());
+        assert_eq!(
+            largest + 1,
+            BigInt::from(1) << magnitude_bits(L),
+            "{L} limbs"
+        );
+    }
+
+    /// `magnitude_bits` at run time. Only the constant `TOTAL_BITS` calls it, so only the
+    /// compiler ever ran it, and only for six limbs. Here it runs on limb counts from zero to the
+    /// largest `usize`, against 64L − 1 computed in `num-bigint`, where no step can overflow:
+    /// its value, and 0 for each of its two refusals.
+    #[test]
+    fn magnitude_bits_is_64_limbs_less_one_or_zero_when_a_step_does_not_fit() {
+        // The last limb count whose product fits a `usize`, and the first whose product does
+        // not: there 64L is exactly 2^BITS, so 64L − 1 would fit, but the product does not.
+        let last_fitting = usize::MAX / 64;
+        let first_overflowing = last_fitting + 1;
+        let counts = [
+            0,
+            1,
+            2,
+            4,
+            5,
+            6,
+            8,
+            1000,
+            last_fitting - 1,
+            last_fitting,
+            first_overflowing,
+            first_overflowing + 1,
+            usize::MAX / 2,
+            usize::MAX - 1,
+            usize::MAX,
+        ];
+        for limbs in counts {
+            assert_eq!(
+                BigInt::from(magnitude_bits(limbs)),
+                documented_magnitude_bits(limbs),
+                "{limbs} limbs"
+            );
+        }
+        // Both refusals, and the values on either side of each, written out.
+        assert_eq!(magnitude_bits(0), 0);
+        assert_eq!(magnitude_bits(1), 63);
+        assert_eq!(magnitude_bits(last_fitting), usize::MAX - 64);
+        assert_eq!(magnitude_bits(first_overflowing), 0);
+        assert_eq!(magnitude_bits(usize::MAX), 0);
+        // The one call the crate makes.
+        assert_eq!(magnitude_bits(Total::ZERO.to_le_limbs().len()), TOTAL_BITS);
+        assert_eq!(magnitude_bits(6), 383);
+    }
+
+    /// `magnitude_bits` is the exponent of the first magnitude a `Wide` of that many limbs
+    /// cannot hold, for every width the crate names.
+    #[test]
+    fn magnitude_bits_is_the_exponent_of_the_first_magnitude_a_wide_cannot_hold() {
+        holds_every_magnitude_below::<2>();
+        holds_every_magnitude_below::<4>();
+        holds_every_magnitude_below::<5>();
+        holds_every_magnitude_below::<6>();
+        holds_every_magnitude_below::<8>();
+    }
+
+    /// The sign of a `num-bigint` value.
+    fn sign_of(v: &BigInt) -> Sign {
+        match v.sign() {
+            num_bigint::Sign::Minus => Sign::Negative,
+            num_bigint::Sign::NoSign => Sign::Zero,
+            num_bigint::Sign::Plus => Sign::Positive,
+        }
+    }
+
+    /// `orient2d_unfiltered` is the step `orient2d` takes when its filter cannot decide. Only a
+    /// target that runs the filter first calls it (32-bit targets and WebAssembly), so on a 64-bit
+    /// host nothing did. Here it gives the sign of the `num-bigint` determinant on the points the
+    /// filter cannot decide (determinants of 0 and ±1 between products near 2^80) and on every
+    /// triple of points at the grid's edges, one step inside them and at its centre. The filter is
+    /// asked beside it: it answers nothing on the first set, and wherever it answers, its sign is
+    /// the same, so the filter-first route gives the public function's sign on every triple.
+    #[test]
+    fn orient2d_unfiltered_gives_the_exact_sign_where_the_filter_cannot_decide() {
+        use super::{orient2d, orient2d_unfiltered};
+        use crate::generated::orient2d::filter;
+        use crate::grid::P2;
+
+        let p2 = |[x, y]: [i64; 2]| P2::new(x, y).unwrap();
+        let check = |a: [i64; 2], b: [i64; 2], c: [i64; 2]| -> (Sign, Option<Sign>) {
+            let expected = sign_of(&oracle(&[&a, &b, &c], false, false));
+            let (pa, pb, pc) = (p2(a), p2(b), p2(c));
+            let what = format!("orient2d {:?}", [a, b, c]);
+            assert_eq!(orient2d_unfiltered(pa, pb, pc), Ok(expected), "{what}");
+            assert_eq!(orient2d(pa, pb, pc), Ok(expected), "{what}");
+            let filtered = filter(pa, pb, pc);
+            assert!(filtered.is_none_or(|sign| sign == expected), "{what}");
+            (expected, filtered)
+        };
+
+        // M(M − 2) − (M − 1)² = −1: two products near 2^80 that differ by one.
+        let undecided = [
+            ([0, 0], [M, M - 1], [M - 1, M - 2], Sign::Negative),
+            ([0, 0], [M - 1, M - 2], [M, M - 1], Sign::Positive),
+            ([-M, -M], [0, 0], [M, M], Sign::Zero),
+            ([-M, M], [M, -M], [1, -1], Sign::Zero),
+            ([-M, -M], [M, M - 1], [M - 1, M - 2], Sign::Negative),
+        ];
+        for (a, b, c, sign) in undecided {
+            assert_eq!(check(a, b, c), (sign, None), "{:?}", [a, b, c]);
+        }
+
+        let decided = [
+            ([0, 0], [1, 0], [0, 1], Sign::Positive),
+            ([0, 0], [0, 1], [1, 0], Sign::Negative),
+            ([-M, -M], [M, -M], [M, M], Sign::Positive),
+            ([-M, -M], [M, M], [M, -M], Sign::Negative),
+            // Three coinciding points: a zero scale, which the filter answers at once.
+            ([5, 5], [5, 5], [5, 5], Sign::Zero),
+        ];
+        for (a, b, c, sign) in decided {
+            assert_eq!(check(a, b, c), (sign, Some(sign)), "{:?}", [a, b, c]);
+        }
+
+        let points = square(&LEVELS_5);
+        let mut seen = [0usize; 3];
+        for &a in &points {
+            for &b in &points {
+                for &c in &points {
+                    let (sign, _) = check(a, b, c);
+                    seen[match sign {
+                        Sign::Negative => 0,
+                        Sign::Zero => 1,
+                        Sign::Positive => 2,
+                    }] += 1;
+                }
+            }
+        }
+        // Swapping b and c flips the sign, so the two turns are equally many, and both occur.
+        assert_eq!(seen[0], seen[2]);
+        assert!(seen[0] > 0 && seen[1] > 0);
+        assert_eq!(seen.iter().sum::<usize>(), points.len().pow(3));
     }
 
     /// The two rules the compiler applies to the total path's bounds are sound: on every pair of

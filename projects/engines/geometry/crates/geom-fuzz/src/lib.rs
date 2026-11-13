@@ -4,13 +4,25 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has twenty-two targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has seven targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
 //! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
 //! operation at every width; and [`variants`] (G42), every variant of every generated exact path
-//! returns the exact value of its description, evaluated in big integers; [`intersect`]
+//! returns the exact value of its description, evaluated in big integers; [`cbor`] (G91),
+//! `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input
+//! and convert both ways bit for bit; [`cache`] (G105), `geom-format`'s memo store keeps to its
+//! bound, forgets the entry used longest ago first and answers only where the caller's budget
+//! covers the stored run; [`arenas`] (G80), `geom-topo` publishes exactly the arenas its rules
+//! allow, and a body's versions never see each other's edits; [`attributes`] (G90),
+//! `geom-name`'s attribute step gives each output exactly what section 8.4's table gives;
+//! [`batch`] (G104), `geom-op`'s batch driver gives each item its own result, and the curve and
+//! surface kinds' many-point calls give the single calls' bits; [`make`] (G101), the primitives
+//! and transforms return only what the full checker passes, keep their laws, and refuse with a
+//! typed error, and the core queries on every body they make keep the Query family's laws
+//! (G102); and [`sequence`] (G116), whole operation logs replay to the same hash and keep
+//! every law at every step. Phase 5 adds [`intersect`]
 //! (G158), an intersection's items keep their invariants against an all-pairs oracle and a pair
 //! asked either way round makes one call; [`quadric`] (G159), every exact decision on a line and a
 //! quadric agrees with big integers, and a Sturm chain counts the roots a polynomial was built
@@ -19,7 +31,8 @@
 //! an item between them; [`piercing`] (G164), every point of a curve and a surface lies on both;
 //! [`level`] (G168), a level curve misses nothing a dense grid can see; and [`general`] (G169, G170),
 //! subdivision leaves no crossing outside its settled or flagged pairs, and marching stays on both
-//! surfaces. Gate 2 (32.44) adds
+//! surfaces. [`adversarial`] holds the generators aimed at chapter 28.5's hard
+//! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.46) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
@@ -28,13 +41,26 @@
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
-//! correctly rounded //! (G47). Phase 3 and 4 add [`arenas`] (G80), `geom-topo` publishes exactly the arenas its
-//! rules allow, and a body's versions never see each other's edits; [`make`] (G101), the
-//! primitives and transforms return only what the full checker passes, keep their laws, and refuse
-//! with a typed error; and [`planes`] (G123), `geom-poly`'s canonical planes and arrangement
-//! predicates give one entry to one plane and one order to any points or rays. The layout every
-//! target follows, and how each engine runs it locally and in CI,
-//! is in this crate's `README.md`.
+//! correctly rounded (G47). Gate 3 (24.7: every reader is a fuzz target) adds [`encoder`],
+//! `geom-op`'s canonical encoder refuses without a trace and writes only canonical items (G86);
+//! [`records`], the record layer reads the same twice and however its reads split, refuses inside
+//! its input and accepts only canonical records and files (G92); [`bodies`], the body records read
+//! the same twice and give a body that writes and reads to itself (G94); [`names`], the names,
+//! history, recipe and attributes records accept only the one encoding of what they read (G95);
+//! [`operations`], the operation record likewise (G96); and [`open`], containers come back from a
+//! file to the same blobs and trust on open keeps damage with the body it is in (G108). For the
+//! Gate 3 code no other target reaches (30.1's standard bar), [`euler`] holds `geom-topo`'s Euler
+//! operators to their table of counts, Euler's formula and their refusals (G81); [`naming`] holds
+//! names, the name graph, the duplicate detector and the ordinal order to their laws (G87); [`references`],
+//! reference resolution gives 20.4's outcome on any history (G89); [`prune`], `PruneHistory`
+//! keeps every held reference and its record reads back, and reads only its one encoding (G109);
+//! and [`contract`], the operation contract's errors keep their detail's kind and chapter 22's
+//! remedies, write text that names what they hold, and every schema the facade lists names details
+//! the contract has, whose MCP tool descriptions parse and round-trip (G82).
+//! Phase 4 adds [`planes`] (G123), `geom-poly`'s canonical planes and arrangement predicates give
+//! one entry to one plane and one order to any points or rays.
+//! The layout every target follows, and how each engine runs it locally and in CI, is in this
+//! crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
@@ -135,34 +161,54 @@
 //!   `bolero-honggfuzz` or `bolero-kani`).
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
+//! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
+//!   the work meter it reads with, and of the [`cache`] target with `geom-op`.
+//! - `geom-topo`, `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), the code under
+//!   test of the [`arenas`] target and the values that fill its arenas.
+//! - `geom-name` and `geom-op` (Apache-2.0, ours), the code under test of the [`attributes`] target.
+//! - `geom-make`, `geom-check` and `geom-op` (Apache-2.0, ours), with the crates above, the code
+//!   under test of the [`make`] target and the checker it judges them by.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
-//! - `geom-intersect` (MPL-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
-//!   `geom-math`, `geom-run` and `geom-surface` (MPL-2.0, ours), what its cases are made of.
-//! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (MPL-2.0, ours), the code
-//!   under test of the [`arenas`] target and the values that fill its arenas.
-//! - `geom-make`, `geom-check` and `geom-op` (MPL-2.0, ours), with the crates above, the code under
-//!   test of the [`make`] target and the checker it judges them by.
+//! - `geom-op`, `geom-curve`, `geom-surface`, `geom-nurbs` and `geom-run` (Apache-2.0, ours), the
+//!   code under test of the [`batch`] target.
+//! - `geom-intersect` (Apache-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
+//!   `geom-math`, `geom-run` and `geom-surface` (Apache-2.0, ours), what its cases are made of.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
+//! - `geom-format`, `geom-op`, `geom-topo` and `geom-run` (Apache-2.0, ours), the code under test
+//!   of the [`records`], [`bodies`], [`names`], [`operations`] and [`open`] targets, and `geom-op`'s
+//!   encoder that of the [`encoder`] target.
+//! - `ciborium-ll` 0.2.2 and `ciborium-io` 0.2.2 (Apache-2.0), without their default features:
+//!   the [`encoder`] target's oracle, an encoder written elsewhere that reads each finished item
+//!   head by head and writes it again, the versions `geom-op`'s tests pin.
+//! - `engine-geometry` (Apache-2.0, ours), the facade whose operation schemas the [`contract`]
+//!   target holds to the contract, with `geom-gen` writing their tool descriptions, and
+//!   `serde_json` 1.0.154 (MIT OR Apache-2.0), the version `geom-gen` pins, which reads them back.
+//! - `nix` 0.31.3 (MIT), a development dependency on Linux only, with its `pthread` and `signal`
+//!   modules alone: the tests' alarm thread sends `SIGALRM` to the fuzzing thread with it, so that
+//!   libFuzzer's per-input time limit works under the test harness (`tests/common/mod.rs`, issue
+//!   #764). Safe Rust over libc's `pthread_kill`, as the crate forbids unsafe code.
 //!
-//! Licences of every outside package this crate brings into a build, through `bolero` and
-//! `num-bigint`, on every target (`cargo tree --target all`), each record checked by `geom-test`'s
-//! `tests/licences.rs`.
+//! Licences of every outside package this crate brings into a build, through `bolero`,
+//! `num-bigint`, `serde_json` and `nix`, on every target (`cargo tree --target all`), each record checked by
+//! `geom-test`'s `tests/licences.rs`.
 //! Where a package offers a choice, it is taken under the permissive licences offered (MIT or
 //! Apache-2.0):
 //!
 //! - MIT: `bolero`, `bolero-engine`, `bolero-generator`, `bolero-generator-derive`,
-//!   `bolero-libfuzzer`, `bolero-afl`, `bolero-honggfuzz`, `bolero-kani`, `pretty-hex` and `winnow`.
-//! - MIT OR Apache-2.0: `anyhow`, `cfg-if`, `lazy_static`, `either`, `rand`, `rand_core`,
-//!   `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
+//!   `bolero-libfuzzer`, `bolero-afl`, `bolero-honggfuzz`, `bolero-kani`, `pretty-hex`, `winnow`,
+//!   `nix`, `cfg_aliases`, `crunchy` (through `half`) and `zmij` (through `serde_json`).
+//! - MIT OR Apache-2.0: `half`, `anyhow`, `bitflags`, `cfg-if`, `lazy_static`, `either`, `rand`,
+//!   `rand_core`, `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
 //!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
 //!   `num-bigint`, `num-integer`, `num-traits`, `autocfg`, `dashu-base`, `dashu-int`,
-//!   `dashu-ratio` and `static_assertions`.
+//!   `dashu-ratio`, `static_assertions`, `serde_json` and `itoa`.
+//! - Unlicense OR MIT: `memchr` (through `serde_json`).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
-//! - Apache-2.0: `num-modular` (through `dashu-int`).
+//! - Apache-2.0: `num-modular` (through `dashu-int`), `ciborium-ll` and `ciborium-io`.
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
 //!   only).
@@ -187,25 +233,43 @@
 
 use core::fmt;
 
+pub mod adversarial;
 pub mod arenas;
+pub mod attributes;
+pub mod batch;
+pub mod bodies;
 pub mod boxtree;
+pub mod cache;
+pub mod cbor;
+pub mod contract;
 pub mod crossings;
 pub mod curves;
+pub mod encoder;
+pub mod euler;
 pub mod general;
 pub mod intersect;
 pub mod level;
 pub mod linalg;
 pub mod make;
 pub mod maths;
+pub mod names;
+pub mod naming;
 pub mod nurbs;
+pub mod open;
+pub mod operations;
 pub mod orient2d;
 pub mod piercing;
 pub mod planes;
 pub mod predicates;
 pub mod project;
+pub mod prune;
 pub mod quadric;
+pub mod records;
+pub mod references;
+pub mod robustness;
 pub mod roots;
 pub mod seeded;
+pub mod sequence;
 pub mod surfaces;
 pub mod transforms;
 pub mod variants;

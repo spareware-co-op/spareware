@@ -120,13 +120,7 @@ impl<const D: usize> Basis<D> {
     pub(crate) fn breaks(&self) -> Vec<f64> {
         match self {
             Basis::Nurbs(c) => c.basis().knots().to_vec(),
-            Basis::Bulge(p) => {
-                let (a, _) = ParamCurve::domain(p);
-                (0..=p.segments())
-                    .filter_map(|i| u32::try_from(i).ok())
-                    .map(|i| a + f64::from(i))
-                    .collect()
-            }
+            Basis::Bulge(p) => ParamCurve::breaks(p),
             Basis::Transition(c) => c.breaks(),
             _ => Vec::new(),
         }
@@ -134,6 +128,10 @@ impl<const D: usize> Basis<D> {
 }
 
 impl<const D: usize> ParamCurve<D> for Basis<D> {
+    fn breaks(&self) -> Vec<f64> {
+        Basis::breaks(self)
+    }
+
     fn domain(&self) -> (f64, f64) {
         match self {
             Basis::Nurbs(c) => ParamCurve::domain(c),
