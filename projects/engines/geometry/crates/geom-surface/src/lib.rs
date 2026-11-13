@@ -50,6 +50,7 @@ extern crate alloc;
 
 pub mod analytic;
 mod cache;
+pub mod class_a;
 pub mod contract;
 pub mod derivative;
 mod extent;
