@@ -16098,6 +16098,33 @@
           "target": "lib"
         },
         {
+          "cost": "a frame is one pass over the stages from the last frame's values, with the held plan's structure analysed once in [`Dragger::begin`]; two when a step is halved. A frame costs about what a residual evaluation of the whole sketch costs, plus the stages whose inputs moved. No recursion.",
+          "does": "[`Dragger::begin`] takes a solved sketch and the points to drag, and holds each dragged coordinate with a driving fix that only the drag owns. [`Dragger::frame`] then moves those fixes to the cursor and follows the path from the last frame to it, the way `solve::continue_to` follows a path (section 15.7), and returns the sketch with a [`Status`]. [`Dragger::release`] is the one logged operation: it replays the accepted targets from the stored state and commits the result (section 15.10).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",
+          "guarantees": [
+            "**Continuous.** A frame starts from the last frame's solution, not from the stored sketch.",
+            "**Held, never weighted.** The dragged coordinates are fixed at the cursor, and the rest is projected back onto the constraints by the least-change step of section 15.6. No constraint is softened.",
+            "**`AtLimit`.** If the constraints cannot hold with the dragged coordinates held (the step and its half both fail to converge), the drag is released for that frame and the whole sketch is projected from the cursor: the dragged geometry stops at the nearest position the constraints allow, and the frame names the constraints the cursor broke ([`Status::AtLimit`]): those whose residual at the cursor is more than the solver's tolerance. A residual of exactly the tolerance counts as met, as the solver's own convergence test counts it.",
+            "**`DragLimit`.** After a frame the stored root choices (the senses of section 15.7) are checked with interval arithmetic. A step that would flip one is halved; if it still flips, the frame is the last good one and the status names the rule ([`Status::DragLimit`]). Both are preview statuses, not errors.",
+            "**A frame that runs out of budget shows the previous frame** ([`Status::Behind`]) and changes nothing. Frames are shown, never stored.",
+            "**Replay is bit for bit.** Every frame that changed the state (`Held` or `AtLimit`) logs its target; the others leave the state as it was and are left out. The log keeps at most 256 targets (above that, every k-th with k the smallest whole number that fits, and the last). Replaying a log of up to 256 targets from the stored sketch gives exactly the last frame's values, and replaying it twice gives the same bits, because nothing in a frame depends on anything but the stored data and the cursor path.",
+            "**Release reports its drift.** If a committed point is more than the fit ceiling ([`crate::check::Checker::fit`], 64 steps) from the last preview, [`Released::moved`] names it and says by how much; a point exactly at the ceiling has not drifted, as a residual exactly at the solver's tolerance is met. [`Dragger::release_within`] takes another ceiling.",
+            "**No recursion, no unsafe code.**"
+          ],
+          "job": "Dragging: a solve with a moving target, held targets, limits, and a release that replays the logged path (piece G228; chapter 15.9).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "section 15.9 and section 15.7 of the kernel architecture (`projects/engines/geometry/architecture/15-sketches.md`); the solver is `solve`'s."
+          },
+          "path": "geom_sketch::drag",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "[`Assembly::new`] sorts the Jacobian's entries once; [`Assembly::evaluate_at`] is linear in the rows, with no allocation. No recursion.",
           "does": "a kind implements [`Residual`]: its residual function, a length that is zero exactly when the constraint holds, and the part of its inputs where it has no derivative. Its derivatives come from running that one function on dual numbers (`geom_num::dual`), never from a second text. A kind's inputs are [`Slot`]s: a sketch variable, or a constant, such as a dimension's value or the characteristic length of an angle, which carries no derivative. A dimension given as a named scalar is the same kind with a variable in that slot. [`Assembly::new`] lays out the rows of the driving constraints and of each arc's two ends, in authoring order, and the Jacobian's stored entries. [`Assembly::evaluate`] then fills the residuals and the Jacobian, in the variables the solver sees: each divided by its power of two, so each column is multiplied by it. It checks the inputs against each singular set first.",
           "family": [],

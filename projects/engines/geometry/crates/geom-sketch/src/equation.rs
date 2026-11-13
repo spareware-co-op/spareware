@@ -1476,6 +1476,35 @@ impl Assembly {
         Ok(x)
     }
 
+    /// Where rule `id`'s inputs start among [`Assembly::slots`]: the rows are in id order.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`] for an id that is no rule.
+    pub(crate) fn input_of(&self, id: ItemId) -> Result<usize, SketchError> {
+        let at = self
+            .rows
+            .binary_search_by_key(&id, |row| row.id)
+            .map_err(|_| SketchError::Unknown(id))?;
+        Ok(self.rows.get(at).ok_or(SketchError::Internal)?.at)
+    }
+
+    /// Sets the constant in input `at` to `value`, which a drag does to a fix: nothing else changes
+    /// until [`Assembly::rescale`].
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for a place it does not have, or one that is a variable.
+    pub(crate) fn set_constant(&mut self, at: usize, value: f64) -> Result<(), SketchError> {
+        match self.slots.get_mut(at) {
+            Some(slot @ Slot::Constant(_)) => {
+                *slot = Slot::Constant(value);
+                Ok(())
+            }
+            _ => Err(SketchError::Internal),
+        }
+    }
+
     /// The inputs of every rule, in order: what a path moves.
     #[must_use]
     pub(crate) fn slots(&self) -> &[Slot] {

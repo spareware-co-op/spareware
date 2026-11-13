@@ -36,6 +36,8 @@
 //!   held to an interval bound under the fit ceiling (piece G226).
 //! - [`commit`]: the commit plan, from a solved sketch to stored geometry with every declared
 //!   incidence exact (piece G225).
+//! - [`drag`]: dragging with held targets, `AtLimit` and `DragLimit`, and a release that replays the
+//!   logged path and commits it (piece G228).
 //! - [`diagnose`]: degrees of freedom, free motions, redundant and conflicting groups and the report
 //!   text (piece G224).
 //! - [`motions`]: free motions, sparse and per entity (piece G224).
@@ -61,6 +63,7 @@ pub mod check;
 pub mod cluster;
 pub mod commit;
 pub mod diagnose;
+pub mod drag;
 pub mod equation;
 pub mod fit;
 pub mod flow;

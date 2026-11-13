@@ -79,6 +79,11 @@ harness = false
 name = "certify"
 harness = false
 
+# A frame of a drag in a 1,000-entity sketch (piece G228), the same way.
+[[bench]]
+name = "drag"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
