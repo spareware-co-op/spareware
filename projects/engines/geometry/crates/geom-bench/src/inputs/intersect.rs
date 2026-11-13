@@ -1,7 +1,7 @@
-//! Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G163, decision 32.44): a list of
+//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G165, decision 32.44): a list of
 //! items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a
 //! point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5
-//! once, and curves through surfaces, each path of 12.6 once.
+//! once, curves through surfaces, each path of 12.6 once, and natural quadrics, four rows of 12.7.
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -23,7 +23,7 @@ use geom_math::Box3;
 use geom_num::Exactness;
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve, Surface};
-use geom_surface::{Plane, Sphere, SurfaceKind, Torus};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 
 use super::{Class, batch_of, p3, rng, within};
 use crate::rng::SplitMix64;
@@ -322,5 +322,69 @@ pub fn cubic_patches(class: Class) -> Vec<(CurveKind<3>, SurfaceKind)> {
         ];
         let curve = Curve::new(Basis::new(3, knots).ok()?, &points).ok()?;
         Some((CurveKind::Nurbs(curve), SurfaceKind::Nurbs(surface)))
+    })
+}
+
+/// How far a tall surface reaches along its axis, and a plane each way.
+const TALL: (f64, f64) = (-16_777_216.0, 16_777_216.0);
+
+/// A whole turn, in half-turns.
+const TURN: (f64, f64) = (0.0, 2.0);
+
+/// A plane at 45 degrees across a cylinder, which cuts an ellipse.
+#[must_use]
+pub fn plane_cylinders(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
+    typical(class, "intersect::plane_cylinders", |g| {
+        let at = point(g);
+        let radius = 1024.0 + plain(g).abs() / 8.0;
+        let frame = Frame::standard().ok()?;
+        let tube = Cylinder::new(at, radius, frame, (TURN, TALL)).ok()?;
+        let sheet = Plane::new(at, [1.0, 0.0, 1.0], [0.0, 1.0, 0.0], (TALL, TALL)).ok()?;
+        Some((SurfaceKind::Plane(sheet), SurfaceKind::Cylinder(tube)))
+    })
+}
+
+/// Two spheres, each through the other's centre, which meet in a circle.
+#[must_use]
+pub fn sphere_pairs(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
+    typical(class, "intersect::sphere_pairs", |g| {
+        let [a, b, c] = point(g);
+        let radius = 1024.0 + plain(g).abs() / 8.0;
+        let band = (-0.5, 0.5);
+        let first = Sphere::new([a, b, c], radius, Frame::standard().ok()?, (TURN, band)).ok()?;
+        let second = Sphere::new(
+            [a + radius, b, c],
+            radius,
+            Frame::standard().ok()?,
+            (TURN, band),
+        )
+        .ok()?;
+        Some((SurfaceKind::Sphere(first), SurfaceKind::Sphere(second)))
+    })
+}
+
+/// A pipe tee: two equal cylinders whose axes cross, which meet in two ellipses.
+#[must_use]
+pub fn tees(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
+    typical(class, "intersect::tees", |g| {
+        let at = point(g);
+        // A whole radius: the exact test that the axes' sphere touches both reads it.
+        let radius = f64::from(1024 + i32::try_from(g.range(0, 65_536)).ok()?);
+        let across = Frame::new([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]).ok()?;
+        let main = Cylinder::new(at, radius, Frame::standard().ok()?, (TURN, TALL)).ok()?;
+        let branch = Cylinder::new(at, radius, across, (TURN, TALL)).ok()?;
+        Some((SurfaceKind::Cylinder(main), SurfaceKind::Cylinder(branch)))
+    })
+}
+
+/// Two cones through one apex, on crossing axes, which meet in rulings.
+#[must_use]
+pub fn apexes(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
+    typical(class, "intersect::apexes", |g| {
+        let at = point(g);
+        let across = Frame::new([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]).ok()?;
+        let first = Cone::new(at, 0.0, 2.0, Frame::standard().ok()?, (TURN, TALL)).ok()?;
+        let second = Cone::new(at, 0.0, 2.0, across, (TURN, TALL)).ok()?;
+        Some((SurfaceKind::Cone(first), SurfaceKind::Cone(second)))
     })
 }

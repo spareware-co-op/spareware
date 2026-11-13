@@ -403,7 +403,8 @@ impl Intersection {
     /// # Errors
     ///
     /// [`IntersectError::Internal`] for a broken invariant, which is a bug in the method that made
-    /// them: two items of one kind whose enclosures meet, items with different numbers of unknowns,
+    /// them: two items of one kind, not curves, whose enclosures meet, items with different numbers
+    /// of unknowns,
     /// or a certified topology with a flagged region. The meter's stop, as
     /// [`IntersectError::Cancelled`] or [`IntersectError::BudgetExceeded`].
     pub fn new(
@@ -413,7 +414,7 @@ impl Intersection {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Intersection, IntersectError> {
         meter.charge(u64::try_from(items.len()).unwrap_or(u64::MAX))?;
-        items.sort_unstable_by(Item::order);
+        items.sort_by(Item::order);
         let unknowns = items.first().map(|i| i.at().unknowns());
         let uneven = items.iter().any(|i| Some(i.at().unknowns()) != unknowns);
         let flagged = items.iter().any(|i| matches!(i, Item::Flagged { .. }));
@@ -424,6 +425,11 @@ impl Intersection {
         // each item meets every later one of its kind that starts before it ends in the first
         // unknown, which the sort makes a run.
         for (i, item) in items.iter().enumerate() {
+            // A curve's box holds all of it, and two curves of one pair may cross, as a pipe tee's
+            // two ellipses do, so only points, overlaps and flagged regions must stand apart.
+            if matches!(item, Item::Curve { .. }) {
+                continue;
+            }
             let later = items.get(i.saturating_add(1)..).unwrap_or_default();
             for other in later
                 .iter()

@@ -7745,6 +7745,366 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate: Real::ONE), so 2.0 * 1.0 and 2.0 / 1.0 are the same double and the band is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "delete - in funnel",
+      "line_text": "let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The mutant puts a cone's apex at r0/k along its axis, on the wrong side of the centre, so a cone given by its radius gets a funnel that is not its own. Some tests fail at once, but attack_g165's pair of one apex reached exactly by one cone and inexactly by the other then spends 5·10^7 steps of work, over 200 s, before a budget stops it, and the run times out."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "delete match arm (Some(s), Some((g, h))) in plane_cylinder",
+      "line_text": "(Some(s), Some((g, h))) => quadric::plane_across(&s, g, h)?,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "across only spares cut_cylinder a test it makes anyway. A plane exactly square to the axis has n × e = 0, and side = cross(n, e) encloses its exact value, so every entry of side holds zero and cut_cylinder makes the same circle; a plane not exactly square gets false from either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace * with + in trimmed",
+      "line_text": "let inside = on_both(curve, lo * 0.5 + hi * 0.5, a, b, meter)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With no cut a piece lies wholly on or wholly off each domain, so any of its points decides. The mutant reads the point at lo + 0.5 + hi/2: on a loop of G165's, on (0, 2), its point at 1.5; on an open piece without cuts, only a line on two planes without edges, a point of that line, which lies on both planes however far out. The answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace * with / in trimmed",
+      "line_text": "let room = 1e-9 * (1.0 + t.abs());",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "room merges only the cuts two edges make at one point of a curve, which agree to rounding. The mutant's room, 1e-9/(1 + |t|), may be too small to merge them far along a line; the stretch between two such cuts, no wider than their rounding, is dropped as no stretch (it is not two steps wide), so a piece's end moves by that rounding at most."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace + with * in branch_span",
+      "line_text": "let ratio = point(2.0 * extent + 2.0)?.div(point(smaller)?)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "(2·e)·2 = 4e ≥ 2e + 2 for e ≥ 1 (cone_extent adds 1), so the branch reaches at least as far and still passes the cone's largest radius; trimming cuts it at the same edges."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace + with * in cone_extent",
+      "line_text": "(far + r0.abs()) * (1.0 + k.abs()) + 1.0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without the +1 the extent is (far + |r0|)·(1 + |k|), still at least the cone's largest radius on its domain, |r0| + |k|·far. A parabola's point at t stands |t| from the axis along b, square to it, so its reach still passes that radius; a branch_span from it gives smaller·sinh t ≥ e + smaller/2, past it too. Trimming cuts both at the same edges."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace + with * in trimmed",
+      "line_text": "let inside = on_both(curve, lo * 0.5 + hi * 0.5, a, b, meter)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With no cut a piece lies wholly on or wholly off each domain, so any of its points decides. The mutant reads the point at lo·hi/4: on a loop of G165's, on (0, 2), its point at 0; on an open piece without cuts, only a line on two planes without edges, a point of that line, which lies on both planes however far out. The answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace + with * in trimmed",
+      "line_text": "let room = 1e-9 * (1.0 + t.abs());",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "room merges only the cuts two edges make at one point of a curve, which agree to rounding. The mutant's room, 1e-9·|t|, is zero at t = 0, where two such cuts may then both stay; the stretch between them, no wider than their rounding, is dropped as no stretch (it is not two steps wide), so a piece's end moves by that rounding at most."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace + with - in branch_span",
+      "line_text": "let ratio = point(2.0 * extent + 2.0)?.div(point(smaller)?)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A branch need only pass the cone's largest radius on its domain, |r0| + |k|·far, which cone_extent's e exceeds by at least 1; trimming then cuts it at the same edges. A branch point at t stands at least sinh t·|side| from the axis (side is square to it) and |side| ≥ smaller, and with t = ln((2e − 2)/smaller + 2), smaller·sinh t ≥ e − 1 + smaller/2, still past that radius; capped at HYPERBOLA_REACH, the original is no shorter."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace += with *= in cut_at",
+      "line_text": "t += period;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "while t < lo { t *= period } never ends for a turn read below a loop's start at 0: a negative t times 2 stays negative, below lo."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace += with -= in cut_at",
+      "line_text": "t += period;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "while t < lo { t -= period } never ends for a turn read below the loop's start (turn_of reads from −½): taking periods away keeps t < lo."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace - with + in cut_at",
+      "line_text": "let period = hi - lo;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every loop G165's closed forms make turns from 0, by Circle::full or an ellipse on (0, 2), so hi + lo = hi − lo = 2. (G167, whose profiles can turn from elsewhere, tests it.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace - with + in trimmed",
+      "line_text": "if *t > last + room && *t < stop - room {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant also keeps cuts within room before the stop (and none past it, cuts lying in the domain): the last stretch, from such a cut to the stop, a billionth of the parameter, is no wider than two steps on any curve the grid holds and is dropped as no stretch: the piece before ends room short of the stop at most."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace - with + in trimmed",
+      "line_text": "let period = hi - lo;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every loop G165's closed forms make turns from 0, by Circle::full or an ellipse on (0, 2), so hi + lo = hi − lo = 2. (G167, whose profiles can turn from elsewhere, tests it.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace - with / in trimmed",
+      "line_text": "if *t > last + room && *t < stop - room {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "stop / room is far past the stop (stop > 0 here: a loop's runs past its first cut, an open piece's span reaches past 0), so the mutant also keeps cuts within room before the stop; cuts lie in the domain, none past it. The last stretch, a billionth of the parameter, is dropped as no stretch: the piece before ends room short of the stop at most."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace -= with += in cut_at",
+      "line_text": "t -= period;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop never runs for G165's loops: turn_of reads a turn in [−½, 3/2], and every loop G165 makes turns from 0 to 2, so t < hi from the start. (G167's profiles can turn from −1, where it runs.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace -= with /= in cut_at",
+      "line_text": "t -= period;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop never runs for G165's loops: turn_of reads a turn in [−½, 3/2], and every loop G165 makes turns from 0 to 2, so t < hi from the start. (G167's profiles can turn from −1, where it runs.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in cut_at",
+      "line_text": "while t < lo {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "t == lo only where a cut lies exactly at the loop's start: the mutant turns it once round and back, which returns lo exactly where lo + period rounds to hi, as for every loop that turns from 0, and a value within a rounding step of lo otherwise: the same point of the loop, to rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in cut_cone",
+      "line_text": "let (lead, side) = if c.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for an enclosure of c whose upper bound is exactly zero. c is the result of interval operations: geom-num widens every bound outward by a full step and stores a zero bound as +0, so a bound of an enclosure from its operations is exactly zero only where its rounded value was ±2^-1074, which a sum or difference of products of doubles reaches only with every term in the lowest binade, from data below 2^-510 steps: far under the finest grid step, Q2 (1/625 of Q0), nothing the kernel promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in decided",
+      "line_text": "} else if enclosure.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for an enclosure whose upper bound is exactly zero. Every enclosure decided reads is the result of interval operations: geom-num widens every bound outward by a full step and stores a zero bound as +0, so a bound of an enclosure from its operations is exactly zero only where its rounded value was ±2^-1074, which a sum or difference of products of doubles reaches only with every term in the lowest binade, from data below 2^-510 steps: far under the finest grid step, Q2 (1/625 of Q0), nothing the kernel promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in edges",
+      "line_text": "let turn = if signed < 0.0 { 1.0 } else { 0.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "turn is read only inside if radius > 0.0, and radius = |signed|, so signed is not zero there: < 0 and <= 0 decide alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in kept",
+      "line_text": "let to = if last.to < first.from {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "last.to == first.from only for a run whose last stretch ends where its first begins, a run of every stretch of a loop, which kept takes whole before this test: <= and < decide alike for every run that reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in on",
+      "line_text": "if x.hi() < domain.0 || x.lo() > domain.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for an enclosure of a parameter whose upper bound is exactly the domain's start. Its bounds are widened a full step past the rounded value, so the value itself lies below the start by less than its own rounding: the original holds it to the start, the mutant calls it off. The answer differs only within rounding at a domain's end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in parameters",
+      "line_text": "let flip = if rho.hi() < 0.0 { -1.0 } else { 1.0 };",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for an enclosure of rho whose upper bound is exactly zero. rho is r0 + k·v in interval operations: geom-num widens every bound outward by a full step and stores a zero bound as +0, so a bound of an enclosure from its operations is exactly zero only where its rounded value was ±2^-1074, which a sum or difference of products of doubles reaches only with every term in the lowest binade, from data below 2^-510 steps: far under the finest grid step, Q2 (1/625 of Q0), nothing the kernel promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in root",
+      "line_text": "let lo = if v.lo() < 0.0 { 0.0 } else { v.lo() };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where v.lo() is zero both take zero: an interval stores a zero bound as +0, so lo is the same +0 either way and the root is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in sphere_cone",
+      "line_text": "if d.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for an enclosure of d whose upper bound is exactly zero. d is the result of interval operations: geom-num widens every bound outward by a full step and stores a zero bound as +0, so a bound of an enclosure from its operations is exactly zero only where its rounded value was ±2^-1074, which a sum or difference of products of doubles reaches only with every term in the lowest binade, from data below 2^-510 steps: far under the finest grid step, Q2 (1/625 of Q0), nothing the kernel promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in tight_size",
+      "line_text": "if x.hi() < 0.0 { x.neg() } else { x }",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for an x whose upper bound is exactly zero. Every x tight_size is given is the result of interval operations: geom-num widens every bound outward by a full step and stores a zero bound as +0, so a bound of an enclosure from its operations is exactly zero only where its rounded value was ±2^-1074, which a sum or difference of products of doubles reaches only with every term in the lowest binade, from data below 2^-510 steps: far under the finest grid step, Q2 (1/625 of Q0), nothing the kernel promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in trimmed",
+      "line_text": "if *t > last + room && *t < stop - room {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant also keeps a cut exactly room before the stop: the last stretch, from it to the stop, a billionth of the parameter, is no wider than two steps on any curve the grid holds and is dropped as no stretch: the piece before ends room short of the stop at most."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with > in cut_at",
+      "line_text": "while t < lo {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "while t > lo { t += period } never ends for a cut past the loop's start: adding a period keeps t > lo, so every pair with a cut on a loop, beyond its first point, hangs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with == in cut_at",
+      "line_text": "if t < lo || t > hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "t > hi never holds (see the entry for || on this line), and t == hi is a cut at the piece's end, which trimmed drops (a cut on an end cuts nothing): the pieces are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with == in cut_cone",
+      "line_text": "} else if c.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "In the hyperbola's branch c is negative: with k = 1 + s², α² + β² = 1 and bent = 1 − k·α² (negative exactly when plane_cone's sign is), c = bent·s0² − rest = h²·s²/bent, and h is not zero, the apex being off the plane. Its enclosure holds it, so c.lo() < 0: c.lo() == 0 is false, as c.lo() > 0 is, and the branch is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with >= in cut_at",
+      "line_text": "if t < lo || t > hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "t > hi never holds (see the entry for || on this line), and the mutant refuses only t == hi, a cut at the piece's end, which trimmed drops anyway: the pieces are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with >= in cut_cone",
+      "line_text": "} else if c.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "In the hyperbola's branch c = h²·s²/bent is negative (bent < 0 there, h ≠ 0 with the apex off the plane; see the entry for == on this line), and its enclosure holds it, so c.lo() < 0: c.lo() >= 0 is false, as c.lo() > 0 is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with >= in decided",
+      "line_text": "if enclosure.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for an enclosure whose lower bound is exactly zero. Every enclosure decided reads is the result of interval operations: geom-num widens every bound outward by a full step and stores a zero bound as +0, so a bound of an enclosure from its operations is exactly zero only where its rounded value was ±2^-1074, which a sum or difference of products of doubles reaches only with every term in the lowest binade, from data below 2^-510 steps: far under the finest grid step, Q2 (1/625 of Q0), nothing the kernel promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with >= in kept",
+      "line_text": "if width > STEP {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for a run whose box is exactly STEP, two steps, wide: a coincidence of size at the threshold between a stretch and a point, which the class's bound does not resolve (the point carries that width in its class)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with >= in kept",
+      "line_text": "let t = if loops && middle_of > hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "middle_of == hi turns to hi − period = lo, the same point of a loop: at_parameter gives it to rounding, so the point is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with >= in on",
+      "line_text": "if x.hi() < domain.0 || x.lo() > domain.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for an enclosure of a parameter whose lower bound is exactly the domain's end. Its bounds are widened a full step past the rounded value, so the value itself lies past the end by less than its own rounding: the original holds it to the end, the mutant calls it off. The answer differs only within rounding at a domain's end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with >= in trimmed",
+      "line_text": "if *t > last + room && *t < stop - room {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant also keeps a cut exactly room past the last: the stretch between, a billionth of the parameter, is no wider than two steps on any curve the grid holds and is dropped as no stretch, and the next starts at that cut instead: a piece's end moves by room at most."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with >= in trimmed",
+      "line_text": "let on_loop = if loops && middle_of > hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "middle_of == hi turns to hi − period = lo, the same point of a loop: on_both reads the same point, to rounding, and the stretch is kept or dropped alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace >= with < in cut_at",
+      "line_text": "while t >= hi {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "while t < hi { t -= period } never ends: after the first loop t lies below hi, and taking periods away keeps it there."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace || with && in cut_at",
+      "line_text": "if t < lo || t > hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The test never holds. On a loop the wraps just before put t in [lo, hi). On an open piece t is the parameter of a point of an edge: on the curve it lies inside the piece's span (a line runs over all of the grid, a conic past the cone's largest radius), and off it the gap test after refuses it, the curve's points past its span standing past that radius, farther than a step from any edge point."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace - with + in kept",
+      "line_text": "let period = hi - lo;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every loop G165's closed forms make turns from 0, by Circle::full or an ellipse on (0, 2), so hi + lo = hi − lo = 2. (G167, whose profiles can turn from elsewhere, tests it.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace < with <= in edges",
+      "line_text": "if u1 - u0 < 2.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On a whole turn the mutant adds the seam's rulings as edges, which cut a curve only where it crosses the seam or runs along it, places on the surface either side: trimming joins stretches on both domains end to end into one run, so a cut where the curve stays on both changes no piece."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace == with != in apex_ends",
+      "line_text": "let ends = [v0, v1].iter().filter(|v| r0 + k * **v == 0.0).count();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant counts the domain's ends that are not at the apex. A domain ending at the apex has one of each, so the apex is a cut either way; one with no end there gets the apex as a cut, inside the domain, where a curve through it stays on the cone on both sides: trimming joins stretches on both domains end to end into one run, so a cut where the curve stays on both changes no piece."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+      "mutant": "replace > with >= in apex_ends",
+      "line_text": "Ok(if ends > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant makes the apex a cut on every cone. Where no end of the domain is at the apex, the apex lies inside it, and a curve through it stays on the cone on both sides: trimming joins stretches on both domains end to end into one run, so a cut where the curve stays on both changes no piece."
     }
   ],
   "coverage_off": [

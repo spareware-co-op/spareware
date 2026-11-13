@@ -336,6 +336,182 @@ pub fn tangent_cone_cone(first: &Cone, second: &Cone) -> Result<Sign, NumError> 
     })
 }
 
+/// A plane through three grid points that do not lie in a line: its normal is (b − a) × (c − a).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Plane {
+    /// A point of the plane.
+    pub a: P3,
+    /// A second.
+    pub b: P3,
+    /// A third.
+    pub c: P3,
+}
+
+/// `plane`'s normal.
+fn normal<R: Ring>(plane: &Plane) -> Option<[R; 3]> {
+    outer(minus(plane.b, plane.a)?, minus(plane.c, plane.a)?)
+}
+
+fn ball<R: Ring>(plane: &Plane, centre: P3, radius: Steps) -> Option<R> {
+    let n = normal::<R>(plane)?;
+    let along = inner(n, minus::<R>(centre, plane.a)?)?;
+    let r = size::<R>(radius.0)?;
+    r.times(r)?.times(inner(n, n)?)?.minus(along.times(along)?)
+}
+
+/// The sign of r²·|n|² − (n·(p − a))², for the plane and the ball of `radius` about `centre`:
+/// positive where the plane cuts the ball, zero where it touches, negative where it misses. It is
+/// also how a plane parallel to a cylinder's axis stands against the cylinder, with `centre` on the
+/// axis.
+///
+/// Budget: |n| < 2^85 and |n·(p − a)| < 2^129, so the square is below 2^258; r² < 2^106 and
+/// |n|² < 2^172, so the product is below 2^278. `Wide<6>` holds both.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] for a radius that does not fit an `i64`.
+pub fn plane_ball(plane: &Plane, centre: P3, radius: Steps) -> Result<Sign, NumError> {
+    signed(ball::<Interval>(plane, centre, radius), || {
+        ball::<Wide<6>>(plane, centre, radius)
+    })
+}
+
+fn along_axis<R: Ring>(plane: &Plane, p: P3, q: P3) -> Option<R> {
+    inner(normal::<R>(plane)?, minus(q, p)?)
+}
+
+/// The sign of n·(q − p): zero exactly when the direction p to q lies along the plane.
+///
+/// # Errors
+///
+/// As [`plane_ball`].
+pub fn plane_along(plane: &Plane, p: P3, q: P3) -> Result<Sign, NumError> {
+    signed(along_axis::<Interval>(plane, p, q), || {
+        along_axis::<Wide<6>>(plane, p, q)
+    })
+}
+
+/// Whether the direction p to q is the plane's normal direction, exactly.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] if a step does not fit, which the budget of [`plane_ball`] rules out.
+pub fn plane_across(plane: &Plane, p: P3, q: P3) -> Result<bool, NumError> {
+    let n = normal::<Wide<6>>(plane).ok_or(NumError::BudgetExceeded)?;
+    let e = minus::<Wide<6>>(q, p).ok_or(NumError::BudgetExceeded)?;
+    let parts = outer(n, e).ok_or(NumError::BudgetExceeded)?;
+    Ok(parts.iter().all(Wide::is_zero))
+}
+
+fn section<R: Ring>(plane: &Plane, cone: &Cone) -> Option<R> {
+    let n = normal::<R>(plane)?;
+    let e: [R; 3] = minus(cone.along, cone.apex)?;
+    let (s, t) = (size::<R>(cone.slope.rise)?, size::<R>(cone.slope.run)?);
+    let (s2, t2) = (s.times(s)?, t.times(t)?);
+    let dot = inner(n, e)?;
+    let left = dot.times(dot)?.times(s2.plus(t2)?)?;
+    left.minus(s2.times(inner(n, n)?)?.times(inner(e, e)?)?)
+}
+
+/// Which conic a plane cuts from a cone: the sign of (n·e)²(s² + t²) − s²|n|²|e|². Positive is an
+/// ellipse or circle, zero a parabola, negative a hyperbola; through the apex they are a point, one
+/// ruling and two.
+///
+/// Budget: (n·e)² < 2^260 and s² + t² < 2^107, so the left is below 2^367, and the right below 2^364.
+/// `Wide<8>` holds both.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] for a slope that does not fit an `i64`.
+pub fn plane_cone(plane: &Plane, cone: &Cone) -> Result<Sign, NumError> {
+    signed(section::<Interval>(plane, cone), || {
+        section::<Wide<8>>(plane, cone)
+    })
+}
+
+/// How two cones through one apex stand: for a direction at `first`'s half-angle from its axis and at
+/// `second`'s from the axis of `second`, on its upper nappe if `upper`, the sign of what is left for
+/// the third coordinate. Positive is two rulings, zero one along which they touch, negative none.
+///
+/// With e and f the axes, s/t and u/v the slopes, the unit-vector sum 1 − g² − c² − d² ± 2cdg, over
+/// a common denominator, is X ± Y, where X = (EF − D²)PQ − AQ·EF − BP·EF and
+/// Y² = 4AB·D²·EF·PQ, for E = |e|², F = |f|², D = e·f, A = t², P = s² + t², B = v², Q = u² + v²; its
+/// sign is read off X, the sign of Y and X² − Y².
+///
+/// Budget: EF < 2^172 and PQ < 2^216 for slopes of 53 bits, so |X| < 2^391, X² < 2^782, and Y² the
+/// same. `Wide<14>` holds them all.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] for a slope that does not fit an `i64`.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the names of the formula above"
+)]
+pub fn shared_apex(first: &Cone, second: &Cone, upper: bool) -> Result<Sign, NumError> {
+    type W = Wide<14>;
+    let e: [W; 3] = minus(first.along, first.apex).ok_or(NumError::BudgetExceeded)?;
+    let f: [W; 3] = minus(second.along, second.apex).ok_or(NumError::BudgetExceeded)?;
+    let run = |c: &Cone| -> Option<(W, W)> {
+        let (s, t) = (size::<W>(c.slope.rise)?, size::<W>(c.slope.run)?);
+        let t2 = t.times(t)?;
+        Some((t2, s.times(s)?.plus(t2)?))
+    };
+    let parts = (|| {
+        let (a, p) = run(first)?;
+        let (b, q) = run(second)?;
+        let (ee, ff, ef) = (inner(e, e)?, inner(f, f)?, inner(e, f)?);
+        let both = ee.times(ff)?;
+        let dd = ef.times(ef)?;
+        let pq = p.times(q)?;
+        let x = both
+            .minus(dd)?
+            .times(pq)?
+            .minus(a.times(q)?.times(both)?)?
+            .minus(b.times(p)?.times(both)?)?;
+        let y2 = W::of(4)?
+            .times(a)?
+            .times(b)?
+            .times(dd)?
+            .times(both)?
+            .times(pq)?;
+        Some((x, ef, x.times(x)?.minus(y2)?))
+    })();
+    let (x, ef, difference) = parts.ok_or(NumError::BudgetExceeded)?;
+    // Y has the sign of D, or against it on the lower nappe, and X the sign it has.
+    let y_up = if upper {
+        sign_of(&ef) == Sign::Positive
+    } else {
+        ef.is_negative()
+    };
+    let x_up = sign_of(&x) == Sign::Positive;
+    Ok(if ef.is_zero() {
+        sign_of(&x)
+    } else if x_up && y_up {
+        Sign::Positive
+    } else if !x_up && !y_up {
+        Sign::Negative
+    } else {
+        // X and Y pull apart, and the larger of X² and Y² decides, with X's sign.
+        match (sign_of(&difference), x_up) {
+            (Sign::Zero, _) => Sign::Zero,
+            (Sign::Positive, true) | (Sign::Negative, false) => Sign::Positive,
+            _ => Sign::Negative,
+        }
+    })
+}
+
+/// The sign of `v`.
+fn sign_of(v: &Wide<14>) -> Sign {
+    if v.is_zero() {
+        Sign::Zero
+    } else if v.is_negative() {
+        Sign::Negative
+    } else {
+        Sign::Positive
+    }
+}
+
 /// What [`polynomial`] computes in: exact integers, or intervals that enclose them.
 pub trait Ring: Copy {
     /// The number `v`, for a |v| of at most 2^53.
