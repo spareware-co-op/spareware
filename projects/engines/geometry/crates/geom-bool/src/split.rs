@@ -37,8 +37,9 @@
 //!   tangent, a pair whose cross product is not proven, and a vertex no direction serves fail
 //!   with [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance compares two.
 //! - **Each loop's sense is proven.** A loop's area is enclosed piece by piece: a straight piece's
-//!   exactly from its ends, a circle's or ellipse's arc on a flat face in closed form with
-//!   certified sines and cosines of half-turns; an area that holds zero fails with
+//!   exactly from its ends, a conic's arc on a flat face in closed form (a circle's or ellipse's
+//!   with certified sines and cosines of half-turns, a hyperbola's with certified exponentials, a
+//!   parabola's as a polynomial); an area that holds zero fails with
 //!   [`BuildError::UndecidedArea`]. On a curved face a piece that is not straight is summed over
 //!   parts of its parameter, each part's share enclosed by the mean value theorem, over more parts
 //!   until the sign is proven or 4,096 parts leave it open.
@@ -48,7 +49,7 @@
 //!   two areas are compared. No direction qualifying fails with [`BuildError::Unclassified`].
 //! - **What this piece does not split, it says.** A face on a sphere, a torus or any other curved
 //!   carrier, a cylinder's or cone's face with something pending, and a face bounded on a plane by
-//!   a curve other than a line, circle or ellipse are listed as waiting: for the rest of G244's
+//!   a curve other than a line or a conic are listed as waiting: for the rest of G244's
 //!   analytic carriers and G245's NURBS and procedural ones.
 //! - **Deterministic.** Faces in order, pieces in index order, vertices' pieces in turning order,
 //!   loops in the order their first pieces come.
@@ -137,7 +138,7 @@ pub struct Splitting {
     /// The split faces, face by face.
     pub faces: Vec<SplitFace>,
     /// The faces this splitting leaves for the splitting of their kinds: on a curved carrier, or
-    /// bounded by a curve other than a line, circle or ellipse.
+    /// bounded by a curve other than a line or a conic.
     pub waiting: Vec<usize>,
 }
 
@@ -516,42 +517,106 @@ fn conic_area(
     at(t1)?.sub(at(t0)?)
 }
 
-/// The picture's centre and two axis vectors of a circle or ellipse, enclosed; `None` for another
-/// kind.
-fn conic_of(
-    curve: &CurveKind<3>,
-    keep: [usize; 2],
-) -> Result<Option<[[Interval; 2]; 3]>, BuildError> {
-    let scaled = |v: [Interval; 3], k: f64| -> Result<[Interval; 3], NumError> {
-        let k = Interval::point(k)?;
-        let [x, y, z] = v;
-        Ok([x.mul(k)?, y.mul(k)?, z.mul(k)?])
-    };
-    let (centre, a, b) = match curve {
+/// How a conic runs with its parameter: c + cos πt·a + sin πt·b (a circle or an ellipse),
+/// c + cosh t·a + sinh t·b (a hyperbola's branch), or c + t²·a + t·b (a parabola).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Conic {
+    /// A circle or an ellipse.
+    Round,
+    /// A hyperbola's branch.
+    Branch,
+    /// A parabola.
+    Parabola,
+}
+
+/// A conic's centre and two axis vectors in the picture, enclosed.
+type Terms = [[Interval; 2]; 3];
+
+/// `v` times `by`, enclosed.
+fn scaled(v: [Interval; 3], by: f64) -> Result<[Interval; 3], NumError> {
+    let by = Interval::point(by)?;
+    let [v0, v1, v2] = v;
+    Ok([v0.mul(by)?, v1.mul(by)?, v2.mul(by)?])
+}
+
+/// A conic's two axis vectors, enclosed: on a frame, its unit vectors scaled; otherwise as stored.
+fn axis_vectors(axes: Axes<3>) -> Result<([Interval; 3], [Interval; 3]), BuildError> {
+    Ok(match axes {
+        Axes::Frame { frame, a, b } => {
+            let (_, [x, y, _]) = frame.unit_vectors().map_err(IntersectError::from)?;
+            (scaled(x, a)?, scaled(y, b)?)
+        }
+        Axes::Vectors { u, v } => (exact3(u)?, exact3(v)?),
+    })
+}
+
+/// The picture's centre (a parabola's vertex) and two axis vectors of a conic, enclosed, with how
+/// it runs; `None` for another kind.
+fn conic_of(curve: &CurveKind<3>, keep: [usize; 2]) -> Result<Option<(Conic, Terms)>, BuildError> {
+    let (conic, centre, (a, b)) = match curve {
         CurveKind::Circle(circle) => {
             let (_, [x, y, _]) = circle
                 .frame()
                 .unit_vectors()
                 .map_err(IntersectError::from)?;
             let r = circle.radius();
-            (exact3(circle.center())?, scaled(x, r)?, scaled(y, r)?)
+            (
+                Conic::Round,
+                circle.center(),
+                (scaled(x, r)?, scaled(y, r)?),
+            )
         }
-        CurveKind::Ellipse(ellipse) => {
-            let (a, b) = match ellipse.axes() {
-                Axes::Frame { frame, a, b } => {
-                    let (_, [x, y, _]) = frame.unit_vectors().map_err(IntersectError::from)?;
-                    (scaled(x, a)?, scaled(y, b)?)
-                }
-                Axes::Vectors { u, v } => (exact3(u)?, exact3(v)?),
-            };
-            (exact3(ellipse.center())?, a, b)
-        }
+        CurveKind::Ellipse(e) => (Conic::Round, e.center(), axis_vectors(e.axes())?),
+        CurveKind::Hyperbola(h) => (Conic::Branch, h.center(), axis_vectors(h.axes())?),
+        CurveKind::Parabola(p) => (Conic::Parabola, p.vertex(), axis_vectors(p.axes())?),
         _ => return Ok(None),
     };
-    let (Some(c), Some(a), Some(b)) = (pick(centre, keep), pick(a, keep), pick(b, keep)) else {
+    let (Some(c), Some(a), Some(b)) = (pick(exact3(centre)?, keep), pick(a, keep), pick(b, keep))
+    else {
         return Err(IntersectError::Internal.into());
     };
-    Ok(Some([c, a, b]))
+    Ok(Some((conic, [c, a, b])))
+}
+
+/// ∫ x dy along an open conic in the picture, from `t0` to `t1`: a hyperbola's branch
+/// c + cosh t·a + sinh t·b, or a parabola c + t²·a + t·b. With x = cx + C·ax + S·bx and
+/// y′ = S·ay + C·by on the branch (C = cosh t, S = sinh t), the antiderivative is
+/// cx·y + (ax·ay + bx·by)·S²/2 + ax·by·(t + S·C)/2 + bx·ay·(S·C − t)/2; on the parabola,
+/// cx·y + ax·ay·t⁴/2 + (ax·by + 2·bx·ay)·t³/3 + bx·by·t²/2.
+fn open_conic_area(
+    conic: Conic,
+    [c, a, b]: [[Interval; 2]; 3],
+    (t0, t1): (Interval, Interval),
+) -> Result<Interval, NumError> {
+    let ([cx, cy], [ax, ay], [bx, by]) = (c, a, b);
+    let half = Interval::point(0.5)?;
+    let at = |t: Interval| -> Result<Interval, NumError> {
+        if conic == Conic::Parabola {
+            let t2 = t.mul(t)?;
+            let t3 = t2.mul(t)?;
+            let y = cy.add(t2.mul(ay)?)?.add(t.mul(by)?)?;
+            let third = Interval::point(1.0)?.div(Interval::point(3.0)?)?;
+            let cubic = ax
+                .mul(by)?
+                .add(Interval::point(2.0)?.mul(bx)?.mul(ay)?)?
+                .mul(t3)?
+                .mul(third)?;
+            return cx
+                .mul(y)?
+                .add(ax.mul(ay)?.mul(t3.mul(t)?)?.mul(half)?)?
+                .add(cubic)?
+                .add(bx.mul(by)?.mul(t2)?.mul(half)?);
+        }
+        let (up, down) = (t.exp()?, t.neg().exp()?);
+        let (ch, sh) = (up.add(down)?.mul(half)?, up.sub(down)?.mul(half)?);
+        let y = cy.add(ch.mul(ay)?)?.add(sh.mul(by)?)?;
+        let sc = sh.mul(ch)?;
+        cx.mul(y)?
+            .add(ax.mul(ay)?.add(bx.mul(by)?)?.mul(sh.mul(sh)?)?.mul(half)?)?
+            .add(ax.mul(by)?.mul(t.add(sc)?)?.mul(half)?)?
+            .add(bx.mul(ay)?.mul(sc.sub(t)?)?.mul(half)?)
+    };
+    at(t1)?.sub(at(t0)?)
 }
 
 /// (x₀ + x₁)/2 · (y₁ − y₀): ∫ x dy along a straight piece from `p0` to `p1` in the picture.
@@ -632,10 +697,16 @@ fn curve_area(
                 };
                 chord_area(p0, p1)?
             } else {
-                let Some(conic) = conic_of(curve, *keep)? else {
+                let Some((kind, conic)) = conic_of(curve, *keep)? else {
                     return Ok(None);
                 };
-                if *wraps {
+                if kind != Conic::Round {
+                    // An open conic runs from one pave to the next, never round a seam.
+                    if *wraps {
+                        return Err(IntersectError::Internal.into());
+                    }
+                    open_conic_area(kind, conic, (lo, hi))?
+                } else if *wraps {
                     conic_area(conic, (lo, Interval::point(b)?))?
                         .add(conic_area(conic, (Interval::point(a)?, hi))?)?
                 } else {

@@ -1223,14 +1223,16 @@ const EXACT_WHOLE: u128 = 9_007_199_254_740_992;
 /// number is not whole in a double, or c lies past the grid's range: the pair then waits, never
 /// met on a plane that is not the face's.
 fn flat_surface(plane: &Plane, (lo, hi): ([f64; 3], [f64; 3])) -> Option<SurfaceKind> {
-    let n = plane.n();
-    let mut k = 0;
-    for (i, c) in n.iter().enumerate() {
-        if c.unsigned_abs() > n.get(k)?.unsigned_abs() {
+    let n: [i128; 3] = plane.n();
+    // Named types throughout, so the recursion check can read them.
+    let mut k: usize = 0;
+    for i in 1..3 {
+        let (here, best): (i128, i128) = (*n.get(i)?, *n.get(k)?);
+        if here.unsigned_abs() > best.unsigned_abs() {
             k = i;
         }
     }
-    let nk = *n.get(k)?;
+    let nk: i128 = *n.get(k)?;
     if nk == 0 || plane.d().checked_rem(nk)? != 0 {
         return None;
     }
@@ -1322,24 +1324,29 @@ fn surfaces_of(
     let (Some(first), Some(second)) = (carrier_of(arr, fs, f1)?, carrier_of(arr, fs, f2)?) else {
         return Ok(None);
     };
-    let around = |round: &SurfaceKind, meter: &mut WorkMeter<'_>| -> Result<_, BuildError> {
-        let b = round
-            .bound(round.domain(), meter)
-            .map_err(IntersectError::from)?;
-        Ok(b.lo
-            .iter()
-            .chain(&b.hi)
-            .all(|v| v.is_finite())
-            .then_some((b.lo, b.hi)))
-    };
-    let flat = |plane: &Plane, round: &SurfaceKind, meter: &mut WorkMeter<'_>| {
-        Ok::<_, BuildError>(around(round, meter)?.and_then(|reach| flat_surface(plane, reach)))
-    };
     Ok(match (first, second) {
         (Carrier::Round(a), Carrier::Round(b)) => Some((a.clone(), b.clone())),
-        (Carrier::Flat(p), Carrier::Round(b)) => flat(&p, b, meter)?.map(|a| (a, b.clone())),
-        (Carrier::Round(a), Carrier::Flat(p)) => flat(&p, a, meter)?.map(|b| (a.clone(), b)),
+        (Carrier::Flat(p), Carrier::Round(b)) => plane_over(&p, b, meter)?.map(|a| (a, b.clone())),
+        (Carrier::Round(a), Carrier::Flat(p)) => plane_over(&p, a, meter)?.map(|b| (a.clone(), b)),
         (Carrier::Flat(_), Carrier::Flat(_)) => None,
+    })
+}
+
+/// Plane `plane` as a surface over the box of carrier `round` ([`flat_surface`]); `None` when that
+/// box is not finite or no surface holds the plane exactly.
+fn plane_over(
+    plane: &Plane,
+    round: &SurfaceKind,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<SurfaceKind>, BuildError> {
+    let b = round
+        .bound(round.domain(), meter)
+        .map_err(IntersectError::from)?;
+    let finite = b.lo.iter().chain(&b.hi).all(|v: &f64| v.is_finite());
+    Ok(if finite {
+        flat_surface(plane, (b.lo, b.hi))
+    } else {
+        None
     })
 }
 
@@ -1377,7 +1384,8 @@ fn section_curves(
             return Ok(None);
         }
         let turn = (0.0, 2.0);
-        let whole = match curve.as_ref() {
+        let curve: &CurveKind<3> = curve;
+        let whole: CurveKind<3> = match curve {
             CurveKind::Circle(c) => CurveKind::Circle(
                 Circle::new(c.center(), c.radius(), c.frame(), turn)
                     .map_err(IntersectError::from)?,

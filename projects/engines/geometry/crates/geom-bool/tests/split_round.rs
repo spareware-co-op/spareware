@@ -600,6 +600,139 @@ fn a_window_across_a_cylinder_s_seam_is_cut_out() {
     assert!(rest[0].cuts[0].iter().all(|u| source(u) == short));
 }
 
+/// A cone opening upwards from its apex to its rim at height 100, closed by its cap, and a plane
+/// parallel to its axis, 30 from it: the plane cuts the cone in a hyperbola's branch from one
+/// crossing of the rim to the other (G165), and the cap in a line between the same two. On the
+/// plane the branch and the line bound the part inside the cone, its area measured in closed
+/// form; the cone and the cap each split in two.
+#[test]
+fn a_plane_along_a_cone_cuts_it_in_a_hyperbola() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let rim = b.circle(p(0, 0, 100), 100, frame, 0);
+    let cone = Cone::new(
+        [0.0; 3],
+        0.0,
+        1.0,
+        frame,
+        ((0.0, 2.0), (0.0, (100 * S) as f64)),
+    );
+    let ix = b.surface(SurfaceKind::Cone(cone.unwrap()));
+    let body = b.face(ix, vec![vec![rim]], 0);
+    let lid = CarrierIx::Plane(
+        b.arr
+            .carriers
+            .add_plane(&Plane::new([0, 0, 1], -i128::from(100 * S)).unwrap())
+            .unwrap(),
+    );
+    let cap = b.face(lid, vec![vec![rim]], 0);
+    let wall = b.sheet(1, 30, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let branch: Vec<usize> = (0..out.sections.len())
+        .filter(|&s| out.sections[s].faces == [body, wall])
+        .collect();
+    assert_eq!(branch.len(), 1, "{:?}", out.sections);
+    let CurveGeom::Section(ix) = out.sections[branch[0]].curve else {
+        panic!("{:?}", out.sections[branch[0]]);
+    };
+    assert!(
+        matches!(out.curves[ix], CurveKind::Hyperbola(_)),
+        "{:?}",
+        out.curves[ix]
+    );
+    let across: Vec<usize> = (0..out.sections.len())
+        .filter(|&s| out.sections[s].faces == [cap, wall])
+        .collect();
+    assert_eq!(across.len(), 1, "{:?}", out.sections);
+    let (branch, across) = (Piece::Section(branch[0]), Piece::Section(across[0]));
+    for f in [body, cap] {
+        assert_eq!(of_face(&splitting, f).len(), 2, "{f}");
+    }
+    let parts = of_face(&splitting, wall);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    let inside: Vec<_> = parts.iter().filter(|s| s.outer.len() == 2).collect();
+    assert_eq!(inside.len(), 1, "{parts:?}");
+    let mut pieces: Vec<Piece> = inside[0].outer.iter().map(|u| u.piece).collect();
+    pieces.sort();
+    let mut want = vec![branch, across];
+    want.sort();
+    assert_eq!(pieces, want);
+    let rest: Vec<_> = parts.iter().filter(|s| s.outer.len() == 4).collect();
+    assert_eq!(rest.len(), 1, "{parts:?}");
+    assert_eq!(rest[0].holes.len(), 1, "{parts:?}");
+}
+
+/// The same cone and cap, and the plane z = x + 50, parallel to one of the cone's rulings: it
+/// cuts the cone in a parabola from one crossing of the rim to the other, and the cap in a line
+/// between the same two. On the plane the parabola and the line bound the part inside the cone,
+/// its area measured in closed form; the cone and the cap each split in two.
+#[test]
+fn a_plane_along_a_ruling_of_a_cone_cuts_it_in_a_parabola() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let rim = b.circle(p(0, 0, 100), 100, frame, 0);
+    let cone = Cone::new(
+        [0.0; 3],
+        0.0,
+        1.0,
+        frame,
+        ((0.0, 2.0), (0.0, (100 * S) as f64)),
+    );
+    let ix = b.surface(SurfaceKind::Cone(cone.unwrap()));
+    let body = b.face(ix, vec![vec![rim]], 0);
+    let lid = CarrierIx::Plane(
+        b.arr
+            .carriers
+            .add_plane(&Plane::new([0, 0, 1], -i128::from(100 * S)).unwrap())
+            .unwrap(),
+    );
+    let cap = b.face(lid, vec![vec![rim]], 0);
+    let wall = b.quad(
+        [
+            [-60 * S, -120 * S, -10 * S],
+            [80 * S, -120 * S, 130 * S],
+            [80 * S, 120 * S, 130 * S],
+            [-60 * S, 120 * S, -10 * S],
+        ],
+        1,
+    );
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let curve: Vec<usize> = (0..out.sections.len())
+        .filter(|&s| out.sections[s].faces == [body, wall])
+        .collect();
+    assert_eq!(curve.len(), 1, "{:?}", out.sections);
+    let CurveGeom::Section(ix) = out.sections[curve[0]].curve else {
+        panic!("{:?}", out.sections[curve[0]]);
+    };
+    assert!(
+        matches!(out.curves[ix], CurveKind::Parabola(_)),
+        "{:?}",
+        out.curves[ix]
+    );
+    let across: Vec<usize> = (0..out.sections.len())
+        .filter(|&s| out.sections[s].faces == [cap, wall])
+        .collect();
+    assert_eq!(across.len(), 1, "{:?}", out.sections);
+    let (curve, across) = (Piece::Section(curve[0]), Piece::Section(across[0]));
+    for f in [body, cap] {
+        assert_eq!(of_face(&splitting, f).len(), 2, "{f}");
+    }
+    let parts = of_face(&splitting, wall);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    let inside: Vec<_> = parts.iter().filter(|s| s.outer.len() == 2).collect();
+    assert_eq!(inside.len(), 1, "{parts:?}");
+    let mut pieces: Vec<Piece> = inside[0].outer.iter().map(|u| u.piece).collect();
+    pieces.sort();
+    let mut want = vec![curve, across];
+    want.sort();
+    assert_eq!(pieces, want);
+    let rest: Vec<_> = parts.iter().filter(|s| s.outer.len() == 4).collect();
+    assert_eq!(rest.len(), 1, "{parts:?}");
+    assert_eq!(rest[0].holes.len(), 1, "{parts:?}");
+}
+
 /// A plane through the axis of a cylinder at a slope of one in two, given by grid points far
 /// apart, so its normal's numbers are large: it cuts the side in an ellipse, whole and inside
 /// both faces. The side splits into the part above it and the part below, and the plane into the
