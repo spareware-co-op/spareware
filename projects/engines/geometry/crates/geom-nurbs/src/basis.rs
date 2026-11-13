@@ -27,6 +27,23 @@
 //!   six roundings, all relative. On a clamped knot vector the values at the ends of the domain
 //!   are exactly 1 and 0. [`Basis::eval_derivs`] gives the same bits for the values as
 //!   [`Basis::eval`].
+//! - **The p + 1 functions are right on every knot range.** [`Basis::eval`] and
+//!   [`Basis::eval_derivs`] keep their bounds on every basis [`Basis::new`] accepts, up to a knot
+//!   range of the largest double, and never refuse one for its size. Their schemes divide by the
+//!   sum of two rounded differences, each finite, and on such a range the sum can round to
+//!   infinity. Where it does, the knot difference the sum stands for divides instead: it is
+//!   finite, it is at least each difference it divides, and it carries one rounding in place of
+//!   three, so the bounds hold as written. Where the sum is finite it divides, as it always has.
+//! - **Relative bounds, so for runs in which nothing underflows.** A quotient, product or
+//!   derivative below 2^−1022 is rounded to the spacing of the doubles there, 2^−1074, and no
+//!   bound here counts that rounding. A first derivative on a range near the largest double is
+//!   such a value. So is an intermediate of [`Basis::eval_one`] and [`Basis::eval_one_derivs`]
+//!   where a knot difference is above 2^1022 times the lower-degree value it divides, or a
+//!   difference times such a value is below 2^−1022: they divide a value by one knot difference
+//!   before they multiply it by another, or multiply before they divide, in `NLib`'s order. So
+//!   on a knot range wide enough or narrow enough (the widest is one) a function of ordinary
+//!   size loses bits its bound needs and a small one can come out 0; their bounds hold while no
+//!   such intermediate underflows.
 //! - **Derivatives, bounded by their magnitudes.** Each derivative of order k ≥ 1 is within
 //!   `γ_(6p+2)` · M of the exact derivative, where M is the same scheme run on magnitudes: every
 //!   difference of two terms replaced by the sum of their absolute values, with the exact knots
@@ -64,7 +81,9 @@
 //!   of `N_BasisIEval` apply only to a clamped end, where they are exact; the zero-divisor guard
 //!   (10^−24) is dropped, because a valid basis never divides by a difference that is not
 //!   positive; the factor p!/(p − k)! is a double rather than an integer, which overflowed past
-//!   degree 12; the checks of `N_KnotVectorIsValid` are those of chapter 24.7, which also accept
+//!   degree 12; a step of `N_BasisEval` or `N_BasisDerivs` whose sum of two differences is past
+//!   the largest double divides by the knot difference instead; the checks of
+//!   `N_KnotVectorIsValid` are those of chapter 24.7, which also accept
 //!   unclamped knots and interior knots repeated p + 1 times; every result that could overflow is
 //!   checked.
 //! SPDX-License-Identifier: Apache-2.0
@@ -90,6 +109,21 @@ pub const MAX_DEGREE: usize = 28;
 pub(crate) const WIDTH: usize = 29;
 
 const _: () = assert!(WIDTH == MAX_DEGREE + 1);
+
+/// 2^1023: A2.2 and A2.3 test the sum of a step's two differences only on a knot range, last
+/// knot minus first as a double, of at least this.
+///
+/// Below it no sum overflows. Each of a step's two rounded differences is a knot minus the
+/// parameter or the parameter minus a knot, and the parameter and every knot lie between the
+/// first knot and the last, so each is at most the rounded range, because rounding keeps order.
+/// A range below 2^1023 is at most the double before it, 2^1023 − 2^970, so the exact sum of
+/// the two is at most 2^1024 − 2^971, which is the largest double, and the rounded sum is no
+/// more.
+///
+/// The cut is safe, not sharp. The two differences of a step add up to one knot difference, so
+/// a sum overflows only on a range near the largest double, about twice this one. The ranges
+/// between pay the test and never need it, and the results are the same bits either way.
+const WIDE: f64 = f64::from_bits(0x7FE0_0000_0000_0000);
 
 /// Which one-sided limit to take at a knot, where a function's derivatives may jump.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
@@ -280,6 +314,35 @@ impl Basis {
 
     /// A2.2 at a known span: `N_(span−p+i)` into `n[i]`, for i from 0 to p.
     pub(crate) fn funs(&self, span: usize, u: f64, n: &mut [f64]) -> Result<(), NurbsError> {
+        if self.range()? >= WIDE {
+            self.funs_on::<true>(span, u, n)
+        } else {
+            self.funs_on::<false>(span, u, n)
+        }
+    }
+
+    /// The last knot minus the first, rounded: finite for every basis ([`Basis::new`] checks
+    /// it). [`Basis::funs`] and [`Basis::ders`] compare it with [`WIDE`] once a call.
+    fn range(&self) -> Result<f64, NurbsError> {
+        match (self.knots.first(), self.knots.last()) {
+            (Some(first), Some(last)) => Ok(last - first),
+            _ => Err(NurbsError::Defect),
+        }
+    }
+
+    /// [`Basis::funs`] on a knot range below [`WIDE`] (`CHECKED` false), where no sum of two
+    /// differences can overflow and the loop is the book's, or on any range (`CHECKED` true),
+    /// where each sum is tested and one past the largest double gives way to
+    /// [`Basis::width`]. One body for both, so the two cannot drift apart; the flag is a
+    /// constant of each copy, so the copy for ordinary ranges carries no test in its loop. With
+    /// the test in the loop of every range, the count benchmark `nurbs/curve_point/typical`
+    /// rose 5.5% on aarch64.
+    fn funs_on<const CHECKED: bool>(
+        &self,
+        span: usize,
+        u: f64,
+        n: &mut [f64],
+    ) -> Result<(), NurbsError> {
         let u_ = &self.knots;
         let mut left = [0.0_f64; WIDTH];
         let mut right = [0.0_f64; WIDTH];
@@ -293,7 +356,12 @@ impl Basis {
                 let le = get(&left, sub(k, l)?)?;
                 // Both differences are at least zero and r > 0 or le > 0 (the span is more than
                 // one value), so delta > 0 and each quotient lies in [0, 1].
-                let delta = r + le;
+                let sum = r + le;
+                let delta = if CHECKED && !sum.is_finite() {
+                    self.width(span, k, l)?
+                } else {
+                    sum
+                };
                 let temp = get(n, l)?;
                 set(n, l, saved + temp * (r / delta))?;
                 saved = temp * (le / delta);
@@ -301,6 +369,24 @@ impl Basis {
             set(n, k, saved)?;
         }
         Ok(())
+    }
+
+    /// The knot difference that divides step `l` of level `k` of A2.2 and A2.3 at `span`,
+    /// `u_(span+l+1)` − `u_(span+l+1−k)`: `sum`, the two rounded differences from the parameter
+    /// added as the book adds them, wherever that is finite. Where the knots span nearly all the
+    /// doubles the sum can round past the largest of them though each difference is finite; the
+    /// knot difference itself, taken directly, is finite for every basis ([`Basis::new`] checks
+    /// the widest) and is used there. It is no smaller than either difference it divides,
+    /// because rounding keeps order, and it carries one rounding where the sum carries three.
+    ///
+    /// Called only where the sum is not finite, which needs a knot range of at least [`WIDE`],
+    /// and kept out of line (`cold`), so on such a range the steps whose sum is finite pay one
+    /// test and no call. On every other range nothing tests the sum at all
+    /// ([`Basis::funs_on`]).
+    #[cold]
+    fn width(&self, span: usize, k: usize, l: usize) -> Result<f64, NurbsError> {
+        let upper = add(add(span, l)?, 1)?;
+        Ok(get(&self.knots, upper)? - get(&self.knots, sub(upper, k)?)?)
     }
 
     /// The basis functions that do not vanish at `u` and their derivatives up to order `order`,
@@ -345,24 +431,10 @@ impl Basis {
         // of each degree (NLib's layout).
         let mut ndu = [0.0_f64; WIDTH * WIDTH];
         let at_ = |j: usize, r: usize| -> Result<usize, NurbsError> { add(mul(j, WIDTH)?, r) };
-        let u_ = &self.knots;
-        let mut left = [0.0_f64; WIDTH];
-        let mut right = [0.0_f64; WIDTH];
-        set(&mut ndu, 0, 1.0)?;
-        for j in 1..=p {
-            set(&mut left, j, u - get(u_, sub(add(span, 1)?, j)?)?)?;
-            set(&mut right, j, get(u_, add(span, j)?)? - u)?;
-            let mut saved = 0.0;
-            for r in 0..j {
-                let ri = get(&right, add(r, 1)?)?;
-                let le = get(&left, sub(j, r)?)?;
-                let delta = ri + le;
-                set(&mut ndu, at_(j, r)?, delta)?;
-                let prev = get(&ndu, at_(r, sub(j, 1)?)?)?;
-                set(&mut ndu, at_(r, j)?, saved + prev * (ri / delta))?;
-                saved = prev * (le / delta);
-            }
-            set(&mut ndu, at_(j, j)?, saved)?;
+        if self.range()? >= WIDE {
+            self.triangle::<true>(span, u, &mut ndu)?;
+        } else {
+            self.triangle::<false>(span, u, &mut ndu)?;
         }
         let rows = add(order, 1)?;
         let total = mul(rows, w)?;
@@ -394,6 +466,44 @@ impl Basis {
         } else {
             Err(NurbsError::NotFinite)
         }
+    }
+
+    /// The triangle of A2.3 at `span` into `ndu`, the first half of [`Basis::ders`]: with every
+    /// sum of two differences tested (`CHECKED` true, for a knot range of [`WIDE`] or more) or
+    /// none (`CHECKED` false), as [`Basis::funs_on`]. Only the triangle has two copies; the
+    /// derivative rows that [`Basis::ders`] takes from it are computed in one place.
+    fn triangle<const CHECKED: bool>(
+        &self,
+        span: usize,
+        u: f64,
+        ndu: &mut [f64; WIDTH * WIDTH],
+    ) -> Result<(), NurbsError> {
+        let at_ = |j: usize, r: usize| -> Result<usize, NurbsError> { add(mul(j, WIDTH)?, r) };
+        let u_ = &self.knots;
+        let mut left = [0.0_f64; WIDTH];
+        let mut right = [0.0_f64; WIDTH];
+        set(ndu, 0, 1.0)?;
+        for j in 1..=self.degree {
+            set(&mut left, j, u - get(u_, sub(add(span, 1)?, j)?)?)?;
+            set(&mut right, j, get(u_, add(span, j)?)? - u)?;
+            let mut saved = 0.0;
+            for r in 0..j {
+                let ri = get(&right, add(r, 1)?)?;
+                let le = get(&left, sub(j, r)?)?;
+                let sum = ri + le;
+                let delta = if CHECKED && !sum.is_finite() {
+                    self.width(span, j, r)?
+                } else {
+                    sum
+                };
+                set(ndu, at_(j, r)?, delta)?;
+                let prev = get(ndu, at_(r, sub(j, 1)?)?)?;
+                set(ndu, at_(r, j)?, saved + prev * (ri / delta))?;
+                saved = prev * (le / delta);
+            }
+            set(ndu, at_(j, j)?, saved)?;
+        }
+        Ok(())
     }
 
     /// The basis function `N_i` at `u` (A2.4).

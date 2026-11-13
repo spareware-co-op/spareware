@@ -170,6 +170,10 @@ impl<const D: usize> Trimmed<D> {
 }
 
 impl<const D: usize> ParamCurve<D> for Trimmed<D> {
+    fn breaks(&self) -> Vec<f64> {
+        self.basis.breaks()
+    }
+
     fn domain(&self) -> (f64, f64) {
         self.interval
     }

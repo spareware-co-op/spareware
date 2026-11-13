@@ -24,7 +24,8 @@
 //! Cost: the tables are static. Finding a name scans them once (a few hundred entries), and
 //! preparing a benchmark builds its batch, O([`inputs::BATCH`]).
 //!
-//! Covers: make.box, make.cylinder, transform.move, transform.rotate.
+//! Covers: make.box, make.cylinder, query.area, query.bounding_box, query.exactness, query.faces,
+//! query.validity, query.volume, transform.move, transform.rotate.
 
 use core::fmt;
 
@@ -438,6 +439,55 @@ pub static OPS: &[Op] = &[
     Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
     Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
     Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
+    // geom-format's CBOR decoder and text form (piece G91; decision 32.46).
+    Op { group: "cbor", name: "check", measures: "geom_format::decode::check", classes: T, prepare: |c| bind(inputs::cbor::check(c), kernels::cbor::check) },
+    Op { group: "cbor", name: "int_column", measures: "geom_format::column::int_column", classes: T, prepare: |c| bind(inputs::cbor::int_column(c), kernels::cbor::int_column) },
+    Op { group: "cbor", name: "float_column", measures: "geom_format::column::float_column", classes: T, prepare: |c| bind(inputs::cbor::float_column(c), kernels::cbor::float_column) },
+    Op { group: "cbor", name: "to_text", measures: "geom_format::text::to_text", classes: T, prepare: |c| bind(inputs::cbor::to_text(c), kernels::cbor::to_text) },
+    Op { group: "cbor", name: "from_text", measures: "geom_format::parse::from_text", classes: T, prepare: |c| bind(inputs::cbor::from_text(c), kernels::cbor::from_text) },
+    // geom-format's record layer (piece G92; decision 32.46).
+    Op { group: "record", name: "encode", measures: "geom_format::Record::encode", classes: T, prepare: |c| bind(inputs::records::record(c), kernels::records::record_encode) },
+    Op { group: "record", name: "decode", measures: "geom_format::Record::decode", classes: T, prepare: |c| bind(inputs::records::record_bytes(c), kernels::records::record_decode) },
+    Op { group: "record", name: "file_write", measures: "geom_format::file::write", classes: T, prepare: |c| bind(inputs::records::file_parts(c), kernels::records::file_write) },
+    Op { group: "record", name: "file_read", measures: "geom_format::file::read", classes: T, prepare: |c| bind(inputs::records::file(c), kernels::records::file_read) },
+    // geom-format's body records (piece G94; decision 32.46).
+    Op { group: "body_record", name: "write", measures: "geom_format::body::write_body", classes: T, prepare: |c| bind(inputs::records::boxes(c), kernels::records::body_write) },
+    Op { group: "body_record", name: "read", measures: "geom_format::body::read_body", classes: T, prepare: |c| bind(inputs::records::stored(c), kernels::records::body_read) },
+    // geom-format's name and history records (piece G95; decision 32.46).
+    Op { group: "name_record", name: "names_write", measures: "geom_format::names::names_record", classes: T, prepare: |c| bind(inputs::records::graph(c), kernels::records::names_write) },
+    Op { group: "name_record", name: "names_read", measures: "geom_format::names::read_names", classes: T, prepare: |c| bind(inputs::records::names_payload(c), kernels::records::names_read) },
+    Op { group: "name_record", name: "history_write", measures: "geom_format::history::history_record", classes: T, prepare: |c| bind(inputs::records::history(c), kernels::records::history_write) },
+    Op { group: "name_record", name: "history_read", measures: "geom_format::history::read_history", classes: T, prepare: |c| bind(inputs::records::history_payload(c), kernels::records::history_read) },
+    // geom-format's operation records (piece G96; decision 32.46).
+    Op { group: "op_record", name: "write", measures: "geom_format::operation::operation_record", classes: T, prepare: |c| bind(inputs::records::operation(c), kernels::records::op_write) },
+    Op { group: "op_record", name: "read", measures: "geom_format::operation::read_operation", classes: T, prepare: |c| bind(inputs::records::operation_payload(c), kernels::records::op_read) },
+    // geom-format's containers and trust on open (piece G108; decision 32.46).
+    Op { group: "open", name: "from_file", measures: "geom_format::Container::from_file", classes: T, prepare: |c| bind(inputs::records::read_file(c), kernels::records::from_file) },
+    Op { group: "open", name: "known", measures: "geom_format::trust::open", classes: T, prepare: |c| bind(inputs::records::container("open::known", c), kernels::records::open_known) },
+    Op { group: "open", name: "unknown", measures: "geom_format::trust::open", classes: T, prepare: |c| bind(inputs::records::container("open::unknown", c), kernels::records::open_unknown) },
+    // The core queries (piece G102; decision 32.46): each of the six on a built box or prism.
+    Op { group: "query", name: "area", measures: "geom_topo::query_ops::twice_area", classes: T, prepare: |c| bind(inputs::query::faces(c), kernels::query::areas) },
+    Op { group: "query", name: "bounding_box", measures: "geom_topo::query_ops::bounding_box", classes: T, prepare: |c| bind(inputs::query::boxes(c), kernels::query::boxes) },
+    Op { group: "query", name: "exactness", measures: "geom_check::query::exactness", classes: T, prepare: |c| bind(inputs::query::reports(c), kernels::query::reports) },
+    Op { group: "query", name: "faces", measures: "geom_name::faces::faces", classes: T, prepare: |c| bind(inputs::query::listed(c), kernels::query::faces) },
+    Op { group: "query", name: "validity", measures: "geom_check::query::validity", classes: T, prepare: |c| bind(inputs::query::validities(c), kernels::query::validities) },
+    Op { group: "query", name: "volume", measures: "geom_topo::query_ops::six_volume", classes: T, prepare: |c| bind(inputs::query::volumes(c), kernels::query::volumes) },
+    // geom-op's canonical encoder and SHA-256 (piece G86; decision 32.46).
+    Op { group: "encoder", name: "map", measures: "geom_op::Encoder::map", classes: T, prepare: |c| bind(inputs::encoder::maps(c), kernels::encoder::maps) },
+    Op { group: "encoder", name: "float", measures: "geom_op::Encoder::float", classes: T, prepare: |c| bind(inputs::encoder::floats(c), kernels::encoder::floats) },
+    Op { group: "encoder", name: "sha256", measures: "geom_op::hash::sha256", classes: T, prepare: |c| bind(inputs::encoder::messages(c), kernels::encoder::hashes) },
+    // Persistent names (piece G87; decision 32.46): a name's ID, and names interned in a graph.
+    Op { group: "names", name: "name_id", measures: "geom_op::TopoName::id", classes: T, prepare: |c| bind(inputs::naming::names(c), kernels::naming::name_ids) },
+    Op { group: "names", name: "intern", measures: "geom_name::NameGraph::intern", classes: T, prepare: |c| bind(inputs::naming::groups(c), kernels::naming::interned) },
+    // History records (piece G88; decision 32.46): a step's laws checked, and two steps composed.
+    Op { group: "history", name: "check", measures: "geom_op::History::check", classes: T, prepare: |c| bind(inputs::naming::checks(c), kernels::naming::checks) },
+    Op { group: "history", name: "compose", measures: "geom_op::Relations::then", classes: T, prepare: |c| bind(inputs::naming::compositions(c), kernels::naming::composed) },
+    // Reference resolution (piece G89; decision 32.46): each of its paths in turn.
+    Op { group: "resolve", name: "reference", measures: "geom_name::resolve::resolve", classes: T, prepare: |c| bind(inputs::naming::scenes(c), kernels::naming::resolved) },
+    // PruneHistory and its record (piece G109; decision 32.46).
+    Op { group: "prune", name: "steps", measures: "geom_name::prune::prune", classes: T, prepare: |c| bind(inputs::naming::prunes(c), kernels::naming::pruned) },
+    Op { group: "prune", name: "record_write", measures: "geom_format::pruned::pruned_record", classes: T, prepare: |c| bind(inputs::naming::pruned(c), kernels::naming::record_write) },
+    Op { group: "prune", name: "record_read", measures: "geom_format::pruned::read_pruned", classes: T, prepare: |c| bind(inputs::naming::pruned_payloads(c), kernels::naming::record_read) },
     // Root finding and quadrature (piece G51; decision 32.46).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -449,7 +499,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 36] = [
+pub const GROUPS: [&str; 48] = [
     "predicate",
     "sign",
     "wide",
@@ -486,6 +536,18 @@ pub const GROUPS: [&str; 36] = [
     "linalg",
     "helper",
     "make",
+    "cbor",
+    "record",
+    "body_record",
+    "name_record",
+    "op_record",
+    "open",
+    "query",
+    "encoder",
+    "names",
+    "history",
+    "resolve",
+    "prune",
 ];
 
 /// The group of the growth checks.

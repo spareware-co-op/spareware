@@ -768,6 +768,39 @@ fn make_context() -> geom_op::OpContext<'static> {
     )
 }
 
+/// A meter under no limit, as the `geom-format` benchmarks run each call.
+fn unlimited() -> geom_run::WorkMeter<'static> {
+    geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED)
+}
+
+/// A container opened at `trust`, as the open benchmarks read it: each root's body's content ID
+/// and where it stands (0 usable, 1 pending, 2 damaged, 3 failed).
+fn open_roots(
+    c: &geom_format::container::Container,
+    trust: geom_format::trust::Trust,
+) -> Option<Vec<(Option<geom_format::content::ContentId>, u64)>> {
+    use geom_format::trust::State;
+    let mut pass = inputs::records::Pass;
+    let opened =
+        geom_format::trust::open(c, &c.document, &c.roots, trust, &mut pass, &mut unlimited())
+            .ok()?;
+    Some(
+        opened
+            .entries
+            .into_iter()
+            .map(|entry| {
+                let state = match entry.state {
+                    State::Usable => 0,
+                    State::Pending => 1,
+                    State::Damaged(_) => 2,
+                    State::Failed(_) => 3,
+                };
+                (entry.id, state)
+            })
+            .collect(),
+    )
+}
+
 /// What a `geom-make` result is read by.
 fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
     let a = out.result.body.arenas();
@@ -777,6 +810,174 @@ fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
         a.rows(geom_topo::Arena::Vertex),
         u32::from(out.exactness.rank()),
     ]
+}
+
+/// The digest of a benchmark of the encoder, names, history, resolution or `PruneHistory` (pieces
+/// G86 to G89 and G109), from each function called directly on its batch.
+fn naming_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
+    use geom_bench::inputs::encoder as ie;
+    use geom_bench::inputs::naming as inm;
+    use geom_op::cbor::Encoder;
+    let item = |write: &dyn Fn(&mut Encoder) -> Option<()>| -> Option<Vec<u8>> {
+        let mut e = Encoder::new();
+        write(&mut e)?;
+        Some(e.finish().ok()?.into_bytes())
+    };
+    Some(match (group, name) {
+        ("encoder", "map") => fold(ie::maps(class).iter().map(|(int, float, text, set)| {
+            let items: Option<Vec<_>> = set
+                .iter()
+                .map(|&v| {
+                    let mut i = Encoder::new();
+                    i.uint(v).ok()?;
+                    i.finish().ok()
+                })
+                .collect();
+            let items = items?;
+            item(&|e| {
+                e.map(4).ok()?;
+                e.key(0).ok()?;
+                e.int(i128::from(*int)).ok()?;
+                e.key(1).ok()?;
+                e.float(*float).ok()?;
+                e.key(2).ok()?;
+                e.text(text).ok()?;
+                e.key(3).ok()?;
+                e.set(items.clone()).ok()
+            })
+        })),
+        ("encoder", "float") => fold(ie::floats(class).iter().map(|row| {
+            item(&|e| {
+                e.array(row.len() as u64).ok()?;
+                row.iter().try_for_each(|&x| e.float(x).ok())
+            })
+        })),
+        ("encoder", "sha256") => fold(ie::messages(class).iter().map(|m| geom_op::hash::sha256(m))),
+        ("names", "name_id") => fold(inm::names(class).iter().map(|n| n.id().ok())),
+        ("names", "intern") => fold(inm::groups(class).iter().map(|names| {
+            let mut graph = geom_name::NameGraph::new();
+            for n in names {
+                graph.intern(n.clone()).ok()?;
+            }
+            Some(graph)
+        })),
+        ("history", "check") => fold(
+            inm::checks(class)
+                .iter()
+                .map(|(h, inputs)| h.check(inputs).is_ok()),
+        ),
+        ("history", "compose") => fold(inm::compositions(class).iter().map(|(a, b)| a.then(b))),
+        ("resolve", "reference") => fold(inm::scenes(class).iter().map(|s| {
+            let body = geom_name::Body {
+                names: &s.chain.body,
+                carriers: &s.chain.carriers,
+                history: &s.history,
+                graph: &s.chain.graph,
+            };
+            geom_name::resolve(
+                &s.reference,
+                &geom_name::Lookup::Found {
+                    body,
+                    version: None,
+                },
+            )
+        })),
+        ("prune", "steps") => {
+            let ctx = geom_op::OpContext::new(
+                geom_op::OpPath::new(geom_op::OpId::from_bytes([9; 16])),
+                geom_run::Budget::UNLIMITED,
+            );
+            fold(
+                inm::prunes(class).iter().map(|(steps, held)| {
+                    geom_name::prune(&ctx, steps, held).ok().map(|o| o.result)
+                }),
+            )
+        }
+        ("prune", "record_write") => fold(
+            inm::pruned(class)
+                .iter()
+                .map(|(by, held, steps)| geom_format::pruned::pruned_record(by, held, steps).ok()),
+        ),
+        ("prune", "record_read") => fold(
+            inm::pruned_payloads(class)
+                .iter()
+                .map(|p| geom_format::pruned::read_pruned(p, &mut unlimited()).ok()),
+        ),
+        _ => return None,
+    })
+}
+
+/// The digest of the core query benchmark `query/name/class`, from each query called directly on
+/// its batch, each answer read as the benchmark reads it, with its class's rank.
+fn query_digest(name: &str, class: Class) -> Option<Digest> {
+    use geom_check::query::{exactness, validity};
+    use geom_topo::query_ops::{bounding_box, six_volume, twice_area};
+    let ctx = make_context();
+    let rank = |e: geom_num::Exactness| u32::from(e.rank());
+    Some(match name {
+        "area" => fold(inputs::query::faces(class).iter().map(|(body, face)| {
+            let face = geom_topo::Ix::new(*face).unwrap();
+            twice_area(&ctx, &body.result.body, face, body.exactness)
+                .map(|a| (a.result, rank(a.exactness)))
+        })),
+        "volume" => fold(inputs::query::volumes(class).iter().map(|body| {
+            six_volume(&ctx, &body.result.body, body.exactness)
+                .map(|v| (v.result, rank(v.exactness)))
+        })),
+        "bounding_box" => fold(inputs::query::boxes(class).iter().map(|body| {
+            bounding_box(&ctx, &body.result.body, body.exactness).map(|b| {
+                let corners = b
+                    .result
+                    .map(|bb| ([bb.bound.min(), bb.bound.max()], bb.tight));
+                (corners, rank(b.exactness))
+            })
+        })),
+        "exactness" => fold(inputs::query::reports(class).iter().map(|body| {
+            exactness(&ctx, &body.result.body, body.exactness).map(|e| {
+                let r = &e.result;
+                let counts = [
+                    r.flat_faces,
+                    r.curved_faces,
+                    r.straight_edges,
+                    r.curved_edges,
+                ];
+                (counts, r.report.passed(), rank(e.exactness))
+            })
+        })),
+        "faces" => fold(inputs::query::listed(class).iter().map(|body| {
+            geom_name::faces(
+                &ctx,
+                &body.result.body,
+                &[&body.result.history],
+                body.exactness,
+            )
+            .map(|listed| {
+                let rows: Vec<[u32; 2]> = listed
+                    .result
+                    .iter()
+                    .map(|f| [f.row.loops, u32::try_from(f.roles.len()).unwrap()])
+                    .collect();
+                (rows, rank(listed.exactness))
+            })
+        })),
+        "validity" => fold(inputs::query::validities(class).iter().map(|body| {
+            validity(
+                &ctx,
+                &body.result.body,
+                body.exactness,
+                geom_check::Level::Full,
+            )
+            .map(|v| {
+                let r = &v.result;
+                (
+                    r.passed(),
+                    r.deferred(),
+                    u32::try_from(r.ran().count()).unwrap(),
+                )
+            })
+        })),
+        _ => return None,
+    })
 }
 
 /// The output digest of one run of `kernel` over `batch`, as a benchmark computes it.
@@ -1457,6 +1658,105 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                             .map(|out| make_counts(&out))
                     }),
             )
+        }
+        ("cbor", "check") => fold(inputs::cbor::check(class).iter().map(|bytes| {
+            geom_format::cbor::check(bytes, inputs::cbor::DEPTH, &mut unlimited()).is_ok()
+        })),
+        ("cbor", "int_column") => fold(inputs::cbor::int_column(class).iter().map(|bytes| {
+            let mut rows = Vec::new();
+            geom_format::cbor::int_column(bytes, &mut rows, &mut unlimited())
+                .ok()
+                .map(|()| rows)
+        })),
+        ("cbor", "float_column") => fold(inputs::cbor::float_column(class).iter().map(|bytes| {
+            let mut rows = Vec::new();
+            geom_format::cbor::float_column(bytes, &mut rows, &mut unlimited())
+                .ok()
+                .map(|()| rows)
+        })),
+        ("cbor", "to_text") => fold(inputs::cbor::to_text(class).iter().map(|bytes| {
+            geom_format::cbor::to_text(bytes, inputs::cbor::DEPTH, &mut unlimited()).ok()
+        })),
+        ("cbor", "from_text") => fold(inputs::cbor::from_text(class).iter().map(|text| {
+            geom_format::cbor::from_text(text, inputs::cbor::DEPTH, &mut unlimited()).ok()
+        })),
+        ("record", "encode") => fold(
+            inputs::records::record(class)
+                .iter()
+                .map(|record| record.encode(&mut unlimited()).ok()),
+        ),
+        ("record", "decode") => fold(inputs::records::record_bytes(class).iter().map(|bytes| {
+            geom_format::record::Record::decode(bytes, &mut unlimited())
+                .ok()
+                .map(|(record, used)| (record, used as u64))
+        })),
+        ("record", "file_write") => fold(inputs::records::file_parts(class).iter().map(
+            |(header, records)| geom_format::file::write(header, records, &mut unlimited()).ok(),
+        )),
+        ("record", "file_read") => fold(inputs::records::file(class).iter().map(|bytes| {
+            let mut source = geom_format::source::SliceSource::new(bytes);
+            geom_format::file::read(&mut source, |_, _| true, &mut unlimited()).ok()
+        })),
+        ("body_record", "write") => fold(
+            inputs::records::boxes(class)
+                .iter()
+                .map(|body| geom_format::body::write_body(body, &mut unlimited()).ok()),
+        ),
+        ("body_record", "read") => fold(
+            inputs::records::stored(class)
+                .iter()
+                .map(|stored| geom_format::body::read_body(stored, &mut unlimited()).ok()),
+        ),
+        ("name_record", "names_write") => fold(
+            inputs::records::graph(class)
+                .iter()
+                .map(|graph| geom_format::names::names_record(graph).ok()),
+        ),
+        ("name_record", "names_read") => fold(
+            inputs::records::names_payload(class)
+                .iter()
+                .map(|payload| geom_format::names::read_names(payload, 1, &mut unlimited()).ok()),
+        ),
+        ("name_record", "history_write") => fold(
+            inputs::records::history(class)
+                .iter()
+                .map(|(op, history)| geom_format::history::history_record(op, history).ok()),
+        ),
+        ("name_record", "history_read") => fold(
+            inputs::records::history_payload(class)
+                .iter()
+                .map(|payload| geom_format::history::read_history(payload, &mut unlimited()).ok()),
+        ),
+        ("op_record", "write") => fold(
+            inputs::records::operation(class)
+                .iter()
+                .map(|op| geom_format::operation::operation_record(op, &mut unlimited()).ok()),
+        ),
+        ("op_record", "read") => fold(
+            inputs::records::operation_payload(class)
+                .iter()
+                .map(|payload| {
+                    geom_format::operation::read_operation(payload, &mut unlimited()).ok()
+                }),
+        ),
+        ("open", "from_file") => {
+            fold(inputs::records::read_file(class).iter().map(|file| {
+                geom_format::container::Container::from_file(file, &mut unlimited()).ok()
+            }))
+        }
+        ("open", "known") => fold(
+            inputs::records::container("open::known", class)
+                .iter()
+                .map(|c| open_roots(c, geom_format::trust::Trust::Known)),
+        ),
+        ("open", "unknown") => fold(
+            inputs::records::container("open::unknown", class)
+                .iter()
+                .map(|c| open_roots(c, geom_format::trust::Trust::Unknown)),
+        ),
+        ("query", _) => query_digest(name, class)?,
+        ("encoder" | "names" | "history" | "resolve" | "prune", _) => {
+            naming_digest(group, name, class)?
         }
         ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
             |scene| -> Result<u64, geom_name::AttrError> {

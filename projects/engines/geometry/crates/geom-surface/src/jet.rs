@@ -68,6 +68,19 @@ fn factorial(n: usize) -> Result<f64, CurveError> {
     Ok(f)
 }
 
+/// Refuses a jet of order `k` past [`MAX_ORDER`] before any work, as [`Jet::from_partials`]
+/// refuses it: by the refusal of its first factorial past [`MAX_ORDER`], whatever `k` is.
+///
+/// # Errors
+///
+/// [`NurbsError::DerivativeOrder`] above [`MAX_ORDER`].
+pub(crate) fn check_order(k: usize) -> Result<(), CurveError> {
+    if k > MAX_ORDER {
+        factorial(MAX_ORDER.saturating_add(1))?;
+    }
+    Ok(())
+}
+
 /// The whole number k as a double (k is an order, a few at most).
 fn whole(k: usize) -> Result<f64, CurveError> {
     u32::try_from(k)

@@ -564,6 +564,26 @@
           "target": "lib"
         },
         {
+          "cost": "O([`BATCH`](super::BATCH)) draws and one encoding per input, once per batch, outside every measured run.",
+          "does": "[`item`] writes an array of [`MAPS`] maps, each of an integer, a text string of three letters and a float, the item `benches/cbor.rs` in `geom-format` builds, cut to a few maps; [`check`] and [`to_text`] give one such item per call, [`from_text`] its text, and [`int_column`] and [`float_column`] the little-endian rows of a column of [`ROWS`] values, as a tag 79 or tag 86 byte string holds them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/cbor.rs",
+          "guarantees": [
+            "every typical batch is full and every call succeeds (`tests/inputs.rs`), so each benchmark measures the path that accepts: every item is canonical, every text reads back to its item, every row is a whole value and every float is finite. Only the typical class exists: the refusals are tested in `geom-format` itself (`tests/attack_g91.rs`)."
+          ],
+          "job": "Inputs for `geom-format`'s CBOR decoder and text form (piece G91, decision 32.46): small items of SKG's deterministic CBOR, their text, and the rows of short columns.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the items and columns of `geom-format`'s wall-clock benchmark of piece G91 (`benches/cbor.rs`), cut small, so a batch costs from tens of thousands of instructions (a column's rows) to a few million (reading a text), each measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`. The board's 500 MB/s per core for column decoding is a wall-clock reading for the reference runner (piece G107), not a count: this group gates the instructions only."
+          },
+          "path": "geom_bench::inputs::cbor",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a batch of up to 64 inputs, built once per benchmark run.",
           "does": null,
           "family": [],
@@ -641,6 +661,26 @@
             "text": "boundary-value analysis (<https://en.wikipedia.org/wiki/Boundary-value_analysis>) on the paths of the error-free transformations of Dekker (1971, <https://doi.org/10.1007/BF01397083>) and Knuth (volume 2, section 4.2.2), as Shewchuk states them (1997, <https://doi.org/10.1007/PL00009321>) and `geom_num::eft` extends them to every double."
           },
           "path": "geom_bench::inputs::eft",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": "[`maps`] draws, per input, an integer, a double, a short text and a set of small integers, which the benchmark writes as a map of four keys; [`floats`] draws eight doubles per input, in turn ones that binary16 holds, ones that binary32 holds and ones only binary64 holds, so the encoder's narrowing takes each of its three ends; [`messages`] draws 256 bytes per input for SHA-256, four of its 64-byte blocks and the padding block.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/encoder.rs",
+          "guarantees": [
+            "every typical batch is full, every value is finite and every set holds distinct items, so every call succeeds (`tests/inputs.rs`), and each input has its own draws. Only the typical class exists: the encoder's refusals (a non-finite double, a repeated set item, a key out of order, an item written out of place) are tested in `geom-op` itself."
+          ],
+          "job": "Inputs for `geom-op`'s canonical CBOR encoder and SHA-256 (piece G86, decision 32.46): a small map of every kind of scalar and a set, a row of doubles, and a message to hash.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the values of `geom-op`'s own encoder tests (`tests/cbor.rs`) and of a names record, cut small; each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::encoder",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -930,6 +970,26 @@
           "target": "lib"
         },
         {
+          "cost": "one chain of a dozen names built per input, once per batch, outside every measured run.",
+          "does": "[`a_chain`] builds one element's history, as an operation log records it: five faces made by a first operation, then a cut that keeps one face, modifies one, splits one in two by a tool, deletes one while generating a cap from it and keeps the last, then a step that modifies the modified face again and deletes the last; every name is interned in the element's name graph, and the body after it holds a carrier for each face. From it, [`names`] are the names of each kind, [`groups`] the names a graph interns, [`checks`] and [`compositions`] its steps for the history laws and for composing them, [`scenes`] references to its faces, in turn one in the body, one modified, one split and wanted whole, one split and wanted by its carrier, one deleted and one split and wanted alone, and [`prunes`], [`pruned`] and [`pruned_payloads`] its steps pruned for a held face. Each input draws its own operation paths, roles and tools, so no two are alike.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/naming.rs",
+          "guarantees": [
+            "every typical batch is full and every call succeeds (`tests/inputs.rs`): each name has an ID, each graph interns its names, each history keeps its laws, each prune runs inside its unlimited budget, and each pruned record reads back. Only the typical class exists: the refusals are tested in `geom-op`, `geom-name` and `geom-format` themselves."
+          ],
+          "job": "Inputs for persistent names, history records, reference resolution and `PruneHistory` (pieces G87, G88, G89 and G109, decision 32.46): names of every kind, an element's history over two operations, references into it, and that history pruned.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-name`'s and `geom-op`'s own tests (`tests/attack_g87.rs`, `tests/attack_g89.rs`, `tests/prune.rs`; `geom-op`'s `tests/history.rs`) and `geom-format`'s `tests/pruned.rs`, cut to one small element; each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::naming",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -1032,6 +1092,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] and one body built per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/query.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the query's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for the core queries (piece G102, decision 32.46): each of the six queries on a built body, half of them boxes and half prisms on a right triangle, and a face of each for the area.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the bodies of `engine-geometry`'s contract and query laws (`tests/contract_laws.rs`, `tests/query_laws.rs`), under an unlimited budget, in the build a program ships. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::query",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -1047,6 +1127,26 @@
             "text": "IEEE 754-2019 totalOrder (section 5.10) as Rust's `f64::total_cmp` implements it (<https://doc.rust-lang.org/std/primitive.f64.html#method.total_cmp>); one input per case of the ordering, including the signed zeros."
           },
           "path": "geom_bench::inputs::real",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O([`BATCH`](super::BATCH)) draws, and for the bodies and containers one box built and written per input, once per batch, outside every measured run.",
+          "does": "[`record`] makes a record holding a short `f64` column, as the record layer's own benchmark (`benches/records.rs` in `geom-format`) does; [`file`] writes a header and two such records as a file. [`boxes`] builds a box with `geom-make`, a small whole solid; [`stored`] is its records. [`graph`] interns three names of three kinds and [`history`] is one operation's history over a few names, as `tests/names_history.rs` writes them; [`operation`] is one authored operation, as `tests/operation.rs` writes it. [`container`] holds a box's records and its validation stamp, read from a file as `benches/open.rs` does, and [`Pass`] is the checker it is opened with. Each input draws its own coordinates, names and values, so no two are alike.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/records.rs",
+          "guarantees": [
+            "every typical batch is full and every call succeeds (`tests/inputs.rs`), so each benchmark measures the path that accepts: every record and file reads back, every body rebuilds, every name's ID matches its bytes, and every root of a container opens as its trust asks. Only the typical class exists: the refusals are tested in `geom-format` itself."
+          ],
+          "job": "Inputs for `geom-format`'s file readers and writers (pieces G92, G94, G95, G96 and G108, decision 32.46): records and files, a body's records, names and history records, operation records, and a container to open at either trust.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-format`'s own tests and wall-clock benchmarks of the pieces (`tests/record_layer.rs`, `tests/body_records.rs`, `tests/names_history.rs`, `tests/operation.rs`, `tests/trust.rs`; `benches/records.rs`, `benches/open.rs`), cut small: a short column, a box (the smallest whole solid) and a few names. A batch of records, names or operations costs a few hundred thousand to a few million instructions, and one of bodies or containers some tens of millions, as a box's records are; each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`. The checker passes every body for one unit of work, as `benches/open.rs`'s does, so an open measures reading, rebuilding and the open's own bookkeeping; the checker's cost is `geom-check`'s to measure."
+          },
+          "path": "geom_bench::inputs::records",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1865,7 +1965,7 @@
         },
         {
           "cost": "the sum of the groups run, each linear in the body's rows except group 3, quadratic in faces and in shells; it reserves [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (at most three per vertex and one per edge), shared by every check.",
-          "does": "[`check`] runs, for each group of [`Group::ALL`] the [`Level`] asks for, the group's checks on the body and the exactness the body is recorded with, and reports every fault in the order found. A group the level asks for that this checker does not have yet is listed as missing in the report, never run and never counted as passed. An operation calls it on its result before returning it, at [`Level::of_build`] (8.3; principle 4); an import, and any caller who asks, call it at [`Level::Full`].",
+          "does": "[`check`] runs, for each group of [`Group::ALL`] the [`Level`] asks for, the group's checks on the body and the exactness the body is recorded with, and reports every fault in the order found. A group the level asks for that this checker does not have yet is listed as missing in the report, never run and never counted as passed. An operation calls it on its result before returning it (8.3; principle 4): at [`Level::of_build`] where the result passes groups 2 and 3 by construction, at [`Level::Full`] where it does not, so that no build answers differently from another (decision 32.48). An import, and any caller who asks, call it at [`Level::Full`].",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/run.rs",
           "guarantees": [
@@ -2215,6 +2315,7 @@
           "file": "projects/engines/geometry/crates/geom-curve/src/bulge.rs",
           "guarantees": [
             "**Exact definition, certified evaluation.** Points, derivatives of every order (Leibniz's rule on W·C = A) and bounds over spans are interval evaluations of those rational functions.",
+            "**A span of one vertex is bounded from both sides.** The tangent turns at a vertex, so a bound over the vertex alone is the hull of the segment before it and the segment after it there, as the trait's rule for a span of one parameter asks ([`ParamCurve`]).",
             "**An exact NURBS form.** The segments are rational quadratic Bezier pieces on the same parameter; an arc whose middle weight is low (a semicircle or more) is first halved, or quartered, by de Casteljau's algorithm at dyadic parameters, which keeps every weight positive. The deviation bounds only the rounding of the pieces' points and weights.",
             "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform moves its NURBS form, the form's deviation stretched by the transform (at most by its linear part's Frobenius norm) plus the move's. A grid transform that moves every vertex exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Splits are trimmed polylines.** A split leaves the polyline untouched and trims it (`crate::trimmed`); a reversal reverses the vertices and negates the bulges, exactly."
@@ -2240,6 +2341,7 @@
           "guarantees": [
             "**Exact definition.** Evaluation at a parameter whose segment parameter is exact is the segment's; otherwise the segment parameter is enclosed and the segment bounded over it, so enclosures stay certified; derivatives carry the affine map's factor.",
             "**Certified conversion.** The deviation adds, per segment, the segment's conversion, elevation and Bezier extraction, the joint's gap and weight rescaling (the rational bound of `crate::rational`), and the rounding of shifted knots (a Bezier piece reparametrised by e at its ends moves by at most |N′|·e).",
+            "**A span of one joint is bounded from both sides.** The tangent may turn at a joint, and a joint may have a gap, so a bound over the joint alone holds the end of the segment before it and the start of the segment after it, as the trait's rule for a span of one parameter asks ([`ParamCurve`]); so does a bound over one break of a segment's own curve.",
             "**Exact operations where they can be.** A split at a joint, a reversal and a split whose segment parameter is exact change no point; a transform moves each segment with its own deviation, the joints' gaps recomputed within it."
           ],
           "job": "The composite curve kind: trimmed curves joined end to end into one curve, and its conversion to one NURBS curve.",
@@ -2279,8 +2381,8 @@
           "target": "lib"
         },
         {
-          "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times.",
-          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30 of the largest value at that parameter, which catches a wrong formula, not rounding.",
+          "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times; and for each of at most sixteen of the kind's breaks, two enclosures and three bounds.",
+          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The two laws of bounds are also checked over the span that is one parameter alone, at each parameter given and at the kind's own breaks ([`ParamCurve::breaks`]): there a bound must be a box that holds the value from both sides (the trait's rule for spans). The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30 of the largest value at that parameter, which catches a wrong formula, not rounding.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
           "guarantees": [
@@ -2318,7 +2420,7 @@
           "target": "lib"
         },
         {
-          "cost": "a few interval evaluations of g, one `atan2` and at most sixteen evaluations per family; the pieces' route at most 64 × 9 evaluations of g and of g′.",
+          "cost": "a few interval evaluations of g, one `atan2` and at most sixteen evaluations per family; the pieces' route at most 64 × 9 evaluations of g and of g′. One work unit per extent and per piece tried, and [`FAR_CORNER`] more for each corner of an arctangent's box that the certified arctangent takes to its 192-bit path, where it spends forty times its usual instructions.",
           "does": "[`Scalar`] names the functions the analytic kinds are made of, one coordinate of one derivative at a time, each with interval coefficients (enclosures of the exact ones the stored data define), and the closed form of the zeros of its derivative:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/extent.rs",
@@ -2547,6 +2649,7 @@
           "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
           "guarantees": [
             "**Certified.** Every enclosure and bound holds the exact value; a split's deviation is the certified rounding of the knot insertion; a transform's is the largest certified error of a control point's image, which bounds the curve's because a NURBS point is a weighted average of its control points with weights `N_i`·`w_i` ≥ 0 (The NURBS Book, P4.3 and P4.4).",
+            "**A span of one parameter is bounded from both sides.** A derivative bound over one parameter is the hull of every Bezier piece that touches it, so both one-sided derivatives at a knot; a bound on the points there is the point, and at a knot repeated degree + 1 times inside the domain, where the curve itself parts, the point from each side (the trait's rule for a span of one parameter, [`ParamCurve`]).",
             "**Exact where the operation is.** Conversion and reversal change no bit (deviation 0).",
             "**Refused outside the domain.** A parameter or span outside it is an error, never clamped."
           ],
@@ -2569,6 +2672,7 @@
           "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
           "guarantees": [
             "**Certified, or refused.** Where the normal may vanish (a cusp of the basis, or a span too wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused, never guessed; a bound on the points still holds there, from the basis's bound widened by the offset's largest size.",
+            "**A span of one break is bounded from both sides.** The offsets' slopes jump at a station and the basis's tangent may turn at one of its breaks, so a derivative bound over one such parameter alone holds the derivative from each side, and a bound on the points there holds the offset of each side, as the trait's rule for a span of one parameter asks ([`ParamCurve`]).",
             "**Converted wherever it is defined.** Where the normal vanishes, or cannot be told from zero even over the narrowest piece the conversion cuts (the domain's width times 2^−52, or two neighbouring doubles where those are farther apart), the offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction), and the NURBS form is refused as `Degenerate`, never as `Unbounded`, which names an infinite domain. A normal that only comes near zero, as on a nearly flat helix offset along its axis, is cut finer there until its pieces are bounded (issue #526); only a remainder that overflows the doubles even on the narrowest pieces is refused, as `NotFinite`.",
             "**Exact split and reversal.** A split trims the basis; a reversal reverses the basis and negates the distances (the left normal of the reversed curve is the right normal).",
             "**Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves exactly gives an offset (a mirror negating the side); any other transform gives the moved NURBS cache, its deviation the cache's stretched by the transform (at most by its linear part's Frobenius norm) plus the move's."
@@ -4620,6 +4724,28 @@
           "target": "bin"
         },
         {
+          "cost": "two reads of the records, and for an accepted body one write and two more reads, each linear in the body, under a work meter of [`WORK`] units each.",
+          "does": "[`decode`] splits the fuzzer's bytes into payloads, each a two-byte little-endian length and that many bytes: the first is a body index, the rest its chunks. [`harness`] makes them a `StoredBody` and reads it with `read_body`. A chunk is found by its payload's content ID, a SHA-256 digest no fuzzer forges, so before reading the harness writes each chunk's real digest over the digest the index lists in its place, and sets the index's `depends` to those IDs, as the writer does; the bytes around them stay exactly as the fuzzer gave them. The corpus starts from bodies `write_body` stored, so the fuzzer edits real chunks and the reader sees them past the hash.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/bodies.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (24.2 to 24.4, as the `body` module header states them): the same verdict twice, from `read_body` and from `chunk_ids`; a refusal's offset inside the payload it read; a body accepted writes with `write_body`, reads back equal, index for index, and its records write again to the same records, a fixed point."
+          ],
+          "job": "Fuzz target: `geom-format`'s body records, read from any index and chunks, give the same answer twice, refuse inside their input, and give back a body that writes and reads to itself.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `body` module header (chapter 24.2 to 24.4, `projects/engines/geometry/architecture/24-file-format-exchange.md`), driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::bodies",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
           "family": [],
@@ -4687,6 +4813,27 @@
           "target": "lib"
         },
         {
+          "cost": "about 40 details built and checked per input, the facade's schemas walked once and the chosen operations' tool descriptions written, parsed and written again, all twice; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: two operation paths (an operation's ID and up to [`MAX_LABELS`] labels each, step names drawn as any text, often printable, or batch keys); up to [`MAX_ERRORS`] errors, each a detail of any family (the parallel helper's stops, the numbers layer's failures, a batch's, the Make and the Query families') at one of the paths, with up to [`MAX_ITEMS`] entities, evidence values and remedies of every kind added and its message kept or replaced; up to [`MAX_DIAGNOSTICS`] warnings, with codes valid and not; an exactness class; a context's budget, precision, cancellation and tally; a choice of the facade's operations; and the bytes every detail of the contract is built from once more. [`check`] holds each to the laws below, and [`harness`] decodes and checks twice.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/contract.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below, and a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case. The laws, chapter 22's and the module headers' of `geom-op`'s G82 files: - *the kinds*: [`ErrorKind::ALL`] holds the thirteen kinds once each, in chapter 22's order, each named by its variant, and only `Cancelled` and `OutOfMemory` are not replayable; - *the error*: an error's kind is its detail's, whatever is added; it starts with the detail's message and remedies, keeps entities, evidence and remedies in the order given, and writes `kind at path: message`; the detail is its source; - *evidence and remedies as chapter 22 says*: every remedy a detail knows is of a form its kind's row allows (\"what the caller can do\"); a budget failure offers to raise exactly the limit it passed to what was used, to split the call and to preview; a defect offers a report; `Cancelled` and `OutOfMemory` offer nothing; a class not accepted offers to accept the class it carries; and the detail's message names its data (the limit, the used amount and the phase; the coordinate; the key; the input, count, class or piece); - *the details map by meaning*: every `NumError` lands on the kind chapter 22 gives it, and every conversion from the helper's errors keeps the stop it is; - *the schemas*: every error a schema of the facade's `OPERATIONS` lists is a detail the contract builds, of the kind the schema states, that offers at least one remedy; no schema lists `Cancelled` or `OutOfMemory`, or a detail twice; every warning code a schema lists is one a [`Diagnostic`] takes; and the MCP tool descriptions of any choice of operations parse as JSON, write and parse back to the same value, and give back each operation's name, version, errors with their kinds (each kind's name read back to the kind), warnings, classes, batch entry and inputs; - *text*: every value's text reads back to the value (integers, points, the length and its step, the interval's bounds bit for bit), evidence writes its name before its value, every remedy names its input, value, candidates in order, route, class, step, budget or piece, and two remedies write the same text only if they are equal; - *identity*: a step label is taken exactly when it is 1 to 64 bytes of printable ASCII not starting or ending with a space; a path keeps its labels in order, writes its ID's hex and its labels, contains exactly the paths that start with it, orders as its bytes and labels do, and its canonical encoding reads back to it; IDs and names write their sixteen bytes as hex; - *the context*: it holds its path, budget, precision (final unless a preview is asked), cancellation and tally, and its `Debug` shows whether it can be cancelled but never the cancellation's state; - *the output*: a warning is made exactly for a valid code, keeps its entities and evidence in order, and an output keeps its result, class and warnings in order; [`Class::of`] reads the class of any exactness; - *determinism*: the errors built twice from the case are equal and write the same text, and [`harness`] gives the same verdict twice."
+          ],
+          "job": "Fuzz target: the operation contract (piece G82). On any operation path, any error detail of any family with any entities, evidence, remedies and message added, any warnings, any context and any choice of the facade's operations, an error's kind is its detail's, it carries the data and the remedies chapter 22's table gives its kind, every value and remedy writes text that names what it holds, every schema the facade lists names details the contract has, with their kinds, and its tool description parses and round-trips, and the same input gives the same verdict twice.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "chapter 22's `OpError`, its table of base kinds with \"what the caller can do\" as the remedies' oracle, its mapping of the numbers layer's errors, and its rule that every operation is described as data from which the MCP tools are generated (`projects/engines/geometry/architecture/22-errors-queries-ai.md`), chapter 20.1's identities and section 32.19's canonical path, driven by coverage-guided fuzzing (28.5). The tool descriptions are written by `geom-gen`'s facade generator and read with `serde_json`; the canonical path is read with `ciborium-ll`, an encoder written elsewhere."
+          },
+          "path": "geom_fuzz::contract",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve kind (one of the 15 of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is built from, up to four parameters in its domain and a typed transform. [`check`] builds the kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.46).",
           "family": [],
@@ -4705,6 +4852,50 @@
             "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
           },
           "path": "geom_fuzz::curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each call does work linear in its arguments; each finished item is read twice, by ciborium-ll and by the decoder, each linear in its length, without recursion.",
+          "does": "[`harness`] reads the fuzzer's bytes as a stream of encoder calls, as `geom-op`'s `tests/fuzz.rs` does: each byte chooses the next call and the bytes after it give the call's arguments, so every call is tried in every place, refused ones included (NaN and the infinities, keys out of order or out of place, sets with repeats, items after the whole). Each item that finishes starts a new encoder and may be handed to later calls.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/encoder.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (the encoder's module header): a refused call leaves the encoder as it was, so a copy taken before the call finishes the same as the encoder after it; whatever finishes is one well-formed item with nothing after it, every length definite and every map's keys unsigned and ascending, and ciborium-ll, reading it head by head and writing each head again in its fewest bytes and each double as its shortest float, writes exactly the same bytes; and `geom-format`'s strict decoder (piece G91) accepts it whole."
+          ],
+          "job": "Fuzz target: `geom-op`'s canonical CBOR encoder, on any stream of calls, refuses without a trace and writes only canonical items.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8949#section-4.2.1",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the canonical form of RFC 8949 section 4.2.1 (<https://www.rfc-editor.org/rfc/rfc8949#section-4.2.1>) as chapter 24.3 restricts it (`projects/engines/geometry/architecture/24-file-format-exchange.md`), checked against an encoder written elsewhere, ciborium-ll 0.2.2 (the crate's dependencies), and against the kernel's own decoder, the property harness of `geom-op`'s `tests/fuzz.rs` made a fuzz target (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::encoder",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "at most [`MAX_STEPS`] operators, each followed by a count of the live rows and a copy of the editor; a publish, an edit and a second publish per publish step and at the end; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_STEPS`] steps of four bytes each, an operator and the bytes that pick its rows. A row is picked from all the rows of its arena, live and dead, so refusals come up as often as edits; the second fin of `mef` and `mekr` is, by turns, the first fin itself, any fin, or a fin of the same face, in the same loop or another. [`check`] starts an editor with the outside region, runs each step, and holds the editor to the laws after it; a publish step, and the end of the case, publish the editor, edit the body again and publish that. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/euler.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, and a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case. The laws, the `euler` module header's: an operator that applies changes the live counts (V, E, F, loops, S) by its row of the table and nothing else; V − E + F − R = 2 (S − H) after every step, with R the loops less the faces and H the holes, which only `kfmrh` (one more) and `mfkrh` (one fewer) change; an operator given a dead row refuses it as dead; a refusal leaves the editor equal to what it was; and a published editor edits back to an editor with the same counts, which publishes to the same body."
+          ],
+          "job": "Fuzz target: `geom-topo`'s Euler operators (piece G81). On any sequence of operators, regions and publishes, each operator changes the counts of vertices, edges, faces, loops and shells by its row of the table, Euler's formula holds after every step, an operator on a dead row refuses, a refusal changes nothing, and publishing the editor and editing the body again gives the body back.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/MCG.1982.1674396"
+            ],
+            "text": "Mäntylä and Sulonen's GWB operators (\"GWB: a solid modeler with Euler operators\", IEEE Computer Graphics and Applications 2(7), 1982, <https://doi.org/10.1109/MCG.1982.1674396>) as the module header of `geom_topo::builder::euler` states them, with the counts of its table as the oracle and `tests/euler_model.rs`'s choice of rows, driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::euler",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4755,16 +4946,16 @@
           "target": "lib"
         },
         {
-          "cost": "at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at most [`MAX_CORNERS`] base corners, each run twice and checked in full; at most [`MAX_INPUT_BYTES`] bytes read.",
-          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a primitive, its inputs placed on the hard cases of chapter 28.5 (one-step sizes, coarse sub-grids, coordinates at the grid's edge), and a short list of transforms and patterns, each with the class the caller accepts and a work budget. [`check`] builds the primitive and runs the list, each step on the last result, and holds every outcome to the laws below. [`harness`] is `decode` then `check`.",
+          "cost": "at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at most [`MAX_CORNERS`] base corners, each run twice and checked in full; the six queries three times on at most `1 + MAX_STEPS` bodies, each time with the checker in full; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a primitive, its inputs placed on the hard cases of chapter 28.5 (one-step sizes, coarse sub-grids, coordinates at the grid's edge), and a short list of transforms and patterns, each with the class the caller accepts and a work budget. [`check`] builds the primitive and runs the list, each step on the last result, and holds every outcome to the laws below. On the primitive and on each transform's result it asks all six queries ([`answers`]), twice and under the step's budget, and holds the answers to [`answers_hold`]. [`harness`] is `decode` then `check`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/make.rs",
           "guarantees": [
             "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
             "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
-            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a result the full checker rejects, a result without names, a history that breaks its laws, a transform that loses a name, a class that rises, a flat solid that turns inside out, a rerun that gives another answer, a budget that changes a result instead of stopping it, a defect on valid input, or an error of a kind no schema lists."
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a result the full checker rejects, a result without names, a history that breaks its laws, a transform that loses a name, a class that rises, a flat solid that turns inside out, a rerun that gives another answer, a budget that changes a result instead of stopping it, a defect on valid input, or an error of a kind no schema lists. For the queries: an answer that states another class than its body's, differs when asked again, or changes under a budget instead of stopping; a refusal of a valid body other than for a curved face or edge; a validity report or exactness judgement that is not the checker's; an exactness report that miscounts the faces and edges by kind; faces not the body's by name and order; a box that misses a vertex or is wrongly tight; and, for a flat solid, area vectors that do not close or a volume that is not the one its loops enclose."
           ],
-          "job": "Fuzz target: `geom-make`'s primitives and transforms, on any bytes, return only what the full checker passes, keep their laws, and refuse with a typed error, never a defect.",
+          "job": "Fuzz target: `geom-make`'s primitives and transforms, on any bytes, return only what the full checker passes, keep their laws, and refuse with a typed error, never a defect; and the core queries (piece G102) on every body they make keep the Query family's laws.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -4800,6 +4991,50 @@
           "target": "lib"
         },
         {
+          "cost": "two reads of the payload and one write, each linear in it.",
+          "does": "[`harness`] takes the fuzzer's first byte as a [`Reader`] and the rest as a payload, and reads it with that reader: `read_names` under the header's `NameScheme`, `read_history`, `read_recipe`, `read_attributes`, or `read_topo_name` for one name. The corpus starts from payloads the writers made from the records of `geom-format`'s names and history tests, so the fuzzer edits real records.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/names.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (24.4 and 32.19, as the module headers state them): the same verdict twice; a refusal's offset inside the payload; and what is accepted, written again by its own writer, is exactly the payload read, since each reader reads by decoding and encoding again."
+          ],
+          "job": "Fuzz target: `geom-format`'s names, history, recipe and attributes records, read from any payload, give the same answer twice, refuse inside their input, and accept only the one canonical encoding of what they read.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `names`, `history`, `recipe` and `attributes` module headers (chapter 24.4, `projects/engines/geometry/architecture/24-file-format-exchange.md`, and decision 32.19, `projects/engines/geometry/architecture/32-decisions.md`), driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::names",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "at most [`MAX_NAMES`] names, each encoded and hashed twice and interned twice; a walk of the graph per name; an O(n²) oracle over at most [`MAX_ENTITIES`] entities, sorted twice; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_NAMES`] names of every kind of `TopoName`, each built on earlier names of the case or on a stranger the graph never holds, through every slot a name has (a role's name argument, a keyed role's key, the names it is made from, a split's input and tools, a merge's inputs, an edge's faces, a weak name's base); a list of the names with repeats; up to [`MAX_SETS`] sets of them; and up to [`MAX_ENTITIES`] colliding entities, each with the three keys of 20.2's rule, any of which may be undecided. [`check`] interns the names in a `NameGraph` and holds each to its laws, asks the graph which are weak, runs `first_duplicate`, `expect_unique`, `reference`, `ordinals` and `weak_names`, and compares every answer with an oracle written here from the rule. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/naming.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below, and a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case. The laws: a name's ID is the first 16 bytes of SHA-256 over `NameScheme v1`'s prefix and its canonical bytes, and the graph interns it under that ID with those bytes, once, however often it is given; the graph lists its IDs in byte order, each once; a name is weak exactly when a `Weak` node is reachable through its parents, and a parent the graph does not hold is `Missing`, never assumed strong (when both a weak node and a stranger are reachable, the walk may meet either first, and only those two answers are allowed); the lowest repeated name is the duplicate, and `expect_unique` refuses exactly then in a build with debug assertions; the reference is the lowest name every set holds; and the ordinals are each entity's rank under the rule's three steps, the same for the entities reversed, unless some pair is undecided or ties on every step, when the answer is `UndecidedOrder` naming such a pair."
+          ],
+          "job": "Fuzz target: persistent names (piece G87). Every name of any shape gets the one `NameId` its canonical bytes hash to, the name graph keeps each once and knows exactly which are weak, the duplicate detector and the reference pick are exact, and colliding entities get the ordinals of 20.2's order whatever order they come in.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 20.1 and 20.2's names, the name graph and the ordinal order (`projects/engines/geometry/architecture/20-naming-history.md`) and decision 32.19's hashing (`32-decisions.md`), each oracle written here from the text, driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::naming",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one curve, one insertion, one Bernstein decomposition and one interpolation of at most [`MAX_POINTS`] points per input, each bounded by [`WORK`] work units, and their exact evaluations; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a NURBS curve in two or three dimensions (degree 1 to 4, a clamped or uniform knot vector with repeated knots, rational or not), a parameter, a knot to insert and the curve's control points again as data to interpolate. [`check`] builds it with `geom-nurbs` and holds four laws against `geom_test::nurbs_reference`, which computes the same curves in exact rationals:",
           "family": [],
@@ -4818,6 +5053,49 @@
             "text": "the bounds `geom-nurbs` states, checked exactly against the reference implementation of chapter 28.9 (`projects/engines/geometry/architecture/28-testing.md`), as piece G69's law catalogue does, driven here by coverage-guided fuzzing (28.5)."
           },
           "path": "geom_fuzz::nurbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one read of the file, two writes of it and six opens, each linear in the file, under a work meter of [`WORK`] units each.",
+          "does": "[`decode`] splits the fuzzer's bytes into an [`Edit`] (which blob, where, which byte, and whether it is flipped, inserted or cut) and a file. [`harness`] reads the file with the registry's records, takes it into a `Container`, opens it at both trusts, then makes the edit to one blob, or to the document blob, and opens and salvages it again. It also reads the file's bytes as a stamp's payload, and every stamp the file holds, with `Stamp::read`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/open.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (24.5 and 24.7, as the `container` and `trust` module headers state them): a container written to a file and read back is the same container; opening gives the same answer twice, at either trust; a changed blob leaves every body that does not need it exactly as it opened before, opens every body that does as damaged, and never stops a document that opened; salvage names only the changed blob; a stamp accepted writes back to the same record, and a stamp refused names an offset inside its payload."
+          ],
+          "job": "Fuzz target: `geom-format`'s containers and trust on open, on any file and any blob changed, give the same answer twice, come back from a file to the same blobs, and keep damage with the body it is in.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `container`, `trust` and `stamp` module headers (chapter 24.5 and 24.7, `projects/engines/geometry/architecture/24-file-format-exchange.md`), the property harness of `geom-format`'s `tests/fuzz_open.rs` made a fuzz target, driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`). The checker passes every body, as that harness's does: the target is about reading, not checking."
+          },
+          "path": "geom_fuzz::open",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two reads of the payload and one write, each linear in it.",
+          "does": "[`harness`] reads the fuzzer's bytes as an operation record's payload with `read_operation`, the reader every replay of an operation log goes through, and writes back what it read with `Operation::encode`. The corpus starts from payloads written from the operations of `geom-format`'s operation record tests, so the fuzzer edits real records.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/operations.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (the `operation` module header's): the same verdict twice; a refusal's offset inside the payload; and an operation accepted, encoded again, is exactly the payload read, its parameters one canonical item."
+          ],
+          "job": "Fuzz target: `geom-format`'s operation record, read from any payload, gives the same answer twice, refuses inside its input, and accepts only the one canonical encoding of what it reads.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/21-determinism.md"
+            ],
+            "text": "the laws of `geom-format`'s `operation` module header (chapter 21's replay and 28.13's operation logs, `projects/engines/geometry/architecture/21-determinism.md` and `28-testing.md`), driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::operations",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4896,6 +5174,70 @@
           "target": "lib"
         },
         {
+          "cost": "three prunes and a budget pair over at most [`references::MAX_STEPS`] steps and a stretch; about 2 · 3 · (s + 1) resolutions for each of the element's names; a record written once and read three times; at most [`MAX_INPUT_BYTES`] bytes of the case read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: an element as the [`references`](crate::references) target reads one (a chain of histories over first faces, some weak, its body and carriers, sometimes a stretch pruned earlier in a linked version), two sets of held names drawn from every name it had, a step to prune again from, and an edit to make to the record's payload: one byte replaced and the rest cut. The bytes after the case are a pruned record's payload as a file holds it. [`check`] prunes the history, holds the result and every reference into it to the laws, prunes again, runs the prune under its exact budget and one unit less, writes the steps as a pruned record and reads it back, and reads the edited payload and the trailing bytes. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/prune.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes of the case, derived below (a unit test builds the input that reaches it), and hands every byte after them to the record's reader.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case. The laws are the module header's of `geom_name::prune`: each step keeps its place and its path, an operation step becomes a kept step naming the operation and the held set and keeping only its own records and deletions, and a step pruned before stays as it was; every held name, and every name in the body, resolves as it did from every step and for every want; any other name with steps to walk meets `HistoryPruned` at once, with the step's pruning operation; pruning again leaves the steps the first prune kept as they were, and every name the second holds resolves as after the first; a run charges one unit a step and a record, so a budget of exactly that succeeds with the same steps and one unit less is `BudgetExceeded`; and of the pruned record's (`geom_format::pruned`): the steps written read back as written, and a payload read twice gives the same answer and is accepted only if it is the one encoding of what it holds."
+          ],
+          "job": "Fuzz target: `PruneHistory` and the pruned history record (piece G109). On any element history and any set of held names, pruning keeps every step's place, every held reference resolves as before from every step and for every want, a reference no one held meets `HistoryPruned`, pruning again cuts only what is new, the budget stops a run exactly where its charges say, and the pruned record reads back to what was written and, from any bytes, reads only its one canonical encoding.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.4's `PruneHistory` and pruned history record (`projects/engines/geometry/architecture/24-file-format-exchange.md`) with chapter 20.4's resolution as the observer, `tests/prune.rs`'s laws in `geom-name` driven by coverage-guided fuzzing (28.5), and the reader's laws as the record targets hold theirs."
+          },
+          "path": "geom_fuzz::prune",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each read twice and once split, linear in the input; salvage tries a record at each byte of a damaged span, all under a work meter of [`WORK`] units.",
+          "does": "[`harness`] reads the fuzzer's bytes as the record layer must read any file (24.7: every reader is a fuzz target), with [`check_bytes`]: one record with `Record::decode`, a whole file with `file::read`, from a slice and from a source that splits its reads by the input's own bytes, and a damaged file with `file::salvage`. It then reads the same bytes as a recipe for records ([`decode`]: up to [`MAX_RECORDS`] records, each a type, flags, a schema, `depends` and a payload), writes them with `Record::encode` and `file::write`, and holds what it wrote to the same laws with [`check_built`], so the paths behind a matching check run too.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/records.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws: the same verdict on a second read and through a split source; every refusal's offset inside the input; a record or file accepted is exactly the bytes its writer gives back; every record salvage keeps is the bytes at its offset, and every damaged span lies inside the input; whatever the writers accept reads back to what they were given, and writes again to the same bytes."
+          ],
+          "job": "Fuzz target: `geom-format`'s record layer reads any bytes the same way twice and however its source splits them, refuses inside its input, and accepts only canonical records and files.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `record` and `file` module headers (chapter 24.2 and 24.5, `projects/engines/geometry/architecture/24-file-format-exchange.md`), the property harness of `geom-format`'s `tests/fuzz_records.rs` made a fuzz target, driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::records",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "at most [`MAX_STEPS`] steps of at most [`MAX_FACES`] inputs and their outputs, four resolutions and one oracle walk; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: an [`Element`], a chain of up to [`MAX_STEPS`] operation histories over up to [`MAX_FACES`] first faces, some of them weak, made by `geom-test`'s history kit from the fates the bytes choose (every input unchanged, modified, split, merged, deleted or deleted while generating, and outputs from nothing), every name interned in the element's name graph, with the body after it (one name sometimes dropped, so the history and the body disagree), carriers for some of its faces, and sometimes a pruned stretch; and a reference to any of its names or to a stranger, from any step, for any want, into its own document or a linked one at any version, with a lookup that finds the element, finds it gone or misses the link. [`check`] resolves it, twice, and again with its signature, kind and element changed, and compares the outcome with [`expected`], 20.4's steps written here from the text over the records themselves. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/references.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below, and a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case. The laws: the same outcome twice; the same outcome whatever the signature, kind and element (20.4 step 5); and the outcome 20.4's table gives: a name in the body is `Exact`; otherwise the walk follows modified images (never generated ones) step by step, and live descendants are `FollowedHistory`, several for one wanted `Ambiguous`, none `Deleted` by the step that removed the last, a pruned stretch on the way `HistoryPruned`, descendants the body lacks `HistoryBroken`, a name nothing holds `NameUnknown`; a weak name with no live descendant is `WeakChanged` when names of its base are in the body; a carrier is the one every piece lies on, `NoCarrier` without one; and a link is `LinkMissing`, or `LinkOlder` for a version before the reference's that lacks the name."
+          ],
+          "job": "Fuzz target: reference resolution (piece G89). On any element history, body and reference, `resolve` gives the one outcome chapter 20.4's steps give, twice alike, and never reads the reference's signature, kind or element.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 20.4's resolution (`projects/engines/geometry/architecture/20-naming-history.md`) as `geom-name`'s `resolve` module header decides its open details, the oracle written here from that text over the records rather than through `geom-op`'s relations, and chapter 20.3's histories from `geom-test`'s kit, driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::references",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in [`DESIGNS`]: one or two operations a design.",
           "does": "a typed error is legal, but an error where a person would expect success is a gap, and a crash hunt does not count gaps. [`tally`] runs [`DESIGNS`] designs per family, each the same on every run and target, through the kernel's operations, and counts the successes. `src/robustness.txt` records them; `tests/robustness.rs` fails if a count falls.",
           "family": [],
@@ -4964,13 +5306,14 @@
           "target": "lib"
         },
         {
-          "cost": "at most [`MAX_OPERATIONS`] operations, each checked in full, then two replays and one replay under a cut budget; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "cost": "at most [`MAX_OPERATIONS`] operations, charging at most [`WORK`] units between them, each checked in full, then two replays and one replay under a cut budget, and for a stopped case one replay to its stop; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_OPERATIONS`] operations on the hard cases of chapter 28.5, each transform on any earlier result, each new primitive free to start exactly on a point of an earlier one or one step from it, some patterns of [`MANY_COPIES`] copies. The first operation is always a primitive, and half of them are tamed to sizes the grid can hold, so a log gets past its first step and its later laws run. [`check`] runs it through the kernel's replay, one operation at a time, and holds each to chapter 28.5's oracle stack; then it writes the operations that succeeded as a log and replays that. [`harness`] is `decode` then `check`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/sequence.rs",
           "guarantees": [
             "**Any bytes are a case**, and [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
             "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a log the kernel refuses; a defect, or an error no schema lists; a result without names, or one the full checker rejects; a history that breaks its laws, alone or composed along a chain; a class that rises; an input that changes; a log that does not read back as written; a replay of the log that gives another hash; a budget that changes a result instead of stopping it.",
+            "**No hang.** A case's operations run under one work budget of [`WORK`] units between them: each is given what the earlier ones left. Running out is a typed stop, which is legal; the case ends at that operation, and its stop is held to laws of its own: it is the budget the operation was given, a work budget, and a replay of the log with the stopped operation stops with the same error after the same work.",
             "**Not yet in the stack:** a thread-count rerun waits for the first parallel operation, since none of the operations a log can hold uses the helper, and an imported Tolerant body waits for the first importer."
           ],
           "job": "Fuzz target: whole operation logs. On any bytes, a log of primitives, transforms and patterns, each on any earlier result, replays to the same hash, and every step keeps every law.",
@@ -5947,8 +6290,9 @@
           "file": "projects/engines/geometry/crates/geom-make/src/build.rs",
           "guarantees": [
             "**Names, not positions.** Every index of the body follows its entities' names, and every name comes from the operation's path, a role and the names it is relative to: never from the order the rows were written in (8.2, 20.2).",
-            "**Checked before returned.** A body that does not pass the checker at the build's level is never returned. What the operation fails with instead is [`Unpassed`]'s to say: [`MakeDetail::ResultInvalid`], a defect, where the checker follows the body's data in full or found something wrong; [`MakeDetail::NotCertifiedYet`], naming the piece that widens the checker, where the data are less than exact and the checker could not certify them.",
-            "**Charged by what it builds.** One meter unit ([`PER_ROW`]) and 64 logical bytes per row built, before it is built (23.10), and the publishing charges its own rows to the same meter. The postcondition check runs on a meter of its own, cancellable and without a limit: its level differs between a test build and a shipped one, and a budget must stop an operation the same way in both.",
+            "**Checked before returned.** A body that does not pass the checker is never returned. What the operation fails with instead is [`Unpassed`]'s to say: [`MakeDetail::ResultInvalid`], a defect, where the checker follows the body's data in full or found something wrong; [`MakeDetail::NotCertifiedYet`], naming the piece that widens the checker, where the data are less than exact and the checker could not certify them.",
+            "**The same answer in every build.** How much of the checker a build runs never decides what an operation answers (principle 5; decision 32.48). A primitive as written and an exact transform of an exact body pass groups 2 and 3 by construction, so there the check runs at the build's level ([`Level::of_build`]: the cheap groups in a shipped build, 8.3), and a fault is a defect the full-checker builds of continuous integration exist to find. A transform that rounded, or that moved a body already less than exact, has no such proof: a rounded corner can land on another, and the refusal [`MakeDetail::NotCertifiedYet`] is an ordinary answer. There every group runs in every build ([`Unpassed::level`]).",
+            "**Charged by what it builds.** One meter unit ([`PER_ROW`]) and 64 logical bytes per row built, before it is built (23.10), and the publishing charges its own rows to the same meter. The postcondition check runs on a meter of its own, cancellable and without a limit: where it runs at the build's level, that differs between a test build and a shipped one, and a budget must stop an operation the same way in both.",
             "**Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation did not report, returns no body (`OpContext::run`)."
           ],
           "job": "Assembling what a Make or Transform operation returns: a body's rows, each entity named by its role, published in name order, checked, and the history that says where each entity came from.",
@@ -6022,6 +6366,7 @@
             "**Accepted, or refused.** A result less exact than the input is returned only when the caller accepts it ([`Moved::accept`]): a class at least as loose and a ceiling at least the result's bound; otherwise [`MakeDetail::NotAccepted`] names the class the result would have.",
             "**Kinds change only where the checker can follow.** A transform that does not keep circles turns them into ellipses and analytic surfaces into affine ones, which the checker cannot certify yet: on a body with curved geometry it is [`MakeDetail::KindNotCertified`] (G177).",
             "**Not certified is a refusal, never a defect.** The checker follows exact data in full, so a result recorded Exact that it does not pass is a defect ([`MakeDetail::ResultInvalid`]). Data less than exact it follows only as far as its certified tests reach. So a transform that rounds a corner or moves curved geometry by a deviation, and gives a body the checker does not pass, is [`MakeDetail::NotCertifiedYet`]; and so is an exact transform of a body that was less than exact already (corners an earlier transform rounded, a round primitive) when the checker finds nothing wrong and cannot certify the result: its interval tests of planes not given by integers depend on the size of the numbers, so a whole-number scale of a body it passed can leave a pair of parallel faces it cannot tell apart. A fault that says something is wrong there is still a defect: an exact move of a body that passed breaks nothing.",
+            "**Refused the same in every build.** Those refusals are groups 2 and 3's to give, so a result that rounded, or whose input was less than exact, is checked with every group in a shipped build too; only a result recorded Exact is checked at the build's level (`build.rs`; decision 32.48).",
             "**Mirrors keep the outside outside.** A mirror reverses orientation, so every face's sense and every loop's direction is reversed with it."
           ],
           "job": "The Transform family of chapter 10.2: move, rotate, mirror and scale a body, its entities keeping their names, its geometry changing kind only as chapter 7's typed transforms say.",
@@ -7131,7 +7476,7 @@
               "shape": "struct"
             },
             {
-              "doc": "A step this module proves cannot fail did fail: Lemire's 128-bit product or its threshold ([`Stream::below`] and [`Stream::range_inclusive`]), the sum that places a value in its range ([`Stream::range_inclusive`]), or [`Real::new`] on the double [`Stream::next_f64`] made. Each step's proof is written beside it, so no input can cause this, only a defect in geom-num. It is reported rather than answered, because any answer would be a guess, as [`NumError::BudgetExceeded`](crate::NumError::BudgetExceeded) is.",
+              "doc": "A step this module proves cannot fail did fail: Lemire's threshold ([`Stream::below`] and [`Stream::range_inclusive`]), the sum that places a value in its range ([`Stream::range_inclusive`]), or [`Real::new`] on the double [`Stream::next_f64`] made. Each step's proof is written beside it, so no input can cause this, only a defect in geom-num. It is reported rather than answered, because any answer would be a guess, as [`NumError::BudgetExceeded`](crate::NumError::BudgetExceeded) is.",
               "name": "Defect",
               "shape": "unit"
             }
@@ -8245,7 +8590,7 @@
           "guarantees": [
             "**Specified, and checked against the reference.** [`philox4x32_10`] is Philox4x32-10 as its authors specify it (Method, below). The tests reproduce Random123's published known answers (`tests/rng_kat.rs`), and golden hashes pin every draw function's output on every CI target, WebAssembly included (`tests/rng_determinism.rs`).",
             "**Explicit inputs only.** A [`Seed`] and a [`StreamId`] are plain integers the caller writes. There is deliberately no `Default`, no constructor from entropy and no global or thread-local generator.",
-            "**Integers, and no step that wraps or drops a bit unseen.** Every operation is on integers. Wrapping happens only where the method is defined modulo a power of two: the specification's 32 × 32-bit product, formed modulo 2^64 as its reference forms it (it never reaches 2^64), and its key schedule, modulo 2^32; and Lemire's threshold, a negation modulo 2^64. Every other step is a checked method, or exact by construction (words split and joined through their bytes, widening casts, bit masks and shifts by constants with their ranges written beside them, and `abs_diff` where the invariants make it the difference), and each place says why. A checked step's failure either has a meaning, which is then the answer (a stream id past 2^64 − 1 lies past every range's end), or is ruled out by a proof written beside it and reported as [`RngError::Defect`] should it happen all the same, never answered. The floating-point steps, in [`Stream::next_f64`], are exact. So results are the same bits on every target, in debug and release, with overflow checks on or off, and no lint on arithmetic or casts is allowed outside the tests.",
+            "**Integers, and no step that wraps or drops a bit unseen.** Every operation is on integers. Wrapping happens only where the method is defined modulo a power of two: the specification's 32 × 32-bit product, formed modulo 2^64 as its reference forms it (it never reaches 2^64), and its key schedule, modulo 2^32; Lemire's 64 × 64-bit product, formed modulo 2^128 the same way (it never reaches 2^128); and Lemire's threshold, a negation modulo 2^64. Every other step is a checked method, or exact by construction (words split and joined through their bytes, widening casts, bit masks and shifts by constants with their ranges written beside them, and `abs_diff` where the invariants make it the difference), and each place says why. A checked step's failure either has a meaning, which is then the answer (a stream id past 2^64 − 1 lies past every range's end), or is ruled out by a proof written beside it and reported as [`RngError::Defect`] should it happen all the same, never answered. The floating-point steps, in [`Stream::next_f64`], are exact. So results are the same bits on every target, in debug and release, with overflow checks on or off, and no lint on arithmetic or casts is allowed outside the tests.",
             "**Exactly uniform, given uniform words.** [`Stream::below`] and [`Stream::range_inclusive`] give every value of the range from exactly the same number of 64-bit words (Lemire's rejection method, so there is no modulo bias), and [`Stream::next_f64`] gives each of the 2^53 values k · 2^−53 in [0, 1) from exactly 2^11 words. That Philox's words are themselves indistinguishable from uniform and independent is the authors' claim, from the `TestU01` library's Crush batteries: seven rounds of Philox4x32 pass, and ten keep three rounds as a safety margin. This module relies on that claim; it does not prove it.",
             "**Streams never overlap and never wrap.** For one key, Philox is a bijection on counters (each round can be undone; `tests/rng_properties.rs` inverts it), so no two (stream, block) pairs share a block. A stream is 2^64 blocks of four words; moving to the next block carries from counter word 0 into word 1, never into the stream's words. Drawing past the end returns [`RngError::Exhausted`].",
             "**Ranges handed out never overlap.** Chunks of one size cut from one [`StreamRange`] are disjoint and lie inside it, with checked integer arithmetic; a range too small for a request returns [`RngError::TooFewStreams`] (`tests/rng_ranges.rs` checks both against a model in arbitrary-precision integers).",
@@ -8670,6 +9015,8 @@
             "**Well formed or refused.** A basis has a degree from 1 to [`MAX_DEGREE`], at least 2p + 2 knots, every knot finite and none smaller than the one before, no value repeated more than p + 1 times, a finite difference between the last knot and the first, and a domain [`u_p`, `u_(m−p)`] that is more than one value (chapter 24.7). Unclamped knot vectors are accepted, so periodic curves can be stored as they are (chapter 7).",
             "**Parameters inside the domain only.** A parameter that is NaN, infinite or outside the domain is [`NurbsError::ParameterOutside`]; `NLib` clamps it to the nearest span in silence. A domain end is in the last (or first) span with more than one value, found exactly, where `NLib` steps over equal knots within 10^−12.",
             "**Basis values, near exact.** The values of [`Basis::eval`] and [`Basis::eval_one`] lie in [0, 1], and each is within `γ_(6p)` · N of the exact value N for the knots and parameter given: every step of the scheme adds or multiplies quantities that are not negative, and the knot difference that divides each step is at least the term it divides, so each level adds at most six roundings, all relative. On a clamped knot vector the values at the ends of the domain are exactly 1 and 0. [`Basis::eval_derivs`] gives the same bits for the values as [`Basis::eval`].",
+            "**The p + 1 functions are right on every knot range.** [`Basis::eval`] and [`Basis::eval_derivs`] keep their bounds on every basis [`Basis::new`] accepts, up to a knot range of the largest double, and never refuse one for its size. Their schemes divide by the sum of two rounded differences, each finite, and on such a range the sum can round to infinity. Where it does, the knot difference the sum stands for divides instead: it is finite, it is at least each difference it divides, and it carries one rounding in place of three, so the bounds hold as written. Where the sum is finite it divides, as it always has.",
+            "**Relative bounds, so for runs in which nothing underflows.** A quotient, product or derivative below 2^−1022 is rounded to the spacing of the doubles there, 2^−1074, and no bound here counts that rounding. A first derivative on a range near the largest double is such a value. So is an intermediate of [`Basis::eval_one`] and [`Basis::eval_one_derivs`] where a knot difference is above 2^1022 times the lower-degree value it divides, or a difference times such a value is below 2^−1022: they divide a value by one knot difference before they multiply it by another, or multiply before they divide, in `NLib`'s order. So on a knot range wide enough or narrow enough (the widest is one) a function of ordinary size loses bits its bound needs and a small one can come out 0; their bounds hold while no such intermediate underflows.",
             "**Derivatives, bounded by their magnitudes.** Each derivative of order k ≥ 1 is within `γ_(6p+2)` · M of the exact derivative, where M is the same scheme run on magnitudes: every difference of two terms replaced by the sum of their absolute values, with the exact knots and parameter. Each level of the derivative scheme adds at most four roundings to the terms it combines and the sums and the final factor p!/(p − k)! at most 2k more, so 6p + 2 covers every order (the tests check this bound against exact rationals). A derivative that overflows, which a span far shorter than its neighbours can cause, is [`NurbsError::NotFinite`]; the functions never return a value that is not finite.",
             "**Deterministic.** Only IEEE 754 addition, subtraction, multiplication and division in the fixed order written here; no fused multiply-add, no platform maths."
           ],
@@ -8694,7 +9041,7 @@
                 "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
               ],
               "pinned": true,
-              "purpose": "translated to safe `no_std` Rust from `N_BasisFindSpan`, `N_BasisEval`, `N_BasisDerivs`, `N_BasisIEval` and `N_BasisIDerivs`; a parameter outside the domain is an error instead of being clamped, and the domain's ends find their span exactly instead of stepping over knots within 10^−12; the span search stops by its loop invariant, without `NLib`'s guard against a repeated midpoint; the end shortcuts of `N_BasisEval` are dropped, because its scheme gives the same exact values there, and those of `N_BasisIEval` apply only to a clamped end, where they are exact; the zero-divisor guard (10^−24) is dropped, because a valid basis never divides by a difference that is not positive; the factor p!/(p − k)! is a double rather than an integer, which overflowed past degree 12; the checks of `N_KnotVectorIsValid` are those of chapter 24.7, which also accept unclamped knots and interior knots repeated p + 1 times; every result that could overflow is checked.",
+              "purpose": "translated to safe `no_std` Rust from `N_BasisFindSpan`, `N_BasisEval`, `N_BasisDerivs`, `N_BasisIEval` and `N_BasisIDerivs`; a parameter outside the domain is an error instead of being clamped, and the domain's ends find their span exactly instead of stepping over knots within 10^−12; the span search stops by its loop invariant, without `NLib`'s guard against a repeated midpoint; the end shortcuts of `N_BasisEval` are dropped, because its scheme gives the same exact values there, and those of `N_BasisIEval` apply only to a clamped end, where they are exact; the zero-divisor guard (10^−24) is dropped, because a valid basis never divides by a difference that is not positive; the factor p!/(p − k)! is a double rather than an integer, which overflowed past degree 12; a step of `N_BasisEval` or `N_BasisDerivs` whose sum of two differences is past the largest double divides by the knot difference instead; the checks of `N_KnotVectorIsValid` are those of chapter 24.7, which also accept unclamped knots and interior knots repeated p + 1 times; every result that could overflow is checked.",
               "take": "port"
             }
           ],
@@ -12588,7 +12935,7 @@
         },
         {
           "cost": "one replay of every case.",
-          "does": "[`seeded`] draws a family's logs from [`SEED`]: `box` is one box of known size, `make` runs every primitive, `transform` builds a body and moves, mirrors and rotates it, and `budget` runs out of its work and of its logical memory, so a stop by a budget is held to one hash on every target. [`digest`] replays the corpus and hashes what it gave: each case's id, its hash and its two counts, in order. `tests/determinism.rs` holds that digest as the golden `geom-test/replay-corpus`, which `golden run` then carries through every target and build mode, the release build as shipped among them, whose checker runs only the cheap groups: one digest across the legs proves the checker changes nothing (28.4).",
+          "does": "[`seeded`] draws a family's logs from [`SEED`]: `box` is one box of known size, `make` runs every primitive, `transform` builds a body and moves, mirrors and rotates it, and `budget` runs out of its work and of its logical memory, so a stop by a budget is held to one hash on every target. [`digest`] replays the corpus and hashes what it gave: each case's id, its hash and its two counts, in order. `tests/determinism.rs` holds that digest as the golden `geom-test/replay-corpus`, which `golden run` then carries through every target and build mode, each with the full checker (this crate's default feature `full-checker`). The shipped-checker leg replays the corpus with the cheap groups only and must reach the same digest (`tests/shipped.rs`; decision 32.48): one digest across the legs proves the checker changes nothing (28.4).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/fixture/replay.rs",
           "guarantees": [
@@ -12980,7 +13327,7 @@
         },
         {
           "cost": "linear in a history's records, times the composition's ordered-set operations; a chain of `k` steps composes twice, `O(k)` compositions.",
-          "does": "[`check_laws`] checks one operation's history against laws 1 to 3 and 13.14's recording rule. [`check_chain`] checks every step of a chain, composes it, checks the composition against the chain's first inputs (law 4: histories compose and keep laws 1 to 3), and checks that composing left to right and right to left give the same relations; it says which step or which part failed ([`ChainBreak`]). [`step`] and [`chain`] are proptest strategies of valid histories: every input unchanged, modified, split, merged with others, deleted, or deleted while generating, plus outputs generated from nothing, each output under a fresh name.",
+          "does": "[`check_laws`] checks one operation's history against laws 1 to 3 and 13.14's recording rule. [`check_chain`] checks every step of a chain, composes it, checks the composition against the chain's first inputs (law 4: histories compose and keep laws 1 to 3), and checks that composing left to right and right to left give the same relations; it says which step or which part failed ([`ChainBreak`]). [`step`] and [`chain`] are proptest strategies of valid histories: every input unchanged, modified, split, merged with others, deleted, or deleted while generating, plus outputs generated from nothing, each output under a fresh name. [`built`] makes one such history from its inputs' [`Fate`]s, for a generator that draws the fates itself (the fuzz targets).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/history.rs",
           "guarantees": [
@@ -14948,7 +15295,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/taylor_work.rs"
         ]
       },
       "missing": [
@@ -14974,7 +15322,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/taylor_work.rs"
         ]
       },
       "missing": [
@@ -15013,7 +15362,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/compound.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/compound.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/offset_work.rs"
         ]
       },
       "missing": [
@@ -15052,7 +15402,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/taylor_work.rs"
         ]
       },
       "missing": [
@@ -15065,7 +15416,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/attack_g64.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/attack_g64.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/transition_work.rs"
         ]
       },
       "missing": [
@@ -15156,7 +15508,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-surface/tests/offset.rs"
+          "projects/engines/geometry/crates/geom-surface/tests/offset.rs",
+          "projects/engines/geometry/crates/geom-surface/tests/offset_work.rs"
         ]
       },
       "missing": [
@@ -15392,91 +15745,163 @@
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.area",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.bounding_box",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.exactness",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.faces",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.validity",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.volume",
       "tier": "Preview since 2026-10-31",
       "version": 1

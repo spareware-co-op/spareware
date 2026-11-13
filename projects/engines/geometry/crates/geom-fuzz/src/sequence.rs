@@ -18,6 +18,11 @@
 //!   full checker rejects; a history that breaks its laws, alone or composed along a chain; a class
 //!   that rises; an input that changes; a log that does not read back as written; a replay of the
 //!   log that gives another hash; a budget that changes a result instead of stopping it.
+//! - **No hang.** A case's operations run under one work budget of [`WORK`] units between them:
+//!   each is given what the earlier ones left. Running out is a typed stop, which is legal; the
+//!   case ends at that operation, and its stop is held to laws of its own: it is the budget the
+//!   operation was given, a work budget, and a replay of the log with the stopped operation stops
+//!   with the same error after the same work.
 //! - **Not yet in the stack:** a thread-count rerun waits for the first parallel operation, since
 //!   none of the operations a log can hold uses the helper, and an imported Tolerant body waits for
 //!   the first importer.
@@ -25,8 +30,9 @@
 //! Method: chapter 28.5's sequence target and oracle stack
 //! (`projects/engines/geometry/architecture/28-testing.md`), run through chapter 28.16's replay.
 //!
-//! Cost: at most [`MAX_OPERATIONS`] operations, each checked in full, then two replays and one
-//! replay under a cut budget; at most [`MAX_INPUT_BYTES`] bytes read.
+//! Cost: at most [`MAX_OPERATIONS`] operations, charging at most [`WORK`] units between them,
+//! each checked in full, then two replays and one replay under a cut budget, and for a stopped
+//! case one replay to its stop; at most [`MAX_INPUT_BYTES`] bytes read.
 
 use geom_check::{Level, check as full_check};
 use geom_format::content::ContentId;
@@ -34,12 +40,14 @@ use geom_format::operation::Operation;
 use geom_format::recipe::RecipeInput;
 use geom_make::PrismInput;
 use geom_num::{Exactness, GridStep, P3, Steps};
-use geom_op::{ErrorKind, History, NameId, NameSet, OpError, OpId, OpPath};
-use geom_run::{Budget, WorkMeter};
-use geom_test::fixture::OpLog;
+use geom_op::{
+    ErrorKind, History, NameId, NameSet, OpError, OpErrorDetail, OpId, OpPath, RunDetail,
+};
+use geom_run::{Budget, BudgetKind, WorkMeter};
 use geom_test::fixture::calls::{Call, Input, Place, Turn};
 use geom_test::fixture::kernel::{Kernel, id_of};
 use geom_test::fixture::run::{Engine, Ran, Replayed, Step as Done, replay};
+use geom_test::fixture::{OpLog, Spend};
 use geom_test::history::check_chain;
 use geom_test::{ByteSource, Entropy};
 use geom_topo::Body;
@@ -50,6 +58,25 @@ use crate::make::{Motion, RotationBy, SHAPE_BYTES, Shape, shape, step as read_st
 
 /// The most operations a case runs.
 pub const MAX_OPERATIONS: u8 = 12;
+
+/// The work units each case may spend, its operations together.
+///
+/// Why this many. An ordinary case is cheap: of a 775-case corpus from a long fuzzing run, the
+/// operations of the median case charged 849 units, of 95% of them at most 1,344, and of every
+/// case without a wall of [`MANY_COPIES`] copies at most 1,370. `WORK` is 7.4 times that 95th
+/// percentile, the headroom the curves and surfaces targets' budgets have over theirs (9.1 and
+/// 8.0 times, measured the same way on their own corpora).
+///
+/// A wall is not an ordinary case: one charges about 19,000 to 40,000 units, by the body it
+/// copies, so under `WORK` a wall stops part way, its copies made and checked up to the stop and
+/// the stop held to its laws. The test `the_extreme_wall_is_reached` runs a whole wall without
+/// the budget, so the laws of a whole wall still run on every `cargo test`.
+///
+/// What a unit costs. Each operation runs four times (the case, two replays and the cut one) and
+/// each result is checked in full and written twice for its content ID, so where walls are a unit
+/// charged costs about 70,000 instructions in all. Unbounded, the slowest cases found held one to
+/// four walls, charged 40,000 to 158,000 units and ran 3 to 10.6 thousand million instructions.
+pub const WORK: u64 = 10_000;
 
 /// The copies of the longest pattern: the 300 openings of chapter 28.5's extreme wall.
 pub const MANY_COPIES: u16 = 300;
@@ -311,8 +338,8 @@ fn transform_call(step: &crate::make::Step, exactness: Exactness) -> Option<Call
     })
 }
 
-/// The record of operation number `at`.
-fn record(at: usize, call: &Call, input: Option<&ContentId>) -> Option<Operation> {
+/// The record of operation number `at`, under `budget`.
+fn record(at: usize, call: &Call, input: Option<&ContentId>, budget: Budget) -> Option<Operation> {
     let mut id = [0u8; 16];
     let bytes = u64::try_from(at).ok()?.to_be_bytes();
     id.iter_mut().zip(bytes).for_each(|(slot, b)| *slot = b);
@@ -324,7 +351,7 @@ fn record(at: usize, call: &Call, input: Option<&ContentId>) -> Option<Operation
             .map(|id| vec![RecipeInput::Body(id.clone())])
             .unwrap_or_default(),
         params: call.params().ok()?,
-        budget: Budget::UNLIMITED,
+        budget,
     })
 }
 
@@ -389,20 +416,46 @@ fn chain_to(results: &[Held], steps: &[(History, NameSet)], at: usize) -> Vec<(H
         .collect()
 }
 
+/// Where the case's budget stopped it: the operation it stopped, the error and what the operation
+/// charged before it stopped.
+struct Stop {
+    operation: Operation,
+    error: OpError,
+    charged: Spend,
+}
+
 /// What running a case's operations left: the operations that succeeded, each result and each
-/// step's history.
+/// step's history, what the operations charged between them, failed ones included, and the stop,
+/// if the case's budget ran out.
 struct Run {
     log: Vec<Operation>,
     results: Vec<Held>,
     steps: Vec<(History, NameSet)>,
+    spent: u64,
+    stop: Option<Stop>,
 }
 
-/// Runs each operation of `case` and holds it to the laws of one step.
+/// A stop is the case's budget's: a work budget passed, and the one the operation was given.
+fn the_budgets(case: &Case, e: &OpError, given: Budget) -> Result<(), Finding> {
+    match e.detail() {
+        OpErrorDetail::Run(RunDetail::BudgetExceeded(x))
+            if x.kind == BudgetKind::Work && x.budget == given =>
+        {
+            Ok(())
+        }
+        other => Err(Finding::new("a stop is the case budget's", || {
+            format!("{other:?} under {given:?}: {case:?}")
+        })),
+    }
+}
+
+/// Runs each operation of `case`, under `work` units between them, and holds it to the laws of
+/// one step.
 #[allow(
     clippy::too_many_lines,
     reason = "one operation's whole round: its call, its run, then each law in turn"
 )]
-fn run(case: &Case) -> Result<Run, Finding> {
+fn run(case: &Case, work: u64) -> Result<Run, Finding> {
     let mut kernel = Kernel::new();
     kernel
         .start(Steps(0), &[])
@@ -411,8 +464,12 @@ fn run(case: &Case) -> Result<Run, Finding> {
         log: Vec::new(),
         results: Vec::new(),
         steps: Vec::new(),
+        spent: 0,
+        stop: None,
     };
     for entry in &case.entries {
+        // Each operation may spend what the case's earlier ones left of its budget.
+        let budget = Budget::of_work(work.saturating_sub(run.spent));
         let from = usize::from(entry.on).checked_rem(run.results.len());
         let taken = from.and_then(|i| run.results.get(i));
         let (call, input) = match &entry.item {
@@ -432,7 +489,8 @@ fn run(case: &Case) -> Result<Run, Finding> {
                 (call, Some((result.id.clone(), result.exactness)))
             }
         };
-        let Some(operation) = record(run.log.len(), &call, input.as_ref().map(|i| &i.0)) else {
+        let Some(operation) = record(run.log.len(), &call, input.as_ref().map(|i| &i.0), budget)
+        else {
             continue;
         };
         // A rotation or a scale factor that does not exist is no call: the kernel refuses it, and
@@ -444,8 +502,12 @@ fn run(case: &Case) -> Result<Run, Finding> {
         match kernel.run(&operation) {
             Ran::Done(step) => {
                 let Done {
-                    history, exactness, ..
+                    history,
+                    exactness,
+                    work,
+                    ..
                 } = step;
+                run.spent = run.spent.saturating_add(work.work);
                 let source = before.and_then(|id| kernel.body(id));
                 let names = source.map_or_else(|| Some(NameSet::default()), names_of);
                 let names = names.ok_or_else(|| {
@@ -484,7 +546,20 @@ fn run(case: &Case) -> Result<Run, Finding> {
                 run.steps.push((history, names));
                 run.log.push(operation);
             }
-            Ran::Failed(e, _) => refused(case, &e)?,
+            // The case's budget ran out: the case ends at this operation, with its stop.
+            Ran::Failed(error, charged) if error.kind() == ErrorKind::BudgetExceeded => {
+                the_budgets(case, &error, budget)?;
+                run.spent = run.spent.saturating_add(charged.work);
+                run.stop = Some(Stop {
+                    operation,
+                    error,
+                    charged,
+                });
+            }
+            Ran::Failed(e, charged) => {
+                run.spent = run.spent.saturating_add(charged.work);
+                refused(case, &e)?;
+            }
             Ran::Refused(why) => {
                 return Err(Finding::new("the kernel runs what a log writes", || {
                     format!("{why}: {case:?}")
@@ -498,12 +573,44 @@ fn run(case: &Case) -> Result<Run, Finding> {
                 format!("{case:?}")
             }));
         }
+        if run.stop.is_some() {
+            break;
+        }
     }
     Ok(run)
 }
 
-/// Holds the log as a whole to its laws: it reads back, replays alike, and a cut budget stops it.
-fn replays(case: &Case, log: Vec<Operation>) -> Result<(), Finding> {
+/// A case its budget stopped stops alike when replayed: `got`, the replay of the log and the
+/// stopped operation, is a budget's stop with the error the case met, after the work the log of
+/// successes charged on replay (`before`) and what the stop charged in the case: so at the same
+/// operation, at the same point of it.
+fn stops_alike(case: &Case, got: &Replayed, before: Spend, stop: &Stop) -> Result<(), Finding> {
+    match got {
+        Replayed::Failed {
+            kind: ErrorKind::BudgetExceeded,
+            entities,
+            work,
+            ..
+        } if entities.as_slice() == stop.error.entities() && *work == before.plus(stop.charged) => {
+            Ok(())
+        }
+        other => Err(Finding::new(
+            "a replay of a stopped case stops where it stopped",
+            || format!("{other:?} after {before:?}: {case:?}"),
+        )),
+    }
+}
+
+/// `log` with the stopped operation at its end.
+fn to_the_stop(log: &OpLog, stop: &Stop) -> OpLog {
+    let mut stopped = log.clone();
+    stopped.operations.push(stop.operation.clone());
+    stopped
+}
+
+/// Holds the log as a whole to its laws: it reads back, replays alike, and a cut budget stops it;
+/// and where the case's budget stopped it, the replay stops there too.
+fn replays(case: &Case, log: Vec<Operation>, stop: Option<&Stop>) -> Result<(), Finding> {
     let log = OpLog::new(Vec::new(), log);
     let bytes = log
         .encode()
@@ -516,7 +623,7 @@ fn replays(case: &Case, log: Vec<Operation>) -> Result<(), Finding> {
         }));
     }
     let first = replay(&mut Kernel::new(), &log);
-    let Replayed::Done { hash, .. } = &first else {
+    let Replayed::Done { hash, work, .. } = &first else {
         return Err(Finding::new("a log of successes replays", || {
             format!("{first:?}: {case:?}")
         }));
@@ -545,10 +652,18 @@ fn replays(case: &Case, log: Vec<Operation>) -> Result<(), Finding> {
             }
         }
     }
-    Ok(())
+    match stop {
+        Some(stop) => stops_alike(
+            case,
+            &replay(&mut Kernel::new(), &to_the_stop(&log, stop)),
+            *work,
+            stop,
+        ),
+        None => Ok(()),
+    }
 }
 
-/// Holds the case's every outcome to the laws.
+/// Holds the case's every outcome to the laws, under [`WORK`].
 ///
 /// # Errors
 ///
@@ -562,11 +677,15 @@ pub fn check(case: &Case) -> Result<(), Finding> {
 /// nothing to replay, or whose run breaks a law, which `check` reports.
 #[must_use]
 pub fn replay_line(case: &Case) -> Option<String> {
-    let done = run(case).ok()?;
-    if done.log.is_empty() {
+    let done = run(case, WORK).ok()?;
+    let mut log = OpLog::new(Vec::new(), done.log);
+    // A case its budget stopped replays to its stop.
+    if let Some(stop) = &done.stop {
+        log = to_the_stop(&log, stop);
+    }
+    if log.operations.is_empty() {
         return None;
     }
-    let log = OpLog::new(Vec::new(), done.log);
     match replay(&mut Kernel::new(), &log) {
         Replayed::Done { hash, measures, .. } => {
             Some(format!("{} {measures:?}", String::from(hash)))
@@ -578,14 +697,35 @@ pub fn replay_line(case: &Case) -> Option<String> {
     }
 }
 
-/// [`check`], and how many of the case's operations succeeded: what a test uses to show that a
-/// generator's cases get past their first step.
+/// How far a case got.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Reached {
+    /// How many of its operations succeeded.
+    pub succeeded: usize,
+    /// The work units its operations charged between them, failed ones included.
+    pub work: u64,
+    /// Whether its budget stopped it.
+    pub stopped: bool,
+}
+
+/// [`check`], and how far the case got: what a test uses to show that a generator's cases get
+/// past their first step, and where the budget stops a case.
 ///
 /// # Errors
 ///
 /// As [`check`].
-pub fn reached(case: &Case) -> Result<usize, Finding> {
-    let done = run(case)?;
+pub fn reached(case: &Case) -> Result<Reached, Finding> {
+    reached_under(case, WORK)
+}
+
+/// [`reached`] with `work` units for the case in place of [`WORK`]: what a test uses to stop a
+/// small case, and hold its stop to the laws, without spending a whole budget.
+///
+/// # Errors
+///
+/// As [`check`].
+pub fn reached_under(case: &Case, work: u64) -> Result<Reached, Finding> {
+    let done = run(case, work)?;
     if let Some(last) = done.results.len().checked_sub(1) {
         let chain = chain_to(&done.results, &done.steps, last);
         check_chain(&chain).map_err(|e| {
@@ -594,7 +734,194 @@ pub fn reached(case: &Case) -> Result<usize, Finding> {
             })
         })?;
     }
-    let count = done.log.len();
-    replays(case, done.log)?;
-    Ok(count)
+    let got = Reached {
+        succeeded: done.log.len(),
+        work: done.spent,
+        stopped: done.stop.is_some(),
+    };
+    replays(case, done.log, done.stop.as_ref())?;
+    Ok(got)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "tests stop loudly"
+)]
+mod tests {
+    use super::*;
+    use crate::make::{Motion, Step};
+    use geom_make::BoxInput;
+    use geom_run::{Exceeded, Phase, Usage};
+
+    /// A box, then a pattern of three of its copies.
+    fn small() -> Case {
+        let made = Entry {
+            item: Item::Make {
+                shape: Shape::Box(BoxInput {
+                    min: P3::new(0, 0, 0).unwrap(),
+                    size: [Steps(10), Steps(20), Steps(30)],
+                }),
+                at: None,
+            },
+            on: 0,
+        };
+        let pattern = Entry {
+            item: Item::Transform(Step {
+                motions: vec![
+                    Motion::Move([100, 0, 0]),
+                    Motion::Move([200, 0, 0]),
+                    Motion::Move([300, 0, 0]),
+                ],
+                pattern: true,
+                accept: None,
+                work: 0,
+            }),
+            on: 0,
+        };
+        Case {
+            entries: vec![made, pattern],
+            cut_at: 0,
+            cut_work: 40,
+        }
+    }
+
+    /// `small` run under a budget the box leaves one unit of: it stops at the pattern.
+    fn stopped() -> Run {
+        let mut only_box = small();
+        only_box.entries.truncate(1);
+        let the_box = run(&only_box, u64::MAX).unwrap().spent;
+        let done = run(&small(), the_box.saturating_add(1)).unwrap();
+        assert_eq!(done.log.len(), 1);
+        assert!(done.stop.is_some());
+        done
+    }
+
+    #[test]
+    fn a_small_case_runs_whole_under_its_cost_and_stops_under_less() {
+        let whole = reached_under(&small(), u64::MAX).unwrap();
+        assert_eq!((whole.succeeded, whole.stopped), (2, false));
+        assert_eq!(reached_under(&small(), whole.work).unwrap(), whole);
+        let cut = reached_under(&small(), whole.work.saturating_sub(1)).unwrap();
+        assert_eq!((cut.succeeded, cut.stopped), (1, true));
+        assert!(cut.work > whole.work.saturating_sub(1), "{cut:?}");
+        // With nothing left, the first operation stops, and an empty log replays.
+        let none = reached_under(&small(), 0).unwrap();
+        assert_eq!((none.succeeded, none.stopped), (0, true));
+    }
+
+    #[test]
+    fn a_stop_replays_to_where_it_stopped_and_nowhere_else() {
+        let done = stopped();
+        let stop = done.stop.as_ref().unwrap();
+        let log = OpLog::new(Vec::new(), done.log.clone());
+        let Replayed::Done { work: before, .. } = replay(&mut Kernel::new(), &log) else {
+            panic!("the box replays");
+        };
+        let got = replay(&mut Kernel::new(), &to_the_stop(&log, stop));
+        let case = small();
+        assert!(stops_alike(&case, &got, before, stop).is_ok(), "{got:?}");
+        let Replayed::Failed {
+            hash,
+            kind,
+            entities,
+            work,
+        } = got
+        else {
+            panic!("{got:?}");
+        };
+        let one = Spend {
+            work: 1,
+            logical_bytes: 0,
+        };
+        let law = "a replay of a stopped case stops where it stopped";
+        let broken = |got: Replayed, before: Spend| {
+            assert_eq!(stops_alike(&case, &got, before, stop).unwrap_err().law, law);
+        };
+        // A stop one unit later, or after other work before it, is not this stop.
+        broken(
+            Replayed::Failed {
+                hash,
+                kind,
+                entities: entities.clone(),
+                work: work.plus(one),
+            },
+            before,
+        );
+        broken(
+            Replayed::Failed {
+                hash,
+                kind,
+                entities: entities.clone(),
+                work,
+            },
+            before.plus(one),
+        );
+        // Another kind of failure, or one naming other entities, is not it either.
+        broken(
+            Replayed::Failed {
+                hash,
+                kind: ErrorKind::Internal,
+                entities: entities.clone(),
+                work,
+            },
+            before,
+        );
+        let mut more = entities.clone();
+        more.push(NameId::from_bytes([7; 16]));
+        broken(
+            Replayed::Failed {
+                hash,
+                kind,
+                entities: more,
+                work,
+            },
+            before,
+        );
+        broken(Replayed::Broken("a panic".to_owned()), before);
+        // The log without its stop finishes: it does not stop where the case stopped.
+        broken(replay(&mut Kernel::new(), &log), before);
+    }
+
+    #[test]
+    fn a_stop_is_the_budget_the_operation_was_given() {
+        let done = stopped();
+        let stop = done.stop.as_ref().unwrap();
+        let case = small();
+        let given = stop.operation.budget;
+        assert!(the_budgets(&case, &stop.error, given).is_ok());
+        let law = "a stop is the case budget's";
+        let other = Budget::of_work(given.work.saturating_add(1));
+        assert_eq!(the_budgets(&case, &stop.error, other).unwrap_err().law, law);
+        let OpErrorDetail::Run(RunDetail::BudgetExceeded(x)) = stop.error.detail() else {
+            panic!("{:?}", stop.error.detail());
+        };
+        let bytes = Exceeded {
+            kind: BudgetKind::LogicalBytes,
+            ..*x
+        };
+        let path = stop.error.op().clone();
+        for e in [
+            OpError::new(path.clone(), RunDetail::BudgetExceeded(bytes)),
+            OpError::new(path.clone(), RunDetail::BatchTotal(*x)),
+            OpError::new(path, RunDetail::Cancelled),
+        ] {
+            assert_eq!(the_budgets(&case, &e, given).unwrap_err().law, law);
+        }
+        // An exceeded budget the run reports from elsewhere is not the operation's, even with
+        // the same work limit.
+        let elsewhere = Exceeded {
+            budget: Budget::new(given.work, 0),
+            kind: BudgetKind::Work,
+            phase: Phase::new("elsewhere"),
+            used: Usage::new(2, 0),
+        };
+        let e = OpError::new(
+            stop.error.op().clone(),
+            RunDetail::BudgetExceeded(elsewhere),
+        );
+        assert_eq!(the_budgets(&case, &e, given).unwrap_err().law, law);
+    }
 }

@@ -82,6 +82,24 @@
 //! meets; the NURBS form O(m·p²) per attempt for m pieces of degree p, the attempts doubling m;
 //! a split or reversal copies the panels, and a transform keeping lengths builds them again.
 //!
+//! What the work costs: a transition decides from its data how many panels it needs, and its
+//! NURBS form how many Taylor pieces, each of which bounds a derivative of order 10 over up to 64
+//! pieces of its own, so the meter is what bounds them, and each step is charged what it costs, at
+//! the curve kinds' rate of about 285 instructions a unit (`crate::offset`, "What the work
+//! costs"). A Gauss–Legendre node is [`NODE_WORK`] units, so a position's integral is 80; a term
+//! of the unit tangent's derivatives [`TERM_WORK`], so its derivatives to order k are
+//! k·(k + 1)·[`TERM_WORK`]/2 ([`units_work`]); an ellipse tried for a panel's remainder
+//! [`ELLIPSE_WORK`], so a panel tried is 120 and one integrated 80 more. Measured, in instructions
+//! of a release build (callgrind, a clothoid, the cant-coupled law and the sine law): a position
+//! 22,000 to 30,800, about 2,750 to 3,850 a node; the derivative bound of one station at order 10
+//! 33,200 to 48,600, at order 5 13,300 to 22,800; a parent of 4,096 panels, which tries 8,191 and
+//! integrates 4,096, 288 million, about 25,000 a panel tried besides the integrals. Before, a
+//! position was one unit, a piece of a derivative bound one whatever its order, and a panel one:
+//! the curves fuzz target's clothoid of 1,956 half-turns under a scale (issue #817) was charged
+//! 1,408,365 units for 13,040 million instructions, about 9,260 a unit, and kept inside its budget
+//! of 2,000,000 for 38 seconds of the fuzz build, past the campaign's 10-second limit; now it
+//! stops on that budget within 887 million, its parent's construction included.
+//!
 //! Consulted: IFC 4.3 documentation (buildingSMART), CC-BY-ND-4.0,
 //!   <https://github.com/buildingSMART/IFC4.3.x-development/tree/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas>,
 //!   for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s
@@ -141,6 +159,45 @@ const ELLIPSES: usize = 12;
 
 /// The sum of the panels' remainders is at most the length times this: 2⁻⁵⁶.
 const TOLERANCE: f64 = 1.0 / 72_057_594_037_927_936.0;
+
+/// The work units one node of the Gauss–Legendre rule is charged, in a position's integral or a
+/// panel's (module documentation, "What the work costs"): the heading at the node and its cosine
+/// and sine, enclosed.
+pub const NODE_WORK: u64 = 10;
+
+/// The work units one term of the unit tangent's derivatives is charged ([`units_work`]; module
+/// documentation, "What the work costs").
+pub const TERM_WORK: u64 = 2;
+
+/// The work units one ellipse tried for a panel's remainder is charged (module documentation,
+/// "What the work costs"): the heading over the ellipse's rectangle in complex intervals and the
+/// exponentials of its bound.
+pub const ELLIPSE_WORK: u64 = 10;
+
+/// The work units one position's integral is charged: [`NODE_WORK`] for each of the rule's
+/// [`NODES`] nodes, 80.
+const INTEGRAL_WORK: u64 = NODE_WORK.saturating_mul(NODES as u64);
+
+/// The work units one panel's remainder is charged: [`ELLIPSE_WORK`] for each of the
+/// [`ELLIPSES`] ellipses tried, 120.
+const REMAINDER_WORK: u64 = ELLIPSE_WORK.saturating_mul(ELLIPSES as u64);
+
+/// The work units the unit tangent's derivatives to `order` are charged: [`TERM_WORK`] for each
+/// of the recurrence's order·(order + 1)/2 terms, Leibniz's order·(order − 1)/2 products and the
+/// order derivatives of the heading they read (module documentation, "What the work costs").
+/// Zero at order 0, where there is no derivative to take.
+///
+/// # Errors
+///
+/// [`CurveError::Defect`] for an order whose count passes `u64`, from about 4.3·10⁹, which no
+/// caller asks.
+pub fn units_work(order: usize) -> Result<u64, CurveError> {
+    let k = u64::try_from(order).map_err(|_| CurveError::Defect)?;
+    k.checked_mul(k.checked_add(1).ok_or(CurveError::Defect)?)
+        .and_then(|x| x.checked_div(2))
+        .and_then(|x| x.checked_mul(TERM_WORK))
+        .ok_or(CurveError::Defect)
+}
 
 /// How the curvature of a [`Transition`] changes along it (decision 32.33): one closed set, every
 /// law evaluated by the one method of the module documentation.
@@ -727,7 +784,8 @@ impl Parent {
     }
 
     /// Certified enclosures of the point and of its derivatives with respect to the station to
-    /// `order`, at station s.
+    /// `order`, at station s, charged what they cost: the point's integral and the derivatives'
+    /// terms (module documentation, "What the work costs").
     fn enclose(
         &self,
         s: f64,
@@ -736,9 +794,9 @@ impl Parent {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<[Interval; 2]>, CurveError> {
         meter.charge(
-            u64::try_from(order)
-                .map_err(|_| CurveError::Defect)?
-                .saturating_add(1),
+            INTEGRAL_WORK
+                .checked_add(units_work(order)?)
+                .ok_or(CurveError::Defect)?,
         )?;
         let (index, xi) = self.locate(s, left)?;
         let panel = self.panels.get(index).ok_or(CurveError::Defect)?;
@@ -852,17 +910,20 @@ impl Parent {
     /// boxed the same way. Method: the mean-value form of an integral (R. E. Moore,
     /// R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009),
     /// <https://doi.org/10.1137/1.9780898717716>). Cost: at most 65 point enclosures and 64
-    /// heading evaluations, and seven enclosures more for each piece cut in eight.
+    /// heading evaluations, and seven enclosures more for each piece cut in eight. Each piece is
+    /// charged a unit and its tangent's terms, and each point enclosure what it costs
+    /// ([`Parent::enclose`]).
     fn bound(
         &self,
         stations: (f64, f64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; 2], CurveError> {
+        let piece_work = units_work(1)?.checked_add(1).ok_or(CurveError::Defect)?;
         let mut out: Option<[Interval; 2]> = None;
         for (part, h, xi) in self.parts(stations)? {
             let mut start: Option<[Interval; 2]> = None;
             for ((s0, s1), x) in self.pieces(part, h, xi)? {
-                meter.charge(1)?;
+                meter.charge(piece_work)?;
                 let p0 = match start {
                     Some(p) => p,
                     None => self.position(s0, meter)?,
@@ -870,7 +931,11 @@ impl Parent {
                 let p1 = self.position(s1, meter)?;
                 let tangent = self.tangent(h, x)?;
                 if tangent.iter().any(|d| d.lo() < 0.0 && 0.0 < d.hi()) {
-                    meter.charge(u64::from(SUBPIECES))?;
+                    meter.charge(
+                        piece_work
+                            .checked_mul(u64::from(SUBPIECES))
+                            .ok_or(CurveError::Defect)?,
+                    )?;
                     let mut q0 = p0;
                     for (r0, r1) in cut((s0, s1), SUBPIECES) {
                         let q1 = if r1 == s1 {
@@ -895,17 +960,21 @@ impl Parent {
     /// An enclosure of the derivative of `order` (at least 1) with respect to the station at
     /// every station of [s₀, s₁], from both sides at Helmert's middle (piece G67): the closed form
     /// in the heading's derivatives (Leibniz's rule on e^{iθ}) over each piece of
-    /// [`Parent::bound`]'s, hulled.
+    /// [`Parent::bound`]'s, hulled. Each piece is charged a unit and the terms of its
+    /// derivatives ([`units_work`]).
     fn derivative_bound(
         &self,
         stations: (f64, f64),
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; 2], CurveError> {
+        let piece_work = units_work(order)?
+            .checked_add(1)
+            .ok_or(CurveError::Defect)?;
         let mut out: Option<[Interval; 2]> = None;
         for (part, h, xi) in self.parts(stations)? {
             for (_, x) in self.pieces(part, h, xi)? {
-                meter.charge(1)?;
+                meter.charge(piece_work)?;
                 let top = *self.units(h, x, order)?.last().ok_or(CurveError::Defect)?;
                 out = Some(hull(out, self.turned(top)?)?);
             }
@@ -961,6 +1030,10 @@ impl Parent {
 }
 
 impl<const D: usize> ParamCurve<D> for Transition<D> {
+    fn breaks(&self) -> Vec<f64> {
+        Transition::breaks(self)
+    }
+
     fn domain(&self) -> (f64, f64) {
         let (a, b) = self.window;
         if self.reversed { (-b, -a) } else { (a, b) }
@@ -1491,8 +1564,16 @@ fn build(
 ) -> Result<(Vec<Panel>, f64), CurveError> {
     let tolerance = length * TOLERANCE;
     let mut count = if second.is_some() { 2 } else { 1 };
+    let each = |work: u64, count: usize| {
+        u64::try_from(count)
+            .ok()
+            .and_then(|n| n.checked_mul(work))
+            .ok_or(CurveError::Defect)
+    };
     loop {
-        meter.charge(u64::try_from(count).map_err(|_| CurveError::Defect)?)?;
+        // Every panel's remainder is charged before it is bounded, so the budget stops a count
+        // before its work, not after.
+        meter.charge(each(REMAINDER_WORK, count)?)?;
         let width = ratio(1, count)?;
         let half = width * 0.5;
         let mut bounds = Vec::with_capacity(count);
@@ -1511,6 +1592,7 @@ fn build(
             bounds.push(r);
         }
         if bounds.len() == count {
+            meter.charge(each(INTEGRAL_WORK, count)?)?;
             return Ok((integrate(first, second, length, &bounds)?, total.hi()));
         }
         count = count.checked_mul(2).ok_or(CurveError::Defect)?;

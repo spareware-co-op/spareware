@@ -41,8 +41,10 @@ use geom_topo::entity::{
 /// The checker's version, which a validation stamp records (24.7): a stored body from a known
 /// source whose stamp comes from a checker at least this new, and lists every group this one has,
 /// needs only the cheap groups when it is opened. It rises with every group built and every check
-/// made stricter: G84's framework with groups 1 and 4 is version 1.
-pub const VERSION: u64 = 1;
+/// made stricter: G84's framework with groups 1 and 4 is version 1; version 2 adds groups 2 and 3
+/// (G85), the exact test of two integer planes (G101) and the checks of loop sense, shell
+/// orientation and nesting (G102), which no version-1 stamp vouches for.
+pub const VERSION: u64 = 2;
 
 /// One of chapter 8.3's four groups of checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -111,6 +113,11 @@ impl Level {
     /// The level this build runs after every operation: [`Level::Full`] in a debug build or with
     /// the crate's `full` feature (every test build turns it on, chapter 28.4), otherwise
     /// [`Level::Cheap`], as shipped release builds run.
+    ///
+    /// An operation checks at this level only a result that passes groups 2 and 3 by
+    /// construction, so that the level is a second look and never the operation's answer: where
+    /// a body those groups would refuse is an ordinary outcome, the operation checks at
+    /// [`Level::Full`] in every build (principle 5; chapter 8.3; decision 32.48).
     #[must_use]
     pub const fn of_build() -> Level {
         #[cfg(any(debug_assertions, feature = "full"))]

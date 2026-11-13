@@ -266,9 +266,27 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "889323ae8306639d37f0a83194768968d86dea765bc9bfcf1efdc2250ba238c1",
+              "kind": "corpus",
+              "piece": "#773",
+              "why": "20 new count benchmarks on the Phase 3 readers and writers (Gate 3 dry run, item 5) in six new groups: cbor (G91), record (G92), body_record (G94), name_record (G95), op_record (G96) and open (G108); no existing digest moved"
+            },
+            {
+              "sha256": "d196a2dee27fdbc3bd2b181bfd27eb4bb63e01bbb757ab01a826ecddcd886431",
+              "kind": "corpus",
+              "piece": "G102",
+              "why": "6 new count benchmarks in a new group: query (the six core queries, area, bounding box, exactness, faces, validity and volume, each on built boxes and prisms); no existing digest moved; merged after #773's 20 benchmarks, whose rows are kept unchanged"
+            },
+            {
+              "sha256": "80a2b28d43791d51e103a693a7781d8278643c3ae5efd2dcb9a2b17db90be699",
+              "kind": "corpus",
+              "piece": "G86, G87, G88, G89, G109",
+              "why": "11 new count benchmarks in five new groups: encoder (G86: a map of every scalar and a set, a row of floats, SHA-256 of 256 bytes), names (G87: a name's ID, names interned in a graph), history (G88: a step's laws checked, two steps composed), resolve (G89: a reference resolved, each path in turn) and prune (G109: PruneHistory, its record written and read); no existing digest moved"
             }
           ],
-          "sha256": "889323ae8306639d37f0a83194768968d86dea765bc9bfcf1efdc2250ba238c1"
+          "sha256": "ddee718ce2bebe394e4cd1a975a27851b9d21b1ad9aace84539343ce83ac7e94"
         },
         {
           "id": "geom-nurbs/operations",

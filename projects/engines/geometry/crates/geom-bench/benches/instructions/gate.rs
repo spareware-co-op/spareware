@@ -2890,3 +2890,382 @@ pub mod make {
         benchmarks = build_box, cylinder, move_box, turn_box
     );
 }
+
+/// geom-format's CBOR decoder and text form (piece G91; decision 32.46).
+pub mod cbor {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("cbor/check/typical"))]
+    fn check(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("cbor/int_column/typical"))]
+    fn int_column(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("cbor/float_column/typical"))]
+    fn float_column(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("cbor/to_text/typical"))]
+    fn to_text(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("cbor/from_text/typical"))]
+    fn from_text(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = cbor;
+        benchmarks = check, int_column, float_column, to_text, from_text
+    );
+}
+
+/// geom-format's record layer (piece G92; decision 32.46).
+pub mod record {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("record/encode/typical"))]
+    fn encode(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("record/decode/typical"))]
+    fn decode(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("record/file_write/typical"))]
+    fn file_write(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("record/file_read/typical"))]
+    fn file_read(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = record;
+        benchmarks = encode, decode, file_write, file_read
+    );
+}
+
+/// geom-format's body records (piece G94; decision 32.46).
+pub mod body_record {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("body_record/write/typical"))]
+    fn write(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("body_record/read/typical"))]
+    fn read(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = body_record;
+        benchmarks = write, read
+    );
+}
+
+/// geom-format's name and history records (piece G95; decision 32.46).
+pub mod name_record {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("name_record/names_write/typical"))]
+    fn names_write(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("name_record/names_read/typical"))]
+    fn names_read(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("name_record/history_write/typical"))]
+    fn history_write(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("name_record/history_read/typical"))]
+    fn history_read(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = name_record;
+        benchmarks = names_write, names_read, history_write, history_read
+    );
+}
+
+/// geom-format's operation records (piece G96; decision 32.46).
+pub mod op_record {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("op_record/write/typical"))]
+    fn write(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("op_record/read/typical"))]
+    fn read(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = op_record;
+        benchmarks = write, read
+    );
+}
+
+/// geom-format's containers and trust on open (piece G108; decision 32.46).
+pub mod open {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("open/from_file/typical"))]
+    fn from_file(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("open/known/typical"))]
+    fn known(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("open/unknown/typical"))]
+    fn unknown(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = open;
+        benchmarks = from_file, known, unknown
+    );
+}
+
+/// The core queries (piece G102; decision 32.46).
+pub mod query {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/area/typical"))]
+    fn area(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/bounding_box/typical"))]
+    fn bounding_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/exactness/typical"))]
+    fn exactness(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/faces/typical"))]
+    fn faces(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/validity/typical"))]
+    fn validity(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/volume/typical"))]
+    fn volume(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = query;
+        benchmarks = area, bounding_box, exactness, faces, validity, volume
+    );
+}
+
+/// geom-op's canonical encoder and SHA-256 (piece G86; decision 32.46).
+pub mod encoder {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("encoder/map/typical"))]
+    fn map(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("encoder/float/typical"))]
+    fn float(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("encoder/sha256/typical"))]
+    fn sha256(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = encoder;
+        benchmarks = map, float, sha256
+    );
+}
+
+/// Persistent names (piece G87; decision 32.46).
+pub mod names {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("names/name_id/typical"))]
+    fn name_id(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("names/intern/typical"))]
+    fn intern(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = names;
+        benchmarks = name_id, intern
+    );
+}
+
+/// History records (piece G88; decision 32.46).
+pub mod history {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("history/check/typical"))]
+    fn check(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("history/compose/typical"))]
+    fn compose(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = history;
+        benchmarks = check, compose
+    );
+}
+
+/// Reference resolution (piece G89; decision 32.46).
+pub mod resolve {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("resolve/reference/typical"))]
+    fn reference(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = resolve;
+        benchmarks = reference
+    );
+}
+
+/// `PruneHistory` and its record (piece G109; decision 32.46).
+pub mod prune {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("prune/steps/typical"))]
+    fn steps(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("prune/record_write/typical"))]
+    fn record_write(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("prune/record_read/typical"))]
+    fn record_read(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = prune;
+        benchmarks = steps, record_write, record_read
+    );
+}

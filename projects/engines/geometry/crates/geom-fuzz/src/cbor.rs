@@ -39,7 +39,7 @@ fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
 
-fn hex(data: &[u8]) -> String {
+pub(crate) fn hex(data: &[u8]) -> String {
     data.iter().fold(String::new(), |mut out, b| {
         let _ = write!(out, "{b:02x}");
         out

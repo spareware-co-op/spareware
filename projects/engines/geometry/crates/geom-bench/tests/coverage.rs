@@ -492,6 +492,30 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("cache", include_str!("../../geom-format/src/cache.rs")),
             ("body", include_str!("../../geom-format/src/body.rs")),
+            (
+                "decode",
+                include_str!("../../geom-format/src/cbor/decode.rs"),
+            ),
+            (
+                "column",
+                include_str!("../../geom-format/src/cbor/column.rs"),
+            ),
+            ("text", include_str!("../../geom-format/src/cbor/text.rs")),
+            ("parse", include_str!("../../geom-format/src/cbor/parse.rs")),
+            ("record", include_str!("../../geom-format/src/record.rs")),
+            ("file", include_str!("../../geom-format/src/file.rs")),
+            ("names", include_str!("../../geom-format/src/names.rs")),
+            ("history", include_str!("../../geom-format/src/history.rs")),
+            (
+                "operation",
+                include_str!("../../geom-format/src/operation.rs"),
+            ),
+            (
+                "container",
+                include_str!("../../geom-format/src/container.rs"),
+            ),
+            ("trust", include_str!("../../geom-format/src/trust.rs")),
+            ("pruned", include_str!("../../geom-format/src/pruned.rs")),
         ],
     ),
     (
@@ -535,15 +559,35 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("column", include_str!("../../geom-topo/src/column.rs")),
             ("builder", include_str!("../../geom-topo/src/builder.rs")),
+            (
+                "query_ops",
+                include_str!("../../geom-topo/src/query_ops.rs"),
+            ),
         ],
     ),
     (
         "geom_name",
-        &[("classes", include_str!("../../geom-name/src/classes.rs"))],
+        &[
+            ("classes", include_str!("../../geom-name/src/classes.rs")),
+            ("faces", include_str!("../../geom-name/src/faces.rs")),
+            ("graph", include_str!("../../geom-name/src/graph.rs")),
+            ("resolve", include_str!("../../geom-name/src/resolve.rs")),
+            ("prune", include_str!("../../geom-name/src/prune.rs")),
+        ],
+    ),
+    (
+        "geom_check",
+        &[("query", include_str!("../../geom-check/src/query.rs"))],
     ),
     (
         "geom_op",
-        &[("batch", include_str!("../../geom-op/src/batch.rs"))],
+        &[
+            ("batch", include_str!("../../geom-op/src/batch.rs")),
+            ("cbor", include_str!("../../geom-op/src/cbor.rs")),
+            ("hash", include_str!("../../geom-op/src/hash.rs")),
+            ("name", include_str!("../../geom-op/src/name.rs")),
+            ("history", include_str!("../../geom-op/src/history.rs")),
+        ],
     ),
     (
         "geom_nurbs",
