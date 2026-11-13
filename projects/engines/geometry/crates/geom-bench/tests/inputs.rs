@@ -3292,7 +3292,7 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("curve_circles", k::met, &m::circle_pairs(Typical));
     all_ok("curve_line_circle", k::met, &m::line_circles(Typical));
     all_ok("curve_cubics", k::met, &m::cubic_pairs(Typical));
-    all_ok("contact_spline_line", k::touched, &m::spline_lines(Typical));
+    all_ok("contact_spline_line", k::contacted, &m::spline_lines(Typical));
     all_ok("curve_loop", k::crossed, &m::loops(Typical));
     all_ok("surface_plane", k::pierced, &m::line_planes(Typical));
     all_ok("surface_torus", k::pierced, &m::line_tori(Typical));

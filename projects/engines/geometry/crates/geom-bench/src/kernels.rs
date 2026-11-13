@@ -3167,7 +3167,7 @@ pub mod intersect {
     /// `geom_2d::contact::contacts` on each pair (piece G195): `curves`, each item read as a
     /// crossing, a touching or undecided.
     #[inline(never)]
-    pub fn touched(
+    pub fn contacted(
         batch: &[(CurveKind<2>, CurveKind<2>)],
         out: &mut Vec<Result<Vec<Contact>, IntersectError>>,
     ) {

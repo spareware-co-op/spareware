@@ -606,7 +606,7 @@ pub static OPS: &[Op] = &[
     Op { group: "intersect", name: "curve_circles", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::circle_pairs(c), kernels::intersect::met) },
     Op { group: "intersect", name: "curve_line_circle", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::line_circles(c), kernels::intersect::met) },
     Op { group: "intersect", name: "curve_cubics", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::cubic_pairs(c), kernels::intersect::met) },
-    Op { group: "intersect", name: "contact_spline_line", measures: "geom_2d::contact::contacts", classes: T, prepare: |c| bind(inputs::intersect::spline_lines(c), kernels::intersect::touched) },
+    Op { group: "intersect", name: "contact_spline_line", measures: "geom_2d::contact::contacts", classes: T, prepare: |c| bind(inputs::intersect::spline_lines(c), kernels::intersect::contacted) },
     Op { group: "intersect", name: "curve_loop", measures: "geom_intersect::curve::self_crossings", classes: T, prepare: |c| bind(inputs::intersect::loops(c), kernels::intersect::crossed) },
     Op { group: "intersect", name: "surface_plane", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::line_planes(c), kernels::intersect::pierced) },
     Op { group: "intersect", name: "surface_torus", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::line_tori(c), kernels::intersect::pierced) },
