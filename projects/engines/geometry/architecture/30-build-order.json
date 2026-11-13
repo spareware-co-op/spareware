@@ -6442,5 +6442,44 @@
    "G465"
   ],
   "chapter": "25, 26"
+ },
+ {
+  "id": "G483",
+  "title": "Shape identity: the same shape under any placement",
+  "phase": "Phase 4",
+  "crate": "geom-num, geom-topo, geom-check",
+  "size": "Large",
+  "done_when": "query.shape_key, query.shape_id and query.shape_match for flat solids whose corners are grid points or three-plane points, under ShapeScheme v1 (32.51): neighbouring faces on one plane merged; the key from exact counts, squared edge lengths, G102's area vectors and volume; the id as the least canonical form over the candidate anchors, each corner written as three squared distances and an orient3d side, hashed with G86's encoder and SHA-256 under its own domain prefix; mirror_id and the symmetry count from the same pass; match returning Same, MirrorOnly, Different with a witness or NotCompared with a reason, the motion as a typed transform where it fits and always as named anchors, and the name map; a greatest common divisor on Wide<N> in geom-num, fuzzed against num-bigint; the widths on three-plane corners (about 1,120 bits) with a written derivation in the module header, a certificate, tests at every coordinate \u00b1(2^40 \u2212 1), a filter so the wide path runs only where narrower integers cannot hold the values, and instruction counts natively and in WebAssembly (32.29's terms); ShapeScheme v1 written as CDDL; schemas and cost bounds; a body outside the scheme is NotCanonical, never guessed. Tests: the id unchanged under renaming, arena shuffles, grid moves, quarter turns and exact rational rotations, and under two build routes to one shape (a boolean's split faces against an extruded profile); a mirror gives MirrorOnly unless the part has a mirror plane; one corner moved one step gives Different; symmetry counts equal the known groups of a box, a square prism, a cube and a tetrahedron; Same implies equal keys; agreement with a brute-force rational reference by a different author on the polyhedral corpus; ids equal on every target.",
+  "depends_on": [
+   "G102",
+   "G134",
+   "G87",
+   "G46",
+   "G131"
+  ],
+  "chapter": "6, 8, 10, 22, 32"
+ },
+ {
+  "id": "G484",
+  "title": "Shape identity: what the same shape means, and its widths (owner)",
+  "phase": "Phase 4",
+  "crate": "owner action",
+  "size": "Small",
+  "done_when": "Decided on 2026-11-14 (32.51): the same shape means equal under a rotation and a move only, exact, names and the cutting of faces ignored, holes and cuts counted, and mirror images reported apart as MirrorOnly with a mirror_id pairing opposite hands; ShapeScheme v1's canonical form and bytes, hashed with G86's SHA-256, are permanent once a program stores ids; and the wide arithmetic for three-plane corners (about 1,120 bits and a greatest common divisor on Wide<N>) joins 6.2 on 32.29's terms. G483 needs nothing more from an owner.",
+  "depends_on": [],
+  "chapter": "6, 32"
+ },
+ {
+  "id": "G485",
+  "title": "Shape identity for analytic bodies",
+  "phase": "Phase 7",
+  "crate": "geom-topo, geom-check",
+  "size": "Medium",
+  "done_when": "ShapeScheme v1's descriptors (32.51) for plane, cylinder, cone, sphere and torus faces and line, circle and ellipse edges with whole-step data: seams and same-surface neighbours merged; anchors from centres and apexes where corners are too few; bodies of revolution; every case not listed is NotCanonical; the widths derived in the module header like G483's. Tests: drilled and slotted plates, rolled sections with root radii, round bars and countersinks give equal ids under every exact motion and across build routes; a hole moved one step gives Different; the curved boolean corpus's bodies each get an id or a named reason.",
+  "depends_on": [
+   "G483",
+   "G248"
+  ],
+  "chapter": "8, 10, 22"
  }
 ]

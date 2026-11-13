@@ -224,9 +224,9 @@ Lanes: A topology, contract, checker, facade, primitives and queries; B the cano
 | G117 | Playbooks: add an operation or a query | geometry/AGENTS.md | S | A | G103, G17 |
 | G118 | Gate 3: topology, names, contract and format core proven | gate review | S | Gate | G99, G102, G104, G106, G107, G108, G109, G111, G112, G113, G114, G115, G116, G117 |
 
-### Phase 4: Exact core: polyhedra, flat booleans and exact meshes (38 pieces)
+### Phase 4: Exact core: polyhedra, flat booleans and exact meshes (40 pieces)
 
-Lanes: A the exact arrangement engine, flat and n-ary booleans, cells and batch cuts; B checkers, references, naming fixtures, local operations and the first law catalogue; C exact meshes, distance predicates and Delaunay. Owner actions are in lane Owner; the gate is G156.
+Lanes: A the exact arrangement engine, flat and n-ary booleans, cells and batch cuts; B checkers, references, naming fixtures, local operations, the first law catalogue and shape identity; C exact meshes, distance predicates and Delaunay. Owner actions are in lane Owner; the gate is G156.
 
 | ID | Piece | Crate | Size | Lane | Needs |
 | --- | --- | --- | --- | --- | --- |
@@ -268,6 +268,8 @@ Lanes: A the exact arrangement engine, flat and n-ary booleans, cells and batch 
 | G154 | Oracles: Manifold, CGAL and mesh booleans | geom-test | M | C | G113, G148, G140 |
 | G155 | Law catalogue: numbers, frames, booleans, cells, mass, names and formats | geom-test | M | B | G136, G140, G95, G102, G131 |
 | G156 | Gate 4: exact core proven | gate review | S | Gate | G124, G135, G141, G144, G145, G150, G151, G152, G153, G154, G155 |
+| G483 | Shape identity: the same shape under any placement | geom-num, geom-topo, geom-check | L | B | G102, G134, G87, G46, G131 (tests) |
+| G484 | Shape identity: what the same shape means, and its widths (owner) | owner action | S | Owner | — |
 
 ### Phase 5: Certified intersections (25 pieces)
 
@@ -360,7 +362,7 @@ Lanes: A exact 2D predicates, the arrangement, regions, booleans and offsets; B 
 | G232 | Law catalogue: 2D and sketches | geom-test | M | B | G191, G214, G231 |
 | G233 | Gate 6: 2D drafting and sketches proven | gate review | S | Gate | G205, G207, G211, G212, G213, G219, G220, G223, G230, G232 |
 
-### Phase 7: Curved modelling: booleans, sweeps, blends and offsets (51 pieces)
+### Phase 7: Curved modelling: booleans, sweeps, blends and offsets (52 pieces)
 
 Lanes: A the curved boolean and B-rep queries; B sweeps, lofts, networks and the thread toolkit; C fillets, corners, the Class-A corpus and the law catalogue; D offsets, skeletons, roofs and build-ups, drafts, face edits, swept volumes, the stair toolkit and one research spike. Owner actions are in lane Owner; the gate is G284.
 
@@ -417,6 +419,7 @@ Lanes: A the curved boolean and B-rep queries; B sweeps, lofts, networks and the
 | G282 | Chapter 13 corpus and Class-A corpus | geom-test | M | C | G267, G277, G114 |
 | G283 | Law catalogue: sweeps, blends, offsets, manufacturing and curved mass | geom-test | M | C | G252, G277, G280, G282, G247 |
 | G284 | Gate 7: curved modelling proven | gate review | S | Gate | G249, G261, G269, G276, G278, G279, G283 |
+| G485 | Shape identity for analytic bodies | geom-topo, geom-check | M | A | G483, G248 (tests) |
 
 ### Phase 8: Tessellation, spatial index and clash (24 pieces)
 
@@ -660,7 +663,7 @@ Lanes: A Spare Construct scenarios, wall-clock gates, bindings, browser builds a
 
 ## 30.5 What the board waits on
 
-**Owner actions.** 52 pieces are decisions or checks only an owner can make. Each is listed below with the pieces that need it directly; section 32 sets out the choices. A piece that waits on one may still be designed and spiked, but it does not merge until the owner action is recorded.
+**Owner actions.** 53 pieces are decisions or checks only an owner can make. Each is listed below with the pieces that need it directly; section 32 sets out the choices. A piece that waits on one may still be designed and spiked, but it does not merge until the owner action is recorded.
 
 | ID | Owner action | Needed directly by |
 | --- | --- | --- |
@@ -716,8 +719,9 @@ Lanes: A Spare Construct scenarios, wall-clock gates, bindings, browser builds a
 | G447 | Gerber and IPC-2581 terms | G474, G475 |
 | G448 | AutoCAD truth tests | G464 |
 | G449 | Wall-clock merge rule | G452 |
+| G484 | Shape identity: what the same shape means, and its widths | Nothing: decided in 32.51 |
 
-**Not gating.** These pieces do not hold up their phase's gate, because they wait on something outside the layer's proof: G250 (Research spike: certified winding number for trimmed NURBS); G258 (geom-thread toolkit); G281 (geom-stair toolkit); G378 (geom-civil compositions), these three built in Spare Construct's crates first, until a second program needs them (32.27); G438 (Rhino .3dm); G439 (Decision notes for formats not yet owned); G466 (Certify mode: candidates and design note); G467 (Certify mode: implementation); G468 (Certify mode: local escalation and default policy); G469 (Research: certifying field meshes at sharp CSG features); G470 (Research: eigen-tables for dart and corner vertices); G471 (Research: curved-eave skeletons); G472 (geom-sheet toolkit); G473 (geom-board copper operations); G474 (Board exchange: Gerber X2 and X3); G475 (Board exchange: IPC-2581); G476 (STEP AP242 semantic PMI); G477 (Placement variables at D = 3 and D = 6); G478 (3D sketch entities); G479 (Assembly mates and mechanism stepping). They still need the gates before them, and any piece that needs one of them waits for it.
+**Not gating.** These pieces do not hold up their phase's gate, because they wait on something outside the layer's proof: G250 (Research spike: certified winding number for trimmed NURBS); G258 (geom-thread toolkit); G281 (geom-stair toolkit); G378 (geom-civil compositions), these three built in Spare Construct's crates first, until a second program needs them (32.27); G438 (Rhino .3dm); G439 (Decision notes for formats not yet owned); G466 (Certify mode: candidates and design note); G467 (Certify mode: implementation); G468 (Certify mode: local escalation and default policy); G469 (Research: certifying field meshes at sharp CSG features); G470 (Research: eigen-tables for dart and corner vertices); G471 (Research: curved-eave skeletons); G472 (geom-sheet toolkit); G473 (geom-board copper operations); G474 (Board exchange: Gerber X2 and X3); G475 (Board exchange: IPC-2581); G476 (STEP AP242 semantic PMI); G477 (Placement variables at D = 3 and D = 6); G478 (3D sketch entities); G479 (Assembly mates and mechanism stepping); G483 (Shape identity: the same shape under any placement) and G485 (Shape identity for analytic bodies), queries Spare Construct needs for part marks that no layer's proof needs (32.51). They still need the gates before them, and any piece that needs one of them waits for it.
 
 **Other boards.** G460 needs Spare Construct's `CON-A18-F2-P1` (the Revit exporter add-in) and `CON-A18-F2-P2` (the Revit API terms). Map projections come from kit-ops (PROJ, section 17.1), which has no piece on Spare Kit's board yet; no kernel piece waits on it, because frame records take map conversions as data.
 
@@ -743,4 +747,4 @@ Where a chapter and chapter 27 disagree, the board follows chapter 27: linear al
 
 The board is generated from one list. `architecture/30-build-order.json` holds every piece with its done-when and is committed beside this chapter; each piece's GitHub issue, titled `<ID>: <piece>`, carries the same done-when. The generator, `geometry/tools/board/gen.py`, rebuilds the tables of 30.4, or the same tables with a Done when column, and checks that every need exists, that no piece needs a later phase, that every piece inherits its gates and that every need follows the crate graph. CI fails if the tables and the list differ.
 
-Once issues exist, IDs never change. The rule that a piece's ID is higher than its needs holds for this first board only. After that a new piece takes the next free number, and its "Needs" alone say where it fits. A piece found too big is split with `tools/piece.py split`, which makes `G123a` and `G123b`. A new operation, kind, representation, format or toolkit is added by the playbooks of section 26.1, which say what its pieces must contain. Today the board holds 476 pieces, G07 to G482: 412 pieces of work, 52 owner actions and 12 gate reviews, with the first Stable release as the thirteenth gate.
+Once issues exist, IDs never change. The rule that a piece's ID is higher than its needs holds for this first board only. After that a new piece takes the next free number, and its "Needs" alone say where it fits. A piece found too big is split with `tools/piece.py split`, which makes `G123a` and `G123b`. A new operation, kind, representation, format or toolkit is added by the playbooks of section 26.1, which say what its pieces must contain. Today the board holds 479 pieces, G07 to G485: 414 pieces of work, 53 owner actions and 12 gate reviews, with the first Stable release as the thirteenth gate.
