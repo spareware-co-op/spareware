@@ -274,6 +274,39 @@ pub fn tangents(class: Class) -> Vec<(SurfaceKind, Known)> {
     })
 }
 
+/// A sheet whose section at y = v is a cubic arch that loops, crossing itself along a line: the
+/// arch with control points (−a, 0), (b, h), (−b, h), (a, 0) in x and z, a, b and h dyadic and
+/// b > a in both end rows, for `self_intersect` (piece G176).
+#[must_use]
+pub fn sweeps(class: Class) -> Vec<SurfaceKind> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::sweeps", class);
+    batch_of(|_| {
+        let mut eighths = |lo: i64, hi: i64| -> Option<f64> {
+            Some(f64::from(i32::try_from(g.range(lo, hi)).ok()?) / 8.0)
+        };
+        let mut rows = Vec::new();
+        for _ in 0..2 {
+            let a = eighths(8, 12)?;
+            let b = a + eighths(2, 5)?;
+            let h = eighths(12, 20)?;
+            rows.push([[-a, 0.0], [b, h], [-b, h], [a, 0.0]]);
+        }
+        let across = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).ok()?;
+        let along = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).ok()?;
+        let mut net = Vec::new();
+        for i in 0..4 {
+            for (y, row) in [-1.0, 1.0].into_iter().zip(&rows) {
+                let [x, z] = *row.get(i)?;
+                net.push([x, y, z]);
+            }
+        }
+        Some(SurfaceKind::Nurbs(Surface::new(across, along, &net).ok()?))
+    })
+}
+
 /// A plane patch and a sphere resting on it, for `analyse`.
 #[must_use]
 pub fn rests(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
