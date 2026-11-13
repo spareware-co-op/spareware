@@ -570,7 +570,8 @@ fn curve_area(
     forward: bool,
     keep: [usize; 2],
 ) -> Result<Option<Interval>, BuildError> {
-    let along = match &bounding.shape {
+    // The type is named so that the recursion check can read `neg` below.
+    let along: Interval = match &bounding.shape {
         Shape::Straight { .. } => return Err(IntersectError::Internal.into()),
         Shape::Curve { curve, span, wraps } => {
             let (a, b) = curve.domain();
