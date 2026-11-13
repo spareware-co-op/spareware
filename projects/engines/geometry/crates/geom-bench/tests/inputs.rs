@@ -2711,7 +2711,7 @@ fn roots_typical_batches_all_succeed() {
     );
 }
 
-/// Every typical batch of `geom-intersect`'s benchmarks (decision 32.44) orders every list and
+/// Every typical batch of `geom-intersect`'s benchmarks (decision 32.46) orders every list and
 /// reads every key.
 #[test]
 fn intersect_typical_batches_all_succeed() {
@@ -2740,7 +2740,7 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("trace_silhouette", k::silhouettes, &m::tori(Typical));
 }
 
-/// Every typical batch of the decisions on lines and quadrics (decision 32.44) is decided.
+/// Every typical batch of the decisions on lines and quadrics (decision 32.46) is decided.
 #[test]
 fn quadric_typical_batches_all_succeed() {
     use geom_bench::inputs::quadric as m;

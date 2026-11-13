@@ -1,4 +1,4 @@
-//! Inputs for the exact decisions on lines and quadrics (piece G159, decision 32.44): lines against
+//! Inputs for the exact decisions on lines and quadrics (piece G159, decision 32.46): lines against
 //! a sphere, a cylinder, a cone and a torus, parallel axes, and pairs whose axes meet.
 //!
 //! Class `typical` only: each input lies within ±2^20 grid steps of the origin, radii and slopes

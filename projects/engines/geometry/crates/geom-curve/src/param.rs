@@ -329,6 +329,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => ParamCurve::points(c, t, side, out, results),
             CurveKind::Offset(c) => ParamCurve::points(c, t, side, out, results),
             CurveKind::OnSurface(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Intersection(c) => ParamCurve::points(c, t, side, out, results),
             CurveKind::Transition(c) => ParamCurve::points(c, t, side, out, results),
         }
     }
@@ -444,6 +445,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => ParamCurve::breaks(c),
             CurveKind::Offset(c) => ParamCurve::breaks(c),
             CurveKind::OnSurface(c) => ParamCurve::breaks(c),
+            CurveKind::Intersection(c) => ParamCurve::breaks(c),
             CurveKind::Transition(c) => ParamCurve::breaks(c),
         }
     }

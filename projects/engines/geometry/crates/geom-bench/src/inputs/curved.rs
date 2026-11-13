@@ -1,4 +1,4 @@
-//! Inputs for the curved builder's broad phase (piece G242, decision 32.44): a scene of points
+//! Inputs for the curved builder's broad phase (piece G242, decision 32.46): a scene of points
 //! padded by the contact radius, as boxes with distinct keys, for the pairs whose boxes meet. And
 //! for ray classification (piece G246): grid points in and round a box, with the box as an
 //! arrangement of one operand ([`box_scene`]); about one point in eight lies inside it, and a
