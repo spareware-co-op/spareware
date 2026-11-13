@@ -59,6 +59,11 @@ harness = false
 name = "diagnose"
 harness = false
 
+# The commit of a 1,000-entity sketch (piece G225), the same way.
+[[bench]]
+name = "commit"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

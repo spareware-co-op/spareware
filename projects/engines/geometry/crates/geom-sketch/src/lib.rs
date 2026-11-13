@@ -31,6 +31,8 @@
 //! - [`model`]: entities, variables and constraints, in authoring order (piece G217).
 //! - [`cluster`]: rigid clusters by the Hoffmann–Lomonosov–Sitharam method, for any number of rigid
 //!   motions (piece G223).
+//! - [`commit`]: the commit plan, from a solved sketch to stored geometry with every declared
+//!   incidence exact (piece G225).
 //! - [`diagnose`]: degrees of freedom, free motions, redundant and conflicting groups and the report
 //!   text (piece G224).
 //! - [`motions`]: free motions, sparse and per entity (piece G224).
@@ -51,6 +53,7 @@
 #![forbid(unsafe_code)]
 
 pub mod author;
+pub mod commit;
 pub mod diagnose;
 pub mod cluster;
 pub mod equation;

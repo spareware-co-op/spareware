@@ -416,6 +416,18 @@
               "kind": "corpus",
               "piece": "G224",
               "why": "2 new count benchmarks on geom-sketch's hot paths (decision 32.44): a chain diagnosed and the free motions of a chain by the sparse form; no existing digest moved"
+            },
+            {
+              "sha256": "ff57bf8f55d864e010b2cf05b41eb4177589ec871e987ac4e411e836d277e084",
+              "kind": "corpus",
+              "piece": "G225",
+              "why": "the G224 line's golden file at the merge, before the G187 and G188 line's benchmarks joined it; no existing digest moved"
+            },
+            {
+              "sha256": "7b4093180097afa334400fcc6295c5e8e795ef51e2f6f9468b16dd78c21ec30a",
+              "kind": "corpus",
+              "piece": "G225",
+              "why": "the G187 and G188 line's golden file at the merge; no existing digest moved"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"
