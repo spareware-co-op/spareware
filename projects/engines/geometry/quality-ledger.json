@@ -9626,6 +9626,22 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The damping runs out only if every damped step up to 10^12 is refused. Every residual is a length with a gradient near one (equation.rs), so once λ passes the Jacobian's scale the step shrinks as 1/λ and the linear model predicts it ever better: no test, and no sketch tried, runs out (replacing the return with another error fails no test). Were one to, the mutant would keep raising λ, and end at the flat-step test with the same Unsolved, at λ's overflow with Numeric, or with a step taken whose result finish still holds to the tolerance: an error or a checked answer, never a wrong one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/fit.rs",
+      "mutant": "replace < with <= in settle",
+      "line_text": "let done = refit.control_moved < TOLERANCE;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the largest move of a control point is exactly a 64th of a step, which a re-interpolation does not produce on any input a test or the fuzzer has found, and the settled answer is the same to within that bound either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/smooth.rs",
+      "mutant": "replace > with >= in line_against",
+      "line_text": "if line.first[0] * first[0] + line.first[1] * first[1] > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the line is exactly at a right angle to the spline, and then the angle between them is a half-turn either way: the measure reports its size, and the sign of an angle of half a turn is not one the measure promises."
     }
   ],
   "coverage_off": [

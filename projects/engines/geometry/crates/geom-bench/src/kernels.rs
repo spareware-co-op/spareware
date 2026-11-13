@@ -2352,9 +2352,12 @@ pub mod linalg {
 /// `geom-sketch`'s spline rules (piece G220, decision 32.44): the arc length of a spline with its
 /// proven bound, and the assembly of rational spline rules, each from the sketch's text.
 pub mod spline {
+    use geom_run::{Budget, WorkMeter};
     use geom_sketch::equation::Assembly;
+    use geom_sketch::fit::settle;
     use geom_sketch::length::spline_length;
     use geom_sketch::model::{ItemId, SketchError};
+    use geom_sketch::smooth::solve_and_measure;
     use geom_sketch::text::parse;
 
     use super::run;
@@ -2366,6 +2369,32 @@ pub mod spline {
             let sketch = parse(text)?;
             let l = spline_length(&sketch, ItemId::new(2, 0))?;
             Ok([l.value, l.error])
+        });
+    }
+
+    /// `solve` on each sketch with `solve_and_measure`: the largest residual, the iterations and
+    /// the tangent gap of the first join.
+    #[inline(never)]
+    pub fn solved_joins(batch: &[String], out: &mut Vec<Result<[f64; 3], SketchError>>) {
+        run(batch, out, |text| {
+            let sketch = parse(text)?;
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let (solved, joins) = solve_and_measure(&sketch, &mut meter)?;
+            let gap = joins.first().map_or(0.0, |j| j.continuity.tangent);
+            let iterations = u32::try_from(solved.report.iterations).map_or(f64::MAX, f64::from);
+            Ok([solved.report.largest, iterations, gap])
+        });
+    }
+
+    /// `settle` on each fit-point sketch: the rounds, whether it settled, and how far the last
+    /// re-interpolation would move a control point.
+    #[inline(never)]
+    pub fn settled_fits(batch: &[String], out: &mut Vec<Result<[f64; 3], SketchError>>) {
+        run(batch, out, |text| {
+            let sketch = parse(text)?;
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let s = settle(&sketch, ItemId::new(2, 0), &mut meter)?;
+            Ok([f64::from(s.rounds), f64::from(u8::from(s.settled)), s.moved])
         });
     }
 

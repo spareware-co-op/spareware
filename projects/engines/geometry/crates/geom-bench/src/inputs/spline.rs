@@ -105,3 +105,121 @@ pub fn rational_rules(class: Class) -> Vec<String> {
     let mut g = rng("spline::rational_rules", class);
     batch_of(|_| Some(rational(&mut g)))
 }
+
+/// A cubic cut at its middle, the right half pulled off the join by a few steps, with a join of
+/// the stated order: the points of both halves held but the right half's inner two.
+fn pulled(g: &mut SplitMix64, order: &str) -> String {
+    let p = [[0.0, 0.0], [8.0, 16.0], [24.0, 20.0], [32.0, 0.0]];
+    let mid = |a: [f64; 2], b: [f64; 2]| [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+    let (q0, q1, q2) = (mid(p[0], p[1]), mid(p[1], p[2]), mid(p[2], p[3]));
+    let (r0, r1) = (mid(q0, q1), mid(q1, q2));
+    let s = mid(r0, r1);
+    let left = [p[0], q0, r0, s];
+    let right = [s, r1, q2, p[3]];
+    let shift = 1.0 + f64::from(i32::try_from(g.range(0, 30)).unwrap_or(0)) / 10.0;
+    let mut text = String::from("sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\n");
+    for (k, c) in left.iter().enumerate() {
+        let _ = writeln!(text, "entity 1.{k} point {} {}", c[0], c[1]);
+    }
+    for (k, c) in right.iter().enumerate() {
+        let (dx, dy) = if k == 1 || k == 2 {
+            (shift, -shift)
+        } else {
+            (0.0, 0.0)
+        };
+        let _ = writeln!(text, "entity 1.{} point {} {}", 4 + k, c[0] + dx, c[1] + dy);
+    }
+    for (index, first) in [(0, 0), (1, 4)] {
+        let _ = writeln!(
+            text,
+            "entity 2.{index} spline 3 4 1.{first} 1.{} 1.{} 1.{} 8 0 0 0 0 1 1 1 1 4 1 1 1 1",
+            first + 1,
+            first + 2,
+            first + 3
+        );
+    }
+    let mut key = 0;
+    for (k, c) in left.iter().enumerate() {
+        let _ = writeln!(
+            text,
+            "constraint 3.{key} driving 0 fix 1.{k} 0 {}\nconstraint 3.{} driving 0 fix 1.{k} 1 {}",
+            c[0],
+            key + 1,
+            c[1]
+        );
+        key += 2;
+    }
+    let _ = writeln!(
+        text,
+        "constraint 3.{key} driving 0 fix 1.7 0 {}\nconstraint 3.{} driving 0 fix 1.7 1 {}",
+        right[3][0],
+        key + 1,
+        right[3][1]
+    );
+    text.push_str("constraint 4.0 driving 0 coincident 1.3 1.4\n");
+    let _ = writeln!(
+        text,
+        "constraint 4.1 driving 0 spline-join 2.0 finish 2.1 start {order}"
+    );
+    text
+}
+
+/// A fit-point spline through six points, the middle one held away from where the spline had it.
+fn dragged(g: &mut SplitMix64) -> String {
+    use geom_sketch::model::ItemId;
+    let data = [
+        [0.0, 0.0],
+        [10.0, 6.0],
+        [22.0, 9.0],
+        [31.0, 7.0],
+        [40.0, 1.0],
+        [52.0, -3.0],
+    ];
+    let mut text = String::from("sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\n");
+    for (k, p) in data.iter().enumerate() {
+        let _ = writeln!(text, "entity 1.{k} point {} {}", p[0], p[1]);
+    }
+    let Ok(mut sketch) = geom_sketch::text::parse(&text) else {
+        return text;
+    };
+    let fit_points: Vec<ItemId> = (0..6).map(|k| ItemId::new(1, k)).collect();
+    if let Ok(made) = geom_sketch::fit::author(&sketch, &fit_points, 3, ItemId::new(2, 0), 1, 100) {
+        for e in made.entities {
+            let _ = sketch.add_entity(e);
+        }
+        for c in made.constraints {
+            let _ = sketch.add_constraint(c);
+        }
+    }
+    let mut out = geom_sketch::text::write(&sketch).unwrap_or(text);
+    let tenth = |v: i64| f64::from(i32::try_from(v).unwrap_or(0)) / 10.0;
+    let (mx, my) = (22.0 + tenth(g.range(0, 80)), 9.0 + tenth(g.range(0, 80)));
+    let _ = writeln!(
+        out,
+        "constraint 3.0 driving 0 fix 1.0 0 0\nconstraint 3.1 driving 0 fix 1.0 1 0\nconstraint 3.2 driving 0 fix 1.2 0 {mx}\nconstraint 3.3 driving 0 fix 1.2 1 {my}\nconstraint 3.4 driving 0 fix 1.5 0 52\nconstraint 3.5 driving 0 fix 1.5 1 -3"
+    );
+    out
+}
+
+/// Sketches for the solver on a pulled join: cut cubics with a join of each order.
+#[must_use]
+pub fn pulled_joins(class: Class) -> Vec<String> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("spline::pulled_joins", class);
+    batch_of(|i| {
+        let order = ["g1", "g2", "g3"].get(i % 3).copied().unwrap_or("g1");
+        Some(pulled(&mut g, order))
+    })
+}
+
+/// Sketches for the settling of a fit-point spline.
+#[must_use]
+pub fn dragged_fits(class: Class) -> Vec<String> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("spline::dragged_fits", class);
+    batch_of(|_| Some(dragged(&mut g)))
+}

@@ -558,9 +558,9 @@ pub(crate) fn curvature_rate<S: Scalar>(d1: [S; 2], d2: [S; 2], d3: [S; 2]) -> R
     top.div(n.square()?.mul(n)?)
 }
 
-/// Whether either end's first two control points are one.
-fn flat_end(x: &[f64]) -> bool {
-    matches!(x, [a, b, c, d, ..] if a == c && b == d)
+/// Whether either end's first two control points are one, within `within` on each axis.
+fn flat_end(x: &[f64], within: f64) -> bool {
+    matches!(x, [a, b, c, d, ..] if together(*a, *b, *c, *d, within))
 }
 
 /// Two splines join at G1: the tangent lines at their ends are one line, scaled by a length.
@@ -572,9 +572,14 @@ impl Residual<11, 1> for JoinTangent {
         Ok([sine(jet1(a)?, jet1(b)?)?.mul(l)?])
     }
 
-    fn singular(&self, x: &[f64; 11]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 11], within: f64) -> Option<Singular> {
         let (a, b) = x.split_at(5);
-        (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+        (flat_end(a, within) || flat_end(b, within)).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 11]) -> Result<Option<S>, NumError> {
+        let (a, b, _) = halves::<S, 11, 5>(&x)?;
+        Ok(Some(S::constant(Real::ZERO).sub(dot(jet1(a)?, jet1(b)?)?)?))
     }
 }
 
@@ -595,9 +600,15 @@ impl Residual<19, 2> for JoinCurvature {
         ])
     }
 
-    fn singular(&self, x: &[f64; 19]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 19], within: f64) -> Option<Singular> {
         let (a, b) = x.split_at(9);
-        (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+        (flat_end(a, within) || flat_end(b, within)).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 19]) -> Result<Option<S>, NumError> {
+        let (a, b, _) = halves::<S, 19, 9>(&x)?;
+        let ((a1, _), (b1, _)) = (jet2(a)?, jet2(b)?);
+        Ok(Some(S::constant(Real::ZERO).sub(dot(a1, b1)?)?))
     }
 }
 
@@ -620,9 +631,15 @@ impl Residual<29, 3> for JoinCurvatureRate {
         ])
     }
 
-    fn singular(&self, x: &[f64; 29]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 29], within: f64) -> Option<Singular> {
         let (a, b) = x.split_at(14);
-        (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+        (flat_end(a, within) || flat_end(b, within)).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 29]) -> Result<Option<S>, NumError> {
+        let (a, b, _) = halves::<S, 29, 14>(&x)?;
+        let ([a1, _, _], [b1, _, _]) = (jet3(a)?, jet3(b)?);
+        Ok(Some(S::constant(Real::ZERO).sub(dot(a1, b1)?)?))
     }
 }
 
@@ -637,9 +654,15 @@ impl Residual<10, 1> for SplineAlong {
         Ok([sine(d, minus([bx, by], [ax, ay])?)?.mul(l)?])
     }
 
-    fn singular(&self, x: &[f64; 10]) -> Option<Singular> {
-        let flat_line = x[5] == x[7] && x[6] == x[8];
-        (flat_end(x) || flat_line).then_some(Singular::ZeroLengthLine)
+    fn singular(&self, x: &[f64; 10], within: f64) -> Option<Singular> {
+        let flat_line = together(x[5], x[6], x[7], x[8], within);
+        (flat_end(x, within) || flat_line).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 10]) -> Result<Option<S>, NumError> {
+        let [p0x, p0y, p1x, p1y, f, ax, ay, bx, by, _] = x;
+        let d = jet1([p0x, p0y, p1x, p1y, f])?;
+        Ok(Some(dot(d, minus([bx, by], [ax, ay])?)?))
     }
 }
 
@@ -1148,6 +1171,39 @@ pub(crate) fn inputs_of(
     })
 }
 
+/// A row of a spline rule: its places, how many control points its spline has, and how it reads its
+/// ends (piece G220).
+fn spline_row(
+    sketch: &Sketch,
+    id: ItemId,
+    kind: ConstraintKind,
+    (first, at, from): (usize, usize, usize),
+    len: usize,
+) -> Result<Row, SketchError> {
+    let n = match kind {
+        ConstraintKind::SplineLength { spline, .. }
+        | ConstraintKind::SplineThrough { spline, .. } => {
+            sketch.spline_parts(spline, 0)?.points.len()
+        }
+        _ => 0,
+    };
+    let round = match kind {
+        ConstraintKind::SplineAgainst { other, .. } => sketch.line(other).is_err(),
+        _ => false,
+    };
+    Ok(Row {
+        id,
+        kind,
+        first,
+        at,
+        from,
+        len,
+        n,
+        lin: linear_layout(sketch, &kind)?,
+        round,
+    })
+}
+
 /// A sketch's residuals and Jacobian.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Assembly {
@@ -1360,28 +1416,13 @@ impl Assembly {
                 }
             }
             rows.try_reserve(1).map_err(|_| SketchError::OutOfMemory)?;
-            let n = match kind {
-                ConstraintKind::SplineLength { spline, .. }
-                | ConstraintKind::SplineThrough { spline, .. } => {
-                    sketch.spline_parts(spline, 0)?.points.len()
-                }
-                _ => 0,
-            };
-            let round = match kind {
-                ConstraintKind::SplineAgainst { other, .. } => sketch.line(other).is_err(),
-                _ => false,
-            };
-            rows.push(Row {
+            rows.push(spline_row(
+                sketch,
                 id,
                 kind,
-                first: equations,
-                at,
-                from,
-                len: list.len(),
-                n,
-                lin: linear_layout(sketch, &kind)?,
-                round,
-            });
+                (equations, at, from),
+                list.len(),
+            )?);
             equations = equations.checked_add(here).ok_or(SketchError::Internal)?;
         }
         let jacobian = Sparse::from_triplets(equations, variables.len(), &triplets)?;
@@ -1569,8 +1610,40 @@ impl Assembly {
             | ConstraintKind::Perpendicular { .. }
             | ConstraintKind::Sweep { .. } => self.sense(&Turned, row, x),
             ConstraintKind::Heading { .. } => self.sense(&Heading, row, x),
+            ConstraintKind::SplineJoin { order, .. } => match (row.lin, order) {
+                (false, Smoothness::Tangent) => self.sense(&JoinTangent, row, x),
+                (false, Smoothness::Curvature) => self.sense(&JoinCurvature, row, x),
+                (false, Smoothness::CurvatureRate) => self.sense(&JoinCurvatureRate, row, x),
+                (true, Smoothness::Tangent) => self.sense(&LinJoin1, row, x),
+                (true, Smoothness::Curvature) => self.sense(&LinJoin2, row, x),
+                (true, Smoothness::CurvatureRate) => self.sense(&LinJoin3, row, x),
+            },
+            ConstraintKind::SplineTangentLine { .. } if row.lin => self.sense(&LinAlong1, row, x),
+            ConstraintKind::SplineTangentLine { .. } => self.sense(&SplineAlong, row, x),
+            ConstraintKind::SplineAgainst { order, .. } => match (row.round, order) {
+                (false, Smoothness::Tangent) => self.sense(&LinAlong1, row, x),
+                (false, Smoothness::Curvature) => self.sense(&LinAlong2, row, x),
+                (false, Smoothness::CurvatureRate) => self.sense(&LinAlong3, row, x),
+                (true, Smoothness::Tangent) => self.sense(&LinRound1, row, x),
+                (true, Smoothness::Curvature) => self.sense(&LinRound2, row, x),
+                (true, Smoothness::CurvatureRate) => self.sense(&LinRound3, row, x),
+            },
             _ => Ok(None),
         }
+    }
+
+    /// The sense of the constraint `id`, if it has a rule with two branches and interval arithmetic
+    /// can certify one, at the values `x`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`] if no rule has that id; as [`Assembly::sense_of`].
+    pub(crate) fn sense_of_id(&self, id: ItemId, x: &[f64]) -> Result<Option<Sense>, SketchError> {
+        let first = self.rows.partition_point(|row| row.id < id);
+        if self.rows.get(first).is_none_or(|row| row.id != id) {
+            return Err(SketchError::Unknown(id));
+        }
+        self.sense_of(first, x)
     }
 
     fn sense<R: Residual<N, E>, const N: usize, const E: usize>(
@@ -1904,22 +1977,24 @@ impl Assembly {
             ConstraintKind::TangentAtEnd { .. } => self.run(&AcrossRadius, row, x, within),
             ConstraintKind::ArcsTangentAtEnd { .. } => self.run(&InLine, row, x, within),
             ConstraintKind::SplineJoin { order, .. } => match (row.lin, order) {
-                (false, Smoothness::Tangent) => self.run(&JoinTangent, row, x),
-                (false, Smoothness::Curvature) => self.run(&JoinCurvature, row, x),
-                (false, Smoothness::CurvatureRate) => self.run(&JoinCurvatureRate, row, x),
-                (true, Smoothness::Tangent) => self.run(&LinJoin1, row, x),
-                (true, Smoothness::Curvature) => self.run(&LinJoin2, row, x),
-                (true, Smoothness::CurvatureRate) => self.run(&LinJoin3, row, x),
+                (false, Smoothness::Tangent) => self.run(&JoinTangent, row, x, within),
+                (false, Smoothness::Curvature) => self.run(&JoinCurvature, row, x, within),
+                (false, Smoothness::CurvatureRate) => self.run(&JoinCurvatureRate, row, x, within),
+                (true, Smoothness::Tangent) => self.run(&LinJoin1, row, x, within),
+                (true, Smoothness::Curvature) => self.run(&LinJoin2, row, x, within),
+                (true, Smoothness::CurvatureRate) => self.run(&LinJoin3, row, x, within),
             },
-            ConstraintKind::SplineTangentLine { .. } if row.lin => self.run(&LinAlong1, row, x),
-            ConstraintKind::SplineTangentLine { .. } => self.run(&SplineAlong, row, x),
+            ConstraintKind::SplineTangentLine { .. } if row.lin => {
+                self.run(&LinAlong1, row, x, within)
+            }
+            ConstraintKind::SplineTangentLine { .. } => self.run(&SplineAlong, row, x, within),
             ConstraintKind::SplineAgainst { order, .. } => match (row.round, order) {
-                (false, Smoothness::Tangent) => self.run(&LinAlong1, row, x),
-                (false, Smoothness::Curvature) => self.run(&LinAlong2, row, x),
-                (false, Smoothness::CurvatureRate) => self.run(&LinAlong3, row, x),
-                (true, Smoothness::Tangent) => self.run(&LinRound1, row, x),
-                (true, Smoothness::Curvature) => self.run(&LinRound2, row, x),
-                (true, Smoothness::CurvatureRate) => self.run(&LinRound3, row, x),
+                (false, Smoothness::Tangent) => self.run(&LinAlong1, row, x, within),
+                (false, Smoothness::Curvature) => self.run(&LinAlong2, row, x, within),
+                (false, Smoothness::CurvatureRate) => self.run(&LinAlong3, row, x, within),
+                (true, Smoothness::Tangent) => self.run(&LinRound1, row, x, within),
+                (true, Smoothness::Curvature) => self.run(&LinRound2, row, x, within),
+                (true, Smoothness::CurvatureRate) => self.run(&LinRound3, row, x, within),
             },
             ConstraintKind::SplineLength { .. } => self.run_length(row, x),
             ConstraintKind::SplineThrough { .. } => self.run_through(row, x),

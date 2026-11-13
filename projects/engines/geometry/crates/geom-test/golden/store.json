@@ -398,6 +398,18 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1",
+              "kind": "corpus",
+              "piece": "G220",
+              "why": "2 new count benchmarks on geom-sketch's spline rules (decision 32.44): the arc length of a cubic spline with its proven error bound, and the assembly of rational spline rules (a G2 join, a G3 end against a line, a pinned point and a stated length); no existing digest moved"
+            },
+            {
+              "sha256": "7d0a63f529f229d7cc7affccc47f9696280e86b04eb1033e9d42af5e1ac02699",
+              "kind": "corpus",
+              "piece": "G220a",
+              "why": "2 new count benchmarks on geom-sketch's solver with splines (decision 32.44): a cut cubic pulled off its join and solved with its joins measured, and a fit-point spline with a dragged point settled; no existing digest moved"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"
@@ -973,6 +985,16 @@
             "function": "solved_values_are_the_same_on_every_target"
           },
           "sha256": "b835783ee649429b7f0a426e22bf0c28b9a42ae8d9da57aff43efe9acbd3def1"
+        },
+        {
+          "id": "geom-sketch/solved-splines",
+          "what": "Spline joins of geom-sketch with the solver (piece G220a): 48 cut cubics pulled off their join by an amount from a fixed sequence, with a join of each order, each through sketch v1 and back, solved and measured (every solved value, the report's counts, the measured gaps and the join's sense); and 8 fit-point splines through six points with the middle one dragged, settled (rounds, whether they settled, every solved value).",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "solved_splines_determinism",
+            "function": "solved_splines_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e4cff9338fb7ef18533588fdde8296d578243c472d12b8ad41dbf6ab83e27bab"
         }
       ]
     }

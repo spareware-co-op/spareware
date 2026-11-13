@@ -529,6 +529,8 @@ pub static OPS: &[Op] = &[
     // geom-sketch's spline rules (piece G220; decision 32.44): a spline's arc length with its bound,
     // and the assembly of rational spline rules.
     Op { group: "spline", name: "length", measures: "geom_sketch::length::spline_length", classes: T, prepare: |c| bind(inputs::spline::lengths(c), kernels::spline::lengths) },
+    Op { group: "spline", name: "solve_join", measures: "geom_sketch::smooth::solve_and_measure", classes: T, prepare: |c| bind(inputs::spline::pulled_joins(c), kernels::spline::solved_joins) },
+    Op { group: "spline", name: "settle_fit", measures: "geom_sketch::fit::settle", classes: T, prepare: |c| bind(inputs::spline::dragged_fits(c), kernels::spline::settled_fits) },
     Op { group: "spline", name: "rational_rules", measures: "geom_sketch::Assembly::new", classes: T, prepare: |c| bind(inputs::spline::rational_rules(c), kernels::spline::rational_rules) },
     // geom-format's hot paths (piece G105; decision 32.46): a cache key, a memo store's lookup and
     // a body's next version.
