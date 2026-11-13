@@ -59,7 +59,7 @@ use geom_topo::ix::Arena;
 use geom_topo::mass::Corner;
 use geom_topo::{Arenas, Body, CurveKind, Ix, SurfaceKind};
 
-use crate::combinatorial::{fin_edge, fin_ends, fin_face, rows};
+use crate::combinatorial::{face_fins, fin_edge, fin_ends, fin_face, rows};
 use crate::curved::{self, Carrier, Pair};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
@@ -75,11 +75,7 @@ pub(crate) fn check(
 ) -> Result<(), Stopped> {
     let a = body.arenas();
     let b = bound(exactness);
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "a bound past 2^53 steps exceeds every distance between points of the grid's range (below 2^42), so rounding it changes no answer"
-    )]
-    let limit = b as f64;
+    let limit = limit(exactness);
     let exact = matches!(exactness, Exactness::Exact);
     for v in rows::<Vertex>(a.rows(Arena::Vertex)) {
         sink.charge()?;
@@ -239,9 +235,21 @@ impl Surface {
         }
     }
 
-    /// How this surface and `other` lie, as far as group 3 can certify.
-    pub(crate) fn lies_with(&self, other: &Surface) -> Pair {
-        curved::pair(&self.carrier, &other.carrier)
+    /// How this surface and `other` lie, as far as group 3 can certify of two faces that between
+    /// them may lie `stray` steps off their surfaces.
+    pub(crate) fn lies_with(&self, other: &Surface, stray: f64) -> Pair {
+        curved::pair(&self.carrier, &other.carrier, stray)
+    }
+
+    /// Whether every vertex and edge of `face`'s loops lies on this surface exactly: group 2's
+    /// tests of each fin, at a bound of nothing. Such a face cannot stray from its surface, however
+    /// wide the body's bound is.
+    pub(crate) fn holds_face(&self, a: &Arenas, face: Ix<Face>) -> bool {
+        face_fins(a, face).all(|n| {
+            let vertex = fin_ends(a, n).is_none_or(|(v, _)| self.holds_vertex(a, v, 0, 0.0));
+            let edge = fin_edge(a, n).is_some_and(|e| edge_on(a, e, self, 0, 0.0));
+            [vertex, edge] == [true; 2]
+        })
     }
 }
 
@@ -321,6 +329,16 @@ const fn bound(exactness: Exactness) -> u64 {
         Exactness::Certified { bound, .. } => bound.get(),
         Exactness::Approximate { deviation, .. } => deviation.get(),
     }
+}
+
+/// [`bound`] as the double group 2 measures against on a surface not given by integers, which is
+/// how far group 3 takes a face that is not exactly on its surface to lie from it at most.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "a bound past 2^53 steps exceeds every distance between points of the grid's range (below 2^42), so rounding it changes no answer"
+)]
+pub(crate) const fn limit(exactness: Exactness) -> f64 {
+    bound(exactness) as f64
 }
 
 /// Where vertex `v` lies: `None` for three planes that do not meet in one point.

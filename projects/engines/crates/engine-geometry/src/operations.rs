@@ -219,6 +219,27 @@ const TRANSFORM_ERRORS: [ErrorSpec; 8] = [
     BUILD_FAILED,
 ];
 
+/// What a move or a mirror can return: each is a grid transform, exact on every kind, so it rounds
+/// nothing and needs no class accepted (`tests/contract_laws.rs` holds every list to its triggers).
+const GRID_TRANSFORM_ERRORS: [ErrorSpec; 5] = [
+    OUT_OF_RANGE,
+    BODY_NOT_NAMED,
+    BUDGET_EXCEEDED,
+    RESULT_INVALID,
+    BUILD_FAILED,
+];
+
+/// What a rotation can return: it keeps circles, so every kind follows it, unlike a scale.
+const ROTATE_ERRORS: [ErrorSpec; 7] = [
+    OUT_OF_RANGE,
+    BODY_NOT_NAMED,
+    NOT_ACCEPTED,
+    NOT_CERTIFIED_YET,
+    BUDGET_EXCEEDED,
+    RESULT_INVALID,
+    BUILD_FAILED,
+];
+
 /// The two regions of every solid.
 const REGION_SOLID: RoleSpec = RoleSpec {
     name: "region.solid",
@@ -374,6 +395,7 @@ const MAKE_BOX: OpSchema = OpSchema {
     classes: &[Class::Exact],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.box { min: [0, 0, 0], size: [4000, 200, 2700] } gives a solid of 6 faces, 12 \
               edges and 8 vertices, Exact.",
 };
@@ -419,6 +441,7 @@ const MAKE_CONE: OpSchema = OpSchema {
     classes: &[Class::Certified],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.cone { base: [0, 0, 0], radius: 6, height: 12, step: Q0 } gives a solid of 2 \
               faces and 1 edge, Certified within 1 step.",
 };
@@ -465,6 +488,7 @@ const MAKE_CYLINDER: OpSchema = OpSchema {
     classes: &[Class::Certified],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.cylinder { base: [0, 0, 0], radius: 5, height: 10, step: Q0 } gives a solid of 3 \
               faces and 2 edges, Certified within 1 step.",
 };
@@ -540,6 +564,7 @@ const MAKE_PRISM: OpSchema = OpSchema {
     classes: &[Class::Exact],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.prism { base: [[0, 0, 0], [10, 0, 0], [12, 7, 0], [3, 11, 0]], height: 9 } gives \
               a solid of 6 faces, Exact.",
 };
@@ -574,6 +599,7 @@ const MAKE_SPHERE: OpSchema = OpSchema {
     classes: &[Class::Certified],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.sphere { center: [1, 2, 3], radius: 5, step: Q0 } gives a solid of 1 face, \
               Certified within 1 step.",
 };
@@ -644,6 +670,7 @@ const MAKE_TORUS: OpSchema = OpSchema {
     classes: &[Class::Certified],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.torus { center: [0, 0, 0], major: 10, minor: 3, step: Q0 } gives a solid of 1 \
               face, 2 edges and 1 vertex, Certified within 1 step.",
 };
@@ -670,11 +697,12 @@ const TRANSFORM_MIRROR: OpSchema = OpSchema {
     ],
     outputs: &MOVED,
     roles: &[],
-    errors: &TRANSFORM_ERRORS,
+    errors: &GRID_TRANSFORM_ERRORS,
     diagnostics: &[],
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.mirror { body, exactness: Exact, axis: x, at: [3, -2, 1] } gives the body \
               mirrored, Exact.",
 };
@@ -699,11 +727,12 @@ const TRANSFORM_MOVE: OpSchema = OpSchema {
     ],
     outputs: &MOVED,
     roles: &[],
-    errors: &TRANSFORM_ERRORS,
+    errors: &GRID_TRANSFORM_ERRORS,
     diagnostics: &[],
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.move { body, exactness: Exact, offset: [1, 2, 3] } gives the body moved, \
               Exact.",
 };
@@ -781,6 +810,7 @@ const TRANSFORM_PATTERN: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.pattern { body, exactness: Exact, instances: [{ key, move by 20 }, { key, \
               move by 40 }] } gives two copies, Exact.",
 };
@@ -808,11 +838,12 @@ const TRANSFORM_ROTATE: OpSchema = OpSchema {
     ],
     outputs: &MOVED,
     roles: &[],
-    errors: &TRANSFORM_ERRORS,
+    errors: &ROTATE_ERRORS,
     diagnostics: &[],
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.rotate { body, exactness: Exact, axis: z, rotation: 1 quarter turn, center: \
               [1, 1, 0] } gives the body rotated, Exact.",
 };
@@ -845,6 +876,7 @@ const TRANSFORM_SCALE: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.scale { body, exactness: Exact, factors: [3, 3, 3], center: [1, 1, 1] } \
               gives the body three times the size, Exact.",
 };
@@ -997,6 +1029,7 @@ const AREA: OpSchema = OpSchema {
         Charge::new(QUERY, "fin of its loops", 1),
     ],
     batch: false,
+    name_free: false,
     example: "query.area { body: the box of 10 by 20 by 30, face: its min.z face, exactness: \
               Exact } gives [0, 0, -400] and Exact.",
 };
@@ -1026,6 +1059,7 @@ const BOUNDING_BOX: OpSchema = OpSchema {
         Charge::new(QUERY, "fin", 1),
     ],
     batch: false,
+    name_free: false,
     example: "query.bounding_box { body: the box of 10 by 20 by 30 at the origin, exactness: \
               Exact } gives (0, 0, 0) to (10, 20, 30), tight, and Exact.",
 };
@@ -1056,8 +1090,10 @@ const QUERY_EXACTNESS: OpSchema = OpSchema {
         Charge::new(QUERY, "row of the checker's cheap groups", 1),
     ],
     batch: false,
-    example: "query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 \
-              curved face, 0 straight edges, 2 curved edges, and a report that passed.",
+    name_free: false,
+    example: "query.exactness { body: the cylinder of radius 5 and height 10, exactness: Certified \
+              within 1 step } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, \
+              a report that passed, and Certified within 1 step.",
 };
 
 /// `query.faces`.
@@ -1096,8 +1132,9 @@ const FACES: OpSchema = OpSchema {
         Charge::new(QUERY, "history entry a face's name reaches", 1),
     ],
     batch: false,
+    name_free: false,
     example: "query.faces { body: a box, histories: [its make.box history], exactness: Exact } \
-              gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z.",
+              gives 6 rows with the roles min.x, max.x, min.y, max.y, min.z and max.z, and Exact.",
 };
 
 /// `query.validity`.
@@ -1132,8 +1169,9 @@ const VALIDITY: OpSchema = OpSchema {
     classes: ANY_CLASS,
     charges: &[Charge::new(QUERY, "row the checker visits", 1)],
     batch: false,
-    example: "query.validity { body: a box, exactness: Exact, level: Full } gives a report with \
-              no faults, all four groups run and nothing deferred.",
+    name_free: false,
+    example: "query.validity { body: a box, exactness: Exact, level: Full } gives a report with 0 \
+              faults, 4 groups run and 0 deferred, and Exact.",
 };
 
 /// `query.volume`.
@@ -1175,6 +1213,7 @@ const VOLUME: OpSchema = OpSchema {
         Charge::new(QUERY, "fin", 1),
     ],
     batch: false,
+    name_free: false,
     example: "query.volume { body: the box of 10 by 20 by 30, exactness: Exact } gives 36000 and \
               Exact.",
 };

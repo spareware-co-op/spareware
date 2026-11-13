@@ -5,6 +5,12 @@
 //! copies and read each copy's stretch from its transform; the class never rises; a coordinate past
 //! the grid is the numbers layer's error, never a defect; a stop publishes nothing; bad input gets
 //! a typed error with its remedy.
+//!
+//! Covers: `make.box`, `make.cone`, `make.cylinder`, `make.prism`, `make.sphere`, `make.torus`,
+//! `transform.mirror`, `transform.move`, `transform.pattern`, `transform.rotate`,
+//! `transform.scale`.
+//!
+//! Family laws: Make, Transform.
 
 #![allow(
     clippy::unwrap_used,
@@ -401,7 +407,7 @@ fn general_rotations_are_certified_where_the_checker_can_follow() {
     // A rotation by the direction (4, 3), its cosine 4/5 and its sine 3/5, accepted up to 64
     // steps: the box's corners, multiples of 5 apart, land on the grid; a sphere and a torus are
     // certified on their own; a prism's corners round off its faces' planes, and each face stands
-    // for its fan of triangles (G134); a cylinder's or cone's caps tilt off the axis' exact data,
+    // for its star of triangles (G134); a cylinder's or cone's caps tilt off the axis' exact data,
     // which the checker follows only from G177.
     for (name, out) in primitives() {
         for axis in [Axis::Z, Axis::Y] {

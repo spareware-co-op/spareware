@@ -28,8 +28,10 @@
 //! Modules:
 //!
 //! - [`operand`]: operands and selections, and an operand's faces as convex polygons (G130).
+//! - [`batch`]: any number of tools through any number of hosts (G138).
 //! - [`broad`]: the broad phase: which pairs of entities may touch (G242).
 //! - [`carrier`]: what the curved builder stores: points, curves and their carriers (G242).
+//! - [`certificate`]: what a result must show before it is returned (G133).
 //! - [`classify`]: one proven winding number for each group of split faces, by rays (G246).
 //! - [`combine`]: the boolean's entry and its schema (G131).
 //! - [`common`]: common blocks, pave blocks of different edges on one curve (G243).
@@ -41,23 +43,28 @@
 //! - [`half_space`]: everything on one side of a plane, as a solid operand (G130).
 //! - [`inside`]: where a point lies in a flat face, certified (G243a).
 //! - [`interfere`]: interferences, lowest dimension first, as paves on the edges (G243).
+//! - [`local`]: the arrangement step of local operations, its fast path, and the topology changes
+//!   it records (G144).
+//! - [`names`]: the names and history of a result (G132).
+//! - [`passage`]: the narrowest passage between two seeds of one cell (G137).
 //! - [`pave`]: paves in their proven order, pave blocks and split edges (G243).
 //! - [`rule`]: the contact rule at `ε_fit`, `NearContact` and `CoincidenceChain` (G242).
 //! - [`split`]: face splitting for flat carriers, loops traced by exact orientation (G244).
 //! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
 //! Status: the rebuild (G129), operands and selections (G130) and the entry (G131) built; the
-//! curved builder's data model (G242), its interferences, paves and common blocks (G243) and its
-//! face information (G243a) built;
-//! the rest by pieces G132, G133, G137, G138, G139, G144, G244, G245, G246, G247, G248, G249, G250,
-//! G324.
+//! curved builder's data model (G242), its interferences, paves and common blocks (G243), its face
+//! information (G243a), face splitting (G244) and classification (G246) built; the rest by pieces
+//! G132, G133, G137, G138, G139, G144, G245, G247, G248, G249, G250, G324.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
+pub mod batch;
 pub mod broad;
 pub mod carrier;
+pub mod certificate;
 pub mod classify;
 pub mod combine;
 pub mod common;
@@ -68,8 +75,11 @@ pub mod face;
 pub mod half_space;
 pub mod inside;
 pub mod interfere;
+pub mod local;
 pub mod merge;
+pub mod names;
 pub mod operand;
+pub mod passage;
 pub mod pave;
 pub mod rebuild;
 pub mod rule;

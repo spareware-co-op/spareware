@@ -1,5 +1,5 @@
 //! Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision
-//! 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in
+//! 32.46): a list of items put in canonical order, a circle's canonical key, a pair of lines put in
 //! canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that
 //! meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a
 //! sphere and seen in silhouette, planes through a whole sphere's poles, sheets tangent to a plane

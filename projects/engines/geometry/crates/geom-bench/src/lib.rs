@@ -22,13 +22,28 @@
 //! Public functions of `geom-num` without a benchmark of their own
 //! are listed with the reason in [`catalogue::UNMEASURED`], and a test keeps that list complete.
 //! It also measures the hot path of every phase-2 code piece in the crates above the numbers
-//! layer (decision 32.44): `geom-math`'s typed transforms, rational rotation, frames and decimal
+//! layer (decision 32.46): `geom-math`'s typed transforms, rational rotation, frames and decimal
 //! reader, `geom-linalg`'s pivoted QR and SVD, `geom-bvh`'s box tree and cell index,
 //! `geom-nurbs`'s evaluation, interpolation and Bernstein bound, and the curve and surface kinds'
 //! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
-//! from phase 3, `geom-make`'s primitives and transforms, and, from phase 4, `geom-intersect`'s
-//! canonical order,
-//! each named in the catalogue with its crate's path and checked to be a public function there.
+//! with, from phase 3, `geom-make`'s primitives and transforms, the core queries of
+//! `geom-topo`, `geom-name` and `geom-check`, `geom-op`'s canonical encoder, SHA-256, name IDs and
+//! history laws, and `geom-name`'s name graph, reference resolution and `PruneHistory` with its
+//! record in `geom-format`, and, from phase 5,
+//! `geom-intersect`'s canonical order,
+//! each named in the catalogue with its crate's path and checked to be a public function there;
+//! and, from phase 3, `geom-topo`'s columns and publishing, `geom-name`'s attribute step,
+//! `geom-op`'s batch driver and the flat arrays of points, and `geom-format`'s file readers and
+//! writers: the CBOR decoder and text form, the record layer and files, body, name, history and
+//! operation records, and containers read and opened at either trust.
+//! With them, `geom-mesh`'s triangulation (piece G153).
+//! From piece G140 it also runs the flat boolean's scenarios (23.13's scenarios at reduced scale):
+//! a wall's openings cut in one call, a door moved and cut again from the arrangement cache, a
+//! slab's holes, a union of many boxes, one and three selections from one arrangement, and a
+//! storey's rooms, each batch one whole job ([`inputs::scenario`]), and times them at full size
+//! for the nightly run.
+//! Beside the gates, [`steps`] tallies which step of chapter 23.2's ladder settled each call, per
+//! corpus.
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which
@@ -275,8 +290,8 @@
 //!
 //! Chapter 23.13's other gates measure what later pieces build: logical bytes and golden work
 //! counts need the work meter (G23), reference mode needs caches and filters to switch off, and
-//! scenario benchmarks need the operations above the numbers layer. The nightly wall-clock gate
-//! on the reference runner is G107.
+//! scenario benchmarks need the operations above the numbers layer. The wall-clock gate is G452:
+//! the reference runner's nightly timings it will judge are [`timings`] (piece G107).
 
 #![forbid(unsafe_code)]
 
@@ -295,6 +310,13 @@ pub mod inputs;
 pub mod kernels;
 pub mod rng;
 pub mod sha256;
+pub mod steps;
+// Unix and Windows only, with the `reference` feature (on by default): the reference runner's
+// nightly records and report (piece G107), which run where the runner does. Like the judge, it is
+// left out of the WebAssembly guest, whose fuel the gate measures, and out of the gate's measured
+// runs, which build without default features, so no measured binary changes with it (Cargo.toml).
+#[cfg(all(feature = "reference", any(unix, windows)))]
+pub mod timings;
 
 /// The gate: the largest rise, in percent, that any gated measure of any benchmark may show
 /// against the merge base. Principle 12 of the kernel architecture sets it at 5.

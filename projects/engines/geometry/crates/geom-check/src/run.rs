@@ -5,8 +5,10 @@
 //! group's checks on the body and the exactness the body is recorded with, and reports every
 //! fault in the order found. A group the level asks for that this checker does not have yet is
 //! listed as missing in the report, never run and never counted as passed. An operation calls it
-//! on its result before returning it, at [`Level::of_build`] (8.3; principle 4); an import, and any
-//! caller who asks, call it at [`Level::Full`].
+//! on its result before returning it (8.3; principle 4): at [`Level::of_build`] where the result
+//! passes groups 2 and 3 by construction, at [`Level::Full`] where it does not, so that no build
+//! answers differently from another (decision 32.48). An import, and any caller who asks, call
+//! it at [`Level::Full`].
 //!
 //! Guarantees:
 //!
@@ -93,7 +95,8 @@ pub fn check(
                 // not cross.
                 if sink.found() == 0 {
                     flat::sense(body, &mut sink)?;
-                    orientation::check(body, &mut scratch, &mut sink)?;
+                    let exact = matches!(exactness, Exactness::Exact);
+                    orientation::check(body, exact, &mut scratch, &mut sink)?;
                 }
                 &mut ran
             }
@@ -103,6 +106,7 @@ pub fn check(
     Ok(Report {
         faults: sink.faults,
         more: sink.more,
+        wrong: sink.wrong,
         deferred: sink.deferred,
         ran,
         missing,

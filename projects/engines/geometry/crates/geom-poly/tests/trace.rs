@@ -18,9 +18,11 @@ use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::Piece;
 use geom_poly::cut::{Clipped, clip, local_cuts};
-use geom_poly::trace::{Cell, Classified, Polygon, TraceError, classify, winding_at};
+use geom_poly::trace::{
+    Cell, Classified, Polygon, TraceError, classify, classify_inside, winding_at,
+};
 use geom_poly::winding::{Kept, Winding, WindingError, WindingTest, kept};
-use geom_run::{Budget, WorkMeter};
+use geom_run::{Budget, Cancel, POLL_EVERY, Usage, WorkMeter};
 use proptest::prelude::*;
 
 fn meter() -> WorkMeter<'static> {
@@ -437,6 +439,93 @@ fn the_same_polygons_give_the_same_vectors() {
     assert_eq!(scene(&blocks), scene(&blocks));
 }
 
+/// A cancellation source that never asks to stop, and counts how often it is read.
+#[allow(
+    clippy::disallowed_types,
+    reason = "a test's count of the reads; no kernel result depends on it"
+)]
+struct Asked(std::sync::atomic::AtomicUsize);
+
+impl Cancel for Asked {
+    fn requested(&self) -> bool {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        false
+    }
+}
+
+#[test]
+#[allow(
+    clippy::disallowed_types,
+    reason = "a test's count of the reads; no kernel result depends on it"
+)]
+fn polygons_inside_their_box_are_classified_by_each_path_s_first_leg() {
+    // classify_inside: every polygon strictly inside the box, so a path's legs past its first run
+    // just inside the box's walls, where no polygon is, and are neither traced nor charged.
+    let scenes: [&[Block]; 3] = [
+        &[A],
+        &[
+            A,
+            Block {
+                low: [2, -2, 1],
+                high: [7, 3, 3],
+            },
+        ],
+        &[
+            A,
+            Block {
+                low: [1, 1, 1],
+                high: [3, 3, 3],
+            },
+            Block {
+                low: [2, 2, -3],
+                high: [9, 5, 2],
+            },
+            Block {
+                low: [-6, 0, 0],
+                high: [1, 4, 4],
+            },
+        ],
+    ];
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    for blocks in scenes {
+        let polygons: Vec<Polygon> = blocks
+            .iter()
+            .enumerate()
+            .flat_map(|(i, b)| faces(b, Some(i as u32)))
+            .collect();
+        let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
+        let whole = classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap();
+        // A unit for each polygon on each piece's first leg and across it, nothing more.
+        let pieces: usize = cuts.iter().map(Vec::len).sum();
+        let charges = 2 * pieces * polygons.len();
+        // Each unit a charge of its own: the meter reads the cancellation every POLL_EVERY
+        // charges, so started at each place in that count, the reads it makes show how many
+        // charges the call made, one more included.
+        for before in 0..POLL_EVERY {
+            let asked = Asked(std::sync::atomic::AtomicUsize::new(0));
+            let mut first = meter().with_cancel(&asked);
+            for _ in 0..before {
+                first.charge(1).unwrap();
+            }
+            let inside =
+                classify_inside(&cell, &Winding::new(), &polygons, &cuts, &mut first).unwrap();
+            assert_eq!(inside, whole, "{blocks:?}");
+            let used = (before + charges) as u128;
+            assert_eq!(first.used(), Usage::new(used, 0), "{blocks:?}");
+            let read = asked.0.load(std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(
+                read,
+                (before + charges) / POLL_EVERY,
+                "{blocks:?}, {before}"
+            );
+        }
+        agrees(blocks, &whole);
+    }
+}
+
 #[test]
 fn a_small_budget_stops_the_trace() {
     let polygons = faces(&A, Some(0));
@@ -449,6 +538,77 @@ fn a_small_budget_stops_the_trace() {
     let got = classify(&cell, &Winding::new(), &polygons, &cuts, &mut small);
     assert!(matches!(got, Err(TraceError::Stopped(_))), "{got:?}");
     assert_eq!(got.unwrap_err().to_string(), "the meter stopped the trace");
+}
+
+/// The three planes through a point in quarter steps.
+fn through(p: [i64; 3]) -> [Plane; 3] {
+    [0, 1, 2].map(|axis| {
+        let mut n = [0i128; 3];
+        n[axis] = 4;
+        Plane::new(n, -i128::from(p[axis])).unwrap()
+    })
+}
+
+#[test]
+fn a_point_is_traced_to_what_the_oracle_counts() {
+    let blocks = [
+        Block {
+            low: [0, 0, 0],
+            high: [8, 8, 8],
+        },
+        Block {
+            low: [4, 4, 4],
+            high: [12, 12, 12],
+        },
+    ];
+    let polygons: Vec<Polygon> = blocks
+        .iter()
+        .enumerate()
+        .flat_map(|(i, b)| faces(b, Some(i as u32)))
+        .collect();
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    let outside = Winding::new();
+    for x in (-7..60).step_by(10) {
+        for y in (-7..60).step_by(10) {
+            for z in (-7..60).step_by(10) {
+                let p = [x, y, z];
+                let got = winding_at(&cell, &outside, &polygons, through(p), &mut meter());
+                assert_eq!(got.unwrap(), oracle(&blocks, p), "{p:?}");
+            }
+        }
+    }
+    // A box inside the scene starts from the vector at its own corner.
+    let cell = Cell {
+        low: [2; 3],
+        high: [10; 3],
+    };
+    let start = oracle(&blocks, [9, 9, 9]);
+    assert_eq!(start.count(0), 1);
+    for p in [[9, 9, 9], [19, 19, 19], [39, 39, 39], [39, 9, 19]] {
+        let got = winding_at(&cell, &start, &polygons, through(p), &mut meter());
+        assert_eq!(got.unwrap(), oracle(&blocks, p), "{p:?}");
+    }
+}
+
+#[test]
+fn a_small_budget_stops_the_trace_to_a_point() {
+    let polygons = faces(&A, Some(0));
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
+    let got = winding_at(
+        &cell,
+        &Winding::new(),
+        &polygons,
+        through([9; 3]),
+        &mut small,
+    );
+    assert!(matches!(got, Err(TraceError::Stopped(_))), "{got:?}");
 }
 
 #[test]
@@ -540,21 +700,54 @@ fn wedges_at(solids: &[[Plane; 4]], p: [f64; 3]) -> Winding {
     w
 }
 
-/// A point just off the middle of a piece, on the side `by` of it.
-fn off_middle(piece: &Piece, by: f64) -> [f64; 3] {
+/// A point just off a piece, on the side `by` of it: of the piece's middle and the points halfway
+/// from it to each corner, the one farthest from every plane of `solids` not parallel to the
+/// piece. A solid may touch a piece at one point, its middle included (one solid's corner at the
+/// middle of another's face), and a point just off it there lands inside that solid or not by
+/// rounding, whatever the piece holds.
+fn off_middle(piece: &Piece, by: f64, solids: &[[Plane; 4]]) -> [f64; 3] {
     let k = piece.bounds.len();
-    let mut middle = [0.0f64; 3];
-    for i in 0..k {
-        let t = Tpi::new(piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]).unwrap();
-        let (x, w) = t.homogeneous().unwrap();
-        let w = w.to_i128().unwrap() as f64;
-        for axis in 0..3 {
-            middle[axis] += x[axis].to_i128().unwrap() as f64 / w / k as f64;
-        }
-    }
+    let corners: Vec<[f64; 3]> = (0..k)
+        .map(|i| {
+            let t = Tpi::new(piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]).unwrap();
+            let (x, w) = t.homogeneous().unwrap();
+            let w = w.to_i128().unwrap() as f64;
+            [0, 1, 2].map(|axis| x[axis].to_i128().unwrap() as f64 / w)
+        })
+        .collect();
+    let middle = [0, 1, 2].map(|axis| corners.iter().map(|c| c[axis]).sum::<f64>() / k as f64);
+    let face = piece.face.n();
+    let crossing: Vec<&Plane> = solids
+        .iter()
+        .flatten()
+        .filter(|q| {
+            let n = q.n();
+            [1, 2, 0]
+                .iter()
+                .zip([2, 0, 1])
+                .any(|(&a, b)| n[a] * face[b] != n[b] * face[a])
+        })
+        .collect();
+    let gap = |p: &[f64; 3]| {
+        crossing
+            .iter()
+            .map(|q| {
+                let n = q.n().map(|v| v as f64);
+                let value = (0..3).map(|i| n[i] * p[i]).sum::<f64>() + q.d() as f64;
+                value.abs() / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    let halfway = corners
+        .iter()
+        .map(|c| [0, 1, 2].map(|axis| f64::midpoint(middle[axis], c[axis])));
+    let at = core::iter::once(middle)
+        .chain(halfway)
+        .max_by(|a, b| gap(a).total_cmp(&gap(b)))
+        .unwrap();
     let n = piece.face.n().map(|v| v as f64);
     let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-    [0, 1, 2].map(|axis| middle[axis] + by * n[axis] / length)
+    [0, 1, 2].map(|axis| at[axis] + by * n[axis] / length)
 }
 
 fn wedges_agree(solids: &[[Plane; 4]]) {
@@ -569,7 +762,10 @@ fn wedges_agree(solids: &[[Plane; 4]]) {
         high: [100; 3],
     };
     for c in classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap() {
-        let (front, back) = (off_middle(&c.piece, 1e-7), off_middle(&c.piece, -1e-7));
+        let (front, back) = (
+            off_middle(&c.piece, 1e-7, solids),
+            off_middle(&c.piece, -1e-7, solids),
+        );
         assert_eq!(c.front, wedges_at(solids, front), "front of {:?}", c.piece);
         assert_eq!(c.back, wedges_at(solids, back), "back of {:?}", c.piece);
     }
@@ -592,7 +788,10 @@ fn wedges_in_cell(solids: &[[Plane; 4]], cell: &Cell) {
         high: cell.high.map(|v| v * 2),
     };
     for c in classify(&doubled, &reference, &polygons, &cuts, &mut meter()).unwrap() {
-        let (front, back) = (off_middle(&c.piece, 1e-9), off_middle(&c.piece, -1e-9));
+        let (front, back) = (
+            off_middle(&c.piece, 1e-9, solids),
+            off_middle(&c.piece, -1e-9, solids),
+        );
         assert_eq!(c.front, wedges_at(solids, front), "front of {:?}", c.piece);
         assert_eq!(c.back, wedges_at(solids, back), "back of {:?}", c.piece);
     }
@@ -616,6 +815,49 @@ fn tilted_faces_are_crossed_where_a_path_leaves_them_by_either_of_two_walls() {
     let a = outward([[0, 0, 0], [9, 1, 0], [1, 8, 1], [2, 1, 7]]).unwrap();
     let b = outward([[1, 1, 1], [8, 3, 2], [3, 9, 4], [4, 2, 9]]).unwrap();
     wedges_agree(&[a]);
+    wedges_agree(&[a, b]);
+    wedges_agree(&[b, a]);
+}
+
+#[test]
+fn a_corner_at_the_middle_of_another_s_face_is_no_reason_to_sample_there() {
+    // The first solid's corner (0, 6, -1) is the middle of the second's face opposite the origin.
+    let plane = |n: [i128; 3], d: i128| Plane::new(n, d).unwrap();
+    let a = [
+        plane([-7, 5, 30], 0),
+        plane([-1, 25, -20], -170),
+        plane([42, -30, -10], 0),
+        plane([-34, 0, 0], 0),
+    ];
+    let b = [
+        plane([8, -7, 20], 0),
+        plane([32, -28, -106], 0),
+        plane([-18, 39, 48], -186),
+        plane([-22, -4, 38], 0),
+    ];
+    wedges_agree(&[a, b]);
+    wedges_agree(&[b, a]);
+}
+
+#[test]
+fn a_corner_that_touches_a_face_from_behind_is_no_reason_to_sample_there() {
+    // The second solid's corner (1, 2, 2) is the middle of the first's face opposite the origin,
+    // and the second solid lies behind that face, inside the first. Just behind the middle is
+    // inside both, but the second solid only touches the face there: everywhere else just behind
+    // it is inside the first alone, as the trace says. An unseeded property run drew this.
+    let plane = |n: [i128; 3], d: i128| Plane::new(n, d).unwrap();
+    let a = [
+        plane([30, -38, 5], 0),
+        plane([-36, 60, 12], -108),
+        plane([-6, -14, -1], 0),
+        plane([12, -8, -16], 0),
+    ];
+    let b = [
+        plane([-6, 3, 0], 0),
+        plane([6, 4, 14], -42),
+        plane([0, -21, 0], 0),
+        plane([0, 14, -14], 0),
+    ];
     wedges_agree(&[a, b]);
     wedges_agree(&[b, a]);
 }

@@ -28,6 +28,8 @@
 //! Cost: linear in the operands' fins, and what [`convex_pieces`] costs per face. Charges the meter
 //! what that does.
 
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt;
@@ -39,9 +41,10 @@ use geom_poly::convex::{ConvexError, Piece, Side, convex_pieces};
 use geom_poly::merge::Merge;
 use geom_poly::order::{Line, along, normals_det};
 use geom_poly::plane::canonical;
-use geom_poly::trace::Polygon;
+use geom_poly::subdivide::around;
+use geom_poly::trace::{Cell, Polygon};
 use geom_poly::winding::{Entry, Term as Inner, WindingError, WindingTest};
-use geom_run::{Stopped, WorkMeter};
+use geom_run::{Stopped, Usage, WorkMeter};
 use geom_topo::{
     Arenas, Body, BodyKind, CurveKind, Edge, Face, Fin, Ix, PointKind, Sense, SurfaceKind, Vertex,
 };
@@ -89,7 +92,16 @@ pub enum Term {
     Not,
 }
 
-/// What to keep of the arrangement (11.1). General fuse and cells come with their regions (G137).
+/// A point in a room and the key that names it (11.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CellSeed {
+    /// The point.
+    pub point: P3,
+    /// The room's key.
+    pub key: OperandKey,
+}
+
+/// What to keep of the arrangement (11.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Selection {
     /// Inside any solid.
@@ -129,6 +141,16 @@ pub enum Selection {
     },
     /// Only the curves where operands meet, as a wire body.
     Section,
+    /// Every cell inside a solid, as one General body whose regions are the cells.
+    GeneralFuse,
+    /// The cells that pass a test, each a body. With seeds, the cells that hold them, named by
+    /// their keys; with none, every such cell, labelled with the operands around it.
+    Cells {
+        /// The test.
+        test: Vec<Term>,
+        /// The seeds.
+        seeds: Vec<CellSeed>,
+    },
 }
 
 /// A boolean's input, without the budget and exactness its caller's context holds.
@@ -208,13 +230,56 @@ pub struct Prepared {
     pub owners: Vec<usize>,
     /// Each polygon's face, counted over every operand.
     pub sources: Vec<usize>,
+    /// Each polygon's face, a row of its operand's.
+    pub rows: Vec<u32>,
     /// One test per selection.
     pub tests: Vec<WindingTest>,
     /// One place in `keys` per selection that names a target.
     pub targets: Vec<Option<usize>>,
+    /// Each operand's box, in `keys` order, as [`around`] gives it for its polygons alone: none for
+    /// an operand with no polygons. The least and greatest of these are [`around`] of them all.
+    pub cells: Vec<Result<Option<Cell>, NumError>>,
     /// Each straight edge of a wire operand, with that operand's place in `keys`, between grid
     /// points: what Keep and Trim cut of a wire target.
     pub segments: Vec<(usize, [P3; 2])>,
+}
+
+/// What preparing one operand gave, kept for a later call that brings the same body (G139).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Held {
+    /// The body it was prepared from.
+    body: Body,
+    /// Its polygons, each with its carrier, its face row and its face counted within the operand.
+    polygons: Vec<Polygon>,
+    carriers: Vec<Carrier>,
+    rows: Vec<u32>,
+    faces: Vec<usize>,
+    /// Its box.
+    cell: Result<Option<Cell>, NumError>,
+    /// What preparing it charged and reserved.
+    used: Usage,
+}
+
+/// Each operand's preparation, by key and entry, for a later call to reuse (G139): an operand whose
+/// body equals the one held under its key and entry is not prepared again, and is charged what it
+/// cost. Any other is prepared afresh, so a held set from other inputs changes nothing.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Operands {
+    held: BTreeMap<(OperandKey, Option<Entry>), Arc<Held>>,
+}
+
+impl Operands {
+    /// How many operands it holds.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.held.len()
+    }
+
+    /// Whether it holds none.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.held.is_empty()
+    }
 }
 
 /// `plane`, facing the other way.
@@ -425,7 +490,6 @@ fn joined(face: &Plane, sides: Vec<Side>) -> Result<Vec<Side>, NumError> {
     Ok(ring)
 }
 
-/// `operand`'s polygons added to `ready`, with their carriers, its owner and its faces.
 /// The straight edges of `operand` if it is a wire, between grid points, into `ready`.
 ///
 /// # Errors
@@ -465,6 +529,7 @@ fn segments_of(
     Ok(())
 }
 
+/// `operand`'s polygons added to `ready`, with their carriers, its owner and its faces.
 fn polygons_of(
     operand: &Operand<'_>,
     entry: Option<Entry>,
@@ -486,7 +551,7 @@ fn polygons_of(
         planes.push(Some(plane));
         rows.push(face);
     }
-    for (face, plane) in rows.iter().zip(&planes) {
+    for (row, (face, plane)) in (0u32..).zip(rows.iter().zip(&planes)) {
         let plane = plane.as_ref().ok_or(broken)?;
         let mut rings: Vec<Vec<Side>> = Vec::new();
         let mut at_loop = face.first_loop;
@@ -520,6 +585,7 @@ fn polygons_of(
             });
             ready.owners.push(owner);
             ready.sources.push(source);
+            ready.rows.push(row);
         }
     }
     Ok(())
@@ -536,7 +602,12 @@ fn target_of(
         | Selection::Split { target }
         | Selection::Keep { target, .. }
         | Selection::Trim { target, .. } => target,
-        Selection::Unite | Selection::Intersect | Selection::Where(_) | Selection::Section => {
+        Selection::Unite
+        | Selection::Intersect
+        | Selection::Where(_)
+        | Selection::Section
+        | Selection::GeneralFuse
+        | Selection::Cells { .. } => {
             return Ok(None);
         }
     };
@@ -561,14 +632,18 @@ fn test_of(
             .ok_or(PrepareError::UnknownOperand(*key))
     };
     Ok(match selection {
-        Selection::Unite | Selection::Trim { .. } | Selection::Section => WindingTest::unite(),
+        Selection::Unite | Selection::Trim { .. } | Selection::Section | Selection::GeneralFuse => {
+            WindingTest::unite()
+        }
         Selection::Intersect => WindingTest::intersect(solids),
         Selection::Subtract { target } => WindingTest::subtract(entry_of(target)?),
         Selection::Imprint { target } | Selection::Split { target } => {
             WindingTest::new(alloc::vec![Inner::Inside(entry_of(target)?)])
                 .map_err(PrepareError::BadTest)?
         }
-        Selection::Where(terms) | Selection::Keep { test: terms, .. } => {
+        Selection::Where(terms)
+        | Selection::Keep { test: terms, .. }
+        | Selection::Cells { test: terms, .. } => {
             let mut inner = Vec::with_capacity(terms.len());
             for term in terms {
                 inner.push(match term {
@@ -593,6 +668,27 @@ pub fn prepare(
     input: &BooleanInput<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Prepared, PrepareError> {
+    prepare_with(input, false, meter)
+}
+
+/// [`prepare`], and if `summed` every solid but a subtraction's target on one entry (11.6): a winding
+/// vector stays two entries long however many tools there are.
+pub(crate) fn prepare_with(
+    input: &BooleanInput<'_>,
+    summed: bool,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Prepared, PrepareError> {
+    Ok(prepare_reusing(input, summed, None, meter)?.0)
+}
+
+/// [`prepare_with`], taking each operand from `reuse` when it holds the same body under the same key
+/// and entry, and returning what every operand gave, for the next call.
+pub(crate) fn prepare_reusing(
+    input: &BooleanInput<'_>,
+    summed: bool,
+    reuse: Option<&Operands>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Prepared, Operands), PrepareError> {
     let mut order: Vec<&Operand<'_>> = input.operands.iter().collect();
     order.sort_by_key(|o| o.key);
     for pair in order.windows(2) {
@@ -604,8 +700,17 @@ pub fn prepare(
     }
     let mut keys = Vec::with_capacity(order.len());
     let mut solids = 0u32;
+    let host = input.select.iter().find_map(|selection| match selection {
+        Selection::Subtract { target } => Some(*target),
+        _ => None,
+    });
     for operand in &order {
-        let entry = (operand.kind == OperandKind::Solid).then_some(solids);
+        let number = if summed {
+            u32::from(host != Some(operand.key))
+        } else {
+            solids
+        };
+        let entry = (operand.kind == OperandKind::Solid).then_some(number);
         solids = solids.saturating_add(u32::from(entry.is_some()));
         keys.push((operand.key, entry));
     }
@@ -622,13 +727,90 @@ pub fn prepare(
         carriers: Vec::new(),
         owners: Vec::new(),
         sources: Vec::new(),
+        rows: Vec::new(),
         tests,
         targets,
+        cells: Vec::with_capacity(order.len()),
         segments: Vec::new(),
     };
+    let mut kept = Operands::default();
     for (owner, (operand, entry)) in order.iter().zip(entries).enumerate() {
-        polygons_of(operand, entry, owner, &mut ready, meter)?;
+        let held = reuse
+            .and_then(|r| r.held.get(&(operand.key, entry)))
+            .filter(|held| held.body == *operand.body);
+        let held = match held {
+            Some(held) => {
+                meter
+                    .charge(wide(held.used.work))
+                    .map_err(PrepareError::Stopped)?;
+                meter
+                    .reserve(wide(held.used.logical_bytes))
+                    .map_err(PrepareError::Stopped)?;
+                Arc::clone(held)
+            }
+            None => Arc::new(prepared_one(operand, entry, meter)?),
+        };
+        let base = ready
+            .sources
+            .last()
+            .map_or(0, |last| last.saturating_add(1));
+        ready.polygons.extend(held.polygons.iter().cloned());
+        ready.carriers.extend(held.carriers.iter().cloned());
+        ready.rows.extend(held.rows.iter().copied());
+        ready
+            .owners
+            .extend(core::iter::repeat_n(owner, held.polygons.len()));
+        ready
+            .sources
+            .extend(held.faces.iter().map(|face| base.saturating_add(*face)));
+        ready.cells.push(held.cell);
+        kept.held.insert((operand.key, entry), held);
         segments_of(operand, owner, &mut ready)?;
     }
-    Ok(ready)
+    Ok((ready, kept))
+}
+
+/// A count of units, as the meter takes it.
+fn wide(units: u128) -> u64 {
+    u64::try_from(units).unwrap_or(u64::MAX)
+}
+
+/// `operand` prepared on its own, with what that charged.
+fn prepared_one(
+    operand: &Operand<'_>,
+    entry: Option<Entry>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Held, PrepareError> {
+    let before = meter.used();
+    let mut one = Prepared {
+        keys: Vec::new(),
+        polygons: Vec::new(),
+        carriers: Vec::new(),
+        owners: Vec::new(),
+        sources: Vec::new(),
+        rows: Vec::new(),
+        tests: Vec::new(),
+        targets: Vec::new(),
+        cells: Vec::new(),
+        segments: Vec::new(),
+    };
+    polygons_of(operand, entry, 0, &mut one, meter)?;
+    let after = meter.used();
+    let cell = if one.polygons.is_empty() {
+        Ok(None)
+    } else {
+        around(&one.polygons).map(Some)
+    };
+    Ok(Held {
+        body: operand.body.clone(),
+        polygons: one.polygons,
+        carriers: one.carriers,
+        rows: one.rows,
+        faces: one.sources,
+        cell,
+        used: Usage::new(
+            after.work.saturating_sub(before.work),
+            after.logical_bytes.saturating_sub(before.logical_bytes),
+        ),
+    })
 }

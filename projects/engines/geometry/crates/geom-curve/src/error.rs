@@ -67,6 +67,13 @@ pub enum CurveError {
     TooManyPanels,
     /// A step its own bounds rule out failed: a defect in this crate, reported, never a panic.
     Defect,
+    /// A flat array of a many-point call holds the wrong number of values (chapter 23.6).
+    ArrayLength {
+        /// The values it must hold.
+        expected: usize,
+        /// The values it holds.
+        given: usize,
+    },
 }
 
 impl fmt::Display for CurveError {
@@ -104,6 +111,10 @@ impl fmt::Display for CurveError {
                 "the transition's heading turns too far for its certified quadrature's panels",
             ),
             CurveError::Defect => f.write_str("an internal step failed (a defect in geom-curve)"),
+            CurveError::ArrayLength { expected, given } => write!(
+                f,
+                "a flat array holds {given} values where the call needs {expected}"
+            ),
         }
     }
 }
@@ -145,9 +156,12 @@ impl From<MathError> for CurveError {
 /// A law of the kind contract (`crate::contract`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Law {
-    /// The point lies in the bound over any span holding its parameter.
+    /// The point lies in the bound over any span holding its parameter, and the bound is a box.
+    /// Over the span that is one parameter alone it holds the point from both sides.
     BoundHoldsPoints,
-    /// Each derivative lies in the derivative bound over any span holding its parameter.
+    /// Each derivative lies in the derivative bound over any span holding its parameter, and the
+    /// bound is a box. Over the span that is one parameter alone it holds the derivative from
+    /// both sides.
     DerivativeBoundHoldsDerivatives,
     /// The doubles of `point` and `derivatives` lie in the certified enclosures, within the
     /// kind's evaluation error.

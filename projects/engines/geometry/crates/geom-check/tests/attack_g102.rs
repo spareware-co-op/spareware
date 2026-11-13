@@ -528,6 +528,11 @@ fn every_row_is_charged_and_a_stop_stops_it() {
     let full = check(&body, Exactness::Exact, Level::Full, &mut m).unwrap();
     assert!(full.passed(), "{:?}", full.faults());
     let total = m.used().work;
+    // The loop below runs the check once for each unit, so it costs the square of `total`. These
+    // three boxes cost 2478 units, each flat face read as one outline. A checker that reads them
+    // a costlier way (a face as triangles, or two crossing planes as one) is held here, at about
+    // twice that, and not after the square of its cost.
+    assert!(total < 5_000, "{total}");
     // The last unit is charged; one less stops the check.
     let mut stopped = 0;
     for work in 0..total as u64 {

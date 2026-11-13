@@ -40,6 +40,9 @@ use geom_poly::merge::{Curves, Merge, MergeError, Merged, Outward, Rules, merge_
 use geom_poly::order::normals_det;
 use geom_run::WorkMeter;
 use geom_topo::Line as Shadow;
+use geom_topo::order::Names;
+
+use crate::names::{NamingError, Near};
 use geom_topo::{
     Body, BodyKind, Box3, Builder, CurveKind, Edge, Face, Fin, Ix, Loop, PointKind, Region,
     RegionKind, Sense, Shell, SurfaceKind, TopoError, Vertex,
@@ -63,6 +66,8 @@ pub enum RebuildError {
     Num(NumError),
     /// The topology refused.
     Topo(TopoError),
+    /// A name could not be formed.
+    Naming(NamingError),
     /// A row past the end of a list: a defect, reported instead of a wrong body.
     Broken,
 }
@@ -73,6 +78,7 @@ impl fmt::Display for RebuildError {
             RebuildError::Merge(e) => write!(f, "{e}"),
             RebuildError::Num(e) => write!(f, "pieces that cannot be rebuilt: {e:?}"),
             RebuildError::Topo(e) => write!(f, "a rebuilt body refused: {e:?}"),
+            RebuildError::Naming(e) => write!(f, "{e}"),
             RebuildError::Broken => f.write_str("a rebuild lost a row"),
         }
     }
@@ -202,6 +208,7 @@ fn arenas(
     merged: &Merged,
     carriers: &[Carrier],
     open: bool,
+    given: Option<&[Near]>,
 ) -> Result<(Builder, Ix<Region>), RebuildError> {
     let mut builder = Builder::new();
     let a = &mut builder.arenas;
@@ -262,8 +269,11 @@ fn arenas(
     let mut pool: Vec<([i128; 4], Plane)> = Vec::new();
     let mut triples: Vec<Option<[Plane; 3]>> = Vec::with_capacity(merged.vertices.len());
     let mut rounded = Vec::with_capacity(merged.vertices.len());
-    for (point, list) in merged.vertices.iter().zip(&around) {
-        let near = point.to_grid()?;
+    for (at, (point, list)) in merged.vertices.iter().zip(&around).enumerate() {
+        let near = match given.and_then(|all| all.get(at)) {
+            Some(near) => (*near)?,
+            None => point.to_grid()?,
+        };
         rounded.push((near.value(), near.is_exact()));
         if near.is_exact() {
             triples.push(None);
@@ -447,19 +457,39 @@ pub fn rebuild_with(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, RebuildError> {
     let merged = merge_with(pieces, mode, rules, meter)?;
-    let (builder, outside) = arenas(&merged, carriers, rules.open)?;
-    let kind = if rules.open {
+    publish(&merged, carriers, rules.open, (None, None), meter)
+}
+
+/// `merged` written into arenas and published, in the order of `names` if it has any: an open
+/// merge is a sheet, and a closed one a solid unless some edge has more than two fins.
+///
+/// # Errors
+///
+/// A [`RebuildError`]: what the arenas refuse.
+pub fn publish(
+    merged: &Merged,
+    carriers: &[Carrier],
+    open: bool,
+    (names, rounded): (Option<&Names>, Option<&[Near]>),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Body, RebuildError> {
+    let (builder, outside) = arenas(merged, carriers, open, rounded)?;
+    // A solid body has material, so a selection that keeps nothing is a general one.
+    let kind = if open {
         BodyKind::Sheet
     } else if merged.faces.is_empty() {
         // Nothing kept bounds no volume, and a solid body holds a solid region (8.3): an empty
         // result, A less A among them (11.17), is a general body, which may hold nothing.
         BodyKind::General
-    } else if merged.edges.iter().all(|e| e.fins.len() == 2) && !pinched(&merged) {
+    } else if merged.edges.iter().all(|e| e.fins.len() == 2) && !pinched(merged) {
         BodyKind::Solid
     } else {
         BodyKind::General
     };
-    Ok(builder.publish(kind, outside, meter)?)
+    Ok(match names {
+        Some(names) => builder.publish_named(names, kind, outside, meter)?,
+        None => builder.publish(kind, outside, meter)?,
+    })
 }
 
 /// Whether some vertex's fins in one shell go round it in more than one fan: the shell's surface
@@ -507,7 +537,11 @@ fn pinched(merged: &Merged) -> bool {
 /// # Errors
 ///
 /// A [`RebuildError`]: what the arenas refuse.
-pub fn wire(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Body, RebuildError> {
+pub fn wire(
+    curves: &Curves,
+    names: Option<&Names>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Body, RebuildError> {
     let mut builder = Builder::new();
     let a = &mut builder.arenas;
     let outside = a.regions.push(Region {
@@ -549,5 +583,8 @@ pub fn wire(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Body, RebuildE
             curve,
         })?;
     }
-    Ok(builder.publish(BodyKind::Wire, outside, meter)?)
+    Ok(match names {
+        Some(names) => builder.publish_named(names, BodyKind::Wire, outside, meter)?,
+        None => builder.publish(BodyKind::Wire, outside, meter)?,
+    })
 }

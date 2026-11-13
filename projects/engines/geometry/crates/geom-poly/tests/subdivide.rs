@@ -15,7 +15,9 @@
 use geom_num::NumError;
 use geom_num::plane::{Plane, Tpi};
 use geom_poly::convex::Piece;
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
+use geom_poly::subdivide::{
+    LEAF_POLYGONS, Solved, around, around_on, arrange, arrange_reusing, arrange_with,
+};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError};
 use geom_poly::winding::{Kept, Winding, WindingTest, kept};
 #[cfg(not(target_family = "wasm"))]
@@ -247,6 +249,33 @@ fn the_box_around_polygons_is_clear_of_them_on_odd_half_steps() {
     assert_eq!(around(&[broken]), Err(NumError::Degenerate));
 }
 
+/// A and B as one entry: inside both its count is 2, so it is no solid, and a leaf holding only
+/// its faces there must be traced. Read as a solid's, those faces would bound the union.
+#[test]
+fn an_entry_that_overlaps_itself_is_traced() {
+    let mut list = polygons(&[A, B]);
+    for polygon in &mut list {
+        polygon.entry = Some(0);
+    }
+    let cell = around(&list).unwrap();
+    let classified = arrange(
+        &Exec::serial(),
+        cell,
+        Winding::new(),
+        &list,
+        1,
+        &[],
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(volume(&WindingTest::unite(), &classified), 120 * 8);
+    let inner = classified
+        .iter()
+        .filter(|c| c.front.count(0) == 1 && c.back.count(0) == 2)
+        .count();
+    assert!(inner > 0);
+}
+
 #[test]
 fn a_small_leaf_gives_the_vectors_a_large_one_does() {
     let blocks = [A, B];
@@ -360,6 +389,52 @@ fn a_split_passes_over_a_plane_that_holds_a_polygon() {
     )
     .unwrap();
     assert!(got.iter().any(|c| c.polygon == 6));
+}
+
+#[test]
+fn a_box_a_multiple_of_four_half_steps_wide_splits_between_the_whole_steps() {
+    // A block from 1 to 6 sits in a box from -1/2 to 15/2, sixteen half steps wide on every axis,
+    // so each middle, 7, is already odd: the split falls at 3 1/2, between the whole steps where
+    // faces end and meet, never at 3. Every bound a split gives a piece is then 2x = odd, the form
+    // by which the merge leaves the boxes' own planes out of a point's name; the others are the
+    // input's planes, either way round.
+    let blocks = [Block {
+        low: [1, 1, 1],
+        high: [6, 6, 6],
+    }];
+    let list = polygons(&blocks);
+    let cell = around(&list).unwrap();
+    assert_eq!((cell.low, cell.high), ([-1; 3], [15; 3]));
+    let mut planes = Vec::new();
+    for polygon in &list {
+        planes.push(polygon.piece.face);
+        planes.extend(polygon.piece.bounds.iter().copied());
+    }
+    let input = |p: &Plane| {
+        planes
+            .iter()
+            .any(|q| q == p || (q.n().map(|v| -v) == p.n() && -q.d() == p.d()))
+    };
+    let split = |p: &Plane| {
+        let n = p.n();
+        n.iter().filter(|v| **v != 0).count() == 1
+            && n.iter().any(|v| v.abs() == 2)
+            && p.d() % 2 != 0
+    };
+    for leaf in [1, 2, 4] {
+        let got = run(&blocks, leaf, &[]);
+        agrees(&blocks, &got);
+        assert!(got.len() > list.len(), "leaf {leaf}: the box split");
+        for c in &got {
+            for bound in &c.piece.bounds {
+                assert!(
+                    input(bound) || split(bound),
+                    "leaf {leaf}: {bound:?} bounds {:?}",
+                    c.piece
+                );
+            }
+        }
+    }
 }
 
 #[test]
@@ -552,6 +627,67 @@ fn any_block() -> impl Strategy<Value = Block> {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(96))]
 
+    /// Every block is a solid, so a box of one block's faces is a leaf, solved without cuts or
+    /// tracing: no more pieces than tracing gives, each with the blocks' own vectors, and the same
+    /// volumes.
+    #[test]
+    fn a_solid_s_leaves_are_what_tracing_gives(
+        blocks in prop::collection::vec(any_block(), 1..5),
+        leaf in 1usize..12,
+    ) {
+        let list = polygons(&blocks);
+        let cell = around(&list).unwrap();
+        let solids: Vec<u32> = (0..blocks.len() as u32).collect();
+        let quick = arrange_with(
+            &Exec::serial(),
+            (cell, Winding::new()),
+            &list,
+            (leaf, &[]),
+            &solids,
+            &mut meter(),
+        )
+        .unwrap();
+        let traced = run(&blocks, leaf, &[]);
+        prop_assert!(quick.len() <= traced.len());
+        agrees(&blocks, &quick);
+        for test in [
+            WindingTest::unite(),
+            WindingTest::intersect(blocks.len() as u32),
+            WindingTest::subtract(0),
+        ] {
+            prop_assert_eq!(volume(&test, &quick), volume(&test, &traced));
+        }
+    }
+
+    /// The box around, made on a pool, is the box made one polygon at a time.
+    #[test]
+    fn the_box_around_is_the_same_on_a_pool(blocks in prop::collection::vec(any_block(), 0..5)) {
+        let list = polygons(&blocks);
+        let one = around(&list).unwrap();
+        prop_assert_eq!(around_on(&Exec::serial(), &list, &mut meter()).unwrap(), one);
+        #[cfg(not(target_family = "wasm"))]
+        prop_assert_eq!(around_on(&Exec::with_pool(&Threads), &list, &mut meter()).unwrap(), one);
+    }
+
+    /// One block alone, a solid, is one leaf whatever the leaf size: its six faces whole.
+    #[test]
+    fn a_lone_solid_is_one_leaf(block in any_block(), leaf in 1usize..6) {
+        let list = polygons(&[block]);
+        let cell = around(&list).unwrap();
+        let quick = arrange_with(
+            &Exec::serial(),
+            (cell, Winding::new()),
+            &list,
+            (leaf, &[]),
+            &[0],
+            &mut meter(),
+        )
+        .unwrap();
+        let pieces: Vec<&Piece> = quick.iter().map(|c| &c.piece).collect();
+        let whole: Vec<&Piece> = list.iter().map(|p| &p.piece).collect();
+        prop_assert_eq!(pieces, whole);
+    }
+
     #[test]
     fn every_arrangement_agrees_with_the_blocks(
         blocks in prop::collection::vec(any_block(), 1..5),
@@ -570,4 +706,410 @@ proptest! {
             prop_assert_eq!(volume(&test, &dropped), want);
         }
     }
+}
+
+/// The arrangement of `blocks`, taking what it can from `reuse`, with what it solved and the work
+/// it charged.
+fn reusing(
+    blocks: &[Block],
+    leaf: usize,
+    reuse: Option<&Solved>,
+) -> (Vec<Classified>, Solved, u128) {
+    reusing_under(blocks, leaf, &[], reuse)
+}
+
+/// [`reusing`], under `tests`.
+fn reusing_under(
+    blocks: &[Block],
+    leaf: usize,
+    tests: &[WindingTest],
+    reuse: Option<&Solved>,
+) -> (Vec<Classified>, Solved, u128) {
+    let list = polygons(blocks);
+    let cell = around(&list).unwrap();
+    let mut m = meter();
+    let (classified, solved) = arrange_reusing(
+        &Exec::serial(),
+        cell,
+        Winding::new(),
+        &list,
+        leaf,
+        tests,
+        reuse,
+        &mut m,
+    )
+    .unwrap();
+    (classified, solved, m.used().work)
+}
+
+fn moved(block: Block, by: [i64; 3]) -> Block {
+    Block {
+        low: [0, 1, 2].map(|k| block.low[k] + by[k]),
+        high: [0, 1, 2].map(|k| block.high[k] + by[k]),
+    }
+}
+
+#[test]
+fn an_edit_far_from_a_box_leaves_its_answer_to_be_reused() {
+    // Two blocks far apart, and the far one moved: the boxes around the near one are the same
+    // boxes holding the same polygons, so their answers come from the cache, and the whole is what
+    // a full arrangement gives, at the same work.
+    let far = Block {
+        low: [100, 0, 0],
+        high: [104, 4, 4],
+    };
+    let (_, before, _) = reusing(&[A, far], 1, None);
+    let now = [A, moved(far, [0, 1, 0])];
+    let (full, solved, work) = reusing(&now, 1, None);
+    let (local, again, local_work) = reusing(&now, 1, Some(&before));
+    assert_eq!(local, full);
+    assert_eq!(local_work, work);
+    assert_eq!(again, solved);
+    let kept = before.shared_with(&solved);
+    assert!(
+        kept > 0 && kept < solved.len(),
+        "{kept} of {}",
+        solved.len()
+    );
+    assert_eq!(run(&now, 1, &[]), full);
+    // The boxes about the near block are taken whole from the last tree, not divided again.
+    let (held, fresh) = (
+        again.divisions_shared_with(&before),
+        solved.divisions_shared_with(&before),
+    );
+    assert!(held > 0, "no box taken");
+    assert_eq!(fresh, 0);
+    assert!(before.divisions_shared_with(&before) > held);
+}
+
+#[test]
+fn a_tree_divided_for_other_tests_or_leaves_is_divided_again() {
+    // A tree divided with no tests keeps every box; under a test that drops boxes, or with another
+    // leaf size, the boxes divide otherwise, so the tree is not taken, and the answer is the full one.
+    let blocks = [A, B];
+    let test = WindingTest::intersect(2);
+    let (_, plain, _) = reusing(&blocks, 1, None);
+    let (full, solved, work) = reusing_under(&blocks, 1, std::slice::from_ref(&test), None);
+    let (local, again, local_work) =
+        reusing_under(&blocks, 1, std::slice::from_ref(&test), Some(&plain));
+    assert_eq!((local, again.clone(), local_work), (full, solved, work));
+    assert_eq!(again.divisions_shared_with(&plain), 0);
+    let (full, solved, work) = reusing(&blocks, 3, None);
+    let (local, again, local_work) = reusing(&blocks, 3, Some(&plain));
+    assert_eq!((local, again.clone(), local_work), (full, solved, work));
+    assert_eq!(again.divisions_shared_with(&plain), 0);
+    // The same tests and leaf take the whole tree.
+    let (_, all, _) = reusing(&blocks, 1, Some(&plain));
+    assert!(all.divisions_shared_with(&plain) > 0);
+}
+
+#[test]
+fn a_cache_from_other_inputs_changes_nothing() {
+    let (_, other, _) = reusing(&[B], 1, None);
+    let (full, solved, work) = reusing(&[A], 1, None);
+    let (local, again, local_work) = reusing(&[A], 1, Some(&other));
+    assert_eq!((local, again, local_work), (full, solved.clone(), work));
+    assert_eq!(other.shared_with(&solved), 0);
+    assert!(!solved.is_empty());
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    #[test]
+    fn a_reused_arrangement_is_the_full_one_bit_for_bit_at_the_same_work(
+        blocks in prop::collection::vec(any_block(), 1..5),
+        edits in prop::collection::vec((0usize..5, [-2i64..3, -2i64..3, -2i64..3]), 1..4),
+        leaf in 1usize..12,
+    ) {
+        let mut now = blocks;
+        let (_, mut cache, _) = reusing(&now, leaf, None);
+        for (which, by) in edits {
+            let at = which % now.len();
+            now[at] = moved(now[at], by);
+            let (full, solved, work) = reusing(&now, leaf, None);
+            let (local, next, local_work) = reusing(&now, leaf, Some(&cache));
+            prop_assert_eq!(&local, &full);
+            prop_assert_eq!(local_work, work);
+            prop_assert_eq!(&next, &solved);
+            cache = next;
+        }
+    }
+}
+
+#[test]
+fn a_box_over_the_subtree_size_splits_level_by_level() {
+    // 25 cubes of one solid, apart, and a cube of another far off: 156 polygons, more than one
+    // task solves at once, so the root is split level by level. The half that holds only the
+    // first solid is still too big; at the next level it is one solid's, a leaf at once, for a
+    // union, and settled, so dropped, for an intersection. Either way the pieces are those one
+    // leaf over the whole scene gives.
+    let mut blocks: Vec<Block> = (0..25)
+        .map(|i| {
+            let (x, y) = (4 * (i % 5), 4 * (i / 5));
+            Block {
+                low: [x, y, 0],
+                high: [x + 2, y + 2, 2],
+            }
+        })
+        .collect();
+    blocks.push(Block {
+        low: [40, 40, 40],
+        high: [42, 42, 42],
+    });
+    let mut list = polygons(&blocks);
+    for polygon in &mut list {
+        polygon.entry = Some(u32::from(polygon.entry == Some(25)));
+    }
+    for test in [WindingTest::unite(), WindingTest::intersect(2)] {
+        let tests = [test.clone()];
+        let at = |leaf: usize| {
+            let cell = around(&list).unwrap();
+            arrange_with(
+                &Exec::serial(),
+                (cell, Winding::new()),
+                &list,
+                (leaf, &tests),
+                &[0, 1],
+                &mut meter(),
+            )
+            .unwrap()
+        };
+        let (levels, one) = (at(LEAF_POLYGONS), at(1_000_000));
+        assert_eq!(volume(&test, &levels), volume(&test, &one), "{test:?}");
+        // The far cube is in the upper half, a task at the first level, while the lower half is
+        // split again: tree order still puts it last.
+        let far = 25 * 6;
+        if let Some(first) = levels.iter().position(|c| c.polygon >= far) {
+            assert!(first > 0, "{test:?}");
+            assert!(levels[first..].iter().all(|c| c.polygon >= far), "{test:?}");
+        }
+    }
+    assert_eq!(
+        volume(&WindingTest::unite(), &run(&blocks, 1_000_000, &[])),
+        26 * 64
+    );
+}
+
+/// What [`arrange_reusing`] keeps of `polygons` in `cell` from `reference`, under `tests`.
+fn kept_of(
+    cell: Cell,
+    reference: Winding,
+    polygons: &[Polygon],
+    leaf: usize,
+    tests: &[WindingTest],
+) -> Solved {
+    arrange_reusing(
+        &Exec::serial(),
+        cell,
+        reference,
+        polygons,
+        leaf,
+        tests,
+        None,
+        &mut meter(),
+    )
+    .unwrap()
+    .1
+}
+
+#[test]
+fn a_kept_tree_is_compared_box_by_box() {
+    // One block of entry 0 under a test no point of it can pass: the top box is dropped at once,
+    // so nothing is solved and the trees differ only where their tops do.
+    let test = [WindingTest::intersect(3)];
+    let list = polygons(&[A]);
+    let shifted = polygons(&[moved(A, [1, 0, 0])]);
+    let cell = Cell {
+        low: [-5; 3],
+        high: [15; 3],
+    };
+    let wider = Cell {
+        low: [-5; 3],
+        high: [17, 15, 15],
+    };
+    let mut other = Winding::new();
+    other.add(5, 1).unwrap();
+    let top = kept_of(cell, Winding::new(), &list, 1, &test);
+    assert!(top.is_empty());
+    assert!(format!("{top:?}").contains("shape: Dropped"));
+    assert_eq!(top, kept_of(cell, Winding::new(), &list, 1, &test));
+    for (name, differs) in [
+        ("the box", kept_of(wider, Winding::new(), &list, 1, &test)),
+        ("the vector", kept_of(cell, other, &list, 1, &test)),
+        (
+            "the polygons",
+            kept_of(cell, Winding::new(), &shifted, 1, &test),
+        ),
+    ] {
+        assert!(differs.is_empty(), "{name}");
+        assert_ne!(top, differs, "{name}");
+    }
+}
+
+#[test]
+fn an_empty_cache_holds_nothing_and_shares_nothing() {
+    let empty = Solved::default();
+    assert!(empty.is_empty());
+    assert_eq!(empty.len(), 0);
+    let (_, solved, _) = reusing(&[A, B], 1, None);
+    assert_eq!(empty.divisions_shared_with(&solved), 0);
+    assert_eq!(solved.divisions_shared_with(&empty), 0);
+    assert_eq!(empty.shared_with(&solved), 0);
+}
+
+#[test]
+fn a_tree_divided_under_tests_is_taken_under_the_same_tests() {
+    let blocks = [A, B];
+    let tests = [WindingTest::intersect(2)];
+    let (full, first, work) = reusing_under(&blocks, 1, &tests, None);
+    let (again, second, again_work) = reusing_under(&blocks, 1, &tests, Some(&first));
+    assert_eq!((again, again_work), (full, work));
+    assert!(second.divisions_shared_with(&first) > 0);
+}
+
+/// Whether `text`'s brackets of each kind open and close in turn.
+fn balanced(text: &str) -> bool {
+    let mut open = Vec::new();
+    for c in text.chars() {
+        let want = match c {
+            '{' | '(' | '[' => {
+                open.push(c);
+                continue;
+            }
+            '}' => '{',
+            ')' => '(',
+            ']' => '[',
+            _ => continue,
+        };
+        if open.pop() != Some(want) {
+            return false;
+        }
+    }
+    open.is_empty()
+}
+
+/// Whether every line of a pretty text is indented four spaces for each bracket open before it,
+/// once the brackets that start the line have closed, as `{:#?}` writes.
+fn indented(text: &str) -> bool {
+    let mut depth = 0usize;
+    for line in text.lines() {
+        let body = line.trim_start_matches(' ');
+        let closers = body
+            .chars()
+            .take_while(|c| matches!(c, '}' | ')' | ']'))
+            .count();
+        if line.len() - body.len() != 4 * depth.saturating_sub(closers) {
+            return false;
+        }
+        for c in body.chars() {
+            match c {
+                '{' | '(' | '[' => depth += 1,
+                '}' | ')' | ']' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+    }
+    depth == 0
+}
+
+/// The text without spaces and newlines, and without the commas the pretty form puts before a
+/// closing bracket.
+fn squeezed(text: &str) -> String {
+    let mut out: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    for (from, to) in [(",}", "}"), (",)", ")"), (",]", "]")] {
+        out = out.replace(from, to);
+    }
+    out
+}
+
+#[test]
+fn a_kept_tree_prints_as_a_derived_debug_would() {
+    // Two blocks apart under a subtraction: the top box splits between them, its lower half, the
+    // first block's alone, is a leaf, and the upper, holding only the second, is dropped. So the
+    // tree has a split, a leaf and a dropped box, and its text every part of the printer's.
+    let near = Block {
+        low: [0, 0, 0],
+        high: [2, 2, 2],
+    };
+    let far = Block {
+        low: [10, 0, 0],
+        high: [12, 2, 2],
+    };
+    let list = polygons(&[near, far]);
+    let solved = kept_of(
+        around(&list).unwrap(),
+        Winding::new(),
+        &list,
+        6,
+        &[WindingTest::subtract(0)],
+    );
+    assert_eq!(solved.len(), 1);
+    let (plain, pretty) = (format!("{solved:?}"), format!("{solved:#?}"));
+    for part in [
+        "tree: Some(Divided { cell: Cell { low: [",
+        " }, reference: Winding { pairs: [] }, polygons: [Polygon { piece: Piece { face: ",
+        "shape: Split(Halves { lower: Child { from: [0, 1, 2, 3, 4, 5], divided: Divided { ",
+        "shape: Leaf([",
+        "]), work: 0 } }, upper: Child { from: [6, 7, 8, 9, 10, 11], divided: Divided { ",
+        "shape: Dropped, work: 0 } } }), work: ",
+    ] {
+        assert!(plain.contains(part), "{part} in {plain}");
+    }
+    assert!(!plain.contains('\n'), "{plain}");
+    for part in [
+        "    tree: Some(\n        Divided {\n            cell: Cell {\n                low: [\n",
+        "            shape: Split(\n                Halves {\n                    lower: Child {\n",
+        "                            shape: Leaf(\n                                [\n",
+        "                            shape: Dropped,\n                            work: 0,\n",
+    ] {
+        assert!(pretty.contains(part), "{part} in {pretty}");
+    }
+    assert!(balanced(&plain), "{plain}");
+    assert!(balanced(&pretty), "{pretty}");
+    assert!(indented(&pretty), "{pretty}");
+    assert_eq!(squeezed(&pretty), squeezed(&plain));
+}
+
+/// Two faces of entry 0 a step apart across x, at `x` and `x + 1`, each the square from `x` to
+/// `x + 1` on the other axes: a box holds both until a split falls between them, and a split
+/// across y or z is taken until one would cut them.
+fn pair_at(x: i64) -> Vec<Polygon> {
+    let block = Block {
+        low: [x; 3],
+        high: [x + 1; 3],
+    };
+    [(x + 1, true), (x, false)]
+        .into_iter()
+        .map(|(at, upward)| Polygon {
+            piece: side(&block, 0, at, upward),
+            entry: Some(0),
+        })
+        .collect()
+}
+
+/// The box around the whole frame, a step clear, on odd half steps.
+const FRAME: Cell = Cell {
+    low: [-(1 << 41) - 1; 3],
+    high: [(1 << 41) + 1; 3],
+};
+
+/// The tree kept for [`pair_at`]`(x)` in the frame's box, with a leaf of one polygon: it splits
+/// down to where the two faces part, about 41 splits along each axis.
+fn deep_at(x: i64) -> Solved {
+    kept_of(FRAME, Winding::new(), &pair_at(x), 1, &[])
+}
+
+#[test]
+fn a_kept_tree_far_down_the_frame_compares_and_prints() {
+    // A box holding one face or none is a leaf, so every split holds both faces and lies on the
+    // path down to where they part: more than a hundred levels, near the tree's bound of 127.
+    let deep = deep_at(1_000_000_000_001);
+    let splits = format!("{deep:?}").matches("Split(").count();
+    assert!(splits > 100, "{splits} splits");
+    assert_eq!(deep, deep_at(1_000_000_000_001));
+    assert_ne!(deep, deep_at(1_000_000_000_003));
+    let pretty = format!("{deep:#?}");
+    assert!(balanced(&pretty));
+    assert!(indented(&pretty));
 }

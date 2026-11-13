@@ -50,7 +50,9 @@
 //! test and the mean-value form of chapter 6 for the pieces).
 //!
 //! Cost: a few interval evaluations of g, one `atan2` and at most sixteen evaluations per family;
-//! the pieces' route at most 64 × 9 evaluations of g and of g′.
+//! the pieces' route at most 64 × 9 evaluations of g and of g′. One work unit per extent and per
+//! piece tried, and [`FAR_CORNER`] more for each corner of an arctangent's box that the certified
+//! arctangent takes to its 192-bit path, where it spends forty times its usual instructions.
 
 #![allow(
     clippy::many_single_char_names,
@@ -79,6 +81,45 @@ const SCAN: usize = 6;
 
 /// 2⁵⁰: past it a period of 2 is too near the doubles' spacing to place a member of a family.
 const FAR: f64 = 1_125_899_906_842_624.0;
+
+/// The bits of 53 binades: the arctangent's first gate sends a corner whose coordinates' bit
+/// patterns are this far apart straight to its accurate path ([`dear`]).
+const FIRST_GATE: u64 = 53 << 52;
+
+/// 2⁴⁷: near the positive x-axis, a corner whose x is at least this many times its |y| has an
+/// angle below 2⁻⁴⁷, which the arctangent's fast paths cannot decide ([`dear`]).
+const NEAR_AXIS: f64 = 140_737_488_355_328.0;
+
+/// 2⁹⁶: near the positive x-axis, a corner whose x is more than this many times its |y| has a
+/// quotient y/x below 2⁻⁹⁶, whose rounding the arctangent's accurate path returns as it is
+/// ([`dear`]).
+const TINY_QUOTIENT: f64 = 79_228_162_514_264_337_593_543_950_336.0;
+
+/// 2⁻⁹¹⁵: below it the arctangent tests a quotient for exactness with both sides scaled by
+/// [`SCALE`], where the remainder cannot underflow ([`exact_quotient`]).
+const SMALL_Y: f64 = f64::from_bits(108 << 52);
+
+/// 2¹⁰⁵: see [`SMALL_Y`].
+const SCALE: f64 = 40_564_819_207_303_340_847_894_502_572_032.0;
+
+/// The work units an extent is charged for each corner of an arctangent's box that the certified
+/// arctangent takes to its 192-bit path (the private `dear` says which, from the arctangent's own
+/// gates), on top of its own unit.
+///
+/// What it stands for, measured: the correctly rounded `atan2` (`geom_num::math`, the CORE-MATH
+/// port) decides almost every argument in double precision, in about 240 instructions, but its
+/// 192-bit path takes about 10,300 (callgrind on a release build of an offset of an ellipse with
+/// axes of 2⁻⁶⁰ and 2⁶⁰, issue #765: 5,285,592 such calls took 54,441,804,432 instructions, and
+/// the 2,642,796 others 641,714,340). A corner near the positive x-axis that both fast paths try
+/// first takes about 2% more than one the first gate sends straight there (13,339 instructions a
+/// call against 13,045, counted on a later build and on the arctangent alone, so only the ratio
+/// is used here), and a corner the accurate path answers without its 192-bit approximation far
+/// less (130 to 1,136), so it is not charged. At the curve offset's rate of about 285 instructions
+/// a unit (`crate::offset`, "What the work costs"), 10,300 instructions are 36 units; the charge
+/// is set at 40, which holds the 2% more of the corners the fast paths try first. The extent's own
+/// unit stands for the rest of the closed form, the usual arctangent included, so an extent with
+/// no such corner is charged as it always was.
+pub const FAR_CORNER: u64 = 40;
 
 /// One function of one parameter with interval coefficients (module documentation).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -177,14 +218,96 @@ fn times(
     }
 }
 
-/// φ = atan2(b, a)/π, in half-turns, for (a, b) not both zero.
-fn phase(a: Interval, b: Interval) -> Result<Interval, CurveError> {
-    let angle = b.atan2(a)?;
-    if is_zero(angle) {
-        // On the positive x-axis: exactly 0, not 0/π widened.
-        return Ok(angle);
+/// Whether the certified arctangent takes the corner (x, y) to its 192-bit path, its rational
+/// approximation of degree 29, read from the port's own gates (`geom_num::math`'s `atan2.rs`,
+/// CORE-MATH's `atan2.c`):
+///
+/// - Its first gate sends a corner whose coordinates' bit patterns are 53 binades apart or more
+///   (`dxy`; with |y| the larger, more than 53) straight to the accurate path. For normal
+///   coordinates that is the larger at least 2⁵³ times the smaller (more than, with |y| the
+///   larger); with a subnormal one the bit patterns, not the values, set the cut.
+/// - Its two fast paths decide every other corner but those near the positive x-axis, where the
+///   angle is about y/x: the second path's error bound has a fixed part of 1.25·2⁻¹⁰¹
+///   (`EPS2_REL`·`EPS2_ABS`), wider than an ulp of an angle below 2⁻⁴⁷, so it never decides a
+///   corner with x > 0 and x ≥ 2⁴⁷·|y|, and the accurate path takes it.
+/// - The accurate path answers three kinds of corner without its rational approximation: a
+///   quotient y/x that rounds to zero, and, with x > 0, a quotient that is exactly a double
+///   ([`exact_quotient`]) or one below 2⁻⁹⁶ (`tiny_quotient`), whose atan2 rounds as it does.
+///
+/// So a corner is dear near the positive x-axis from 2⁴⁷ to 2⁹⁶ apart unless its quotient is
+/// exact, and elsewhere past the first gate unless its quotient rounds to zero; a zero coordinate
+/// is on an axis, decided at once. Checked against the port's own count of the calls that reach
+/// its rational approximation, on 400,000 corners of every kind (subnormal, exact, every quadrant
+/// and distance): none charged in vain.
+///
+/// One cost is left unpriced, because only the arctangent itself can tell it: just short of 2⁴⁷
+/// apart near the positive x-axis the bound's fixed part is still a large share of an ulp, so a
+/// corner whose angle falls that near a rounding boundary goes to the 192-bit path too. That is
+/// about 5/8 of the corners from 2⁴⁶ to 2⁴⁷ apart and half as many in each binade below (in the
+/// check above, 1,644 of the 400,000, all near the positive x-axis between 2³⁴ and 2⁴⁷ apart);
+/// which ones is decided by the angle's last bits, which only the arctangent computes.
+fn dear(y: f64, x: f64) -> bool {
+    let (ay, ax) = (y.abs(), x.abs());
+    if ay == 0.0 || ax == 0.0 {
+        return false;
     }
-    tight::div(angle, form::pi()?)
+    if x > 0.0 && ay * NEAR_AXIS <= ax {
+        // Both products are exact, or infinite where the real product passes every double.
+        return ax <= ay * TINY_QUOTIENT && !exact_quotient(y, x);
+    }
+    let (bx, by) = (ax.to_bits(), ay.to_bits());
+    let apart = bx.abs_diff(by);
+    let first_gate = if bx >= by {
+        apart >= FIRST_GATE
+    } else {
+        apart > FIRST_GATE
+    };
+    first_gate && y / x != 0.0
+}
+
+/// Whether the quotient y/x (x > 0, |y/x| ≤ 2⁻⁴⁷) is exactly a double, by the arctangent's own
+/// test: t = y/x rounded, and t·x − y by a fused multiply-add, zero only where t is the quotient;
+/// for |y| below 2⁻⁹¹⁵, where that remainder may underflow, both sides scaled by 2¹⁰⁵.
+fn exact_quotient(y: f64, x: f64) -> bool {
+    let t = y / x;
+    let zero = |a: f64, b: f64, c: f64| math::fma(a, b, c).is_ok_and(|r| r.get() == 0.0);
+    zero(t, x, -y) && (y.abs() >= SMALL_Y || zero(t * SCALE, x, -y * SCALE))
+}
+
+/// The certified angle atan2(y, x) of every point of the box, with the meter charged
+/// [`FAR_CORNER`] units for each corner that is [`dear`].
+///
+/// The charge is a function of the box alone (chapter 23.10: a count no shortcut can change): the
+/// four corners `Interval::atan2` takes the angle of, less the boxes it answers without them (one
+/// that holds the negative x-axis and points below it, whose angles are all of [−π, π]).
+fn angle(y: Interval, x: Interval, meter: &mut WorkMeter<'_>) -> Result<Interval, CurveError> {
+    let all_round = x.lo() < 0.0 && y.lo() < 0.0 && y.hi() >= 0.0;
+    if !all_round {
+        for (cy, cx) in [
+            (y.lo(), x.lo()),
+            (y.lo(), x.hi()),
+            (y.hi(), x.lo()),
+            (y.hi(), x.hi()),
+        ] {
+            // One charge a dear corner, and none where no corner is dear: for every such extent
+            // the meter's count of charges (and with it where it reads a cancellation) is as it
+            // was.
+            if dear(cy, cx) {
+                meter.charge(FAR_CORNER)?;
+            }
+        }
+    }
+    Ok(y.atan2(x)?)
+}
+
+/// φ = atan2(b, a)/π, in half-turns, for (a, b) not both zero.
+fn phase(a: Interval, b: Interval, meter: &mut WorkMeter<'_>) -> Result<Interval, CurveError> {
+    let radians = angle(b, a, meter)?;
+    if is_zero(radians) {
+        // On the positive x-axis: exactly 0, not 0/π widened.
+        return Ok(radians);
+    }
+    tight::div(radians, form::pi()?)
 }
 
 /// cosh t and sinh t over `t`.
@@ -284,10 +407,10 @@ impl Scalar {
     }
 
     /// The critical points in closed form (module documentation's table).
-    fn critical(&self) -> Result<Critical, CurveError> {
+    fn critical(&self, meter: &mut WorkMeter<'_>) -> Result<Critical, CurveError> {
         let one = point(1.0)?;
         match *self {
-            Scalar::Wave { q, a, b, .. } => wave_critical(q, a, b),
+            Scalar::Wave { q, a, b, .. } => wave_critical(q, a, b, meter),
             Scalar::Quadratic { q, r, .. } => {
                 if is_zero(r) {
                     Ok(Critical::Families(Vec::new()))
@@ -323,7 +446,7 @@ impl Scalar {
                     return Ok(Critical::Families(Vec::new()));
                 }
                 // g′ = π²·t·R·cos(π(t − φ)).
-                let phi = tight::add(phase(a, b)?, point(0.5)?)?;
+                let phi = tight::add(phase(a, b, meter)?, point(0.5)?)?;
                 Ok(Critical::Families(vec![
                     (point(0.0)?, false),
                     (phi, true),
@@ -332,7 +455,7 @@ impl Scalar {
             }
             // With no t in its coefficients it is a wave: p + a·cos πt + b·sin πt.
             Scalar::Modulated { a, b, c, d, .. } if is_zero(c) && is_zero(d) => {
-                wave_critical(point(0.0)?, a, b)
+                wave_critical(point(0.0)?, a, b, meter)
             }
             Scalar::Modulated { .. } => Ok(Critical::Undecided),
         }
@@ -340,13 +463,18 @@ impl Scalar {
 }
 
 /// The critical points of p + q·t + a·cos πt + b·sin πt (module documentation's table).
-fn wave_critical(q: Interval, a: Interval, b: Interval) -> Result<Critical, CurveError> {
+fn wave_critical(
+    q: Interval,
+    a: Interval,
+    b: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Critical, CurveError> {
     let one = point(1.0)?;
     if is_zero(a) && is_zero(b) {
         // p + q·t: monotone.
         return Ok(Critical::Families(Vec::new()));
     }
-    let phi = phase(a, b)?;
+    let phi = phase(a, b, meter)?;
     if is_zero(q) {
         // Maxima at φ + 2m, minima at φ + 1 + 2m.
         return Ok(Critical::Families(vec![
@@ -370,7 +498,7 @@ fn wave_critical(q: Interval, a: Interval, b: Interval) -> Result<Critical, Curv
         return Ok(Critical::Undecided);
     }
     // ψ = asin ρ / π, in [−½, ½]: the angle whose sine is ρ and cosine √(1 − ρ²).
-    let psi = tight::div(rho.atan2(tight::sqrt(cos2)?)?, form::pi()?)?;
+    let psi = tight::div(angle(rho, tight::sqrt(cos2)?, meter)?, form::pi()?)?;
     Ok(Critical::Families(vec![
         (tight::add(phi, psi)?, true),
         (tight::sub(tight::add(phi, one)?, psi)?, true),
@@ -543,7 +671,7 @@ pub fn extent(
     if t0.abs() >= FAR || t1.abs() >= FAR {
         return pieces(g, (t0, t1), meter);
     }
-    let Critical::Families(families) = g.critical()? else {
+    let Critical::Families(families) = g.critical(meter)? else {
         return pieces(g, (t0, t1), meter);
     };
     let mut out = hull(g.over(point(t0)?)?, g.over(point(t1)?)?)?;

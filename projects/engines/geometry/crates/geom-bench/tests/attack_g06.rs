@@ -69,7 +69,7 @@ use geom_num::dd::{self as dd, DD};
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
-use geom_num::plane::{Lpi, Plane, Tpi};
+use geom_num::plane::{Lpi, Plane, Tpi, determinant_sign, normals_sign};
 use geom_num::real::Real;
 use geom_num::rng::{self as rng, Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
@@ -768,6 +768,39 @@ fn make_context() -> geom_op::OpContext<'static> {
     )
 }
 
+/// A meter under no limit, as the `geom-format` benchmarks run each call.
+fn unlimited() -> geom_run::WorkMeter<'static> {
+    geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED)
+}
+
+/// A container opened at `trust`, as the open benchmarks read it: each root's body's content ID
+/// and where it stands (0 usable, 1 pending, 2 damaged, 3 failed).
+fn open_roots(
+    c: &geom_format::container::Container,
+    trust: geom_format::trust::Trust,
+) -> Option<Vec<(Option<geom_format::content::ContentId>, u64)>> {
+    use geom_format::trust::State;
+    let mut pass = inputs::records::Pass;
+    let opened =
+        geom_format::trust::open(c, &c.document, &c.roots, trust, &mut pass, &mut unlimited())
+            .ok()?;
+    Some(
+        opened
+            .entries
+            .into_iter()
+            .map(|entry| {
+                let state = match entry.state {
+                    State::Usable => 0,
+                    State::Pending => 1,
+                    State::Damaged(_) => 2,
+                    State::Failed(_) => 3,
+                };
+                (entry.id, state)
+            })
+            .collect(),
+    )
+}
+
 /// What a `geom-make` result is read by.
 fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
     let a = out.result.body.arenas();
@@ -777,6 +810,195 @@ fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
         a.rows(geom_topo::Arena::Vertex),
         u32::from(out.exactness.rank()),
     ]
+}
+
+/// A context of one `geom-bool` scenario, as the benchmarks run it.
+fn scenario_context() -> geom_op::OpContext<'static> {
+    geom_op::OpContext::new(
+        geom_op::OpPath::new(geom_op::OpId::from_bytes([4; 16])),
+        geom_run::Budget::UNLIMITED,
+    )
+}
+
+/// What a scenario's bodies are read by: their faces, edges and vertices, and how many.
+fn scenario_counts<'b>(bodies: impl IntoIterator<Item = &'b geom_topo::Body>) -> [u32; 4] {
+    let mut sum = [0u32; 4];
+    for body in bodies {
+        let a = body.arenas();
+        sum[0] += a.rows(geom_topo::Arena::Face);
+        sum[1] += a.rows(geom_topo::Arena::Edge);
+        sum[2] += a.rows(geom_topo::Arena::Vertex);
+        sum[3] += 1;
+    }
+    sum
+}
+
+/// The digest of a benchmark of the encoder, names, history, resolution or `PruneHistory` (pieces
+/// G86 to G89 and G109), from each function called directly on its batch.
+fn naming_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
+    use geom_bench::inputs::encoder as ie;
+    use geom_bench::inputs::naming as inm;
+    use geom_op::cbor::Encoder;
+    let item = |write: &dyn Fn(&mut Encoder) -> Option<()>| -> Option<Vec<u8>> {
+        let mut e = Encoder::new();
+        write(&mut e)?;
+        Some(e.finish().ok()?.into_bytes())
+    };
+    Some(match (group, name) {
+        ("encoder", "map") => fold(ie::maps(class).iter().map(|(int, float, text, set)| {
+            let items: Option<Vec<_>> = set
+                .iter()
+                .map(|&v| {
+                    let mut i = Encoder::new();
+                    i.uint(v).ok()?;
+                    i.finish().ok()
+                })
+                .collect();
+            let items = items?;
+            item(&|e| {
+                e.map(4).ok()?;
+                e.key(0).ok()?;
+                e.int(i128::from(*int)).ok()?;
+                e.key(1).ok()?;
+                e.float(*float).ok()?;
+                e.key(2).ok()?;
+                e.text(text).ok()?;
+                e.key(3).ok()?;
+                e.set(items.clone()).ok()
+            })
+        })),
+        ("encoder", "float") => fold(ie::floats(class).iter().map(|row| {
+            item(&|e| {
+                e.array(row.len() as u64).ok()?;
+                row.iter().try_for_each(|&x| e.float(x).ok())
+            })
+        })),
+        ("encoder", "sha256") => fold(ie::messages(class).iter().map(|m| geom_op::hash::sha256(m))),
+        ("names", "name_id") => fold(inm::names(class).iter().map(|n| n.id().ok())),
+        ("names", "intern") => fold(inm::groups(class).iter().map(|names| {
+            let mut graph = geom_name::NameGraph::new();
+            for n in names {
+                graph.intern(n.clone()).ok()?;
+            }
+            Some(graph)
+        })),
+        ("history", "check") => fold(
+            inm::checks(class)
+                .iter()
+                .map(|(h, inputs)| h.check(inputs).is_ok()),
+        ),
+        ("history", "compose") => fold(inm::compositions(class).iter().map(|(a, b)| a.then(b))),
+        ("resolve", "reference") => fold(inm::scenes(class).iter().map(|s| {
+            let body = geom_name::Body {
+                names: &s.chain.body,
+                carriers: &s.chain.carriers,
+                history: &s.history,
+                graph: &s.chain.graph,
+            };
+            geom_name::resolve(
+                &s.reference,
+                &geom_name::Lookup::Found {
+                    body,
+                    version: None,
+                },
+            )
+        })),
+        ("prune", "steps") => {
+            let ctx = geom_op::OpContext::new(
+                geom_op::OpPath::new(geom_op::OpId::from_bytes([9; 16])),
+                geom_run::Budget::UNLIMITED,
+            );
+            fold(
+                inm::prunes(class).iter().map(|(steps, held)| {
+                    geom_name::prune(&ctx, steps, held).ok().map(|o| o.result)
+                }),
+            )
+        }
+        ("prune", "record_write") => fold(
+            inm::pruned(class)
+                .iter()
+                .map(|(by, held, steps)| geom_format::pruned::pruned_record(by, held, steps).ok()),
+        ),
+        ("prune", "record_read") => fold(
+            inm::pruned_payloads(class)
+                .iter()
+                .map(|p| geom_format::pruned::read_pruned(p, &mut unlimited()).ok()),
+        ),
+        _ => return None,
+    })
+}
+
+/// The digest of the core query benchmark `query/name/class`, from each query called directly on
+/// its batch, each answer read as the benchmark reads it, with its class's rank.
+fn query_digest(name: &str, class: Class) -> Option<Digest> {
+    use geom_check::query::{exactness, validity};
+    use geom_topo::query_ops::{bounding_box, six_volume, twice_area};
+    let ctx = make_context();
+    let rank = |e: geom_num::Exactness| u32::from(e.rank());
+    Some(match name {
+        "area" => fold(inputs::query::faces(class).iter().map(|(body, face)| {
+            let face = geom_topo::Ix::new(*face).unwrap();
+            twice_area(&ctx, &body.result.body, face, body.exactness)
+                .map(|a| (a.result, rank(a.exactness)))
+        })),
+        "volume" => fold(inputs::query::volumes(class).iter().map(|body| {
+            six_volume(&ctx, &body.result.body, body.exactness)
+                .map(|v| (v.result, rank(v.exactness)))
+        })),
+        "bounding_box" => fold(inputs::query::boxes(class).iter().map(|body| {
+            bounding_box(&ctx, &body.result.body, body.exactness).map(|b| {
+                let corners = b
+                    .result
+                    .map(|bb| ([bb.bound.min(), bb.bound.max()], bb.tight));
+                (corners, rank(b.exactness))
+            })
+        })),
+        "exactness" => fold(inputs::query::reports(class).iter().map(|body| {
+            exactness(&ctx, &body.result.body, body.exactness).map(|e| {
+                let r = &e.result;
+                let counts = [
+                    r.flat_faces,
+                    r.curved_faces,
+                    r.straight_edges,
+                    r.curved_edges,
+                ];
+                (counts, r.report.passed(), rank(e.exactness))
+            })
+        })),
+        "faces" => fold(inputs::query::listed(class).iter().map(|body| {
+            geom_name::faces(
+                &ctx,
+                &body.result.body,
+                &[&body.result.history],
+                body.exactness,
+            )
+            .map(|listed| {
+                let rows: Vec<[u32; 2]> = listed
+                    .result
+                    .iter()
+                    .map(|f| [f.row.loops, u32::try_from(f.roles.len()).unwrap()])
+                    .collect();
+                (rows, rank(listed.exactness))
+            })
+        })),
+        "validity" => fold(inputs::query::validities(class).iter().map(|body| {
+            validity(
+                &ctx,
+                &body.result.body,
+                body.exactness,
+                geom_check::Level::Full,
+            )
+            .map(|v| {
+                let r = &v.result;
+                (
+                    r.passed(),
+                    r.deferred(),
+                    u32::try_from(r.ran().count()).unwrap(),
+                )
+            })
+        })),
+        _ => return None,
+    })
 }
 
 /// The output digest of one run of `kernel` over `batch`, as a benchmark computes it.
@@ -1071,12 +1293,37 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[p, q, r]| Tpi::new(p, q, r)),
         ),
+        ("plane", "tpi_meeting") => fold(
+            ip::tpi_meeting(class)
+                .into_iter()
+                .map(|[p, q, r]| Tpi::meeting(p, q, r)),
+        ),
+        ("plane", "normals_sign") => fold(
+            ip::normals_sign(class)
+                .iter()
+                .map(|[p, q, r]| normals_sign(p, q, r)),
+        ),
+        ("plane", "normals_sign_faces") => fold(
+            ip::normals_sign_faces(class)
+                .iter()
+                .map(|[p, q, r]| normals_sign(p, q, r)),
+        ),
         ("plane", "tpi_homogeneous") => {
             fold(ip::tpi_homogeneous(class).iter().map(Tpi::homogeneous))
         }
         ("plane", "side_of_tpi") => {
             fold(ip::side_of_tpi(class).iter().map(|(p, t)| p.side_of_tpi(t)))
         }
+        ("plane", "determinant_sign") => fold(
+            ip::determinant_sign(class)
+                .iter()
+                .map(|[p, q, r, s]| determinant_sign(p, q, r, s)),
+        ),
+        ("plane", "determinant_sign_faces") => fold(
+            ip::determinant_sign_faces(class)
+                .iter()
+                .map(|[p, q, r, s]| determinant_sign(p, q, r, s)),
+        ),
         ("plane", "to_grid") => fold(ip::to_grid(class).iter().map(Tpi::to_grid)),
         ("plane", "lpi_new") => fold(
             ip::lpi_new(class)
@@ -1529,6 +1776,40 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
             fold(pairs.into_iter().map(|(u, v)| s.point(u, v, sides)))
         }
+        ("format", "cache_key") => {
+            let path = inputs::format::path();
+            fold(
+                inputs::format::cache_key(class)
+                    .into_iter()
+                    .map(|(edition, seed)| {
+                        geom_format::cache::CacheKey::new(
+                            edition,
+                            &inputs::format::SCHEMA,
+                            &path,
+                            geom_op::Precision::Final,
+                            &[inputs::format::input(seed)],
+                        )
+                        .ok()
+                    }),
+            )
+        }
+        ("format", "memo_get") => {
+            let mut store = inputs::format::store();
+            fold(inputs::format::memo_get(class).into_iter().map(|key| {
+                match store.get(&key, geom_run::Budget::UNLIMITED) {
+                    Some(Ok(answer)) => Some(answer.result),
+                    _ => None,
+                }
+            }))
+        }
+        ("format", "next_version") => fold(inputs::format::next_version(class).into_iter().map(
+            |(_, body)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_format::body::write_body(&body, &mut meter)
+                    .ok()
+                    .map(|stored| stored.content_id())
+            },
+        )),
         ("surface", "torus_second_bound") => {
             use geom_surface::ParamSurface;
             let s = inputs::surface::torus().unwrap();
@@ -1651,6 +1932,376 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     }),
             )
         }
+        ("cbor", "check") => fold(inputs::cbor::check(class).iter().map(|bytes| {
+            geom_format::cbor::check(bytes, inputs::cbor::DEPTH, &mut unlimited()).is_ok()
+        })),
+        ("cbor", "int_column") => fold(inputs::cbor::int_column(class).iter().map(|bytes| {
+            let mut rows = Vec::new();
+            geom_format::cbor::int_column(bytes, &mut rows, &mut unlimited())
+                .ok()
+                .map(|()| rows)
+        })),
+        ("cbor", "float_column") => fold(inputs::cbor::float_column(class).iter().map(|bytes| {
+            let mut rows = Vec::new();
+            geom_format::cbor::float_column(bytes, &mut rows, &mut unlimited())
+                .ok()
+                .map(|()| rows)
+        })),
+        ("cbor", "to_text") => fold(inputs::cbor::to_text(class).iter().map(|bytes| {
+            geom_format::cbor::to_text(bytes, inputs::cbor::DEPTH, &mut unlimited()).ok()
+        })),
+        ("cbor", "from_text") => fold(inputs::cbor::from_text(class).iter().map(|text| {
+            geom_format::cbor::from_text(text, inputs::cbor::DEPTH, &mut unlimited()).ok()
+        })),
+        ("record", "encode") => fold(
+            inputs::records::record(class)
+                .iter()
+                .map(|record| record.encode(&mut unlimited()).ok()),
+        ),
+        ("record", "decode") => fold(inputs::records::record_bytes(class).iter().map(|bytes| {
+            geom_format::record::Record::decode(bytes, &mut unlimited())
+                .ok()
+                .map(|(record, used)| (record, used as u64))
+        })),
+        ("record", "file_write") => fold(inputs::records::file_parts(class).iter().map(
+            |(header, records)| geom_format::file::write(header, records, &mut unlimited()).ok(),
+        )),
+        ("record", "file_read") => fold(inputs::records::file(class).iter().map(|bytes| {
+            let mut source = geom_format::source::SliceSource::new(bytes);
+            geom_format::file::read(&mut source, |_, _| true, &mut unlimited()).ok()
+        })),
+        ("body_record", "write") => fold(
+            inputs::records::boxes(class)
+                .iter()
+                .map(|body| geom_format::body::write_body(body, &mut unlimited()).ok()),
+        ),
+        ("body_record", "read") => fold(
+            inputs::records::stored(class)
+                .iter()
+                .map(|stored| geom_format::body::read_body(stored, &mut unlimited()).ok()),
+        ),
+        ("name_record", "names_write") => fold(
+            inputs::records::graph(class)
+                .iter()
+                .map(|graph| geom_format::names::names_record(graph).ok()),
+        ),
+        ("name_record", "names_read") => fold(
+            inputs::records::names_payload(class)
+                .iter()
+                .map(|payload| geom_format::names::read_names(payload, 1, &mut unlimited()).ok()),
+        ),
+        ("name_record", "history_write") => fold(
+            inputs::records::history(class)
+                .iter()
+                .map(|(op, history)| geom_format::history::history_record(op, history).ok()),
+        ),
+        ("name_record", "history_read") => fold(
+            inputs::records::history_payload(class)
+                .iter()
+                .map(|payload| geom_format::history::read_history(payload, &mut unlimited()).ok()),
+        ),
+        ("op_record", "write") => fold(
+            inputs::records::operation(class)
+                .iter()
+                .map(|op| geom_format::operation::operation_record(op, &mut unlimited()).ok()),
+        ),
+        ("op_record", "read") => fold(
+            inputs::records::operation_payload(class)
+                .iter()
+                .map(|payload| {
+                    geom_format::operation::read_operation(payload, &mut unlimited()).ok()
+                }),
+        ),
+        ("open", "from_file") => {
+            fold(inputs::records::read_file(class).iter().map(|file| {
+                geom_format::container::Container::from_file(file, &mut unlimited()).ok()
+            }))
+        }
+        ("open", "known") => fold(
+            inputs::records::container("open::known", class)
+                .iter()
+                .map(|c| open_roots(c, geom_format::trust::Trust::Known)),
+        ),
+        ("open", "unknown") => fold(
+            inputs::records::container("open::unknown", class)
+                .iter()
+                .map(|c| open_roots(c, geom_format::trust::Trust::Unknown)),
+        ),
+        ("query", _) => query_digest(name, class)?,
+        ("encoder" | "names" | "history" | "resolve" | "prune", _) => {
+            naming_digest(group, name, class)?
+        }
+        ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
+            |scene| -> Result<u64, geom_name::AttrError> {
+                let (after, notes) = geom_name::apply(
+                    &scene.defs,
+                    &scene.before,
+                    &scene.history,
+                    &geom_name::Step::default(),
+                )?;
+                Ok(after.iter().count() as u64 + notes.len() as u64)
+            },
+        )),
+        ("topo", "column_edit") => fold(inputs::topo::column_edit(class).iter().map(
+            |(values, row, value)| -> Result<u64, geom_topo::TopoError> {
+                let mut column: geom_topo::Column<geom_topo::Face, u64> = geom_topo::Column::new();
+                for &v in values {
+                    column.push(v)?;
+                }
+                let original = column.clone();
+                column.set(geom_topo::Ix::new(*row).unwrap(), *value)?;
+                let a: u64 = original.iter().fold(0, |s, v| s.wrapping_add(*v));
+                let b: u64 = column.iter().fold(0, |s, v| s.wrapping_add(*v));
+                Ok(a.wrapping_add(b))
+            },
+        )),
+        ("topo", "publish") => fold(inputs::topo::publish(class).iter().map(
+            |builder| -> Result<u32, geom_topo::TopoError> {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let body = builder.clone().publish(
+                    geom_topo::BodyKind::Solid,
+                    geom_topo::Ix::new(1).unwrap(),
+                    &mut meter,
+                )?;
+                Ok(body.arenas().fins.len())
+            },
+        )),
+        ("batch", "run_items") => fold(inputs::batch::run_items(class).iter().map(
+            |items| -> Result<u64, geom_op::OpError> {
+                // Each item alone, as a call made one by one gives it.
+                let path = geom_op::OpPath::new(geom_op::OpId::from_bytes([7; 16]));
+                let ctx = geom_op::OpContext::new(path, geom_run::Budget::UNLIMITED);
+                let driver = geom_op::Batch::new(
+                    &ctx,
+                    geom_run::BatchBudget::new(geom_run::Budget::of_work(64)),
+                    geom_run::Phase::new("items"),
+                    geom_run::ChunkPlan::fixed::<4>(),
+                );
+                items.iter().try_fold(0_u64, |all, n| {
+                    let mut key = [0_u8; 16];
+                    key[..8].copy_from_slice(&n.to_be_bytes());
+                    key[8..].copy_from_slice(&(!n).to_le_bytes());
+                    let one = driver.single(key, n, |_, &n, meter| {
+                        meter.charge(n % 16).unwrap();
+                        Ok(n.wrapping_mul(3))
+                    })?;
+                    Ok(all ^ one)
+                })
+            },
+        )),
+        ("batch", "curve_points") => {
+            let helix = inputs::curve::helix().unwrap();
+            fold(inputs::batch::curve_points(class).iter().map(
+                |t| -> Result<Vec<f64>, geom_curve::CurveError> {
+                    let points = t
+                        .iter()
+                        .map(|&x| {
+                            geom_curve::ParamCurve::point(&helix, x, geom_nurbs::Limit::FromRight)
+                        })
+                        .collect::<Result<Vec<[f64; 3]>, _>>()?;
+                    Ok((0..3)
+                        .flat_map(|k| points.iter().map(move |p| p[k]))
+                        .collect())
+                },
+            ))
+        }
+        ("batch", "surface_points") => {
+            let torus = inputs::surface::torus().unwrap();
+            let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
+            fold(inputs::batch::surface_points(class).iter().map(
+                |uv| -> Result<Vec<f64>, geom_curve::CurveError> {
+                    let (us, vs) = uv.split_at(uv.len() / 2);
+                    let points = us
+                        .iter()
+                        .zip(vs)
+                        .map(|(&u, &v)| geom_surface::ParamSurface::point(&torus, u, v, sides))
+                        .collect::<Result<Vec<[f64; 3]>, _>>()?;
+                    Ok((0..3)
+                        .flat_map(|k| points.iter().map(move |p| p[k]))
+                        .collect())
+                },
+            ))
+        }
+        ("scenario", "openings" | "slab_holes" | "moved_door") => {
+            let size = inputs::scenario::reduced();
+            let hosts = match name {
+                "openings" => inputs::scenario::wall(class, size),
+                "slab_holes" => inputs::scenario::slab(class, size),
+                _ => Vec::new(),
+            };
+            let recuts = if name == "moved_door" {
+                inputs::scenario::moved_door(class, size)
+            } else {
+                Vec::new()
+            };
+            let cuts: Vec<geom_bool::batch::Cut<'_>> = hosts
+                .iter()
+                .map(|host| inputs::scenario::cut_of(host, None))
+                .chain(
+                    recuts
+                        .iter()
+                        .map(|r| inputs::scenario::cut_of(&r.host, Some(&r.cache))),
+                )
+                .collect();
+            fold(cuts.iter().map(|one| {
+                geom_bool::batch::cut(
+                    &scenario_context(),
+                    &geom_run::Exec::serial(),
+                    std::slice::from_ref(one),
+                    geom_bool::batch::BatchRule::Atomic,
+                )
+                .map(|out| scenario_counts(out.result.iter().map(|r| &r.result.body)))
+            }))
+        }
+        ("scenario", "union") => fold(
+            inputs::scenario::boxes(class, inputs::scenario::reduced())
+                .iter()
+                .map(|many| {
+                    let operands: Vec<_> = many
+                        .bodies
+                        .iter()
+                        .enumerate()
+                        .map(|(k, b)| inputs::scenario::solid(k, b))
+                        .collect();
+                    geom_bool::combine::unite(
+                        &scenario_context(),
+                        &geom_run::Exec::serial(),
+                        &operands,
+                    )
+                    .map(|out| scenario_counts([&out.result.body]))
+                }),
+        ),
+        ("scenario", "one_selection" | "three_selections") => fold(
+            inputs::scenario::wall(class, inputs::scenario::reduced())
+                .iter()
+                .map(|host| {
+                    use geom_bool::operand::Selection;
+                    let target = inputs::scenario::solid(0, &host.host).key;
+                    let mut select = vec![Selection::Subtract { target }];
+                    if name == "three_selections" {
+                        select.extend([Selection::Unite, Selection::Intersect]);
+                    }
+                    let mut operands = vec![inputs::scenario::solid(0, &host.host)];
+                    operands.extend(
+                        host.tools
+                            .iter()
+                            .enumerate()
+                            .map(|(k, t)| inputs::scenario::solid(k + 1, t)),
+                    );
+                    let input = geom_bool::operand::BooleanInput {
+                        operands,
+                        select,
+                        merge: geom_poly::merge::Merge::RemoveRedundant,
+                        accept: None,
+                    };
+                    geom_bool::combine::combine(
+                        &scenario_context(),
+                        &geom_run::Exec::serial(),
+                        &input,
+                    )
+                    .map(|out| scenario_counts(out.result.iter().flatten().map(|c| &c.body)))
+                }),
+        ),
+        ("scenario", "storey") => fold(
+            inputs::scenario::storey(class, inputs::scenario::reduced())
+                .iter()
+                .map(|storey| {
+                    use geom_bool::operand::{Selection, Term};
+                    let envelope = inputs::scenario::solid(0, &storey.envelope);
+                    let mut test = vec![Term::Inside(envelope.key)];
+                    let mut operands = vec![envelope];
+                    for (k, wall) in storey.walls.iter().enumerate() {
+                        let one = inputs::scenario::solid(k + 1, wall);
+                        test.extend([Term::Inside(one.key), Term::Not, Term::And]);
+                        operands.push(one);
+                    }
+                    let input = geom_bool::operand::BooleanInput {
+                        operands,
+                        select: vec![Selection::Cells {
+                            test,
+                            seeds: inputs::scenario::seeds(storey),
+                        }],
+                        merge: geom_poly::merge::Merge::RemoveRedundant,
+                        accept: None,
+                    };
+                    geom_bool::combine::combine(
+                        &scenario_context(),
+                        &geom_run::Exec::serial(),
+                        &input,
+                    )
+                    .map(|out| scenario_counts(out.result.iter().flatten().map(|c| &c.body)))
+                }),
+        ),
+        ("mesh", "point_point") => fold(
+            inputs::mesh::point_point(class)
+                .iter()
+                .map(|&([p, q], c)| geom_num::distance::point_point(p, q, c)),
+        ),
+        ("mesh", "point_line") => fold(
+            inputs::mesh::point_line(class)
+                .iter()
+                .map(|&([a, b, p], c)| geom_num::distance::point_line(a, b, p, c)),
+        ),
+        ("mesh", "point_plane") => fold(
+            inputs::mesh::point_plane(class)
+                .iter()
+                .map(|&([a, b, d, p], c)| geom_num::distance::point_plane(a, b, d, p, c)),
+        ),
+        ("mesh", "line_line") => fold(
+            inputs::mesh::line_line(class)
+                .iter()
+                .map(|&([a, b, d, p], c)| geom_num::distance::line_line(a, b, d, p, c)),
+        ),
+        ("mesh", "closest_dots") => {
+            use geom_num::distance::{dot_from, product_difference};
+            fold(
+                inputs::mesh::closest_dots(class)
+                    .iter()
+                    .map(|&[a, b, d, p]| {
+                        let (x, y) = (dot_from(a, b, p), dot_from(b, d, p));
+                        product_difference(x, y, dot_from(d, a, p), dot_from(a, d, p))
+                    }),
+            )
+        }
+        ("mesh", "triangles") => fold(inputs::mesh::triangles(class).iter().map(|&[a, b]| {
+            geom_mesh::contact::triangles(a, b).map(|c| match c {
+                geom_mesh::contact::Contact::Apart => geom_num::Sign::Negative,
+                geom_mesh::contact::Contact::Touch => geom_num::Sign::Zero,
+                geom_mesh::contact::Contact::Cross => geom_num::Sign::Positive,
+            })
+        })),
+        ("mesh", "locate") => fold(inputs::mesh::locate(class).iter().map(|probe| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let exec = geom_run::Exec::serial();
+            geom_mesh::classify::Classifier::new(&probe.solid, &exec, &mut meter)?.locate_all(
+                &probe.points,
+                &exec,
+                &mut meter,
+            )
+        })),
+        ("mesh", "envelope") => fold(
+            inputs::mesh::envelope(class)
+                .iter()
+                .map(|&(t, p)| geom_mesh::envelope::TriangleEnvelope::new(t, 1 << 16)?.contains(p)),
+        ),
+        ("mesh", "boolean") => fold(inputs::mesh::boolean(class).iter().map(|pair| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::boolean::boolean(
+                &[&pair.first, &pair.second],
+                &[geom_poly::winding::WindingTest::unite()],
+                &geom_op::OpPath::new(geom_op::OpId::from_bytes([7; 16])),
+                &geom_run::Exec::serial(),
+                &mut meter,
+            )
+        })),
+        ("mesh", "cdt") => fold(inputs::mesh::cdt(class).iter().map(|t| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::triangulate(&t.sites, &t.constraints, None, &mut meter)
+        })),
+        ("mesh", "exact_build") => fold(inputs::mesh::exact_build(class).iter().map(|p| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::exact::build::build(p, &geom_run::Exec::serial(), &mut meter)
+        })),
         ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
             |(entries, query)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
@@ -1726,7 +2377,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
     })
 }
 
-/// The digest of the `geom-curve` benchmark `name` on `class` (decision 32.44), from direct calls
+/// The digest of the `geom-curve` benchmark `name` on `class` (decision 32.46), from direct calls
 /// on its inputs through the kind contract, with the kernels' helix and transition.
 fn curve_digest(name: &str, class: Class) -> Option<Digest> {
     use geom_bench::inputs::curve as m;
@@ -1770,7 +2421,7 @@ fn curve_digest(name: &str, class: Class) -> Option<Digest> {
     })
 }
 
-/// The digest of the `geom-math` benchmark `name` on `class` (decision 32.44), from direct calls on
+/// The digest of the `geom-math` benchmark `name` on `class` (decision 32.46), from direct calls on
 /// its inputs: each transform built here as `geom-math`'s `benches/transform.rs` builds it, and
 /// the rotation and frame from the kernels' own definitions.
 fn math_types_digest(name: &str, class: Class) -> Option<Digest> {
@@ -2516,6 +3167,76 @@ fn three_plane_points_agree_with_cramers_rule_on_every_input() {
             panic!("an overflow input is inside the frame");
         };
         assert!(value.unsigned_abs() < 1 << 60, "{value}");
+    }
+}
+
+/// The 4 × 4 determinant of four planes' coefficients, rows in order and the offset last, as
+/// `plane::determinant_sign` defines it.
+fn coefficients_det(planes: &[Plane; 4]) -> Big {
+    det(&planes.map(|p| {
+        let ([x, y, z], d) = coefficients(&p);
+        vec![x, y, z, d]
+    }))
+}
+
+/// The determinant of three planes' normals: the weight of the point where they meet.
+fn normals_det(planes: [&Plane; 3]) -> Big {
+    det(&planes.map(|p| coefficients(p).0.to_vec()))
+}
+
+#[test]
+fn plane_determinants_agree_with_exact_determinants_on_every_input() {
+    // Piece G138's functions against Laplace determinants: plane::determinant_sign and
+    // plane::normals_sign give the exact signs, and Tpi::meeting is Tpi::new, with the exact
+    // weight, or Degenerate exactly when the normals are dependent.
+    use inputs::plane as p;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        for planes @ [a, b, c, s] in p::determinant_sign(class) {
+            let exact = coefficients_det(&planes);
+            assert_eq!(
+                determinant_sign(&a, &b, &c, &s),
+                Ok(exact.sign()),
+                "{class}"
+            );
+            // The determinant is n · X + d · w for the fourth plane at the point where the first
+            // three meet, as the function documents: the value side_of_tpi takes the sign of.
+            let t = Tpi::new(a, b, c).unwrap();
+            assert_eq!(exact, side_of_tpi_value(&s, &t).0, "{class}");
+        }
+    }
+    for class in [Typical, Degenerate] {
+        for planes @ [a, b, c, s] in p::determinant_sign_faces(class) {
+            let exact = coefficients_det(&planes).sign();
+            assert_eq!(determinant_sign(&a, &b, &c, &s), Ok(exact), "{class}");
+        }
+        for [a, b, c] in p::normals_sign_faces(class) {
+            let exact = normals_det([&a, &b, &c]).sign();
+            assert_eq!(normals_sign(&a, &b, &c), Ok(exact), "{class}");
+        }
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        for [a, b, c] in p::normals_sign(class) {
+            let exact = normals_det([&a, &b, &c]).sign();
+            assert_eq!(normals_sign(&a, &b, &c), Ok(exact), "{class}");
+        }
+        for planes @ [a, b, c] in p::tpi_meeting(class) {
+            let weight = normals_det([&a, &b, &c]).sign();
+            let made = Tpi::meeting(a, b, c);
+            assert_eq!(
+                made,
+                Tpi::new(a, b, c),
+                "{class}: not the point Tpi::new makes"
+            );
+            match made {
+                Ok(t) => {
+                    assert_ne!(weight, Sign::Zero, "{class}: dependent normals accepted");
+                    assert_eq!((t.weight(), *t.planes()), (weight, planes), "{class}");
+                }
+                Err(e) => {
+                    assert_eq!((e, weight), (NumError::Degenerate, Sign::Zero), "{class}");
+                }
+            }
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-//! Inputs for `geom-surface`'s hot paths (pieces G65 to G68, decision 32.44): parameter pairs on
+//! Inputs for `geom-surface`'s hot paths (pieces G65 to G68, decision 32.46): parameter pairs on
 //! a torus (its point, and its certified enclosure with first partials) and on an offset cylinder
 //! (its point).
 //!

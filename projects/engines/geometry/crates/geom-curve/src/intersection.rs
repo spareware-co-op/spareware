@@ -215,6 +215,11 @@ fn grown(s: Span, at: (f64, f64), e: f64) -> Result<Span, CurveError> {
 }
 
 impl<const D: usize> ParamCurve<D> for IntersectionCurve<D> {
+    // The cache is what every evaluation reads, so its breaks are the curve's.
+    fn breaks(&self) -> Vec<f64> {
+        ParamCurve::breaks(&self.cache)
+    }
+
     fn domain(&self) -> (f64, f64) {
         ParamCurve::domain(&self.cache)
     }

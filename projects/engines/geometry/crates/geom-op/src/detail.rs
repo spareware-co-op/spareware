@@ -42,13 +42,13 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
-use geom_num::NumError;
+use geom_num::{Exactness, GridStep, NumError, Steps};
 use geom_run::{Exceeded, Interrupted, ItemError, RunError};
 
-use geom_num::Exactness;
-
+use crate::batch::BatchDetail;
 use crate::evidence::Value;
 use crate::kind::ErrorKind;
+use crate::local::LocalDetail;
 use crate::remedy::{Bound, Remedy};
 
 /// The operation's own typed failure (chapter 22): one variant per family of details, each holding
@@ -61,6 +61,8 @@ pub enum OpErrorDetail {
     Run(RunDetail),
     /// A failure of the numbers layer, wrapped by meaning.
     Num(NumDetail),
+    /// A batch that could not run its items (piece G104).
+    Batch(BatchDetail),
     /// A failure of the Make and Transform families: primitives, transforms and patterns
     /// (`geom-make`, piece G101).
     Make(MakeDetail),
@@ -68,6 +70,10 @@ pub enum OpErrorDetail {
     Query(QueryDetail),
     /// A failure of the Combine family (`geom-bool`, chapter 11.11).
     Combine(CombineDetail),
+    /// A refusal of the per-entity bounds: what a step or a history may spend (13.2, piece G143).
+    Bound(BoundDetail),
+    /// A refusal of a local operation's topology changes (13.14, 13.20; piece G144).
+    Local(LocalDetail),
 }
 
 impl OpErrorDetail {
@@ -77,9 +83,12 @@ impl OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => detail.kind(),
             OpErrorDetail::Num(detail) => detail.kind(),
+            OpErrorDetail::Batch(detail) => detail.kind(),
             OpErrorDetail::Make(detail) => detail.kind(),
             OpErrorDetail::Query(detail) => detail.kind(),
             OpErrorDetail::Combine(detail) => detail.kind(),
+            OpErrorDetail::Bound(detail) => detail.kind(),
+            OpErrorDetail::Local(detail) => detail.kind(),
         }
     }
 
@@ -89,9 +98,12 @@ impl OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => detail.remedies(),
             OpErrorDetail::Num(detail) => detail.remedies(),
+            OpErrorDetail::Batch(detail) => detail.remedies(),
             OpErrorDetail::Make(detail) => detail.remedies(),
             OpErrorDetail::Query(detail) => detail.remedies(),
             OpErrorDetail::Combine(detail) => detail.remedies(),
+            OpErrorDetail::Bound(detail) => detail.remedies(),
+            OpErrorDetail::Local(detail) => detail.remedies(),
         }
     }
 }
@@ -101,9 +113,12 @@ impl fmt::Display for OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Num(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Batch(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Make(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Query(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Combine(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Bound(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Local(detail) => fmt::Display::fmt(detail, f),
         }
     }
 }
@@ -382,12 +397,20 @@ pub enum MakeDetail {
     /// a scale that is not uniform makes cylinders, cones, spheres and tori affine surfaces and
     /// circles ellipses.
     KindNotCertified,
-    /// A transform that rounds corners or moves curved geometry by a certified deviation gave a
-    /// body the checker cannot certify yet: rounded corners leave their faces' planes, and a tilted
-    /// curved face meets its caps where only exact data is followed today.
+    /// A transform gave a body the checker cannot certify yet, from corners it rounded or curved
+    /// geometry it moved by a certified deviation, or from a body an earlier transform left so:
+    /// rounded corners leave their faces' planes, and a tilted curved face meets its caps where
+    /// only exact data is followed today. A rounded flat face is certified by the star of
+    /// triangles from the mean of its corners (G134); one no star can stand for, with a hole or
+    /// an edge the mean does not see from inside, still waits.
     NotCertifiedYet {
         /// The piece that widens what the checker certifies, by its board number.
         piece: &'static str,
+    },
+    /// A placed instance names a row past the document's side table of transforms.
+    NoSuchPlacement {
+        /// The row.
+        index: u32,
     },
     /// The body given carries no names: it was not published in name order, so its entities
     /// cannot keep their names through the transform.
@@ -416,6 +439,7 @@ impl MakeDetail {
             | MakeDetail::BaseNotConvex
             | MakeDetail::MinorNotBelowMajor { .. }
             | MakeDetail::BodyNotNamed
+            | MakeDetail::NoSuchPlacement { .. }
             | MakeDetail::EmptyPattern
             | MakeDetail::RepeatedKey
             | MakeDetail::SingularTransform => ErrorKind::InvalidInput,
@@ -452,6 +476,7 @@ impl MakeDetail {
             MakeDetail::KindNotCertified => vec![Remedy::AwaitPiece { piece: "G177" }],
             MakeDetail::NotCertifiedYet { piece } => vec![Remedy::AwaitPiece { piece }],
             MakeDetail::BodyNotNamed => vec![change("body", None)],
+            MakeDetail::NoSuchPlacement { .. } => vec![change("placement", None)],
             MakeDetail::EmptyPattern | MakeDetail::RepeatedKey | MakeDetail::SingularTransform => {
                 vec![change("instances", None)]
             }
@@ -485,6 +510,9 @@ impl fmt::Display for MakeDetail {
                 "the checker cannot certify the transformed body yet; piece {piece} widens it"
             ),
             MakeDetail::BodyNotNamed => f.write_str("the body carries no names"),
+            MakeDetail::NoSuchPlacement { index } => {
+                write!(f, "row {index} is past the table of placements")
+            }
             MakeDetail::EmptyPattern => f.write_str("the pattern has no instance"),
             MakeDetail::RepeatedKey => f.write_str("two instances of the pattern have one key"),
             MakeDetail::SingularTransform => {
@@ -497,6 +525,111 @@ impl fmt::Display for MakeDetail {
 }
 
 impl core::error::Error for MakeDetail {}
+
+/// Why the per-entity bounds refused an operation (13.2, 32.21; [`crate::bounds`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum BoundDetail {
+    /// An operation's own term for an entity passes what one step may add.
+    OverStep {
+        /// The term.
+        own: Steps,
+        /// The most one step may add.
+        limit: Steps,
+        /// The grid step they count.
+        step: GridStep,
+    },
+    /// An entity's bound would pass what the caller accepts.
+    OverCeiling {
+        /// The bound it would reach.
+        needed: Steps,
+        /// The most the caller accepts.
+        ceiling: Steps,
+        /// The grid step they count.
+        step: GridStep,
+    },
+    /// An operation gave an own term to an entity that is not an output, that passed through
+    /// unchanged, or twice to one output. A defect.
+    OwnTermAstray,
+    /// Two operands' bounds count different grid steps.
+    MixedSteps,
+    /// A commit would change a decision the ideal shape makes for certain (`CommitFlip`, 13.2).
+    CommitFlip,
+}
+
+impl BoundDetail {
+    /// The base kind.
+    #[must_use]
+    pub const fn kind(&self) -> ErrorKind {
+        match self {
+            BoundDetail::OverStep { .. }
+            | BoundDetail::OverCeiling { .. }
+            | BoundDetail::CommitFlip => ErrorKind::ExactnessNotAccepted,
+            BoundDetail::OwnTermAstray => ErrorKind::Internal,
+            BoundDetail::MixedSteps => ErrorKind::InvalidInput,
+        }
+    }
+
+    /// The remedies this detail knows: the larger bound, to accept explicitly; or, for a defect, a
+    /// report (chapter 22).
+    #[must_use]
+    pub fn remedies(&self) -> Vec<Remedy> {
+        match *self {
+            BoundDetail::OverStep {
+                own: bound, step, ..
+            }
+            | BoundDetail::OverCeiling {
+                needed: bound,
+                step,
+                ..
+            } => vec![Remedy::Accept {
+                class: Exactness::Certified { bound, step },
+            }],
+            BoundDetail::OwnTermAstray => vec![Remedy::Report],
+            BoundDetail::MixedSteps | BoundDetail::CommitFlip => Vec::new(),
+        }
+    }
+}
+
+impl fmt::Display for BoundDetail {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BoundDetail::OverStep { own, limit, .. } => write!(
+                f,
+                "one step would add {} steps of error, past the {} a step may add",
+                own.0, limit.0
+            ),
+            BoundDetail::OverCeiling {
+                needed, ceiling, ..
+            } => write!(
+                f,
+                "an entity's error bound would reach {} steps, past the {} accepted",
+                needed.0, ceiling.0
+            ),
+            BoundDetail::OwnTermAstray => {
+                write!(
+                    f,
+                    "an operation's own term does not belong to one changed output"
+                )
+            }
+            BoundDetail::MixedSteps => write!(f, "the operands' bounds count different grid steps"),
+            BoundDetail::CommitFlip => {
+                write!(
+                    f,
+                    "a commit would change a decision the ideal shape makes for certain"
+                )
+            }
+        }
+    }
+}
+
+impl core::error::Error for BoundDetail {}
+
+impl From<BoundDetail> for OpErrorDetail {
+    fn from(detail: BoundDetail) -> Self {
+        OpErrorDetail::Bound(detail)
+    }
+}
 
 /// Why a query could not answer (chapter 22).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -626,7 +759,8 @@ impl CombineDetail {
         }
     }
 
-    /// The remedies this detail knows: the input to change, or the piece that adds a route.
+    /// The remedies this detail knows: the input to change, the piece that adds a route, the class
+    /// to accept, or, for a defect, a report (chapter 22).
     #[must_use]
     pub fn remedies(&self) -> Vec<Remedy> {
         let change = |input: &'static str| Remedy::ChangeInput { input, to: None };
@@ -642,7 +776,7 @@ impl CombineDetail {
             }
             CombineDetail::NotPlaneBased => vec![Remedy::AwaitPiece { piece: "G242" }],
             CombineDetail::NotAccepted { would } => vec![Remedy::Accept { class: *would }],
-            CombineDetail::ResultInvalid => Vec::new(),
+            CombineDetail::ResultInvalid => vec![Remedy::Report],
         }
     }
 }
@@ -684,6 +818,12 @@ impl From<CombineDetail> for OpErrorDetail {
 impl From<QueryDetail> for OpErrorDetail {
     fn from(detail: QueryDetail) -> Self {
         OpErrorDetail::Query(detail)
+    }
+}
+
+impl From<LocalDetail> for OpErrorDetail {
+    fn from(detail: LocalDetail) -> Self {
+        OpErrorDetail::Local(detail)
     }
 }
 

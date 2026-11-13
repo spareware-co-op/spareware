@@ -1,4 +1,4 @@
-//! Inputs for `geom-make`'s hot paths (piece G101, decision 32.44): a box and a cylinder built from
+//! Inputs for `geom-make`'s hot paths (piece G101, decision 32.46): a box and a cylinder built from
 //! their inputs, and a box moved and quarter-turned, each with its checker postcondition.
 //!
 //! Class `typical` only: each input is a primitive within ±2^20 grid steps of the origin, its sizes

@@ -260,6 +260,34 @@ fn two_faces_on_one_plane_are_decided() {
     assert_eq!(group_3(&at(&r, BodyKind::Sheet, 0)), []);
 }
 
+/// A plane through `origin` spanned by `u` and `v`, with an origin off the grid, so the check
+/// compares it by certified intervals rather than as an integer plane.
+fn plane_off_grid(origin: [f64; 3], u: [f64; 3], v: [f64; 3]) -> SurfaceKind {
+    SurfaceKind::Plane(Plane::new(origin, u, v, ((0.0, 1.0), (0.0, 1.0))).unwrap())
+}
+
+#[test]
+fn planes_off_the_grid_are_certified_apart_or_crossing() {
+    // Parallel planes a step apart, neither given by integers: certainly apart, so they pass.
+    let mut r = sheets(&[
+        &[[0, 0, 1], [4, 0, 1], [4, 4, 1], [0, 4, 1]],
+        &[[0, 0, 2], [8, 0, 2], [8, 8, 2], [0, 8, 2]],
+    ]);
+    for (k, z) in [(0, 1.0), (1, 2.0)] {
+        r.surfaces[k] = plane_off_grid([0.25, 0.0, z], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    }
+    assert_eq!(group_3(&at(&r, BodyKind::Sheet, 1)), []);
+    // A square in z = 0 and one in x = 5 beyond it in y, neither plane given by integers: the
+    // planes certainly cross, and the faces are then tested exactly, and pass.
+    let mut r = sheets(&[
+        &[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
+        &[[5, 20, -5], [5, 30, -5], [5, 30, 5], [5, 20, 5]],
+    ]);
+    r.surfaces[0] = plane_off_grid([0.25, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    r.surfaces[1] = plane_off_grid([5.0, 0.25, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]);
+    assert_eq!(group_3(&at(&r, BodyKind::General, 1)), []);
+}
+
 #[test]
 fn faces_whose_planes_cross_but_which_do_not_meet_pass() {
     // A square in z = 0, and one in x = 5 beyond it in y: each crosses the other's plane outside
@@ -296,17 +324,11 @@ fn pairs_without_a_certified_test_are_reported_never_passed() {
     unchecked(&torus(), BodyKind::Solid, 1);
     unchecked(&annulus_sheet(), BodyKind::Sheet, 1);
     // Against a crossing plane, a face of any shape is decided: not convex, with a first corner
-    // that is straight, and bent, which stands for its fan of triangles. A bent face no fan from
-    // its first corner can stand for is not.
+    // that is straight, and bent, which stands for its star of triangles. A bent face no star
+    // can stand for is not: this one's notch is cut back past the mean of its corners, (7, 3),
+    // which sees the notch's two edges from outside.
     let crossing = [[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]];
-    let bent = [
-        [10, 0, 0],
-        [10, 5, 1],
-        [5, 5, 0],
-        [5, 10, 0],
-        [0, 10, 0],
-        [0, 0, 0],
-    ];
+    let bent = [[0, 0, 0], [10, 0, 0], [10, 10, 1], [8, 2, 0]];
     let mut r = sheets(&[&bent[..], &crossing[..]]);
     r.surfaces[0] = level(0.0);
     assert_eq!(

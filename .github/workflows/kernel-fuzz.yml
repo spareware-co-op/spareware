@@ -15,7 +15,8 @@ name: Kernel fuzzing and proofs
 # - Kani: each `<target>_proof` test, bolero's harness unchanged, proven by Kani for every case of
 #   its domain (the target module's header says which).
 # - Kani for geom-num: each `#[kani::proof]` harness beside geom-num's code (piece G41), proven
-#   on its own; and the same for geom-op's (piece G86), in the job kani-op.
+#   on its own; and the same for geom-op's (piece G86), in the job kani-op, and geom-format's
+#   (piece G92), in the job kani-format.
 # - kernel-fuzz-campaign.yml runs a target for hours instead, on demand: the wide integers' 25-hour
 #   campaign (G26).
 # - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
@@ -27,12 +28,12 @@ name: Kernel fuzzing and proofs
 #   found.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
-# geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-name, geom-num, geom-nurbs, geom-op,
-# geom-poly, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with engine-geometry and
-# kit-core through geom-gen's facade generators;
+# every crate of the workspace it depends on (geom-bench, geom-bool, geom-bvh, geom-check, geom-curve,
+# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-mesh, geom-name, geom-num,
+# geom-nurbs, geom-op, geom-poly, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with
+# engine-geometry and kit-core through geom-gen's facade generators;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
-# its job kani-op, the workspace
+# its job kani-op, geom-format for kani-format, the workspace
 # files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
 # ClusterFuzzLite files and this workflow.
 #
@@ -52,17 +53,23 @@ on:
   pull_request:
     paths:
       - "projects/engines/crates/engine-geometry/**"
-      - "projects/kit/crates/kit-core/**"
+      - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bool/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-check/**"
+      - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
+      - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-field/**"
+      - "projects/engines/geometry/crates/geom-format/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
+      - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
@@ -70,9 +77,13 @@ on:
       - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-sketch/**"
+      - "projects/engines/geometry/crates/geom-spatial/**"
+      - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
+      - "projects/kit/crates/kit-core/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -84,17 +95,23 @@ on:
     branches: [main]
     paths:
       - "projects/engines/crates/engine-geometry/**"
-      - "projects/kit/crates/kit-core/**"
+      - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bool/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-check/**"
+      - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
+      - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-field/**"
+      - "projects/engines/geometry/crates/geom-format/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
+      - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
@@ -102,9 +119,13 @@ on:
       - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-sketch/**"
+      - "projects/engines/geometry/crates/geom-spatial/**"
+      - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
+      - "projects/kit/crates/kit-core/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -146,7 +167,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, boxtree_fuzz, crossings_fuzz, curves_fuzz, general_fuzz, intersect_fuzz, level_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, piercing_fuzz, planes_fuzz, predicates_fuzz, project_fuzz, quadric_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, contract_fuzz, crossings_fuzz, curves_fuzz, encoder_fuzz, euler_fuzz, exact_fuzz, general_fuzz, intersect_fuzz, level_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, naming_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, piercing_fuzz, planes_fuzz, predicates_fuzz, project_fuzz, prune_fuzz, quadric_fuzz, records_fuzz, references_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -173,16 +194,21 @@ jobs:
       # Gate 1 (G43): on the first leg, libFuzzer must first find a planted violation, a carry
       # dropped from geom-num's wide integers, which wide_fuzz compares with big integers
       # (geom-test's trip module and binary). The corpus and crash that run leaves are removed,
-      # so a later failure uploads only its own.
+      # so a later failure uploads only its own. It runs with the next step's options, the input
+      # time limit too, so the planted run is the real one.
       - name: libFuzzer finds a planted violation
         if: strategy.job-index == 0
         run: |
-          cargo run --locked -q -p geom-test --bin trip -- libfuzzer -- cargo bolero test wide_fuzz --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s
+          cargo run --locked -q -p geom-test --bin trip -- libfuzzer -- cargo bolero test wide_fuzz --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s --timeout 10s
           rm -rf projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/wide
+      # --timeout: an input that runs for ten seconds fails the job, and libFuzzer saves it as
+      # timeout-<sha1> beside the crash files, which the next step uploads (a slow or hung input,
+      # not a broken law). geom-fuzz's tests make the limit work under the test harness
+      # (tests/common/mod.rs, issue #764), as kernel-fuzz-campaign.yml says.
       - name: Fuzz ${{ matrix.target }} with libFuzzer for a minute
         run: >-
           cargo bolero test "${{ matrix.target }}" --package geom-fuzz
-          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s
+          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s --timeout 10s
       - name: Upload the crashing input
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -234,11 +260,11 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-fuzz --
-          cargo kani --tests -p geom-fuzz --harness orient2d_fuzz --exact
+          cargo kani --tests -p geom-fuzz -Z stubbing --harness orient2d_fuzz --exact
       - name: Prove ${{ matrix.harness }}
         run: |
           start=$(date +%s)
-          cargo kani --tests -p geom-fuzz --harness "${{ matrix.harness }}" --exact
+          cargo kani --tests -p geom-fuzz -Z stubbing --harness "${{ matrix.harness }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
@@ -269,6 +295,10 @@ jobs:
           - eft::proofs::two_prod_with_minus_a_tenth
           - eft::proofs::two_prod_with_the_largest_double
           - eft::proofs::two_prod_with_the_smallest_subnormal
+          - distance::proofs::cross_is_the_cross_product
+          - distance::proofs::point_line_has_the_sign_of_its_gap
+          - distance::proofs::point_point_has_the_sign_of_its_gap
+          - distance::proofs::triple_has_the_sign_of_its_gap
           - eft::proofs::two_prod_with_the_splitter
           - eft::proofs::two_prod_with_three
           - eft::proofs::two_prod_with_two_pow_996
@@ -331,6 +361,7 @@ jobs:
           - real::proofs::real_new_refuses_exactly_nan_and_the_infinities
           - real::proofs::total_order_and_its_tie_rules
           - rng::proofs::draws_never_panic
+          - rng::proofs::every_unit_double_is_a_real_below_one
           - rng::proofs::lemire_never_reports_a_defect
           - rng::proofs::philox_never_panics
           - rng::proofs::stream_ranges_cut_without_overflow
@@ -374,6 +405,67 @@ jobs:
         run: |
           start=$(date +%s)
           cargo kani -p geom-num --harness "${{ matrix.proof }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
+  # Bounded proofs beside geom-topo's own code (chapter 28.7; piece G112): the arenas' typed
+  # indices and columns, the two checks publishing makes, which keep every index of a body inside
+  # its arenas, and short sequences of Euler operators, which keep the combinatorial rules. Each
+  # harness of a module's `#[cfg(kani)] mod proofs`, proven for every case of its stated bound, with
+  # Kani's overflow, bounds and panic checks on; -Z stubbing lets the operators' proofs stand in for
+  # the geometry pools, which no operator reads. geom-topo's tests/kani_harnesses.rs holds this list
+  # to the harnesses in the source. The budget is kani-num's; an operators' proof takes about 15
+  # minutes on a development machine, and --no-assertion-reach-checks leaves out a solve and a trace
+  # for every assertion, which ran a runner out of memory.
+  kani-topo:
+    name: Kani, geom-topo (${{ matrix.proof }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        proof:
+          - builder::euler::proofs::kemr_and_mekr
+          - builder::euler::proofs::kill_wire_leaves_nothing
+          - builder::euler::proofs::mef_and_kef
+          - builder::euler::proofs::mef_closes_an_edge
+          - builder::euler::proofs::mev_and_kev
+          - builder::euler::proofs::mfkrh_and_kfmrh
+          - builder::euler::proofs::refusals_change_nothing
+          - builder::proofs::the_length_check_accepts_exactly_even_columns
+          - builder::proofs::the_link_check_accepts_exactly_the_links_inside_their_arena
+          - column::proofs::get_is_in_bounds
+          - column::proofs::set_writes_one_row_and_never_the_copy
+          - ix::proofs::every_row_round_trips
+          - ix::proofs::order_is_row_order
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          cargo kani setup
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, Ix::row
+      # giving one row too few (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        if: strategy.job-index == 0
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-topo --
+          cargo kani -p geom-topo -Z stubbing --no-assertion-reach-checks --harness ix::proofs::every_row_round_trips --exact
+      - name: Prove ${{ matrix.proof }}
+        run: |
+          start=$(date +%s)
+          cargo kani -p geom-topo -Z stubbing --no-assertion-reach-checks --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
@@ -423,12 +515,6 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
-  # Bounded proofs beside geom-op's own code (chapter 28.7; piece G86), as kani-num proves
-  # geom-num's: the canonical CBOR encoder's binary16 and binary32 narrowing, each proven exact and
-  # shortest for every finite double, and a refused double proven to write nothing. geom-op's
-  # tests/kani_harnesses.rs holds this list to the harnesses in the source. The budget: on a
-  # development machine (Kani 0.68.0) each proof took under 3 seconds after a one-minute build, so
-  # 60 minutes leaves room for Kani's install, which takes most of a job.
   kani-op:
     name: Kani, geom-op (${{ matrix.proof }})
     runs-on: ubuntu-latest
@@ -456,10 +542,67 @@ jobs:
           cargo kani setup
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, the narrowing
+      # to a shorter float dropping a set bit (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        if: strategy.job-index == 0
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-op --
+          cargo kani -p geom-op --harness cbor::proofs::binary16_is_exact_and_shortest --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
           cargo kani -p geom-op --harness "${{ matrix.proof }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
+  # Bounded proofs beside geom-format's own code (chapter 28.7; pieces G92 and G112): the range
+  # checks of 24.7, proven for every value of their domain, so the frame's edge at ±(2^40 − 1) and
+  # one beyond are covered by the proof, not only by tests; and the native reader: one head of any
+  # bytes and a record read over any heads, never a panic, with -Z
+  # stubbing standing in for the checks each proof leaves to tests. geom-format's
+  # tests/kani_harnesses.rs holds this list to the harnesses in the source.
+  kani-format:
+    name: Kani, geom-format (${{ matrix.proof }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        proof:
+          - cbor::decode::proofs::one_head_never_panics
+          - range::proofs::bits_is_the_magnitude_width
+          - range::proofs::grid_accepts_exactly_the_frame
+          - range::proofs::real_accepts_exactly_the_finite_frame
+          - record::proofs::decode_never_panics
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          cargo kani setup
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, a magnitude's
+      # width one too many (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        if: strategy.job-index == 0
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-format --
+          cargo kani -p geom-format -Z stubbing --harness range::proofs::real_accepts_exactly_the_finite_frame --exact
+      - name: Prove ${{ matrix.proof }}
+        run: |
+          start=$(date +%s)
+          cargo kani -p geom-format -Z stubbing --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock

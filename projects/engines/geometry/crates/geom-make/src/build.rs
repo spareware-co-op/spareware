@@ -15,10 +15,24 @@
 //! - **Names, not positions.** Every index of the body follows its entities' names, and every name
 //!   comes from the operation's path, a role and the names it is relative to: never from the
 //!   order the rows were written in (8.2, 20.2).
-//! - **Checked before returned.** A body that does not pass the checker at the build's level is
-//!   never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.
-//! - **Charged by what it builds.** One meter unit per row built ([`PER_ROW`]), before it is built
-//!   (23.10), and the publishing and the checker charge their own rows to the same meter.
+//! - **Checked before returned.** A body that does not pass the checker is never returned. What
+//!   the operation fails with instead is [`Unpassed`]'s to say: [`MakeDetail::ResultInvalid`], a
+//!   defect, where the checker follows the body's data in full or found something wrong;
+//!   [`MakeDetail::NotCertifiedYet`], naming the piece that widens the checker, where the data
+//!   are less than exact and the checker could not certify them.
+//! - **The same answer in every build.** How much of the checker a build runs never decides what
+//!   an operation answers (principle 5; decision 32.48). A primitive as written and an exact
+//!   transform of an exact body pass groups 2 and 3 by construction, so there the check runs at
+//!   the build's level ([`Level::of_build`]: the cheap groups in a shipped build, 8.3), and a
+//!   fault is a defect the full-checker builds of continuous integration exist to find. A
+//!   transform that rounded, or that moved a body already less than exact, has no such proof: a
+//!   rounded corner can land on another, and the refusal [`MakeDetail::NotCertifiedYet`] is an
+//!   ordinary answer. There every group runs in every build ([`Unpassed::level`]).
+//! - **Charged by what it builds.** One meter unit ([`PER_ROW`]) and 64 logical bytes per row built,
+//!   before it is built (23.10), and the publishing charges its own rows to the same meter. The
+//!   postcondition check runs on a meter of its own, cancellable and without a limit: where it
+//!   runs at the build's level, that differs between a test build and a shipped one, and a budget
+//!   must stop an operation the same way in both.
 //! - **Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation
 //!   did not report, returns no body (`OpContext::run`).
 //!
@@ -41,7 +55,7 @@ use geom_op::{
     Charge, MakeDetail, NameId, NameList, NameSet, OpContext, OpError, OpOutput, OpPath, Role,
     TopoName,
 };
-use geom_run::{Phase, WorkMeter};
+use geom_run::{LogicalSize, Phase, WorkMeter};
 use geom_surface::SurfaceKind;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
@@ -188,6 +202,28 @@ pub(crate) fn assemble(
     ctx.run(|meter| built(ctx, meter, part, exactness))
 }
 
+/// One row of a body, for the logical-memory budget (23.10): the size of the widest record any
+/// arena holds, fixed by the operation's version, whatever a row takes on this machine.
+struct Row;
+
+impl LogicalSize for Row {
+    const LOGICAL_BYTES: u64 = 64;
+}
+
+/// Charges `rows` rows to `meter`: their work, then their logical memory, before they are built.
+pub(crate) fn charge_rows(
+    ctx: &OpContext<'_>,
+    meter: &mut WorkMeter<'_>,
+    rows: u64,
+) -> Result<(), OpError> {
+    PER_ROW
+        .charge(meter, rows)
+        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
+    meter
+        .reserve_for::<Row>(rows)
+        .map_err(|stop| ctx.stopped(meter, stop, PHASE))
+}
+
 /// [`assemble`]'s body, on the operation's meter.
 fn built(
     ctx: &OpContext<'_>,
@@ -212,9 +248,7 @@ fn built(
         .try_fold(roles.len(), |n, l| n.checked_add(1)?.checked_add(l.len()))
         .and_then(|n| u64::try_from(n).ok())
         .ok_or_else(defect)?;
-    PER_ROW
-        .charge(meter, rows)
-        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
+    charge_rows(ctx, meter, rows)?;
     let mut names = Names {
         regions: Vec::new(),
         faces: Vec::new(),
@@ -247,7 +281,7 @@ fn built(
     let body = filled(&rows, part)
         .and_then(|b| b.publish_named(&names, BodyKind::Solid, outside_row, meter))
         .map_err(|e| unbuilt(ctx, meter, e))?;
-    finish(ctx, meter, body, records, made, None, exactness)
+    finish(ctx, body, records, made, None, exactness, Unpassed::Defect)
 }
 
 /// A solid's topology, as rows.
@@ -270,30 +304,81 @@ enum Kind {
     Vertex,
 }
 
+/// What it means for an operation that the checker did not pass the body it built: which of the
+/// checker's reports are a defect of the operation, and which a body the checker cannot certify
+/// yet (8.3: every pair or carrier without a certified test is a fault, never a pass).
+#[derive(Clone, Copy)]
+pub(crate) enum Unpassed {
+    /// A defect, whatever the report holds: the body is a primitive as written, or its data are
+    /// exact, and the checker follows both in full.
+    Defect,
+    /// The body's data were less than exact before this operation, which moved them exactly: an
+    /// earlier transform rounded its corners or moved its curved geometry by a deviation, or it
+    /// is a round primitive. A report that found nothing wrong and could not certify the body
+    /// (`geom_check::Report::uncertified`) waits for `piece`; a report that found something
+    /// wrong is a defect, since an exact move of a body that passed breaks nothing.
+    Inherited {
+        /// The piece that widens what the checker certifies, by its board number.
+        piece: &'static str,
+    },
+    /// This operation rounded a corner or moved curved geometry by a deviation: any report
+    /// waits for `piece`.
+    Rounded {
+        /// The piece that widens what the checker certifies, by its board number.
+        piece: &'static str,
+    },
+}
+
+impl Unpassed {
+    /// The level the result is checked at. A body the checker follows in full passes groups 2
+    /// and 3 by construction, so the build's level is enough and a shipped build runs the cheap
+    /// groups (8.3). On the other two routes the checker's verdict is the operation's answer, so
+    /// every group runs in every build: otherwise a shipped build would return what a test build
+    /// refuses (principle 5; decision 32.48).
+    const fn level(self) -> Level {
+        match self {
+            Unpassed::Defect => Level::of_build(),
+            Unpassed::Inherited { .. } | Unpassed::Rounded { .. } => Level::Full,
+        }
+    }
+}
+
 /// Checks `body` as the postcondition, and returns it with the history of `records` (no input is
 /// deleted: a Make operation has none, and a transform keeps every entity) and the names it made.
 ///
 /// # Errors
 ///
-/// The meter's stop; [`MakeDetail::ResultInvalid`] if the body does not pass the checker;
-/// [`MakeDetail::BuildFailed`] if the history cannot be formed.
+/// `Cancelled`; if the body does not pass the checker, [`MakeDetail::NotCertifiedYet`] where
+/// `unpassed` says the report waits for a piece and [`MakeDetail::ResultInvalid`] otherwise, each
+/// with the report's first fault as its message; [`MakeDetail::BuildFailed`] if the history cannot
+/// be formed.
 pub(crate) fn finish(
     ctx: &OpContext<'_>,
-    meter: &mut WorkMeter<'_>,
     body: Body,
     records: Vec<Record>,
     names: Vec<TopoName>,
     motion: Option<Motion>,
     exactness: Exactness,
+    unpassed: Unpassed,
 ) -> Result<OpOutput<Made>, OpError> {
-    let report = check(&body, exactness, Level::of_build(), meter)
-        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
+    // Where the check's level is the build's, its work differs by build, so it stays off the
+    // operation's budget on every route.
+    let mut checking = ctx.unbudgeted_meter();
+    let report = check(&body, exactness, unpassed.level(), &mut checking)
+        .map_err(|stop| ctx.stopped(&checking, stop, PHASE))?;
     if !report.passed() {
         let first = report.faults().first().map_or_else(
             || alloc::string::String::from("the checker reported faults"),
             alloc::string::ToString::to_string,
         );
-        return Err(fail(ctx, MakeDetail::ResultInvalid).with_message(first));
+        let detail = match unpassed {
+            Unpassed::Rounded { piece } => MakeDetail::NotCertifiedYet { piece },
+            Unpassed::Inherited { piece } if report.uncertified() => {
+                MakeDetail::NotCertifiedYet { piece }
+            }
+            Unpassed::Inherited { .. } | Unpassed::Defect => MakeDetail::ResultInvalid,
+        };
+        return Err(fail(ctx, detail).with_message(first));
     }
     let defect = || fail(ctx, MakeDetail::BuildFailed);
     let none = NameSet::new([]).map_err(|_| defect())?;

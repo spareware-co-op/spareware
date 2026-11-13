@@ -23,8 +23,17 @@ geom-topo = { path = "../../geometry/crates/geom-topo" }
 geom-pool = { path = "../../geometry/crates/geom-pool", optional = true }
 
 [dev-dependencies]
+# The contract laws of chapter 28.2 (piece G103), which tests/contract_laws.rs runs on every registered
+# operation. Ours, MPL-2.0; a development crate, so tests only.
+geom-test = { path = "../../geometry/crates/geom-test" }
 # Every test build runs all four checker groups (chapter 28.4), release builds included.
 geom-check = { path = "../../geometry/crates/geom-check", features = ["full"] }
+# The Query family's laws (tests/query_laws.rs, piece G102): a body and its histories saved as
+# records, to bytes, and read back, as a program saves them (24.4). Ours, MPL-2.0; tests only.
+geom-format = { path = "../../geometry/crates/geom-format" }
+# Property tests only, never linked into the kernel. MIT OR Apache-2.0. Without its default fork and
+# timeout features, so the tests also run on wasm32-wasip1.
+proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 # The scaffold check and the merge gate (tests/scaffold) read TOML, cargo's metadata and messages,
 # JSON and Rust source with the standard crates for each, in place of readers written there (piece
 # G12a; chapter 29.1, the owner's direction of 2026-10-22). Tests only, never shipped. Each pinned:

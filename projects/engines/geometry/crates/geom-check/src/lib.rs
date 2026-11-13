@@ -27,7 +27,8 @@
 //!
 //! - [`check`], in `run`: one check of a body at a [`Level`], returning a [`Report`].
 //! - [`report`]: the [`Group`]s of 8.3, the [`Level`]s, the [`Entity`] a [`Fault`] is at, its
-//!   [`FaultKind`], and the [`Report`].
+//!   [`FaultKind`], the [`Report`], and the checker's [`VERSION`], which validation stamps record
+//!   (G108).
 //! - `combinatorial`: group 1, loops close, fin partners, shells closed and oriented, regions,
 //!   Euler's formula.
 //! - `geometric`: group 2, vertices on their faces' surfaces and at their edges' curve ends, and
@@ -41,10 +42,14 @@
 //!   vertices and faces only along shared edges; exact on segments and flat convex polygons,
 //!   certified on circles; every other pair is reported unchecked, never passed.
 //! - `orientation`: group 3 on the flat shells of a solid, each facing the way its place says, and
-//!   each lying where its region allows (G102).
+//!   each lying where its region allows (G102). In a body that is not Exact, whose faces may be
+//!   bent, the volume's sign comes from the least and the most its faces' corners can give and the
+//!   nesting from the faces' stars, so that neither depends on where a ring starts (G134).
 //! - `exactness`: group 4, the exactness record against the geometry.
 //! - [`query`]: the exactness report and the validity report, as operations (G102).
-//! - `planar`: group 3 on flat faces of any shape, by the signs of planes (G134).
+//! - `planar`: group 3 on flat faces of any shape, by the signs of planes (G134). A face its
+//!   rounded corners have bent stands for the star of triangles from the mean of its corners, so
+//!   that what is found of it does not depend on where its ring starts.
 //! - `sink`: the faults found so far, capped at [`MAX_FAULTS`], and the caller's meter.
 //!
 //! Status: the framework and groups 1 and 4 (G84) and groups 2 and 3 for primitive bodies (G85)
@@ -71,6 +76,6 @@ mod run;
 mod self_intersection;
 mod sink;
 
-pub use report::{Entity, Fault, FaultKind, Group, Level, Report};
+pub use report::{Entity, Fault, FaultKind, Group, Level, Report, VERSION};
 pub use run::check;
 pub use sink::MAX_FAULTS;

@@ -20,17 +20,36 @@ name = "geom-bench-guest"
 test = false
 bench = false
 
+# Chapter 23.2's step mix, per corpus.
+[[bin]]
+name = "geom-bench-steps"
+test = false
+bench = false
+
 # The checks the gates run on count files: comparison with the merge base, removals, growth.
 [[bin]]
 name = "geom-bench-counts"
 test = false
 bench = false
 
+# The reference runner's records and report (piece G107): assembling a night, checking records,
+# writing the report from the history.
+[[bin]]
+name = "geom-bench-timings"
+test = false
+bench = false
+required-features = ["reference"]
+
 [dependencies]
 geom-num = { path = "../geom-num" }
+# The step mix (chapter 23.2) counts the plane table's steps too (ours, Apache-2.0).
+geom-poly = { path = "../geom-poly" }
 # The work meter the root-isolation engine runs under (its benchmarks, G53).
 geom-run = { path = "../geom-run" }
-# The math types of phase 2 (pieces G45, G46 and G48): their count benchmarks, as decision 32.44
+# Cache keys, the memo store and body versions (piece G105), with the crates their inputs need
+# (geom-op and geom-topo, listed below with phase 3's other count benchmarks).
+geom-format = { path = "../geom-format" }
+# The math types of phase 2 (pieces G45, G46 and G48): their count benchmarks, as decision 32.46
 # asks of every phase-2 code piece.
 geom-math = { path = "../geom-math" }
 # The box tree and cell index of phase 2 (pieces G54 and G55), for the same count benchmarks.
@@ -43,15 +62,26 @@ geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 # The dense linear algebra of phase 2 (pieces G49 and G50), for the same count benchmarks.
 geom-linalg = { path = "../geom-linalg" }
-# The intersection results and canonical order of phase 4 (piece G158), for the same count benchmarks.
-geom-intersect = { path = "../geom-intersect" }
+# The arenas (piece G80), the attribute step (piece G90) and the batch driver (piece G104) of
+# phase 3 and the types they take, for the same count benchmarks.
+geom-name = { path = "../geom-name" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
 # The primitives and transforms of phase 3 (piece G101), and the context and output they take and
 # give, for the same count benchmarks.
 geom-make = { path = "../geom-make" }
-# The curved builder's broad phase (piece G242), for the same count benchmarks.
+# The flat boolean's scenarios (piece G140; 23.13's scenarios at reduced scale): walls and their
+# openings, a moved door, a slab's holes, a union of many boxes and a storey's rooms, with the
+# arrangement cache a moved door is cut again from; and the curved builder's broad phase and
+# ray classification (pieces G242 and G246).
 geom-bool = { path = "../geom-bool" }
-geom-op = { path = "../geom-op" }
-geom-topo = { path = "../geom-topo" }
+# The triangulation (piece G153), for the same count benchmarks.
+geom-mesh = { path = "../geom-mesh" }
+# The checker's two queries, the exactness and validity reports (piece G102), for the same count
+# benchmarks as the other core queries in geom-topo and geom-name.
+geom-check = { path = "../geom-check" }
+# The intersection results and canonical order of phase 4 (piece G158), for the same count benchmarks.
+geom-intersect = { path = "../geom-intersect" }
 # SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
 # crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
 # sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which
@@ -73,12 +103,17 @@ gungraun-runner = { version = "=0.20.0", default-features = false, features = ["
 serde_json = { version = "1.0.154", optional = true }
 
 [features]
-default = ["judge"]
+default = ["judge", "reference"]
 # The judge of the instruction-and-cache gate (`geom_bench::callgrind`), on by default. The gate's
 # measured runs build without it (`cargo bench --no-default-features`): Gungraun's runner crate is
 # also a dependency of the benchmark binary, so turning on its summary model would change the
 # binary being measured, and a measurement must not change with the tool that judges it.
 judge = ["dep:gungraun-runner", "dep:serde_json"]
+# The reference runner's nightly records and report (`geom_bench::timings`, piece G107), on by
+# default, on Unix and Windows only. Like the judge, the measured runs leave it out
+# (`--no-default-features`) and the WebAssembly guest never has it, so no measured binary changes
+# with it. It needs no dependency.
+reference = []
 
 [dev-dependencies]
 geom-test = { path = "../geom-test" }

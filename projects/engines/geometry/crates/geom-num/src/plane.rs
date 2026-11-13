@@ -102,7 +102,9 @@ use core::cmp::Ordering;
 use crate::error::NumError;
 use crate::generated;
 use crate::grid::{COORD_BITS, COORD_MAX, Coord, P3, Rounded};
+use crate::predicate::filtered;
 use crate::sign::Sign;
+use crate::step::Step;
 use crate::wide::{I256, I320, Wide};
 // Named in the documentation only; the code reaches them as `Wide<6>` and `Wide<8>`.
 #[cfg(doc)]
@@ -377,6 +379,47 @@ impl Plane {
     /// could only if the checked wide arithmetic itself were wrong (module docs, "No answer is
     /// silently wrong"), and then this reports it rather than answering.
     pub fn side_of_tpi(&self, t: &Tpi) -> Result<Sign, NumError> {
+        if t.planes.contains(self) {
+            return Ok(Sign::Zero);
+        }
+        tpi_filtered(t, self).map_or_else(|| self.side_of_tpi_unfiltered(t), Ok)
+    }
+
+    /// [`Plane::side_of_tpi`], and the [`Step`] that settled it: this plane among the point's own;
+    /// the generated filter; for what it leaves, small coefficients in `i64`, then a plane square to
+    /// an axis in one narrower product; the exact paths. The narrow and axis steps go after the
+    /// filter, which settles general position for less than they would add to it, and what they
+    /// save is the exact path of the ties it leaves.
+    ///
+    /// # Errors
+    ///
+    /// As [`Plane::side_of_tpi`].
+    pub fn side_of_tpi_step(&self, t: &Tpi) -> Result<(Sign, Step), NumError> {
+        let sign = self.side_of_tpi(t)?;
+        let step = if t.planes.contains(self) {
+            Step::Identity
+        } else if tpi_filtered(t, self).is_some() {
+            Step::Filter
+        } else if tpi_narrow(t, self).is_some() {
+            Step::Narrow
+        } else if tpi_axis(t, self).is_some() {
+            Step::Axis
+        } else {
+            Step::Exact
+        };
+        Ok((sign, step))
+    }
+
+    /// [`Plane::side_of_tpi`] when the filter cannot decide: small coefficients, a plane square to an
+    /// axis, the exact paths. Out of line, so that a call the filter answers does not pay for them.
+    #[inline(never)]
+    fn side_of_tpi_unfiltered(&self, t: &Tpi) -> Result<Sign, NumError> {
+        if let Some(sign) = tpi_narrow(t, self) {
+            return Ok(sign);
+        }
+        if let Some(sign) = tpi_axis(t, self) {
+            return Ok(sign);
+        }
         tpi_routed(t, self).map_or_else(|| self.side_of_tpi_hand(t), Ok)
     }
 
@@ -387,10 +430,7 @@ impl Plane {
         let (x, w) = t.homogeneous()?;
         match classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w) {
             Some(s) => Ok(s),
-            None => match classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w) {
-                Some(s) => Ok(s),
-                None => Err(NumError::BudgetExceeded),
-            },
+            None => fitted(classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w)),
         }
     }
 
@@ -434,14 +474,8 @@ impl Plane {
         ) else {
             return Err(NumError::BudgetExceeded);
         };
-        let side = match lpi_classify::<4>(w1, s2p, w2, s1p) {
-            Some(s) => Some(s),
-            None => lpi_classify::<5>(w1, s2p, w2, s1p),
-        };
-        match side {
-            Some(s) => Ok(s.mul(Sign::of_i128(w1))),
-            None => Err(NumError::BudgetExceeded),
-        }
+        let side = lpi_classify_total(w1, s2p, w2, s1p)?;
+        Ok(side.mul(Sign::of_i128(w1)))
     }
 
     /// w = n · (q − p) and sₚ = n · p + d for the line from p to q, in `i128`: `None` if either
@@ -457,6 +491,13 @@ impl Plane {
 /// |q − p| < 2^64 for any two `i64` values.
 pub(crate) const fn difference(q: Coord, p: Coord) -> Option<i128> {
     (q.get() as i128).checked_sub(p.get() as i128)
+}
+
+/// q − p for two coordinates, in `i128`, for a caller with no failure to report: formed modulo
+/// 2^128, which it never reaches, since |q − p| < 2^64 for any two `i64` values, by the types
+/// alone.
+const fn span(q: Coord, p: Coord) -> i128 {
+    (q.get() as i128).wrapping_sub(p.get() as i128)
 }
 
 /// p · q − r · s in `i128`, every step checked: `None` if a step does not fit.
@@ -491,16 +532,8 @@ const fn dot_point(n: &[i128; 3], p: P3) -> Option<i128> {
     reason = "a, b and c are the points and n and d the coefficients of the formulas above"
 )]
 const fn coefficients(a: P3, b: P3, c: P3) -> Option<([i128; 3], i128)> {
-    let (Some(ux), Some(uy), Some(uz), Some(vx), Some(vy), Some(vz)) = (
-        difference(b.x, a.x),
-        difference(b.y, a.y),
-        difference(b.z, a.z),
-        difference(c.x, a.x),
-        difference(c.y, a.y),
-        difference(c.z, a.z),
-    ) else {
-        return None;
-    };
+    let (ux, uy, uz) = (span(b.x, a.x), span(b.y, a.y), span(b.z, a.z));
+    let (vx, vy, vz) = (span(c.x, a.x), span(c.y, a.y), span(c.z, a.z));
     let (Some(nx), Some(ny), Some(nz)) = (
         mul_sub(uy, vz, uz, vy),
         mul_sub(uz, vx, ux, vz),
@@ -581,6 +614,23 @@ impl Tpi {
                 Ok(t)
             }
             None => Err(NumError::BudgetExceeded),
+        }
+    }
+
+    /// [`Tpi::new`] at a fraction of its cost, for loops that make a point to read a sign from it:
+    /// it computes only w. [`Tpi::new`] also computes X, and is proved never to fail doing so for
+    /// any planes (`verus/plane.rs`), so the result is the same.
+    ///
+    /// # Errors
+    ///
+    /// As [`Tpi::new`].
+    pub fn meeting(p: Plane, q: Plane, r: Plane) -> Result<Tpi, NumError> {
+        match normals_sign(&p, &q, &r)? {
+            Sign::Zero => Err(NumError::Degenerate),
+            weight => Ok(Tpi {
+                planes: [p, q, r],
+                weight,
+            }),
         }
     }
 
@@ -814,16 +864,10 @@ impl Lpi {
         let Some((w, sp)) = self.plane.weight_and_offset(self.p, self.q) else {
             return Err(NumError::BudgetExceeded);
         };
-        let Some(sq) = sp.checked_add(w) else {
-            return Err(NumError::BudgetExceeded);
-        };
-        let (Some(x), Some(y), Some(z)) = (
-            lpi_axis(sq, sp, self.p.x, self.q.x),
-            lpi_axis(sq, sp, self.p.y, self.q.y),
-            lpi_axis(sq, sp, self.p.z, self.q.z),
-        ) else {
-            return Err(NumError::BudgetExceeded);
-        };
+        let sq = fitted(sp.checked_add(w))?;
+        let x = fitted(lpi_axis(sq, sp, self.p.x, self.q.x))?;
+        let y = fitted(lpi_axis(sq, sp, self.p.y, self.q.y))?;
+        let z = fitted(lpi_axis(sq, sp, self.p.z, self.q.z))?;
         Ok(([x, y, z], w))
     }
 
@@ -836,15 +880,32 @@ impl Lpi {
     /// [`NumError::BudgetExceeded`] as for [`Lpi::homogeneous`].
     pub fn to_grid(&self) -> Result<Rounded<P3>, NumError> {
         let (x, w) = self.homogeneous()?;
-        let [x0, x1, x2] = x;
-        let (Some(r0), Some(r1), Some(r2)) = (x0.resize(), x1.resize(), x2.resize()) else {
-            return Err(NumError::BudgetExceeded);
-        };
-        let x: [I320; 3] = [r0, r1, r2];
+        // Widening keeps every value.
+        let x = x.map(I320::from);
         let w = I256::from_i128(w);
         commit::<BUDGET_LIMBS>(&x, &w)
             .or_else(|| commit::<TOTAL_LIMBS>(&x, &w))
             .unwrap_or(Err(NumError::BudgetExceeded))
+    }
+}
+
+/// The value of a checked step that always fits where it is asked for, or
+/// [`NumError::BudgetExceeded`] should it not: reported, not answered.
+///
+/// Every caller passes a step that cannot fail there, so the `None` arm cannot run. Verus proves
+/// it: the twin (`verus/plane.rs`) requires the step to be `Some`, which Verus checks at every
+/// call, and in the `None` arm it calls `a_fitted_step_is_never_none`, whose precondition is
+/// `false`, so the twin verifies only because control cannot arrive there. The function is marked
+/// for the coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/plane.rs::a_fitted_step_is_never_none
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn fitted<T>(step: Option<T>) -> Result<T, NumError> {
+    match step {
+        Some(value) => Ok(value),
+        None => {
+            // Never: the step fits at every call (the proof cited above).
+            Err(NumError::BudgetExceeded)
+        }
     }
 }
 
@@ -864,9 +925,9 @@ fn lpi_routed(l: &Lpi, s: &Plane) -> Option<Sign> {
     let ([ax, ay, az], ad) = (l.plane.n, l.plane.d);
     let ([bx, by, bz], bd) = (s.n, s.d);
     let (p, q) = (l.p, l.q);
-    let weight = generated::lpi_weight::filter(ax, ay, az, p, q)
+    let weight = filtered(|| generated::lpi_weight::filter(ax, ay, az, p, q))
         .or_else(|| generated::lpi_weight::exact(ax, ay, az, p, q))?;
-    let side = generated::lpi_side::filter(ax, ay, az, ad, bx, by, bz, bd, p, q)
+    let side = filtered(|| generated::lpi_side::filter(ax, ay, az, ad, bx, by, bz, bd, p, q))
         .or_else(|| generated::lpi_side::exact(ax, ay, az, ad, bx, by, bz, bd, p, q))?;
     Some(side.mul(weight))
 }
@@ -878,32 +939,314 @@ fn lpi_classify<const L: usize>(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Opt
     Some(a.checked_sub(&b)?.signum())
 }
 
-/// The side of plane `s` that the point where `t`'s planes meet is on, through the generated
-/// predicates (chapter 6.2): the sign of the 4 × 4 determinant of the four planes' coefficients
-/// (`tpi_side`, which equals n · X + d · w), from its `f64` filter when the filter can decide and
-/// from its generated exact path otherwise, times the sign of the point's weight w, which
-/// [`Tpi::new`] stored exactly (so the generated `tpi_weight` is never needed here). `None` only
-/// when the generated exact path does not fit its certified types, which no planes made by
-/// [`Plane::through`] cause; the caller then takes the hand-written paths.
+/// [`lpi_classify`] in [`I256`], then in [`I320`] should a step there not fit (the total path of
+/// [`Plane::side_of_lpi`]), and [`NumError::BudgetExceeded`] should neither fit.
+///
+/// For the weights and offsets of planes within their budget the first always fits, so nothing
+/// after it can run. Verus proves it: the twin (`verus/plane.rs`) requires each of the four values
+/// below 2^126 in magnitude, which Verus checks at the call, and after a first `None` it calls
+/// `lpi_classify_always_fits`, whose precondition is `false`. The function is marked for the
+/// coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/plane.rs::lpi_classify_always_fits
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn lpi_classify_total(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Result<Sign, NumError> {
+    match lpi_classify::<4>(w1, s2p, w2, s1p) {
+        Some(s) => Ok(s),
+        None => {
+            // Never, for planes within their budget (the proof cited above).
+            match lpi_classify::<5>(w1, s2p, w2, s1p) {
+                Some(s) => Ok(s),
+                None => Err(NumError::BudgetExceeded),
+            }
+        }
+    }
+}
+
+/// The bound on a normal component for [`Plane::side_of_tpi`]'s narrow step: 2^6, which holds the
+/// axes, 45 degrees and small rational slopes.
+const TPI_NARROW_NORMAL: u128 = 1 << 6;
+
+/// The bound on an offset for [`Plane::side_of_tpi`]'s narrow step: 2^40, so a unit normal stays
+/// narrow anywhere in the frame.
+const TPI_NARROW_OFFSET: u128 = 1 << 40;
+
+/// A plane's coefficients in `i64` when they are below those bounds in magnitude.
+fn narrow_plane(plane: &Plane) -> Option<([i64; 3], i64)> {
+    let small = |v: i128, limit: u128| {
+        if v.unsigned_abs() < limit {
+            i64::try_from(v).ok()
+        } else {
+            None
+        }
+    };
+    let [x, y, z] = plane.n;
+    Some((
+        [
+            small(x, TPI_NARROW_NORMAL)?,
+            small(y, TPI_NARROW_NORMAL)?,
+            small(z, TPI_NARROW_NORMAL)?,
+        ],
+        small(plane.d, TPI_NARROW_OFFSET)?,
+    ))
+}
+
+/// The cross product a × b in `i64`.
+fn narrow_cross(a: [i64; 3], b: [i64; 3]) -> Option<[i64; 3]> {
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    let minor = |p: i64, q: i64, r: i64, s: i64| p.checked_mul(q)?.checked_sub(r.checked_mul(s)?);
+    Some([
+        minor(ay, bz, az, by)?,
+        minor(az, bx, ax, bz)?,
+        minor(ax, by, ay, bx)?,
+    ])
+}
+
+/// [`Plane::side_of_tpi`] in `i64`, or `None` when a coefficient is out of range: the point's X and
+/// w as on [`Tpi::homogeneous`], then n · X + d · w. With |`n_i`| < 2^6 and |d| < 2^40, the cross
+/// products are below 2^13, w below 2^21, `X_i` below 2^55 and the result, a 4 × 4 determinant,
+/// below 24 · 2^58 < 2^63. Every step is checked all the same, and a partial sum that did not fit
+/// would leave the call to the next step.
 #[allow(
     clippy::many_single_char_names,
     reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
 )]
-fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
+fn tpi_narrow(t: &Tpi, s: &Plane) -> Option<Sign> {
+    let [p, q, r] = &t.planes;
+    let (np, dp) = narrow_plane(p)?;
+    let (nq, dq) = narrow_plane(q)?;
+    let (nr, dr) = narrow_plane(r)?;
+    let ([sx, sy, sz], sd) = narrow_plane(s)?;
+    let qr = narrow_cross(nq, nr)?;
+    let [rp_x, rp_y, rp_z] = narrow_cross(nr, np)?;
+    let [pq_x, pq_y, pq_z] = narrow_cross(np, nq)?;
+    let [qr_x, qr_y, qr_z] = qr;
+    let [px, py, pz] = np;
+    let w = px
+        .checked_mul(qr_x)?
+        .checked_add(py.checked_mul(qr_y)?)?
+        .checked_add(pz.checked_mul(qr_z)?)?;
+    let numerator = |a: i64, b: i64, c: i64| {
+        dp.checked_mul(a)?
+            .checked_add(dq.checked_mul(b)?)?
+            .checked_add(dr.checked_mul(c)?)?
+            .checked_neg()
+    };
+    let side = sx
+        .checked_mul(numerator(qr_x, rp_x, pq_x)?)?
+        .checked_add(sy.checked_mul(numerator(qr_y, rp_y, pq_y)?)?)?
+        .checked_add(sz.checked_mul(numerator(qr_z, rp_z, pq_z)?)?)?
+        .checked_add(sd.checked_mul(w)?)?;
+    Some(Sign::of_i64(side).mul(t.weight))
+}
+
+/// [`Plane::side_of_tpi`] for a plane with a unit normal along a frame axis, the shape every such
+/// plane has in canonical form (11.3): ±`X_i` + d · w, which needs one component of the
+/// numerators and one product in [`I320`], about 300 bits where the general path takes 384. `None`
+/// for any other plane, and when d · w does not fit, which a plane within the frame cannot cause
+/// (|d| < 2^41, |w| < 2^252).
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
+)]
+fn tpi_axis(t: &Tpi, s: &Plane) -> Option<Sign> {
+    let (axis, negative) = match s.n {
+        [1, 0, 0] => (0, false),
+        [-1, 0, 0] => (0, true),
+        [0, 1, 0] => (1, false),
+        [0, -1, 0] => (1, true),
+        [0, 0, 1] => (2, false),
+        [0, 0, -1] => (2, true),
+        _ => return None,
+    };
+    let [p, q, r] = &t.planes;
+    let c_qr = cross(&q.n, &r.n)?;
+    let w = dot(&p.n, &c_qr)?;
+    let one = |a: &[i128; 3], b: &[i128; 3]| {
+        let ([ax, ay, az], [bx, by, bz]) = (*a, *b);
+        match axis {
+            0 => product_difference(ay, bz, az, by),
+            1 => product_difference(az, bx, ax, bz),
+            _ => product_difference(ax, by, ay, bx),
+        }
+    };
+    let [qr_x, qr_y, qr_z] = &c_qr;
+    let qr = match axis {
+        0 => qr_x,
+        1 => qr_y,
+        _ => qr_z,
+    };
+    let (pd, qd, rd) = (
+        I320::from_i128(p.d),
+        I320::from_i128(q.d),
+        I320::from_i128(r.d),
+    );
+    let (rp, pq) = (one(&r.n, &p.n)?, one(&p.n, &q.n)?);
+    let x = numerator(&pd, &qd, &rd, qr, &rp, &pq)?;
+    let x = if negative { x.checked_neg()? } else { x };
+    let side = x.checked_add(&I320::from_i128(s.d).checked_mul(&w.resize::<5>()?)?)?;
+    Some(side.signum().mul(t.weight))
+}
+
+/// The side of plane `s` that the point where `t`'s planes meet is on, from the `f64` filter of
+/// the generated predicate (chapter 6.2): the sign of the 4 × 4 determinant of the four planes'
+/// coefficients (`tpi_side`, which equals n · X + d · w), times the sign of the point's weight w,
+/// which [`Tpi::new`] stored exactly (so the generated `tpi_weight` is never needed here). `None`
+/// when the filter cannot decide.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
+)]
+fn tpi_filtered(t: &Tpi, s: &Plane) -> Option<Sign> {
     let [p, q, r] = t.planes;
     let ([ax, ay, az], ad) = (p.n, p.d);
     let ([bx, by, bz], bd) = (q.n, q.d);
     let ([cx, cy, cz], cd) = (r.n, r.d);
     let ([sx, sy, sz], sd) = (s.n, s.d);
-    let side = generated::tpi_side::filter(
-        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
-    )
-    .or_else(|| {
-        generated::tpi_side::exact(
+    let side = filtered(|| {
+        generated::tpi_side::filter(
             ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
         )
     })?;
     Some(side.mul(t.weight))
+}
+
+/// [`tpi_filtered`] from the generated exact path. `None` only when that path does not fit its
+/// certified types, which no planes within budget cause; the caller then takes the hand-written
+/// paths. The only caller comes here after [`tpi_filtered`], [`tpi_narrow`] and [`tpi_axis`] could
+/// not decide these same four planes, so neither the filter nor machine words are asked again:
+/// planes too long for the narrow path are, within the frame, almost always too long for the
+/// determinant in words, and its failed attempt took a degenerate meeting point's count from 4%
+/// over the exact path alone to 8% (23.13).
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
+)]
+fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
+    let [p, q, r] = &t.planes;
+    Some(determinant_exact(p, q, r, s)?.mul(t.weight))
+}
+
+/// The sign of the determinant of four planes' coefficients: machine words if they fit, else the
+/// generated predicate, its filter and then its exact path (6.2).
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the planes, as on Plane::side_of_tpi"
+)]
+fn determinant_routed(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign> {
+    determinant_in_words(p, q, r, s).or_else(|| {
+        let ([ax, ay, az], ad) = (p.n, p.d);
+        let ([bx, by, bz], bd) = (q.n, q.d);
+        let ([cx, cy, cz], cd) = (r.n, r.d);
+        let ([sx, sy, sz], sd) = (s.n, s.d);
+        filtered(|| {
+            generated::tpi_side::filter(
+                ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+            )
+        })
+        .or_else(|| determinant_exact(p, q, r, s))
+    })
+}
+
+/// The sign of the determinant of four planes' coefficients from the generated predicate's exact
+/// path (6.2): `None` only if it does not fit its certified types, which no planes within budget
+/// cause.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the planes, as on Plane::side_of_tpi"
+)]
+#[inline]
+fn determinant_exact(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign> {
+    let ([ax, ay, az], ad) = (p.n, p.d);
+    let ([bx, by, bz], bd) = (q.n, q.d);
+    let ([cx, cy, cz], cd) = (r.n, r.d);
+    let ([sx, sy, sz], sd) = (s.n, s.d);
+    generated::tpi_side::exact(
+        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+    )
+}
+
+/// A plane's coefficients as machine words, if they fit: a face square to the axes always does.
+fn words(p: &Plane) -> Option<[i64; 4]> {
+    let [x, y, z] = p.n;
+    Some([
+        i64::try_from(x).ok()?,
+        i64::try_from(y).ok()?,
+        i64::try_from(z).ok()?,
+        i64::try_from(p.d).ok()?,
+    ])
+}
+
+/// The determinant of three rows' normals, if every step fits a machine word.
+fn det_in_words(a: &[i64; 4], b: &[i64; 4], c: &[i64; 4]) -> Option<i64> {
+    let ([ax, ay, az, _], [bx, by, bz, _], [cx, cy, cz, _]) = (*a, *b, *c);
+    let minor = |p: i64, q: i64, r: i64, s: i64| p.checked_mul(q)?.checked_sub(r.checked_mul(s)?);
+    ax.checked_mul(minor(by, cz, bz, cy)?)?
+        .checked_add(ay.checked_mul(minor(bz, cx, bx, cz)?)?)?
+        .checked_add(az.checked_mul(minor(bx, cy, by, cx)?)?)
+}
+
+/// The sign of the determinant of four planes' coefficients, if every step fits a machine word.
+/// Every step is checked, so it is exact or it is `None`, and needs neither filter nor budget: at
+/// about a hundred instructions it is the first rung for the planes of a building's faces, whose
+/// normals are short. Expanded along the offsets: −`d_p` m(q, r, s) + `d_q` m(p, r, s) −
+/// `d_r` m(p, q, s) + `d_s` m(p, q, r), m being the determinant of three normals.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the planes, and a, b, c and e their rows"
+)]
+fn determinant_in_words(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign> {
+    let (a, b, c, e) = (words(p)?, words(q)?, words(r)?, words(s)?);
+    let ([.., ad], [.., bd], [.., cd], [.., ed]) = (a, b, c, e);
+    let total = bd
+        .checked_mul(det_in_words(&a, &c, &e)?)?
+        .checked_sub(ad.checked_mul(det_in_words(&b, &c, &e)?)?)?
+        .checked_sub(cd.checked_mul(det_in_words(&a, &b, &e)?)?)?
+        .checked_add(ed.checked_mul(det_in_words(&a, &b, &c)?)?)?;
+    Some(Sign::of_i64(total))
+}
+
+/// The sign of the 4 × 4 determinant of four planes' coefficients, rows in the order given and the
+/// offset last, exactly. It is n · X + d · w for the point where the first three meet, and is
+/// defined whether they meet or not.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] if the exact path does not fit, which no four planes cause.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the planes, as on Plane::side_of_tpi"
+)]
+pub fn determinant_sign(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Result<Sign, NumError> {
+    determinant_routed(p, q, r, s).ok_or(NumError::BudgetExceeded)
+}
+
+/// The sign of det(`n_a`, `n_b`, `n_c`) exactly, `Zero` for normals that are dependent: the sign of
+/// the weight of the point where three planes meet, without the rest of the point.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] if a step did not fit, which the normals' budget rules out.
+pub fn normals_sign(a: &Plane, b: &Plane, c: &Plane) -> Result<Sign, NumError> {
+    if let (Some(p), Some(q), Some(r)) = (words(a), words(b), words(c))
+        && let Some(det) = det_in_words(&p, &q, &r)
+    {
+        return Ok(Sign::of_i64(det));
+    }
+    // The generated filter of `tpi_weight`, which is this determinant (its bound is proven for
+    // normals below 2^83, as `Plane` keeps them): it decides nearly every call that machine words
+    // cannot, in a handful of `f64` operations, where the exact path below makes six wide products
+    // and a wide dot. `None` when it cannot tell, and then the exact path decides, as before. Like
+    // every generated filter it goes through `filtered`, so a reference build does not run it.
+    let ([ax, ay, az], [bx, by, bz], [cx, cy, cz]) = (a.n, b.n, c.n);
+    if let Some(sign) =
+        filtered(|| generated::tpi_weight::filter(ax, ay, az, bx, by, bz, cx, cy, cz))
+    {
+        return Ok(sign);
+    }
+    cross(&b.n, &c.n)
+        .and_then(|across| dot(&a.n, &across))
+        .map(|w| w.signum())
+        .ok_or(NumError::BudgetExceeded)
 }
 
 /// The sign of n · X + d · w times the sign of w, in `Wide<L>`: [`I384`] on the budgeted path,
@@ -1064,7 +1407,8 @@ fn divide_half_even<const L: usize>(
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
     clippy::disallowed_methods,
-    reason = "tests may use native arithmetic, casts and std reductions"
+    clippy::many_single_char_names,
+    reason = "tests may use native arithmetic, casts and std reductions, and name points as the formulas do"
 )]
 mod tests {
     //! The private rounding division on its own. No public call can pass it a negative numerator,
@@ -1076,7 +1420,16 @@ mod tests {
 
     use core::cmp::Ordering;
 
-    use super::{BUDGET_LIMBS, TOTAL_LIMBS, divide_half_even, limbs};
+    use num_bigint::BigInt;
+    use num_rational::BigRational;
+
+    use super::{
+        BUDGET_LIMBS, Lpi, Plane, TOTAL_LIMBS, Tpi, classify, commit_axes, divide_half_even,
+        dot_point, limbs, lpi_classify, mul_sub, within_budget,
+    };
+    use crate::error::NumError;
+    use crate::grid::{COORD_MAX, Coord, P3};
+    use crate::sign::Sign;
     use crate::wide::{I256, I320, Wide};
 
     /// `limbs`, which only the bit-budget constants call (so only the compiler ran it): the limb
@@ -1216,5 +1569,700 @@ mod tests {
         // 2^252 − 1, just below the I384 path's bound on w, and 2^255 − 1, the largest I256.
         largest_denominator(below_pow2::<BUDGET_LIMBS>(252));
         largest_denominator(below_pow2::<TOTAL_LIMBS>(255));
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // The hand-written paths and the refusals, on their own. `Plane::side_of_tpi` and
+    // `Plane::side_of_lpi` answer through the generated predicates for every plane a caller can
+    // make, so no public call reaches the hand-written paths behind them, and no plane made by
+    // `Plane::through` is over its budget. These tests call the private functions directly, with
+    // each answer checked against the point itself, formed by division in exact rationals.
+    // -----------------------------------------------------------------------------------------
+
+    const M: i64 = COORD_MAX;
+
+    /// `SplitMix64` (Steele, Lea and Flood, OOPSLA 2014), as the crate's other tests write it.
+    struct Rng(u64);
+
+    impl Rng {
+        /// The generator for the test `name`, from its fixed seed or `SPAREKIT_SEED`.
+        fn for_test(name: &str, default: u64) -> Rng {
+            let seed = std::env::var("SPAREKIT_SEED")
+                .ok()
+                .and_then(|s| u64::from_str_radix(s.trim().trim_start_matches("0x"), 16).ok())
+                .unwrap_or(default);
+            println!("{name}: seed: {seed:016x}");
+            Rng(seed)
+        }
+
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        }
+
+        /// A coordinate: an edge of the grid, a step inside it, a small value, or any value.
+        fn coord(&mut self) -> i64 {
+            match self.next() % 8 {
+                0 => M,
+                1 => -M,
+                2 => M - 1,
+                3 => 1 - M,
+                4 | 5 => (self.next() % 7) as i64 - 3,
+                _ => (self.next() % (2 * M as u64 + 1)) as i64 - M,
+            }
+        }
+
+        fn point(&mut self) -> [i64; 3] {
+            [self.coord(), self.coord(), self.coord()]
+        }
+
+        /// A plane through three random grid points; `None` when they are collinear.
+        fn plane(&mut self) -> Option<Plane> {
+            plane_through(self.point(), self.point(), self.point())
+        }
+    }
+
+    fn p3(c: [i64; 3]) -> P3 {
+        P3::new(c[0], c[1], c[2]).unwrap()
+    }
+
+    fn plane_through(a: [i64; 3], b: [i64; 3], c: [i64; 3]) -> Option<Plane> {
+        Plane::through(p3(a), p3(b), p3(c)).ok()
+    }
+
+    fn sign_of(v: &BigInt) -> Sign {
+        match v.sign() {
+            num_bigint::Sign::Minus => Sign::Negative,
+            num_bigint::Sign::NoSign => Sign::Zero,
+            num_bigint::Sign::Plus => Sign::Positive,
+        }
+    }
+
+    fn count(seen: &mut [usize; 3], sign: Sign) {
+        seen[match sign {
+            Sign::Negative => 0,
+            Sign::Zero => 1,
+            Sign::Positive => 2,
+        }] += 1;
+    }
+
+    fn int(v: i128) -> BigRational {
+        BigRational::from_integer(BigInt::from(v))
+    }
+
+    /// The value a `Wide` holds, read from its two's-complement limbs.
+    fn big<const L: usize>(w: &Wide<L>) -> BigInt {
+        let bytes: Vec<u8> = w
+            .to_le_limbs()
+            .iter()
+            .flat_map(|l| l.to_le_bytes())
+            .collect();
+        BigInt::from_signed_bytes_le(&bytes)
+    }
+
+    /// n · x + d for a plane and a rational point.
+    fn at(plane: &Plane, x: &[BigRational; 3]) -> BigRational {
+        let [nx, ny, nz] = plane.n;
+        int(nx) * &x[0] + int(ny) * &x[1] + int(nz) * &x[2] + int(plane.d)
+    }
+
+    /// A 3 × 3 determinant by its first row.
+    fn det3(m: &[[BigInt; 3]; 3]) -> BigInt {
+        let minor = |j: usize, k: usize| &m[1][j] * &m[2][k] - &m[1][k] * &m[2][j];
+        &m[0][0] * minor(1, 2) - &m[0][1] * minor(0, 2) + &m[0][2] * minor(0, 1)
+    }
+
+    /// The point where three planes meet, by Cramer's rule in exact rationals: the solution of
+    /// `n_k` · x = −`d_k`. `None` when the normals are dependent.
+    fn tpi_point(planes: &[Plane; 3]) -> Option<[BigRational; 3]> {
+        let normals = planes.map(|p| p.n.map(BigInt::from));
+        let w = det3(&normals);
+        if w == BigInt::from(0) {
+            return None;
+        }
+        Some([0, 1, 2].map(|axis| {
+            let mut replaced = normals.clone();
+            for (row, plane) in replaced.iter_mut().zip(planes) {
+                row[axis] = -BigInt::from(plane.d);
+            }
+            BigRational::new(det3(&replaced), w.clone())
+        }))
+    }
+
+    /// The point where the line p q meets a plane, in exact rationals: p + t (q − p) with
+    /// t = −(n · p + d) / (n · (q − p)).
+    fn lpi_point(plane: &Plane, p: [i64; 3], q: [i64; 3]) -> [BigRational; 3] {
+        let (rp, rq) = (p.map(|v| int(i128::from(v))), q.map(|v| int(i128::from(v))));
+        let (sp, sq) = (at(plane, &rp), at(plane, &rq));
+        let t = -&sp / (&sq - &sp);
+        [0, 1, 2].map(|k| &rp[k] + &t * (&rq[k] - &rp[k]))
+    }
+
+    /// Three planes that meet in one point: ordinary ones, nearly dependent ones at the edge of
+    /// the grid, and planes through corners of the frame's cube.
+    fn fixed_triples() -> Vec<[Plane; 3]> {
+        let plane = |a, b, c| plane_through(a, b, c).unwrap();
+        let x1 = plane([1, 0, 0], [1, 1, 0], [1, 0, 1]);
+        let y2 = plane([0, 2, 0], [0, 2, 1], [1, 2, 0]);
+        let z3 = plane([0, 0, 3], [1, 0, 3], [0, 1, 3]);
+        // Two planes through the z axis whose directions (M, M − 1) and (M − 1, M − 2) differ by
+        // one step in 2^40: nearly the same plane.
+        let steep = plane([0, 0, 0], [M, M - 1, 0], [0, 0, M]);
+        let steeper = plane([0, 0, 0], [M - 1, M - 2, 0], [0, 0, M]);
+        let corner_a = plane([-M, -M, -M], [M, -M, M], [-M, M, M]);
+        let corner_b = plane([M, M, M], [-M, M, -M], [-M, -M, M]);
+        let corner_c = plane([M, -M, -M], [-M, M, -M], [-M, -M, M]);
+        vec![
+            [x1, y2, z3],
+            [z3, y2, x1],
+            [steep, steeper, z3],
+            [steeper, z3, steep],
+            [corner_a, corner_b, corner_c],
+            [corner_a, x1, steep],
+        ]
+    }
+
+    /// The oracle itself, on a point known by eye: x = 1, y = 2 and z = 3 meet at (1, 2, 3).
+    #[test]
+    fn the_rational_oracles_find_points_known_by_eye() {
+        let first = fixed_triples().remove(0);
+        assert_eq!(tpi_point(&first), Some([int(1), int(2), int(3)]));
+        let floor = plane_through([0, 0, 0], [1, 0, 0], [0, 1, 0]).unwrap();
+        // From (4, 6, −1) to (0, 0, 3): a quarter of the way up, at (3, 9/2, 0).
+        let met = lpi_point(&floor, [4, 6, -1], [0, 0, 3]);
+        let half = |v: i128| BigRational::new(BigInt::from(v), BigInt::from(2));
+        assert_eq!(met, [int(3), half(9), int(0)]);
+        assert_eq!(tpi_point(&[floor, floor, first[0]]), None);
+    }
+
+    /// `side_of_tpi_hand`, the path `Plane::side_of_tpi` takes when the generated one gives
+    /// nothing, which no plane made by `Plane::through` causes: the sign of n · x + d at the
+    /// meeting point x, for the point's own planes (`Zero`), for planes one step off it and for
+    /// random planes, on ordinary, nearly dependent, corner and random triples. The public
+    /// function gives the same sign.
+    #[test]
+    fn the_hand_written_side_of_a_three_plane_point_is_exact() {
+        let mut rng = Rng::for_test("side_of_tpi_hand", 0x6741_0000_5eed_0001);
+        let mut triples = fixed_triples();
+        while triples.len() < 150 {
+            if let (Some(p), Some(q), Some(r)) = (rng.plane(), rng.plane(), rng.plane()) {
+                triples.push([p, q, r]);
+            }
+        }
+        let mut seen = [0usize; 3];
+        let mut points = 0;
+        for planes in triples {
+            let Some(x) = tpi_point(&planes) else {
+                assert_eq!(
+                    Tpi::new(planes[0], planes[1], planes[2]),
+                    Err(NumError::Degenerate)
+                );
+                continue;
+            };
+            points += 1;
+            let t = Tpi::new(planes[0], planes[1], planes[2]).unwrap();
+            let mut check = |s: &Plane| {
+                let expected = sign_of(at(s, &x).numer());
+                assert_eq!(s.side_of_tpi_hand(&t), Ok(expected), "{s:?} {planes:?}");
+                assert_eq!(s.side_of_tpi(&t), Ok(expected), "{s:?} {planes:?}");
+                count(&mut seen, expected);
+                expected
+            };
+            for own in &planes {
+                assert_eq!(check(own), Sign::Zero);
+                // The same plane moved one unit of offset either way has the point strictly on
+                // one side: n · x + d ± 1 = ±1.
+                let (mut up, mut down) = (*own, *own);
+                up.d += 1;
+                down.d -= 1;
+                assert_eq!(check(&up), Sign::Positive);
+                assert_eq!(check(&down), Sign::Negative);
+            }
+            for _ in 0..6 {
+                if let Some(s) = rng.plane() {
+                    check(&s);
+                }
+            }
+        }
+        assert!(points >= 100, "only {points} triples met in a point");
+        assert!(seen.iter().all(|&n| n > 100), "{seen:?}");
+    }
+
+    /// `side_of_lpi_hand`, the path `Plane::side_of_lpi` takes when the generated one gives
+    /// nothing: the sign of n · x + d at the point x where the line meets its plane, for the
+    /// line's own plane and planes that hold the line (`Zero`), planes one unit off, and random
+    /// planes; on an ordinary line, on a line nearly parallel to its plane at the edge of the
+    /// grid, and on random lines. The public function gives the same sign.
+    #[test]
+    fn the_hand_written_side_of_a_line_plane_point_is_exact() {
+        let mut rng = Rng::for_test("side_of_lpi_hand", 0x6741_0000_5eed_0002);
+        let floor = plane_through([0, 0, 0], [1, 0, 0], [0, 1, 0]).unwrap();
+        let steep = plane_through([0, 0, 0], [M, M - 1, 0], [0, 0, M]).unwrap();
+        let mut cases = vec![
+            (floor, [4, 6, -1], [0, 0, 3]),
+            (floor, [-M, M, M], [M, -M, -M]),
+            // n · (q − p) = M against products near 2^120: nearly parallel.
+            (steep, [0, 0, 1], [M - 1, M - 2, 1]),
+            (steep, [M - 1, M - 2, -M], [0, 0, M]),
+        ];
+        while cases.len() < 300 {
+            if let Some(plane) = rng.plane() {
+                cases.push((plane, rng.point(), rng.point()));
+            }
+        }
+        let mut seen = [0usize; 3];
+        let mut points = 0;
+        for (plane, p, q) in cases {
+            let Ok(l) = Lpi::new(p3(p), p3(q), plane) else {
+                // Refused exactly when the line does not cross the plane: n · (q − p) = 0.
+                let (rp, rq) = (p.map(|v| int(i128::from(v))), q.map(|v| int(i128::from(v))));
+                assert_eq!(at(&plane, &rp), at(&plane, &rq), "{plane:?} {p:?} {q:?}");
+                continue;
+            };
+            points += 1;
+            let x = lpi_point(&plane, p, q);
+            let mut check = |s: &Plane| {
+                let expected = sign_of(at(s, &x).numer());
+                assert_eq!(s.side_of_lpi_hand(&l), Ok(expected), "{s:?} {l:?}");
+                assert_eq!(s.side_of_lpi(&l), Ok(expected), "{s:?} {l:?}");
+                count(&mut seen, expected);
+                expected
+            };
+            assert_eq!(check(&plane), Sign::Zero);
+            let (mut up, mut down) = (plane, plane);
+            up.d += 1;
+            down.d -= 1;
+            // n · x + d = 0 on the line's plane, so one unit of offset decides the side.
+            assert_eq!(check(&up), Sign::Positive);
+            assert_eq!(check(&down), Sign::Negative);
+            // A plane through the line's two points holds the whole line, so the point too.
+            if let Some(holding) = plane_through(p, q, rng.point()) {
+                assert_eq!(check(&holding), Sign::Zero);
+            }
+            for _ in 0..6 {
+                if let Some(s) = rng.plane() {
+                    check(&s);
+                }
+            }
+        }
+        assert!(points >= 200, "only {points} lines met their plane");
+        assert!(seen.iter().all(|&n| n > 100), "{seen:?}");
+    }
+
+    /// A plane over its budget, which `Plane::through` never makes and only this module can
+    /// build, field by field. `side_of_tpi_hand` documents a total path for it: where a step does
+    /// not fit 384 bits, the same sum in 512 bits, exact for any coefficients an `i128` holds.
+    /// `side_of_lpi_hand` documents an error for it when a weight or an offset does not fit an
+    /// `i128`. Here the three-plane point is (−M, 0, 0), whose numerator 256M^7 is the largest
+    /// there is, so a normal component near 2^127 passes 2^383 (`classify` in 384 bits refuses
+    /// it, checked), and the answer is still the sign of n · x + d at the point.
+    #[test]
+    fn a_plane_over_its_budget_takes_the_total_path_or_is_refused() {
+        let corners = fixed_triples().remove(4);
+        let x = tpi_point(&corners).unwrap();
+        assert_eq!(x, [int(-i128::from(M)), int(0), int(0)]);
+        let t = Tpi::new(corners[0], corners[1], corners[2]).unwrap();
+        let (numerators, weight) = t.homogeneous().unwrap();
+        let (top, bottom) = (i128::MAX, i128::MIN);
+        // n · x + d = −M n_x + d at (−M, 0, 0).
+        let over = [
+            ([top; 3], top, Sign::Negative),
+            ([top, 0, 0], 0, Sign::Negative),
+            ([-top, top, top], -top, Sign::Positive),
+            ([bottom, 1, 1], bottom, Sign::Positive),
+        ];
+        for (n, d, expected) in over {
+            let s = Plane { n, d };
+            assert!(!within_budget(&n, d), "{s:?}");
+            assert_eq!(sign_of(at(&s, &x).numer()), expected, "{s:?}");
+            let narrow = classify::<BUDGET_LIMBS>(&n, d, &numerators, &weight);
+            assert_eq!(narrow, None, "{s:?}");
+            assert_eq!(s.side_of_tpi_hand(&t), Ok(expected), "{s:?}");
+        }
+
+        let floor = plane_through([0, 0, 0], [1, 0, 0], [0, 1, 0]).unwrap();
+        let line = |p: [i64; 3], q: [i64; 3]| Lpi::new(p3(p), p3(q), floor).unwrap();
+        let wide = Plane {
+            n: [top, 0, 0],
+            d: 0,
+        };
+        // Every step fits: the line meets the floor at (1, 0, 0), where n · x + d = 2^127 − 1.
+        let (p, q) = ([1, 0, -1], [1, 0, 1]);
+        assert_eq!(
+            sign_of(at(&wide, &lpi_point(&floor, p, q)).numer()),
+            Sign::Positive
+        );
+        assert_eq!(wide.side_of_lpi_hand(&line(p, q)), Ok(Sign::Positive));
+        // n · p = 2 (2^127 − 1) does not fit.
+        let refused = Err(NumError::BudgetExceeded);
+        assert_eq!(wide.side_of_lpi_hand(&line([2, 0, -1], [2, 0, 1])), refused);
+        // n · p and n · q fit, and their difference, the weight, does not.
+        assert_eq!(
+            wide.side_of_lpi_hand(&line([-1, 0, -1], [1, 0, 1])),
+            refused
+        );
+        // n · p fits, and n · p + d does not.
+        let offset = Plane {
+            n: [top, 0, 0],
+            d: top,
+        };
+        assert_eq!(offset.side_of_lpi_hand(&line(p, q)), refused);
+    }
+
+    /// (n · X + d · w) · sign(w), exactly.
+    fn classify_oracle(n: &[i128; 3], d: i128, x: &[I320; 3], w: &I256) -> Sign {
+        let w = big(w);
+        let mut side = BigInt::from(d) * &w;
+        for (ni, xi) in n.iter().zip(x) {
+            side += BigInt::from(*ni) * big(xi);
+        }
+        sign_of(&side).mul(sign_of(&w))
+    }
+
+    /// `classify` in both widths. On the homogeneous coordinates of real three-plane points the
+    /// 384-bit path and the 512-bit path both give the exact sign. On values only the types
+    /// bound, where a product passes 2^383, the 384-bit path refuses and the 512-bit path still
+    /// gives the exact sign: nothing the types hold overflows it.
+    #[test]
+    fn classify_is_exact_in_both_widths_and_the_narrow_one_refuses_what_does_not_fit() {
+        let mut rng = Rng::for_test("classify", 0x6741_0000_5eed_0003);
+        let mut seen = [0usize; 3];
+        for planes in fixed_triples() {
+            let t = Tpi::new(planes[0], planes[1], planes[2]).unwrap();
+            let (x, w) = t.homogeneous().unwrap();
+            let mut others: Vec<Plane> = planes.to_vec();
+            while others.len() < 40 {
+                others.extend(rng.plane());
+            }
+            for s in others {
+                let expected = classify_oracle(&s.n, s.d, &x, &w);
+                assert_eq!(classify::<BUDGET_LIMBS>(&s.n, s.d, &x, &w), Some(expected));
+                assert_eq!(classify::<TOTAL_LIMBS>(&s.n, s.d, &x, &w), Some(expected));
+                count(&mut seen, expected);
+            }
+        }
+        assert!(seen.iter().all(|&n| n > 0), "{seen:?}");
+
+        let (most, least) = (I320::max_value(), I320::min_value());
+        let (heavy, light) = (I256::max_value(), I256::min_value());
+        let (top, bottom) = (i128::MAX, i128::MIN);
+        let unit = I320::one();
+        // (n, d, X, w, the 384-bit path's answer, the exact sign).
+        let cases = [
+            // 2^127 · 2^319 = 2^446: the first product does not fit 384 bits.
+            ([top; 3], top, [most; 3], heavy, None, Sign::Positive),
+            ([top; 3], top, [least; 3], heavy, None, Sign::Negative),
+            ([bottom; 3], bottom, [least; 3], light, None, Sign::Negative),
+            ([bottom; 3], top, [most; 3], light, None, Sign::Positive),
+            // Only the last product is too wide, after two that fit.
+            (
+                [1, 1, top],
+                0,
+                [unit, unit, most],
+                heavy,
+                None,
+                Sign::Positive,
+            ),
+            // d · w = (2^127 − 1)(2^255 − 1) < 2^382 fits, and so do sums of small products.
+            (
+                [1, -1, 1],
+                top,
+                [unit; 3],
+                heavy,
+                Some(Sign::Positive),
+                Sign::Positive,
+            ),
+            // d · w = (−2^127)(−2^255) = 2^382 fits; times the sign of w, negative.
+            (
+                [0; 3],
+                bottom,
+                [unit; 3],
+                light,
+                Some(Sign::Negative),
+                Sign::Negative,
+            ),
+            // n · X + d · w = 3 − 3 = 0.
+            (
+                [1, 1, 1],
+                -3,
+                [unit; 3],
+                I256::one(),
+                Some(Sign::Zero),
+                Sign::Zero,
+            ),
+        ];
+        for (n, d, x, w, narrow, exact) in cases {
+            let what = format!("{n:?} {d}");
+            assert_eq!(classify_oracle(&n, d, &x, &w), exact, "{what}");
+            assert_eq!(classify::<BUDGET_LIMBS>(&n, d, &x, &w), narrow, "{what}");
+            assert_eq!(
+                classify::<TOTAL_LIMBS>(&n, d, &x, &w),
+                Some(exact),
+                "{what}"
+            );
+        }
+    }
+
+    /// `lpi_classify` in both widths: the sign of w₁ s₂ₚ − w₂ s₁ₚ, against `num-bigint`, at every
+    /// combination of the extremes of `i128`. Even the narrow width holds every one: each
+    /// product is at most 2^254 in magnitude and of the two only one can be 2^254, so the
+    /// difference stays within ±(2^255 − 2^127).
+    #[test]
+    fn lpi_classify_is_exact_in_both_widths_at_the_extremes_of_i128() {
+        let levels = [
+            i128::MIN,
+            i128::MIN + 1,
+            -3,
+            -1,
+            0,
+            1,
+            2,
+            i128::MAX - 1,
+            i128::MAX,
+        ];
+        let mut seen = [0usize; 3];
+        for w1 in levels {
+            for s2p in levels {
+                for w2 in levels {
+                    for s1p in levels {
+                        let exact = BigInt::from(w1) * BigInt::from(s2p)
+                            - BigInt::from(w2) * BigInt::from(s1p);
+                        let expected = sign_of(&exact);
+                        let what = format!("{w1} {s2p} {w2} {s1p}");
+                        assert_eq!(
+                            lpi_classify::<4>(w1, s2p, w2, s1p),
+                            Some(expected),
+                            "{what}"
+                        );
+                        assert_eq!(
+                            lpi_classify::<5>(w1, s2p, w2, s1p),
+                            Some(expected),
+                            "{what}"
+                        );
+                        count(&mut seen, expected);
+                    }
+                }
+            }
+        }
+        assert_eq!(seen[0], seen[2], "swapping the two products flips the sign");
+        assert!(seen.iter().all(|&n| n > 0), "{seen:?}");
+    }
+
+    /// `commit_axes` refuses a zero weight, which no implicit point has, in both dimensions and
+    /// both widths, whatever the numerators; beside it, the same numerators over ±3 and ±2 commit
+    /// to the quotients rounded half to even.
+    #[test]
+    fn commit_axes_refuses_a_zero_weight() {
+        let x3 = [6, -9, 0].map(I320::from_i128);
+        let x2 = [7, -5].map(I320::from_i128);
+        let zero = I256::ZERO;
+        assert_eq!(commit_axes::<BUDGET_LIMBS, 3>(&x3, &zero), None);
+        assert_eq!(commit_axes::<TOTAL_LIMBS, 3>(&x3, &zero), None);
+        assert_eq!(commit_axes::<BUDGET_LIMBS, 2>(&x2, &zero), None);
+        assert_eq!(
+            commit_axes::<BUDGET_LIMBS, 3>(&[I320::ZERO; 3], &zero),
+            None
+        );
+
+        let committed = |w: i128| {
+            commit_axes::<BUDGET_LIMBS, 3>(&x3, &I256::from_i128(w))
+                .map(|r| r.map(|(c, exact)| (c.map(Coord::get), exact)))
+        };
+        assert_eq!(committed(3), Some(Ok(([2, -3, 0], true))));
+        assert_eq!(committed(-3), Some(Ok(([-2, 3, 0], true))));
+        let halves = |w: i128| {
+            commit_axes::<TOTAL_LIMBS, 2>(&x2, &I256::from_i128(w))
+                .map(|r| r.map(|(c, exact)| (c.map(Coord::get), exact)))
+        };
+        // 7/2 and −5/2 are ties: to the even 4 and −2.
+        assert_eq!(halves(2), Some(Ok(([4, -2], false))));
+        assert_eq!(halves(-2), Some(Ok(([-4, 2], false))));
+    }
+
+    /// `mul_sub` and `dot_point` refuse a step that does not fit an `i128`, which no grid points
+    /// cause, and give the exact value otherwise.
+    #[test]
+    fn the_checked_i128_steps_refuse_what_does_not_fit() {
+        let (top, bottom) = (i128::MAX, i128::MIN);
+        assert_eq!(mul_sub(3, 4, 5, 6), Some(-18));
+        assert_eq!(mul_sub(top, 1, 0, 0), Some(top));
+        assert_eq!(mul_sub(0, 0, top, 1), Some(-top));
+        // A product that does not fit, on either side.
+        assert_eq!(mul_sub(top, 2, 0, 0), None);
+        assert_eq!(mul_sub(0, 0, top, 2), None);
+        assert_eq!(mul_sub(bottom, -1, 0, 0), None);
+        assert_eq!(mul_sub(top, 2, bottom, 2), None);
+        // Both products fit and their difference does not.
+        assert_eq!(mul_sub(top, 1, -1, 1), None);
+        assert_eq!(mul_sub(bottom, 1, 1, 1), None);
+
+        assert_eq!(dot_point(&[1, 2, 3], p3([4, 5, 6])), Some(32));
+        assert_eq!(dot_point(&[top, 0, 0], p3([1, M, M])), Some(top));
+        assert_eq!(dot_point(&[top, top, top], p3([1, -1, 1])), Some(top));
+        // A product that does not fit, in each place.
+        assert_eq!(dot_point(&[top, 0, 0], p3([2, 0, 0])), None);
+        assert_eq!(dot_point(&[0, bottom, 0], p3([0, -1, 0])), None);
+        assert_eq!(dot_point(&[0, 0, top], p3([0, 0, M])), None);
+        // The products fit; the first sum does not.
+        assert_eq!(dot_point(&[top, top, 0], p3([1, 1, 0])), None);
+        assert_eq!(dot_point(&[bottom, bottom, top], p3([1, 1, 1])), None);
+        // The first sum fits; the second does not.
+        assert_eq!(dot_point(&[top, 0, top], p3([1, 0, 1])), None);
+        assert_eq!(dot_point(&[top, -1, 2], p3([1, 1, 1])), None);
+    }
+
+    /// `within_budget` is true exactly when every normal component is below 2^83 in magnitude
+    /// and the offset below 2^125: each of the four at its last value inside and its first
+    /// outside, either sign, with the others at their largest.
+    #[test]
+    fn within_budget_holds_exactly_below_the_limits() {
+        let n_in: i128 = (1 << 83) - 1;
+        let d_in: i128 = (1 << 125) - 1;
+        assert!(within_budget(&[0, 0, 0], 0));
+        assert!(within_budget(&[n_in, -n_in, n_in], -d_in));
+        assert!(within_budget(&[-n_in, n_in, -n_in], d_in));
+        for sign in [1, -1] {
+            let n_out = sign * (n_in + 1);
+            let d_out = sign * (d_in + 1);
+            assert!(!within_budget(&[n_out, 0, 0], 0));
+            assert!(!within_budget(&[0, n_out, 0], 0));
+            assert!(!within_budget(&[0, 0, n_out], 0));
+            assert!(!within_budget(&[0, 0, 0], d_out));
+            assert!(!within_budget(&[n_out, n_in, n_in], d_in));
+            assert!(!within_budget(&[n_in, n_out, n_in], d_in));
+            assert!(!within_budget(&[n_in, n_in, n_out], d_in));
+            assert!(!within_budget(&[n_in, n_in, n_in], d_out));
+        }
+        assert!(!within_budget(
+            &[i128::MIN, i128::MAX, i128::MIN],
+            i128::MIN
+        ));
+        // The largest coefficients grid points reach, 4M² and 4M³, are inside.
+        let m = i128::from(M);
+        assert!(within_budget(
+            &[4 * m * m, -4 * m * m, 4 * m * m],
+            4 * m * m * m
+        ));
+    }
+
+    /// A grid point holding these numbers whatever their size, which only a test can make.
+    fn raw(c: [i64; 3]) -> P3 {
+        let [x, y, z] = c.map(Coord::unchecked);
+        P3 { x, y, z }
+    }
+
+    /// `Plane::through` checks every step although no grid point can make one fail. With points
+    /// outside the frame, which only a test can make, each step that can fail does, and each is
+    /// reported: a product of two differences, the normal times the point, the offset's negation
+    /// (only −2^127 has none), and coefficients past the budget.
+    #[test]
+    fn through_reports_every_step_that_does_not_fit() {
+        let through =
+            |a: [i64; 3], b: [i64; 3], c: [i64; 3]| Plane::through(raw(a), raw(b), raw(c));
+        let (top, bottom) = (i64::MAX, i64::MIN);
+        // Differences of 2^64 − 1: their product does not fit.
+        assert_eq!(
+            through([0, bottom, bottom], [0, top, bottom], [0, bottom, top]),
+            Err(NumError::BudgetExceeded)
+        );
+        // n = (2^124, 0, 0) fits, and n · a = 2^134 does not.
+        let side = 1_i64 << 62;
+        assert_eq!(
+            through([1024, 0, 0], [1024, side, 0], [1024, 0, side]),
+            Err(NumError::BudgetExceeded)
+        );
+        // n = (2^64, 0, 0) and a_x = −2^63: n · a = −2^127 fits, and its negation does not.
+        let side = 1_i64 << 32;
+        assert_eq!(
+            through([bottom, 0, 0], [bottom, side, 0], [bottom, 0, side]),
+            Err(NumError::BudgetExceeded)
+        );
+        // Every step fits, and n = (2^100, 0, 0) is past the budget's 2^83.
+        let side = 1_i64 << 50;
+        assert_eq!(
+            through([0, 0, 0], [0, side, 0], [0, 0, side]),
+            Err(NumError::BudgetExceeded)
+        );
+        // One step inside all of that, the same shape is a plane: n = (4, 0, 0), d = −4.
+        let plane = through([1, 0, 0], [1, 2, 0], [1, 0, 2]).unwrap();
+        assert_eq!((plane.n(), plane.d()), ([4, 0, 0], -4));
+    }
+
+    /// `Plane::side`, `Tpi::new`, `Tpi::homogeneous`, `Lpi::new` and `Lpi::homogeneous` check every
+    /// step although no plane within its budget can make one fail. A plane over its budget, built
+    /// field by field, makes each fail, and each reports.
+    #[test]
+    fn a_plane_over_its_budget_is_reported_by_every_function_it_reaches() {
+        let top = i128::MAX;
+        // n · p: two products of 2^127 − 1 do not fit together.
+        let wide = Plane {
+            n: [top, top, 0],
+            d: 0,
+        };
+        assert_eq!(wide.side(p3([1, 1, 0])), Err(NumError::BudgetExceeded));
+        assert_eq!(wide.side(p3([1, -1, 0])), Ok(Sign::Zero));
+        // n · p fits, and n · p + d does not.
+        let offset = Plane {
+            n: [top, 0, 0],
+            d: top,
+        };
+        assert_eq!(offset.side(p3([1, 0, 0])), Err(NumError::BudgetExceeded));
+        assert_eq!(offset.side(p3([-1, 0, 0])), Ok(Sign::Zero));
+
+        // Three planes whose weight, (2^127 − 1)^3, does not fit 256 bits.
+        let axes = [[top, 0, 0], [0, top, 0], [0, 0, top]].map(|n| Plane { n, d: 0 });
+        assert_eq!(
+            Tpi::new(axes[0], axes[1], axes[2]),
+            Err(NumError::BudgetExceeded)
+        );
+        let unmade = Tpi {
+            planes: axes,
+            weight: Sign::Positive,
+        };
+        assert_eq!(unmade.homogeneous(), Err(NumError::BudgetExceeded));
+        assert_eq!(unmade.to_grid(), Err(NumError::BudgetExceeded));
+
+        // A line whose n · p = 2 (2^127 − 1) does not fit.
+        let steep = Plane {
+            n: [top, 0, 0],
+            d: 0,
+        };
+        let (p, q) = (p3([2, 0, -1]), p3([2, 0, 1]));
+        assert_eq!(Lpi::new(p, q, steep), Err(NumError::BudgetExceeded));
+        let unmade = Lpi { p, q, plane: steep };
+        assert_eq!(unmade.homogeneous(), Err(NumError::BudgetExceeded));
+        assert_eq!(unmade.to_grid(), Err(NumError::BudgetExceeded));
+    }
+
+    /// A point with weight zero is no point, and `Tpi::new` and `Lpi::new` refuse it. Built field
+    /// by field all the same, it has nothing to commit: the budgeted commit refuses it, the total
+    /// commit is asked next and refuses it too, and `to_grid` reports, never a coordinate.
+    #[test]
+    fn a_point_without_weight_goes_to_the_total_commit_and_is_reported() {
+        let floor = plane_through([0, 0, 0], [1, 0, 0], [0, 1, 0]).unwrap();
+        assert_eq!(Tpi::new(floor, floor, floor), Err(NumError::Degenerate));
+        let flat = Tpi {
+            planes: [floor; 3],
+            weight: Sign::Positive,
+        };
+        let (x, w) = flat.homogeneous().unwrap();
+        assert!(w.is_zero());
+        assert_eq!(commit_axes::<BUDGET_LIMBS, 3>(&x, &w), None);
+        assert_eq!(commit_axes::<TOTAL_LIMBS, 3>(&x, &w), None);
+        assert_eq!(flat.to_grid(), Err(NumError::BudgetExceeded));
+
+        let p = p3([3, 4, 5]);
+        assert_eq!(Lpi::new(p, p, floor), Err(NumError::Degenerate));
+        let still = Lpi {
+            p,
+            q: p,
+            plane: floor,
+        };
+        let (_, w) = still.homogeneous().unwrap();
+        assert_eq!(w, 0);
+        assert_eq!(still.to_grid(), Err(NumError::BudgetExceeded));
     }
 }

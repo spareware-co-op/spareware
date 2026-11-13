@@ -133,6 +133,11 @@ fn nurbs<const D: usize>(k: CurveKind<D>) -> Result<Curve<D>, CurveError> {
 }
 
 impl<const D: usize> ParamCurve<D> for OnSurface<D> {
+    /// The cache's knots.
+    fn breaks(&self) -> Vec<f64> {
+        ParamCurve::breaks(&self.cache)
+    }
+
     fn domain(&self) -> (f64, f64) {
         self.pcurve.interval()
     }

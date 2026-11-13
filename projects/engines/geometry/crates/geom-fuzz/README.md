@@ -10,7 +10,44 @@ how each engine runs a target, on your machine and in CI. The first target built
 agree with the exact determinant of orient2d's definition, computed from scratch. The others:
 `predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
 flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
-every operation at every width, `I128` to the reserved 768 bits; `intersect`
+every operation at every width, `I128` to the reserved 768 bits; `cbor` (`src/cbor.rs`, G91),
+`geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
+convert both ways bit for bit; `cache` (`src/cache.rs`, G105), `geom-format`'s memo store keeps to
+its bound, forgets the entry used longest ago first and answers only where the caller's budget
+covers the stored run; and, for Gate 2 (decision 32.46:
+a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
+every curve and surface kind built from any bytes keeps the kind contract kit
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform; `arenas` (`src/arenas.rs`,
+G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see
+each other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives
+each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G104), `geom-op`'s
+batch driver gives each item its own result, and the many-point calls give the single calls' bits;
+`make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
+passes, keep their laws, and refuse with a typed error; and `sequence` (`src/sequence.rs`, G116),
+whole operation logs replay to the same hash and keep every law at every step. For Gate 3 (24.7:
+every reader is a fuzz target): `encoder` (`src/encoder.rs`, G86), `geom-op`'s canonical encoder
+refuses without a trace and writes only canonical items; `records` (`src/records.rs`, G92), the
+record layer reads the same twice and however its reads split, refuses inside its input and
+accepts only canonical records and files; `bodies` (`src/bodies.rs`, G94), body records read the
+same twice and give a body that writes and reads to itself; `names` (`src/names.rs`, G95) and
+`operations` (`src/operations.rs`, G96), the names, history, recipe, attributes and operation
+records accept only the one encoding of what they read; and `open` (`src/open.rs`, G108), a
+container comes back from a file to the same blobs and trust on open keeps damage with the body
+it is in. Their corpora start from the writers' output for the fixtures of `geom-format`'s own
+tests. For the Gate 3 pieces that `make` and `sequence` do not reach (30.1: a fuzz target per
+code piece): `euler` (`src/euler.rs`, G81), the Euler operators change the counts by their table,
+keep Euler's formula, refuse dead rows without a trace and publish back to themselves; `naming`
+(`src/naming.rs`, G87), names get the one ID their bytes hash to, the name
+graph keeps each once and knows which are weak, and the duplicate detector, the reference pick and
+the ordinal order agree with oracles written from 20.2; `references` (`src/references.rs`, G89),
+reference resolution gives 20.4's outcome on any history from `geom-test`'s kit; `prune`
+(`src/prune.rs`, G109), `PruneHistory` keeps every held reference and charges exactly its
+schedule, and the pruned record reads back and reads only its one encoding; and `contract`
+(`src/contract.rs`, G82), the operation contract's errors keep their detail's kind and chapter 22's
+remedies and write text that names what they hold, and every schema the facade lists names details
+the contract has, whose MCP tool descriptions parse and round-trip. Phase 4 adds `planes`
+(`src/planes.rs`, G123), `geom-poly`'s canonical planes and arrangement predicates give one
+entry to one plane and one order to any points or rays. Phase 5 adds `intersect`
 (`src/intersect.rs`, G158), an intersection's items keep their invariants against an all-pairs
 oracle, and a pair asked either way round makes one call; `quadric` (`src/quadric.rs`, G159), every
 exact decision on a line and a quadric agrees with big integers, and a Sturm chain counts the roots
@@ -18,16 +55,11 @@ a polynomial was built from; `project` (`src/project.rs`, G162), a nearest point
 by a sample of the kind; `crossings` (`src/crossings.rs`, G163), every point of any two curves lies
 on both, and two cubic graphs that change sides have an item between them; `piercing`
 (`src/piercing.rs`, G164), every point of a curve and a surface lies on both; `level`
-(`src/level.rs`, G168), a level curve misses nothing a dense grid can see; `general`
+(`src/level.rs`, G168), a level curve misses nothing a dense grid can see; and `general`
 (`src/general.rs`, G169, G170), subdivision leaves no crossing outside its settled or flagged pairs,
-and marching stays on both surfaces; and,
-for Gate 2 (decision 32.44: a target per phase-2 code piece), `curves` (`src/curves.rs`) and
-`surfaces` (`src/surfaces.rs`), every curve and surface kind built from any bytes keeps the kind
-contract kit (`geom_curve::contract`, `geom_surface::contract`) under any typed transform. Phase 3 adds `arenas` (`src/arenas.rs`, G80), `geom-topo` publishes exactly the arenas its rules
-allow, and a body's versions never see each other's edits; `make` (`src/make.rs`, G101), the
-primitives and transforms return only what the full checker passes, keep their laws, and refuse with
-a typed error; and `planes` (`src/planes.rs`, G123), `geom-poly`'s canonical planes and arrangement
-predicates give one entry to one plane and one order to any points or rays.
+and marching stays on both surfaces. `src/adversarial.rs`
+holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
+succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
 ## One law, four engines
 
@@ -172,10 +204,29 @@ cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-
 `-T` bounds the run; `--runs`, `--jobs` and `--max-input-length` are the other limits. A crash is
 written to `tests/__fuzz__/orient2d/crashes`, where `cargo test` replays it.
 
-**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs `wide_fuzz` under libFuzzer in
-five shards of five hours, 25 CPU hours, for G26's "24 hours clean". It runs only on demand: when
-the label `fuzz-campaign` is added to a pull request, or by hand from the Actions tab once the file
-is on `main`. Each shard uploads any crash and the corpus it grew.
+`--timeout` (10 seconds unless given; both workflows give it) bounds one input: an input that runs
+that long stops the run, which fails, and libFuzzer writes it to the same folder as
+`timeout-<sha1>`. That is a slow or hung input, not a broken law, so find why it is slow rather
+than leave it with the crash files, where `cargo test` would replay it every time. libFuzzer
+enforces the limit only on the thread that runs the fuzzer, and cargo-bolero starts the fuzzer
+inside the test harness, on a thread of its own, while the timer's signal goes to the main thread;
+so on Linux each target's test makes it work itself: the first `holds` under libFuzzer starts a
+thread that sends that signal to the fuzzing thread once a second, and libFuzzer's own handler
+decides (`tests/common/mod.rs`, issue #764). Before that the limit never fired. On macOS it still
+does not.
+
+**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs every target under libFuzzer for
+five hours each night, one shard each. On demand it runs `wide_fuzz` in five shards of five hours,
+25 CPU hours, for G26's "24 hours clean": when the label `fuzz-campaign` is added to a pull
+request, or by hand from the Actions tab. By hand it can also run every target as a night does, on
+the head of the branch or tag it is started on:
+
+```text
+gh workflow run kernel-fuzz-campaign.yml --ref main -f targets=all
+```
+
+`-f hours=1` (one to five, five by default) shortens every shard for a trial. Each shard uploads
+any crash and the corpus it grew.
 
 **Kani**, on Linux or macOS:
 

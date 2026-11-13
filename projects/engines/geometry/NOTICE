@@ -785,6 +785,20 @@ Clippy's `clippy_dev` token cursor
     projects/engines/geometry/crates/geom-test/src/map/errors.rs
       for the approach of finding declarations with a token cursor. No code copied.
 
+csgrs
+  Licence:      MIT
+  Link:         https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-mesh/src/exact/check.rs
+      for which rules a closure certificate holds; its method, not its code.
+
+Geogram `CDT_2d`
+  Licence:      BSD-3-Clause
+  Link:         https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/delaunay/CDT_2d.cpp
+  Consulted by:
+    projects/engines/geometry/crates/geom-mesh/src/cdt.rs
+      > for Sloan's flip insertion of constraints and the exact construction of a crossing from the two original constraint ends; its method, not its code.
+
 Geogram `interval_nt.h`
   Licence:      BSD-3-Clause
   Link:         https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/interval_nt.h
@@ -833,6 +847,13 @@ Geogram's PCK `_SOS` predicates
   Consulted by:
     projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs
       for its compile-time bit counting, a cross-check of the certificate here. No code copied.
+
+github-action-benchmark
+  Licence:      MIT
+  Link:         https://github.com/benchmark-action/github-action-benchmark/blob/84ec6ea748925b6580796c05ce7a1c8fd0d15f3b/README.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-bench/src/timings.rs
+      for keeping benchmark history in a branch of the repository it measures. No code copied.
 
 Gitiles
   Licence:      Apache-2.0
@@ -888,6 +909,13 @@ LLVM's llvm-cov
   Consulted by:
     projects/engines/geometry/crates/geom-test/src/coverage.rs
       with `CoverageSummaryInfo.cpp` and `CodeCoverage.cpp` beside it at the same commit (the LLVM 23.1.1 the pinned nightly ships), for how its LCOV export counts `BRF` and writes `BRDA`. No code copied.
+
+Manifold
+  Licence:      Apache-2.0
+  Link:         https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/shared.h
+  Consulted by:
+    projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs
+      for half-edges as parallel arrays, and <https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/include/manifold/mesh.h>, for property vertices and runs; its data model, not its code.
 
 npm `hosted-git-info` 10.1.1
   Licence:      ISC
@@ -1064,6 +1092,7 @@ PUBLISHED CRATES
 The published crates the kernel crates depend on (DEPEND, section 29.1). Their notices, and those of
 every other crate compiled into a shipped binary, go in the generated third-party notices file.
 
+  crc 3.4.0 (Apache-2.0 OR MIT), https://crates.io/crates/crc/3.4.0, named by projects/engines/geometry/crates/geom-format/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   rayon 1.12.0 (Apache-2.0 OR MIT), https://crates.io/crates/rayon/1.12.0, named by projects/engines/geometry/crates/geom-pool/Cargo.toml

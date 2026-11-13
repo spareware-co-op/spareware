@@ -24,6 +24,10 @@
 //!   elevation and Bezier extraction, the joint's gap and weight rescaling (the rational bound of
 //!   `crate::rational`), and the rounding of shifted knots (a Bezier piece reparametrised by e at
 //!   its ends moves by at most |N′|·e).
+//! - **A span of one joint is bounded from both sides.** The tangent may turn at a joint, and a
+//!   joint may have a gap, so a bound over the joint alone holds the end of the segment before
+//!   it and the start of the segment after it, as the trait's rule for a span of one parameter
+//!   asks ([`ParamCurve`]); so does a bound over one break of a segment's own curve.
 //! - **Exact operations where they can be.** A split at a joint, a reversal and a split whose
 //!   segment parameter is exact change no point; a transform moves each segment with its own
 //!   deviation, the joints' gaps recomputed within it.
@@ -118,6 +122,21 @@ impl<const D: usize> Composite<D> {
             starts.push(s);
         }
         Composite::assemble(segments, starts, 0.0)
+    }
+
+    /// The composite of `segments` over `starts` exactly as given, with each joint's gap certified
+    /// again: what a stored composite is rebuilt from. Its joints may be apart, as a transform or
+    /// split may leave them; [`Composite::gaps`] bounds each.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Degenerate`] unless there is a segment and one more start than segments,
+    /// increasing and finite; the errors of enclosing a segment's ends.
+    pub fn from_starts(
+        segments: Vec<Trimmed<D>>,
+        starts: Vec<f64>,
+    ) -> Result<Composite<D>, CurveError> {
+        Composite::assemble(segments, starts, f64::INFINITY)
     }
 
     /// The composite of `segments` over `starts` (increasing and finite, or
@@ -269,10 +288,53 @@ impl<const D: usize> Composite<D> {
         scaled(self.power(k, j)?, &e)
     }
 
-    /// The segments a span meets, with each one's part of it in segment parameters.
-    fn parts(&self, (lo, hi): (f64, f64)) -> Result<Vec<(usize, Interval)>, CurveError> {
-        let first = self.locate(lo, Limit::FromRight)?;
-        let last = self.locate(hi, Limit::FromLeft)?.max(first);
+    /// The derivative of order j of segment k over its parameters `l`, enclosed, for a bound.
+    /// Where `l` is one parameter the trait's rule for a span of one parameter holds
+    /// ([`ParamCurve`]): at the segment's end the side inside the segment, and strictly inside
+    /// it, on a break of the segment's own curve (a vertex, a knot), both sides, through the
+    /// segment's bound over that one parameter.
+    fn derivative_over(
+        &self,
+        k: usize,
+        l: Interval,
+        j: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<[Interval; D], CurveError> {
+        let seg = self.seg(k)?;
+        let (a, b) = seg.interval();
+        let t = l.lo();
+        if t == l.hi() && a < t && t < b && seg.breaks().contains(&t) {
+            return match seg.derivative_bound((t, t), j, meter)? {
+                DerivativeBound::Bounded(x) => scaled(self.power(k, j)?, &intervals(&x)?),
+                DerivativeBound::Unbounded => Err(CurveError::Unbounded),
+            };
+        }
+        let side = if t == b {
+            Limit::FromLeft
+        } else {
+            Limit::FromRight
+        };
+        self.segment_over(k, l, j, side, meter)
+    }
+
+    /// The segments a span meets for the derivative of `order` (0 for the points), with each
+    /// one's part of the span in segment parameters: the segments from the one holding the
+    /// span's start from the right to the one holding its end from the left. A span that is one
+    /// joint has those the other way round, the segment after the joint and the one before it,
+    /// and by the trait's rule for a span of one parameter ([`ParamCurve`]) meets both wherever
+    /// what is asked for can differ across the joint: a derivative always, the points when the
+    /// joint has a gap. Where the two ends are the same exact point the segment after the joint
+    /// gives it.
+    fn parts(
+        &self,
+        (lo, hi): (f64, f64),
+        order: usize,
+    ) -> Result<Vec<(usize, Interval)>, CurveError> {
+        let after = self.locate(lo, Limit::FromRight)?;
+        let before = self.locate(hi, Limit::FromLeft)?;
+        let one_point = order == 0 && self.gaps.get(before).is_none_or(|&g| g == 0.0);
+        let first = if one_point { after } else { after.min(before) };
+        let last = after.max(before);
         let mut out = Vec::with_capacity(last.saturating_sub(first).saturating_add(1));
         for k in first..=last {
             let (s0, s1) = (self.start(k)?, self.start(k.saturating_add(1))?);
@@ -286,6 +348,30 @@ impl<const D: usize> Composite<D> {
 }
 
 impl<const D: usize> ParamCurve<D> for Composite<D> {
+    /// The joints, and each break of a segment's own curve whose composite parameter maps back
+    /// to it exactly (the others are not parameters a caller can name).
+    fn breaks(&self) -> Vec<f64> {
+        let mut out = self.starts.clone();
+        for (k, seg) in self.segments.iter().enumerate() {
+            let (a, b) = seg.interval();
+            let Some(&s) = self.starts.get(k) else {
+                continue;
+            };
+            for l in seg.breaks() {
+                let t = s + (l - a);
+                if a < l
+                    && l < b
+                    && let (Ok(x), Ok(exact)) = (self.local(k, t), point(l))
+                    && x == exact
+                {
+                    out.push(t);
+                }
+            }
+        }
+        out.sort_by(f64::total_cmp);
+        out
+    }
+
     fn domain(&self) -> (f64, f64) {
         (
             self.starts.first().copied().unwrap_or(0.0),
@@ -344,7 +430,7 @@ impl<const D: usize> ParamCurve<D> for Composite<D> {
             lo: [f64::INFINITY; D],
             hi: [f64::NEG_INFINITY; D],
         };
-        for (k, l) in self.parts(span)? {
+        for (k, l) in self.parts(span, 0)? {
             let b = self.seg(k)?.bound((l.lo(), l.hi()), meter)?;
             for ((lo, hi), (&x, &y)) in out
                 .lo
@@ -370,8 +456,8 @@ impl<const D: usize> ParamCurve<D> for Composite<D> {
             lo: [f64::INFINITY; D],
             hi: [f64::NEG_INFINITY; D],
         };
-        for (k, l) in self.parts(span)? {
-            let e = match self.segment_over(k, l, order, Limit::FromRight, meter) {
+        for (k, l) in self.parts(span, order)? {
+            let e = match self.derivative_over(k, l, order, meter) {
                 Ok(e) => e,
                 Err(CurveError::Unbounded) => return Ok(DerivativeBound::Unbounded),
                 Err(e) => return Err(e),

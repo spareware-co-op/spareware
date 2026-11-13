@@ -471,7 +471,7 @@ A body's exactness report: its recorded class and bound, how many faces lie on p
 **Example**
 
 ```text
-query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, and a report that passed.
+query.exactness { body: the cylinder of radius 5 and height 10, exactness: Certified within 1 step } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, a report that passed, and Certified within 1 step.
 ```
 
 ## `query.faces`
@@ -516,7 +516,7 @@ Every face of a body in arena order, with its shell, surface, sense and loops, i
 **Example**
 
 ```text
-query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z.
+query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives 6 rows with the roles min.x, max.x, min.y, max.y, min.z and max.z, and Exact.
 ```
 
 ## `query.validity`
@@ -558,7 +558,7 @@ A body's validity report: chapter 8.3's checks at the level asked, each fault wi
 **Example**
 
 ```text
-query.validity { body: a box, exactness: Exact, level: Full } gives a report with no faults, all four groups run and nothing deferred.
+query.validity { body: a box, exactness: Exact, level: Full } gives a report with 0 faults, 4 groups run and 0 deferred, and Exact.
 ```
 
 ## `query.volume`
@@ -644,9 +644,6 @@ A body mirrored across the plane through a point, perpendicular to an axis. Ever
 | --- | --- | --- | --- |
 | `OutOfRange` | `FrameRangeExceeded` | `value: i128` | A corner, a box or an offset would leave the grid's range. |
 | `BodyNotNamed` | `InvalidInput` | - | The body was not published in name order, so its entities cannot keep their names. |
-| `NotAccepted` | `ExactnessNotAccepted` | `would: Exactness` | The result would be less exact than the class the caller accepted. |
-| `KindNotCertified` | `Unsupported` | - | A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet. |
-| `NotCertifiedYet` | `Unsupported` | `piece: &str` | Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet. |
 | `BudgetExceeded` | `BudgetExceeded` | - | The operation's budget ran out; nothing is returned. |
 | `ResultInvalid` | `Internal` | - | The result did not pass the checker. A defect: nothing is returned. |
 | `BuildFailed` | `Internal` | - | The body could not be assembled from its rows. A defect. |
@@ -697,9 +694,6 @@ A body moved by whole grid steps. Every entity keeps its name.
 | --- | --- | --- | --- |
 | `OutOfRange` | `FrameRangeExceeded` | `value: i128` | A corner, a box or an offset would leave the grid's range. |
 | `BodyNotNamed` | `InvalidInput` | - | The body was not published in name order, so its entities cannot keep their names. |
-| `NotAccepted` | `ExactnessNotAccepted` | `would: Exactness` | The result would be less exact than the class the caller accepted. |
-| `KindNotCertified` | `Unsupported` | - | A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet. |
-| `NotCertifiedYet` | `Unsupported` | `piece: &str` | Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet. |
 | `BudgetExceeded` | `BudgetExceeded` | - | The operation's budget ran out; nothing is returned. |
 | `ResultInvalid` | `Internal` | - | The result did not pass the checker. A defect: nothing is returned. |
 | `BuildFailed` | `Internal` | - | The body could not be assembled from its rows. A defect. |
@@ -809,7 +803,6 @@ A body rotated about a line along an axis. Quarter turns keep an Exact body Exac
 | `OutOfRange` | `FrameRangeExceeded` | `value: i128` | A corner, a box or an offset would leave the grid's range. |
 | `BodyNotNamed` | `InvalidInput` | - | The body was not published in name order, so its entities cannot keep their names. |
 | `NotAccepted` | `ExactnessNotAccepted` | `would: Exactness` | The result would be less exact than the class the caller accepted. |
-| `KindNotCertified` | `Unsupported` | - | A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet. |
 | `NotCertifiedYet` | `Unsupported` | `piece: &str` | Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet. |
 | `BudgetExceeded` | `BudgetExceeded` | - | The operation's budget ran out; nothing is returned. |
 | `ResultInvalid` | `Internal` | - | The result did not pass the checker. A defect: nothing is returned. |

@@ -10,7 +10,8 @@
 //! - **One list per selection.** Most selections give one body, split one per cell, and each
 //!   selection's list stands in its place.
 //! - **Inputs are never changed, and nothing is returned unchecked.** A result that fails the
-//!   checker is an error, never a body (11.10).
+//!   checker or the arrangement certificate is an error, never a body, and a failure leaves the
+//!   operands as they were: they are shared borrows (11.10).
 //! - **As exact as the least exact operand.** A flat arrangement adds no error of its own (11.3).
 //! - **The same bytes on any threads, and in any order of the operands.** The order is the keys',
 //!   and the work is deterministic (23.4).
@@ -21,29 +22,36 @@
 //!
 //! Cost: what [`prepare`], [`arrange`] and [`rebuild`] cost, and the checker per result.
 
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use geom_check::{Level, check};
 use geom_num::ladder::FIT;
+use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError, P3, Sign};
 use geom_op::{
     Charge, Class, CombineDetail, Diagnostic, DiagnosticSpec, ErrorKind, ErrorSpec, Family, Field,
-    OpContext, OpError, OpOutput, OpSchema, RoleSpec, RunDetail, Unit,
+    History, OpContext, OpError, OpOutput, OpPath, OpSchema, RoleSpec, RunDetail, TopoName, Unit,
 };
 use geom_poly::convex::Piece;
 use geom_poly::merge::{
-    Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with, section, select,
+    Curves, Memo, Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with,
+    merge_with_reusing, section, select,
 };
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
-use geom_poly::trace::{Classified, Polygon, TraceError};
-use geom_poly::winding::{Winding, WindingTest};
+use geom_poly::subdivide::{LEAF_POLYGONS, Solved, around, arrange_reusing};
+use geom_poly::trace::{Cell, Classified, Polygon, TraceError, winding_at};
+use geom_poly::winding::{Entry, Winding, WindingTest};
 use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
 use geom_topo::Body;
 
+use crate::certificate::{Fault, certify, labelled};
+use crate::names::{NameIds, Named, Naming, NamingError, Sources, name, name_curves};
 use crate::operand::{
-    BooleanInput, Operand, OperandKey, PrepareError, Prepared, Selection, prepare,
+    BooleanInput, CellSeed, Operand, OperandKey, PrepareError, Prepared, Selection, prepare,
 };
-use crate::rebuild::{RebuildError, rebuild, rebuild_with, wire};
+use crate::passage::{Passage, narrowest};
+use crate::rebuild::{Carrier, RebuildError, publish, wire};
 use crate::wires::{self, Run, WireError};
 
 /// The arrangement's phase.
@@ -129,20 +137,169 @@ pub const COMBINE: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified],
     charges: &[Charge::new(ARRANGEMENT, "polygon a split clips", 1)],
     batch: false,
+    // A result's names come from its operands' keys and faces (chapter 10), so no name-free key.
+    name_free: false,
     example: "a 4 m cube less a 2 m cube at its corner: a cube with a corner notch",
 };
+
+/// A result: its body and, when every operand had names to start from, its history.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Combined {
+    /// The body.
+    pub body: Body,
+    /// How its entities relate to the operands' (11.9).
+    pub history: Option<History>,
+    /// The names the call made that the body holds or refers to, in the order made, each after
+    /// those it refers to: with the operands' own, what a name graph (`geom_name`) needs to
+    /// resolve a reference to the body (20.4), the cache's `NamedBody` holds (23.8) and a names
+    /// record stores (24.4). Empty when it has no history.
+    pub names: Vec<TopoName>,
+    /// For a cell, what it holds and what lies around it (11.7).
+    pub cell: Option<CellReport>,
+}
+
+/// What lies on the far side of a cell's face (11.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Beyond {
+    /// Another cell: IFC's type 2a boundary. The cell is numbered among the cells of the selection,
+    /// whether it came back or not.
+    Cell(usize),
+    /// An element: IFC's type 2b boundary.
+    Element(OperandKey),
+    /// Nothing.
+    Outside,
+}
+
+/// A cell's report.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CellReport {
+    /// The keys of the seeds it holds.
+    pub keys: Vec<OperandKey>,
+    /// The solid operands it lies inside, for a clash.
+    pub elements: Vec<OperandKey>,
+    /// Each face, by its row before naming, with what lies beyond it.
+    pub boundaries: Vec<(usize, Beyond)>,
+}
 
 /// A wire target's pieces, and the other operands' polygons that cut it.
 type WireRuns<'a> = (Vec<Run>, Vec<&'a Polygon>);
 
+/// `curves` as a wire, a selection's one result, with no history: a wire target's pieces carry no
+/// names yet, though a section's curves do.
+fn wire_picked(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Picked, Refused> {
+    Ok(Picked {
+        results: alloc::vec![Combined {
+            body: wire(curves, None, meter)?,
+            history: None,
+            names: Vec::new(),
+            cell: None,
+        }],
+        separated: true,
+        qualified: false,
+        leaks: Vec::new(),
+        memo: None,
+    })
+}
+
 /// One arrangement, for the selections to read.
 struct Scene<'a> {
+    /// The step that names the results.
+    op: &'a OpPath,
+    /// The operands, in key order.
+    operands: Vec<&'a Operand<'a>>,
+    /// Each polygon's plane.
+    planes: Vec<Plane>,
     /// The operands, ready.
     ready: &'a Prepared,
     /// Every piece, with its vectors.
     classified: &'a [Classified],
     /// What merges.
     merge: Merge,
+    /// What an earlier merge and naming of mostly the same pieces kept, for a merge to start
+    /// from and a naming to take ids from (G139).
+    reuse: Option<Again<'a>>,
+}
+
+/// What an earlier merge and naming kept: the merge's memo and the names' ids (G139).
+pub(crate) type Again<'a> = (&'a Memo, &'a NameIds);
+
+/// What one result of a selection is told.
+#[derive(Clone, Copy)]
+struct Job<'j> {
+    /// The operand that keeps its names, if not all do.
+    target: Option<usize>,
+    /// Whether it is a sheet.
+    open: bool,
+    /// The input faces that other results of this selection hold pieces of.
+    split: &'j BTreeSet<(usize, u32)>,
+    /// The seed that names this cell.
+    seed: Option<OperandKey>,
+}
+
+/// A piece of a cell.
+struct Held {
+    /// The piece, facing out of the cell.
+    piece: Outward,
+    /// For a wall, the cell on its other side.
+    across: Option<usize>,
+}
+
+/// What a test holds, in cells.
+struct Partition {
+    /// Each cell's pieces, by its number.
+    lists: BTreeMap<usize, Vec<Held>>,
+    /// Whether any wall stood.
+    walled: bool,
+    /// Every piece, walls both ways, merged.
+    whole: Merged,
+    /// Those pieces.
+    pieces: Vec<Outward>,
+}
+
+/// What a selection gives.
+struct Picked {
+    /// The results.
+    results: Vec<Combined>,
+    /// Whether anything separated the target, for a split.
+    separated: bool,
+    /// Whether two operands brought one name.
+    qualified: bool,
+    /// One entry per cell that holds two seeds: where it is narrowest.
+    leaks: Vec<Option<Passage>>,
+    /// What its merge and naming kept for the next, where it merged once.
+    memo: Option<(Memo, NameIds)>,
+}
+
+impl Picked {
+    /// What it says beside its results: a split that separated nothing, each leak where it is
+    /// narrowest, and names qualified by their operands' keys.
+    fn note(&self, notes: &mut Vec<Diagnostic>) {
+        if !self.separated {
+            notes.extend(Diagnostic::new(
+                "bool.cutter_does_not_separate",
+                "nothing cuts the target right through",
+            ));
+        }
+        for leak in &self.leaks {
+            let at = leak.map_or_else(String::new, |passage| {
+                alloc::format!(
+                    ": narrowest {} steps, near {:?}, approximately",
+                    passage.width,
+                    passage.at
+                )
+            });
+            notes.extend(Diagnostic::new(
+                "bool.seeds_share_cell",
+                alloc::format!("two seeds lie in one cell{at}"),
+            ));
+        }
+        if self.qualified {
+            notes.extend(Diagnostic::new(
+                "bool.names_qualified",
+                "two operands brought one name, so each face is qualified by its operand's key",
+            ));
+        }
+    }
 }
 
 /// Why a selection gave no body.
@@ -152,6 +309,30 @@ enum Refused {
     Rebuild(RebuildError),
     /// The input did.
     Detail(CombineDetail),
+    /// A trace refused.
+    Trace(TraceError),
+    /// The certificate did.
+    Fault(Fault),
+    /// The names could not be formed.
+    Naming(NamingError),
+}
+
+impl From<TraceError> for Refused {
+    fn from(e: TraceError) -> Self {
+        Refused::Trace(e)
+    }
+}
+
+impl From<NamingError> for Refused {
+    fn from(e: NamingError) -> Self {
+        Refused::Naming(e)
+    }
+}
+
+impl From<Fault> for Refused {
+    fn from(e: Fault) -> Self {
+        Refused::Fault(e)
+    }
 }
 
 impl From<RebuildError> for Refused {
@@ -188,12 +369,12 @@ fn numbers(ctx: &OpContext<'_>, e: NumError) -> OpError {
 }
 
 /// The operation's error for `detail`.
-fn fail(ctx: &OpContext<'_>, detail: CombineDetail) -> OpError {
+pub(crate) fn fail(ctx: &OpContext<'_>, detail: CombineDetail) -> OpError {
     OpError::new(ctx.path().clone(), detail)
 }
 
 /// `error` as the operation's.
-fn prepared(ctx: &OpContext<'_>, error: PrepareError, meter: &WorkMeter<'_>) -> OpError {
+pub(crate) fn prepared(ctx: &OpContext<'_>, error: PrepareError, meter: &WorkMeter<'_>) -> OpError {
     match error {
         PrepareError::Stopped(stopped) => ctx.stopped(meter, stopped, ARRANGEMENT),
         PrepareError::Num(e) => numbers(ctx, e),
@@ -226,6 +407,15 @@ fn refused(ctx: &OpContext<'_>, error: Refused, meter: &mut WorkMeter<'_>) -> Op
     match error {
         Refused::Rebuild(e) => rebuilt(ctx, e, meter),
         Refused::Detail(detail) => fail(ctx, detail),
+        Refused::Trace(TraceError::Stopped(stopped)) | Refused::Fault(Fault::Stopped(stopped)) => {
+            ctx.stopped(meter, stopped, REBUILD)
+        }
+        Refused::Trace(TraceError::Num(e)) => numbers(ctx, e),
+        Refused::Trace(TraceError::Winding(_)) => fail(ctx, CombineDetail::ResultInvalid),
+        Refused::Fault(fault) => {
+            fail(ctx, CombineDetail::ResultInvalid).with_message(fault.to_string())
+        }
+        Refused::Naming(e) => fail(ctx, CombineDetail::ResultInvalid).with_message(e.to_string()),
     }
 }
 
@@ -259,7 +449,7 @@ fn accepted(would: Exactness, accept: Option<Exactness>) -> bool {
     }
 }
 
-impl Scene<'_> {
+impl<'a> Scene<'a> {
     /// `pieces`, each knowing the face it came from.
     fn sourced(&self, mut pieces: Vec<Outward>) -> Vec<Outward> {
         for piece in &mut pieces {
@@ -297,33 +487,118 @@ impl Scene<'_> {
         others.map(|c| c.piece.clone()).collect()
     }
 
+    /// The operands with their names, each keeping them if it is `target` or nothing is, or
+    /// `None` if one has none.
+    fn named(&self, target: Option<usize>) -> Option<Vec<Named<'a>>> {
+        let mut out = Vec::with_capacity(self.operands.len());
+        for (at, operand) in self.operands.iter().enumerate() {
+            out.push(Named {
+                key: operand.key,
+                body: operand.body,
+                names: operand.body.names()?,
+                keeps: target.is_none_or(|place| place == at),
+            });
+        }
+        Some(out)
+    }
+
+    /// `merged`, named and published, its faces split among other results where `split` says.
+    fn finished(
+        &self,
+        merged: &Merged,
+        job: Job<'_>,
+        pieces: &[Outward],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<(Combined, bool, NameIds), Refused> {
+        let carriers: &[Carrier] = &self.ready.carriers;
+        let Some(named) = self.named(job.target) else {
+            let body = publish(merged, carriers, job.open, (None, None), meter)?;
+            return Ok((
+                Combined {
+                    body,
+                    history: None,
+                    names: Vec::new(),
+                    cell: None,
+                },
+                false,
+                NameIds::default(),
+            ));
+        };
+        let sources = Sources {
+            operands: &named,
+            owners: &self.ready.owners,
+            rows: &self.ready.rows,
+            planes: &self.planes,
+            split: job.split,
+            seed: job.seed,
+            known: self.reuse.map(|(_, ids)| ids),
+        };
+        let Naming {
+            names,
+            made,
+            history,
+            qualified,
+            ids,
+            rounded,
+        } = name(self.op, merged, pieces, &sources)?;
+        let given = (Some(&names), Some(rounded.as_slice()));
+        let body = publish(merged, carriers, job.open, given, meter)?;
+        let history = Some(history);
+        Ok((
+            Combined {
+                body,
+                history,
+                names: made,
+                cell: None,
+            },
+            qualified,
+            ids,
+        ))
+    }
+
     /// What `test` keeps, its seams held where `cuts` lie.
     fn kept(
         &self,
         test: &WindingTest,
         cuts: &[Piece],
+        target: Option<usize>,
         meter: &mut WorkMeter<'_>,
-    ) -> Result<Vec<Body>, Refused> {
+    ) -> Result<Picked, Refused> {
         let kept = self.sourced(select(test, self.classified)?);
+        labelled(&kept, test, meter)?;
         let rules = Rules { cuts, open: false };
-        let body = rebuild_with(&kept, &self.ready.carriers, self.merge, rules, meter)?;
-        Ok(alloc::vec![body])
+        let reuse = self.reuse.map(|(memo, _)| memo);
+        let (merged, memo) = merge_with_reusing(&kept, self.merge, rules, reuse, meter)?;
+        let job = Job {
+            target,
+            open: false,
+            split: &BTreeSet::new(),
+            seed: None,
+        };
+        let (result, qualified, ids) = self.finished(&merged, job, &kept, meter)?;
+        Ok(Picked {
+            results: alloc::vec![result],
+            separated: true,
+            qualified,
+            leaks: Vec::new(),
+            memo: Some((memo, ids)),
+        })
     }
 
-    /// The target of `test` cut into one body per cell by the pieces inside it, and whether any
-    /// wall stood.
-    fn split(
+    /// The cells of what `test` holds: its boundary and every piece inside it, each of those a wall
+    /// back to back, sorted into cells.
+    fn partition(
         &self,
         test: &WindingTest,
         meter: &mut WorkMeter<'_>,
-    ) -> Result<(Vec<Body>, bool), Refused> {
+    ) -> Result<Partition, Refused> {
         let outer = self.sourced(select(test, self.classified)?);
         let mut walls: Vec<&Classified> = self
             .classified
             .iter()
             .filter(|c| c.first && test.holds(&c.front) && test.holds(&c.back))
             .collect();
-        let (mut pieces, mut merged) = self.cells(&outer, &walls, meter)?;
+        let (mut pieces, mut merged) = self.walled(&outer, &walls, meter)?;
         // A wall with one cell on both sides separates nothing. Taking those away changes no cell,
         // so a second pass has nothing more to find.
         let base = outer.len();
@@ -341,28 +616,250 @@ impl Scene<'_> {
         }
         if standing.len() != walls.len() {
             walls = standing;
-            (pieces, merged) = self.cells(&outer, &walls, meter)?;
+            (pieces, merged) = self.walled(&outer, &walls, meter)?;
         }
-        let mut lists: alloc::collections::BTreeMap<usize, Vec<Outward>> =
-            alloc::collections::BTreeMap::new();
-        for (at, piece) in pieces.into_iter().enumerate() {
+        let cell_of = |at: usize| -> Result<usize, RebuildError> {
             let shell = shell_of(&merged, at).ok_or(RebuildError::Broken)?;
             let held = merged.shells.get(shell).ok_or(RebuildError::Broken)?;
-            lists
-                .entry(held.holder.unwrap_or(shell))
-                .or_default()
-                .push(piece);
+            Ok(held.holder.unwrap_or(shell))
+        };
+        let mut lists: BTreeMap<usize, Vec<Held>> = BTreeMap::new();
+        for (at, piece) in pieces.iter().cloned().enumerate() {
+            // A wall's other side lies next to it among the pieces.
+            let other = (at >= base).then(|| {
+                let twin = base.saturating_add(at.saturating_sub(base) ^ 1);
+                cell_of(twin)
+            });
+            let held = Held {
+                piece,
+                across: other.transpose()?,
+            };
+            lists.entry(cell_of(at)?).or_default().push(held);
         }
-        let mut bodies = Vec::with_capacity(lists.len());
+        let walled = !walls.is_empty();
+        Ok(Partition {
+            lists,
+            walled,
+            whole: merged,
+            pieces,
+        })
+    }
+
+    /// The target of `test` cut into one body per cell by the pieces inside it.
+    fn split(
+        &self,
+        test: &WindingTest,
+        target: Option<usize>,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Picked, Refused> {
+        let Partition { lists, walled, .. } = self.partition(test, meter)?;
+        let split = self.split_faces(&lists)?;
+        let mut picked = Picked {
+            results: Vec::with_capacity(lists.len()),
+            separated: walled,
+            qualified: false,
+            leaks: Vec::new(),
+            memo: None,
+        };
         for list in lists.values() {
-            let carriers = &self.ready.carriers;
-            bodies.push(rebuild(list, carriers, Merge::RemoveRedundant, meter)?);
+            let pieces: Vec<Outward> = list.iter().map(|held| held.piece.clone()).collect();
+            let merged = merge_with(&pieces, Merge::RemoveRedundant, Rules::default(), meter)?;
+            let job = Job {
+                target,
+                open: false,
+                split: &split,
+                seed: None,
+            };
+            let (result, qualified, _) = self.finished(&merged, job, &pieces, meter)?;
+            picked.results.push(result);
+            picked.qualified = picked.qualified || qualified;
         }
-        Ok((bodies, !walls.is_empty()))
+        Ok(picked)
+    }
+
+    /// The input faces with pieces in several of `lists`.
+    fn split_faces(
+        &self,
+        lists: &BTreeMap<usize, Vec<Held>>,
+    ) -> Result<BTreeSet<(usize, u32)>, RebuildError> {
+        let mut cells_of: BTreeMap<(usize, u32), BTreeSet<usize>> = BTreeMap::new();
+        for (cell, list) in lists {
+            for held in list {
+                let polygon = held.piece.polygon;
+                let owner = self.ready.owners.get(polygon).copied();
+                let row = self.ready.rows.get(polygon).copied();
+                let source = owner.zip(row).ok_or(RebuildError::Broken)?;
+                cells_of.entry(source).or_default().insert(*cell);
+            }
+        }
+        Ok(cells_of
+            .iter()
+            .filter(|(_, cells)| cells.len() > 1)
+            .map(|(source, _)| *source)
+            .collect())
+    }
+
+    /// The cell each of `seeds` lies in, a number of `lists`.
+    fn seated(
+        &self,
+        lists: &BTreeMap<usize, Vec<Held>>,
+        seeds: &[CellSeed],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<usize>, Refused> {
+        let mut polygons = Vec::new();
+        for (cell, list) in lists {
+            let entry = u32::try_from(*cell).map_err(|_| RebuildError::Broken)?;
+            for held in list {
+                polygons.push(Polygon {
+                    piece: held.piece.piece.clone(),
+                    entry: Some(entry),
+                });
+            }
+        }
+        let cell = around(&polygons)?;
+        let mut seats = Vec::with_capacity(seeds.len());
+        for seed in seeds {
+            for c in self.classified {
+                if holds(&c.piece, seed.point)? {
+                    return Err(Refused::Detail(CombineDetail::SeedOnBoundary));
+                }
+            }
+            let (x, y, z) = (seed.point.x.get(), seed.point.y.get(), seed.point.z.get());
+            let inside =
+                [x, y, z]
+                    .iter()
+                    .zip(cell.low.iter().zip(&cell.high))
+                    .all(|(v, (low, high))| {
+                        let half = v.saturating_mul(2);
+                        *low < half && half < *high
+                    });
+            if !inside {
+                return Err(Refused::Detail(CombineDetail::SeedOutside));
+            }
+            let axes = [
+                Plane::new([1, 0, 0], i128::from(x).saturating_neg())?,
+                Plane::new([0, 1, 0], i128::from(y).saturating_neg())?,
+                Plane::new([0, 0, 1], i128::from(z).saturating_neg())?,
+            ];
+            let here = winding_at(&cell, &Winding::new(), &polygons, axes, meter)?;
+            let found = lists
+                .keys()
+                .find(|cell| u32::try_from(**cell).is_ok_and(|entry| here.count(entry) > 0));
+            seats.push(*found.ok_or(Refused::Detail(CombineDetail::SeedOutside))?);
+        }
+        Ok(seats)
+    }
+
+    /// What lies beyond each face of a cell, and which operands the cell lies inside.
+    fn report(&self, merged: &Merged, list: &[Held], keys: Vec<OperandKey>) -> CellReport {
+        let solids: Vec<(Entry, OperandKey)> = self
+            .ready
+            .keys
+            .iter()
+            .filter_map(|(key, entry)| entry.map(|entry| (entry, *key)))
+            .collect();
+        let around = |winding: &Winding| -> Vec<OperandKey> {
+            solids
+                .iter()
+                .filter(|(entry, _)| winding.count(*entry) > 0)
+                .map(|(_, key)| *key)
+                .collect()
+        };
+        let mut boundaries = BTreeSet::new();
+        let mut elements = BTreeSet::new();
+        for (held, face) in list.iter().zip(&merged.piece_face) {
+            elements.extend(around(&held.piece.back));
+            // What the face crosses into: an operand counted in front of it and not behind.
+            let (front, back) = (&held.piece.front, &held.piece.back);
+            let into = solids
+                .iter()
+                .find(|(entry, _)| front.count(*entry) > back.count(*entry));
+            let beyond = match (held.across, into) {
+                (Some(cell), _) => Beyond::Cell(cell),
+                (None, Some((_, key))) => Beyond::Element(*key),
+                (None, None) => Beyond::Outside,
+            };
+            boundaries.insert((*face, beyond));
+        }
+        CellReport {
+            keys,
+            elements: elements.into_iter().collect(),
+            boundaries: boundaries.into_iter().collect(),
+        }
+    }
+
+    /// Every cell of `test` in one General body, a wall as a face of each cell, back to back.
+    fn fused(&self, test: &WindingTest, meter: &mut WorkMeter<'_>) -> Result<Picked, Refused> {
+        let Partition { whole, pieces, .. } = self.partition(test, meter)?;
+        let job = Job {
+            target: None,
+            open: false,
+            split: &BTreeSet::new(),
+            seed: None,
+        };
+        let (result, qualified, _) = self.finished(&whole, job, &pieces, meter)?;
+        Ok(Picked {
+            results: alloc::vec![result],
+            separated: true,
+            qualified,
+            leaks: Vec::new(),
+            memo: None,
+        })
+    }
+
+    /// The cells of `test`: with seeds, those that hold them; with none, every one.
+    fn cells(
+        &self,
+        test: &WindingTest,
+        seeds: &[CellSeed],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Picked, Refused> {
+        let Partition { lists, .. } = self.partition(test, meter)?;
+        let seats = self.seated(&lists, seeds, meter)?;
+        let split = self.split_faces(&lists)?;
+        let mut picked = Picked {
+            results: Vec::new(),
+            separated: true,
+            qualified: false,
+            leaks: Vec::new(),
+            memo: None,
+        };
+        for (number, list) in &lists {
+            let seated: Vec<&CellSeed> = seeds
+                .iter()
+                .zip(&seats)
+                .filter(|(_, seat)| *seat == number)
+                .map(|(seed, _)| seed)
+                .collect();
+            if !seeds.is_empty() && seated.is_empty() {
+                continue;
+            }
+            let pieces: Vec<Outward> = list.iter().map(|held| held.piece.clone()).collect();
+            let merged = merge_with(&pieces, Merge::RemoveRedundant, Rules::default(), meter)?;
+            let job = Job {
+                target: None,
+                open: false,
+                split: &split,
+                seed: seated.iter().map(|seed| seed.key).min(),
+            };
+            let (mut result, qualified, _) = self.finished(&merged, job, &pieces, meter)?;
+            let mut keys: Vec<OperandKey> = seated.iter().map(|seed| seed.key).collect();
+            keys.sort_unstable();
+            result.cell = Some(self.report(&merged, list, keys));
+            if let [one, two, ..] = seated.as_slice() {
+                let walls: Vec<Piece> = pieces.iter().map(|p| p.piece.clone()).collect();
+                let corners = corners_of(&merged)?;
+                let passage = narrowest(&walls, &corners, one.point, two.point, meter)?;
+                picked.leaks.push(passage);
+            }
+            picked.results.push(result);
+            picked.qualified = picked.qualified || qualified;
+        }
+        Ok(picked)
     }
 
     /// `outer` and `walls` merged, each wall twice, back to back, a seam held along it.
-    fn cells(
+    fn walled(
         &self,
         outer: &[Outward],
         walls: &[&Classified],
@@ -419,9 +916,9 @@ impl Scene<'_> {
         test: &WindingTest,
         target: Option<usize>,
         meter: &mut WorkMeter<'_>,
-    ) -> Result<Vec<Body>, Refused> {
+    ) -> Result<Picked, Refused> {
         if let Some((runs, _)) = self.wire_runs(target, meter)? {
-            return Ok(alloc::vec![wire(&wires::kept(test, &runs), meter)?]);
+            return wire_picked(&wires::kept(test, &runs), meter);
         }
         let pieces: Vec<Outward> = self
             .classified
@@ -430,13 +927,35 @@ impl Scene<'_> {
             .filter(|c| test.holds(&c.front) || test.holds(&c.back))
             .map(as_kept)
             .collect();
-        let pieces = self.sourced(pieces);
+        self.sheet(&self.sourced(pieces), target, meter)
+    }
+
+    /// `pieces` of the sheet at `target`, as a sheet.
+    fn sheet(
+        &self,
+        pieces: &[Outward],
+        target: Option<usize>,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Picked, Refused> {
         let rules = Rules {
             cuts: &[],
             open: true,
         };
-        let body = rebuild_with(&pieces, &self.ready.carriers, self.merge, rules, meter)?;
-        Ok(alloc::vec![body])
+        let merged = merge_with(pieces, self.merge, rules, meter)?;
+        let job = Job {
+            target,
+            open: true,
+            split: &BTreeSet::new(),
+            seed: None,
+        };
+        let (result, qualified, _) = self.finished(&merged, job, pieces, meter)?;
+        Ok(Picked {
+            results: alloc::vec![result],
+            separated: true,
+            qualified,
+            leaks: Vec::new(),
+            memo: None,
+        })
     }
 
     /// The pieces of the sheet or wire at `target`, cut by the others, that hold `seeds`.
@@ -445,10 +964,9 @@ impl Scene<'_> {
         target: Option<usize>,
         seeds: &[P3],
         meter: &mut WorkMeter<'_>,
-    ) -> Result<Vec<Body>, Refused> {
+    ) -> Result<Picked, Refused> {
         if let Some((runs, others)) = self.wire_runs(target, meter)? {
-            let curves = wires::trimmed(&runs, &others, seeds)?;
-            return Ok(alloc::vec![wire(&curves, meter)?]);
+            return wire_picked(&wires::trimmed(&runs, &others, seeds)?, meter);
         }
         let of_target = self
             .classified
@@ -483,24 +1001,60 @@ impl Scene<'_> {
             .filter(|(_, face)| chosen.contains(face))
             .map(|(piece, _)| piece.clone())
             .collect();
-        let rules = Rules {
-            cuts: &[],
-            open: true,
-        };
-        let body = rebuild_with(&kept, &self.ready.carriers, self.merge, rules, meter)?;
-        Ok(alloc::vec![body])
+        self.sheet(&kept, target, meter)
     }
 
     /// The curves where operands meet.
-    fn section(&self, meter: &mut WorkMeter<'_>) -> Result<Vec<Body>, Refused> {
+    fn section(&self, meter: &mut WorkMeter<'_>) -> Result<Picked, Refused> {
         let mut pieces = Vec::with_capacity(self.classified.len());
         for c in self.classified {
             let owner = self.ready.owners.get(c.polygon);
             pieces.push((c.piece.clone(), owner.copied().ok_or(RebuildError::Broken)?));
         }
         let curves = section(&pieces, meter)?;
-        Ok(alloc::vec![wire(&curves, meter)?])
+        let split = BTreeSet::new();
+        let polygons: Vec<usize> = self.classified.iter().map(|c| c.polygon).collect();
+        let naming = match self.named(None) {
+            Some(named) => {
+                let sources = Sources {
+                    operands: &named,
+                    owners: &self.ready.owners,
+                    rows: &self.ready.rows,
+                    planes: &self.planes,
+                    split: &split,
+                    seed: None,
+                    known: None,
+                };
+                Some(name_curves(self.op, &curves, &polygons, &sources)?)
+            }
+            None => None,
+        };
+        let names = naming.as_ref().map(|held| &held.names);
+        let body = wire(&curves, names, meter)?;
+        let (history, made) =
+            naming.map_or((None, Vec::new()), |held| (Some(held.history), held.made));
+        Ok(Picked {
+            results: alloc::vec![Combined {
+                body,
+                history,
+                names: made,
+                cell: None,
+            }],
+            separated: true,
+            qualified: false,
+            leaks: Vec::new(),
+            memo: None,
+        })
     }
+}
+
+/// The grid points nearest `merged`'s corners.
+fn corners_of(merged: &Merged) -> Result<Vec<P3>, NumError> {
+    let mut out = Vec::with_capacity(merged.vertices.len());
+    for vertex in &merged.vertices {
+        out.push(vertex.to_grid()?.value());
+    }
+    Ok(out)
 }
 
 /// Whether `seed` lies on `piece`, its boundary included.
@@ -526,9 +1080,71 @@ pub fn combine(
     ctx: &OpContext<'_>,
     exec: &Exec<'_>,
     input: &BooleanInput<'_>,
-) -> Result<OpOutput<Vec<Vec<Body>>>, OpError> {
+) -> Result<OpOutput<Vec<Vec<Combined>>>, OpError> {
     let mut meter = ctx.meter();
     let ready = prepare(input, &mut meter).map_err(|e| prepared(ctx, e, &meter))?;
+    let (classified, exactness, _) = arranged_input(ctx, exec, input, &ready, None, &mut meter)?;
+    let scene = (&ready, &classified[..], None);
+    selected(ctx, input, scene, exactness, &mut meter).map(|(out, _)| out)
+}
+
+/// The box around every operand's polygons: the least and greatest of the operands' own boxes,
+/// which is [`around`] of all their polygons, as each corner counts the same wherever it is
+/// taken; [`around`] of none when no operand has a polygon.
+fn cell_of(cells: &[Result<Option<Cell>, NumError>]) -> Result<Cell, NumError> {
+    let mut whole: Option<Cell> = None;
+    for cell in cells {
+        let Some(one) = (*cell)? else {
+            continue;
+        };
+        whole = Some(match whole {
+            None => one,
+            Some(mut both) => {
+                for (low, v) in both.low.iter_mut().zip(one.low) {
+                    *low = (*low).min(v);
+                }
+                for (high, v) in both.high.iter_mut().zip(one.high) {
+                    *high = (*high).max(v);
+                }
+                both
+            }
+        });
+    }
+    whole.map_or_else(|| around(&[]), Ok)
+}
+
+/// The arrangement of `ready`, taking each box's answer from `reuse` where it holds one; how exact
+/// it is; and the boxes it solved.
+pub(crate) fn arranged_input(
+    ctx: &OpContext<'_>,
+    exec: &Exec<'_>,
+    input: &BooleanInput<'_>,
+    ready: &Prepared,
+    reuse: Option<&Solved>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Vec<Classified>, Exactness, Solved), OpError> {
+    let exactness = operands_exactness(ctx, input)?;
+    let cell = cell_of(&ready.cells).map_err(|e| numbers(ctx, e))?;
+    let (classified, solved) = arrange_reusing(
+        exec,
+        cell,
+        Winding::new(),
+        &ready.polygons,
+        LEAF_POLYGONS,
+        &ready.tests,
+        reuse,
+        meter,
+    )
+    .map_err(|e| arranged(ctx, e, meter))?;
+    Ok((classified, exactness, solved))
+}
+
+/// How exact a result of `input`'s operands is: the least exact of them, refused unless the caller
+/// accepts it.
+pub(crate) fn operands_exactness(
+    ctx: &OpContext<'_>,
+    input: &BooleanInput<'_>,
+) -> Result<Exactness, OpError> {
     let mut exactness = Exactness::Exact;
     for operand in &input.operands {
         exactness = exactness
@@ -538,54 +1154,67 @@ pub fn combine(
     if !accepted(exactness, input.accept) {
         return Err(fail(ctx, CombineDetail::NotAccepted { would: exactness }));
     }
-    let cell = around(&ready.polygons).map_err(|e| numbers(ctx, e))?;
-    let classified = arrange(
-        exec,
-        cell,
-        Winding::new(),
-        &ready.polygons,
-        LEAF_POLYGONS,
-        &ready.tests,
-        &mut meter,
-    )
-    .map_err(|e| arranged(ctx, e, &meter))?;
+    Ok(exactness)
+}
+
+/// Each selection's bodies, and what the last selection that merged once kept for the next merge
+/// and naming.
+pub(crate) type Selected = (OpOutput<Vec<Vec<Combined>>>, Option<(Memo, NameIds)>);
+
+/// `input`'s selections, read from one arrangement, a merge and naming starting from `reuse` where
+/// given.
+pub(crate) fn selected(
+    ctx: &OpContext<'_>,
+    input: &BooleanInput<'_>,
+    (ready, classified, reuse): (&Prepared, &[Classified], Option<Again<'_>>),
+    exactness: Exactness,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Selected, OpError> {
+    let mut operands: Vec<&Operand<'_>> = input.operands.iter().collect();
+    operands.sort_by_key(|operand| operand.key);
     let scene = Scene {
-        ready: &ready,
-        classified: &classified,
+        op: ctx.path(),
+        operands,
+        planes: ready.polygons.iter().map(|p| p.piece.face).collect(),
+        ready,
+        classified,
         merge: input.merge,
+        reuse,
     };
+    let mut memo = None;
     let mut lists = Vec::with_capacity(ready.tests.len());
     let mut notes = Vec::new();
     let jobs = input.select.iter().zip(&ready.tests).zip(&ready.targets);
     for ((selection, test), target) in jobs {
         let found = match selection {
-            Selection::Imprint { .. } => scene.kept(test, &scene.others(*target), &mut meter),
-            Selection::Split { .. } => scene.split(test, &mut meter).map(|(bodies, walls)| {
-                if !walls {
-                    notes.extend(Diagnostic::new(
-                        "bool.cutter_does_not_separate",
-                        "nothing cuts the target right through",
-                    ));
-                }
-                bodies
-            }),
-            Selection::Keep { .. } => scene.keep(test, *target, &mut meter),
-            Selection::Trim { seeds, .. } => scene.trim(*target, seeds, &mut meter),
-            Selection::Section => scene.section(&mut meter),
+            Selection::Imprint { .. } => scene.kept(test, &scene.others(*target), *target, meter),
+            Selection::Split { .. } => scene.split(test, *target, meter),
+            Selection::GeneralFuse => scene.fused(test, meter),
+            Selection::Cells { seeds, .. } => scene.cells(test, seeds, meter),
+            Selection::Keep { .. } => scene.keep(test, *target, meter),
+            Selection::Trim { seeds, .. } => scene.trim(*target, seeds, meter),
+            Selection::Section => scene.section(meter),
             Selection::Unite
             | Selection::Subtract { .. }
             | Selection::Intersect
-            | Selection::Where(_) => scene.kept(test, &[], &mut meter),
+            | Selection::Where(_) => scene.kept(test, &[], *target, meter),
         };
-        let bodies = found.map_err(|e| refused(ctx, e, &mut meter))?;
-        for body in &bodies {
-            let report = check(body, exactness, Level::Cheap, &mut meter)
-                .map_err(|stopped: Stopped| ctx.stopped(&meter, stopped, REBUILD))?;
+        let picked = found.map_err(|e| refused(ctx, e, meter))?;
+        picked.note(&mut notes);
+        memo = picked.memo.or(memo);
+        let results = picked.results;
+        for body in results.iter().map(|result| &result.body) {
+            let report = check(body, exactness, Level::Cheap, meter)
+                .map_err(|stopped: Stopped| ctx.stopped(meter, stopped, REBUILD))?;
             if !report.passed() {
                 return Err(fail(ctx, CombineDetail::ResultInvalid));
             }
+            certify(body, meter).map_err(|e| refused(ctx, e.into(), meter))?;
         }
-        if bodies.iter().all(|body| body.arenas().edges.is_empty()) {
+        if results
+            .iter()
+            .all(|result| result.body.arenas().edges.is_empty())
+        {
             notes.extend(Diagnostic::new(
                 "bool.empty_result",
                 "the selection keeps nothing",
@@ -597,11 +1226,11 @@ pub fn combine(
                 ));
             }
         }
-        lists.push(bodies);
+        lists.push(results);
     }
     let mut out = OpOutput::new(lists, exactness);
     out.diagnostics = notes;
-    Ok(out)
+    Ok((out, memo))
 }
 
 /// The one body of `operands` under `selection`.
@@ -610,7 +1239,7 @@ fn one(
     exec: &Exec<'_>,
     operands: &[Operand<'_>],
     selection: Selection,
-) -> Result<OpOutput<Body>, OpError> {
+) -> Result<OpOutput<Combined>, OpError> {
     let input = BooleanInput {
         operands: operands.to_vec(),
         select: alloc::vec![selection],
@@ -641,7 +1270,7 @@ pub fn unite(
     ctx: &OpContext<'_>,
     exec: &Exec<'_>,
     operands: &[Operand<'_>],
-) -> Result<OpOutput<Body>, OpError> {
+) -> Result<OpOutput<Combined>, OpError> {
     one(ctx, exec, operands, Selection::Unite)
 }
 
@@ -656,7 +1285,7 @@ pub fn subtract(
     exec: &Exec<'_>,
     target: OperandKey,
     operands: &[Operand<'_>],
-) -> Result<OpOutput<Body>, OpError> {
+) -> Result<OpOutput<Combined>, OpError> {
     one(ctx, exec, operands, Selection::Subtract { target })
 }
 
@@ -669,6 +1298,6 @@ pub fn intersect(
     ctx: &OpContext<'_>,
     exec: &Exec<'_>,
     operands: &[Operand<'_>],
-) -> Result<OpOutput<Body>, OpError> {
+) -> Result<OpOutput<Combined>, OpError> {
     one(ctx, exec, operands, Selection::Intersect)
 }

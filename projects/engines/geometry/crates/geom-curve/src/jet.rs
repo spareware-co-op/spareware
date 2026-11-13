@@ -36,6 +36,11 @@ use crate::error::CurveError;
 use crate::form::count;
 use crate::tight::{self, point};
 
+/// The highest order a jet can be built from derivatives at: k! is a finite double up to 170!
+/// (about 7.3·10³⁰⁶), and [`Jet::from_derivatives`] divides by it, so at 171 its factorial
+/// overflows and the jet is [`CurveError::NotFinite`], whatever the derivatives are.
+pub(crate) const MAX_ORDER: usize = 170;
+
 /// Enclosures of the Taylor coefficients f⁽ᵏ⁾/k!, k = 0 … K (module documentation).
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Jet {

@@ -380,7 +380,9 @@ const WIDE_TWIN: &str = include_str!("../../geom-num/verus/wide.rs");
 const WIDE: &str = include_str!("../../geom-num/src/wide.rs");
 
 /// Every function the wide twin runs, all of them proven there.
-const WIDE_PROVEN: [&str; 18] = [
+const WIDE_PROVEN: [&str; 20] = [
+    "limb_at",
+    "put_limb",
     "fill",
     "is_zero",
     "signum",
@@ -526,6 +528,116 @@ fn every_function_the_wide_twin_runs_is_proven_and_compared() {
     assert_eq!(names, proven);
 }
 
+/// The functions marked `coverage(off)` on a Verus proof (chapter 28.8): the shipped file, its
+/// twin, the function, the proof function its mark cites, the requirement the twin gives it, and
+/// how many functions call it at least.
+const MARKED: [(&str, &str, &str, &str, &str, &str, usize); 5] = [
+    (
+        WIDE,
+        WIDE_TWIN,
+        "wide",
+        "limb_at",
+        "limb_lookup_never_misses",
+        "requires i < N",
+        9,
+    ),
+    (
+        WIDE,
+        WIDE_TWIN,
+        "wide",
+        "put_limb",
+        "limb_store_never_misses",
+        "requires i < N",
+        6,
+    ),
+    (
+        PLANE,
+        PLANE_TWIN,
+        "plane",
+        "fitted",
+        "a_fitted_step_is_never_none",
+        "requires step . is_some ( )",
+        2,
+    ),
+    (
+        PLANE,
+        PLANE_TWIN,
+        "plane",
+        "lpi_classify_total",
+        "lpi_classify_always_fits",
+        "requires - bound_126 ( ) < w1 < bound_126 ( )",
+        1,
+    ),
+    (
+        CROSSING,
+        CROSSING_TWIN,
+        "crossing",
+        "side_total",
+        "side_always_fits",
+        "requires - bound_84 ( ) < oa < bound_84 ( )",
+        1,
+    ),
+];
+
+/// A function marked `coverage(off)` on a Verus proof holds an arm that proof shows cannot run,
+/// and the proof holds for the calls Verus sees. So every function of the shipped file that calls
+/// a marked one is a function its twin proves; the twin gives the marked function its
+/// requirement, which Verus checks at each of those calls; the side that cannot run calls the
+/// proof function the mark cites, whose own requirement is `false`, so Verus accepts the call
+/// only where control cannot arrive; and the shipped function carries the mark and the citation.
+#[test]
+fn every_marked_function_is_called_only_where_its_proof_holds() {
+    for (shipped_text, twin_text, module, name, lemma, requirement, least) in MARKED {
+        let shipped = tokens(shipped_text);
+        let twin = tokens(twin_text);
+        let mut names = Vec::new();
+        fn_names(&shipped, &mut names);
+        names.sort();
+        names.dedup();
+        // The functions the twin proves: those below its `verus!` block and those inside it.
+        let mut proven = Vec::new();
+        fn_names(&twin, &mut proven);
+        let call = format!("{name} (");
+        let mut callers = Vec::new();
+        for caller in names.iter().filter(|n| n.as_str() != name) {
+            for item in find_fns(&shipped, caller) {
+                if canonical(&item).contains(&call) {
+                    callers.push(caller.clone());
+                }
+            }
+        }
+        assert!(callers.len() >= least, "{name}: {callers:?}");
+        for caller in &callers {
+            let inside = !find_fns_in_verus(&twin, caller).is_empty();
+            assert!(
+                proven.contains(caller) || inside,
+                "`fn {caller}` calls `{name}` but the {module} twin does not prove it"
+            );
+        }
+        let item = canonical(&find_fn(&twin, name).unwrap());
+        assert!(item.contains(requirement), "{name}: {item}");
+        assert!(
+            item.contains(&format!("proof ! {{ {lemma} ( ) ; }}")),
+            "{name}: {item}"
+        );
+        let proof = find_fns_in_verus(&twin, lemma);
+        assert_eq!(proof.len(), 1, "{lemma}");
+        let proof = canonical(&proof[0]);
+        assert!(proof.contains("requires false"), "{proof}");
+        let mark = format!(
+            "// proof: projects/engines/geometry/crates/geom-num/verus/{module}.rs::{lemma}\n#[cfg_attr(coverage_nightly, coverage(off))]\n"
+        );
+        let marked = shipped_text.replace("\r\n", "\n");
+        let at = marked
+            .find(&mark)
+            .unwrap_or_else(|| panic!("{name}: no mark"));
+        let after = &marked[at + mark.len()..];
+        let after = after.strip_prefix("#[inline]\n").unwrap_or(after);
+        let after = after.strip_prefix(&format!("fn {name}")).unwrap_or("");
+        assert!(after.starts_with('<') || after.starts_with('('), "{name}");
+    }
+}
+
 #[test]
 fn the_order_is_the_proven_comparison() {
     let cmp = find_fn(&tokens(WIDE), "cmp").unwrap();
@@ -621,12 +733,29 @@ fn shared_parts(item: &[TokenTree]) -> String {
 #[test]
 fn from_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body() {
     let twin = find_fn_in_verus(&tokens(WIDE_TWIN), "from_i128").expect("the twin's from_i128");
-    let shipped = find_fn(&tokens(WIDE), "from_i128").expect("wide.rs's from_i128");
+    // The shipped function opens with its compile-time guard, which the twin states in Verus's
+    // own form, `requires 2 <= L`: a width below two limbs does not build, so no caller can break
+    // the requirement. That one statement apart, the bodies are the same.
+    //
+    // The guard is found as two lines of text, so the file is read with one line ending,
+    // whichever a checkout gave it: Git writes `\r\n` on Windows unless told not to.
+    let wide = WIDE.replace("\r\n", "\n");
+    let guard = "        let () = Self::AT_LEAST_TWO_LIMBS;\n";
+    let opening = "    pub fn from_i128(v: i128) -> Self {\n";
+    assert!(wide.contains(&format!("{opening}{guard}")));
+    assert!(
+        wide.contains("const AT_LEAST_TWO_LIMBS: () = assert!(L >= 2, \"Wide<L> needs L >= 2\");")
+    );
+    let unguarded = wide.replacen(&format!("{opening}{guard}"), opening, 1);
+    let shipped = find_fn(&tokens(&unguarded), "from_i128").expect("wide.rs's from_i128");
     assert_eq!(shared_parts(&twin), shared_parts(&shipped));
+    let guarded = find_fn(&tokens(&wide), "from_i128").unwrap();
+    assert_ne!(shared_parts(&twin), shared_parts(&guarded));
     let text = canonical(&twin);
+    assert!(text.contains("requires 2 <= L <= 4096"), "{text}");
     assert!(text.contains("ensures r . value ( ) == v as int"), "{text}");
     // A change on either side is seen.
-    let changed = WIDE.replacen("(1u128 << 127)", "(1u128 << 126)", 1);
+    let changed = wide.replacen("(1u128 << 127)", "(1u128 << 126)", 1);
     let changed = find_fn(&tokens(&changed), "from_i128").unwrap();
     assert_ne!(shared_parts(&twin), shared_parts(&changed));
 }
@@ -729,17 +858,20 @@ const HAND_TWINS: [HandTwin; 3] = [
             "difference",
             "dot",
             "dot_point",
+            "fitted",
             "homogeneous",
             "homogeneous",
             "homogeneous_checked",
             "lpi_axis",
             "lpi_classify",
+            "lpi_classify_total",
             "mul_sub",
             "numerator",
             "product_difference",
             "side",
             "side_of_lpi_hand",
             "side_of_tpi_hand",
+            "span",
             "weight_and_offset",
             "within_budget",
         ],
@@ -755,6 +887,7 @@ const HAND_TWINS: [HandTwin; 3] = [
             "offsets",
             "orient2d_hand",
             "side",
+            "side_total",
             "ssi_axis",
         ],
         &["new"],

@@ -167,6 +167,35 @@ impl Attributes {
             .and_then(|by_name| by_name.get(&entity))
     }
 
+    /// The same classes with exactly these values, as an attribute step computes them afresh from
+    /// a history (piece G90). A value whose attribute has no class here is left out: every value
+    /// has a class.
+    #[must_use]
+    pub fn rebuilt(
+        &self,
+        values: impl IntoIterator<Item = (AttrId, NameKey, Carried)>,
+    ) -> Attributes {
+        let mut next = Attributes {
+            classes: self.classes.clone(),
+            values: BTreeMap::new(),
+        };
+        for (attr, entity, carried) in values {
+            if self.classes.contains_key(&attr) {
+                next.values.entry(attr).or_default().insert(entity, carried);
+            }
+        }
+        next
+    }
+
+    /// The same attributes with `attr`'s class set to `class`, whatever it was: for a definition
+    /// already checked against the class held (piece G90).
+    #[must_use]
+    pub fn defined_as(&self, attr: AttrId, class: Class) -> Attributes {
+        let mut next = self.clone();
+        next.classes.insert(attr, class);
+        next
+    }
+
     /// Every (attribute, entity, carried) triple, attributes then names in order.
     pub fn iter(&self) -> impl Iterator<Item = (&AttrId, &NameKey, &Carried)> {
         self.values

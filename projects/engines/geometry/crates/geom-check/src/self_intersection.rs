@@ -18,11 +18,17 @@
 //! - **Two faces meet only along shared edges and at shared vertices.** Every pair of faces is
 //!   tested. Two faces exactly on integer planes, or on planes their grid corners fix, are tested
 //!   exactly by `crate::planar`, whatever their shape. Two integer planes are compared exactly, in
-//!   320-bit integers, and other planes by certified intervals. Parallel planes certainly apart
-//!   cannot meet. A plane perpendicular to a cylinder's or cone's axis, or a plane and a sphere,
-//!   meet in one circle at most, so faces on them that share a full circle edge meet only along
-//!   it. Any other pair is reported unchecked.
+//!   320-bit integers, and other planes by certified intervals. Faces on parallel planes cannot
+//!   meet when the planes are certainly farther apart than the two faces may stray from them:
+//!   nothing for a face whose corners and edges lie on its plane exactly, and the body's bound
+//!   for any other, since group 2 held it no nearer. Nearer planes say nothing of where their
+//!   faces lie, and such a pair is unchecked. A plane perpendicular to a cylinder's or cone's
+//!   axis, or a plane and a sphere, meet in one circle at most, so faces on them that share a
+//!   full circle edge meet only along it. Any other pair is reported unchecked.
 //! - **Edges with a vertex where three planes meet** are tested by `crate::planar` too.
+//! - **A wall between two cells is two faces.** In a general body, two faces with the same edges,
+//!   each run the opposite way, are the two sides of one wall, each in its own cell's shell
+//!   (11.7), and do not cross. No other pair of coincident faces has that excuse.
 //!
 //! Guarantees:
 //!
@@ -51,10 +57,14 @@
     reason = "the names are the predicates': p, q, r and s segment ends, v a shared vertex, a to d 2D points"
 )]
 
+use alloc::vec::Vec;
+
 use geom_curve::{Circle, ParamCurve};
 use geom_num::predicate::orient3d;
 use geom_num::{Coord, Exactness, P3, Sign};
 use geom_run::Stopped;
+use geom_topo::BodyKind;
+use geom_topo::Sense;
 use geom_topo::entity::{Edge, Face, Vertex};
 use geom_topo::ix::Arena;
 use geom_topo::mass::Corner;
@@ -62,7 +72,7 @@ use geom_topo::{Arenas, Body, Ix};
 
 use crate::combinatorial::{edge_fins, face_fins, fin_edge, fin_face, rows};
 use crate::curved::{self, Pair};
-use crate::geometric::{Ends, corner, surface};
+use crate::geometric::{Ends, Surface, corner, limit, surface};
 use crate::planar::{self, Outline};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
@@ -75,6 +85,7 @@ pub(crate) fn check(
 ) -> Result<(), Stopped> {
     let a = body.arenas();
     let exact = matches!(exactness, Exactness::Exact);
+    let reach = limit(exactness);
     let outlines = planar::outlines(a, exact, sink)?;
     let pieces = |f: Ix<Face>| -> &[Outline] {
         outlines
@@ -95,11 +106,15 @@ pub(crate) fn check(
             }
         }
     }
+    let cells = body.kind() == BodyKind::General;
     for (i, f) in rows::<Face>(a.rows(Arena::Face)).enumerate() {
         for g in rows::<Face>(a.rows(Arena::Face)).skip(i).skip(1) {
             sink.charge()?;
+            if cells && back_to_back(a, f, g) {
+                continue;
+            }
             let found = if pieces(f).is_empty() || pieces(g).is_empty() {
-                other_faces_meet(a, f, g, exact)
+                other_faces_meet(a, f, g, exact, reach)
             } else {
                 planar::slots_meet(a, pieces(f), pieces(g), sink)?
             };
@@ -109,11 +124,47 @@ pub(crate) fn check(
     Ok(())
 }
 
-/// How two faces meet that are not both outlines, as far as their carriers say.
-fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool) -> Meet {
+/// The edges of `f`, each with the way its fin runs, sorted.
+fn runs(a: &Arenas, f: Ix<Face>) -> Vec<(u32, bool)> {
+    let mut out = Vec::new();
+    // By the walk every other check of a face's fins takes: a ring walked by hand here ran for
+    // ever, filling this list, under one changed comparison.
+    for fin in face_fins(a, f).filter_map(|n| a.fins.get(n)) {
+        out.push((fin.edge.row(), fin.sense == Sense::Forward));
+    }
+    out.sort_unstable();
+    out
+}
+
+/// Whether `f` and `g` are the two sides of one wall: the same edges, each run the opposite way.
+fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
+    let turned: Vec<(u32, bool)> = runs(a, g).into_iter().map(|(e, way)| (e, !way)).collect();
+    runs(a, f) == turned
+}
+
+/// How two faces meet that are not both outlines, as far as their carriers say of two faces that
+/// may stray from them. A face whose vertices and edges lie on its surface exactly cannot; any
+/// other may by `reach`, the body's bound, which is all group 2 held it to. The distance between
+/// two written planes must clear what both faces may stray before it keeps them apart: a face
+/// bent within its bound, written under a plane a step above a face it ran through, was once
+/// passed as apart from it (issue #783). In a body recorded Exact the bound is nothing, so
+/// neither face can stray, whatever the answer.
+///
+/// The carriers are first asked for the most the two faces may stray, twice `reach`. Only two
+/// parallel planes read it, and planes that clear the most clear what the faces do stray, which
+/// is no more; every other answer but unknown does not depend on it. So the faces are asked
+/// whether they hold to their surfaces, a certified test of each of their edges, only where the
+/// most leaves the pair unknown, and the answer is the one their own stray gives.
+fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool, reach: f64) -> Meet {
+    let stray = |on: &Surface, face| {
+        if on.holds_face(a, face) { 0.0 } else { reach }
+    };
     let lie = surface(a, f, exact)
         .zip(surface(a, g, exact))
-        .map(|(p, q)| p.lies_with(&q));
+        .map(|(p, q)| match p.lies_with(&q, reach + reach) {
+            Pair::Unknown => p.lies_with(&q, stray(&p, f) + stray(&q, g)),
+            settled => settled,
+        });
     match lie {
         Some(Pair::Apart) => Meet::Apart,
         Some(Pair::Circle) if shares_full_circle(a, f, g) => Meet::Apart,
@@ -337,13 +388,13 @@ fn drop(p: P3, k: usize) -> [i128; 2] {
 }
 
 /// `p − q`, exactly.
-fn diff(p: P3, q: P3) -> Option<[i128; 3]> {
+pub(crate) fn diff(p: P3, q: P3) -> Option<[i128; 3]> {
     let d = |a: Coord, b: Coord| i128::from(a.get()).checked_sub(i128::from(b.get()));
     Some([d(p.x, q.x)?, d(p.y, q.y)?, d(p.z, q.z)?])
 }
 
 /// `u × w`, exactly.
-fn cross(u: [i128; 3], w: [i128; 3]) -> Option<[i128; 3]> {
+pub(crate) fn cross(u: [i128; 3], w: [i128; 3]) -> Option<[i128; 3]> {
     let [u0, u1, u2] = u;
     let [w0, w1, w2] = w;
     let term =
@@ -356,7 +407,7 @@ fn cross(u: [i128; 3], w: [i128; 3]) -> Option<[i128; 3]> {
 }
 
 /// `u · w`, exactly.
-fn dot(u: [i128; 3], w: [i128; 3]) -> Option<i128> {
+pub(crate) fn dot(u: [i128; 3], w: [i128; 3]) -> Option<i128> {
     let [u0, u1, u2] = u;
     let [w0, w1, w2] = w;
     u0.checked_mul(w0)?

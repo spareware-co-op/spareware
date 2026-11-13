@@ -322,9 +322,9 @@ fn bytes_per_wall_body_are_recorded() {
     assert_eq!(m.unique_bytes, bytes);
     // The record in body.rs's header, per pointer width.
     #[cfg(target_pointer_width = "64")]
-    assert_eq!((m.bytes, m.chunks, size_of::<Body>()), (16_804, 29, 1_008));
+    assert_eq!((m.bytes, m.chunks, size_of::<Body>()), (16_804, 29, 1_016));
     #[cfg(target_pointer_width = "32")]
-    assert_eq!((m.bytes, m.chunks, size_of::<Body>()), (15_088, 29, 508));
+    assert_eq!((m.bytes, m.chunks, size_of::<Body>()), (15_088, 29, 512));
     // Built row by row instead, the same body holds more: each column grew by doubling.
     let pushed = wall_builder(false)
         .publish(BodyKind::Solid, wall_outside(), &mut meter())
@@ -424,13 +424,21 @@ fn no_container_iterates_by_hash_or_address() {
             "hashbrown",
             "IndexMap",
             "RandomState",
-            "ptr_eq",
             "as_ptr",
             "addr(",
             "thread_local",
         ] {
             assert!(!code.contains(banned), "{name} names {banned}");
         }
+        // One use of an address, in `Column::shares_chunk`: whether two handles are one chunk.
+        // It orders nothing, and it answers yes only for clones of one `Arc`, whatever the
+        // addresses, so the most a wrong "no" can cost is hashing a chunk again (23.8).
+        let allowed = usize::from(name == "column.rs");
+        assert_eq!(
+            code.matches("ptr_eq").count(),
+            allowed,
+            "{name} names ptr_eq"
+        );
         for line in code.lines().map(str::trim_start) {
             let item = line
                 .strip_prefix("pub(crate) ")

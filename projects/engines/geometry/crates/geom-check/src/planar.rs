@@ -2,17 +2,22 @@
 //! whether their vertices are grid points or the meetings of three planes (G134).
 //!
 //! What it does: an [`Outline`] is a flat face as this module reads it: its integer plane, and for
-//! each fin the edge's two ends and a plane that crosses the face's along the edge. That plane is
-//! the other face's across the edge, or, along a seam, a plane the edge's ends both lie on, or for
-//! two grid points one stood on them; so a side of the polygon is a pair of planes, as EMBER keeps
-//! it, and no test here ever needs the orientation of three implicit points, about 840 bits a term
-//! (19.2).
+//! each fin, ring by ring, the corner the edge starts at (it ends at the next fin's) and a plane
+//! that crosses the face's along the edge. That plane is the other face's across the edge, or,
+//! along a seam, a plane the edge's ends both lie on, or for two grid points one stood on them; so
+//! a side of the polygon is a pair of planes, as EMBER keeps it, and no test here ever needs the
+//! orientation of three implicit points, about 840 bits a term (19.2).
 //!
 //! - **A face and a line.** Where a face's plane meets another plane, [`Cut`] names each point of
 //!   the line by a plane that crosses it there. Moved infinitely little off the other plane, the
 //!   line crosses the face's boundary at sorted marks that pair up into stretches; the stretches on
 //!   the two sides together are the whole of the closed face on the line, with no special case for
 //!   a vertex or an edge lying on it.
+//! - **A face that keeps to one side of another's plane.** If its corners are all on one side of
+//!   that plane or on it, each one on it a vertex of the other face and each side along it an
+//!   edge of the other, it holds nothing else of the plane, so the two meet only at what they
+//!   share. One sign for each corner settles such a pair, with no line cut: every pair of faces
+//!   of a convex body.
 //! - **Two crossing faces.** Their stretches on their planes' line may overlap only where the two
 //!   faces share edges and vertices.
 //! - **Two faces on one plane.** Each side of each face, as a stretch of its own line, against the
@@ -21,25 +26,53 @@
 //! - **Two edges of one face.** Each is a stretch of its own line; they may meet only at a vertex
 //!   they share.
 //! - **A flat face its rounded corners have bent.** A Certified face whose grid corners leave one
-//!   plane has no plane to read, so it stands for the fan of triangles from its first corner, which
-//!   lies within the record's bound of the true face, provided every triangle turns the way the
-//!   first does. Each triangle is an outline, and the face meets another where any of its triangles
-//!   does. A bent face no fan can stand for has no outline.
+//!   plane has no plane to read, so it stands for the star of triangles from the mean of its
+//!   corners, one to each edge, which lies within the record's bound of the true face (every point
+//!   of it is a mix of rounded corners, each within the bound of its true place), provided every
+//!   triangle turns the way the ring does as a whole. Each triangle is an outline, and the face
+//!   meets another where any of its triangles does. A bent face no star can stand for has no
+//!   outline.
 //! - **A point against a shell.** The parity of the crossings of a ray along the line of two of the
-//!   point's planes, moved infinitely little off both, so that no tie is left.
+//!   point's planes, moved infinitely little off both, so that no tie is left. A shell is its
+//!   faces' outlines, a bent face's being the triangles of its star: they close the shell as the
+//!   faces do, and group 3's orientation asks them of every body that is not recorded Exact, so
+//!   that where a shell lies does not depend on where a ring starts either.
+//!
+//! Why a star from the mean, and not a fan from a corner: what the checker finds of a body must
+//! depend on where the body lies and on nothing else. A fan needs a corner to start from, and a
+//! ring's first corner is chosen by the body's names (`geom_topo::Builder::publish_named` starts
+//! each loop at its least fin), so a mirror, which turns every ring round, and a pattern's copy,
+//! which renames everything, moved the fan, and a valid body's exact copy could be found crossing
+//! itself. The mean of a ring's corners, the triangles from it and the test of their turning are
+//! the same whichever corner the ring starts at and whichever way it runs, and the mean of a ring
+//! moved by any affine map is the moved mean. So a body, its mirror, and every exact move, quarter
+//! turn, scale by one factor and renumbered copy of it get one verdict. A scale by unlike factors
+//! keeps the triangles and what they cross, but not the angles between them, so it can leave a
+//! triangle turned against its ring: such a face waits, and no crossing is found that was not
+//! there before.
 //!
 //! Guarantees:
 //!
 //! - **Exact.** Every decision is the sign of a plane at a grid point or at a meeting of three
 //!   planes (`geom_num::plane::Plane::side` and `side_of_tpi`, within 384 bits), or the sign of a
 //!   3 × 3 determinant of normals (`geom_num::plane::Tpi::weight`). No double is read and nothing
-//!   is sampled.
+//!   is sampled. The mean of n corners is such a meeting, of the planes n x = Σx, n y = Σy and
+//!   n z = Σz, so a star needs no arithmetic of its own.
+//! - **One verdict for a shape.** A bent face's star depends on where its corners lie, in their
+//!   order round the ring, and on nothing else (above). Nor does the plane a face of grid corners
+//!   is read on depend on how its plane is written: it is the written plane if the corners lie on
+//!   it, and otherwise the plane the corners fix, whether or not the written one is given by
+//!   integers (a whole scale can make it so).
 //! - **Any polygon.** A face that is not convex, has holes, or has several outer loops is cut like
 //!   any other. A vertex on the line, an edge along it and a touch from one side all fall to the
 //!   moved line, which sees each as ordinary crossings at one mark.
 //! - **Fails closed.** A step that cannot be decided is [`Meet::Unknown`], which the caller reports,
 //!   never a pass. A face without a plane or a plane for each side has no outline, and its pairs are
-//!   the caller's to report.
+//!   the caller's to report. So is a bent face with no star: one with a second loop, one whose
+//!   mean does not see every edge from inside, and one of five or more corners so wide that a
+//!   triangle's plane passes a plane's budget (its normal is the sum of n − 2 normals of triangles
+//!   of grid points, each below 2^82, against the budget's 2^83; a ring of four never does). No
+//!   point is given a side of a shell with a face that has neither.
 //! - **Runs on bodies that passed group 2.** Every vertex is on every face it bounds, so a shared
 //!   edge lies on both faces' planes and the other face's plane crosses along it.
 //! - **Charged.** One meter unit per side visited and per pair of sides or stretches compared.
@@ -53,8 +86,10 @@
 //! to the query alone, as `geom_topo::query` applies it.
 //!
 //! Cost: an outline is linear in its face's fins, a pair of faces linear in their sides plus the
-//! sorting of their crossings, a pair of faces on one plane the product of their sides. Each test
-//! allocates a short list, reserved fallibly with its logical bytes on the meter. Recursion: none.
+//! sorting of their crossings, a pair of faces on one plane the product of their sides. A pair
+//! one of whose faces keeps to one side of the other's plane costs a sign for each of its corners
+//! and reserves nothing. Each other test allocates a short list, reserved fallibly with its
+//! logical bytes on the meter. Recursion: none.
 
 use alloc::vec::Vec;
 use core::cmp::Ordering;
@@ -65,7 +100,7 @@ use geom_num::wide::I256;
 use geom_num::{P3, Sign};
 use geom_op::run::reserve;
 use geom_run::{LogicalSize, Stopped};
-use geom_topo::entity::{Edge, Face, Shell, Vertex};
+use geom_topo::entity::{Edge, Face, Loop, Shell, Vertex};
 use geom_topo::ix::Arena;
 use geom_topo::mass::Corner;
 use geom_topo::query::Side as ShellSide;
@@ -74,7 +109,7 @@ use geom_topo::{Arenas, Ix, SurfaceKind};
 use crate::combinatorial::{edge_fins, face_fins, face_loops, fin_edge, fin_ends, fin_face, rows};
 use crate::curved::Pair;
 use crate::geometric::{corner, planes_lie, surface};
-use crate::self_intersection::Meet;
+use crate::self_intersection::{Meet, cross, diff, dot};
 use crate::sink::Sink;
 
 /// Why a test could not finish.
@@ -110,27 +145,30 @@ fn known<T>(step: Option<T>) -> Result<T, Stuck> {
     step.ok_or(Stuck::Undecided)
 }
 
-/// A vertex of an outline.
+/// A corner of an outline.
 #[derive(Clone)]
 struct End {
-    vertex: Ix<Vertex>,
+    /// The vertex; `None` for the hub of a star, which no vertex is at and no other face shares.
+    vertex: Option<Ix<Vertex>>,
     at: Corner,
 }
 
-/// One fin of an outline.
+/// One side of an outline, from the corner it starts at. It ends where the next side round its
+/// ring starts ([`Outline::rounds`]), so that corner is kept once.
 #[derive(Clone)]
 struct Side {
-    /// The edge; `None` for a diagonal of a fan.
+    /// The edge; `None` for a spoke of a star.
     edge: Option<Ix<Edge>>,
+    /// The loop it runs round; `None` round a triangle of a star, which is one ring.
+    ring: Option<Ix<Loop>>,
     start: End,
-    end: End,
     /// A plane through the edge that crosses the face's plane: the edge's line is where they meet.
     across: Plane,
 }
 
 impl LogicalSize for Side {
-    /// Two corners of 200 bytes with their vertices, a plane of 64, and the edge.
-    const LOGICAL_BYTES: u64 = 480;
+    /// A corner of 200 bytes with its vertex, a plane of 64, the edge and the loop.
+    const LOGICAL_BYTES: u64 = 280;
 }
 
 /// A flat face, as this module reads it.
@@ -142,7 +180,7 @@ pub(crate) struct Outline {
     pub(crate) implicit: bool,
 }
 
-/// What a face is made of, as outlines: one, a fan's, or none for a face that has none.
+/// What a face is made of, as outlines: one, a star's, or none for a face that has none.
 pub(crate) struct Slot(pub(crate) Vec<Outline>);
 
 impl LogicalSize for Slot {
@@ -205,9 +243,11 @@ struct Cut {
 }
 
 impl Cut {
-    /// The point where `plane` crosses the line, if it does.
+    /// The point where `plane` crosses the line, if it does. Made by [`Tpi::meeting`], which finds
+    /// only the sign of the point's weight: every caller reads a sign from it, and [`Tpi::new`],
+    /// which also works out where the point is, cost a box three times its build (23.13).
     fn at(&self, plane: &Plane) -> Option<Tpi> {
-        Tpi::new(self.first, self.second, *plane).ok()
+        Tpi::meeting(self.first, self.second, *plane).ok()
     }
 
     /// The order along the line of the points where `a` and `b` cross it. `b` rises along the
@@ -412,19 +452,30 @@ fn side_of(
     let (start, end) = (corner(a, first)?, corner(a, last)?);
     Some(Side {
         edge: Some(edge),
+        ring: a.fins.loop_.get(fin).copied(),
         across: across(a, (face, edge), plane, [&start, &end], exact)?,
         start: End {
-            vertex: first,
+            vertex: Some(first),
             at: start,
-        },
-        end: End {
-            vertex: last,
-            at: end,
         },
     })
 }
 
 /// Face `f` as an outline, if it is one: exactly on an integer plane, with a plane for each side.
+///
+/// The plane is the one written for the face, if that is given by integers and the face's
+/// corners lie on it, and otherwise the one its grid corners fix. So which plane a face of grid
+/// corners is read on depends on where the corners lie and not on how its plane is written: a
+/// plane written half a step off its corners is no integer plane, and the same plane scaled by
+/// two is one, a step off them.
+///
+/// Why that keeps what a Certified body promises: group 2 alone holds each corner within the
+/// body's bound of the surface written for the face, whichever plane is read here, and a body
+/// reaches group 3 only if it passed. Group 3 has always judged the corners: a face is the polygon
+/// its corners make, never a piece of its written plane. So a face read on the plane its corners
+/// fix is the same polygon, every point of it a mix of corners that lie within the bound of the
+/// written surface; a written plane the corners are farther from is group 2's fault, found before
+/// any face is read.
 fn outline(
     a: &Arenas,
     f: Ix<Face>,
@@ -435,12 +486,25 @@ fn outline(
     if !matches!(kind, Some(SurfaceKind::Plane(_))) {
         return Ok(None);
     }
-    let Some(plane) = surface(a, f, exact)
-        .and_then(|on| on.grid)
-        .or_else(|| corners_plane(a, f))
-    else {
-        return Ok(None);
-    };
+    if let Some(written) = surface(a, f, exact).and_then(|on| on.grid)
+        && let Some(one) = outline_on(a, f, written, exact, sink)?
+    {
+        return Ok(Some(one));
+    }
+    match corners_plane(a, f) {
+        Some(fixed) => outline_on(a, f, fixed, exact, sink),
+        None => Ok(None),
+    }
+}
+
+/// Face `f` as an outline on `plane`, if its corners lie on it and each side has a plane.
+fn outline_on(
+    a: &Arenas,
+    f: Ix<Face>,
+    plane: Plane,
+    exact: bool,
+    sink: &mut Sink<'_, '_>,
+) -> Result<Option<Outline>, Stopped> {
     let mut sides: Vec<Side> = reserve(sink.meter(), count(face_fins(a, f).count()))?;
     for n in face_fins(a, f) {
         sink.charge()?;
@@ -475,7 +539,8 @@ fn same_way(first: [i128; 3], second: [i128; 3]) -> bool {
     sum.is_some_and(|s| s.signum() == Sign::Positive)
 }
 
-/// A corner of a face a fan stands for: where it lies, and the edge from it to the next.
+/// A corner of a face a star stands for, where a spoke ends: where it lies, and the edge from it
+/// to the next.
 #[derive(Clone, Copy)]
 struct Spoke {
     at: P3,
@@ -519,77 +584,200 @@ fn ring(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Option<Vec<S
     Ok(Some(out))
 }
 
-/// One triangle of a fan, its three corners with the edges along its sides: `None` for corners on
-/// one line.
-fn triangle(
-    face: Ix<Face>,
-    [p, q, r]: [Option<&Spoke>; 3],
-    edges: [Option<Ix<Edge>>; 3],
-    sink: &mut Sink<'_, '_>,
-) -> Result<Option<Outline>, Stopped> {
-    let plane = p
-        .zip(q)
-        .zip(r)
-        .and_then(|((p, q), r)| Plane::through(p.at, q.at, r.at).ok());
-    let Some(plane) = plane else {
-        return Ok(None);
-    };
-    let mut sides: Vec<Side> = reserve(sink.meter(), 3)?;
-    for ((from, to), edge) in [(p, q), (q, r), (r, p)].into_iter().zip(edges) {
-        sides.extend(from.zip(to).and_then(|(s, t)| {
-            Some(Side {
-                edge,
-                start: End {
-                    vertex: s.vertex,
-                    at: Corner::Grid(s.at),
-                },
-                end: End {
-                    vertex: t.vertex,
-                    at: Corner::Grid(t.at),
-                },
-                across: stood_on(&plane, s.at, t.at)?,
-            })
-        }));
-    }
-    Ok((sides.len() == 3).then_some(Outline {
-        face,
-        plane,
-        sides,
-        implicit: false,
-    }))
+/// `p`'s coordinates.
+fn wide(p: P3) -> [i128; 3] {
+    [p.x, p.y, p.z].map(|c| i128::from(c.get()))
 }
 
-/// Flat face `f` as the fan of triangles from its first corner, if it has a ring of grid corners and
-/// every triangle turns the way the first does; none otherwise.
-fn fan(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Vec<Outline>, Stopped> {
+/// `u` + `v`: `None` past an `i128`, which no sum over a ring of an arena reaches.
+fn added(u: [i128; 3], v: [i128; 3]) -> Option<[i128; 3]> {
+    let mut sum = u;
+    for (total, term) in sum.iter_mut().zip(v) {
+        *total = total.checked_add(term)?;
+    }
+    Some(sum)
+}
+
+/// The plane with normal `normal` through the point `through`: `None` for a zero normal, or a
+/// normal or an offset past a plane's budget.
+fn plane_at(normal: [i128; 3], through: [i128; 3]) -> Option<Plane> {
+    Plane::new(normal, dot(normal, through)?.checked_neg()?).ok()
+}
+
+/// The hub of a star: the mean of a ring's corners, kept exactly as their sum Σ and their number n.
+struct Hub {
+    sum: [i128; 3],
+    count: i128,
+    /// The mean as the meeting of the planes n x = Σx, n y = Σy and n z = Σz.
+    at: Corner,
+}
+
+/// One triangle of a star, as planes: its own, turning as the ring runs, and one along each of its
+/// three sides that crosses it.
+struct Wedge {
+    plane: Plane,
+    /// Along the spoke from the hub out to the edge's start.
+    out: Plane,
+    /// Along the ring's edge, from its start to its end.
+    along: Plane,
+    /// Along the spoke from the edge's end back to the hub.
+    back: Plane,
+}
+
+impl Hub {
+    /// The mean of `ring`'s corners: `None` for a ring of none.
+    ///
+    /// Bit budget: n coordinates of at most 2^40 sum to at most n · 2^40, far inside a plane's
+    /// offset (2^125), and n is far inside its normal (2^83), so the three planes are planes; they
+    /// lie along the three axes, so they meet.
+    fn of(ring: &[Spoke]) -> Option<Hub> {
+        let count = i128::from(count(ring.len()));
+        let mut corners = ring.iter().map(|spoke| wide(spoke.at));
+        let sum = corners.try_fold([0_i128; 3], added)?;
+        let [x, y, z] = sum;
+        let at = Tpi::new(
+            Plane::new([count, 0, 0], x.checked_neg()?).ok()?,
+            Plane::new([0, count, 0], y.checked_neg()?).ok()?,
+            Plane::new([0, 0, count], z.checked_neg()?).ok()?,
+        );
+        Some(Hub {
+            sum,
+            count,
+            at: Corner::Tpi(at.ok()?),
+        })
+    }
+
+    /// n times the vector from the mean to `p`, n p − Σ: whole numbers, where the vector itself
+    /// has n in its denominators.
+    fn arm(&self, p: P3) -> Option<[i128; 3]> {
+        let mut out = wide(p);
+        for (slot, total) in out.iter_mut().zip(self.sum) {
+            *slot = self.count.checked_mul(*slot)?.checked_sub(total)?;
+        }
+        Some(out)
+    }
+
+    /// The triangle from the mean to `p` and on to `q`, as planes. Its own has the normal
+    /// (n p − Σ) × (q − p) and holds `p`, so it holds `q` and the mean. A spoke's is the plane
+    /// through the spoke and along an axis the triangle's plane is not parallel to, which
+    /// therefore crosses it; the edge's is one stood on its two corners.
+    ///
+    /// `None` for a triangle of no area, and for one whose plane is past a plane's budget. The
+    /// normal is the sum, over the ring's other n − 2 corners r, of (p − r) × (q − r), the normal
+    /// of a triangle of grid points, below 2^82: it stays inside 2^83 for every ring of four
+    /// corners, and for a ring of five or more unless the ring spans most of the frame.
+    fn wedge(&self, p: P3, q: P3) -> Option<Wedge> {
+        let (from, to) = (self.arm(p)?, self.arm(q)?);
+        let plane = plane_at(cross(from, diff(q, p)?)?, wide(p))?;
+        let k = plane.n().iter().position(|&c| c != 0)?;
+        let mut unit = [0_i128; 3];
+        *unit.get_mut(k)? = 1;
+        let spoke = |arm: [i128; 3], end: P3| plane_at(cross(arm, unit)?, wide(end));
+        Some(Wedge {
+            plane,
+            out: spoke(from, p)?,
+            along: stood_on(&plane, p, q)?,
+            back: spoke(to, q)?,
+        })
+    }
+}
+
+/// One triangle of a star as an outline: from the hub out to `p`, along `p`'s edge to `q`, and
+/// back. The hub is a meeting of planes but no vertex, so the outline is not marked `implicit`:
+/// the face's own edges all run between grid points, and are tested as the segments they are.
+fn triangle(
+    face: Ix<Face>,
+    hub: &Hub,
+    wedge: &Wedge,
+    (p, q): (&Spoke, &Spoke),
+    sink: &mut Sink<'_, '_>,
+) -> Result<Outline, Stopped> {
+    let middle = End {
+        vertex: None,
+        at: hub.at.clone(),
+    };
+    let rim = |s: &Spoke| End {
+        vertex: Some(s.vertex),
+        at: Corner::Grid(s.at),
+    };
+    let mut sides: Vec<Side> = reserve(sink.meter(), 3)?;
+    sides.push(Side {
+        edge: None,
+        ring: None,
+        start: middle,
+        across: wedge.out,
+    });
+    sides.push(Side {
+        edge: Some(p.edge),
+        ring: None,
+        start: rim(p),
+        across: wedge.along,
+    });
+    sides.push(Side {
+        edge: None,
+        ring: None,
+        start: rim(q),
+        across: wedge.back,
+    });
+    Ok(Outline {
+        face,
+        plane: wedge.plane,
+        sides,
+        implicit: false,
+    })
+}
+
+/// Whether every one of `normals`, those of a star's triangles, points the way their sum does.
+///
+/// The sum is n times the ring's area vector, whatever point the star is drawn from, so each
+/// triangle is asked to turn the way the ring does as a whole. No triangle is the one the others
+/// are held to, so the answer does not depend on where the ring starts.
+fn one_way(normals: impl Iterator<Item = [i128; 3]> + Clone) -> bool {
+    let mut each = normals.clone();
+    let mut all = normals;
+    each.try_fold([0_i128; 3], added)
+        .is_some_and(|whole| all.all(|one| same_way(one, whole)))
+}
+
+/// Flat face `f` as the star of triangles from the mean of its corners, one to each edge, if it
+/// has a ring of grid corners and every triangle turns the way the ring does as a whole; none
+/// otherwise.
+///
+/// The mean, the triangles and the test of their turning are the same whichever corner the ring
+/// starts at and whichever way it runs, and the mean of a ring moved by an affine map is the moved
+/// mean. So a face's star, and what the checker finds of it, depend on where its corners lie and on
+/// nothing else: not on a name, nor on the order a body was built in. A fan from the ring's first
+/// corner did depend on them, and found a valid body's mirror crossing itself.
+fn star(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Vec<Outline>, Stopped> {
     let Some(ring) = ring(a, f, sink)? else {
         return Ok(Vec::new());
     };
-    let pieces = ring.len().saturating_sub(2);
-    let mut out: Vec<Outline> = reserve(sink.meter(), count(pieces))?;
-    let mut turn: Option<[i128; 3]> = None;
-    let edge = |k: usize| ring.get(k).map(|s| s.edge);
-    for k in 0..pieces {
-        let (next, after) = (k.saturating_add(1), k.saturating_add(2));
-        let corners = [ring.first(), ring.get(next), ring.get(after)];
-        // Only the first triangle has the first edge, and only the last the edge back.
-        let edges = [
-            (k == 0).then(|| edge(0)).flatten(),
-            edge(next),
-            (after.saturating_add(1) == ring.len())
-                .then(|| edge(after))
-                .flatten(),
-        ];
-        let piece = triangle(f, corners, edges, sink)?.filter(|one| {
-            let normal = one.plane.n();
-            same_way(*turn.get_or_insert(normal), normal)
-        });
-        let Some(one) = piece else {
+    // Only a ring of no corners has no mean, and it has no triangle to ask for one.
+    let hub = Hub::of(&ring);
+    let mut out: Vec<Outline> = reserve(sink.meter(), count(ring.len()))?;
+    for (p, q) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+        let wedge = hub
+            .as_ref()
+            .and_then(|hub| Some((hub, hub.wedge(p.at, q.at)?)));
+        let Some((hub, wedge)) = wedge else {
             return Ok(Vec::new());
         };
-        out.push(one);
+        out.push(triangle(f, hub, &wedge, (p, q), sink)?);
     }
-    Ok(out)
+    let turns = one_way(out.iter().map(|one| one.plane.n()));
+    Ok(if turns { out } else { Vec::new() })
+}
+
+/// What face `f` is made of, as outlines: its own, a star's triangles, or none.
+fn slot(a: &Arenas, f: Ix<Face>, exact: bool, sink: &mut Sink<'_, '_>) -> Result<Slot, Stopped> {
+    Ok(Slot(match outline(a, f, exact, sink)? {
+        Some(one) => {
+            let mut list: Vec<Outline> = reserve(sink.meter(), 1)?;
+            list.push(one);
+            list
+        }
+        None => star(a, f, sink)?,
+    }))
 }
 
 /// One slot per face of `a`.
@@ -600,19 +788,26 @@ pub(crate) fn outlines(
 ) -> Result<Vec<Slot>, Stopped> {
     let mut out: Vec<Slot> = reserve(sink.meter(), u64::from(a.rows(Arena::Face)))?;
     for f in rows::<Face>(a.rows(Arena::Face)) {
-        out.push(Slot(match outline(a, f, exact, sink)? {
-            Some(one) => {
-                let mut list: Vec<Outline> = reserve(sink.meter(), 1)?;
-                list.push(one);
-                list
-            }
-            None => fan(a, f, sink)?,
-        }));
+        out.push(slot(a, f, exact, sink)?);
     }
     Ok(out)
 }
 
 impl Outline {
+    /// Each side with the corner it ends at: where the next side round its ring starts, and the
+    /// ring's first side after its last. The sides are kept ring by ring, in the order each ring
+    /// runs, and group 1 has held every loop closed, each fin ending at the vertex the next
+    /// starts from; a star's triangle is one ring of three. So the next side round the ring is
+    /// the one kept after it, if that is of its ring, and otherwise the first kept of its ring.
+    fn rounds(&self) -> impl Iterator<Item = (&Side, &End)> {
+        self.sides.iter().enumerate().map(|(at, side)| {
+            let of_ring = |other: &&Side| other.ring == side.ring;
+            let after = self.sides.get(at.saturating_add(1)).filter(of_ring);
+            let next = after.or_else(|| self.sides.iter().find(of_ring));
+            (side, next.map_or(&side.start, |to| &to.start))
+        })
+    }
+
     /// Where its boundary crosses `cut`, on its plane where it meets `against`, moved infinitely
     /// little to the side of `against` that `above` names: a vertex on `against` counts as below
     /// the moved line, so one that only touches it gives two crossings or none. Sorted.
@@ -624,15 +819,15 @@ impl Outline {
         sink: &mut Sink<'_, '_>,
     ) -> Result<Vec<Mark>, Stuck> {
         let mut marks: Vec<Mark> = reserve(sink.meter(), count(self.sides.len()))?;
-        for side in &self.sides {
+        for (side, end) in self.rounds() {
             sink.charge()?;
             let from = known(side.start.at.side(against).ok())?;
-            let to = known(side.end.at.side(against).ok())?;
+            let to = known(end.at.side(against).ok())?;
             if (from == above) != (to == above) {
                 let mark = if from == Sign::Zero {
                     cut.mark(&side.start.at)?
                 } else if to == Sign::Zero {
-                    cut.mark(&side.end.at)?
+                    cut.mark(&end.at)?
                 } else {
                     Mark(side.across)
                 };
@@ -691,14 +886,12 @@ fn joins(
     sink: &mut Sink<'_, '_>,
 ) -> Result<Vec<Stretch>, Stuck> {
     let mut out: Vec<Stretch> = reserve(sink.meter(), count(f.sides.len().saturating_mul(2)))?;
-    for s in &f.sides {
-        let shared = s.edge.is_some() && g.sides.iter().any(|t| t.edge == s.edge);
-        if shared && cut.holds(&s.start.at) && cut.holds(&s.end.at) {
-            let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&s.end.at)?);
+    for (s, end) in f.rounds() {
+        if s.runs_on(g) && cut.holds(&s.start.at) && cut.holds(&end.at) {
+            let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&end.at)?);
             out.push(cut.stretch(from, to)?);
         }
-        let met = g.sides.iter().any(|t| t.start.vertex == s.start.vertex);
-        if met && cut.holds(&s.start.at) {
+        if s.starts_on(g) && cut.holds(&s.start.at) {
             let at = cut.mark(&s.start.at)?;
             out.push(Stretch { from: at, to: at });
         }
@@ -735,8 +928,73 @@ fn along(
     Ok(Meet::Apart)
 }
 
-/// How two faces on crossing planes meet.
+impl Side {
+    /// Whether the corner this side starts at is a vertex of `other` too: the one vertex, not
+    /// another at its place. A star's hub is no vertex, so it is shared with nothing, not with
+    /// another star's hub at the same place either.
+    fn starts_on(&self, other: &Outline) -> bool {
+        let at = |v| other.sides.iter().any(|t| t.start.vertex == Some(v));
+        self.start.vertex.is_some_and(at)
+    }
+
+    /// Whether this side's edge is an edge of `other` too. A star's spoke is no edge.
+    fn runs_on(&self, other: &Outline) -> bool {
+        let along = |e| other.sides.iter().any(|t| t.edge == Some(e));
+        self.edge.is_some_and(along)
+    }
+}
+
+impl Outline {
+    /// Whether this face reaches the plane of `other`, which crosses its own, only where the two
+    /// faces share a vertex or an edge: its corners on one side of that plane or on it, and not
+    /// all on it; each corner on the plane a vertex of `other`; and each side along the plane an
+    /// edge of `other`. Two such faces meet nowhere else, since they can meet only on `other`'s
+    /// plane.
+    ///
+    /// Why the corners decide it. A face is a closed, bounded piece of its plane whose boundary is
+    /// its sides, so it lies inside the convex hull of its corners, and the other plane's
+    /// equation, which is zero or of one sign at every corner, is so over the whole face. The
+    /// planes cross, so on the face's own plane the equation is zero along one line and of both
+    /// signs about every point of that line. So it is zero at no point with a neighbourhood in
+    /// the face, only on a side. Along a side it runs evenly from one end's value to the other's,
+    /// neither of the other sign, so it is zero at an end that is on the plane, along the whole
+    /// side if both ends are, and nowhere else. What the face holds of the other plane is
+    /// therefore its corners on it and its sides along it and nothing more, whatever its shape:
+    /// not convex, with holes, or one triangle of a star.
+    ///
+    /// Every pair of faces of a convex body is settled here, by one sign for each corner. The
+    /// answer is the one [`crossing`]'s cut gives, which finds the same corners and sides on the
+    /// planes' line and excuses them by the same two tests of what is shared
+    /// ([`Side::starts_on`], [`Side::runs_on`]). A face with corners on both sides of the plane,
+    /// or with a corner or a side on it that the other does not share, is left to the cut; so is
+    /// one with every corner on it, a face folded onto the planes' line.
+    fn rests_on(&self, other: &Outline, sink: &mut Sink<'_, '_>) -> Result<bool, Stuck> {
+        let (mut above, mut below) = (false, false);
+        for (side, end) in self.rounds() {
+            sink.charge()?;
+            match known(side.start.at.side(&other.plane).ok())? {
+                Sign::Positive => above = true,
+                Sign::Negative => below = true,
+                Sign::Zero => {
+                    let along = known(end.at.side(&other.plane).ok())? == Sign::Zero;
+                    let shared = side.starts_on(other) && (!along || side.runs_on(other));
+                    if !shared {
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+        Ok(above != below)
+    }
+}
+
+/// How two faces on crossing planes meet: apart if either reaches the other's plane only at what
+/// they share ([`Outline::rests_on`]), with no line cut; otherwise as their stretches of the
+/// planes' line lie.
 fn crossing(f: &Outline, g: &Outline, sink: &mut Sink<'_, '_>) -> Result<Meet, Stuck> {
+    if f.rests_on(g, sink)? || g.rests_on(f, sink)? {
+        return Ok(Meet::Apart);
+    }
     let cut = Cut {
         first: f.plane,
         second: g.plane,
@@ -780,13 +1038,13 @@ fn same_side(
 /// other; then each side, which must keep them on opposite sides of it if they both reach it.
 fn coplanar(f: &Outline, g: &Outline, sink: &mut Sink<'_, '_>) -> Result<Meet, Stuck> {
     for (one, other) in [(f, g), (g, f)] {
-        for side in &one.sides {
+        for (side, end) in one.rounds() {
             let cut = Cut {
                 first: one.plane,
                 second: side.across,
             };
             let from = cut.mark(&side.start.at)?;
-            let to = cut.mark(&side.end.at)?;
+            let to = cut.mark(&end.at)?;
             let own = [cut.stretch(from, to)?];
             let cuts = other.stretches(&side.across, &cut, sink)?;
             if along((one, other), &cut, &own, &cuts, sink)? == Meet::Cross {
@@ -838,14 +1096,15 @@ fn faces_meet(
     settled(found, Meet::Unknown)
 }
 
-/// Where two sides meet on the line of the first: `None` if the second keeps to one side of it.
-fn contact(cut: &Cut, s: &Side, t: &Side) -> Result<Option<Stretch>, Stuck> {
+/// Where two sides meet on the line of the first: `None` if the second, which ends at `end`,
+/// keeps to one side of it.
+fn contact(cut: &Cut, s: &Side, (t, end): (&Side, &End)) -> Result<Option<Stretch>, Stuck> {
     let from = known(t.start.at.side(&s.across).ok())?;
-    let to = known(t.end.at.side(&s.across).ok())?;
+    let to = known(end.at.side(&s.across).ok())?;
     let point = |at: Mark| Stretch { from: at, to: at };
     Ok(match (from, to) {
         (Sign::Zero, Sign::Zero) => {
-            let (p, q) = (cut.mark(&t.start.at)?, cut.mark(&t.end.at)?);
+            let (p, q) = (cut.mark(&t.start.at)?, cut.mark(&end.at)?);
             Some(cut.stretch(p, q)?)
         }
         (p, q) if p == q => None,
@@ -864,23 +1123,24 @@ pub(crate) fn edges_meet(
 ) -> Result<Meet, Stopped> {
     let found = (|| -> Result<Meet, Stuck> {
         sink.charge()?;
-        let side = |e| known(o.sides.iter().find(|s| s.edge == Some(e)));
-        let (s, t) = (side(first)?, side(second)?);
+        let side = |e| known(o.rounds().find(|(s, _)| s.edge == Some(e)));
+        let ((s, s_end), (t, t_end)) = (side(first)?, side(second)?);
         let cut = Cut {
             first: o.plane,
             second: s.across,
         };
-        let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&s.end.at)?);
+        let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&s_end.at)?);
         let own = cut.stretch(from, to)?;
-        let Some(touch) = contact(&cut, s, t)? else {
+        let Some(touch) = contact(&cut, s, (t, t_end))? else {
             return Ok(Meet::Apart);
         };
         let Some(common) = cut.overlap(&own, &touch)? else {
             return Ok(Meet::Apart);
         };
         let mut runs: Vec<Stretch> = reserve(sink.meter(), 2)?;
-        for end in [&s.start, &s.end] {
-            if [&t.start, &t.end].iter().any(|e| e.vertex == end.vertex) {
+        // Both sides are edges, so each of their ends is a vertex, never a star's hub.
+        for end in [&s.start, s_end] {
+            if [&t.start, t_end].iter().any(|e| e.vertex == end.vertex) {
                 let at = cut.mark(&end.at)?;
                 runs.push(Stretch { from: at, to: at });
             }
@@ -914,15 +1174,13 @@ fn frame(p: &Corner) -> Option<[Plane; 3]> {
 /// parity of the faces pierced is the side.
 fn point_side(
     p: &Corner,
-    shell: &[Outline],
+    shell: &[Slot],
     sink: &mut Sink<'_, '_>,
 ) -> Result<Option<ShellSide>, Stuck> {
     let [x, y, z] = known(frame(p))?;
     let on = |c: &Corner| [&x, &y, &z].iter().all(|q| c.side(q) == Ok(Sign::Zero));
-    if shell
-        .iter()
-        .any(|o| o.sides.iter().any(|s| on(&s.start.at)))
-    {
+    let outlines = || shell.iter().flat_map(|slot| slot.0.iter());
+    if outlines().any(|o| o.sides.iter().any(|s| on(&s.start.at))) {
         return Ok(None);
     }
     let ray = Cut {
@@ -930,7 +1188,7 @@ fn point_side(
         second: y,
     };
     let mut inside = false;
-    for o in shell {
+    for o in outlines() {
         sink.charge()?;
         // A face parallel to the ray cannot be crossed by it, even one that holds it unmoved.
         if ray.at(&o.plane).is_none() || ray.order(&Mark(z), &Mark(o.plane))? != Ordering::Less {
@@ -960,7 +1218,16 @@ fn point_side(
 }
 
 /// Which side of closed shell `t` shell `s` lies on: the side of the first of `s`'s corners that is
-/// not at a corner of `t`, or `None` if there is none, or a face of `t` has no outline.
+/// not at a corner of `t`, or `None` if there is none, or a face of `t` has neither an outline nor
+/// a star.
+///
+/// Each face of `t` is read as group 3 read it against every other face: its outline, or for a
+/// bent face the triangles of its star, which close the shell as the faces do (two neighbours
+/// share their edge, two triangles of a star their spoke). So the side does not depend on where a
+/// ring starts or which way it runs, as the count of a ray's crossings with a fan from each loop's
+/// first corner does on a bent shell (`geom_topo::query::side_of_shell`). Two shells that do not
+/// cross lie wholly on one side of each other, so whichever corner of `s` comes first gives the
+/// one answer, and a corner at a star's hub is passed over like one at a vertex.
 pub(crate) fn shell_side(
     a: &Arenas,
     s: Ix<Shell>,
@@ -970,16 +1237,19 @@ pub(crate) fn shell_side(
     let of = |shell: Ix<Shell>| {
         rows::<Face>(a.rows(Arena::Face)).filter(move |&f| a.faces.shell.get(f) == Some(&shell))
     };
-    let mut shell: Vec<Outline> = reserve(sink.meter(), count(of(t).count()))?;
+    let mut shell: Vec<Slot> = reserve(sink.meter(), count(of(t).count()))?;
     for f in of(t) {
-        let Some(one) = outline(a, f, false, sink)? else {
-            return Ok(None);
-        };
-        shell.push(one);
+        shell.push(slot(a, f, false, sink)?);
     }
+    // A face nothing stands for would leave the shell open to the ray, so against such a shell no
+    // corner is asked. (No body brings one this far: such a face shares a corner with its
+    // neighbours, so their planes are within twice the bound of each other or cross, and each of
+    // those pairs was reported unchecked before any shell was compared.)
+    let closed = shell.iter().all(|one| !one.0.is_empty());
     let corners = of(s)
         .flat_map(|f| face_fins(a, f))
-        .filter_map(|n| fin_ends(a, n).and_then(|(v, _)| corner(a, v)));
+        .filter_map(|n| fin_ends(a, n).and_then(|(v, _)| corner(a, v)))
+        .filter(|_| closed);
     for p in corners {
         let side = settled(point_side(&p, &shell, sink), None)?;
         if side.is_some() {
@@ -1010,6 +1280,126 @@ mod tests {
     fn crossing_point() -> Corner {
         let (p, q) = (P3::new(0, 0, 0).unwrap(), P3::new(10, 0, 0).unwrap());
         Corner::Lpi(Lpi::new(p, q, wall(5)).unwrap())
+    }
+
+    /// The grid point (`x`, `y`, `z`).
+    fn grid(x: i64, y: i64, z: i64) -> P3 {
+        P3::new(x, y, z).unwrap()
+    }
+
+    /// A ring's corners as a star reads them; no test here asks for their vertices or edges.
+    fn spokes(corners: &[[i64; 3]]) -> Vec<Spoke> {
+        corners
+            .iter()
+            .map(|&[x, y, z]| Spoke {
+                at: grid(x, y, z),
+                vertex: Ix::new(0).unwrap(),
+                edge: Ix::new(0).unwrap(),
+            })
+            .collect()
+    }
+
+    /// Whether `corner` lies on `plane`.
+    fn on(corner: &Corner, plane: &Plane) -> bool {
+        corner.side(plane) == Ok(Sign::Zero)
+    }
+
+    #[test]
+    fn a_sum_or_a_plane_that_does_not_fit_is_refused() {
+        assert_eq!(added([1, 2, 3], [10, 20, 30]), Some([11, 22, 33]));
+        let most = i128::MAX;
+        for past in [[most, 0, 0], [0, most, 0], [0, 0, most]] {
+            assert_eq!(added(past, [1; 3]), None);
+        }
+        let plane = plane_at([0, 0, 2], [5, 6, 7]).unwrap();
+        assert_eq!((plane.n(), plane.d()), ([0, 0, 2], -14));
+        // No normal, a normal past its budget, an offset past its own, and one past an `i128`.
+        assert!(plane_at([0; 3], [5, 6, 7]).is_none());
+        assert!(plane_at([1 << 83, 0, 0], [0; 3]).is_none());
+        assert!(plane_at([1, 0, 0], [1 << 125, 0, 0]).is_none());
+        assert!(plane_at([i128::MAX, 0, 0], [2, 0, 0]).is_none());
+    }
+
+    #[test]
+    fn a_hub_is_the_mean_of_its_ring_exactly() {
+        // The mean, (5/4, 3/4, 1/2), is no grid point.
+        let ring = spokes(&[[0, 0, 0], [4, 0, 0], [1, 3, 0], [0, 0, 2]]);
+        let hub = Hub::of(&ring).unwrap();
+        assert_eq!((hub.sum, hub.count), ([5, 3, 2], 4));
+        for (normal, offset) in [
+            ([4, 0, 0], -5),
+            ([0, 4, 0], -3),
+            ([0, 0, 2], -1),
+            ([2, 2, 2], -5),
+        ] {
+            assert!(on(&hub.at, &Plane::new(normal, offset).unwrap()));
+        }
+        assert_eq!(hub.at.side(&wall(1)), Ok(Sign::Positive));
+        assert_eq!(hub.at.side(&wall(2)), Ok(Sign::Negative));
+        // Four times the way from the mean to a corner.
+        assert_eq!(hub.arm(grid(4, 0, 0)), Some([11, -3, -2]));
+        assert!(Hub::of(&[]).is_none());
+    }
+
+    #[test]
+    fn a_wedge_is_a_triangle_from_the_hub_with_a_plane_along_each_side() {
+        let ring = spokes(&[[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]]);
+        let hub = Hub::of(&ring).unwrap();
+        let (p, q) = (grid(10, 0, 0), grid(10, 10, 1));
+        let wedge = hub.wedge(p, q).unwrap();
+        // (4 p − Σ) × (q − p) = (20, −20, −1) × (0, 10, 1).
+        assert_eq!(wedge.plane.n(), [-10, -20, 200]);
+        let (start, end) = (Corner::Grid(p), Corner::Grid(q));
+        for corner in [&hub.at, &start, &end] {
+            assert!(on(corner, &wedge.plane));
+        }
+        // Each side's plane holds the side's two ends and not the third corner, and crosses.
+        for (side, ends, off) in [
+            (&wedge.out, [&hub.at, &start], &end),
+            (&wedge.along, [&start, &end], &hub.at),
+            (&wedge.back, [&end, &hub.at], &start),
+        ] {
+            assert!(ends.iter().all(|corner| on(corner, side)));
+            assert!(!on(off, side));
+            assert_eq!(planes_lie(&wedge.plane, side), Pair::Crossing);
+        }
+        // Run the other way, the triangle turns the other way.
+        assert_eq!(hub.wedge(q, p).unwrap().plane.n(), [10, 20, -200]);
+    }
+
+    #[test]
+    fn a_triangle_of_no_area_or_past_a_planes_budget_has_no_wedge() {
+        // The second corner is the mean of the five.
+        let ring = spokes(&[[-4, -2, 0], [0, 3, 1], [4, -2, 2], [6, 8, 0], [-6, 8, 2]]);
+        let hub = Hub::of(&ring).unwrap();
+        assert!(hub.wedge(grid(-4, -2, 0), grid(0, 3, 1)).is_none());
+        assert!(hub.wedge(grid(4, -2, 2), grid(6, 8, 0)).is_some());
+        // Across the whole frame: five corners pass the budget, four do not.
+        let m = (1_i64 << 40) - 1;
+        let wide = [[-m, -m, 0], [m, -m, 0], [m, m, 1], [0, m, 0], [-m, 0, 0]];
+        let (p, q) = (grid(-m, -m, 0), grid(m, -m, 0));
+        assert!(Hub::of(&spokes(&wide)).unwrap().wedge(p, q).is_none());
+        let four = [wide[0], wide[1], wide[2], wide[4]];
+        assert!(Hub::of(&spokes(&four)).unwrap().wedge(p, q).is_some());
+    }
+
+    #[test]
+    fn a_star_turns_one_way_when_every_normal_agrees_with_their_sum() {
+        let up = [0, 0, 5];
+        assert!(one_way([up, [1, 0, 2], [-1, 0, 2]].into_iter()));
+        assert!(!one_way([up, up, [0, 0, -1]].into_iter()));
+        // Two that cancel agree with nothing.
+        assert!(!one_way([up, [0, 0, -5]].into_iter()));
+        // No one of them is the one the rest are held to. Held to the first, these would pass
+        // started from the second and fail started from the first, which the third points against.
+        let mixed = [[4, 0, 1], [0, 0, 3], [-4, 0, 1]];
+        for start in 0..3 {
+            let mut turned = mixed;
+            turned.rotate_left(start);
+            assert!(one_way(turned.into_iter()), "{start}");
+        }
+        // A sum past an `i128` is no answer, so no star.
+        assert!(!one_way([[i128::MAX, 0, 0], [i128::MAX, 0, 0]].into_iter()));
     }
 
     #[test]

@@ -39,7 +39,7 @@
 
 use alloc::vec::Vec;
 
-use geom_run::{LogicalSize, Stop, Stopped, WorkMeter};
+use geom_run::{Budget, LogicalSize, Stop, Stopped, Usage, WorkMeter};
 
 use crate::context::OpContext;
 use crate::detail::{OpErrorDetail, RunDetail};
@@ -116,11 +116,31 @@ pub fn reserve<T: LogicalSize>(meter: &mut WorkMeter<'_>, count: u64) -> Result<
     }
 }
 
+/// What hears the work and logical memory a run charged, once its body returns: a replay holding
+/// work counts to their goldens (28.13, piece G98). Nothing an operation does depends on it.
+pub trait Tally: Sync {
+    /// One run charged `used`.
+    fn add(&self, used: Usage);
+}
+
 impl<'c> OpContext<'c> {
     /// A work meter over this context's budget, reading its cancellation.
     #[must_use]
     pub fn meter(&self) -> WorkMeter<'c> {
         let meter = WorkMeter::new(self.budget());
+        match self.cancel() {
+            Some(cancel) => meter.with_cancel(cancel),
+            None => meter,
+        }
+    }
+
+    /// A meter with no limit, reading this context's cancellation, for work that does not count
+    /// towards the budget: the postcondition check, whose level differs between a test build and a
+    /// shipped one, so a budget that counted it would stop an operation in one build and not in the
+    /// other (23.10, 28.4).
+    #[must_use]
+    pub fn unbudgeted_meter(&self) -> WorkMeter<'c> {
+        let meter = WorkMeter::new(Budget::UNLIMITED);
         match self.cancel() {
             Some(cancel) => meter.with_cancel(cancel),
             None => meter,
@@ -149,7 +169,11 @@ impl<'c> OpContext<'c> {
         body: impl FnOnce(&mut WorkMeter<'c>) -> Result<T, OpError>,
     ) -> Result<T, OpError> {
         let mut meter = self.meter();
-        let value = body(&mut meter)?;
+        let value = body(&mut meter);
+        if let Some(tally) = self.tally() {
+            tally.add(meter.used());
+        }
+        let value = value?;
         match meter.poll() {
             Ok(()) => Ok(value),
             Err(stopped) => Err(self.stopped(&meter, stopped, RUN)),

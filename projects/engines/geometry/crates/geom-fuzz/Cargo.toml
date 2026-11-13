@@ -7,14 +7,20 @@ publish.workspace = true
 license.workspace = true
 description = "Spare Kit geometry kernel, development only: fuzz harnesses and bounded proofs, run as tests on stable, under libFuzzer with cargo-bolero, in ClusterFuzzLite and under Kani."
 
+[features]
+# Reference mode (23.13; piece G106), for `replay-hashes`.
+reference = ["geom-test/reference"]
+
 [dependencies]
+# The triangulation target (G153) and the exact mesh target (G146).
+geom-mesh = { path = "../geom-mesh" }
 geom-num = { path = "../geom-num" }
-# The exact rationals of the nurbs target's oracle (Gate 2, 32.44), as geom-test's NURBS reference
+# The exact rationals of the nurbs target's oracle (Gate 2, 32.46), as geom-test's NURBS reference
 # uses them. MIT OR Apache-2.0, the version geom-test pins.
 dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
 # The maths target's 400-bit fixed point (geom_test::fixed). MIT OR Apache-2.0.
 dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
-# The kinds and transforms the curves and surfaces targets hold to the kind contract (Gate 2, 32.44). Ours,
+# The kinds and transforms the curves and surfaces targets hold to the kind contract (Gate 2, 32.46). Ours,
 # Apache-2.0.
 geom-bvh = { path = "../geom-bvh" }
 geom-curve = { path = "../geom-curve" }
@@ -32,23 +38,47 @@ geom-bench = { path = "../geom-bench", default-features = false }
 # Apache-2.0; development only).
 geom-gen = { path = "../geom-gen" }
 # The make target (G101): geom-make's operations under test, and the kernel crates its inputs and
-# oracles come from (ours, MPL-2.0).
+# oracles come from (ours, Apache-2.0).
 geom-check = { path = "../geom-check", features = ["full"] }
 geom-make = { path = "../geom-make" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
-# The planes target (G123): geom-poly's planes and orders, under test (ours, MPL-2.0).
+# The planes target (G123): geom-poly's planes and orders, under test (ours, Apache-2.0).
 geom-poly = { path = "../geom-poly" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
-# The arenas target (G80): geom-topo's arenas and builder, under test, and the kernel crates
-# whose values fill them (ours, MPL-2.0).
+# The code under test of the cbor target (G91), and the work meter it is read with; the cache
+# target's memo store (G105), and the operation types its entries hold (Apache-2.0, ours).
+geom-format = { path = "../geom-format" }
+# The encoder target (G86): an encoder written elsewhere, ciborium-ll's head and float encoding
+# (Apache-2.0), that each finished item is read and written again by; the versions geom-op's tests
+# pin.
+ciborium-ll = { version = "=0.2.2", default-features = false }
+ciborium-io = { version = "=0.2.2", default-features = false, features = ["alloc"] }
+# The attributes target (G90): geom-name's attribute step and geom-topo's definitions, under
+# test, with geom-op's history records (ours, Apache-2.0; geom-op and geom-topo are listed above).
+geom-name = { path = "../geom-name" }
+# The contract target (G82): the facade's operation schemas, held to the operation contract (ours,
+# Apache-2.0), and serde_json (MIT OR Apache-2.0), at the version geom-gen pins, to read back the
+# MCP tool descriptions geom-gen writes from them.
+engine-geometry = { path = "../../../crates/engine-geometry" }
+serde_json = "=1.0.154"
+# The arenas target (G80) tests geom-topo's arenas and builder, and the batch target (G104)
+# geom-op's batch driver, both listed above with the make target; the curve and surface kinds,
+# nurbs and run crates they also need are listed above too.
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under
 # libFuzzer, AFL or honggfuzz (cargo-bolero) and under Kani. MIT.
 bolero = "0.13.7"
+
+# Under libFuzzer on Linux, the tests' alarm thread sends SIGALRM to the fuzzing thread, so that
+# libFuzzer's per-input time limit works under the test harness (tests/common/mod.rs, issue #764):
+# `pthread_kill` as safe Rust, since the crate forbids unsafe code. MIT; only its `pthread` and
+# `signal` modules.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+nix = { version = "=0.31.3", default-features = false, features = ["pthread", "signal"] }
 
 [lints.rust]
 unsafe_code = "forbid"
