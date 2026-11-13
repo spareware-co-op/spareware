@@ -2355,11 +2355,11 @@ pub mod intersect {
     use geom_intersect::contact::{Reading, analyse};
     use geom_intersect::curve::{curves, self_crossings};
     use geom_intersect::curve_surface::curve_surface;
-    use geom_intersect::quadrics::natural;
-    use geom_intersect::quartic::meet;
     use geom_intersect::general::{Subdivided, subdivide};
     use geom_intersect::known::{Known, subdivide_known};
     use geom_intersect::march::{Traced, march};
+    use geom_intersect::quadrics::natural;
+    use geom_intersect::quartic::meet;
     use geom_intersect::selfcross::{SelfCrossing, self_intersect};
     use geom_intersect::{
         CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, LevelCurves, OnImplicit,

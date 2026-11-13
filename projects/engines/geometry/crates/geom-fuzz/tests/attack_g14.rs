@@ -39,7 +39,11 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, crossings, curves, encoder, euler, exact, general, intersect, level, linalg, make, maths, names, naming, natural, nurbs, open, operations, orient2d, pencils, piercing, planes, predicates, project, prune, quadric, records, reductions, references, roots, sequence, surfaces, transforms, variants, wide,
+    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, crossings,
+    curves, encoder, euler, exact, general, intersect, level, linalg, make, maths, names, naming,
+    natural, nurbs, open, operations, orient2d, pencils, piercing, planes, predicates, project,
+    prune, quadric, records, reductions, references, roots, sequence, surfaces, transforms,
+    variants, wide,
 };
 
 use geom_num::Sign;

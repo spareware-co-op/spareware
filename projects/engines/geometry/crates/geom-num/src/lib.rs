@@ -122,8 +122,8 @@ pub mod real;
 pub mod rng;
 pub mod scalar;
 pub mod sign;
-pub mod sturm;
 pub mod step;
+pub mod sturm;
 pub mod wide;
 pub mod wide32;
 
