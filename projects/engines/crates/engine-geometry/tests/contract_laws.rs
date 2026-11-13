@@ -36,6 +36,7 @@ use engine_geometry::operations::{
     move_by, pattern, prism, rotate, scale, six_volume, sphere, torus, twice_area, validity,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Scale, TypedTransform};
+use geom_num::plane::Plane;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::history::History;
 use geom_op::{ErrorKind, Family, NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath};
@@ -48,7 +49,7 @@ use geom_test::contract::{
 use geom_test::history::check_laws;
 use geom_test::rng::SplitMix64;
 use geom_topo::ix::Arena;
-use geom_topo::{Body, BodyKind, Builder, Ix, SurfaceKind};
+use geom_topo::{Body, BodyKind, Builder, Ix, PointKind, SurfaceKind};
 
 /// A call, its answer the text of its whole result.
 type S = Subject<'static, String>;
@@ -852,6 +853,32 @@ fn sheet() -> Held {
     edited(BodyKind::Sheet, |_| {})
 }
 
+/// The box with every corner held as where its three face planes meet, as the rebuild stores a
+/// point off the grid (G129): the same places, with no grid point for the exact sums.
+fn met() -> Held {
+    edited(BodyKind::Solid, |b| {
+        let a = &mut b.arenas;
+        let corners: Vec<P3> = a.points.iter().map(|q| q.grid().unwrap()).collect();
+        for (row, q) in (0..).zip(corners) {
+            let mut plane = |k: usize, at: i64| {
+                let mut n = [0; 3];
+                n[k] = 1;
+                a.planes
+                    .push(Plane::new(n, -i128::from(at)).unwrap())
+                    .unwrap()
+            };
+            let planes = [
+                plane(0, q.x.get()),
+                plane(1, q.y.get()),
+                plane(2, q.z.get()),
+            ];
+            a.points
+                .set(Ix::new(row).unwrap(), PointKind::Meet(planes))
+                .unwrap();
+        }
+    })
+}
+
 /// The first face of `held` on a plane, or the first not on one.
 fn face_of(held: &Held, plane: bool) -> u32 {
     let a = held.body.arenas();
@@ -909,6 +936,7 @@ fn drive_area() -> Driver {
             trigger("CurvedFace", area_of(cyl, face_of(cyl, false))),
             trigger("CurvedEdge", area_of(cyl, face_of(cyl, true))),
             trigger("NoLoops", area_of(&loopless(), 0)),
+            trigger("ImplicitVertex", area_of(&met(), 0)),
         ],
         edge: Some(area_of(&filling(), 0)),
         example: Some((vec![], shown.exactness)),
@@ -936,6 +964,7 @@ fn drive_volume() -> Driver {
             trigger("CurvedEdge", volume_of(cyl)),
             trigger("CurvedFace", volume_of(ball)),
             trigger("NoLoops", volume_of(&loopless())),
+            trigger("ImplicitVertex", volume_of(&met())),
             trigger("NotSolid", volume_of(&sheet())),
         ],
         edge: Some(volume_of(&filling())),
