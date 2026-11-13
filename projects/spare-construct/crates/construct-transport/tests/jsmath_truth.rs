@@ -4,7 +4,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -15,6 +16,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -23,6 +26,9 @@ mod support;
 use construct_transport::jsmath;
 use serde_json::Value;
 use support::load_json;
+
+/// One of jsmath's functions of one number.
+type UnaryFn = fn(f64) -> f64;
 
 fn bits(v: &Value) -> f64 {
     f64::from_bits(u64::from_str_radix(v.as_str().expect("hex"), 16).expect("hex digits"))
@@ -40,7 +46,7 @@ fn ulps(a: f64, b: f64) -> u64 {
 #[test]
 fn exp_sin_cos_and_asin_match_node_bit_for_bit() {
     let cases = load_json("expected/jsmath-cases.json");
-    let fns: [(&str, fn(f64) -> f64); 4] = [
+    let fns: [(&str, UnaryFn); 4] = [
         ("exp", jsmath::exp),
         ("sin", jsmath::sin),
         ("cos", jsmath::cos),

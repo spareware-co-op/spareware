@@ -96,7 +96,7 @@ pub fn project_and_record(name: &str) -> (Project, Recorded) {
     (super::support::load_project(name), load(name))
 }
 
-/// serde_json value of an output.
+/// `serde_json` value of an output.
 pub fn json<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serializes")
 }

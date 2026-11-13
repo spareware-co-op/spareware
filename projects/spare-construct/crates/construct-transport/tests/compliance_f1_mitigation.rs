@@ -3,7 +3,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,6 +15,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -41,7 +44,7 @@ fn count(n: usize) -> V {
 
 #[test]
 fn mitigation_register() {
-    set_clock(Some(1792540800000.0));
+    set_clock(Some(1_792_540_800_000.0));
     let all = compliance_support::expected("f1-mitigation");
     let cases = all["cases"].as_array().expect("cases");
     assert!(cases.len() > 700, "{} cases", cases.len());
@@ -99,7 +102,7 @@ fn mitigation_register() {
                 if !sc.t() || !res.t() {
                     V::Null
                 } else {
-                    let only: Option<HashSet<String>> = if a.g("only").is_arr() { Some(a.g("only").items().iter().map(|x| x.s()).collect()) } else { None };
+                    let only: Option<HashSet<String>> = if a.g("only").is_arr() { Some(a.g("only").items().iter().map(construct_transport::compliance::jv::Jx::s).collect()) } else { None };
                     mitigation::fails_at(sc, res, a.g("crit"), only.as_ref())
                 }
             }

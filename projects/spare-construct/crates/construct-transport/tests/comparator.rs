@@ -2,7 +2,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -13,6 +14,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -24,7 +27,7 @@ use support::{PROJECTS, assert_close, diff_json, load_expected, load_input};
 #[test]
 fn equal_within_tolerance() {
     let e = json!({ "a": 1.0, "b": [1e9, 0.0, "x", true, null], "c": { "d": "Infinity", "e": "-Infinity", "f": "NaN" }, "ts": 1, "ms": 2 });
-    let a = json!({ "a": 1.0000000001, "b": [1e9 + 0.5, 1e-10, "x", true, null], "c": { "d": "Infinity", "e": "-Infinity", "f": "NaN" }, "ts": 99 });
+    let a = json!({ "a": 1.000_000_000_1, "b": [1e9 + 0.5, 1e-10, "x", true, null], "c": { "d": "Infinity", "e": "-Infinity", "f": "NaN" }, "ts": 99 });
     assert_close(&a, &e, "$");
     assert_close(&json!(2), &json!(2.0), "$");
 }

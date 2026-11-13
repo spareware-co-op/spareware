@@ -3,7 +3,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,6 +15,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -90,11 +93,11 @@ fn the_drury_sample_is_built_and_analysed_as_the_prototype_does() {
         let cancel_on: Option<String> = case["cancelOn"].as_str().map(str::to_string);
         let cancelled = Cell::new(false);
         let mut status: Vec<Value> = Vec::new();
-        let cancel_fn = || cancelled.get();
+        let is_cancelled = || cancelled.get();
         // without the feature scripts the prototype still has the existing land use and calibration engine, which are core scripts
         let modules = if case["features"].as_bool().unwrap() { Modules::default() } else { Modules { elu: true, cb: true, ..Modules::none() } };
         let o = &case["opts"];
-        let opts = BuildOpts { gtfs: o.get("gtfs").and_then(Value::as_bool), run: o.get("run").and_then(Value::as_bool) == Some(true), extras: o.get("extras").and_then(Value::as_bool), modules, cancel: Some(&cancel_fn) };
+        let opts = BuildOpts { gtfs: o.get("gtfs").and_then(Value::as_bool), run: o.get("run").and_then(Value::as_bool) == Some(true), extras: o.get("extras").and_then(Value::as_bool), modules, cancel: Some(&is_cancelled) };
         let mut on_status = |t: &str| {
             status.push(json!(t));
             if cancel_on.as_deref().is_some_and(|c| t.contains(c)) {
@@ -106,7 +109,7 @@ fn the_drury_sample_is_built_and_analysed_as_the_prototype_does() {
         ck.same(&format!("{name}: requests"), &net.used(), &case["log"].as_array().unwrap().len());
         match (&r, case.get("error")) {
             (Err(e), Some(want)) => {
-                ck.check(&format!("{name}: error"), &json!({ "message": e.message(), "stage": match e { SampleError::Failed { stage, .. } => json!(stage), _ => Value::Null }, "abort": e.is_cancel() }), want);
+                ck.check(&format!("{name}: error"), &json!({ "message": e.message(), "stage": match e { SampleError::Failed { stage, .. } => json!(stage), SampleError::Cancelled => Value::Null }, "abort": e.is_cancel() }), want);
                 ck.check(&format!("{name}: progress"), &Value::Array(status.clone()), &case["status"]);
                 continue;
             }
@@ -122,7 +125,7 @@ fn the_drury_sample_is_built_and_analysed_as_the_prototype_does() {
         }
         let mut b = r.ok().unwrap();
         ck.check(&format!("{name}: notes"), &json!(b.notes), &case["notes"]);
-        ck.check(&format!("{name}: failed"), &Value::Array(b.failed.iter().map(|f| f.to_value()).collect()), &case["failed"]);
+        ck.check(&format!("{name}: failed"), &Value::Array(b.failed.iter().map(construct_transport::sample::Failed::to_value).collect()), &case["failed"]);
         ck.check(&format!("{name}: ms"), &json!(b.ms), &case["ms"]);
         let sv = &case["scenarios"];
         ck.check(&format!("{name}: scenarios"), &json!({ "s0": b.scenarios.s0, "s1": b.scenarios.s1, "s2": b.scenarios.s2, "s3": b.scenarios.s3 }), &json!({ "s0": sv["S0"], "s1": sv["S1"], "s2": sv["S2"], "s3": sv["S3"] }));
@@ -166,7 +169,7 @@ fn the_drury_sample_is_built_and_analysed_as_the_prototype_does() {
                 }
                 Ok(())
             };
-            let mut aopts = AnalyseOpts { extras: ao["extras"].as_bool(), modules, cancel: Some(&cancel_fn), runs: None };
+            let mut aopts = AnalyseOpts { extras: ao["extras"].as_bool(), modules, cancel: Some(&is_cancelled), runs: None };
             if ao["ownRuns"].as_bool() == Some(true) {
                 aopts.runs = Some(&mut own);
             }

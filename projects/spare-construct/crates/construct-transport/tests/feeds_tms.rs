@@ -5,7 +5,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -16,6 +17,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -170,9 +173,9 @@ fn peak_profiles_match() {
         );
         let mut get: GetOnce = profiles_request();
         let log = rec["requests"].as_array().unwrap();
-        let (used, res) = replay(&mut get, log, 0, label);
+        let (used, outcome) = replay(&mut get, log, 0, label);
         all_used(log, used, label);
-        let result = match res {
+        let result = match outcome {
             Err(m) => Err(m),
             Ok(()) => match get.into_answer() {
                 Some(Answer::Json(j)) => apply_profiles(&mut p, &j, NOW),

@@ -9,7 +9,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -20,6 +21,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -71,7 +74,7 @@ fn state_value(g: &Graph, p: &PerfSet, xt: &[f64], mv: bool) -> Value {
                 m.insert("ts".into(), json!([0.0, 1200.0, 2400.0].iter().map(|&x| n(arc_time(a, x, p))).collect::<Vec<_>>()));
                 if mv {
                     m.insert("mj".into(), a.mj.map_or(Value::Null, |j| j.to_value()));
-                    m.insert("mvRes".into(), a.mv_res.as_ref().map_or(Value::Null, |r| r.to_value()));
+                    m.insert("mvRes".into(), a.mv_res.as_ref().map_or(Value::Null, construct_transport::junction::EntryRes::to_value));
                 }
                 Value::Object(m)
             })
@@ -290,7 +293,7 @@ fn movement_functions_match_the_prototype() {
         let idx = |k: Option<usize>| k.map_or(Value::Null, |k| json!(k));
         let got: Vec<Value> = ent
             .iter()
-            .map(|e| json!({ "res": e.res.as_ref().map_or(Value::Null, |r| r.to_value()), "g": e.g.map_or(Value::Null, |g| g.to_value()),
+            .map(|e| json!({ "res": e.res.as_ref().map_or(Value::Null, construct_transport::junction::EntryRes::to_value), "g": e.g.map_or(Value::Null, |g| g.to_value()),
                 "n": idx(e.near), "f": idx(e.far), "o": idx(e.opp_minor), "opp": idx(e.opp) }))
             .collect();
         // The prototype keeps an override's gap value as saved ("3.9") and only ever uses it in

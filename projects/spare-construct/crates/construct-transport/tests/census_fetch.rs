@@ -4,7 +4,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -15,6 +16,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -37,8 +40,13 @@ fn poly_part(p: &Poly) -> Value {
 }
 
 fn merge(a: Value, b: Value) -> Value {
-    let mut m = a.as_object().cloned().unwrap_or_default();
-    m.extend(b.as_object().cloned().unwrap_or_default());
+    let mut m = match a {
+        Value::Object(m) => m,
+        _ => serde_json::Map::new(),
+    };
+    if let Value::Object(o) = b {
+        m.extend(o);
+    }
     Value::Object(m)
 }
 
@@ -71,7 +79,7 @@ fn every_download_asks_what_the_prototype_asked_and_words_failures_the_same() {
                         "sa2": e.sa2.iter().map(|a| merge(json!({ "code": a.code, "name": a.name, "n": a.n.map(plain), "year": plain(a.year), "growth": a.growth.map(plain) }), poly_part(&a.poly))).collect::<Vec<_>>(),
                     })
                 }),
-                "moe-schools" | "moe-ece" => dl.moe(net, &what[4..], &bounds, &mut st).map(|l| Value::Array(l.iter().map(|m| m.to_value()).collect())),
+                "moe-schools" | "moe-ece" => dl.moe(net, &what[4..], &bounds, &mut st).map(|l| Value::Array(l.iter().map(construct_transport::census::Moe::to_value).collect())),
                 "aup" => dl.aup(net, &bounds, &mut st).map(|a| {
                     json!({
                         "zones": a.zones.iter().map(|z| merge(json!({ "code": plain(z.code), "name": z.name, "group": z.group, "status": z.status }), poly_part(&z.poly))).collect::<Vec<_>>(),

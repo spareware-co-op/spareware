@@ -1,4 +1,4 @@
-//! DataHub and calibrate.js function by function against the JavaScript's recorded answers
+//! `DataHub` and calibrate.js function by function against the JavaScript's recorded answers
 //! (expected/calibrate-cases.json, from tools/transport-truth/gen-calibrate.mjs): road-name normalising, a count as a
 //! peak-hour volume and its method and weight, which counts are in use (with the 200 m rule for RAMM estimates), the
 //! regression, the through-origin and OLS fits, the statistics of a set of sites (band edges included), the journey-time
@@ -7,7 +7,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -18,6 +19,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -53,7 +56,7 @@ fn rules_and_constants() {
         .collect();
     assert_close(&Value::Object(rules), &c["rules"], "RULES");
     let mut om = Map::new();
-    for m in OBS_METHODS.iter() {
+    for m in &OBS_METHODS {
         let mut o = Map::new();
         o.insert("label".into(), json!(m.label));
         o.insert("weight".into(), json!(m.weight));

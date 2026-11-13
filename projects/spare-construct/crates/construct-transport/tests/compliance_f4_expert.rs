@@ -3,7 +3,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,6 +15,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -80,8 +83,8 @@ fn expert_matches_the_prototype() {
             }
             "supersession" => expert::supersession(&p, case.g("now")),
             "missingDisclaimers" => {
-                let kinds: Vec<String> = case.g("kinds").items().iter().map(|k| k.s()).collect();
-                let kinds: Vec<&str> = kinds.iter().map(|k| k.as_str()).collect();
+                let kinds: Vec<String> = case.g("kinds").items().iter().map(construct_transport::compliance::jv::Jx::s).collect();
+                let kinds: Vec<&str> = kinds.iter().map(std::string::String::as_str).collect();
                 arr(expert::missing_disclaimers(&case.g("html").s(), &kinds).into_iter().map(st))
             }
             "jwsCSV" => st(expert::jws_csv(&p, case.g("result"))),

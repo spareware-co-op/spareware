@@ -1,12 +1,13 @@
 //! The sensitivity pack on the real assignment: Table SENS-1 for the first scenario of each truth-test
 //! project, running `assign` for every test, must equal the table the prototype recorded
 //! (expected/<name>.json "sensitivity"), and every run it makes must give the result the prototype's
-//! `assign` gave for the same inputs (expected/sensitivity-runs-<name>.json). tests/sensitivity_truth.rs
+//! `assign` gave for the same inputs (expected/sensitivity-runs-<name>.json). `tests/sensitivity_truth.rs`
 //! replays the recorded runs; this makes every run itself.
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,6 +18,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 

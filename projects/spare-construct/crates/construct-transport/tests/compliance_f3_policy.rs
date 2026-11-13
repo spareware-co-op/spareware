@@ -4,7 +4,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -15,6 +16,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -41,8 +44,8 @@ fn policy_matches_the_prototype() {
             "skim" => {
                 let p = project(case);
                 let sc = p.g("scenarios").ix(args.g("sci").n() as usize);
-                let ids: Vec<String> = sc.g("zones").keys().into_iter().map(|k| k.to_string()).collect();
-                let list = |v: &V| -> Vec<String> { if v.is_arr() { v.items().iter().map(|x| x.s()).collect() } else { ids.clone() } };
+                let ids: Vec<String> = sc.g("zones").keys().into_iter().map(std::string::ToString::to_string).collect();
+                let list = |v: &V| -> Vec<String> { if v.is_arr() { v.items().iter().map(construct_transport::compliance::jv::Jx::s).collect() } else { ids.clone() } };
                 let (from, to) = (list(args.g("from")), list(args.g("to")));
                 let res = if args.g("per").t() { Some(sc.g("res").g(&args.g("per").s())) } else { None };
                 let got = policy::skim(&p, sc, res, &from, &to);

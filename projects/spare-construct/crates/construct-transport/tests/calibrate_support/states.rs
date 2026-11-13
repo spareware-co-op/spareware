@@ -38,7 +38,7 @@ pub fn run_period(p: &mut Project, sc_id: &str, pd: &str) {
     store_res(&mut p.scenarios[idx], pd, &res);
 }
 
-fn by_key<'a, T>(items: impl Iterator<Item = (String, T)>) -> Map<String, Value>
+fn by_key<T>(items: impl Iterator<Item = (String, T)>) -> Map<String, Value>
 where
     T: Into<Value>,
 {
@@ -325,7 +325,7 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
                 null_non_finite(&mut v);
                 v
             }));
-            out.insert("meStats".into(), me_out(&me_stats(p, "AM")));
+            out.insert("meStats".into(), me_out(me_stats(p, "AM").as_ref()));
             let (r2, tried) = reduce_me(p, &sc_id, &RunMeOpts { period: Some("PM"), xamax: None, date: Some(date) }, Some(2.0), None).expect("reduceME");
             out.insert(
                 "reduceMe".into(),
@@ -400,7 +400,7 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
             reset_roles(p);
         }
         "other-scenario" => {
-            let s2_id = p.scenarios[1].id.clone();
+            let second_id = p.scenarios[1].id.clone();
             {
                 let by = p.settings.base_year.clone();
                 let s2 = &mut p.scenarios[1];
@@ -413,16 +413,16 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
                 s2.links.remove(ids.last().expect("a link"));
                 s2.year = by;
             }
-            run_both(p, &s2_id);
+            run_both(p, &second_id);
             let ctx_core = {
                 let ctx = Ctx::new(p);
-                core_out(&core_area(&ctx, p.scenario(&s2_id).expect("sc")))
+                core_out(&core_area(&ctx, p.scenario(&second_id).expect("sc")))
             };
             out.insert("scenarioIndex".into(), json!(1));
             out.insert("core2".into(), ctx_core);
-            out.insert("snap2".into(), snapshot(p, &s2_id, "scenario 1", "mid", true));
+            out.insert("snap2".into(), snapshot(p, &second_id, "scenario 1", "mid", true));
             let ctx = Ctx::new(p);
-            let s2 = p.scenario(&s2_id).expect("sc");
+            let s2 = p.scenario(&second_id).expect("sc");
             let res = stored_res(s2, "AM");
             let mut cordon = Map::new();
             for sl in &ctx.store.screenlines {
@@ -484,16 +484,16 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
                 *a = user;
             }
             let mut st = CalibStore::read(p);
-            for s in st.turn_sites.iter_mut() {
+            for s in &mut st.turn_sites {
                 s.role = Maybe::Set(JsNum::Text("off".into()));
             }
             st.write(p);
             hold_out_default(p, &sc_id);
         }
         "gateway-counts" => {
-            let data = Data::read(p);
+            let store = Data::read(p);
             let settings = p.settings.clone();
-            let n = gateways_from_counts(&mut p.scenarios[0], &settings, &data);
+            let n = gateways_from_counts(&mut p.scenarios[0], &settings, &store);
             out.insert("gatewaysSet".into(), json!(n));
             let gw_src: Map<String, Value> = p.scenarios[0]
                 .zones
@@ -525,7 +525,7 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
                 let a = construct_transport::calibrate::phf(&st, sc, id, "AM");
                 let b = construct_transport::calibrate::phf(&st, sc, id, "PM");
                 if a.is_some() || b.is_some() {
-                    phf_all.insert(id.to_string(), json!({ "AM": a.map_or(Value::Null, |x| pn(x)), "PM": b.map_or(Value::Null, |x| pn(x)) }));
+                    phf_all.insert(id.to_string(), json!({ "AM": a.map_or(Value::Null, pn), "PM": b.map_or(Value::Null, pn) }));
                 }
             }
             out.insert("phf".into(), Value::Object(phf_all));

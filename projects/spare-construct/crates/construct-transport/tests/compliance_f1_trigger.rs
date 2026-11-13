@@ -4,7 +4,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -15,6 +16,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -30,7 +33,7 @@ use construct_transport::compliance::jv::{Jx, V};
 
 /// Runs every case of a recorded file: the finder's answer and whether it was kept in the project's record.
 fn run_file(name: &str, at_least: usize) {
-    set_clock(Some(1792540800000.0));
+    set_clock(Some(1_792_540_800_000.0));
     let all = compliance_support::expected(name);
     let cases = all["cases"].as_array().expect("cases");
     assert!(cases.len() >= at_least, "{} cases", cases.len());

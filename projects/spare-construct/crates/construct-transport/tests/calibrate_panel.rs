@@ -10,7 +10,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -21,6 +22,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -32,6 +35,7 @@ use construct_transport::calibrate::{CalibStore, import_turn_csv, match_sites};
 use construct_transport::edit::IdSource;
 use construct_transport::project::Project;
 use serde_json::{Value, json};
+use std::fmt::Write as _;
 use support::{assert_close, diff_json, load_json};
 
 const SKIPPED: [&str; 4] = ["name", "setup", "level", "snapshot"];
@@ -39,7 +43,7 @@ const SKIPPED: [&str; 4] = ["name", "setup", "level", "snapshot"];
 /// The balancing audit lists in a canonical order (site, then movement).
 ///
 /// The audit follows the order of a count's movements ("W-T" before "W-R" as the file gave them). The project keeps
-/// the calibration store as JSON values, whose objects serde_json holds sorted by key, so a project read from text
+/// the calibration store as JSON values, whose objects `serde_json` holds sorted by key, so a project read from text
 /// has the movements in key order instead. The entries themselves are identical.
 fn sort_audits(v: &mut Value) {
     match v {
@@ -50,7 +54,7 @@ fn sort_audits(v: &mut Value) {
                         Value::Array(a) => sort_entries(a),
                         Value::Object(per) => per.values_mut().for_each(|y| {
                             if let Value::Array(a) = y {
-                                sort_entries(a)
+                                sort_entries(a);
                             }
                         }),
                         _ => {}
@@ -85,10 +89,11 @@ fn replay(file: &str, expect_states: usize) {
         if total > 0 {
             let mut m = format!("{total} difference(s) under {path}");
             for d in diffs.iter().take(6) {
-                m.push_str(&format!("
+                // Writing to a String cannot fail.
+                let _ = write!(m, "
     {}
         expected {}
-        actual   {}", d.path, d.expected, d.actual));
+        actual   {}", d.path, d.expected, d.actual);
             }
             failures.push(m);
         }

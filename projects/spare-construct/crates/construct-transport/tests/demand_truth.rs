@@ -5,7 +5,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -16,6 +17,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -65,13 +68,13 @@ fn demand_and_apply_me_on_the_variants() {
     assert_eq!(cases.len(), 33);
     let (mut n_demand, mut n_me) = (0, 0);
     for case in cases {
-        let name = case["name"].as_str().expect("name");
+        let case_name = case["name"].as_str().expect("name");
         let p = Project::from_json(case["projectText"].as_str().expect("project text"))
-            .unwrap_or_else(|e| panic!("{name}: {e}"));
+            .unwrap_or_else(|e| panic!("{case_name}: {e}"));
         let sc = p.scenario(case["scenario"].as_str().expect("scenario")).expect("scenario");
         for period in ["AM", "PM"] {
             let rec = &case["periods"][period];
-            let path = format!("{name}.{period}");
+            let path = format!("{case_name}.{period}");
             let g = build_graph(sc, &p.settings, Some(period));
             // trip ends of every zone and gateway
             for z in sc.zones.values() {

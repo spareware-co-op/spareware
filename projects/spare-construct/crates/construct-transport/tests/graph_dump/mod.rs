@@ -63,7 +63,7 @@ pub fn arc_value(a: &Arc) -> Value {
     put("outB", n(a.out_b));
     put("ctrl", json!(a.ctrl.as_str()));
     put("internal", json!(a.internal));
-    put("toll", if a.toll != 0.0 { n(a.toll) } else { Value::Null });
+    put("toll", if a.toll == 0.0 { Value::Null } else { n(a.toll) });
     put("zone", a.zone.as_ref().map_or(Value::Null, |z| json!(z)));
     put("node", a.node.map_or(Value::Null, |x| json!(x)));
     put("phase", a.phase.map_or(Value::Null, |x| json!(x)));

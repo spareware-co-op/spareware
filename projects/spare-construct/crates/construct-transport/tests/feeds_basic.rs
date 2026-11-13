@@ -5,7 +5,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -16,6 +17,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -203,7 +206,7 @@ fn vintage_table_matches() {
         ("council", json!({ "key": "council:x", "url": "https://services1.arcgis.com/R6s0QqCMQdwKY6yp/x", "source": "Hamilton City Council", "n": 5 })),
         ("mvr", json!({ "error": "No <b>cars</b> here", "n": 0 })),
         ("council", json!({ "key": "council:y", "url": "javascript:alert(1)", "source": "Hamilton City Council", "n": 0 })),
-        ("osm", json!({ "n": 1234567, "url": "data/x.json", "page": "data/x.json" })),
+        ("osm", json!({ "n": 1_234_567, "url": "data/x.json", "page": "data/x.json" })),
         ("ags", json!({ "n": 3, "note": "It's \"quoted\" & <tagged>" })),
         ("flood", json!({ "n": 6, "source": "Zed" })),
         ("coastal", json!({ "n": 6, "source": "Alpha" })),

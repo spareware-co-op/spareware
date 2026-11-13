@@ -3,7 +3,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,6 +15,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -117,7 +120,7 @@ fn the_steps_of_the_build_match_the_prototype() {
         for n in ex["siteWith"].as_array().unwrap() {
             let ll = [n["ll"][0].as_f64().unwrap(), n["ll"][1].as_f64().unwrap()];
             let pats: Vec<&str> = n["pats"].as_array().unwrap().iter().map(|x| x.as_str().unwrap()).collect();
-            let got = site_with(sc, &pats, ll).map(|h| json!({ "site": h.site, "c": h.c })).unwrap_or(Value::Null);
+            let got = site_with(sc, &pats, ll).map_or(Value::Null, |h| json!({ "site": h.site, "c": h.c }));
             ck.check(&format!("siteWith {} {}", n["pats"], n["ll"]), &got, &n["out"]);
         }
         let keys: Vec<&str> = sc.sites.get().unwrap().keys().collect();

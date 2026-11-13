@@ -5,7 +5,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -16,6 +17,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -209,16 +212,16 @@ fn the_whole_download_for_every_scenario_matches() {
         let (mut sets, mut statuses, mut used) = (Vec::new(), Vec::new(), 0);
         for y in &years {
             statuses.push(nslr_status(*y));
-            let mut load = NslrLoad::new(bounds_of(&rec["bounds"]), if *y != 0.0 { Some(*y) } else { None }, NOW, cfg.limit_ms(), &cache);
-            let (u, res) = replay(&mut load, log, used, &at);
-            res.expect("a download");
+            let mut load = NslrLoad::new(bounds_of(&rec["bounds"]), if *y == 0.0 { None } else { Some(*y) }, NOW, cfg.limit_ms(), &cache);
+            let (u, outcome) = replay(&mut load, log, used, &at);
+            outcome.expect("a download");
             used = u;
             sets.push((*y, load.finish()));
         }
         all_used(log, used, &at);
         assert_eq!(json!(statuses), rec["statuses"], "{at}: status lines");
-        let res = apply_nslr_all(&mut p, &sets, NOW, future);
-        assert_close(&serde_json::to_value(&res).unwrap(), &rec["result"], &format!("{at} result"));
+        let outcome = apply_nslr_all(&mut p, &sets, NOW, future);
+        assert_close(&serde_json::to_value(&outcome).unwrap(), &rec["result"], &format!("{at} result"));
         assert_close(&p.extra["feeds"], &rec["feeds"], &format!("{at} feeds"));
         let links: Map<String, Value> = p.scenarios.iter().map(|s| (s.id.clone(), link_fields(s))).collect();
         assert_close(&Value::Object(links), &rec["links"], &format!("{at} links"));

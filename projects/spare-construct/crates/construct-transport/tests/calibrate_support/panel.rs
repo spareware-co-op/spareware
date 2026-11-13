@@ -79,7 +79,7 @@ fn pair_out(p: &PairVal) -> Value {
 }
 
 /// `meOut`.
-pub fn me_out(m: &Option<MeStats>) -> Value {
+pub fn me_out(m: Option<&MeStats>) -> Value {
     match m {
         None => json!({ "n": 0 }),
         Some(m) => json!({ "n": m.n, "totalAbs": pn(m.total_abs), "totalPct": pn(m.total_pct), "cells": pair_out(&m.cells), "ends": pair_out(&m.ends),
@@ -113,11 +113,11 @@ pub fn ev_out(ev: &Evidence, store: &CalibStore, with_all: bool) -> Value {
         "all": ev.all.iter().map(|r| if with_all { count_row_out(r) } else { json!(r.c.id) }).collect::<Vec<_>>(),
         "link": cal_stats_out(&ev.link), "measured": cal_stats_out(&ev.measured), "turn": cal_stats_out(&ev.turn),
         "turnRows": ev.turn_rows.iter().map(turn_row_out).collect::<Vec<_>>(), "screen": sl_obs_out(&ev.screen, store),
-        "jt": jt_stats_out(&ev.jt), "jtRows": ev.jt_rows.iter().map(jr_out).collect::<Vec<_>>(), "conv": conv_out(&ev.conv), "me": me_out(&ev.me),
+        "jt": jt_stats_out(&ev.jt), "jtRows": ev.jt_rows.iter().map(jr_out).collect::<Vec<_>>(), "conv": conv_out(&ev.conv), "me": me_out(ev.me.as_ref()),
         "baseYear": ev.base_year, "year": po(ev.year), "hasRes": ev.has_res() })
 }
 
-fn val_out(v: &Option<Val>) -> Value {
+fn val_out(v: Option<&Val>) -> Value {
     match v {
         None => Value::Null,
         Some(Val::Num(x)) => pn(*x),
@@ -131,7 +131,7 @@ pub fn eval_out(e: &Eval) -> Value {
     let mut o = Map::new();
     o.insert("id".into(), json!(e.t.id));
     o.insert("n".into(), json!(e.n));
-    o.insert("value".into(), val_out(&e.value));
+    o.insert("value".into(), val_out(e.value.as_ref()));
     o.insert("got".into(), e.got.map_or(Value::Null, |x| json!(x)));
     o.insert("need".into(), e.need.map_or(Value::Null, |x| json!(x)));
     o.insert("ok".into(), e.ok.map_or(Value::Null, |x| json!(x)));
@@ -162,7 +162,7 @@ pub fn test_out(t: &Test) -> Value {
 /// `assessOut`.
 pub fn assess_out(a: &Assessment) -> Value {
     json!({ "period": a.period, "standard": a.standard, "category": a.category.to_string(), "status": a.status, "pass": a.pass.map_or(Value::Null, |b| json!(b)),
-        "line": a.line, "also": a.also.iter().map(|c| c.to_string()).collect::<Vec<_>>(),
+        "line": a.line, "also": a.also.iter().map(std::string::ToString::to_string).collect::<Vec<_>>(),
         "fails": a.fails.iter().map(|f| json!({ "cat": f.cat.to_string(), "test": f.test, "got": f.got, "target": f.target })).collect::<Vec<_>>(),
         "rows": a.rows.iter().map(eval_out).collect::<Vec<_>>() })
 }

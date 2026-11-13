@@ -49,7 +49,7 @@ impl Fakes {
     fn setting(&self, k: &str) -> Option<String> {
         self.fake.get(k).and_then(Value::as_str).map(str::to_string)
     }
-    fn cx<'a>(p: &'a mut Project) -> &'a mut Map<String, Value> {
+    fn cx(p: &mut Project) -> &mut Map<String, Value> {
         let cx = obj(&mut p.extra, "cx");
         if !cx.contains_key("precinct") {
             cx.insert("precinct".into(), json!({ "id": null, "register": [], "proposal": null }));

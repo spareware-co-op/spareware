@@ -4,7 +4,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -15,6 +16,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -81,7 +84,7 @@ fn run_case(case: &serde_json::Value) -> Option<V> {
                 .collect())
         }
         "depthOf" => arr(["None", "Lite", "Full"].iter().flat_map(|r| [true, false].into_iter().flat_map(move |k| ["urban", "periurban", "rural", "x"].into_iter().map(move |x| cx::depth_of(r, k, x)))).collect()),
-        "sisd" => arr(vec![(num(50.0), 0.0), (num(80.0), 0.0), (st("x"), 0.0), (num(100.0), 87.0), (num(200.0), 0.0), (num(10.0), 0.0), (num(60.0), 95.5)].iter().map(|(s, m)| cx::sisd(s, *m)).collect()),
+        "sisd" => arr([(num(50.0), 0.0), (num(80.0), 0.0), (st("x"), 0.0), (num(100.0), 87.0), (num(200.0), 0.0), (num(10.0), 0.0), (num(60.0), 95.5)].iter().map(|(s, m)| cx::sisd(s, *m)).collect()),
         "accessType" => arr(vec![
             cx::access_type(300.0, 5.0, 0.0, None), cx::access_type(10.0, 30.0, 0.0, None), cx::access_type(20.0, 0.0, 0.0, Some(true)), cx::access_type(20.0, 0.0, 0.0, Some(false)), cx::access_type(20.0, 0.0, 0.0, None), cx::access_type(80.0, 0.0, 0.0, None), cx::access_type(20.0, 0.0, 3.0, Some(true)),
         ]),
@@ -160,7 +163,7 @@ fn run_case(case: &serde_json::Value) -> Option<V> {
 
 #[test]
 fn core_checks() {
-    set_clock(Some(1792540800000.0));
+    set_clock(Some(1_792_540_800_000.0));
     let all = compliance_support::expected("core");
     let cases = all["cases"].as_array().expect("cases");
     let only = std::env::var("CX_ONLY").ok();

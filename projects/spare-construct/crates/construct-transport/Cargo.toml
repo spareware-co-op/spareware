@@ -17,9 +17,8 @@ missing_docs = "warn"
 
 [lints.clippy]
 # Spare Construct's lint posture: the geometry kernel's [lints] tables (geom-num's Cargo.toml), so
-# that nothing here crashes (AGENTS.md, rule 8). The crate is being brought to clippy's pedantic
-# idioms module by module (pieces A19a to A19g); CI denies every warning once A19h adds it to the
-# clippy step. projects/spare-construct/clippy.toml lets tests use what is denied here.
+# that nothing here crashes (AGENTS.md, rule 8), with clippy's pedantic idioms; CI's clippy step
+# denies every warning. projects/spare-construct/clippy.toml lets tests use what is denied here.
 pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"

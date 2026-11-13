@@ -11,7 +11,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -22,6 +23,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -162,20 +165,19 @@ impl Check {
                 self.what, self.near_exact, self.near
             );
         }
-        if !self.fails.is_empty() {
-            panic!(
-                "{}: {} of {} cases differ from the JavaScript:\n  {}",
-                self.what,
-                self.fails.len(),
-                self.cases,
-                self.fails
-                    .iter()
-                    .take(30)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join("\n  ")
-            );
-        }
+        assert!(
+            self.fails.is_empty(),
+            "{}: {} of {} cases differ from the JavaScript:\n  {}",
+            self.what,
+            self.fails.len(),
+            self.cases,
+            self.fails
+                .iter()
+                .take(30)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n  ")
+        );
     }
 }
 
@@ -213,14 +215,14 @@ fn js_int32_and_round() {
     for k in group("toInt32") {
         c.num(
             || format!("{} | 0", k[0]),
-            to_int32(dec(&k[0])) as f64,
+            f64::from(to_int32(dec(&k[0]))),
             dec(&k[1]),
         );
     }
     for k in group("toUint32") {
         c.num(
             || format!("{} >>> 0", k[0]),
-            to_uint32(dec(&k[0])) as f64,
+            f64::from(to_uint32(dec(&k[0]))),
             dec(&k[1]),
         );
     }
@@ -233,7 +235,7 @@ fn js_int32_and_round() {
     }
     for k in group("hypot") {
         let a: Vec<f64> = k[0].as_array().unwrap().iter().map(dec).collect();
-        c.num(|| format!("Math.hypot{:?}", a), math_hypot(&a), dec(&k[1]));
+        c.num(|| format!("Math.hypot{a:?}"), math_hypot(&a), dec(&k[1]));
     }
     for k in group("minMax") {
         let (a, b) = (dec(&k[0]), dec(&k[1]));
@@ -256,7 +258,7 @@ fn js_number_text() {
     for k in group("toFixed") {
         let (x, d) = (dec(&k[0]), usize_of(&k[1]));
         c.text(
-            || format!("({:e}).toFixed({d})", x),
+            || format!("({x:e}).toFixed({d})"),
             &to_fixed(x, d),
             text(&k[2]),
         );
@@ -264,7 +266,7 @@ fn js_number_text() {
     for k in group("toPrecision") {
         let (x, p) = (dec(&k[0]), usize_of(&k[1]));
         c.text(
-            || format!("({:e}).toPrecision({p})", x),
+            || format!("({x:e}).toPrecision({p})"),
             &to_precision(x, p),
             text(&k[2]),
         );
@@ -272,7 +274,7 @@ fn js_number_text() {
     for k in group("intl") {
         let (x, d) = (dec(&k[0]), usize_of(&k[1]));
         c.text(
-            || format!("Intl en-NZ ({:e}, {d})", x),
+            || format!("Intl en-NZ ({x:e}, {d})"),
             &intl_format(x, d),
             text(&k[2]),
         );
@@ -387,7 +389,7 @@ fn util_heap() {
         let want = run["pops"].as_array().unwrap();
         c.truth(|| format!("run {n}: pops"), pops.len() == want.len(), true);
         for (i, ((v, top), w)) in pops.iter().zip(want).enumerate() {
-            c.num(|| format!("run {n} pop {i}: value"), *v as f64, dec(&w[0]));
+            c.num(|| format!("run {n} pop {i}: value"), f64::from(*v), dec(&w[0]));
             c.num(|| format!("run {n} pop {i}: top"), *top, dec(&w[1]));
         }
         c.truth(|| format!("run {n}: empty at the end"), h.is_empty(), true);

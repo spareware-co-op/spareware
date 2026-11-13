@@ -3,7 +3,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,6 +15,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -79,7 +82,7 @@ fn the_capacity_table_matches_the_prototype() {
 fn filling_a_zone_from_a_yield_matches_the_prototype() {
     let ex = load_json("expected/census-yield.json");
     let ps = projects(&ex);
-    let ids = census_support::ids_for(&json!({ "seed": 1, "rngSkip": 0, "seq0": 0, "now": 1792540800000u64 }));
+    let ids = census_support::ids_for(&json!({ "seed": 1, "rngSkip": 0, "seq0": 0, "now": 1_792_540_800_000_u64 }));
     let mut ck = Checker::default();
     for (i, c) in ex["applyYield"].as_array().expect("cases").iter().enumerate() {
         let mut z: Zone = serde_json::from_value(json!({

@@ -3,7 +3,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,6 +15,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -47,12 +50,12 @@ fn ordered(name: &str) -> V {
 
 /// The ids a case lists, as text.
 fn ids_of(args: &V) -> Vec<String> {
-    args.g("ids").items().iter().map(|x| x.s()).collect()
+    args.g("ids").items().iter().map(construct_transport::compliance::jv::Jx::s).collect()
 }
 
 #[test]
 fn speed_limits_cbds_and_exports() {
-    set_clock(Some(1792540800000.0));
+    set_clock(Some(1_792_540_800_000.0));
     let all = expected("f2-speed");
     let cases = all["cases"].as_array().expect("cases");
     let ord = ordered("f2-speed");
@@ -65,9 +68,7 @@ fn speed_limits_cbds_and_exports() {
         for (k, v) in oc.g("sets").entries() {
             set_path(&mut p, k, v.clone());
         }
-        if case_error(case).is_some() {
-            panic!("{id}: the prototype refused this case: {}", case_error(case).unwrap());
-        }
+        assert!(case_error(case).is_none(), "{id}: the prototype refused this case: {}", case_error(case).unwrap());
         let want = case_ok(case);
         let args = oc.g("args").clone();
         let sc_arg: Option<V> = if args.has("sc") && !args.g("sc").nullish() { Some(p.g("scenarios").ix(args.g("sc").n() as usize).clone()) } else { None };

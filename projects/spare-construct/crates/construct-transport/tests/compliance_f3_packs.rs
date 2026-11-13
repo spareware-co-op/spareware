@@ -3,7 +3,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,6 +15,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -33,7 +36,7 @@ fn sections_of(v: &V) -> Vec<Section> {
         .map(|s| Section {
             title: s.g("title").s(),
             note: if s.g("note").t() { Some(s.g("note").s()) } else { None },
-            head: s.g("head").items().iter().map(|h| h.s()).collect(),
+            head: s.g("head").items().iter().map(construct_transport::compliance::jv::Jx::s).collect(),
             rows: s.g("rows").items().iter().map(|r| r.items().to_vec()).collect(),
             empty: if s.g("empty").t() { Some(s.g("empty").s()) } else { None },
         })

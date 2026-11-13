@@ -6,7 +6,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,6 +18,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -206,7 +209,7 @@ fn arms_json(a: &[construct_transport::turns::Arm], coded: bool) -> Value {
 }
 
 fn rows_json(r: &[construct_transport::turns::MovementRow]) -> Value {
-    Value::Array(r.iter().map(|x| x.to_value()).collect())
+    Value::Array(r.iter().map(construct_transport::turns::MovementRow::to_value).collect())
 }
 
 fn gate_json(g: &construct_transport::turns::SidraExport) -> Value {
@@ -222,7 +225,13 @@ fn check_case(ck: &mut Checker, at: &str, inp: &Inputs, rec: &Value, loose_base:
     for (id, n) in rec["nodes"].as_object().expect("nodes") {
         let a = format!("{at}.nodes[{id}]");
         let list = res.and_then(|r| r.turns.get(id)).unwrap_or(&none);
-        if id != "missing" {
+        if id == "missing" {
+            ck.check(
+                &format!("{a}.arms"),
+                &arms_json(&arms(sc, id, &[], None), false),
+                &n["arms"],
+            );
+        } else {
             ck.same(
                 &format!("{a}.has"),
                 &res.is_some_and(|r| r.turns.contains_key(id)),
@@ -237,12 +246,6 @@ fn check_case(ck: &mut Checker, at: &str, inp: &Inputs, rec: &Value, loose_base:
                 &format!("{a}.armsNoTurns"),
                 &arms_json(&arms(sc, id, &[], None), false),
                 &n["armsNoTurns"],
-            );
-        } else {
-            ck.check(
-                &format!("{a}.arms"),
-                &arms_json(&arms(sc, id, &[], None), false),
-                &n["arms"],
             );
         }
         ck.check(
@@ -350,7 +353,7 @@ fn check_case(ck: &mut Checker, at: &str, inp: &Inputs, rec: &Value, loose_base:
     // (the junctions of the random cases record only some of the forms)
     let mut text = |name: &str, got: String| {
         if let Some(want) = c.get(name) {
-            ck.same(&format!("{at}.csv.{name}"), &got, &s(want))
+            ck.same(&format!("{at}.csv.{name}"), &got, &s(want));
         }
     };
     text(
@@ -396,7 +399,7 @@ fn check_case(ck: &mut Checker, at: &str, inp: &Inputs, rec: &Value, loose_base:
     );
     let mut gate = |name: &str, g: construct_transport::turns::SidraExport| {
         if let Some(want) = c.get(name) {
-            ck.check(&format!("{at}.csv.{name}"), &gate_json(&g), want)
+            ck.check(&format!("{at}.csv.{name}"), &gate_json(&g), want);
         }
     };
     gate(

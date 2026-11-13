@@ -2,7 +2,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -13,6 +14,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -138,8 +141,13 @@ fn poly_part(p: &Poly) -> Value {
 }
 
 fn merge(a: Value, b: Value) -> Value {
-    let mut m = a.as_object().cloned().unwrap_or_default();
-    m.extend(b.as_object().cloned().unwrap_or_default());
+    let mut m = match a {
+        Value::Object(m) => m,
+        _ => serde_json::Map::new(),
+    };
+    if let Value::Object(o) = b {
+        m.extend(o);
+    }
     Value::Object(m)
 }
 
@@ -232,7 +240,7 @@ fn employees_schools_and_zones_are_read_the_same_way() {
     for (name, l) in cases {
         ck.check(&format!("parseEmployees {name}"), &emp_json(&parse_employees(&layer(&l).unwrap())), &ex["parseEmployees"][name]);
     }
-    let moe = |v: &Value, kind: &str| Value::Array(parse_moe(v.as_array().map_or(&[][..], Vec::as_slice), kind).iter().map(|m| m.to_value()).collect());
+    let moe = |v: &Value, kind: &str| Value::Array(parse_moe(v.as_array().map_or(&[][..], Vec::as_slice), kind).iter().map(construct_transport::census::Moe::to_value).collect());
     let odd_moe = ex["parseMoE"]["oddEce"].clone();
     let _ = odd_moe;
     ck.check("parseMoE schools", &moe(&ans["schools"], "schools"), &ex["parseMoE"]["schools"]);

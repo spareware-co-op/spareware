@@ -1,7 +1,7 @@
 //! Truth-test support: loads the prototype's recorded answers and compares JSON with a tolerance.
 //!
 //! tools/transport-truth holds inputs/<name>.json (saved projects after the prototype's
-//! migrate()), expected/<name>.json (everything the JavaScript engine returned for them, from
+//! `migrate()`), expected/<name>.json (everything the JavaScript engine returned for them, from
 //! gen-expected.mjs) and expected/util-cases.json (the helpers' answers, from
 //! gen-util-cases.mjs). Use [`assert_close`] to check a port's JSON output against them.
 #![allow(dead_code)] // each test file uses its own part of this module
@@ -63,7 +63,7 @@ pub fn load_expected(name: &str) -> Value {
 /// One difference between actual and expected JSON.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Diff {
-    /// Where, as a JSON path ($.scenarios["s-dm"].periods.AM.res.arcs[...]).
+    /// Where, as a JSON path (`$.scenarios["s-dm"].periods.AM.res.arcs[...]`).
     pub path: String,
     /// What was expected.
     pub expected: String,

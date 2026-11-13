@@ -6,7 +6,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,6 +18,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -152,10 +155,10 @@ fn input_of(case: &Value) -> Value {
                         || e["tags"]["building"].as_bool() == Some(true)
                 }),
                 Some("areas") => {
-                    list.retain(|e| !(e["tags"]["building"].is_string()) || e["type"] == "node")
+                    list.retain(|e| !(e["tags"]["building"].is_string()) || e["type"] == "node");
                 }
                 Some("houses") => {
-                    list.retain(|e| matches!(e["tags"]["building"].as_str(), Some("yes" | "house")))
+                    list.retain(|e| matches!(e["tags"]["building"].as_str(), Some("yes" | "house")));
                 }
                 _ => {}
             }
@@ -292,9 +295,9 @@ fn the_download_matches_the_prototype() {
             let is_b = j.query.contains("way[\"building\"]");
             let k = if is_b { nb } else { na };
             if is_b {
-                nb += 1
+                nb += 1;
             } else {
-                na += 1
+                na += 1;
             }
             let file = &files[(if is_b { 0 } else { 2 }) + (k % 2)];
             let answer = match name {

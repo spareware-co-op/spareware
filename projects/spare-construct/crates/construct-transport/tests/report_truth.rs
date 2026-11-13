@@ -6,7 +6,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,6 +18,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -113,7 +116,7 @@ fn run(name: &str) -> usize {
     let res = file.get("results").expect("results");
     let results: Vec<Results> =
         project.scenarios.iter().map(|s| serde_json::from_str(&res.get(&s.id).expect("res").stringify()).expect("results read")).collect();
-    let fx = |k: &str| file.get(k).map(JsonValue::to_value).unwrap_or(Value::Null);
+    let fx = |k: &str| file.get(k).map_or(Value::Null, JsonValue::to_value);
     let foreign: Vec<ForeignSection> = fx("foreign")
         .as_array()
         .map(|a| {
@@ -190,9 +193,7 @@ fn run(name: &str) -> usize {
         let g = |k: &str| exp["pick"][k].as_u64().map(|x| x as usize);
         format!("{:?}", (g("with"), g("without"), g("mitigation"), g("existing"), g("base")))
     });
-    if !fails.is_empty() {
-        panic!("{} of {checks} checks differ:\n{}", fails.len(), fails.join("\n"));
-    }
+    assert!(fails.is_empty(), "{} of {checks} checks differ:\n{}", fails.len(), fails.join("\n"));
     checks
 }
 
@@ -207,7 +208,7 @@ fn base64_decode(s: &str) -> Vec<u8> {
     let b: Vec<u8> = s.bytes().filter(|c| *c != b'=').collect();
     let mut out = Vec::new();
     for ch in b.chunks(4) {
-        let v: Vec<u32> = ch.iter().map(|c| val(*c) as u32).collect();
+        let v: Vec<u32> = ch.iter().map(|c| u32::from(val(*c))).collect();
         let n = v.iter().fold(0u32, |a, x| (a << 6) | x) << (6 * (4 - v.len()));
         for i in 0..(v.len() * 6 / 8) {
             out.push((n >> (16 - 8 * i)) as u8);

@@ -1,12 +1,13 @@
-//! Import truth tests: OpenStreetMap (Overpass) answers read into a scenario, gateways, GeoJSON lines read as roads, and the
-//! network written as GeoJSON and CSV, against the prototype.
+//! Import truth tests: OpenStreetMap (Overpass) answers read into a scenario, gateways, `GeoJSON` lines read as roads, and the
+//! network written as `GeoJSON` and CSV, against the prototype.
 //!
 //! tools/transport-truth/gen-import.mjs ran model.js `Importers` on the made-up files in tools/transport-truth/fixtures and
 //! wrote expected/import-cases.json; these tests replay the same operations with the same seeded id generator.
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,6 +18,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -148,7 +151,7 @@ fn apply_import(ctx: &mut Ctx, marks: &mut Marks, o: &Value) -> (Value, Option<V
                 None,
             )
         }
-        _ => unreachable!(),
+        _ => panic!("an export this test does not know"),
     };
     if let Some(b) = a.get("as").and_then(Value::as_str) {
         ctx.env.insert(b.to_string(), ret.clone());

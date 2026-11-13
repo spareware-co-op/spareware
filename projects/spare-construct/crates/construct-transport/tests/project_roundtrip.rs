@@ -6,7 +6,8 @@
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
-// may use native arithmetic and casts (Cargo.toml).
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,6 +18,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the rules are for the crate's own code"
 )]
 
@@ -113,7 +116,7 @@ fn is_array_index(k: &str) -> bool {
     !k.is_empty()
         && k.bytes().all(|c| c.is_ascii_digit())
         && (k == "0" || !k.starts_with('0'))
-        && k.parse::<u64>().is_ok_and(|n| n < 4294967295)
+        && k.parse::<u64>().is_ok_and(|n| n < 4_294_967_295)
 }
 
 #[test]
@@ -314,7 +317,7 @@ fn defaults_and_constructors_match_the_prototype() {
         &m["newScenario"],
         "newScenario()",
     );
-    let n1 = Node::new("n1", [-36.84851234567, 174.76331234567]);
+    let n1 = Node::new("n1", [-36.848_512_345_67, 174.763_312_345_67]);
     let mut n2 = Node::new("n2", [-36.85, 174.77]);
     n2.control = Maybe::Set("signals".to_string());
     assert_same(
@@ -327,7 +330,7 @@ fn defaults_and_constructors_match_the_prototype() {
         &m["addNode"][1],
         "Net.addNode with control",
     );
-    let pts = [[-36.8491111111111, 174.765555555555], [-36.8495, 174.7688]];
+    let pts = [[-36.849_111_111_111_1, 174.765_555_555_555], [-36.8495, 174.7688]];
     for (i, c) in m["addLink"].as_array().unwrap().iter().enumerate() {
         let l = Link::new(&format!("l{i}"), "n1", "n2", &pts, c["cls"].as_str());
         assert_same(
