@@ -15,7 +15,8 @@
 //!   run here: the nonlinear part, the speed √(dx² + dy²) of a node's velocity, is differentiated
 //!   by the forward mode (`geom_num::dual`), and the velocity's own dependence on the control
 //!   points is the coefficient, exact because it is linear. The partials are then the chain rule
-//!   through that map, in a fixed order.
+//!   through that map, in a fixed order. The same sums are written once more over `Scalar`
+//!   (`length_residual`, `through_residuals`), so piece G226's check encloses them in intervals.
 //!
 //! Guarantees: as `equation`: deterministic, a NaN anywhere is an error, no panics, no recursion.
 //!
@@ -30,6 +31,7 @@ use alloc::vec::Vec;
 
 use geom_num::NumError;
 use geom_num::dual::Dual;
+use geom_num::interval::Interval;
 use geom_num::real::Real;
 use geom_num::scalar::Scalar;
 
@@ -395,6 +397,59 @@ impl Residual<25, 3> for LinRound3 {
     }
 }
 
+/// A spline's arc length minus the stated length, over any [`Scalar`], in the layout
+/// `Assembly::run_length` reads: the 2n coordinates of the control points, the length, then for
+/// each node its weight and the n coefficients of its velocity. The same sums in the same order as
+/// `run_length`'s value, so an enclosure over intervals holds what the solver stores.
+///
+/// # Errors
+///
+/// What the arithmetic refuses (a square root of a range below zero); [`NumError::Degenerate`] for
+/// inputs of another shape.
+pub(super) fn length_residual<S: Scalar>(values: &[S], n: usize) -> Result<S, NumError> {
+    let head = n.checked_mul(2).ok_or(NumError::Degenerate)?;
+    let width = n.checked_add(1).ok_or(NumError::Degenerate)?;
+    let (points, rest) = values.split_at_checked(head).ok_or(NumError::Degenerate)?;
+    let (stated, nodes) = rest.split_first().ok_or(NumError::Degenerate)?;
+    let zero = S::constant(Real::ZERO);
+    let mut total = zero;
+    for node in nodes.chunks_exact(width) {
+        let (weight, coefficients) = node.split_first().ok_or(NumError::Degenerate)?;
+        let (mut dx, mut dy) = (zero, zero);
+        for (c, [px, py]) in coefficients.iter().zip(points.as_chunks::<2>().0) {
+            dx = dx.add(c.mul(*px)?)?;
+            dy = dy.add(c.mul(*py)?)?;
+        }
+        let speed = dx.mul(dx)?.add(dy.mul(dy)?)?.sqrt()?;
+        total = total.add(weight.mul(speed)?)?;
+    }
+    total.sub(*stated)
+}
+
+/// A spline's point at a parameter minus a point, over any [`Scalar`], in the layout
+/// `Assembly::run_through` reads: the 2n coordinates of the control points, the point's two, then
+/// the n coefficients of the curve at the parameter. The same sums in the same order as
+/// `run_through`'s values.
+///
+/// # Errors
+///
+/// What the arithmetic refuses; [`NumError::Degenerate`] for inputs of another shape.
+pub(super) fn through_residuals<S: Scalar>(values: &[S], n: usize) -> Result<[S; 2], NumError> {
+    let head = n.checked_mul(2).ok_or(NumError::Degenerate)?;
+    let (points, rest) = values.split_at_checked(head).ok_or(NumError::Degenerate)?;
+    let (q, coefficients) = rest.split_at_checked(2).ok_or(NumError::Degenerate)?;
+    let zero = S::constant(Real::ZERO);
+    let mut out = [zero; 2];
+    for (e, slot) in out.iter_mut().enumerate() {
+        let mut sum = zero;
+        for (c, p) in coefficients.iter().zip(points.as_chunks::<2>().0) {
+            sum = sum.add(c.mul(*p.get(e).ok_or(NumError::Degenerate)?)?)?;
+        }
+        *slot = sum.sub(*q.get(e).ok_or(NumError::Degenerate)?)?;
+    }
+    Ok(out)
+}
+
 impl Assembly {
     /// The inputs of a row, read at `x`.
     fn read_row(&self, row: &Row, x: &[f64]) -> Result<Vec<f64>, SketchError> {
@@ -409,6 +464,31 @@ impl Assembly {
             .map_err(|_| SketchError::OutOfMemory)?;
         for slot in list {
             values.push(Assembly::read(*slot, x)?);
+        }
+        Ok(values)
+    }
+
+    /// A wide row's inputs over `held`, one interval per variable: a constant is its own point
+    /// (piece G226's enclosures, joined with this module's wide rules).
+    pub(super) fn held_row(
+        &self,
+        row: &Row,
+        held: &[Interval],
+    ) -> Result<Vec<Interval>, SketchError> {
+        let list = self
+            .slots
+            .get(row.at..)
+            .and_then(|tail| tail.get(..row.len))
+            .ok_or(SketchError::Internal)?;
+        let mut values: Vec<Interval> = Vec::new();
+        values
+            .try_reserve_exact(list.len())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        for slot in list {
+            values.push(match *slot {
+                Slot::Constant(c) => Interval::point(c)?,
+                Slot::Variable(i) => *held.get(i).ok_or(SketchError::Internal)?,
+            });
         }
         Ok(values)
     }

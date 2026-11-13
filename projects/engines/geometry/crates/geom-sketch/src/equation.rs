@@ -1171,6 +1171,10 @@ pub(crate) fn inputs_of(
     })
 }
 
+/// Every rule's residuals enclosed, in authoring order, by the rule's id; `None` for a rule whose
+/// arithmetic the intervals refuse.
+pub type Enclosed = Vec<(ItemId, Option<Vec<Interval>>)>;
+
 /// A row of a spline rule: its places, how many control points its spline has, and how it reads its
 /// ends (piece G220).
 fn spline_row(
@@ -1933,77 +1937,220 @@ impl Assembly {
     }
 
     fn one(&mut self, row: &Row, x: &[f64], within: f64) -> Result<(), SketchError> {
-        match row.kind {
-            ConstraintKind::Coincident { .. } | ConstraintKind::Concentric { .. } => {
-                self.run(&Coincident, row, x, within)
-            }
-            ConstraintKind::Horizontal { .. }
-            | ConstraintKind::Vertical { .. }
-            | ConstraintKind::Across { .. }
-            | ConstraintKind::Upward { .. }
-            | ConstraintKind::Radius { .. }
-            | ConstraintKind::EqualRadius { .. }
-            | ConstraintKind::Fix { .. } => self.run(&Apart { sign: 1.0 }, row, x, within),
-            ConstraintKind::Offset { grows, .. } => {
-                let sign = if grows { 1.0 } else { -1.0 };
-                self.run(&Apart { sign }, row, x, within)
-            }
-            ConstraintKind::Diameter { .. } => self.run(&Halved, row, x, within),
-            ConstraintKind::OnLine { .. } => self.run(&OnLine, row, x, within),
-            ConstraintKind::Collinear { .. } => self.run(&Collinear, row, x, within),
-            ConstraintKind::OnCircle { .. }
-            | ConstraintKind::Distance { .. }
-            | ConstraintKind::Length { .. } => self.run(&AtDistance, row, x, within),
-            ConstraintKind::FromCircle { outside, .. }
-            | ConstraintKind::TangentCircles { outside, .. } => {
-                let sign = if outside { 1.0 } else { -1.0 };
-                self.run(&AtSum { sign }, row, x, within)
-            }
-            ConstraintKind::Midpoint { .. }
-            | ConstraintKind::SymmetricAbout { .. }
-            | ConstraintKind::Spaced { .. } => self.run(&Middle, row, x, within),
-            ConstraintKind::Turned { .. }
-            | ConstraintKind::Parallel { .. }
-            | ConstraintKind::Perpendicular { .. }
-            | ConstraintKind::Sweep { .. } => self.run(&Turned, row, x, within),
-            ConstraintKind::Heading { .. } => self.run(&Heading, row, x, within),
-            ConstraintKind::ArcLength { .. } => self.run(&SweptLength, row, x, within),
-            ConstraintKind::FromLine { side, .. }
-            | ConstraintKind::LinesApart { side, .. }
-            | ConstraintKind::TangentLine { side, .. } => {
-                self.run(&FromLine { sign: side.sign() }, row, x, within)
-            }
-            ConstraintKind::EqualLength { .. } => self.run(&SameLength, row, x, within),
-            ConstraintKind::TangentAtEnd { .. } => self.run(&AcrossRadius, row, x, within),
-            ConstraintKind::ArcsTangentAtEnd { .. } => self.run(&InLine, row, x, within),
-            ConstraintKind::SplineJoin { order, .. } => match (row.lin, order) {
-                (false, Smoothness::Tangent) => self.run(&JoinTangent, row, x, within),
-                (false, Smoothness::Curvature) => self.run(&JoinCurvature, row, x, within),
-                (false, Smoothness::CurvatureRate) => self.run(&JoinCurvatureRate, row, x, within),
-                (true, Smoothness::Tangent) => self.run(&LinJoin1, row, x, within),
-                (true, Smoothness::Curvature) => self.run(&LinJoin2, row, x, within),
-                (true, Smoothness::CurvatureRate) => self.run(&LinJoin3, row, x, within),
+        dispatch(
+            row,
+            &mut Evaluate {
+                assembly: self,
+                x,
+                within,
             },
-            ConstraintKind::SplineTangentLine { .. } if row.lin => {
-                self.run(&LinAlong1, row, x, within)
-            }
-            ConstraintKind::SplineTangentLine { .. } => self.run(&SplineAlong, row, x, within),
-            ConstraintKind::SplineAgainst { order, .. } => match (row.round, order) {
-                (false, Smoothness::Tangent) => self.run(&LinAlong1, row, x, within),
-                (false, Smoothness::Curvature) => self.run(&LinAlong2, row, x, within),
-                (false, Smoothness::CurvatureRate) => self.run(&LinAlong3, row, x, within),
-                (true, Smoothness::Tangent) => self.run(&LinRound1, row, x, within),
-                (true, Smoothness::Curvature) => self.run(&LinRound2, row, x, within),
-                (true, Smoothness::CurvatureRate) => self.run(&LinRound3, row, x, within),
-            },
-            ConstraintKind::SplineLength { .. } => self.run_length(row, x),
-            ConstraintKind::SplineThrough { .. } => self.run_through(row, x),
-            ConstraintKind::Symmetric { .. } => self.run(&Mirror, row, x, within),
-            ConstraintKind::LinearPattern { .. } => self.run(&SameStep, row, x, within),
-            ConstraintKind::CircularPattern { .. } => self.run(&TurnedAbout, row, x, within),
-            ConstraintKind::Linear { .. } => self.run(&Linear, row, x, within),
-            ConstraintKind::Product { .. } => self.run(&Product, row, x, within),
+        )
+    }
+
+    /// Every rule's residuals over a box: the natural interval extension of the one text each kind
+    /// is written in, at `held` (one interval per variable). Each rule's id is given with its
+    /// residuals, in authoring order, so a bound on a stored geometry is one call (piece G226).
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for `held` of another length than the variables. A rule whose
+    /// arithmetic the intervals refuse (a divisor holding zero, a square root of a negative range)
+    /// has `None`.
+    pub fn enclose(&self, held: &[Interval]) -> Result<Enclosed, SketchError> {
+        if held.len() != self.variables.len() {
+            return Err(SketchError::Internal);
         }
+        let mut out = Vec::new();
+        out.try_reserve_exact(self.rows.len())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        for row in &self.rows {
+            let mut residuals = Vec::new();
+            let done = dispatch(
+                row,
+                &mut Enclose {
+                    assembly: self,
+                    held,
+                    out: &mut residuals,
+                },
+            );
+            match done {
+                Ok(()) => out.push((row.id, Some(residuals))),
+                // A range the arithmetic refuses: that rule has no bound, the others do.
+                Err(SketchError::Numeric(_)) => out.push((row.id, None)),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// Something to do with a rule once its kind's residual type is known: evaluate it on dual numbers,
+/// or enclose it over intervals. One dispatch table serves both.
+trait Visit {
+    fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+    ) -> Result<(), SketchError>;
+
+    /// The same for a rule as wide as its spline (piece G220), which no fixed-width [`Residual`]
+    /// holds: its arc length or its point at a parameter.
+    fn wide(&mut self, wide: Wide, row: &Row) -> Result<(), SketchError>;
+}
+
+/// The rules as wide as their spline.
+#[derive(Clone, Copy)]
+enum Wide {
+    /// `SplineLength`: the arc length minus the stated length.
+    Length,
+    /// `SplineThrough`: the point at a parameter minus the point.
+    Through,
+}
+
+/// Evaluates a rule's residuals and Jacobian at `x`, refusing an `x` within `within` of its
+/// singular set.
+struct Evaluate<'a> {
+    assembly: &'a mut Assembly,
+    x: &'a [f64],
+    within: f64,
+}
+
+impl Visit for Evaluate<'_> {
+    fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+    ) -> Result<(), SketchError> {
+        self.assembly.run(kind, row, self.x, self.within)
+    }
+
+    fn wide(&mut self, wide: Wide, row: &Row) -> Result<(), SketchError> {
+        match wide {
+            Wide::Length => self.assembly.run_length(row, self.x),
+            Wide::Through => self.assembly.run_through(row, self.x),
+        }
+    }
+}
+
+/// Encloses a rule's residuals over `held`.
+struct Enclose<'a> {
+    assembly: &'a Assembly,
+    held: &'a [Interval],
+    out: &'a mut Vec<Interval>,
+}
+
+impl Visit for Enclose<'_> {
+    fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+    ) -> Result<(), SketchError> {
+        let list: &[Slot; N] = self.assembly.list_of(row)?;
+        let mut inputs = [Interval::point(0.0)?; N];
+        for (input, slot) in inputs.iter_mut().zip(list) {
+            *input = match *slot {
+                Slot::Constant(c) => Interval::point(c)?,
+                Slot::Variable(i) => *self.held.get(i).ok_or(SketchError::Internal)?,
+            };
+        }
+        let result = kind.residuals(inputs)?;
+        self.out
+            .try_reserve(E)
+            .map_err(|_| SketchError::OutOfMemory)?;
+        self.out.extend(result);
+        Ok(())
+    }
+
+    fn wide(&mut self, wide: Wide, row: &Row) -> Result<(), SketchError> {
+        let inputs = self.assembly.held_row(row, self.held)?;
+        match wide {
+            Wide::Length => {
+                let r = spline::length_residual(&inputs, row.n)?;
+                self.out
+                    .try_reserve(1)
+                    .map_err(|_| SketchError::OutOfMemory)?;
+                self.out.push(r);
+            }
+            Wide::Through => {
+                let r = spline::through_residuals(&inputs, row.n)?;
+                self.out
+                    .try_reserve(2)
+                    .map_err(|_| SketchError::OutOfMemory)?;
+                self.out.extend(r);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Hands a rule's kind to `v` with its residual type, the one table of kinds.
+fn dispatch<V: Visit>(row: &Row, v: &mut V) -> Result<(), SketchError> {
+    match row.kind {
+        ConstraintKind::Coincident { .. } | ConstraintKind::Concentric { .. } => {
+            v.go(&Coincident, row)
+        }
+        ConstraintKind::Horizontal { .. }
+        | ConstraintKind::Vertical { .. }
+        | ConstraintKind::Across { .. }
+        | ConstraintKind::Upward { .. }
+        | ConstraintKind::Radius { .. }
+        | ConstraintKind::EqualRadius { .. }
+        | ConstraintKind::Fix { .. } => v.go(&Apart { sign: 1.0 }, row),
+        ConstraintKind::Offset { grows, .. } => {
+            let sign = if grows { 1.0 } else { -1.0 };
+            v.go(&Apart { sign }, row)
+        }
+        ConstraintKind::Diameter { .. } => v.go(&Halved, row),
+        ConstraintKind::OnLine { .. } => v.go(&OnLine, row),
+        ConstraintKind::Collinear { .. } => v.go(&Collinear, row),
+        ConstraintKind::OnCircle { .. }
+        | ConstraintKind::Distance { .. }
+        | ConstraintKind::Length { .. } => v.go(&AtDistance, row),
+        ConstraintKind::FromCircle { outside, .. }
+        | ConstraintKind::TangentCircles { outside, .. } => {
+            let sign = if outside { 1.0 } else { -1.0 };
+            v.go(&AtSum { sign }, row)
+        }
+        ConstraintKind::Midpoint { .. }
+        | ConstraintKind::SymmetricAbout { .. }
+        | ConstraintKind::Spaced { .. } => v.go(&Middle, row),
+        ConstraintKind::Turned { .. }
+        | ConstraintKind::Parallel { .. }
+        | ConstraintKind::Perpendicular { .. }
+        | ConstraintKind::Sweep { .. } => v.go(&Turned, row),
+        ConstraintKind::Heading { .. } => v.go(&Heading, row),
+        ConstraintKind::ArcLength { .. } => v.go(&SweptLength, row),
+        ConstraintKind::FromLine { side, .. }
+        | ConstraintKind::LinesApart { side, .. }
+        | ConstraintKind::TangentLine { side, .. } => v.go(&FromLine { sign: side.sign() }, row),
+        ConstraintKind::EqualLength { .. } => v.go(&SameLength, row),
+        ConstraintKind::TangentAtEnd { .. } => v.go(&AcrossRadius, row),
+        ConstraintKind::ArcsTangentAtEnd { .. } => v.go(&InLine, row),
+        ConstraintKind::SplineJoin { order, .. } => match (row.lin, order) {
+            (false, Smoothness::Tangent) => v.go(&JoinTangent, row),
+            (false, Smoothness::Curvature) => v.go(&JoinCurvature, row),
+            (false, Smoothness::CurvatureRate) => v.go(&JoinCurvatureRate, row),
+            (true, Smoothness::Tangent) => v.go(&LinJoin1, row),
+            (true, Smoothness::Curvature) => v.go(&LinJoin2, row),
+            (true, Smoothness::CurvatureRate) => v.go(&LinJoin3, row),
+        },
+        ConstraintKind::SplineTangentLine { .. } if row.lin => v.go(&LinAlong1, row),
+        ConstraintKind::SplineTangentLine { .. } => v.go(&SplineAlong, row),
+        ConstraintKind::SplineAgainst { order, .. } => match (row.round, order) {
+            (false, Smoothness::Tangent) => v.go(&LinAlong1, row),
+            (false, Smoothness::Curvature) => v.go(&LinAlong2, row),
+            (false, Smoothness::CurvatureRate) => v.go(&LinAlong3, row),
+            (true, Smoothness::Tangent) => v.go(&LinRound1, row),
+            (true, Smoothness::Curvature) => v.go(&LinRound2, row),
+            (true, Smoothness::CurvatureRate) => v.go(&LinRound3, row),
+        },
+        ConstraintKind::SplineLength { .. } => v.wide(Wide::Length, row),
+        ConstraintKind::SplineThrough { .. } => v.wide(Wide::Through, row),
+        ConstraintKind::Symmetric { .. } => v.go(&Mirror, row),
+        ConstraintKind::LinearPattern { .. } => v.go(&SameStep, row),
+        ConstraintKind::CircularPattern { .. } => v.go(&TurnedAbout, row),
+        ConstraintKind::Linear { .. } => v.go(&Linear, row),
+        ConstraintKind::Product { .. } => v.go(&Product, row),
     }
 }
 

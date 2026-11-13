@@ -25,6 +25,11 @@ geom-nurbs = { path = "../geom-nurbs" }
 geom-test = { path = "../geom-test" }
 
 # The 10,000-constraint benchmark (piece G217), with the standard library's clock only.
+# The exact oracle of the commit checks' tests (piece G226): rationals, never linked into the kernel.
+# MIT OR Apache-2.0; the versions geom-linalg's tests use, without default features.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+
 [[bench]]
 name = "assemble"
 harness = false
@@ -62,6 +67,11 @@ harness = false
 # The commit of a 1,000-entity sketch (piece G225), the same way.
 [[bench]]
 name = "commit"
+harness = false
+
+# The checks after the commit of a 1,000-entity sketch (piece G226), the same way.
+[[bench]]
+name = "check"
 harness = false
 
 [lints.rust]

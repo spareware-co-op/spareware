@@ -28,6 +28,7 @@
 use std::f64::consts::{FRAC_1_SQRT_2, PI};
 use std::fmt::Write;
 
+use geom_num::interval::Interval;
 use geom_sketch::equation::Assembly;
 use geom_sketch::fit;
 use geom_sketch::length::spline_length;
@@ -332,6 +333,47 @@ fn a_point_pinned_to_a_spline_reads_the_miss() {
     );
 }
 
+/// Moves every value of `x` by a fixed pseudo-random amount of at most a quarter, off any join.
+fn jiggle(x: &mut [f64]) {
+    let mut state = 0x0220_u64;
+    for value in x {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        *value += ((state >> 40) as f64 / (1_u64 << 24) as f64 - 0.5) * 0.5;
+    }
+}
+
+/// The rule's residuals enclosed over `x` as points (piece G226's `Assembly::enclose`, by the one
+/// dispatch table G220's spline rules joined): each holds the residual the solver stores, as tightly
+/// as the arithmetic, with the rule's own count of equations.
+fn assert_enclosed(rule: &str, a: &mut Assembly, x: &[f64]) {
+    a.evaluate_at(x).unwrap();
+    let held: Vec<Interval> = x.iter().map(|v| Interval::point(*v).unwrap()).collect();
+    let enclosed = a.enclose(&held).unwrap();
+    let (last, bounds) = enclosed.last().unwrap();
+    assert_eq!(*last, id(3, 0), "{rule}");
+    let bounds = bounds.as_ref().unwrap();
+    let r = a.residuals();
+    assert_eq!(bounds.len(), rows_of(rule), "{rule}");
+    let stored = &r[r.len() - bounds.len()..];
+    for (b, v) in bounds.iter().zip(stored) {
+        assert!(b.lo() <= *v && *v <= b.hi(), "{rule}: {v} outside {b:?}");
+        assert!(b.hi() - b.lo() <= 1e-9 * (1.0 + v.abs()), "{rule}: {b:?}");
+    }
+}
+
+/// How many equations a spline rule has: one for each order of smoothness, two for a point.
+fn rows_of(rule: &str) -> usize {
+    if rule.ends_with("g3") {
+        3
+    } else if rule.ends_with("g2") || rule.starts_with("spline-through") {
+        2
+    } else {
+        1
+    }
+}
+
 #[test]
 fn every_jacobian_entry_is_the_derivative_of_its_residual() {
     let mut text = quarters();
@@ -353,13 +395,7 @@ fn every_jacobian_entry_is_the_derivative_of_its_residual() {
         let s = with_rule(&text, rule);
         let mut a = Assembly::new(&s).unwrap();
         let mut x = a.start().unwrap();
-        let mut state = 0x0220_u64;
-        for value in &mut x {
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1_442_695_040_888_963_407);
-            *value += ((state >> 40) as f64 / (1_u64 << 24) as f64 - 0.5) * 0.5;
-        }
+        jiggle(&mut x);
         a.rescale(&x).unwrap();
         a.evaluate_at(&x).unwrap();
         let jacobian = a.jacobian().to_dense().unwrap();
@@ -383,6 +419,35 @@ fn every_jacobian_entry_is_the_derivative_of_its_residual() {
                 );
             }
         }
+    }
+}
+
+#[test]
+/// Rational splines' rules, the length and the point pinned to a parameter, at the start and
+/// jiggled off it.
+fn every_spline_rule_is_enclosed_around_the_residual_it_stores() {
+    let mut text = quarters();
+    text.push_str("entity 1.7 point 0 0\nentity 1.8 point 6 1\nentity 2.3 line 1.7 1.8 segment\n");
+    for rule in [
+        "spline-join 2.0 finish 2.1 start g1",
+        "spline-join 2.0 finish 2.1 start g2",
+        "spline-join 2.0 finish 2.1 start g3",
+        "spline-tangent-line 2.0 start 2.3",
+        "spline-against 2.0 finish 2.2 finish g1",
+        "spline-against 2.1 start 2.2 finish g2",
+        "spline-against 2.1 start 2.2 finish g3",
+        "spline-against 2.1 finish 2.3 start g1",
+        "spline-against 2.1 finish 2.3 start g2",
+        "spline-against 2.1 finish 2.3 start g3",
+        "spline-length 2.1 7",
+        "spline-through 2.0 1.7 0.3",
+    ] {
+        let s = with_rule(&text, rule);
+        let mut a = Assembly::new(&s).unwrap();
+        let mut x = a.start().unwrap();
+        assert_enclosed(rule, &mut a, &x);
+        jiggle(&mut x);
+        assert_enclosed(rule, &mut a, &x);
     }
 }
 

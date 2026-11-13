@@ -15795,6 +15795,16 @@
               "shape": "struct"
             },
             {
+              "doc": "Committing moved geometry across this constraint's stored root choice (a side, an outside, a tangency), or onto its boundary where the choice cannot be told: rounding within a few grid steps of a degenerate configuration (chapter 15.10, the first check).",
+              "name": "CommitFlip",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A constraint is held only to this bound, in grid steps, which is past the fit ceiling (chapter 15.10, the second check; section 22's `Bound`).",
+              "name": "ExactnessNotAccepted",
+              "shape": "struct"
+            },
+            {
               "doc": "A path's two ends are not one sketch with new values.",
               "name": "NotTheSameSketch",
               "shape": "unit"
@@ -15913,6 +15923,29 @@
             "text": "section 15.2's offset chains and section 15.3's fixing (`projects/engines/geometry/architecture/15-sketches.md`)."
           },
           "path": "geom_sketch::author",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one interval evaluation of every rule, and one exact predicate for every root choice; linear in the sketch, no recursion. A 1,000-entity sketch is checked in about 2 ms (`benches/check.rs`). The meter is charged eight units of work for each constraint, before anything is read.",
+          "does": "[`Checker::new`] builds a sketch's equations once. [`Checker::check`] then takes a [`Committed`] sketch (`commit`) and runs chapter 15.10's first two checks, in order. **Root choices:** a side, an outside or a tangency stored on a constraint is decided again with exact predicates on the committed geometry; one that has flipped, or whose point now lies on the boundary where the choice cannot be told, fails the commit with [`SketchError::CommitFlip`], naming the constraint. **Ceiling:** the residual of every constraint the commit did not make exact is enclosed in interval arithmetic on the committed values, by the very text the solver differentiates (`Assembly::enclose`), and must be at most the ceiling, or the commit fails with [`SketchError::ExactnessNotAccepted`], naming the constraint and its bound. What it returns is each constraint's [`Holds`]: `Exact`, `Within` a bound in grid steps, or `Unresolved`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/check.rs",
+          "guarantees": [
+            "**A bound is a bound.** A `Within` residual encloses the true residual of the stored geometry: each input is an interval holding the stored value (a rational point's coordinate is X / W enclosed outward; a circle through a defining point has the square root of its squared radius enclosed), and every operation rounds outward. The bound is the larger magnitude of the interval, so it is never below the exact residual.",
+            "**Root choices by exact predicates.** A side is `Rational2::orient` of the line's stored ends and the point; an outside is `Circle2::side` or `Round::side`; two circles are tangent from outside when the distance between their centres squared is more than the sum of their radii squared. No rounding decides one. A choice on geometry the commit did not give a form to (an ellipse, a spline) is not checked here.",
+            "**Nothing changes.** The check reads the sketch and the commit and writes nothing; a failure leaves both exactly as they were.",
+            "**Deterministic.** Constraints are taken in authoring order; the first to fail is the one reported."
+          ],
+          "job": "The checks that follow a commit: every stored root choice decided again, every bounded constraint held to an interval bound, and the fit ceiling.",
+          "method": {
+            "links": [
+              "doi:10.1137/1.9780898717716"
+            ],
+            "text": "chapter 15.10's \"Three checks then run\" (`projects/engines/geometry/architecture/ 15-sketches.md`): root choices decided again on the committed geometry, and a bounded residual \"evaluated on the stored geometry in interval arithmetic\" against the fit ceiling (`geom_num::ladder::FIT`); interval arithmetic as in R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM, 2009, doi:10.1137/1.9780898717716, through `geom_num::interval::Interval`, with the residual written once over `geom_num::scalar::Scalar`."
+          },
+          "path": "geom_sketch::check",
           "provenance": [],
           "spdx": null,
           "target": "lib"

@@ -9738,6 +9738,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "At k equal to rows no row is left below the last step, so the pivot is 0, and a pivot of 0 is near no positive threshold (0 times 16 is below it), so the confirmation is not entered either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/check.rs",
+      "mutant": "replace > with >= in Checker::check",
+      "line_text": "if magnitude > bound {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when a residual's magnitude equals the bound found so far, and then both keep the same value: the largest is the same number either way."
     }
   ],
   "coverage_off": [
