@@ -58,7 +58,7 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 34] = [
+const GEOM_NUM: [(&str, &str); 35] = [
     ("distance", include_str!("../../geom-num/src/distance.rs")),
     ("quadric", include_str!("../../geom-num/src/quadric.rs")),
     ("sturm", include_str!("../../geom-num/src/sturm.rs")),
@@ -83,6 +83,7 @@ const GEOM_NUM: [(&str, &str); 34] = [
     ("newton", include_str!("../../geom-num/src/newton.rs")),
     ("perturb", include_str!("../../geom-num/src/perturb.rs")),
     ("plane", include_str!("../../geom-num/src/plane.rs")),
+    ("arc", include_str!("../../geom-num/src/arc.rs")),
     ("carrier", include_str!("../../geom-num/src/carrier.rs")),
     ("crossing", include_str!("../../geom-num/src/crossing.rs")),
     ("predicate", include_str!("../../geom-num/src/predicate.rs")),
@@ -125,7 +126,7 @@ const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "sup
 
 /// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
 /// functions are `generated::<predicate>::<function>`.
-const GENERATED_PARTS: [(&str, &str); 23] = [
+const GENERATED_PARTS: [(&str, &str); 29] = [
     (
         "generated::line_sphere",
         include_str!("../../geom-num/src/generated/line_sphere.rs"),
@@ -209,6 +210,30 @@ const GENERATED_PARTS: [(&str, &str); 23] = [
     (
         "generated::rational_orient",
         include_str!("../../geom-num/src/generated/rational_orient.rs"),
+    ),
+    (
+        "generated::round_grid",
+        include_str!("../../geom-num/src/generated/round_grid.rs"),
+    ),
+    (
+        "generated::round_rational",
+        include_str!("../../geom-num/src/generated/round_rational.rs"),
+    ),
+    (
+        "generated::round_line",
+        include_str!("../../geom-num/src/generated/round_line.rs"),
+    ),
+    (
+        "generated::circle_side",
+        include_str!("../../geom-num/src/generated/circle_side.rs"),
+    ),
+    (
+        "generated::circle_line",
+        include_str!("../../geom-num/src/generated/circle_line.rs"),
+    ),
+    (
+        "generated::circle_gap",
+        include_str!("../../geom-num/src/generated/circle_gap.rs"),
     ),
     (
         "generated::plain",

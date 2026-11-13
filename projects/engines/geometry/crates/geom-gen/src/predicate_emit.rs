@@ -709,7 +709,8 @@ const WIDTH: usize = 100;
 
 /// A paragraph of comment lines starting with `lead` (`//!` or `///`), its words wrapped so that
 /// no line passes [`WIDTH`] columns unless one word does; `first` begins the first line and
-/// `rest` every other (`- ` and two spaces for a list item).
+/// `rest` every other (`- ` and two spaces for a list item). A line never opens with `+` or `-`,
+/// which rustdoc would read as a list item: the word before goes down with it.
 fn para(out: &mut String, lead: &str, first: &str, rest: &str, text: &str) {
     let mut current = format!("{lead} {first}");
     let mut empty = true;
@@ -720,9 +721,22 @@ fn para(out: &mut String, lead: &str, first: &str, rest: &str, text: &str) {
             .saturating_add(usize::from(!empty))
             .saturating_add(word.chars().count());
         if !empty && needed > WIDTH {
-            line(out, &current);
-            current = format!("{lead} {rest}");
-            empty = true;
+            let carried = if matches!(word, "+" | "-") {
+                current
+                    .rsplit_once(' ')
+                    .map(|(kept, last)| (kept.to_owned(), last.to_owned()))
+            } else {
+                None
+            };
+            let next = format!("{lead} {rest}");
+            if let Some((kept, last)) = carried {
+                line(out, &kept);
+                current = format!("{next}{last}");
+            } else {
+                line(out, &current);
+                current = next;
+                empty = true;
+            }
         }
         if !empty {
             current.push(' ');
@@ -1330,10 +1344,20 @@ fn axes_of(ty: &str) -> &'static [&'static str] {
     }
 }
 
+/// The name the twin's `#[verus_spec]` gives `value`'s result, and the name of the integer inside
+/// its `Some`. Both end in `_`, which no name of the description language may
+/// (`crate::predicate_lang`'s module header), so neither can be an input's name: a circle's radius
+/// input `r`, or a rational point's weight `v`, would otherwise be shadowed in the `ensures`.
+const SPEC_RESULT: &str = "result_";
+
+/// The integer inside the result's `Some`, as [`SPEC_RESULT`] says.
+const SPEC_HELD: &str = "held_";
+
 /// The twin's `#[verus_spec]`: every coordinate of every point input on the grid, and the
 /// result `Some` of the description's value over the integers (`spec_value`). With rounded inputs,
 /// the result is `Some` of that value exactly when every rounded input is within its declared
-/// range (`in_range`, the specification of the twin of `within`), and `None` otherwise.
+/// range (`in_range`, the specification of the twin of `within`), and `None` otherwise. The result
+/// and the integer it holds are named [`SPEC_RESULT`] and [`SPEC_HELD`].
 fn verus_spec(out: &mut String, d: &Derivation) -> Result<(), EmitError> {
     let ty = point_type(d)?;
     let mut grid = Vec::new();
@@ -1353,7 +1377,7 @@ fn verus_spec(out: &mut String, d: &Derivation) -> Result<(), EmitError> {
             )),
         }
     }
-    line(out, "#[verus_spec(r =>");
+    line(out, &format!("#[verus_spec({SPEC_RESULT} =>"));
     if !grid.is_empty() {
         line(out, "    requires");
         for g in &grid {
@@ -1364,26 +1388,26 @@ fn verus_spec(out: &mut String, d: &Derivation) -> Result<(), EmitError> {
         return fail("the result step is missing");
     };
     let result = if root.width > Width::I128 {
-        "v.value()"
+        format!("{SPEC_HELD}.value()")
     } else {
-        "v as int"
+        format!("{SPEC_HELD} as int")
     };
     line(out, "    ensures");
     if ranges.is_empty() {
         line(
             out,
             &format!(
-                "        r matches Some(v) && {result} == spec_value({}),",
+                "        {SPEC_RESULT} matches Some({SPEC_HELD}) && {result} == spec_value({}),",
                 args(d)
             ),
         );
     } else {
         let all = ranges.join(" && ");
-        line(out, "        match r {");
+        line(out, &format!("        match {SPEC_RESULT} {{"));
         line(
             out,
             &format!(
-                "            Some(v) => {all} && {result} == spec_value({}),",
+                "            Some({SPEC_HELD}) => {all} && {result} == spec_value({}),",
                 args(d)
             ),
         );

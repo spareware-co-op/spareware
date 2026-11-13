@@ -79,7 +79,7 @@ const fn below(bits: u32) -> i128 {
 }
 
 /// Whether `v` is below 2 to `bits` in magnitude.
-const fn fits(v: i128, bits: u32) -> bool {
+pub(crate) const fn fits(v: i128, bits: u32) -> bool {
     v.unsigned_abs() <= below(bits).unsigned_abs()
 }
 
@@ -231,7 +231,7 @@ impl Carrier {
 }
 
 /// p · q − r · s, each product within `i128` for any values in the budget.
-fn product_difference(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumError> {
+pub(crate) fn product_difference(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumError> {
     p.checked_mul(q)
         .zip(r.checked_mul(s))
         .and_then(|(m, n)| m.checked_sub(n))
@@ -239,7 +239,7 @@ fn product_difference(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumErr
 }
 
 /// p · q + r · s, as [`product_difference`].
-fn product_sum(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumError> {
+pub(crate) fn product_sum(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumError> {
     p.checked_mul(q)
         .zip(r.checked_mul(s))
         .and_then(|(m, n)| m.checked_add(n))
@@ -272,11 +272,18 @@ impl Rational2 {
             return Err(NumError::Degenerate);
         }
         // Each is below 2^124, so turning it cannot overflow.
-        let turned = |v: i128| if w < 0 { v.checked_neg() } else { Some(v) };
-        match (turned(x), turned(y), turned(w)) {
-            (Some(x), Some(y), Some(w)) => Ok(Rational2 { x, y, w }),
-            _ => Err(NumError::BudgetExceeded),
-        }
+        let turned = |v: i128| -> Result<i128, NumError> {
+            if w < 0 {
+                v.checked_neg().ok_or(NumError::BudgetExceeded)
+            } else {
+                Ok(v)
+            }
+        };
+        Ok(Rational2 {
+            x: turned(x)?,
+            y: turned(y)?,
+            w: turned(w)?,
+        })
     }
 
     /// The homogeneous coordinates: `[X, Y]` and W, W positive.
