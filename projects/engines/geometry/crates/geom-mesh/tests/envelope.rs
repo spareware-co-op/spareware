@@ -192,7 +192,9 @@ fn every_corner_of_the_swept_cube_is_inside_and_on_a_facet() {
     // A step past the box of the swept cubes is outside.
     assert!(!body.contains(p(45, 0, 0)).unwrap());
     assert!(!body.contains(p(0, 0, -5)).unwrap());
-    assert_eq!(body.planes().len(), 26);
+    // Only the planes of faces, each once: 6 along the axes, 2 along the normal, and 9 edges
+    // crossed with axes on the side away from the third corner, 2 of them axis planes already.
+    assert_eq!(body.planes().len(), 15);
 }
 
 #[test]
