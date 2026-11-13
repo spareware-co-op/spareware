@@ -364,11 +364,15 @@ fn the_basis_work_is_the_bounds_and_the_orders_asked() {
         assert_eq!(Offset::<2>::basis_work(order, false), Ok(2 * orders * 4));
         assert_eq!(Offset::<3>::basis_work(order, false), Ok(3 * orders * 4));
     }
-    for over_span in [false, true] {
-        assert_eq!(
-            Offset::<3>::basis_work(usize::MAX, over_span),
+    // The count passes u64 only from an order of about 3·10¹⁷, which a 64-bit usize can name and
+    // a 32-bit one (wasm32) cannot: there the largest order's count fits, 2³² + 1 orders.
+    for (over_span, each) in [(false, 4), (true, 19)] {
+        let want = if usize::BITS == 32 {
+            Ok(3 * (u64::from(u32::MAX) + 2) * each)
+        } else {
             Err(CurveError::Defect)
-        );
+        };
+        assert_eq!(Offset::<3>::basis_work(usize::MAX, over_span), want);
     }
 }
 
