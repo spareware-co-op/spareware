@@ -23,7 +23,13 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224,
-//! G225, G226, G227, G228, G230, G477, G478.
+//! Modules today:
+//!
+//! - [`plane`]: sketch planes, their maps into 3D and the Gram metric (piece G216).
+//!
+//! Status: built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227,
+//! G228, G230, G477, G478; G216 is done.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+pub mod plane;
