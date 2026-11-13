@@ -167,6 +167,8 @@
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `geom-op`, `geom-curve`, `geom-surface`, `geom-nurbs` and `geom-run` (Apache-2.0, ours), the
 //!   code under test of the [`batch`] target.
+//! - `geom-intersect` (MPL-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
+//!   `geom-math`, `geom-run` and `geom-surface` (MPL-2.0, ours), what its cases are made of.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -225,6 +227,8 @@
 #![forbid(unsafe_code)]
 
 use core::fmt;
+
+pub mod intersect;
 
 pub mod adversarial;
 pub mod arenas;

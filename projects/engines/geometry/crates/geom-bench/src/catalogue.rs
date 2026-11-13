@@ -508,6 +508,11 @@ pub static OPS: &[Op] = &[
     Op { group: "prune", name: "record_write", measures: "geom_format::pruned::pruned_record", classes: T, prepare: |c| bind(inputs::naming::pruned(c), kernels::naming::record_write) },
     Op { group: "prune", name: "record_read", measures: "geom_format::pruned::read_pruned", classes: T, prepare: |c| bind(inputs::naming::pruned_payloads(c), kernels::naming::record_read) },
     // Root finding and quadrature (piece G51; decision 32.46).
+    // geom-intersect's canonical order (piece G158; decision 32.44): a list of items sorted and
+    // proven disjoint, a key read through a circle's NURBS form, and a pair of keys put in order.
+    Op { group: "intersect", name: "sort_items", measures: "geom_intersect::Intersection::new", classes: T, prepare: |c| bind(inputs::intersect::items(c), kernels::intersect::sorted) },
+    Op { group: "intersect", name: "key_circle", measures: "geom_intersect::CanonicalKey::of_curve", classes: T, prepare: |c| bind(inputs::intersect::circles(c), kernels::intersect::keys) },
+    Op { group: "intersect", name: "pair_lines", measures: "geom_intersect::order::pair", classes: T, prepare: |c| bind(inputs::intersect::lines(c), kernels::intersect::paired) },
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
     Op { group: "math_types", name: "decimal_parse", measures: "geom_math::Decimal::parse", classes: T, prepare: |c| bind(inputs::math_types::decimal_parse(c), kernels::math_types::decimal_parse) },
@@ -586,7 +591,7 @@ pub fn full_scenario(op: &str) -> Option<Prepared> {
 }
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 50] = [
+pub const GROUPS: [&str; 51] = [
     "predicate",
     "sign",
     "wide",
@@ -637,6 +642,7 @@ pub const GROUPS: [&str; 50] = [
     "history",
     "resolve",
     "prune",
+    "intersect",
 ];
 
 /// The group of the growth checks.

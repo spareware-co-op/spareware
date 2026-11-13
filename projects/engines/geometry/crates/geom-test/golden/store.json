@@ -290,6 +290,12 @@
               "kind": "corpus",
               "piece": "Phase 4 train 1 (G123 to G155)",
               "why": "Phase 4's first train, one record for its pieces' 32 new count benchmarks: 14 on geom-num's plane functions (G138: plane::determinant_sign and its fellows), mesh/cdt (G153), mesh/exact_build (G146), 6 on the distance comparisons and triangle contact (G151), mesh/envelope (G152), mesh/locate (G147), mesh/boolean (G148) and 7 scenarios of the flat boolean (G140); and topo/publish's input digest, which moves because a vertex's point is now a PointKind (the G129 fix), while its output digest stays. No other existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G158",
+              "why": "3 new count benchmarks on geom-intersect's canonical order (decision 32.44): a list of items sorted and proven disjoint, a circle's key, a pair of lines put in order; no existing digest moved"
             }
           ],
           "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b"

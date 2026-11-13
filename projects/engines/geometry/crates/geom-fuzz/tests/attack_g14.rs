@@ -39,11 +39,9 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, curves,
-    encoder, euler, exact, linalg, make, maths, names, naming, nurbs, open, operations, orient2d,
-    planes, predicates, prune, records, references, roots, sequence, surfaces, transforms,
-    variants, wide,
+    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, curves, encoder, euler, exact, intersect, linalg, make, maths, names, naming, nurbs, open, operations, orient2d, planes, predicates, prune, records, references, roots, sequence, surfaces, transforms, variants, wide,
 };
+
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
 use geom_num::grid::{COORD_MAX, P2};
@@ -54,7 +52,7 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 33] = [
+const TARGETS: [(&str, Harness); 34] = [
     ("arenas", arenas::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
@@ -76,6 +74,7 @@ const TARGETS: [(&str, Harness); 33] = [
     ("nurbs", nurbs::harness),
     ("open", open::harness),
     ("operations", operations::harness),
+    ("intersect", intersect::harness),
     ("orient2d", orient2d::harness),
     ("planes", planes::harness),
     ("predicates", predicates::harness),

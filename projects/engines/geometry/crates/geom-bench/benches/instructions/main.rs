@@ -23,24 +23,14 @@ mod gate;
 
 #[cfg(target_os = "linux")]
 use gate::{
-    attributes::attributes, ball::ball, batch::batch, body_record::body_record, brent::brent,
-    bvh::bvh, cbor::cbor, crossing::crossing, curve::curve, dd::dd, dual::dual, eft::eft,
-    encoder::encoder, exact_sum::exact_sum, exactness::exactness, format::format,
-    generated::generated, grid::grid, growth::growth, helper::helper, history::history,
-    interval::interval, isolate::isolate, linalg::linalg, make::make, math::math,
-    math_types::math_types, mesh::mesh, name_record::name_record, names::names, newton::newton,
-    nurbs::nurbs, op_record::op_record, open::open, perturb::perturb, plane::plane,
-    predicate::predicate, prune::prune, quadrature::quadrature, query::query, real::real,
-    record::record, resolve::resolve, rng::rng, scenario::scenario, sign::sign, surface::surface,
-    topo::topo, unproven::unproven, wide::wide, wide32::wide32,
+    attributes::attributes, ball::ball, batch::batch, body_record::body_record, brent::brent, bvh::bvh, cbor::cbor, crossing::crossing, curve::curve, dd::dd, dual::dual, eft::eft, encoder::encoder, exact_sum::exact_sum, exactness::exactness, format::format, generated::generated, grid::grid, growth::growth, helper::helper, history::history, interval::interval, isolate::isolate, linalg::linalg, make::make, math::math, math_types::math_types, mesh::mesh, name_record::name_record, names::names, newton::newton, nurbs::nurbs, op_record::op_record, open::open, perturb::perturb, plane::plane, predicate::predicate, prune::prune, quadrature::quadrature, query::query, real::real, record::record, resolve::resolve, rng::rng, scenario::scenario, sign::sign, surface::surface, topo::topo, unproven::unproven, wide::wide, wide32::wide32, intersect::intersect,
 };
 
 #[cfg(target_os = "linux")]
 gungraun::main!(
     config = gate::config();
     library_benchmark_groups = predicate, sign, wide, wide32, plane, crossing, eft, interval, grid, real, exactness,
-        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, attributes, topo, batch, mesh, nurbs, curve, surface, format, brent, quadrature, helper, scenario, growth, make,
-        cbor, record, body_record, name_record, op_record, open, query, encoder, names, history, resolve, prune
+        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, attributes, topo, batch, mesh, nurbs, curve, surface, format, brent, quadrature, helper, scenario, growth, make, cbor, record, body_record, name_record, op_record, open, query, encoder, names, history, resolve, prune, intersect
 );
 
 /// Off Linux: explain where the gate runs, and succeed.

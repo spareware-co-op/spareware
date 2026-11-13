@@ -47,6 +47,7 @@ pub mod format;
 pub mod generated;
 pub mod grid;
 pub mod growth;
+pub mod intersect;
 pub mod helper;
 pub mod interval;
 pub mod isolate;
