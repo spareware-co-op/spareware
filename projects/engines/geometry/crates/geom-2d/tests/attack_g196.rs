@@ -586,6 +586,9 @@ fn ix<K: geom_topo::Kind>(n: usize) -> geom_topo::Ix<K> {
 fn point_of(body: &geom_topo::Body, v: geom_topo::VertexIx) -> (i64, i64) {
     let ar = body.arenas();
     let q = ar.points.get(ar.vertices.get(v).unwrap().point).unwrap();
+    let geom_topo::PointKind::Grid(q) = q else {
+        panic!("an arrangement's vertex is a grid point")
+    };
     (q.x.get(), q.y.get())
 }
 
