@@ -42,7 +42,7 @@
 )]
 
 use geom_num::generated::{
-    axis_gap, carrier_order, carrier_side, circle_gap, circle_line, circle_side, cross_norm, incircle, insphere, limbs, line_cone, line_cone_lead, line_cylinder, line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side, rational_cmp, rational_orient, round_grid, round_line, round_rational, ssi_side, ssi_weight, tpi_side, tpi_weight,
+    axis_gap, carrier_order, carrier_side, circle_gap, circle_line, circle_side, cross_norm, ellipse_line, ellipse_side, incircle, insphere, limbs, line_cone, line_cone_lead, line_cylinder, line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side, rational_cmp, rational_orient, round_grid, round_line, round_rational, ssi_side, ssi_weight, tpi_side, tpi_weight,
 };
 use geom_num::grid::{COORD_MAX, P2, P3};
 use geom_num::{I512, Sign, Wide, Wide32};
@@ -202,6 +202,11 @@ fn round_and_circle_predicates_agree_on_random_inputs() {
         agree!(circle_side, circle_side_value; x, y, v, k, r);
         agree!(circle_line, circle_line_value; a, b, d, k, r);
         agree!(circle_gap, circle_gap_value; z, p, t);
+        // An ellipse's major axis below 2^41 in each part and its p and q below 2^22.
+        let [mx, my] = [g.value(41), g.value(41)];
+        let [pp, q] = [g.value(22), g.value(22)];
+        agree!(ellipse_side, ellipse_side_value; x, y, w, k, mx, my, pp, q);
+        agree!(ellipse_line, ellipse_line_value; a, b, d, k, mx, my, pp, q);
     }
 }
 
@@ -352,6 +357,32 @@ fn a_rounded_input_past_its_range_is_refused_by_every_variant() {
     assert_eq!(circle_gap::value(q, q, t + 1), None);
     assert_eq!(plain::circle_gap_value(q, q, t + 1), None);
     assert_eq!(limbs::circle_gap_value(q, q, t + 1), None);
+    let ratio = (1i128 << 22) - 1;
+    assert!(ellipse_side::value(c, c, w, q, r, r, ratio, ratio).is_some());
+    assert_eq!(
+        ellipse_side::value(c, c, w, q, r, r, ratio + 1, ratio),
+        None
+    );
+    assert_eq!(
+        plain::ellipse_side_value(c, c, w, q, r, r, ratio + 1, ratio),
+        None
+    );
+    assert_eq!(
+        limbs::ellipse_side_value(c, c, w, q, r, r, ratio + 1, ratio),
+        None
+    );
+    assert_eq!(
+        ellipse_line::value(r, r, r, q, r + 1, r, ratio, ratio),
+        None
+    );
+    assert_eq!(
+        plain::ellipse_line_value(r, r, r, q, r + 1, r, ratio, ratio),
+        None
+    );
+    assert_eq!(
+        limbs::ellipse_line_value(r, r, r, q, r + 1, r, ratio, ratio),
+        None
+    );
 }
 
 /// `Wide32`'s extremes, its order and its `Debug` form (the two's-complement bits, most significant
