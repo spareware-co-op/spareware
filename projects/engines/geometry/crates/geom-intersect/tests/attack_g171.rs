@@ -33,9 +33,11 @@ use geom_surface::{Cylinder, Plane, SurfaceKind, Torus};
 const UNIT: f64 = 1024.0;
 const CEILING: f64 = 1024.0;
 
-/// A meter above what any case here takes, so a search that loses its way fails, not hangs.
+/// A meter above what any case here takes, so a search that loses its way fails, not hangs. The
+/// cusp on a torus takes the most: 20,633,237 units to subdivide, since a torus's partials pay for
+/// the arctangent's 192-bit corners (issue #765).
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::of_work(1 << 23))
+    WorkMeter::new(Budget::of_work(1 << 25))
 }
 
 /// z = h + (a·x² + b·y²)/`UNIT` over [−r, r]², exact in Bézier form.
