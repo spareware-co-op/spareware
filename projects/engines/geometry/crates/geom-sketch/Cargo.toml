@@ -49,6 +49,11 @@ harness = false
 name = "solve"
 harness = false
 
+# The rigid clusters of a 1,000-entity family (piece G223), the same way.
+[[bench]]
+name = "cluster"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
