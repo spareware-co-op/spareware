@@ -797,12 +797,15 @@ impl Outline {
     /// Each side with the corner it ends at: where the next side round its ring starts, and the
     /// ring's first side after its last. The sides are kept ring by ring, in the order each ring
     /// runs, and group 1 has held every loop closed, each fin ending at the vertex the next
-    /// starts from; a star's triangle is one ring of three.
+    /// starts from; a star's triangle is one ring of three. So the next side round the ring is
+    /// the one kept after it, if that is of its ring, and otherwise the first kept of its ring.
     fn rounds(&self) -> impl Iterator<Item = (&Side, &End)> {
-        self.sides
-            .chunk_by(|before, after| before.ring == after.ring)
-            .flat_map(|ring| ring.iter().zip(ring.iter().cycle().skip(1)))
-            .map(|(side, next)| (side, &next.start))
+        self.sides.iter().enumerate().map(|(at, side)| {
+            let of_ring = |other: &&Side| other.ring == side.ring;
+            let after = self.sides.get(at.saturating_add(1)).filter(of_ring);
+            let next = after.or_else(|| self.sides.iter().find(of_ring));
+            (side, next.map_or(&side.start, |to| &to.start))
+        })
     }
 
     /// Where its boundary crosses `cut`, on its plane where it meets `against`, moved infinitely

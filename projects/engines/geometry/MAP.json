@@ -2339,8 +2339,8 @@
           "target": "lib"
         },
         {
-          "cost": "an outline is linear in its face's fins, a pair of faces linear in their sides plus the sorting of their crossings, a pair of faces on one plane the product of their sides. Each test allocates a short list, reserved fallibly with its logical bytes on the meter. Recursion: none.",
-          "does": "an [`Outline`] is a flat face as this module reads it: its integer plane, and for each fin the edge's two ends and a plane that crosses the face's along the edge. That plane is the other face's across the edge, or, along a seam, a plane the edge's ends both lie on, or for two grid points one stood on them; so a side of the polygon is a pair of planes, as EMBER keeps it, and no test here ever needs the orientation of three implicit points, about 840 bits a term (19.2).",
+          "cost": "an outline is linear in its face's fins, a pair of faces linear in their sides plus the sorting of their crossings, a pair of faces on one plane the product of their sides. A pair one of whose faces keeps to one side of the other's plane costs a sign for each of its corners and reserves nothing. Each other test allocates a short list, reserved fallibly with its logical bytes on the meter. Recursion: none.",
+          "does": "an [`Outline`] is a flat face as this module reads it: its integer plane, and for each fin, ring by ring, the corner the edge starts at (it ends at the next fin's) and a plane that crosses the face's along the edge. That plane is the other face's across the edge, or, along a seam, a plane the edge's ends both lie on, or for two grid points one stood on them; so a side of the polygon is a pair of planes, as EMBER keeps it, and no test here ever needs the orientation of three implicit points, about 840 bits a term (19.2).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
           "guarantees": [
