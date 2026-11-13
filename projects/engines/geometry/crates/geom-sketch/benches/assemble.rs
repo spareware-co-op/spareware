@@ -21,7 +21,7 @@ use std::time::Instant;
 use geom_num::{GridStep, P3};
 use geom_sketch::equation::Assembly;
 use geom_sketch::model::{
-    Constraint, ConstraintKind, Entity, EntityKind, ItemId, Sketch, Standing,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, ItemId, Sketch, Standing,
 };
 use geom_sketch::plane::{Lattice, PlaneFrame, SketchPlane};
 
@@ -47,7 +47,7 @@ fn chain() -> Sketch {
                 ConstraintKind::Distance {
                     a: at(i),
                     b: at(i + 1),
-                    distance: 3.0,
+                    distance: Amount::Value(3.0),
                 },
             ),
             (

@@ -217,6 +217,22 @@ impl Sparse {
         Ok(())
     }
 
+    /// Adds to the entry stored at `place`: for a pattern whose triplets name one place twice.
+    ///
+    /// # Errors
+    ///
+    /// [`LinalgError::Shape`] if nothing is stored there; [`LinalgError::NotFinite`].
+    pub fn add_at(&mut self, place: usize, value: f64) -> Result<(), LinalgError> {
+        let held = self.values.get_mut(place).ok_or(LinalgError::Shape)?;
+        *held = finite(*held + value)?;
+        Ok(())
+    }
+
+    /// Sets every stored entry to zero: the pattern stays.
+    pub fn clear_values(&mut self) {
+        self.values.fill(0.0);
+    }
+
     /// A·x.
     ///
     /// # Errors

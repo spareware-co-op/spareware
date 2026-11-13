@@ -183,6 +183,37 @@ fn every_grid_point_of_the_plane_is_a_lattice_point() {
 }
 
 #[test]
+fn ties_between_the_shortest_vectors_fall_one_way() {
+    // Planes whose two shortest grid vectors are as long as each other, or where the reduction
+    // meets a half: the frame each takes is the one every sketch on it is measured in, so it is
+    // pinned. u is the shorter of the reduced pair, the first found on a tie, and a half rounds
+    // toward zero, which stops the reduction.
+    for (normal, u, v) in [
+        ([0, 0, 1], [1, 0, 0], [0, 1, 0]),
+        ([0, 0, -1], [1, 0, 0], [0, -1, 0]),
+        ([1, 0, 0], [0, 1, 0], [0, 0, 1]),
+        ([0, 1, 0], [1, 0, 0], [0, 0, -1]),
+        ([1, 1, 0], [0, 0, 1], [1, -1, 0]),
+        ([1, -1, 0], [0, 0, 1], [-1, -1, 0]),
+        ([0, 1, 1], [1, 0, 0], [0, 1, -1]),
+        ([1, 1, 1], [1, -1, 0], [0, 1, -1]),
+        ([1, 1, 2], [1, -1, 0], [1, 1, -1]),
+        ([1, 2, 2], [0, 1, -1], [-2, 1, 0]),
+        ([2, 2, 1], [1, -1, 0], [0, 1, -2]),
+        ([1, 1, 3], [1, -1, 0], [1, 2, -1]),
+        // And the other way round, where the reduction meets a half below zero.
+        ([-1, -1, -1], [1, -1, 0], [0, -1, 1]),
+        ([-1, 1, 1], [1, 1, 0], [0, 1, -1]),
+        ([1, -1, 1], [1, 1, 0], [0, 1, 1]),
+        ([1, 1, -1], [1, -1, 0], [0, -1, -1]),
+        ([-1, -2, -2], [0, 1, -1], [2, -1, 0]),
+    ] {
+        let frame = Lattice::of_normal(p(0, 0, 0), normal).unwrap();
+        assert_eq!((frame.u(), frame.v()), (u, v), "{normal:?}");
+    }
+}
+
+#[test]
 fn one_plane_has_one_frame() {
     let a = Lattice::of_normal(p(1, 2, 3), [2, -3, 6]).unwrap();
     let b = Lattice::of_normal(p(1, 2, 3), [4, -6, 12]).unwrap();
@@ -383,4 +414,19 @@ fn a_placed_point_states_its_class() {
     );
     assert_eq!(lattice.place(i64::MAX, 0), Err(PlaneError::OutOfRange));
     assert_eq!(rotated.place(i64::MAX, 0), Err(PlaneError::OutOfRange));
+}
+
+#[test]
+fn a_rotated_frame_measures_its_height_off_the_plane() {
+    // No part of either axis is zero, so every term of the normal counts: (3, -6, 6) is 9 along it.
+    let third = 1.0 / 3.0;
+    let frame = Rotated::new(
+        p(0, 0, 0),
+        [2.0 * third, 2.0 * third, third],
+        [-2.0 * third, third, 2.0 * third],
+    )
+    .unwrap();
+    let (s, t, height) = frame.project(p(3, -6, 6));
+    assert!(s.abs() < 1e-9 && t.abs() < 1e-9);
+    assert!((height - 9.0).abs() < 1e-9, "{height}");
 }

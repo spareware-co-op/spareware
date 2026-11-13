@@ -19,6 +19,9 @@
 //!   and an item with the id of another is refused.
 //! - **Exact scales.** A variable's scale is a power of two, so dividing by it rounds nothing.
 //! - **Reference only where it means something.** Only a dimension can be a reference.
+//! - **Root choices are stored.** A side, a sense or a tangency is a field of its constraint, and
+//!   [`Sketch::drawn_side`], [`Sketch::drawn_outside`] and [`Sketch::drawn_touching_outside`] read it
+//!   off a drawing by exact predicates, or say it cannot be read (chapter 15.3).
 //!
 //! Method: section 15.2's table of entities and variables, and sections 15.3 and 15.4
 //! (`projects/engines/geometry/architecture/15-sketches.md`).
@@ -29,6 +32,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use geom_linalg::LinalgError;
 use geom_num::NumError;
@@ -236,8 +240,14 @@ pub enum EntityKind {
         /// The group's size, which scales the rotation.
         size: f64,
     },
-    /// Model geometry brought onto the plane: it never moves, and has no variables.
-    Reference,
+    /// A point of model geometry brought onto the plane: it never moves, and has no variables. A
+    /// line or a circle on such points is the reference geometry a constraint can name.
+    Reference {
+        /// x.
+        x: f64,
+        /// y.
+        y: f64,
+    },
 }
 
 /// One entity of a sketch.
@@ -271,7 +281,25 @@ impl Side {
     }
 }
 
-/// What a constraint says.
+/// A value a dimension takes: a number, or a named scalar several constraints share.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Amount {
+    /// This value.
+    Value(f64),
+    /// The value of this scalar.
+    Named(ItemId),
+}
+
+/// What section 15.10's table says a relation becomes at commit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommitClass {
+    /// Exact, by the stored form: one point, one carrier, a grid coordinate.
+    Exact,
+    /// Its residual is evaluated on the stored geometry, and its bound reported.
+    Bounded,
+}
+
+/// What a constraint says. Its residual is in `crate::equation`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ConstraintKind {
     /// Two points are one.
@@ -279,6 +307,43 @@ pub enum ConstraintKind {
         /// The first point.
         a: ItemId,
         /// The second point.
+        b: ItemId,
+    },
+    /// Two circles or arcs have one centre.
+    Concentric {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+    },
+    /// A point is on a line.
+    OnLine {
+        /// The point.
+        point: ItemId,
+        /// The line.
+        line: ItemId,
+    },
+    /// A point is on a circle, or an arc's circle.
+    OnCircle {
+        /// The point.
+        point: ItemId,
+        /// The circle.
+        circle: ItemId,
+    },
+    /// A point is the middle of two others.
+    Midpoint {
+        /// The point.
+        point: ItemId,
+        /// One end.
+        a: ItemId,
+        /// The other end.
+        b: ItemId,
+    },
+    /// Two lines are on one line.
+    Collinear {
+        /// The first.
+        a: ItemId,
+        /// The second.
         b: ItemId,
     },
     /// A line's two points have one y.
@@ -291,6 +356,37 @@ pub enum ConstraintKind {
         /// The line.
         line: ItemId,
     },
+    /// Two lines have one direction.
+    Parallel {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+    },
+    /// Two lines are at right angles.
+    Perpendicular {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+    },
+    /// From line a's direction to line b's is this angle, in half-turns: its sign is the sense
+    /// stored.
+    Turned {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+        /// The angle.
+        angle: Amount,
+    },
+    /// A line points this far from the frame's x axis, in half-turns.
+    Heading {
+        /// The line.
+        line: ItemId,
+        /// The angle.
+        angle: Amount,
+    },
     /// Two points are this far apart.
     Distance {
         /// The first point.
@@ -298,18 +394,203 @@ pub enum ConstraintKind {
         /// The second point.
         b: ItemId,
         /// The distance, above zero.
-        distance: f64,
+        distance: Amount,
     },
     /// A point is this far from a line, on a stored side.
-    PointLine {
+    FromLine {
         /// The point.
         point: ItemId,
         /// The line.
         line: ItemId,
         /// The distance, above zero.
-        distance: f64,
+        distance: Amount,
         /// Which side.
         side: Side,
+    },
+    /// A point is this far from a circle, on a stored side.
+    FromCircle {
+        /// The point.
+        point: ItemId,
+        /// The circle.
+        circle: ItemId,
+        /// The distance, above zero.
+        distance: Amount,
+        /// Whether it is outside the circle.
+        outside: bool,
+    },
+    /// Two parallel lines are this far apart, the second on a stored side of the first.
+    LinesApart {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+        /// The distance, above zero.
+        distance: Amount,
+        /// Which side.
+        side: Side,
+    },
+    /// The second point's x is this much more than the first's.
+    Across {
+        /// The first point.
+        a: ItemId,
+        /// The second point.
+        b: ItemId,
+        /// The distance, with its sign.
+        distance: Amount,
+    },
+    /// The second point's y is this much more than the first's.
+    Upward {
+        /// The first point.
+        a: ItemId,
+        /// The second point.
+        b: ItemId,
+        /// The distance, with its sign.
+        distance: Amount,
+    },
+    /// A line has this length.
+    Length {
+        /// The line.
+        line: ItemId,
+        /// The length, above zero.
+        length: Amount,
+    },
+    /// Two lines have one length.
+    EqualLength {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+    },
+    /// A circle or arc has this radius.
+    Radius {
+        /// The circle.
+        circle: ItemId,
+        /// The radius, above zero.
+        radius: Amount,
+    },
+    /// A circle or arc has this diameter.
+    Diameter {
+        /// The circle.
+        circle: ItemId,
+        /// The diameter, above zero.
+        diameter: Amount,
+    },
+    /// Two circles or arcs have one radius.
+    EqualRadius {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+    },
+    /// The second's radius is the first's, more or less by this: an offset chain's arcs.
+    Offset {
+        /// The first.
+        from: ItemId,
+        /// The second.
+        to: ItemId,
+        /// The difference.
+        by: Amount,
+        /// Whether the second is the larger.
+        grows: bool,
+    },
+    /// An arc sweeps this far from its start to its end, in half-turns.
+    Sweep {
+        /// The arc.
+        arc: ItemId,
+        /// The angle.
+        angle: Amount,
+    },
+    /// An arc has this length.
+    ArcLength {
+        /// The arc.
+        arc: ItemId,
+        /// The length, above zero.
+        length: Amount,
+    },
+    /// A line touches a circle, on a stored side of the line.
+    TangentLine {
+        /// The line.
+        line: ItemId,
+        /// The circle.
+        circle: ItemId,
+        /// The side of the line the circle's centre is on.
+        side: Side,
+    },
+    /// Two circles touch, the first outside or inside the second.
+    TangentCircles {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+        /// Whether they touch from outside.
+        outside: bool,
+    },
+    /// A line and an arc that share a point are tangent there.
+    TangentAtEnd {
+        /// The line.
+        line: ItemId,
+        /// The arc.
+        arc: ItemId,
+        /// The shared point.
+        point: ItemId,
+    },
+    /// Two arcs that share a point are tangent there.
+    ArcsTangentAtEnd {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+        /// The shared point.
+        point: ItemId,
+    },
+    /// Two points are mirror images in a line.
+    Symmetric {
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+        /// The line.
+        line: ItemId,
+    },
+    /// Two points are mirror images through a third.
+    SymmetricAbout {
+        /// The centre.
+        point: ItemId,
+        /// The first.
+        a: ItemId,
+        /// The second.
+        b: ItemId,
+    },
+    /// Three points are equally spaced along a line through them.
+    Spaced {
+        /// The first.
+        a: ItemId,
+        /// The middle one.
+        b: ItemId,
+        /// The third.
+        c: ItemId,
+    },
+    /// The step from a to b is the step from c to d.
+    LinearPattern {
+        /// The first of the first step.
+        a: ItemId,
+        /// The last of the first step.
+        b: ItemId,
+        /// The first of the second step.
+        c: ItemId,
+        /// The last of the second step.
+        d: ItemId,
+    },
+    /// b is a turned about a centre by this many half-turns.
+    CircularPattern {
+        /// The centre.
+        centre: ItemId,
+        /// The point turned.
+        a: ItemId,
+        /// Where it goes.
+        b: ItemId,
+        /// The angle.
+        angle: Amount,
     },
     /// A variable of an entity has this value.
     Fix {
@@ -320,6 +601,26 @@ pub enum ConstraintKind {
         /// The value.
         value: f64,
     },
+    /// Scalars with a = ratio·b + plus.
+    Linear {
+        /// a.
+        a: ItemId,
+        /// b.
+        b: ItemId,
+        /// The ratio.
+        ratio: f64,
+        /// The constant.
+        plus: f64,
+    },
+    /// Scalars with a = b·c.
+    Product {
+        /// a.
+        a: ItemId,
+        /// b.
+        b: ItemId,
+        /// c.
+        c: ItemId,
+    },
 }
 
 impl ConstraintKind {
@@ -328,8 +629,57 @@ impl ConstraintKind {
     pub const fn is_dimension(&self) -> bool {
         matches!(
             self,
-            ConstraintKind::Distance { .. } | ConstraintKind::PointLine { .. }
+            ConstraintKind::Distance { .. }
+                | ConstraintKind::FromLine { .. }
+                | ConstraintKind::FromCircle { .. }
+                | ConstraintKind::LinesApart { .. }
+                | ConstraintKind::Across { .. }
+                | ConstraintKind::Upward { .. }
+                | ConstraintKind::Length { .. }
+                | ConstraintKind::Radius { .. }
+                | ConstraintKind::Diameter { .. }
+                | ConstraintKind::Turned { .. }
+                | ConstraintKind::Heading { .. }
+                | ConstraintKind::Sweep { .. }
+                | ConstraintKind::ArcLength { .. }
         )
+    }
+
+    /// What it becomes at commit, by section 15.10's table. An angle counts as exact when it is a
+    /// number and a multiple of a quarter turn. Symmetry about a line is exact only about a
+    /// horizontal or vertical one, a radius only on a full circle, and a point on a circle only if
+    /// it is a defining point: all three need the sketch, and are the commit plan's (G225), so they
+    /// are bounded here.
+    #[must_use]
+    pub fn commit(&self) -> CommitClass {
+        let square = |amount: &Amount| match *amount {
+            Amount::Value(x) => whole(x * 2.0).is_some(),
+            Amount::Named(_) => false,
+        };
+        let exact = match self {
+            ConstraintKind::Coincident { .. }
+            | ConstraintKind::Concentric { .. }
+            | ConstraintKind::OnLine { .. }
+            | ConstraintKind::Collinear { .. }
+            | ConstraintKind::Horizontal { .. }
+            | ConstraintKind::Vertical { .. }
+            | ConstraintKind::Parallel { .. }
+            | ConstraintKind::Perpendicular { .. }
+            | ConstraintKind::Across { .. }
+            | ConstraintKind::Upward { .. }
+            | ConstraintKind::EqualRadius { .. }
+            | ConstraintKind::TangentAtEnd { .. }
+            | ConstraintKind::Fix { .. } => true,
+            ConstraintKind::Turned { angle, .. } | ConstraintKind::Heading { angle, .. } => {
+                square(angle)
+            }
+            _ => false,
+        };
+        if exact {
+            CommitClass::Exact
+        } else {
+            CommitClass::Bounded
+        }
     }
 }
 
@@ -379,6 +729,35 @@ pub fn power_of_two(x: f64) -> f64 {
     } else {
         f64::MIN_POSITIVE
     }
+}
+
+/// The whole number `x` is, if it is one: the value counts only if it converts back to its own bits.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "the value counts only if it converts back to its own bits"
+)]
+fn whole(x: f64) -> Option<i64> {
+    let n = x as i64;
+    ((n as f64).to_bits() == x.to_bits()).then_some(n)
+}
+
+/// A step's square, added to `base`: a closure, for `and_then`.
+fn reach_of(base: i128) -> impl Fn(i64) -> Option<i128> {
+    move |r| {
+        i128::from(r)
+            .checked_mul(i128::from(r))
+            .and_then(|square| square.checked_add(base))
+    }
+}
+
+/// |pq|², if both are grid points.
+fn grid_square(p: [f64; 2], q: [f64; 2]) -> Option<i128> {
+    let part = |a: f64, b: f64| {
+        let along = i128::from(whole(a)?).checked_sub(i128::from(whole(b)?))?;
+        along.checked_mul(along)
+    };
+    part(p[0], q[0])?.checked_add(part(p[1], q[1])?)
 }
 
 /// `x`, or [`SketchError::NotFinite`].
@@ -436,7 +815,9 @@ impl EntityKind {
                 push(out, (offset[1], 1.0))?;
                 push(out, (*turn, power_of_two(1.0 / *size)))
             }
-            EntityKind::Line { .. } | EntityKind::Spline { .. } | EntityKind::Reference => Ok(()),
+            EntityKind::Line { .. } | EntityKind::Spline { .. } | EntityKind::Reference { .. } => {
+                Ok(())
+            }
         }
     }
 
@@ -444,7 +825,7 @@ impl EntityKind {
     fn check(&self, sketch: &Sketch) -> Result<(), SketchError> {
         let point = |id: ItemId| sketch.point(id).map(|_| ());
         match self {
-            EntityKind::Point { x, y } => {
+            EntityKind::Point { x, y } | EntityKind::Reference { x, y } => {
                 finite(*x)?;
                 finite(*y)?;
                 Ok(())
@@ -512,7 +893,6 @@ impl EntityKind {
                 positive(1.0 / positive(*size)?)?;
                 Ok(())
             }
-            EntityKind::Reference => Ok(()),
         }
     }
 }
@@ -559,16 +939,16 @@ impl Sketch {
             .ok_or(SketchError::Unknown(id))
     }
 
-    /// The point `id`'s coordinates.
+    /// The point `id`'s coordinates, whether it moves or is a reference.
     ///
     /// # Errors
     ///
     /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not a point.
     pub fn point(&self, id: ItemId) -> Result<[f64; 2], SketchError> {
-        let EntityKind::Point { x, y } = self.entity(id)?.kind else {
-            return Err(SketchError::WrongKind(id));
-        };
-        Ok([x, y])
+        match self.entity(id)?.kind {
+            EntityKind::Point { x, y } | EntityKind::Reference { x, y } => Ok([x, y]),
+            _ => Err(SketchError::WrongKind(id)),
+        }
     }
 
     /// The line `id`'s two points.
@@ -581,6 +961,45 @@ impl Sketch {
             return Err(SketchError::WrongKind(id));
         };
         Ok([start, end])
+    }
+
+    /// The centre of the circle or arc `id`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is neither.
+    pub fn centre(&self, id: ItemId) -> Result<ItemId, SketchError> {
+        match self.entity(id)?.kind {
+            EntityKind::Circle { centre, .. } | EntityKind::Arc { centre, .. } => Ok(centre),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
+    /// The radius of the circle or arc `id`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is neither.
+    pub fn radius(&self, id: ItemId) -> Result<f64, SketchError> {
+        match self.entity(id)?.kind {
+            EntityKind::Circle { radius, .. } | EntityKind::Arc { radius, .. } => Ok(radius),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
+    /// The arc `id`'s centre, start and end, swept anticlockwise from its start.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not an arc.
+    pub fn arc(&self, id: ItemId) -> Result<[ItemId; 3], SketchError> {
+        let EntityKind::Arc {
+            centre, start, end, ..
+        } = self.entity(id)?.kind
+        else {
+            return Err(SketchError::WrongKind(id));
+        };
+        Ok([centre, start, end])
     }
 
     /// Adds `entity`, which may name only entities already here.
@@ -622,32 +1041,180 @@ impl Sketch {
         Ok(())
     }
 
+    fn check_amount(&self, amount: Amount, above_zero: bool) -> Result<(), SketchError> {
+        match amount {
+            Amount::Value(x) if above_zero => positive(x).map(|_| ()),
+            Amount::Value(x) => finite(x).map(|_| ()),
+            Amount::Named(id) => self.scalar(id),
+        }
+    }
+
+    fn scalar(&self, id: ItemId) -> Result<(), SketchError> {
+        match self.entity(id)?.kind {
+            EntityKind::Scalar { .. } => Ok(()),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm for each kind, naming what it holds"
+    )]
     fn check_constraint(&self, constraint: &Constraint) -> Result<(), SketchError> {
         if constraint.standing == Standing::Reference && !constraint.kind.is_dimension() {
             return Err(SketchError::NotADimension(constraint.id));
         }
+        let point = |id: ItemId| self.point(id).map(|_| ());
+        let line = |id: ItemId| self.line(id).map(|_| ());
+        let round = |id: ItemId| self.centre(id).map(|_| ());
+        let arc = |id: ItemId| self.arc(id).map(|_| ());
         match constraint.kind {
             ConstraintKind::Coincident { a, b } => {
-                self.point(a)?;
-                self.point(b)?;
+                point(a)?;
+                point(b)
             }
-            ConstraintKind::Horizontal { line } | ConstraintKind::Vertical { line } => {
-                self.line(line)?;
+            ConstraintKind::Concentric { a, b }
+            | ConstraintKind::EqualRadius { a, b }
+            | ConstraintKind::TangentCircles { a, b, .. } => {
+                round(a)?;
+                round(b)
+            }
+            ConstraintKind::OnLine { point: p, line: l } => {
+                point(p)?;
+                line(l)
+            }
+            ConstraintKind::OnCircle { point: p, circle } => {
+                point(p)?;
+                round(circle)
+            }
+            ConstraintKind::Midpoint { point: p, a, b }
+            | ConstraintKind::SymmetricAbout { point: p, a, b }
+            | ConstraintKind::Spaced { a: p, b: a, c: b } => {
+                point(p)?;
+                point(a)?;
+                point(b)
+            }
+            ConstraintKind::Collinear { a, b }
+            | ConstraintKind::Parallel { a, b }
+            | ConstraintKind::Perpendicular { a, b }
+            | ConstraintKind::EqualLength { a, b } => {
+                line(a)?;
+                line(b)
+            }
+            ConstraintKind::Horizontal { line: l } | ConstraintKind::Vertical { line: l } => {
+                line(l)
+            }
+            ConstraintKind::Turned { a, b, angle } => {
+                self.check_amount(angle, false)?;
+                line(a)?;
+                line(b)
+            }
+            ConstraintKind::Heading { line: l, angle } => {
+                self.check_amount(angle, false)?;
+                line(l)
             }
             ConstraintKind::Distance { a, b, distance } => {
-                positive(distance)?;
-                self.point(a)?;
-                self.point(b)?;
+                self.check_amount(distance, true)?;
+                point(a)?;
+                point(b)
             }
-            ConstraintKind::PointLine {
-                point,
-                line,
+            ConstraintKind::FromLine {
+                point: p,
+                line: l,
                 distance,
                 ..
             } => {
-                positive(distance)?;
-                self.point(point)?;
-                self.line(line)?;
+                self.check_amount(distance, true)?;
+                point(p)?;
+                line(l)
+            }
+            ConstraintKind::FromCircle {
+                point: p,
+                circle,
+                distance,
+                ..
+            } => {
+                self.check_amount(distance, true)?;
+                point(p)?;
+                round(circle)
+            }
+            ConstraintKind::LinesApart { a, b, distance, .. } => {
+                self.check_amount(distance, true)?;
+                line(a)?;
+                line(b)
+            }
+            ConstraintKind::Across { a, b, distance }
+            | ConstraintKind::Upward { a, b, distance } => {
+                self.check_amount(distance, false)?;
+                point(a)?;
+                point(b)
+            }
+            ConstraintKind::Length { line: l, length } => {
+                self.check_amount(length, true)?;
+                line(l)
+            }
+            ConstraintKind::Radius { circle, radius } => {
+                self.check_amount(radius, true)?;
+                round(circle)
+            }
+            ConstraintKind::Diameter { circle, diameter } => {
+                self.check_amount(diameter, true)?;
+                round(circle)
+            }
+            ConstraintKind::Offset { from, to, by, .. } => {
+                self.check_amount(by, false)?;
+                round(from)?;
+                round(to)
+            }
+            ConstraintKind::Sweep { arc: a, angle } => {
+                self.check_amount(angle, false)?;
+                arc(a)
+            }
+            ConstraintKind::ArcLength { arc: a, length } => {
+                self.check_amount(length, true)?;
+                arc(a)
+            }
+            ConstraintKind::TangentLine {
+                line: l, circle, ..
+            } => {
+                line(l)?;
+                round(circle)
+            }
+            ConstraintKind::TangentAtEnd {
+                line: l,
+                arc: a,
+                point: p,
+            } => {
+                line(l)?;
+                arc(a)?;
+                point(p)
+            }
+            ConstraintKind::ArcsTangentAtEnd { a, b, point: p } => {
+                arc(a)?;
+                arc(b)?;
+                point(p)
+            }
+            ConstraintKind::Symmetric { a, b, line: l } => {
+                point(a)?;
+                point(b)?;
+                line(l)
+            }
+            ConstraintKind::LinearPattern { a, b, c, d } => {
+                point(a)?;
+                point(b)?;
+                point(c)?;
+                point(d)
+            }
+            ConstraintKind::CircularPattern {
+                centre,
+                a,
+                b,
+                angle,
+            } => {
+                self.check_amount(angle, false)?;
+                point(centre)?;
+                point(a)?;
+                point(b)
             }
             ConstraintKind::Fix {
                 entity,
@@ -657,16 +1224,29 @@ impl Sketch {
                 finite(value)?;
                 let mut held = Vec::new();
                 self.entity(entity)?.kind.variables(&mut held)?;
-                if usize::from(slot) >= held.len() {
-                    return Err(SketchError::WrongKind(entity));
+                if usize::from(slot) < held.len() {
+                    Ok(())
+                } else {
+                    Err(SketchError::WrongKind(entity))
                 }
             }
+            ConstraintKind::Linear { a, b, ratio, plus } => {
+                finite(ratio)?;
+                finite(plus)?;
+                self.scalar(a)?;
+                self.scalar(b)
+            }
+            ConstraintKind::Product { a, b, c } => {
+                self.scalar(a)?;
+                self.scalar(b)?;
+                self.scalar(c)
+            }
         }
-        Ok(())
     }
 
     /// The side of line `line` that `point` is drawn on, by the exact predicate: the stored choice
-    /// of a [`ConstraintKind::PointLine`] authored from a drawing.
+    /// of a [`ConstraintKind::FromLine`], [`ConstraintKind::LinesApart`] or
+    /// [`ConstraintKind::TangentLine`] authored from a drawing.
     ///
     /// # Errors
     ///
@@ -676,15 +1256,6 @@ impl Sketch {
         let [start, end] = self.line(line)?;
         let undecided = SketchError::RootChoiceUndetermined(point);
         let grid = |p: [f64; 2]| -> Result<P2, SketchError> {
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_precision_loss,
-                reason = "the value counts only if it converts back to its own bits"
-            )]
-            let whole = |x: f64| {
-                let n = x as i64;
-                ((n as f64).to_bits() == x.to_bits()).then_some(n)
-            };
             match (whole(p[0]), whole(p[1])) {
                 (Some(x), Some(y)) => P2::new(x, y).map_err(|_| undecided),
                 _ => Err(undecided),
@@ -699,6 +1270,58 @@ impl Sketch {
             Sign::Positive => Ok(Side::Left),
             Sign::Negative => Ok(Side::Right),
             Sign::Zero => Err(undecided),
+        }
+    }
+
+    /// Whether `point` is drawn outside the circle `circle`, by exact integers: the stored choice of
+    /// a [`ConstraintKind::FromCircle`] authored from a drawing.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::RootChoiceUndetermined`] if the point is on the circle or any of them is off
+    /// the grid; what [`Sketch::centre`], [`Sketch::radius`] and [`Sketch::point`] refuse.
+    pub fn drawn_outside(&self, point: ItemId, circle: ItemId) -> Result<bool, SketchError> {
+        let undecided = SketchError::RootChoiceUndetermined(point);
+        let p = self.point(point)?;
+        let c = self.point(self.centre(circle)?)?;
+        let r = self.radius(circle)?;
+        let (Some(square), Some(reach)) = (grid_square(p, c), whole(r).and_then(reach_of(0)))
+        else {
+            return Err(undecided);
+        };
+        match square.cmp(&reach) {
+            Ordering::Greater => Ok(true),
+            Ordering::Less => Ok(false),
+            Ordering::Equal => Err(undecided),
+        }
+    }
+
+    /// Whether the circles `a` and `b` are drawn nearer touching from outside than from inside, by
+    /// exact integers: the stored choice of a [`ConstraintKind::TangentCircles`] authored from a
+    /// drawing. The two tangent distances squared are (ra ± rb)², so the test is the square of the
+    /// distance between the centres against their mean, ra² + rb².
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::RootChoiceUndetermined`] if the two are equally near or any of them is off the
+    /// grid; what [`Sketch::centre`], [`Sketch::radius`] and [`Sketch::point`] refuse.
+    pub fn drawn_touching_outside(&self, a: ItemId, b: ItemId) -> Result<bool, SketchError> {
+        let undecided = SketchError::RootChoiceUndetermined(a);
+        let p = self.point(self.centre(a)?)?;
+        let q = self.point(self.centre(b)?)?;
+        let (ra, rb) = (self.radius(a)?, self.radius(b)?);
+        let mean = whole(ra).and_then(reach_of(0)).and_then(|first| {
+            whole(rb)
+                .and_then(reach_of(0))
+                .and_then(|second| first.checked_add(second))
+        });
+        let (Some(square), Some(mean)) = (grid_square(p, q), mean) else {
+            return Err(undecided);
+        };
+        match square.cmp(&mean) {
+            Ordering::Greater => Ok(true),
+            Ordering::Less => Ok(false),
+            Ordering::Equal => Err(undecided),
         }
     }
 

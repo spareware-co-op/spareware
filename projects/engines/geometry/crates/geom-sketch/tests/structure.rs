@@ -28,7 +28,8 @@
 use geom_num::{GridStep, P3};
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::model::{
-    Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Sketch, SketchError, Standing,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Sketch, SketchError,
+    Standing,
 };
 use geom_sketch::plane::{Lattice, PlaneFrame, SketchPlane};
 use geom_sketch::structure::{Analysis, Component, Graph, Part, analyse, substitute};
@@ -366,7 +367,7 @@ fn rectangle() -> (Vec<Entity>, Vec<Constraint>) {
             ConstraintKind::Distance {
                 a: p(0),
                 b: p(1),
-                distance: 40.0,
+                distance: Amount::Value(40.0),
             },
         ),
         constraint(
@@ -374,7 +375,7 @@ fn rectangle() -> (Vec<Entity>, Vec<Constraint>) {
             ConstraintKind::Distance {
                 a: p(1),
                 b: p(2),
-                distance: 30.0,
+                distance: Amount::Value(30.0),
             },
         ),
         constraint(
@@ -454,7 +455,7 @@ fn a_reference_dimension_adds_no_equation_and_a_coincidence_merges_all_of_it() {
             ConstraintKind::Distance {
                 a: p(0),
                 b: p(1),
-                distance: 5.0,
+                distance: Amount::Value(5.0),
             },
         )
     })
@@ -504,4 +505,24 @@ fn a_sketch_authored_in_any_order_has_one_plan() {
         assert_eq!(sub, want);
         assert_eq!(plan_of(&sub), plan_of(&want));
     }
+}
+
+#[test]
+fn a_budget_is_charged_for_what_it_reads() {
+    let rows: Vec<Vec<usize>> = (0..1_000).map(|i| vec![i]).collect();
+    let g = Graph::new(1_000, rows.iter().map(Vec::as_slice)).unwrap();
+    let mut short = WorkMeter::new(Budget::of_work(100));
+    assert_eq!(analyse(&g, &mut short), Err(SketchError::Stopped));
+}
+
+#[test]
+fn blocks_ready_together_go_lowest_equation_first() {
+    // The walk from equation 0 reaches variable 1's solver, equation 2, before equation 1.
+    let a = plan(3, &[&[0, 1, 2], &[2], &[1]]);
+    let order: Vec<&[usize]> = a.components[0]
+        .blocks
+        .iter()
+        .map(|b| b.equations.as_slice())
+        .collect();
+    assert_eq!(order, [&[1][..], &[2][..], &[0][..]]);
 }
