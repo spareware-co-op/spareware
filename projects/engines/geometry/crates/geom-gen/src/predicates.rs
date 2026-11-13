@@ -2584,9 +2584,9 @@ mod tests {
         assert_eq!(bits(&PREDICATES[4], "nx"), (83, "i128"));
         assert_eq!(bits(&PREDICATES[4], "d"), (125, "i128"));
         assert_eq!(bits(&PREDICATES[4], "s"), (126, "i128"));
-        assert_eq!(bits(&PREDICATES[11], "s"), (167, "I256"));
-        assert_eq!(bits(&PREDICATES[12], "s"), (250, "I256"));
-        assert_eq!(bits(&PREDICATES[13], "s"), (208, "I256"));
-        assert_eq!(bits(&PREDICATES[14], "det"), (334, "I384"));
+        assert_eq!(bits(named("carrier_side").unwrap(), "s"), (167, "I256"));
+        assert_eq!(bits(named("carrier_order").unwrap(), "s"), (250, "I256"));
+        assert_eq!(bits(named("rational_cmp").unwrap(), "s"), (208, "I256"));
+        assert_eq!(bits(named("rational_orient").unwrap(), "det"), (334, "I384"));
     }
 }

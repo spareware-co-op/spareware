@@ -1898,7 +1898,24 @@ fn determinants() -> [Row; 2] {
     ]
 }
 
+/// Every public predicate's row, in order: the parts below, each a page of whole rows.
 fn matrix() -> Vec<Row> {
+    let mut rows = Vec::new();
+    for part in [
+        matrix_part_1(),
+        matrix_part_2(),
+        matrix_part_3(),
+        matrix_part_4(),
+        matrix_part_5(),
+        matrix_part_6(),
+    ] {
+        rows.extend(part);
+    }
+    rows
+}
+
+/// Rows 1 to 15 of [`matrix`], in its order.
+fn matrix_part_1() -> Vec<Row> {
     use Class::*;
     use Where::{NotApplicable, Test};
     let [determinant_sign, normals_sign] = determinants();
@@ -1979,6 +1996,12 @@ fn matrix() -> Vec<Row> {
             "one_step_along_a_carrier_is_decided_by_the_exact_path",
             "orient_filter_boundary_crossed_both_ways",
         ),
+    ]
+}
+
+/// Rows 16 to 19 of [`matrix`], in its order.
+fn matrix_part_2() -> Vec<Row> {
+    vec![
         on_conic(
             "conic::Ellipse2::side",
             ".side",
@@ -2042,6 +2065,12 @@ fn matrix() -> Vec<Row> {
                 ),
             ],
         },
+    ]
+}
+
+/// Rows 20 to 21 of [`matrix`], in its order.
+fn matrix_part_3() -> Vec<Row> {
+    vec![
         Row {
             predicate: "conic_root::ConicRoot::cmp_rational",
             call: ".cmp_rational",
@@ -2122,6 +2151,12 @@ fn matrix() -> Vec<Row> {
             ],
         },
         // The sign of a quartic at another's root (G196b): its attacks are in attack_g196b.rs.
+    ]
+}
+
+/// Rows 22 to 30 of [`matrix`], in its order.
+fn matrix_part_4() -> Vec<Row> {
+    vec![
         Row {
             predicate: "quartic::sign_at_root",
             call: "sign_at_root",
@@ -2205,6 +2240,12 @@ fn matrix() -> Vec<Row> {
             "random_rounds_orders_and_roots_match_the_oracle",
             Where::NotApplicable("defers to cmp_x's and cmp_y's filter"),
         ),
+    ]
+}
+
+/// Rows 31 to 38 of [`matrix`], in its order.
+fn matrix_part_5() -> Vec<Row> {
+    vec![
         on_root(
             "one_root::Arc2::order_crossings",
             ".order_crossings",
@@ -2252,6 +2293,14 @@ fn matrix() -> Vec<Row> {
             "a_fine_line_s_side_is_exact_at_the_extremes",
             "a_fine_line_s_side_keeps_its_laws",
         ),
+    ]
+}
+
+/// Rows 39 to 43 of [`matrix`], in its order.
+fn matrix_part_6() -> Vec<Row> {
+    use Class::*;
+    use Where::{NotApplicable, Test};
+    vec![
         Row {
             predicate: "arc::Arc2::order",
             call: ".order",
