@@ -259,6 +259,7 @@ pub mod nurbs;
 pub mod open;
 pub mod operations;
 pub mod orient2d;
+pub mod pencils;
 pub mod piercing;
 pub mod planes;
 pub mod predicates;

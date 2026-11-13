@@ -42,7 +42,6 @@ use crate::error::NumError;
 use crate::interval::Interval;
 use crate::sign::Sign;
 use crate::wide::Wide;
-use alloc::vec::Vec;
 
 /// The limbs of a chain's integers: 3456 bits, for the budget of the module header.
 pub const LIMBS: usize = 54;
@@ -58,7 +57,7 @@ pub type Big = Wide<LIMBS>;
 pub const MAX_COEFFICIENT_BITS: u32 = 256;
 
 /// One more than the highest degree: a chain's polynomials have up to this many coefficients.
-const TERMS: usize = 5;
+pub const TERMS: usize = 5;
 
 /// A rational point of a line's parameter: `num / den`, with `den` positive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,31 +87,31 @@ pub struct Roots {
 
 /// A polynomial: its coefficients, lowest first, and its degree.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Poly {
-    terms: [Big; TERMS],
+struct Poly<const L: usize> {
+    terms: [Wide<L>; TERMS],
     degree: usize,
 }
 
 /// The degree of `terms`, or `None` for zero.
-fn degree_of(terms: &[Big; TERMS]) -> Option<usize> {
+fn degree_of<const L: usize>(terms: &[Wide<L>; TERMS]) -> Option<usize> {
     terms.iter().rposition(|c| !c.is_zero())
 }
 
-impl Poly {
+impl<const L: usize> Poly<L> {
     /// The coefficient of the highest term.
-    fn lead(&self) -> Option<Big> {
+    fn lead(&self) -> Option<Wide<L>> {
         self.terms.get(self.degree).copied()
     }
 
     /// Its derivative, or `None` if a step did not fit.
-    fn derivative(&self) -> Option<[Big; TERMS]> {
-        let mut out = [Big::ZERO; TERMS];
+    fn derivative(&self) -> Option<[Wide<L>; TERMS]> {
+        let mut out = [Wide::<L>::ZERO; TERMS];
         for (i, slot) in out.iter_mut().enumerate() {
             let next = i.checked_add(1)?;
-            let scale = Big::from_i128(i128::try_from(next).ok()?);
+            let scale = Wide::<L>::from_i128(i128::try_from(next).ok()?);
             *slot = match self.terms.get(next) {
                 Some(c) => c.checked_mul(&scale)?,
-                None => Big::ZERO,
+                None => Wide::<L>::ZERO,
             };
         }
         Some(out)
@@ -120,27 +119,23 @@ impl Poly {
 
     /// The sign of its value at `at`: the sign of Σ cᵢ·numⁱ·den^(degree − i), since `den` is
     /// positive. Horner's rule keeps each partial sum an integer.
-    fn sign_at(&self, at: Point) -> Option<Sign> {
-        let num = Big::from_i64(at.num);
-        let den = Big::from_i64(at.den);
-        let mut power = Big::one();
-        let mut sum = Big::ZERO;
+    fn sign_at(&self, num: &Wide<L>, den: &Wide<L>) -> Option<Sign> {
+        let mut power = Wide::<L>::one();
+        let mut sum = Wide::<L>::ZERO;
         for c in self.terms.iter().take(self.degree.checked_add(1)?).rev() {
-            sum = sum
-                .checked_mul(&num)?
-                .checked_add(&c.checked_mul(&power)?)?;
-            power = power.checked_mul(&den)?;
+            sum = sum.checked_mul(num)?.checked_add(&c.checked_mul(&power)?)?;
+            power = power.checked_mul(den)?;
         }
         Some(sum.signum())
     }
 
     /// Its sign just to one side of `at`: the sign of the first derivative that is not zero there,
     /// with odd derivatives flipped on the left, from Taylor's expansion.
-    fn sign_beside(&self, at: Point, left: bool) -> Option<Sign> {
+    fn sign_beside(&self, num: &Wide<L>, den: &Wide<L>, left: bool) -> Option<Sign> {
         let mut p = *self;
         let mut odd = false;
         loop {
-            let s = p.sign_at(at)?;
+            let s = p.sign_at(num, den)?;
             if s != Sign::Zero {
                 return Some(if odd && left {
                     s.mul(Sign::Negative)
@@ -249,8 +244,147 @@ pub fn div_exact<const L: usize>(n: &Wide<L>, d: &Wide<L>) -> Option<Wide<L>> {
     (answer.checked_mul(d)? == *n).then_some(answer)
 }
 
+/// The sign just to one side of num / den, with a positive den, of the polynomial with `terms`,
+/// lowest first; zero for the zero polynomial. `None` if a step did not fit.
+#[must_use]
+pub fn sign_beside<const L: usize>(
+    terms: &[Wide<L>; TERMS],
+    num: &Wide<L>,
+    den: &Wide<L>,
+    left: bool,
+) -> Option<Sign> {
+    let Some(degree) = degree_of(terms) else {
+        return Some(Sign::Zero);
+    };
+    Poly {
+        terms: *terms,
+        degree,
+    }
+    .sign_beside(num, den, left)
+}
+
+/// The greatest common divisor of two integers, not negative, by Stein's binary method. `None` if a
+/// step did not fit.
+#[must_use]
+pub fn gcd<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<Wide<L>> {
+    gcd_with_steps(a, b).map(|(out, _)| out)
+}
+
+/// [`gcd`], and how many reduction steps it took (zero when one of them is zero).
+///
+/// The steps are bounded by the numbers' bits, so by 2·64·L: both numbers are odd when the loop
+/// starts, so their difference is even and the odd part that replaces the larger is at most half
+/// of it, which is less than half of the larger; the larger's bit length therefore falls by at
+/// least one at every step, while neither number can fall below 1, and the loop ends in fewer
+/// than the two numbers' bits together. The loop counts that bound down and gives up with `None`
+/// when it is spent, which no input reaches (the unit test in `tests/attack_g166.rs` holds the
+/// count to the bits of the inputs, worst cases included).
+///
+/// # Errors
+///
+/// `None` if a step did not fit.
+#[must_use]
+pub fn gcd_with_steps<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<(Wide<L>, usize)> {
+    let zeros = |v: &[u64; L]| -> Option<usize> {
+        let whole = v.iter().take_while(|l| **l == 0).count();
+        let part = v.get(whole).map_or(0, |l| l.trailing_zeros());
+        whole.checked_mul(64)?.checked_add(part.try_into().ok()?)
+    };
+    let (mut x, mut y) = (magnitude(a)?.to_le_limbs(), magnitude(b)?.to_le_limbs());
+    if x.iter().all(|l| *l == 0) {
+        return Some((Wide::<L>::from_le_limbs(y), 0));
+    }
+    if y.iter().all(|l| *l == 0) {
+        return Some((Wide::<L>::from_le_limbs(x), 0));
+    }
+    let (from_x, from_y) = (zeros(&x)?, zeros(&y)?);
+    let common = from_x.min(from_y);
+    x = shifted(&x, from_x);
+    y = shifted(&y, from_y);
+    // Both odd now: the bound in the function's documentation, counted down.
+    let allowed = L.checked_mul(128)?;
+    let mut left = allowed;
+    loop {
+        let (wide_x, wide_y) = (Wide::<L>::from_le_limbs(x), Wide::<L>::from_le_limbs(y));
+        let difference = wide_x.checked_sub(&wide_y)?;
+        if difference.is_zero() {
+            let mut out = wide_x;
+            let two = Wide::<L>::from_i64(2);
+            for _ in 0..common {
+                out = out.checked_mul(&two)?;
+            }
+            return Some((out, allowed.checked_sub(left)?));
+        }
+        left = left.checked_sub(1)?;
+        let (rest, keep_y) = if difference.is_negative() {
+            (difference.checked_neg()?, true)
+        } else {
+            (difference, false)
+        };
+        let limbs = rest.to_le_limbs();
+        let odd = shifted(&limbs, zeros(&limbs)?);
+        if keep_y {
+            y = odd;
+        } else {
+            x = odd;
+        }
+    }
+}
+
+/// The whole square root of `v`, if it has one, by Newton's iteration from above. `None` if a step did
+/// not fit, or if `v` is negative or not a square.
+#[must_use]
+pub fn square_root<const L: usize>(v: &Wide<L>) -> Option<Wide<L>> {
+    if v.is_negative() {
+        return None;
+    }
+    if v.is_zero() {
+        return Some(*v);
+    }
+    let limbs = v.to_le_limbs();
+    let used = limbs.iter().rposition(|l| *l != 0)?;
+    let top = usize::try_from(64_u32.checked_sub(limbs.get(used)?.leading_zeros())?).ok()?;
+    let bits = used.checked_mul(64)?.checked_add(top)?;
+    let two = Wide::<L>::from_i64(2);
+    let mut guess = Wide::<L>::one();
+    for _ in 0..bits.div_ceil(2) {
+        guess = guess.checked_mul(&two)?;
+    }
+    // From a value at or above the root, the floor of Newton's step falls to it in at most `bits`
+    // steps, and then rises: the first that does not fall is the floor of the root.
+    for _ in 0..bits {
+        let (quotient, _) = divided(v, &guess)?;
+        let sum = guess.checked_add(&quotient)?;
+        let (next, _) = divided(&sum, &two)?;
+        if !next.checked_sub(&guess)?.is_negative() {
+            break;
+        }
+        guess = next;
+    }
+    (guess.checked_mul(&guess)? == *v).then_some(guess)
+}
+
+/// `n / d` and its remainder, for an `n` not negative and a positive `d`, by long division in bits.
+fn divided<const L: usize>(n: &Wide<L>, d: &Wide<L>) -> Option<(Wide<L>, Wide<L>)> {
+    let limbs = n.to_le_limbs();
+    let (mut quotient, mut rest) = ([0_u64; L], Wide::<L>::ZERO);
+    let two = Wide::<L>::from_i64(2);
+    for bit in (0..L.checked_mul(64)?).rev() {
+        let set = (limbs.get(bit / 64)? >> (bit % 64)) & 1;
+        rest = rest
+            .checked_mul(&two)?
+            .checked_add(&Wide::<L>::from_i64(i64::try_from(set).ok()?))?;
+        let less = rest.checked_sub(d)?;
+        if !less.is_negative() {
+            rest = less;
+            *quotient.get_mut(bit / 64)? |= 1 << (bit % 64);
+        }
+    }
+    Some((Wide::<L>::from_le_limbs(quotient), rest))
+}
+
 /// The magnitude of `v`.
-fn magnitude(v: &Big) -> Option<Big> {
+fn magnitude<const L: usize>(v: &Wide<L>) -> Option<Wide<L>> {
     if v.is_negative() {
         v.checked_neg()
     } else {
@@ -259,8 +393,8 @@ fn magnitude(v: &Big) -> Option<Big> {
 }
 
 /// `v` to the power `n`.
-fn power(v: &Big, n: usize) -> Option<Big> {
-    let mut out = Big::one();
+fn power<const L: usize>(v: &Wide<L>, n: usize) -> Option<Wide<L>> {
+    let mut out = Wide::<L>::one();
     for _ in 0..n {
         out = out.checked_mul(v)?;
     }
@@ -269,7 +403,7 @@ fn power(v: &Big, n: usize) -> Option<Big> {
 
 /// The pseudo-remainder of `u` by `v`: |lc(v)|^(δ+1) · u, less a multiple of `v`, of degree below
 /// `v`'s. The multiplier is positive, as a Sturm chain needs.
-fn remainder(dividend: &Poly, divisor: &Poly) -> Option<[Big; TERMS]> {
+fn remainder<const L: usize>(dividend: &Poly<L>, divisor: &Poly<L>) -> Option<[Wide<L>; TERMS]> {
     let lead = divisor.lead()?;
     let size = magnitude(&lead)?;
     let flip = lead.is_negative();
@@ -301,11 +435,11 @@ fn remainder(dividend: &Poly, divisor: &Poly) -> Option<[Big; TERMS]> {
 }
 
 /// A Sturm chain: up to five polynomials of falling degree, the last the greatest common divisor
-/// of the polynomial and its derivative. They are held on the heap, so a chain of wide numbers
-/// stays off the stack: WebAssembly's has no guard page (principle 13).
+/// of the polynomial and its derivative.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Chain {
-    polys: Vec<Poly>,
+pub struct Chain<const L: usize = LIMBS> {
+    polys: [Poly<L>; TERMS],
+    len: usize,
 }
 
 /// How many times the sign changes along `signs`, zeros skipped.
@@ -321,7 +455,7 @@ fn changes(signs: impl Iterator<Item = Sign>) -> u8 {
     count
 }
 
-impl Chain {
+impl<const L: usize> Chain<L> {
     /// The chain of the polynomial with `coefficients`, lowest first.
     ///
     /// # Errors
@@ -329,70 +463,130 @@ impl Chain {
     /// [`NumError::Degenerate`] for a constant polynomial, which has no chain.
     /// [`NumError::BudgetExceeded`] if a step did not fit, which coefficients below
     /// 2^[`MAX_COEFFICIENT_BITS`] cannot cause (the module header).
-    pub fn of(coefficients: &[Big; TERMS]) -> Result<Chain, NumError> {
+    pub fn of(coefficients: &[Wide<L>; TERMS]) -> Result<Chain<L>, NumError> {
+        let mut chain = Self::EMPTY;
+        chain.fill(coefficients)?;
+        Ok(chain)
+    }
+
+    /// A chain of no polynomials, for [`Chain::fill`] to set up where the chain will live: a chain
+    /// is large, and building it in place saves the copies a return by value makes.
+    pub(crate) const EMPTY: Chain<L> = Chain {
+        polys: [Poly {
+            terms: [Wide::<L>::ZERO; TERMS],
+            degree: 0,
+        }; TERMS],
+        len: 0,
+    };
+
+    /// [`Chain::of`], into `self`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Chain::of`].
+    #[inline(never)]
+    pub(crate) fn fill(&mut self, coefficients: &[Wide<L>; TERMS]) -> Result<(), NumError> {
         let degree = degree_of(coefficients).ok_or(NumError::Degenerate)?;
         if degree == 0 {
             return Err(NumError::Degenerate);
         }
-        Self::build(coefficients, degree).ok_or(NumError::BudgetExceeded)
+        self.seed(coefficients, degree)
+            .ok_or(NumError::BudgetExceeded)?;
+        let (mut lead, mut step) = (Wide::<L>::one(), Wide::<L>::one());
+        // A chain has at most TERMS polynomials, so TERMS steps always reach its end: the step that
+        // would add a sixth fails instead.
+        for _ in 0..TERMS {
+            if !self
+                .advance(&mut lead, &mut step)
+                .ok_or(NumError::BudgetExceeded)?
+            {
+                break;
+            }
+        }
+        Ok(())
     }
 
-    /// [`Chain::of`] past its checks.
-    fn build(terms: &[Big; TERMS], degree: usize) -> Option<Chain> {
-        let first = Poly {
-            terms: *terms,
-            degree,
-        };
-        let slope = first.derivative()?;
-        let second = Poly {
+    /// The chain's first two polynomials, the polynomial and its derivative; every other slot
+    /// holds the first until a step replaces it.
+    #[inline(never)]
+    fn seed(&mut self, terms: &[Wide<L>; TERMS], degree: usize) -> Option<()> {
+        for slot in &mut self.polys {
+            slot.terms = *terms;
+            slot.degree = degree;
+        }
+        let slope = self.polys.first()?.derivative()?;
+        *self.polys.get_mut(1)? = Poly {
             terms: slope,
             degree: degree_of(&slope)?,
         };
-        let mut polys = Vec::with_capacity(TERMS);
-        polys.push(first);
-        polys.push(second);
-        // Cohen's lead and step, as magnitudes.
-        let (mut lead, mut step) = (Big::one(), Big::one());
-        loop {
-            let len = polys.len();
-            let (above, below) = (
-                polys.get(len.checked_sub(2)?)?,
-                polys.get(len.checked_sub(1)?)?,
-            );
-            if below.degree == 0 {
-                break;
-            }
-            let gap = above.degree.checked_sub(below.degree)?;
-            let raw = remainder(above, below)?;
-            let divisor = lead.checked_mul(&power(&step, gap)?)?;
-            let mut next = [Big::ZERO; TERMS];
-            for (slot, term) in next.iter_mut().zip(&raw) {
-                *slot = div_exact(term, &divisor)?.checked_neg()?;
-            }
-            let Some(degree) = degree_of(&next) else {
-                break;
-            };
-            let below_lead = magnitude(&below.lead()?)?;
-            // At most five, as the array they were held in before.
-            if len >= TERMS {
-                return None;
-            }
-            polys.push(Poly {
-                terms: next,
-                degree,
-            });
-            lead = below_lead;
-            step = match gap.checked_sub(1)? {
-                0 => lead,
-                less => div_exact(&power(&lead, gap)?, &power(&step, less)?)?,
-            };
+        self.len = 2;
+        Some(())
+    }
+
+    /// The next polynomial of the chain, if there is one: `Some(true)` after adding it,
+    /// `Some(false)` when the chain is complete, `None` if a step did not fit.
+    #[inline(never)]
+    fn advance(&mut self, lead: &mut Wide<L>, step: &mut Wide<L>) -> Option<bool> {
+        let len = self.len;
+        let above = self.polys.get(len.checked_sub(2)?)?;
+        let below = self.polys.get(len.checked_sub(1)?)?;
+        if below.degree == 0 {
+            return Some(false);
         }
-        Some(Chain { polys })
+        let gap = above.degree.checked_sub(below.degree)?;
+        let next = Self::next_terms(above, below, lead, step, gap)?;
+        let Some(degree) = degree_of(&next) else {
+            return Some(false);
+        };
+        let below_lead = below.lead()?;
+        *self.polys.get_mut(len)? = Poly {
+            terms: next,
+            degree,
+        };
+        self.len = len.checked_add(1)?;
+        Self::follow(&below_lead, gap, lead, step)?;
+        Some(true)
+    }
+
+    /// The terms of the polynomial after `below`: the pseudo-remainder of `above` by it, divided
+    /// exactly and negated.
+    #[inline(never)]
+    fn next_terms(
+        above: &Poly<L>,
+        below: &Poly<L>,
+        lead: &Wide<L>,
+        step: &Wide<L>,
+        gap: usize,
+    ) -> Option<[Wide<L>; TERMS]> {
+        let raw = remainder(above, below)?;
+        let divisor = lead.checked_mul(&power(step, gap)?)?;
+        let mut next = [Wide::<L>::ZERO; TERMS];
+        for (slot, term) in next.iter_mut().zip(&raw) {
+            *slot = div_exact(term, &divisor)?.checked_neg()?;
+        }
+        Some(next)
+    }
+
+    /// Cohen's lead and step for the step after one whose divisor had leading coefficient
+    /// `below_lead` and degree gap `gap`.
+    #[inline(never)]
+    fn follow(
+        below_lead: &Wide<L>,
+        gap: usize,
+        lead: &mut Wide<L>,
+        step: &mut Wide<L>,
+    ) -> Option<()> {
+        *lead = magnitude(below_lead)?;
+        *step = match gap.checked_sub(1)? {
+            0 => *lead,
+            less => div_exact(&power(lead, gap)?, &power(step, less)?)?,
+        };
+        Some(())
     }
 
     /// The polynomials, first to last.
-    fn elements(&self) -> impl Iterator<Item = &Poly> {
-        self.polys.iter()
+    fn elements(&self) -> impl Iterator<Item = &Poly<L>> {
+        self.polys.iter().take(self.len)
     }
 
     /// The real roots, each counted once, and whether any root is repeated.
@@ -429,17 +623,47 @@ impl Chain {
         if lo.den <= 0 || hi.den <= 0 || !ordered {
             return Err(NumError::Degenerate);
         }
-        let side = |at: Point, left: bool| -> Option<u8> {
-            let mut signs = [Sign::Zero; TERMS];
-            for (slot, p) in signs.iter_mut().zip(self.elements()) {
-                *slot = p.sign_beside(at, left)?;
-            }
-            Some(changes(signs.iter().copied()))
-        };
-        let (start, end) = side(lo, false)
-            .zip(side(hi, true))
-            .ok_or(NumError::BudgetExceeded)?;
-        Ok(start.saturating_sub(end))
+        let ends = |at: Point| (Wide::<L>::from_i64(at.num), Wide::<L>::from_i64(at.den));
+        let ((a, b), (c, d)) = (ends(lo), ends(hi));
+        self.roots_in(&a, &b, &c, &d)
+            .ok_or(NumError::BudgetExceeded)
+    }
+
+    /// The sign changes of the chain just to one side of (num / den).
+    fn side(&self, num: &Wide<L>, den: &Wide<L>, left: bool) -> Option<u8> {
+        let mut signs = [Sign::Zero; TERMS];
+        for (slot, p) in signs.iter_mut().zip(self.elements()) {
+            *slot = p.sign_beside(num, den, left)?;
+        }
+        Some(changes(signs.iter().copied()))
+    }
+
+    /// The real roots strictly between two points written num / den with a positive den, each counted
+    /// once: [`Chain::roots_between`] for numbers past an `i64`. `None` if a step did not fit.
+    #[must_use]
+    pub fn roots_in(
+        &self,
+        lo_num: &Wide<L>,
+        lo_den: &Wide<L>,
+        hi_num: &Wide<L>,
+        hi_den: &Wide<L>,
+    ) -> Option<u8> {
+        let start = self.side(lo_num, lo_den, false)?;
+        let end = self.side(hi_num, hi_den, true)?;
+        Some(start.saturating_sub(end))
+    }
+
+    /// Whether the polynomial is zero at num / den. `None` if a step did not fit.
+    #[must_use]
+    pub fn vanishes_at(&self, num: &Wide<L>, den: &Wide<L>) -> Option<bool> {
+        Some(self.polys.first()?.sign_at(num, den)? == Sign::Zero)
+    }
+
+    /// The chain's last polynomial, the greatest common divisor of the first and its derivative up to
+    /// a rational multiple: its coefficients, lowest first, and its degree.
+    #[must_use]
+    pub fn last(&self) -> Option<(&[Wide<L>; TERMS], usize)> {
+        self.elements().last().map(|p| (&p.terms, p.degree))
     }
 }
 
