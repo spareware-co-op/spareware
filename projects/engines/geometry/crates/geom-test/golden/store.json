@@ -356,6 +356,12 @@
               "kind": "corpus",
               "piece": "G167",
               "why": "3 new count benchmarks on the reductions of 12.7 (decision 32.44): a plane square to a torus's axis through its tube, a cylinder about its axis through its tube, and a sloping plane across a wall; no existing digest moved"
+            },
+            {
+              "sha256": "c6ad6ae11db193fbb5f9ca80bf84189b6ef77a320dc0a152592e208d889d487d",
+              "kind": "corpus",
+              "piece": "G168",
+              "why": "2 new count benchmarks on geom-intersect's tracer (decision 32.44): a sphere through a plane patch and a torus's silhouette; no existing digest moved"
             }
           ],
           "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b"

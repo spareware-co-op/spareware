@@ -8306,6 +8306,22 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "while t >= hi { t += period } never ends once a cut's turn reads past the loop's end: turn_of reads up to 3/2, and a loop turning from −1, as a whole circle profile on (−1, 1) pushed and cut across makes (attack_g167), ends at 1."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/level.rs",
+      "mutant": "replace && with || in ending",
+      "line_text": "overlap(x, u) && overlap(y, v)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A crossing with nothing across it and off the domain stands beside a flagged box, or the trace is broken: an interior crossing always has a box across its side, and that box is settled or flagged. With || the test also accepts a flagged box level with the crossing in one parameter only, which differs only on that broken trace, where the answer is Internal rather than an ended branch."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
+      "mutant": "replace * with / in <impl ImplicitBound for Cone>::enclose_box",
+      "line_text": "let slope = Interval::point(k * self.round.sign)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The axial sign is exactly 1 or -1, so k / sign and k * sign are the same double."
     }
   ],
   "coverage_off": [

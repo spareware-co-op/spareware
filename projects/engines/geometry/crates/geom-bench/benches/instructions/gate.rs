@@ -2962,7 +2962,7 @@ pub mod quadrature {
     );
 }
 
-/// geom-intersect's hot paths (pieces G158 and G162; decision 32.44).
+/// geom-intersect's hot paths (pieces G158, G162 and G168; decision 32.44).
 pub mod intersect {
     use super::*;
 
@@ -3113,9 +3113,23 @@ pub mod intersect {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/trace_patch/typical"))]
+    fn trace_patch(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/trace_silhouette/typical"))]
+    fn trace_silhouette(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch, natural_plane, natural_spheres, natural_tee, natural_apex, quartic_walk, reduced_torus, reduced_tube, reduced_wall
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch, natural_plane, natural_spheres, natural_tee, natural_apex, quartic_walk, reduced_torus, reduced_tube, reduced_wall, trace_patch, trace_silhouette
     );
 }
 

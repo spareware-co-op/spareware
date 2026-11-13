@@ -159,6 +159,46 @@ pub fn spheres(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
     })
 }
 
+/// A plane patch and the centre of a sphere that cuts it in a closed circle, for `trace`.
+#[must_use]
+pub fn patches(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::patches", class);
+    batch_of(|_| {
+        let at = point(&mut g);
+        let patch = Plane::new(
+            [at[0], at[1], 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-8.0, 8.0), (-8.0, 8.0)),
+        );
+        let lift = f64::from(i32::try_from(g.range(1, 4)).ok()?);
+        Some((SurfaceKind::Plane(patch.ok()?), [at[0], at[1], lift]))
+    })
+}
+
+/// Most of a torus and a view direction, for a silhouette.
+#[must_use]
+pub fn tori(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::tori", class);
+    batch_of(|_| {
+        let band = Torus::new(
+            point(&mut g),
+            8.0,
+            2.0,
+            Frame::standard().ok()?,
+            ((0.1, 1.9), (0.1, 1.9)),
+        );
+        let run = f64::from(i32::try_from(g.range(1, 4)).ok()?);
+        Some((SurfaceKind::Torus(band.ok()?), [run, 1.0, 2.0]))
+    })
+}
+
 /// A coordinate of a 2D curve.
 fn plain(g: &mut SplitMix64) -> f64 {
     coordinate(g)

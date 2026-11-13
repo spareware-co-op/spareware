@@ -234,6 +234,8 @@ pub mod crossings;
 
 pub mod intersect;
 
+pub mod level;
+
 pub mod natural;
 
 pub mod adversarial;

@@ -2961,6 +2961,8 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("reduced_wall", k::closed_forms, &m::wall_cuts(Typical));
     all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
     all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
+    all_ok("trace_patch", k::cut_patches, &m::patches(Typical));
+    all_ok("trace_silhouette", k::silhouettes, &m::tori(Typical));
 }
 
 /// Every typical batch of the decisions on lines and quadrics (decision 32.44) is decided.
