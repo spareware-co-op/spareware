@@ -1209,7 +1209,6 @@ mod repository {
         ),
         ("geom-3dm", "G438"),
         ("geom-align", "G373 G374 G376"),
-        ("geom-analysis", "G346 G347 G348 G349"),
         ("geom-blend", "G262 G263 G264 G265 G266 G267 G268 G269"),
         (
             "geom-bool",

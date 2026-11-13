@@ -314,7 +314,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-combine",  10, Amended27, Here, "base bool mesh field convert check subd"),
     kernel("geom-panel",    10, Amended27, Here,
         "base topo check surface intersect poly mesh 2d linalg"),
-    kernel("geom-analysis", 10, Amended27, Here, "base surface topo intersect spatial"),
+    kernel("geom-analysis", 10, Amended27, Elsewhere("G346"), "base surface topo intersect spatial"),
     // 11. Domain toolkits: a toolkit enters the kernel when a second program needs it (26.1),
     // so none is built yet; owner action G238 decides whether geom-civil, geom-thread and
     // geom-stair enter as exceptions. Chapter 27 gives the sheet, thread and stair toolkits "base and the

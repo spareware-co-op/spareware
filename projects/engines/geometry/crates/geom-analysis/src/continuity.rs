@@ -45,8 +45,9 @@
 //!
 //! Cost: each piece is one `class_a::at` and one `class_a::over` (O(1) each); a join of smooth
 //! surfaces whose measure is not constant needs O(log(1/tight)) rounds of a few pieces near the
-//! maximum, one whose measure is the same all along (an exact join) O(√(L/tight)) pieces, L the
-//! length of t's range; never more than [`Ask::pieces`]. Memory: the pieces kept. No recursion.
+//! maximum, one whose measure is the same all along (an exact join) O(L/√tight) pieces, L the
+//! length of t's range, since the centred form's excess shrinks with the square of a piece's
+//! width; never more than [`Ask::pieces`]. Memory: the pieces kept. No recursion.
 
 use alloc::vec::Vec;
 use core::fmt;
