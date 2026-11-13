@@ -1316,7 +1316,7 @@ impl Arrangement {
         let surface = a.surfaces.push(SurfaceKind::Plane(plane))?;
         // Vertices.
         for p in &points {
-            let at = a.points.push(*p)?;
+            let at = a.points.push((*p).into())?;
             a.vertices.push(Vertex { point: at })?;
         }
         // Edges, each on the segment between its end points.
