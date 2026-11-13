@@ -35,7 +35,10 @@
 //! `geom-op`'s batch driver and the flat arrays of points, and `geom-format`'s file readers and
 //! writers: the CBOR decoder and text form, the record layer and files, body, name, history and
 //! operation records, and containers read and opened at either trust.
-//! With them, `geom-mesh`'s triangulation (piece G153).
+//! With them, `geom-mesh`'s triangulation (piece G153), and from phase 5 `geom-intersect`'s
+//! canonical order, projection, curve and surface meetings, closed forms, tracer, subdivision,
+//! marching, poles and seams, known curves, self-intersection and contact analysis, and
+//! `geom-num`'s exact decisions on lines and quadrics (pieces G158 to G176).
 //! From piece G140 it also runs the flat boolean's scenarios (23.13's scenarios at reduced scale):
 //! a wall's openings cut in one call, a door moved and cut again from the arrangement cache, a
 //! slab's holes, a union of many boxes, one and three selections from one arrangement, and a

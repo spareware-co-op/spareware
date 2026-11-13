@@ -1220,7 +1220,7 @@ impl Canonical for geom_num::brent::Zero {
     }
 }
 
-// The exact decisions on lines and quadrics (decision 32.44's count benchmarks for piece G159).
+// The exact decisions on lines and quadrics (decision 32.46's count benchmarks for piece G159).
 
 impl Canonical for geom_num::quadric::Line {
     fn encode(&self, h: &mut Sha256) {
@@ -1264,7 +1264,7 @@ impl Canonical for geom_num::pencil::Topology {
     }
 }
 
-// `geom-intersect`'s results (decision 32.44's count benchmarks for piece G158), each through its
+// `geom-intersect`'s results (decision 32.46's count benchmarks for piece G158), each through its
 // debug text: their fields are public only as far as the kernel needs, and a double's debug text
 // is the same on every target.
 

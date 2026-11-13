@@ -508,7 +508,7 @@ pub static OPS: &[Op] = &[
     Op { group: "prune", name: "record_write", measures: "geom_format::pruned::pruned_record", classes: T, prepare: |c| bind(inputs::naming::pruned(c), kernels::naming::record_write) },
     Op { group: "prune", name: "record_read", measures: "geom_format::pruned::read_pruned", classes: T, prepare: |c| bind(inputs::naming::pruned_payloads(c), kernels::naming::record_read) },
     // Root finding and quadrature (piece G51; decision 32.46).
-    // The exact decisions on lines and quadrics (piece G159; decision 32.44).
+    // The exact decisions on lines and quadrics (piece G159; decision 32.46).
     Op { group: "quadric", name: "line_sphere", measures: "quadric::line_sphere", classes: T, prepare: |c| bind(inputs::quadric::spheres(c), kernels::quadric::spheres) },
     Op { group: "quadric", name: "line_cylinder", measures: "quadric::line_cylinder", classes: T, prepare: |c| bind(inputs::quadric::cylinders(c), kernels::quadric::cylinders) },
     Op { group: "quadric", name: "line_cone", measures: "quadric::line_cone", classes: T, prepare: |c| bind(inputs::quadric::cones(c), kernels::quadric::cones) },
@@ -518,7 +518,7 @@ pub static OPS: &[Op] = &[
     Op { group: "quadric", name: "tangent", measures: "quadric::tangent_cylinder_cone", classes: T, prepare: |c| bind(inputs::quadric::tangents(c), kernels::quadric::tangents) },
     Op { group: "quadric", name: "pencil_simple", measures: "pencil::classify", classes: T, prepare: |c| bind(inputs::quadric::simple_pencils(c), kernels::quadric::pencils) },
     Op { group: "quadric", name: "pencil_node", measures: "pencil::classify", classes: T, prepare: |c| bind(inputs::quadric::nodal_pencils(c), kernels::quadric::pencils) },
-    // geom-intersect's canonical order (piece G158; decision 32.44): a list of items sorted and
+    // geom-intersect's canonical order (piece G158; decision 32.46): a list of items sorted and
     // proven disjoint, a key read through a circle's NURBS form, and a pair of keys put in order.
     Op { group: "intersect", name: "sort_items", measures: "geom_intersect::Intersection::new", classes: T, prepare: |c| bind(inputs::intersect::items(c), kernels::intersect::sorted) },
     Op { group: "intersect", name: "key_circle", measures: "geom_intersect::CanonicalKey::of_curve", classes: T, prepare: |c| bind(inputs::intersect::circles(c), kernels::intersect::keys) },
@@ -539,26 +539,26 @@ pub static OPS: &[Op] = &[
     Op { group: "intersect", name: "reduced_torus", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::torus_cuts(c), kernels::intersect::closed_forms) },
     Op { group: "intersect", name: "reduced_tube", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::torus_tubes(c), kernels::intersect::closed_forms) },
     Op { group: "intersect", name: "reduced_wall", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::wall_cuts(c), kernels::intersect::closed_forms) },
-    // geom-intersect's projection (piece G162; decision 32.44): the search on an arc and on a band
+    // geom-intersect's projection (piece G162; decision 32.46): the search on an arc and on a band
     // of a sphere.
     Op { group: "intersect", name: "project_arc", measures: "geom_intersect::project::project_curve", classes: T, prepare: |c| bind(inputs::intersect::arcs(c), kernels::intersect::on_arcs) },
     Op { group: "intersect", name: "project_sphere", measures: "geom_intersect::project::project_surface", classes: T, prepare: |c| bind(inputs::intersect::spheres(c), kernels::intersect::on_spheres) },
-    // The tracer (piece G168; decision 32.44): a sphere through a plane patch, and a torus's
+    // The tracer (piece G168; decision 32.46): a sphere through a plane patch, and a torus's
     // silhouette.
     Op { group: "intersect", name: "trace_patch", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::patches(c), kernels::intersect::cut_patches) },
-    // Subdivision (piece G169; decision 32.44): a sphere through a plane patch.
+    // Subdivision (piece G169; decision 32.46): a sphere through a plane patch.
     Op { group: "intersect", name: "subdivide_patch", measures: "geom_intersect::general::subdivide", classes: T, prepare: |c| bind(inputs::intersect::sheets(c), kernels::intersect::subdivided) },
-    // Marching (piece G170; decision 32.44): the branches of a sphere through a plane patch.
+    // Marching (piece G170; decision 32.46): the branches of a sphere through a plane patch.
     Op { group: "intersect", name: "march_plate", measures: "geom_intersect::march::march", classes: T, prepare: |c| bind(inputs::intersect::plates(c), kernels::intersect::marched) },
-    // Poles and seams (piece G173; decision 32.44): a whole sphere through a plane holding both its
+    // Poles and seams (piece G173; decision 32.46): a whole sphere through a plane holding both its
     // poles, one loop joined through each.
     Op { group: "intersect", name: "march_poles", measures: "geom_intersect::march::march", classes: T, prepare: |c| bind(inputs::intersect::poles(c), kernels::intersect::through_poles) },
-    // Known curves (piece G174; decision 32.44): sheets tangent to a plane along a known line,
+    // Known curves (piece G174; decision 32.46): sheets tangent to a plane along a known line,
     // the tube about it proven and taken out of the search.
     Op { group: "intersect", name: "known_tangent", measures: "geom_intersect::known::subdivide_known", classes: T, prepare: |c| bind(inputs::intersect::tangents(c), kernels::intersect::known_cut) },
-    // Self-intersection (piece G176; decision 32.44): swept loops crossing themselves along a line.
+    // Self-intersection (piece G176; decision 32.46): swept loops crossing themselves along a line.
     Op { group: "intersect", name: "selfcross_sweep", measures: "geom_intersect::selfcross::self_intersect", classes: T, prepare: |c| bind(inputs::intersect::sweeps(c), kernels::intersect::self_cross) },
-    // Contact analysis (piece G171; decision 32.44): a sphere resting on a plane patch.
+    // Contact analysis (piece G171; decision 32.46): a sphere resting on a plane patch.
     Op { group: "intersect", name: "analyse_rest", measures: "geom_intersect::contact::analyse", classes: T, prepare: |c| bind(inputs::intersect::rests(c), kernels::intersect::touched) },
     Op { group: "intersect", name: "trace_silhouette", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::tori(c), kernels::intersect::silhouettes) },
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
