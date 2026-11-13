@@ -567,10 +567,13 @@ impl LogicalSize for Spoke {
     const LOGICAL_BYTES: u64 = 32;
 }
 
-/// Whether face `f` is flat with one loop.
-fn one_loop(a: &Arenas, f: Ix<Face>) -> bool {
+/// Whether flat face `f` is one ring of spokes: one loop, every fin a [`spoke`]. Only such a face
+/// has a star.
+fn rings(a: &Arenas, f: Ix<Face>) -> bool {
     let kind = a.faces.surface.get(f).and_then(|s| a.surfaces.get(*s));
-    matches!(kind, Some(SurfaceKind::Plane(_))) && face_loops(a, f).nth(1).is_none()
+    matches!(kind, Some(SurfaceKind::Plane(_)))
+        && face_loops(a, f).nth(1).is_none()
+        && face_fins(a, f).all(|n| spoke(a, n).is_some())
 }
 
 /// Fin `n` as a corner of a ring, if its edge is straight and starts at a grid point.
@@ -590,19 +593,11 @@ fn spoke(a: &Arenas, n: Ix<geom_topo::entity::Fin>) -> Option<Spoke> {
     })
 }
 
-/// The corners of flat face `f`, if it has one loop of straight edges between grid points.
-fn ring(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Option<Vec<Spoke>>, Stopped> {
-    if !one_loop(a, f) {
-        return Ok(None);
-    }
+/// The corners of face `f`, one ring of spokes ([`rings`]), in its order.
+fn ring(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Vec<Spoke>, Stopped> {
     let mut out: Vec<Spoke> = reserve(sink.meter(), count(face_fins(a, f).count()))?;
-    for n in face_fins(a, f) {
-        let Some(one) = spoke(a, n) else {
-            return Ok(None);
-        };
-        out.push(one);
-    }
-    Ok(Some(out))
+    out.extend(face_fins(a, f).filter_map(|n| spoke(a, n)));
+    Ok(out)
 }
 
 /// `p`'s coordinates.
@@ -760,8 +755,8 @@ fn one_way(normals: impl Iterator<Item = [i128; 3]> + Clone) -> bool {
         .is_some_and(|whole| all.all(|one| same_way(one, whole)))
 }
 
-/// Flat face `f` as the star of triangles from the mean of its corners, one to each edge, if it
-/// has a ring of grid corners and every triangle turns the way the ring does as a whole; none
+/// Flat face `f`, one ring of spokes ([`rings`]), as the star of triangles from the mean of its
+/// corners, one to each edge, if every triangle turns the way the ring does as a whole; none
 /// otherwise.
 ///
 /// The mean, the triangles and the test of their turning are the same whichever corner the ring
@@ -770,9 +765,7 @@ fn one_way(normals: impl Iterator<Item = [i128; 3]> + Clone) -> bool {
 /// nothing else: not on a name, nor on the order a body was built in. A fan from the ring's first
 /// corner did depend on them, and found a valid body's mirror crossing itself.
 fn star(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Vec<Outline>, Stopped> {
-    let Some(ring) = ring(a, f, sink)? else {
-        return Ok(Vec::new());
-    };
+    let ring = ring(a, f, sink)?;
     // Only a ring of no corners has no mean, and it has no triangle to ask for one.
     let hub = Hub::of(&ring);
     let mut out: Vec<Outline> = reserve(sink.meter(), count(ring.len()))?;
@@ -789,16 +782,19 @@ fn star(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Vec<Outline>
     Ok(if turns { out } else { Vec::new() })
 }
 
-/// What face `f` is made of, as outlines: its own, a star's triangles, or none. `reading` is
-/// [`Reading::Whole`] or [`Reading::Again`].
+/// What face `f`, read as `read`, is made of, as outlines: its own, a star's triangles, or none.
+/// Read again, not charged: [`read`] charged the reading.
 fn slot(
     a: &Arenas,
     f: Ix<Face>,
+    read: Read,
     exact: bool,
-    reading: Reading,
     sink: &mut Sink<'_, '_>,
 ) -> Result<Slot, Stopped> {
-    Ok(Slot(match outline(a, f, exact, reading, sink)? {
+    if matches!(read, Read::Bare) {
+        return Ok(Slot(Vec::new()));
+    }
+    Ok(Slot(match outline(a, f, exact, Reading::Again, sink)? {
         Some(one) => {
             let mut list: Vec<Outline> = reserve(sink.meter(), 1)?;
             list.push(one);
@@ -808,15 +804,16 @@ fn slot(
     }))
 }
 
-/// One slot per face of `a`, kept after [`read`] has charged each face's reading.
+/// One slot per face of `a`, whose faces [`read`] read as `reads`.
 pub(crate) fn outlines(
     a: &Arenas,
+    reads: &[Read],
     exact: bool,
     sink: &mut Sink<'_, '_>,
 ) -> Result<Vec<Slot>, Stopped> {
-    let mut out: Vec<Slot> = reserve(sink.meter(), u64::from(a.rows(Arena::Face)))?;
-    for f in rows::<Face>(a.rows(Arena::Face)) {
-        out.push(slot(a, f, exact, Reading::Again, sink)?);
+    let mut out: Vec<Slot> = reserve(sink.meter(), count(reads.len()))?;
+    for (f, &read) in rows::<Face>(a.rows(Arena::Face)).zip(reads) {
+        out.push(slot(a, f, read, exact, sink)?);
     }
     Ok(out)
 }
@@ -824,12 +821,10 @@ pub(crate) fn outlines(
 /// How a face's outline is read.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Reading {
-    /// Charged, its sides kept: a shell's outlines, for [`shell_side`].
-    Whole,
     /// Charged, and nothing kept or reserved: [`read`].
     Look,
-    /// Its sides kept and not charged: the outlines group 3 keeps after [`read`] has charged the
-    /// same reading of every face.
+    /// Its sides kept and not charged: an outline kept after [`read`] has charged the same
+    /// reading.
     Again,
 }
 
@@ -838,15 +833,14 @@ enum Reading {
 /// and reserves nothing for one.
 #[derive(Clone, Copy)]
 pub(crate) enum Read {
-    /// A face with neither an outline nor a star: one not on a plane, or a flat one with an edge
-    /// that is not straight between grid points or with a second loop and no outline. Its pairs
-    /// are the caller's to test.
+    /// A face with neither an outline nor a star: one not on a plane, or a flat one with no
+    /// outline that is not one ring of spokes. Its pairs are the caller's to test.
     Bare,
     /// A face with an outline on this plane, every corner of it a grid point.
     Plain(Plane),
     /// Any other flat face: one with a corner where three planes meet, whose edges are tested on
-    /// its outline, or one with no outline, which may have a star. Its pairs are tested on the
-    /// outlines kept.
+    /// its outline, or one with no outline that is one ring of spokes, which may have a star. Its
+    /// pairs are tested on the outlines kept.
     Kept,
 }
 
@@ -862,11 +856,10 @@ pub(crate) fn read(
     exact: bool,
     sink: &mut Sink<'_, '_>,
 ) -> Result<Read, Stopped> {
-    // A face with no outline has a star only if it is one flat ring of spokes ([`ring`]).
     Ok(match outline(a, f, exact, Reading::Look, sink)? {
         Some(one) if !one.implicit => Read::Plain(one.plane),
         Some(_) => Read::Kept,
-        None if one_loop(a, f) && face_fins(a, f).all(|n| spoke(a, n).is_some()) => Read::Kept,
+        None if rings(a, f) => Read::Kept,
         None => Read::Bare,
     })
 }
@@ -1011,18 +1004,25 @@ impl Side {
     /// another at its place. A star's hub is no vertex, so it is shared with nothing, not with
     /// another star's hub at the same place either.
     fn starts_on(&self, other: &Outline) -> bool {
-        let at = |v| other.sides.iter().any(|t| t.start.vertex == Some(v));
-        self.start.vertex.is_some_and(at)
+        self.start.vertex.is_some_and(|v| other.has_vertex(v))
     }
 
     /// Whether this side's edge is an edge of `other` too. A star's spoke is no edge.
     fn runs_on(&self, other: &Outline) -> bool {
-        let along = |e| other.sides.iter().any(|t| t.edge == Some(e));
-        self.edge.is_some_and(along)
+        self.edge.is_some_and(|e| other.has_edge(e))
     }
 }
 
 impl Outline {
+    /// Whether vertex `v` is a corner of this outline.
+    fn has_vertex(&self, v: Ix<Vertex>) -> bool {
+        self.sides.iter().any(|t| t.start.vertex == Some(v))
+    }
+
+    /// Whether edge `e` is a side of this outline.
+    fn has_edge(&self, e: Ix<Edge>) -> bool {
+        self.sides.iter().any(|t| t.edge == Some(e))
+    }
     /// Whether this face reaches the plane of `other`, which crosses its own, only where the two
     /// faces share a vertex or an edge: its corners on one side of that plane or on it, and not
     /// all on it; each corner on the plane a vertex of `other`; and each side along the plane an
@@ -1055,9 +1055,8 @@ impl Outline {
                 edge: side.edge,
             })
         });
-        let has_vertex = |v| other.sides.iter().any(|t| t.start.vertex == Some(v));
-        let has_edge = |e| other.sides.iter().any(|t| t.edge == Some(e));
-        rests(rounds, &other.plane, (has_vertex, has_edge), sink)
+        let held = (|v| other.has_vertex(v), |e| other.has_edge(e));
+        rests(rounds, &other.plane, held, sink)
     }
 }
 
@@ -1462,7 +1461,9 @@ pub(crate) fn shell_side(
     };
     let mut shell: Vec<Slot> = reserve(sink.meter(), count(of(t).count()))?;
     for f in of(t) {
-        shell.push(slot(a, f, false, Reading::Whole, sink)?);
+        // Read as group 3 reads a face, then kept: charged once.
+        let read = read(a, f, false, sink)?;
+        shell.push(slot(a, f, read, false, sink)?);
     }
     // A face nothing stands for would leave the shell open to the ray, so against such a shell no
     // corner is asked. (No body brings one this far: such a face shares a corner with its

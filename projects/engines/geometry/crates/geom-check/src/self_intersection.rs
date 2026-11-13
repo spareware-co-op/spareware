@@ -103,13 +103,14 @@ pub(crate) fn check(
     for (slot, f) in reads.iter_mut().zip(rows::<Face>(faces)) {
         *slot = planar::read(a, f, exact, sink)?;
     }
+    let reads: &[Read] = reads;
     let read = |f: Ix<Face>| reads.get(f.to_usize()).copied().unwrap_or(Read::Bare);
     let mut kept: Option<Vec<Slot>> = None;
     for f in rows::<Face>(faces) {
         sink.charge()?;
         let mut implicit = None;
         if matches!(read(f), Read::Kept) {
-            implicit = pieces(keep(&mut kept, a, exact, sink)?, f)
+            implicit = pieces(keep(&mut kept, a, (reads, exact), sink)?, f)
                 .first()
                 .filter(|o| o.implicit);
         }
@@ -137,13 +138,13 @@ pub(crate) fn check(
                     match planar::look(a, (f, &p), (g, &q), sink)? {
                         Look::Found(found) => found,
                         Look::Left(left) => {
-                            let slots = keep(&mut kept, a, exact, sink)?;
+                            let slots = keep(&mut kept, a, (reads, exact), sink)?;
                             planar::finish(left, pieces(slots, f), pieces(slots, g), sink)?
                         }
                     }
                 }
                 _ => {
-                    let slots = keep(&mut kept, a, exact, sink)?;
+                    let slots = keep(&mut kept, a, (reads, exact), sink)?;
                     let (first, second) = (pieces(slots, f), pieces(slots, g));
                     if first.is_empty() || second.is_empty() {
                         other_faces_meet(a, f, g, exact, reach)
@@ -172,11 +173,11 @@ fn to_usize(rows: u32) -> usize {
 fn keep<'k>(
     kept: &'k mut Option<Vec<Slot>>,
     a: &Arenas,
-    exact: bool,
+    (reads, exact): (&[Read], bool),
     sink: &mut Sink<'_, '_>,
 ) -> Result<&'k [Slot], Stopped> {
     if kept.is_none() {
-        *kept = Some(planar::outlines(a, exact, sink)?);
+        *kept = Some(planar::outlines(a, reads, exact, sink)?);
     }
     Ok(kept.as_deref().unwrap_or(&[]))
 }

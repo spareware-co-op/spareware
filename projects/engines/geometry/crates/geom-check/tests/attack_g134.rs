@@ -26,7 +26,7 @@ mod common;
 
 use common::{
     CUBE_FACES, Rows, certified, faces_into, ix, kinds, level, line, meter, parallel, polyhedron,
-    report, round_cylinder,
+    report, round_cylinder, seamed_cylinder,
 };
 use geom_check::{Entity, Fault, FaultKind, Level, Report, check};
 use geom_curve::CurveKind;
@@ -2051,6 +2051,37 @@ fn a_body_of_many_faces_reserves_their_reads() {
     faces.extend(walls.iter().map(Vec::as_slice));
     let prism = polyhedron(&points, &faces);
     assert_eq!(cost(&prism.body(BodyKind::Solid)), (2_772, 18 * 80));
+}
+
+#[test]
+fn faces_with_neither_an_outline_nor_a_star_keep_nothing() {
+    // A cylinder's caps are flat but round a circle, its side is curved: no face has an outline
+    // or a star, every pair goes to the carriers' test, and nothing is kept or reserved. The same
+    // with a seam, whose caps' circles start at vertices.
+    for r in [round_cylinder(), seamed_cylinder()] {
+        let mut m = WorkMeter::new(Budget::UNLIMITED);
+        let found = check(&r.body(BodyKind::Solid), certified(), Level::Full, &mut m).unwrap();
+        assert!(found.passed(), "{:?}", found.faults());
+        assert_eq!(m.used().logical_bytes, 0);
+    }
+}
+
+#[test]
+fn a_face_with_nothing_to_keep_is_kept_as_nothing() {
+    // The ring of meetings keeps its outlines, and with them a slot for every face: a disc above
+    // it, round a circle, has neither an outline nor a star, so its slot is empty and its pair
+    // goes to the carriers' test, which keeps the two planes apart.
+    let mut r = ring_of_meetings();
+    let e = r.edge(None);
+    r.curves[e as usize] = parallel(50.0, 5.0);
+    let s = r.shell(0);
+    let f = r.face(s, &[&[(e, Sense::Forward)]]);
+    r.surfaces[f as usize] = level(50.0);
+    let mut m = WorkMeter::new(Budget::UNLIMITED);
+    let found = check(&r.body(BodyKind::Sheet), certified(), Level::Full, &mut m).unwrap();
+    assert!(found.passed(), "{:?}", found.faults());
+    // The ring's lists, and the disc's slot, a list of no outline: no ring is read for a star.
+    assert_eq!(m.used().logical_bytes, MEETINGS_BYTES + 24);
 }
 
 #[test]
