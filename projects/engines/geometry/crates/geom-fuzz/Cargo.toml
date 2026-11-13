@@ -72,6 +72,8 @@ serde_json = "=1.0.154"
 # Apache-2.0.
 # The entity target (G194): geom-2d's entity model, under test (ours, Apache-2.0).
 geom-2d = { path = "../geom-2d" }
+# The sketch_text target (G217): the parser under test (MPL-2.0, ours).
+geom-sketch = { path = "../geom-sketch" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

@@ -182,6 +182,7 @@
 //!   code under test of the [`batch`] target.
 //! - `geom-intersect` (MPL-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
 //!   `geom-math`, `geom-run` and `geom-surface` (MPL-2.0, ours), what its cases are made of.
+//! - `geom-sketch` (MPL-2.0, ours), the code the [`sketch_text`] target tests.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -290,6 +291,7 @@ pub mod references;
 pub mod robustness;
 pub mod roots;
 pub mod seeded;
+pub mod sketch_text;
 pub mod snap;
 pub mod sequence;
 pub mod surfaces;

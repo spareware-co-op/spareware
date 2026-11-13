@@ -345,6 +345,8 @@ Failures are `OpError`s (section 22). Each sketch kind refines a kind of the sha
 
 An unresolved reference is not on this list: it is model state, reported in `holds` (section 15.11).
 
+As built (G217, `geom_sketch::model`, `equation` and `text`): an `ItemId` is the sequence number and key of 15.2, and a `Sketch` keeps every item sorted by it. A kind implements `Residual<N, E>` once, over `Scalar`, with its `singular` set; `Assembly::new` reads the pattern once and `Assembly::evaluate` fills the residuals and the Jacobian through `geom_num::dual`, each column multiplied by its variable's power of two. The first kinds are coincident, horizontal, vertical, distance, point-line distance on a stored side, and fix; G218 brings the rest of 15.3. `sketch v1` is line-based, with ids written `sequence.key`, and `geom-fuzz`'s `sketch_text` target holds its parser to never panicking and to a fixed point.
+
 **History.** A solve creates and deletes nothing. Every entity whose geometry changed is modified one-to-one and keeps its name; every other entity is unchanged (section 20.3).
 
 **A text form.** A canonical text form of a sketch problem (plane, entities, constraints, root choices and values) round-trips exactly. Grid values are written as whole numbers of steps, and other numbers as the shortest decimal that reads back to the same `f64`. The grammar is versioned (`sketch v1`). It starts in the Preview tier and becomes Stable with the facade (section 25). Tests, bug reports and AI agents use it, on the model of ezpz's problem files ([README](https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/README.md)).

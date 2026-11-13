@@ -196,6 +196,21 @@ fn a_bad_triplet_is_refused() {
 }
 
 #[test]
+fn an_entry_is_found_and_set_in_place() {
+    let mut a = Sparse::from_triplets(3, 2, &[(0, 0, 1.0), (2, 0, 2.0), (1, 1, 3.0)]).unwrap();
+    assert_eq!(a.place_of(0, 0), Ok(0));
+    assert_eq!(a.place_of(2, 0), Ok(1));
+    assert_eq!(a.place_of(1, 1), Ok(2));
+    assert_eq!(a.place_of(1, 0), Err(LinalgError::Shape));
+    assert_eq!(a.place_of(0, 2), Err(LinalgError::Shape));
+    a.set_at(1, 7.0).unwrap();
+    assert_eq!(a.column(0).unwrap().1, &[1.0, 7.0]);
+    assert_eq!(a.set_at(3, 1.0), Err(LinalgError::Shape));
+    assert_eq!(a.set_at(0, f64::NAN), Err(LinalgError::NotFinite));
+    assert_eq!(a.column(0).unwrap().1, &[1.0, 7.0]);
+}
+
+#[test]
 fn it_multiplies_transposes_and_goes_to_and_from_dense() {
     let dense = Matrix::from_rows(2, 3, &[1.0, 0.0, 2.0, 0.0, 3.0, -4.0]).unwrap();
     let a = Sparse::from_dense(&dense).unwrap();
