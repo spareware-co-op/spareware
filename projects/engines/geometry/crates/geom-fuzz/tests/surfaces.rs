@@ -1,5 +1,6 @@
 //! The surface kinds' fuzz target, run as tests on stable Rust: bolero's test mode, the seeded
-//! leg, the input bound, every kind reached, and a broken kind caught.
+//! leg, the input bound, every kind reached, the offsets left to their own target, and a broken
+//! kind caught, in the contract and in the pass after a budget stop.
 //!
 //! - `surfaces_fuzz` wraps `geom_fuzz::surfaces::harness` in `bolero::check!`. Under
 //!   `cargo test` it replays the files in `tests/__fuzz__/surfaces/corpus` and `crashes`, if any,
@@ -8,10 +9,15 @@
 //!   `cargo bolero test surfaces_fuzz --package geom-fuzz` the same test is a libFuzzer target.
 //! - `surfaces_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed
 //!   seed (`SPAREKIT_SEED` replays it), the same on every target.
-//! - `every_kind_is_reached` decodes one input per kind tag and checks each builds and keeps the
-//!   contract, so no kind is out of the fuzzer's reach.
+//! - `every_kind_is_reached` decodes one input per kind tag and checks each keeps the contract,
+//!   so no kind is out of the fuzzer's reach; the offset is passed unbuilt, as
+//!   `tests/surface_offsets.rs` reaches it.
+//! - `no_stored_file_of_this_target_is_an_offset`: no corpus or crash file here decodes to an
+//!   offset, which this target would pass without testing.
 //! - `a_broken_kind_is_a_finding`: a kind whose bound misses its own points is caught (28.4,
-//!   fault injection: a check that cannot fail proves nothing).
+//!   fault injection: a check that cannot fail proves nothing); and
+//!   `a_broken_kind_that_stops_is_a_finding`: so is one whose conversions spend the whole budget,
+//!   by the pass without conversions after the stop.
 
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them to build their inputs.
@@ -30,19 +36,20 @@
     clippy::indexing_slicing
 )]
 
+#[path = "broken/surface.rs"]
+mod broken;
 mod common;
 
+use std::path::Path;
+
+use broken::Broken;
 use common::holds;
-use geom_curve::{CurveError, DerivativeBound};
 use geom_fuzz::seeded;
 use geom_fuzz::surfaces::{
-    KINDS, MAX_INPUT_BYTES, PARAMS, VALUES, check, check_with, decode, harness,
+    KINDS, MAX_INPUT_BYTES, OFFSET, PARAMS, Reached, VALUES, check_with, decode, harness, reached,
 };
 use geom_math::{Axis, GridTransform, TypedTransform};
-use geom_num::interval::Interval;
-use geom_nurbs::{Basis, Bounds, Changed, Direction, Limit, Surface};
-use geom_run::WorkMeter;
-use geom_surface::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
+use geom_nurbs::{Basis, Surface};
 use geom_test::Seed;
 
 /// Random byte strings per `cargo test` run of the fuzz target in bolero's test mode.
@@ -120,92 +127,34 @@ fn every_kind_is_reached() {
     for kind in 0..KINDS {
         let case = decode(&input(kind)).0;
         assert_eq!(case.kind, kind);
-        holds(check(&case));
-    }
-}
-
-/// A NURBS patch whose bound over any box is moved a million units from the truth.
-#[derive(Debug)]
-struct Moved(Surface<3>);
-
-impl ParamSurface for Moved {
-    fn domain(&self) -> ParamBox {
-        ParamSurface::domain(&self.0)
-    }
-    fn point(&self, u: f64, v: f64, s: (Limit, Limit)) -> Result<[f64; 3], CurveError> {
-        ParamSurface::point(&self.0, u, v, s)
-    }
-    fn partials(&self, u: f64, v: f64, s: (Limit, Limit)) -> Result<[[f64; 3]; 3], CurveError> {
-        self.0.partials(u, v, s)
-    }
-    fn enclose(
-        &self,
-        u: f64,
-        v: f64,
-        s: (Limit, Limit),
-        m: &mut WorkMeter<'_>,
-    ) -> Result<[[Interval; 3]; 3], CurveError> {
-        self.0.enclose(u, v, s, m)
-    }
-    fn bound(&self, r: ParamBox, m: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
-        let b = ParamSurface::bound(&self.0, r, m)?;
-        Ok(Bounds {
-            lo: b.lo.map(|x| x + 1e6),
-            hi: b.hi.map(|x| x + 1e6),
-        })
-    }
-    fn derivative_bound(
-        &self,
-        r: ParamBox,
-        d: Direction,
-        m: &mut WorkMeter<'_>,
-    ) -> Result<DerivativeBound<3>, CurveError> {
-        ParamSurface::derivative_bound(&self.0, r, d, m)
-    }
-    fn partials_over(
-        &self,
-        r: ParamBox,
-        s: (Limit, Limit),
-        k: usize,
-        m: &mut WorkMeter<'_>,
-    ) -> Result<Vec<[Interval; 3]>, CurveError> {
-        self.0.partials_over(r, s, k, m)
-    }
-    fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
-        self.0.breaks()
-    }
-    fn normal_bound(&self, r: ParamBox, m: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
-        self.0.normal_bound(r, m)
-    }
-    fn to_nurbs(&self, m: &mut WorkMeter<'_>) -> Result<Changed<SurfaceForm>, CurveError> {
-        self.0.to_nurbs(m)
-    }
-    fn split(
-        &self,
-        d: Direction,
-        t: f64,
-        m: &mut WorkMeter<'_>,
-    ) -> Result<(Changed<SurfaceKind>, Changed<SurfaceKind>), CurveError> {
-        ParamSurface::split(&self.0, d, t, m)
-    }
-    fn reversed(
-        &self,
-        d: Direction,
-        m: &mut WorkMeter<'_>,
-    ) -> Result<Changed<SurfaceKind>, CurveError> {
-        self.0.reversed(d, m)
-    }
-    fn transformed(
-        &self,
-        t: &TypedTransform,
-        m: &mut WorkMeter<'_>,
-    ) -> Result<Changed<SurfaceKind>, CurveError> {
-        self.0.transformed(t, m)
+        let reached = reached(&case).unwrap_or_else(|f| panic!("{f}"));
+        // The offset is passed unbuilt: `surface_offsets` fuzzes it.
+        if kind == OFFSET {
+            assert_eq!(reached, Reached::Unbuilt);
+        }
     }
 }
 
 #[test]
-fn a_broken_kind_is_a_finding() {
+fn no_stored_file_of_this_target_is_an_offset() {
+    // This target passes an offset without building it, so an offset stored here would test
+    // nothing: offsets' files belong to `tests/__fuzz__/surface_offsets`, which reads the same
+    // bytes. The folder holds no file today; the test reads whatever it holds.
+    let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/__fuzz__/surfaces");
+    for kind in ["corpus", "crashes"] {
+        let Ok(listing) = std::fs::read_dir(folder.join(kind)) else {
+            continue;
+        };
+        for f in listing {
+            let path = f.unwrap().path();
+            let case = decode(&std::fs::read(&path).unwrap()).0;
+            assert_ne!(case.kind, OFFSET, "{} is an offset", path.display());
+        }
+    }
+}
+
+/// A bilinear patch, broken as asked.
+fn patch(moved: bool, dear: bool) -> Broken<Surface<3>> {
     let knots = || Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
     let net = [
         [0.0, 0.0, 0.0],
@@ -213,10 +162,35 @@ fn a_broken_kind_is_a_finding() {
         [1.0, 0.0, 0.0],
         [1.0, 1.0, 1.0],
     ];
-    let s = Surface::new(knots(), knots(), &net).unwrap();
+    Broken {
+        inner: Surface::new(knots(), knots(), &net).unwrap(),
+        moved,
+        dear,
+    }
+}
+
+#[test]
+fn a_broken_kind_is_a_finding() {
     let t = TypedTransform::Exact(GridTransform::quarter_turns(Axis::Z, 1));
     let params = [(0, 0), (85, 170), (170, 85), (255, 255)];
-    holds(check_with(&s, &params, &t));
-    let found = check_with(&Moved(s), &params, &t).unwrap_err();
+    holds(check_with(&patch(false, false), &params, &t));
+    let found = check_with(&patch(true, false), &params, &t).unwrap_err();
     assert!(found.law.contains("kind contract"), "{found}");
+}
+
+#[test]
+fn a_broken_kind_that_stops_is_a_finding() {
+    // Conversions that spend the whole budget stop the contract in the transform law, before any
+    // law at a pair. The stop is legal; the pass without conversions then runs those laws under
+    // its own meter, and finds the bound that misses the patch.
+    let t = TypedTransform::Exact(GridTransform::quarter_turns(Axis::Z, 1));
+    let params = [(0, 0), (85, 170), (170, 85), (255, 255)];
+    holds(check_with(&patch(false, true), &params, &t));
+    let found = check_with(&patch(true, true), &params, &t).unwrap_err();
+    assert!(
+        found
+            .law
+            .contains("without its conversions, after a budget stop"),
+        "{found}"
+    );
 }

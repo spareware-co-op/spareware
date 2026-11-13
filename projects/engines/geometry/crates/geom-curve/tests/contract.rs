@@ -1,7 +1,8 @@
 //! The kind contract (piece G60) on the NURBS kind and on kinds broken on purpose: every random
 //! NURBS curve, planar and spatial, rational or not, with repeated knots, passes every law under
 //! exact, rational and certified transforms; and a kind whose bound, reversal or evaluation is
-//! wrong is caught by the law it breaks.
+//! wrong is caught by the law it breaks. The entry without the conversions keeps the same
+//! verdicts on the laws it runs, never converts, and reports a stop as a stop.
 //!
 //! Covers: `CurveKind::Nurbs`.
 
@@ -16,7 +17,7 @@
     reason = "tests: a failure stops the test"
 )]
 
-use geom_curve::contract::check;
+use geom_curve::contract::{check, check_without_conversions};
 use geom_curve::{CurveError, CurveKind, DerivativeBound, Law, NurbsForm, ParamCurve};
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
 use geom_num::interval::Interval;
@@ -113,6 +114,17 @@ fn every_nurbs_curve_keeps_the_contract() {
         let ps = params(&c3);
         let kind = CurveKind::Nurbs(c3);
         check(&kind, &ps, t, &mut meter()).unwrap_or_else(|e| panic!("trial {trial} (enum): {e}"));
+        // Without the conversions: the same verdict, for less work.
+        let (mut whole, mut part) = (meter(), meter());
+        check(&kind, &ps, t, &mut whole).unwrap();
+        check_without_conversions(&kind, &ps, &mut part)
+            .unwrap_or_else(|e| panic!("trial {trial} (without conversions): {e}"));
+        assert!(
+            part.used().work <= whole.used().work,
+            "trial {trial}: {:?} against {:?}",
+            part.used(),
+            whole.used()
+        );
     }
 }
 
@@ -137,6 +149,22 @@ fn a_meter_that_runs_out_anywhere_is_reported_as_the_stop() {
         );
     }
     assert!(check(&c, &ps, t, &mut WorkMeter::new(Budget::of_work(whole))).is_ok());
+    // The same for the entry without the conversions, which the fuzz targets run after a stop,
+    // on the first three parameters (every law it runs, at a third of the work).
+    let ps = &ps[..3];
+    let mut m = meter();
+    check_without_conversions(&c, ps, &mut m).unwrap();
+    let part = u64::try_from(m.used().work).unwrap();
+    assert!(0 < part && part < whole, "{part} of {whole}");
+    for budget in 0..part {
+        let e = check_without_conversions(&c, ps, &mut WorkMeter::new(Budget::of_work(budget)))
+            .unwrap_err();
+        assert!(
+            matches!(e.error, Some(CurveError::Stopped(_))),
+            "budget {budget} of {part}: {e}"
+        );
+    }
+    assert!(check_without_conversions(&c, ps, &mut WorkMeter::new(Budget::of_work(part))).is_ok());
 }
 
 #[test]
@@ -186,11 +214,17 @@ fn exact_operations_are_exact() {
 
 /// A NURBS curve with one behaviour broken on purpose.
 #[derive(Clone)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "one switch per behaviour broken, set one or two at a time"
+)]
 struct Broken {
     inner: Curve<3>,
     bound: bool,
     reverse: bool,
     evaluate: bool,
+    /// Both conversions, the transform and the NURBS form, fail as a defect.
+    convert: bool,
 }
 
 impl ParamCurve<3> for Broken {
@@ -237,6 +271,9 @@ impl ParamCurve<3> for Broken {
         self.inner.derivative_bound(span, order, meter)
     }
     fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<NurbsForm<3>>, CurveError> {
+        if self.convert {
+            return Err(CurveError::Defect);
+        }
         self.inner.to_nurbs(meter)
     }
     fn split(
@@ -274,12 +311,16 @@ impl ParamCurve<3> for Broken {
         transform: &TypedTransform,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Changed<CurveKind<3>>, CurveError> {
+        if self.convert {
+            return Err(CurveError::Defect);
+        }
         self.inner.transformed(transform, meter)
     }
 }
 
-#[test]
-fn broken_kinds_are_caught_by_their_law() {
+/// A cubic that keeps every law, the transform, the parameters, and the cubic broken three ways,
+/// each with the law that must catch it.
+fn broken_kinds() -> (Broken, TypedTransform, Vec<f64>, Vec<(Broken, Law)>) {
     let inner = Curve::new(
         Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap(),
         &[
@@ -297,9 +338,9 @@ fn broken_kinds_are_caught_by_their_law() {
         bound: false,
         reverse: false,
         evaluate: false,
+        convert: false,
     };
-    check(&base, &ps, &t, &mut meter()).unwrap();
-    for (broken, law) in [
+    let broken = vec![
         (
             Broken {
                 bound: true,
@@ -321,8 +362,51 @@ fn broken_kinds_are_caught_by_their_law() {
             },
             Law::EvaluationIsEnclosed,
         ),
-    ] {
+    ];
+    (base, t, ps, broken)
+}
+
+#[test]
+fn broken_kinds_are_caught_by_their_law() {
+    let (base, t, ps, broken) = broken_kinds();
+    check(&base, &ps, &t, &mut meter()).unwrap();
+    for (broken, law) in broken {
         let e = check(&broken, &ps, &t, &mut meter()).unwrap_err();
         assert_eq!(e.law, law, "{e}");
     }
+}
+
+#[test]
+fn without_conversions_a_broken_kind_is_caught_as_check_catches_it() {
+    // Fault injection on the second entry: each broken kind gives the error `check` gives, the
+    // law, the parameter and the call's error alike, so the laws they share have not drifted
+    // apart. With its conversions failing as well, which `check` stops on first, the entry
+    // without them still finds the same broken law; and a kind broken in its conversions alone
+    // keeps every law that entry runs, since it never calls them.
+    let (base, t, ps, broken) = broken_kinds();
+    check_without_conversions(&base, &ps, &mut meter()).unwrap();
+    for (broken, law) in broken {
+        let whole = check(&broken, &ps, &t, &mut meter()).unwrap_err();
+        let part = check_without_conversions(&broken, &ps, &mut meter()).unwrap_err();
+        assert_eq!(part, whole, "{law:?}");
+        let failing = Broken {
+            convert: true,
+            ..broken
+        };
+        let e = check(&failing, &ps, &t, &mut meter()).unwrap_err();
+        assert_eq!(
+            (e.law, e.error),
+            (Law::TransformMovesTheCurve, Some(CurveError::Defect)),
+            "{e}"
+        );
+        let e = check_without_conversions(&failing, &ps, &mut meter()).unwrap_err();
+        assert_eq!(e, part, "{law:?}");
+    }
+    let failing = Broken {
+        convert: true,
+        ..base
+    };
+    let e = check(&failing, &ps, &t, &mut meter()).unwrap_err();
+    assert_eq!(e.law, Law::TransformMovesTheCurve, "{e}");
+    check_without_conversions(&failing, &ps, &mut meter()).unwrap();
 }
