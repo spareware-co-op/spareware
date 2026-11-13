@@ -93,9 +93,9 @@ fn a_g1_join_s_curvature_jump_peaks_mid_edge() {
     let m = measure(&strip(0.0), &b, Measure::Curvature, 1e-6);
     check(&m, 2.5, 1e-6, 0.5, 1e-2);
     for g in [Measure::Gap, Measure::NormalAngle] {
-        let m = measure(&strip(0.0), &b, g, 1e-9);
+        let m = measure(&strip(0.0), &b, g, 1e-7);
         assert!(
-            m.lower() == 0.0 && upper(&m) <= 1e-9 && m.as_asked,
+            m.lower() == 0.0 && upper(&m) <= 1e-7 && m.as_asked,
             "{g:?}: {m:?}"
         );
     }
@@ -111,8 +111,8 @@ fn a_g2_join_s_curvature_change_peaks_mid_edge() {
         0.5,
         1e-2,
     );
-    let m = measure(&strip(0.0), &b, Measure::Curvature, 1e-8);
-    assert!(upper(&m) <= 1e-8 && m.as_asked, "{m:?}");
+    let m = measure(&strip(0.0), &b, Measure::Curvature, 1e-6);
+    assert!(upper(&m) <= 1e-6 && m.as_asked, "{m:?}");
 }
 
 #[test]

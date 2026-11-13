@@ -91,7 +91,7 @@ use geom_num::real::Real;
 use geom_num::scalar::Scalar;
 use geom_run::WorkMeter;
 
-use crate::param::{ParamBox, ParamSurface, SurfaceKind, centred, offset_from, partial_index};
+use crate::param::{ParamBox, ParamSurface, SurfaceKind, offset_from, partial_index};
 
 /// The error of every function here, and the side a parameter is read from at a break,
 /// re-exported so a caller above the curve crates (`geom-analysis`) can name them.
@@ -644,18 +644,21 @@ fn inside(region: ParamBox, domain: ParamBox) -> Result<ParamBox, CurveError> {
     Ok((cut(region.0, domain.0)?, cut(region.1, domain.1)?))
 }
 
-/// How much of the smooth piece of the domain around a box the box for the higher partials spans
-/// at least, in each finite direction: 1/128.
+/// How much of the smooth piece of the domain around a box the box for the remainder spans at
+/// least, in each finite direction: 1/128.
 const REACH: f64 = 1.0 / 128.0;
 
-/// The surface's partials to `order` over `region`, well conditioned however small the region: a
-/// region with no break of the surface in it, and not a point, is enclosed by the mean value form
-/// about its centre, P(c) + `P_u`(W)·Δu + `P_v`(W)·Δv, with P(c) at the centre point and the
-/// partials one order higher over W, the region widened to at least [`REACH`] of the smooth piece
-/// of the domain around it (but no further than that piece). A box's partials found by cutting a
-/// patch down to the box lose a factor of the box's width to rounding for each order, so the
-/// partials straight over a box of 2⁻³⁰ are far wider than the values; over W they are not, and
-/// the steps Δ keep the result as narrow as the region. Any other region is [`partials`]'s.
+/// The surface's partials to `order` over `region`, well conditioned however small the region.
+/// A NURBS patch, and every kind whose partials over a box come from cutting a NURBS piece down
+/// to the box (all but the analytic kinds, whose extents are closed forms), loses a factor of the
+/// box's width to rounding at each order, so its partials straight over a box of 2⁻³⁰ are far
+/// wider than their values, the more so far from the origin. So for such a kind a region with no
+/// break of the surface in it and not a point is enclosed by Taylor's theorem about its centre c
+/// to the second order, P(c) + `P_u`(c)·Δu + `P_v`(c)·Δv + `P_uu`(W)·Δu²/2 + `P_uv`(W)·Δu·Δv +
+/// `P_vv`(W)·Δv²/2: the first terms at the centre point, the remainder over W, the region widened
+/// to [`REACH`] of the smooth piece of the domain around it (no further than that piece), whose
+/// partials are well conditioned and whose width the squared steps Δ² make small. Any other
+/// region is [`partials`]'s.
 fn conditioned(
     surface: &SurfaceKind,
     region: ParamBox,
@@ -664,19 +667,63 @@ fn conditioned(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<V<Interval>>, CurveError> {
     let ((u0, u1), (v0, v1)) = region;
+    let closed = matches!(
+        surface,
+        SurfaceKind::Plane(_)
+            | SurfaceKind::Cylinder(_)
+            | SurfaceKind::Cone(_)
+            | SurfaceKind::Sphere(_)
+            | SurfaceKind::Torus(_)
+            | SurfaceKind::Affine(_)
+    );
     let (bu, bv) = surface.breaks();
     let clear = |(lo, hi): (f64, f64), breaks: &[f64]| !breaks.iter().any(|&b| lo <= b && b <= hi);
-    if (u0 == u1 && v0 == v1) || !(clear(region.0, &bu) && clear(region.1, &bv)) {
+    if closed || (u0 == u1 && v0 == v1) || !(clear(region.0, &bu) && clear(region.1, &bv)) {
         return partials(surface, region, order, limit, meter);
     }
     let (du, dv) = surface.domain();
-    let (cu, cv) = (f64::midpoint(u0, u1), f64::midpoint(v0, v1));
     let wide = (widened(region.0, &bu, du), widened(region.1, &bv, dv));
-    let up = order.checked_add(1).ok_or(CurveError::Defect)?;
-    let at = surface.partials_over(((cu, cu), (cv, cv)), (limit, limit), order, meter)?;
-    let over = surface.partials_over(wide, (limit, limit), up, meter)?;
-    let steps = (offset_from(region.0, cu)?, offset_from(region.1, cv)?);
-    centred(&at, &over, steps, order)
+    let (cu, cv) = (f64::midpoint(u0, u1), f64::midpoint(v0, v1));
+    let one = order.checked_add(1).ok_or(CurveError::Defect)?;
+    let two = order.checked_add(2).ok_or(CurveError::Defect)?;
+    let at = surface.partials_over(((cu, cu), (cv, cv)), (limit, limit), one, meter)?;
+    let over = surface.partials_over(wide, (limit, limit), two, meter)?;
+    let (su, sv) = (offset_from(region.0, cu)?, offset_from(region.1, cv)?);
+    let half = tight::point(0.5)?;
+    let (uu, uv, vv) = (
+        tight::mul(tight::square(su)?, half)?,
+        tight::mul(su, sv)?,
+        tight::mul(tight::square(sv)?, half)?,
+    );
+    let mut out = Vec::new();
+    for n in 0..=order {
+        for j in 0..=n {
+            let i = n.checked_sub(j).ok_or(CurveError::Defect)?;
+            let (i1, j1) = (
+                i.checked_add(1).ok_or(CurveError::Defect)?,
+                j.checked_add(1).ok_or(CurveError::Defect)?,
+            );
+            let (i2, j2) = (
+                i.checked_add(2).ok_or(CurveError::Defect)?,
+                j.checked_add(2).ok_or(CurveError::Defect)?,
+            );
+            let terms = [
+                (got(&at, i1, j)?, su),
+                (got(&at, i, j1)?, sv),
+                (got(&over, i2, j)?, uu),
+                (got(&over, i1, j1)?, uv),
+                (got(&over, i, j2)?, vv),
+            ];
+            let mut p = got(&at, i, j)?;
+            for (x, step) in terms {
+                for (slot, d) in p.iter_mut().zip(x) {
+                    *slot = tight::add(*slot, tight::mul(d, step)?)?;
+                }
+            }
+            out.push(p);
+        }
+    }
+    Ok(out)
 }
 
 /// `side` of a box widened about its centre to at least [`REACH`] of the smooth piece of `domain`
