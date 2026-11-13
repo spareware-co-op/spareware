@@ -820,14 +820,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
-      "mutant": "replace == with != in Offset::partials_of",
-      "line_text": "let point_u = u0 == u1;",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "Only regions of one u value or of one v value change. At a point the mutant takes the centred form, whose steps are 0 there, so it is the direct enclosure intersected with itself: the same. A line along u (one v value) then takes the direct enclosure alone instead of its intersection with the centred form: a wider enclosure of the same values, still certified. The cache certifies along lines of one u value, which keep their form."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
       "mutant": "replace > with >= in Offset::factor_sign",
       "line_text": "Ok(if det.lo() > 0.0 {",
       "occurrences": 1,
@@ -5032,7 +5024,7 @@
       "line_text": "if x > 0.0 && ay * NEAR_AXIS <= ax {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "x > 0.0 and x >= 0.0 differ only for x = 0.0 or x = −0.0, and dear excludes both before this line: dear is private, its one caller is angle (line 295, `if dear(cy, cx)`), which passes every corner unfiltered, but dear's own first lines (251 to 253, `let (ay, ax) = (y.abs(), x.abs()); if ay == 0.0 || ax == 0.0 { return false; }`) return for any corner with x = 0.0 or −0.0, whose |x| is 0.0. So line 254 is reached only with x nonzero, where the two comparisons agree; for a NaN x both are false. Every corner reaching it takes the same branch, and dear returns the same answer for every input."
+      "reason": "x > 0.0 and x >= 0.0 differ only for x = 0.0 or x = −0.0, and dear excludes both before this line: dear is private, its one caller is angle (line 310, `if dear(cy, cx)`), which passes every corner unfiltered, but dear's own first lines (265 to 268, `let (ay, ax) = (y.abs(), x.abs()); if ay == 0.0 || ax == 0.0 { return false; }`) return for any corner with x = 0.0 or −0.0, whose |x| is 0.0. So line 269 is reached only with x nonzero, where the two comparisons agree; for a NaN x both are false. Every corner reaching it takes the same branch, and dear returns the same answer for every input."
     },
     {
       "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",

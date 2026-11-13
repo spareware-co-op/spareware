@@ -284,9 +284,15 @@
               "kind": "corpus",
               "piece": "G86, G87, G88, G89, G109",
               "why": "11 new count benchmarks in five new groups: encoder (G86: a map of every scalar and a set, a row of floats, SHA-256 of 256 bytes), names (G87: a name's ID, names interned in a graph), history (G88: a step's laws checked, two steps composed), resolve (G89: a reference resolved, each path in turn) and prune (G109: PruneHistory, its record written and read); no existing digest moved"
+            },
+            {
+              "sha256": "ddee718ce2bebe394e4cd1a975a27851b9d21b1ad9aace84539343ce83ac7e94",
+              "kind": "corpus",
+              "piece": "G100",
+              "why": "2 new count benchmarks in a new group: facade (G100, Gate 3's record: a registered operation found by name in the facade's table and its schema read, and make.box dispatched by name through the facade's re-export with its class checked against its schema); no existing digest moved"
             }
           ],
-          "sha256": "ddee718ce2bebe394e4cd1a975a27851b9d21b1ad9aace84539343ce83ac7e94"
+          "sha256": "cc13b5939bfbf8c3cdb3806d9d25ab4f91b827e92aef476a4e2096d84370ac59"
         },
         {
           "id": "geom-nurbs/operations",

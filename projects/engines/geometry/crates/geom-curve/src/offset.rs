@@ -97,10 +97,13 @@
 //! stops within 530 to 750 million instructions where the basis's arctangents are ordinary or
 //! charged.
 //!
-//! One cost stays under its charge (issue #853): `crate::extent` leaves unpriced the arctangents
+//! One cost stayed under its charge until issue #853: `crate::extent` left free the arctangents
 //! just short of 2⁴⁷ apart that take the 192-bit path, and an ellipse whose coefficients fall there
-//! asks them again in every evaluation. Two of issue #852's stored inputs do, three and about
-//! seven an evaluation, and their halvings stop after 1,246 and 1,744 million instructions.
+//! asks them again in every evaluation. Two of issue #852's stored inputs do, three and seven an
+//! evaluation, and their halvings stopped after 1,246 and 1,744 million instructions, 623 and 872
+//! a unit. With every such corner charged from 2⁴⁴ apart they stop after 667 and 637 million, 333
+//! and 319 a unit. A dear corner below 2⁴⁴ apart is still free (`crate::extent`'s `dear` says how
+//! few there are).
 
 #![allow(
     clippy::many_single_char_names,

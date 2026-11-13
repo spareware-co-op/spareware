@@ -86,9 +86,11 @@ const FAR: f64 = 1_125_899_906_842_624.0;
 /// patterns are this far apart straight to its accurate path ([`dear`]).
 const FIRST_GATE: u64 = 53 << 52;
 
-/// 2⁴⁷: near the positive x-axis, a corner whose x is at least this many times its |y| has an
-/// angle below 2⁻⁴⁷, which the arctangent's fast paths cannot decide ([`dear`]).
-const NEAR_AXIS: f64 = 140_737_488_355_328.0;
+/// 2⁴⁴: near the positive x-axis, a corner whose x is at least this many times its |y| is charged
+/// as dear. From 2⁴⁷ apart its angle is below 2⁻⁴⁷, which the arctangent's fast paths cannot
+/// decide; from here to there they decide some corners and not others, more than one in ten not
+/// ([`dear`]).
+const NEAR_AXIS: f64 = 17_592_186_044_416.0;
 
 /// 2⁹⁶: near the positive x-axis, a corner whose x is more than this many times its |y| has a
 /// quotient y/x below 2⁻⁹⁶, whose rounding the arctangent's accurate path returns as it is
@@ -104,7 +106,7 @@ const SCALE: f64 = 40_564_819_207_303_340_847_894_502_572_032.0;
 
 /// The work units an extent is charged for each corner of an arctangent's box that the certified
 /// arctangent takes to its 192-bit path (the private `dear` says which, from the arctangent's own
-/// gates), on top of its own unit.
+/// gates, and counts in the band where the gates cannot say), on top of its own unit.
 ///
 /// What it stands for, measured: the correctly rounded `atan2` (`geom_num::math`, the CORE-MATH
 /// port) decides almost every argument in double precision, in about 240 instructions, but its
@@ -226,26 +228,39 @@ fn times(
 ///   (`dxy`; with |y| the larger, more than 53) straight to the accurate path. For normal
 ///   coordinates that is the larger at least 2⁵³ times the smaller (more than, with |y| the
 ///   larger); with a subnormal one the bit patterns, not the values, set the cut.
-/// - Its two fast paths decide every other corner but those near the positive x-axis, where the
-///   angle is about y/x: the second path's error bound has a fixed part of 1.25·2⁻¹⁰¹
-///   (`EPS2_REL`·`EPS2_ABS`), wider than an ulp of an angle below 2⁻⁴⁷, so it never decides a
-///   corner with x > 0 and x ≥ 2⁴⁷·|y|, and the accurate path takes it.
+/// - Its two fast paths decide almost every other corner. Those they never decide are near the
+///   positive x-axis, where the angle is about y/x: the second path's error bound has a fixed part
+///   of 1.25·2⁻¹⁰¹ (`EPS2_REL`·`EPS2_ABS`), wider than an ulp of an angle below 2⁻⁴⁷, so it never
+///   decides a corner with x > 0 and x ≥ 2⁴⁷·|y|, and the accurate path takes it.
 /// - The accurate path answers three kinds of corner without its rational approximation: a
 ///   quotient y/x that rounds to zero, and, with x > 0, a quotient that is exactly a double
 ///   ([`exact_quotient`]) or one below 2⁻⁹⁶ (`tiny_quotient`), whose atan2 rounds as it does.
 ///
-/// So a corner is dear near the positive x-axis from 2⁴⁷ to 2⁹⁶ apart unless its quotient is
-/// exact, and elsewhere past the first gate unless its quotient rounds to zero; a zero coordinate
-/// is on an axis, decided at once. Checked against the port's own count of the calls that reach
-/// its rational approximation, on 400,000 corners of every kind (subnormal, exact, every quadrant
-/// and distance): none charged in vain.
+/// So a corner is certainly dear near the positive x-axis from 2⁴⁷ to 2⁹⁶ apart unless its
+/// quotient is exact, and elsewhere past the first gate unless its quotient rounds to zero; a zero
+/// coordinate is on an axis, decided at once. Checked against the port's own count of the calls
+/// that reach its rational approximation, on 400,000 corners of every kind (subnormal, exact,
+/// every quadrant and distance): none of those charged in vain.
 ///
-/// One cost is left unpriced, because only the arctangent itself can tell it: just short of 2⁴⁷
-/// apart near the positive x-axis the bound's fixed part is still a large share of an ulp, so a
-/// corner whose angle falls that near a rounding boundary goes to the 192-bit path too. That is
-/// about 5/8 of the corners from 2⁴⁶ to 2⁴⁷ apart and half as many in each binade below (in the
-/// check above, 1,644 of the 400,000, all near the positive x-axis between 2³⁴ and 2⁴⁷ apart);
-/// which ones is decided by the angle's last bits, which only the arctangent computes.
+/// One band is charged from the box, because only the arctangent itself can tell which of its
+/// corners are dear (issue #853): just short of 2⁴⁷ apart near the positive x-axis the bound's
+/// fixed part is still a large share of an ulp, 5/16 of it from 2⁴⁶ to 2⁴⁷ apart and half as much
+/// in each binade below, so a corner whose angle falls that near a rounding boundary goes to the
+/// 192-bit path too. Which ones is decided by the angle's last bits. Counted on the same 400,000
+/// corners, of those whose quotient is not exact: 1,161 of 1,823 from 2⁴⁶ to 2⁴⁷ apart (64%), 560
+/// of 1,828 from 2⁴⁵ (31%), 268 of 1,855 from 2⁴⁴ (14%), then 134 of 1,815 (7%), 67, 35, 27 and 6
+/// a binade down to 2³⁹. An ellipse's coefficients are fixed, so an offset of one asks the same
+/// corners in every evaluation, and where they are dear and free it runs at two to three times
+/// its charge (two stored fuzz inputs did, 623 and 872 instructions a unit). So every corner from
+/// 2⁴⁴ apart ([`NEAR_AXIS`]) is charged as dear unless its quotient is exact, which a fast path
+/// or the accurate path's own shortcut answers: the three binades where more than one corner in
+/// ten is dear. There the charge is in vain for the others, 36%, 69% and 86% of them.
+///
+/// What is still unpriced: the dear corners below 2⁴⁴ apart near the positive x-axis, fewer than
+/// one in twelve and half as many a binade; and, since that bound also grows with the cube of the
+/// angle, about one corner in 2,000 some 2⁷ apart there (2,044 of 4,000,000), fewer with each
+/// binade and none found from 2¹³ apart, and one in 100,000 anywhere else (337 of 40,000,000).
+/// Pricing those too needs the arctangent to say which path it took.
 fn dear(y: f64, x: f64) -> bool {
     let (ay, ax) = (y.abs(), x.abs());
     if ay == 0.0 || ax == 0.0 {
@@ -265,7 +280,7 @@ fn dear(y: f64, x: f64) -> bool {
     first_gate && y / x != 0.0
 }
 
-/// Whether the quotient y/x (x > 0, |y/x| ≤ 2⁻⁴⁷) is exactly a double, by the arctangent's own
+/// Whether the quotient y/x (x > 0, |y/x| ≤ 2⁻⁴⁴) is exactly a double, by the arctangent's own
 /// test: t = y/x rounded, and t·x − y by a fused multiply-add, zero only where t is the quotient;
 /// for |y| below 2⁻⁹¹⁵, where that remainder may underflow, both sides scaled by 2¹⁰⁵.
 fn exact_quotient(y: f64, x: f64) -> bool {

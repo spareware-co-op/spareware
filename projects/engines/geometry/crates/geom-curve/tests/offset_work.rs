@@ -1,5 +1,5 @@
-//! What the meter charges an offset curve and the extents under it (issues #765 and #852): the
-//! counts are the ones the modules state, an ordinary extent costs what it always did, every
+//! What the meter charges an offset curve and the extents under it (issues #765, #852 and #853):
+//! the counts are the ones the modules state, an ordinary extent costs what it always did, every
 //! evaluation costs about the curve kinds' rate at every order, and the offsets that ran for
 //! thousands of millions of instructions under the curves fuzz target's budget now stop on it
 //! early.
@@ -9,7 +9,9 @@
 //!   coefficient included, nor for the corners near an axis that the arctangent answers without
 //!   it; counted on point and on wide coefficients, for each corner of a box on its own, at each
 //!   of the arctangent's own cuts and one double either side, among subnormal coordinates too;
-//!   and a budget one unit short stops it.
+//!   and a budget one unit short stops it. Near the positive x-axis from 2⁴⁴ to 2⁴⁷ apart, where
+//!   only the arctangent can tell which corners take that path, every corner is charged but an
+//!   exact quotient (issue #853), at the cut and one double either side.
 //! - An offset's evaluation costs its basis's plus `Offset::jet_work` and `Offset::basis_work`,
 //!   at a point and over a span, in 2D and in 3D, at every order the cache uses; an order its
 //!   jets cannot hold is refused before any work.
@@ -17,7 +19,9 @@
 //!   (issue #852: at order 0 over a span it was 2,389).
 //! - The seven stored inputs of issue #852, whose conversions ran 3.5 to 11.9 thousand million
 //!   instructions inside the fuzz target's budget, are stopped by it within 100,000 charges
-//!   (about 81,000; the first of them took 555,008).
+//!   (about 81,000; the first of them took 555,008). The two whose ellipses ask arctangents on
+//!   the 192-bit path in every evaluation, three and seven, are charged for them (issue #853:
+//!   none was, and they ran at 623 and 872 instructions a unit).
 //! - The offset of issue #765's smallest input, under that input's transform and the fuzz
 //!   target's budget of 2,000,000 units, is a typed stop, and an ordinary offset's whole kind
 //!   contract still fits half that budget, in 2D and in 3D.
@@ -205,6 +209,30 @@ fn the_arctangents_own_cuts_set_the_charge() {
         (two_to(53), 1.0, false),
         (two_to(-1021), LEAST, false),
         (3.0 * two_to(-1021), LEAST, true),
+        // Short of 2⁴⁷ apart near the positive x-axis no gate decides, the second fast path's
+        // rounding test does: its error bound is 5/16 of an ulp of an angle from 2⁻⁴⁷ to 2⁻⁴⁶ and
+        // half as much in each binade above. The quotient 2ᵏ/3 lies a sixth of an ulp from the
+        // boundary between two doubles: inside the bound 2⁴⁶·⁶ apart, on either side of the axis,
+        // where it takes the 192-bit path, and outside it 2⁴⁵·⁶ apart, where it does not. The
+        // box cannot tell them apart, so from 2⁴⁴ apart every such corner is charged (issue #853;
+        // until then none was),
+        (3.0 * two_to(45), 1.0, true),
+        (3.0 * two_to(45), -1.0, true),
+        (3.0 * two_to(44), 1.0, true),
+        // but an exact quotient, here 3·2⁻⁴⁸ and, at the cut itself, 2⁻⁴⁴; and one double either
+        // side of the cut.
+        (two_to(48), 3.0, false),
+        (3.0 * two_to(44), 3.0, false),
+        ((3.0 * two_to(44)).next_up(), 3.0, true),
+        ((3.0 * two_to(44)).next_down(), 3.0, false),
+        // Still free: a dear corner below the cut, and the odd one anywhere, since the bound also
+        // grows with the cube of the angle. This one, 2⁶·⁸ apart, takes the 192-bit path (one of
+        // three such that a search of 400,000 corners met).
+        (
+            f64::from_bits(0x4041_2065_E8B9_F9F6),
+            f64::from_bits(0x3FD3_40CD_2B52_4FB7),
+            false,
+        ),
     ] {
         let want = if charged { all } else { 1 };
         assert_eq!(phase_work(a, b), want, "{a:e} {b:e}");
@@ -681,7 +709,8 @@ fn the_stored_offsets_of_issue_852_stop_early_on_the_fuzz_budget() {
     // for each of the six extents it asks of its basis). Before issue #852 such an evaluation was
     // charged 26 units, the budget paid for 75,000 of them, and the conversions ran 3.5 to 11.9
     // thousand million instructions before it stopped them: the first made 555,008 charges, where
-    // each now makes 81,024 to 81,728.
+    // each now makes 81,024 to 81,728, and the two whose bases are charged for arctangents too
+    // (issue #853) 66,432 and 61,120.
     for (name, offset) in stored_offsets() {
         let reads = Reads::default();
         let mut m = WorkMeter::new(Budget::of_work(FUZZ_WORK)).with_cancel(&reads);
@@ -692,6 +721,38 @@ fn the_stored_offsets_of_issue_852_stop_early_on_the_fuzz_budget() {
         let charges = *reads.0.lock().unwrap() * POLL_EVERY;
         assert!(charges <= 100_000, "{name}: {charges} charges");
     }
+}
+
+#[test]
+fn the_stored_offsets_bases_are_charged_for_every_dear_arctangent() {
+    // What one evaluation of order 0 over a span asks of its basis: the ellipse's bound and its
+    // first derivative's, an extent a coordinate, so six units, and `FAR_CORNER` more for each
+    // dear corner. An ellipse's coefficients are fixed, so every evaluation asks the same corners
+    // again. Two of the ellipses have coefficients just short of 2⁴⁷ apart near the positive
+    // x-axis: d881371f's 3 against 2⁴⁸ in y, whose derivative's phase has four such corners (π's
+    // two ends make them four), three of them on the arctangent's 192-bit path; and fd977595's
+    // 2.5 and −3 against 2⁴⁸ in y and z, eight corners, seven on that path. Until issue #853 none
+    // was charged, and those two inputs ran at 623 and 872 instructions a unit.
+    let dear: Vec<(&str, u128)> = stored_offsets()
+        .iter()
+        .map(|(name, offset)| {
+            let work = basis_over(offset.basis(), (0.0, 0.125), 0);
+            assert_eq!((work - 6) % u128::from(FAR_CORNER), 0, "{name}: {work}");
+            (*name, (work - 6) / u128::from(FAR_CORNER))
+        })
+        .collect();
+    assert_eq!(
+        dear,
+        [
+            ("d881371f", 4),
+            ("8c111277", 0),
+            ("191381a4", 0),
+            ("ddc2b788", 0),
+            ("1dabb018", 0),
+            ("fd977595", 8),
+            ("edf80e0c", 0),
+        ]
+    );
 }
 
 /// The offset of issue #765's 24-byte curves input, as `geom_fuzz::curves` builds it: an ellipse
