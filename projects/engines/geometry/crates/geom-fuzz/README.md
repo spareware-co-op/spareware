@@ -45,7 +45,19 @@ reference resolution gives 20.4's outcome on any history from `geom-test`'s kit;
 schedule, and the pruned record reads back and reads only its one encoding; and `contract`
 (`src/contract.rs`, G82), the operation contract's errors keep their detail's kind and chapter 22's
 remedies and write text that names what they hold, and every schema the facade lists names details
-the contract has, whose MCP tool descriptions parse and round-trip. `src/adversarial.rs`
+the contract has, whose MCP tool descriptions parse and round-trip. Phase 4 adds `planes`
+(`src/planes.rs`, G123), `geom-poly`'s canonical planes and arrangement predicates give one
+entry to one plane and one order to any points or rays. Phase 5 adds `intersect`
+(`src/intersect.rs`, G158), an intersection's items keep their invariants against an all-pairs
+oracle, and a pair asked either way round makes one call; `quadric` (`src/quadric.rs`, G159), every
+exact decision on a line and a quadric agrees with big integers, and a Sturm chain counts the roots
+a polynomial was built from; `project` (`src/project.rs`, G162), a nearest point is never beaten
+by a sample of the kind; `crossings` (`src/crossings.rs`, G163), every point of any two curves lies
+on both, and two cubic graphs that change sides have an item between them; `piercing`
+(`src/piercing.rs`, G164), every point of a curve and a surface lies on both; `level`
+(`src/level.rs`, G168), a level curve misses nothing a dense grid can see; and `general`
+(`src/general.rs`, G169, G170), subdivision leaves no crossing outside its settled or flagged pairs,
+and marching stays on both surfaces. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 

@@ -4,8 +4,8 @@
 //!
 //! What it does: [`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box
 //! of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it,
-//! F(x) = n·x + d, its first implementor; quadrics and tori come with their kinds (G65) and fields
-//! with `geom-field`.
+//! F(x) = n·x + d, its first implementor; the analytic kinds implement it in `analytic`, each with
+//! the equation of its whole untrimmed shape (G168), and fields do with `geom-field`.
 //!
 //! Guarantees:
 //!
@@ -14,6 +14,8 @@
 //!   2^126, each held exactly (an integer whose double is not exact is widened by its rounding).
 //! - **Smoothness stated.** `smooth` is true only where F is continuously differentiable over the
 //!   whole box; a kind that cannot tell says false.
+//! - **Second derivatives where known.** [`ImplicitBound::hessian_box`] encloses ∇²F over a box for
+//!   the planes and the analytic kinds (G174, for 12.11's tangent tubes); others give `None`.
 //!
 //! Method: interval extensions of F and ∇F (R. E. Moore, R. B. Kearfott and M. J. Cloud,
 //! *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>),
@@ -45,9 +47,27 @@ pub trait ImplicitBound {
     ///
     /// [`CurveError::NotFinite`] if an enclosure leaves the finite doubles.
     fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError>;
+
+    /// ∇²F over the box `region`, enclosed, row by row, or `None` where the implementor gives no
+    /// second derivatives (the default). For every point x of the box, each entry of ∇²F(x) lies
+    /// in its interval.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if an enclosure leaves the finite doubles.
+    fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let _ = region;
+        Ok(None)
+    }
 }
 
 impl ImplicitBound for Plane {
+    /// F is linear: ∇²F = 0.
+    fn hessian_box(&self, _: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let zero = Interval::point(0.0)?;
+        Ok(Some([[zero; 3]; 3]))
+    }
+
     fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
         let n = self.n();
         let mut gradient = [Interval::point(0.0)?; 3];

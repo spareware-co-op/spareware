@@ -29,7 +29,8 @@
 //! with, from phase 3, `geom-make`'s primitives and transforms, the core queries of
 //! `geom-topo`, `geom-name` and `geom-check`, `geom-op`'s canonical encoder, SHA-256, name IDs and
 //! history laws, and `geom-name`'s name graph, reference resolution and `PruneHistory` with its
-//! record in `geom-format`,
+//! record in `geom-format`, and, from phase 5,
+//! `geom-intersect`'s canonical order,
 //! each named in the catalogue with its crate's path and checked to be a public function there;
 //! and, from phase 3, `geom-topo`'s columns and publishing, `geom-name`'s attribute step,
 //! `geom-op`'s batch driver and the flat arrays of points, and `geom-format`'s file readers and
