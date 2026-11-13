@@ -1,0 +1,14 @@
+{
+  "classes": {
+    "transversal": { "count": 0, "size": 0, "why": "12.17: this class may not flag" },
+    "tangent-curve": { "count": 0, "size": 0, "why": "no method yet; the first method's run sets this, with its reason" },
+    "isolated-point": { "count": 0, "size": 0, "why": "no method yet; the first method's run sets this, with its reason" },
+    "singular": { "count": 0, "size": 0, "why": "no method yet; the first method's run sets this, with its reason" },
+    "boundary": { "count": 0, "size": 0, "why": "12.17: this class may not flag" },
+    "coincident": { "count": 0, "size": 0, "why": "12.17: this class may not flag" },
+    "near-degenerate": { "count": 0, "size": 0, "why": "no method yet; the first method's run sets this, with its reason" },
+    "periodic": { "count": 0, "size": 0, "why": "12.17: this class may not flag" },
+    "high-degree": { "count": 0, "size": 0, "why": "12.17: this class may not flag" },
+    "yang": { "count": 0, "size": 0, "why": "no method yet; the first method's run sets this, with its reason" }
+  }
+}

@@ -21,8 +21,10 @@
 //! surface kinds' many-point calls give the single calls' bits; [`make`] (G101), the primitives
 //! and transforms return only what the full checker passes, keep their laws, and refuse with a
 //! typed error, and the core queries on every body they make keep the Query family's laws
-//! (G102); and [`sequence`] (G116), whole operation logs replay to the same hash and keep
-//! every law at every step. [`adversarial`] holds the generators aimed at chapter 28.5's hard
+//! (G102); [`sequence`] (G116), whole operation logs replay to the same hash and keep
+//! every law at every step; and [`intersect`] (G158), an intersection's items keep their
+//! invariants against an all-pairs oracle and a pair asked either way round makes one call.
+//! [`adversarial`] holds the generators aimed at chapter 28.5's hard
 //! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.46) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep

@@ -233,6 +233,10 @@
 //! - `geom-bool`, `geom-make`, `geom-topo`, `geom-check`, `geom-poly` and `geom-name` (Apache-2.0,
 //!   ours), development dependencies (G155): the booleans, primitives, transforms, queries, checker
 //!   and names the law catalogue checks.
+//! - `geom-curve` and `geom-surface` (MPL-2.0, ours), dependencies: the kinds and transforms the
+//!   law catalogue checks (G69), and what [`ssi`] builds a corpus case from (G160).
+//! - `geom-intersect` (MPL-2.0, ours), a dependency (G160): the result type [`ssi`] reads an answer
+//!   from.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -293,6 +297,7 @@ pub mod scan;
 pub mod second_check;
 pub mod second_mesh;
 pub mod seed;
+pub mod ssi;
 pub mod trip;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};

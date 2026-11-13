@@ -1671,6 +1671,7 @@ dependencies = [
  "geom-check",
  "geom-curve",
  "geom-format",
+ "geom-intersect",
  "geom-make",
  "geom-math",
  "geom-mesh",

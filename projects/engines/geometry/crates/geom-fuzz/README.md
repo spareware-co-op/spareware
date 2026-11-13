@@ -23,8 +23,10 @@ each other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attri
 each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G104), `geom-op`'s
 batch driver gives each item its own result, and the many-point calls give the single calls' bits;
 `make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
-passes, keep their laws, and refuse with a typed error; and `sequence` (`src/sequence.rs`, G116),
-whole operation logs replay to the same hash and keep every law at every step. For Gate 3 (24.7:
+passes, keep their laws, and refuse with a typed error; `sequence` (`src/sequence.rs`, G116),
+whole operation logs replay to the same hash and keep every law at every step; and `intersect` (`src/intersect.rs`, G158), an intersection's
+items keep their invariants against an all-pairs oracle, and a pair asked either way round makes one
+call. For Gate 3 (24.7:
 every reader is a fuzz target): `encoder` (`src/encoder.rs`, G86), `geom-op`'s canonical encoder
 refuses without a trace and writes only canonical items; `records` (`src/records.rs`, G92), the
 record layer reads the same twice and however its reads split, refuses inside its input and

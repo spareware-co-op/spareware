@@ -302,6 +302,24 @@
               "kind": "corpus",
               "piece": "G159",
               "why": "7 new count benchmarks on the exact decisions on lines and quadrics (decision 32.44): a line with a sphere, cylinder, cone and torus, parallel directions, an axis's gap and a tangent sphere; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G105",
+              "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
+            },
+            {
+              "sha256": "5775a677d1dc165be37085b18d3bfd09e1c02a95a0b9661fc1305914ea731812",
+              "kind": "corpus",
+              "piece": "G158",
+              "why": "3 new count benchmarks on geom-intersect's canonical order (decision 32.44): a list of items sorted and proven disjoint, a circle's key, a pair of lines put in order; no existing digest moved"
+            },
+            {
+              "sha256": "71d5020c80411fdbcffcc856ab61ead6142460d6afde64e30b08e01bea0ad627",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
           "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b"
@@ -759,6 +777,16 @@
             "function": "boolean_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "7d7eb9015bb8b9744ca2e243265c55797173b2de30c2e84e0c0a1bfab3a68f7c"
+        },
+        {
+          "id": "geom-test/ssi-catalogue",
+          "what": "The failure catalogue of the intersection harness (piece G160): every case, its surfaces and its closed-form truth, as the JSON the corpus's scorer reads.",
+          "check": {
+            "crate": "geom-test",
+            "test": "ssi",
+            "function": "the_catalogue_is_pinned"
+          },
+          "sha256": "72833e2e0e317cd26acba70110f485d2ad8a6bc8b8ed6f2cdcf04beadc0031db"
         }
       ]
     }
