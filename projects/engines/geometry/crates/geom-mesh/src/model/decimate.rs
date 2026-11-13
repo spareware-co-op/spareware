@@ -13,8 +13,8 @@
 //!   [`crate::model`]; the quadrics only choose the order and the place.
 //! - **On the grid.** A collapse's point is the quadric's best point committed to the grid, or an
 //!   end or the middle of the edge, also on the grid; the candidates are tried cheapest first.
-//! - **Deterministic.** The queue pops the cheapest candidate, ties broken by the edge's ends, so
-//!   the result never depends on the heap's order.
+//! - **Deterministic.** The queue, an ordered set, pops the cheapest candidate, ties broken by
+//!   the edge's ends and their versions, so nothing depends on insertion order.
 //!
 //! Method: Garland and Heckbert 1997, "Surface simplification using quadric error metrics",
 //! <https://doi.org/10.1145/258734.258849>, as chapter 19.6 names it
@@ -41,7 +41,7 @@
     reason = "the names of the geometry: a triangle's corners and vertices, a normal's parts, a point"
 )]
 
-use alloc::collections::BinaryHeap;
+use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
@@ -212,12 +212,13 @@ impl PartialOrd for Candidate {
     }
 }
 impl Ord for Candidate {
-    /// The cheapest first (the heap pops the greatest), ties by the ends, so the result never
-    /// depends on the heap's order.
+    /// The cheapest greatest (the queue pops the greatest), ties by the ends and then their
+    /// versions, so no two candidates are equal unless they are the same.
     fn cmp(&self, o: &Self) -> Ordering {
         o.cost
             .total_cmp(&self.cost)
             .then_with(|| (o.u, o.v).cmp(&(self.u, self.v)))
+            .then_with(|| self.stamps.cmp(&o.stamps))
     }
 }
 
@@ -225,7 +226,7 @@ struct Collapser {
     surface: Surface,
     quadric: Vec<Quadric>,
     stamp: Vec<u32>,
-    heap: BinaryHeap<Candidate>,
+    queue: BTreeSet<Candidate>,
 }
 
 impl Collapser {
@@ -253,8 +254,12 @@ impl Collapser {
         // Open boundaries (sides of one triangle only): a plane across each, weighted, so the
         // boundary keeps its place.
         sides.sort_unstable();
-        for run in sides.chunk_by(|x, y| x.0 == y.0 && x.1 == y.1) {
-            if let &[(a, b, f)] = run
+        for (k, &(a, b, f)) in sides.iter().enumerate() {
+            let same =
+                |other: Option<&(u32, u32, u32)>| other.is_some_and(|o| (o.0, o.1) == (a, b));
+            let alone = !same(k.checked_sub(1).and_then(|k| sides.get(k)))
+                && !same(sides.get(k.saturating_add(1)));
+            if alone
                 && let (Some(pa), Some(pb), Some(corners)) =
                     (surface.point(a), surface.point(b), surface.corners(f))
             {
@@ -273,7 +278,7 @@ impl Collapser {
             surface,
             quadric,
             stamp: alloc::vec![0; n],
-            heap: BinaryHeap::new(),
+            queue: BTreeSet::new(),
         };
         let mut last = None;
         for &(a, b, _) in &sides {
@@ -329,12 +334,12 @@ impl Collapser {
             self.stamp.get(u as usize).copied().unwrap_or(0),
             self.stamp.get(v as usize).copied().unwrap_or(0),
         );
-        self.heap.push(Candidate { cost, u, v, stamps });
+        self.queue.insert(Candidate { cost, u, v, stamps });
     }
 
     fn collapse_to(&mut self, target: usize, meter: &mut WorkMeter<'_>) -> Result<(), ModelError> {
         while self.surface.live() > target {
-            let Some(c) = self.heap.pop() else {
+            let Some(c) = self.queue.pop_last() else {
                 return Ok(());
             };
             meter.charge(1)?;

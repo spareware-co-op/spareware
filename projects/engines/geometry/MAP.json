@@ -8061,7 +8061,7 @@
           "guarantees": [
             "**Certified(ε).** The result is within ε of the input both ways, by the checks of [`crate::model`]; the quadrics only choose the order and the place.",
             "**On the grid.** A collapse's point is the quadric's best point committed to the grid, or an end or the middle of the edge, also on the grid; the candidates are tried cheapest first.",
-            "**Deterministic.** The queue pops the cheapest candidate, ties broken by the edge's ends, so the result never depends on the heap's order."
+            "**Deterministic.** The queue, an ordered set, pops the cheapest candidate, ties broken by the edge's ends and their versions, so nothing depends on insertion order."
           ],
           "job": "Decimation to a bound: edge collapses ranked by quadric error, each kept only inside the two-way envelope (19.6).",
           "method": {
