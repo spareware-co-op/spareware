@@ -151,6 +151,10 @@ harness = false
 name = "wall_clock"
 harness = false
 
+[[bench]]
+name = "arrange_1m"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
