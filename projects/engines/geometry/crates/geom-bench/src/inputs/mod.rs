@@ -62,6 +62,7 @@ pub mod mesh;
 pub mod naming;
 pub mod newton;
 pub mod nurbs;
+pub mod one_root;
 pub mod perturb;
 pub mod plane;
 pub mod predicate;

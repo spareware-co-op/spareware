@@ -113,6 +113,7 @@ pub mod isolate;
 pub mod ladder;
 pub mod math;
 pub mod newton;
+pub mod one_root;
 pub mod pencil;
 pub mod perturb;
 pub mod plane;

@@ -70,6 +70,7 @@ use geom_num::dd::{self as dd, DD};
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
+use geom_num::one_root::{Crossing2, Root};
 use geom_num::plane::{Lpi, Plane, Tpi, determinant_sign, normals_sign};
 use geom_num::real::Real;
 use geom_num::rng::{self as rng, Philox, RngError, Seed, Stream, StreamId, StreamRange};
@@ -1408,6 +1409,34 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             inputs::arc::circle_meets(class)
                 .iter()
                 .map(|(c, l)| c.meets(l)),
+        ),
+        ("crossing", "crossing_of_circle") => fold(
+            inputs::one_root::of_circle(class)
+                .iter()
+                .map(|(l, c)| Crossing2::of_circle(l, c, Root::First)),
+        ),
+        ("crossing", "crossing_of_round") => fold(
+            inputs::one_root::of_round(class)
+                .iter()
+                .map(|(l, r)| Crossing2::of_round(l, r, Root::First)),
+        ),
+        ("crossing", "crossing_cmp_x") => fold(
+            inputs::one_root::cmp_x(class)
+                .iter()
+                .map(|(p, q)| p.cmp_x(q)),
+        ),
+        ("crossing", "crossing_side") => {
+            fold(inputs::one_root::side(class).iter().map(|(p, l)| p.side(l)))
+        }
+        ("crossing", "crossing_against_circle") => fold(
+            inputs::one_root::against_circle(class)
+                .iter()
+                .map(|(p, c)| p.against_circle(c)),
+        ),
+        ("crossing", "arc_order_crossings") => fold(
+            inputs::one_root::order_crossings(class)
+                .iter()
+                .map(|(arc, a, b)| arc.order_crossings(a, b)),
         ),
         ("crossing", "ssi_to_grid") => fold(
             inputs::crossing::ssi_to_grid(class)
