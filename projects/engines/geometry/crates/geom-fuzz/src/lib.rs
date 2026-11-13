@@ -288,6 +288,7 @@ pub mod references;
 pub mod robustness;
 pub mod roots;
 pub mod seeded;
+pub mod snap;
 pub mod sequence;
 pub mod surfaces;
 pub mod transforms;

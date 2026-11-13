@@ -39,7 +39,10 @@ pub mod carrier;
 pub mod commit;
 pub mod contact;
 pub mod entity;
+pub mod index;
 pub mod fit;
 mod ideal;
 pub mod point;
+pub mod snap;
+
 pub mod tangent;
