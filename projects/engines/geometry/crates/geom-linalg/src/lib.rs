@@ -23,7 +23,7 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today (pieces G49 and G50, dense decompositions):
+//! Modules today (pieces G49 and G50, dense decompositions, and G215, the sparse parts):
 //!
 //! - [`matrix`]: [`Matrix`], dense and finite; [`LinalgError`]; and [`Work`], the budget every
 //!   factorisation charges before it starts.
@@ -34,21 +34,33 @@
 //!   with ranks and chapter 15.8's three verdicts ([`Ranks`]).
 //! - [`eigen`]: [`SymmetricEigen`], the symmetric eigenproblem by Householder tridiagonalisation
 //!   and implicit QR.
+//! - [`sparse`]: [`Sparse`], a sparse matrix by columns.
+//! - [`colamd`]: the column order that keeps sparse factors small.
+//! - [`sparse_qr`]: [`SymbolicQr`] and [`SparseQr`], sparse Householder QR and the least-squares
+//!   solution of least norm.
+//! - [`sparse_cholesky`]: [`SymbolicCholesky`], [`SparseCholesky`] and [`SparseLdlt`].
 //!
-//! Status: dense decompositions built (G49, G50); the sparse parts (G215) to come.
+//! Status: dense decompositions built (G49, G50); sparse parts built (G215).
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
+pub mod colamd;
 mod cols;
 pub mod eigen;
 pub mod matrix;
 pub mod qr;
 mod rotation;
 pub mod solve;
+pub mod sparse;
+pub mod sparse_cholesky;
+pub mod sparse_qr;
 pub mod svd;
 
 pub use eigen::SymmetricEigen;
 pub use matrix::{LinalgError, Matrix, Work};
 pub use qr::{Cod, PivotedQr, canonical_null_space};
 pub use solve::{Cholesky, Lu, solve_lower, solve_tridiagonal, solve_upper};
+pub use sparse::Sparse;
+pub use sparse_cholesky::{SparseCholesky, SparseLdlt, SymbolicCholesky};
+pub use sparse_qr::{SparseQr, SymbolicQr};
 pub use svd::{Ranks, Svd};
