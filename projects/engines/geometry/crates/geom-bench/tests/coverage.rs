@@ -58,7 +58,7 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 33] = [
+const GEOM_NUM: [(&str, &str); 34] = [
     ("distance", include_str!("../../geom-num/src/distance.rs")),
     ("quadric", include_str!("../../geom-num/src/quadric.rs")),
     ("sturm", include_str!("../../geom-num/src/sturm.rs")),
@@ -83,6 +83,7 @@ const GEOM_NUM: [(&str, &str); 33] = [
     ("newton", include_str!("../../geom-num/src/newton.rs")),
     ("perturb", include_str!("../../geom-num/src/perturb.rs")),
     ("plane", include_str!("../../geom-num/src/plane.rs")),
+    ("carrier", include_str!("../../geom-num/src/carrier.rs")),
     ("crossing", include_str!("../../geom-num/src/crossing.rs")),
     ("predicate", include_str!("../../geom-num/src/predicate.rs")),
     (
@@ -124,7 +125,7 @@ const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "sup
 
 /// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
 /// functions are `generated::<predicate>::<function>`.
-const GENERATED_PARTS: [(&str, &str); 19] = [
+const GENERATED_PARTS: [(&str, &str); 23] = [
     (
         "generated::line_sphere",
         include_str!("../../geom-num/src/generated/line_sphere.rs"),
@@ -192,6 +193,22 @@ const GENERATED_PARTS: [(&str, &str); 19] = [
     (
         "generated::ssi_side",
         include_str!("../../geom-num/src/generated/ssi_side.rs"),
+    ),
+    (
+        "generated::carrier_side",
+        include_str!("../../geom-num/src/generated/carrier_side.rs"),
+    ),
+    (
+        "generated::carrier_order",
+        include_str!("../../geom-num/src/generated/carrier_order.rs"),
+    ),
+    (
+        "generated::rational_cmp",
+        include_str!("../../geom-num/src/generated/rational_cmp.rs"),
+    ),
+    (
+        "generated::rational_orient",
+        include_str!("../../geom-num/src/generated/rational_orient.rs"),
     ),
     (
         "generated::plain",

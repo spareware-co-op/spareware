@@ -25,6 +25,7 @@
 
 use core::cmp::Ordering;
 
+use geom_num::carrier::{Carrier, Rational2};
 use geom_num::crossing::Ssi;
 use geom_num::dd::DD;
 use geom_num::exact_sum::ExactSum;
@@ -215,6 +216,26 @@ impl Canonical for Ssi {
         for p in self.points() {
             p.encode(h);
         }
+    }
+}
+
+impl Canonical for Carrier {
+    // A carrier is exactly its coefficients.
+    fn encode(&self, h: &mut Sha256) {
+        let ([a, b], c) = self.coefficients();
+        a.encode(h);
+        b.encode(h);
+        c.encode(h);
+    }
+}
+
+impl Canonical for Rational2 {
+    // A rational point is exactly its three integers, its weight positive.
+    fn encode(&self, h: &mut Sha256) {
+        let ([x, y], w) = self.coordinates();
+        x.encode(h);
+        y.encode(h);
+        w.encode(h);
     }
 }
 

@@ -296,6 +296,12 @@
               "kind": "corpus",
               "piece": "Phase 5 train 1 (G158 to G180)",
               "why": "Phase 5's first train, one record for its pieces' 38 new count benchmarks (groups intersect, quadric: geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils). No existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G187",
+              "why": "83 new benchmarks: integer carriers and rational points and their generated predicates; no existing digest moved"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"
@@ -763,6 +769,16 @@
             "function": "the_catalogue_is_pinned"
           },
           "sha256": "72833e2e0e317cd26acba70110f485d2ad8a6bc8b8ed6f2cdcf04beadc0031db"
+        },
+        {
+          "id": "geom-num/carrier",
+          "what": "Integer carriers and rational points (piece G187): 600 seeded carriers and 600 seeded points at every scale up to each budget, the meetings of neighbouring carriers, and the extreme values, every question of geom_num::carrier asked of them, each answer and error one byte and each point its integers, in tests/carrier_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "carrier_determinism",
+            "function": "carrier_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "89a8f906d45699813237faacf81cf7ecdabd392d96397381913ad260a0cda2c0"
         }
       ]
     }

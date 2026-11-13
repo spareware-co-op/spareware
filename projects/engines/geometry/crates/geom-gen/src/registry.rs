@@ -30,7 +30,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 69] = [
+pub const GENERATORS: [Generator; 86] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -146,6 +146,30 @@ pub const GENERATORS: [Generator; 69] = [
         generate: Generate::Plain(predicates::generate_ssi_side),
     },
     Generator {
+        name: "predicate-carrier-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/carrier_side.rs",
+        about: "a rational point against a 2D carrier: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_carrier_side),
+    },
+    Generator {
+        name: "predicate-carrier-order",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/carrier_order.rs",
+        about: "two rational points along a 2D carrier: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_carrier_order),
+    },
+    Generator {
+        name: "predicate-rational-cmp",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/rational_cmp.rs",
+        about: "two fractions of a rational point's coordinates: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_rational_cmp),
+    },
+    Generator {
+        name: "predicate-rational-orient",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/rational_orient.rs",
+        about: "the turn of three rational points: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_rational_orient),
+    },
+    Generator {
         name: predicates::PLAIN_GENERATOR,
         output: predicates::PLAIN_OUTPUT,
         about: "every predicate's exact path in plain i128, the baseline of chapter 23.3's variants",
@@ -192,6 +216,30 @@ pub const GENERATORS: [Generator; 69] = [
         output: "projects/engines/geometry/crates/geom-num/verus/generated/ssi_side.rs",
         about: "ssi_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
         generate: Generate::Plain(predicates::generate_verus_ssi_side),
+    },
+    Generator {
+        name: "verus-carrier-side",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/carrier_side.rs",
+        about: "carrier_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_carrier_side),
+    },
+    Generator {
+        name: "verus-carrier-order",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/carrier_order.rs",
+        about: "carrier_order's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_carrier_order),
+    },
+    Generator {
+        name: "verus-rational-cmp",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/rational_cmp.rs",
+        about: "rational_cmp's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_rational_cmp),
+    },
+    Generator {
+        name: "verus-rational-orient",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/rational_orient.rs",
+        about: "rational_orient's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_rational_orient),
     },
     Generator {
         name: "verus-plane-side",
@@ -306,6 +354,36 @@ pub const GENERATORS: [Generator; 69] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/gappa-ssi-side.g",
         about: "ssi_side's f64 filter for Gappa, whose proof of its error bound Rocq checks",
         generate: Generate::Plain(predicates::generate_gappa_ssi_side),
+    },
+    Generator {
+        name: "gappa-carrier-side-n-p",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-carrier-side-n-p.g",
+        about: "carrier_side's f64 filter for Gappa, one case of two, whose proof Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_carrier_side_n_p),
+    },
+    Generator {
+        name: "gappa-carrier-side-d-w",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-carrier-side-d-w.g",
+        about: "carrier_side's f64 filter for Gappa, one case of two, whose proof Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_carrier_side_d_w),
+    },
+    Generator {
+        name: "gappa-carrier-order",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-carrier-order.g",
+        about: "carrier_order's f64 filter for Gappa, whose proof of its error bound Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_carrier_order),
+    },
+    Generator {
+        name: "gappa-rational-cmp",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-rational-cmp.g",
+        about: "rational_cmp's f64 filter for Gappa, whose proof of its error bound Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_rational_cmp),
+    },
+    Generator {
+        name: "gappa-rational-orient",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-rational-orient.g",
+        about: "rational_orient's f64 filter for Gappa, whose proof of its error bound Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_rational_orient),
     },
     Generator {
         name: "gappa-lpi-weight-z-n",
@@ -426,6 +504,30 @@ pub const GENERATORS: [Generator; 69] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-ssi-side.fpt",
         about: "ssi_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
         generate: Generate::Plain(predicates::generate_fptaylor_ssi_side),
+    },
+    Generator {
+        name: "fptaylor-carrier-side",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-carrier-side.fpt",
+        about: "carrier_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_carrier_side),
+    },
+    Generator {
+        name: "fptaylor-carrier-order",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-carrier-order.fpt",
+        about: "carrier_order's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_carrier_order),
+    },
+    Generator {
+        name: "fptaylor-rational-cmp",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-rational-cmp.fpt",
+        about: "rational_cmp's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_rational_cmp),
+    },
+    Generator {
+        name: "fptaylor-rational-orient",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-rational-orient.fpt",
+        about: "rational_orient's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_rational_orient),
     },
     Generator {
         name: quadrature::NAME,
