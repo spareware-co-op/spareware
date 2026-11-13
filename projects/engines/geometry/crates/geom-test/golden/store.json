@@ -282,11 +282,17 @@
             {
               "sha256": "80a2b28d43791d51e103a693a7781d8278643c3ae5efd2dcb9a2b17db90be699",
               "kind": "corpus",
+              "piece": "G86, G87, G88, G89, G109",
+              "why": "11 new count benchmarks in five new groups: encoder (G86: a map of every scalar and a set, a row of floats, SHA-256 of 256 bytes), names (G87: a name's ID, names interned in a graph), history (G88: a step's laws checked, two steps composed), resolve (G89: a reference resolved, each path in turn) and prune (G109: PruneHistory, its record written and read); no existing digest moved"
+            },
+            {
+              "sha256": "ddee718ce2bebe394e4cd1a975a27851b9d21b1ad9aace84539343ce83ac7e94",
+              "kind": "corpus",
               "piece": "Phase 4 train 1 (G123 to G155)",
               "why": "Phase 4's first train, one record for its pieces' 32 new count benchmarks: 14 on geom-num's plane functions (G138: plane::determinant_sign and its fellows), mesh/cdt (G153), mesh/exact_build (G146), 6 on the distance comparisons and triangle contact (G151), mesh/envelope (G152), mesh/locate (G147), mesh/boolean (G148) and 7 scenarios of the flat boolean (G140); and topo/publish's input digest, which moves because a vertex's point is now a PointKind (the G129 fix), while its output digest stays. No other existing digest moved"
             }
           ],
-          "sha256": "e9c2eaafbf085fb421672a445d34119db6df3779d198e1488e90fc8a58fb94a6"
+          "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b"
         },
         {
           "id": "geom-nurbs/operations",

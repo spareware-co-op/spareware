@@ -8,7 +8,8 @@
 //! which step or which part failed ([`ChainBreak`]). [`step`] and [`chain`] are proptest
 //! strategies of valid histories: every input unchanged, modified, split, merged with others,
 //! deleted, or deleted while generating, plus outputs generated from nothing, each output under a
-//! fresh name.
+//! fresh name. [`built`] makes one such history from its inputs' [`Fate`]s, for a generator that
+//! draws the fates itself (the fuzz targets).
 //!
 //! Guarantees:
 //!
@@ -147,14 +148,44 @@ fn fresh(step: u8, at: u16, tag: u8) -> NameId {
 }
 
 /// What becomes of one input in a generated step.
-#[derive(Clone, Copy, Debug)]
-enum Fate {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fate {
+    /// The input is an output, unchanged.
     Unchanged,
+    /// One output modified from it.
     Modified,
+    /// Two outputs split from it by one tool, its back and its front.
     Split,
+    /// Merged into one output with every other input of this fate (modified from it if alone).
     Merged,
+    /// Deleted.
     Deleted,
+    /// Deleted, with one output generated from it.
     DeletedGenerating,
+}
+
+impl Fate {
+    /// Every fate, in declaration order.
+    pub const ALL: [Fate; 6] = [
+        Fate::Unchanged,
+        Fate::Modified,
+        Fate::Split,
+        Fate::Merged,
+        Fate::Deleted,
+        Fate::DeletedGenerating,
+    ];
+}
+
+/// The history of step `step` over `inputs` with these `fates` (one per input, in order; inputs
+/// past the end of `fates` take none and are left out) and `new` outputs generated from nothing,
+/// with its outputs. Each output takes a fresh name made from the step and its position, as the
+/// strategies' do.
+///
+/// `None` if `inputs` repeats a name, or holds a name this step makes fresh, which `History`
+/// refuses.
+#[must_use]
+pub fn built(step: u8, inputs: &[NameId], fates: &[Fate], new: u8) -> Option<(History, NameSet)> {
+    build(step, inputs, fates, new)
 }
 
 fn fate() -> impl Strategy<Value = Fate> {
