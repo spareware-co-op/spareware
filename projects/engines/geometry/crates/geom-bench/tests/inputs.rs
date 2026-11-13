@@ -2764,6 +2764,11 @@ fn entity_typical_batches_all_succeed() {
     all_ok("polyline", k::polyline, &m::polyline(Typical));
     all_ok("under", k::under, &m::under(Typical));
     all_ok("arrange", k::arrange, &m::arrange(Typical));
+    all_ok(
+        "arrange_curves",
+        k::arrange_curves,
+        &m::arrange_curves(Typical),
+    );
 }
 
 /// Every typical batch of the batch runner's benchmarks (decision 32.46) runs every item and

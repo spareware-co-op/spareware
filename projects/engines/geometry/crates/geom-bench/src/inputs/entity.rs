@@ -2,8 +2,9 @@
 //! and a shape put through a transform's classification.
 //!
 //! Class `typical` only: each [`polyline`] input is [`VERTICES`] vertices on the grid with a bulge
-//! for each segment, and each [`under`] input is a polyline, a circle or a segment with a
-//! classification drawn from all five invertible kinds, mirrored or not.
+//! for each segment, each [`under`] input is a polyline, a circle or a segment with a
+//! classification drawn from all five invertible kinds, mirrored or not, and each [`arrange`] and
+//! [`arrange_curves`] input one drawing.
 //!
 //! Guarantees: every batch is full and the same on every target, and every result of a typical
 //! batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly
@@ -15,11 +16,14 @@
 //! Cost: a few dozen draws of [`SplitMix64`](crate::rng::SplitMix64) per input, once per batch,
 //! outside every measured run.
 
+use geom_2d::arrange::Curve;
 use geom_2d::carrier::{Circle2, Line2};
 use geom_2d::entity::{Ends, Frac, Polyline, Shape};
 use geom_2d::point::Pt2;
 use geom_math::{Classification, TransformKind};
-use geom_num::arc::Circle2 as GridCircle;
+use geom_num::arc::{Arc2, Circle2 as GridCircle};
+use geom_num::carrier::Rational2;
+use geom_num::conic::Ellipse2;
 use geom_num::grid::P2;
 
 use super::{Class, batch_of, rng};
@@ -71,6 +75,46 @@ pub fn arrange(class: Class) -> Vec<Vec<(P2, P2)>> {
 /// A grid point in the square from 0 to `span`.
 fn point_in(g: &mut SplitMix64, span: i64) -> Option<P2> {
     P2::new(g.range(0, span), g.range(0, span)).ok()
+}
+
+/// One drawing of segments, arcs and ellipses that `arrange_curves` arranges: 10 segments between
+/// grid points of the band from (0, 0) to (200, 600); 5 arcs between grid points of the square from
+/// 0 to 100, each about a point of its bisector a whole number of quarter chords from the middle,
+/// up to four, so that its circle (radius at most 159, centre at most 142 from the square) stays
+/// below y = 400; and 3 ellipses of ratio below one, about centres at least 50 apart in x at heights
+/// from 440 to 480, each major axis at most 15 in a part (so at most 22 long), so that no ellipse
+/// meets a circle or another ellipse and the segments cross them all.
+#[must_use]
+pub fn arrange_curves(class: Class) -> Vec<Vec<Curve>> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("entity::arrange_curves", class);
+    batch_of(|_| {
+        let mut curves = Vec::with_capacity(18);
+        for _ in 0..10 {
+            let a = P2::new(g.range(0, 200), g.range(0, 600)).ok()?;
+            let b = P2::new(g.range(0, 200), g.range(0, 600)).ok()?;
+            curves.push(Curve::Segment(a, b));
+        }
+        for _ in 0..5 {
+            let (a, b) = (point_in(&mut g, 100)?, point_in(&mut g, 100)?);
+            let [px, py, qx, qy] = [a.x.get(), a.y.get(), b.x.get(), b.y.get()].map(i128::from);
+            let s = i128::from(g.range(-4, 4));
+            let x = 2 * (px + qx) - s * (qy - py);
+            let y = 2 * (py + qy) + s * (qx - px);
+            let centre = Rational2::new(x, y, 4).ok()?;
+            curves.push(Curve::Arc(Arc2::new(a, b, centre).ok()?));
+        }
+        for i in 0..3 {
+            let centre = P2::new(40 + 60 * i + g.range(-5, 5), g.range(440, 480)).ok()?;
+            let major = [g.range(-15, 15), g.range(-15, 15)];
+            let q = g.range(2, 5);
+            let p = g.range(1, q - 1);
+            curves.push(Curve::Ellipse(Ellipse2::new(centre, major, p, q).ok()?));
+        }
+        Some(curves)
+    })
 }
 
 /// A shape and the classification of a transform to put it through.

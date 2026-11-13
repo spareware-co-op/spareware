@@ -1,30 +1,34 @@
-//! The arrangement of line segments and circular arcs (chapter 14.4): an exact plane sweep, overlap
-//! merging, the order of edges at each vertex, the faces and the unbounded face, and where each edge
-//! came from.
+//! The arrangement of line segments, circular arcs and ellipses (chapter 14.4): an exact plane sweep,
+//! overlap merging, the order of edges at each vertex, the faces and the unbounded face, and where
+//! each edge came from.
 //!
-//! What it does: [`arrange`] takes segments between grid points, and [`arrange_curves`] segments
-//! and arcs ([`Curve`]), and each returns the [`Arrangement`] they divide the plane into: the
-//! vertices (every end point, every crossing, and where an arc's circle is leftmost or rightmost,
-//! in lexicographic order), the edges between consecutive vertices along each curve (curves that
-//! share a stretch share its edges, and an edge names every curve that covers it), what each edge
-//! lies on ([`Along`]: a line's smallest carrier, or one half of a listed circle), each vertex's
+//! What it does: [`arrange`] takes segments between grid points, and [`arrange_curves`] segments,
+//! arcs and whole ellipses ([`Curve`]), and each returns the [`Arrangement`] they divide the plane
+//! into: the vertices (every end point, every crossing, and where an arc's circle or an ellipse is
+//! leftmost or rightmost, in lexicographic order), the edges between consecutive vertices along each
+//! curve (curves that share a stretch share its edges, and an edge names every curve that covers
+//! it), what each edge lies on ([`Along`]: a line's smallest carrier, or one half of a listed circle
+//! or ellipse), each vertex's
 //! edges in counter-clockwise order, and the faces: one unbounded face, and one bounded face for
 //! each outer boundary, with the boundaries of the components inside it as holes. A vertex is an
-//! [`At`]: a rational point, or a one-root point where arcs come in.
+//! [`At`]: a rational point, or a one-root point where arcs or ellipses come in. An ellipse meets a
+//! line at one-root points; where it may meet a circle or another ellipse, at a root of a quartic,
+//! the sweep refuses ([`ArrangeError::Conic`]).
 //!
 //! Guarantees:
 //!
 //! - **Exact.** Every decision is a sign of one of `geom-num`'s exact predicates on carriers,
-//!   circles, rational points and one-root points ([`Carrier::side`], [`Carrier::meet`],
-//!   [`Rational2::cmp_x`], `Crossing2`'s comparisons and crossings, and the tangent and curvature
-//!   orders of the `piece` module); no coordinate is ever rounded, and a crossing is the exact
-//!   point where two carriers meet. A step past the exact budget is [`ArrangeError::Range`], never
-//!   a wrong answer.
+//!   circles, ellipses, rational points and one-root points ([`Carrier::side`], [`Carrier::meet`],
+//!   [`Rational2::cmp_x`], `Crossing2`'s comparisons and crossings, `Ellipse2`'s sides and meetings,
+//!   and the tangent and curvature orders of the `piece` module); no coordinate is ever rounded, and
+//!   a crossing is the exact point where two carriers meet. A step past the exact budget is
+//!   [`ArrangeError::Range`], never a wrong answer, and a meeting of an ellipse with a circle or
+//!   another ellipse that the pieces may hold is [`ArrangeError::Conic`], never a missing vertex.
 //! - **Permutation-invariant.** Vertices are named by their rank in lexicographic order, edges by
 //!   their end vertices and the order they leave the lower one, faces by the rank of their
-//!   lowest-leftmost vertex, circles by centre and radius; the only thing that depends on the input
-//!   order is the label of each source, which is the curve's place in the input. Permuting the input
-//!   gives the same arrangement with the labels permuted.
+//!   lowest-leftmost vertex, circles by centre and radius, ellipses by centre and form; the only thing
+//!   that depends on the input order is the label of each source, which is the curve's place in the
+//!   input. Permuting the input gives the same arrangement with the labels permuted.
 //! - **Overlaps merge, touching splits.** A curve through another's end point is split there; two
 //!   segments on one line, or two arcs of one circle, share the edges of their common stretch; a
 //!   tangency is one vertex where the curves touch.
@@ -33,14 +37,14 @@
 //! Method: Bentley and Ottmann's sweep ([DOI](https://doi.org/10.1109/TC.1979.1675432)) in the form
 //! of de Berg, Cheong, van Kreveld and Overmars, *Computational Geometry*, 3rd ed., Springer 2008,
 //! section 2.1 (doi:10.1007/978-3-540-77974-2), with the sweep line tilted so that a vertical segment
-//! is the steepest upward one, with every comparison an exact sign, and generalised to arcs cut into
-//! x-monotone pieces as the `piece` module says; the doubly-connected edge list and the placing of
-//! holes by a leftward ray after the same book, section 2.2.
+//! is the steepest upward one, with every comparison an exact sign, and generalised to arcs and
+//! ellipses cut into x-monotone pieces as the `piece` module says; the doubly-connected edge list and
+//! the placing of holes by a leftward ray after the same book, section 2.2.
 //!
 //! Cost: O((n + k) log n) comparisons for the sweep, n curves and k crossings, plus the cost of
 //! moving the entries of the status list on insertion, which is linear in the pieces the sweep
 //! line crosses at once; the faces are linear in the edges, and finding the face around each hole
-//! is a second sweep over the finished edges. An arc is at most three pieces.
+//! is a second sweep over the finished edges. An arc is at most three pieces and an ellipse two.
 
 #![allow(
     clippy::many_single_char_names,
@@ -58,6 +62,7 @@ use geom_curve::{CurveKind, Line};
 use geom_math::bbox::Box3;
 use geom_num::arc::{Arc2, Round};
 use geom_num::carrier::{Carrier, Rational2};
+use geom_num::conic::Ellipse2;
 use geom_num::grid::{P2, P3};
 use geom_num::one_root::Crossing2;
 use geom_num::{NumError, Sign};
@@ -71,8 +76,11 @@ use geom_topo::{
 mod piece;
 
 use piece::{
-    Circle, On, Piece, Way, circles_of, cmp_pt, cut, meetings, order_at, ordering, side, way,
+    On, Piece, Shapes, Way, circles_of, cmp_pt, cut, cut_oval, cut_oval_arc, cut_whole, meetings,
+    order_at, ordering, ovals_of, side, way,
 };
+
+use crate::entity::Param;
 
 /// Why an arrangement was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,6 +91,9 @@ pub enum ArrangeError {
     TooMany,
     /// The work meter stopped the sweep.
     Stopped(Stopped),
+    /// An ellipse may meet a circle or another ellipse on the pieces the sweep holds: they meet at
+    /// roots of a quartic, which the sweep does not yet place as vertices.
+    Conic,
 }
 
 impl From<NumError> for ArrangeError {
@@ -103,6 +114,9 @@ impl fmt::Display for ArrangeError {
             ArrangeError::Range => f.write_str("a step of the exact arithmetic did not fit"),
             ArrangeError::TooMany => f.write_str("more items than a 32-bit index names"),
             ArrangeError::Stopped(s) => write!(f, "stopped: {s:?}"),
+            ArrangeError::Conic => f.write_str(
+                "an ellipse may meet a circle or another ellipse, at a root of a quartic the sweep does not place",
+            ),
         }
     }
 }
@@ -206,6 +220,15 @@ pub enum Along {
         /// Whether the edge is on the upper half.
         upper: bool,
     },
+    /// A piece of the ellipse [`Arrangement::ellipses`] holds at `ellipse`: on its upper half, from
+    /// its leftmost point over the top to its rightmost, or on its lower half; the halves are split
+    /// by the diameter through those two points.
+    Ellipse {
+        /// The ellipse's place in [`Arrangement::ellipses`].
+        ellipse: u32,
+        /// Whether the edge is on the upper half.
+        upper: bool,
+    },
 }
 
 /// An edge between two vertices, lowest first, with the curves that cover it.
@@ -238,6 +261,8 @@ pub struct Arrangement {
     along: Vec<Along>,
     /// The circles the arcs lie on, each once.
     circles: Vec<Round>,
+    /// The ellipses, each once.
+    ellipses: Vec<Ellipse2>,
     /// For each vertex, the half-edges that leave it, counter-clockwise from the negative-x
     /// direction. Half-edge `2 e` runs along edge `e` from `from` to `to`; `2 e + 1` runs back.
     around: Vec<Vec<u32>>,
@@ -274,6 +299,14 @@ impl Arrangement {
         &self.circles
     }
 
+    /// The ellipses, each once, in order of centre (x, then y), then of the ratios of their forms'
+    /// coefficients to their levels. Of the copies of one ellipse, the one whose major-axis vector,
+    /// then ratio, has the least integers is the one stored.
+    #[must_use]
+    pub fn ellipses(&self) -> &[Ellipse2] {
+        &self.ellipses
+    }
+
     /// The half-edges leaving `vertex`, counter-clockwise from the negative x direction: one that
     /// leaves exactly westwards first, one that leaves exactly eastwards after those that leave
     /// below it. Half-edge `2 e` runs from edge `e`'s `from` to its `to`, and `2 e + 1` back.
@@ -307,6 +340,61 @@ pub enum Curve {
     /// An arc: grid ends and a rational centre on their bisector, running counter-clockwise from its
     /// start to its end.
     Arc(Arc2),
+    /// A whole ellipse. One of ratio 1 is a circle through its centre plus its major-axis vector,
+    /// and is arranged as one, so that it shares the edges of any arc of that circle.
+    Ellipse(Ellipse2),
+    /// An arc of an ellipse, counter-clockwise from the point at parameter `start` to the point at
+    /// `end` (`entity::Param`: x = a(1 − s²) / (1 + s²), y = b · 2s / (1 + s²) along its axes), the
+    /// whole ellipse when they are equal. Its ends are the rational points those parameters give;
+    /// one past the budget of a rational point is refused. It is arranged as an ellipse whatever its
+    /// ratio, so an arc of ratio 1 beside a circle of the same curve is refused as one that may meet
+    /// it ([`ArrangeError::Conic`]).
+    EllipticArc {
+        /// The ellipse.
+        ellipse: Ellipse2,
+        /// Where it starts.
+        start: Param,
+        /// Where it ends.
+        end: Param,
+    },
+}
+
+/// The point of `e` at the parameter `s`: for s = n / d, K + (M(d² − n²) + (p / q) M⊥ · 2nd) /
+/// (d² + n²), M⊥ = (−My, Mx), over q(d² + n²); K − M at the far end of the major axis.
+///
+/// # Errors
+///
+/// [`ArrangeError::Range`] if a step did not fit, or the point is past a rational point's budget.
+fn param_point(e: &Ellipse2, s: &Param) -> Result<Rational2, ArrangeError> {
+    let k = e.centre();
+    let [mx, my] = e.major().map(i128::from);
+    let (kx, ky) = (i128::from(k.x.get()), i128::from(k.y.get()));
+    let fit = |v: Option<i128>| v.ok_or(ArrangeError::Range);
+    let (n, d) = match s {
+        Param::Far => {
+            let far = Rational2::new(fit(kx.checked_sub(mx))?, fit(ky.checked_sub(my))?, 1);
+            return Ok(far?);
+        }
+        Param::At(f) => (i128::from(f.numerator()), i128::from(f.denominator())),
+    };
+    let (p, q) = e.ratio();
+    let (p, q) = (i128::from(p), i128::from(q));
+    let (dd, nn) = (fit(d.checked_mul(d))?, fit(n.checked_mul(n))?);
+    let (sum, difference) = (fit(dd.checked_add(nn))?, fit(dd.checked_sub(nn))?);
+    let twice = fit(n.checked_mul(d).and_then(|v| v.checked_mul(2)))?;
+    let w = fit(q.checked_mul(sum))?;
+    let coordinate = |c: i128, along: i128, across: i128| -> Result<i128, ArrangeError> {
+        let centre = fit(c.checked_mul(w))?;
+        let on = fit(q.checked_mul(along).and_then(|v| v.checked_mul(difference)))?;
+        let turned = fit(p.checked_mul(across).and_then(|v| v.checked_mul(twice)))?;
+        fit(centre.checked_add(on).and_then(|v| v.checked_add(turned)))
+    };
+    let neg = fit(my.checked_neg())?;
+    Ok(Rational2::new(
+        coordinate(kx, mx, neg)?,
+        coordinate(ky, my, mx)?,
+        w,
+    )?)
 }
 
 /// One event: a point, and the piece that starts there if it is a start.
@@ -453,13 +541,13 @@ fn piece_of(pieces: &[Piece], id: u32) -> Result<&Piece, ArrangeError> {
 fn new_events(
     heap: &mut Heap,
     pieces: &[Piece],
-    circles: &[Circle],
+    shapes: &Shapes,
     s: u32,
     t: u32,
     p: &At,
 ) -> Result<(), ArrangeError> {
     let (a, b) = (piece_of(pieces, s)?, piece_of(pieces, t)?);
-    for q in meetings(a, b, circles, p)?.into_iter().flatten() {
+    for q in meetings(a, b, shapes, p)?.into_iter().flatten() {
         heap.push(Event { at: q, start: None })?;
     }
     Ok(())
@@ -483,31 +571,68 @@ pub fn arrange(
             ids.push(index(place)?);
         }
     }
-    sweep(&pieces, &ids, Vec::new(), meter)
+    sweep(&pieces, &ids, Shapes::default(), meter)
 }
 
-/// The arrangement of `curves`: segments between grid points and arcs. Each arc is cut where its
-/// circle is leftmost or rightmost, so its pieces run one way in x, and those cuts are vertices; an
-/// edge on an arc names the arc's place as its source, as a segment's edges name the segment's.
+/// A whole ellipse of ratio 1 as the two halves of its circle, counter-clockwise from its centre
+/// plus its major-axis vector round to its centre less it and back, which list the circle; `None`
+/// for any other ellipse, or for one whose points there are off the grid. The sweep cuts the circle
+/// whole, at its leftmost and rightmost points only.
+fn as_circle(e: &Ellipse2) -> Option<[Arc2; 2]> {
+    if e.ratio() != (1, 1) {
+        return None;
+    }
+    let (k, [mx, my]) = (e.centre(), e.major());
+    let at =
+        |sx: i64, sy: i64| P2::new(k.x.get().checked_add(sx)?, k.y.get().checked_add(sy)?).ok();
+    let (start, end) = (at(mx, my)?, at(mx.checked_neg()?, my.checked_neg()?)?);
+    let centre = Rational2::from(k);
+    Some([
+        Arc2::new(start, end, centre).ok()?,
+        Arc2::new(end, start, centre).ok()?,
+    ])
+}
+
+/// The arrangement of `curves`: segments between grid points, arcs, whole ellipses and elliptic
+/// arcs. Each arc or ellipse is cut where its circle or ellipse is leftmost or rightmost, so its
+/// pieces run one way in x, and those cuts are vertices; an edge on an arc or an ellipse names its
+/// place as its source, as a segment's edges name the segment's.
 ///
 /// # Errors
 ///
-/// As for [`arrange`].
+/// As for [`arrange`], and [`ArrangeError::Conic`] where an ellipse may meet a circle or another
+/// ellipse.
 pub fn arrange_curves(
     curves: &[Curve],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Arrangement, ArrangeError> {
-    let arcs: Vec<Arc2> = curves
-        .iter()
-        .filter_map(|c| match c {
-            Curve::Arc(a) => Some(*a),
-            Curve::Segment(..) => None,
-        })
-        .collect();
+    let mut arcs: Vec<Arc2> = Vec::new();
+    let mut ellipses: Vec<Ellipse2> = Vec::new();
+    for c in curves {
+        match c {
+            Curve::Arc(a) => arcs.push(*a),
+            Curve::Ellipse(e) => match as_circle(e) {
+                Some(halves) => arcs.extend(halves),
+                None => ellipses.push(*e),
+            },
+            Curve::EllipticArc { ellipse, .. } => ellipses.push(*ellipse),
+            Curve::Segment(..) => {}
+        }
+    }
     let (circles, circle_of_arc) = circles_of(&arcs)?;
+    let (ovals, oval_of_ellipse) = ovals_of(&ellipses)?;
     let mut pieces: Vec<Piece> = Vec::with_capacity(curves.len());
     let mut ids: Vec<u32> = Vec::with_capacity(curves.len());
-    let mut nth_arc = 0_usize;
+    let (mut nth_arc, mut nth_ellipse) = (0_usize, 0_usize);
+    // The listed circle of the next arc, and how many arcs it takes from the list.
+    let mut next_circle = |taken: usize| -> Result<u32, ArrangeError> {
+        let circle = circle_of_arc
+            .get(nth_arc)
+            .copied()
+            .ok_or(ArrangeError::TooMany)?;
+        nth_arc = nth_arc.saturating_add(taken);
+        Ok(circle)
+    };
     for (place, curve) in curves.iter().enumerate() {
         let before = pieces.len();
         match curve {
@@ -516,13 +641,33 @@ pub fn arrange_curves(
                     pieces.push(piece);
                 }
             }
-            Curve::Arc(arc) => {
-                let circle = circle_of_arc
-                    .get(nth_arc)
+            Curve::Arc(arc) => cut(arc, next_circle(1)?, &circles, &mut pieces)?,
+            Curve::Ellipse(e) => {
+                if as_circle(e).is_some() {
+                    // Its two halves were listed for the circle's form; it is cut as one whole
+                    // circle, at its extremes only.
+                    cut_whole(next_circle(2)?, &circles, &mut pieces)?;
+                } else {
+                    let ellipse = oval_of_ellipse
+                        .get(nth_ellipse)
+                        .copied()
+                        .ok_or(ArrangeError::TooMany)?;
+                    nth_ellipse = nth_ellipse.saturating_add(1);
+                    cut_oval(ellipse, &ovals, &mut pieces)?;
+                }
+            }
+            Curve::EllipticArc {
+                ellipse: e,
+                start,
+                end,
+            } => {
+                let ellipse = oval_of_ellipse
+                    .get(nth_ellipse)
                     .copied()
                     .ok_or(ArrangeError::TooMany)?;
-                nth_arc = nth_arc.saturating_add(1);
-                cut(arc, circle, &circles, &mut pieces)?;
+                nth_ellipse = nth_ellipse.saturating_add(1);
+                let (from, to) = (param_point(e, start)?, param_point(e, end)?);
+                cut_oval_arc(ellipse, &ovals, &from, &to, &mut pieces)?;
             }
         }
         let place = index(place)?;
@@ -531,14 +676,14 @@ pub fn arrange_curves(
             pieces.len().saturating_sub(before),
         ));
     }
-    sweep(&pieces, &ids, circles, meter)
+    sweep(&pieces, &ids, Shapes { circles, ovals }, meter)
 }
 
 /// The plane sweep over `pieces`, the input place of each in `ids`.
 fn sweep(
     pieces: &[Piece],
     ids: &[u32],
-    circles: Vec<Circle>,
+    shapes: Shapes,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Arrangement, ArrangeError> {
     let mut heap = Heap {
@@ -582,7 +727,7 @@ fn sweep(
         while a < b {
             let mid = a.saturating_add(b.saturating_sub(a) / 2);
             let s = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
-            if side(piece_of(pieces, s)?, &circles, &p)? == Sign::Positive {
+            if side(piece_of(pieces, s)?, &shapes, &p)? == Sign::Positive {
                 a = mid.saturating_add(1);
             } else {
                 b = mid;
@@ -593,7 +738,7 @@ fn sweep(
         while a < b {
             let mid = a.saturating_add(b.saturating_sub(a) / 2);
             let s = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
-            if side(piece_of(pieces, s)?, &circles, &p)? == Sign::Zero {
+            if side(piece_of(pieces, s)?, &shapes, &p)? == Sign::Zero {
                 a = mid.saturating_add(1);
             } else {
                 b = mid;
@@ -619,7 +764,7 @@ fn sweep(
         keep.extend(starting.iter().copied());
         let mut fail = Ok(());
         keep.sort_by(|&x, &y| {
-            let order = leaving(pieces, &circles, &p, x, y).map(|o| o.then(x.cmp(&y)));
+            let order = leaving(pieces, &shapes, &p, x, y).map(|o| o.then(x.cmp(&y)));
             order.unwrap_or_else(|e| failed(&mut fail, e))
         });
         fail?;
@@ -640,36 +785,45 @@ fn sweep(
                 let lines = matches!(piece_of(pieces, l)?.on, On::Line { .. })
                     && matches!(piece_of(pieces, r)?.on, On::Line { .. });
                 if !(inside && lines) {
-                    new_events(&mut heap, pieces, &circles, l, r, &p)?;
+                    new_events(&mut heap, pieces, &shapes, l, r, &p)?;
                 }
             }
         }
         vertices.push(p);
     }
-    build(pieces, ids, circles, vertices, &on)
+    build(pieces, ids, shapes, vertices, &on)
 }
+
+/// Where the keys of [`class`] for ellipses start: past every circle's, as a circle's place is below
+/// 2^32.
+const ELLIPSE_CLASSES: u64 = 0x100_0000_0000;
 
 /// The order in which pieces `x` and `y` leave `p`: by tangent, then curvature, lowest first.
 fn leaving(
     pieces: &[Piece],
-    circles: &[Circle],
+    shapes: &Shapes,
     p: &At,
     x: u32,
     y: u32,
 ) -> Result<Ordering, ArrangeError> {
-    let wx = way(piece_of(pieces, x)?, circles, false)?;
-    let wy = way(piece_of(pieces, y)?, circles, false)?;
+    let wx = way(piece_of(pieces, x)?, shapes, false)?;
+    let wy = way(piece_of(pieces, y)?, shapes, false)?;
     order_at(p, &wx, &wy)
 }
 
-/// What a piece's edges lie on, as a key: lines first, then each half of each circle.
+/// What a piece's edges lie on, as a key: lines first, then each half of each circle, then each half
+/// of each ellipse.
 fn class(piece: &Piece) -> u64 {
-    match piece.on {
-        On::Line { .. } => 0,
-        On::Arc { circle, upper } => u64::from(circle)
+    let half = |at: u32, upper: bool| {
+        u64::from(at)
             .saturating_mul(2)
             .saturating_add(u64::from(upper))
-            .saturating_add(1),
+            .saturating_add(1)
+    };
+    match piece.on {
+        On::Line { .. } => 0,
+        On::Arc { circle, upper } => half(circle, upper),
+        On::Ellipse { ellipse, upper } => half(ellipse, upper).saturating_add(ELLIPSE_CLASSES),
     }
 }
 
@@ -677,7 +831,7 @@ fn class(piece: &Piece) -> u64 {
 fn build(
     pieces: &[Piece],
     ids: &[u32],
-    circles: Vec<Circle>,
+    shapes: Shapes,
     vertices: Vec<At>,
     on: &[Vec<u32>],
 ) -> Result<Arrangement, ArrangeError> {
@@ -723,7 +877,7 @@ fn build(
     let mut fail = Ok(());
     grouped.sort_by(|(e, s), (f, t)| {
         (e.from, e.to).cmp(&(f.from, f.to)).then_with(|| {
-            let order = vertex(e.from).and_then(|at| leaving(pieces, &circles, at, *s, *t));
+            let order = vertex(e.from).and_then(|at| leaving(pieces, &shapes, at, *s, *t));
             order.unwrap_or_else(|err| failed(&mut fail, err))
         })
     });
@@ -739,7 +893,7 @@ fn build(
     };
     let way_of = |h: u32| -> Result<Way<'_>, ArrangeError> {
         let e = usize::try_from(h / 2).map_err(|_| ArrangeError::TooMany)?;
-        way(rep_of(e)?, &circles, !h.is_multiple_of(2))
+        way(rep_of(e)?, &shapes, !h.is_multiple_of(2))
     };
     // Around each vertex: the half-edges that leave it, counter-clockwise from the negative x axis.
     let mut around: Vec<Vec<u32>> = alloc::vec![Vec::new(); vertices.len()];
@@ -848,7 +1002,7 @@ fn build(
         edges: &edges,
         vertices: &vertices,
         pieces,
-        circles: &circles,
+        shapes: &shapes,
         rep: &rep,
     };
     let (faces, _) = faces_of(&found, &cycles, &counter, &low)?;
@@ -857,14 +1011,18 @@ fn build(
         along.push(match rep_of(e)?.on {
             On::Line { line, .. } => Along::Line(line),
             On::Arc { circle, upper } => Along::Arc { circle, upper },
+            On::Ellipse { ellipse, upper } => Along::Ellipse { ellipse, upper },
         });
     }
+    let Shapes { circles, ovals } = shapes;
     let circles = circles.into_iter().map(|c| c.round).collect();
+    let ellipses = ovals.into_iter().map(|o| o.ellipse).collect();
     Ok(Arrangement {
         vertices,
         edges,
         along,
         circles,
+        ellipses,
         around,
         cycles,
         faces,
@@ -876,7 +1034,7 @@ struct Found<'a> {
     edges: &'a [Edge],
     vertices: &'a [At],
     pieces: &'a [Piece],
-    circles: &'a [Circle],
+    shapes: &'a Shapes,
     /// The piece that stands for each edge.
     rep: &'a [u32],
 }
@@ -892,7 +1050,7 @@ fn faces_of(
         edges,
         vertices,
         pieces,
-        circles,
+        shapes,
         rep,
     } = *found;
     // Face numbers: by the rank of the lowest vertex of each counter-clockwise cycle.
@@ -946,7 +1104,7 @@ fn faces_of(
         while a < b {
             let mid = a.saturating_add(b.saturating_sub(a) / 2);
             let e = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
-            if side(piece_of_edge(e)?, circles, at)? == Sign::Positive {
+            if side(piece_of_edge(e)?, shapes, at)? == Sign::Positive {
                 a = mid.saturating_add(1);
             } else {
                 b = mid;
@@ -957,7 +1115,7 @@ fn faces_of(
         while a < b {
             let mid = a.saturating_add(b.saturating_sub(a) / 2);
             let e = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
-            if side(piece_of_edge(e)?, circles, at)? == Sign::Zero {
+            if side(piece_of_edge(e)?, shapes, at)? == Sign::Zero {
                 a = mid.saturating_add(1);
             } else {
                 b = mid;
@@ -990,8 +1148,8 @@ fn faces_of(
         let mut fail = Ok(());
         starting.sort_by(|&x, &y| {
             let order = piece_of_edge(x).and_then(|px| {
-                let wx = way(px, circles, false)?;
-                order_at(at, &wx, &way(piece_of_edge(y)?, circles, false)?)
+                let wx = way(px, shapes, false)?;
+                order_at(at, &wx, &way(piece_of_edge(y)?, shapes, false)?)
             });
             order.unwrap_or_else(|e| failed(&mut fail, e))
         });
@@ -1042,8 +1200,9 @@ pub enum BodyError {
         /// Where it is.
         at: At,
     },
-    /// An edge is an arc, and the body's curves are stored in doubles, which hold no circle about
-    /// a rational centre exactly: the first such edge. The exact [`Arrangement`] still holds it.
+    /// An edge is an arc or a piece of an ellipse, and the body's curves are stored in doubles,
+    /// which hold no circle about a rational centre exactly: the first such edge. The exact
+    /// [`Arrangement`] still holds it.
     Curved {
         /// The edge's place in [`Arrangement::edges`].
         edge: u32,
@@ -1073,8 +1232,8 @@ impl Arrangement {
     /// first and the loops of the components inside it after, one fin for each side of an edge that
     /// a bounded face lies on (the unbounded face has none), and one shell in the outside region.
     ///
-    /// The body's curves are stored in doubles, so the arrangement must have no arc (the first is
-    /// the error), and its points are grid points, so it must have no crossing off the grid (the
+    /// The body's curves are stored in doubles, so the arrangement must have no arc or ellipse (the
+    /// first is the error), and its points are grid points, so it must have no crossing off the grid (the
     /// options for storing exact points are in the pull request that added this); the first that
     /// is off the grid is the error. A one-root vertex lies on an arc, so it is refused as the arc.
     ///
@@ -1083,11 +1242,7 @@ impl Arrangement {
     /// [`BodyError::Curved`], [`BodyError::OffGrid`], [`BodyError::TooMany`],
     /// [`BodyError::Geometry`] and [`BodyError::Topo`].
     pub fn to_body(&self, meter: &mut WorkMeter<'_>) -> Result<Body, BodyError> {
-        if let Some(edge) = self
-            .along
-            .iter()
-            .position(|a| matches!(a, Along::Arc { .. }))
-        {
+        if let Some(edge) = self.along.iter().position(|a| !matches!(a, Along::Line(_))) {
             return Err(BodyError::Curved {
                 edge: index(edge).map_err(|_| BodyError::TooMany)?,
             });

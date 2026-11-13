@@ -55,6 +55,11 @@ arrangement of segments built from any bytes has exactly the end points and prop
 cross-product formula gives as its vertices, satisfies Euler's formula, puts every half-edge on one
 cycle and every cycle on one face, and does not depend on the input order. Its replay corpus,
 18 seed files in `tests/__fuzz__/arrange/corpus`, covers every segment count from none to eight.
+And `arrange_curves` (`src/arrange_curves.rs`, G196b): the arrangement of segments, circular arcs
+and whole ellipses built from any bytes is refused only where an ellipse meets a circle or another
+ellipse, and otherwise has exactly the vertices a pairwise oracle finds on the curves' own carriers
+and circles, keeps Euler's formula and the cycle laws, and gives the same arrangement for the curves
+in the opposite order. Its replay corpus is in `tests/__fuzz__/arrange_curves/corpus`.
 
 ## One law, four engines
 

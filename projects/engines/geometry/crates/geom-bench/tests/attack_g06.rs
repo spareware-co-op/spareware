@@ -2243,6 +2243,18 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     + a.faces().len() as u64)
             },
         )),
+        ("entity", "arrange_curves") => {
+            fold(inputs::entity::arrange_curves(class).into_iter().map(
+                |curves| -> Result<u64, geom_num::NumError> {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    let a = geom_2d::arrange::arrange_curves(&curves, &mut meter)
+                        .map_err(|_| geom_num::NumError::Degenerate)?;
+                    Ok((a.vertices().len() as u64) * 1_000_003
+                        + (a.edges().len() as u64) * 1_009
+                        + a.faces().len() as u64)
+                },
+            ))
+        }
         ("entity", "under") => fold(inputs::entity::under(class).iter().map(
             |(shape, class)| -> Result<u64, geom_num::NumError> {
                 let change = shape

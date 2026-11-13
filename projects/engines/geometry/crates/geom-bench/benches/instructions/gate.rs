@@ -3372,6 +3372,13 @@ pub mod entity {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("entity/arrange_curves/typical"))]
+    fn arrange_curves(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("entity/under/typical"))]
     fn under(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
@@ -3380,7 +3387,7 @@ pub mod entity {
 
     library_benchmark_group!(
         name = entity;
-        benchmarks = polyline, arrange, under
+        benchmarks = polyline, arrange, arrange_curves, under
     );
 }
 

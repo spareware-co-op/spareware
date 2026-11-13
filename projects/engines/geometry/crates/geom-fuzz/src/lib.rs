@@ -38,6 +38,9 @@
 //! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
 //! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
 //! [`entity`], `geom-2d`'s entity model keeps its fraction, tag, polyline and kind-change laws (G194), and
+//! [`arrange`] and [`arrange_curves`], `geom-2d`'s arrangement of segments (G196a), and of
+//! segments, arcs and ellipses (G196b), has a pairwise oracle's vertices, keeps Euler's formula and
+//! does not depend on the input order, and
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
@@ -248,6 +251,7 @@ pub mod natural;
 pub mod adversarial;
 pub mod arenas;
 pub mod arrange;
+pub mod arrange_curves;
 pub mod attributes;
 pub mod batch;
 pub mod bodies;

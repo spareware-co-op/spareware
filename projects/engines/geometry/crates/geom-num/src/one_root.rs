@@ -831,6 +831,43 @@ impl Crossing2 {
         Crossing2::on_ellipse(l.coefficients(), ellipse, root)
     }
 
+    /// Where a vertical line touches the ellipse `ellipse`: [`Root::First`] its leftmost point and
+    /// [`Root::Second`] its rightmost. With A, B and C its form, B' = B / 2 = Mx · My · (p² − q²)
+    /// and (u, v) the point less the centre, the tangent is vertical where B u + 2C v = 0; there
+    /// 4AC − B² = 4p²q²L² and the level is p²L², L = ‖M‖², so u = ±√C / q and
+    /// v = ∓B'√C / (qC). In this form a is q · C times the centre, b is (±C, ∓B'), k is C and w is
+    /// q · C: C below 2^125, B' below 2^125 and q at most 2^21, so a is below 2^187 and w below
+    /// 2^146, within the column of a carrier and an ellipse above.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if a step did not fit, which no ellipse in the budget can reach.
+    pub fn of_ellipse_extreme(ellipse: &Ellipse2, root: Root) -> Result<Crossing2, NumError> {
+        let [_, _, c] = form_of(ellipse)?;
+        let [mx, my] = ellipse.major().map(Big::from_i64);
+        let (p, q) = ellipse.ratio();
+        let (p, q) = (Big::from_i64(p), Big::from_i64(q));
+        let shear = mul(&mul(&mx, &my)?, &sub(&mul(&p, &p)?, &mul(&q, &q)?)?)?;
+        let weight = mul(&q, &c)?;
+        let centre = ellipse.centre();
+        let scaled = |v: i64| mul(&Big::from_i64(v), &weight);
+        let stored =
+            |v: Big| -> Result<Stored, NumError> { v.resize().ok_or(NumError::BudgetExceeded) };
+        let (bx, by) = match root {
+            Root::First => (neg(&c)?, shear),
+            Root::Second => (c, neg(&shear)?),
+        };
+        Crossing2::from_parts(
+            [
+                stored(scaled(centre.x.get())?)?,
+                stored(scaled(centre.y.get())?)?,
+            ],
+            [stored(bx)?, stored(by)?],
+            stored(c)?,
+            stored(weight)?,
+        )
+    }
+
     /// Where the constructed line `l` meets the ellipse `e`, as [`Crossing2::of_ellipse`] says.
     ///
     /// # Errors

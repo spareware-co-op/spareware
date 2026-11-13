@@ -99,6 +99,7 @@ pub mod ball;
 pub mod brent;
 pub mod carrier;
 pub mod conic;
+pub mod conic_root;
 pub mod crossing;
 pub mod dd;
 pub mod distance;
