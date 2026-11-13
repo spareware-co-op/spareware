@@ -284,7 +284,8 @@ fn accepted_texts_write_to_a_fixed_point() {
 fn memory_does_not_grow_with_the_file() {
     // About 25 MB here; `a_file_beyond_four_gibibytes_reads_in_the_same_memory` goes past 2^32.
     let held = read_synthetic(300_000);
-    assert!(held < 80 << 10, "{held} bytes held");
+    // The buffer, 64 KiB, and one instance's tokens.
+    assert!((64 << 10..80 << 10).contains(&held), "{held} bytes held");
 }
 
 #[test]

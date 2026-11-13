@@ -385,6 +385,25 @@ impl<S: ByteSource> Lexer<'_, '_, S> {
             .offset
             .saturating_add(u64::try_from(n).unwrap_or(u64::MAX));
     }
+
+    /// Takes `n` buffered bytes, counting the line feeds among them.
+    #[allow(
+        clippy::naive_bytecount,
+        reason = "a stretch of white space between two tokens, a few bytes: not worth the bytecount crate as a dependency, which chapter 27's crate table would have to name"
+    )]
+    fn skip(&mut self, n: usize) {
+        let lines = self
+            .chunk()
+            .get(..n)
+            .unwrap_or(&[])
+            .iter()
+            .filter(|c| **c == b'\n')
+            .count();
+        self.line = self
+            .line
+            .saturating_add(u64::try_from(lines).unwrap_or(u64::MAX));
+        self.advance(n);
+    }
 }
 
 /// Where in the exchange structure the reader is.
@@ -557,10 +576,8 @@ impl<'m, 'c, S: ByteSource> Reader<'m, 'c, S> {
     /// An [`Error`] for a malformed text, a record beyond the options, a failed source or a
     /// stopped meter. The reader then gives the same error at every later call.
     pub fn next_event(&mut self) -> Result<Option<Event>, Error> {
-        match self.state {
-            State::Failed(e) => return Err(e),
-            State::Done => return Ok(None),
-            _ => {}
+        if let State::Failed(e) = self.state {
+            return Err(e);
         }
         self.tokens.clear();
         let step = self.step();
@@ -754,7 +771,10 @@ impl<'m, 'c, S: ByteSource> Reader<'m, 'c, S> {
         self.ws()?;
         if let Some(c @ b'(') = self.lx.peek()? {
             self.lx.bump(c);
-            loop {
+            // Each part pushes its record's item at least, and `push` refuses more than
+            // `options.items`, so `)` or an error ends the loop inside this bound. The bound
+            // also ends a loop whose parts read nothing, which would otherwise never end.
+            for _ in 0..=self.options.items {
                 self.ws()?;
                 if let Some(c @ b')') = self.lx.peek()? {
                     self.lx.bump(c);
@@ -786,8 +806,24 @@ impl<'m, 'c, S: ByteSource> Reader<'m, 'c, S> {
     /// Skips white space and comments.
     fn ws(&mut self) -> Result<(), Error> {
         loop {
-            match self.lx.peek()? {
-                Some(c) if c.is_ascii_whitespace() => self.lx.bump(c),
+            // `peek` fills a drained buffer, so an empty chunk is the source's end.
+            self.lx.peek()?;
+            let chunk = self.lx.chunk();
+            if chunk.is_empty() {
+                return Ok(());
+            }
+            let n = chunk
+                .iter()
+                .position(|c| !c.is_ascii_whitespace())
+                .unwrap_or(chunk.len());
+            let next = chunk.get(n).copied();
+            self.lx.skip(n);
+            match next {
+                // The whole buffer was white space: read on from the source. Each such pass
+                // reads new bytes, so the loop ends with the source.
+                None => {
+                    self.lx.refill()?;
+                }
                 Some(c @ b'/') => {
                     self.lx.bump(c);
                     match self.lx.peek()? {
@@ -798,7 +834,7 @@ impl<'m, 'c, S: ByteSource> Reader<'m, 'c, S> {
                         _ => return self.fail(ErrorKind::UnexpectedByte(b'/')),
                     }
                 }
-                _ => return Ok(()),
+                Some(_) => return Ok(()),
             }
         }
     }
@@ -840,19 +876,21 @@ impl<'m, 'c, S: ByteSource> Reader<'m, 'c, S> {
 
     /// Takes bytes onto the scratch while `keep` holds; `keep` never holds for a line feed.
     fn run(&mut self, keep: impl Fn(u8) -> bool) -> Result<(), Error> {
-        while self.lx.peek()?.is_some() {
+        loop {
+            // `peek` fills a drained buffer. A pass that keeps nothing ends the run: the next
+            // byte is one `keep` refuses, or the source has ended. Every other pass grows the
+            // scratch, which `check_text` bounds, so the loop ends whatever the buffer holds.
+            self.lx.peek()?;
             let chunk = self.lx.chunk();
             let n = chunk.iter().position(|c| !keep(*c)).unwrap_or(chunk.len());
-            let whole = n == chunk.len();
-            self.scratch
-                .extend_from_slice(chunk.get(..n).unwrap_or(&[]));
+            let kept = chunk.get(..n).unwrap_or(&[]);
+            if kept.is_empty() {
+                return Ok(());
+            }
+            self.scratch.extend_from_slice(kept);
             self.lx.advance(n);
             self.check_text()?;
-            if !whole {
-                break;
-            }
         }
-        Ok(())
     }
 
     /// Reads a section word (letters, digits, `_` and `-`) onto the scratch, in upper case; the

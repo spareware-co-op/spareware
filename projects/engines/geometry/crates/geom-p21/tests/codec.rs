@@ -20,7 +20,7 @@ use common::{data, events, exchange, instances, meter, refusal};
 use geom_format::source::{ByteSource, SliceSource, SourceError};
 use geom_p21::{
     ErrorKind, Event, Exchange, Header, List, Options, Param, Reader, Record, Section, Token,
-    Totals, WriteError, Writer,
+    TooDeepError, Totals, WriteError, Writer,
 };
 
 const SAMPLE: &str = "ISO-10303-21;\nHEADER;FILE_DESCRIPTION((''),'2;1');\nFILE_NAME('a','',(''),(''),'','sys','');\nFILE_SCHEMA(('AUTOMOTIVE_DESIGN'));ENDSEC;\nDATA;\n#1=CARTESIAN_POINT('p',(0.,1.5E1,-2));\n/* c */ #2=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));\n#3=X('it''s','\\X2\\00E9\\X0\\',$,#1,LENGTH_MEASURE(1.E-3),\"0F\");\nENDSEC;\nEND-ISO-10303-21;\n";
@@ -65,7 +65,9 @@ fn parses_simple_and_complex() {
 
 #[test]
 fn the_events_come_in_file_order_with_their_tokens() {
-    let text = b"ISO-10303-21;HEADER;FILE_SCHEMA(('S'));ENDSEC;ANCHOR;<a>=#1;ENDSEC;DATA('d',('S'));#7=A(1,(2,B(3)),.t.);ENDSEC;DATA;ENDSEC;SIGNATURE x'ENDSEC;' /*ENDSEC;*/ ENDSECX; 1ENDSEC; ENDSEC ;END-ISO-10303-21;trailing";
+    // In a skipped section, `ENDSEC` ends it only as a whole word: not in a string, a comment, a
+    // longer word, after a digit, or as another six-letter word starting with `E`.
+    let text = b"ISO-10303-21;HEADER;FILE_SCHEMA(('S'));ENDSEC;ANCHOR;<a>=#1;ENDSEC;DATA('d',('S'));#7=A(1,(2,B(3)),.t.);ENDSEC;DATA;ENDSEC;REFERENCE;ENDSEC;SIGNATURE x'ENDSEC;' /*ENDSEC;*/ ENDSECX; 1ENDSEC; ENTITY; ENDSEC ;END-ISO-10303-21;trailing";
     let mut meter = meter();
     let mut reader = Reader::new(SliceSource::new(text), Options::DEFAULT, &mut meter);
     let mut seen = Vec::new();
@@ -109,6 +111,7 @@ fn the_events_come_in_file_order_with_their_tokens() {
             Event::EndSection,
             Event::Section(Section::Data),
             Event::EndSection,
+            Event::Skipped(Section::Reference),
             Event::Skipped(Section::Signature),
         ]
     );
@@ -220,6 +223,10 @@ fn every_malformed_text_is_its_typed_error() {
         (b"ISO-10303-21".to_vec(), K::NotP21),
         (b"ISO-10303-22;".to_vec(), K::NotP21),
         (b"\xEF\xBBISO-10303-21;".to_vec(), K::NotP21),
+        (
+            b"\xEF\xBB ISO-10303-21;HEADER;ENDSEC;END-ISO-10303-21;".to_vec(),
+            K::NotP21,
+        ),
         (b"/*".to_vec(), K::UnterminatedComment),
         (b"/ISO-10303-21;".to_vec(), K::UnexpectedByte(b'/')),
         (b"ISO-10303-21;".to_vec(), K::MissingHeader),
@@ -547,6 +554,17 @@ fn a_whole_file_is_held_to_its_totals() {
         Err(ErrorKind::TooLarge)
     );
     assert_eq!(read(&t, bytes(0)), Err(ErrorKind::TooLarge));
+    // Reading exactly the total is allowed: a file stopped where the bytes read first pass it,
+    // here at its end, not at the `ENDSEC;` that reaches the total.
+    let at_endsec = (t.len() - "END-ISO-10303-21;".len()) as u64;
+    let e = Exchange::read(
+        SliceSource::new(&t),
+        Options::DEFAULT,
+        bytes(at_endsec),
+        &mut meter(),
+    )
+    .unwrap_err();
+    assert_eq!((e.kind, e.offset), (ErrorKind::TooLarge, t.len() as u64));
 }
 
 #[test]
@@ -858,4 +876,66 @@ fn a_failing_source_is_its_error() {
         let e = common::events_of(source, Options::DEFAULT).1.unwrap();
         assert_eq!((e.kind, e.line, e.offset), (kind, 1, 0));
     }
+}
+
+#[test]
+fn errors_say_what_they_are() {
+    // A printable byte is shown as itself, any other by its value.
+    for (byte, shown) in [
+        (b'?', "unexpected `?`"),
+        (b' ', "unexpected ` `"),
+        (b'~', "unexpected `~`"),
+        (0x1F, "unexpected byte 0x1F"),
+        (0x7F, "unexpected byte 0x7F"),
+        (0xE9, "unexpected byte 0xE9"),
+    ] {
+        assert_eq!(ErrorKind::UnexpectedByte(byte).to_string(), shown);
+    }
+    assert_eq!(TooDeepError.to_string(), "lists nested too deeply");
+}
+
+#[test]
+fn string_directives_decode_to_their_characters() {
+    let got = instances(
+        "#1=A('\\X4\\0001F6000010FFFF\\X0\\','\\X2\\D83DDE00\\X0\\','\\X2\\DBFFDFFF\\X0\\','\\X\\E9\\X\\41','\\X2\\00E9\\X0\\\\X2\\','');",
+    );
+    assert_eq!(
+        got[0].1[0].params,
+        [
+            Param::Str("\u{1f600}\u{10ffff}".into()),
+            Param::Str("\u{1f600}".into()),
+            Param::Str("\u{10ffff}".into()),
+            Param::Str("\u{e9}A".into()),
+            // A run with no `\X0\` after it is kept as written.
+            Param::Str("\u{e9}\\X2\\".into()),
+            Param::Str(String::new()),
+        ]
+    );
+    // A group that is not whole is refused, or replaced and counted.
+    let lossy = Options {
+        lossy_text: true,
+        ..Options::DEFAULT
+    };
+    for (text, decoded) in [
+        ("\\X4\\0001F60\\X0\\", "\u{fffd}"),
+        ("\\X2\\00E\\X0\\", "\u{fffd}"),
+        ("\\X2\\D83D\\X0\\", "\u{fffd}"),
+    ] {
+        let t = data(&format!("#1=A('{text}');"));
+        assert_eq!(refusal(&t).kind, ErrorKind::BadText, "{text}");
+        let ex =
+            Exchange::read(SliceSource::new(&t), lossy, Totals::DEFAULT, &mut meter()).unwrap();
+        assert_eq!(ex.get(1).unwrap().params(), [Param::Str(decoded.into())]);
+        assert_eq!(ex.replaced, 1);
+    }
+}
+
+#[test]
+fn reals_are_written_with_a_point_before_any_exponent() {
+    let ex = exchange(&data("#1=A(1.5E-7,1.E-7,-2.5E300,1.E21,15.,0.001);")).unwrap();
+    let written = String::from_utf8(ex.write(Vec::new()).unwrap()).unwrap();
+    assert!(
+        written.contains("\n#1=A(1.5E-7,1.E-7,-2.5E300,1.E21,15.0,0.001);\n"),
+        "{written}"
+    );
 }

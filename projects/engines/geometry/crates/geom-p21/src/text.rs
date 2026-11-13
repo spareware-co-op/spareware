@@ -54,9 +54,9 @@ fn digit(c: u8) -> Option<u32> {
     char::from(c).to_digit(16)
 }
 
-/// The value of `group` read as hexadecimal digits, all of them digits; `None` for an empty group.
-fn hex(group: &[u8]) -> Option<u32> {
-    if group.is_empty() || group.len() > 8 {
+/// The value of `group` read as hexadecimal digits; `None` unless it is `width` digits, at most 8.
+fn hex(group: &[u8], width: usize) -> Option<u32> {
+    if group.len() != width {
         return None;
     }
     let mut value = 0_u32;
@@ -93,12 +93,14 @@ fn run(body: &[u8], width: usize, out: &mut String, lossy: bool) -> Result<u64, 
         // not four digits pairs with nothing.
         let mut high: Option<u32> = None;
         for g in body.chunks(4) {
-            let unit = hex(g).filter(|_| g.len() == 4);
+            let unit = hex(g, 4);
             let low = unit.filter(|u| (0xDC00..0xE000).contains(u));
             if let (Some(h), Some(l)) = (high, low) {
                 high = None;
-                // Both differences are below 2^10, so the sum is a character above U+FFFF.
-                let code = ((h.wrapping_sub(0xD800) << 10) | l.wrapping_sub(0xDC00))
+                // Unicode's pairing, 0x10000 + (h - 0xD800) * 0x400 + (l - 0xDC00): both
+                // differences are below 2^10, so the sum is a character above U+FFFF.
+                let code = (h.wrapping_sub(0xD800) << 10)
+                    .wrapping_add(l.wrapping_sub(0xDC00))
                     .wrapping_add(0x1_0000);
                 out.push(char::from_u32(code).unwrap_or(char::REPLACEMENT_CHARACTER));
                 continue;
@@ -120,7 +122,7 @@ fn run(body: &[u8], width: usize, out: &mut String, lossy: bool) -> Result<u64, 
         }
     } else {
         for g in body.chunks(8) {
-            match hex(g).filter(|_| g.len() == 8).and_then(char::from_u32) {
+            match hex(g, 8).and_then(char::from_u32) {
                 Some(c) => out.push(c),
                 None => replace(out),
             }
@@ -135,11 +137,11 @@ fn run(body: &[u8], width: usize, out: &mut String, lossy: bool) -> Result<u64, 
 /// [`decode`] with the search for a run's `\X0\` given, so a test can count its steps.
 /// `find_end(rest)` is the offset of the first `\X0\` in `rest`.
 ///
-/// A `\X2\` or `\X4\` with no `\X0\` after it is kept as written. The search for the terminator
-/// is remembered: the first `\X0\` at or after one position is also the first at or after every
-/// later position up to it, and when none follows one position none follows any later one. So a
-/// search starts only past the terminator the last one found, the searches cover disjoint
-/// stretches of `raw`, and decoding is linear however many unterminated runs the string holds.
+/// A `\X2\` or `\X4\` with no `\X0\` after it is kept as written. A search that finds a
+/// terminator ends the run that asked, and decoding goes on past it, so the next search starts
+/// beyond everything this one compared. A search that finds none is remembered: none follows any
+/// later position either. So the searches cover disjoint stretches of `raw`, and decoding is
+/// linear however many unterminated runs the string holds.
 pub(crate) fn decode_with(
     raw: &[u8],
     out: &mut String,
@@ -148,10 +150,14 @@ pub(crate) fn decode_with(
 ) -> Result<u64, BadText> {
     let mut replaced = 0_u64;
     let mut i = 0_usize;
-    // The last search's answer: the position in `raw` of the first `\X0\` it found (`None`: none
-    // to the end). `None` outside: no search yet.
-    let mut next_end: Option<Option<usize>> = None;
-    while let Some(rest) = raw.get(i..).filter(|r| !r.is_empty()) {
+    // A search found no `\X0\` from some position to the end.
+    let mut no_end = false;
+    // Each pass takes one byte at least, so `raw` is decoded inside this bound; it also ends a
+    // pass that would take none, which would otherwise repeat for ever.
+    for _ in 0..=raw.len() {
+        let Some(rest) = raw.get(i..).filter(|r| !r.is_empty()) else {
+            break;
+        };
         if !rest.starts_with(b"\\") {
             // Plain bytes up to the next backslash. No byte of a UTF-8 character is a backslash,
             // so a character is never split.
@@ -176,7 +182,10 @@ pub(crate) fn decode_with(
             continue;
         }
         if rest.starts_with(b"\\X\\")
-            && let Some(c) = rest.get(3..5).and_then(hex).and_then(char::from_u32)
+            && let Some(c) = rest
+                .get(3..5)
+                .and_then(|g| hex(g, 2))
+                .and_then(char::from_u32)
         {
             out.push(c);
             i = i.saturating_add(5);
@@ -190,14 +199,12 @@ pub(crate) fn decode_with(
             None
         };
         if let Some(width) = width {
-            let found = match next_end {
-                Some(Some(end)) if end >= i => Some(end),
-                Some(None) => None,
-                _ => {
-                    let found = find_end(rest).and_then(|end| i.checked_add(end));
-                    next_end = Some(found);
-                    found
-                }
+            let found = if no_end {
+                None
+            } else {
+                let found = find_end(rest).and_then(|end| i.checked_add(end));
+                no_end = found.is_none();
+                found
             };
             // The terminator starts at least three bytes on: only the tag's own closing backslash
             // can open it that early, in a run written `\X2\X0\`, which holds no digits.
@@ -514,10 +521,12 @@ mod tests {
 
     #[test]
     fn hex_reads_digits_only() {
-        assert_eq!(hex(b"00e9"), Some(0xE9));
-        assert_eq!(hex(b"FFFFFFFF"), Some(u32::MAX));
-        for bad in [&b""[..], b"+A", b"-1", b" 1", b"0x", b"123456789"] {
-            assert_eq!(hex(bad), None, "{bad:?}");
+        assert_eq!(hex(b"00e9", 4), Some(0xE9));
+        assert_eq!(hex(b"FFFFFFFF", 8), Some(u32::MAX));
+        for bad in [&b"+A"[..], b"-1", b" 1", b"0x"] {
+            assert_eq!(hex(bad, 2), None, "{bad:?}");
         }
+        assert_eq!(hex(b"00E", 4), None);
+        assert_eq!(hex(b"0001F600", 4), None);
     }
 }
