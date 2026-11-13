@@ -481,6 +481,10 @@ pub static OPS: &[Op] = &[
     // geom-topo's hot paths (piece G80; decision 32.46): a column's copy on write, and publishing.
     Op { group: "topo", name: "column_edit", measures: "geom_topo::Column::set", classes: T, prepare: |c| bind(inputs::topo::column_edit(c), kernels::topo::column_edit) },
     Op { group: "topo", name: "publish", measures: "geom_topo::Builder::publish", classes: T, prepare: |c| bind(inputs::topo::publish(c), kernels::topo::publish) },
+    // geom-2d's entity model (piece G194; decision 32.44): a polyline built and checked, and a
+    // shape's change under a transform's classification.
+    Op { group: "entity", name: "polyline", measures: "geom_2d::Polyline::new", classes: T, prepare: |c| bind(inputs::entity::polyline(c), kernels::entity::polyline) },
+    Op { group: "entity", name: "under", measures: "geom_2d::Shape::under", classes: T, prepare: |c| bind(inputs::entity::under(c), kernels::entity::under) },
     // The batch runner's hot paths (piece G104; decision 32.46): the driver and the flat arrays.
     Op { group: "batch", name: "run_items", measures: "geom_op::Batch::run", classes: T, prepare: |c| bind(inputs::batch::run_items(c), kernels::batch::run_items) },
     Op { group: "batch", name: "curve_points", measures: "geom_curve::ParamCurve::points", classes: T, prepare: |c| bind(inputs::batch::curve_points(c), kernels::batch::curve_points) },
@@ -709,7 +713,7 @@ pub fn full_scenario(op: &str) -> Option<Prepared> {
 }
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 52] = [
+pub const GROUPS: [&str; 53] = [
     "predicate",
     "sign",
     "wide",
@@ -736,6 +740,7 @@ pub const GROUPS: [&str; 52] = [
     "bvh",
     "attributes",
     "topo",
+    "entity",
     "batch",
     "mesh",
     "nurbs",

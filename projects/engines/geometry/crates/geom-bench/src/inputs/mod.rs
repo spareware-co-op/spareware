@@ -44,6 +44,7 @@ pub mod crossing;
 pub mod curve;
 pub mod dd;
 pub mod eft;
+pub mod entity;
 pub mod encoder;
 pub mod exact_sum;
 pub mod exactness;

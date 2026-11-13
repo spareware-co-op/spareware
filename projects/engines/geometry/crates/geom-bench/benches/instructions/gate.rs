@@ -3353,6 +3353,30 @@ pub mod topo {
     );
 }
 
+/// geom-2d's entity model (piece G194; decision 32.44).
+pub mod entity {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("entity/polyline/typical"))]
+    fn polyline(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("entity/under/typical"))]
+    fn under(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = entity;
+        benchmarks = polyline, under
+    );
+}
+
 /// The batch runner's hot paths (piece G104; decision 32.46).
 pub mod batch {
     use super::*;

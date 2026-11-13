@@ -948,6 +948,7 @@ name = "geom-bench"
 version = "0.0.0"
 dependencies = [
  "divan",
+ "geom-2d",
  "geom-bool",
  "geom-bvh",
  "geom-check",
@@ -1205,6 +1206,7 @@ dependencies = [
  "dashu-int",
  "dashu-ratio",
  "engine-geometry",
+ "geom-2d",
  "geom-bench",
  "geom-bvh",
  "geom-check",

@@ -92,6 +92,9 @@ hex = "=0.4.3"
 # needs `OsString` to deserialize, which serde provides there only, so the WebAssembly guest
 # (geom-bench-guest, built for wasm32-wasip1) never builds it. Both are optional, behind the
 # `judge` feature below.
+# The entity model of phase 6 (piece G194), for the same count benchmarks.
+geom-2d = { path = "../geom-2d" }
+
 [target.'cfg(any(unix, windows))'.dependencies]
 # Gungraun's summary model, the typed schema of the `summary.json` files the gate's runs write, which
 # `geom-bench-counts callgrind` reads (`geom_bench::callgrind`). Only the model: no runner, no

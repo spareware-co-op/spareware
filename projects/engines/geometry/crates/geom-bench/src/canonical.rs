@@ -25,6 +25,8 @@
 
 use core::cmp::Ordering;
 
+use geom_2d::entity::{Frac, Shape};
+use geom_math::Classification;
 use geom_num::arc::{Arc2, Circle2, Contact, Round};
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::conic::{Ellipse2, Meeting};
@@ -220,6 +222,30 @@ impl Canonical for Ssi {
         for p in self.points() {
             p.encode(h);
         }
+    }
+}
+
+impl Canonical for Frac {
+    // A fraction is exactly its reduced numerator and denominator.
+    fn encode(&self, h: &mut Sha256) {
+        self.numerator().encode(h);
+        self.denominator().encode(h);
+    }
+}
+
+// A shape and a classification are plain data whose derived `Debug` text lists every field in
+// declaration order with integers in decimal: that text is the same on every target, and it
+// separates any two different values, so the digest of the text is a canonical digest of the
+// value. Writing a field-by-field encoding of all eighteen shape kinds would repeat the type.
+impl Canonical for Shape {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(format!("{self:?}").as_bytes());
+    }
+}
+
+impl Canonical for Classification {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(format!("{self:?}").as_bytes());
     }
 }
 

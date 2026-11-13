@@ -326,6 +326,18 @@
               "kind": "corpus",
               "piece": "G192",
               "why": "4 count benchmarks that piece/G87's merge brought in: G80's topo/column_edit and topo/publish, and G148's helper/lone_serial and helper/lone_pool; no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
+              "piece": "G194",
+              "why": "the benchmark groups of piece/G192's line and of G80 and G81 meet in one golden"
+            },
+            {
+              "sha256": "d447eb75906f05514da32055b78c30ab5a248d51385dd15b17e7f694c57e7307",
+              "kind": "corpus",
+              "piece": "G194",
+              "why": "two entity benchmarks added (entity/polyline, entity/under)"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"

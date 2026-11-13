@@ -2220,6 +2220,25 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 Ok(a.wrapping_add(b))
             },
         )),
+        ("entity", "polyline") => fold(inputs::entity::polyline(class).into_iter().map(
+            |(vertices, bulges)| -> Result<u64, geom_num::NumError> {
+                geom_2d::entity::Polyline::new(vertices, bulges, None, false)
+                    .map(|p| p.vertices().len() as u64)
+                    .map_err(|_| geom_num::NumError::Degenerate)
+            },
+        )),
+        ("entity", "under") => fold(inputs::entity::under(class).iter().map(
+            |(shape, class)| -> Result<u64, geom_num::NumError> {
+                let change = shape
+                    .under(*class)
+                    .map_err(|_| geom_num::NumError::Degenerate)?;
+                let tag = match change.becomes {
+                    geom_2d::entity::Becomes::One(tag) => u64::from(tag.as_u8()),
+                    geom_2d::entity::Becomes::Run => 0,
+                };
+                Ok(tag * 2 + u64::from(change.mirror))
+            },
+        )),
         ("topo", "publish") => fold(inputs::topo::publish(class).iter().map(
             |builder| -> Result<u32, geom_topo::TopoError> {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
