@@ -397,6 +397,7 @@ fn a_term_astray_is_a_defect() {
         .unwrap_err();
     assert_eq!(*e.detail(), astray);
     assert_eq!(e.kind(), ErrorKind::Internal);
+    assert_eq!(e.remedies(), [Remedy::Report]);
     assert_eq!(e.entities(), &[name(1)]);
     // On an entity that is not an output.
     let e = start()
@@ -504,10 +505,5 @@ fn every_detail_says_what_it_is() {
         );
     }
     let internal = OpErrorDetail::from(BoundDetail::OwnTermAstray);
-    assert!(
-        internal
-            .remedies()
-            .iter()
-            .all(|r| !matches!(r, Remedy::Accept { .. }))
-    );
+    assert_eq!(internal.remedies(), [Remedy::Report]);
 }

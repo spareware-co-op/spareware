@@ -90,7 +90,11 @@ fn every_combine_detail_offers_what_it_can() {
         CombineDetail::NotPlaneBased.remedies(),
         [Remedy::AwaitPiece { piece: "G242" }]
     );
-    assert_eq!(CombineDetail::ResultInvalid.remedies(), []);
+    assert_eq!(CombineDetail::ResultInvalid.remedies(), [Remedy::Report]);
+    assert_eq!(
+        OpErrorDetail::from(CombineDetail::ResultInvalid).remedies(),
+        [Remedy::Report]
+    );
     let would = Exactness::Exact;
     assert_eq!(
         CombineDetail::NotAccepted { would }.remedies(),

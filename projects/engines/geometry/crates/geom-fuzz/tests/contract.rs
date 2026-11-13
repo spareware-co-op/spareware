@@ -2,7 +2,8 @@
 //! mode, which cargo-bolero and `ClusterFuzzLite` select by name, and `contract_seeded` the seeded
 //! leg that runs on every target, WebAssembly included (the crate README sets out the layout).
 //! Each hands the fuzzer's raw bytes to `geom_fuzz::contract::harness`. The case's input bound is
-//! reached and never passed, and the seeded inputs reach errors, warnings and tool descriptions.
+//! reached and never passed, every variant of every family is drawn and every `Internal` one
+//! offers a report, and the seeded inputs reach errors, warnings and tool descriptions.
 
 #![allow(
     clippy::panic,
@@ -17,6 +18,8 @@ use common::holds;
 
 use geom_fuzz::contract::{MAX_INPUT_BYTES, decode, harness};
 use geom_fuzz::seeded;
+use geom_op::local::{CLASSES, LocalDetail};
+use geom_op::{BoundDetail, CombineDetail, ErrorKind, OpErrorDetail, Remedy};
 use geom_test::{Seed, SplitMix64};
 
 /// Random byte strings per `cargo test` run of the bolero leg.
@@ -119,6 +122,50 @@ fn the_input_bound_is_reached_and_never_passed() {
         let data: Vec<u8> = (0..len).map(|_| g.next_u64().to_le_bytes()[0]).collect();
         let (_, read) = decode(&data);
         assert!(read <= MAX_INPUT_BYTES && read <= data.len());
+    }
+}
+
+/// The input whose one error is the detail of `family` and `variant`, its payload all zero.
+fn one_error(family: u8, variant: u8) -> Vec<u8> {
+    let mut data = vec![0u8; 6];
+    data.extend([1, family, variant]);
+    data.extend([0u8; 8 + 4]);
+    data
+}
+
+#[test]
+fn every_family_and_variant_is_drawn_and_every_defect_offers_a_report() {
+    let mut drawn: Vec<OpErrorDetail> = Vec::new();
+    for family in 0..8 {
+        for variant in 0..16 {
+            let data = one_error(family, variant);
+            let (case, _) = decode(&data);
+            assert_eq!(case.errors.len(), 1);
+            let d = case.errors[0].detail;
+            if !drawn.contains(&d) {
+                drawn.push(d);
+            }
+            holds(harness(&data));
+        }
+    }
+    // Run 5, Num 11, Batch 1, Make 15, Query 7, Combine 10, Bound 5, Local 9 (one per class).
+    assert_eq!(drawn.len(), 63);
+    let defects: Vec<OpErrorDetail> = drawn
+        .iter()
+        .copied()
+        .filter(|d| d.kind() == ErrorKind::Internal)
+        .collect();
+    assert_eq!(defects.len(), 9, "{defects:?}");
+    assert!(defects.iter().all(|d| d.remedies() == [Remedy::Report]));
+    for named in [
+        OpErrorDetail::Combine(CombineDetail::ResultInvalid),
+        OpErrorDetail::Bound(BoundDetail::OwnTermAstray),
+    ] {
+        assert!(defects.contains(&named), "{named:?}");
+    }
+    for class in CLASSES {
+        let refused = OpErrorDetail::Local(LocalDetail::TopologyChangeNotAllowed { class });
+        assert!(drawn.contains(&refused), "{refused:?}");
     }
 }
 

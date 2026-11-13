@@ -570,7 +570,8 @@ impl BoundDetail {
         }
     }
 
-    /// The remedies this detail knows: the larger bound, to accept explicitly.
+    /// The remedies this detail knows: the larger bound, to accept explicitly; or, for a defect, a
+    /// report (chapter 22).
     #[must_use]
     pub fn remedies(&self) -> Vec<Remedy> {
         match *self {
@@ -584,9 +585,8 @@ impl BoundDetail {
             } => vec![Remedy::Accept {
                 class: Exactness::Certified { bound, step },
             }],
-            BoundDetail::OwnTermAstray | BoundDetail::MixedSteps | BoundDetail::CommitFlip => {
-                Vec::new()
-            }
+            BoundDetail::OwnTermAstray => vec![Remedy::Report],
+            BoundDetail::MixedSteps | BoundDetail::CommitFlip => Vec::new(),
         }
     }
 }
@@ -759,7 +759,8 @@ impl CombineDetail {
         }
     }
 
-    /// The remedies this detail knows: the input to change, or the piece that adds a route.
+    /// The remedies this detail knows: the input to change, the piece that adds a route, the class
+    /// to accept, or, for a defect, a report (chapter 22).
     #[must_use]
     pub fn remedies(&self) -> Vec<Remedy> {
         let change = |input: &'static str| Remedy::ChangeInput { input, to: None };
@@ -775,7 +776,7 @@ impl CombineDetail {
             }
             CombineDetail::NotPlaneBased => vec![Remedy::AwaitPiece { piece: "G242" }],
             CombineDetail::NotAccepted { would } => vec![Remedy::Accept { class: *would }],
-            CombineDetail::ResultInvalid => Vec::new(),
+            CombineDetail::ResultInvalid => vec![Remedy::Report],
         }
     }
 }
