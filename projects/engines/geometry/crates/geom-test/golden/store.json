@@ -338,6 +338,18 @@
               "kind": "corpus",
               "piece": "G194",
               "why": "two entity benchmarks added (entity/polyline, entity/under)"
+            },
+            {
+              "sha256": "761e00e8fb8501231bdaf94d17ef5dc7818c56bc86be4beae74d14048964e5bd",
+              "kind": "corpus",
+              "piece": "G195",
+              "why": "signed/G163's geom-intersect benchmarks merged with the 2D chain's (G187 to G192); no digest of either side moved"
+            },
+            {
+              "sha256": "929acc75086bff656939499edf94434e6f8e8037dbf8786dd199d2ecb012ff18",
+              "kind": "corpus",
+              "piece": "G195",
+              "why": "1 new benchmark: geom_2d::contact::contacts on a cubic crossed by a line; no existing digest moved"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"

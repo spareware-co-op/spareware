@@ -2960,6 +2960,7 @@ pub mod roots {
 /// canonical order, a key read, a pair put in order, a point projected and a level curve traced,
 /// under an unlimited budget.
 pub mod intersect {
+    use geom_2d::contact::{Contact, contacts};
     use geom_curve::CurveKind;
     use geom_intersect::contact::{Reading, analyse};
     use geom_intersect::curve::{curves, self_crossings};
@@ -3056,6 +3057,16 @@ pub mod intersect {
         out: &mut Vec<Result<Topology, IntersectError>>,
     ) {
         run(batch, out, |(a, b)| walk(a, b));
+    }
+
+    /// `geom_2d::contact::contacts` on each pair (piece G195): `curves`, each item read as a
+    /// crossing, a touching or undecided.
+    #[inline(never)]
+    pub fn touched(
+        batch: &[(CurveKind<2>, CurveKind<2>)],
+        out: &mut Vec<Result<Vec<Contact>, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| contacts(a, b, &mut meter()));
     }
 
     /// `self_crossings` on each curve.
