@@ -607,6 +607,14 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
             ("contact", include_str!("../../geom-mesh/src/contact.rs")),
             ("envelope", include_str!("../../geom-mesh/src/envelope.rs")),
             (
+                "model::decimate",
+                include_str!("../../geom-mesh/src/model/decimate.rs"),
+            ),
+            (
+                "model::remesh",
+                include_str!("../../geom-mesh/src/model/remesh.rs"),
+            ),
+            (
                 "exact::build",
                 include_str!("../../geom-mesh/src/exact/build.rs"),
             ),

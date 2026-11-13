@@ -17,6 +17,10 @@
 //!   6.2's deepest tests. The width is absolute, in grid steps, never a fraction of a model's size.
 //! - **Refused, never rounded.** A plane over 6.2's budget is an error. That takes an envelope
 //!   reaching past the frame on a triangle whose normal is near its largest.
+//! - **A whole triangle, proven.** [`covers`] and [`Envelope::covers`] answer whether a triangle
+//!   lies inside a union of these bodies, and [`covers_within`] whether the part of it inside one
+//!   more body does, never by sampling. `true` is proven by the argument on [`covers_within`]; `false` may also be a triangle that only touches the union's boundary from inside,
+//!   so an operation that waits for `true` is never wrong, only sometimes cautious.
 //!
 //! Method: the polyhedral envelope of Wang et al. (2020), <https://doi.org/10.1145/3386569.3392426>,
 //! as 19.8 asks, its corners on the grid
@@ -24,10 +28,14 @@
 //! by a prism with caps; here the same inscribed body is a Minkowski sum, the triangle and a cube,
 //! whose facets have closed-form normals: the cube's, the triangle's, and each edge crossed with
 //! each axis, both ways. A body with normal m reaches m · v + h·|m|₁ at its furthest, so each
-//! facet's plane is known without a hull.
+//! facet's plane is known without a hull. The triangle test asks the paper's points: the triangle's
+//! corners, where its edges cross the bodies' facets, and where two facets cross it, each a grid
+//! point, a line-plane point or a three-plane point, as 19.8 lists.
 //!
 //! Cost: 26 planes a triangle at most, each one or two greatest common divisors. A containment test
-//! is a tree query and up to 26 signs for each triangle whose box holds the point.
+//! is a tree query and up to 26 signs for each triangle whose box holds the point. A triangle test
+//! against k bodies that meet it, l of whose facets cross it, makes at most 3 + 3l + l²/2 points
+//! and up to 26k signs for each.
 
 #![allow(
     clippy::many_single_char_names,
@@ -39,7 +47,9 @@ use alloc::vec::Vec;
 use geom_bvh::{Aabb, BoxTree, BvhError, Entry};
 use geom_math::gcd_u128;
 use geom_num::grid::P3;
+use geom_num::interval::Interval;
 use geom_num::plane::{Lpi, Plane, Tpi};
+use geom_num::wide::{I256, Wide};
 use geom_num::{NumError, Sign};
 use geom_run::{Exec, Stopped, WorkMeter};
 
@@ -178,9 +188,72 @@ fn reach(t: [P3; 3], pad: i64) -> ([i64; 3], [i64; 3]) {
 }
 
 /// A convex polyhedron with grid corners around one triangle, inscribed in its ε-offset.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct TriangleEnvelope {
     planes: Vec<Plane>,
+    /// Each plane's coefficients as intervals, for the triangle test's filter.
+    approx: Vec<Approx>,
+    /// The triangle it was made round.
+    t: [P3; 3],
+    /// The cube's half side.
+    h: u64,
+}
+
+/// Bodies are equal when made round the same triangle with the same cube: the planes and their
+/// intervals follow from those.
+impl PartialEq for TriangleEnvelope {
+    fn eq(&self, other: &Self) -> bool {
+        self.t == other.t && self.h == other.h
+    }
+}
+
+impl Eq for TriangleEnvelope {}
+
+/// A plane's coefficients n and d as intervals.
+type Approx = [Interval; 4];
+
+/// The interval round a wide integer, built from its 32-bit digits, each exact in a double.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] for the one value with no negation, and as [`Interval`]'s steps
+/// report.
+pub(crate) fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError> {
+    let negative = v.is_negative();
+    let magnitude = if negative {
+        v.checked_neg().ok_or(NumError::BudgetExceeded)?
+    } else {
+        *v
+    };
+    let radix = Interval::point(4_294_967_296.0)?;
+    let mut sum = Interval::point(0.0)?;
+    for limb in magnitude.to_le_limbs().iter().rev() {
+        let (high, low) = (limb >> 32, limb & 0xffff_ffff);
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "each is below 2^32, exact in a double"
+        )]
+        for digit in [high as f64, low as f64] {
+            sum = sum.mul(radix)?.add(Interval::point(digit)?)?;
+        }
+    }
+    Ok(if negative { sum.neg() } else { sum })
+}
+
+/// The interval round an `i128`.
+fn enclose_i128(v: i128) -> Result<Interval, NumError> {
+    enclose(&I256::from_i128(v).resize::<2>().ok_or(NumError::BudgetExceeded)?)
+}
+
+/// A plane's coefficients as intervals.
+fn approximate(plane: &Plane) -> Result<Approx, NumError> {
+    let [a, b, c] = plane.n();
+    Ok([
+        enclose_i128(a)?,
+        enclose_i128(b)?,
+        enclose_i128(c)?,
+        enclose_i128(plane.d())?,
+    ])
 }
 
 impl TriangleEnvelope {
@@ -209,7 +282,13 @@ impl TriangleEnvelope {
                 planes.push(facet(m.map(i128::wrapping_neg), t, h)?);
             }
         }
-        Ok(Self { planes })
+        let approx = planes.iter().map(approximate).collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            planes,
+            approx,
+            t,
+            h,
+        })
     }
 
     /// The facets' planes, each looking outward.
@@ -259,6 +338,459 @@ impl TriangleEnvelope {
         }
         Ok(true)
     }
+
+    /// The low and high corners of the polyhedron's box.
+    pub(crate) fn bounds(&self) -> ([i64; 3], [i64; 3]) {
+        reach(self.t, i64::try_from(self.h).unwrap_or(i64::MAX))
+    }
+
+    /// Whether the two polyhedra's boxes meet: `false` proves they do not.
+    fn reaches_body(&self, other: &TriangleEnvelope) -> bool {
+        let (low, high) = other.bounds();
+        self.reaches(low, high)
+    }
+
+    /// Whether the polyhedron's box meets the box from `low` to `high`: `false` proves the
+    /// polyhedron is apart from everything in that box.
+    #[must_use]
+    pub fn reaches(&self, low: [i64; 3], high: [i64; 3]) -> bool {
+        let (l, h) = self.bounds();
+        l.iter().zip(&high).all(|(a, b)| a <= b) && low.iter().zip(&h).all(|(a, b)| a <= b)
+    }
+
+    /// Whether the polyhedron lies strictly on one side of `plane`, so no point of `plane` is in
+    /// it: over its corners, the triangle's moved by (±h, ±h, ±h), n · x + d ranges over
+    /// [min − h·|n|₁, max + h·|n|₁], with min and max over the triangle's corners. `false` when a
+    /// step does not fit, which only costs the caller a point it could have skipped.
+    fn misses(&self, plane: &Plane) -> bool {
+        let n = plane.n();
+        let at = |p: P3| -> Option<i128> {
+            n[0].checked_mul(coordinate(p, 0))?
+                .checked_add(n[1].checked_mul(coordinate(p, 1))?)?
+                .checked_add(n[2].checked_mul(coordinate(p, 2))?)?
+                .checked_add(plane.d())
+        };
+        let width = n
+            .iter()
+            .try_fold(0_i128, |s, v| s.checked_add(i128::try_from(v.unsigned_abs()).ok()?))
+            .and_then(|s| s.checked_mul(i128::from(self.h)));
+        let [a, b, c] = self.t;
+        let (Some(x), Some(y), Some(z), Some(w)) = (at(a), at(b), at(c), width) else {
+            return false;
+        };
+        let (low, high) = (x.min(y).min(z), x.max(y).max(z));
+        low.checked_sub(w).is_some_and(|l| l > 0) || high.checked_add(w).is_some_and(|h| h < 0)
+    }
+
+    /// Whether triangle `t` may meet the polyhedron: `false` proves it does not, since a facet
+    /// then has every corner of `t` outside it.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Plane::side`].
+    pub fn may_meet(&self, t: [P3; 3]) -> Result<bool, NumError> {
+        Ok(self.against(t)? != Against::Apart)
+    }
+
+    /// Where triangle `t` lies against the polyhedron: wholly inside (its corners are, and the body
+    /// is convex), apart (one facet has every corner outside), or neither.
+    fn against(&self, t: [P3; 3]) -> Result<Against, NumError> {
+        let mut whole = true;
+        for plane in &self.planes {
+            let [a, b, c] = t;
+            let sides = [plane.side(a)?, plane.side(b)?, plane.side(c)?];
+            if sides.iter().all(|s| *s == Sign::Positive) {
+                return Ok(Against::Apart);
+            }
+            if sides.contains(&Sign::Positive) {
+                whole = false;
+            }
+        }
+        Ok(if whole { Against::Whole } else { Against::Partly })
+    }
+
+    /// Whether `p` is inside or on the polyhedron, or, `strictly`, inside and on no facet.
+    fn holds(&self, p: &Asked, strictly: bool) -> Result<bool, NumError> {
+        for (plane, approx) in self.planes.iter().zip(&self.approx) {
+            match p.side(plane, approx)? {
+                Sign::Positive => return Ok(false),
+                Sign::Zero if strictly => return Ok(false),
+                _ => {}
+            }
+        }
+        Ok(true)
+    }
+}
+
+/// Where a triangle lies against one body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Against {
+    /// Every point of the triangle is in the body.
+    Whole,
+    /// No point of the triangle is in the body.
+    Apart,
+    /// Undecided by the corners alone.
+    Partly,
+}
+
+/// A point the triangle test asks about: a grid point, a line-plane point or a three-plane point.
+#[derive(Clone, Copy, Debug)]
+enum Point {
+    /// A corner of the triangle.
+    Grid(P3),
+    /// Where an edge of the triangle crosses a facet.
+    Line(Lpi),
+    /// Where two facets cross the triangle's plane.
+    Planes(Tpi),
+}
+
+impl Point {
+    /// Which side of `plane` the point is on, exactly.
+    fn side(&self, plane: &Plane) -> Result<Sign, NumError> {
+        match self {
+            Point::Grid(p) => plane.side(*p),
+            Point::Line(l) => plane.side_of_lpi(l),
+            Point::Planes(t) => plane.side_of_tpi(t),
+        }
+    }
+}
+
+/// A point asked about, with intervals round its coordinates where it is not a grid point: a
+/// sign the intervals decide is the exact sign, since they hold the exact values; a sign they
+/// leave open is decided exactly.
+#[derive(Clone, Copy, Debug)]
+struct Asked {
+    point: Point,
+    at: Option<[Interval; 3]>,
+}
+
+impl Asked {
+    /// `point`, with its coordinates' intervals: X / w from its exact homogeneous coordinates.
+    fn new(point: Point) -> Result<Asked, NumError> {
+        let divide = |x: Interval, w: Interval| x.div(w).ok();
+        let at = match point {
+            Point::Grid(_) => None,
+            Point::Line(l) => {
+                let ([x, y, z], w) = l.homogeneous()?;
+                let w = enclose_i128(w)?;
+                divide(enclose(&x)?, w)
+                    .zip(divide(enclose(&y)?, w))
+                    .zip(divide(enclose(&z)?, w))
+                    .map(|((x, y), z)| [x, y, z])
+            }
+            Point::Planes(t) => {
+                let ([x, y, z], w) = t.homogeneous()?;
+                let w = enclose(&w)?;
+                divide(enclose(&x)?, w)
+                    .zip(divide(enclose(&y)?, w))
+                    .zip(divide(enclose(&z)?, w))
+                    .map(|((x, y), z)| [x, y, z])
+            }
+        };
+        Ok(Asked { point, at })
+    }
+
+    /// Which side of `plane` the point is on: by the intervals when they decide a strict sign,
+    /// exactly otherwise.
+    fn side(&self, plane: &Plane, approx: &Approx) -> Result<Sign, NumError> {
+        if let Some([x, y, z]) = self.at {
+            let [a, b, c, d] = *approx;
+            let value = a
+                .mul(x)
+                .and_then(|ax| ax.add(b.mul(y)?))
+                .and_then(|s| s.add(c.mul(z)?))
+                .and_then(|s| s.add(d));
+            if let Ok(Some(sign)) = value.map(Interval::certain_sign)
+                && sign != Sign::Zero
+            {
+                return Ok(sign);
+            }
+        }
+        self.point.side(plane)
+    }
+}
+
+/// Whether some body holds `p` strictly inside, so that a neighbourhood of `p` is covered. The
+/// bodies numbered in `on`, whose facets `p` lies on, cannot, and are not asked.
+fn held(
+    bodies: &[&TriangleEnvelope],
+    p: &Asked,
+    on: [usize; 2],
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, EnvelopeError> {
+    for (k, body) in bodies.iter().enumerate() {
+        if on.contains(&k) {
+            continue;
+        }
+        meter.charge(1)?;
+        if body.holds(p, true)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// m · p + d = 0 through grid point `p` with normal `m`, `m` below 2^42 in each part: each product
+/// is below 2^82, so every step fits `i128`, and every step is checked all the same.
+fn through(m: [i128; 3], p: P3) -> Result<Plane, NumError> {
+    let [x, y, z] = m;
+    let d = x
+        .checked_mul(coordinate(p, 0))
+        .zip(y.checked_mul(coordinate(p, 1)))
+        .zip(z.checked_mul(coordinate(p, 2)))
+        .and_then(|((a, b), c)| a.checked_add(b)?.checked_add(c)?.checked_neg())
+        .ok_or(NumError::BudgetExceeded)?;
+    Plane::new(m, d)
+}
+
+/// The three planes through the edges of triangle `t`, square to the coordinate plane its normal
+/// `n` is not parallel to, each looking away from the triangle: a point of the triangle's plane is
+/// in the triangle exactly when it is on no plane's positive side, because the projection along
+/// that axis maps the triangle's plane one to one onto the coordinate plane.
+fn rim(t: [P3; 3], n: [i128; 3]) -> Result<[Plane; 3], NumError> {
+    let axis: [i128; 3] = match n {
+        [x, _, _] if x != 0 => [1, 0, 0],
+        [_, y, _] if y != 0 => [0, 1, 0],
+        _ => [0, 0, 1],
+    };
+    let [a, b, c] = t;
+    let side = |p: P3, q: P3, r: P3| -> Result<Plane, NumError> {
+        // (q − p) × axis: the edge is not parallel to the axis, or the projection would be flat.
+        let m = cross(run(p, q), axis);
+        let plane = through(m, p)?;
+        match plane.side(r)? {
+            Sign::Negative => Ok(plane),
+            Sign::Positive => through(m.map(i128::wrapping_neg), p),
+            Sign::Zero => Err(NumError::Degenerate),
+        }
+    };
+    Ok([side(a, b, c)?, side(b, c, a)?, side(c, a, b)?])
+}
+
+/// Whether triangle `t` lies inside the union of `bodies`: every point of it in at least one.
+/// [`covers_within`] with no region.
+///
+/// # Errors
+///
+/// As for [`covers_within`].
+pub fn covers(
+    bodies: &[&TriangleEnvelope],
+    t: [P3; 3],
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, EnvelopeError> {
+    covers_within(bodies, t, None, meter)
+}
+
+/// Whether the part of triangle `t` inside body `within` (all of `t` when `None`) lies inside the
+/// union of `bodies`: every point of it in at least one.
+///
+/// `true` is proven, `false` is cautious: it is also the answer for some parts that lie in the
+/// union but touch its boundary at one of the points below.
+///
+/// Proof. Let C be the part, a closed convex polygon in the triangle's plane bounded by lines of
+/// `t`'s edges and of `within`'s facets; let U be the union and `Q_k` each body's cut by that
+/// plane, a convex polygon bounded by lines where the body's facets cross it. Suppose every point
+/// the test asks about lies strictly inside some body: each crossing, inside C, of two of C's
+/// boundary lines; each crossing, inside C, of one of them with a facet line of a body i, inside
+/// i; and each crossing, inside C, of facet lines of bodies i and j, inside i and j. Suppose too a
+/// point of C is outside U. The points of C outside U form a set open in C, so its closure W has
+/// an extreme point v of its convex hull, with v in W. The cone of W at v holds no line through v,
+/// so it has two boundary rays on two different lines. Next to such a ray, on its outer side, lie
+/// points of C outside W, or no points of C. In the second case the ray runs along a boundary line
+/// of C. In the first those points are in U, so in some `Q_i`, while the points just inside the
+/// ray are in no `Q_i`; a cell of the lines' arrangement lies wholly inside or outside each
+/// `Q_i`, so the ray runs along a facet line of body i, and, `Q_i` being closed and finitely many,
+/// v is in `Q_i` for one such i. So v is one of the points the test asks about. But every
+/// neighbourhood of v meets points outside U, so no body holds v strictly inside. That contradicts
+/// the test passing, so C lies in U.
+///
+/// # Errors
+///
+/// [`EnvelopeError::Num`] with [`NumError::Degenerate`] for a triangle with no area that no one
+/// body holds, and as the predicates report; [`EnvelopeError::Stopped`] when the budget runs out.
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_lines,
+    reason = "the names of the proof: bodies i and j, facets f and g; the proof's three kinds of \
+              point, asked in turn"
+)]
+pub fn covers_within(
+    bodies: &[&TriangleEnvelope],
+    t: [P3; 3],
+    within: Option<&TriangleEnvelope>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, EnvelopeError> {
+    if let Some(region) = within
+        && region.against(t)? == Against::Apart
+    {
+        return Ok(true);
+    }
+    let mut near: Vec<&TriangleEnvelope> = Vec::with_capacity(bodies.len());
+    for &body in bodies {
+        meter.charge(1)?;
+        if within.is_some_and(|region| !region.reaches_body(body)) {
+            continue;
+        }
+        match body.against(t)? {
+            Against::Whole => return Ok(true),
+            Against::Apart => {}
+            Against::Partly => near.push(body),
+        }
+    }
+    if near.is_empty() {
+        return Ok(false);
+    }
+    let [a, b, c] = t;
+    let base = Plane::through(a, b, c)?;
+    let rims = rim(t, base.n())?;
+    let rims = [
+        (rims[0], approximate(&rims[0])?),
+        (rims[1], approximate(&rims[1])?),
+        (rims[2], approximate(&rims[2])?),
+    ];
+    // Whether a point of the triangle's plane is in C.
+    let in_part = |p: &Asked, on_rim: bool| -> Result<bool, NumError> {
+        if !on_rim {
+            for (edge, approx) in &rims {
+                if p.side(edge, approx)? == Sign::Positive {
+                    return Ok(false);
+                }
+            }
+        }
+        within.map_or(Ok(true), |region| region.holds(p, false))
+    };
+    // A facet crosses the triangle when its corners are not all on one side and the triangle is
+    // not in its plane.
+    let crosses = |plane: &Plane| -> Result<bool, NumError> {
+        let sides = [plane.side(a)?, plane.side(b)?, plane.side(c)?];
+        Ok(
+            sides.contains(&Sign::Positive) && sides.contains(&Sign::Negative)
+                || sides.contains(&Sign::Zero) && sides.iter().any(|s| *s != Sign::Zero),
+        )
+    };
+    let mut cut: Vec<(Plane, Approx)> = Vec::new();
+    if let Some(region) = within {
+        for (plane, approx) in region.planes.iter().zip(&region.approx) {
+            if crosses(plane)? {
+                cut.push((*plane, *approx));
+            }
+        }
+    }
+    let mut lines: Vec<(usize, Plane)> = Vec::new();
+    for (i, body) in near.iter().enumerate() {
+        for plane in body.planes() {
+            if crosses(plane)? && within.is_none_or(|region| !region.misses(plane)) {
+                lines.push((i, *plane));
+            }
+        }
+    }
+    let edges = [(a, b), (b, c), (c, a)];
+    // An edge's crossing with a plane, strictly inside the edge: a crossing at a corner is the
+    // corner, asked on its own.
+    let crossing = |p: P3, q: P3, plane: &Plane| -> Result<Option<Asked>, NumError> {
+        let (sp, sq) = (plane.side(p)?, plane.side(q)?);
+        if sp == Sign::Zero || sq == Sign::Zero || sp == sq {
+            return Ok(None);
+        }
+        Ok(Some(Asked::new(Point::Line(Lpi::new(p, q, *plane)?))?))
+    };
+    let meeting = |f: &Plane, g: &Plane| -> Result<Option<Asked>, NumError> {
+        match Tpi::meeting(base, *f, *g) {
+            Ok(tpi) => Ok(Some(Asked::new(Point::Planes(tpi))?)),
+            // Parallel lines, or one line twice: no point.
+            Err(NumError::Degenerate) => Ok(None),
+            Err(e) => Err(e),
+        }
+    };
+    let none = [usize::MAX; 2];
+    // C's corners: the triangle's, its edges' crossings with the region's facets, and two of the
+    // region's facet lines' crossings.
+    for p in t {
+        let point = Asked::new(Point::Grid(p))?;
+        if in_part(&point, true)? && !held(&near, &point, none, meter)? {
+            return Ok(false);
+        }
+    }
+    for (f, _) in &cut {
+        for (p, q) in edges {
+            meter.charge(1)?;
+            if let Some(point) = crossing(p, q, f)?
+                && in_part(&point, true)?
+                && !held(&near, &point, none, meter)?
+            {
+                return Ok(false);
+            }
+        }
+    }
+    for (k, (f, _)) in cut.iter().enumerate() {
+        for (g, _) in cut.get(k.saturating_add(1)..).unwrap_or(&[]) {
+            meter.charge(1)?;
+            if let Some(point) = meeting(f, g)?
+                && in_part(&point, false)?
+                && !held(&near, &point, none, meter)?
+            {
+                return Ok(false);
+            }
+        }
+    }
+    // C's sides crossing the bodies' facet lines.
+    for &(i, plane) in &lines {
+        let Some(body) = near.get(i) else {
+            continue;
+        };
+        for (p, q) in edges {
+            meter.charge(1)?;
+            if let Some(point) = crossing(p, q, &plane)?
+                && body.holds(&point, false)?
+                && in_part(&point, true)?
+                && !held(&near, &point, [i, i], meter)?
+            {
+                return Ok(false);
+            }
+        }
+        for (f, _) in &cut {
+            meter.charge(1)?;
+            if let Some(point) = meeting(f, &plane)?
+                && body.holds(&point, false)?
+                && in_part(&point, false)?
+                && !held(&near, &point, [i, i], meter)?
+            {
+                return Ok(false);
+            }
+        }
+    }
+    // Two bodies' facet lines crossing in C. They can meet at a point inside both bodies only if
+    // each facet's plane meets the other's body, and the two bodies' boxes meet.
+    for (i, body_i) in near.iter().enumerate() {
+        for (j, body_j) in near.iter().enumerate().skip(i) {
+            if !body_i.reaches_body(body_j) {
+                continue;
+            }
+            let of = |k: usize, other: &TriangleEnvelope| -> Vec<Plane> {
+                lines
+                    .iter()
+                    .filter(|(b, plane)| *b == k && (i == j || !other.misses(plane)))
+                    .map(|(_, plane)| *plane)
+                    .collect()
+            };
+            let (fs, gs) = (of(i, body_j), of(j, body_i));
+            for (k, f) in fs.iter().enumerate() {
+                let start = if i == j { k.saturating_add(1) } else { 0 };
+                for g in gs.get(start..).unwrap_or(&[]) {
+                    meter.charge(1)?;
+                    if let Some(point) = meeting(f, g)?
+                        && body_i.holds(&point, false)?
+                        && body_j.holds(&point, false)?
+                        && in_part(&point, false)?
+                        && !held(&near, &point, [i, j], meter)?
+                    {
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+    }
+    Ok(true)
 }
 
 /// The envelope of a surface: one polyhedron to a triangle, and a tree of their boxes.
@@ -309,6 +841,33 @@ impl Envelope {
     #[must_use]
     pub const fn half_side(&self) -> u64 {
         self.h
+    }
+
+    /// The keys (positions in the list it was made from) of the triangles whose bodies' boxes meet
+    /// the box from `low` to `high`: every triangle whose body meets the box is among them.
+    ///
+    /// # Errors
+    ///
+    /// As for the tree's query.
+    pub fn near_keys(
+        &self,
+        low: [i64; 3],
+        high: [i64; 3],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<u64>, EnvelopeError> {
+        Ok(self.tree.overlapping(&Aabb::new(low, high)?, meter)?)
+    }
+
+    /// Whether triangle `t` is inside the envelope, so its every point within ε of the surface:
+    /// [`covers`] over the bodies whose boxes meet the triangle's.
+    ///
+    /// # Errors
+    ///
+    /// As for [`covers`] and the tree's query.
+    pub fn covers(&self, t: [P3; 3], meter: &mut WorkMeter<'_>) -> Result<bool, EnvelopeError> {
+        let (low, high) = reach(t, 0);
+        let bodies = self.near(low, high, meter)?;
+        covers(&bodies, t, meter)
     }
 
     /// The bodies whose boxes hold the box from `low` to `high`.

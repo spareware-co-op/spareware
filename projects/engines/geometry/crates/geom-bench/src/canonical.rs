@@ -852,6 +852,27 @@ impl<T: Canonical> Canonical for Result<T, geom_mesh::exact::MeshError> {
     }
 }
 
+impl Canonical for geom_mesh::model::Modelled {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::model::ModelError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 impl Canonical for geom_mesh::Cdt<u32> {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);

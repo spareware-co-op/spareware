@@ -2057,6 +2057,23 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .iter()
                 .map(|&(t, p)| geom_mesh::envelope::TriangleEnvelope::new(t, 1 << 16)?.contains(p)),
         ),
+        ("mesh", "decimate") => fold(inputs::mesh::decimate(class).iter().map(|(p, t)| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let settings = geom_mesh::model::Decimate {
+                epsilon: 4,
+                target: 0,
+            };
+            geom_mesh::model::decimate(p, t, settings, &geom_run::Exec::serial(), &mut meter)
+        })),
+        ("mesh", "remesh") => fold(inputs::mesh::remesh(class).iter().map(|(p, t)| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let settings = geom_mesh::model::Remesh {
+                epsilon: 4,
+                length: 48,
+                iterations: 1,
+            };
+            geom_mesh::model::remesh(p, t, settings, &geom_run::Exec::serial(), &mut meter)
+        })),
         ("mesh", "boolean") => fold(inputs::mesh::boolean(class).iter().map(|pair| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::boolean::boolean(

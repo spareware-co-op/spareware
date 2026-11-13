@@ -58,27 +58,9 @@ fn determinant(a: P3, b: P3, c: P3) -> i128 {
         .saturating_add(az.saturating_mul(minor(bx, cy, by, cx)))
 }
 
-/// The interval around a wide integer, built from its 32-bit digits, each exact in a double.
+/// The interval around a wide integer: [`crate::envelope::enclose`].
 fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, MeshError> {
-    let negative = v.is_negative();
-    let magnitude = if negative {
-        v.checked_neg().ok_or(NumError::BudgetExceeded)?
-    } else {
-        *v
-    };
-    let radix = Interval::point(4_294_967_296.0)?;
-    let mut sum = Interval::point(0.0)?;
-    for limb in magnitude.to_le_limbs().iter().rev() {
-        let (high, low) = (limb >> 32, limb & 0xffff_ffff);
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "each is below 2^32, exact in a double"
-        )]
-        for digit in [high as f64, low as f64] {
-            sum = sum.mul(radix)?.add(Interval::point(digit)?)?;
-        }
-    }
-    Ok(if negative { sum.neg() } else { sum })
+    Ok(crate::envelope::enclose(v)?)
 }
 
 /// A vertex's three coordinates as intervals.

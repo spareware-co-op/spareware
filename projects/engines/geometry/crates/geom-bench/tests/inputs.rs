@@ -2802,6 +2802,8 @@ fn mesh_typical_batches_all_succeed() {
     all_ok("closest_dots", k::closest_dots, &m::closest_dots(Typical));
     all_ok("triangles", k::triangles, &m::triangles(Typical));
     all_ok("envelope", k::envelope, &m::envelope(Typical));
+    all_ok("decimate", k::decimate, &m::decimate(Typical));
+    all_ok("remesh", k::remesh, &m::remesh(Typical));
 }
 
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.46) maps every list.

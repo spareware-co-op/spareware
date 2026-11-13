@@ -2763,6 +2763,20 @@ pub mod mesh {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/decimate/typical"))]
+    fn decimate(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/remesh/typical"))]
+    fn remesh(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("mesh/boolean/typical"))]
     fn boolean(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
@@ -2772,7 +2786,7 @@ pub mod mesh {
     library_benchmark_group!(
         name = mesh;
         benchmarks = cdt, exact_build, locate, boolean, point_point, point_line, point_plane, line_line,
-            closest_dots, triangles, envelope
+            closest_dots, triangles, envelope, decimate, remesh
     );
 }
 

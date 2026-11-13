@@ -30,7 +30,8 @@
 //! (piece G147), where a point is against a closed mesh; [`cdt`] (piece G153), the kernel's one exact constrained Delaunay triangulation,
 //! [`exact`] (piece G146), the exact mesh, its checker group and its mass properties, and
 //! [`contact`] (piece G151), exact contact and closest features of triangles, and [`envelope`]
-//! (piece G152), the polyhedral envelope with integer corners.
+//! (piece G152), the polyhedral envelope with integer corners and its whole-triangle test, and
+//! [`model`] (piece G300), decimation and remeshing inside the two-way envelope.
 //!
 //! Status: built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288, G289, G290, G291,
 //! G298, G299, G300, G301, G302, G303, G304, G305, G306, G319, G341, G350, G411; G153 is in.
@@ -45,5 +46,6 @@ pub mod classify;
 pub mod contact;
 pub mod envelope;
 pub mod exact;
+pub mod model;
 
 pub use cdt::{Cdt, CdtError, Quality, Site, Vertex, triangulate};
