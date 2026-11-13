@@ -17,7 +17,10 @@ fn is_word(c: char) -> bool {
 /// `\bx\b` for a one-letter word.
 fn lone(k: &str, x: char) -> bool {
     let cs: Vec<char> = k.chars().collect();
-    cs.iter().enumerate().any(|(i, c)| *c == x && (i == 0 || !is_word(cs[i - 1])) && (i + 1 == cs.len() || !is_word(cs[i + 1])))
+    // a missing neighbour (the start or end of the text) is a word boundary
+    cs.iter().enumerate().any(|(i, c)| {
+        *c == x && i.checked_sub(1).and_then(|p| cs.get(p)).is_none_or(|&p| !is_word(p)) && i.checked_add(1).and_then(|n| cs.get(n)).is_none_or(|&n| !is_word(n))
+    })
 }
 
 /// `/veh\/h|%|km\/h|\bm\b|\bs\b/.test(k)`.
@@ -38,11 +41,9 @@ fn gj_unit(k: &str) -> &'static str {
         "cycle" => "cycle facility: none, painted or separated",
         "length_m" => "m",
         "vol_ab" => "veh/h A to B",
-        "vc_ab" => "volume/capacity ratio",
-        "spd_ab" => "km/h",
+        "vc_ab" | "vc_ba" => "volume/capacity ratio",
+        "spd_ab" | "spd_ba" => "km/h",
         "vol_ba" => "veh/h B to A",
-        "vc_ba" => "volume/capacity ratio",
-        "spd_ba" => "km/h",
         _ => "-",
     }
 }
@@ -72,26 +73,7 @@ pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String])
     l.push(String::new());
     l.push("Format: every CSV is UTF-8 with a byte-order mark, so Excel shows macrons (for example \u{14c}t\u{101}huhu) correctly. The first row of every CSV is Disclaimer D1; skip one row when reading (pandas: skiprows=1). The one exception is corridor-sidra-volumes.csv, the SIDRA hand-over file: it has no disclaimer row so the SIDRA loader reads it as is (D1 and D12 above apply to it). Dates are ISO (YYYY-MM-DD). Units are listed below, not in the headers.".to_string());
     l.push(String::new());
-    l.push("SCENARIOS".to_string());
-    for (i, s) in r.project.scenarios.iter().enumerate() {
-        let role = s.role.as_str().filter(|x| !x.is_empty());
-        l.push(format!(
-            "- {}: {} ({}{}){}",
-            s.id,
-            s.name.as_str().unwrap_or(""),
-            crate::jsnum::number_to_js_string(crate::standards::year_of(Some(s), r.st())),
-            role.map_or(String::new(), |x| format!(", {x}")),
-            if Some(i) == sel.with {
-                " [assessed]"
-            } else if Some(i) == sel.without {
-                " [without]"
-            } else if Some(i) == sel.mitigation {
-                " [mitigation]"
-            } else {
-                ""
-            }
-        ));
-    }
+    scenario_lines(r, sel, &mut l);
     l.push(String::new());
     l.push("FILES".to_string());
     for f in files {
@@ -125,13 +107,52 @@ pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String])
             l.push(format!("  {k}: {}", if u.is_empty() { "-" } else { u }));
         }
     }
-    // files made outside the dictionary: their header row, as written (units are in the names or listed here)
-    for f in files.iter().filter(|f| f.name.ends_with(".csv") && !COLS.iter().any(|(n, _)| *n == f.name) && f.of.is_none() && !f.name.starts_with("od_")) {
+    extra_csv_lines(files, &mut l);
+    geojson_lines(files, &mut l);
+    l.push(String::new());
+    l.push("od_<period>.csv: rows are origin zones, columns destination zones, veh/h in the peak hour.".to_string());
+    l.push("settings.json: every model setting. project.corridor.json: the full project; open it in Spare Construct (Menu \u{203a} Open) to reproduce every run.".to_string());
+    l.push(String::new());
+    l.push("DATA VINTAGE (Source | Dataset | Query date | Records | Licence)".to_string());
+    for row in vintage_rows(r) {
+        l.push(row.join(" | "));
+    }
+    format!("{}\r\n", l.join("\r\n"))
+}
+
+/// The README's SCENARIOS block: each scenario with its year, role and part in the assessment.
+fn scenario_lines(r: &Rep, sel: &Sel, l: &mut Vec<String>) {
+    l.push("SCENARIOS".to_string());
+    for (i, s) in r.project.scenarios.iter().enumerate() {
+        let role = s.role.as_str().filter(|x| !x.is_empty());
+        l.push(format!(
+            "- {}: {} ({}{}){}",
+            s.id,
+            s.name.as_str().unwrap_or(""),
+            crate::jsnum::number_to_js_string(crate::standards::year_of(Some(s), r.st())),
+            role.map_or(String::new(), |x| format!(", {x}")),
+            if Some(i) == sel.with {
+                " [assessed]"
+            } else if Some(i) == sel.without {
+                " [without]"
+            } else if Some(i) == sel.mitigation {
+                " [mitigation]"
+            } else {
+                ""
+            }
+        ));
+    }
+}
+
+/// Files made outside the dictionary: their header row, as written (units are in the names or listed here).
+fn extra_csv_lines(files: &[PackFile], l: &mut Vec<String>) {
+    // `/\.csv$/`: case-sensitive, as the prototype's test is
+    for f in files.iter().filter(|f| f.name.strip_suffix(".csv").is_some() && !COLS.iter().any(|(n, _)| *n == f.name) && f.of.is_none() && !f.name.starts_with("od_")) {
         let text = f.data.strip_prefix('\u{feff}').unwrap_or(&f.data);
         let rows: Vec<&str> = text
             .split('\n')
             .map(|x| x.strip_suffix('\r').unwrap_or(x))
-            .filter(|x| !x.is_empty() && !(x.starts_with('#') || x.starts_with("\"#")))
+            .filter(|x| !(x.is_empty() || x.starts_with('#') || x.starts_with("\"#")))
             .collect();
         let head: Vec<String> = rows
             .first()
@@ -153,6 +174,10 @@ pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String])
             l.push(format!("  {k}: {}", if has_unit(&k) { "unit in the name" } else { "-" }));
         }
     }
+}
+
+/// The README's block on network.geojson and its link properties.
+fn geojson_lines(files: &[PackFile], l: &mut Vec<String>) {
     if let Some(gj) = files.iter().find(|f| f.name == "network.geojson") {
         let props: Vec<String> = JsonValue::parse(&gj.data)
             .ok()
@@ -166,15 +191,6 @@ pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String])
         }
         l.push("  Junction features (Point): id, control, delay_s (s), los (A to F). Zone features (Point): id, zone (name), kind, land-use quantities in their units, gateway flows (veh/h).".to_string());
     }
-    l.push(String::new());
-    l.push("od_<period>.csv: rows are origin zones, columns destination zones, veh/h in the peak hour.".to_string());
-    l.push("settings.json: every model setting. project.corridor.json: the full project; open it in Spare Construct (Menu \u{203a} Open) to reproduce every run.".to_string());
-    l.push(String::new());
-    l.push("DATA VINTAGE (Source | Dataset | Query date | Records | Licence)".to_string());
-    for row in vintage_rows(r) {
-        l.push(row.join(" | "));
-    }
-    format!("{}\r\n", l.join("\r\n"))
 }
 
 /// The JSON text of a result as `JSON.stringify` writes it: non-finite numbers are null.
@@ -187,8 +203,8 @@ fn res_json(res: &Res) -> JsonValue {
             _ => {}
         }
     }
-    let text = serde_json::to_string(res).expect("a result serialises");
-    let mut v = JsonValue::parse(&text).expect("a result's text is JSON");
+    // a result always serialises and its text is always JSON; null is a fallback that never happens
+    let mut v = serde_json::to_string(res).ok().and_then(|text| JsonValue::parse(&text).ok()).unwrap_or(JsonValue::Null);
     fix(&mut v);
     v
 }

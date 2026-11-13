@@ -56,6 +56,10 @@ use crate::junction_tools::{Sc, Tools};
 use crate::project::{Project, Scenario, Settings};
 use crate::results::Results;
 use crate::standards::year_of;
+use std::sync::LazyLock;
+
+/// The scenario [`Rep::scenario`] gives for an index outside the project's list.
+static NO_SCENARIO: LazyLock<Scenario> = LazyLock::new(|| crate::project::new_scenario("", ""));
 
 /// The scenarios a report assesses (`Report.pick`): by position in the project's scenario list.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -99,7 +103,8 @@ pub fn pick(t: &Tools) -> Sel {
             .map(|(i, _)| i)
             .collect()
     };
-    let yr = |i: usize| -> f64 { year_of(Some(&scs[i]), st) };
+    // i is always a position in scs, so the scenario is always there
+    let yr = |i: usize| -> f64 { year_of(scs.get(i), st) };
     let latest = |list: Vec<usize>| -> Option<usize> {
         let mut l = list;
         crate::graph::js_sort_by(&mut l, |a, b| yr(*b) - yr(*a));
@@ -195,10 +200,11 @@ impl<'a> Rep<'a> {
         &self.project.settings
     }
 
-    /// Scenario i.
+    /// Scenario i (an empty scenario when i is not a position in the project's list, which the report never asks for: every
+    /// index it passes comes from [`pick`] or from the list itself).
     #[must_use]
     pub fn scenario(&self, i: usize) -> &'a Scenario {
-        &self.project.scenarios[i]
+        self.project.scenarios.get(i).unwrap_or_else(|| LazyLock::force(&NO_SCENARIO))
     }
 
     /// The report's `periodsOf(sc)`: AM, PM, IP that have results (not the junction tools' order).
@@ -207,7 +213,7 @@ impl<'a> Rep<'a> {
         PERIODS
             .iter()
             .copied()
-            .filter(|p| self.results[i].get(p).is_some())
+            .filter(|p| self.results.get(i).is_some_and(|r| r.get(p).is_some()))
             .collect()
     }
 

@@ -6,15 +6,15 @@ use super::js;
 use crate::edit::json::JsonValue;
 use crate::graph::js_sort_by;
 use crate::jsmath;
-use crate::jsnum::{math_max, or_default};
+use crate::jsnum::{f64_to_usize, math_max, or_default};
 use crate::util::fmt;
 use std::collections::HashSet;
 
 /// `pof(legs)`: the HRIG product of flows from the two-way AADTs [major 1, major 2, minor 1, minor 2] (the second minor leg is 0 at a T).
 #[must_use]
 pub fn pof(legs: &[f64]) -> f64 {
-    let g = |i: usize| or_default(legs.get(i).copied().unwrap_or(0.0), 0.0);
-    let (a, b, c, d) = (g(0), g(1), g(2), g(3));
+    let leg = |idx: usize| or_default(legs.get(idx).copied().unwrap_or(0.0), 0.0);
+    let (a, b, c, d) = (leg(0), leg(1), leg(2), leg(3));
     jsmath::pow(f64::midpoint(a, b) * f64::midpoint(c, d), 0.4)
 }
 
@@ -230,7 +230,7 @@ pub fn band4(v: Option<f64>, cuts: &[f64; 3]) -> Option<u8> {
 /// `sevHint(speed, safe)`: a Safe System severity score 1 to 4 from the posted speed.
 #[must_use]
 pub fn sev_hint(speed: f64, safe: f64) -> Option<u8> {
-    if !(speed > 0.0) {
+    if speed <= 0.0 || speed.is_nan() {
         return None;
     }
     Some(if speed <= safe {
@@ -276,21 +276,24 @@ fn crit_of(r: &JsonValue, id: &str) -> Vec<String> {
     }
 }
 
-/// `stagingTrigger(rows)` from build-out rows [{ pct, dwellings, gfa, fails: [site ids], crit: { id: ['dos', 'los', 'queue'] },
+/// `stagingTrigger(rows)` from build-out rows [{ pct, dwellings, gfa, fails: [site ids], crit: { id: `['dos', 'los', 'queue']` },
 /// dos: { id: worst `DoS` } }]. A site triggers at the first increment where it fails a criterion it passed at 0% (so a junction
 /// whose queue already exceeds its storage still triggers when it first exceeds practical `DoS` or reaches `LoS` E/F), or where a
 /// criterion it already failed at 0% gets materially worse (`DoS` up by 0.05 or more).
 pub fn staging_trigger(rows: &[JsonValue]) -> Trigger {
     let mut order: Vec<usize> = (0..rows.len()).collect();
-    js_sort_by(&mut order, |a, b| js::num(js::get(Some(&rows[*a]), "pct")) - js::num(js::get(Some(&rows[*b]), "pct")));
-    let r0i = order.iter().copied().find(|i| js::num(js::get(Some(&rows[*i]), "pct")) == 0.0);
+    // every position in `order` is in range of `rows`
+    js_sort_by(&mut order, |a, b| js::num(js::get(rows.get(*a), "pct")) - js::num(js::get(rows.get(*b), "pct")));
+    let r0i = order.iter().copied().find(|i| js::num(js::get(rows.get(*i), "pct")) == 0.0);
     let empty = JsonValue::object();
-    let r0 = r0i.map_or(&empty, |i| &rows[i]);
+    let r0 = r0i.and_then(|i| rows.get(i)).unwrap_or(&empty);
     let base: Vec<String> = unique(js::items(js::get(Some(r0), "fails")).iter().map(JsonValue::js_string));
     let dos0 = js::get(Some(r0), "dos").filter(|d| d.truthy());
     let mut last_pass: Option<usize> = None;
     for &ri in &order {
-        let r = &rows[ri];
+        let Some(r) = rows.get(ri) else {
+            continue;
+        };
         if Some(ri) == r0i {
             last_pass = Some(ri);
             continue;
@@ -311,17 +314,15 @@ pub fn staging_trigger(rows: &[JsonValue]) -> Trigger {
                 && js::num(d_now) - js::num(d_was) >= WORSEN_DOS - 1e-9;
             if !fresh.is_empty() || worse {
                 nf.push(id.clone());
-                let text = if !fresh.is_empty() {
-                    if was.is_empty() {
-                        "new failure".to_string()
-                    } else {
-                        format!("new criterion failed: {}", fresh.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
-                    }
-                } else {
+                let text = if fresh.is_empty() {
                     format!("existing deficiency worse by DoS {}", fmt::num(js::num(d_now) - js::num(d_was), 2))
+                } else if was.is_empty() {
+                    "new failure".to_string()
+                } else {
+                    format!("new criterion failed: {}", fresh.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
                 };
-                match how.iter().position(|(k, _)| *k == id) {
-                    Some(p) => how[p].1 = text,
+                match how.iter_mut().find(|(k, _)| *k == id) {
+                    Some(slot) => slot.1 = text,
                     None => how.push((id, text)),
                 }
             }
@@ -363,8 +364,8 @@ pub fn ordinal(n: f64) -> String {
     let v = n % 100.0;
     let s = ["th", "st", "nd", "rd"];
     let pick = |i: f64| -> Option<&'static str> {
-        if i >= 0.0 && i.fract() == 0.0 && (i as usize) < 4 {
-            Some(s[i as usize])
+        if i >= 0.0 && i.fract() == 0.0 {
+            s.get(f64_to_usize(i)).copied()
         } else {
             None
         }
@@ -379,9 +380,12 @@ pub fn trigger_text(rows: &[JsonValue], trig: &Trigger, measure: Option<&str>) -
     let Some(ri) = trig.row else {
         return String::new();
     };
-    let row = &rows[ri];
+    // the trigger's rows are positions in these rows, so they are always in range
+    let Some(row) = rows.get(ri) else {
+        return String::new();
+    };
     let m = measure.filter(|m| !m.is_empty()).unwrap_or("<the mitigation measure>");
-    let lp = trig.last_pass.map(|i| &rows[i]);
+    let lp = trig.last_pass.and_then(|i| rows.get(i));
     let n = |v: Option<&JsonValue>, k: &str| js::num(js::get(v, k));
     if js::num(js::get(Some(row), "dwellings")) > 0.0 {
         let d = lp.map_or(0.0, |l| n(Some(l), "dwellings")).floor();

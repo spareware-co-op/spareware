@@ -30,10 +30,11 @@ pub fn disclaimer_text(id: &str, version: Option<&str>, tools: Option<&str>) -> 
     }
     if id == "D12"
         && let Some(tools) = tools.filter(|t| !t.is_empty())
-        && let Some(a) = t.find('[')
-        && let Some(b) = t[a..].find(']')
+        && let Some((head, after)) = t.split_once('[')
+        && let Some((_, tail)) = after.split_once(']')
     {
-        t = format!("{}{}{}", &t[..a], tools, &t[a + b + 1..]);
+        // the first '[' and the first ']' after it, as t.indexOf('[') and the search from there find them
+        t = format!("{head}{tools}{tail}");
     }
     t
 }
@@ -170,7 +171,8 @@ pub mod rr422 {
 #[must_use]
 pub fn level_of(row: &Rr422Row, scope_key: &str) -> char {
     let i = SCOPES.iter().position(|s| s.key == scope_key).unwrap_or(0);
-    row.lv.as_bytes()[i] as char
+    // Every row's lv has one letter for each of the four scopes, so the fallback never applies
+    row.lv.as_bytes().get(i).copied().map_or('U', char::from)
 }
 
 /// A crash model of the NZTA crash estimation compendium.
@@ -294,8 +296,7 @@ pub mod ssm {
         match k {
             "ror" => 40.0,
             "headon" => 70.0,
-            "int" => 50.0,
-            "other" => 50.0,
+            "int" | "other" => 50.0,
             _ => 30.0,
         }
     }

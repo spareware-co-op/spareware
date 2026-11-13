@@ -177,7 +177,7 @@ pub(crate) fn assessed_sites(r: &Rep, with: Option<usize>) -> Assessed {
     let rl: Vec<&Res> = r
         .rep_periods(w)
         .iter()
-        .filter_map(|p| r.results[w].get(p))
+        .filter_map(|p| r.results.get(w).and_then(|m| m.get(p)))
         .collect();
     if rl.is_empty() {
         return Assessed {
@@ -217,10 +217,10 @@ pub(crate) fn assessed_sites(r: &Rep, with: Option<usize>) -> Assessed {
                 continue;
             }
             let dos = if nr.dos == 0.0 || nr.dos.is_nan() { 0.0 } else { nr.dos };
-            match score.iter().position(|(k, _, _)| k == id) {
-                Some(p) => {
-                    score[p].1 = math_max(score[p].1, dos);
-                    score[p].2 = nr.r#type.clone();
+            match score.iter_mut().find(|(k, _, _)| k == id) {
+                Some(slot) => {
+                    slot.1 = math_max(slot.1, dos);
+                    slot.2.clone_from(&nr.r#type);
                 }
                 None => score.push((id.to_string(), math_max(0.0, dos), nr.r#type.clone())),
             }
@@ -340,13 +340,13 @@ pub(crate) fn junction_rows<'a>(r: &Rep<'a>, sel: &Sel, sc: usize, ids: Option<&
     let mut use_ids = list.clone();
     if ids.is_none() && Some(sc) != sel.with {
         let own = assessed_sites(r, Some(sc)).ids;
-        use_ids = if !list.is_empty() {
+        use_ids = if list.is_empty() {
+            own.clone()
+        } else {
             list.iter()
-                .filter(|id| rl.iter().any(|p| r.results[sc].get(p).is_some_and(|res| res.nodes.contains_key(id))))
+                .filter(|id| rl.iter().any(|p| r.results.get(sc).and_then(|m| m.get(p)).is_some_and(|res| res.nodes.contains_key(id))))
                 .cloned()
                 .collect()
-        } else {
-            own.clone()
         };
         if use_ids.is_empty() {
             use_ids = own;
@@ -355,7 +355,10 @@ pub(crate) fn junction_rows<'a>(r: &Rep<'a>, sel: &Sel, sc: usize, ids: Option<&
     let scn = r.scenario(sc);
     for id in &use_ids {
         for p in &rl {
-            let res = r.results[sc].get(p).expect("a period with results");
+            // rep_periods lists only the periods that have results, so this never skips
+            let Some(res) = r.results.get(sc).and_then(|m| m.get(p)) else {
+                continue;
+            };
             let nr = res.nodes.get(id);
             out.push(JRow {
                 id: id.clone(),
@@ -392,7 +395,7 @@ pub(crate) fn junction_groups(r: &Rep, sc: usize, scw: usize, ids: &[String]) ->
     let rl: Vec<&Res> = r
         .rep_periods(scw)
         .iter()
-        .filter_map(|p| r.results[scw].get(p))
+        .filter_map(|p| r.results.get(scw).and_then(|m| m.get(p)))
         .collect();
     let scr = r.scenario(sc);
     let mut out: Vec<JGroup> = Vec::new();
@@ -405,8 +408,8 @@ pub(crate) fn junction_groups(r: &Rep, sc: usize, scw: usize, ids: &[String]) ->
         let hit = j.as_ref().and_then(|j| nr.iter().find(|(k, _)| k == j));
         if let (Some(j), Some((_, info))) = (&j, hit) {
             key = Some(format!("j:{j}"));
-            nodes = info.nodes.clone();
-            name = info.name.clone();
+            nodes.clone_from(&info.nodes);
+            name.clone_from(&info.name);
         } else {
             let site = rl
                 .iter()
@@ -433,7 +436,10 @@ pub(crate) fn junction_groups(r: &Rep, sc: usize, scw: usize, ids: &[String]) ->
         }
         let key = key.unwrap_or_else(|| format!("n:{id}"));
         if let Some((_, gi)) = by.iter().find(|(k, _)| *k == key) {
-            out[*gi].ids.push(id.clone());
+            // gi is the position the group was pushed at
+            if let Some(grp) = out.get_mut(*gi) {
+                grp.ids.push(id.clone());
+            }
             continue;
         }
         let mut members: Vec<String> = vec![id.clone()];
@@ -489,17 +495,93 @@ pub struct Tally {
     pub wet: f64,
 }
 
-/// What the crash fields hold.
-#[derive(Clone, Copy, Debug, Default)]
+/// An optional CAS crash field, which the downloaded crashes may or may not carry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CrashField {
+    /// The number of deaths.
+    Deaths,
+    /// The number of serious injuries.
+    SeriousInjuries,
+    /// Light.
+    Light,
+    /// Weather.
+    Weather,
+}
+
+/// What the crash fields hold: the optional fields at least one counted crash carries.
+#[derive(Clone, Debug, Default)]
 pub struct CrashHas {
-    /// Deaths are recorded.
-    pub deaths: bool,
-    /// Serious injuries are recorded.
-    pub si: bool,
-    /// Light is recorded.
-    pub light: bool,
-    /// Weather is recorded.
-    pub weather: bool,
+    recorded: Vec<CrashField>,
+}
+
+impl CrashHas {
+    /// Whether at least one counted crash carries the field.
+    #[must_use]
+    pub fn recorded(&self, field: CrashField) -> bool {
+        self.recorded.contains(&field)
+    }
+
+    fn mark(&mut self, field: CrashField) {
+        if !self.recorded(field) {
+            self.recorded.push(field);
+        }
+    }
+
+    /// Marks the optional fields one crash carries.
+    fn note(&mut self, facts: &CrashFacts) {
+        if facts.deaths.is_some() {
+            self.mark(CrashField::Deaths);
+        }
+        if facts.serious.is_some() {
+            self.mark(CrashField::SeriousInjuries);
+        }
+        if !facts.light.is_empty() {
+            self.mark(CrashField::Light);
+        }
+        if !facts.weather.is_empty() {
+            self.mark(CrashField::Weather);
+        }
+    }
+}
+
+/// The fields of one crash the CR1 tallies read.
+struct CrashFacts<'a> {
+    sev: &'a str,
+    deaths: Option<f64>,
+    serious: Option<f64>,
+    light: String,
+    weather: String,
+    flags: String,
+}
+
+impl CrashFacts<'_> {
+    /// Adds the crash to a tally: its severity, its vulnerable users (injury crashes only), deaths, serious injuries and conditions.
+    fn add_to(&self, o: &mut Tally) {
+        o.n += 1.0;
+        match self.sev {
+            "F" => o.f += 1.0,
+            "S" => o.s += 1.0,
+            "M" => o.m += 1.0,
+            _ => o.nn += 1.0,
+        }
+        for fl in ['p', 'c', 'm'] {
+            if self.flags.contains(fl) && "FSM".contains(self.sev) {
+                match fl {
+                    'p' => o.p += 1.0,
+                    'c' => o.c += 1.0,
+                    _ => o.mc += 1.0,
+                }
+            }
+        }
+        o.deaths += self.deaths.unwrap_or(0.0);
+        o.si += self.serious.unwrap_or(0.0);
+        if contains_ci(&self.light, &["dark"]) {
+            o.dark += 1.0;
+        }
+        if contains_ci(&self.weather, &["rain", "snow", "hail", "sleet", "wet"]) {
+            o.wet += 1.0;
+        }
+    }
 }
 
 /// The crash years of the downloaded CAS area.
@@ -615,55 +697,21 @@ pub(crate) fn crash_years(r: &Rep) -> Option<CrashYears> {
         if !(target_is_years || target_is_ytd) || sev_s.chars().count() != 1 || !"FSMN".contains(sev_s.as_str()) {
             continue;
         }
-        let df = cnum(c, cx::FATAL);
-        let ds = cnum(c, cx::SERIOUS);
-        let lt = ctext(c, cx::LIGHT);
-        let wt = ctext(c, cx::WEATHER);
-        if df.is_some() {
-            has.deaths = true;
-        }
-        if ds.is_some() {
-            has.si = true;
-        }
-        if !lt.is_empty() {
-            has.light = true;
-        }
-        if !wt.is_empty() {
-            has.weather = true;
-        }
-        let flags = js::text_or_empty(js::idx(Some(c), 5));
-        let add = |o: &mut Tally| {
-            o.n += 1.0;
-            match sev_s.as_str() {
-                "F" => o.f += 1.0,
-                "S" => o.s += 1.0,
-                "M" => o.m += 1.0,
-                _ => o.nn += 1.0,
-            }
-            for fl in ['p', 'c', 'm'] {
-                if flags.contains(fl) && "FSM".contains(sev_s.as_str()) {
-                    match fl {
-                        'p' => o.p += 1.0,
-                        'c' => o.c += 1.0,
-                        _ => o.mc += 1.0,
-                    }
-                }
-            }
-            o.deaths += df.unwrap_or(0.0);
-            o.si += ds.unwrap_or(0.0);
-            if contains_ci(&lt, &["dark"]) {
-                o.dark += 1.0;
-            }
-            if contains_ci(&wt, &["rain", "snow", "hail", "sleet", "wet"]) {
-                o.wet += 1.0;
-            }
+        let facts = CrashFacts {
+            sev: &sev_s,
+            deaths: cnum(c, cx::FATAL),
+            serious: cnum(c, cx::SERIOUS),
+            light: ctext(c, cx::LIGHT),
+            weather: ctext(c, cx::WEATHER),
+            flags: js::text_or_empty(js::idx(Some(c), 5)),
         };
+        has.note(&facts);
         if target_is_ytd {
-            add(&mut y);
+            facts.add_to(&mut y);
         } else if let Some(slot) = years.iter_mut().find(|(k, _)| *k == yy) {
-            add(&mut slot.1);
+            facts.add_to(&mut slot.1);
             if yy != ytd {
-                add(&mut total);
+                facts.add_to(&mut total);
             }
         }
     }
@@ -760,18 +808,19 @@ pub(crate) fn road_groups(sc: &Scenario) -> Vec<RoadGroup<'_>> {
             continue;
         }
         let cls = l.cls.as_str().unwrap_or("").to_string();
-        let k = format!("{name}|{cls}");
-        let i = if let Some(i) = g.iter().position(|x| format!("{}|{}", x.name, x.cls) == k) { i } else {
+        let key = format!("{name}|{cls}");
+        if !g.iter().any(|x| format!("{}|{}", x.name, x.cls) == key) {
             g.push(RoadGroup {
                 name: name.to_string(),
                 cls: cls.clone(),
                 links: Vec::new(),
                 km: 0.0,
             });
-            g.len() - 1
-        };
-        g[i].links.push(l);
-        g[i].km += sc.link_len(l) / 1000.0;
+        }
+        if let Some(slot) = g.iter_mut().find(|x| format!("{}|{}", x.name, x.cls) == key) {
+            slot.links.push(l);
+            slot.km += sc.link_len(l) / 1000.0;
+        }
     }
     js_sort_by(&mut g, |a, b| {
         let ra = road_class(Some(a.cls.as_str())).rank;

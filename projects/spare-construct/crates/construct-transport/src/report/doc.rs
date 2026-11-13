@@ -5,6 +5,7 @@ use super::consts::{D1_SHORT, disclaimer_text};
 use super::shared::model_version;
 use super::texts::{CSP, CSS, DOC_SCRIPT};
 use super::Rep;
+use crate::jsnum::f64_to_i64;
 use crate::results::iso_day_of_ms;
 use crate::util::esc;
 
@@ -39,7 +40,8 @@ pub fn iso_minute(ms: f64) -> String {
     let t = ms.trunc().rem_euclid(86_400_000.0);
     let h = (t / 3_600_000.0).floor();
     let m = ((t - h * 3_600_000.0) / 60_000.0).floor();
-    format!("{day} {:02}:{:02}", h as i64, m as i64)
+    // h is a whole number in 0..24 and m in 0..60, which i64 holds exactly
+    format!("{day} {:02}:{:02}", f64_to_i64(h), f64_to_i64(m))
 }
 
 impl Rep<'_> {
@@ -97,7 +99,7 @@ impl Rep<'_> {
             .flat_map(|i| {
                 self.rep_periods(i)
                     .into_iter()
-                    .filter_map(move |p| self.results[i].get(p).map(|r| r.ts))
+                    .filter_map(move |p| self.results.get(i).and_then(|res| res.get(p)).map(|r| r.ts))
                     .collect::<Vec<_>>()
             })
             .filter(|t| *t != 0.0 && !t.is_nan())

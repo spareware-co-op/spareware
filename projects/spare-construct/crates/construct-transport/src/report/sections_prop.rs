@@ -28,7 +28,7 @@ fn lp_parts(c: &Ctx, sc: usize, parts: &[&str]) -> Option<String> {
     if let Some(cut) = hh.find("<h4>T2 ")
         && cut > 0
     {
-        if parts.len() == 1 && parts[0] == "T1" {
+        if matches!(parts, ["T1"]) {
             hh.truncate(cut);
         } else if !parts.contains(&"T1") {
             hh = hh[cut..].to_string();
@@ -48,24 +48,24 @@ pub(crate) fn landuse(c: &mut Ctx) -> String {
     }
     let scn = r.scenario(sc);
     let mut rows: Vec<Row> = Vec::new();
-    for z in dev_zones(scn) {
-        let Some(lu) = z.lu.get() else {
+    for zone in dev_zones(scn) {
+        let Some(lu) = zone.lu.get() else {
             continue;
         };
-        for (k, q) in lu.iter() {
-            let q = q.num();
-            let Some(l) = land_use(k).filter(|_| q > 0.0) else {
+        for (key, qty) in lu.iter() {
+            let qty = qty.num();
+            let Some(lu_def) = land_use(key).filter(|_| qty > 0.0) else {
                 continue;
             };
             rows.push(Row::new(vec![
-                esc(&z.name.as_str().filter(|n| !n.is_empty()).map_or(z.id.clone(), str::to_string)),
-                esc(l.label),
-                rfmt::num(q, 0),
-                esc(l.unit),
-                esc(zone_class(Some(z))),
-                year_txt(&z.year.js_string()),
+                esc(&zone.name.as_str().filter(|n| !n.is_empty()).map_or(zone.id.clone(), str::to_string)),
+                esc(lu_def.label),
+                rfmt::num(qty, 0),
+                esc(lu_def.unit),
+                esc(zone_class(Some(zone))),
+                year_txt(&zone.year.js_string()),
                 esc(&{
-                    let t = js::text_or_empty(r.rs.text_of(&format!("hours-{}", z.id)));
+                    let t = js::text_or_empty(r.rs.text_of(&format!("hours-{}", zone.id)));
                     if t.is_empty() { fmt::DASH.to_string() } else { t }
                 }),
             ]));
@@ -174,73 +174,108 @@ fn strict_same(a: &Maybe<JsNum>, b: &Maybe<JsNum>) -> bool {
     }
 }
 
-/// `report-tripgen`.
-pub(crate) fn tripgen(c: &mut Ctx) -> String {
+/// Trip generation from the land-use feature: its person trips, mode share and gross-to-net vehicle trips (T2-T4), its gateway
+/// distribution (T5) and its without/with junction list, printed once here.
+fn landuse_tripgen(c: &mut Ctx, sc: usize, lp: &str) -> String {
     let r = c.r;
-    let Some(sc) = c.sel.with else {
-        return String::new();
+    let t5 = match r.host.landuse_t5_html(sc) {
+        Some(h5) => format!("<h4>T5 Development traffic by gateway</h4>{h5}"),
+        None => String::new(),
     };
-    let scn = r.scenario(sc);
-    let s = r.st();
-    let d0 = default_settings();
-    // with the land-use feature: its person trips, mode share and gross-to-net vehicle trips (T2-T4), its gateway distribution (T5)
-    // and its without/with junction list, printed once here
-    if let Some(lp) = lp_parts(c, sc, &["T2", "T3", "T4", "T4b", "check", "flags"]) {
-        let t5 = match r.host.landuse_t5_html(sc) {
-            Some(h5) => format!("<h4>T5 Development traffic by gateway</h4>{h5}"),
-            None => String::new(),
-        };
-        let ww = match r.host.landuse_ww_html(sc, c.sel.without.unwrap_or(usize::MAX)) {
-            Some(w) if c.sel.without.is_some() => {
-                format!("<h4>Junctions without and with the development (largest changes and new accesses)</h4>{w}")
-            }
-            _ if r.host.landuse_ww_html(sc, 0).is_some() || c.sel.without.is_none() && r.host.landuse_ww_html(sc, 0).is_some() => note(
-                &format!(
-                    "No same-year scenario without the development for {} ({}): choose one in the Report tab to list junction changes.",
-                    esc(r.sc(sc).name()),
-                    r.year_of(sc).map_or("null".to_string(), number_to_js_string)
-                ),
-                true,
+    let ww = match r.host.landuse_ww_html(sc, c.sel.without.unwrap_or(usize::MAX)) {
+        Some(w) if c.sel.without.is_some() => {
+            format!("<h4>Junctions without and with the development (largest changes and new accesses)</h4>{w}")
+        }
+        _ if r.host.landuse_ww_html(sc, 0).is_some() || c.sel.without.is_none() && r.host.landuse_ww_html(sc, 0).is_some() => note(
+            &format!(
+                "No same-year scenario without the development for {} ({}): choose one in the Report tab to list junction changes.",
+                esc(r.sc(sc).name()),
+                r.year_of(sc).map_or("null".to_string(), number_to_js_string)
             ),
-            _ => String::new(),
-        };
-        return format!("{}{}", lp_tables(&format!("{lp}{t5}{ww}"), "Trip generation"), dev_figures(c, sc));
+            true,
+        ),
+        _ => String::new(),
+    };
+    format!("{}{}", lp_tables(&format!("{lp}{t5}{ww}"), "Trip generation"), dev_figures(c, sc))
+}
+
+/// Table T4's row of the extra trips the author entered for a zone in one peak, unless the land-use feature's table is synced
+/// there (z.extra then mirrors that table, not the author's own extra trips).
+fn extra_trip_row(zone: &Zone, per: &str) -> Option<Row> {
+    let tg_synced = zone
+        .tg
+        .get()
+        .is_some_and(|tg| tg.get("on").is_some_and(crate::jsnum::value_truthy) && tg.get("synced").and_then(|v| v.as_str()) == Some("extra"));
+    if tg_synced {
+        return None;
     }
+    let ex = zone.extra_trips.get()?;
+    let xin = ex.num_at(&format!("{per}in")).num();
+    let xout = ex.num_at(&format!("{per}out")).num();
+    if !(ex.num_at(&format!("{per}in")).truthy() || ex.num_at(&format!("{per}out")).truthy()) {
+        return None;
+    }
+    let in_v = crate::jsnum::or_default(xin, 0.0);
+    let out_v = crate::jsnum::or_default(xout, 0.0);
+    Some(Row::new(vec![
+        esc(zone.name.as_str().unwrap_or("")),
+        "Extra trips (user)".to_string(),
+        per.to_string(),
+        fmt::DASH.to_string(),
+        "User-entered".to_string(),
+        fmt::DASH.to_string(),
+        fmt::DASH.to_string(),
+        fmt::DASH.to_string(),
+        rfmt::num(in_v + out_v, 0),
+        fmt::DASH.to_string(),
+        fmt::DASH.to_string(),
+        rfmt::num(in_v, 0),
+        rfmt::num(out_v, 0),
+    ]))
+}
+
+/// Table T4's rows: each development zone's land uses by peak (rate, gross, reductions, build-out, net, in and out), then the
+/// author's extra trips.
+fn trip_rows(r: &super::Rep, sc: usize, scn: &Scenario) -> Vec<Row> {
+    let st = r.st();
+    let d0 = default_settings();
     let mut rows: Vec<Row> = Vec::new();
-    for z in dev_zones(scn) {
-        for p in ["AM", "PM"] {
-            if let Some(lu) = z.lu.get() {
-                for (k, q) in lu.iter() {
-                    let qv = q.num();
-                    let rate = s
+    for zone in dev_zones(scn) {
+        for per in ["AM", "PM"] {
+            if let Some(lu) = zone.lu.get() {
+                for (key, qty) in lu.iter() {
+                    let qv = qty.num();
+                    let rate = st
                         .rates
                         .get()
-                        .and_then(|m| m.get(k))
+                        .and_then(|m| m.get(key))
                         .and_then(|m| m.get())
-                        .and_then(|m| m.get(p))
+                        .and_then(|m| m.get(per))
                         .and_then(|m| m.get());
-                    let Some((rate, l)) = rate.zip(land_use(k)).filter(|_| qv > 0.0) else {
+                    let Some((rate, lu_def)) = rate.zip(land_use(key)).filter(|_| qv > 0.0) else {
                         continue;
                     };
-                    let gross = qv / l.per * rate.rate.num();
-                    let red = clamp(z.reduction.or(0.0), 0.0, 100.0);
-                    let stage = crate::demand::stage_of(Some(z), Some(scn));
-                    let open = !(z.year.num() > r.year_of(sc).unwrap_or(f64::NAN));
+                    let gross = qv / lu_def.per * rate.rate.num();
+                    let red = clamp(zone.reduction.or(0.0), 0.0, 100.0);
+                    let stage = crate::demand::stage_of(Some(zone), Some(scn));
+                    // `!(zoneYear > year)`: open unless the zone opens after the scenario year (NaN compares false)
+                    let (zone_year, year) = (zone.year.num(), r.year_of(sc).unwrap_or(f64::NAN));
+                    let open = zone_year <= year || zone_year.is_nan() || year.is_nan();
                     let open = open || r.year_of(sc).is_none();
                     let net = if open { gross * (1.0 - red / 100.0) * stage } else { 0.0 };
                     let dflt = d0
                         .rates
                         .get()
-                        .and_then(|m| m.get(k))
+                        .and_then(|m| m.get(key))
                         .and_then(|m| m.get())
-                        .and_then(|m| m.get(p))
+                        .and_then(|m| m.get(per))
                         .and_then(|m| m.get())
                         .is_some_and(|dr| strict_same(&dr.rate, &rate.rate));
                     let inp = rate.in_pct.num();
                     rows.push(Row::new(vec![
-                        esc(&z.name.as_str().filter(|n| !n.is_empty()).map_or(z.id.clone(), str::to_string)),
-                        esc(l.label),
-                        p.to_string(),
+                        esc(&zone.name.as_str().filter(|n| !n.is_empty()).map_or(zone.id.clone(), str::to_string)),
+                        esc(lu_def.label),
+                        per.to_string(),
                         rfmt::num(rate.rate.num(), 2),
                         if dflt { "Spare Construct indicative default (replace with surveyed rates)".to_string() } else { "User-entered".to_string() },
                         rfmt::num(gross, 0),
@@ -254,40 +289,29 @@ pub(crate) fn tripgen(c: &mut Ctx) -> String {
                     ]));
                 }
             }
-            // z.extra mirrors the land-use feature's table while it is synced there (z.tg.synced 'extra'): not the author's own extra trips
-            let tg_synced = z
-                .tg
-                .get()
-                .is_some_and(|tg| tg.get("on").is_some_and(crate::jsnum::value_truthy) && tg.get("synced").and_then(|v| v.as_str()) == Some("extra"));
-            if !tg_synced && let Some(ex) = z.extra_trips.get() {
-                let xin = ex.num_at(&format!("{p}in")).num();
-                let xout = ex.num_at(&format!("{p}out")).num();
-                if ex.num_at(&format!("{p}in")).truthy() || ex.num_at(&format!("{p}out")).truthy() {
-                    let a = crate::jsnum::or_default(xin, 0.0);
-                    let b = crate::jsnum::or_default(xout, 0.0);
-                    rows.push(Row::new(vec![
-                        esc(z.name.as_str().unwrap_or("")),
-                        "Extra trips (user)".to_string(),
-                        p.to_string(),
-                        fmt::DASH.to_string(),
-                        "User-entered".to_string(),
-                        fmt::DASH.to_string(),
-                        fmt::DASH.to_string(),
-                        fmt::DASH.to_string(),
-                        rfmt::num(a + b, 0),
-                        fmt::DASH.to_string(),
-                        fmt::DASH.to_string(),
-                        rfmt::num(a, 0),
-                        rfmt::num(b, 0),
-                    ]));
-                }
+            if let Some(row) = extra_trip_row(zone, per) {
+                rows.push(row);
             }
         }
     }
+    rows
+}
+
+/// `report-tripgen`.
+pub(crate) fn tripgen(c: &mut Ctx) -> String {
+    let r = c.r;
+    let Some(sc) = c.sel.with else {
+        return String::new();
+    };
+    let scn = r.scenario(sc);
+    if let Some(lp) = lp_parts(c, sc, &["T2", "T3", "T4", "T4b", "check", "flags"]) {
+        return landuse_tripgen(c, sc, &lp);
+    }
+    let rows = trip_rows(r, sc, scn);
     let res_l: Vec<&crate::results::Res> = r
         .rep_periods(sc)
         .iter()
-        .filter_map(|p| r.results[sc].get(p))
+        .filter_map(|p| r.results.get(sc).and_then(|m| m.get(p)))
         .collect();
     let dd = if res_l.is_empty() { None } else { Some(dev_distribution(Some(scn), &res_l)) };
     let t5: Vec<Row> = match &dd {
@@ -303,7 +327,7 @@ pub(crate) fn tripgen(c: &mut Ctx) -> String {
                     rfmt::pct(share("AMout")),
                     rfmt::pct(share("PMin")),
                     rfmt::pct(share("PMout")),
-                    x.vph.iter().map(|(p, v)| format!("{} {}", p, rfmt::veh(*v))).collect::<Vec<_>>().join(", "),
+                    x.vph.iter().map(|(per, vph)| format!("{} {}", per, rfmt::veh(*vph))).collect::<Vec<_>>().join(", "),
                 ])
             })
             .collect(),
@@ -340,7 +364,7 @@ pub(crate) fn tripgen(c: &mut Ctx) -> String {
             "{}.",
             dd.periods
                 .iter()
-                .map(|(p, x)| format!("{}: {} of development trips stay inside the study area", p, x.internal_pct.map_or(fmt::DASH.to_string(), rfmt::pct)))
+                .map(|(per, x)| format!("{}: {} of development trips stay inside the study area", per, x.internal_pct.map_or(fmt::DASH.to_string(), rfmt::pct)))
                 .collect::<Vec<_>>()
                 .join("; ")
         ),
