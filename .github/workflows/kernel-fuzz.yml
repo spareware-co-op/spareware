@@ -167,7 +167,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, contract_fuzz, crossings_fuzz, curves_fuzz, encoder_fuzz, euler_fuzz, exact_fuzz, intersect_fuzz, level_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, naming_fuzz, natural_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, pencils_fuzz, piercing_fuzz, planes_fuzz, predicates_fuzz, project_fuzz, prune_fuzz, quadric_fuzz, records_fuzz, reductions_fuzz, references_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, contract_fuzz, crossings_fuzz, curves_fuzz, encoder_fuzz, euler_fuzz, exact_fuzz, general_fuzz, intersect_fuzz, level_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, naming_fuzz, natural_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, pencils_fuzz, piercing_fuzz, planes_fuzz, predicates_fuzz, project_fuzz, prune_fuzz, quadric_fuzz, records_fuzz, reductions_fuzz, references_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash

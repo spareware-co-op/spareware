@@ -2962,7 +2962,7 @@ pub mod quadrature {
     );
 }
 
-/// geom-intersect's hot paths (pieces G158, G162 and G168; decision 32.44).
+/// geom-intersect's hot paths (pieces G158, G162, G168 and G169; decision 32.44).
 pub mod intersect {
     use super::*;
 
@@ -3004,6 +3004,20 @@ pub mod intersect {
     #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("intersect/curve_segments/typical"))]
     fn curve_segments(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/trace_silhouette/typical"))]
+    fn trace_silhouette(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/subdivide_patch/typical"))]
+    fn subdivide_patch(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
@@ -3120,16 +3134,9 @@ pub mod intersect {
         run
     }
 
-    #[library_benchmark(teardown = verify)]
-    #[bench::typical(leak("intersect/trace_silhouette/typical"))]
-    fn trace_silhouette(run: &'static mut Named) -> &'static mut Named {
-        run.bench.measure();
-        run
-    }
-
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch, natural_plane, natural_spheres, natural_tee, natural_apex, quartic_walk, reduced_torus, reduced_tube, reduced_wall, trace_patch, trace_silhouette
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, trace_patch, subdivide_patch, trace_silhouette, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch, natural_plane, natural_spheres, natural_tee, natural_apex, quartic_walk, reduced_torus, reduced_tube, reduced_wall
     );
 }
 

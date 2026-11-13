@@ -249,6 +249,7 @@ pub mod cbor;
 pub mod cdt;
 pub mod contract;
 pub mod curves;
+pub mod general;
 pub mod encoder;
 pub mod euler;
 pub mod exact;
