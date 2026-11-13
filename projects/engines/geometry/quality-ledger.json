@@ -6838,9 +6838,9 @@
       "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
       "mutant": "replace | with ^ in mark",
       "line_text": "shifted.wrapping_shl(64) | u128::from(digits).wrapping_shl(32) | u128::from(more)",
-      "occurrences": 1,
+      "occurrences": 2,
       "kind": "equivalent",
-      "reason": "The three parts take disjoint bits: the shifted floor bits 64 and up, the digits bits 32 to 63 and more bit 0, so | and ^ give one value."
+      "reason": "The line has two |, and each becomes ^ in one mutant. The three parts take disjoint bits: the shifted floor bits 64 and up, the digits bits 32 to 63 and more bit 0. Where two values share no set bit, | and ^ give one value, and the first two parts or the last two joined either way still share none with the third, so both mutants give the mark the line gives."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
