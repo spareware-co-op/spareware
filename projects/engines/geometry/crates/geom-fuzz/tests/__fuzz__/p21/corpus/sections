@@ -1,0 +1,9 @@
+/* edition 3 */ ISO-10303-21;
+HEADER; /* c */ FILE_DESCRIPTION((''),'4;1'); FILE_POPULATION('g','d',$); ENDSEC;
+ANCHOR; <a>=#1; 'ENDSEC;' /* ENDSEC; */ ENDSEC;
+REFERENCE; #9=<http://example.invalid/a.stp#x>; ENDSEC;
+DATA('one',('S')); #1=A(1,.5,1E5,-0.,+7); ENDSEC;
+DATA; #2 = ( A ( ) B ( ( ) , ( ( ) ) ) ) ; ENDSEC;
+SIGNATURE abc+/= ENDSEC;
+END-ISO-10303-21;
+trailing

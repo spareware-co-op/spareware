@@ -215,7 +215,7 @@ pub(crate) fn decode_with(
         if rest.starts_with(b"\\S\\")
             && let Some(c) = rest
                 .get(3)
-                .filter(|c| (b' '..=b'~').contains(c))
+                .filter(|c| matches!(c, b' '..=b'~'))
                 .and_then(|c| char::from_u32(u32::from(*c).saturating_add(128)))
         {
             out.push(c);

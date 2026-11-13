@@ -92,9 +92,12 @@ impl fmt::Display for ErrorKind {
             ErrorKind::UnexpectedEnd => f.write_str("the file ends without END-ISO-10303-21;"),
             ErrorKind::UnterminatedComment => f.write_str("unterminated comment"),
             ErrorKind::UnterminatedString => f.write_str("unterminated string"),
-            ErrorKind::Expected(c) => write!(f, "expected `{}`", c.escape_ascii()),
+            ErrorKind::Expected(c) => write!(f, "expected `{}`", char::from(*c)),
             ErrorKind::ExpectedKeyword => f.write_str("expected a keyword"),
-            ErrorKind::UnexpectedByte(c) => write!(f, "unexpected `{}`", c.escape_ascii()),
+            ErrorKind::UnexpectedByte(c) if matches!(c, b' '..=b'~') => {
+                write!(f, "unexpected `{}`", char::from(*c))
+            }
+            ErrorKind::UnexpectedByte(c) => write!(f, "unexpected byte {c:#04X}"),
             ErrorKind::UnexpectedSection => f.write_str("a keyword that opens no section here"),
             ErrorKind::BadNumber => f.write_str("bad number"),
             ErrorKind::IntegerOutOfRange => f.write_str("integer out of range"),

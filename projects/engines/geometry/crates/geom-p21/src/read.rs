@@ -329,32 +329,42 @@ impl<S: ByteSource> Lexer<'_, '_, S> {
     }
 
     /// The next byte, not taken; `None` at the end of the source.
+    #[inline]
     fn peek(&mut self) -> Result<Option<u8>, Error> {
-        if self.pos >= self.len {
-            if self.ended {
-                return Ok(None);
-            }
-            let n = self
-                .source
-                .read(&mut self.buf)
-                .map_err(|e| self.error(ErrorKind::Source(e)))?;
-            if n > self.buf.len() {
-                return Err(self.error(ErrorKind::Source(SourceError::Overrun)));
-            }
-            self.pos = 0;
-            self.len = n;
-            if n == 0 {
-                self.ended = true;
-                return Ok(None);
-            }
-            self.meter
-                .charge(u64::try_from(n).unwrap_or(u64::MAX))
-                .map_err(|stopped| self.error(ErrorKind::Stopped(stopped)))?;
+        if self.pos < self.len {
+            return Ok(self.buf.get(self.pos).copied());
         }
-        Ok(self.buf.get(self.pos).copied())
+        self.refill()
+    }
+
+    /// Fills the buffer from the source and gives its first byte; `None` at the source's end.
+    #[cold]
+    #[inline(never)]
+    fn refill(&mut self) -> Result<Option<u8>, Error> {
+        if self.ended {
+            return Ok(None);
+        }
+        let n = self
+            .source
+            .read(&mut self.buf)
+            .map_err(|e| self.error(ErrorKind::Source(e)))?;
+        if n > self.buf.len() {
+            return Err(self.error(ErrorKind::Source(SourceError::Overrun)));
+        }
+        self.pos = 0;
+        self.len = n;
+        if n == 0 {
+            self.ended = true;
+            return Ok(None);
+        }
+        self.meter
+            .charge(u64::try_from(n).unwrap_or(u64::MAX))
+            .map_err(|stopped| self.error(ErrorKind::Stopped(stopped)))?;
+        Ok(self.buf.first().copied())
     }
 
     /// Takes the byte `c` that [`peek`](Self::peek) just gave.
+    #[inline]
     fn bump(&mut self, c: u8) {
         self.pos = self.pos.saturating_add(1);
         self.offset = self.offset.saturating_add(1);

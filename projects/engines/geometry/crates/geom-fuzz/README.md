@@ -24,7 +24,9 @@ each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G10
 batch driver gives each item its own result, and the many-point calls give the single calls' bits;
 `make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
 passes, keep their laws, and refuse with a typed error; and `sequence` (`src/sequence.rs`, G116),
-whole operation logs replay to the same hash and keep every law at every step. `src/adversarial.rs`
+whole operation logs replay to the same hash and keep every law at every step; and `p21`
+(`src/p21.rs`, G415), `geom-p21`'s Part 21 reader never panics, refuses inside its input, reads
+the same however its bytes arrive, and what it accepts writes to a fixed point. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 

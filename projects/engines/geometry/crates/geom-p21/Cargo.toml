@@ -17,6 +17,11 @@ geom-format = { path = "../geom-format" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 
+# The codec's benchmarks (piece G415), with the standard library's clock only.
+[[bench]]
+name = "p21"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
