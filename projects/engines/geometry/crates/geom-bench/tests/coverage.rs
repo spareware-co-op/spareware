@@ -700,6 +700,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     (
         "geom_2d",
         &[
+            ("update", include_str!("../../geom-2d/src/update.rs")),
             ("arrange", include_str!("../../geom-2d/src/arrange.rs")),
             ("entity", include_str!("../../geom-2d/src/entity.rs")),
             ("contact", include_str!("../../geom-2d/src/contact.rs")),

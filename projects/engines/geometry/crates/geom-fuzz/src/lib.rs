@@ -294,6 +294,7 @@ pub mod surfaces;
 pub mod transforms;
 pub mod variants;
 pub mod wide;
+pub mod zone;
 
 /// A law a harness found broken, with the input that broke it.
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -44,5 +44,5 @@ pub mod fit;
 mod ideal;
 pub mod point;
 pub mod snap;
-
 pub mod tangent;
+pub mod update;

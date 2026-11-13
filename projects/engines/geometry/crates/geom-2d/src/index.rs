@@ -221,6 +221,13 @@ pub fn bounds(entity: &Entity, carriers: &Carriers) -> Result<Option<Corners>, I
             Ends::Segment(a, b) => join(point_box(a, carriers)?, point_box(b, carriers)?),
             Ends::Ray(_) | Ends::Infinite => whole,
         },
+        // A constructed circle through no grid point hides its squared radius, so its box is the
+        // whole frame: a box only has to hold the shape, and these are rare.
+        Shape::Circle(crate::carrier::Circle2::Disc(_))
+        | Shape::Arc {
+            circle: crate::carrier::Circle2::Disc(_),
+            ..
+        } => whole,
         Shape::Circle(c) | Shape::Arc { circle: c, .. } => {
             let (num, den, [cx, cy]) = match c {
                 crate::carrier::Circle2::Grid(g) => {
@@ -256,6 +263,7 @@ pub fn bounds(entity: &Entity, carriers: &Carriers) -> Result<Option<Corners>, I
                         ],
                     )
                 }
+                crate::carrier::Circle2::Disc(_) => return Ok(Some(whole)),
             };
             // The radius squared rounded up to a whole number, then its root rounded up, and one
             // step more for a centre that is not on the grid.

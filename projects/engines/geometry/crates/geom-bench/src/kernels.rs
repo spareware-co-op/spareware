@@ -2449,6 +2449,36 @@ pub mod entity {
                 .wrapping_add(count(a.faces().len())))
         });
     }
+    /// `Live::insert` of each drawing's segments one by one: the pieces and the sources on them
+    /// counted into one number, and the piece under a probe point at the middle of the square.
+    #[inline(never)]
+    pub fn zone_insert(batch: &[Vec<(P2, P2)>], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |segments| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let mut live = geom_2d::update::Live::new();
+            for (label, &(a, b)) in (0_u32..).zip(segments) {
+                live = live
+                    .insert(a, b, label, &mut meter)
+                    .map_err(|_| NumError::Degenerate)?;
+            }
+            let count = |n: usize| u64::try_from(n).unwrap_or(0);
+            let sources: usize = live.pieces().map(|piece| piece.sources().len()).sum();
+            let at = geom_num::carrier::Rational2::new(201, 201, 2)?;
+            let found = match live
+                .locate(&at, &mut meter)
+                .map_err(|_| NumError::Degenerate)?
+            {
+                geom_2d::update::Location::Vertex(_) => 1,
+                geom_2d::update::Location::Edge(..) => 2,
+                geom_2d::update::Location::Face(None) => 3,
+                geom_2d::update::Location::Face(Some(_)) => 4,
+            };
+            Ok(count(live.len())
+                .wrapping_mul(1_000_003)
+                .wrapping_add(count(sources).wrapping_mul(1_009))
+                .wrapping_add(found))
+        });
+    }
 }
 
 /// The attribute step's hot path (piece G90, decision 32.46).

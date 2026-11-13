@@ -490,6 +490,7 @@ fn centre_of(circle: &Circle2) -> Rational2 {
     match circle {
         Circle2::Grid(c) => Rational2::from(c.centre()),
         Circle2::Round(r) => r.centre(),
+        Circle2::Disc(d) => d.centre(),
     }
 }
 
@@ -912,14 +913,14 @@ impl SnapRef {
                 };
                 Ok(point_of(rational(x, y, 1)?))
             }
-            Curve2::Circle(circle @ Circle2::Round(r)) => {
+            Curve2::Circle(circle @ (Circle2::Round(_) | Circle2::Disc(_))) => {
                 let d = match self.pick {
                     0 => [1, 0],
                     1 => [0, 1],
                     2 => [-1, 0],
                     _ => [0, -1],
                 };
-                along_ray(carriers, &Curve2::Circle(*circle), &r.centre(), d)
+                along_ray(carriers, &Curve2::Circle(*circle), &centre_of(circle), d)
             }
             Curve2::Ellipse(e) => {
                 let (p, q) = e.ratio();
@@ -951,7 +952,7 @@ impl SnapRef {
                 };
                 Ok(point_of(rational(x, y, q)?))
             }
-            Curve2::Line(_) => Err(SnapError::Unsupported(
+            Curve2::Line(_) | Curve2::Fine(_) => Err(SnapError::Unsupported(
                 SnapKind::Quadrant,
                 crate::entity::Tag::Segment,
             )),
@@ -988,6 +989,10 @@ impl SnapRef {
             Curve2::Ellipse(_) => Err(SnapError::Unsupported(
                 SnapKind::Perpendicular,
                 crate::entity::Tag::Ellipse,
+            )),
+            Curve2::Fine(_) => Err(SnapError::Unsupported(
+                SnapKind::Perpendicular,
+                crate::entity::Tag::Segment,
             )),
         }
     }
@@ -1058,7 +1063,7 @@ impl SnapRef {
                     c0.checked_div(g).unwrap_or(c0),
                 )?
             }
-            Curve2::Line(_) => {
+            Curve2::Line(_) | Curve2::Fine(_) => {
                 return Err(SnapError::Unsupported(
                     SnapKind::Tangent,
                     crate::entity::Tag::Segment,
@@ -1297,6 +1302,11 @@ fn radius_squared(circle: &Circle2) -> Result<(i128, i128), SnapError> {
             let dy = sub(mul(i128::from(on.y.get()), cw)?, cy)?;
             Ok((add(mul(dx, dx)?, mul(dy, dy)?)?, mul(cw, cw)?))
         }
+        // A disc keeps its squared radius as a wide integer that need not fit these fractions.
+        Circle2::Disc(_) => Err(SnapError::Unsupported(
+            SnapKind::Tangent,
+            crate::entity::Tag::Circle,
+        )),
     }
 }
 

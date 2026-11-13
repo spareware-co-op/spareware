@@ -2255,6 +2255,29 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 },
             ))
         }
+        ("entity", "zone_insert") => fold(inputs::entity::zone(class).into_iter().map(
+            |segments| -> Result<u64, geom_num::NumError> {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let mut live = geom_2d::update::Live::new();
+                for (label, (a, b)) in segments.iter().enumerate() {
+                    live = live
+                        .insert(*a, *b, label as u32, &mut meter)
+                        .map_err(|_| geom_num::NumError::Degenerate)?;
+                }
+                let sources: usize = live.pieces().map(|p| p.sources().len()).sum();
+                let at = geom_num::carrier::Rational2::new(201, 201, 2)?;
+                let found = match live
+                    .locate(&at, &mut meter)
+                    .map_err(|_| geom_num::NumError::Degenerate)?
+                {
+                    geom_2d::update::Location::Vertex(_) => 1,
+                    geom_2d::update::Location::Edge(..) => 2,
+                    geom_2d::update::Location::Face(None) => 3,
+                    geom_2d::update::Location::Face(Some(_)) => 4,
+                };
+                Ok((live.len() as u64) * 1_000_003 + (sources as u64) * 1_009 + found)
+            },
+        )),
         ("entity", "under") => fold(inputs::entity::under(class).iter().map(
             |(shape, class)| -> Result<u64, geom_num::NumError> {
                 let change = shape

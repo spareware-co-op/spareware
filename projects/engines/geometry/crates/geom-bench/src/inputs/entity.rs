@@ -72,6 +72,20 @@ pub fn arrange(class: Class) -> Vec<Vec<(P2, P2)>> {
     })
 }
 
+/// Segments of one drawing to insert one by one: 24 random segments in a 200 by 200 square.
+#[must_use]
+pub fn zone(class: Class) -> Vec<Vec<(P2, P2)>> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("entity::zone", class);
+    batch_of(|_| {
+        (0..24)
+            .map(|_| Some((point_in(&mut g, 200)?, point_in(&mut g, 200)?)))
+            .collect::<Option<Vec<(P2, P2)>>>()
+    })
+}
+
 /// A grid point in the square from 0 to `span`.
 fn point_in(g: &mut SplitMix64, span: i64) -> Option<P2> {
     P2::new(g.range(0, span), g.range(0, span)).ok()
