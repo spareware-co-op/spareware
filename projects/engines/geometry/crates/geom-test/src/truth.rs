@@ -12,7 +12,7 @@
 //! is reported. [`oracle`] holds the 70 analytic cases of `SolidCraft`'s oracle as a table of
 //! formulas, each derived here as enclosures and cross-checked against `SolidCraft`'s stored
 //! numbers. [`CORPUS`] lists every family, what checks it today and the board piece that brings the
-//! operation still missing; `tests/truth.rs` runs what exists, so the corpus grows with each curved
+//! operation still missing; `tests/truth_corpus.rs` runs what exists, so the corpus grows with each curved
 //! family.
 //!
 //! Guarantees:
@@ -640,7 +640,7 @@ pub fn judge(claim: Interval, truth: &Enclosed) -> Verdict {
 /// What checks one family of the corpus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
-    /// `tests/truth.rs` holds the kernel to it today, by the test named.
+    /// `tests/truth_corpus.rs` holds the kernel to it today, by the test named.
     Checked(&'static str),
     /// The truth is here, and its operation comes with this board piece.
     Awaits(&'static str),
