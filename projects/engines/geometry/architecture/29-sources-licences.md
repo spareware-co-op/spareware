@@ -405,7 +405,7 @@ From [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), [04
 | OpenUSD AOUSD proposals | OpenUSD Technical Proposal Supplemental Terms | STUDY | STUDY | Read where they are published upstream; nothing copied |
 | miniz_oxide | MIT OR Zlib OR Apache-2.0 in its crate manifest (checked 2026-10-21 at [`cdd7ddd5`](https://github.com/Frommi/miniz_oxide/blob/cdd7ddd56cf57a6255203bb9f5c6a92bf1144bbf/miniz_oxide/Cargo.toml)) | PORT, DEPEND | PORT into `geom-exchange` (24.7): inflate and deflate, notice kept, run inside our size and ratio budgets | It is `no_std` and forbids `unsafe` code (24.7) |
 | LandXML 1.2 schema ([landxml.org](http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd)) | Terms not found (checked again 2026-10-28); it cannot be pinned to a commit (17.13) | PORT METHOD: implemented from its definitions, never copied or generated from, fetched only to validate (owner action G408, 32.38) | PORT METHOD (17.13): `geom-landxml` reads surfaces, alignments, profiles, COGO points and parcels | It names sixteen spiral types without formulas; each mapping to a curve kind waits for the curve-kind decision note (17.13) |
-| The "Viennese Bend" transition curve, in IFC 4.3's alignment documentation | IFC's documentation writes "Viennese Bend (R)", a registered trademark; its owner and any patent are unverified (17, open questions) | Stop and ask | PORT METHOD of IFC's published definition (17.8), after an owner checks the trademark status (29.17; no patent check, 32.49) | The name is used only to identify the IFC and LandXML type, never as the name of our own feature |
+| The "Viennese Bend" transition curve, in IFC 4.3's alignment documentation | IFC's documentation writes "Viennese Bend (R)", a registered trademark; its owner and any patent are unverified (17, open questions) | PORT METHOD | PORT METHOD of IFC's published definition (17.8), under our own name, the cant-coupled transition (32.33); no patent check or stop (32.49) | The name is used only to identify the IFC and LandXML type, never as the name of our own feature |
 
 ## 29.15 Test corpora (`geom-test`)
 
@@ -457,24 +457,24 @@ Nothing here enters a kernel crate.
 | generational-arena; im; earcutr; thunderdome | MPL-2.0 (archived); MPL-2.0 (archived); ISC (archived); MIT OR Apache-2.0 (last release 2023) | REJECT | — |
 | nanite-webgpu | MIT | STUDY | — |
 
-## 29.17 Patents to avoid
+## 29.17 Patents known
 
-A patent protects a method, not code, so a clean re-implementation does not escape it. The facts below come from Google Patents (checked 2026-10-21), which itself calls its status and assignee fields an assumption, not a legal conclusion. Nobody has reviewed the claims, so no row says we are free of a patent; each says only what we avoid.
+A patent protects a method, not code, so a clean re-implementation does not escape it. The facts below come from Google Patents (checked 2026-10-21), which itself calls its status and assignee fields an assumption, not a legal conclusion. Nobody has reviewed the claims, so no row says we are free of a patent. The owner decided on 2026-11-13 that none of them is avoided (32.49): the table records what is known, and is not a rule.
 
 | Patent | Assignee | Title or subject | Status | What we do |
 | --- | --- | --- | --- | --- |
-| US 9,269,189 | Autodesk Inc | "Conversion of T-spline models to trim-free T-spline models: functional case" | Active; adjusted expiry 2034-02-01 | Avoid the claimed method: no trim-free T-spline conversion, and T-splines are not first-class (section 16). Claims not reviewed; non-infringement not established |
-| US 10,614,195 | University of Texas System; University of Utah Research Foundation | Reparametrising surfaces for continuity between them (the "watertightCAD" method) | Active; anticipated expiry 2037-02-15 | Avoid the claimed method. Section 19 plans edge-first watertight tessellation; its relation to the claims has not been reviewed |
-| US 10,339,266 | The same | Constructing spline surfaces for continuity between surfaces | Active; adjusted expiry 2037-08-14 | Avoid the claimed method. Claims not reviewed |
-| US 10,614,256 | The same | Using a model-space trim curve for continuity between surfaces | Active; anticipated expiry 2037-02-15 | Avoid the claimed method. Claims not reviewed |
-| US 10,635,088 | Autodesk Inc | "Hollow topology generation with lattices for computer aided design and manufacturing" | Active; anticipated expiry 2039-01-24 | Stop and ask before building hollowing with lattices (sections 16 and 26) |
+| US 9,269,189 | Autodesk Inc | "Conversion of T-spline models to trim-free T-spline models: functional case" | Active; adjusted expiry 2034-02-01 | Not avoided (32.49). Claims not reviewed; non-infringement not established |
+| US 10,614,195 | University of Texas System; University of Utah Research Foundation | Reparametrising surfaces for continuity between them (the "watertightCAD" method) | Active; anticipated expiry 2037-02-15 | Not avoided (32.49). Section 19 plans edge-first watertight tessellation; its relation to the claims has not been reviewed |
+| US 10,339,266 | The same | Constructing spline surfaces for continuity between surfaces | Active; adjusted expiry 2037-08-14 | Not avoided (32.49). Claims not reviewed |
+| US 10,614,256 | The same | Using a model-space trim curve for continuity between surfaces | Active; anticipated expiry 2037-02-15 | Not avoided (32.49). Claims not reviewed |
+| US 10,635,088 | Autodesk Inc | "Hollow topology generation with lattices for computer aided design and manufacturing" | Active; anticipated expiry 2039-01-24 | Not avoided (32.49): hollowing with lattices is built like any other family (sections 16 and 26) |
 | US 7,274,364 | Brigham Young University (original), Autodesk Inc (current); inventor Sederberg | The T-spline core | Expired; anticipated expiry 2024-03-26 | Free to use, but its later family above still applies |
 | US 6,222,553; US 6,300,960; US 6,489,960; RE41677 | Pixar | Hybrid and semi-sharp subdivision | Expired; anticipated expiry 2017-08-04 | Free to use: semi-sharp creases are allowed |
 | US 6,389,154 | Silicon Graphics (original), Alias Systems and Autodesk (current); inventor Jos Stam | Exact evaluation of subdivision surfaces | Expired; anticipated expiry 2018-07-15 | Free to use |
 | US 2008/0043023 A1 | Application by Loop and Schaefer | Approximate Catmull–Clark patches | Abandoned in 2012; never granted | Free to use, but not CAD-grade |
-| nTop's "patent-pending" implicit modelling | nTop | Unknown | Unverified | Stop and ask before copying any nTop-described feature |
-| IntegrityWare's "patented never-fail shelling and offsetting" | IntegrityWare | Unknown; no number found | Unverified | Stop and ask before following SMLib's offset methods closely |
-| The "Viennese Bend" transition curve | Unknown | A rail transition curve whose curvature depends on cant (17.8) | Unverified; not searched. IFC's documentation marks the name as a registered trademark | Stop and ask before implementing it (29.14) |
+| nTop's "patent-pending" implicit modelling | nTop | Unknown | Unverified | Not avoided (32.49) |
+| IntegrityWare's "patented never-fail shelling and offsetting" | IntegrityWare | Unknown; no number found | Unverified | Not avoided (32.49): SMLib's offset and shell methods may be followed and ported (32.8) |
+| The "Viennese Bend" transition curve | Unknown | A rail transition curve whose curvature depends on cant (17.8) | Unverified; not searched. IFC's documentation marks the name as a registered trademark | Built from IFC's published definition under our own name, the cant-coupled transition (32.33); no patent stop (32.49) |
 
 **Families not yet searched.** The evidence searched only subdivision, T-splines, watertight trimming and lattices. These catalogue families (10.2) have had no search at all:
 
@@ -613,7 +613,7 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
    - Data with no licence, or with restrictive terms, is not used until an owner decides (rule 11).
    - Recorded oracle outputs are data we generate. They are vendored with the tool's name and version and the inputs.
    - Fixtures are never copied from copyleft or proprietary projects. Failure cases from issue trackers are rebuilt from their descriptions with our own inputs.
-10. **Patents.** Before building in an area named in 29.17, read its row. An active patent means: avoid the claimed method, or stop and ask. No family waits for a patent search: the owner decided on 2026-11-13 that none are made (32.49). A paper or vendor that mentions a patent, or calls a method "patent-pending", means: stop and ask.
+10. **Patents.** A patent stops no work (owner, 2026-11-13; 32.49). No searches are made, no method is avoided because a patent on it is known or claimed, and a paper or vendor that mentions a patent, or calls a method "patent-pending", is no reason to stop. 29.17 records the patents already known, with their expiry dates.
 11. **When to stop and ask an owner.** Stop, note it on the pull request, and ask the contributor to raise it with an owner (AGENTS.md section 5) when:
     - a licence is missing, unclear, modified, contradicted inside the source, or stated only outside the repository;
     - you want to DEPEND on or PORT a source that is not in this ledger, add a STUDY row for a copyleft or unclear source, or move a source to a more permissive class;
@@ -621,7 +621,6 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
     - the chain of title shows any sign of trouble (rule 2);
     - documentation you need is only available as a third-party copy;
     - the work needs knowledge of a closed format, anything learnt by observing, decompiling or reverse engineering a proprietary program, or a proprietary program as a reference;
-    - a method might be patented;
     - a dataset has no licence, or its terms restrict use or redistribution;
     - you notice output that may reproduce remembered code or data;
     - any contact with another project about code, data or partnership is needed;

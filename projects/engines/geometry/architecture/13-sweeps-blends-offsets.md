@@ -316,7 +316,7 @@ The cache follows Piegl and Tiller's sample, interpolate and remove-knots method
 
 Both are trimmed by the arrangement step and reported as topology changes. SMLib's offset-surface third derivatives have wrong coefficients ([13](../../../kit/notes/G01-evidence/13-vetting-smlib.md), "operations-io"); ours are derived symbolically and tested against the exact kinds.
 
-**Stop and ask first.** IntegrityWare claims a patented "never-fail" shelling and offsetting method (no number found), and SMLib's offset and shell modules show IntegrityWare lineage. The owner's decision of 2026-10-24 (32.8) settles their copyright: they may be ported with NVIDIA's notice kept (29.6). It does not settle the patent, so nobody follows or ports SMLib's offset and shell methods closely without first stopping to ask an owner (29.17). The methods here come from the papers cited.
+**IntegrityWare's claim.** IntegrityWare claims a patented "never-fail" shelling and offsetting method (no number found), and SMLib's offset and shell modules show IntegrityWare lineage. The owner's decision of 2026-10-24 (32.8) settles their copyright: they may be ported with NVIDIA's notice kept (29.6). The owner's decision of 2026-11-13 (32.49) settles the patent question: no patent stops this work, so SMLib's offset and shell methods may be followed and ported like any other. The methods here come from the papers cited.
 
 **Offsetting a body** uses one of two joins:
 
