@@ -178,7 +178,10 @@ fn ends(b: &Build, out: &Interfered, one: &Use) -> [P3; 2] {
             let block = out.splits[k].block;
             [block.from.unwrap().vertex, block.to.unwrap().vertex]
         }
-        Piece::Section(s) => [out.sections[s].from.vertex, out.sections[s].to.vertex],
+        Piece::Section(s) => [
+            out.sections[s].from.unwrap().vertex,
+            out.sections[s].to.unwrap().vertex,
+        ],
     };
     let at = |v: usize| b.arr.carriers.commit(&out.vertices[v]).unwrap().0;
     if one.forward {

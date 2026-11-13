@@ -67,7 +67,7 @@ use geom_num::interval::Interval;
 use geom_num::math::round_ties_even;
 use geom_num::{NumError, P3};
 use geom_run::{Exec, WorkMeter};
-use geom_topo::{Box3, CurveIx, ParamCurve};
+use geom_topo::{Box3, CurveIx, CurveKind, ParamCurve};
 
 use crate::broad::{candidate_pairs, point_entries};
 use crate::carrier::{Bound, CarrierIx, PointGeom, SortedVec};
@@ -199,14 +199,22 @@ pub enum BuildError {
         /// The face being split.
         face: usize,
     },
-    /// Two paves of a section line whose order is not proven.
+    /// Two paves of a section, along a line or a curve, whose order is not proven.
     SectionOrder {
-        /// The two faces whose planes meet in the line.
+        /// The two faces whose carriers meet in it.
         faces: [usize; 2],
         /// The first pave, by the lower end of its enclosure.
         first: Pave,
         /// The pave after it, whose enclosure meets the first's.
         second: Pave,
+    },
+    /// A vertex of two faces whose carriers meet in more than one curve, none of them proven
+    /// nearer to it than the others, or with no one nearest point on the nearest (G244).
+    SectionVertex {
+        /// The two faces.
+        faces: [usize; 2],
+        /// The vertex.
+        vertex: usize,
     },
 }
 
@@ -246,8 +254,15 @@ impl fmt::Display for BuildError {
                 second,
             } => write!(
                 f,
-                "the order of vertices {} and {} on the line where faces {a} and {b} meet is not proven",
+                "the order of vertices {} and {} on the section where faces {a} and {b} meet is not proven",
                 first.vertex, second.vertex
+            ),
+            BuildError::SectionVertex {
+                faces: [a, b],
+                vertex,
+            } => write!(
+                f,
+                "vertex {vertex} of faces {a} and {b} is not proven to lie on one curve where they meet"
             ),
         }
     }
@@ -359,8 +374,11 @@ pub struct Interfered {
     pub common: Vec<CommonBlock>,
     /// Each face's information: its On, In and section groups, and what waits for face splitting.
     pub faces: Vec<FaceInfo>,
-    /// The section edges: where the planes of two flat faces meet, kept where inside both.
+    /// The section edges: where the carriers of two faces meet, kept where inside both.
     pub sections: Vec<SectionEdge>,
+    /// The curves sections run along where a face on a cylinder or a cone meets a face on another
+    /// carrier, each whole, in closed form: `CurveGeom::Section` indexes them.
+    pub curves: Vec<CurveKind<3>>,
 }
 
 /// A region two edges' intersection could not decide, held until the common blocks are known.
@@ -985,6 +1003,7 @@ fn finish(
         common,
         faces: Vec::new(),
         sections: Vec::new(),
+        curves: Vec::new(),
     })
 }
 

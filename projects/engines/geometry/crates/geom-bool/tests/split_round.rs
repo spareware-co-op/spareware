@@ -15,7 +15,7 @@
     reason = "test code: a failure should stop loudly"
 )]
 
-use geom_bool::carrier::{CarrierIx, PointGeom};
+use geom_bool::carrier::{CarrierIx, CurveGeom, PointGeom};
 use geom_bool::interfere::{Arrangement, EdgeIn, FaceIn, Interfered, VertexIn, interfere};
 use geom_bool::merge::default_remaining;
 use geom_bool::split::{Piece, SplitFace, Splitting, Use, split};
@@ -107,19 +107,50 @@ impl Build {
 
     /// A square on the plane z = 0, from (`lo`, `lo`) to (`hi`, `hi`).
     fn square(&mut self, lo: i64, hi: i64, operand: u32) -> usize {
+        self.sheet(2, 0, (lo, hi), operand)
+    }
+
+    /// A square on the plane where coordinate `k` is `at`, from `lo` to `hi` in the other two,
+    /// counter-clockwise seen from where coordinate `k` is larger; each in the tests' unit.
+    fn sheet(&mut self, k: usize, at: i64, (lo, hi): (i64, i64), operand: u32) -> usize {
+        let point = |a: i64, b: i64| {
+            let mut c = [0; 3];
+            c[k] = at;
+            c[(k + 1) % 3] = a;
+            c[(k + 2) % 3] = b;
+            p(c[0], c[1], c[2])
+        };
         let corners: Vec<usize> = [(lo, lo), (hi, lo), (hi, hi), (lo, hi)]
             .iter()
-            .map(|&(x, y)| self.vertex(p(x, y, 0), operand))
+            .map(|&(a, b)| self.vertex(point(a, b), operand))
             .collect();
         let edges = (0..4)
             .map(|k| self.line(corners[k], corners[(k + 1) % 4], operand))
             .collect();
+        let mut n = [0; 3];
+        n[k] = 1;
         let plane = CarrierIx::Plane(
             self.arr
                 .carriers
-                .add_plane(&Plane::new([0, 0, 1], 0).unwrap())
+                .add_plane(&Plane::new(n, -i128::from(at * S)).unwrap())
                 .unwrap(),
         );
+        self.face(plane, vec![edges], operand)
+    }
+
+    /// A face on the plane through grid points `corners[0..3]`, bounded by the four corners in
+    /// order, in steps.
+    fn quad(&mut self, corners: [[i64; 3]; 4], operand: u32) -> usize {
+        let at = |c: [i64; 3]| P3::new(c[0], c[1], c[2]).unwrap();
+        let ids: Vec<usize> = corners
+            .iter()
+            .map(|&c| self.vertex(at(c), operand))
+            .collect();
+        let edges = (0..4)
+            .map(|k| self.line(ids[k], ids[(k + 1) % 4], operand))
+            .collect();
+        let plane = Plane::through(at(corners[0]), at(corners[1]), at(corners[2])).unwrap();
+        let plane = CarrierIx::Plane(self.arr.carriers.add_plane(&plane).unwrap());
         self.face(plane, vec![edges], operand)
     }
 
@@ -270,23 +301,187 @@ fn a_vertex_on_a_cylinder_s_side_is_placed() {
     }
 }
 
-/// A plane across a cylinder's side, its edges far away: only the two faces' boxes meet. The face
-/// stages have no section for the pair yet, so neither face is split: both wait.
+/// The pieces of a split face's outer loop and holes, each list in order.
+fn shape_of(s: &SplitFace) -> (Vec<Piece>, Vec<Vec<Piece>>) {
+    let pieces = |uses: &[Use]| uses.iter().map(|u| u.piece).collect::<Vec<_>>();
+    (
+        pieces(&s.outer),
+        s.holes.iter().map(|h| pieces(h)).collect(),
+    )
+}
+
+/// A plane square to a cylinder's axis across its side, its edges far away: no vertex is on both
+/// faces, and the carriers cross in a circle (G165's closed form), whole, inside both. It is one
+/// section with no pave: the side splits into the band above it and the band below, and the
+/// plane into the disc inside the circle and the rest, whose hole the circle is.
 #[test]
-fn a_cylinder_and_a_plane_across_it_wait() {
+fn a_plane_across_a_cylinder_cuts_it_in_a_circle() {
     let mut b = Build::default();
-    let (side, _, _) = b.tube((p(0, 0, -50), 2, 1.0), 50, (0, 100), 0);
+    let (side, near, far) = b.tube((p(0, 0, -50), 2, 1.0), 50, (0, 100), 0);
     let sheet = b.square(-1000, 1000, 1);
     let (out, splitting) = b.run();
-    assert_eq!(out.faces[side].pending.faces, vec![sheet]);
-    assert!(
-        out.faces[side].pending.edges.is_empty(),
-        "{:?}",
-        out.faces[side].pending.edges
+    for f in [side, sheet] {
+        let info = &out.faces[f];
+        assert!(
+            info.pending.faces.is_empty() && info.pending.edges.is_empty(),
+            "{:?}",
+            info.pending
+        );
+        assert_eq!(info.sections, vec![0]);
+    }
+    assert_eq!(out.sections.len(), 1, "{:?}", out.sections);
+    let section = out.sections[0];
+    assert_eq!(section.faces, [side, sheet]);
+    assert_eq!(section.curve, CurveGeom::Section(0));
+    assert!(section.from.is_none() && section.to.is_none() && !section.wraps);
+    match &out.curves[0] {
+        CurveKind::Circle(c) => {
+            // The closed form's data are the midpoints of enclosures, within its class's steps.
+            assert!(c.center().iter().all(|x| x.abs() < 1.0), "{c:?}");
+            assert_eq!(c.radius(), (50 * S) as f64);
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let circle = Piece::Section(0);
+    let (near, far) = (whole_piece(&out, near), whole_piece(&out, far));
+    let mut bands: Vec<_> = of_face(&splitting, side)
+        .into_iter()
+        .map(shape_of)
+        .collect();
+    bands.sort();
+    let mut want = vec![
+        (vec![far], vec![vec![circle]]),
+        (vec![circle], vec![vec![near]]),
+    ];
+    want.sort();
+    assert_eq!(bands, want);
+    let parts = of_face(&splitting, sheet);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    let disc: Vec<_> = parts.iter().filter(|s| s.outer.len() == 1).collect();
+    assert_eq!(disc.len(), 1, "{parts:?}");
+    assert_eq!(shape_of(disc[0]), (vec![circle], Vec::new()));
+    let rest: Vec<_> = parts.iter().filter(|s| s.outer.len() == 4).collect();
+    assert_eq!(rest.len(), 1, "{parts:?}");
+    assert_eq!(
+        rest[0].holes,
+        vec![vec![run(circle, !disc[0].outer[0].forward)]]
     );
-    assert_eq!(out.faces[sheet].pending.faces, vec![side]);
-    assert_eq!(splitting.waiting, vec![side, sheet]);
-    assert!(splitting.faces.is_empty(), "{:?}", splitting.faces);
+}
+
+/// A plane along a cylinder's axis, 30 from it, across its side of radius 50: the carriers cross
+/// in two rulings 40 either side of the axis (G165), each from the rim below to the rim above.
+/// The rims cross the plane at four vertices, on the side's boundary and In the plane: each
+/// ruling's paves, so each ruling is one section between two of them. The side splits into the
+/// narrow part on the near side of the plane and the wide part, each between the two rulings and
+/// an arc of each rim; on the plane the two rulings are cuts of the one face.
+#[test]
+fn a_plane_along_a_cylinder_cuts_it_in_two_rulings() {
+    let mut b = Build::default();
+    let (side, near, far) = b.tube((p(0, 0, -50), 2, 1.0), 50, (0, 100), 0);
+    let wall = b.sheet(0, 30, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert_eq!(out.sections.len(), 2, "{:?}", out.sections);
+    for (k, section) in out.sections.iter().enumerate() {
+        assert_eq!(section.faces, [side, wall]);
+        let ends = [section.from.unwrap().vertex, section.to.unwrap().vertex];
+        let at = |v: usize| b.arr.carriers.commit(&out.vertices[v]).unwrap().0;
+        let (a, c) = (at(ends[0]), at(ends[1]));
+        assert_eq!(
+            (a.x.get(), a.y.get()),
+            (c.x.get(), c.y.get()),
+            "{k}: {a:?} {c:?}"
+        );
+        assert_eq!(a.x.get(), 30 * S);
+        assert_eq!(a.y.get().abs(), 40 * S);
+        assert_eq!((a.z.get() - c.z.get()).abs(), 100 * S);
+        assert!(
+            matches!(out.curves[k], CurveKind::Line(_)),
+            "{:?}",
+            out.curves[k]
+        );
+    }
+    assert_eq!(
+        out.faces[wall].in_vertices.len(),
+        4,
+        "{:?}",
+        out.faces[wall]
+    );
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let rulings = [Piece::Section(0), Piece::Section(1)];
+    let parts = of_face(&splitting, side);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    for part in &parts {
+        assert_eq!(part.outer.len(), 4, "{parts:?}");
+        assert!(part.holes.is_empty() && part.cuts.is_empty(), "{parts:?}");
+        let pieces: Vec<Piece> = part.outer.iter().map(|u| u.piece).collect();
+        assert!(rulings.iter().all(|r| pieces.contains(r)), "{parts:?}");
+        assert_eq!(
+            pieces
+                .iter()
+                .filter(|q| matches!(q, Piece::Split(_)))
+                .count(),
+            2,
+            "{parts:?}"
+        );
+    }
+    let sources = |part: &SplitFace| -> Vec<usize> {
+        let mut s: Vec<usize> = part
+            .outer
+            .iter()
+            .filter_map(|u| match u.piece {
+                Piece::Split(k) => Some(out.splits[k].source),
+                Piece::Section(_) => None,
+            })
+            .collect();
+        s.sort_unstable();
+        s
+    };
+    assert!(parts.iter().all(|part| sources(part) == vec![near, far]));
+    let parts = of_face(&splitting, wall);
+    assert_eq!(parts.len(), 1, "{parts:?}");
+    assert_eq!(parts[0].cuts.len(), 2, "{parts:?}");
+}
+
+/// A plane across a cone opening upwards from its apex, at height 25: a circle of radius 25,
+/// inside both faces. The cone splits into the cap round its apex and the band to its rim, and
+/// the plane into the disc and the rest.
+#[test]
+fn a_plane_across_a_cone_cuts_it_in_a_circle() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let rim = b.circle(p(0, 0, 100), 100, frame, 0);
+    let cone = Cone::new(
+        [0.0; 3],
+        0.0,
+        1.0,
+        frame,
+        ((0.0, 2.0), (0.0, (100 * S) as f64)),
+    );
+    let ix = b.surface(SurfaceKind::Cone(cone.unwrap()));
+    let body = b.face(ix, vec![vec![rim]], 0);
+    let sheet = b.sheet(2, 25, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert_eq!(out.sections.len(), 1, "{:?}", out.sections);
+    match &out.curves[0] {
+        CurveKind::Circle(c) => {
+            assert_eq!(c.center(), coords(p(0, 0, 25)));
+            assert_eq!(c.radius(), (25 * S) as f64);
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let circle = Piece::Section(0);
+    let rim = whole_piece(&out, rim);
+    let mut parts: Vec<_> = of_face(&splitting, body)
+        .into_iter()
+        .map(shape_of)
+        .collect();
+    parts.sort();
+    let mut want = vec![(vec![circle], Vec::new()), (vec![rim], vec![vec![circle]])];
+    want.sort();
+    assert_eq!(parts, want);
+    assert_eq!(of_face(&splitting, sheet).len(), 2);
 }
 
 /// An edge of another operand through a cylinder's side, bounding no face: where it crosses the
@@ -405,10 +600,93 @@ fn a_window_across_a_cylinder_s_seam_is_cut_out() {
     assert!(rest[0].cuts[0].iter().all(|u| source(u) == short));
 }
 
-/// Two cones of one shape about different points of one axis are not known to be one carrier
-/// (only cones with the same stored data are): both wait.
+/// A plane through the axis of a cylinder at a slope of one in two, given by grid points far
+/// apart, so its normal's numbers are large: it cuts the side in an ellipse, whole and inside
+/// both faces. The side splits into the part above it and the part below, and the plane into the
+/// ellipse's inside and the rest.
 #[test]
-fn cones_about_different_centres_wait() {
+fn a_tilted_plane_cuts_a_cylinder_in_an_ellipse() {
+    let mut b = Build::default();
+    let (side, _, _) = b.tube((p(0, 0, -50), 2, 1.0), 50, (0, 100), 0);
+    let m = 1000 * S;
+    let sheet = b.quad(
+        [
+            [-m, -m, -m / 2],
+            [m, -m, m / 2],
+            [m, m, m / 2],
+            [-m, m, -m / 2],
+        ],
+        1,
+    );
+    let (out, splitting) = b.run();
+    assert_eq!(out.sections.len(), 1, "{:?}", out.sections);
+    assert!(out.sections[0].from.is_none());
+    assert!(
+        matches!(out.curves[0], CurveKind::Ellipse(_)),
+        "{:?}",
+        out.curves[0]
+    );
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let ellipse = Piece::Section(0);
+    let parts = of_face(&splitting, side);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    assert!(
+        parts.iter().all(|s| s.outer == vec![run(ellipse, true)]
+            || s.holes == vec![vec![run(ellipse, false)]]
+            || s.outer == vec![run(ellipse, false)]
+            || s.holes == vec![vec![run(ellipse, true)]]),
+        "{parts:?}"
+    );
+    let parts = of_face(&splitting, sheet);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    let inside: Vec<_> = parts.iter().filter(|s| s.outer.len() == 1).collect();
+    assert_eq!(inside.len(), 1, "{parts:?}");
+    assert_eq!(inside[0].outer[0].piece, ellipse);
+}
+
+/// A plane x + 2z = 1 step: its table form has no point on the z axis a double holds as a whole
+/// number (the plane crosses it at half a step), so no surface holds it exactly and the closed
+/// forms are not asked. The pair waits rather than meet a plane that is not the face's.
+#[test]
+fn a_plane_no_surface_holds_exactly_waits() {
+    let mut b = Build::default();
+    let (side, _, _) = b.tube((p(0, 0, -50), 2, 1.0), 50, (0, 100), 0);
+    let (h, w) = (500 * S, 1000 * S);
+    let sheet = b.quad(
+        [
+            [1 - 2 * h, -w, h],
+            [1 + 2 * h, -w, -h],
+            [1 + 2 * h, w, -h],
+            [1 - 2 * h, w, h],
+        ],
+        1,
+    );
+    let (out, splitting) = b.run();
+    assert!(out.sections.is_empty(), "{:?}", out.sections);
+    assert_eq!(out.faces[side].pending.faces, vec![sheet]);
+    assert_eq!(out.faces[sheet].pending.faces, vec![side]);
+    assert_eq!(splitting.waiting, vec![side, sheet]);
+}
+
+/// Two cylinders of different radii whose axes cross square: in general position, where they
+/// meet is a quartic the closed forms of 12.7 do not give as a conic (its curve is a procedural
+/// one, G175's kind), so the pair waits.
+#[test]
+fn cylinders_in_general_position_wait() {
+    let mut b = Build::default();
+    let (upright, _, _) = b.tube((p(0, 0, -100), 2, 1.0), 50, (0, 200), 0);
+    let (across, _, _) = b.tube((p(-100, 0, 0), 0, 1.0), 30, (0, 200), 1);
+    let (out, splitting) = b.run();
+    assert!(out.sections.is_empty(), "{:?}", out.sections);
+    assert_eq!(out.faces[upright].pending.faces, vec![across]);
+    assert_eq!(splitting.waiting, vec![upright, across]);
+}
+
+/// Two cones of one shape about different points of one axis are not known to be one carrier
+/// (only cones with the same stored data are), and the closed forms prove they never meet: their
+/// meridians are parallel. Neither waits, and each stays whole.
+#[test]
+fn cones_about_different_centres_never_meet() {
     let mut b = Build::default();
     let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
     let mut faces = Vec::new();
@@ -431,8 +709,16 @@ fn cones_about_different_centres_wait() {
         "{:?}",
         out.faces[faces[0]].same_carrier
     );
-    assert_eq!(out.faces[faces[0]].pending.faces, vec![faces[1]]);
-    assert_eq!(splitting.waiting, faces);
+    assert!(
+        out.faces[faces[0]].pending.faces.is_empty(),
+        "{:?}",
+        out.faces[faces[0]].pending
+    );
+    assert!(out.sections.is_empty(), "{:?}", out.sections);
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    for f in faces {
+        assert_eq!(of_face(&splitting, f).len(), 1);
+    }
 }
 
 /// Coaxial cylinders of one radius, given about different points of the axis, are one carrier,
@@ -476,17 +762,18 @@ fn coaxial_cylinders_of_one_radius_split_each_other() {
     assert!(got.contains(&band(lid, joint)), "{got:?}");
 }
 
-/// A cylinder inside another, about the same axis but of another radius, is another carrier: the
-/// two sides may cross for all the face stages know, so both wait and neither is split.
+/// A cylinder inside another, about the same axis but of another radius, is another carrier, and
+/// the closed forms prove the two never meet: neither waits, and each side stays whole.
 #[test]
-fn coaxial_cylinders_of_two_radii_wait() {
+fn coaxial_cylinders_of_two_radii_never_meet() {
     let mut b = Build::default();
     let (outer, _, _) = b.tube((p(0, 0, 0), 2, 1.0), 50, (0, 100), 0);
     let (inner, _, _) = b.tube((p(0, 0, 0), 2, 1.0), 30, (0, 100), 1);
     let (out, splitting) = b.run();
-    assert_eq!(splitting.waiting, vec![outer, inner]);
-    assert!(splitting.faces.is_empty(), "{:?}", splitting.faces);
-    assert_eq!(out.faces[outer].pending.faces, vec![inner]);
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(of_face(&splitting, outer).len(), 1);
+    assert_eq!(of_face(&splitting, inner).len(), 1);
+    assert_eq!(out.faces[outer].pending.faces, Vec::<usize>::new());
     assert!(
         out.faces[outer].same_carrier.is_empty(),
         "{:?}",

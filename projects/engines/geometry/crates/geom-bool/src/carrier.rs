@@ -186,6 +186,9 @@ pub enum CurveGeom {
     Line([PlaneIx; 2]),
     /// A circle, ellipse or other kind, stored as itself.
     Kind(CurveIx),
+    /// A curve where two analytic carriers cross, in closed form (12.7), made by the face stages:
+    /// its index in `Interfered::curves`.
+    Section(usize),
     /// A procedural intersection curve, defined by its two carriers.
     Meeting {
         /// The two surfaces.

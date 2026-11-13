@@ -24,9 +24,19 @@
 //! stored data for cones). Any other edge meets the carrier where the curve and surface
 //! intersection finds (`geom_intersect::curve_surface`, G164): each point inside the face, or on
 //! its boundary, is a vertex as on a flat face, and an edge found to lie on the carrier is placed
-//! piece by piece. What is not yet met with such a face, a face of another operand on another
-//! carrier whose box meets it, is kept as pending, as is everything about a face on any other
-//! curved carrier; a face with something pending is not split (pieces G244 and G245).
+//! piece by piece. **A face on a cylinder or a cone with a face on another carrier** (a plane of
+//! the table, or another cylinder or cone) meets it where `geom_intersect::quadrics::natural`
+//! (G165 to G167) finds the two carriers cross in closed form: each curve it finds is taken whole
+//! (a circle or an ellipse round its full turn) into [`crate::interfere::Interfered::curves`], its
+//! paves are the vertices both faces hold, each on the curve proven nearest to it, at the
+//! parameter of its nearest point there, and each piece between neighbouring paves (round the
+//! seam of a closed curve; the whole curve when none is on it) whose middle lies inside both faces
+//! is a section edge. What the closed forms do not settle waits as pending: a pair in general
+//! position (whose curve is a procedural one), carriers that touch along a curve or at a point, a
+//! curve through a cone's apex or ending at a flagged region, and a plane whose table form no
+//! surface holds exactly. A face of another operand on any other carrier whose box meets a curved
+//! face, and everything about a face on any other curved carrier, is pending too; a face with
+//! something pending is not split (pieces G244 and G245).
 //!
 //! Guarantees:
 //!
@@ -69,8 +79,10 @@ use alloc::vec::Vec;
 
 use geom_bvh::{Aabb, Entry};
 use geom_intersect::curve_surface::curve_surface;
+use geom_intersect::project::{Projection, project_curve};
+use geom_intersect::quadrics::natural;
 use geom_intersect::solve::Reason;
-use geom_intersect::{IntersectError, Item, Unresolved};
+use geom_intersect::{CurveContact, CurveEnd, IntersectError, Item, Unresolved};
 use geom_num::grid::COORD_MAX;
 use geom_num::interval::Interval;
 use geom_num::plane::Plane;
@@ -78,20 +90,22 @@ use geom_num::quadric::Cylinder;
 use geom_num::{NumError, P3};
 use geom_poly::order::Line as PlaneLine;
 use geom_run::{Exec, WorkMeter};
-use geom_topo::{Box3, ParamCurve, ParamSurface, SurfaceKind};
+use geom_topo::{
+    Box3, Circle, CurveKind, Ellipse, FlatSurface, ParamCurve, ParamSurface, SurfaceKind,
+};
 
 use crate::broad::{candidate_pairs, point_entries};
 use crate::carrier::{Bound, CarrierIx, CurveGeom, SortedVec};
 use crate::crossing::{Enclosed, Hull, crossings};
 use crate::decide::cylinders_coincide;
-use crate::distance::Carriers;
+use crate::distance::{Carriers, FIRST_FLOOR};
 use crate::inside::{FlatFace, Place, RoundFace};
 use crate::interfere::{
     Arrangement, BuildError, Entity, Interfered, Interference, Stages, certify, committed,
     coordinates, edge_entry, floor_ceil, nearest_point, parameter, to_box, touching, widened,
 };
-use crate::pave::{OrderError, Pave, PaveBlock, order};
-use crate::rule::{Contact, EPS_FIT, Verdict, decide, judge};
+use crate::pave::{OrderError, Pave, PaveBlock, blocks, order};
+use crate::rule::{Contact, EPS_FIT, REFINEMENTS, Verdict, decide, greater, judge, lesser};
 
 /// What waits for face splitting on a face whose carrier is curved.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -126,17 +140,22 @@ pub struct FaceInfo {
     pub pending: Pending,
 }
 
-/// A section edge: a piece of the line where the planes of two flat faces meet, inside both.
+/// A section edge: a piece of the line where the planes of two flat faces meet, or of a curve
+/// where the carriers of two faces meet, inside both.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SectionEdge {
     /// The two faces, lower index first.
     pub faces: [usize; 2],
-    /// The line: the meeting of the two faces' planes, exact.
+    /// The line, the meeting of the two faces' planes, exact; or the curve, by its index in
+    /// [`crate::interfere::Interfered::curves`].
     pub curve: CurveGeom,
-    /// The pave it starts at; its parameter is the distance along the line's direction, n₁ × n₂.
-    pub from: Pave,
-    /// The pave it ends at.
-    pub to: Pave,
+    /// The pave it starts at: on a line, its parameter is the distance along the line's direction,
+    /// n₁ × n₂; on a curve, the curve's own. `None` only for a closed curve with no pave.
+    pub from: Option<Pave>,
+    /// The pave it ends at; `None` only for a closed curve with no pave.
+    pub to: Option<Pave>,
+    /// Whether it runs round a closed curve's seam, from its last pave to its first.
+    pub wraps: bool,
 }
 
 /// The candidate pairs of the face stages, each in key order, of different operands.
@@ -1028,7 +1047,92 @@ fn outside(
     }
 }
 
-/// The section edges where the planes of flat faces `f1` and `f2` meet, kept inside both.
+/// Faces `f1`'s and `f2`'s vertices by the earlier stages (on the boundary or In), each list made
+/// once, when first needed.
+fn fill_vertices(
+    arr: &Arrangement,
+    out: &Interfered,
+    fs: &FaceStage,
+    on_face: &mut [Option<Vec<usize>>],
+    faces: [usize; 2],
+) -> Result<(), BuildError> {
+    for f in faces {
+        let slot = on_face
+            .get_mut(f)
+            .ok_or(BuildError::Missing(Entity::Face(f)))?;
+        if slot.is_none() {
+            let mut list = boundary_vertices(arr, &out.paves, f);
+            if let Some(info) = fs.info.get(f) {
+                list.extend(info.in_vertices.iter().copied());
+            }
+            list.sort_unstable();
+            list.dedup();
+            *slot = Some(list);
+        }
+    }
+    Ok(())
+}
+
+/// The vertices both faces hold, in index order.
+fn shared_vertices(
+    on_face: &[Option<Vec<usize>>],
+    [f1, f2]: [usize; 2],
+) -> Result<Vec<usize>, BuildError> {
+    let (Some(Some(first)), Some(Some(second))) = (on_face.get(f1), on_face.get(f2)) else {
+        return Err(BuildError::Missing(Entity::Face(f1)));
+    };
+    Ok(first
+        .iter()
+        .filter(|v| second.binary_search(v).is_ok())
+        .copied()
+        .collect())
+}
+
+/// The paves in their proven order, two that are not proven apart failing as a section's.
+fn section_order(faces: [usize; 2], paves: Vec<Pave>) -> Result<Vec<Pave>, BuildError> {
+    let [f1, _] = faces;
+    order(f1, paves).map_err(|e| match e {
+        OrderError::Undecided(p) => BuildError::SectionOrder {
+            faces,
+            first: p.first,
+            second: p.second,
+        },
+        OrderError::Num(n) => n.into(),
+    })
+}
+
+/// Section edges, recorded on both faces and as interferences.
+fn record(
+    out: &mut Interfered,
+    fs: &mut FaceStage,
+    (faces, curve): ([usize; 2], CurveGeom),
+    blocks: Vec<PaveBlock>,
+) -> Result<(), BuildError> {
+    let [f1, f2] = faces;
+    for block in blocks {
+        let index = out.sections.len();
+        out.sections.push(SectionEdge {
+            faces,
+            curve,
+            from: block.from,
+            to: block.to,
+            wraps: block.wraps,
+        });
+        out.interferences.push(Interference::FaceFace {
+            first: f1,
+            second: f2,
+            section: index,
+        });
+        info_of(fs, f1)?.sections.push(index);
+        info_of(fs, f2)?.sections.push(index);
+    }
+    Ok(())
+}
+
+/// The section edges where the carriers of faces `f1` and `f2` meet, kept inside both: on the line
+/// of two planes for two flat faces, and on the closed forms' curves for a face on a cylinder or a
+/// cone with one on another carrier ([`round_section`]). Two faces on one carrier are noted as one
+/// carrier's instead, and a pair the closed forms do not settle waits as pending.
 fn section(
     arr: &Arrangement,
     out: &mut Interfered,
@@ -1038,8 +1142,11 @@ fn section(
 ) -> Result<(), BuildError> {
     if flat_of(fs, f1)?.is_none() || flat_of(fs, f2)?.is_none() {
         // A curved face on either side: two on one carrier are one carrier's, as two faces on one
-        // plane are, and any other pair waits for its sections.
+        // plane are; any other pair is met in closed form where it can be, and waits otherwise.
         let same = coincide(arr, f1, f2)?;
+        if !same && round_section(arr, out, fs, ([f1, f2], on_face), meter)? {
+            return Ok(());
+        }
         for (f, other) in [(f1, f2), (f2, f1)] {
             let info = info_of(fs, f)?;
             if same {
@@ -1071,32 +1178,12 @@ fn section(
         Err(e) => return Err(e.into()),
         Ok(_) => {}
     }
-    for f in [f1, f2] {
-        let slot = on_face
-            .get_mut(f)
-            .ok_or(BuildError::Missing(Entity::Face(f)))?;
-        if slot.is_none() {
-            let mut list = boundary_vertices(arr, &out.paves, f);
-            if let Some(info) = fs.info.get(f) {
-                list.extend(info.in_vertices.iter().copied());
-            }
-            list.sort_unstable();
-            list.dedup();
-            *slot = Some(list);
-        }
-    }
+    fill_vertices(arr, out, fs, on_face, [f1, f2])?;
     let (Some(Some(first)), Some(Some(second))) = (on_face.get(f1), on_face.get(f2)) else {
         return Err(BuildError::Missing(Entity::Face(f1)));
     };
     let paves = section_paves(arr, out, (first, second), (&pa, &pb))?;
-    let ordered = order(f1, paves).map_err(|e| match e {
-        OrderError::Undecided(p) => BuildError::SectionOrder {
-            faces: [f1, f2],
-            first: p.first,
-            second: p.second,
-        },
-        OrderError::Num(n) => n.into(),
-    })?;
+    let ordered = section_order([f1, f2], paves)?;
     let mut kept = Vec::new();
     for (from, to) in ordered.iter().zip(ordered.iter().skip(1)) {
         let (pf, _) = committed(&arr.carriers, &out.vertices, from.vertex)?;
@@ -1112,26 +1199,297 @@ fn section(
             flat.place(carriers, middle, Bound::ZERO, meter)
         };
         if here(first_flat, meter)? == Place::In && here(second_flat, meter)? == Place::In {
-            kept.push((*from, *to));
+            kept.push(PaveBlock {
+                edge: f1,
+                from: Some(*from),
+                to: Some(*to),
+                wraps: false,
+            });
         }
     }
-    for (from, to) in kept {
-        let index = out.sections.len();
-        out.sections.push(SectionEdge {
-            faces: [f1, f2],
-            curve: CurveGeom::Line([p1, p2]),
-            from,
-            to,
-        });
-        out.interferences.push(Interference::FaceFace {
-            first: f1,
-            second: f2,
-            section: index,
-        });
-        info_of(fs, f1)?.sections.push(index);
-        info_of(fs, f2)?.sections.push(index);
+    record(out, fs, ([f1, f2], CurveGeom::Line([p1, p2])), kept)
+}
+
+/// The largest magnitude a coordinate of a plane's surface may have: a double holds every whole
+/// number up to it exactly.
+const EXACT_WHOLE: u128 = 9_007_199_254_740_992;
+
+/// The plane n · p + d = 0 of the table as a surface the closed forms take, c + u·a + v·b, held
+/// exactly by its doubles: with k the coordinate the normal is largest in, c the point where the
+/// plane crosses that axis, and a and b the whole vectors nₖ·eᵢ − nᵢ·eₖ and nₖ·eⱼ − nⱼ·eₖ,
+/// each square to n. Its domain reaches past the box `lo..hi` of the carrier it is to meet (where
+/// xᵢ = u·nₖ and xⱼ = v·nₖ) by an eighth of its width and a step each way, so it holds every
+/// point of that carrier on the plane: the closed forms take no plane without end. `None` when a
+/// number is not whole in a double, or c lies past the grid's range: the pair then waits, never
+/// met on a plane that is not the face's.
+fn flat_surface(plane: &Plane, (lo, hi): ([f64; 3], [f64; 3])) -> Option<SurfaceKind> {
+    let n = plane.n();
+    let mut k = 0;
+    for (i, c) in n.iter().enumerate() {
+        if c.unsigned_abs() > n.get(k)?.unsigned_abs() {
+            k = i;
+        }
     }
-    Ok(())
+    let nk = *n.get(k)?;
+    if nk == 0 || plane.d().checked_rem(nk)? != 0 {
+        return None;
+    }
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "the whole number is at most 2^53 in size, which a double holds exactly"
+    )]
+    let exact = |v: i128| (v.unsigned_abs() <= EXACT_WHOLE).then_some(v as f64);
+    let at = exact(plane.d().checked_div(nk)?.checked_neg()?)?;
+    if at.abs() > COORD_MAX_F64 {
+        return None;
+    }
+    let top = exact(nk)?;
+    let along = |i: usize| -> Option<[f64; 3]> {
+        let side = exact(n.get(i)?.checked_neg()?)?;
+        Some(core::array::from_fn(|c| {
+            if c == i {
+                top
+            } else if c == k {
+                side
+            } else {
+                0.0
+            }
+        }))
+    };
+    let span = |i: usize| -> Option<(f64, f64)> {
+        let (a, b) = (lo.get(i)? / top, hi.get(i)? / top);
+        let (a, b) = (lesser(a, b), greater(a, b));
+        let margin = (b - a) / 8.0 + 1.0;
+        Some((a - margin, b + margin))
+    };
+    let (i, j) = match k {
+        0 => (1, 2),
+        1 => (2, 0),
+        _ => (0, 1),
+    };
+    let origin = core::array::from_fn(|c| if c == k { at } else { 0.0 });
+    FlatSurface::new(origin, along(i)?, along(j)?, (span(i)?, span(j)?))
+        .ok()
+        .map(SurfaceKind::Plane)
+}
+
+/// The grid's range as a double, which holds it exactly.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "the grid's range is below 2^41, which a double holds exactly"
+)]
+const COORD_MAX_F64: f64 = COORD_MAX as f64;
+
+/// A face's carrier, as the closed forms are to take it.
+enum Carrier<'a> {
+    /// A flat face's plane of the table.
+    Flat(Plane),
+    /// A cylinder's or a cone's face's own carrier.
+    Round(&'a SurfaceKind),
+}
+
+/// Face `f`'s carrier: `None` for a face on any other.
+fn carrier_of<'a>(
+    arr: &'a Arrangement,
+    fs: &FaceStage,
+    f: usize,
+) -> Result<Option<Carrier<'a>>, BuildError> {
+    if let Some(flat) = flat_of(fs, f)? {
+        return Ok(Some(Carrier::Flat(*flat.plane())));
+    }
+    if fs.rounds.get(f).and_then(Option::as_ref).is_none() {
+        return Ok(None);
+    }
+    let face = arr
+        .faces
+        .get(f)
+        .ok_or(BuildError::Missing(Entity::Face(f)))?;
+    let CarrierIx::Surface(ix) = face.surface else {
+        return Ok(None);
+    };
+    Ok(arr.carriers.surface(ix).map(Carrier::Round))
+}
+
+/// The carriers of faces `f1` and `f2` as surfaces for the closed forms, at least one a cylinder
+/// or a cone: a plane made a surface over the box of the other carrier ([`flat_surface`]). `None`
+/// for any other pair, a round carrier whose box is not finite, or a plane no surface holds.
+fn surfaces_of(
+    arr: &Arrangement,
+    fs: &FaceStage,
+    [f1, f2]: [usize; 2],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<(SurfaceKind, SurfaceKind)>, BuildError> {
+    let (Some(first), Some(second)) = (carrier_of(arr, fs, f1)?, carrier_of(arr, fs, f2)?) else {
+        return Ok(None);
+    };
+    let around = |round: &SurfaceKind, meter: &mut WorkMeter<'_>| -> Result<_, BuildError> {
+        let b = round
+            .bound(round.domain(), meter)
+            .map_err(IntersectError::from)?;
+        Ok(b.lo
+            .iter()
+            .chain(&b.hi)
+            .all(|v| v.is_finite())
+            .then_some((b.lo, b.hi)))
+    };
+    let flat = |plane: &Plane, round: &SurfaceKind, meter: &mut WorkMeter<'_>| {
+        Ok::<_, BuildError>(around(round, meter)?.and_then(|reach| flat_surface(plane, reach)))
+    };
+    Ok(match (first, second) {
+        (Carrier::Round(a), Carrier::Round(b)) => Some((a.clone(), b.clone())),
+        (Carrier::Flat(p), Carrier::Round(b)) => flat(&p, b, meter)?.map(|a| (a, b.clone())),
+        (Carrier::Round(a), Carrier::Flat(p)) => flat(&p, a, meter)?.map(|b| (a.clone(), b)),
+        (Carrier::Flat(_), Carrier::Flat(_)) => None,
+    })
+}
+
+/// The curves where carriers `a` and `b` cross, each whole: a circle or an ellipse over its full
+/// turn, any other kind as the closed forms give it; one curve once. `None` when the closed forms
+/// leave the pair (general position, or no enclosure decides), or find what this stage does not
+/// make sections of: carriers that touch along a curve or at a point, a stretch ending at a cone's
+/// apex or a flagged region, or an open curve cut at a seam. Two curves with an empty list: the
+/// carriers are proven not to meet.
+fn section_curves(
+    a: &SurfaceKind,
+    b: &SurfaceKind,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Vec<CurveKind<3>>>, BuildError> {
+    let found = match natural(a, b, meter) {
+        Ok(Some(found)) => found,
+        Ok(None) | Err(IntersectError::FrameRange) => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
+    let mut curves: Vec<CurveKind<3>> = Vec::new();
+    for item in found.items() {
+        let Item::Curve {
+            curve,
+            contact: CurveContact::Crossing,
+            ends,
+            ..
+        } = item
+        else {
+            return Ok(None);
+        };
+        if ends
+            .iter()
+            .any(|e| matches!(e, CurveEnd::Singular | CurveEnd::Flagged))
+        {
+            return Ok(None);
+        }
+        let turn = (0.0, 2.0);
+        let whole = match curve.as_ref() {
+            CurveKind::Circle(c) => CurveKind::Circle(
+                Circle::new(c.center(), c.radius(), c.frame(), turn)
+                    .map_err(IntersectError::from)?,
+            ),
+            CurveKind::Ellipse(e) => CurveKind::Ellipse(
+                Ellipse::new(e.center(), e.axes(), turn).map_err(IntersectError::from)?,
+            ),
+            _ if ends.contains(&CurveEnd::Seam) => return Ok(None),
+            other => other.clone(),
+        };
+        if !curves.contains(&whole) {
+            curves.push(whole);
+        }
+    }
+    Ok(Some(curves))
+}
+
+/// Whether a curve closes on itself: a circle or an ellipse over its full turn.
+fn closes(curve: &CurveKind<3>) -> bool {
+    matches!(curve, CurveKind::Circle(_) | CurveKind::Ellipse(_))
+}
+
+/// Which of `curves` vertex `vertex` (at grid point `at`) lies on, and its pave there: the curve
+/// whose nearest point is proven nearer to it than any other's, at that point's parameter, as an
+/// edge's paves are found. The vertex lies on both carriers, so on where they meet; the proof only
+/// says which of the meeting's curves.
+fn curve_pave(
+    curves: &[CurveKind<3>],
+    (faces, vertex, at): ([usize; 2], usize, P3),
+    meter: &mut WorkMeter<'_>,
+) -> Result<(usize, Pave), BuildError> {
+    let refused = BuildError::SectionVertex { faces, vertex };
+    let scale = (0..REFINEMENTS).fold(1.0_f64, |s, _| s * 2.0);
+    let mut near: Vec<(usize, Interval, Interval)> = Vec::with_capacity(curves.len());
+    for (i, curve) in curves.iter().enumerate() {
+        match project_curve(curve, &coordinates(at), FIRST_FLOOR / scale, meter)? {
+            Projection::Points(found) => {
+                let first = found.first().ok_or(refused)?;
+                let t = *first.at.first().ok_or(refused)?;
+                near.push((i, t, first.distance));
+            }
+            Projection::Set { .. } | Projection::NonIsolated { .. } => return Err(refused),
+        }
+    }
+    let mut best: Option<(usize, Interval, Interval)> = None;
+    for &(i, t, d) in &near {
+        if best.is_none_or(|(_, _, b)| d.hi() < b.hi()) {
+            best = Some((i, t, d));
+        }
+    }
+    let (nearest, t, gap) = best.ok_or(refused)?;
+    if near
+        .iter()
+        .any(|&(other, _, far)| other != nearest && far.lo() <= gap.hi())
+    {
+        return Err(refused);
+    }
+    Ok((nearest, Pave { vertex, t }))
+}
+
+/// A face on a cylinder or a cone with a face on another carrier (a plane of the table, a cylinder
+/// or a cone), not one carrier: the section edges along each curve where the carriers cross in
+/// closed form ([`section_curves`]), kept where inside both faces. The paves are the vertices both
+/// faces hold, each on its curve ([`curve_pave`]); the pieces are the blocks between neighbouring
+/// paves, round the seam of a closed curve, and the whole of a closed curve with none. A piece
+/// meets neither face's boundary between its paves, since every crossing of a boundary edge with
+/// the other face's carrier is a vertex of both, so its middle places it. `false` when the closed
+/// forms leave the pair: it waits.
+fn round_section(
+    arr: &Arrangement,
+    out: &mut Interfered,
+    fs: &mut FaceStage,
+    (faces, on_face): ([usize; 2], &mut [Option<Vec<usize>>]),
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, BuildError> {
+    let [f1, f2] = faces;
+    let Some((a, b)) = surfaces_of(arr, fs, faces, meter)? else {
+        return Ok(false);
+    };
+    let Some(curves) = section_curves(&a, &b, meter)? else {
+        return Ok(false);
+    };
+    fill_vertices(arr, out, fs, on_face, faces)?;
+    let mut paves: Vec<Vec<Pave>> = alloc::vec![Vec::new(); curves.len()];
+    for v in shared_vertices(on_face, faces)? {
+        let (p, _) = committed(&arr.carriers, &out.vertices, v)?;
+        let (i, pave) = curve_pave(&curves, (faces, v, p), meter)?;
+        paves.get_mut(i).ok_or(IntersectError::Internal)?.push(pave);
+    }
+    let carriers = &arr.carriers;
+    for (curve, list) in curves.into_iter().zip(paves) {
+        let ordered = section_order(faces, list)?;
+        let mut kept = Vec::new();
+        for block in blocks(f1, &ordered, closes(&curve)) {
+            let Some(t) = middle_of(&curve, &block) else {
+                continue;
+            };
+            let middle = near_point(&curve, t, meter)?;
+            if place_in(fs, carriers, f1, middle, meter)? == Some(Place::In)
+                && place_in(fs, carriers, f2, middle, meter)? == Some(Place::In)
+            {
+                kept.push(block);
+            }
+        }
+        if kept.is_empty() {
+            continue;
+        }
+        let ix = out.curves.len();
+        out.curves.push(curve);
+        record(out, fs, (faces, CurveGeom::Section(ix)), kept)?;
+    }
+    Ok(true)
 }
 
 /// The edges held as lying on a face's plane, or on a curved face's carrier, placed piece by

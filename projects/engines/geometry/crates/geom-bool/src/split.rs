@@ -143,7 +143,7 @@ pub struct Splitting {
 
 /// A piece's geometry.
 enum Shape<'a> {
-    /// A stretch of an edge's curve, from one pave's parameter to the next, round the curve's seam
+    /// A stretch of an edge's or a section's curve, from one pave's parameter to the next, round the curve's seam
     /// when `wraps`; the whole curve when it has no pave.
     Curve {
         curve: &'a CurveKind<3>,
@@ -310,11 +310,11 @@ fn section_direction(
     Ok((exact, approx))
 }
 
-/// The pieces of flat face `f`: its boundary's split edges, the In split edges and its sections,
-/// one split edge for each common block.
+/// The pieces of face `f`: its boundary's split edges, the In split edges and its sections (a
+/// section on a curve, as a split edge on a curve is), one split edge for each common block.
 fn pieces_of<'a>(
     arr: &'a Arrangement,
-    out: &Interfered,
+    out: &'a Interfered,
     f: usize,
     senses: &BTreeMap<usize, bool>,
 ) -> Result<Vec<Bounding<'a>>, BuildError> {
@@ -378,11 +378,24 @@ fn pieces_of<'a>(
             .sections
             .get(s)
             .ok_or(BuildError::Missing(Entity::Face(f)))?;
-        let (direction, approx) = section_direction(arr, section.curve)?;
+        let (ends, span) = match (section.from, section.to) {
+            (Some(from), Some(to)) => (Some([from.vertex, to.vertex]), Some((from.t, to.t))),
+            _ => (None, None),
+        };
+        let shape = if let CurveGeom::Section(ix) = section.curve {
+            Shape::Curve {
+                curve: out.curves.get(ix).ok_or(IntersectError::Internal)?,
+                span,
+                wraps: section.wraps,
+            }
+        } else {
+            let (direction, approx) = section_direction(arr, section.curve)?;
+            Shape::Straight { direction, approx }
+        };
         out_pieces.push(Bounding {
             piece: Piece::Section(s),
-            ends: Some([section.from.vertex, section.to.vertex]),
-            shape: Shape::Straight { direction, approx },
+            ends,
+            shape,
             left: None,
         });
     }

@@ -237,8 +237,8 @@ fn a_walls_face_is_crossed_by_another_walls_edges() {
     // side of the other wall, 200 steps, or along its top or bottom, 100 steps.
     for s in &out.sections {
         let (a, c) = (
-            where_is(&b, &out, s.from.vertex),
-            where_is(&b, &out, s.to.vertex),
+            where_is(&b, &out, s.from.unwrap().vertex),
+            where_is(&b, &out, s.to.unwrap().vertex),
         );
         assert_eq!(a.y.get(), c.y.get(), "{a:?} to {c:?}");
         let run = ((c.x.get() - a.x.get()).abs(), (c.z.get() - a.z.get()).abs());
@@ -316,7 +316,7 @@ fn a_section_through_an_existing_corner_ends_at_the_corner() {
         .filter(|s| s.faces == [face, slope] || s.faces == [slope, face])
         .collect();
     assert_eq!(found.len(), 1, "{:?}", out.sections);
-    let mut ends = [found[0].from.vertex, found[0].to.vertex];
+    let mut ends = [found[0].from.unwrap().vertex, found[0].to.unwrap().vertex];
     ends.sort_unstable();
     let mut want = [corner(1), corner(7)];
     want.sort_unstable();

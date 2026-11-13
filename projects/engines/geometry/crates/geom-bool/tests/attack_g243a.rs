@@ -464,7 +464,7 @@ fn a_section_is_kept_only_where_inside_both_faces() {
         .map(|s| {
             assert_eq!(s.faces, [large, shape]);
             let z = |v: usize| b.arr.carriers.commit(&out.vertices[v]).unwrap().0.z.get();
-            let (a, c) = (z(s.from.vertex), z(s.to.vertex));
+            let (a, c) = (z(s.from.unwrap().vertex), z(s.to.unwrap().vertex));
             (a.min(c), a.max(c))
         })
         .collect();
@@ -477,7 +477,7 @@ fn a_section_is_kept_only_where_inside_both_faces() {
     assert_eq!(spans[1], (700_000, 900_000));
     // Each section's paves are widened by their vertices' bounds.
     for s in &out.sections {
-        for pave in [s.from, s.to] {
+        for pave in [s.from.unwrap(), s.to.unwrap()] {
             let (_, bound) = b.arr.carriers.commit(&out.vertices[pave.vertex]).unwrap();
             let width = pave.t.hi() - pave.t.lo();
             assert!(

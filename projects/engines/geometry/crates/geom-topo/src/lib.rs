@@ -88,7 +88,7 @@ pub use error::{Refusal, TopoError};
 // The geometry kinds a body's pools hold, for the crates above this one that read them (such as
 // geom-check's exactness record) without a direct dependency on geom-curve and geom-surface,
 // which chapter 27's crate table does not give them.
-pub use geom_curve::{Axes, CurveKind, DerivativeBound, Line, ParamCurve};
+pub use geom_curve::{Axes, Circle, CurveKind, DerivativeBound, Ellipse, Line, ParamCurve};
 pub use geom_math::Box3;
 pub use geom_surface::Plane as FlatSurface;
 pub use geom_surface::{ParamSurface, SurfaceKind};
