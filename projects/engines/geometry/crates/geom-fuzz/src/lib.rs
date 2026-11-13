@@ -247,6 +247,7 @@ pub mod natural;
 
 pub mod adversarial;
 pub mod arenas;
+pub mod arrange;
 pub mod attributes;
 pub mod batch;
 pub mod bodies;

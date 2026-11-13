@@ -577,6 +577,33 @@ impl Crossing2 {
         )
     }
 
+    /// An end of the horizontal diameter of the circle `disc`, where a vertical line touches it:
+    /// [`Root::First`] the leftmost, ((X − √rr) / W, Y / W), and [`Root::Second`] the rightmost,
+    /// the order a carrier running along the x axis would meet them in. In this form a is the
+    /// centre's (X, Y), b is (∓1, 0), k is rr and w is W, so every part is within the column of a
+    /// carrier and a circle above: X below 2^124, rr below 2^252 and W below 2^83.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if a step did not fit, which no circle in the budget can reach.
+    pub fn of_extreme(disc: &Disc, root: Root) -> Result<Crossing2, NumError> {
+        let ([x, y], w) = disc.centre().coordinates();
+        let way = match root {
+            Root::First => -1,
+            Root::Second => 1,
+        };
+        let rr: Stored = disc
+            .squared_radius()
+            .resize()
+            .ok_or(NumError::BudgetExceeded)?;
+        Crossing2::from_parts(
+            [Stored::from_i128(x), Stored::from_i128(y)],
+            [Stored::from_i64(way), Stored::from_i64(0)],
+            rr,
+            Stored::from_i128(w),
+        )
+    }
+
     /// Its homogeneous parts: `[a₀, a₁]`, `[b₀, b₁]`, k and w, w positive.
     #[must_use]
     pub const fn parts(&self) -> ([Stored; 2], [Stored; 2], Stored, Stored) {

@@ -50,7 +50,11 @@ schedule, and the pruned record reads back and reads only its one encoding; and 
 remedies and write text that names what they hold, and every schema the facade lists names details
 the contract has, whose MCP tool descriptions parse and round-trip. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
-succeed per family: `src/robustness.txt` records it, and a count may not fall.
+succeed per family: `src/robustness.txt` records it, and a count may not fall. And `arrange` (`src/arrange.rs`, G196a): the
+arrangement of segments built from any bytes has exactly the end points and proper crossings the
+cross-product formula gives as its vertices, satisfies Euler's formula, puts every half-edge on one
+cycle and every cycle on one face, and does not depend on the input order. Its replay corpus,
+18 seed files in `tests/__fuzz__/arrange/corpus`, covers every segment count from none to eight.
 
 ## One law, four engines
 

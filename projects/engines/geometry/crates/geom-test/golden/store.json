@@ -350,6 +350,12 @@
               "kind": "corpus",
               "piece": "G195",
               "why": "1 new benchmark: geom_2d::contact::contacts on a cubic crossed by a line; no existing digest moved"
+            },
+            {
+              "sha256": "7208d271d98e833acd7a8ad9e5974395dd546d19ef3cfd6135d8df0e6c18bebf",
+              "kind": "corpus",
+              "piece": "G196a",
+              "why": "one arrangement benchmark added (entity/arrange)"
             }
           ],
           "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"

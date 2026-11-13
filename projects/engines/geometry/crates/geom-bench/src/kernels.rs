@@ -2391,6 +2391,7 @@ pub mod entity {
     use geom_math::Classification;
     use geom_num::NumError;
     use geom_num::grid::P2;
+    use geom_run::{Budget, WorkMeter};
 
     use super::run;
 
@@ -2414,6 +2415,21 @@ pub mod entity {
                 Becomes::Run => 0,
             };
             Ok(tag.wrapping_mul(2).wrapping_add(u64::from(change.mirror)))
+        });
+    }
+
+    /// `arrange` on each drawing: its vertices, edges and faces counted into one number.
+    #[inline(never)]
+    pub fn arrange(batch: &[Vec<(P2, P2)>], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |segments| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let a = geom_2d::arrange::arrange(segments, &mut meter)
+                .map_err(|_| NumError::Degenerate)?;
+            let count = |n: usize| u64::try_from(n).unwrap_or(0);
+            Ok(count(a.vertices().len())
+                .wrapping_mul(1_000_003)
+                .wrapping_add(count(a.edges().len()).wrapping_mul(1_009))
+                .wrapping_add(count(a.faces().len())))
         });
     }
 }

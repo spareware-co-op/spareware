@@ -670,7 +670,7 @@ mod repository {
         (
             "geom-2d",
             6,
-            "base math curve nurbs topo name intersect bvh",
+            "base math curve nurbs surface topo name intersect bvh",
         ),
         (
             "geom-mesh",

@@ -484,6 +484,7 @@ pub static OPS: &[Op] = &[
     // geom-2d's entity model (piece G194; decision 32.44): a polyline built and checked, and a
     // shape's change under a transform's classification.
     Op { group: "entity", name: "polyline", measures: "geom_2d::Polyline::new", classes: T, prepare: |c| bind(inputs::entity::polyline(c), kernels::entity::polyline) },
+    Op { group: "entity", name: "arrange", measures: "geom_2d::arrange::arrange", classes: T, prepare: |c| bind(inputs::entity::arrange(c), kernels::entity::arrange) },
     Op { group: "entity", name: "under", measures: "geom_2d::Shape::under", classes: T, prepare: |c| bind(inputs::entity::under(c), kernels::entity::under) },
     // The batch runner's hot paths (piece G104; decision 32.46): the driver and the flat arrays.
     Op { group: "batch", name: "run_items", measures: "geom_op::Batch::run", classes: T, prepare: |c| bind(inputs::batch::run_items(c), kernels::batch::run_items) },
@@ -1024,6 +1025,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Crossing2::of_rounds", "the same steps as Crossing2::of_round, on the radical line"),
     ("Crossing2::of_round_and_circle", "the same steps as Crossing2::of_round, on the radical line"),
     ("Crossing2::of_point", "the enclosures of three integers, as Crossing2::of_circle's"),
+    ("Crossing2::of_extreme", "the enclosures of four integers and one root, as Crossing2::of_circle's"),
     ("Crossing2::parts", "field accessor"),
     ("Crossing2::enclosure", "field accessor"),
     ("Crossing2::cmp_x_filter", "two interval subtractions, the first step of Crossing2::cmp_x"),

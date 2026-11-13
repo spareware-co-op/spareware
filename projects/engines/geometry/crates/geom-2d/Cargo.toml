@@ -20,6 +20,7 @@ geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
 geom-nurbs = { path = "../geom-nurbs" }
+geom-surface = { path = "../geom-surface" }
 
 [lints.rust]
 unsafe_code = "forbid"
