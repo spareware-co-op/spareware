@@ -1353,14 +1353,6 @@ impl AffineSurface {
         self.angular
     }
 }
-impl AffineSurface {
-    /// Whether u, then v, is an angle in half-turns, as in the kind it is the image of: an
-    /// angular parameter over a whole turn closes on itself (chapter 12.10).
-    #[must_use]
-    pub const fn angular(&self) -> (bool, bool) {
-        self.angular
-    }
-}
 
 impl ParamSurface for AffineSurface {
     fn domain(&self) -> ParamBox {
