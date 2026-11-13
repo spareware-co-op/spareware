@@ -147,8 +147,8 @@ fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
 /// other may by `reach`, the body's bound, which is all group 2 held it to. The distance between
 /// two written planes must clear what both faces may stray before it keeps them apart: a face
 /// bent within its bound, written under a plane a step above a face it ran through, was once
-/// passed as apart from it (issue #783). In a body recorded Exact (`exact`) group 2 has held every
-/// face to its surface exactly already, so no face is asked again.
+/// passed as apart from it (issue #783). In a body recorded Exact the bound is nothing, so
+/// neither face can stray, whatever the answer.
 ///
 /// The carriers are first asked for the most the two faces may stray, twice `reach`. Only two
 /// parallel planes read it, and planes that clear the most clear what the faces do stray, which
@@ -157,11 +157,7 @@ fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
 /// most leaves the pair unknown, and the answer is the one their own stray gives.
 fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool, reach: f64) -> Meet {
     let stray = |on: &Surface, face| {
-        if exact || on.holds_face(a, face) {
-            0.0
-        } else {
-            reach
-        }
+        if on.holds_face(a, face) { 0.0 } else { reach }
     };
     let lie = surface(a, f, exact)
         .zip(surface(a, g, exact))

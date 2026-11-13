@@ -2002,10 +2002,67 @@ fn the_faces_of_a_convex_body_are_told_apart_by_their_corners_alone() {
         cost(&cube.body(BodyKind::Solid)),
         // The same of a box whose corners are meetings of its faces' planes, each tilted a step.
         cost(&tilted(BOX, &jog(7)).body(BodyKind::Solid)),
-        // An L is not convex: its caps and the two walls of its notch are cut.
+        // An L is not convex, but of each two of its faces one keeps to one side of the other's
+        // plane: a wall under a cap, a wall beside a wall. So no line is cut for it either.
         cost(&tilted(ELL, &still).body(BodyKind::Solid)),
     ];
     assert_eq!(got, [(546, 7_440), (675, 23_184), (1_068, 34_656)]);
+}
+
+/// On z = 0, a face along the x axis from 0 to 10 that also holds the axis from −5 to 0, so that
+/// it has corners on both sides of y = 0.
+const FLOOR_PAST_THE_AXIS: [[i64; 3]; 6] = [
+    [0, 0, 0],
+    [10, 0, 0],
+    [10, 10, 0],
+    [-5, 10, 0],
+    [-5, -5, 0],
+    [0, -5, 0],
+];
+
+#[test]
+fn two_faces_through_each_others_planes_are_cut_along_their_line() {
+    // Each face has corners on both sides of the other's plane, so no corner's sign settles the
+    // pair and the planes' line, the x axis, is cut. The floor holds it from −5 to 10. The first
+    // wall holds it from 0 to 15, so they have the edge from 0 to 10 in common, which they
+    // share: apart.
+    let wall = [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, 0, -5],
+        [15, 0, -5],
+        [15, 0, 10],
+        [0, 0, 10],
+    ];
+    let found = |wall: &[[i64; 3]]| {
+        let r = sheets(&[&FLOOR_PAST_THE_AXIS, wall]);
+        kinds(report(&r, BodyKind::General, Exactness::Exact).faults())
+    };
+    assert_eq!(found(&wall), []);
+    // A wall that holds the axis from −3 to 10 has the stretch from −3 to 0 in common with the
+    // floor as well, where they share nothing.
+    let back = [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, 0, 10],
+        [-3, 0, 10],
+        [-3, 0, -5],
+        [0, 0, -5],
+    ];
+    assert_eq!(found(&back), [FaultKind::FacesCross]);
+    // A wall that holds the axis from 10 to 15 has only the corner at 10 in common with the
+    // floor, which they share: apart. Moved a step back along the axis it has the stretch from 9
+    // to 10 in common with it and no corner.
+    let beyond = [
+        [10, 0, 0],
+        [10, 0, -5],
+        [15, 0, -5],
+        [15, 0, 10],
+        [12, 0, 10],
+    ];
+    assert_eq!(found(&beyond), []);
+    let nearer = beyond.map(|[x, y, z]| [x - 1, y, z]);
+    assert_eq!(found(&nearer), [FaultKind::FacesCross]);
 }
 
 #[test]
