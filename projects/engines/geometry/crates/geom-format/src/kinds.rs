@@ -16,7 +16,9 @@
 //! - **Caches are rebuilt, not stored.** An offset's fitted NURBS cache is a function of the
 //!   offset; the item says whether it was there and reading computes it again
 //!   (`Offset::cached`), which gives the same bits on every target (23.1). A curve on a surface
-//!   keeps its 3D curve, which defines it.
+//!   keeps its 3D curve, which defines it. An intersection curve keeps its definition and its
+//!   caches with their certified bounds (24.4's procedural caches): `geom-intersect` fitted them,
+//!   this crate cannot fit them again, and a later edition might fit them otherwise.
 //! - **Infinite ends.** A parameter interval's end may be infinite only on its own side (a ray or
 //!   line); it is written `[]`.
 //! - **Bounded.** Every kind nests at most [`DEPTH`] containers deep: a surface offset at most
@@ -56,9 +58,10 @@ use core::fmt;
 use geom_curve::geom_nurbs::{self, NurbsError};
 use geom_curve::{
     Axes, Basis, BulgePolyline, Circle, Composite, CurvatureLaw, CurveError, CurveKind, Ellipse,
-    Frame, Helix, HelixAxes, Hyperbola, Involute, Line, OffsetLaw, OnSurface, Parabola, ParamCurve,
-    Polynomial, Station, SurfaceRef, Transition, Trimmed,
+    Frame, Helix, HelixAxes, Hyperbola, IntersectionCurve, Involute, Line, Marched, OffsetLaw,
+    OnSurface, Parabola, ParamCurve, Polynomial, Span, Station, SurfaceRef, Transition, Trimmed,
 };
+use geom_num::interval::Interval;
 use geom_op::cbor::{EncodeError, Encoder};
 use geom_run::WorkMeter;
 use geom_surface::{
@@ -104,6 +107,8 @@ pub mod curve {
     pub const ON_SURFACE: u64 = 14;
     /// A transition curve: start, direction, length, law, window, reversed.
     pub const TRANSITION: u64 = 15;
+    /// An intersection curve: surfaces, marched chain, 3D cache, pcurves, spans.
+    pub const INTERSECTION: u64 = 16;
 }
 
 /// The surface kinds' codes.
@@ -609,7 +614,51 @@ pub fn write_curve<const D: usize>(e: &mut Encoder, c: &CurveKind<D>) -> Written
             e.float(o.error())?;
             Ok(())
         }
+        CurveKind::Intersection(x) => intersection(e, x),
     }
+}
+
+/// An intersection curve: `[16, [surface, surface], chain, [NURBS fields], [pcurve, pcurve],
+/// spans]`, the chain nine doubles a marched point (each of u₁, v₁, u₂, v₂ as its interval's two
+/// ends, then t) and the spans five a span (its two ends, the curve's bound, the pcurves').
+fn intersection<const D: usize>(e: &mut Encoder, x: &IntersectionCurve<D>) -> Written {
+    e.array(6)?;
+    e.uint(curve::INTERSECTION)?;
+    let [first, second] = x.surfaces();
+    e.array(2)?;
+    e.uint(first.0)?;
+    e.uint(second.0)?;
+    column(
+        e,
+        x.chain().iter().flat_map(|p| {
+            let [a, b, c, d] = p.at;
+            [
+                a.lo(),
+                a.hi(),
+                b.lo(),
+                b.hi(),
+                c.lo(),
+                c.hi(),
+                d.lo(),
+                d.hi(),
+                p.t,
+            ]
+        }),
+    )?;
+    e.array(4)?;
+    nurbs_fields(e, x.cache())?;
+    let [p, q] = x.pcurves();
+    e.array(2)?;
+    trimmed(e, p)?;
+    trimmed(e, q)?;
+    column(
+        e,
+        x.spans().iter().flat_map(|s| {
+            let (a, b) = s.at;
+            let [p, q] = s.pcurves;
+            [a, b, s.curve, p, q]
+        }),
+    )
 }
 
 /// A swept surface's placement: `[c, L by rows]`.
@@ -1250,6 +1299,10 @@ pub fn read_curve<const D: usize>(
             let cache = read_nurbs(d, m)?;
             CurveKind::OnSurface(OnSurface::new(pcurve, surface, cache, float(d, m)?)?)
         }
+        curve::INTERSECTION => {
+            want(6)?;
+            CurveKind::Intersection(read_intersection(d, m)?)
+        }
         _ => match read_leaf_fields(code, n, d, m)? {
             Basis::Nurbs(c) => CurveKind::Nurbs(c),
             Basis::Line(c) => CurveKind::Line(c),
@@ -1264,6 +1317,52 @@ pub fn read_curve<const D: usize>(
             Basis::Transition(c) => CurveKind::Transition(c),
         },
     })
+}
+
+/// An intersection curve's fields after its code (the writer's `intersection`).
+fn read_intersection<const D: usize>(
+    d: &mut Decoder<'_>,
+    m: &mut WorkMeter<'_>,
+) -> Result<IntersectionCurve<D>, KindError> {
+    fields(d, m, 2)?;
+    let surfaces = [SurfaceRef(uint(d, m)?), SurfaceRef(uint(d, m)?)];
+    let flat = read_column(d, m)?;
+    let (points, rest) = flat.as_chunks::<9>();
+    if !rest.is_empty() {
+        return Err(KindError::Shape("nine doubles for each marched point"));
+    }
+    let enclose =
+        |lo: f64, hi: f64| Interval::new(lo, hi).map_err(|_| KindError::Shape("an interval"));
+    let mut chain = Vec::new();
+    for &[a0, a1, b0, b1, c0, c1, d0, d1, t] in points {
+        let at = [
+            enclose(a0, a1)?,
+            enclose(b0, b1)?,
+            enclose(c0, c1)?,
+            enclose(d0, d1)?,
+        ];
+        chain.push(Marched { at, t });
+    }
+    fields(d, m, 4)?;
+    let cache = read_nurbs(d, m)?;
+    fields(d, m, 2)?;
+    let pcurves = [read_trimmed::<2>(d, m)?, read_trimmed::<2>(d, m)?];
+    let flat = read_column(d, m)?;
+    let (rows, rest) = flat.as_chunks::<5>();
+    if !rest.is_empty() {
+        return Err(KindError::Shape("five doubles for each span"));
+    }
+    let spans = rows
+        .iter()
+        .map(|&[a, b, curve, p, q]| Span {
+            at: (a, b),
+            curve,
+            pcurves: [p, q],
+        })
+        .collect();
+    Ok(IntersectionCurve::new(
+        surfaces, chain, cache, pcurves, spans,
+    )?)
 }
 
 /// A swept surface's placement.

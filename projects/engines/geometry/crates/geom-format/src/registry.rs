@@ -610,6 +610,11 @@ pub const CURVES: &[(u64, &str, &str)] = &[
         "transition",
         "start, direction, length, curvature law, window, reversed",
     ),
+    (
+        kinds::curve::INTERSECTION,
+        "intersection",
+        "surfaces, marched chain, 3D cache (NURBS fields), trimmed pcurves, spans",
+    ),
 ];
 
 /// The surface kinds (7.2): code, kind and fields after the code.
