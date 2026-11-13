@@ -30,6 +30,7 @@
 //! - [`operand`]: operands and selections, and an operand's faces as convex polygons (G130).
 //! - [`broad`]: the broad phase: which pairs of entities may touch (G242).
 //! - [`carrier`]: what the curved builder stores: points, curves and their carriers (G242).
+//! - [`classify`]: one proven winding number for each group of split faces, by rays (G246).
 //! - [`combine`]: the boolean's entry and its schema (G131).
 //! - [`common`]: common blocks, pave blocks of different edges on one curve (G243).
 //! - [`crossing`]: where a curve crosses a plane of the table, and how far it strays from one (G243a).
@@ -57,6 +58,7 @@ extern crate alloc;
 
 pub mod broad;
 pub mod carrier;
+pub mod classify;
 pub mod combine;
 pub mod common;
 pub mod crossing;

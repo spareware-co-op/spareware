@@ -1676,6 +1676,21 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 tree.pairs(&mut meter)
             }))
         }
+        // A box's winding number is 1 strictly inside it and 0 strictly outside it, and a point
+        // on it has none: decided here from the coordinates alone.
+        ("curved", "classify_point") => {
+            fold(inputs::curved::classify_points(class).iter().map(|q| {
+                let at = [q.x.get(), q.y.get(), q.z.get()];
+                let half = inputs::curved::BOX;
+                if at.iter().all(|c| c.abs() < half) {
+                    Some(1_i32)
+                } else if at.iter().any(|c| c.abs() > half) {
+                    Some(0)
+                } else {
+                    None
+                }
+            }))
+        }
         // The pool's results must be the serial executor's, so both are recomputed serially.
         ("helper", "lone_serial" | "lone_pool") => {
             let lists = if name == "lone_serial" {

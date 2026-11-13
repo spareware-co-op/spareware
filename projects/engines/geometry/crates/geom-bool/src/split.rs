@@ -1249,6 +1249,49 @@ fn assemble(
     Ok(faces)
 }
 
+/// Whether the grid point `point` lies inside the split face `one` in the picture of its plane:
+/// inside its outer loop and outside every hole, each by the first ray that qualifies. The point
+/// of the plane with the same picture is then strictly inside the split face (G246's
+/// classification takes its points this way).
+///
+/// # Errors
+///
+/// [`BuildError::Missing`] for a face this piece does not split; [`BuildError::Unclassified`]
+/// when no ray qualifies for a loop, as when the picture lies on it; the ray test's errors.
+pub(crate) fn within(
+    arr: &Arrangement,
+    out: &Interfered,
+    one: &SplitFace,
+    point: P3,
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, BuildError> {
+    let missing = BuildError::Missing(Entity::Face(one.face));
+    let Some(flat) = FlatFace::new(arr, one.face, meter)? else {
+        return Err(missing);
+    };
+    let keep = flat.keep();
+    let Some(senses) = senses(arr, (one.face, keep))? else {
+        return Err(missing);
+    };
+    let pieces = pieces_of(arr, out, one.face, &senses)?;
+    let index: BTreeMap<Piece, usize> = pieces
+        .iter()
+        .enumerate()
+        .map(|(i, b)| (b.piece, i))
+        .collect();
+    let outer = ring(arr, out, (&pieces, &index), &one.outer, meter)?;
+    if !holds(&outer, &pieces, (one.face, keep), point, meter)? {
+        return Ok(false);
+    }
+    for hole in &one.holes {
+        let inner = ring(arr, out, (&pieces, &index), hole, meter)?;
+        if holds(&inner, &pieces, (one.face, keep), point, meter)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// The faces of `arr`'s flat faces split along what `out` found on them (module documentation).
 ///
 /// # Errors

@@ -3,7 +3,9 @@ name = "geom-bool"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-license.workspace = true
+# Apache-2.0 for Spare Kit's code and for the ray classification ported from solidcore
+# (rule 29.20(4); its notices are in projects/engines/geometry/NOTICE).
+license = "Apache-2.0"
 description = "Spare Kit geometry kernel: the arrangement engine (booleans, imprint, split, cells and batch cuts)."
 
 [dependencies]

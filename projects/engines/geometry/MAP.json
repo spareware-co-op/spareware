@@ -554,7 +554,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for the curved builder's broad phase (piece G242, decision 32.44): a scene of points padded by the contact radius, as boxes with distinct keys, for the pairs whose boxes meet.",
+          "job": "Inputs for the curved builder's broad phase (piece G242, decision 32.44): a scene of points padded by the contact radius, as boxes with distinct keys, for the pairs whose boxes meet. And for ray classification (piece G246): grid points in and round a box, with the box as an arrangement of one operand ([`box_scene`]); about one point in eight lies inside it, and a point on it, which has no winding number, is kept as the refusal it is.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -1368,6 +1368,16 @@
               "shape": "struct"
             },
             {
+              "doc": "No ray of the fixed sequence qualified to count an operand's crossings from a point: each passed within the operand's bound of an edge, met a face at its boundary or tangentially, or met a curved face this piece cannot yet place it in (G246).",
+              "name": "NoRay",
+              "shape": "struct"
+            },
+            {
+              "doc": "No grid point of a group of split faces was proven clear of an operand's faces (G246).",
+              "name": "NoClearBox",
+              "shape": "struct"
+            },
+            {
               "doc": "Two paves of a section line whose order is not proven.",
               "name": "SectionOrder",
               "shape": "struct"
@@ -1562,6 +1572,47 @@
           "path": "geom_bool::carrier",
           "provenance": [],
           "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Boundary::new`] converts each edge of the operand to its hull once. A ray costs an interval test per edge, a few box tests of the edges it passes near, a few whole-number products per flat face with one [`FlatFace::place`] where it meets the face's plane ahead near the face, and one certified intersection per curved face; a clear test costs a distance per face. All charged to the meter, a unit per ray and per point besides what the engines charge. No recursion.",
+          "does": "[`groups`] joins the split faces of [`crate::split`] that meet across a piece of their own operand's boundary which touches no other operand; the faces of a group lie in one cell of every other operand, so a group needs one answer. [`classify`] finds it. For a group and an operand it takes grid points from a fixed sequence on the group's faces, keeps the first one proven inside its split face ([`crate::split::within`]) whose surroundings are proven clear of every face of the operand ([`Boundary::clear`]), and counts the operand's signed crossings along a ray from it ([`Boundary::winding`]). The rays come from [`RAYS`], in order. A ray is used only when it qualifies: it is proven further than the operand's bound from every edge of the operand, every crossing of a flat face is decided off that face's boundary, and every crossing of a curved face is a certified simple crossing whose normal is proven not square to the ray. The first ray that qualifies decides, and the count is the winding number.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/classify.rs",
+          "guarantees": [
+            "**The number is exact.** A [`Winding`] is an integer proven for the point it was counted from, never a rounded sum: every crossing counted is proven to exist, to lie ahead of the point and inside its face, and to pass through the face, and every face not counted is proven missed. The box round the point (the point, and the point of the group's face it stands for) is proven clear of the operand's faces, so the number is the group's.",
+            "**Flat faces are crossed exactly.** Whether a ray meets a face's plane, and on which side of the point, is the sign of whole numbers ([`geom_num::plane::Lpi`]); the meeting is committed to the grid with whether it was exact, and placed in the face by [`FlatFace::place`], whose On refuses the ray.",
+            "**No ray slips through a seam.** A ray proven further than the operand's bound from every edge cannot pass between two faces that meet only to within that bound.",
+            "**Never a guess.** A ray with any undecided part is dropped whole and the next is tried. When none of [`RAYS`] qualifies the answer is [`BuildError::NoRay`], and when no point of a group is proven clear it is [`BuildError::NoClearBox`], each with a [`NearContact`] as evidence.",
+            "**What this piece does not classify, it says.** A crossing of a curved carrier whose face has loops cannot be put in or out of that face until curved faces have their own picture (G244's analytic carriers, G245): a ray that meets such a carrier does not qualify, and a ray proven to miss it does. A group that lies in a face of another operand has no clear point; coincident faces are G248's.",
+            "**Deterministic.** Groups in the order of their lowest face, operands in number order, points and rays in their fixed order, faces and edges in index order. Nothing is drawn at random.",
+            "**Bounded.** At most [`GROUP_POINTS`] points for a group and an operand, the rays of [`RAYS`] for a point, and [`EDGE_PIECES`] boxes of an edge for a ray. No recursion: an edge is halved from a list that holds at most that many spans."
+          ],
+          "job": "Classification: one proven winding number for each group of split faces against each other operand, by rays that qualify (11.4 step 6, G246).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1017/CBO9780511804120"
+            ],
+            "text": "chapter 11.4, \"Classification\" (`projects/engines/geometry/architecture/11-booleans.md`): a point in a certified clear box, a fixed sequence of rays, a ray kept only when it stays further than the operand's bound from every edge and meets no face tangentially, crossings exact on flat faces and certified on curved ones (chapter 12's curve with surface). The crossing count is the ray test for a point in a solid (J. O'Rourke, *Computational Geometry in C*, 2nd edition, Cambridge University Press (1998), section 7.5, <https://doi.org/10.1017/CBO9780511804120>). **The picture lemma**, used wherever a point known within ρ steps is placed in a flat face: if the point is within ρ of the face's plane and [`FlatFace::place`] with a bound of 3ρ answers In or Out, every point within ρ of it has the same answer. For if one had the other, the pictures of the stretch between them would cross the boundary's picture; the point of the stretch there is within ρ of the plane, so within √3·ρ of the boundary point with the same picture (the picture drops the coordinate the normal is largest in), which puts the boundary within (1 + √3)·ρ < 3ρ of the point placed, and `place` would have answered On."
+          },
+          "path": "geom_bool::classify",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/bb836b8183c6810b9f1c17f68059f4b3e1c1f94f/crates/solidcore/src/topology/shell.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "Copyright (c) 2026 The solidcore contributors",
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "`is_inner_shell_of` and `ray_fire` (`SmShell::IsInnerShellOf`, `SmShell::RayFire`) turned into [`Boundary::winding`], [`Boundary::clear`] and [`classify`] in safe `no_std` Rust. Kept: the order of the cases. Rays are tried one after another from a point of the shell being placed; a ray is used only when all it meets are single points inside faces, and any range, edge or vertex it meets sends the loop to the next ray; a ray that meets nothing puts the point outside; otherwise the crossings are read by the side of the face's normal the ray runs to; and no ray deciding is an answer of its own (`SM_UNSURE`, here a typed error). Changed: the ray directions are a fixed table, where the origin draws them from a random generator, seeded from the clock upstream; the start is a grid point in a box proven clear of the other operand, where the origin samples three parameter points of each face; whether a hit is a face's inside, its edge or behind the start is proven (whole-number signs, the contact rule, certified enclosures) where the origin compares doubles with `EFF_ZERO` and a zone tolerance; a normal whose side of the ray is not proven refuses the ray, where the origin reads the sign of a dot product in doubles; the stack of shells entered and left is a signed sum, since an operand here is one boundary; a failed step is never ignored, where upstream ignores the status of the box, the samples, the ray solve and the normal; the nearest-hit choice of `ray_fire`, which measures every candidate against the first one's parameter, is not taken, since every crossing is counted. Its voxel grid (`intersect/ray_tracer.rs`) is not taken either: candidates are found by each edge's hull and each face's box.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -13923,6 +13974,17 @@
       "take": "port",
       "used_by": [
         "projects/engines/geometry/crates/geom-surface/src/frame_rule.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/bb836b8183c6810b9f1c17f68059f4b3e1c1f94f/crates/solidcore/src/topology/shell.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-bool/src/classify.rs"
       ]
     },
     {

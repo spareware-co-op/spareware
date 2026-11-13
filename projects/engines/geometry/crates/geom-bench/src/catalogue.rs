@@ -398,6 +398,8 @@ pub static OPS: &[Op] = &[
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
     // The curved builder's broad phase (piece G242; decision 32.44): padded point boxes, the pairs that meet.
     Op { group: "curved", name: "broad_pairs", measures: "geom_bool::broad::candidate_pairs", classes: T, prepare: |c| bind(inputs::curved::broad_scenes(c), kernels::curved::broad_pairs) },
+    // Ray classification (piece G246; decision 32.44): a box's winding number at points in and round it.
+    Op { group: "curved", name: "classify_point", measures: "geom_bool::Boundary::winding", classes: T, prepare: |c| bind(inputs::curved::classify_points(c), kernels::curved::classify_point) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },

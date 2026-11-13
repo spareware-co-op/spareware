@@ -2978,9 +2978,16 @@ pub mod curved {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("curved/classify_point/typical"))]
+    fn classify_point(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = curved;
-        benchmarks = broad_pairs
+        benchmarks = broad_pairs, classify_point
     );
 }
 

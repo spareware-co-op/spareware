@@ -572,7 +572,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     ),
     (
         "geom_bool",
-        &[("broad", include_str!("../../geom-bool/src/broad.rs"))],
+        &[
+            ("broad", include_str!("../../geom-bool/src/broad.rs")),
+            ("classify", include_str!("../../geom-bool/src/classify.rs")),
+        ],
     ),
     (
         "geom_bvh",

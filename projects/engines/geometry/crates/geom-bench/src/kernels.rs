@@ -1775,10 +1775,14 @@ pub mod bvh {
 /// meet, from the box tree, under an unlimited budget on the serial executor.
 pub mod curved {
     use geom_bool::broad::candidate_pairs;
+    use geom_bool::carrier::Bound;
+    use geom_bool::classify::Boundary;
     use geom_bvh::{BvhError, Entry};
+    use geom_num::grid::P3;
     use geom_run::{Budget, Exec, WorkMeter};
 
     use super::run;
+    use crate::inputs::curved::box_scene;
 
     /// `candidate_pairs` on each scene.
     #[inline(never)]
@@ -1786,6 +1790,27 @@ pub mod curved {
         run(batch, out, |entries| {
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
             candidate_pairs(entries, &Exec::serial(), &mut meter).map_err(|_| BvhError::Defect)
+        });
+    }
+
+    /// `Boundary::winding` at each point, against the box of [`box_scene`] (piece G246): the
+    /// winding number, or `None` where no ray qualifies, as for a point on the box. The boundary
+    /// the counts read is built inside the run, once, from the scene's faces and edges.
+    #[inline(never)]
+    pub fn classify_point(batch: &[P3], out: &mut Vec<Option<i32>>) {
+        let scene = box_scene();
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let boundary = scene.as_ref().and_then(|(arr, outward)| {
+            Boundary::new(arr, 0, outward, Bound::ZERO, &mut meter)
+                .ok()
+                .map(|boundary| (boundary, &arr.carriers))
+        });
+        run(batch, out, |point| {
+            let (boundary, carriers) = boundary.as_ref()?;
+            boundary
+                .winding(carriers, *point, &mut meter)
+                .ok()
+                .map(|winding| winding.number)
         });
     }
 }

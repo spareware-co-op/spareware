@@ -199,6 +199,26 @@ pub enum BuildError {
         /// The face being split.
         face: usize,
     },
+    /// No ray of the fixed sequence qualified to count an operand's crossings from a point: each
+    /// passed within the operand's bound of an edge, met a face at its boundary or tangentially,
+    /// or met a curved face this piece cannot yet place it in (G246).
+    NoRay {
+        /// The operand whose winding number was asked.
+        operand: u32,
+        /// The point.
+        at: P3,
+        /// The evidence: how near the rays came, as a near contact with its remedies.
+        near: NearContact,
+    },
+    /// No grid point of a group of split faces was proven clear of an operand's faces (G246).
+    NoClearBox {
+        /// The first face of the group.
+        face: usize,
+        /// The operand its points were not proven clear of.
+        operand: u32,
+        /// The evidence, as a near contact with its remedies.
+        near: NearContact,
+    },
     /// Two paves of a section line whose order is not proven.
     SectionOrder {
         /// The two faces whose planes meet in the line.
@@ -239,6 +259,14 @@ impl fmt::Display for BuildError {
             BuildError::Unclassified { face, .. } => write!(
                 f,
                 "no ray qualified to place a point in face {face}: its picture lies on the boundary's"
+            ),
+            BuildError::NoRay { operand, .. } => write!(
+                f,
+                "no ray qualified to count the crossings of operand {operand} from a point: a near contact"
+            ),
+            BuildError::NoClearBox { face, operand, .. } => write!(
+                f,
+                "no point of the group of face {face} is proven clear of operand {operand}: a near contact"
             ),
             BuildError::SectionOrder {
                 faces: [a, b],
