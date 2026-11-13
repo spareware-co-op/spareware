@@ -5,6 +5,22 @@
 //! operation lists, edit-migrate-cases.mjs the saved projects) and wrote expected/edit-*.json; these tests replay the same
 //! operations with the same seeded id generator and compare every answer and every project state.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod edit_ops;
 mod edit_support;
 mod support;

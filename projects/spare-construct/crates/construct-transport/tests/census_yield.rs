@@ -1,6 +1,22 @@
 //! Land use truth tests: zoned yield of packs/nz/landuse-plus.js (the land use a zoned area holds at full build-out, the capacity table and filling a zone from a
 //! yield) against the prototype (tools/transport-truth/gen-census.mjs).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod census_support;
 mod edit_support;
 mod support;

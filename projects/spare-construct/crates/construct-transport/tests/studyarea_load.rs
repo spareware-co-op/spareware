@@ -1,6 +1,22 @@
 //! Study area truth tests: `estimate`, the crash window and `DataHub.loadAll` (the count and crash downloads) against the prototype with the network stubbed
 //! (tools/transport-truth/gen-studyarea.mjs): the requests, progress messages, answers and what is left in the project, and the words for every failure.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod census_support;
 mod edit_support;
 mod studyarea_support;

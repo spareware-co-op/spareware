@@ -1,6 +1,22 @@
 //! Drury sample truth tests: `Sample.build` and `Sample.analyse` against the prototype with the network stubbed (tools/transport-truth/gen-sample.mjs): the
 //! requests, the progress messages, the notes, the sources that failed, the project made and the results of the runs, in many ways.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod census_support;
 mod edit_support;
 mod sample_support;

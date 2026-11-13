@@ -2,6 +2,22 @@
 //! (expected/compliance-f3-policy.json, from tools/transport-truth/gen-compliance-f3.mjs). Cases that need the Future Development Strategy
 //! check or the ANOP assessment of another part are skipped while those are still stubs (the count is printed).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod compliance_f3_support;
 mod compliance_support;
 mod support;
