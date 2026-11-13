@@ -8762,6 +8762,14 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "With apart never telling, order narrows two roots' stretches for ever: no narrowing is ever enough to part them, so every comparison of two distinct roots loops until its budget, and the tests run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/commit.rs",
+      "mutant": "replace < with <= in nearest",
+      "line_text": "while low < high {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The bisection ends when low meets high, at the grid point whose half-past is at or above the coordinate. With <= the loop runs once more there: middle is low, its half-past is not below the coordinate, so high = middle again and nothing changes, for ever. The run's timeout catches it."
     }
   ],
   "coverage_off": [
