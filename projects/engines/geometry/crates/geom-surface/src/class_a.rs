@@ -83,16 +83,20 @@
 
 use alloc::vec::Vec;
 
-use geom_curve::{CurveError, CurveKind, DerivativeBound, ParamCurve, tight};
+use geom_curve::{CurveKind, DerivativeBound, ParamCurve, tight};
 use geom_num::NumError;
 use geom_num::dual::Dual;
 use geom_num::interval::Interval;
 use geom_num::real::Real;
 use geom_num::scalar::Scalar;
-use geom_nurbs::Limit;
 use geom_run::WorkMeter;
 
 use crate::param::{ParamBox, ParamSurface, SurfaceKind, centred, offset_from, partial_index};
+
+/// The error of every function here, and the side a parameter is read from at a break,
+/// re-exported so a caller above the curve crates (`geom-analysis`) can name them.
+pub use geom_curve::CurveError;
+pub use geom_nurbs::Limit;
 
 /// What a join's continuity is measured by (16.5's table).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -130,6 +134,21 @@ pub struct Side<'a> {
     pub pcurve: &'a CurveKind<2>,
     /// Whether the face's normal is −(`S_u` × `S_v`) (a face whose sense is reversed).
     pub turned: bool,
+}
+
+impl Side<'_> {
+    /// The pcurve's parameter domain: the join's parameter range on this side.
+    #[must_use]
+    pub fn domain(&self) -> (f64, f64) {
+        self.pcurve.domain()
+    }
+
+    /// The parameters where the pcurve may not be smooth, in increasing order (some perhaps
+    /// repeated or outside the domain), where a caller splits the join before measuring it.
+    #[must_use]
+    pub fn breaks(&self) -> Vec<f64> {
+        self.pcurve.breaks()
+    }
 }
 
 /// Enclosures of a measure's smooth parts, from which [`Parts::value`] encloses the measure.
