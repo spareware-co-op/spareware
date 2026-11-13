@@ -38,6 +38,7 @@ pub mod carrier;
 pub mod commit;
 pub mod contact;
 pub mod entity;
+pub mod fit;
 mod ideal;
 pub mod point;
 pub mod tangent;
