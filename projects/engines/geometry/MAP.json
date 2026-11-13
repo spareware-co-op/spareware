@@ -14877,7 +14877,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/taylor_work.rs"
         ]
       },
       "missing": [
@@ -14903,7 +14904,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/taylor_work.rs"
         ]
       },
       "missing": [
@@ -14982,7 +14984,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/taylor_work.rs"
         ]
       },
       "missing": [

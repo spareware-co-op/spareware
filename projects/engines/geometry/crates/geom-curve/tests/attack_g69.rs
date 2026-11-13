@@ -46,10 +46,12 @@ fn meter() -> WorkMeter<'static> {
 }
 
 /// The work an offset's conversion is given in the tests of its halving (issue #526): about
-/// twice what the most costly of them takes (6 753 922, the offset turning within 2^−45), so a
+/// twice what the most costly of them takes (6 977 992, the offset turning within 2^−45), so a
 /// halving that never stops is stopped by the meter and fails its test, rather than hanging.
 /// (Before issue #765 priced an offset's jets, the same conversion was charged 254 282 and the
-/// budget was 500 000: the same work at its new price.)
+/// budget was 500 000: the same work at its new price. Issue #837's price for each Taylor
+/// piece's change to Bernstein form took it from 6 753 922 to 6 977 992, and twice that is still
+/// about 14 000 000.)
 const WITHIN: Budget = Budget::of_work(14_000_000);
 
 fn grid() -> [TypedTransform; 3] {
@@ -246,7 +248,7 @@ fn a_nearly_flat_helix_offset_along_its_axis_converts() {
         .count();
     assert!(unbounded > 0, "the finest even cut must fail somewhere");
     // Converted, within the conversion's aim of 10⁻¹⁰ of the offset's size, and within the
-    // halving tests' budget (it takes 4 521 689): halving that ran away, cutting pieces already
+    // halving tests' budget (it takes 4 677 009): halving that ran away, cutting pieces already
     // within the aim, would need billions, and stops there rather than hanging.
     let n = o.to_nurbs(&mut WorkMeter::new(WITHIN)).unwrap();
     let b = o.bound((-1.0, 1.0), m).unwrap();
