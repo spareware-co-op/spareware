@@ -1105,7 +1105,7 @@ fn rests<C: Borrow<Corner>>(
 /// starting at the fin's first vertex, and group 1 has held every loop closed, so each side ends
 /// at its fin's last vertex, where the next side round the loop starts.
 fn fin_rounds(a: &Arenas, f: Ix<Face>) -> impl Iterator<Item = Result<Round<Corner>, Stuck>> + '_ {
-    face_fins(a, f).map(move |n| {
+    face_fins(a, f).map(move |n| -> Result<Round<Corner>, Stuck> {
         let (v, w) = known(fin_ends(a, n))?;
         Ok(Round {
             start: known(corner(a, v))?,
