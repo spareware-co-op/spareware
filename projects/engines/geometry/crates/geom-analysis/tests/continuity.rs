@@ -25,6 +25,7 @@
     clippy::panic,
     clippy::many_single_char_names,
     clippy::too_many_lines,
+    clippy::cast_lossless,
     reason = "tests: oracles and generators, and a failure stops the test"
 )]
 

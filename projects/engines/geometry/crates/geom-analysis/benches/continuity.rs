@@ -60,9 +60,9 @@ fn main() {
             let z = match i {
                 0 | 1 => 0.0,
                 2 => *h,
-                _ => *h * (i as f64 - 1.0),
+                _ => *h * (f64::from(i) - 1.0),
             };
-            pts.push([i as f64 / 4.0, j as f64 / 6.0, z]);
+            pts.push([f64::from(i) / 4.0, j as f64 / 6.0, z]);
         }
     }
     let patch = SurfaceKind::Nurbs(Surface::new(bu, bv, &pts).unwrap());

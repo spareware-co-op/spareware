@@ -257,34 +257,10 @@ pub fn join(
     let mut best: Option<Witness> = None;
     for (t, limit) in [(lo, Limit::FromRight), (hi, Limit::FromLeft)] {
         if let Some(p) = point(measure, sides, t, limit, meter)? {
-            best = better(best, t, p.value()?);
+            best = Some(better(best, t, p.value()?));
         }
     }
-    // The first pieces: the range cut at each break of either pcurve inside it.
-    let mut cuts: Vec<f64> = Vec::new();
-    for t in a.breaks().into_iter().chain(b.breaks()) {
-        if lo < t && t < hi {
-            meter.reserve_for::<Piece>(1)?;
-            cuts.try_reserve(1).map_err(|_| meter.out_of_memory())?;
-            cuts.push(t);
-        }
-    }
-    cuts.sort_by(f64::total_cmp);
-    cuts.dedup();
-    let mut queue: Vec<Piece> = Vec::new();
-    let mut from = lo;
-    for t in cuts.into_iter().chain(core::iter::once(hi)) {
-        keep(
-            &mut queue,
-            Piece {
-                lo: from,
-                hi: t,
-                upper: None,
-            },
-            meter,
-        )?;
-        from = t;
-    }
+    let mut queue = first_pieces(sides, (lo, hi), meter)?;
     let mut live: Vec<Piece> = Vec::new();
     let mut measured = 0_usize;
     loop {
@@ -295,7 +271,7 @@ pub fn join(
             let c = f64::midpoint(lo, hi);
             let centre = point(measure, sides, c, Limit::FromRight, meter)?;
             if let Some(p) = &centre {
-                best = better(best, c, p.value()?);
+                best = Some(better(best, c, p.value()?));
             }
             let upper = match class_a::over(
                 measure,
@@ -333,9 +309,54 @@ pub fn join(
         }
         live = rest;
     }
+    Ok(finish(measure, best, &live, ask.tight, measured))
+}
+
+/// The join's range cut at each break of either pcurve strictly inside it, as pieces to measure.
+fn first_pieces(
+    [a, b]: [Side<'_>; 2],
+    (lo, hi): (f64, f64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Piece>, ContinuityError> {
+    let mut cuts: Vec<f64> = Vec::new();
+    for t in a.breaks().into_iter().chain(b.breaks()) {
+        if lo < t && t < hi {
+            meter.reserve_for::<Piece>(1)?;
+            cuts.try_reserve(1).map_err(|_| meter.out_of_memory())?;
+            cuts.push(t);
+        }
+    }
+    cuts.sort_by(f64::total_cmp);
+    cuts.dedup();
+    let mut queue: Vec<Piece> = Vec::new();
+    let mut from = lo;
+    for t in cuts.into_iter().chain(core::iter::once(hi)) {
+        keep(
+            &mut queue,
+            Piece {
+                lo: from,
+                hi: t,
+                upper: None,
+            },
+            meter,
+        )?;
+        from = t;
+    }
+    Ok(queue)
+}
+
+/// The maximum from the best witness and the pieces kept: the upper end is the largest of their
+/// upper bounds and the witness's, or the first unbounded piece's span.
+fn finish(
+    measure: Measure,
+    best: Option<Witness>,
+    live: &[Piece],
+    tight: f64,
+    measured: usize,
+) -> Maximum {
     let floor = best.map_or(0.0, |w| w.value.lo());
     let mut upper = Upper::Bounded(best.map_or(0.0, |w| w.value.hi()));
-    for p in &live {
+    for p in live {
         upper = match (upper, p.upper) {
             (Upper::Unresolved { .. }, _) => upper,
             (_, None) => Upper::Unresolved {
@@ -346,16 +367,16 @@ pub fn join(
         };
     }
     let as_asked = match upper {
-        Upper::Bounded(u) => u - floor <= ask.tight,
+        Upper::Bounded(u) => u - floor <= tight,
         Upper::Unresolved { .. } => false,
     };
-    Ok(Maximum {
+    Maximum {
         measure,
         witness: best,
         upper,
         as_asked,
         pieces: measured,
-    })
+    }
 }
 
 /// Whether a piece can be halved: its middle lies strictly between its ends.
@@ -380,10 +401,10 @@ fn point(
 }
 
 /// The witness with the larger lower end, the first kept on a tie.
-fn better(best: Option<Witness>, at: f64, value: Interval) -> Option<Witness> {
+fn better(best: Option<Witness>, at: f64, value: Interval) -> Witness {
     match best {
-        Some(w) if w.value.lo() >= value.lo() => Some(w),
-        _ => Some(Witness { at, value }),
+        Some(w) if w.value.lo() >= value.lo() => w,
+        _ => Witness { at, value },
     }
 }
 

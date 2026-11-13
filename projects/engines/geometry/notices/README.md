@@ -31,3 +31,4 @@ Licence text:
 | [core-math.txt](core-math.txt) | CORE-MATH (Inria), ported into `geom-num`'s `math` module by piece G05 |
 | [usd-brep.txt](usd-brep.txt) | NLib, in NVIDIA's USD BRep, ported into `geom-nurbs` by piece G56 |
 | [tinyspline.txt](tinyspline.txt) | tinyspline's double-reflection frames, ported into `geom-surface`'s `frame_rule` by piece G254 |
+| [solidcore-db9f4ae1.txt](solidcore-db9f4ae1.txt) | solidcore at db9f4ae1: its normal section and continuity measures, ported into `geom-surface`'s `class_a` by piece G346 |

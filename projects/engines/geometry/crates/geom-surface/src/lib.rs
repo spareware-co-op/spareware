@@ -35,14 +35,18 @@
 //! partials over a box, and chapter 19.3's chord constant, come from its partials there
 //! ([`derivative`], piece G68); a rational NURBS patch's partials are the interval quotient rule
 //! with the patch itself bounded by its control points. The frame rules a sweep turns its profile
-//! by, their stored stations and laws, are [`frame_rule`] (piece G254).
+//! by, their stored stations and laws, are [`frame_rule`] (piece G254). Chapter 16.5's Class-A
+//! maths, how two faces meet along an edge (gap, normal angle, curvature and curvature change,
+//! each enclosed from the surfaces' own partials), are [`class_a`] (piece G346).
 //!
 //! Status: the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the
 //! analytic and swept kinds (G65); the offset kind, and every kind's partials of any order
 //! (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and
 //! normal-derivative bounds for every kind (G68); many points per call, every kind evaluating n
 //! parameter pairs into flat arrays through `ParamSurface::points` (G104); the frame rules and
-//! laws (G254); the other kinds to come in G253, G260, G264, G315, G316, G317, G318 and G470.
+//! laws (G254); Class-A maths, the continuity measures G0 to G3 across a join of two surfaces
+//! along their pcurves, at a parameter and over a span ([`class_a`], piece G346); the other kinds
+//! to come in G253, G260, G264, G315, G316, G317, G318 and G470.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 

@@ -20,6 +20,9 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::too_many_lines,
+    clippy::many_single_char_names,
+    clippy::cast_lossless,
+    clippy::assert_is_empty,
     reason = "tests: oracles and generators, and a failure stops the test"
 )]
 
