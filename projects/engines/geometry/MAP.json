@@ -727,6 +727,26 @@
           "target": "lib"
         },
         {
+          "cost": "one or a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": "[`names`] draws, per input, the name of one operation the facade registers (`engine_geometry::operations::OPERATIONS`), each with equal chance, which the benchmark finds in the table and reads the schema of; [`calls`] draws, per input, a call of `make.box` by its name with a box within ±2^20 grid steps of the origin, as `geom-make`'s own benchmark draws them ([`super::make`]), which the benchmark finds by name and runs through the facade's re-export.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/facade.rs",
+          "guarantees": [
+            "every typical batch is full, every name is registered and every box is valid, so every lookup finds its operation and every call succeeds (`tests/inputs.rs`), and each input has its own draws. Only the typical class exists: an unknown name is the caller's refusal, not the facade's, and `make.box`'s refusals are tested in `geom-make` itself."
+          ],
+          "job": "Inputs for the facade, `engine-geometry` (piece G100, decision 32.46): the names a program or an AI tool calls operations by, and the calls it dispatches through the facade.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the facade's own table, read as `geom-fuzz`'s `contract` target reads it, and the calls of `engine-geometry`'s `tests/attack_g101.rs`, cut to one operation; each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::facade",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(`BATCH`) draws; a batch of versions shares one body's chunks.",
           "does": "[`cache_key`] gives an edition and an input's seed per call; [`memo_get`] gives the place of a key in the store [`store`] fills; [`next_version`] gives a first version of the body [`faces`] with a body one row changed from it.",
           "family": [],

@@ -488,6 +488,10 @@ pub static OPS: &[Op] = &[
     Op { group: "prune", name: "steps", measures: "geom_name::prune::prune", classes: T, prepare: |c| bind(inputs::naming::prunes(c), kernels::naming::pruned) },
     Op { group: "prune", name: "record_write", measures: "geom_format::pruned::pruned_record", classes: T, prepare: |c| bind(inputs::naming::pruned(c), kernels::naming::record_write) },
     Op { group: "prune", name: "record_read", measures: "geom_format::pruned::read_pruned", classes: T, prepare: |c| bind(inputs::naming::pruned_payloads(c), kernels::naming::record_read) },
+    // The facade (piece G100; decision 32.46): an operation found by name in its table, and a call
+    // dispatched by name through its re-export.
+    Op { group: "facade", name: "lookup", measures: "engine_geometry::operations::OPERATIONS", classes: T, prepare: |c| bind(inputs::facade::names(c), kernels::facade::lookup) },
+    Op { group: "facade", name: "dispatch", measures: "engine_geometry::operations::make_box", classes: T, prepare: |c| bind(inputs::facade::calls(c), kernels::facade::dispatch) },
     // Root finding and quadrature (piece G51; decision 32.46).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -499,7 +503,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 48] = [
+pub const GROUPS: [&str; 49] = [
     "predicate",
     "sign",
     "wide",
@@ -548,6 +552,7 @@ pub const GROUPS: [&str; 48] = [
     "history",
     "resolve",
     "prune",
+    "facade",
 ];
 
 /// The group of the growth checks.
