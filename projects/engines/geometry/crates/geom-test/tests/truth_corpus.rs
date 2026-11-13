@@ -207,7 +207,7 @@ fn the_judge_names_each_verdict() {
 
 #[test]
 fn the_corpus_names_a_check_or_a_piece_for_each_family() {
-    let tests = include_str!("truth.rs");
+    let tests = include_str!("truth_corpus.rs");
     let board = include_str!("../../../architecture/30-build-order.md");
     for family in CORPUS {
         match family.status {
