@@ -891,7 +891,7 @@
   "phase": "Phase 3",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "An owner names who searches for patents, who reviews what is found and whether counsel reads claims (29.17).",
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent searches are made, so nobody is named to search or review.",
   "depends_on": [],
   "chapter": "29, 32"
  },
@@ -901,10 +901,8 @@
   "phase": "Phase 3",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of persistent naming and reference resolution, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of persistent naming and reference resolution is made, and G87 no longer needs this piece.",
+  "depends_on": [],
   "chapter": "20, 29"
  },
  {
@@ -1058,8 +1056,7 @@
   "depends_on": [
    "G81",
    "G86",
-   "G78",
-   "G74"
+   "G78"
   ],
   "chapter": "20"
  },
@@ -1422,10 +1419,9 @@
   "phase": "Phase 3",
   "crate": "geometry/PATENTS.md",
   "size": "Medium",
-  "done_when": "geometry/PATENTS.md with one entry per known patent and per catalogue family, with search status; CI fails when an operation module's family has no recorded search and review.",
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent register is kept, and no CI check asks for a recorded search; gate 3 (G118) no longer needs this piece.",
   "depends_on": [
    "G15",
-   "G73",
    "G70"
   ],
   "chapter": "29"
@@ -1477,7 +1473,6 @@
    "G112",
    "G113",
    "G114",
-   "G115",
    "G116",
    "G117"
   ],
@@ -1489,10 +1484,8 @@
   "phase": "Phase 4",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of slicing and toolpath methods, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of slicing and toolpath methods is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "19, 29"
  },
  {
@@ -1521,10 +1514,8 @@
   "phase": "Phase 4",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review covering EMBER, Nehring-Wirxel's integer plane arithmetic, Campen and Kobbelt's plane-based booleans, cellular models and batch cutting, in the patent register.",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of EMBER, Nehring-Wirxel's integer plane arithmetic, Campen and Kobbelt's plane-based booleans, cellular models and batch cutting is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "11, 29"
  },
  {
@@ -2324,10 +2315,8 @@
   "phase": "Phase 6",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of distance, clearance, clash and continuous collision detection, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of distance, clearance, clash and continuous collision detection is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "14, 19, 29"
  },
  {
@@ -2336,10 +2325,8 @@
   "phase": "Phase 6",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of constraint solving and sketch diagnosis, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of constraint solving and sketch diagnosis is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "15, 29"
  },
  {
@@ -3007,10 +2994,8 @@
   "phase": "Phase 7",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of straight skeletons and roof generation, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of straight skeletons and roof generation is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "13, 29"
  },
  {
@@ -3019,10 +3004,8 @@
   "phase": "Phase 7",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of shells, offsets and thickening, IntegrityWare's claim included, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of shells, offsets and thickening, IntegrityWare's claim included is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "13, 29"
  },
  {
@@ -3031,10 +3014,8 @@
   "phase": "Phase 7",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of G2 and G3 Class-A blends and variable fillets, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of G2 and G3 Class-A blends and variable fillets is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "13, 29"
  },
  {
@@ -3043,10 +3024,8 @@
   "phase": "Phase 7",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of face move, replace and delete with healing, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of face move, replace and delete with healing is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "13, 29"
  },
  {
@@ -3699,10 +3678,8 @@
   "phase": "Phase 8",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of mesh simplification, remeshing and conversion from subdivision to NURBS, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of mesh simplification, remeshing and conversion from subdivision to NURBS is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "16, 19, 29"
  },
  {
@@ -3711,10 +3688,8 @@
   "phase": "Phase 8",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "An owner reviews how 19.3's edge-first tessellation relates to the claims of US 10,614,195 and records the result in the patent register.",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no review of how 19.3's edge-first tessellation relates to the claims of US 10,614,195 is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "19, 29"
  },
  {
@@ -4033,10 +4008,8 @@
   "phase": "Phase 9",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded patent search on Lifted Surfacing and general swept volumes, and chapter 13's legal check (question 7): the Adobe-licensed dependencies and libigl's copyleft module listed in section 29 as never to be read.",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "The patent search on Lifted Surfacing and general swept volumes is closed by the owner on 2026-11-13 (32.49): none is made. Left: chapter 13's legal check (question 7): the Adobe-licensed dependencies and libigl's copyleft module listed in section 29 as never to be read.",
+  "depends_on": [],
   "chapter": "13, 16, 29"
  },
  {
@@ -4045,10 +4018,8 @@
   "phase": "Phase 9",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of point-cloud fitting and registration, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of point-cloud fitting and registration is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "16, 17, 29"
  },
  {
@@ -4057,10 +4028,8 @@
   "phase": "Phase 9",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of panelisation (Evolute, Pottmann et al.), in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of panelisation (Evolute, Pottmann et al.) is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "16, 29"
  },
  {
@@ -4079,10 +4048,8 @@
   "phase": "Phase 9",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "Recorded searches for every 16.6 method and flagged patent, OpenSubdiv licence review, counsel sign-off; nothing in this phase reaches Stable before it.",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "The patent searches for the 16.6 methods and flagged patents are closed by the owner on 2026-11-13 (32.49): none is made. Left: the OpenSubdiv licence review and counsel sign-off; nothing in this phase reaches Stable before it.",
+  "depends_on": [],
   "chapter": "16, 29"
  },
  {
@@ -4671,10 +4638,8 @@
   "phase": "Phase 10",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of terrain, corridor and alignment methods, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of terrain, corridor and alignment methods is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "17, 29"
  },
  {
@@ -5046,10 +5011,8 @@
   "phase": "Phase 11",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of hidden lines, sections and drawing generation, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of hidden lines, sections and drawing generation is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "18, 29"
  },
  {
@@ -5904,10 +5867,8 @@
   "phase": "Phase 13",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of circuit-board pours and clearance, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of circuit-board pours and clearance is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "14, 29"
  },
  {
@@ -5916,10 +5877,8 @@
   "phase": "Phase 13",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "A recorded search and owner review of sheet-metal bending and unfolding, in the patent register (29.17).",
-  "depends_on": [
-   "G73"
-  ],
+  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of sheet-metal bending and unfolding is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
+  "depends_on": [],
   "chapter": "13, 29"
  },
  {
