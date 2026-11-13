@@ -405,7 +405,7 @@ From [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), [04
 | OpenUSD AOUSD proposals | OpenUSD Technical Proposal Supplemental Terms | STUDY | STUDY | Read where they are published upstream; nothing copied |
 | miniz_oxide | MIT OR Zlib OR Apache-2.0 in its crate manifest (checked 2026-10-21 at [`cdd7ddd5`](https://github.com/Frommi/miniz_oxide/blob/cdd7ddd56cf57a6255203bb9f5c6a92bf1144bbf/miniz_oxide/Cargo.toml)) | PORT, DEPEND | PORT into `geom-exchange` (24.7): inflate and deflate, notice kept, run inside our size and ratio budgets | It is `no_std` and forbids `unsafe` code (24.7) |
 | LandXML 1.2 schema ([landxml.org](http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd)) | Terms not found (checked again 2026-10-28); it cannot be pinned to a commit (17.13) | PORT METHOD: implemented from its definitions, never copied or generated from, fetched only to validate (owner action G408, 32.38) | PORT METHOD (17.13): `geom-landxml` reads surfaces, alignments, profiles, COGO points and parcels | It names sixteen spiral types without formulas; each mapping to a curve kind waits for the curve-kind decision note (17.13) |
-| The "Viennese Bend" transition curve, in IFC 4.3's alignment documentation | IFC's documentation writes "Viennese Bend (R)", a registered trademark; its owner and any patent are unverified (17, open questions) | Stop and ask | PORT METHOD of IFC's published definition (17.8), after an owner checks the trademark and patent status (29.17) | The name is used only to identify the IFC and LandXML type, never as the name of our own feature |
+| The "Viennese Bend" transition curve, in IFC 4.3's alignment documentation | IFC's documentation writes "Viennese Bend (R)", a registered trademark; its owner and any patent are unverified (17, open questions) | Stop and ask | PORT METHOD of IFC's published definition (17.8), after an owner checks the trademark status (29.17; no patent check, 32.49) | The name is used only to identify the IFC and LandXML type, never as the name of our own feature |
 
 ## 29.15 Test corpora (`geom-test`)
 
@@ -496,7 +496,7 @@ A patent protects a method, not code, so a clean re-implementation does not esca
 - mesh simplification, remeshing and conversion from subdivision to NURBS;
 - panelisation (Evolute, Pottmann et al.).
 
-A family enters the Build stage only after a recorded search, by whoever an owner designates, and owner review of anything found. The record lives in the patent register (build piece "Patent register"). In the United States knowingly infringing can raise damages, so some organisations leave patent reading to counsel; who searches is an owner decision.
+**No searches (owner, 2026-11-13; 32.49).** No patent searches are made, and there is no patent register. A family on this list does not wait for a search before it enters the Build stage: it is built like any other, existing code first (solidcore, SMLib and other permissive sources, ported to Rust, as the kernel's AGENTS.md says). Owner actions G73 and G74 and piece G115, the patent register, are closed, and the search pieces that needed G73 are recorded as needing no search (30.5). The list above and the table before it stay as a record of what the evidence found.
 
 Apache-2.0's patent grant (SMLib, Manifold, OpenSubdiv's licence) covers the licensor's own code as contributed. It does not clearly cover a re-implementation of the method.
 
@@ -613,7 +613,7 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
    - Data with no licence, or with restrictive terms, is not used until an owner decides (rule 11).
    - Recorded oracle outputs are data we generate. They are vendored with the tool's name and version and the inputs.
    - Fixtures are never copied from copyleft or proprietary projects. Failure cases from issue trackers are rebuilt from their descriptions with our own inputs.
-10. **Patents.** Before building in an area named in 29.17, read its row. An active patent means: avoid the claimed method, or stop and ask. A family not yet searched waits for its recorded search before it enters the Build stage. A paper or vendor that mentions a patent, or calls a method "patent-pending", means: stop and ask.
+10. **Patents.** Before building in an area named in 29.17, read its row. An active patent means: avoid the claimed method, or stop and ask. No family waits for a patent search: the owner decided on 2026-11-13 that none are made (32.49). A paper or vendor that mentions a patent, or calls a method "patent-pending", means: stop and ask.
 11. **When to stop and ask an owner.** Stop, note it on the pull request, and ask the contributor to raise it with an owner (AGENTS.md section 5) when:
     - a licence is missing, unclear, modified, contradicted inside the source, or stated only outside the repository;
     - you want to DEPEND on or PORT a source that is not in this ledger, add a STUDY row for a copyleft or unclear source, or move a source to a more permissive class;
@@ -633,7 +633,7 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
 - A STUDY row for a copyleft, unclear or unlicensed source, and any new DEPEND or PORT row, needs a kernel owner's yes in review.
 - A licence exception or a legal judgment needs a decision note an owner accepts.
 
-This adds four entries to the file table in 26.3 and the folder tree in section 27: `geometry/PROVENANCE.md` (this ledger, generated and kept current), `geometry/NOTICE` (every origin licence text and credit, shipped with every binary), `geometry/methods/` (method notes from the method-only procedure) and `geometry/PATENTS.md` (the patent register).
+This adds four entries to the file table in 26.3 and the folder tree in section 27: `geometry/PROVENANCE.md` (this ledger, generated and kept current), `geometry/NOTICE` (every origin licence text and credit, shipped with every binary), `geometry/methods/` (method notes from the method-only procedure) and `geometry/PATENTS.md` (the patent register). The patent register is not built: the owner closed it on 2026-11-13 (32.49).
 
 ## 29.21 People and projects worth contacting
 
