@@ -1,7 +1,7 @@
 //! Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G163, decision 32.44): a list of
 //! items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a
-//! point projected on an arc and on a band of a sphere, and pairs of curves that meet, each path of
-//! 12.5 once.
+//! point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5
+//! once, and curves through surfaces, each path of 12.6 once.
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -22,8 +22,8 @@ use geom_intersect::{Item, ParamBox, PointContact};
 use geom_math::Box3;
 use geom_num::Exactness;
 use geom_num::interval::Interval;
-use geom_nurbs::{Basis, Curve};
-use geom_surface::{Sphere, SurfaceKind};
+use geom_nurbs::{Basis, Curve, Surface};
+use geom_surface::{Plane, Sphere, SurfaceKind, Torus};
 
 use super::{Class, batch_of, p3, rng, within};
 use crate::rng::SplitMix64;
@@ -258,5 +258,69 @@ pub fn loops(class: Class) -> Vec<CurveKind<2>> {
             [-2.0 * s, 2.0 * s],
             [s, 0.0],
         ])
+    })
+}
+
+/// A line through a point of a plane.
+#[must_use]
+pub fn line_planes(class: Class) -> Vec<(CurveKind<3>, SurfaceKind)> {
+    typical(class, "intersect::line_planes", |g| {
+        let [a, b, c] = point(g);
+        let [x, y, z] = point(g);
+        let side = (-f64::from(1 << 22), f64::from(1 << 22));
+        let plane = Plane::new([a, b, c], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], (side, side)).ok()?;
+        let line = Line::new(
+            [a + x, b + y, c + z.abs() + 1.0],
+            [0.0, 0.0, -1.0],
+            (0.0, f64::from(1 << 23)),
+        )
+        .ok()?;
+        Some((CurveKind::Line(line), SurfaceKind::Plane(plane)))
+    })
+}
+
+/// A line along a torus's equator, through its tube.
+#[must_use]
+pub fn line_tori(class: Class) -> Vec<(CurveKind<3>, SurfaceKind)> {
+    typical(class, "intersect::line_tori", |g| {
+        let [a, b, c] = point(g);
+        let major = 1024.0 + plain(g).abs() / 8.0;
+        let minor = 1.0 + plain(g).abs() / 2048.0;
+        let turn = (0.0, 2.0);
+        let frame = Frame::standard().ok()?;
+        let torus = Torus::new([a, b, c], major, minor, frame, (turn, turn)).ok()?;
+        let line = Line::new([a - 2.0 * major, b, c], [1.0, 0.0, 0.0], (0.0, 4.0 * major)).ok()?;
+        Some((CurveKind::Line(line), SurfaceKind::Torus(torus)))
+    })
+}
+
+/// A cubic down through a biquadratic graph.
+#[must_use]
+pub fn cubic_patches(class: Class) -> Vec<(CurveKind<3>, SurfaceKind)> {
+    typical(class, "intersect::cubic_patches", |g| {
+        let w = f64::from(1 << 12);
+        let mut height = || plain(g) / 2048.0;
+        let mut net = Vec::with_capacity(9);
+        for i in 0..3_i32 {
+            for j in 0..3_i32 {
+                net.push([f64::from(i) * w, f64::from(j) * w, height()]);
+            }
+        }
+        let knots = || vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0];
+        let surface = Surface::new(
+            Basis::new(2, knots()).ok()?,
+            Basis::new(2, knots()).ok()?,
+            &net,
+        )
+        .ok()?;
+        let knots = vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0];
+        let points = [
+            [0.25 * w, 0.5 * w, 4.0 * w],
+            [0.75 * w, 0.75 * w, 2.0 * w],
+            [1.25 * w, 1.25 * w, -2.0 * w],
+            [1.75 * w, 1.5 * w, -4.0 * w],
+        ];
+        let curve = Curve::new(Basis::new(3, knots).ok()?, &points).ok()?;
+        Some((CurveKind::Nurbs(curve), SurfaceKind::Nurbs(surface)))
     })
 }
