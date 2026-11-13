@@ -277,6 +277,7 @@ pub mod contract;
 pub mod corpus;
 pub mod coverage;
 pub mod deps;
+pub mod exact_rank;
 pub mod faults;
 pub mod fixed;
 pub mod fixture;

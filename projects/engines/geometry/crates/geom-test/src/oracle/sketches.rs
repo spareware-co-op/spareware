@@ -1,5 +1,7 @@
-//! Sketch solvers as oracles: ezpz and fiksi, each out of process, against the block solver of
-//! `geom-sketch` (piece G222's differential runs; chapters 15.16 and 28.10).
+//! Sketch solvers as oracles: ezpz, fiksi, `SolveSpace` and planegcs, each out of process, against the
+//! block solver of `geom-sketch` (pieces G222's and G231's differential runs; chapters 15.16 and
+//! 28.10). `SolveSpace` (GPL-3.0) and planegcs (LGPL-2.1-or-later) are only ever run as separate
+//! programs from the oracle repository: nothing of either is linked, vendored or read here.
 //!
 //! What it does: [`jobs`] draws a night's sketches for one oracle from a true configuration: a fixed
 //! first point, then each further point fixed by two equations of kinds that oracle has (two
@@ -13,8 +15,8 @@
 //!
 //! - **Drawn from a truth.** Every value is measured on a known configuration, so a difference is
 //!   settled on the spot: the truth says which side is off.
-//! - **Each oracle sees only what it can state.** fiksi has no midpoint and no mirror rule, so its
-//!   sketches are drawn from the other kinds; level and plumb lines its harness states as parallel to
+//! - **Each oracle sees only what it can state.** fiksi has no midpoint and no mirror rule, and
+//!   planegcs no midpoint, so their sketches are drawn from the other kinds; level and plumb lines its harness states as parallel to
 //!   a fixed axis.
 //! - **Grouped by what the oracle did.** Where the kernel is on the truth and the oracle is not,
 //!   the difference's family says how: `another-root` when the oracle's answer meets every rule
@@ -34,8 +36,8 @@
 //! (`projects/engines/geometry/architecture/15-sketches.md`,
 //! `projects/engines/geometry/architecture/28-testing.md`). Both run out of process: ezpz's numerics
 //! bring in `paste`, which the `RustSec` database marks unmaintained and `deny.toml` refuses anywhere in the graph,
-//! and fiksi is not on crates.io, whose registry is the only source `deny.toml` allows. The fuller
-//! sketch corpus and the other solvers come with G231.
+//! and fiksi is not on crates.io, whose registry is the only source `deny.toml` allows. The generated
+//! families with known diagnoses are `families`'s (G231).
 //!
 //! Cost: linear in the jobs; a judgement is one parse and one solve.
 
@@ -69,6 +71,13 @@ pub const EZPZ: &str = "ezpz";
 
 /// fiksi, Linebender's sketch solver, in the catalogue.
 pub const FIKSI: &str = "fiksi";
+
+/// `SolveSpace`, in the catalogue (piece G231): GPL-3.0, run out of process; its source is not read.
+pub const SOLVESPACE: &str = "solvespace";
+
+/// `FreeCAD`'s planegcs, in the catalogue (piece G231): LGPL-2.1-or-later, run out of process; its
+/// source is not read.
+pub const PLANEGCS: &str = "planegcs";
 
 /// Grid steps to one unit of a job, as the stored ezpz problems are written.
 pub const STEPS: f64 = 1024.0;
@@ -195,9 +204,9 @@ pub struct Answer {
     pub points: Option<Vec<[String; 2]>>,
 }
 
-type P = [f64; 2];
+pub(super) type P = [f64; 2];
 
-fn minus(a: P, b: P) -> P {
+pub(super) fn minus(a: P, b: P) -> P {
     [a[0] - b[0], a[1] - b[1]]
 }
 
@@ -209,12 +218,12 @@ fn dot(u: P, v: P) -> f64 {
     u[0] * v[0] + u[1] * v[1]
 }
 
-fn size(u: P) -> f64 {
+pub(super) fn size(u: P) -> f64 {
     math::sqrt(dot(u, u)).map_or(0.0, Real::get)
 }
 
 /// A uniform double in [lo, hi), from 53 bits.
-fn between(rng: &mut SplitMix64, lo: f64, hi: f64) -> f64 {
+pub(super) fn between(rng: &mut SplitMix64, lo: f64, hi: f64) -> f64 {
     let bits = rng.next_u64() >> 11;
     // A 53-bit whole number is exact as a double.
     #[allow(clippy::cast_precision_loss, reason = "53 bits, exact")]
@@ -222,20 +231,20 @@ fn between(rng: &mut SplitMix64, lo: f64, hi: f64) -> f64 {
     lo + (hi - lo) * unit
 }
 
-fn below(rng: &mut SplitMix64, n: usize) -> usize {
+pub(super) fn below(rng: &mut SplitMix64, n: usize) -> usize {
     let n = u64::try_from(n).ok().and_then(NonZeroU64::new);
     n.map_or(0, |n| usize::try_from(rng.below(n)).unwrap_or(0))
 }
 
-fn sign(rng: &mut SplitMix64) -> f64 {
+pub(super) fn sign(rng: &mut SplitMix64) -> f64 {
     if below(rng, 2) == 0 { 1.0 } else { -1.0 }
 }
 
-fn text(x: f64) -> String {
+pub(super) fn text(x: f64) -> String {
     float(x).unwrap_or_default()
 }
 
-fn at(truth: &[P], i: usize) -> P {
+pub(super) fn at(truth: &[P], i: usize) -> P {
     truth.get(i).copied().unwrap_or([0.0, 0.0])
 }
 
@@ -255,8 +264,38 @@ fn clear(p: P, a: P, b: P) -> bool {
     size(v) > 2.0 && size(w) > 2.0 && cross(u, v).abs() > 0.3 * size(u) * size(v)
 }
 
-/// One sketch of `count` points, its rules of the kinds `fiksi` can state if it is set.
-fn draw(rng: &mut SplitMix64, count: usize, fiksi: bool) -> (Vec<P>, Vec<Rule>) {
+/// The kinds of rule an oracle can state beyond the ones every oracle has.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Kinds {
+    /// A point halfway between two.
+    pub(super) midpoint: bool,
+    /// Two points mirror images in a line.
+    pub(super) mirror: bool,
+}
+
+/// The kinds `oracle` states, or `None` for a name that is no sketch solver: ezpz and `SolveSpace` have
+/// every kind, planegcs has no midpoint rule (its midpoint constraint puts a line's middle on
+/// another line), and fiksi has neither.
+pub(super) fn kinds_of(oracle: &str) -> Option<Kinds> {
+    match oracle {
+        EZPZ | SOLVESPACE => Some(Kinds {
+            midpoint: true,
+            mirror: true,
+        }),
+        PLANEGCS => Some(Kinds {
+            midpoint: false,
+            mirror: true,
+        }),
+        FIKSI => Some(Kinds {
+            midpoint: false,
+            mirror: false,
+        }),
+        _ => None,
+    }
+}
+
+/// One sketch of `count` points, its rules of the kinds `kinds` names.
+pub(super) fn draw(rng: &mut SplitMix64, count: usize, kinds: Kinds) -> (Vec<P>, Vec<Rule>) {
     let mut truth = vec![[between(rng, -20.0, 20.0), between(rng, -20.0, 20.0)]];
     let mut rules = vec![Rule::Fix { point: 0 }];
     let along = between(rng, 3.0, 20.0) * sign(rng);
@@ -297,11 +336,11 @@ fn draw(rng: &mut SplitMix64, count: usize, fiksi: bool) -> (Vec<P>, Vec<Rule>) 
                 rules.push(distance(pa, free, a, k));
                 rules.push(distance(pb, free, b, k));
             }
-            1 if !fiksi => {
+            1 if kinds.midpoint => {
                 truth.push([f64::midpoint(pa[0], pb[0]), f64::midpoint(pa[1], pb[1])]);
                 rules.push(Rule::Midpoint { point: k, a, b });
             }
-            2 if !fiksi && c != a && c != b && clear(pc, pa, pb) => {
+            2 if kinds.mirror && c != a && c != b && clear(pc, pa, pb) => {
                 let u = minus(pb, pa);
                 let t = dot(minus(pc, pa), u) / dot(u, u);
                 let foot = [pa[0] + t * u[0], pa[1] + t * u[1]];
@@ -384,7 +423,7 @@ fn draw(rng: &mut SplitMix64, count: usize, fiksi: bool) -> (Vec<P>, Vec<Rule>) 
     (truth, rules)
 }
 
-fn kind_name(rule: &Rule) -> &'static str {
+pub(super) fn kind_name(rule: &Rule) -> &'static str {
     match rule {
         Rule::Fix { .. } => "fix",
         Rule::Distance { .. } => "distance",
@@ -403,17 +442,13 @@ fn kind_name(rule: &Rule) -> &'static str {
 /// The night's `count` jobs for `oracle` from `seed`; `None` for an oracle with no sketch jobs.
 #[must_use]
 pub fn jobs(oracle: &str, seed: Seed, count: u64) -> Option<Vec<Job>> {
-    let fiksi = match oracle {
-        EZPZ => false,
-        FIKSI => true,
-        _ => return None,
-    };
+    let kinds = kinds_of(oracle)?;
     let mut rng = SplitMix64::new(seed);
     let mut out = Vec::new();
     for id in 0..count {
         let points =
             3_usize.saturating_add(usize::try_from(id.checked_rem(10).unwrap_or(0)).unwrap_or(0));
-        let (truth, rules) = draw(&mut rng, points, fiksi);
+        let (truth, rules) = draw(&mut rng, points, kinds);
         // The fixed first point starts on its truth, where its rule holds it; the rest are shaken.
         let starts = truth
             .iter()
@@ -440,11 +475,11 @@ pub fn jobs(oracle: &str, seed: Seed, count: u64) -> Option<Vec<Job>> {
     Some(out)
 }
 
-fn read(t: &str, id: u64) -> Result<f64, String> {
+pub(super) fn read(t: &str, id: u64) -> Result<f64, String> {
     read_float(t).ok_or_else(|| format!("job {id}: bad number {t:?}"))
 }
 
-fn pairs(list: &[[String; 2]], id: u64) -> Result<Vec<P>, String> {
+pub(super) fn pairs(list: &[[String; 2]], id: u64) -> Result<Vec<P>, String> {
     list.iter()
         .map(|[x, y]| Ok([read(x, id)?, read(y, id)?]))
         .collect()
@@ -616,7 +651,7 @@ pub fn near(oracle: &str, job: &Job) -> Result<f64, String> {
 }
 
 /// Whether every point of `solved` is within `near` of `truth`.
-fn on_truth(solved: Option<&[P]>, truth: &[P], near: f64) -> bool {
+pub(super) fn on_truth(solved: Option<&[P]>, truth: &[P], near: f64) -> bool {
     solved.is_some_and(|s| {
         s.len() == truth.len()
             && s.iter()
@@ -628,7 +663,7 @@ fn on_truth(solved: Option<&[P]>, truth: &[P], near: f64) -> bool {
 /// How far `points` are from meeting `rule`, in units: a distance in every case, so that one
 /// tolerance reads them all. An angle is the distance the second line's far end is from where the
 /// angle puts it.
-fn missed(rule: &Rule, points: &[P], starts: &[P]) -> f64 {
+pub(super) fn missed(rule: &Rule, points: &[P], starts: &[P]) -> f64 {
     let p = |i: usize| at(points, i);
     let turn = |u: P, half_turns: f64| {
         let (c, s) = (

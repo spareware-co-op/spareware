@@ -785,6 +785,16 @@
           ]
         },
         {
+          "id": "geom-test/sketch-families",
+          "what": "Generated sketch cases of geom-test (piece G231): 120 cases from six families (chain, loose, ladder, growth, redundant, conflicting), each as its sketch v1 text with its expected, kernel and exact-rank degrees of freedom, redundancy and conflicts, and the Bareiss rank of its Jacobian in exact rationals with the longest entry and the multiplications it cost.",
+          "check": {
+            "crate": "geom-test",
+            "test": "sketch_families_replay",
+            "function": "sketch_families_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "c517a1a4f74f1887c5c92d5563f0958cafe7ef31bc48f76db0bf2320bc76a17c"
+        },
+        {
           "id": "geom-linalg/dense",
           "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
           "check": {
