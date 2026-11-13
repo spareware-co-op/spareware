@@ -52,7 +52,8 @@ use geom_curve::moved::Motion;
 use geom_curve::tight::{self, point};
 use geom_curve::{CurveError, DerivativeBound, Frame};
 use geom_math::TypedTransform;
-use geom_num::eft::two_sum;
+use geom_num::eft::{two_prod, two_sum};
+use geom_num::exact_sum::ExactSum;
 use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
@@ -393,18 +394,39 @@ impl Round {
         }
     }
 
-    /// The sign of the radius r₀ + k·v (cone) or R + r·cos πv (torus) over v: Some(true) if
-    /// certainly positive, Some(false) if certainly negative, None if it may be either.
+    /// The sign of the radius r₀ + k·v (cone) or R + r·cos πv (torus) over v: Some(true) if never
+    /// negative and not everywhere zero, Some(false) if never positive and not everywhere zero,
+    /// None if it may be either. Where the radius reaches zero only from one side, as at a cone's
+    /// apex at an end of its v, the normal there is the limit from that side: the factor that
+    /// vanishes is divided out, as chapter 12.10 asks of a collapsed edge. A cone's sign is exact;
+    /// a torus's comes from its radius's enclosure, so a zero only it proves is one-sided counts.
     fn radius_sign(&self, which: Which, v: Interval) -> Result<Option<bool>, CurveError> {
         let [l0, l1] = self.lengths;
         let rho = match which {
             Which::Cylinder | Which::Sphere => return Ok(Some(true)),
-            Which::Cone => tight::add(point(l0)?, tight::mul(point(l1)?, v)?)?,
+            Which::Cone => {
+                // r₀ + k·v is linear, so its ends bound it, and each end's sign is exact: k·v is
+                // the error-free pair p + e, and the sum r₀ + p + e is rounded once, correctly.
+                let at = |x: f64| -> Result<f64, CurveError> {
+                    let (p, e) = two_prod(l1, x);
+                    let mut sum = ExactSum::new();
+                    sum.add_slice(&[l0, p, e]);
+                    Ok(sum.round()?.get())
+                };
+                let (a, b) = (at(v.lo())?, at(v.hi())?);
+                return Ok(if a >= 0.0 && b >= 0.0 && (a > 0.0 || b > 0.0) {
+                    Some(true)
+                } else if a <= 0.0 && b <= 0.0 && (a < 0.0 || b < 0.0) {
+                    Some(false)
+                } else {
+                    None
+                });
+            }
             Which::Torus => tight::add(point(l0)?, tight::mul(point(l1)?, v.cospi()?)?)?,
         };
-        Ok(if rho.lo() > 0.0 {
+        Ok(if rho.lo() >= 0.0 && rho.hi() > 0.0 {
             Some(true)
-        } else if rho.hi() < 0.0 {
+        } else if rho.hi() <= 0.0 && rho.lo() < 0.0 {
             Some(false)
         } else {
             None
@@ -599,6 +621,18 @@ macro_rules! round_kind {
                     sign: s,
                     ..self.round
                 })
+            }
+
+            /// The same surface over `domain`: its data are kept, so the points that both
+            /// domains hold are the same points.
+            ///
+            /// # Errors
+            ///
+            /// As the kind's `new`, for the domain.
+            pub fn with_domain(&self, domain: ParamBox) -> Result<$kind, CurveError> {
+                let mut round = self.round.clone();
+                round.domain = domain;
+                $kind::build(round)
             }
 
             fn build(round: Round) -> Result<$kind, CurveError> {
@@ -957,6 +991,15 @@ round_surface!(Sphere, Which::Sphere, Sphere);
 round_surface!(Torus, Which::Torus, Torus);
 
 impl Plane {
+    /// The same plane over `domain`.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::SpanOutside`] for a side that is not ordered or is NaN.
+    pub fn with_domain(&self, domain: ParamBox) -> Result<Plane, CurveError> {
+        Plane::new(self.origin, self.a, self.b, domain)
+    }
+
     /// The plane c + u·a + v·b over `domain`, whose ends may be infinite.
     ///
     /// # Errors
@@ -1307,6 +1350,14 @@ impl AffineSurface {
     /// Which parameters are angles in half-turns, (u, v).
     #[must_use]
     pub fn angular(&self) -> (bool, bool) {
+        self.angular
+    }
+}
+impl AffineSurface {
+    /// Whether u, then v, is an angle in half-turns, as in the kind it is the image of: an
+    /// angular parameter over a whole turn closes on itself (chapter 12.10).
+    #[must_use]
+    pub const fn angular(&self) -> (bool, bool) {
         self.angular
     }
 }

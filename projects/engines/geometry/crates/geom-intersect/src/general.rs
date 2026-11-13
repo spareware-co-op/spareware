@@ -47,6 +47,11 @@
 //! A fat plane here is the mean-value form of a patch along its middle normal, rather than the
 //! control net's slab, so it serves every kind and tightens with the square of the patch's width.
 //!
+//! Where a parameterisation is not regular (G173, [`crate::seam`]): the work list starts from each
+//! domain cut at its creases and inner poles, so no patch reaches across one, and an edge on a pole
+//! line is the one point it is, tested as a point. An edge that ends on a pole line leaves the pole
+//! to that test: a root or a flag the engine finds at that end is the pole itself.
+//!
 //! Cost: a pair takes two bounds, and two sets of partials if neither culls it; pairs number about
 //! the length of the intersection over the patch size where the normals part, near one per step of
 //! a branch. Each settled pair's eight edges run the engine of [`crate::solve`]. All of it is
@@ -71,7 +76,8 @@ use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
 
 use crate::IntersectError;
 use crate::project::{boxed, dot, image, negative, positive};
-use crate::result::{StepsInterval, Test, Unresolved};
+use crate::result::{Degeneracy, StepsInterval, Test, Unresolved};
+use crate::seam::{Charts, PoleStarts, Poles, cells, charts};
 use crate::solve::{Field, solve};
 
 /// What a pair of patches costs the meter, besides the kinds' own charges.
@@ -338,37 +344,99 @@ pub(crate) fn same(a: &[Interval; 4], b: &[Interval; 4]) -> bool {
         .all(|(x, y)| x.lo() <= y.hi() && y.lo() <= x.hi())
 }
 
-/// The start points of one settled pair, or `None` if they could not all be proven.
+/// What the edges of a pair whose normals part give.
+pub(crate) enum Starts {
+    /// Its start points, every one proven.
+    Found(Vec<[Interval; 4]>),
+    /// Some could not be proven.
+    Undecided,
+    /// A pole of one surface lies on the other in the pair, and no branch leaves it: a lone point.
+    Lone,
+}
+
+/// The start points of one pair, or why there are none to take. An edge on a pole line of its
+/// surface ([`crate::seam`]) is one point, tested as a point.
 pub(crate) fn starts_of(
     first: &SurfaceKind,
     second: &SurfaceKind,
     pair: (Region, Region),
     floor: f64,
+    (seams, read): ([&Charts; 2], &Poles),
     meter: &mut WorkMeter<'_>,
-) -> Result<Option<Vec<[Interval; 4]>>, IntersectError> {
+) -> Result<Starts, IntersectError> {
     let (one, two) = pair;
+    let [first_seams, second_seams] = seams;
     let mut out: Vec<[Interval; 4]> = Vec::new();
-    for (own, other, here, there, swapped) in [
-        (first, second, one, two, false),
-        (second, first, two, one, true),
+    for (own, other, here, there, swapped, poles) in [
+        (first, second, one, two, false, &first_seams.poles),
+        (second, first, two, one, true, &second_seams.poles),
     ] {
         let ((a, b), (c, d)) = here;
         for (at, fixed_u) in [(a, true), (b, true), (c, false), (d, false)] {
-            let edge = Edge {
-                own,
-                other,
-                at,
-                fixed_u,
-                floor,
+            let on_pole = if fixed_u { &poles.0 } else { &poles.1 }.contains(&at);
+            let zeros = if on_pole {
+                match read.starts(swapped, (at, fixed_u), (here, there)) {
+                    PoleStarts::Starts(zeros) => zeros,
+                    PoleStarts::Lone => return Ok(Starts::Lone),
+                    PoleStarts::Undecided => return Ok(Starts::Undecided),
+                }
+            } else {
+                let edge = Edge {
+                    own,
+                    other,
+                    at,
+                    fixed_u,
+                    floor,
+                };
+                let length = if fixed_u { (c, d) } else { (a, b) };
+                let (wide, room) = match roomy(other, there) {
+                    Some((wide, room)) => (Some(wide), room),
+                    None => (None, there),
+                };
+                let (wide_own, own_room) = match roomy(own, here) {
+                    Some((wide, room)) => (Some(wide), room),
+                    None => (None, here),
+                };
+                let search = if fixed_u { own_room.1 } else { own_room.0 };
+                let edge = Edge {
+                    own: wide_own.as_ref().unwrap_or(own),
+                    other: wide.as_ref().unwrap_or(other),
+                    ..edge
+                };
+                let domain = [span(search)?, span(room.0)?, span(room.1)?];
+                let mut found = solve(&edge, domain, |_, _| Ok(true), meter)?;
+                // A zero is the patches' if its enclosure meets them both: it is cut to them, and
+                // one wholly in the room past an end is another patch's or none.
+                found
+                    .zeros
+                    .retain_mut(|z| meets_patch(&mut z.enclosure, length, there));
+                found.flagged.retain(|f| {
+                    let mut region = f.region;
+                    meets_patch(&mut region, length, there)
+                });
+                // An end of the edge on a pole line is the pole, which that line's own test
+                // answers for every pair at once: a root or a flag the engine leaves there is that
+                // point, within the floor, and is not this edge's.
+                let across = if fixed_u { &poles.1 } else { &poles.0 };
+                let at_pole = |t: Interval| {
+                    [length.0, length.1]
+                        .iter()
+                        .any(|&end| across.contains(&end) && t.contains(end))
+                };
+                for flagged in &found.flagged {
+                    let [t, ..] = flagged.region;
+                    if !(at_pole(t) && edge.reach(&flagged.region, meter)? <= 1.0) {
+                        return Ok(Starts::Undecided);
+                    }
+                }
+                found
+                    .zeros
+                    .into_iter()
+                    .map(|z| z.enclosure)
+                    .filter(|[t, ..]| !at_pole(*t))
+                    .collect()
             };
-            let length = if fixed_u { (c, d) } else { (a, b) };
-            let domain = [span(length)?, span(there.0)?, span(there.1)?];
-            let found = solve(&edge, domain, |_, _| Ok(true), meter)?;
-            if !found.flagged.is_empty() {
-                return Ok(None);
-            }
-            for zero in found.zeros {
-                let [t, s, r] = zero.enclosure;
+            for [t, s, r] in zeros {
                 let held = point(at)?;
                 let on = if fixed_u { [held, t] } else { [t, held] };
                 let [x, y] = on;
@@ -379,7 +447,78 @@ pub(crate) fn starts_of(
             }
         }
     }
-    Ok(Some(out))
+    Ok(Starts::Found(out))
+}
+
+/// `surface` and `there`, a patch of it that an edge is searched against, both widened past each
+/// end that is an end of the surface's own domain, on the parameters along which the kind goes on
+/// past it: a plane's both, a cylinder's and a cone's axial one (their round one closes on itself
+/// instead). `None` when there is nothing to widen.
+///
+/// A zero of the edge's system on the end of the other surface's domain cannot be proven in a box
+/// that stops at the end: Krawczyk's image of the box leaves it on the outside. In a box that goes
+/// on past the end the same zero is inside, and is proven there (12.3). The kinds' formulas do not
+/// stop at the end, so the same surface over a wider domain (`with_domain`) is read there; a NURBS
+/// surface is not defined past its end, so it has no room. What lies past the end is cut off
+/// again by [`meets_patch`].
+fn roomy(surface: &SurfaceKind, there: Region) -> Option<(SurfaceKind, Region)> {
+    let (us, vs) = surface.domain();
+    let (free_u, free_v) = match surface {
+        SurfaceKind::Plane(_) => (true, true),
+        SurfaceKind::Cylinder(_) | SurfaceKind::Cone(_) => (false, true),
+        _ => (false, false),
+    };
+    // The patch and the domain, each widened by the same room at the ends they share.
+    let widen = |(a, b): (f64, f64), (lo, hi): (f64, f64), free: bool| {
+        let room = (b - a) / ROOM;
+        if !free || room.is_nan() || room <= 0.0 {
+            return ((a, b), (lo, hi));
+        }
+        let (down, up) = (a == lo, b == hi);
+        (
+            (
+                if down { a - room } else { a },
+                if up { b + room } else { b },
+            ),
+            (
+                if down { lo - room } else { lo },
+                if up { hi + room } else { hi },
+            ),
+        )
+    };
+    let (ru, du) = widen(there.0, us, free_u);
+    let (rv, dv) = widen(there.1, vs, free_v);
+    if (ru, rv) == there {
+        return None;
+    }
+    let domain = (du, dv);
+    let wide = match surface {
+        SurfaceKind::Plane(k) => SurfaceKind::Plane(k.with_domain(domain).ok()?),
+        SurfaceKind::Cylinder(k) => SurfaceKind::Cylinder(k.with_domain(domain).ok()?),
+        SurfaceKind::Cone(k) => SurfaceKind::Cone(k.with_domain(domain).ok()?),
+        _ => return None,
+    };
+    Some((wide, (ru, rv)))
+}
+
+/// How much of a patch's width the room past its end is: a sixteenth.
+const ROOM: f64 = 16.0;
+
+/// Whether the enclosure `[t, s, r]` of a zero of an edge system meets the edge (`length`) and the patch `there` of the
+/// other surface, and if so cut to it (a zero within the floor of the patch's end is the end's).
+fn meets_patch(zero: &mut [Interval; 3], length: (f64, f64), there: Region) -> bool {
+    let [t, s, r] = zero;
+    let (((a, b), (c, d)), cut) = (there, |x: &mut Interval, lo: f64, hi: f64| {
+        let (low, high) = (larger(x.lo(), lo), smaller(x.hi(), hi));
+        match Interval::new(low, high) {
+            Ok(met) => {
+                *x = met;
+                true
+            }
+            Err(_) => false,
+        }
+    });
+    cut(t, length.0, length.1) && cut(s, a, b) && cut(r, c, d)
 }
 
 /// The point `share` of the way across a span, if it has one strictly inside.
@@ -538,7 +677,17 @@ pub fn subdivide(
         settled: Vec::new(),
         flagged: Vec::new(),
     };
-    let mut work = alloc::vec![(first.domain(), second.domain())];
+    // Cut first at the lines where a kind is not regular (12.10): its creases and the poles inside
+    // its domain, so no patch reaches across one.
+    let seams = (charts(first), charts(second));
+    let poles = Poles::of(first, second, [&seams.0, &seams.1], floor, meter)?;
+    let mut work = Vec::new();
+    for a in cells(first, &seams.0) {
+        for b in cells(second, &seams.1) {
+            work.push((a, b));
+        }
+    }
+    work.reverse();
     while let Some((a, b)) = work.pop() {
         meter.charge(STEP)?;
         let (over_a, over_b) = (around(first, a, meter)?, around(second, b, meter)?);
@@ -549,9 +698,16 @@ pub fn subdivide(
             continue;
         }
         let (na, nb) = (normals(first, a, meter)?, normals(second, b, meter)?);
+        // Why the pair is split, and flagged once it reaches the floor: its normals may be
+        // parallel, or a pole touches the other surface here with no branch out of it, a lone point
+        // kept as small as the floor allows (12.10).
+        let mut why = Unresolved::UndecidedAtFloor {
+            test: Test::LoopFreedom,
+        };
         if !may_be_parallel(&na, &nb)? {
-            match starts_of(first, second, (a, b), floor, meter)? {
-                Some(starts) if starts.len() % 2 == 0 => {
+            let lines = ([&seams.0, &seams.1], &poles);
+            match starts_of(first, second, (a, b), floor, lines, meter)? {
+                Starts::Found(starts) if starts.len() % 2 == 0 => {
                     if !starts.is_empty() {
                         out.settled.push(Settled {
                             first: a,
@@ -559,24 +715,30 @@ pub fn subdivide(
                             starts,
                         });
                     }
+                    continue;
                 }
-                _ => out.flagged.push(FlaggedPair {
-                    first: a,
-                    second: b,
-                    why: Unresolved::UndecidedAtFloor {
-                        test: Test::Exclusion,
-                    },
-                }),
+                Starts::Found(_) | Starts::Undecided => {
+                    out.flagged.push(FlaggedPair {
+                        first: a,
+                        second: b,
+                        why: Unresolved::UndecidedAtFloor {
+                            test: Test::Exclusion,
+                        },
+                    });
+                    continue;
+                }
+                Starts::Lone => {
+                    why = Unresolved::NonSmooth {
+                        at: Degeneracy::Pole,
+                    };
+                }
             }
-            continue;
         }
         if larger(image(&over_a), image(&over_b)) <= floor {
             out.flagged.push(FlaggedPair {
                 first: a,
                 second: b,
-                why: Unresolved::UndecidedAtFloor {
-                    test: Test::LoopFreedom,
-                },
+                why,
             });
             continue;
         }
@@ -595,9 +757,7 @@ pub fn subdivide(
         out.flagged.push(FlaggedPair {
             first: a,
             second: b,
-            why: Unresolved::UndecidedAtFloor {
-                test: Test::LoopFreedom,
-            },
+            why,
         });
     }
     Ok(out)

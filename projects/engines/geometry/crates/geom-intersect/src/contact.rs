@@ -23,6 +23,13 @@
 //!    an even number, on two analytic surfaces, it is a singular contact of that many half-branches.
 //!    Anything else is a contact of higher order.
 //!
+//! At a pole (G173, [`crate::seam`]): a cluster that subdivision flagged as a lone pole, a pole of
+//! one surface on the other that no branch leaves, is one singular point there. A cluster at a
+//! sphere's pole whose normals may agree is read in a chart turned to put the pole on the equator:
+//! the same sphere, its centre and radius, with its frame turned, where the forms do not vanish
+//! (12.10's local re-chart). Its reading counts only if it is one point and no branch crosses the
+//! cap, and the point is put back at the pole.
+//!
 //! Guarantees:
 //!
 //! - **Every flagged pair is accounted for.** Each one is in a cluster with at least one [`Reading`],
@@ -34,6 +41,17 @@
 //!   spans zero is a contact of higher order, whatever its middle says.
 //! - **A band is an upper bound.** Its width comes from what the cluster's boxes reach and the least
 //!   its pairs' forms can differ by, and a band past the ceiling is a [`Unresolved::TangentBand`].
+//! - **A point on a seam is one point.** Subdivision cuts a closing domain at its ends, so the two
+//!   sides of a seam are flagged as separate clusters, each seeing only the half-branches on its
+//!   side. Singular points whose boxes meet once one is moved a whole turn along the closing
+//!   parameters are joined into one, their half-branches added ([`Reading::Point`]).
+//! - **A contact on a seam is read where nothing cuts it.** If a reading is left undecided or a
+//!   tangent curve at the end of a closing parameter's domain, the same surfaces are read with
+//!   that parameter's domain moved half a turn on (the same surface, cut elsewhere), the
+//!   subdivision's patches moved into it, and the readings that hold the first cut come from that
+//!   chart. Such a reading's box may reach past the domain's end by what it reaches; the part
+//!   past the end is the same points as the domain's start. See
+//!   `architecture/decisions/G173-contacts-on-a-seam.md`.
 //! - **Overlap is by identity or by a covered area.** Two surfaces are identical only if their data
 //!   are equal, and a cluster overlaps only if patches of both surfaces cover its hulls, so that
 //!   every point of each has a box of the other within reach, and its hull ends at an edge: a
@@ -54,7 +72,7 @@
 //! form is as likely a pair of near crossings, so it stays flagged.
 //!
 //! What this piece leaves: a tangent curve is reported as a band over its cluster, and its curve is
-//! G175's. A contact on a domain's edge is G173's. The half-branches at a crossing are what
+//! G175's. A contact at a NURBS pole stays undecided (G173's `seam` says why). The half-branches at a crossing are what
 //! [`crate::march`] traces to the cluster's edge.
 //!
 //! Cost: each cluster is one run of [`crate::solve`] on the collinear-normal system, boxes in four
@@ -68,28 +86,128 @@
 
 use alloc::vec::Vec;
 
+use geom_curve::Frame;
 use geom_curve::tight::{larger, smaller};
 use geom_num::NumError;
 use geom_num::grid::Steps;
 use geom_num::interval::Interval;
 use geom_run::WorkMeter;
-use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
+use geom_surface::{ParamBox as Region, ParamSurface, Sphere, SurfaceKind};
 
 use crate::IntersectError;
 use crate::curve::exact_steps;
 use crate::general::shared_carrier;
 use crate::general::{
-    FlaggedPair, Settled, Subdivided, around, cross, ends, may_be_parallel, minus_box, normals,
-    partials, point, same, span, speeds, starts_of,
+    FlaggedPair, Settled, Starts, Subdivided, around, cross, ends, may_be_parallel, minus_box,
+    normals, partials, point, same, span, speeds, starts_of, subdivide,
 };
-use crate::project::{dot, image, negative, positive};
-use crate::result::{Coincidence, CurveContact, PointContact, StepsInterval, Test, Unresolved};
+use crate::project::{Projection, dot, image, negative, positive, project_surface};
+use crate::result::{
+    Coincidence, CurveContact, Degeneracy, PointContact, StepsInterval, Test, Unresolved,
+};
+use crate::seam::{Charts, Poles, charts};
 use crate::solve::{Field, Solved, Zero, refined, solve};
 
 /// Why a pair is flagged when subdivision ran out of room with its normals still unparted.
 const NO_ROOM: Unresolved = Unresolved::UndecidedAtFloor {
     test: Test::LoopFreedom,
 };
+
+/// Why subdivision flags a pair holding a pole of one surface that lies on the other with no
+/// branch leaving it (12.10).
+const LONE: Unresolved = Unresolved::NonSmooth {
+    at: Degeneracy::Pole,
+};
+
+/// The pole line of `surface` every region of `regions` reaches, as the parameter held (0 for u),
+/// its value, and the domain's span of the other parameter.
+fn shared_pole(
+    surface: &SurfaceKind,
+    seams: &Charts,
+    mut regions: impl Iterator<Item = Region>,
+) -> Option<(usize, f64, (f64, f64))> {
+    let ((u0, u1), (v0, v1)) = surface.domain();
+    let first = regions.next()?;
+    let reaches = |r: Region, axis: usize, p: f64| {
+        let ((a, b), (c, d)) = r;
+        if axis == 0 {
+            a == p || b == p
+        } else {
+            c == p || d == p
+        }
+    };
+    let lines = seams.poles.0.iter().map(|&p| (0, p, (v0, v1)));
+    let lines = lines.chain(seams.poles.1.iter().map(|&p| (1, p, (u0, u1))));
+    let found: Vec<(usize, f64, (f64, f64))> = lines
+        .filter(|&(axis, p, _)| reaches(first, axis, p))
+        .collect();
+    let rest: Vec<Region> = regions.collect();
+    found
+        .into_iter()
+        .find(|&(axis, p, _)| rest.iter().all(|&r| reaches(r, axis, p)))
+}
+
+/// A cluster that subdivision flagged as a lone pole (12.10): the pole of one surface, lying on the
+/// other within the floor, read as one point. It is a singular point of the surface, so its contact
+/// is [`PointContact::Singular`] with the branches that end on the cluster (none, for a cone's apex
+/// resting on a plane). `None` where the cluster is not at one pole.
+fn at_pole(
+    system: &Collinear<'_>,
+    pairs: &[FlaggedPair],
+    settled: &[Settled],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Reading>, IntersectError> {
+    let sides = [
+        (system.first, system.second, &system.seams.0, false),
+        (system.second, system.first, &system.seams.1, true),
+    ];
+    for (own, other, seams, swapped) in sides {
+        let regions = pairs
+            .iter()
+            .map(|p| if swapped { p.second } else { p.first });
+        let Some((axis, p, free)) = shared_pole(own, seams, regions) else {
+            continue;
+        };
+        let held = point(p)?;
+        let along = span(free)?;
+        let (at, line) = if axis == 0 {
+            (((p, p), (free.0, free.0)), [held, along])
+        } else {
+            (((free.0, free.0), (p, p)), [along, held])
+        };
+        let Some(read) = partials(own, at, 0, meter)? else {
+            return Ok(None);
+        };
+        let [pole, ..] = read.as_slice() else {
+            return Err(IntersectError::Internal);
+        };
+        let middle = pole.map(|x| x.lo() / 2.0 + x.hi() / 2.0);
+        let Projection::Points(feet) = project_surface(other, &middle, system.floor / 8.0, meter)?
+        else {
+            return Ok(None);
+        };
+        let Some(foot) = feet.into_iter().min_by(|x, y| {
+            x.distance
+                .lo()
+                .partial_cmp(&y.distance.lo())
+                .unwrap_or(core::cmp::Ordering::Equal)
+        }) else {
+            return Ok(None);
+        };
+        let ending = branches(settled, pairs, meter)?;
+        let Ok(count) = u16::try_from(ending) else {
+            return Ok(None);
+        };
+        let [x, y] = line;
+        let [s, r] = foot.at;
+        return Ok(Some(Reading::Point {
+            at: if swapped { [s, r, x, y] } else { [x, y, s, r] },
+            gap: foot.distance,
+            contact: PointContact::Singular { branches: count },
+        }));
+    }
+    Ok(None)
+}
 
 /// What one cluster of flagged pairs turned out to be.
 #[derive(Clone, Debug, PartialEq)]
@@ -141,6 +259,35 @@ struct Collinear<'a> {
     floor: f64,
     /// Each parameter's speed: a surface's run in a unit's worth of parameter, a plane's in steps.
     weights: [f64; 4],
+    /// What each surface's data proves of its seams and poles (12.10).
+    seams: (Charts, Charts),
+    /// Each pole line read against the other surface.
+    poles: Poles,
+}
+
+impl<'a> Collinear<'a> {
+    /// The system for `first` and `second` at `floor`, with their charts and poles read.
+    fn of(
+        first: &'a SurfaceKind,
+        second: &'a SurfaceKind,
+        floor: f64,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Collinear<'a>, IntersectError> {
+        let ([a, b], [c, d]) = (
+            speeds(first, first.domain(), meter)?,
+            speeds(second, second.domain(), meter)?,
+        );
+        let seams = (charts(first), charts(second));
+        let poles = Poles::of(first, second, [&seams.0, &seams.1], floor, meter)?;
+        Ok(Collinear {
+            first,
+            second,
+            floor,
+            weights: [a, b, c, d],
+            seams,
+            poles,
+        })
+    }
 }
 
 /// Both surfaces read to the second order.
@@ -750,9 +897,10 @@ fn look(
             second,
             (pair.first, pair.second),
             system.floor,
+            ([&system.seams.0, &system.seams.1], &system.poles),
             meter,
         )? {
-            Some(starts) if starts.len().is_multiple_of(2) => {
+            Starts::Found(starts) if starts.len().is_multiple_of(2) => {
                 if !starts.is_empty() {
                     pieces.push(Settled {
                         first: pair.first,
@@ -819,6 +967,30 @@ pub fn analyse(
     ceiling: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Reading>, IntersectError> {
+    let readings = read_pair(first, second, found, floor, ceiling, meter)?;
+    let Some(turned) = turned_seams(first, second, found, &readings, meter)? else {
+        return Ok(readings);
+    };
+    let again = read_pair(
+        &turned.first,
+        &turned.second,
+        &turned.found,
+        floor,
+        ceiling,
+        meter,
+    )?;
+    Ok(at_the_cuts(readings, again, &turned))
+}
+
+/// [`analyse`] in the chart the surfaces are given in.
+fn read_pair(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    found: &Subdivided,
+    floor: f64,
+    ceiling: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Reading>, IntersectError> {
     if floor.is_nan() || floor <= 0.0 || ceiling.is_nan() || ceiling <= 0.0 {
         return Err(IntersectError::InvalidInput);
     }
@@ -836,20 +1008,145 @@ pub fn analyse(
             coincidence: Coincidence::Identical,
         }]);
     }
-    let ([a, b], [c, d]) = (
-        speeds(first, first.domain(), meter)?,
-        speeds(second, second.domain(), meter)?,
-    );
-    let system = Collinear {
-        first,
-        second,
-        floor,
-        weights: [a, b, c, d],
-    };
-    let mut out = Vec::new();
-    let mut settled = found.settled.clone();
-    let mut contacts = Vec::new();
+    let system = Collinear::of(first, second, floor, meter)?;
+    let mut rest = Vec::new();
+    let mut turned = Vec::new();
     for cluster in clusters(&found.flagged, meter)? {
+        if cluster.iter().any(|p| p.why == NO_ROOM)
+            && let Some(reading) = turned_at_pole(&system, &cluster, ceiling, meter)?
+        {
+            turned.push(reading);
+        } else {
+            rest.push(cluster);
+        }
+    }
+    let mut out = read_clusters(&system, &found.settled, rest, ceiling, meter)?;
+    out.extend(turned);
+    Ok(across_seams(first, second, out))
+}
+
+/// The length of a closing parameter's domain: a whole turn, in half-turns.
+#[doc(hidden)]
+pub const TURN: f64 = 2.0;
+
+/// The parameters (u₁, v₁, u₂, v₂) that close, by a whole turn: a point of the domain's one end is
+/// the point of the other.
+#[doc(hidden)]
+#[must_use]
+pub fn closing(first: &SurfaceKind, second: &SurfaceKind) -> [bool; 4] {
+    let (a, b) = (charts(first).closes, charts(second).closes);
+    [a[0], a[1], b[0], b[1]]
+}
+
+/// `x` moved by `by`, widened outward by one step of the grid of doubles for the rounding. (This and
+/// the other items marked hidden are public only so that tests/seam_chart.rs can hold each to its
+/// arithmetic, since the mutation judge runs the tests folder and not a crate's own.)
+#[doc(hidden)]
+pub fn moved(x: Interval, by: f64) -> Result<Interval, NumError> {
+    Interval::new((x.lo() + by).next_down(), (x.hi() + by).next_up())
+}
+
+/// The box of `b`, moved by whole turns of the closing parameters, that touches `a` in all four
+/// parameters; `None` if no such move exists or none is needed (then the clusters already met).
+#[doc(hidden)]
+#[must_use]
+pub fn wrapped(a: &[Interval; 4], b: &[Interval; 4], closes: [bool; 4]) -> Option<[Interval; 4]> {
+    let mut out = *b;
+    let mut moves = 0_usize;
+    for ((o, x), (y, close)) in out.iter_mut().zip(a).zip(b.iter().zip(closes)) {
+        let touching = |z: Interval| x.lo() <= z.hi() && z.lo() <= x.hi();
+        if touching(*y) {
+            continue;
+        }
+        if !close {
+            return None;
+        }
+        let shifted = [-TURN, TURN]
+            .into_iter()
+            .filter_map(|by| moved(*y, by).ok())
+            .find(|z| touching(*z))?;
+        *o = shifted;
+        moves = moves.saturating_add(1);
+    }
+    (moves > 0).then_some(out)
+}
+
+/// Point readings that are one point read in two charts across a closing seam, joined (12.10).
+///
+/// A point on a seam is flagged from both of its sides: subdivision cuts a domain at its ends, so
+/// the clusters of the two sides never touch in the parameters, and each is read alone, with
+/// only the half-branches that end on its side. Two singular points whose boxes touch once one is
+/// moved a whole turn along the closing parameters (an exact identity of the data, see
+/// [`crate::seam`]) are one point: the half-branches add, and the box is where the two enclosures
+/// meet, each holding the one point (the first's, if rounding made them miss).
+fn across_seams(first: &SurfaceKind, second: &SurfaceKind, readings: Vec<Reading>) -> Vec<Reading> {
+    let closes = closing(first, second);
+    if !closes.iter().any(|c| *c) {
+        return readings;
+    }
+    let mut out: Vec<Reading> = Vec::new();
+    for reading in readings {
+        let mut taken = false;
+        if let Reading::Point {
+            at,
+            gap,
+            contact: PointContact::Singular { branches },
+        } = &reading
+        {
+            for kept in &mut out {
+                if let Reading::Point {
+                    at: into,
+                    gap: into_gap,
+                    contact: PointContact::Singular { branches: held },
+                } = kept
+                    && let Some(there) = wrapped(into, at, closes)
+                    && let Some(sum) = held.checked_add(*branches)
+                {
+                    let mut met = *into;
+                    for ((m, a), b) in met.iter_mut().zip(into.iter()).zip(there) {
+                        let (lo, hi) = (larger(a.lo(), b.lo()), smaller(a.hi(), b.hi()));
+                        if let Ok(both) = Interval::new(lo, hi) {
+                            *m = both;
+                        }
+                    }
+                    *into = met;
+                    if let Ok(wider) = Interval::new(
+                        smaller(into_gap.lo(), gap.lo()),
+                        larger(into_gap.hi(), gap.hi()),
+                    ) {
+                        *into_gap = wider;
+                    }
+                    *held = sum;
+                    taken = true;
+                    break;
+                }
+            }
+        }
+        if !taken {
+            out.push(reading);
+        }
+    }
+    out
+}
+
+/// What each of `clusters` is, around the `settled` pairs of the same subdivision.
+fn read_clusters(
+    system: &Collinear<'_>,
+    settled: &[Settled],
+    clusters: Vec<Vec<FlaggedPair>>,
+    ceiling: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Reading>, IntersectError> {
+    let mut out = Vec::new();
+    let mut settled = settled.to_vec();
+    let mut contacts = Vec::new();
+    for cluster in clusters {
+        if cluster.iter().all(|p| p.why == LONE)
+            && let Some(reading) = at_pole(system, &cluster, &settled, meter)?
+        {
+            out.push(reading);
+            continue;
+        }
         if !cluster.iter().any(|p| p.why == NO_ROOM) {
             out.extend(cluster.iter().map(|p| Reading::Undecided {
                 first: p.first,
@@ -858,7 +1155,7 @@ pub fn analyse(
             }));
             continue;
         }
-        match look(&system, &cluster, ceiling, meter)? {
+        match look(system, &cluster, ceiling, meter)? {
             Look::Read(reading) => out.push(reading),
             Look::Settled(pieces) => {
                 out.extend(pieces.iter().cloned().map(Reading::Crossing));
@@ -870,7 +1167,7 @@ pub fn analyse(
     for (pairs, cluster, solved) in &contacts {
         let ending = branches(&settled, pairs, meter)?;
         out.extend(read_cluster(
-            &system,
+            system,
             (cluster, solved),
             ending,
             ceiling,
@@ -878,4 +1175,445 @@ pub fn analyse(
         )?);
     }
     Ok(out)
+}
+
+/// The farthest, in half-turns, a cap about a sphere's pole may reach for its turned chart (below)
+/// to be a small patch about a regular point: an eighth of a turn.
+const CAP: f64 = 0.25;
+
+/// The same sphere as `sphere`, which is its centre and radius whatever its frame, charted with
+/// the pole at `pole` (v = ±1/2) on its equator at (0, 0), over `reach` half-turns either way of
+/// it, where the chart is regular: 12.10's local re-chart. `None` for a sphere whose normal points
+/// in, since the turned one's points out.
+fn turned(sphere: &Sphere, pole: f64, reach: f64) -> Option<SurfaceKind> {
+    if sphere.axial_sign() < 0.0 {
+        return None;
+    }
+    let frame = sphere.frame();
+    let (x, n) = (frame.x(), frame.normal());
+    // The pole is c + r·sin(π·pole)·n̂: along +n̂ at v = 1/2 and −n̂ at v = −1/2.
+    let toward = if pole > 0.0 { n } else { n.map(|t| -t) };
+    let frame = Frame::new(toward, x).ok()?;
+    let cap = ((-reach, reach), (-reach, reach));
+    Sphere::new(sphere.center(), sphere.radius(), frame, cap)
+        .ok()
+        .map(SurfaceKind::Sphere)
+}
+
+/// A cluster about a sphere's pole whose normals may agree there (a plane touching the pole),
+/// read in the turned chart, where 12.9's forms do not vanish: its one point reading, the sphere's
+/// parameters put back at the pole, or `None` where the turned chart does not decide it alone (a
+/// branch crosses the cap, or it reads anything but one point).
+fn turned_at_pole(
+    system: &Collinear<'_>,
+    pairs: &[FlaggedPair],
+    ceiling: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Reading>, IntersectError> {
+    let sides = [
+        (system.first, system.second, false),
+        (system.second, system.first, true),
+    ];
+    for (own, other, swapped) in sides {
+        let SurfaceKind::Sphere(sphere) = own else {
+            continue;
+        };
+        let ((u0, u1), (v0, v1)) = own.domain();
+        let mut regions = pairs
+            .iter()
+            .map(|p| if swapped { p.second } else { p.first });
+        let Some(first) = regions.next() else {
+            continue;
+        };
+        let ((_, _), (c, d)) = regions.fold(first, hull);
+        let pole = if d == 0.5 && v1 == 0.5 {
+            0.5
+        } else if c == -0.5 && v0 == -0.5 {
+            -0.5
+        } else {
+            continue;
+        };
+        // Twice the cluster's reach from the pole: the turned box holds every point that near it.
+        let reach = 2.0 * if pole > 0.0 { 0.5 - c } else { d + 0.5 };
+        if !(reach > 0.0 && reach <= CAP) {
+            continue;
+        }
+        let Some(cap) = turned(sphere, pole, reach) else {
+            continue;
+        };
+        let (one, two) = if swapped {
+            (other, &cap)
+        } else {
+            (&cap, other)
+        };
+        let found = subdivide(one, two, system.floor, meter)?;
+        if !found.settled.is_empty() {
+            return Ok(None);
+        }
+        let near = Collinear::of(one, two, system.floor, meter)?;
+        let read = read_clusters(
+            &near,
+            &found.settled,
+            clusters(&found.flagged, meter)?,
+            ceiling,
+            meter,
+        )?;
+        let [Reading::Point { at, gap, contact }] = read.as_slice() else {
+            return Ok(None);
+        };
+        let [a, b, s, r] = *at;
+        let (x, y) = (span((u0, u1))?, point(pole)?);
+        return Ok(Some(Reading::Point {
+            at: if swapped { [a, b, x, y] } else { [x, y, s, r] },
+            gap: *gap,
+            contact: *contact,
+        }));
+    }
+    Ok(None)
+}
+
+/// The pair of surfaces read in a chart whose closing parameters are cut half a turn on (12.10),
+/// and the patches of `found` moved into it.
+struct Turned {
+    first: SurfaceKind,
+    second: SurfaceKind,
+    found: Subdivided,
+    /// For each of u₁, v₁, u₂, v₂ that closes: where its domain starts in the first chart. The
+    /// first chart is cut there, and the turned chart half a turn on.
+    starts: [Option<f64>; 4],
+}
+
+/// The four parameters' ranges of a reading's boxes.
+fn ranges(reading: &Reading) -> [(f64, f64); 4] {
+    let both = |first: Region, second: Region| {
+        let (((a, b), (c, d)), ((e, f), (g, h))) = (first, second);
+        [(a, b), (c, d), (e, f), (g, h)]
+    };
+    match reading {
+        Reading::Point { at, .. } => at.map(|x| (x.lo(), x.hi())),
+        Reading::Crossing(pair) => both(pair.first, pair.second),
+        Reading::Curve { first, second, .. }
+        | Reading::Overlap { first, second, .. }
+        | Reading::Undecided { first, second, .. } => both(*first, *second),
+    }
+}
+
+/// Where each closing parameter's domain starts and ends, and `None` for those that do not close.
+#[doc(hidden)]
+#[must_use]
+pub fn cuts_of(first: &SurfaceKind, second: &SurfaceKind) -> [Option<(f64, f64)>; 4] {
+    let closes = closing(first, second);
+    let ((u0, u1), (v0, v1)) = first.domain();
+    let ((s0, s1), (t0, t1)) = second.domain();
+    let [c0, c1, c2, c3] = closes;
+    [
+        c0.then_some((u0, u1)),
+        c1.then_some((v0, v1)),
+        c2.then_some((s0, s1)),
+        c3.then_some((t0, t1)),
+    ]
+}
+
+/// Whether a reading's boxes reach an end of a closing parameter's domain.
+fn on_a_cut(reading: &Reading, cuts: &[Option<(f64, f64)>; 4]) -> bool {
+    reach_a_cut(&ranges(reading), cuts)
+}
+
+/// Whether four ranges, one for each of u1, v1, u2, v2, reach an end of a closing parameter's
+/// domain.
+fn reach_a_cut(spans: &[(f64, f64); 4], cuts: &[Option<(f64, f64)>; 4]) -> bool {
+    spans
+        .iter()
+        .zip(cuts)
+        .any(|((a, b), cut)| cut.is_some_and(|(lo, hi)| *a == lo || *b == hi))
+}
+
+/// The four ranges of a pair of patches.
+#[doc(hidden)]
+#[must_use]
+pub const fn spans_of(first: Region, second: Region) -> [(f64, f64); 4] {
+    let (((a, b), (c, d)), ((e, f), (g, h))) = (first, second);
+    [(a, b), (c, d), (e, f), (g, h)]
+}
+
+/// `surface` over its domain with each closing parameter's range moved half a turn on: the same
+/// surface, cut elsewhere. `None` for a kind that has no such ranges.
+fn turned_surface(surface: &SurfaceKind, closes: [bool; 2]) -> Option<SurfaceKind> {
+    let ((u0, u1), (v0, v1)) = surface.domain();
+    let half = |closes: bool, (lo, hi): (f64, f64)| {
+        if closes {
+            (lo + TURN / 2.0, hi + TURN / 2.0)
+        } else {
+            (lo, hi)
+        }
+    };
+    let domain = (half(closes[0], (u0, u1)), half(closes[1], (v0, v1)));
+    match surface {
+        SurfaceKind::Cylinder(k) => k.with_domain(domain).ok().map(SurfaceKind::Cylinder),
+        SurfaceKind::Cone(k) => k.with_domain(domain).ok().map(SurfaceKind::Cone),
+        SurfaceKind::Sphere(k) => k.with_domain(domain).ok().map(SurfaceKind::Sphere),
+        SurfaceKind::Torus(k) => k.with_domain(domain).ok().map(SurfaceKind::Torus),
+        _ => None,
+    }
+}
+
+/// Which of a patch's two parameters move a whole turn on in the turned chart: those that close
+/// and lie in the first half of the domain. `None` if the patch reaches across the half-way line,
+/// where the turned chart cuts.
+fn moves(region: Region, starts: [Option<f64>; 2]) -> Option<[bool; 2]> {
+    let ((a, b), (c, d)) = region;
+    let one = |(lo, hi): (f64, f64), start: Option<f64>| match start {
+        None => Some(false),
+        Some(start) => {
+            let half = start + TURN / 2.0;
+            if hi <= half {
+                Some(true)
+            } else if lo >= half {
+                Some(false)
+            } else {
+                None
+            }
+        }
+    };
+    Some([one((a, b), starts[0])?, one((c, d), starts[1])?])
+}
+
+/// `region` with the parameters `moved` a whole turn on.
+fn turn_region(region: Region, moved: [bool; 2]) -> Region {
+    let ((a, b), (c, d)) = region;
+    let up = |(lo, hi): (f64, f64), by: bool| if by { (lo + TURN, hi + TURN) } else { (lo, hi) };
+    (up((a, b), moved[0]), up((c, d), moved[1]))
+}
+
+/// `cuts` with those left out that no reading left undecided, or a tangent curve, lies on: only the
+/// closing parameters that such a reading lies on a cut of are turned, and the others keep their
+/// cut, where no reading of this pair is.
+#[doc(hidden)]
+#[must_use]
+pub fn cuts_with_readings(
+    mut cuts: [Option<(f64, f64)>; 4],
+    readings: &[Reading],
+) -> [Option<(f64, f64)>; 4] {
+    let undecided: Vec<&Reading> = readings
+        .iter()
+        .filter(|r| matches!(r, Reading::Undecided { .. } | Reading::Curve { .. }))
+        .collect();
+    for (k, cut) in cuts.iter_mut().enumerate() {
+        let here = *cut;
+        let only = |r: &&Reading| {
+            let mut one = [None; 4];
+            if let Some(slot) = one.get_mut(k) {
+                *slot = here;
+            }
+            on_a_cut(r, &one)
+        };
+        if !undecided.iter().any(only) {
+            *cut = None;
+        }
+    }
+    cuts
+}
+
+/// Whether a settled pair touches a flagged pair of `seam` in both its patches: it is next to a
+/// contact on a cut, and cannot be left out of the turned chart.
+#[doc(hidden)]
+#[must_use]
+pub fn in_a_seam(seam: &[FlaggedPair], pair: &Settled) -> bool {
+    seam.iter()
+        .any(|f| touch(f.first, pair.first) && touch(f.second, pair.second))
+}
+
+/// The surfaces and the patches of `found` in the chart cut half a turn on along every closing
+/// parameter, if some reading in `readings` is left undecided or a tangent curve at a cut of the
+/// first chart.
+fn turned_seams(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    found: &Subdivided,
+    readings: &[Reading],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Turned>, IntersectError> {
+    let cuts = cuts_with_readings(cuts_of(first, second), readings);
+    if cuts.iter().all(Option::is_none) {
+        return Ok(None);
+    }
+    let starts = cuts.map(|cut| cut.map(|(lo, _)| lo));
+    let [first_u, first_v, second_u, second_v] = starts;
+    let [c0, c1, c2, c3] = starts.map(|s| s.is_some());
+    let (Some(turned_first), Some(turned_second)) = (
+        turned_surface(first, [c0, c1]),
+        turned_surface(second, [c2, c3]),
+    ) else {
+        return Ok(None);
+    };
+    // The patches in the clusters that reach a cut are the ones the turned chart reads. A patch
+    // that reaches across the half-way line, where the turned chart cuts, cannot be moved: if it
+    // is in such a cluster the turned chart declines, and anywhere else it is left out, since a
+    // contact on that line is read in the first chart, where it is not cut.
+    let mut seam: Vec<FlaggedPair> = Vec::new();
+    for cluster in clusters(&found.flagged, meter)? {
+        if cluster
+            .iter()
+            .any(|p| reach_a_cut(&spans_of(p.first, p.second), &cuts))
+        {
+            seam.extend(cluster);
+        }
+    }
+    let mut out = Subdivided {
+        settled: Vec::new(),
+        flagged: Vec::new(),
+    };
+    for pair in &found.flagged {
+        let moved_by = (
+            moves(pair.first, [first_u, first_v]),
+            moves(pair.second, [second_u, second_v]),
+        );
+        let (Some(m1), Some(m2)) = moved_by else {
+            if seam.contains(pair) {
+                return Ok(None);
+            }
+            continue;
+        };
+        out.flagged.push(FlaggedPair {
+            first: turn_region(pair.first, m1),
+            second: turn_region(pair.second, m2),
+            why: pair.why,
+        });
+    }
+    for pair in &found.settled {
+        let moved_by = (
+            moves(pair.first, [first_u, first_v]),
+            moves(pair.second, [second_u, second_v]),
+        );
+        let (Some(m1), Some(m2)) = moved_by else {
+            if in_a_seam(&seam, pair) {
+                return Ok(None);
+            }
+            continue;
+        };
+        let by = [m1[0], m1[1], m2[0], m2[1]];
+        let mut starts_moved = Vec::new();
+        for start in &pair.starts {
+            let mut s = *start;
+            for (x, up) in s.iter_mut().zip(by) {
+                if up {
+                    let Ok(y) = moved(*x, TURN) else {
+                        return Ok(None);
+                    };
+                    *x = y;
+                }
+            }
+            starts_moved.push(s);
+        }
+        out.settled.push(Settled {
+            first: turn_region(pair.first, m1),
+            second: turn_region(pair.second, m2),
+            starts: starts_moved,
+        });
+    }
+    Ok(Some(Turned {
+        first: turned_first,
+        second: turned_second,
+        found: out,
+        starts,
+    }))
+}
+
+/// A reading of the turned chart, put back in the first chart: a box wholly a turn past the first
+/// chart's start moves back by it. One that reaches across the first chart's cut is left as it is,
+/// past the domain's end by what it reaches; the part past the end is the same points as the
+/// domain's start (12.10).
+#[doc(hidden)]
+#[must_use]
+pub fn unturned(reading: Reading, starts: &[Option<f64>; 4]) -> Reading {
+    let spans = ranges(&reading);
+    let past: [bool; 4] = core::array::from_fn(|k| {
+        spans
+            .get(k)
+            .zip(starts.get(k).copied().flatten())
+            .is_some_and(|((a, _), s)| *a >= s + TURN)
+    });
+    let [p0, p1, p2, p3] = past;
+    let down = |(lo, hi): (f64, f64), by: bool| if by { (lo - TURN, hi - TURN) } else { (lo, hi) };
+    let region = |r: Region, by: [bool; 2]| -> Region {
+        let ((a, b), (c, d)) = r;
+        (down((a, b), by[0]), down((c, d), by[1]))
+    };
+    match reading {
+        Reading::Point {
+            mut at,
+            gap,
+            contact,
+        } => {
+            for (x, by) in at.iter_mut().zip(past) {
+                if by && let Ok(y) = moved(*x, -TURN) {
+                    *x = y;
+                }
+            }
+            Reading::Point { at, gap, contact }
+        }
+        Reading::Undecided { first, second, why } => Reading::Undecided {
+            first: region(first, [p0, p1]),
+            second: region(second, [p2, p3]),
+            why,
+        },
+        Reading::Curve {
+            first,
+            second,
+            contact,
+        } => Reading::Curve {
+            first: region(first, [p0, p1]),
+            second: region(second, [p2, p3]),
+            contact,
+        },
+        Reading::Overlap {
+            first,
+            second,
+            coincidence,
+        } => Reading::Overlap {
+            first: region(first, [p0, p1]),
+            second: region(second, [p2, p3]),
+            coincidence,
+        },
+        Reading::Crossing(pair) => Reading::Crossing(pair),
+    }
+}
+
+/// `readings` of the first chart with those at its cuts replaced by those of the turned chart that
+/// hold the first chart's cut (a whole turn from the turned domain's start, in its middle) and do
+/// not touch the turned chart's own.
+fn at_the_cuts(readings: Vec<Reading>, again: Vec<Reading>, turned: &Turned) -> Vec<Reading> {
+    let old = turned_cuts(&turned.starts);
+    let mut out: Vec<Reading> = readings
+        .into_iter()
+        .filter(|r| !on_a_cut(r, &old))
+        .collect();
+    for reading in again {
+        let (holds, new_cut) = cut_of(&ranges(&reading), &turned.starts);
+        if holds && !new_cut {
+            out.push(unturned(reading, &turned.starts));
+        }
+    }
+    out
+}
+
+/// Whether four ranges of the turned chart hold the first chart's cut (a whole turn from the turned
+/// domain's start) and whether they touch the turned chart's own (its half-way line, and a turn
+/// past it).
+#[doc(hidden)]
+#[must_use]
+pub fn cut_of(spans: &[(f64, f64); 4], starts: &[Option<f64>; 4]) -> (bool, bool) {
+    let holds = spans
+        .iter()
+        .zip(starts)
+        .any(|((a, b), start)| start.is_some_and(|s| *a <= s + TURN && s + TURN <= *b));
+    let new_cut = spans.iter().zip(starts).any(|((a, b), start)| {
+        start.is_some_and(|s| *a == s + TURN / 2.0 || *b == s + TURN / 2.0 + TURN)
+    });
+    (holds, new_cut)
+}
+
+/// The first chart's domain ends, from where its closing parameters start: a turn long.
+fn turned_cuts(starts: &[Option<f64>; 4]) -> [Option<(f64, f64)>; 4] {
+    starts.map(|start| start.map(|s| (s, s + TURN)))
 }

@@ -3,7 +3,8 @@
 //! the surfaces deny, on any bytes.
 //!
 //! What it does: [`decode`] turns a fuzzer's bytes into a [`Case`]: one of four surfaces on small
-//! lattice sizes, and a sphere or a plane through it. [`check`] subdivides the pair and holds the
+//! lattice sizes, some over a whole turn and some cones with an apex (G173's seams and poles), and
+//! a sphere or a plane through it. [`check`] subdivides the pair and holds the
 //! answer to the laws below, with a dense grid of the implicit form of the second surface on the
 //! first as the oracle: a sign change between neighbours proves the surfaces cross there, and
 //! [`crate::general`]'s pairs must cover it. [`harness`] is `decode` then `check`.
@@ -15,9 +16,10 @@
 //!   the input that reaches it.
 //! - **A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing
 //!   no pair covers, a start point or a branch's vertex off a surface, a settled pair with an odd
-//!   count, a chord past its ceiling, a contact whose point is on one surface only, a bound past
-//!   its ceiling, a region off its surface, an internal error, or a budget that changes an answer
-//!   instead of stopping it.
+//!   count, a chord past its ceiling, a pass named at a vertex off its seam or pole, two branch
+//!   ends left apart across a closing seam, a contact whose point is on one surface only, a bound
+//!   past its ceiling, a region off its surface, an internal error, or a budget that changes an
+//!   answer instead of stopping it.
 //!
 //! Method: chapter 12.8's subdivision
 //! (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack
@@ -37,7 +39,8 @@ use geom_intersect::IntersectError;
 use geom_intersect::contact::{Reading, analyse};
 use geom_intersect::general::{Subdivided, subdivide};
 use geom_intersect::march::{Traced, march};
-use geom_intersect::result::{Coincidence, CurveContact, PointContact};
+use geom_intersect::result::{Coincidence, CurveContact, CurveEnd, PointContact};
+use geom_intersect::seam::{Charts, Passing, charts};
 use geom_num::grid::Steps;
 use geom_num::interval::Interval;
 use geom_nurbs::Limit;
@@ -73,7 +76,9 @@ const TURN: f64 = 2.0;
 /// One input of the target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Case {
-    /// Plane, cylinder, cone or torus, by its remainder on division by four.
+    /// Plane, cylinder, cone or torus, by its remainder on division by four. Its next bit gives a
+    /// round kind one whole turn, so its domain closes on itself, and the bit after puts a cone's
+    /// apex on its domain's edge (G173's seams and poles).
     pub surface: u8,
     /// How large the surface is.
     pub size: u8,
@@ -135,7 +140,9 @@ const LAW: &str = "the lattice's kinds are valid";
 pub fn surface(case: Case) -> Result<SurfaceKind, Finding> {
     let frame = must(Frame::standard(), LAW)?;
     let size = 1.0 + f64::from(case.size % 8) / 2.0;
-    let round = (0.0625, 1.8125);
+    let whole = (case.surface / 4) % 2 == 1;
+    let round = if whole { (0.0, TURN) } else { (0.0625, 1.8125) };
+    let apex = (case.surface / 8) % 2 == 1;
     Ok(match case.surface % 4 {
         0 => SurfaceKind::Plane(must(
             Plane::new(
@@ -150,12 +157,18 @@ pub fn surface(case: Case) -> Result<SurfaceKind, Finding> {
             Cylinder::new([0.0; 3], size, frame, (round, (-4.0, 4.0))),
             LAW,
         )?),
+        // Its slope from the size: steep enough for the plane of `second` to cut its generators
+        // at the apex, or shallow enough that it only touches the apex, a lone point.
+        2 if apex => SurfaceKind::Cone(must(
+            Cone::new([0.0; 3], 0.0, size, frame, (round, (0.0, 4.0))),
+            LAW,
+        )?),
         2 => SurfaceKind::Cone(must(
             Cone::new([0.0; 3], size, 0.25, frame, (round, (0.0, 4.0))),
             LAW,
         )?),
         _ => SurfaceKind::Torus(must(
-            Torus::new([0.0; 3], size + 2.0, 1.0, frame, (round, (0.0625, 1.8125))),
+            Torus::new([0.0; 3], size + 2.0, 1.0, frame, (round, round)),
             LAW,
         )?),
     })
@@ -293,7 +306,44 @@ pub fn judge(
     Ok(())
 }
 
-/// The laws of a march: every vertex is on both surfaces, and every branch keeps within its ceiling.
+/// Whether `x` is exactly `at`.
+fn held(x: Interval, at: f64) -> bool {
+    x.lo() == at && x.hi() == at
+}
+
+/// Each of (u₁, v₁, u₂, v₂): its domain's ends, and whether they close.
+fn lines(surfaces: [&SurfaceKind; 2], charts: &[Charts; 2]) -> [((f64, f64), bool); 4] {
+    let [one, two] = charts;
+    let ([cu, cv], [cs, cr]) = (one.closes, two.closes);
+    let [((u0, u1), (v0, v1)), ((s0, s1), (r0, r1))] = surfaces.map(ParamSurface::domain);
+    [
+        ((u0, u1), cu),
+        ((v0, v1), cv),
+        ((s0, s1), cs),
+        ((r0, r1), cr),
+    ]
+}
+
+/// Whether two ends of branches are one point across a closing seam: one held at each end of a
+/// closing parameter, every other parameter overlapping.
+fn across_a_seam(a: &[Interval; 4], b: &[Interval; 4], lines: &[((f64, f64), bool); 4]) -> bool {
+    let mut seam = false;
+    for ((x, y), ((lo, hi), closes)) in a.iter().zip(b).zip(lines) {
+        if x.lo() <= y.hi() && y.lo() <= x.hi() {
+            continue;
+        }
+        if *closes && ((held(*x, *lo) && held(*y, *hi)) || (held(*x, *hi) && held(*y, *lo))) {
+            seam = true;
+        } else {
+            return false;
+        }
+    }
+    seam
+}
+
+/// The laws of a march: every vertex is on both surfaces, every branch keeps within its ceiling,
+/// every pass names a vertex on the line it passes, and no two ends across a closing seam are left
+/// apart (12.10).
 ///
 /// # Errors
 ///
@@ -303,6 +353,52 @@ pub fn judge_march(
     second: &SurfaceKind,
     traced: &Traced,
 ) -> Result<(), Finding> {
+    let read = [charts(first), charts(second)];
+    let lines = lines([first, second], &read);
+    let mut ends = Vec::new();
+    for branch in &traced.branches {
+        for pass in &branch.passes {
+            let on_line = branch.vertices.get(pass.at).is_some_and(|x| {
+                let [u, v, p, q] = *x;
+                let [one, two] = &read;
+                let on = |t: Interval, poles: &[f64]| poles.iter().any(|&at| held(t, at));
+                match pass.passing {
+                    Passing::Seam => x
+                        .iter()
+                        .zip(&lines)
+                        .any(|(t, ((lo, hi), closes))| *closes && (held(*t, *lo) || held(*t, *hi))),
+                    Passing::Pole => {
+                        on(u, &one.poles.0)
+                            || on(v, &one.poles.1)
+                            || on(p, &two.poles.0)
+                            || on(q, &two.poles.1)
+                    }
+                    Passing::KnotLine => false,
+                }
+            });
+            if !on_line {
+                return Err(Finding::new("a pass names a vertex on its line", || {
+                    format!("{pass:?}: {branch:?}")
+                }));
+            }
+        }
+        if branch.ends != [CurveEnd::Closed, CurveEnd::Closed]
+            && let (Some(a), Some(b)) = (branch.vertices.first(), branch.vertices.last())
+        {
+            ends.push(*a);
+            ends.push(*b);
+        }
+    }
+    for (k, a) in ends.iter().enumerate() {
+        for b in ends.iter().skip(k.saturating_add(1)) {
+            if across_a_seam(a, b, &lines) {
+                return Err(Finding::new(
+                    "two ends across a closing seam are one branch",
+                    || format!("{a:?} and {b:?}: {traced:?}"),
+                ));
+            }
+        }
+    }
     for branch in &traced.branches {
         if branch.deviation > CEILING {
             return Err(Finding::new("a branch keeps within its ceiling", || {
@@ -449,7 +545,7 @@ fn exact_ceiling() -> u64 {
 }
 
 /// Whether a point near the second surface's equation stands over its trimmed patch: a sphere
-/// band's latitude, or a plane patch's whole reach.
+/// band's latitude, or a plane patch's parallelogram.
 fn reaches(second: &SurfaceKind, p: [f64; 3]) -> bool {
     if let SurfaceKind::Sphere(sphere) = second {
         let [cx, cy, cz] = sphere.center();
@@ -459,7 +555,37 @@ fn reaches(second: &SurfaceKind, p: [f64; 3]) -> bool {
         // A margin inside the band: its edge's own crossings are the first surface's business.
         return dz.abs() < 0.9 * length * 0.98;
     }
+    if let SurfaceKind::Plane(_) = second {
+        return over_patch(second, p);
+    }
     true
+}
+
+/// Whether `p`, which stands near a plane patch's plane, stands over the patch: its coordinates on
+/// the plane's two directions, inside the patch's domain with a margin, since the edge's own
+/// crossings are the first surface's business. A plane is linear in its parameters, so its origin
+/// and directions are three of its points.
+fn over_patch(plane: &SurfaceKind, p: [f64; 3]) -> bool {
+    let at = |u: f64, v: f64| plane.point(u, v, (Limit::FromRight, Limit::FromRight));
+    let (Ok(o), Ok(pa), Ok(pb)) = (at(0.0, 0.0), at(1.0, 0.0), at(0.0, 1.0)) else {
+        return true;
+    };
+    let sub = |[x0, x1, x2]: [f64; 3], [y0, y1, y2]: [f64; 3]| [x0 - y0, x1 - y1, x2 - y2];
+    let dot = |[x0, x1, x2]: [f64; 3], [y0, y1, y2]: [f64; 3]| x0 * y0 + x1 * y1 + x2 * y2;
+    let (a, b, d) = (sub(pa, o), sub(pb, o), sub(p, o));
+    let (aa, bb, ab) = (dot(a, a), dot(b, b), dot(a, b));
+    let (da, db) = (dot(d, a), dot(d, b));
+    let det = aa * bb - ab * ab;
+    if det == 0.0 {
+        return true;
+    }
+    let (s, r) = ((da * bb - db * ab) / det, (db * aa - da * ab) / det);
+    let ((s0, s1), (r0, r1)) = plane.domain();
+    let inside = |x: f64, lo: f64, hi: f64| {
+        let (middle, half) = (lo / 2.0 + hi / 2.0, (hi - lo) / 2.0);
+        (x - middle).abs() < 0.98 * half
+    };
+    inside(s, s0, s1) && inside(r, r0, r1)
 }
 
 /// Holds one case to the laws, and says what its answer was.

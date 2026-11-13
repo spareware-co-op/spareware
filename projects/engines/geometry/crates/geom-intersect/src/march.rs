@@ -23,6 +23,9 @@
 //!   is from the chords through its vertices. A step is kept only within the ceiling.
 //! - **Deterministic.** Pairs in the order subdivision left them, starts in the order found, and a
 //!   step size that follows only from what the tests said.
+//! - **Joined across a closing seam (G173).** Where a domain's two ends are one curve
+//!   ([`crate::seam`]), a branch that reaches one end goes on from the other: the point is kept
+//!   once, and [`Branch::passes`] says where.
 //!
 //! Method: the predictor along the tangent n₁ × n₂ and the corrector's four-unknown system are
 //! Barnhill and Kersey's (<https://doi.org/10.1016/0167-8396(90)90035-P>), with the proof of each
@@ -32,8 +35,8 @@
 //! enclosure over the step's box, which is a bound of the same strength as 12.8's h²κ/8 and needs no
 //! curvature formula.
 //!
-//! What this piece leaves: a branch into a flagged pair ends there (G171), and one at a seam ends at
-//! the domain's boundary (G173). A procedural curve from a branch is G175.
+//! What this piece leaves: a branch into a flagged pair ends there (G171). A procedural curve from a
+//! branch is G175.
 //!
 //! Cost: each step is two reads of both surfaces and one 4 × 4 inverse. Steps along a branch of
 //! length L number about L·√(κ/ceiling), and stitching is quadratic in the start points of a line
@@ -59,6 +62,7 @@ use crate::general::{
 };
 use crate::project::{negative, positive};
 use crate::result::CurveEnd;
+use crate::seam::{Charts, Meet, Pass, Passing, at_pole, charts, meet};
 
 /// What a step costs the meter, besides the kinds' own charges.
 const STEP: u64 = 1;
@@ -84,6 +88,8 @@ pub struct Branch {
     pub ends: [CurveEnd; 2],
     /// A bound, in space, on how far the exact branch is from the chords through its vertices.
     pub deviation: f64,
+    /// Where it passes a closing seam, each point recorded once (12.10), in order along it.
+    pub passes: Vec<Pass>,
 }
 
 /// What [`march`] leaves.
@@ -134,6 +140,8 @@ struct System<'a> {
     axis: usize,
     /// Each parameter's speed, to turn a length in space into a width of that parameter.
     speeds: [f64; 4],
+    /// What each surface's data proves of its seams and poles (12.10).
+    seams: [&'a Charts; 2],
 }
 
 /// The surfaces read over a box of unknowns: each point and its partials.
@@ -364,6 +372,9 @@ fn beside(
         return Ok(None);
     };
     let place = at.s.map(mid);
+    // Of those near enough in space, the nearest in parameters, each at its speed: starts at one
+    // pole are one point in space, and differ only in the direction they leave it by (12.10).
+    let mut best: Option<(usize, f64)> = None;
     for (k, s) in pair.starts.iter().enumerate() {
         if used.get(k).copied().unwrap_or(true) {
             continue;
@@ -376,10 +387,19 @@ fn beside(
             .zip(there.s.map(mid))
             .all(|(a, b)| (a - b).abs() <= 2.0 * floor);
         if near {
-            return Ok(Some(k));
+            let apart = here
+                .iter()
+                .zip(s)
+                .zip(system.speeds)
+                .fold(0.0, |most, ((x, y), speed)| {
+                    larger(most, (mid(*x) - mid(*y)).abs() * speed)
+                });
+            if best.is_none_or(|(_, b)| apart < b) {
+                best = Some((k, apart));
+            }
         }
     }
-    Ok(None)
+    Ok(best.map(|(k, _)| k))
 }
 
 /// How one march through a pair ended.
@@ -388,6 +408,32 @@ enum Walk {
     Reached(usize, Vec<[Interval; 4]>, f64),
     /// A step could not be proven above the floor.
     Unproven,
+}
+
+/// Where the corrector begins from `start`: its middle, but a floor off any pole line it is held
+/// on, into the pair's patch. On the line itself the chart has no tangent plane (a partial
+/// vanishes there), so Newton's step could not be taken (12.10).
+fn off_poles(system: &System<'_>, pair: &Settled, start: &[Interval; 4], floor: f64) -> [f64; 4] {
+    let mut x = start.map(mid);
+    let [one, two] = system.seams;
+    let spans = [pair.first.0, pair.first.1, pair.second.0, pair.second.1];
+    let lines = [&one.poles.0, &one.poles.1, &two.poles.0, &two.poles.1];
+    for (((slot, held), (lo, hi)), (lines, speed)) in x
+        .iter_mut()
+        .zip(start)
+        .zip(spans)
+        .zip(lines.into_iter().zip(system.speeds))
+    {
+        if held.lo() == held.hi() && lines.contains(&held.lo()) {
+            let step = floor / speed;
+            *slot = if held.lo() <= lo {
+                smaller(lo + step, hi)
+            } else {
+                larger(hi - step, lo)
+            };
+        }
+    }
+    x
 }
 
 /// Marches from start `from` of `pair`, along c in `way`, to another of its start points.
@@ -405,7 +451,7 @@ fn walk(
     };
     // A start on a domain's edge has no box around it, so the march begins a floor along.
     let mut c = c0 + way * floor;
-    let Some(mut x) = system.correct(first.map(mid), c, meter)? else {
+    let Some(mut x) = system.correct(off_poles(system, pair, &first, floor), c, meter)? else {
         return Ok(Walk::Unproven);
     };
     let mut heights = Vec::with_capacity(pair.starts.len());
@@ -426,6 +472,14 @@ fn walk(
     let mut used = alloc::vec![false; pair.starts.len()];
     if let Some(mark) = used.get_mut(from) {
         *mark = true;
+    }
+    // The other starts at the pole this one is on are the same point: leaving it, none of them
+    // is a place to reach (12.10).
+    let domains = [system.first.domain(), system.second.domain()];
+    for (mark, s) in used.iter_mut().zip(&pair.starts) {
+        if meet(&first, s, domains, system.seams) == Some(Meet::Pole) {
+            *mark = true;
+        }
     }
     loop {
         meter.charge(STEP)?;
@@ -506,13 +560,6 @@ fn signed_to(x: &[f64; 4], rates: &[f64; 4], h: f64) -> [f64; 4] {
     out
 }
 
-/// Whether two start points are one point.
-fn same(a: &[Interval; 4], b: &[Interval; 4]) -> bool {
-    a.iter()
-        .zip(b)
-        .all(|(x, y)| x.lo() <= y.hi() && y.lo() <= x.hi())
-}
-
 /// A domain as four numbers.
 type Flat = (f64, f64, f64, f64);
 
@@ -536,50 +583,99 @@ const fn flat(((a, b), (c, d)): Region) -> Flat {
     (a, b, c, d)
 }
 
+/// What a branch passes where two of its pieces meet so.
+const fn passing(how: Meet) -> Option<Passing> {
+    match how {
+        Meet::Same => None,
+        Meet::Seam => Some(Passing::Seam),
+        Meet::Pole => Some(Passing::Pole),
+    }
+}
+
+/// A piece's two ends: the start it leaves from and the one it reaches.
+fn ends_of(
+    pairs: &[Settled],
+    piece: &Piece,
+) -> Result<([Interval; 4], [Interval; 4]), IntersectError> {
+    let pair = pairs.get(piece.from.0).ok_or(IntersectError::Internal)?;
+    let at = |k: usize| pair.starts.get(k).copied().ok_or(IntersectError::Internal);
+    Ok((at(piece.from.1)?, at(piece.to)?))
+}
+
+/// How two points meet, given the two surfaces' domains and charts.
+type Meets<'a> = &'a dyn Fn(&[Interval; 4], &[Interval; 4]) -> Option<Meet>;
+
+/// Where a branch goes on: the next piece's index, its far end, whether it runs forward from the
+/// near one, and how the two pieces meet.
+type Onward = (usize, [Interval; 4], bool, Meet);
+
+/// The piece other than `k`, not yet taken, with an end that meets `tail`, and how it goes on.
+fn next_piece(
+    pieces: &[Piece],
+    pairs: &[Settled],
+    (taken, k): (&[bool], usize),
+    tail: &[Interval; 4],
+    one: Meets<'_>,
+) -> Result<Option<Onward>, IntersectError> {
+    for (j, other) in pieces.iter().enumerate() {
+        if j == k || taken.get(j).copied().unwrap_or(true) {
+            continue;
+        }
+        let (p, q) = ends_of(pairs, other)?;
+        if let Some(how) = one(tail, &p) {
+            return Ok(Some((j, q, true, how)));
+        }
+        if let Some(how) = one(tail, &q) {
+            return Ok(Some((j, p, false, how)));
+        }
+    }
+    Ok(None)
+}
+
 /// Follows pieces into branches, starting from those with an end, then the closed ones.
 fn join(
     pieces: &[Piece],
     pairs: &[Settled],
     domains: (Region, Region),
+    seams: [&Charts; 2],
 ) -> Result<Vec<Branch>, IntersectError> {
     let flats = (flat(domains.0), flat(domains.1));
-    let start_of = |pair: usize, k: usize| -> Result<[Interval; 4], IntersectError> {
-        pairs
-            .get(pair)
-            .and_then(|p| p.starts.get(k))
-            .copied()
-            .ok_or(IntersectError::Internal)
+    let both = [domains.0, domains.1];
+    // Ends meeting at a pole: two make one branch through it, any other number a singular point
+    // that each of them ends at (12.8, step 7; 12.10).
+    let meeting = |x: &[Interval; 4]| -> usize {
+        pieces
+            .iter()
+            .filter_map(|p| ends_of(pairs, p).ok())
+            .flat_map(|(a, b)| [a, b])
+            .filter(|e| meet(x, e, both, seams).is_some())
+            .count()
     };
-    // Each piece's two ends as points, and what meets each.
+    let one = |a: &[Interval; 4], b: &[Interval; 4]| match meet(a, b, both, seams) {
+        // At a pole, whether the two are held there with the same direction or not: any number
+        // of ends but two make it a singular point, which joins none of them.
+        Some(_) if at_pole(a, seams) && meeting(a) != 2 => None,
+        how => how,
+    };
     let mut taken = alloc::vec![false; pieces.len()];
-    let meets = |index: usize, at: &[Interval; 4]| -> Result<Option<usize>, IntersectError> {
-        for (j, other) in pieces.iter().enumerate() {
-            if j == index {
-                continue;
-            }
-            let a = start_of(other.from.0, other.from.1)?;
-            let b = start_of(other.from.0, other.to)?;
-            if same(at, &a) || same(at, &b) {
-                return Ok(Some(j));
-            }
-        }
-        Ok(None)
-    };
+    let none = alloc::vec![false; pieces.len()];
     let mut branches: Vec<Branch> = Vec::new();
     for only_open in [true, false] {
         for (index, piece) in pieces.iter().enumerate() {
             if taken.get(index).copied().unwrap_or(true) {
                 continue;
             }
-            let a = start_of(piece.from.0, piece.from.1)?;
-            let b = start_of(piece.from.0, piece.to)?;
-            let (open_a, open_b) = (meets(index, &a)?.is_none(), meets(index, &b)?.is_none());
+            // Each end is open when no other piece, taken or not, meets it.
+            let (a, b) = ends_of(pairs, piece)?;
+            let open_a = next_piece(pieces, pairs, (&none, index), &a, &one)?.is_none();
+            let open_b = next_piece(pieces, pairs, (&none, index), &b, &one)?.is_none();
             if only_open && !(open_a || open_b) {
                 continue;
             }
             // From the open end, or from the first end of a closed one.
             let reversed = !open_a && open_b;
             let mut vertices: Vec<[Interval; 4]> = Vec::new();
+            let mut passes: Vec<Pass> = Vec::new();
             let mut deviation: f64 = 0.0;
             let mut k = index;
             let mut tail = if reversed { a } else { b };
@@ -597,43 +693,46 @@ fn join(
                     run.remove(0);
                 }
                 vertices.extend(run);
-                let mut next = None;
-                for (j, other) in pieces.iter().enumerate() {
-                    if j == k || taken.get(j).copied().unwrap_or(true) {
-                        continue;
-                    }
-                    let p = start_of(other.from.0, other.from.1)?;
-                    let q = start_of(other.from.0, other.to)?;
-                    if same(&tail, &p) {
-                        next = Some((j, q, true));
-                        break;
-                    }
-                    if same(&tail, &q) {
-                        next = Some((j, p, false));
-                        break;
-                    }
+                let Some((j, end, forward, how)) =
+                    next_piece(pieces, pairs, (&taken, k), &tail, &one)?
+                else {
+                    break;
+                };
+                // The point is kept as the part before it reads it; the next part's own
+                // enclosure of it is dropped with its first vertex.
+                if let Some(passing) = passing(how) {
+                    passes.push(Pass {
+                        at: vertices.len().saturating_sub(1),
+                        passing,
+                    });
                 }
-                match next {
-                    Some((j, end, forward)) => {
-                        k = j;
-                        tail = end;
-                        along = forward;
-                    }
-                    None => break,
-                }
+                k = j;
+                tail = end;
+                along = forward;
             }
-            let closed = same(&tail, &start) && vertices.len() > 2;
-            if closed {
+            let closing = one(&tail, &start).filter(|_| vertices.len() > 2);
+            if closing.is_some() {
                 vertices.pop();
             }
+            if let Some(passing) = closing.and_then(passing) {
+                passes.insert(0, Pass { at: 0, passing });
+            }
+            let end = |x: &[Interval; 4]| {
+                if at_pole(x, seams) {
+                    CurveEnd::Singular
+                } else {
+                    ending(x, flats)
+                }
+            };
             branches.push(Branch {
-                ends: if closed {
+                ends: if closing.is_some() {
                     [CurveEnd::Closed, CurveEnd::Closed]
                 } else {
-                    [ending(&start, flats), ending(&tail, flats)]
+                    [end(&start), end(&tail)]
                 },
                 vertices,
                 deviation,
+                passes,
             });
         }
     }
@@ -671,12 +770,14 @@ pub fn march(
         speeds(first, first.domain(), meter)?,
         speeds(second, second.domain(), meter)?,
     );
+    let seams = (charts(first), charts(second));
     for (index, pair) in found.settled.iter().enumerate() {
         let system = System {
             first,
             second,
             axis: axis_of(first, second, pair, meter)?,
             speeds: [a, b, c, d],
+            seams: [&seams.0, &seams.1],
         };
         let mut done = alloc::vec![false; pair.starts.len()];
         let mut bad = false;
@@ -715,6 +816,11 @@ pub fn march(
             unproven.push(pair.clone());
         }
     }
-    let branches = join(&pieces, &found.settled, (first.domain(), second.domain()))?;
+    let branches = join(
+        &pieces,
+        &found.settled,
+        (first.domain(), second.domain()),
+        [&seams.0, &seams.1],
+    )?;
     Ok(Traced { branches, unproven })
 }

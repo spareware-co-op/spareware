@@ -398,6 +398,18 @@
               "kind": "corpus",
               "piece": "G171",
               "why": "1 new count benchmark on geom-intersect's contact analysis (decision 32.44): a sphere resting on a plane patch. march_plate's digest moves with it: the march now pads each parameter's box at that parameter's speed, without which it could not walk a NURBS surface against a plane at grid scale."
+            },
+            {
+              "sha256": "a39643deef4fb7e171b3b6162517f9e46f940f605f037d6a17403875e776f7a9",
+              "kind": "corpus",
+              "piece": "G173",
+              "why": "1 new count benchmark on geom-intersect's poles and seams (decision 32.44): a whole sphere through a plane holding both its poles, one loop joined through each. trace_patch's, march_plate's and trace_silhouette's digests move with it: their results' branches now say where they pass a seam, a knot line or a pole (Branch::passes, 12.10), which their Debug text writes, empty here."
+            },
+            {
+              "sha256": "60d4d161c7d9e90819b775275dc5dd71da8245c62a8941036bca5f516294e09d",
+              "kind": "improvement",
+              "piece": "G173",
+              "why": "The edge room: an edge's zeros on the end of a plane's, cylinder's or cone's domain are proven in a box that reaches past the end, so intersect/subdivide_patch, march_plate and march_poles return other valid enclosures of the same start points (same 11 settled pairs and 22 starts, the work differs); no other digest moved"
             }
           ],
           "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b"

@@ -219,6 +219,26 @@ pub fn plates(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
     })
 }
 
+/// A plane patch holding the axis of a whole sphere about each centre, so it passes through both
+/// of the sphere's poles, for `march` across them (piece G173).
+#[must_use]
+pub fn poles(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::poles", class);
+    batch_of(|_| {
+        let at = point(&mut g);
+        let patch = Plane::new(
+            at,
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            ((-8.0, 8.0), (-8.0, 8.0)),
+        );
+        Some((SurfaceKind::Plane(patch.ok()?), at))
+    })
+}
+
 /// A plane patch and a sphere resting on it, for `analyse`.
 #[must_use]
 pub fn rests(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
