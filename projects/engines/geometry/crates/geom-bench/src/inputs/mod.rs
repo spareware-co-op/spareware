@@ -38,6 +38,7 @@ pub mod bvh;
 pub mod cbor;
 pub mod crossing;
 pub mod curve;
+pub mod curved;
 pub mod dd;
 pub mod eft;
 pub mod encoder;

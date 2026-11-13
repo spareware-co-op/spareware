@@ -406,6 +406,8 @@ pub static OPS: &[Op] = &[
     // each built for a scene and queried.
     Op { group: "bvh", name: "tree_build_query", measures: "geom_bvh::BoxTree::build", classes: T, prepare: |c| bind(inputs::bvh::tree_build_query(c), kernels::bvh::tree_build_query) },
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
+    // The curved builder's broad phase (piece G242; decision 32.46): padded point boxes, the pairs that meet.
+    Op { group: "curved", name: "broad_pairs", measures: "geom_bool::broad::candidate_pairs", classes: T, prepare: |c| bind(inputs::curved::broad_scenes(c), kernels::curved::broad_pairs) },
     // The attribute step's hot path (piece G90; decision 32.46).
     Op { group: "attributes", name: "apply", measures: "geom_name::classes::apply", classes: T, prepare: |c| bind(inputs::attributes::apply(c), kernels::attributes::apply) },
     // geom-topo's hot paths (piece G80; decision 32.46): a column's copy on write, and publishing.
@@ -639,7 +641,7 @@ pub fn full_scenario(op: &str) -> Option<Prepared> {
 }
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 52] = [
+pub const GROUPS: [&str; 53] = [
     "predicate",
     "sign",
     "wide",
@@ -677,6 +679,7 @@ pub const GROUPS: [&str; 52] = [
     "linalg",
     "helper",
     "make",
+    "curved",
     "scenario",
     "cbor",
     "record",

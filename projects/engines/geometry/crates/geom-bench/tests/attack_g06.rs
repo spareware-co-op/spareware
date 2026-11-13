@@ -2380,6 +2380,15 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 index.within(*center, *radius, &mut meter)
             },
         )),
+        // The broad phase's pairs, recomputed from the box tree directly.
+        ("curved", "broad_pairs") => {
+            fold(inputs::curved::broad_scenes(class).iter().map(|entries| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let tree =
+                    geom_bvh::BoxTree::build(entries, &geom_run::Exec::serial(), &mut meter)?;
+                tree.pairs(&mut meter)
+            }))
+        }
         // The pool's results must be the serial executor's, so both are recomputed serially.
         ("helper", "lone_serial" | "lone_pool") => {
             let lists = if name == "lone_serial" {

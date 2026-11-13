@@ -296,9 +296,15 @@
               "kind": "corpus",
               "piece": "Phase 5 train 1 (G158 to G180)",
               "why": "Phase 5's first train, one record for its pieces' 38 new count benchmarks (groups intersect, quadric: geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils). No existing digest moved"
+            },
+            {
+              "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4",
+              "kind": "corpus",
+              "piece": "G242",
+              "why": "1 new count benchmark of geom-bool's broad phase (decision 32.46): the pairs of 32 padded point boxes that meet; joined with the Phase 5 train. No existing digest moved"
             }
           ],
-          "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"
+          "sha256": "4ccc87095712d39805b85fdba85a4c4a72bafc6848fa4698eba3c14f3cf1abc2"
         },
         {
           "id": "geom-nurbs/operations",

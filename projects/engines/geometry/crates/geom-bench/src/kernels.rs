@@ -1809,6 +1809,25 @@ pub mod bvh {
     }
 }
 
+/// `geom-bool`'s broad phase (piece G242, decision 32.46): the pairs of padded point boxes that
+/// meet, from the box tree, under an unlimited budget on the serial executor.
+pub mod curved {
+    use geom_bool::broad::candidate_pairs;
+    use geom_bvh::{BvhError, Entry};
+    use geom_run::{Budget, Exec, WorkMeter};
+
+    use super::run;
+
+    /// `candidate_pairs` on each scene.
+    #[inline(never)]
+    pub fn broad_pairs(batch: &[Vec<Entry<3>>], out: &mut Vec<Result<Vec<(u64, u64)>, BvhError>>) {
+        run(batch, out, |entries| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            candidate_pairs(entries, &Exec::serial(), &mut meter).map_err(|_| BvhError::Defect)
+        });
+    }
+}
+
 /// The attribute step's hot path (piece G90, decision 32.46).
 pub mod attributes {
     use geom_name::{AttrError, Step, apply as step};
