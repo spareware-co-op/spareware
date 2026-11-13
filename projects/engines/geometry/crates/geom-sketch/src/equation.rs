@@ -19,8 +19,10 @@
 //! - **Every residual is a length, with a gradient near one.** A distance's gradient has length one
 //!   at its solution; an angle's or an incidence's is scaled by a characteristic length of its lines,
 //!   a power of two fixed at the start, so one tolerance serves every constraint.
-//! - **Smooth forms.** A distance d uses (|PQ|² − d²) / 2d, a polynomial in the points. Square roots
-//!   appear only in a point's distance from a line, and a sweep's length.
+//! - **Smooth forms.** A distance d uses (|PQ|² − d²) / 2d, a polynomial in the points, and a point
+//!   on an ellipse its implicit equation, a polynomial too (piece G219). Square roots appear only in
+//!   a point's distance from a line, a sweep's length, an ellipse's major radius at a parameter and
+//!   its reach across a tangent line.
 //! - **Singular sets are declared.** [`Residual::singular`] is checked before differentiating, and an
 //!   input on one is [`SketchError::Degenerate`], naming the constraint. The remedy of section 15.4,
 //!   a perturbation derived from keys, is the solver's (G222).
@@ -80,6 +82,9 @@ pub enum Singular {
     ZeroLengthLine,
     /// A circle of no radius, or a distance of zero, has no smooth form.
     ZeroRadius,
+    /// An ellipse whose radii are equal is a circle: its axis has no direction to follow (section
+    /// 15.4).
+    EqualRadii,
 }
 
 /// Which way round a rule with two branches is.
@@ -153,6 +158,294 @@ fn minus<S: Scalar>(p: [S; 2], q: [S; 2]) -> Result<[S; 2], NumError> {
 /// (|p|² − d²) / 2d.
 fn smooth<S: Scalar>(p: [S; 2], d: S) -> Result<S, NumError> {
     dot(p, p)?.sub(d.square()?)?.div(d.add(d)?)
+}
+
+/// An ellipse's inputs: centre c, major-axis vector a and minor radius b, and its singular set: no
+/// axis or no minor radius has no smooth form, and equal radii no axis direction.
+fn oval_singular(cx: f64, cy: f64, ax: f64, ay: f64, b: f64, within: f64) -> Option<Singular> {
+    let _ = (cx, cy);
+    let a2 = ax * ax + ay * ay;
+    if a2 == 0.0 || together(ax, ay, 0.0, 0.0, within) || close(b, 0.0, within) {
+        Some(Singular::ZeroRadius)
+    } else if near_length(a2, b, within) {
+        Some(Singular::EqualRadii)
+    } else {
+        None
+    }
+}
+
+/// Whether the length whose square is `a2` is within `within` of |`b`|: `a2` = b² at `within` = 0,
+/// where both sides are the same rounded squares. Squares, not roots, so no square root is taken.
+fn near_length(a2: f64, b: f64, within: f64) -> bool {
+    let (low, high) = (b.abs() - within, b.abs() + within);
+    a2 <= high * high && (low <= 0.0 || a2 >= low * low)
+}
+
+/// `p` is on the ellipse of centre c, major-axis vector a and minor radius b (piece G219). With
+/// d = p − c and A² = a · a, the point's coordinates along the axes are d · a / A and d × a / A, so
+/// it is on the ellipse when (d · a)² b² + (d × a)² A² − A⁴ b² = 0, a polynomial with no square
+/// root. Over the scale `s`, a power of two near 2 A^3.5 b^1.5 fixed at the start, its gradient is
+/// near one on the ellipse: 2 A³ b² / s at the ends of the major axis and 2 A⁴ b / s at the ends of
+/// the minor, within √(A / b) of one either side.
+pub struct OnEllipse;
+
+impl Residual<8, 1> for OnEllipse {
+    fn residuals<S: Scalar>(&self, x: [S; 8]) -> Result<[S; 1], NumError> {
+        let [px, py, cx, cy, ax, ay, b, s] = x;
+        let d = minus([px, py], [cx, cy])?;
+        let a = [ax, ay];
+        let a2 = dot(a, a)?;
+        let b2 = b.square()?;
+        let along = dot(d, a)?.square()?.mul(b2)?;
+        let across = cross(d, a)?.square()?.mul(a2)?;
+        let size = a2.square()?.mul(b2)?;
+        Ok([along.add(across)?.sub(size)?.div(s)?])
+    }
+
+    fn singular(&self, x: &[f64; 8], within: f64) -> Option<Singular> {
+        let [_, _, cx, cy, ax, ay, b, _] = *x;
+        oval_singular(cx, cy, ax, ay, b, within)
+    }
+}
+
+/// `p` is the ellipse's point at the parameter t, in half-turns from the end of its major axis
+/// (piece G219): p − (c + cos πt · a + sin πt · (b / |a|) · a⊥), a⊥ being a turned a quarter turn
+/// anticlockwise. Two residuals, each a length, with gradient one in p.
+pub struct AtParameter;
+
+impl Residual<8, 2> for AtParameter {
+    fn residuals<S: Scalar>(&self, x: [S; 8]) -> Result<[S; 2], NumError> {
+        let [px, py, cx, cy, ax, ay, b, t] = x;
+        let (cos, sin) = (t.cospi()?, t.sinpi()?);
+        let ratio = b.div(dot([ax, ay], [ax, ay])?.sqrt()?)?;
+        let side = sin.mul(ratio)?;
+        let qx = cx.add(cos.mul(ax)?)?.sub(side.mul(ay)?)?;
+        let qy = cy.add(cos.mul(ay)?)?.add(side.mul(ax)?)?;
+        Ok([px.sub(qx)?, py.sub(qy)?])
+    }
+
+    fn singular(&self, x: &[f64; 8], within: f64) -> Option<Singular> {
+        let [_, _, cx, cy, ax, ay, b, _] = *x;
+        oval_singular(cx, cy, ax, ay, b, within)
+    }
+}
+
+/// The ellipse's point at t and its tangent there over π: c + cos πt · a + sin πt · r a⊥ and
+/// −sin πt · a + cos πt · r a⊥, for r = b / |a| and a⊥ the axis turned a quarter turn anticlockwise.
+fn at_parameter<S: Scalar>(c: [S; 2], a: [S; 2], b: S, t: S) -> Result<([S; 2], [S; 2]), NumError> {
+    let (cos, sin) = (t.cospi()?, t.sinpi()?);
+    let r = b.div(dot(a, a)?.sqrt()?)?;
+    let turned = [a[1].neg(), a[0]];
+    let point = [
+        c[0].add(cos.mul(a[0])?)?.add(sin.mul(r)?.mul(turned[0])?)?,
+        c[1].add(cos.mul(a[1])?)?.add(sin.mul(r)?.mul(turned[1])?)?,
+    ];
+    let tangent = [
+        cos.mul(r)?.mul(turned[0])?.sub(sin.mul(a[0])?)?,
+        cos.mul(r)?.mul(turned[1])?.sub(sin.mul(a[1])?)?,
+    ];
+    Ok((point, tangent))
+}
+
+/// `p` is `d` from the ellipse, at its foot, the ellipse's point Q at the parameter t (piece G219):
+/// p − Q is across the tangent there, its part along the unit tangent zero, and
+/// (|p − Q|² − d²) / 2d is zero. Two lengths, each with gradient one in p.
+pub struct FromEllipse;
+
+impl Residual<9, 2> for FromEllipse {
+    fn residuals<S: Scalar>(&self, x: [S; 9]) -> Result<[S; 2], NumError> {
+        let [px, py, cx, cy, ax, ay, b, t, d] = x;
+        let (q, tangent) = at_parameter([cx, cy], [ax, ay], b, t)?;
+        let gap = minus([px, py], q)?;
+        let along = dot(gap, tangent)?.div(dot(tangent, tangent)?.sqrt()?)?;
+        Ok([along, smooth(gap, d)?])
+    }
+
+    fn singular(&self, x: &[f64; 9], within: f64) -> Option<Singular> {
+        let [_, _, cx, cy, ax, ay, b, _, d] = *x;
+        if close(d, 0.0, within) {
+            return Some(Singular::ZeroRadius);
+        }
+        oval_singular(cx, cy, ax, ay, b, within)
+    }
+}
+
+/// The length of the ellipse of major-axis vector a and minor radius b from the parameter t₀ to t₁:
+/// the integral of its speed π |Q′(t) / π|, by the 20-node Gauss–Legendre rule of
+/// `geom_num::quadrature_rules`, summed in node order (section 15.3; piece G219).
+fn arc_length<S: Scalar>(a: [S; 2], b: S, t0: S, t1: S) -> Result<S, NumError> {
+    let rule = geom_num::quadrature_rules::GAUSS_LEGENDRE
+        .last()
+        .ok_or(NumError::NotFinite)?;
+    let half = S::constant(Real::new(0.5)?);
+    let middle = t0.add(t1)?.mul(half)?;
+    let reach = t1.sub(t0)?.mul(half)?;
+    let zero = S::constant(Real::ZERO);
+    let mut sum = zero;
+    for (node, weight) in rule.nodes.iter().zip(rule.weights) {
+        let t = middle.add(reach.mul(S::constant(Real::new(*node)?))?)?;
+        let (_, tangent) = at_parameter([zero, zero], a, b, t)?;
+        let speed = dot(tangent, tangent)?.sqrt()?;
+        sum = sum.add(speed.mul(S::constant(Real::new(*weight)?))?)?;
+    }
+    sum.mul(reach)?.mul(S::pi())
+}
+
+/// An elliptical arc of major-axis vector a and minor radius b, from the parameter t₀ to t₁, is
+/// `l` long: its length by [`arc_length`] less `l` (piece G219).
+pub struct EllipseLength;
+
+impl Residual<6, 1> for EllipseLength {
+    fn residuals<S: Scalar>(&self, x: [S; 6]) -> Result<[S; 1], NumError> {
+        let [ax, ay, b, t0, t1, l] = x;
+        Ok([arc_length([ax, ay], b, t0, t1)?.sub(l)?])
+    }
+
+    fn singular(&self, x: &[f64; 6], within: f64) -> Option<Singular> {
+        let [ax, ay, b, ..] = *x;
+        oval_singular(0.0, 0.0, ax, ay, b, within)
+    }
+}
+
+/// The line through s and e touches the ellipse of centre c, major-axis vector a and minor radius
+/// b, the centre on the side `sign` (+1 left, −1 right) of it (piece G219). With w the line's
+/// direction turned a quarter turn anticlockwise, the centre's distance from the line is
+/// w · (c − s) / |w|, and the ellipse reaches (w · a)² + b² (w · a⊥)² / A² = h² |w|² from its
+/// centre across it (its support distance h): the residual is (w · (c − s) − sign · h |w|) / |w|,
+/// the gap, a length with gradient one in the centre.
+pub struct TangentEllipse {
+    /// +1 for the centre on the line's left, −1 for its right.
+    pub sign: f64,
+}
+
+impl Residual<9, 1> for TangentEllipse {
+    fn residuals<S: Scalar>(&self, x: [S; 9]) -> Result<[S; 1], NumError> {
+        let [sx, sy, ex, ey, cx, cy, ax, ay, b] = x;
+        let u = minus([ex, ey], [sx, sy])?;
+        let w = [u[1].neg(), u[0]];
+        let a = [ax, ay];
+        let turned = [ay.neg(), ax];
+        let reach = dot(w, a)?
+            .square()?
+            .add(
+                b.square()?
+                    .mul(dot(w, turned)?.square()?)?
+                    .div(dot(a, a)?)?,
+            )?
+            .sqrt()?;
+        let gap = dot(w, minus([cx, cy], [sx, sy])?)?;
+        let signed = S::constant(Real::new(self.sign)?).mul(reach)?;
+        Ok([gap.sub(signed)?.div(dot(w, w)?.sqrt()?)?])
+    }
+
+    fn singular(&self, x: &[f64; 9], within: f64) -> Option<Singular> {
+        let [sx, sy, ex, ey, cx, cy, ax, ay, b] = *x;
+        if together(sx, sy, ex, ey, within) {
+            return Some(Singular::ZeroLengthLine);
+        }
+        oval_singular(cx, cy, ax, ay, b, within)
+    }
+}
+
+/// Which curve a tangency at a point reads, and so how its five inputs make its normal there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shape {
+    /// A line through s and e: its normal is (e − s) turned a quarter turn, the same everywhere.
+    Line,
+    /// A circle or arc of centre c: its normal at p is p − c.
+    Round,
+    /// An ellipse or elliptical arc of centre c, major-axis vector a and minor radius b: its normal
+    /// at p is half the gradient of `OnEllipse`'s polynomial, (d · a) b² a + (d × a) A² (`a_y`, −`a_x`)
+    /// with d = p − c.
+    Oval,
+}
+
+/// A curve's normal at `p`, from its five inputs, as [`Shape`] says.
+fn normal<S: Scalar>(shape: Shape, p: [S; 2], x: [S; 5]) -> Result<[S; 2], NumError> {
+    let [x0, x1, x2, x3, x4] = x;
+    Ok(match shape {
+        Shape::Line => {
+            let u = minus([x2, x3], [x0, x1])?;
+            [u[1].neg(), u[0]]
+        }
+        Shape::Round => minus(p, [x0, x1])?,
+        Shape::Oval => {
+            let d = minus(p, [x0, x1])?;
+            let a = [x2, x3];
+            let along = dot(d, a)?.mul(x4.square()?)?;
+            let across = cross(d, a)?.mul(dot(a, a)?)?;
+            [
+                along.mul(x2)?.add(across.mul(x3)?)?,
+                along.mul(x3)?.sub(across.mul(x2)?)?,
+            ]
+        }
+    })
+}
+
+/// [`normal`] in doubles, for the scale and the singular set.
+fn normal_f64(shape: Shape, p: [f64; 2], x: [f64; 5]) -> Result<[f64; 2], NumError> {
+    let real = |v: f64| Real::new(v);
+    let [n0, n1] = normal(
+        shape,
+        [real(p[0])?, real(p[1])?],
+        [
+            real(x[0])?,
+            real(x[1])?,
+            real(x[2])?,
+            real(x[3])?,
+            real(x[4])?,
+        ],
+    )?;
+    Ok([n0.get(), n1.get()])
+}
+
+/// Two curves are tangent at `p`, a point on both: their normals there are parallel, the cross
+/// product of the two over `l`, a power of two fixed at the start near |nₐ| |`n_b`| (κₐ + `κ_b`) for
+/// their curvatures there, so the row reads sin θ / (κₐ + `κ_b`) for θ the angle between them, a
+/// length whose gradient is near one (piece G219).
+pub struct TangentAtPoint {
+    /// The first curve's shape.
+    pub a: Shape,
+    /// The second curve's shape.
+    pub b: Shape,
+}
+
+impl Residual<13, 1> for TangentAtPoint {
+    fn residuals<S: Scalar>(&self, x: [S; 13]) -> Result<[S; 1], NumError> {
+        let [px, py, a0, a1, a2, a3, a4, b0, b1, b2, b3, b4, l] = x;
+        let p = [px, py];
+        let na = normal(self.a, p, [a0, a1, a2, a3, a4])?;
+        let nb = normal(self.b, p, [b0, b1, b2, b3, b4])?;
+        Ok([cross(na, nb)?.div(l)?])
+    }
+
+    fn singular(&self, x: &[f64; 13], within: f64) -> Option<Singular> {
+        let [px, py, a0, a1, a2, a3, a4, b0, b1, b2, b3, b4, _] = *x;
+        for (shape, inputs) in [
+            (self.a, [a0, a1, a2, a3, a4]),
+            (self.b, [b0, b1, b2, b3, b4]),
+        ] {
+            if shape == Shape::Oval
+                && let Some(s) = oval_singular(
+                    inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], within,
+                )
+            {
+                return Some(s);
+            }
+            let near = match shape {
+                Shape::Line => together(inputs[0], inputs[1], inputs[2], inputs[3], within),
+                Shape::Round | Shape::Oval => together(px, py, inputs[0], inputs[1], within),
+            };
+            if near || matches!(normal_f64(shape, [px, py], inputs), Ok([0.0, 0.0]) | Err(_)) {
+                return Some(if shape == Shape::Line {
+                    Singular::ZeroLengthLine
+                } else {
+                    Singular::ZeroRadius
+                });
+            }
+        }
+        None
+    }
 }
 
 /// The two points are one: also concentric circles, by their centres.
@@ -674,11 +967,23 @@ fn zeros(n: usize) -> Result<Vec<f64>, SketchError> {
     Ok(v)
 }
 
+/// The [`Shape`] of the curve `id`.
+fn shape_of(sketch: &Sketch, id: ItemId) -> Result<Shape, SketchError> {
+    match sketch.entity(id)?.kind {
+        EntityKind::Line { .. } => Ok(Shape::Line),
+        EntityKind::Circle { .. } | EntityKind::Arc { .. } => Ok(Shape::Round),
+        EntityKind::Ellipse { .. } | EntityKind::EllipticalArc { .. } => Ok(Shape::Oval),
+        _ => Err(SketchError::WrongKind(id)),
+    }
+}
+
 /// One rule in an assembly: where its inputs and its Jacobian entries are.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Row {
     id: ItemId,
     kind: ConstraintKind,
+    /// The shapes of the curves of a tangency at a point; lines for any other rule.
+    shapes: [Shape; 2],
     /// Its first residual.
     first: usize,
     /// Its inputs, at `Assembly::slots[at..]`.
@@ -767,6 +1072,34 @@ impl Inputs<'_> {
         let centre = self.sketch.centre(id)?;
         self.point(centre)?;
         self.variable(id, 0)
+    }
+
+    /// A curve's five inputs for a tangency at a point, as its [`Shape`] reads them: a line's ends
+    /// and a zero; a circle's or arc's centre and three zeros; an ellipse's own five.
+    fn curve(&mut self, id: ItemId) -> Result<(), SketchError> {
+        match shape_of(self.sketch, id)? {
+            Shape::Line => {
+                self.line(id)?;
+                self.constant(0.0)
+            }
+            Shape::Round => {
+                self.point(self.sketch.centre(id)?)?;
+                for _ in 0..3 {
+                    self.constant(0.0)?;
+                }
+                Ok(())
+            }
+            Shape::Oval => self.oval(id),
+        }
+    }
+
+    /// An ellipse's centre, major-axis vector and minor radius.
+    fn oval(&mut self, id: ItemId) -> Result<(), SketchError> {
+        let (centre, _, _) = self.sketch.ellipse(id)?;
+        self.point(centre)?;
+        self.variable(id, 0)?;
+        self.variable(id, 1)?;
+        self.variable(id, 2)
     }
 }
 
@@ -1155,6 +1488,66 @@ pub(crate) fn inputs_of(
             i.amount(angle)?;
             2
         }
+        ConstraintKind::OnEllipse { point, ellipse } => {
+            i.point(point)?;
+            i.oval(ellipse)?;
+            i.constant(unit)?;
+            1
+        }
+        ConstraintKind::TangentAtPoint { a, b, point } => {
+            i.point(point)?;
+            i.curve(a)?;
+            i.curve(b)?;
+            i.constant(unit)?;
+            1
+        }
+        ConstraintKind::AtParameter { point, parameter } => {
+            i.point(point)?;
+            i.oval(sketch.parameter_ellipse(parameter)?)?;
+            i.variable(parameter, 0)?;
+            2
+        }
+        ConstraintKind::FromEllipse {
+            point,
+            parameter,
+            distance,
+        } => {
+            i.point(point)?;
+            i.oval(sketch.parameter_ellipse(parameter)?)?;
+            i.variable(parameter, 0)?;
+            i.amount(distance)?;
+            2
+        }
+        ConstraintKind::EllipticalArcLength { arc, length } => {
+            let [from, to] = sketch.elliptical_arc(arc)?;
+            for slot in 0..3 {
+                i.variable(arc, slot)?;
+            }
+            i.variable(from, 0)?;
+            i.variable(to, 0)?;
+            i.amount(length)?;
+            1
+        }
+        ConstraintKind::MajorRadius { ellipse, radius } => {
+            // As a distance from the origin to the point a: (a · a − r²) / 2r.
+            i.variable(ellipse, 0)?;
+            i.variable(ellipse, 1)?;
+            i.constant(0.0)?;
+            i.constant(0.0)?;
+            i.amount(radius)?;
+            1
+        }
+        ConstraintKind::MinorRadius { ellipse, radius } => {
+            i.constant(0.0)?;
+            i.variable(ellipse, 2)?;
+            i.amount(radius)?;
+            1
+        }
+        ConstraintKind::TangentEllipse { line, ellipse, .. } => {
+            i.line(line)?;
+            i.oval(ellipse)?;
+            1
+        }
         ConstraintKind::Linear { a, b, ratio, plus } => {
             i.amount(Amount::Named(a))?;
             i.amount(Amount::Named(b))?;
@@ -1194,6 +1587,7 @@ fn spline_row(
     sketch: &Sketch,
     id: ItemId,
     kind: ConstraintKind,
+    shapes: [Shape; 2],
     (first, at, from): (usize, usize, usize),
     len: usize,
 ) -> Result<Row, SketchError> {
@@ -1218,6 +1612,7 @@ fn spline_row(
         n,
         lin: linear_layout(sketch, &kind)?,
         round,
+        shapes,
     })
 }
 
@@ -1233,8 +1628,22 @@ pub struct Assembly {
     jacobian: Sparse,
 }
 
-/// What each arc contributes: its two ends on its circle, as rules with the arc's own id.
+/// What each arc contributes: its two ends on its circle, or an elliptical arc's each at its
+/// parameter, as rules with the arc's own id.
 fn arc_rules(entity: &Entity, out: &mut Vec<(ItemId, ConstraintKind)>) -> Result<(), SketchError> {
+    if let EntityKind::EllipticalArc {
+        start,
+        end,
+        from,
+        to,
+        ..
+    } = entity.kind
+    {
+        out.try_reserve(2).map_err(|_| SketchError::OutOfMemory)?;
+        for (point, parameter) in [(start, from), (end, to)] {
+            out.push((entity.id, ConstraintKind::AtParameter { point, parameter }));
+        }
+    }
     if let EntityKind::Arc { start, end, .. } = entity.kind {
         out.try_reserve(2).map_err(|_| SketchError::OutOfMemory)?;
         for point in [start, end] {
@@ -1265,6 +1674,68 @@ pub(crate) fn rules_of(sketch: &Sketch) -> Result<Vec<(ItemId, ConstraintKind)>,
     }
     rules.sort_by_key(|(id, _)| *id);
     Ok(rules)
+}
+
+/// A curve's size for a tangency's scale: a line's length, a circle's radius at the point, an
+/// ellipse's major radius.
+fn size(shape: Shape, p: [f64; 2], x: [f64; 5]) -> f64 {
+    let [x0, x1, x2, x3, _] = x;
+    match shape {
+        Shape::Line => span(x0, x1, x2, x3),
+        Shape::Round => span(x0, x1, p[0], p[1]),
+        Shape::Oval => span(0.0, 0.0, x2, x3),
+    }
+}
+
+/// A curve's curvature at `p`: none for a line, 1 / |p − c| for a circle or arc, and for an ellipse
+/// 1 / (A² b² (u² / A⁴ + v² / b⁴)^{3/2}) at the point's coordinates u and v along its axes.
+fn shape_curvature(shape: Shape, p: [f64; 2], x: [f64; 5]) -> Result<f64, SketchError> {
+    let [x0, x1, x2, x3, b] = x;
+    let root = |v: f64| -> Result<f64, SketchError> { Ok(Real::new(v)?.sqrt()?.get()) };
+    let (dx, dy) = (p[0] - x0, p[1] - x1);
+    Ok(match shape {
+        Shape::Line => 0.0,
+        Shape::Round => {
+            let r = root(dx * dx + dy * dy)?;
+            if r > 0.0 { 1.0 / r } else { 0.0 }
+        }
+        Shape::Oval => {
+            let a2 = x2 * x2 + x3 * x3;
+            let a = root(a2)?;
+            if a == 0.0 || b == 0.0 {
+                return Ok(0.0);
+            }
+            let (u, v) = ((dx * x2 + dy * x3) / a, (dx * x3 - dy * x2) / a);
+            let b2 = b * b;
+            let inner = u * u / (a2 * a2) + v * v / (b2 * b2);
+            1.0 / (a2 * b2 * inner * root(inner)?)
+        }
+    })
+}
+
+/// [`TangentAtPoint`]'s scale at `inputs`: |nₐ| |`n_b`| (κₐ + `κ_b`), as a power of two, so the row
+/// reads sin θ / (κₐ + `κ_b`), whose gradient along the curves is near one, since their normals turn at
+/// κₐ + `κ_b` as the point moves; |nₐ| |`n_b`| / L, L the larger curve's size, for two straight
+/// curves; and 1 where that is not positive, which `singular` then refuses.
+fn tangency_scale(shapes: [Shape; 2], inputs: &[f64; 13]) -> Result<f64, SketchError> {
+    let [px, py, a0, a1, a2, a3, a4, b0, b1, b2, b3, b4, _] = *inputs;
+    let p = [px, py];
+    let ([sa, sb], (xa, xb)) = (shapes, ([a0, a1, a2, a3, a4], [b0, b1, b2, b3, b4]));
+    let length = |n: [f64; 2]| -> Result<f64, SketchError> {
+        Ok(Real::new(n[0] * n[0] + n[1] * n[1])?.sqrt()?.get())
+    };
+    let product = length(normal_f64(sa, p, xa)?)? * length(normal_f64(sb, p, xb)?)?;
+    let bend = shape_curvature(sa, p, xa)? + shape_curvature(sb, p, xb)?;
+    let scale = if bend > 0.0 {
+        product * bend
+    } else {
+        product / characteristic(size(sa, p, xa), size(sb, p, xb))
+    };
+    Ok(if scale > 0.0 && scale.is_finite() {
+        power_of_two(scale)
+    } else {
+        1.0
+    })
 }
 
 /// The angle from `u` to `v` anticlockwise, in half-turns from 0 up to 2; 0 if either has no length,
@@ -1432,11 +1903,18 @@ impl Assembly {
                     }
                 }
             }
+            let shapes = match kind {
+                ConstraintKind::TangentAtPoint { a, b, .. } => {
+                    [shape_of(sketch, a)?, shape_of(sketch, b)?]
+                }
+                _ => [Shape::Line; 2],
+            };
             rows.try_reserve(1).map_err(|_| SketchError::OutOfMemory)?;
             rows.push(spline_row(
                 sketch,
                 id,
                 kind,
+                shapes,
                 (equations, at, from),
                 list.len(),
             )?);
@@ -1844,6 +2322,21 @@ impl Assembly {
                     )
                 }
                 ConstraintKind::Symmetric { .. } => (8, characteristic(line(s, 4)?, 0.0)),
+                ConstraintKind::TangentAtPoint { .. } => {
+                    // |nₐ| |`n_b`| / L, as a power of two: TangentAtPoint's scale.
+                    let mut inputs = [0.0; 13];
+                    for (k, slot) in inputs.iter_mut().enumerate() {
+                        *slot = value(s, k)?;
+                    }
+                    (12, tangency_scale(row.shapes, &inputs)?)
+                }
+                ConstraintKind::OnEllipse { .. } => {
+                    // 2 A^3.5 b^1.5, as a power of two: OnEllipse's scale.
+                    let a = span(0.0, 0.0, value(s, 4)?, value(s, 5)?);
+                    let b = value(s, 6)?;
+                    let size = 2.0 * a * a * a * Real::new(a * b)?.sqrt()?.get() * b;
+                    (7, power_of_two(if size > 0.0 { size } else { 1.0 }))
+                }
                 ConstraintKind::ArcLength { .. } => {
                     let (cx, cy) = (value(s, 0)?, value(s, 1)?);
                     let (sx, sy) = (value(s, 2)? - cx, value(s, 3)? - cy);
@@ -2421,6 +2914,7 @@ fn dispatch<V: Visit>(row: &Row, v: &mut V) -> Result<(), SketchError> {
         | ConstraintKind::Across { .. }
         | ConstraintKind::Upward { .. }
         | ConstraintKind::Radius { .. }
+        | ConstraintKind::MinorRadius { .. }
         | ConstraintKind::EqualRadius { .. }
         | ConstraintKind::Fix { .. } => v.go(&Apart { sign: 1.0 }, row),
         ConstraintKind::Offset { grows, .. } => {
@@ -2432,7 +2926,8 @@ fn dispatch<V: Visit>(row: &Row, v: &mut V) -> Result<(), SketchError> {
         ConstraintKind::Collinear { .. } => v.go(&Collinear, row),
         ConstraintKind::OnCircle { .. }
         | ConstraintKind::Distance { .. }
-        | ConstraintKind::Length { .. } => v.go(&AtDistance, row),
+        | ConstraintKind::Length { .. }
+        | ConstraintKind::MajorRadius { .. } => v.go(&AtDistance, row),
         ConstraintKind::FromCircle { outside, .. }
         | ConstraintKind::TangentCircles { outside, .. } => {
             let sign = if outside { 1.0 } else { -1.0 };
@@ -2476,6 +2971,17 @@ fn dispatch<V: Visit>(row: &Row, v: &mut V) -> Result<(), SketchError> {
         ConstraintKind::Symmetric { .. } => v.go(&Mirror, row),
         ConstraintKind::LinearPattern { .. } => v.go(&SameStep, row),
         ConstraintKind::CircularPattern { .. } => v.go(&TurnedAbout, row),
+        ConstraintKind::OnEllipse { .. } => v.go(&OnEllipse, row),
+        ConstraintKind::FromEllipse { .. } => v.go(&FromEllipse, row),
+        ConstraintKind::EllipticalArcLength { .. } => v.go(&EllipseLength, row),
+        ConstraintKind::TangentAtPoint { .. } => {
+            let [a, b] = row.shapes;
+            v.go(&TangentAtPoint { a, b }, row)
+        }
+        ConstraintKind::AtParameter { .. } => v.go(&AtParameter, row),
+        ConstraintKind::TangentEllipse { side, .. } => {
+            v.go(&TangentEllipse { sign: side.sign() }, row)
+        }
         ConstraintKind::Linear { .. } => v.go(&Linear, row),
         ConstraintKind::Product { .. } => v.go(&Product, row),
     }
@@ -2547,6 +3053,15 @@ pub fn measure(sketch: &Sketch, constraint: &Constraint) -> Result<f64, SketchEr
         ConstraintKind::Upward { a, b, .. } => Ok(at(b)?[1] - at(a)?[1]),
         ConstraintKind::Radius { circle, .. } => sketch.radius(circle),
         ConstraintKind::Diameter { circle, .. } => Ok(sketch.radius(circle)? * 2.0),
+        ConstraintKind::MajorRadius { ellipse, .. } => {
+            let (_, [ax, ay], _) = sketch.ellipse(ellipse)?;
+            Ok(Real::new(ax * ax + ay * ay)?.sqrt()?.get())
+        }
+        ConstraintKind::MinorRadius { ellipse, .. } => Ok(sketch.ellipse(ellipse)?.2),
+        ConstraintKind::FromEllipse {
+            point, parameter, ..
+        } => foot_distance(sketch, at(point)?, parameter),
+        ConstraintKind::EllipticalArcLength { arc, .. } => elliptical_arc_length(sketch, arc),
         ConstraintKind::Turned { a, b, .. } => angle_between(along(a)?, along(b)?),
         ConstraintKind::Heading { line, .. } => angle_between([1.0, 0.0], along(line)?),
         ConstraintKind::Sweep { arc, .. } => sweep(arc),
@@ -2557,6 +3072,42 @@ pub fn measure(sketch: &Sketch, constraint: &Constraint) -> Result<f64, SketchEr
         }
         _ => Err(SketchError::NotADimension(id)),
     }
+}
+
+/// A point's distance from its foot on an ellipse, at the foot parameter's stored value.
+fn foot_distance(sketch: &Sketch, p: [f64; 2], parameter: ItemId) -> Result<f64, SketchError> {
+    let (centre, axis, minor) = sketch.ellipse(sketch.parameter_ellipse(parameter)?)?;
+    let EntityKind::Parameter { t, .. } = sketch.entity(parameter)?.kind else {
+        return Err(SketchError::WrongKind(parameter));
+    };
+    let real = |v: f64| Real::new(v);
+    let [cx, cy] = sketch.point(centre)?;
+    let (q, _) = at_parameter(
+        [real(cx)?, real(cy)?],
+        [real(axis[0])?, real(axis[1])?],
+        real(minor)?,
+        real(t)?,
+    )?;
+    let gap = [real(p[0])?.sub(q[0])?, real(p[1])?.sub(q[1])?];
+    Ok(dot(gap, gap)?.sqrt()?.get())
+}
+
+/// An elliptical arc's length now, from its start's parameter to its end's.
+fn elliptical_arc_length(sketch: &Sketch, arc: ItemId) -> Result<f64, SketchError> {
+    let (_, axis, minor) = sketch.ellipse(arc)?;
+    let [from, to] = sketch.elliptical_arc(arc)?;
+    let t = |p: ItemId| match sketch.entity(p)?.kind {
+        EntityKind::Parameter { t, .. } => Ok(t),
+        _ => Err(SketchError::WrongKind(p)),
+    };
+    let real = |v: f64| Real::new(v);
+    Ok(arc_length(
+        [real(axis[0])?, real(axis[1])?],
+        real(minor)?,
+        real(t(from)?)?,
+        real(t(to)?)?,
+    )?
+    .get())
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
-//! The benchmark of piece G218 (chapter 30): each kind's residual and Jacobian, the board's "under
-//! 200 ns".
+//! The benchmark of pieces G218 and G219 (chapter 30): each kind's residual and Jacobian, the board's
+//! "under 200 ns", on the points, lines, circles and arcs of `catalogue.sketch` and the ellipses of
+//! `ellipses.sketch`.
 //!
 //! Run with `cargo bench -p geom-sketch --bench catalogue`. It uses the standard library's clock only
 //! (wall-clock time on this machine; the reference machine and instruction counts are geom-bench's,
@@ -24,7 +25,10 @@ use std::time::Instant;
 use geom_sketch::equation::Assembly;
 use geom_sketch::text::parse;
 
-const SCENE: &str = include_str!("../tests/data/catalogue.sketch");
+const SCENES: [&str; 2] = [
+    include_str!("../tests/data/catalogue.sketch"),
+    include_str!("../tests/data/ellipses.sketch"),
+];
 const RUNS: u32 = 200_000;
 
 fn nanoseconds(a: &mut Assembly, x: &[f64]) -> f64 {
@@ -35,8 +39,9 @@ fn nanoseconds(a: &mut Assembly, x: &[f64]) -> f64 {
     start.elapsed().as_secs_f64() * 1e9 / f64::from(RUNS)
 }
 
-fn main() {
-    let bare: String = SCENE
+/// Each rule of `scene`, timed with its entities less the entities' own rows; the slowest.
+fn each_rule(scene: &str) -> (f64, String) {
+    let bare: String = scene
         .lines()
         .filter(|line| !line.starts_with("constraint"))
         .map(|line| format!("{line}\n"))
@@ -46,7 +51,7 @@ fn main() {
     let mut base = nanoseconds(&mut plain, &x);
     base = base.min(nanoseconds(&mut plain, &x));
     let mut slowest = (0.0, String::new());
-    for line in SCENE.lines().filter(|line| line.starts_with("constraint")) {
+    for line in scene.lines().filter(|line| line.starts_with("constraint")) {
         let mut a = Assembly::new(&parse(&format!("{bare}{line}\n")).unwrap()).unwrap();
         let x = a.start().unwrap();
         let own = nanoseconds(&mut a, &x).min(nanoseconds(&mut a, &x)) - base;
@@ -54,6 +59,17 @@ fn main() {
         println!("{rule:<52} {own:>8.1} ns");
         if own > slowest.0 {
             slowest = (own, rule.to_owned());
+        }
+    }
+    slowest
+}
+
+fn main() {
+    let mut slowest = (0.0, String::new());
+    for scene in SCENES {
+        let here = each_rule(scene);
+        if here.0 > slowest.0 {
+            slowest = here;
         }
     }
     println!("slowest: {} at {:.1} ns", slowest.1, slowest.0);
