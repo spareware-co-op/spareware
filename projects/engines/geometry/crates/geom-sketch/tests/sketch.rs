@@ -576,6 +576,11 @@ fn errors_say_what_went_wrong() {
         (SketchError::Degenerate(x), "the start is on a singular set"),
         (SketchError::Text { line: 3 }, "text that is not sketch v1"),
         (SketchError::OutOfMemory, "an allocation could not be made"),
+        (SketchError::Stopped, "the work meter stopped"),
+        (
+            SketchError::Internal,
+            "a step its own bounds rule out failed (a defect)",
+        ),
         (
             geom_num::NumError::NotFinite.into(),
             "the arithmetic refused",

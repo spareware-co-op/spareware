@@ -175,7 +175,7 @@ fn index(variables: &[Variable], owner: ItemId, slot: u8) -> Result<usize, Sketc
 }
 
 /// Which variables `constraint` touches, and how many equations it has.
-fn touched_by(
+pub(crate) fn touched_by(
     sketch: &Sketch,
     constraint: &Constraint,
     variables: &[Variable],
