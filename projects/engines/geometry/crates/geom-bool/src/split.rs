@@ -1,18 +1,30 @@
-//! Face splitting for flat carriers: each face cut along its In and section edges into the faces it
-//! splits into, its loops traced in the plane's picture by exact orientation (11.4 step 5, G244).
+//! Face splitting for flat and analytic carriers: each face cut along its In and section edges into
+//! the faces it splits into, its loops traced in the face's picture by exact orientation (11.4
+//! step 5, G244).
 //!
 //! What it does: [`split`] takes the interferences of an arrangement ([`crate::interfere`]) and,
-//! for each face whose carrier is a plane of the table, gathers its pieces: its boundary's split
-//! edges (On), other operands' split edges lying inside it (In) and its section edges, a common
-//! block once. In the plane's picture (the coordinate the normal is largest in dropped, as
-//! [`crate::inside`] does), the pieces leaving each vertex are put in turning order by their
-//! tangents, counted from a whole reference direction that no tangent there can lie along; the
-//! loops are then traced with each piece's left side as the face it bounds. A loop running
-//! counter-clockwise, by the sign of its certified area, bounds a split face; one running
-//! clockwise is the outside of a connected group of pieces, a hole of the smallest split face that
-//! holds it (by the certified ray test), or, held by none, the outside of the face itself.
-//! Vertices of other operands inside the face that no piece reaches are given to the split face
-//! that holds them.
+//! for each face whose carrier is a plane of the table, a cylinder or one nappe of a cone, gathers
+//! its pieces: its boundary's split edges (On), other operands' split edges lying inside it (In)
+//! and its section edges, a common block once. In the face's picture (a plane's with the
+//! coordinate its normal is largest in dropped, as [`crate::inside`] does; a cylinder's or cone's
+//! seen from a point inside the carrier, `crate::picture`), the pieces leaving each vertex are put
+//! in turning order by their tangents, counted from a whole reference direction that no tangent
+//! there can lie along; the loops are then traced with each piece's left side as the face it
+//! bounds. A loop running counter-clockwise, by the sign of its certified area, bounds a split
+//! face; one running clockwise is the outside of a connected group of pieces, a hole of the
+//! innermost split face that holds it (by the certified ray test), or, held by none, the outside
+//! of the face itself. Vertices of other operands inside the face that no piece reaches are given
+//! to the split face that holds them.
+//!
+//! **Curved faces.** A cylinder's or cone's picture has no seam and no pole: a cylinder's whole
+//! side is a ring between its two end circles, and a cone's apex is a point like any other, where
+//! the rulings that meet are ordered exactly. A split face's loops run counter-clockwise (its
+//! outer loop) and clockwise (its holes) seen from outside the carrier, away from its axis. The
+//! outer loop of a curved face is the outermost in its picture, found by the ray test, not the
+//! first given: a cylinder's side has its outer loop at the end its axis points to. A face is
+//! split only when the face stages have met everything with it: one that an edge or a face of
+//! another operand may still cross (`FaceInfo::pending`) waits, a curved face or a flat one
+//! whose box meets a curved face's.
 //!
 //! Guarantees:
 //!
@@ -25,14 +37,19 @@
 //!   tangent, a pair whose cross product is not proven, and a vertex no direction serves fail
 //!   with [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance compares two.
 //! - **Each loop's sense is proven.** A loop's area is enclosed piece by piece: a straight piece's
-//!   exactly from its ends, a circle's or ellipse's arc in closed form with certified sines and
-//!   cosines of half-turns; an area that holds zero fails with [`BuildError::UndecidedArea`].
+//!   exactly from its ends, a circle's or ellipse's arc on a flat face in closed form with
+//!   certified sines and cosines of half-turns; an area that holds zero fails with
+//!   [`BuildError::UndecidedArea`]. On a curved face a piece that is not straight is summed over
+//!   parts of its parameter, each part's share enclosed by the mean value theorem, over more parts
+//!   until the sign is proven or 4,096 parts leave it open.
 //! - **Holes go to the face that holds them, by proof.** A clockwise loop's point is placed in each
-//!   counter-clockwise loop by the certified ray test, and the smallest by area that holds it takes
-//!   it; no direction qualifying fails with [`BuildError::Unclassified`].
-//! - **What this piece does not split, it says.** A face on a curved carrier, or bounded by a curve
-//!   other than a line, circle or ellipse, is listed as waiting, for G244's analytic carriers and
-//!   G245's NURBS and procedural ones.
+//!   counter-clockwise loop of another group by the certified ray test. Two that hold it are
+//!   nested, and the inner is the one whose own point the other holds, again by the ray test: no
+//!   two areas are compared. No direction qualifying fails with [`BuildError::Unclassified`].
+//! - **What this piece does not split, it says.** A face on a sphere, a torus or any other curved
+//!   carrier, a cylinder's or cone's face with something pending, and a face bounded on a plane by
+//!   a curve other than a line, circle or ellipse are listed as waiting: for the rest of G244's
+//!   analytic carriers and G245's NURBS and procedural ones.
 //! - **Deterministic.** Faces in order, pieces in index order, vertices' pieces in turning order,
 //!   loops in the order their first pieces come.
 //!
@@ -56,10 +73,11 @@
 //!   for the order round a vertex and the grouping of outer loops and holes; no code copied.
 //! SPDX-License-Identifier: Apache-2.0
 //!
-//! Cost: per flat face, its pieces sorted round each vertex (at most 16 side tests per piece there
-//! to find the reference, then O(k²) comparisons at a vertex of k pieces, each a few wide
-//! multiplications or interval products), one walk over the pieces, an area per loop, and a ray
-//! test per hole and loop pair; all charged to the meter. No recursion.
+//! Cost: per face, its pieces sorted round each vertex (at most 16 side tests per piece there to
+//! find the reference, then O(k²) comparisons at a vertex of k pieces, each a few wide
+//! multiplications or interval products), one walk over the pieces, an area per loop (on a curved
+//! face 16 to 4,096 bounds of each piece that is not straight), and a ray test per hole and loop
+//! pair; all charged to the meter. No recursion.
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -72,10 +90,12 @@ use geom_num::{NumError, P3, Sign};
 use geom_run::WorkMeter;
 use geom_topo::{Axes, CurveKind, DerivativeBound, Line, ParamCurve};
 
-use crate::carrier::{CarrierIx, CurveGeom};
+use crate::carrier::CurveGeom;
 use crate::crossing::{Enclosed, Hull};
 use crate::inside::{Crossable, DIRECTIONS, FlatFace, hull as hull_of, ray_parity};
 use crate::interfere::{Arrangement, BuildError, Entity, Interfered, committed, nearest_point};
+use crate::picture::{Central, Picture, whole};
+use crate::rule::{greater, lesser};
 
 /// A piece of edge that bounds a split face.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -154,14 +174,9 @@ type Rotations = BTreeMap<usize, Vec<(usize, Dir)>>;
 /// pieces both ways and so bounds nothing.
 type Loops = (Vec<Vec<Use>>, Vec<Option<Interval>>);
 
-/// The counter-clockwise loops (as indices into all the loops), ready for the ray test, with every
-/// loop's area and group.
-type Outers<'r> = (
-    &'r [usize],
-    &'r [Ring],
-    &'r [Option<Interval>],
-    &'r [Option<usize>],
-);
+/// The counter-clockwise loops (as indices into all the loops), each ready for the ray test and
+/// with a grid point on it, and every loop's group.
+type Outers<'r> = (&'r [usize], &'r [Ring], &'r [P3], &'r [Option<usize>]);
 
 /// A tangent in the picture, leaving a vertex: whole when it can be, and its enclosure.
 #[derive(Clone, Copy, Debug)]
@@ -173,19 +188,6 @@ struct Dir {
 /// The picture's two coordinates of a vector of three.
 fn pick<T: Copy>(v: [T; 3], [first, second]: [usize; 2]) -> Option<[T; 2]> {
     Some([*v.get(first)?, *v.get(second)?])
-}
-
-/// A double as a whole number in a wide integer, if it is one and small enough.
-fn whole(x: f64) -> Option<I256> {
-    let rounded = geom_num::math::round_ties_even(x).ok()?.get();
-    if rounded != x || x.abs() >= 9.0e15 {
-        return None;
-    }
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "a whole number below 2^53 in size, which an integer holds exactly"
-    )]
-    Some(I256::from_i128(i128::from(x as i64)))
 }
 
 /// Three doubles, each enclosed as itself.
@@ -388,30 +390,35 @@ fn pieces_of<'a>(
 }
 
 /// The tangent of `bounding` leaving its first end (`at_start`) or its last, in the picture.
-/// `None` for a curve kind this piece does not order.
+/// `None` for a curve kind this piece does not order, and for a section's chord on a curved face.
 fn leaving(
     bounding: &Bounding<'_>,
     at_start: bool,
-    keep: [usize; 2],
+    picture: &Picture,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Dir>, BuildError> {
     let flip = |v: Interval| if at_start { v } else { v.neg() };
+    // Running a piece backwards turns its tangent round.
+    let turn = |[x, y]: [I256; 2]| -> Result<[I256; 2], NumError> {
+        if at_start {
+            return Ok([x, y]);
+        }
+        Ok([
+            x.checked_neg().ok_or(NumError::BudgetExceeded)?,
+            y.checked_neg().ok_or(NumError::BudgetExceeded)?,
+        ])
+    };
     match &bounding.shape {
         Shape::Straight { direction, approx } => {
-            let (Some([x, y]), Some([ax, ay])) = (pick(*direction, keep), pick(*approx, keep))
+            let Picture::Flat { keep } = picture else {
+                return Ok(None);
+            };
+            let (Some(exact), Some([ax, ay])) = (pick(*direction, *keep), pick(*approx, *keep))
             else {
                 return Err(IntersectError::Internal.into());
             };
-            let exact = if at_start {
-                [x, y]
-            } else {
-                [
-                    x.checked_neg().ok_or(NumError::BudgetExceeded)?,
-                    y.checked_neg().ok_or(NumError::BudgetExceeded)?,
-                ]
-            };
             Ok(Some(Dir {
-                exact: Some(exact),
+                exact: Some(turn(exact)?),
                 approx: [flip(ax), flip(ay)],
             }))
         }
@@ -421,20 +428,24 @@ fn leaving(
             };
             let t = if at_start { *from } else { *to };
             if let CurveKind::Line(line) = curve {
-                let Some([dx, dy]) = pick(line.direction(), keep) else {
-                    return Err(IntersectError::Internal.into());
-                };
-                let exact = match (whole(dx), whole(dy)) {
-                    (Some(x), Some(y)) if at_start => Some([x, y]),
-                    (Some(x), Some(y)) => Some([
-                        x.checked_neg().ok_or(NumError::BudgetExceeded)?,
-                        y.checked_neg().ok_or(NumError::BudgetExceeded)?,
-                    ]),
-                    _ => None,
+                let (exact, [ax, ay]) = match picture {
+                    Picture::Flat { keep } => {
+                        let Some([dx, dy]) = pick(line.direction(), *keep) else {
+                            return Err(IntersectError::Internal.into());
+                        };
+                        (
+                            whole(dx).zip(whole(dy)).map(|(x, y)| [x, y]),
+                            [Interval::point(dx)?, Interval::point(dy)?],
+                        )
+                    }
+                    Picture::Central(central) => (
+                        central.line_tangent(line.origin(), line.direction()),
+                        central.tangent(exact3(line.origin())?, exact3(line.direction())?)?,
+                    ),
                 };
                 return Ok(Some(Dir {
-                    exact,
-                    approx: [flip(Interval::point(dx)?), flip(Interval::point(dy)?)],
+                    exact: exact.map(turn).transpose()?,
+                    approx: [flip(ax), flip(ay)],
                 }));
             }
             let DerivativeBound::Bounded(d1) = curve
@@ -443,10 +454,16 @@ fn leaving(
             else {
                 return Ok(None);
             };
-            let Some([x1, y1]) = pick(boxed(d1.lo, d1.hi)?, keep) else {
-                return Err(IntersectError::Internal.into());
+            let along = boxed(d1.lo, d1.hi)?;
+            let [x1, y1] = match picture {
+                Picture::Flat { keep } => {
+                    let Some(kept) = pick(along, *keep) else {
+                        return Err(IntersectError::Internal.into());
+                    };
+                    kept
+                }
+                Picture::Central(central) => central.tangent(point_at(curve, t, meter)?, along)?,
             };
-            // Running the curve backwards turns its tangent round.
             Ok(Some(Dir {
                 exact: None,
                 approx: [flip(x1), flip(y1)],
@@ -540,25 +557,30 @@ fn picture_point(p: P3, keep: [usize; 2]) -> Result<[Interval; 2], BuildError> {
     pick(exact3(v)?, keep).ok_or_else(|| IntersectError::Internal.into())
 }
 
-/// ∫ x dy along `bounding` run `forward` or back, in the picture; `None` for a curve kind this
-/// piece does not measure.
+/// ∫ x dy along `bounding` run `forward` or back, in the picture, a curved piece on a curved
+/// face summed over `pieces` parts of its parameter; `None` for a curve kind this piece does not
+/// measure.
 fn area_of(
     arr: &Arrangement,
     out: &Interfered,
     bounding: &Bounding<'_>,
     forward: bool,
-    keep: [usize; 2],
+    (picture, pieces): (&Picture, u32),
+    meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Interval>, BuildError> {
     let along = match &bounding.shape {
         Shape::Straight { .. } => {
+            let Picture::Flat { keep } = picture else {
+                return Ok(None);
+            };
             let Some([u, v]) = bounding.ends else {
                 return Err(IntersectError::Internal.into());
             };
             let (pu, _) = committed(&arr.carriers, &out.vertices, u)?;
             let (pv, _) = committed(&arr.carriers, &out.vertices, v)?;
-            chord_area(picture_point(pu, keep)?, picture_point(pv, keep)?)?
+            chord_area(picture_point(pu, *keep)?, picture_point(pv, *keep)?)?
         }
-        Shape::Curve { .. } => return curve_area(bounding, forward, keep),
+        Shape::Curve { .. } => return curve_area(bounding, forward, (picture, pieces), meter),
     };
     Ok(Some(if forward { along } else { along.neg() }))
 }
@@ -568,16 +590,19 @@ fn area_of(
 fn curve_area(
     bounding: &Bounding<'_>,
     forward: bool,
-    keep: [usize; 2],
+    (picture, pieces): (&Picture, u32),
+    meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Interval>, BuildError> {
-    let along = match &bounding.shape {
-        Shape::Straight { .. } => return Err(IntersectError::Internal.into()),
-        Shape::Curve { curve, span, wraps } => {
-            let (a, b) = curve.domain();
-            let (lo, hi) = match span {
-                Some((from, to)) => (*from, *to),
-                None => (Interval::point(a)?, Interval::point(b)?),
-            };
+    let Shape::Curve { curve, span, wraps } = &bounding.shape else {
+        return Err(IntersectError::Internal.into());
+    };
+    let (a, b) = curve.domain();
+    let (lo, hi) = match span {
+        Some((from, to)) => (*from, *to),
+        None => (Interval::point(a)?, Interval::point(b)?),
+    };
+    let along = match picture {
+        Picture::Flat { keep } => {
             if let CurveKind::Line(line) = curve {
                 let (o, d) = (exact3(line.origin())?, exact3(line.direction())?);
                 let at = |t: Interval| -> Result<[Interval; 3], NumError> {
@@ -589,12 +614,12 @@ fn curve_area(
                         o2.add(t.mul(d2)?)?,
                     ])
                 };
-                let (Some(p0), Some(p1)) = (pick(at(lo)?, keep), pick(at(hi)?, keep)) else {
+                let (Some(p0), Some(p1)) = (pick(at(lo)?, *keep), pick(at(hi)?, *keep)) else {
                     return Err(IntersectError::Internal.into());
                 };
                 chord_area(p0, p1)?
             } else {
-                let Some(conic) = conic_of(curve, keep)? else {
+                let Some(conic) = conic_of(curve, *keep)? else {
                     return Ok(None);
                 };
                 if *wraps {
@@ -605,23 +630,207 @@ fn curve_area(
                 }
             }
         }
+        Picture::Central(central) => {
+            let spans = if *wraps {
+                [
+                    Some((lo, Interval::point(b)?)),
+                    Some((Interval::point(a)?, hi)),
+                ]
+            } else {
+                [Some((lo, hi)), None]
+            };
+            let mut total = Interval::point(0.0)?;
+            for span in spans.into_iter().flatten() {
+                let Some(part) = swept(central, curve, span, pieces, meter)? else {
+                    return Ok(None);
+                };
+                total = total.add(part)?;
+            }
+            total
+        }
     };
     Ok(Some(if forward { along } else { along.neg() }))
 }
 
-/// For each edge of flat face `f`'s loops, whether the face lies on its left in the picture when it
+/// ∫ x dy along `curve` over the parameter span `ta..tb`, in a curved face's picture: the
+/// picture's first coordinate over the span times the rate of its second there, times the span's
+/// length, which holds the integral by the mean value theorem. `None` where the curve's tangent
+/// is not bounded.
+fn strip(
+    central: &Central,
+    curve: &CurveKind<3>,
+    (ta, tb): (f64, f64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Interval>, BuildError> {
+    let DerivativeBound::Bounded(d1) = curve
+        .derivative_bound((ta, tb), 1, meter)
+        .map_err(IntersectError::from)?
+    else {
+        return Ok(None);
+    };
+    let at = point_at(curve, Interval::new(ta, tb)?, meter)?;
+    let [x, _] = central.point(at)?;
+    let [_, rate] = central.rate(at, boxed(d1.lo, d1.hi)?)?;
+    let length = Interval::point(tb)?.sub(Interval::point(ta)?)?;
+    Ok(Some(x.mul(rate)?.mul(length)?))
+}
+
+/// ∫ x dy along `curve` from a parameter in `t0` to one in `t1`, in a curved face's picture. A
+/// straight line's picture is straight, so its integral is its chord's. Any other curve is summed
+/// over `pieces` equal parts between the two enclosures ([`strip`]); the stretch within each
+/// enclosure, of which the piece runs an unknown part, adds anything from nothing to its whole
+/// strip. `None` where the curve's tangent is not bounded.
+fn swept(
+    central: &Central,
+    curve: &CurveKind<3>,
+    (t0, t1): (Interval, Interval),
+    pieces: u32,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Interval>, BuildError> {
+    if let CurveKind::Line(_) = curve {
+        let p0 = central.point(point_at(curve, t0, meter)?)?;
+        let p1 = central.point(point_at(curve, t1, meter)?)?;
+        return Ok(Some(chord_area(p0, p1)?));
+    }
+    let mut total = Interval::point(0.0)?;
+    // Between the two enclosures; where they overlap, a span of no length, which adds nothing.
+    let start = t0.hi();
+    let end = greater(t1.lo(), start);
+    let mut from = start;
+    for k in 1..=pieces {
+        meter.charge(1).map_err(IntersectError::from)?;
+        // The last part ends at the end itself, so the parts cover the span and nothing more.
+        let to = if k == pieces {
+            end
+        } else {
+            start + (end - start) * (f64::from(k) / f64::from(pieces))
+        };
+        let Some(part) = strip(central, curve, (from, to), meter)? else {
+            return Ok(None);
+        };
+        total = total.add(part)?;
+        from = to;
+    }
+    for t in [t0, t1] {
+        let Some(part) = strip(central, curve, (t.lo(), t.hi()), meter)? else {
+            return Ok(None);
+        };
+        total = total.add(Interval::new(
+            lesser(part.lo(), 0.0),
+            greater(part.hi(), 0.0),
+        )?)?;
+    }
+    Ok(Some(total))
+}
+
+/// A loop's area, summed by `sum` over more and more parts of its curved pieces until its sign is
+/// proven; `None` when `sum` gives none.
+fn proven(
+    (f, picture): (usize, &Picture),
+    mut sum: impl FnMut(u32) -> Result<Option<Interval>, BuildError>,
+) -> Result<Option<Interval>, BuildError> {
+    for &pieces in picture.levels() {
+        let Some(total) = sum(pieces)? else {
+            return Ok(None);
+        };
+        if let Some(Sign::Positive | Sign::Negative) = total.certain_sign() {
+            return Ok(Some(total));
+        }
+    }
+    Err(BuildError::UndecidedArea { face: f })
+}
+
+/// The grid point nearest the middle of `curve`.
+fn middle_point(curve: &CurveKind<3>, meter: &mut WorkMeter<'_>) -> Result<P3, BuildError> {
+    let (start, end) = curve.domain();
+    let middle = point_at(curve, Interval::point(start / 2.0 + end / 2.0)?, meter)?;
+    Ok(nearest_point(middle.map(|c| c.lo() / 2.0 + c.hi() / 2.0))?)
+}
+
+/// Which of a curved face's loops is the outermost in its picture: the one that holds a point of
+/// another, its loops being apart and all but one of them holes. A face of one loop has it.
+fn outermost(
+    arr: &Arrangement,
+    out: &Interfered,
+    (f, picture): (usize, &Picture),
+    meter: &mut WorkMeter<'_>,
+) -> Result<usize, BuildError> {
+    let face = arr
+        .faces
+        .get(f)
+        .ok_or(BuildError::Missing(Entity::Face(f)))?;
+    if face.loops.len() < 2 {
+        return Ok(0);
+    }
+    // Each boundary edge whole, as a piece named by its own index.
+    let mut pieces = Vec::new();
+    let mut index: BTreeMap<Piece, usize> = BTreeMap::new();
+    let mut points = Vec::with_capacity(face.loops.len());
+    for ring in &face.loops {
+        for (i, &e) in ring.iter().enumerate() {
+            let edge = arr
+                .edges
+                .get(e)
+                .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+            let curve = arr
+                .carriers
+                .curve(edge.curve)
+                .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+            let (a, b) = curve.domain();
+            if i == 0 {
+                points.push(middle_point(curve, meter)?);
+            }
+            index.insert(Piece::Split(e), pieces.len());
+            pieces.push(Bounding {
+                piece: Piece::Split(e),
+                ends: edge.ends,
+                shape: Shape::Curve {
+                    curve,
+                    span: Some((Interval::point(a)?, Interval::point(b)?)),
+                    wraps: false,
+                },
+                left: None,
+            });
+        }
+    }
+    for (k, edges) in face.loops.iter().enumerate() {
+        let uses: Vec<Use> = edges
+            .iter()
+            .map(|&e| Use {
+                piece: Piece::Split(e),
+                forward: true,
+            })
+            .collect();
+        let made = ring(arr, out, (pieces.as_slice(), &index), &uses, meter)?;
+        let next = k.checked_add(1).filter(|n| *n < points.len()).unwrap_or(0);
+        let other = *points.get(next).ok_or(IntersectError::Internal)?;
+        if holds(&made, &pieces, (f, picture), other, meter)? {
+            return Ok(k);
+        }
+    }
+    Err(IntersectError::Internal.into())
+}
+
+/// For each edge of face `f`'s loops, whether the face lies on its left in the picture when it
 /// is run forward: each loop is run edge after edge, its sense read from its certified area, the
-/// outer loop (the first) counter-clockwise round the face and the others clockwise round its
-/// holes. `None` for an edge kind this piece does not measure.
+/// outer loop counter-clockwise round the face and the others clockwise round its holes. A flat
+/// face's outer loop is its first; a curved face's is the outermost in its picture
+/// ([`outermost`]). `None` for an edge kind this piece does not measure.
 fn senses(
     arr: &Arrangement,
-    (f, keep): (usize, [usize; 2]),
+    out: &Interfered,
+    (f, picture): (usize, &Picture),
+    meter: &mut WorkMeter<'_>,
 ) -> Result<Option<BTreeMap<usize, bool>>, BuildError> {
     let face = arr
         .faces
         .get(f)
         .ok_or(BuildError::Missing(Entity::Face(f)))?;
-    let mut out = BTreeMap::new();
+    let outer = match picture {
+        Picture::Flat { .. } => 0,
+        Picture::Central(_) => outermost(arr, out, (f, picture), meter)?,
+    };
+    let mut left = BTreeMap::new();
     for (k, ring) in face.loops.iter().enumerate() {
         // Which way the loop runs each edge: on from the end it shares with the edge before.
         let mut runs: Vec<(usize, bool)> = Vec::with_capacity(ring.len());
@@ -647,50 +856,53 @@ fn senses(
             at = edge.ends.map(|[s, t]| if forward { t } else { s });
             runs.push((e, forward));
         }
-        let mut total = Interval::point(0.0)?;
-        for &(e, forward) in &runs {
-            let edge = arr
-                .edges
-                .get(e)
-                .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-            let curve = arr
-                .carriers
-                .curve(edge.curve)
-                .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-            let (a, b) = curve.domain();
-            let whole = Bounding {
-                piece: Piece::Split(0),
-                ends: None,
-                shape: Shape::Curve {
-                    curve,
-                    span: Some((Interval::point(a)?, Interval::point(b)?)),
-                    wraps: false,
-                },
-                left: None,
-            };
-            let Some(part) = curve_area(&whole, forward, keep)? else {
-                return Ok(None);
-            };
-            total = total.add(part)?;
-        }
-        if total.lo() <= 0.0 && total.hi() >= 0.0 {
-            return Err(BuildError::UndecidedArea { face: f });
-        }
+        let Some(total) = proven((f, picture), |pieces| {
+            let mut total = Interval::point(0.0)?;
+            for &(e, forward) in &runs {
+                let edge = arr
+                    .edges
+                    .get(e)
+                    .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+                let curve = arr
+                    .carriers
+                    .curve(edge.curve)
+                    .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+                let (a, b) = curve.domain();
+                let whole = Bounding {
+                    piece: Piece::Split(0),
+                    ends: None,
+                    shape: Shape::Curve {
+                        curve,
+                        span: Some((Interval::point(a)?, Interval::point(b)?)),
+                        wraps: false,
+                    },
+                    left: None,
+                };
+                let Some(part) = curve_area(&whole, forward, (picture, pieces), meter)? else {
+                    return Ok(None);
+                };
+                total = total.add(part)?;
+            }
+            Ok(Some(total))
+        })?
+        else {
+            return Ok(None);
+        };
         // The outer loop runs counter-clockwise with the face on its left; a hole clockwise.
         let left_turning = total.lo() > 0.0;
-        let wanted = k == 0;
+        let wanted = k == outer;
         for (e, forward) in runs {
-            out.insert(e, forward == (left_turning == wanted));
+            left.insert(e, forward == (left_turning == wanted));
         }
     }
-    Ok(Some(out))
+    Ok(Some(left))
 }
 
 /// The pieces leaving each vertex, in turning order: half-edge 2i leaves piece i's first end, and
 /// 2i + 1 its last. `None` when a tangent cannot be had.
 fn rotations(
     pieces: &[Bounding<'_>],
-    (f, keep): (usize, [usize; 2]),
+    (f, picture): (usize, &Picture),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Rotations>, BuildError> {
     let mut at: Rotations = BTreeMap::new();
@@ -702,7 +914,7 @@ fn rotations(
         for (vertex, at_start, half_edge) in [(u, true, twice), (v, false, twice.saturating_add(1))]
         {
             meter.charge(1).map_err(IntersectError::from)?;
-            let Some(dir) = leaving(bounding, at_start, keep, meter)? else {
+            let Some(dir) = leaving(bounding, at_start, picture, meter)? else {
                 return Ok(None);
             };
             at.entry(vertex).or_default().push((half_edge, dir));
@@ -940,7 +1152,7 @@ fn ring(
 fn holds(
     ring: &Ring,
     pieces: &[Bounding<'_>],
-    (f, keep): (usize, [usize; 2]),
+    (f, picture): (usize, &Picture),
     point: P3,
     meter: &mut WorkMeter<'_>,
 ) -> Result<bool, BuildError> {
@@ -960,7 +1172,7 @@ fn holds(
         });
     }
     for direction in DIRECTIONS {
-        if let Some(inside) = ray_parity(keep, (&sides, &ring.joins), point, direction, meter)? {
+        if let Some(inside) = ray_parity(picture, (&sides, &ring.joins), point, direction, meter)? {
             return Ok(inside);
         }
     }
@@ -981,9 +1193,7 @@ fn point_on(
     let Shape::Curve { curve, .. } = &bounding.shape else {
         return Err(IntersectError::Internal.into());
     };
-    let (start, end) = curve.domain();
-    let middle = point_at(curve, Interval::point(start / 2.0 + end / 2.0)?, meter)?;
-    Ok(nearest_point(middle.map(|c| c.lo() / 2.0 + c.hi() / 2.0))?)
+    middle_point(curve, meter)
 }
 
 /// The groups of pieces joined at vertices: each piece's group, named by the lowest piece in it.
@@ -1018,16 +1228,16 @@ fn groups(pieces: &[Bounding<'_>]) -> Vec<usize> {
     (0..pieces.len()).map(|i| find(&lead, i)).collect()
 }
 
-/// The loops of flat face `f`'s pieces with their areas, or `None` when this piece leaves the
-/// face for another.
+/// The loops of face `f`'s pieces with their areas, or `None` when this piece leaves the face
+/// for another.
 fn loops_of(
     arr: &Arrangement,
     out: &Interfered,
-    (f, keep): (usize, [usize; 2]),
+    (f, picture): (usize, &Picture),
     (pieces, index): (&[Bounding<'_>], &BTreeMap<Piece, usize>),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Loops>, BuildError> {
-    let Some(at) = rotations(pieces, (f, keep), meter)? else {
+    let Some(at) = rotations(pieces, (f, picture), meter)? else {
         return Ok(None);
     };
     let mut loops = trace(pieces, &at)?;
@@ -1060,35 +1270,53 @@ fn loops_of(
             areas.push(None);
             continue;
         }
-        let mut total = Interval::point(0.0)?;
-        for one in uses {
-            let i = *index.get(&one.piece).ok_or(IntersectError::Internal)?;
-            let bounding = pieces.get(i).ok_or(IntersectError::Internal)?;
-            let Some(part) = area_of(arr, out, bounding, one.forward, keep)? else {
-                return Ok(None);
-            };
-            total = total.add(part)?;
-        }
-        if total.lo() <= 0.0 && total.hi() >= 0.0 {
-            return Err(BuildError::UndecidedArea { face: f });
-        }
+        let Some(total) = proven((f, picture), |parts| {
+            let mut total = Interval::point(0.0)?;
+            for one in uses {
+                let i = *index.get(&one.piece).ok_or(IntersectError::Internal)?;
+                let bounding = pieces.get(i).ok_or(IntersectError::Internal)?;
+                let Some(part) = area_of(arr, out, bounding, one.forward, (picture, parts), meter)?
+                else {
+                    return Ok(None);
+                };
+                total = total.add(part)?;
+            }
+            Ok(Some(total))
+        })?
+        else {
+            return Ok(None);
+        };
         areas.push(Some(total));
     }
     Ok(Some((loops, areas)))
 }
 
-/// The faces flat face `f` splits into, or `None` when this piece leaves it for another.
+/// The faces face `f` splits into, or `None` when this piece leaves it for another: a face with
+/// no picture, and a face that an edge or a face of another operand may cross, which the face
+/// stages have not yet met with it (a curved face, or a flat one whose box meets a curved one's).
 fn split_face(
     arr: &Arrangement,
     out: &Interfered,
     f: usize,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Vec<SplitFace>>, BuildError> {
-    let Some(flat) = FlatFace::new(arr, f, meter)? else {
+    let waits = out
+        .faces
+        .get(f)
+        .is_some_and(|info| !info.pending.edges.is_empty() || !info.pending.faces.is_empty());
+    if waits {
         return Ok(None);
+    }
+    let picture = if let Some(flat) = FlatFace::new(arr, f, meter)? {
+        Picture::Flat { keep: flat.keep() }
+    } else {
+        let Some(central) = Central::of_face(arr, f, meter)? else {
+            return Ok(None);
+        };
+        Picture::Central(central)
     };
-    let keep = flat.keep();
-    let Some(senses) = senses(arr, (f, keep))? else {
+    let picture = &picture;
+    let Some(senses) = senses(arr, out, (f, picture), meter)? else {
         return Ok(None);
     };
     let pieces = pieces_of(arr, out, f, &senses)?;
@@ -1097,7 +1325,7 @@ fn split_face(
         .enumerate()
         .map(|(i, b)| (b.piece, i))
         .collect();
-    let Some((loops, areas)) = loops_of(arr, out, (f, keep), (&pieces, &index), meter)? else {
+    let Some((loops, areas)) = loops_of(arr, out, (f, picture), (&pieces, &index), meter)? else {
         return Ok(None);
     };
     // A loop that runs a stretch of the face's own boundary with the face on its right bounds
@@ -1120,7 +1348,7 @@ fn split_face(
     assemble(
         arr,
         out,
-        (f, keep),
+        (f, picture),
         (&pieces, &index),
         (loops, areas),
         meter,
@@ -1128,31 +1356,34 @@ fn split_face(
     .map(Some)
 }
 
-/// The smallest of `outer` (loops of `loops`, ready as `rings`) holding `point`, of a group other
-/// than `own`: its index in `outer`.
+/// The innermost of `outer` (loops ready as `rings`, with a grid point on each) holding `point`,
+/// of a group other than `own`: its index in `outer`. Two loops of different groups that hold one
+/// point are nested, one inside the other, and the inner is the one whose own point the other
+/// holds: proven by the ray test, never read from two areas.
 fn smallest(
     pieces: &[Bounding<'_>],
-    (f, keep): (usize, [usize; 2]),
-    (outer, rings, areas, groups_of): Outers<'_>,
+    (f, picture): (usize, &Picture),
+    (outer, rings, points, groups_of): Outers<'_>,
     (point, own): (P3, Option<usize>),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<usize>, BuildError> {
-    let mut best: Option<(usize, f64)> = None;
+    let mut best: Option<(usize, &Ring)> = None;
     for (slot, (&k, ring)) in outer.iter().zip(rings).enumerate() {
         if own.is_some() && groups_of.get(k).copied().flatten() == own {
             continue;
         }
-        let size = areas
-            .get(k)
-            .copied()
-            .flatten()
-            .ok_or(IntersectError::Internal)?
-            .hi();
-        if best.is_some_and(|(_, b)| b <= size) {
+        if !holds(ring, pieces, (f, picture), point, meter)? {
             continue;
         }
-        if holds(ring, pieces, (f, keep), point, meter)? {
-            best = Some((slot, size));
+        let inner = match best {
+            None => true,
+            Some((_, so_far)) => {
+                let on_ring = *points.get(slot).ok_or(IntersectError::Internal)?;
+                holds(so_far, pieces, (f, picture), on_ring, meter)?
+            }
+        };
+        if inner {
+            best = Some((slot, ring));
         }
     }
     Ok(best.map(|(slot, _)| slot))
@@ -1163,7 +1394,7 @@ fn smallest(
 fn assemble(
     arr: &Arrangement,
     out: &Interfered,
-    (f, keep): (usize, [usize; 2]),
+    (f, picture): (usize, &Picture),
     (pieces, index): (&[Bounding<'_>], &BTreeMap<Piece, usize>),
     (loops, areas): Loops,
     meter: &mut WorkMeter<'_>,
@@ -1186,10 +1417,16 @@ fn assemble(
         })
         .collect();
     let mut rings = Vec::with_capacity(outer.len());
+    let mut points = Vec::with_capacity(outer.len());
     let mut faces: Vec<SplitFace> = Vec::with_capacity(outer.len());
     for &k in &outer {
         let uses = loops.get(k).ok_or(IntersectError::Internal)?;
         rings.push(ring(arr, out, (pieces, index), uses, meter)?);
+        let first = uses.first().ok_or(IntersectError::Internal)?;
+        let bounding = pieces
+            .get(*index.get(&first.piece).ok_or(IntersectError::Internal)?)
+            .ok_or(IntersectError::Internal)?;
+        points.push(point_on(arr, out, bounding, meter)?);
         faces.push(SplitFace {
             face: f,
             outer: uses.clone(),
@@ -1201,7 +1438,7 @@ fn assemble(
     let found = (
         outer.as_slice(),
         rings.as_slice(),
-        areas.as_slice(),
+        points.as_slice(),
         groups_of.as_slice(),
     );
     for (k, uses) in loops.iter().enumerate() {
@@ -1216,7 +1453,7 @@ fn assemble(
         let point = point_on(arr, out, bounding, meter)?;
         let own = groups_of.get(k).copied().flatten();
         // Held by none: the outside of the face itself.
-        if let Some(slot) = smallest(pieces, (f, keep), found, (point, own), meter)? {
+        if let Some(slot) = smallest(pieces, (f, picture), found, (point, own), meter)? {
             let face = faces.get_mut(slot).ok_or(IntersectError::Internal)?;
             if area.is_some() {
                 face.holes.push(uses.clone());
@@ -1238,7 +1475,7 @@ fn assemble(
             continue;
         }
         let (point, _) = committed(&arr.carriers, &out.vertices, v)?;
-        if let Some(slot) = smallest(pieces, (f, keep), found, (point, None), meter)? {
+        if let Some(slot) = smallest(pieces, (f, picture), found, (point, None), meter)? {
             faces
                 .get_mut(slot)
                 .ok_or(IntersectError::Internal)?
@@ -1263,13 +1500,201 @@ pub fn split(
 ) -> Result<Splitting, BuildError> {
     let mut made = Splitting::default();
     for f in 0..arr.faces.len() {
-        match arr.faces.get(f).map(|face| face.surface) {
-            Some(CarrierIx::Plane(_)) => match split_face(arr, out, f, meter)? {
-                Some(faces) => made.faces.extend(faces),
-                None => made.waiting.push(f),
-            },
-            _ => made.waiting.push(f),
+        match split_face(arr, out, f, meter)? {
+            Some(faces) => made.faces.extend(faces),
+            None => made.waiting.push(f),
         }
     }
     Ok(made)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic,
+    clippy::float_cmp,
+    reason = "test code: a failure should stop loudly"
+)]
+mod tests {
+    use super::*;
+    use crate::carrier::CarrierIx;
+    use crate::interfere::{EdgeIn, FaceIn};
+    use geom_curve::{Circle, Frame};
+    use geom_run::Budget;
+    use geom_surface::Cylinder;
+    use geom_topo::SurfaceKind;
+
+    fn at(t: f64) -> Interval {
+        Interval::point(t).unwrap()
+    }
+
+    /// Whether an enclosure holds `value`.
+    fn holds_value(x: Interval, value: f64) -> bool {
+        x.lo() <= value && value <= x.hi()
+    }
+
+    /// A cylinder of radius 50 up the third coordinate from 0 to 100, its two end circles, and
+    /// its picture: seen from (0, 0, 258), mirrored.
+    fn tube() -> (Central, Vec<CurveKind<3>>) {
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let mut arr = Arrangement::default();
+        let mut circles = Vec::new();
+        for z in [0.0, 100.0] {
+            let circle =
+                CurveKind::Circle(Circle::new([0.0, 0.0, z], 50.0, frame, (0.0, 2.0)).unwrap());
+            circles.push(circle.clone());
+            let curve = arr.carriers.add_curve(circle).unwrap();
+            arr.edges.push(EdgeIn {
+                curve,
+                ends: None,
+                operand: 0,
+            });
+        }
+        let cylinder = Cylinder::new([0.0; 3], 50.0, frame, ((0.0, 2.0), (0.0, 100.0))).unwrap();
+        let ix = arr
+            .carriers
+            .add_surface(SurfaceKind::Cylinder(cylinder))
+            .unwrap();
+        arr.faces.push(FaceIn {
+            surface: CarrierIx::Surface(ix),
+            loops: vec![vec![0], vec![1]],
+            operand: 0,
+        });
+        let m = &mut WorkMeter::new(Budget::UNLIMITED);
+        (Central::of_face(&arr, 0, m).unwrap().unwrap(), circles)
+    }
+
+    #[test]
+    fn a_circle_s_area_in_a_cylinder_s_picture_is_enclosed_ever_closer() {
+        let (central, circles) = tube();
+        let m = &mut WorkMeter::new(Budget::UNLIMITED);
+        // A circle at depth d is a circle of radius 50 / d in the picture, run clockwise there
+        // (the picture is mirrored): its area is −π (50 / d)².
+        for (circle, depth) in circles.iter().zip([258.0_f64, 158.0]) {
+            let area = -core::f64::consts::PI * (50.0 / depth) * (50.0 / depth);
+            let mut last = f64::INFINITY;
+            for pieces in [16, 256, 4096] {
+                let got = swept(&central, circle, (at(0.0), at(2.0)), pieces, m)
+                    .unwrap()
+                    .unwrap();
+                assert!(holds_value(got, area), "{pieces}: {got:?} {area}");
+                let width = got.hi() - got.lo();
+                assert!(width < last / 8.0, "{pieces}: {width} after {last}");
+                last = width;
+            }
+            assert!(last < area.abs() / 50.0, "{last} of {area}");
+            // Half the circle sweeps half of it.
+            let half = swept(&central, circle, (at(0.0), at(1.0)), 4096, m)
+                .unwrap()
+                .unwrap();
+            assert!(holds_value(half, area / 2.0), "{half:?}");
+            assert!(half.hi() - half.lo() < area.abs() / 50.0);
+        }
+    }
+
+    #[test]
+    fn a_span_between_two_enclosures_holds_every_piece_it_may_be() {
+        let (central, circles) = tube();
+        let m = &mut WorkMeter::new(Budget::UNLIMITED);
+        let r = 50.0 / 158.0;
+        let quarter = |a: f64, b: f64| Interval::new(a, b).unwrap();
+        // From somewhere in the first quarter of a half turn to somewhere in the last: at most
+        // the half circle, −π r² / 2, at least its middle half, −r² (π / 4 − 1 / 2).
+        let got = swept(
+            &central,
+            &circles[1],
+            (quarter(0.0, 0.25), quarter(0.75, 1.0)),
+            4096,
+            m,
+        )
+        .unwrap()
+        .unwrap();
+        let (most, least) = (
+            -core::f64::consts::PI * r * r / 2.0,
+            -r * r * (core::f64::consts::FRAC_PI_4 - 0.5),
+        );
+        assert!(holds_value(got, most) && holds_value(got, least), "{got:?}");
+        assert!(got.lo() > most * 1.25 && got.hi() < 0.0, "{got:?}");
+        // Enclosures that overlap leave a span of no length: only what the two may add.
+        let got = swept(
+            &central,
+            &circles[1],
+            (quarter(0.25, 0.75), quarter(0.5, 1.0)),
+            16,
+            m,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(
+            holds_value(got, 0.0) && holds_value(got, most * 0.9),
+            "{got:?}"
+        );
+    }
+
+    #[test]
+    fn a_ruling_s_area_is_its_chord_s() {
+        let (central, _) = tube();
+        let m = &mut WorkMeter::new(Budget::UNLIMITED);
+        // The ruling through (30, 40) from the bottom to the top: in the picture the straight
+        // piece from (−30, 40) / 258 to (−30, 40) / 158.
+        let ruling =
+            CurveKind::Line(Line::new([30.0, 40.0, 0.0], [0.0, 0.0, 100.0], (0.0, 1.0)).unwrap());
+        let got = swept(&central, &ruling, (at(0.0), at(1.0)), 16, m)
+            .unwrap()
+            .unwrap();
+        let (near, far) = (1.0 / 158.0_f64, 1.0 / 258.0_f64);
+        let area = -15.0 * (near + far) * 40.0 * (near - far);
+        assert!(holds_value(got, area), "{got:?} {area}");
+        assert!(got.hi() - got.lo() < 1e-12, "{got:?}");
+    }
+
+    #[test]
+    fn an_area_is_proven_at_the_first_level_that_decides_it() {
+        let picture = Picture::Central(tube().0);
+        let iv = |lo: f64, hi: f64| Interval::new(lo, hi).unwrap();
+        // Decided at the third level, negative; the levels asked for are the picture's.
+        let mut asked = Vec::new();
+        let got = proven((7, &picture), |pieces| {
+            asked.push(pieces);
+            Ok(Some(match asked.len() {
+                1 => iv(-1.0, 1.0),
+                2 => iv(0.0, 0.0),
+                _ => iv(-0.75, -0.25),
+            }))
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!((got.lo(), got.hi()), (-0.75, -0.25));
+        assert_eq!(asked, vec![16, 64, 256]);
+        // Never decided: refused, with the face.
+        let never = proven((7, &picture), |_| Ok(Some(iv(-1.0, 1.0))));
+        assert!(matches!(never, Err(BuildError::UndecidedArea { face: 7 })));
+        // A kind that is not measured gives none at once.
+        let mut asked = 0;
+        let none = proven((7, &picture), |_| {
+            asked += 1;
+            Ok(None)
+        })
+        .unwrap();
+        assert!(none.is_none());
+        assert_eq!(asked, 1);
+        // A flat face's area is a closed form: one level.
+        let flat = Picture::Flat { keep: [0, 1] };
+        let mut asked = 0;
+        let refused = proven((3, &flat), |_| {
+            asked += 1;
+            Ok(Some(iv(-1.0, 1.0)))
+        });
+        assert!(matches!(
+            refused,
+            Err(BuildError::UndecidedArea { face: 3 })
+        ));
+        assert_eq!(asked, 1);
+        let positive = proven((3, &flat), |_| Ok(Some(iv(2.0, 3.0))))
+            .unwrap()
+            .unwrap();
+        assert_eq!(positive.lo(), 2.0);
+    }
 }

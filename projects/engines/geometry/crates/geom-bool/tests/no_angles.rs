@@ -15,11 +15,12 @@
 )]
 
 /// The curved builder's topology modules: where the arrangement's order and loops are decided.
-const MODULES: [(&str, &str); 5] = [
+const MODULES: [(&str, &str); 6] = [
     ("interfere.rs", include_str!("../src/interfere.rs")),
     ("pave.rs", include_str!("../src/pave.rs")),
     ("face.rs", include_str!("../src/face.rs")),
     ("inside.rs", include_str!("../src/inside.rs")),
+    ("picture.rs", include_str!("../src/picture.rs")),
     ("split.rs", include_str!("../src/split.rs")),
 ];
 

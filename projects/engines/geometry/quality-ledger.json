@@ -6328,7 +6328,7 @@
       "line_text": "let left_turning = total.lo() > 0.0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The line before returns BuildError::UndecidedArea when total.lo() <= 0 and total.hi() >= 0. A total with a lower end of exactly 0 has an upper end of at least 0, so it never reaches this line, and > 0 and >= 0 agree."
+      "reason": "The total comes from proven, which returns one only when its sign is certain and otherwise fails with BuildError::UndecidedArea. A total with a lower end of exactly 0 has an upper end of at least 0, so its sign is not certain and it never reaches this line, and > 0 and >= 0 agree."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",

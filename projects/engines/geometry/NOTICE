@@ -695,6 +695,13 @@ solidcore
 
 solidcore
   Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/ae70d1c03d8664e3392bd7c38dd2a8e51a7bf845/crates/solidcore/src/topology/trimming_tools.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-bool/src/picture.rs
+      for how seams are treated; no code copied.
+
+solidcore
+  Licence:      Apache-2.0
   Link:         https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/boolean/topology_intersector/p1.rs
   Consulted by:
     projects/engines/geometry/crates/geom-bool/src/face.rs
