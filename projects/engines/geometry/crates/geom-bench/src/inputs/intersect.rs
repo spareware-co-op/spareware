@@ -1,8 +1,9 @@
-//! Inputs for `geom-intersect`'s hot paths (piece G158, decision 32.44): a list of items put in
-//! canonical order, a circle's canonical key, and a pair of lines put in canonical order.
+//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162, decision 32.44): a list of items
+//! put in canonical order, a circle's canonical key, a pair of lines put in canonical order, and a
+//! point projected on an arc and on a band of a sphere.
 //!
-//! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle
-//! and line within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
+//! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
+//! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
 //! `geom-intersect` itself.
 //!
 //! Guarantees: every batch is full and the same on every target, and every result of a typical
@@ -20,6 +21,7 @@ use geom_intersect::{Item, ParamBox, PointContact};
 use geom_math::Box3;
 use geom_num::Exactness;
 use geom_num::interval::Interval;
+use geom_surface::{Sphere, SurfaceKind};
 
 use super::{Class, batch_of, p3, rng, within};
 use crate::rng::SplitMix64;
@@ -111,4 +113,45 @@ pub fn lines(class: Class) -> Vec<(CurveKind<3>, CurveKind<3>)> {
             .map(CurveKind::Line)
     };
     batch_of(|_| Some((line()?, line()?)))
+}
+
+/// A radius of up to 2^16 grid steps.
+fn radius(g: &mut SplitMix64) -> Option<f64> {
+    i32::try_from(g.range(1, 1 << 16)).ok().map(f64::from)
+}
+
+/// Three quarters of a circle and a point to project on it.
+#[must_use]
+pub fn arcs(class: Class) -> Vec<(CurveKind<3>, [f64; 3])> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::arcs", class);
+    batch_of(|_| {
+        let arc = Circle::new(
+            point(&mut g),
+            radius(&mut g)?,
+            Frame::standard().ok()?,
+            (0.0, 1.5),
+        );
+        Some((CurveKind::Circle(arc.ok()?), point(&mut g)))
+    })
+}
+
+/// A band of a sphere and a point to project on it.
+#[must_use]
+pub fn spheres(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::spheres", class);
+    batch_of(|_| {
+        let band = Sphere::new(
+            point(&mut g),
+            radius(&mut g)?,
+            Frame::standard().ok()?,
+            ((0.0, 1.5), (-0.4, 0.4)),
+        );
+        Some((SurfaceKind::Sphere(band.ok()?), point(&mut g)))
+    })
 }

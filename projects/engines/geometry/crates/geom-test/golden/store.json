@@ -320,6 +320,12 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "ac8f48e34a9a84aa562f2d851ab2eb7891c2c8e984ff9c46241e92bef029ae63",
+              "kind": "corpus",
+              "piece": "G162",
+              "why": "2 new count benchmarks on geom-intersect's projection (decision 32.44): the search on an arc and on a band of a sphere; no existing digest moved"
             }
           ],
           "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b"
