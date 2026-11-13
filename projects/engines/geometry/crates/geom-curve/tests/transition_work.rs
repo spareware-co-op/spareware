@@ -11,7 +11,8 @@
 //!   3·10⁻²⁹³ to 3 over 4,096, so 1,956 half-turns of heading) under that input's scale by 2⁴⁸,
 //!   under the target's budget of 2,000,000 units, is a typed stop.
 //! - The whole kind contract of an ordinary transition of each law, under a quarter turn, a scale
-//!   and a turn that is not exact, fits half that budget.
+//!   and a turn that is not exact, fits half that budget; the strong clothoid's, whose heading
+//!   turns almost nine half-turns in a length of 5, fits the budget.
 //!
 //! Covers: `CurveKind::Transition`.
 
@@ -245,7 +246,13 @@ fn an_ordinary_transitions_whole_contract_fits_the_fuzz_budget() {
             let mut m = WorkMeter::new(Budget::of_work(FUZZ_WORK));
             assert_eq!(contract::check(&k, &params, t, &mut m), Ok(()), "{name}");
             let used = m.used().work;
-            assert!(used * 2 < u128::from(FUZZ_WORK), "{name}: {used}");
+            // The strong clothoid is the stress case, not an alignment's: under the scale its
+            // contract converts it to NURBS twice, 323 million instructions of a release build
+            // (callgrind) in all, charged 1,079,650 units since issue #837
+            // priced each piece's change to Bernstein form (742,390 before, at 435 instructions a
+            // unit; now about 300, the curve kinds' rate).
+            let room = if name == "strong clothoid" { 1 } else { 2 };
+            assert!(used * room < u128::from(FUZZ_WORK), "{name}: {used}");
         }
     }
 }

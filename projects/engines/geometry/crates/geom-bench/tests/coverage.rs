@@ -515,6 +515,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
                 include_str!("../../geom-format/src/container.rs"),
             ),
             ("trust", include_str!("../../geom-format/src/trust.rs")),
+            ("pruned", include_str!("../../geom-format/src/pruned.rs")),
         ],
     ),
     (
@@ -569,6 +570,9 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("classes", include_str!("../../geom-name/src/classes.rs")),
             ("faces", include_str!("../../geom-name/src/faces.rs")),
+            ("graph", include_str!("../../geom-name/src/graph.rs")),
+            ("resolve", include_str!("../../geom-name/src/resolve.rs")),
+            ("prune", include_str!("../../geom-name/src/prune.rs")),
         ],
     ),
     (
@@ -577,7 +581,13 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     ),
     (
         "geom_op",
-        &[("batch", include_str!("../../geom-op/src/batch.rs"))],
+        &[
+            ("batch", include_str!("../../geom-op/src/batch.rs")),
+            ("cbor", include_str!("../../geom-op/src/cbor.rs")),
+            ("hash", include_str!("../../geom-op/src/hash.rs")),
+            ("name", include_str!("../../geom-op/src/name.rs")),
+            ("history", include_str!("../../geom-op/src/history.rs")),
+        ],
     ),
     (
         "geom_nurbs",

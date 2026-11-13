@@ -104,15 +104,19 @@ jobs:
       || github.event.label.name == 'fuzz-campaign'
       || startsWith(github.ref, 'refs/tags/geom-v')
     runs-on: ubuntu-latest
-    # Five hours of fuzzing (fewer if a dispatch asks), the build before it and the uploads after,
-    # inside the six hours a hosted job may run.
-    timeout-minutes: 330
+    # The six hours a hosted job may run, the most GitHub allows. The fuzz step has its own limit
+    # of 330 minutes (below), so a step that overruns still leaves 30 minutes for the uploads.
+    # On the night of 2026-11-12 (run 43221765733) the slowest shard, variants_fuzz built from a
+    # cold cache, ended every step clean 308 minutes in, 22 inside the old job limit of 330, but
+    # GitHub did not record the job as done until that limit passed and then cancelled it, so a
+    # clean night counted as not clean. This limit stands 52 minutes past that shard's work.
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
         # Nightly, on a release and by hand with `targets: all`: every target, one shard each.
         # Otherwise on demand: wide_fuzz in five. Both lines choose by the same condition.
-        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '["arenas_fuzz", "attributes_fuzz", "batch_fuzz", "bodies_fuzz", "boxtree_fuzz", "cache_fuzz", "cbor_fuzz", "curves_fuzz", "encoder_fuzz", "linalg_fuzz", "make_fuzz", "maths_fuzz", "names_fuzz", "nurbs_fuzz", "open_fuzz", "operations_fuzz", "orient2d_fuzz", "predicates_fuzz", "records_fuzz", "roots_fuzz", "sequence_fuzz", "surfaces_fuzz", "transforms_fuzz", "variants_fuzz", "wide_fuzz"]' || '["wide_fuzz"]') }}
+        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '["arenas_fuzz", "attributes_fuzz", "batch_fuzz", "bodies_fuzz", "boxtree_fuzz", "cache_fuzz", "cbor_fuzz", "contract_fuzz", "curves_fuzz", "encoder_fuzz", "euler_fuzz", "linalg_fuzz", "make_fuzz", "maths_fuzz", "names_fuzz", "naming_fuzz", "nurbs_fuzz", "open_fuzz", "operations_fuzz", "orient2d_fuzz", "predicates_fuzz", "prune_fuzz", "records_fuzz", "references_fuzz", "roots_fuzz", "sequence_fuzz", "surfaces_fuzz", "transforms_fuzz", "variants_fuzz", "wide_fuzz"]' || '["wide_fuzz"]') }}
         shard: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '[1]' || '[1, 2, 3, 4, 5]') }}
     defaults:
       run:
@@ -145,6 +149,9 @@ jobs:
       # timer signals, so geom-fuzz's tests signal that thread themselves (tests/common/mod.rs,
       # issue #764); before that the limit never fired.
       - name: Fuzz ${{ matrix.target }} with libFuzzer for ${{ (inputs.hours || '5') == '5' && 'five hours' || format('{0} h', inputs.hours) }}
+        # Five hours of fuzzing at most and 30 minutes to build the target first: a cold build
+        # took 6 min 41 s on 2026-11-12, and the slowest step 307 minutes in all, 23 inside this.
+        timeout-minutes: 330
         env:
           HOURS: ${{ inputs.hours || '5' }}
         run: >-

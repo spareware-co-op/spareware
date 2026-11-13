@@ -34,7 +34,18 @@ same twice and give a body that writes and reads to itself; `names` (`src/names.
 records accept only the one encoding of what they read; and `open` (`src/open.rs`, G108), a
 container comes back from a file to the same blobs and trust on open keeps damage with the body
 it is in. Their corpora start from the writers' output for the fixtures of `geom-format`'s own
-tests. `src/adversarial.rs`
+tests. For the Gate 3 pieces that `make` and `sequence` do not reach (30.1: a fuzz target per
+code piece): `euler` (`src/euler.rs`, G81), the Euler operators change the counts by their table,
+keep Euler's formula, refuse dead rows without a trace and publish back to themselves; `naming`
+(`src/naming.rs`, G87), names get the one ID their bytes hash to, the name
+graph keeps each once and knows which are weak, and the duplicate detector, the reference pick and
+the ordinal order agree with oracles written from 20.2; `references` (`src/references.rs`, G89),
+reference resolution gives 20.4's outcome on any history from `geom-test`'s kit; `prune`
+(`src/prune.rs`, G109), `PruneHistory` keeps every held reference and charges exactly its
+schedule, and the pruned record reads back and reads only its one encoding; and `contract`
+(`src/contract.rs`, G82), the operation contract's errors keep their detail's kind and chapter 22's
+remedies and write text that names what they hold, and every schema the facade lists names details
+the contract has, whose MCP tool descriptions parse and round-trip. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 

@@ -3142,3 +3142,130 @@ pub mod query {
         benchmarks = area, bounding_box, exactness, faces, validity, volume
     );
 }
+
+/// geom-op's canonical encoder and SHA-256 (piece G86; decision 32.46).
+pub mod encoder {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("encoder/map/typical"))]
+    fn map(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("encoder/float/typical"))]
+    fn float(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("encoder/sha256/typical"))]
+    fn sha256(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = encoder;
+        benchmarks = map, float, sha256
+    );
+}
+
+/// Persistent names (piece G87; decision 32.46).
+pub mod names {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("names/name_id/typical"))]
+    fn name_id(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("names/intern/typical"))]
+    fn intern(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = names;
+        benchmarks = name_id, intern
+    );
+}
+
+/// History records (piece G88; decision 32.46).
+pub mod history {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("history/check/typical"))]
+    fn check(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("history/compose/typical"))]
+    fn compose(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = history;
+        benchmarks = check, compose
+    );
+}
+
+/// Reference resolution (piece G89; decision 32.46).
+pub mod resolve {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("resolve/reference/typical"))]
+    fn reference(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = resolve;
+        benchmarks = reference
+    );
+}
+
+/// `PruneHistory` and its record (piece G109; decision 32.46).
+pub mod prune {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("prune/steps/typical"))]
+    fn steps(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("prune/record_write/typical"))]
+    fn record_write(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("prune/record_read/typical"))]
+    fn record_read(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = prune;
+        benchmarks = steps, record_write, record_read
+    );
+}
