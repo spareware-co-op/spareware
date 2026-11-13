@@ -190,6 +190,10 @@ fn reach(t: [P3; 3], pad: i64) -> ([i64; 3], [i64; 3]) {
 }
 
 /// A convex polyhedron with grid corners around one triangle, inscribed in its ε-offset.
+///
+/// Made for width ε, with half side h = ⌊ε/√3⌋ ([`half_side`]), it holds every point within h of
+/// the triangle and no point farther than ε from it. It does not hold every point within ε: a
+/// point between h and ε from the triangle may be inside or outside.
 #[derive(Clone, Debug)]
 pub struct TriangleEnvelope {
     planes: Vec<Plane>,
@@ -291,7 +295,7 @@ impl TriangleEnvelope {
                 normals.push((n, behind <= 0, behind >= 0));
             }
         }
-        let mut planes = Vec::with_capacity(26);
+        let mut planes = Vec::with_capacity(17);
         for (n, forward, backward) in normals {
             if let Some(m) = primitive(n) {
                 if forward {
@@ -702,7 +706,10 @@ pub fn covers(
 /// `Q_i`, so the ray runs along a facet line of body i, and, `Q_i` being closed and finitely many,
 /// v is in `Q_i` for one such i. So v is one of the points the test asks about. But every
 /// neighbourhood of v meets points outside U, so no body holds v strictly inside. That contradicts
-/// the test passing, so C lies in U.
+/// the test passing, so C lies in U. If C has no area (a segment or a point, where `within` meets
+/// the triangle's plane along an edge or at a corner, or cuts it exactly along an edge of `t`),
+/// the same holds along its line: an end of W is an end of C or an end of some `Q_i` on that
+/// line, again a point the test asks about.
 ///
 /// # Errors
 ///

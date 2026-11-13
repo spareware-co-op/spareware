@@ -42,7 +42,11 @@
 //! against the input bodies near it, and one [`covers_within`] per input triangle and removed body
 //! that may meet, against the result triangles whose bodies' boxes meet that body's, found by a
 //! scan of every result triangle's box, so linear in the mesh for each. Each triangle's body is
-//! made once, when the triangle is. Memory is linear in the mesh.
+//! made once, when the triangle is, and dropped when an operation that removes the triangle is
+//! kept. Memory is linear in the mesh for the bodies (about 2 KB a triangle: the input's, twice,
+//! and the result's) and grows by a few words for each triangle and vertex a kept operation
+//! makes, since numbers are never reused: a dead triangle keeps its corners and a dead vertex its
+//! point, so that every number stays valid.
 
 #![allow(
     clippy::many_single_char_names,
@@ -289,8 +293,9 @@ pub(crate) struct Surface {
     alive: Vec<bool>,
     /// The triangles at each vertex; dead ones are dropped when an operation is kept.
     around: Vec<Vec<u32>>,
-    /// Each triangle's body, of half side `h`, made when the triangle was.
-    shell: Vec<TriangleEnvelope>,
+    /// Each triangle's body, of half side `h`, made when the triangle was; a dead triangle's is
+    /// dropped when the operation that removed it is kept.
+    shell: Vec<Option<TriangleEnvelope>>,
     live: usize,
     /// The input's triangles and their envelope.
     source: Vec<[P3; 3]>,
@@ -337,7 +342,7 @@ impl Surface {
         let mut shell = Vec::with_capacity(source.len());
         for t in &source {
             meter.charge(1)?;
-            shell.push(TriangleEnvelope::new(*t, h)?);
+            shell.push(Some(TriangleEnvelope::new(*t, h)?));
         }
         Ok(Self {
             points: points.to_vec(),
@@ -564,6 +569,7 @@ impl Surface {
                 self.shell
                     .get(f as usize)
                     .cloned()
+                    .flatten()
                     .ok_or(ModelError::Full)?,
             );
             for p in corners {
@@ -577,7 +583,7 @@ impl Surface {
                 .ok_or(ModelError::Full)
                 .and_then(|c| Ok(TriangleEnvelope::new(c, self.h)?));
             match body {
-                Ok(body) => self.shell.push(body),
+                Ok(body) => self.shell.push(Some(body)),
                 Err(e) => {
                     self.undo(undo);
                     return Err(e);
@@ -599,6 +605,12 @@ impl Surface {
         };
         if kept {
             self.kept = self.kept.saturating_add(1);
+            // The removed triangles are dead for good: their bodies are not asked again.
+            for &f in &patch.remove {
+                if let Some(body) = self.shell.get_mut(f as usize) {
+                    *body = None;
+                }
+            }
             for &f in patch.remove.iter().chain(&added) {
                 if let Some(t) = self.faces.get(f as usize).copied() {
                     for v in t {
@@ -759,7 +771,10 @@ impl Surface {
                 let mut refs: Vec<&TriangleEnvelope> = Vec::new();
                 for (other, alive) in self.shell.iter().zip(&self.alive) {
                     meter.charge(1)?;
-                    if *alive && other.reaches(low, high) {
+                    if let Some(other) = other
+                        && *alive
+                        && other.reaches(low, high)
+                    {
                         refs.push(other);
                     }
                 }
@@ -972,6 +987,11 @@ mod tests {
         }
         let flip = s.flip(5, 9).or_else(|| s.flip(5, 10)).unwrap();
         assert!(s.attempt(&flip, &mut meter).unwrap());
+        // A body is kept for each live triangle and for no dead one.
+        assert_eq!(s.shell.len(), s.alive.len());
+        for (body, alive) in s.shell.iter().zip(&s.alive) {
+            assert_eq!(body.is_some(), *alive);
+        }
         let out = s.finish().unwrap();
         assert_eq!(out.triangles().len(), 18);
         assert_eq!(out.points().len(), 16);
