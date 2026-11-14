@@ -3,23 +3,26 @@
 //! step 5, G244).
 //!
 //! What it does: [`split`] takes the interferences of an arrangement ([`crate::interfere`]) and,
-//! for each face whose carrier is a plane of the table, a cylinder or one nappe of a cone, gathers
-//! its pieces: its boundary's split edges (On), other operands' split edges lying inside it (In)
-//! and its section edges, a common block once. In the face's picture (a plane's with the
-//! coordinate its normal is largest in dropped, as [`crate::inside`] does; a cylinder's or cone's
-//! seen from a point inside the carrier, `crate::picture`), the pieces leaving each vertex are put
+//! for each face whose carrier is a plane of the table, a cylinder, one nappe of a cone, a sphere
+//! or a torus whose axis lies along a coordinate, gathers its pieces: its boundary's split edges
+//! (On), other operands' split edges lying inside it (In) and its section edges, a common block
+//! once. In the face's picture (a plane's with the coordinate its normal is largest in dropped, as
+//! [`crate::inside`] does; a cylinder's, cone's or sphere's seen from a point inside the carrier,
+//! and a torus's seen along its axis, `crate::picture`), the pieces leaving each vertex are put
 //! in turning order by their tangents, counted from a whole reference direction that no tangent
-//! there can lie along; the loops are then traced with each piece's left side as the face it
-//! bounds. A loop running counter-clockwise, by the sign of its certified area, bounds a split
-//! face; one running clockwise is the outside of a connected group of pieces, a hole of the
-//! innermost split face that holds it (by the certified ray test), or, held by none, the outside
-//! of the face itself. Vertices of other operands inside the face that no piece reaches are given
-//! to the split face that holds them.
+//! there can lie along, and two along one tangent by how they bend; the loops are then traced with
+//! each piece's left side as the face it bounds. A loop running counter-clockwise, by the sign of
+//! its certified area, bounds a split face; one running clockwise is the outside of a connected
+//! group of pieces, a hole of the innermost split face that holds it (by the certified ray test),
+//! or, held by none, the outside of the face itself. Vertices of other operands inside the face
+//! that no piece reaches are given to the split face that holds them.
 //!
 //! **Curved faces.** A cylinder's or cone's picture has no seam and no pole: a cylinder's whole
 //! side is a ring between its two end circles, and a cone's apex is a point like any other, where
-//! the rulings that meet are ordered exactly. A split face's loops run counter-clockwise (its
-//! outer loop) and clockwise (its holes) seen from outside the carrier, away from its axis. A face
+//! the rulings that meet are ordered exactly. A sphere's face is seen from a point between it and
+//! a pole, and a torus's along its axis, the half of the torus it lies in being the graph of a
+//! height over the plane square to the axis. A split face's loops run counter-clockwise (its
+//! outer loop) and clockwise (its holes) seen from outside the carrier. A face
 //! is split only when the face stages have met everything with it: one that an edge or a face of
 //! another operand may still cross (`FaceInfo::pending`) waits, a curved face or a flat one
 //! whose box meets a curved face's.
@@ -40,7 +43,10 @@
 //!   enclosures otherwise. The reference at a vertex is the first ray direction of
 //!   [`crate::inside::DIRECTIONS`] whose line no tangent's enclosure there meets, so a tangent
 //!   along an axis, as a circle's at its top, is ordered as any other. Two pieces along one
-//!   tangent, a pair whose cross product is not proven, and a vertex no direction serves fail
+//!   tangent are ordered by their curvature where they are proven to touch there exactly: on a
+//!   flat face, two circles or a line and a circle given by whole numbers in its plane, the
+//!   distance of their centres (or of the centre from the line) compared exactly with their radii.
+//!   Any other pair whose cross product is not proven, and a vertex no direction serves, fail
 //!   with [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance compares two.
 //! - **Each loop's sense is proven.** A loop's area is enclosed piece by piece: a straight piece's
 //!   exactly from its ends, a conic's arc on a flat face in closed form (a circle's or ellipse's
@@ -53,10 +59,11 @@
 //!   counter-clockwise loop of another group by the certified ray test. Two that hold it are
 //!   nested, and the inner is the one whose own point the other holds, again by the ray test: no
 //!   two areas are compared. No direction qualifying fails with [`BuildError::Unclassified`].
-//! - **What this piece does not split, it says.** A face on a sphere, a torus or any other curved
-//!   carrier, a cylinder's or cone's face with something pending, and a face bounded on a plane by
-//!   a curve other than a line or a conic are listed as waiting: for the rest of G244's
-//!   analytic carriers and G245's NURBS and procedural ones.
+//! - **What this piece does not split, it says.** A face with no picture (a whole sphere; a
+//!   torus's face across its middle plane, or on a torus whose axis is not along a coordinate; a
+//!   face on any other curved carrier), a curved face with something pending, and a face bounded
+//!   in a flat picture by a curve other than a line or a conic are listed as waiting: for G245's
+//!   NURBS and procedural carriers.
 //! - **Deterministic.** Faces in order, pieces in index order, vertices' pieces in turning order,
 //!   loops in the order their first pieces come.
 //!
@@ -70,10 +77,11 @@
 //! (`SmTrimmingTools::OrderCurvesIntoLoops`), read in solidcore's Rust port; it compares tangents
 //! in doubles within a tolerance, and where they agree goes on to curvature, and its outer loops
 //! are found by the areas of tessellations. None of that is taken: tangents are compared by proven
-//! signs, and two along one tangent are refused, the curvature step waiting for the analytic
-//! carriers, whose tangents can be proven to agree. The order is counted from a reference direction
-//! chosen to avoid every tangent at the vertex, so no tangent sits where the count starts and ends:
-//! counted from a fixed axis, a curve leaving along the axis could belong at either end.
+//! signs, and two along one tangent go on to curvature only where their touching is proven
+//! exactly, never because two tangents agree within a tolerance. The order is counted from a
+//! reference direction chosen to avoid every tangent at the vertex, so no tangent sits where the
+//! count starts and ends: counted from a fixed axis, a curve leaving along the axis could belong
+//! at either end.
 //!
 //! Consulted: solidcore, Apache-2.0,
 //!   <https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/topology/trimming_tools.rs>,
@@ -101,7 +109,7 @@ use crate::carrier::{CarrierIx, CurveGeom};
 use crate::crossing::{Enclosed, Hull};
 use crate::inside::{Crossable, DIRECTIONS, FlatFace, hull as hull_of, ray_parity};
 use crate::interfere::{Arrangement, BuildError, Entity, Interfered, committed, nearest_point};
-use crate::picture::{Central, Picture, whole};
+use crate::picture::{Central, Graph, Picture, whole};
 use crate::rule::{greater, lesser};
 
 /// A piece of edge that bounds a split face.
@@ -283,6 +291,244 @@ fn turning(a: &Dir, b: &Dir, r: (i64, i64)) -> Option<Ordering> {
         Sign::Negative => Some(Ordering::Greater),
         Sign::Zero => None,
     }
+}
+
+/// A piece of a flat face as the curvature step reads it: a line through a grid point along a
+/// whole direction, or a circle about a grid point of a whole radius, given exactly in the face's
+/// plane, and how it bends leaving its vertex: its signed curvature s / r in the picture, s the
+/// side of its tangent its centre lies on (1 on the left, −1 on the right, 0 for a line) and r its
+/// radius (1 for a line).
+#[derive(Clone, Copy, Debug)]
+enum Planar {
+    /// A line: its origin and direction.
+    Straight([I256; 3], [I256; 3]),
+    /// A circle: its centre and radius, and the side of its tangent its centre lies on.
+    Round([I256; 3], I256, Sign),
+}
+
+/// Three doubles as whole numbers, if each is one.
+fn whole3(v: [f64; 3]) -> Option<[I256; 3]> {
+    let [x, y, z] = v;
+    Some([whole(x)?, whole(y)?, whole(z)?])
+}
+
+/// a · b, exactly; `None` past the width.
+fn dot_whole(a: &[I256; 3], b: &[I256; 3]) -> Option<I256> {
+    let [a0, a1, a2] = a;
+    let [b0, b1, b2] = b;
+    a0.checked_mul(b0)?
+        .checked_add(&a1.checked_mul(b1)?)?
+        .checked_add(&a2.checked_mul(b2)?)
+}
+
+/// a − b, exactly.
+fn minus_whole(a: &[I256; 3], b: &[I256; 3]) -> Option<[I256; 3]> {
+    let [a0, a1, a2] = a;
+    let [b0, b1, b2] = b;
+    Some([
+        a0.checked_sub(b0)?,
+        a1.checked_sub(b1)?,
+        a2.checked_sub(b2)?,
+    ])
+}
+
+/// a × b, exactly.
+fn cross_whole(a: &[I256; 3], b: &[I256; 3]) -> Option<[I256; 3]> {
+    let [a0, a1, a2] = a;
+    let [b0, b1, b2] = b;
+    let term =
+        |x: &I256, y: &I256, z: &I256, w: &I256| x.checked_mul(y)?.checked_sub(&z.checked_mul(w)?);
+    Some([
+        term(a1, b2, a2, b1)?,
+        term(a2, b0, a0, b2)?,
+        term(a0, b1, a1, b0)?,
+    ])
+}
+
+impl Planar {
+    /// Half-edge `h`'s piece of `pieces` (leaving its first end for an even `h`), with its
+    /// tangent there `dir`, when it is a line or a circle given exactly in the plane `normal` ·
+    /// p + `offset` = 0 of a flat face's `picture`; `None` for any other.
+    fn of(
+        pieces: &[Bounding<'_>],
+        (h, dir): (usize, &Dir),
+        (normal, offset): (&[I256; 3], &I256),
+        picture: &Picture,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<Planar>, BuildError> {
+        let Picture::Flat { keep } = picture else {
+            return Ok(None);
+        };
+        let bounding = pieces.get(h / 2).ok_or(IntersectError::Internal)?;
+        let Shape::Curve {
+            curve,
+            span: Some((from, to)),
+            ..
+        } = &bounding.shape
+        else {
+            return Ok(None);
+        };
+        let on_plane = |p: &[I256; 3]| -> Option<bool> {
+            Some(dot_whole(normal, p)?.checked_add(offset)?.signum() == Sign::Zero)
+        };
+        let square_to =
+            |v: &[I256; 3]| -> Option<bool> { Some(dot_whole(normal, v)?.signum() == Sign::Zero) };
+        let parallel = |v: &[I256; 3]| -> Option<bool> {
+            Some(
+                cross_whole(normal, v)?
+                    .iter()
+                    .all(|part| part.signum() == Sign::Zero),
+            )
+        };
+        Ok(match curve {
+            CurveKind::Line(line) => {
+                let (Some(origin), Some(direction)) =
+                    (whole3(line.origin()), whole3(line.direction()))
+                else {
+                    return Ok(None);
+                };
+                (on_plane(&origin) == Some(true) && square_to(&direction) == Some(true))
+                    .then_some(Planar::Straight(origin, direction))
+            }
+            CurveKind::Circle(circle) => {
+                let (Some(centre), Some(radius), Some(axis)) = (
+                    whole3(circle.center()),
+                    whole(circle.radius()),
+                    whole3(circle.frame().normal()),
+                ) else {
+                    return Ok(None);
+                };
+                if on_plane(&centre) != Some(true) || parallel(&axis) != Some(true) {
+                    return Ok(None);
+                }
+                // The side of the tangent the centre lies on, in the picture.
+                let t = if h % 2 == 0 { *from } else { *to };
+                let at = point_at(curve, t, meter)?;
+                let (Some([cx, cy]), Some([px, py])) =
+                    (pick(exact3(circle.center())?, *keep), pick(at, *keep))
+                else {
+                    return Err(IntersectError::Internal.into());
+                };
+                let [dx, dy] = dir.approx;
+                let side = dx
+                    .mul(cy.sub(py)?)?
+                    .sub(dy.mul(cx.sub(px)?)?)?
+                    .certain_sign();
+                match side {
+                    Some(sign @ (Sign::Positive | Sign::Negative)) => {
+                        Some(Planar::Round(centre, radius, sign))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        })
+    }
+
+    /// The signed curvature as a fraction: its side and its radius.
+    fn bend(&self) -> (Sign, I256) {
+        match self {
+            Planar::Straight(..) => (Sign::Zero, I256::from_i64(1)),
+            Planar::Round(_, radius, side) => (*side, *radius),
+        }
+    }
+}
+
+/// Whether two pieces of a flat face are proven, exactly, to touch where they meet: two circles
+/// in its plane whose centres lie the sum or the difference of their radii apart, or a line and a
+/// circle whose centre lies its radius from the line. Two such curves meet in one point, so at a
+/// vertex both leave they leave along one tangent.
+fn touch(first: &Planar, second: &Planar) -> bool {
+    let tangent = match (first, second) {
+        (Planar::Round(c1, r1, _), Planar::Round(c2, r2, _)) => (|| {
+            let gap = minus_whole(c1, c2)?;
+            let apart = dot_whole(&gap, &gap)?;
+            if apart.signum() == Sign::Zero {
+                return Some(false);
+            }
+            let is = |radius: I256| -> Option<bool> {
+                Some(radius.checked_mul(&radius)?.checked_sub(&apart)?.signum() == Sign::Zero)
+            };
+            Some(is(r1.checked_add(r2)?)? || is(r1.checked_sub(r2)?)?)
+        })(),
+        (Planar::Straight(origin, along), Planar::Round(centre, radius, _))
+        | (Planar::Round(centre, radius, _), Planar::Straight(origin, along)) => (|| {
+            let across = cross_whole(along, &minus_whole(centre, origin)?)?;
+            let far = dot_whole(&across, &across)?;
+            let length = dot_whole(along, along)?;
+            Some(
+                radius
+                    .checked_mul(radius)?
+                    .checked_mul(&length)?
+                    .checked_sub(&far)?
+                    .signum()
+                    == Sign::Zero,
+            )
+        })(),
+        (Planar::Straight(..), Planar::Straight(..)) => None,
+    };
+    tangent == Some(true)
+}
+
+/// Two half-edges leaving one vertex, each with its tangent there.
+type Leaving<'d> = (&'d (usize, Dir), &'d (usize, Dir));
+
+/// The curvature step (11.4 step 5): the turning order of half-edges `a` and `b`, leaving one
+/// vertex of a flat face along one tangent, when both pieces are proven to touch there
+/// ([`touch`]). Leaving along one direction, the one that bends further to the left in the
+/// picture, with the larger signed curvature, lies further counter-clockwise. A flat picture is
+/// an affine map of the plane, which scales both curves' bend from their common tangent by one
+/// factor, so the order of the curvatures in the plane, taken with the sides read in the picture,
+/// is the order in the picture. `None` for any other pair, and for two that bend alike.
+fn bend_order(
+    arr: &Arrangement,
+    pieces: &[Bounding<'_>],
+    ((f, picture), (a, b)): ((usize, &Picture), Leaving<'_>),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Ordering>, BuildError> {
+    let face = arr
+        .faces
+        .get(f)
+        .ok_or(BuildError::Missing(Entity::Face(f)))?;
+    let CarrierIx::Plane(ix) = face.surface else {
+        return Ok(None);
+    };
+    let plane = arr
+        .carriers
+        .plane(ix)
+        .ok_or(BuildError::Missing(Entity::Face(f)))?;
+    let normal = plane.n().map(I256::from_i128);
+    let offset = I256::from_i128(plane.d());
+    let flat = (&normal, &offset);
+    let (Some(first), Some(second)) = (
+        Planar::of(pieces, (a.0, &a.1), flat, picture, meter)?,
+        Planar::of(pieces, (b.0, &b.1), flat, picture, meter)?,
+    ) else {
+        return Ok(None);
+    };
+    if !touch(&first, &second) {
+        return Ok(None);
+    }
+    let ((s1, r1), (s2, r2)) = (first.bend(), second.bend());
+    let signed = |s: Sign, r: &I256| -> Option<I256> {
+        match s {
+            Sign::Positive => Some(*r),
+            Sign::Negative => r.checked_neg(),
+            Sign::Zero => Some(I256::from_i64(0)),
+        }
+    };
+    // s₁ / r₁ against s₂ / r₂, both radii positive: s₁·r₂ against s₂·r₁.
+    let (Some(left), Some(right)) = (signed(s1, &r2), signed(s2, &r1)) else {
+        return Ok(None);
+    };
+    let Some(difference) = left.checked_sub(&right) else {
+        return Ok(None);
+    };
+    Ok(match difference.signum() {
+        Sign::Positive => Some(Ordering::Greater),
+        Sign::Negative => Some(Ordering::Less),
+        Sign::Zero => None,
+    })
 }
 
 /// The section line's direction n₁ × n₂, exactly and enclosed, from its two planes.
@@ -841,8 +1087,15 @@ fn middle_point(curve: &CurveKind<3>, meter: &mut WorkMeter<'_>) -> Result<P3, B
 /// carrier ([`FaceIn`]): always for a curved face's picture, which is seen from outside; for a
 /// flat face's, when the coordinates kept run as the plane's normal turns them. Seen from the
 /// third coordinate, the kept two run counter-clockwise when the three are in cyclic order, and
-/// the normal points to the side it is seen from when its own part there is positive.
-fn seen_from_outside(arr: &Arrangement, f: usize, picture: &Picture) -> Result<bool, BuildError> {
+/// the normal points to the side it is seen from when its own part there is positive. A torus's
+/// face seen along its axis is a flat picture too, its outward normal pointing away from the
+/// torus's middle plane on the face's side of it ([`Graph`]).
+fn seen_from_outside(
+    arr: &Arrangement,
+    f: usize,
+    picture: &Picture,
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, BuildError> {
     let Picture::Flat { keep } = picture else {
         return Ok(true);
     };
@@ -850,19 +1103,23 @@ fn seen_from_outside(arr: &Arrangement, f: usize, picture: &Picture) -> Result<b
         .faces
         .get(f)
         .ok_or(BuildError::Missing(Entity::Face(f)))?;
-    let CarrierIx::Plane(ix) = face.surface else {
-        return Err(BuildError::Missing(Entity::Face(f)));
-    };
-    let plane = arr
-        .carriers
-        .plane(ix)
-        .ok_or(BuildError::Missing(Entity::Face(f)))?;
     let (cyclic, dropped) = match keep {
         [1, 2] => (true, 0),
         [0, 2] => (false, 1),
         _ => (true, 2),
     };
-    let up = plane.n().get(dropped).is_some_and(|n| *n > 0);
+    let up = if let CarrierIx::Plane(ix) = face.surface {
+        let plane = arr
+            .carriers
+            .plane(ix)
+            .ok_or(BuildError::Missing(Entity::Face(f)))?;
+        plane.n().get(dropped).is_some_and(|n| *n > 0)
+    } else {
+        let Some((_, up, _)) = Graph::side(arr, f, meter)? else {
+            return Err(BuildError::Missing(Entity::Face(f)));
+        };
+        up
+    };
     Ok(up == cyclic)
 }
 
@@ -885,7 +1142,7 @@ pub(crate) fn face_area(
         .faces
         .get(f)
         .ok_or(BuildError::Missing(Entity::Face(f)))?;
-    let same = seen_from_outside(arr, f, picture)?;
+    let same = seen_from_outside(arr, f, picture, meter)?;
     proven((f, picture), |pieces| {
         let mut total = Interval::point(0.0)?;
         for one in face.loops.iter().flatten() {
@@ -930,12 +1187,13 @@ pub(crate) fn face_area(
 fn senses(
     arr: &Arrangement,
     (f, picture): (usize, &Picture),
+    meter: &mut WorkMeter<'_>,
 ) -> Result<BTreeMap<usize, bool>, BuildError> {
     let face = arr
         .faces
         .get(f)
         .ok_or(BuildError::Missing(Entity::Face(f)))?;
-    let same = seen_from_outside(arr, f, picture)?;
+    let same = seen_from_outside(arr, f, picture, meter)?;
     let mut left = BTreeMap::new();
     for (k, ring) in face.loops.iter().enumerate() {
         let broken = BuildError::BrokenLoop { face: f, ring: k };
@@ -972,6 +1230,7 @@ fn senses(
 /// The pieces leaving each vertex, in turning order: half-edge 2i leaves piece i's first end, and
 /// 2i + 1 its last. `None` when a tangent cannot be had.
 fn rotations(
+    arr: &Arrangement,
     pieces: &[Bounding<'_>],
     (f, picture): (usize, &Picture),
     meter: &mut WorkMeter<'_>,
@@ -1008,7 +1267,12 @@ fn rotations(
         for item in list.drain(..) {
             let mut place = sorted.len();
             for (k, other) in sorted.iter().enumerate() {
-                match turning(&item.1, &other.1, reference) {
+                // Two along one tangent go by how they bend, where that is proven.
+                let order = match turning(&item.1, &other.1, reference) {
+                    Some(order) => Some(order),
+                    None => bend_order(arr, pieces, ((f, picture), (&item, other)), meter)?,
+                };
+                match order {
                     Some(Ordering::Less) => {
                         place = k;
                         break;
@@ -1308,7 +1572,7 @@ fn loops_of(
     (pieces, index): (&[Bounding<'_>], &BTreeMap<Piece, usize>),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Loops>, BuildError> {
-    let Some(at) = rotations(pieces, (f, picture), meter)? else {
+    let Some(at) = rotations(arr, pieces, (f, picture), meter)? else {
         return Ok(None);
     };
     let mut loops = trace(pieces, &at)?;
@@ -1380,16 +1644,17 @@ fn split_face(
     }
     let picture = if let Some(flat) = FlatFace::new(arr, f, meter)? {
         Picture::Flat { keep: flat.keep() }
-    } else {
-        let Some(central) = Central::of_face(arr, f, meter)? else {
-            return Ok(None);
-        };
+    } else if let Some(central) = Central::of_face(arr, f, meter)? {
         Picture::Central(central)
+    } else if let Some(graph) = Graph::of_face(arr, f, meter)? {
+        Picture::Flat { keep: graph.keep() }
+    } else {
+        return Ok(None);
     };
     let picture = &picture;
-    let senses = senses(arr, (f, picture))?;
+    let senses = senses(arr, (f, picture), meter)?;
     // The face its loops name lies in the part of the picture they close round: on a plane, a
-    // cylinder or a cone the face is bounded, and a sphere's picture is chosen so.
+    // cylinder or a cone the face is bounded, and a sphere's or a torus's picture is chosen so.
     let Some(area) = face_area(arr, f, picture, meter)? else {
         return Ok(None);
     };
@@ -1735,6 +2000,41 @@ mod tests {
         let area = -15.0 * (near + far) * 40.0 * (near - far);
         assert!(holds_value(got, area), "{got:?} {area}");
         assert!(got.hi() - got.lo() < 1e-12, "{got:?}");
+    }
+
+    #[test]
+    fn touching_is_proven_exactly_from_whole_data() {
+        let w = |v: [i64; 3]| v.map(I256::from_i64);
+        let round = |c: [i64; 3], r: i64| Planar::Round(w(c), I256::from_i64(r), Sign::Positive);
+        let straight = |o: [i64; 3], d: [i64; 3]| Planar::Straight(w(o), w(d));
+        // Circles touching from outside and from inside, and two that cross.
+        assert!(touch(&round([0, 0, 0], 3), &round([5, 0, 0], 2)));
+        assert!(touch(&round([0, 0, 0], 5), &round([3, 4, 0], 10)));
+        assert!(touch(&round([0, 0, 0], 5), &round([0, 3, 0], 2)));
+        assert!(!touch(&round([0, 0, 0], 5), &round([0, 3, 0], 3)));
+        // Circles about one centre never touch.
+        assert!(!touch(&round([1, 1, 0], 5), &round([1, 1, 0], 3)));
+        // A line along y = 5 touches the circle of radius 5 about the origin, either way round;
+        // along y = 4 it crosses it, and two lines are no touch of this kind.
+        assert!(touch(&straight([7, 5, 0], [2, 0, 0]), &round([0, 0, 0], 5)));
+        assert!(touch(&round([0, 0, 0], 5), &straight([7, 5, 0], [2, 0, 0])));
+        assert!(!touch(
+            &straight([7, 4, 0], [2, 0, 0]),
+            &round([0, 0, 0], 5)
+        ));
+        assert!(!touch(
+            &straight([0, 0, 0], [1, 0, 0]),
+            &straight([0, 1, 0], [1, 0, 0])
+        ));
+        // A line's curvature is nothing, a circle's its side over its radius.
+        let (s, r) = straight([0, 0, 0], [1, 0, 0]).bend();
+        assert_eq!((s, r.signum()), (Sign::Zero, Sign::Positive));
+        let (s, r) = round([0, 0, 0], 5).bend();
+        assert_eq!(s, Sign::Positive);
+        assert_eq!(
+            r.checked_sub(&I256::from_i64(5)).unwrap().signum(),
+            Sign::Zero
+        );
     }
 
     #[test]

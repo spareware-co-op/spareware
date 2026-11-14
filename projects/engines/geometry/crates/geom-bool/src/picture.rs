@@ -1,5 +1,5 @@
-//! The picture a face is split in: a plane's own, or a cylinder's or cone's seen from a point
-//! inside it (11.4 step 5, G244).
+//! The picture a face is split in: a plane's own, a cylinder's, cone's or sphere's seen from a
+//! point inside it, or a torus's seen along its axis (11.4 step 5, G244).
 //!
 //! What it does: a face's loops are ordered, measured and tested in a picture, a map from the
 //! face onto part of a plane that is one to one and keeps what lies inside a loop inside it. A
@@ -13,13 +13,20 @@
 //! the face have one picture. **A line of the picture is a plane through C**, so the ray test of a
 //! flat face ([`crate::inside::ray_parity`]) serves a curved one with nothing changed but the
 //! plane. A cylinder's whole side is a ring between two closed curves, and a cone's apex is an
-//! ordinary point: the picture has no seam and no pole, and no angle is computed.
+//! ordinary point: the picture has no seam and no pole, and no angle is computed. A sphere's face
+//! is seen in the same way from a point between its boundary and a pole, the face's oriented loops
+//! saying which cap is the face ([`Central::of_face`]). A torus bounds no convex solid; a face on
+//! one whose axis lies along a coordinate, with its boundary on one side of the middle plane, is
+//! seen along the axis instead ([`Graph`]): that half of the torus is a graph over the plane
+//! square to the axis, and the picture is a flat face's, the axis's coordinate dropped.
 //!
 //! Guarantees:
 //!
 //! - **One to one, by proof.** [`Central::of_face`] gives a picture only when it has proven, with
 //!   enclosures, that C lies inside the carrier's solid and that the whole face lies in front of
-//!   C. A face it cannot prove this for gets none, and waits.
+//!   C; [`Graph::of_face`] only when the face's boundary is proven in one half of its torus and
+//!   the face's loops bound a positive area there. A face it cannot prove this for gets none, and
+//!   waits.
 //! - **Seen from outside.** The first coordinate is mirrored where needed, so a loop that runs
 //!   counter-clockwise in the picture runs counter-clockwise on the carrier seen from outside it.
 //! - **Whole numbers where they can be.** The ray's plane is a plane of whole numbers through C
@@ -322,6 +329,233 @@ impl Solid {
     }
 }
 
+/// A ring torus whose axis lies along a coordinate: its centre, that coordinate, and its major
+/// and minor radii.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Tube {
+    /// Its centre.
+    centre: [f64; 3],
+    /// The coordinate its axis lies along.
+    axis: usize,
+    /// The radius of its core circle.
+    major: f64,
+    /// The radius of its tube.
+    minor: f64,
+}
+
+impl Tube {
+    /// The carrier `surface` as one of these; `None` for any other kind, a torus whose tube
+    /// reaches its axis, and one whose axis does not lie exactly along a coordinate.
+    pub(crate) fn of(surface: &SurfaceKind) -> Option<Tube> {
+        let SurfaceKind::Torus(torus) = surface else {
+            return None;
+        };
+        let (major, minor) = torus.radii();
+        if minor >= major {
+            return None;
+        }
+        let normal = torus.frame().normal();
+        let axis = normal.iter().position(|part| part.abs() == 1.0)?;
+        if normal
+            .iter()
+            .enumerate()
+            .any(|(k, part)| k != axis && *part != 0.0)
+        {
+            return None;
+        }
+        Some(Tube {
+            centre: torus.center(),
+            axis,
+            major,
+            minor,
+        })
+    }
+
+    /// The carrier of face `f` of `arr`, if it is one of these.
+    ///
+    /// # Errors
+    ///
+    /// [`BuildError::Missing`] for a face or carrier that is not there.
+    pub(crate) fn of_face(arr: &Arrangement, f: usize) -> Result<Option<Tube>, BuildError> {
+        let face = arr
+            .faces
+            .get(f)
+            .ok_or(BuildError::Missing(Entity::Face(f)))?;
+        let CarrierIx::Surface(ix) = face.surface else {
+            return Ok(None);
+        };
+        let surface = arr
+            .carriers
+            .surface(ix)
+            .ok_or(BuildError::Missing(Entity::Face(f)))?;
+        Ok(Tube::of(surface))
+    }
+
+    /// The two coordinates of the picture along the axis, in order: the axis's is dropped.
+    pub(crate) fn keep(&self) -> [usize; 2] {
+        let [first, second, _] = axes_for(self.axis);
+        [first, second]
+    }
+
+    /// A vector's part along the axis's coordinate, and its distance from the axis's line.
+    fn split(&self, v: [Interval; 3]) -> Result<(Interval, Interval), NumError> {
+        let [first, second, third] = axes_for(self.axis);
+        let part = |k: usize| v.get(k).copied().ok_or(NumError::Degenerate);
+        Ok((
+            part(third)?,
+            Interval::norm(&[part(first)?, part(second)?])?,
+        ))
+    }
+
+    /// The height above the torus's middle plane and the distance from its axis of the grid
+    /// point `p`, enclosed.
+    fn place_of(&self, p: P3) -> Result<(Interval, Interval), NumError> {
+        self.split(minus(exact3(coordinates(p))?, exact3(self.centre)?)?)
+    }
+
+    /// How far the grid point `p` lies from the torus, enclosed in closed form: with h its height
+    /// above the torus's middle plane and ρ its distance from the axis, the size of
+    /// √((ρ − R)² + h²) − r, its distance from the core circle less the tube's radius.
+    ///
+    /// # Errors
+    ///
+    /// An enclosure's.
+    pub(crate) fn gap(&self, p: P3) -> Result<Interval, NumError> {
+        let (h, rho) = self.place_of(p)?;
+        let core = Interval::norm(&[rho.sub(Interval::point(self.major)?)?, h])?;
+        magnitude(core.sub(Interval::point(self.minor)?)?)
+    }
+}
+
+/// A face on a torus whose axis lies along a coordinate, seen along that axis: the torus's half
+/// on one side of its middle plane, square to the axis, is the graph of a height over the ring
+/// between the circles of radii R − r and R + r about the axis, so dropping the axis's coordinate
+/// is one to one on it. A face whose boundary lies in one half lies in that half or holds the
+/// whole of the other ([`Graph::of_face`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Graph {
+    /// The torus.
+    tube: Tube,
+    /// Whether the face lies where the axis's coordinate is larger than at the centre.
+    up: bool,
+    /// The least height of the face's boundary's box from the middle plane: no point of the face
+    /// is nearer that plane, as the height has no lowest point inside the half.
+    floor: f64,
+}
+
+impl Graph {
+    /// The picture of face `f` of `arr` along its torus's axis, if its carrier is a [`Tube`] and
+    /// the picture is proven one to one on the face; `None` for any other face.
+    ///
+    /// The face's boundary's box is proven on one side of the middle plane, and then the face is
+    /// part of that half or holds the whole of the other: its loops say which, the area they bound
+    /// with the face on their left being positive in the picture for the first and negative for
+    /// the second ([`crate::split::face_area`]). In that half the outward normal points away from
+    /// the middle plane, so the half is seen from outside from that side.
+    ///
+    /// # Errors
+    ///
+    /// [`BuildError::Missing`] for a face, edge or carrier that is not there; a boundary curve's
+    /// bound's or area's errors but an area left undecided, which leaves the face with none.
+    pub(crate) fn of_face(
+        arr: &Arrangement,
+        f: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<Graph>, BuildError> {
+        let Some((tube, up, floor)) = Graph::side(arr, f, meter)? else {
+            return Ok(None);
+        };
+        let picture = Picture::Flat { keep: tube.keep() };
+        match crate::split::face_area(arr, f, &picture, meter) {
+            Ok(Some(area)) if area.certain_sign() == Some(Sign::Positive) => {
+                Ok(Some(Graph { tube, up, floor }))
+            }
+            Ok(_) | Err(BuildError::UndecidedArea { .. }) => Ok(None),
+            Err(other) => Err(other),
+        }
+    }
+
+    /// Face `f`'s torus, which side of its middle plane the face's boundary's box is proven on
+    /// (true where the axis's coordinate is larger), and the box's least height from that plane;
+    /// `None` for a face on any other carrier or with a box not proven on one side.
+    ///
+    /// # Errors
+    ///
+    /// As [`Graph::of_face`].
+    pub(crate) fn side(
+        arr: &Arrangement,
+        f: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<(Tube, bool, f64)>, BuildError> {
+        let Some(tube) = Tube::of_face(arr, f)? else {
+            return Ok(None);
+        };
+        let Some(bounds) = boundary_box(arr, f, meter)? else {
+            return Ok(None);
+        };
+        let (Some(part), Some(c)) = (bounds.get(tube.axis), tube.centre.get(tube.axis)) else {
+            return Err(IntersectError::Internal.into());
+        };
+        let h = part.sub(Interval::point(*c)?)?;
+        Ok(match h.certain_sign() {
+            Some(Sign::Positive) => Some((tube, true, h.lo())),
+            Some(Sign::Negative) => Some((tube, false, h.neg().lo())),
+            Some(Sign::Zero) | None => None,
+        })
+    }
+
+    /// The torus.
+    pub(crate) fn tube(&self) -> &Tube {
+        &self.tube
+    }
+
+    /// The picture's two coordinates.
+    pub(crate) fn keep(&self) -> [usize; 2] {
+        self.tube.keep()
+    }
+
+    /// The least height of the face from the middle plane.
+    pub(crate) fn floor(&self) -> f64 {
+        self.floor
+    }
+
+    /// The height of the grid point `p` from the middle plane, positive on the face's side.
+    ///
+    /// # Errors
+    ///
+    /// An enclosure's.
+    pub(crate) fn height(&self, p: P3) -> Result<Interval, NumError> {
+        let (h, _) = self.tube.place_of(p)?;
+        Ok(if self.up { h } else { h.neg() })
+    }
+
+    /// How far from the grid point `p` a point of the face's half may lie whose picture is within
+    /// `slack` of `p`'s: `None` when no point of the torus has such a picture.
+    ///
+    /// Such a point's distance ρ from the axis is within `slack` of `p`'s, and its height h is
+    /// √(r² − (ρ − R)²); it lies within √(slack² + (h − hₚ)²) of `p`, with hₚ `p`'s own height.
+    ///
+    /// # Errors
+    ///
+    /// An enclosure's.
+    pub(crate) fn reach(&self, p: P3, slack: f64) -> Result<Option<f64>, NumError> {
+        let (h, rho) = self.tube.place_of(p)?;
+        let own = if self.up { h } else { h.neg() };
+        let off = rho
+            .add(Interval::new(-slack, slack)?)?
+            .sub(Interval::point(self.tube.major)?)?;
+        let room = Interval::point(self.tube.minor)?
+            .square()?
+            .sub(off.square()?)?;
+        if room.hi() < 0.0 {
+            return Ok(None);
+        }
+        let heights = Interval::new(greater(room.lo(), 0.0), room.hi())?.sqrt()?;
+        let rise = magnitude(heights.sub(own)?)?;
+        Ok(Some(Interval::norm(&[Interval::point(slack)?, rise])?.hi()))
+    }
+}
+
 /// The box of face `f`'s boundary, enclosed: the bounds of its edges' curves.
 fn boundary_box(
     arr: &Arrangement,
@@ -342,14 +576,14 @@ fn boundary_box(
             .carriers
             .curve(edge.curve)
             .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-        let b = curve
+        let held = curve
             .bound(curve.domain(), meter)
             .map_err(IntersectError::from)?;
-        let here = boxed(b.lo, b.hi)?;
+        let here = boxed(held.lo, held.hi)?;
         so_far = Some(match so_far {
-            Some([x, y, z]) => {
-                let [a, b, c] = here;
-                [join(x, a)?, join(y, b)?, join(z, c)?]
+            Some([first, second, third]) => {
+                let [one, two, three] = here;
+                [join(first, one)?, join(second, two)?, join(third, three)?]
             }
             None => here,
         });
@@ -440,7 +674,7 @@ impl Central {
                     mirrored: below == (drop != 1),
                 };
                 let from = minus(exact3(coordinates(stand))?, centre)?;
-                let [_, _, depth] = made.lifted(bounds)?;
+                let depth = made.depth(bounds)?;
                 if !(proven(radius.square()?.sub(dot(from, from)?)?) && proven(depth)) {
                     continue;
                 }
@@ -568,6 +802,48 @@ impl Central {
     /// The point the carrier is seen from.
     pub(crate) fn centre(&self) -> P3 {
         self.centre
+    }
+
+    /// How deep the points of the box `at` lie, measured from the centre into the picture.
+    ///
+    /// # Errors
+    ///
+    /// An enclosure's.
+    pub(crate) fn depth(&self, at: [Interval; 3]) -> Result<Interval, NumError> {
+        let [_, _, w] = self.lifted(at)?;
+        Ok(w)
+    }
+
+    /// How deep the grid point `p` lies ([`Central::depth`]).
+    ///
+    /// # Errors
+    ///
+    /// An enclosure's.
+    pub(crate) fn depth_of(&self, p: P3) -> Result<Interval, NumError> {
+        self.depth(exact3(coordinates(p))?)
+    }
+
+    /// The least depth of face `f`'s boundary in the picture, when the face lies on a sphere:
+    /// no point of the face lies shallower. A depth along a line has no lowest point on a sphere
+    /// but the pole behind the centre, which the face, in front, does not hold, so the face is
+    /// shallowest on its boundary. `None` for a face on any other carrier.
+    ///
+    /// # Errors
+    ///
+    /// As [`Central::of_face`].
+    pub(crate) fn floor(
+        &self,
+        arr: &Arrangement,
+        f: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<f64>, BuildError> {
+        let Some(Solid::Ball(_)) = Solid::of_face(arr, f)? else {
+            return Ok(None);
+        };
+        let Some(bounds) = boundary_box(arr, f, meter)? else {
+            return Ok(None);
+        };
+        Ok(Some(self.depth(bounds)?.lo()))
     }
 
     /// How far a point of the carrier near the grid point `p` may be from the point of the carrier
@@ -1158,6 +1434,114 @@ mod tests {
         assert!(near(solid.gap(grid(10, 0, 0)).unwrap(), 50.0));
         assert!(near(solid.gap(grid(10, 0, 80)).unwrap(), 30.0));
         assert!(near(solid.gap(grid(10, -20, 0)).unwrap(), 30.0));
+    }
+
+    #[test]
+    fn a_torus_about_a_coordinate_and_a_point_s_gap_from_it() {
+        let grid = |x, y, z| P3::new(x, y, z).unwrap();
+        let domain = ((0.0, 2.0), (0.0, 2.0));
+        let up = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let torus = |frame, major, minor| {
+            SurfaceKind::Torus(Torus::new([0.0, 0.0, 10.0], major, minor, frame, domain).unwrap())
+        };
+        let tube = Tube::of(&torus(up, 50.0, 25.0)).unwrap();
+        assert_eq!(tube.keep(), [0, 1]);
+        assert!(near(tube.gap(grid(75, 0, 10)).unwrap(), 0.0));
+        assert!(near(tube.gap(grid(0, 50, 35)).unwrap(), 0.0));
+        assert!(near(tube.gap(grid(50, 0, 10)).unwrap(), 25.0));
+        assert!(near(tube.gap(grid(0, 0, 10)).unwrap(), 25.0));
+        assert!(near(tube.gap(grid(0, -90, 10)).unwrap(), 15.0));
+        // Down the second coordinate: the picture keeps the first and the third.
+        let along = Frame::new([1.0, 0.0, 0.0], [0.0, -1.0, 0.0]).unwrap();
+        let tube = Tube::of(&torus(along, 50.0, 25.0)).unwrap();
+        assert_eq!(tube.keep(), [0, 2]);
+        assert!(near(tube.gap(grid(0, 25, 60)).unwrap(), 0.0));
+        // A tube that reaches the axis, a tilted axis, and any other kind: none.
+        assert_eq!(Tube::of(&torus(up, 25.0, 25.0)), None);
+        let tilted = Frame::new([1.0, 0.0, 0.0], [0.0, 1.0, 1.0]).unwrap();
+        assert_eq!(Tube::of(&torus(tilted, 50.0, 25.0)), None);
+        let cylinder = Cylinder::new([0.0; 3], 5.0, up, domain).unwrap();
+        assert_eq!(Tube::of(&SurfaceKind::Cylinder(cylinder)), None);
+    }
+
+    /// A face on the torus of radii 50 and 25 about the third coordinate through the origin,
+    /// bounded by circles about the axis, each (centre's height, radius, forward).
+    fn on_torus(rims: &[(f64, f64, bool)]) -> (Arrangement, Option<Graph>) {
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let mut arr = Arrangement::default();
+        let mut loops = Vec::new();
+        for &(h, r, forward) in rims {
+            let circle = Circle::new([0.0, 0.0, h], r, frame, (0.0, 2.0)).unwrap();
+            let curve = arr.carriers.add_curve(CurveKind::Circle(circle)).unwrap();
+            arr.edges.push(EdgeIn {
+                curve,
+                ends: None,
+                operand: 0,
+            });
+            loops.push(vec![EdgeUse {
+                edge: arr.edges.len() - 1,
+                forward,
+            }]);
+        }
+        let torus = Torus::new([0.0; 3], 50.0, 25.0, frame, ((0.0, 2.0), (0.0, 2.0))).unwrap();
+        let ix = arr.carriers.add_surface(SurfaceKind::Torus(torus)).unwrap();
+        arr.faces.push(FaceIn {
+            surface: CarrierIx::Surface(ix),
+            loops,
+            operand: 0,
+        });
+        let graph = Graph::of_face(&arr, 0, &mut WorkMeter::new(Budget::UNLIMITED)).unwrap();
+        (arr, graph)
+    }
+
+    #[test]
+    fn a_torus_s_face_in_one_half_is_seen_along_its_axis() {
+        let grid = |x, y, z| P3::new(x, y, z).unwrap();
+        // The band above height 15, between the circles of radii 70 and 30 there.
+        let (_, graph) = on_torus(&[(15.0, 70.0, true), (15.0, 30.0, false)]);
+        let graph = graph.unwrap();
+        assert!(graph.up);
+        assert_eq!(graph.keep(), [0, 1]);
+        assert!(
+            graph.floor() <= 15.0 && graph.floor() > 14.999,
+            "{}",
+            graph.floor()
+        );
+        assert!(near(graph.height(grid(50, 0, 25)).unwrap(), 25.0));
+        // Below the middle plane, seen from below: the outer circle run back.
+        let (_, graph) = on_torus(&[(-15.0, 70.0, false), (-15.0, 30.0, true)]);
+        let graph = graph.unwrap();
+        assert!(!graph.up);
+        assert!(near(graph.height(grid(50, 0, -25)).unwrap(), 25.0));
+        // The rest of the torus beyond either band holds the other half, and a face reaching the
+        // middle plane is in neither half: neither has a picture.
+        assert_eq!(on_torus(&[(15.0, 70.0, false), (15.0, 30.0, true)]).1, None);
+        assert_eq!(
+            on_torus(&[(-15.0, 70.0, true), (-15.0, 30.0, false)]).1,
+            None
+        );
+        assert_eq!(on_torus(&[(0.0, 75.0, true), (0.0, 25.0, false)]).1, None);
+        assert_eq!(on_torus(&[]).1, None);
+    }
+
+    #[test]
+    fn a_torus_s_reach_holds_every_point_whose_picture_is_near() {
+        let grid = |x, y, z| P3::new(x, y, z).unwrap();
+        let (_, graph) = on_torus(&[(15.0, 70.0, true), (15.0, 30.0, false)]);
+        let graph = graph.unwrap();
+        // On the top circle, a picture within 3 holds points of the half at most about 3 away in
+        // the picture and next to nothing in height.
+        let reach = graph.reach(grid(50, 0, 25), 3.0).unwrap().unwrap();
+        assert!((3.0..3.3).contains(&reach), "{reach}");
+        // At the band's outer circle the half is steep: a picture within 3 reaches far further
+        // in height. The height at radius 73 is √(625 − 529) = 9.8 or so.
+        let reach = graph.reach(grid(70, 0, 15), 3.0).unwrap().unwrap();
+        assert!(reach > 5.9 && reach < 6.1, "{reach}");
+        // Nothing of the torus has its picture within 3 of the axis.
+        assert_eq!(graph.reach(grid(0, 0, 15), 3.0).unwrap(), None);
+        // With no slack, a point on the torus reaches only itself.
+        let reach = graph.reach(grid(50, 0, 25), 0.0).unwrap().unwrap();
+        assert!(reach < 1e-6, "{reach}");
     }
 
     /// A centre at (0, 0, 100) looking down the third coordinate.

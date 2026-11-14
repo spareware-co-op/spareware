@@ -1071,6 +1071,6 @@ pub fn interfere(
     face::vertex_face(arr, &mut st, &mut faces, &pairs.vertices, meter)?;
     face::edge_face(arr, &mut st, &mut faces, &pairs.edges, remaining, meter)?;
     let mut out = finish(arr, st, meter)?;
-    face::settle(arr, &mut out, faces, &pairs.faces, meter)?;
+    face::settle(arr, &mut out, faces, &pairs.faces, remaining, meter)?;
     Ok(out)
 }

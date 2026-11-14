@@ -23,7 +23,7 @@ use geom_curve::{Circle, CurveKind, Frame, Line};
 use geom_num::P3;
 use geom_num::plane::Plane;
 use geom_run::{Budget, Exec, WorkMeter};
-use geom_surface::{Cone, Cylinder, Sphere};
+use geom_surface::{Cone, Cylinder, Sphere, Torus};
 use geom_topo::SurfaceKind;
 
 /// The tests' unit, in steps: a millimetre on a grid of a micrometre.
@@ -99,7 +99,7 @@ impl Build {
     /// A face whose loops are each listed in order round it with the face on their left, seen
     /// from outside its carrier: for a flat one, from the side its plane's entry in the table
     /// faces ([`Build::runs`]).
-    fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+    fn face(&mut self, surface: CarrierIx, loops: &[Vec<usize>], operand: u32) -> usize {
         let loops = loops.iter().map(|ring| self.runs(ring)).collect();
         self.face_with(surface, loops, operand)
     }
@@ -163,7 +163,7 @@ impl Build {
                 .add_plane(&Plane::new(n, -i128::from(at * S)).unwrap())
                 .unwrap(),
         );
-        self.face(plane, vec![edges], operand)
+        self.face(plane, &[edges], operand)
     }
 
     /// A face on the plane through grid points `corners[0..3]`, bounded by the four corners in
@@ -546,6 +546,96 @@ fn a_plane_across_a_cone_cuts_it_in_a_circle() {
     assert_eq!(of_face(&splitting, sheet).len(), 2);
 }
 
+/// A plane through a cone's apex and along its axis: the carriers cross in the two rulings
+/// x = 0, z = ±y (12.7's closed form), each from the apex to the rim. The apex lies inside both
+/// faces and is no vertex of either, so a vertex is made there, In both, and each ruling is one
+/// section from it to where the rim crosses the plane. The cone splits into its two halves, each
+/// two rulings and an arc of the rim; on the plane the two rulings are one cut of the one face.
+#[test]
+fn a_plane_through_a_cone_s_apex_cuts_it_in_two_rulings() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let rim = b.circle(p(0, 0, 100), 100, frame, 0);
+    let cone = Cone::new(
+        [0.0; 3],
+        0.0,
+        1.0,
+        frame,
+        ((0.0, 2.0), (0.0, (100 * S) as f64)),
+    );
+    let ix = b.surface(SurfaceKind::Cone(cone.unwrap()));
+    let body = b.face_with(ix, vec![vec![back(rim)]], 0);
+    let sheet = b.sheet(0, 0, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(out.sections.len(), 2, "{:?}", out.sections);
+    // The vertex made at the apex is In both faces and ends both sections.
+    let apex = out.vertices.len() - 1;
+    match &out.vertices[apex] {
+        PointGeom::Certified { at, .. } => assert_eq!(*at, p(0, 0, 0)),
+        other => panic!("{other:?}"),
+    }
+    for f in [body, sheet] {
+        assert!(out.faces[f].in_vertices.contains(&apex), "{f}");
+    }
+    for s in &out.sections {
+        let ends = [s.from.unwrap().vertex, s.to.unwrap().vertex];
+        assert!(ends.contains(&apex), "{s:?}");
+    }
+    let parts = of_face(&splitting, body);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    for half in &parts {
+        assert_eq!(half.outer.len(), 3, "{parts:?}");
+        assert!(half.holes.is_empty(), "{parts:?}");
+    }
+    let parts = of_face(&splitting, sheet);
+    assert_eq!(parts.len(), 1, "{parts:?}");
+    assert_eq!(parts[0].cuts.len(), 1, "{parts:?}");
+    assert_eq!(parts[0].cuts[0].len(), 4, "{parts:?}");
+}
+
+/// A strip of the plane x = 50, from z = 20 to 80, tangent to a cylinder of radius 50 about the
+/// third coordinate: the carriers touch along the ruling x = 50, y = 0, which the closed form
+/// finds from an exact sign of nothing (the plane stands its radius from the axis), so it is a
+/// section. The strip's lower and upper edges touch the side where they cross the ruling: those
+/// two points are vertices of both faces, and the ruling's section runs between them. The strip
+/// splits into its two halves; on the side the ruling is a cut.
+#[test]
+fn a_plane_tangent_to_a_cylinder_meets_it_along_a_ruling() {
+    let mut b = Build::default();
+    let (side, _, _) = b.tube((p(0, 0, 0), 2, 1.0), 50, (0, 100), 0);
+    let strip = b.quad(
+        [
+            [50 * S, -10 * S, 20 * S],
+            [50 * S, 10 * S, 20 * S],
+            [50 * S, 10 * S, 80 * S],
+            [50 * S, -10 * S, 80 * S],
+        ],
+        1,
+    );
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(out.sections.len(), 1, "{:?}", out.sections);
+    let section = &out.sections[0];
+    let at = |v: usize| b.arr.carriers.commit(&out.vertices[v]).unwrap().0;
+    let mut ends = [
+        at(section.from.unwrap().vertex),
+        at(section.to.unwrap().vertex),
+    ];
+    ends.sort_by_key(|q| q.z.get());
+    assert_eq!(ends, [p(50, 0, 20), p(50, 0, 80)]);
+    let parts = of_face(&splitting, strip);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    for half in &parts {
+        assert_eq!(half.outer.len(), 4, "{parts:?}");
+        assert!(half.outer.iter().any(|u| u.piece == Piece::Section(0)));
+    }
+    let parts = of_face(&splitting, side);
+    assert_eq!(parts.len(), 1, "{parts:?}");
+    assert_eq!(parts[0].cuts.len(), 1, "{parts:?}");
+    assert_eq!(parts[0].cuts[0].len(), 2, "{parts:?}");
+}
+
 /// An edge of another operand through a cylinder's side, bounding no face: where it crosses the
 /// side is a new vertex, In the side and a pave on the edge, and the side is one face that holds
 /// it. A spoke beyond the side's end crosses the carrier outside the face: no vertex.
@@ -618,7 +708,7 @@ fn a_window_across_a_cylinder_s_seam_is_cut_out() {
     )
     .unwrap();
     let ix = b.surface(SurfaceKind::Cylinder(carrier));
-    let window = b.face(ix, vec![vec![low, up, high, down]], 1);
+    let window = b.face(ix, &[vec![low, up, high, down]], 1);
     let (from, to) = (b.vertex(p(-50, 0, 30), 2), b.vertex(p(-50, 0, 70), 2));
     let short = b.line(from, to, 2);
     let (out, splitting) = b.run();
@@ -688,7 +778,7 @@ fn a_plane_along_a_cone_cuts_it_in_a_hyperbola() {
             .add_plane(&Plane::new([0, 0, 1], -i128::from(100 * S)).unwrap())
             .unwrap(),
     );
-    let cap = b.face(lid, vec![vec![rim]], 0);
+    let cap = b.face(lid, &[vec![rim]], 0);
     let wall = b.sheet(1, 30, (-1000, 1000), 1);
     let (out, splitting) = b.run();
     assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
@@ -751,7 +841,7 @@ fn a_plane_along_a_ruling_of_a_cone_cuts_it_in_a_parabola() {
             .add_plane(&Plane::new([0, 0, 1], -i128::from(100 * S)).unwrap())
             .unwrap(),
     );
-    let cap = b.face(lid, vec![vec![rim]], 0);
+    let cap = b.face(lid, &[vec![rim]], 0);
     let wall = b.quad(
         [
             [-60 * S, -120 * S, -10 * S],
@@ -1209,4 +1299,131 @@ fn faces_on_one_sphere_split_each_other() {
         "{got:?}"
     );
     assert_eq!(of_face(&splitting, cap).len(), 1);
+}
+
+impl Build {
+    /// A face on the torus of radii 50 and 25 about the third coordinate through the origin, in
+    /// the tests' unit, bounded by its two circles at height `h` (of radii 50 + √(625 − h²) and
+    /// 50 − √(625 − h²), given as `radii`): run with the outer one counter-clockwise about the
+    /// axis and the inner one back (`forward`), the face is the band of the torus beyond the
+    /// height; the other way, the rest of the torus. The face, and the outer and inner circles.
+    fn on_torus(
+        &mut self,
+        (h, radii): (i64, [i64; 2]),
+        forward: bool,
+        operand: u32,
+    ) -> (usize, usize, usize) {
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let [outer, inner] = radii.map(|r| self.circle(p(0, 0, h), r, frame, operand));
+        let torus = Torus::new(
+            [0.0; 3],
+            (50 * S) as f64,
+            (25 * S) as f64,
+            frame,
+            ((0.0, 2.0), (0.0, 2.0)),
+        )
+        .unwrap();
+        let ix = self.surface(SurfaceKind::Torus(torus));
+        let (o, i) = if forward {
+            (ahead(outer), back(inner))
+        } else {
+            (back(outer), ahead(inner))
+        };
+        (
+            self.face_with(ix, vec![vec![o], vec![i]], operand),
+            outer,
+            inner,
+        )
+    }
+}
+
+/// A torus's face above its middle plane, the band above height 15 between its circles of radii
+/// 70 and 30, is seen along its axis. Vertices of another operand on the torus's top circle are In
+/// it; one on its bottom circle and one on its outer equator lie below the band's least height
+/// and are not. The band is one face, the outer circle its outer loop and the inner its hole. The
+/// same circles run the other way bound the rest of the torus, which holds the lower half: no
+/// picture along the axis holds it, and it waits.
+#[test]
+fn a_torus_s_face_above_its_middle_plane_is_seen_along_its_axis() {
+    let mut b = Build::default();
+    let (band, outer, inner) = b.on_torus((15, [70, 30]), true, 0);
+    let tops: Vec<usize> = [(50, 0), (0, 50), (-50, 0)]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 25), 1))
+        .collect();
+    b.vertex(p(50, 0, -25), 1);
+    b.vertex(p(75, 0, 0), 1);
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(out.faces[band].in_vertices, tops);
+    let parts = of_face(&splitting, band);
+    assert_eq!(parts.len(), 1, "{parts:?}");
+    assert_eq!(parts[0].outer, vec![run(whole_piece(&out, outer), true)]);
+    assert_eq!(
+        parts[0].holes,
+        vec![vec![run(whole_piece(&out, inner), false)]]
+    );
+    assert_eq!(parts[0].inside, tops);
+    // The rest of the torus.
+    let mut b = Build::default();
+    let (rest, _, _) = b.on_torus((15, [70, 30]), false, 0);
+    let (_, splitting) = b.run();
+    assert_eq!(splitting.waiting, vec![rest]);
+}
+
+/// The band of a torus below height −15, seen along the axis from below, and the plane at height
+/// −20 across it: the carriers cross in two circles, of radii 65 and 35 (12.7's closed form for a
+/// plane square to a torus's axis), each whole and inside both faces. The band splits into three:
+/// the band below the plane between the two circles, and the narrow bands outside the outer one
+/// and inside the inner one; the plane into the disc inside the inner circle, the ring between
+/// the two and the rest.
+#[test]
+fn a_plane_across_a_torus_s_band_cuts_it_in_two_circles() {
+    let mut b = Build::default();
+    // Below the middle plane the outside of the torus is seen from below: the band below −15 lies
+    // on the right of its outer circle run counter-clockwise about the third coordinate.
+    let (band, outer, inner) = b.on_torus((-15, [70, 30]), false, 0);
+    let sheet = b.sheet(2, -20, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(out.sections.len(), 2, "{:?}", out.sections);
+    let mut radii: Vec<f64> = out
+        .curves
+        .iter()
+        .map(|c| match c {
+            CurveKind::Circle(c) => {
+                let [x, y, z] = c.center();
+                assert!(x.abs() < 1e-6 && y.abs() < 1e-6, "{:?}", c.center());
+                assert!((z + (20 * S) as f64).abs() < 1e-6, "{:?}", c.center());
+                c.radius() / S as f64
+            }
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    radii.sort_by(f64::total_cmp);
+    assert!(
+        (radii[0] - 35.0).abs() < 1e-6 && (radii[1] - 65.0).abs() < 1e-6,
+        "{radii:?}"
+    );
+    let parts: Vec<_> = of_face(&splitting, band)
+        .into_iter()
+        .map(shape_of)
+        .collect();
+    assert_eq!(parts.len(), 3, "{parts:?}");
+    assert!(
+        parts.iter().all(|(o, h)| o.len() == 1 && h.len() == 1),
+        "{parts:?}"
+    );
+    let outers: Vec<Piece> = parts.iter().map(|(o, _)| o[0]).collect();
+    let holes: Vec<Piece> = parts.iter().map(|(_, h)| h[0][0]).collect();
+    assert!(outers.contains(&whole_piece(&out, outer)), "{parts:?}");
+    assert!(holes.contains(&whole_piece(&out, inner)), "{parts:?}");
+    for s in 0..2 {
+        let section = Piece::Section(s);
+        assert!(
+            outers.contains(&section) && holes.contains(&section),
+            "{parts:?}"
+        );
+    }
+    assert_eq!(of_face(&splitting, sheet).len(), 3);
 }

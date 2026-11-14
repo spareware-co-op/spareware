@@ -1,5 +1,5 @@
-//! Where a point lies in a flat face, or in one on a cylinder or a cone: on its boundary, inside it
-//! or outside it, certified (11.4 step 4, G243a; the curved faces G244).
+//! Where a point lies in a flat face, or in one on a cylinder, a cone, a sphere or a torus: on its
+//! boundary, inside it or outside it, certified (11.4 step 4, G243a; the curved faces G244).
 //!
 //! What it does: a [`FlatFace`] is a face whose carrier is a plane of the table, with its boundary
 //! edges and the joins between them. [`FlatFace::place`] says where a grid point, known within a bound, lies.
@@ -16,10 +16,11 @@
 //! it, no boundary edge lying in the ray's plane, no flagged region ahead, and no join within a step
 //! of the ray ahead of the point: a join is the box round the end points of the curves that meet at
 //! a vertex (or a closed curve's two ends), where a crossing could fall between two curves, or be
-//! counted on both. A [`RoundFace`] is a face on a cylinder or on one nappe of a cone, placed
-//! in the same way in its own picture, the carrier seen from a point inside it (`crate::picture`):
-//! there a ray's line is the meeting of the carrier with a plane through that point, again a plane
-//! of whole numbers.
+//! counted on both. A [`RoundFace`] is a face on a cylinder, on one nappe of a cone or on a
+//! sphere, placed in the same way in its own picture, the carrier seen from a point inside it
+//! (`crate::picture`): there a ray's line is the meeting of the carrier with a plane through that
+//! point, again a plane of whole numbers. A face on a torus whose axis lies along a coordinate,
+//! in one half of it, is a [`RoundFace`] too, seen along the axis as a flat face is seen.
 //!
 //! Guarantees:
 //!
@@ -75,7 +76,7 @@ use crate::carrier::{Bound, CarrierIx};
 use crate::crossing::{Enclosed, Hull, crossings_over};
 use crate::distance::Carriers;
 use crate::interfere::{Arrangement, BuildError, Entity, FaceIn, widened};
-use crate::picture::{Central, Picture, Solid};
+use crate::picture::{Central, Graph, Picture, Solid};
 use crate::rule::{Contact, ContactError, EPS_FIT, Verdict, decide, judge};
 
 /// The ray directions tried, in order, in the plane's own picture: whole and primitive, no two
@@ -460,28 +461,43 @@ impl FlatFace {
     }
 }
 
-/// A face on a cylinder, on one nappe of a cone or on a sphere, ready to place points in (G244):
-/// its boundary edges and joins as a flat face's, and its picture seen from inside the carrier
-/// (`crate::picture`).
+/// A face on a cylinder, on one nappe of a cone, on a sphere or on a torus, ready to place points
+/// in (G244): its boundary edges and joins as a flat face's, and its picture (`crate::picture`).
 #[derive(Clone, Debug)]
 pub struct RoundFace {
     /// The face, by its index in the arrangement.
     face: usize,
-    /// Its carrier.
-    round: Solid,
-    /// Its picture.
-    picture: Central,
-    /// How far the picture's centre lies from the carrier.
-    centre_gap: Interval,
+    /// How it is seen.
+    view: View,
     /// Its boundary edges, loop by loop.
     sides: Vec<Side>,
     /// Its joins.
     joins: Vec<[Interval; 3]>,
 }
 
+/// How a curved face is seen.
+#[derive(Clone, Debug)]
+enum View {
+    /// From a point inside its carrier, a cylinder, a cone's nappe or a sphere.
+    Central {
+        /// Its carrier.
+        round: Solid,
+        /// Its picture.
+        picture: Central,
+        /// How far the picture's centre lies from the carrier.
+        centre_gap: Interval,
+        /// On a sphere, the least depth of its boundary in the picture, which no point of it is
+        /// shallower than ([`Central::floor`]).
+        floor: Option<f64>,
+    },
+    /// Along its torus's axis.
+    Along(Graph),
+}
+
 impl RoundFace {
     /// The face `face` of `arr`, ready to place points in: `None` when its carrier is not a
-    /// cylinder, a cone or a sphere, or its picture is not proven one to one.
+    /// cylinder, a cone, a sphere or a torus whose axis lies along a coordinate, or its picture is
+    /// not proven one to one.
     ///
     /// # Errors
     ///
@@ -496,32 +512,42 @@ impl RoundFace {
             .faces
             .get(face)
             .ok_or(BuildError::Missing(Entity::Face(face)))?;
-        let (Some(round), Some(picture)) = (
-            Solid::of_face(arr, face)?,
-            Central::of_face(arr, face, meter)?,
-        ) else {
+        let view = if let Some(round) = Solid::of_face(arr, face)? {
+            let Some(picture) = Central::of_face(arr, face, meter)? else {
+                return Ok(None);
+            };
+            View::Central {
+                round,
+                picture,
+                centre_gap: round.gap(picture.centre())?,
+                floor: picture.floor(arr, face, meter)?,
+            }
+        } else if let Some(graph) = Graph::of_face(arr, face, meter)? {
+            View::Along(graph)
+        } else {
             return Ok(None);
         };
         let (sides, joins) = boundary(arr, this, meter)?;
-        let centre_gap = round.gap(picture.centre())?;
         Ok(Some(RoundFace {
             face,
-            round,
-            picture,
-            centre_gap,
+            view,
             sides,
             joins,
         }))
     }
 
-    /// How far the grid point `point` lies from the face's carrier, the whole cylinder or nappe,
-    /// enclosed in closed form: the distance the contact rule reads for a vertex with this face.
+    /// How far the grid point `point` lies from the face's carrier, the whole cylinder, nappe,
+    /// sphere or torus, enclosed in closed form: the distance the contact rule reads for a vertex
+    /// with this face.
     ///
     /// # Errors
     ///
     /// An enclosure's.
     pub fn gap(&self, point: P3) -> Result<Interval, NumError> {
-        self.round.gap(point)
+        match &self.view {
+            View::Central { round, .. } => round.gap(point),
+            View::Along(graph) => graph.tube().gap(point),
+        }
     }
 
     /// Where the grid point `point`, within `bound` of a point of the face's carrier, lies in the
@@ -533,10 +559,22 @@ impl RoundFace {
     /// (`Central::reach`), and so does the point of the carrier `point` stands for, within
     /// `bound`. The carrier's points within a distance of a point form one patch: on a cylinder or
     /// cone the nearest point's ruling holds a stretch of them, and each circle about the axis an
-    /// arc round that ruling; on a sphere they are a cap. So when every boundary edge is proven further from `point` than the
-    /// reach and the bound, the patch's picture meets no boundary edge's, and all three points lie
-    /// on one side of the boundary. A boundary edge not proven so far leaves the point
-    /// [`BuildError::Unclassified`].
+    /// arc round that ruling; on a sphere they are a cap. So when every boundary edge is proven
+    /// further from `point` than the reach and the bound, the patch's picture meets no boundary
+    /// edge's, and all three points lie on one side of the boundary. A boundary edge not proven so
+    /// far leaves the point [`BuildError::Unclassified`]. On a sphere a point shallower in the
+    /// picture than the face's boundary, by more than its gap and bound, is Out at once: the
+    /// picture holds only the cap in front of its centre, and the face is shallowest on its
+    /// boundary.
+    ///
+    /// A torus's face is seen along the axis, and the picture puts `point` where the line along
+    /// the axis through it meets the face's half of the torus. The carrier's point `point` stands
+    /// for has its picture within `bound` of `point`'s; every point of the half with its picture
+    /// there lies within a reach of `point` ([`Graph::reach`]), so when every boundary edge is
+    /// proven further than that, no boundary edge's picture comes within `bound` of `point`'s,
+    /// and the two pictures lie on one side of the boundary's. The point stood for must lie in the
+    /// face's half, proven when `point`'s height from the middle plane is more than its bound;
+    /// below the face's least height by more than the bound, it is Out at once.
     ///
     /// # Errors
     ///
@@ -577,8 +615,50 @@ impl RoundFace {
             face: self.face,
             at: point,
         };
-        let Some(reach) = self.picture.reach(&self.round, self.centre_gap, point)? else {
-            return Err(unclassified);
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "bounds are counts of steps far below 2^53"
+        )]
+        let steps = bound.steps() as f64;
+        let (picture, reach) = match &self.view {
+            View::Central {
+                round,
+                picture,
+                centre_gap,
+                floor,
+            } => {
+                // On a sphere, a point shallower than the face's boundary, by more than its gap
+                // from the carrier and its bound, stands for no point of the face, which is
+                // shallowest there.
+                if let Some(floor) = floor {
+                    let slack = Interval::point(steps)?.add(round.gap(point)?)?;
+                    if picture.depth_of(point)?.add(slack)?.hi() < *floor {
+                        return Ok(Place::Out);
+                    }
+                }
+                let Some(reach) = picture.reach(round, *centre_gap, point)? else {
+                    return Err(unclassified);
+                };
+                (Picture::Central(*picture), reach)
+            }
+            View::Along(graph) => {
+                // The carrier's point `point` stands for lies within its bound of it, so its
+                // height from the middle plane within the bound of `point`'s: below the face's
+                // least height it is no point of the face, and in the face's half it is the one
+                // point of that half its picture shows.
+                let height = graph.height(point)?;
+                let slack = Interval::point(steps)?;
+                if height.add(slack)?.hi() < graph.floor() {
+                    return Ok(Place::Out);
+                }
+                if height.sub(slack)?.lo() <= 0.0 {
+                    return Err(unclassified);
+                }
+                let Some(reach) = graph.reach(point, steps)? else {
+                    return Err(unclassified);
+                };
+                (Picture::Flat { keep: graph.keep() }, reach)
+            }
         };
         let wide = Bound::of(reach).ok_or(NumError::BudgetExceeded)?;
         if wide.steps() > bound.steps() {
@@ -596,7 +676,6 @@ impl RoundFace {
                 }
             }
         }
-        let picture = Picture::Central(self.picture);
         for direction in DIRECTIONS {
             if let Some(inside) =
                 ray_parity(&picture, (&sides, &self.joins), point, direction, meter)?

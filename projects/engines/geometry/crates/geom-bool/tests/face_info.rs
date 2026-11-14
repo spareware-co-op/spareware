@@ -105,9 +105,9 @@ impl Build {
     /// A face whose loops are each listed in order round it with the face on their left, seen
     /// from outside its carrier: each edge run on from the end it shares with the edge before it
     /// (the first towards the edge after it), a closed edge forward.
-    fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+    fn face(&mut self, surface: CarrierIx, loops: &[Vec<usize>], operand: u32) -> usize {
         let mut uses = Vec::new();
-        for ring in &loops {
+        for ring in loops {
             let mut at = None;
             let mut run = Vec::new();
             for (i, &e) in ring.iter().enumerate() {
@@ -138,7 +138,7 @@ impl Build {
             .map(|k| self.line(corners[k], corners[(k + 1) % corners.len()], operand))
             .collect();
         let plane = self.plane(n, d);
-        self.face(plane, vec![edges], operand)
+        self.face(plane, &[edges], operand)
     }
 
     /// A box from `lo` to `hi`: its 8 corners (bit k of the index picks the high side of axis k),
@@ -183,7 +183,7 @@ impl Build {
                 n[axis] = 1;
                 let at = if side == 1 { hi[axis] } else { lo[axis] };
                 let plane = self.plane(n, -i128::from(at * S));
-                faces[2 * axis + side] = self.face(plane, vec![edges], operand);
+                faces[2 * axis + side] = self.face(plane, &[edges], operand);
             }
         }
         Cuboid { corners, faces }
@@ -431,7 +431,7 @@ fn points_are_placed_in_a_face_with_a_hole() {
     };
     let (o, h) = (ring(&mut b, &outer), ring(&mut b, &hole));
     let carrier = b.plane([0, 0, 1], 0);
-    let face = b.face(carrier, vec![o.clone(), h.clone()], 0);
+    let face = b.face(carrier, &[o.clone(), h.clone()], 0);
     let m = &mut meter();
     let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
     let place =

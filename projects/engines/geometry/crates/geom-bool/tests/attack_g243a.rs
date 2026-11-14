@@ -100,9 +100,9 @@ impl Build {
     /// A face whose loops are each listed in order round it with the face on their left, seen
     /// from outside its carrier: each edge run on from the end it shares with the edge before it
     /// (the first towards the edge after it), a closed edge forward.
-    fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+    fn face(&mut self, surface: CarrierIx, loops: &[Vec<usize>], operand: u32) -> usize {
         let mut uses = Vec::new();
-        for ring in &loops {
+        for ring in loops {
             let mut at = None;
             let mut run = Vec::new();
             for (i, &e) in ring.iter().enumerate() {
@@ -141,7 +141,7 @@ impl Build {
             .collect();
         let edges = self.ring(&corners, operand);
         let plane = self.plane([0, 0, 1], -i128::from(z));
-        (self.face(plane, vec![edges], operand), corners)
+        (self.face(plane, &[edges], operand), corners)
     }
 
     fn run(&self) -> Result<Interfered, BuildError> {
@@ -241,7 +241,7 @@ fn a_round_hole_s_seam_is_a_join() {
     let circle = Circle::new([500_000.0, 500_000.0, 0.0], 200_000.0, frame, (0.0, 2.0)).unwrap();
     let hole = b.edge(CurveKind::Circle(circle), None, 0);
     let carrier = b.plane([0, 0, 1], 0);
-    let face = b.face(carrier, vec![outer, vec![hole]], 0);
+    let face = b.face(carrier, &[outer, vec![hole]], 0);
     let m = &mut meter();
     let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
     let place =
@@ -461,7 +461,7 @@ fn a_section_is_kept_only_where_inside_both_faces() {
     .collect();
     let edges = b.ring(&big, 0);
     let plane = b.plane([0, 1, 0], 0);
-    let large = b.face(plane, vec![edges], 0);
+    let large = b.face(plane, &[edges], 0);
     // The U on x = 500,000, open towards −y, its notch across y = 0 from z = 300,000 to 700,000.
     let u: Vec<usize> = [
         (100_000, 100_000),
@@ -478,7 +478,7 @@ fn a_section_is_kept_only_where_inside_both_faces() {
     .collect();
     let edges = b.ring(&u, 1);
     let plane = b.plane([1, 0, 0], -500_000);
-    let shape = b.face(plane, vec![edges], 1);
+    let shape = b.face(plane, &[edges], 1);
     let out = b.run().unwrap();
     let mut spans: Vec<(i64, i64)> = out
         .sections
@@ -575,7 +575,7 @@ fn a_flagged_region_just_outside_a_face_is_proven_outside() {
             let mut n = [0_i128; 3];
             n[axis] = 1;
             let plane = b.plane(n, 0);
-            b.face(plane, vec![edges], 0);
+            b.face(plane, &[edges], 0);
             // The circle stands in the plane holding the dropped axis and the second kept one.
             let frame = Frame::new(lay(0.0, 0.0, 1.0), lay(1.0, 0.0, 0.0)).unwrap();
             let ring = Circle::new(lay(at.0, at.1, 1_000.0), 1_000.0, frame, (0.0, 2.0)).unwrap();
@@ -611,7 +611,7 @@ fn an_unbounded_carrier_s_face_takes_the_whole_frame() {
         .map(|&(x, y)| b.vertex(p(x, y, 500_000_000), 1))
         .collect();
     let edges = b.ring(&corners, 1);
-    let far = b.face(CarrierIx::Surface(ix), vec![edges], 1);
+    let far = b.face(CarrierIx::Surface(ix), &[edges], 1);
     let out = b.run().unwrap();
     assert_eq!(out.faces[far].pending.faces, vec![floor]);
     assert_eq!(out.faces[far].pending.edges.len(), 4);
@@ -897,7 +897,7 @@ fn a_face_with_no_boundary_is_missing() {
     let mut b = Build::default();
     b.flat(&[(0, 0), (1_000, 0), (0, 1_000)], 0, 0);
     let plane = b.plane([0, 0, 1], -5);
-    let empty = b.face(plane, Vec::new(), 1);
+    let empty = b.face(plane, &[], 1);
     assert!(
         matches!(b.run(), Err(BuildError::Missing(Entity::Face(f))) if f == empty),
         "{:?}",
@@ -1062,7 +1062,7 @@ fn a_join_holds_both_curves_ends() {
         edges.push(b.line(c[3], c[4], 0));
         edges.push(b.line(c[4], c[0], 0));
         let plane = b.plane([0, 0, 1], 0);
-        let face = b.face(plane, vec![edges], 0);
+        let face = b.face(plane, &[edges], 0);
         let m = &mut meter();
         let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
         assert_eq!(
@@ -1113,7 +1113,7 @@ fn a_point_in_a_gap_of_the_boundary_is_refused() {
     edges.push(b.line(c[3], c[4], 0));
     edges.push(b.line(c[4], c[0], 0));
     let plane = b.plane([0, 0, 1], 0);
-    let face = b.face(plane, vec![edges], 0);
+    let face = b.face(plane, &[edges], 0);
     let m = &mut meter();
     let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
     assert!(matches!(
@@ -1148,7 +1148,7 @@ fn a_flagged_region_ahead_refuses_the_ray() {
     edges.push(b.line(c[2], c[3], 0));
     edges.push(b.line(c[3], c[0], 0));
     let plane = b.plane([0, 0, 1], 0);
-    let face = b.face(plane, vec![edges], 0);
+    let face = b.face(plane, &[edges], 0);
     let m = &mut meter();
     let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
     assert_eq!(
@@ -1265,7 +1265,7 @@ fn a_point_inside_an_edge_s_box_and_within_its_bound_is_on_it() {
         .collect();
     let edges = b.ring(&c, 0);
     let plane = b.plane([0, 0, 1], 0);
-    let face = b.face(plane, vec![edges.clone()], 0);
+    let face = b.face(plane, core::slice::from_ref(&edges), 0);
     let m = &mut meter();
     let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
     let at = p(500, 0, 0);

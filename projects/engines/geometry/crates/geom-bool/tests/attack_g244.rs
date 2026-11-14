@@ -96,7 +96,7 @@ impl Build {
     /// A face whose loops are each listed in order round it with the face on their left, seen
     /// from outside its carrier: for a flat one, from the side its plane's entry in the table
     /// faces ([`Build::runs`]).
-    fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+    fn face(&mut self, surface: CarrierIx, loops: &[Vec<usize>], operand: u32) -> usize {
         let loops = loops.iter().map(|ring| self.runs(ring)).collect();
         self.face_with(surface, loops, operand)
     }
@@ -189,7 +189,7 @@ impl Build {
                 n[axis] = 1;
                 let at = if side == 1 { hi[axis] } else { lo[axis] };
                 let plane = self.plane(n, -i128::from(at * S));
-                faces[2 * axis + side] = self.face(plane, vec![edges], operand);
+                faces[2 * axis + side] = self.face(plane, &[edges], operand);
             }
         }
         Cuboid { faces }
@@ -400,7 +400,7 @@ fn a_face_splits_the_same_whichever_way_its_edges_run() {
             })
             .collect();
         let plane = b.plane([0, 0, 1], 0);
-        let face = b.face(plane, vec![edges], 0);
+        let face = b.face(plane, &[edges], 0);
         b.cuboid([400, -100, -100], [450, 1100, 100], 1);
         let (out, splitting) = b.run();
         let parts = of_face(&splitting, face);
@@ -442,7 +442,7 @@ fn a_hole_beside_a_section_goes_to_its_own_part() {
         };
         let edges = vec![b.line(c[0], c[1], 0), hypotenuse, b.line(c[2], c[0], 0)];
         let plane = b.plane([0, 0, 1], 0);
-        let face = b.face(plane, vec![edges], 0);
+        let face = b.face(plane, &[edges], 0);
         b.cuboid([1200, -100, -100], [1250, 2100, 100], 1);
         b.cuboid([200, 1300, -100], [300, 1400, 100], 2);
         let (out, splitting) = b.run();
@@ -504,7 +504,7 @@ fn a_side_of_direction_not_whole_is_ordered_by_its_enclosure() {
     let top = b.line(far, back, 0);
     let other = b.line(back, apex, 0);
     let plane = b.plane([0, 0, 1], 0);
-    let wedge = b.face(plane, vec![vec![side, top, other]], 0);
+    let wedge = b.face(plane, &[vec![side, top, other]], 0);
     let start = b.vertex(P3::new(0, 0, 0).unwrap(), 1);
     let end = b.vertex(P3::new(200, 1200, 0).unwrap(), 1);
     b.line(start, end, 1);
@@ -754,7 +754,7 @@ fn a_crossing_enclosed_from_exactly_zero_is_not_ahead() {
             .collect();
         let hole = b.ring(&h, 0);
         let plane = b.plane([0, 0, 1], 0);
-        let face = b.face(plane, vec![vec![bottom, right, top, left], hole], 0);
+        let face = b.face(plane, &[vec![bottom, right, top, left], hole], 0);
         let out = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut meter()).unwrap();
         match split(&b.arr, &out, &mut meter()) {
             Ok(splitting) if placed => {

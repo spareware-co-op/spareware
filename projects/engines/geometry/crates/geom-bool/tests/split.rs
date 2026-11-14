@@ -106,7 +106,7 @@ impl Build {
     /// A face whose loops are each listed in order round it with the face on their left, seen
     /// from outside its carrier: for a flat one, from the side its plane's entry in the table
     /// faces ([`Build::runs`]).
-    fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+    fn face(&mut self, surface: CarrierIx, loops: &[Vec<usize>], operand: u32) -> usize {
         let loops = loops.iter().map(|ring| self.runs(ring)).collect();
         self.face_with(surface, loops, operand)
     }
@@ -210,7 +210,7 @@ impl Build {
                 n[axis] = 1;
                 let at = if side == 1 { hi[axis] } else { lo[axis] };
                 let plane = self.plane(n, -i128::from(at * S));
-                faces[2 * axis + side] = self.face(plane, vec![edges], operand);
+                faces[2 * axis + side] = self.face(plane, &[edges], operand);
             }
         }
         Cuboid { faces }
@@ -542,4 +542,50 @@ fn a_flat_face_with_its_loop_the_wrong_way_is_refused() {
         split(&b.arr, &out, &mut meter()),
         Err(BuildError::BrokenLoop { face, ring: 0 })
     );
+}
+
+/// A disc of radius 200 and, on the same plane, a disc of another operand of radius 100 inside it
+/// that touches its rim from within, both circles starting at the point they touch. There the
+/// four ends of the two circles leave along one tangent two by two, and the tangents give no
+/// order: the circles are proven to touch exactly (their centres lie the difference of their
+/// radii apart), and the smaller bends more, so the order is by curvature. The disc splits into
+/// the small disc and the crescent round it, whose loop runs the rim and then the small circle
+/// back; the small disc stays whole.
+#[test]
+fn circles_that_touch_are_ordered_by_curvature() {
+    let k = S as f64;
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let disc = |b: &mut Build, centre: f64, radius: f64, operand: u32| {
+        let at = b.vertex(p(700, 500, 0), operand);
+        let circle = Circle::new([centre * k, 500.0 * k, 0.0], radius * k, frame, (0.0, 2.0));
+        let rim = b.edge(CurveKind::Circle(circle.unwrap()), Some([at, at]), operand);
+        let forward = EdgeUse {
+            edge: rim,
+            forward: true,
+        };
+        (b.flat(([0, 0, 1], 0), vec![vec![forward]], operand), rim)
+    };
+    let mut b = Build::default();
+    let (big, rim) = disc(&mut b, 500.0, 200.0, 0);
+    let (small, inner) = disc(&mut b, 600.0, 100.0, 1);
+    let (out, splitting) = b.run();
+    let whole = |e: usize| {
+        let k = out.splits.iter().position(|s| s.source == e).unwrap();
+        Piece::Split(k)
+    };
+    let (rim, inner) = (whole(rim), whole(inner));
+    let use_of = |piece, forward| Use { piece, forward };
+    let mut parts: Vec<Vec<Use>> = of_face(&splitting, big)
+        .iter()
+        .map(|s| s.outer.clone())
+        .collect();
+    parts.sort_by_key(Vec::len);
+    assert_eq!(
+        parts,
+        vec![
+            vec![use_of(inner, true)],
+            vec![use_of(rim, true), use_of(inner, false)]
+        ]
+    );
+    assert_eq!(of_face(&splitting, small).len(), 1);
 }
