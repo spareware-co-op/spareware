@@ -7045,7 +7045,8 @@
           "file": "projects/engines/geometry/crates/geom-make/src/transform.rs",
           "guarantees": [
             "**Exact where the transform is.** A move by whole steps, quarter turns, mirrors across grid planes and whole-number uniform scales map grid points to grid points and keep planes given by integers: an Exact body stays Exact.",
-            "**Rounded once, and said so.** Any other rotation or scale rounds each vertex to the grid once (at most √3/2 of a step), and moves curves and surfaces by their own typed transforms, each with a certified deviation. The result's bound is the input's, stretched by the most the transform can stretch a length, plus one step if any vertex rounded, plus the largest deviation, rounded up.",
+            "**Planes move with their meetings.** A vertex where three planes of the body's plane pool meet (6.3, as a boolean leaves one) moves with its planes: under a transform that maps the grid onto itself each plane moves exactly, by the transform's cofactors, and the vertex stays where the moved planes meet, or becomes the grid point that meeting is. Its edges' lines, only shadows of the edges (8.3), are drawn again between their ends' new places on the grid, as the rebuild draws them. Under any other transform no plane can stay exact, so the vertex is committed to the grid (6.3's half a step on each axis) and then moves as a grid point does; the bound counts the commit, stretched.",
+            "**Rounded once, and said so.** Any other rotation or scale rounds each vertex to the grid once (at most √3/2 of a step), and moves curves and surfaces by their own typed transforms, each with a certified deviation. The result's bound is the input's, stretched by the most the transform can stretch a length, plus one step if any vertex rounded, plus the steps a committed meeting can stray, plus the largest deviation, rounded up.",
             "**The class never rises.** The result keeps the input's class or a less exact one: an Approximate body stays Approximate whatever its bound does (principle 3).",
             "**Accepted, or refused.** A result less exact than the input is returned only when the caller accepts it ([`Moved::accept`]): a class at least as loose and a ceiling at least the result's bound; otherwise [`MakeDetail::NotAccepted`] names the class the result would have.",
             "**Kinds change only where the checker can follow.** A transform that does not keep circles turns them into ellipses and analytic surfaces into affine ones, which the checker cannot certify yet: on a body with curved geometry it is [`MakeDetail::KindNotCertified`] (G177).",
@@ -7058,7 +7059,7 @@
             "links": [
               "projects/engines/geometry/architecture/07-geometry-types.md"
             ],
-            "text": "chapter 7's typed transforms and their kind changes (`projects/engines/geometry/architecture/07-geometry-types.md`), applied as `geom-math`, `geom-curve` and `geom-surface` define them; chapter 20.2's naming rule for one-to-one changes."
+            "text": "chapter 7's typed transforms and their kind changes (`projects/engines/geometry/architecture/07-geometry-types.md`), applied as `geom-math`, `geom-curve` and `geom-surface` define them; a plane moved by the cofactor matrix of the transform's linear part (the inverse transpose, scaled to integers: the textbook rule for transforming plane equations); chapter 20.2's naming rule for one-to-one changes."
           },
           "path": "geom_make::transform",
           "provenance": [],
