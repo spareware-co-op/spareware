@@ -998,6 +998,7 @@ version = "0.0.0"
 dependencies = [
  "geom-bvh",
  "geom-check",
+ "geom-curve",
  "geom-intersect",
  "geom-make",
  "geom-name",
@@ -1007,6 +1008,7 @@ dependencies = [
  "geom-run",
  "geom-surface",
  "geom-topo",
+ "num-bigint",
  "proptest",
 ]
 
