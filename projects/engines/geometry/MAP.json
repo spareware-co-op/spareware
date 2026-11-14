@@ -7164,7 +7164,7 @@
           "target": "lib"
         },
         {
-          "cost": "O(n log n) for n triangles: one triangulation per face that is not a triangle, and a query of a box tree per triangle for the check, charged to the meter per test.",
+          "cost": "O(n log n) for n triangles: one triangulation per face that is not a triangle, with a box tree of its sides to count them along its edges, and a query of a box tree per triangle for the check, charged to the meter per test.",
           "does": "[`triangles`] commits a mesh to the grid and splits its faces into triangles. [`export`] writes those as OBJ, ASCII STL or a 3MF model part, in exact decimals of millimetres, or as binary STL or binary glTF, in `f32` relative to a chunk origin. It then checks what it wrote with exact predicates, and says how far from the mesh the file can be.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
@@ -7173,6 +7173,7 @@
             "**`f32` is rounded once, on one lattice.** Every value of a chunk is rounded to the nearest multiple of the power of two that fits the chunk's largest value in 24 bits. Each such multiple is an `f32`, so the error is at most half a unit in the last place at the chunk's extent. That is what 19.5 asks, at every value and not only the largest, and it makes the written points small integers, which the kernel's own predicates can check.",
             "**The bound is proven and stated.** [`Export::bound`] adds the lattice's half step to the commit of three-plane points to the grid, in quarter-nanometres.",
             "**Rounding that breaks the mesh is refused.** A triangle that turned over or closed up, or two that came to touch, are [`Flaw`]s, with their faces. [`export`] returns [`ExportError::RoundingFlip`] unless told to accept them, and then lists them.",
+            "**The triangles of a face cover what its rounded outline encloses, or it is refused.** A face of more than three corners is triangulated on its corners rounded to the grid, and rounding can fold its outline back along or over itself. [`triangles`] keeps exactly the triangles that the rounded outline winds round once: the face as the rounding of its corners moved it, never a triangle outside that or a hole in it. A face whose rounded sides cross, or that its rounded outline winds round any other number of times than once or not at all, is refused with [`ExportError::RoundingFlip`] and the face, accepted or not.",
             "**Deterministic.** The bytes depend on the mesh and the options alone, and no floating-point sum is done: an `f32` is built from its integer."
           ],
           "job": "Exact meshes written at each format's precision (19.5, 24.10).",
