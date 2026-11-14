@@ -562,16 +562,68 @@ fn decimation_takes_the_cheapest_collapse_at_its_best_point() {
     );
 }
 
+/// A sheet of 6 × 6 cells of side `s`, tilted across both axes, whose bend grows fourfold from
+/// each row of vertices to the next, from nearly none.
+fn growing(s: i64) -> (Vec<P3>, Vec<[u32; 3]>) {
+    sheet(6, s, |i, j| {
+        (i + j) * s + ((i * i + 2 * j * j + i * j) << (2 * j)) / 64
+    })
+}
+
+/// A quadric's best point is offered only up to twice the edge's length from the edge's middle.
+/// On the growing sheet at a scale of 1800, decimated to 24 triangles within 40, a best point
+/// more than the edge's length from its middle is offered and taken, and the result pins it.
+#[test]
+fn a_best_point_is_offered_up_to_twice_the_edge_from_its_middle() {
+    let input = growing(1800);
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon: 40,
+            target: 24,
+        },
+        &Exec::serial(),
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(out.triangles().len(), 25);
+    assert_eq!(out.operations(), (28, 161));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, 0),
+            (10799, 0, 10799),
+            (1, 5609, 5620),
+            (10803, 5099, 15936),
+            (6, 7307, 7443),
+            (6419, 7202, 13857),
+            (10797, 7149, 18306),
+            (0, 9000, 9800),
+            (1800, 9000, 11696),
+            (3600, 9000, 13624),
+            (5400, 9000, 15584),
+            (7200, 9000, 17576),
+            (9000, 9000, 19600),
+            (10800, 9000, 21656),
+            (0, 10800, 15408),
+            (1800, 10800, 17656),
+            (3600, 10800, 20032),
+            (5400, 10800, 22536),
+            (7200, 10800, 25168),
+            (9000, 10800, 27928),
+            (10800, 10800, 30816)
+        ]
+    );
+}
+
 /// A quadric's best point is trusted only when the quadric is far enough from singular: its
-/// determinant above 10⁻¹² of the cube of its trace. A sheet tilted across both axes, whose bend
-/// grows fourfold from each row of cells to the next, has quadrics on both sides of that line, and
-/// where it falls is pinned by the result at two scales.
+/// determinant above 10⁻¹² of the cube of its trace. The growing sheet has quadrics on both sides
+/// of that line, and where it falls is pinned by the result at two scales.
 #[test]
 fn a_best_point_is_trusted_only_away_from_a_flat_quadric() {
     let run = |s: i64| {
-        let input = sheet(6, s, |i, j| {
-            (i + j) * s + ((i * i + 2 * j * j + i * j) << (2 * j)) / 64
-        });
+        let input = growing(s);
         let out = decimate(
             &input.0,
             &input.1,
@@ -1034,10 +1086,14 @@ fn remeshing_collapses_as_pmp_does() {
     );
 }
 
+/// Work enough for remeshing the sheet of the test below with no edit tried (it takes 329).
+const BOUNDS_BUDGET: u64 = 1000;
+
 /// An edge is too long only above 4/3 of the target and too short only below 4/5 of it. A flat
 /// sheet of 60 × 80 cells has sides of 60 and diagonals of 100, exactly 4/5 and 4/3 of 75, and
 /// every vertex's triangles are symmetric about it, so nothing is split, collapsed, flipped or
-/// moved: remeshing toward 75 gives the input back.
+/// moved: remeshing toward 75 gives the input back, and cheaply, since no edit is tried (a small
+/// budget is enough, where splitting every edge pass after pass would run it out).
 #[test]
 fn edges_at_the_bounds_of_the_target_are_left_alone() {
     let mut points = Vec::new();
@@ -1063,9 +1119,40 @@ fn edges_at_the_bounds_of_the_target_are_left_alone() {
             iterations: 1,
         },
         &Exec::serial(),
+        &mut WorkMeter::new(Budget::of_work(BOUNDS_BUDGET)),
+    )
+    .unwrap();
+    assert_eq!(out.points(), points.as_slice());
+    assert_eq!(out.triangles(), triangles.as_slice());
+}
+
+/// A side of exactly 4/5 of the target is not too short either: a flat pentagon of three
+/// triangles toward edges of 100 has one side of exactly 80 and the rest a little longer, its
+/// diagonals below 4/3 of 100, and no vertex inside, so nothing is done to it. Merging the side's
+/// ends would be allowed: no new edge too long, and the pentagon's corner it cuts off within ε.
+#[test]
+fn a_side_at_four_fifths_of_the_target_is_not_collapsed() {
+    let points = vec![
+        p(0, 69, 0),
+        p(-66, 21, 0),
+        p(-40, -56, 0),
+        p(40, -56, 0),
+        p(66, 21, 0),
+    ];
+    let triangles = vec![[0, 1, 2], [0, 2, 3], [0, 3, 4]];
+    let out = remesh(
+        &points,
+        &triangles,
+        Remesh {
+            epsilon: 100,
+            length: 100,
+            iterations: 1,
+        },
+        &Exec::serial(),
         &mut meter(),
     )
     .unwrap();
+    assert_eq!(out.operations(), (0, 0));
     assert_eq!(out.points(), points.as_slice());
     assert_eq!(out.triangles(), triangles.as_slice());
 }
