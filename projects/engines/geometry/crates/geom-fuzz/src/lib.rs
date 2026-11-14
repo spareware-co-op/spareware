@@ -43,8 +43,9 @@
 //! adds [`planes`] (G123), `geom-poly`'s canonical planes and arrangement predicates give one entry
 //! to one plane and one order to any points or rays, and [`cdt`] (G153), `geom-mesh`'s
 //! triangulation is a true constrained Delaunay triangulation and one answer in any input order,
-//! and [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a mesh and gives one mesh in
-//! any input order. For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
+//! [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a mesh and gives one mesh in any
+//! input order, and [`solids`] (G147 to G152), `geom-mesh`'s operations on small solids agree with
+//! counted cells. For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
 //! holds `geom-topo`'s Euler operators to their table of counts, Euler's formula and their
 //! refusals (G81); [`naming`] holds names, the name graph, the duplicate detector and the ordinal
 //! order to their laws (G87); [`references`], reference resolution gives 20.4's outcome on any
@@ -261,6 +262,7 @@ pub mod robustness;
 pub mod roots;
 pub mod seeded;
 pub mod sequence;
+pub mod solids;
 pub mod surfaces;
 pub mod transforms;
 pub mod variants;

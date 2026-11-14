@@ -187,7 +187,7 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 134] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 135] = [
     ("aho-corasick", "Unlicense OR MIT", "MIT"),
     ("anstream", "MIT OR Apache-2.0", "MIT"),
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
@@ -288,6 +288,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 134] = [
     ("regex-lite", "MIT OR Apache-2.0", "MIT"),
     ("regex-syntax", "MIT OR Apache-2.0", "MIT"),
     ("robust", "MIT OR Apache-2.0", "MIT"),
+    ("rustc-hash", "Apache-2.0 OR MIT", "MIT"),
     ("rustc_version", "MIT OR Apache-2.0", "MIT"),
     (
         "rustix",

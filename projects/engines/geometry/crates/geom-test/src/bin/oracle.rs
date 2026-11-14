@@ -4,9 +4,9 @@
 //! ```text
 //! cargo run -p geom-test --bin oracle -- list
 //! cargo run -p geom-test --bin oracle -- check [--root <dir>] [--repository <oracle checkout>]
-//! cargo run -p geom-test --bin oracle -- jobs geomdl --seed <hex> --count <n>
-//! cargo run -p geom-test --bin oracle -- compare geomdl --jobs <file> --answers <file>
-//! cargo run -p geom-test --bin oracle -- triage geomdl --jobs <file> --id <n> --kind <kind>
+//! cargo run -p geom-test --bin oracle -- jobs <oracle> --seed <hex> --count <n>
+//! cargo run -p geom-test --bin oracle -- compare <oracle> --jobs <file> --answers <file>
+//! cargo run -p geom-test --bin oracle -- triage <oracle> --jobs <file> --id <n> --kind <kind>
 //!     --outcome <ours|theirs|within-bounds|undecided> --fixture <id> --why <words>
 //!     [--reference <words>] [--root <dir>]
 //! ```
@@ -40,6 +40,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
+use geom_format::operation::Operation;
 use geom_test::fixture::kernel::Kernel;
 use geom_test::fixture::repo as fixture_repo;
 use geom_test::fixture::run::replay;
@@ -47,7 +48,8 @@ use geom_test::fixture::{OpLog, Triage};
 use geom_test::golden::store::Store;
 use geom_test::map::repo::workspace_root;
 use geom_test::oracle::catalogue::{self, Catalogue, audit, linked};
-use geom_test::oracle::geomdl::{self, Answer, Compared, Job, judge};
+use geom_test::oracle::geomdl::{self, Compared};
+use geom_test::oracle::meshes;
 use geom_test::oracle::triage::{self, Record, Register, Signature, fixture as fixture_of, group};
 use geom_test::seed::Seed;
 
@@ -206,7 +208,7 @@ fn check(repository: Option<&Path>, root: &Root) -> Result<ExitCode, String> {
 }
 
 fn known(oracle: &str) -> Result<(), String> {
-    if oracle == geomdl::ID {
+    if oracle == geomdl::ID || meshes::holds(oracle) {
         Ok(())
     } else {
         Err(format!("no jobs for {oracle}"))
@@ -217,13 +219,20 @@ fn jobs(oracle: &str, seed: &str, count: u64) -> Result<ExitCode, String> {
     known(oracle)?;
     let seed = u64::from_str_radix(seed, 16).map_err(|e| format!("the seed {seed:?}: {e}"))?;
     eprintln!("seed: {seed:016x}");
-    for job in geomdl::jobs(Seed(seed), count) {
-        println!(
-            "{}",
-            serde_json::to_string(&job).map_err(|e| e.to_string())?
-        );
+    if meshes::holds(oracle) {
+        printed(&meshes::jobs(Seed(seed), count))?;
+    } else {
+        printed(&geomdl::jobs(Seed(seed), count))?;
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// `jobs`, one JSON line each.
+fn printed<T: serde::Serialize>(jobs: &[T]) -> Result<(), String> {
+    for job in jobs {
+        println!("{}", serde_json::to_string(job).map_err(|e| e.to_string())?);
+    }
+    Ok(())
 }
 
 /// Each line of `text` as a `T`.
@@ -233,10 +242,19 @@ fn lines<T: serde::de::DeserializeOwned>(text: &str, what: &str) -> Result<Vec<T
         .collect()
 }
 
-fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String> {
-    known(oracle)?;
-    let jobs: Vec<Job> = lines(&read(jobs)?, "a job")?;
-    let answers: Vec<Answer> = lines(&read(answers)?, "an answer")?;
+/// Each answer in `answers` judged against its job in `jobs`, each difference printed: how many
+/// jobs there were, and the differences' signatures.
+fn judged<J, A>(
+    jobs: &str,
+    answers: &str,
+    judge: impl Fn(&J, &A) -> Result<(u64, Compared), String>,
+) -> Result<(usize, Vec<Signature>), String>
+where
+    J: serde::de::DeserializeOwned,
+    A: serde::de::DeserializeOwned,
+{
+    let jobs: Vec<J> = lines(jobs, "a job")?;
+    let answers: Vec<A> = lines(answers, "an answer")?;
     if jobs.len() != answers.len() {
         return Err(format!(
             "{} jobs and {} answers: the harness stopped early",
@@ -246,11 +264,26 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String
     }
     let mut differences = Vec::new();
     for (job, answer) in jobs.iter().zip(&answers) {
-        if let Compared::Differ { signature, settled } = judge(job, answer)? {
-            println!("job {}: {signature}: {settled}", job.id);
+        if let (id, Compared::Differ { signature, settled }) = judge(job, answer)? {
+            println!("job {id}: {signature}: {settled}");
             differences.push(signature);
         }
     }
+    Ok((jobs.len(), differences))
+}
+
+fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String> {
+    known(oracle)?;
+    let (jobs, answers) = (read(jobs)?, read(answers)?);
+    let (count, differences) = if meshes::holds(oracle) {
+        judged(&jobs, &answers, |job: &meshes::Job, answer| {
+            Ok((job.id, meshes::judge(oracle, job, answer)?))
+        })?
+    } else {
+        judged(&jobs, &answers, |job: &geomdl::Job, answer| {
+            Ok((job.id, geomdl::judge(job, answer)?))
+        })?
+    };
     let register = Register::embedded().map_err(|e| e.to_string())?;
     for (signature, count) in group(&differences) {
         println!("{signature}: {count}");
@@ -258,7 +291,7 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String
     let new = register.new_signatures(&differences);
     println!(
         "oracle compare: {} jobs, {} differences, {} new signatures",
-        jobs.len(),
+        count,
         differences.len(),
         new.len()
     );
@@ -272,25 +305,37 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String
     })
 }
 
+/// Job `id` of `text`: its operation's name, its family, and its operation for a log.
+fn chosen(oracle: &str, text: &str, id: u64) -> Result<(String, String, Operation), String> {
+    let missing = || format!("no job {id}");
+    if meshes::holds(oracle) {
+        let jobs: Vec<meshes::Job> = lines(text, "a job")?;
+        let job = jobs.iter().find(|j| j.id == id).ok_or_else(missing)?;
+        let name = job.op.name().to_owned();
+        Ok((name, job.family.clone(), meshes::operation(job)?))
+    } else {
+        let jobs: Vec<geomdl::Job> = lines(text, "a job")?;
+        let job = jobs.iter().find(|j| j.id == id).ok_or_else(missing)?;
+        let name = job.op.name().to_owned();
+        Ok((name, job.family.clone(), geomdl::operation(job)?))
+    }
+}
+
 fn triage_command(t: &Triaging) -> Result<ExitCode, String> {
     known(&t.oracle)?;
     let root = match &t.root.root {
         Some(r) => r.clone(),
         None => workspace_root().map_err(|e| e.to_string())?,
     };
-    let jobs: Vec<Job> = lines(&read(&t.jobs)?, "a job")?;
-    let job = jobs
-        .iter()
-        .find(|j| j.id == t.id)
-        .ok_or_else(|| format!("no job {}", t.id))?;
+    let (operation, family, logged) = chosen(&t.oracle, &read(&t.jobs)?, t.id)?;
     let outcome: Triage = serde_json::from_value(serde_json::Value::String(t.outcome.clone()))
         .map_err(|e| format!("the outcome {:?}: {e}", t.outcome))?;
     let record = Record {
         signature: Signature {
-            operation: job.op.name().to_owned(),
+            operation,
             oracle: t.oracle.clone(),
             kind: t.kind.clone(),
-            family: job.family.clone(),
+            family,
         },
         outcome,
         fixture: t.fixture.clone(),
@@ -303,7 +348,7 @@ fn triage_command(t: &Triaging) -> Result<ExitCode, String> {
         eprintln!("oracle triage: {} is already triaged", record.signature);
         return Ok(ExitCode::from(1));
     }
-    let log = OpLog::new(Vec::new(), vec![geomdl::operation(job)?]);
+    let log = OpLog::new(Vec::new(), vec![logged]);
     let store = Store::embedded().map_err(|e| e.to_string())?;
     let edition = store.current().map_err(|e| e.to_string())?.edition.clone();
     let key = (edition, log.versions());

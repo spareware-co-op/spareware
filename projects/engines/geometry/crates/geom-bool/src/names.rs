@@ -33,7 +33,6 @@ use core::cmp::Ordering;
 use core::fmt;
 
 use geom_name::{OrderError, WeakOrder, weak_names};
-use geom_num::grid::Rounded;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_op::{
@@ -519,8 +518,8 @@ fn input(a: &Arenas) -> Result<Input<'_>, NumError> {
 /// A grid key, as [`grid_key`] gives it.
 type GridKey = (i64, i64, i64);
 
-/// A point rounded to the grid, or why it could not be.
-pub type Near = Result<Rounded<P3>, NumError>;
+/// A point rounded to the grid, or why it could not be: the publication's own type.
+pub use geom_poly::publish::Near;
 
 /// Each merged vertex rounded to the grid, once for the lookups in every operand and for the
 /// publication: a vertex rounds the same whichever operand it is looked for in. A vertex `known`
