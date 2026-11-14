@@ -29,6 +29,12 @@ fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 40))
 }
 
+/// A meter of `work` units, a few times what the run it is given takes, so a change that makes a
+/// run loop, or split without end, stops it at once with an error rather than by a timeout.
+fn budget(work: u64) -> WorkMeter<'static> {
+    WorkMeter::new(Budget::of_work(work))
+}
+
 fn p(x: i64, y: i64, z: i64) -> P3 {
     P3::new(x, y, z).unwrap()
 }
@@ -282,7 +288,7 @@ fn a_flat_sheet_decimates_to_few_triangles_on_the_same_plane() {
         &input.1,
         Decimate { epsilon, target: 2 },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 21),
     )
     .unwrap();
     assert!(
@@ -313,7 +319,7 @@ fn decimation_stops_at_its_target() {
             &input.1,
             Decimate { epsilon: 8, target },
             &Exec::serial(),
-            &mut meter(),
+            &mut budget(1 << 21),
         )
         .unwrap();
         let n = out.triangles().len();
@@ -329,7 +335,7 @@ fn decimation_stops_at_its_target() {
             target: 32,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 21),
     )
     .unwrap();
     assert_eq!(out.triangles(), input.1.as_slice());
@@ -348,7 +354,7 @@ fn a_closed_cube_stays_closed_and_within_epsilon() {
             target: 12,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 21),
     )
     .unwrap();
     assert!(closed(out.triangles()));
@@ -376,7 +382,7 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
             target: 0,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 22),
     )
     .unwrap();
     let tight = decimate(
@@ -387,7 +393,7 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
             target: 0,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 22),
     )
     .unwrap();
     assert!(closed(loose.triangles()) && closed(tight.triangles()));
@@ -409,7 +415,7 @@ fn a_thin_spike_is_kept_by_the_backward_test() {
         &input.1,
         Decimate { epsilon, target: 0 },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 21),
     )
     .unwrap();
     assert!(
@@ -435,7 +441,7 @@ fn decimation_is_deterministic() {
                 target: 0,
             },
             &Exec::serial(),
-            &mut meter(),
+            &mut budget(1 << 19),
         )
         .unwrap()
     };
@@ -474,7 +480,7 @@ fn decimation_takes_the_cheapest_collapse_at_its_best_point() {
             &input.1,
             Decimate { epsilon, target },
             &Exec::serial(),
-            &mut meter(),
+            &mut budget(1 << 22),
         )
         .unwrap();
         two_way(&input, &out, epsilon);
@@ -584,7 +590,7 @@ fn a_best_point_is_offered_up_to_twice_the_edge_from_its_middle() {
             target: 24,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 23),
     )
     .unwrap();
     assert_eq!(out.triangles().len(), 25);
@@ -632,7 +638,7 @@ fn a_best_point_is_trusted_only_away_from_a_flat_quadric() {
                 target: 36,
             },
             &Exec::serial(),
-            &mut meter(),
+            &mut budget(1 << 22),
         )
         .unwrap();
         assert_eq!(out.triangles().len(), 36);
@@ -723,7 +729,7 @@ fn decimation_weighs_the_open_sides_of_a_skewed_sheet() {
             target: 16,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 21),
     )
     .unwrap();
     two_way(&input, &out, 10);
@@ -784,7 +790,7 @@ fn a_coarse_sheet_remeshes_toward_the_target_length() {
             iterations: 2,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 20),
     )
     .unwrap();
     assert!(
@@ -832,7 +838,7 @@ fn a_narrow_strip_is_not_pinched() {
             &input.1,
             Decimate { epsilon, target: 0 },
             &Exec::serial(),
-            &mut meter(),
+            &mut budget(1 << 17),
         )
         .unwrap(),
         remesh(
@@ -844,7 +850,7 @@ fn a_narrow_strip_is_not_pinched() {
                 iterations: 2,
             },
             &Exec::serial(),
-            &mut meter(),
+            &mut budget(1 << 17),
         )
         .unwrap(),
     ] {
@@ -870,7 +876,7 @@ fn a_long_diagonal_is_split_at_its_middle() {
             iterations: 1,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 12),
     )
     .unwrap();
     assert_eq!(out.triangles().len(), 4, "{:?}", out.triangles());
@@ -915,7 +921,14 @@ fn flips_and_smoothing_work_on_a_flat_sheet() {
         let mut turned = triangles.clone();
         turned[0] = first;
         let input = (points.clone(), turned);
-        let out = remesh(&input.0, &input.1, settings, &Exec::serial(), &mut meter()).unwrap();
+        let out = remesh(
+            &input.0,
+            &input.1,
+            settings,
+            &Exec::serial(),
+            &mut budget(1 << 17),
+        )
+        .unwrap();
         assert_eq!(out.triangles().len(), input.1.len());
         // Every vertex is still there, in its number, so the middle is still number 4.
         assert_eq!(out.points().len(), input.0.len());
@@ -932,7 +945,14 @@ fn flips_and_smoothing_work_on_a_flat_sheet() {
     let mut moved = points;
     moved[4] = p(130, 120, 0);
     let input = (moved, triangles);
-    let out = remesh(&input.0, &input.1, settings, &Exec::serial(), &mut meter()).unwrap();
+    let out = remesh(
+        &input.0,
+        &input.1,
+        settings,
+        &Exec::serial(),
+        &mut budget(1 << 17),
+    )
+    .unwrap();
     let off = |q: P3| (q.x.get() - 100).pow(2) + (q.y.get() - 100).pow(2);
     assert!(
         off(out.points()[4]) < off(p(130, 120, 0)),
@@ -954,7 +974,7 @@ fn remesh_bent(epsilon: u64, length: u64) -> Modelled {
             iterations: 1,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 22),
     )
     .unwrap();
     two_way(&input, &out, epsilon);
@@ -1086,9 +1106,6 @@ fn remeshing_collapses_as_pmp_does() {
     );
 }
 
-/// Work enough for remeshing the sheet of the test below with no edit tried (it takes 329).
-const BOUNDS_BUDGET: u64 = 1000;
-
 /// An edge is too long only above 4/3 of the target and too short only below 4/5 of it. A flat
 /// sheet of 60 × 80 cells has sides of 60 and diagonals of 100, exactly 4/5 and 4/3 of 75, and
 /// every vertex's triangles are symmetric about it, so nothing is split, collapsed, flipped or
@@ -1119,7 +1136,7 @@ fn edges_at_the_bounds_of_the_target_are_left_alone() {
             iterations: 1,
         },
         &Exec::serial(),
-        &mut WorkMeter::new(Budget::of_work(BOUNDS_BUDGET)),
+        &mut budget(1 << 10),
     )
     .unwrap();
     assert_eq!(out.points(), points.as_slice());
@@ -1149,7 +1166,7 @@ fn a_side_at_four_fifths_of_the_target_is_not_collapsed() {
             iterations: 1,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 8),
     )
     .unwrap();
     assert_eq!(out.operations(), (0, 0));
@@ -1170,7 +1187,7 @@ fn a_fine_ball_remeshes_coarser_within_epsilon() {
             iterations: 1,
         },
         &Exec::serial(),
-        &mut meter(),
+        &mut budget(1 << 26),
     )
     .unwrap();
     assert!(closed(out.triangles()));
@@ -1193,7 +1210,7 @@ fn inputs_that_are_not_surfaces_are_refused() {
                 target: 0,
             },
             &Exec::serial(),
-            &mut meter(),
+            &mut budget(1 << 12),
         )
     };
     assert_eq!(
