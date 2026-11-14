@@ -220,8 +220,47 @@ fn euler(points: usize, triangles: &[[u32; 3]]) -> i64 {
     points as i64 - edges.len() as i64 + triangles.len() as i64
 }
 
-/// The result is within ε of the input both ways, by the sampling oracle.
+/// Whether `triangles` are an oriented surface: no directed edge twice, and the triangles at each
+/// vertex one fan, the link (x → y for each triangle (v, x, y)) one path or one cycle.
+fn surface(points: usize, triangles: &[[u32; 3]]) -> bool {
+    let mut directed = std::collections::BTreeSet::new();
+    let mut link: Vec<BTreeMap<u32, u32>> = vec![BTreeMap::new(); points];
+    for &[a, b, c] in triangles {
+        for (u, v, w) in [(a, b, c), (b, c, a), (c, a, b)] {
+            if !directed.insert((u, v)) || link[u as usize].insert(v, w).is_some() {
+                return false;
+            }
+        }
+    }
+    link.iter().all(|next| {
+        let Some(&first) = next.keys().next() else {
+            return true;
+        };
+        // A path starts where no link edge comes in; a cycle anywhere.
+        let start = next
+            .keys()
+            .copied()
+            .find(|x| !next.values().any(|y| y == x))
+            .unwrap_or(first);
+        let (mut at, mut walked) = (start, 0);
+        while let Some(&y) = next.get(&at) {
+            walked += 1;
+            if y == start || walked > next.len() {
+                break;
+            }
+            at = y;
+        }
+        walked == next.len()
+    })
+}
+
+/// The result is a surface within ε of the input both ways, by the sampling oracle.
 fn two_way(input: &(Vec<P3>, Vec<[u32; 3]>), out: &Modelled, epsilon: u64) {
+    assert!(
+        surface(out.points().len(), out.triangles()),
+        "not a surface: {:?}",
+        out.triangles()
+    );
     let a = soup(&input.0, &input.1);
     let b = soup(out.points(), out.triangles());
     assert!(
@@ -405,6 +444,126 @@ fn a_coarse_sheet_remeshes_toward_the_target_length() {
     assert!(9 * longest <= 16 * 150 * 150 + 9 * 3 * 4, "{longest}");
     assert_eq!(euler(out.points().len(), out.triangles()), 1);
     two_way(&input, &out, epsilon);
+}
+
+/// A strip one cell wide, with a width the envelope would let a collapse pinch: every vertex is on
+/// the boundary, and joining two across the strip makes a vertex two fans meet at. The boundary
+/// rule refuses that, so the result stays a surface.
+#[test]
+fn a_narrow_strip_is_not_pinched() {
+    let mut points = Vec::new();
+    for i in 0..7 {
+        points.push(p(i * 10, 0, 0));
+        points.push(p(i * 10, 10, 0));
+    }
+    let mut triangles = Vec::new();
+    for i in 0..6_u32 {
+        let (a, b, c, d) = (2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1);
+        triangles.push([a, b, c]);
+        triangles.push([a, c, d]);
+    }
+    let input = (points, triangles);
+    let epsilon = 14;
+    for out in [
+        decimate(
+            &input.0,
+            &input.1,
+            Decimate { epsilon, target: 0 },
+            &Exec::serial(),
+            &mut meter(),
+        )
+        .unwrap(),
+        remesh(
+            &input.0,
+            &input.1,
+            Remesh {
+                epsilon,
+                length: 40,
+                iterations: 2,
+            },
+            &Exec::serial(),
+            &mut meter(),
+        )
+        .unwrap(),
+    ] {
+        assert!(out.triangles().len() < input.1.len());
+        two_way(&input, &out, epsilon);
+    }
+}
+
+/// A square of two triangles whose diagonal alone is too long: it is split once at its middle, and
+/// nothing else changes. The diagonal is the first edge of one triangle and the second of the
+/// other, so both ways a triangle is turned to put the edge first are used.
+#[test]
+fn a_long_diagonal_is_split_at_its_middle() {
+    let points = vec![p(0, 0, 0), p(300, 0, 0), p(0, 300, 0), p(300, 300, 0)];
+    let input = (points, vec![[1, 3, 0], [0, 3, 2]]);
+    let epsilon = 4;
+    let out = remesh(
+        &input.0,
+        &input.1,
+        Remesh {
+            epsilon,
+            length: 250,
+            iterations: 1,
+        },
+        &Exec::serial(),
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(out.triangles().len(), 4, "{:?}", out.triangles());
+    assert!(out.points().contains(&p(150, 150, 0)), "{:?}", out.points());
+    two_way(&input, &out, epsilon);
+}
+
+/// A flat 2 × 2 sheet with every cell's diagonal through the middle vertex, which so has eight
+/// neighbours, and every edge near the target length, so nothing is split or collapsed: flips
+/// move edges off the middle toward the corners, which have three. And smoothing moves a middle
+/// vertex set off its place back toward it.
+#[test]
+fn flips_and_smoothing_work_on_a_flat_sheet() {
+    let (points, _) = sheet(2, 100, |_, _| 0);
+    let triangles = vec![
+        [0, 1, 4],
+        [0, 4, 3],
+        [1, 2, 4],
+        [2, 5, 4],
+        [3, 4, 6],
+        [4, 7, 6],
+        [4, 5, 8],
+        [4, 8, 7],
+    ];
+    let valence = |triangles: &[[u32; 3]]| {
+        let mut around: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        for t in triangles.iter().filter(|t| t.contains(&4)) {
+            around.extend(t.iter().filter(|v| **v != 4));
+        }
+        around.len()
+    };
+    assert_eq!(valence(&triangles), 8);
+    let settings = Remesh {
+        epsilon: 4,
+        length: 110,
+        iterations: 1,
+    };
+    let input = (points.clone(), triangles.clone());
+    let out = remesh(&input.0, &input.1, settings, &Exec::serial(), &mut meter()).unwrap();
+    assert_eq!(out.triangles().len(), input.1.len());
+    // Every vertex is still there, in its number, so the middle is still number 4.
+    assert_eq!(out.points().len(), input.0.len());
+    assert!(valence(out.triangles()) < 8, "{:?}", out.triangles());
+    two_way(&input, &out, 4);
+    let mut moved = points;
+    moved[4] = p(130, 120, 0);
+    let input = (moved, triangles);
+    let out = remesh(&input.0, &input.1, settings, &Exec::serial(), &mut meter()).unwrap();
+    let off = |q: P3| (q.x.get() - 100).pow(2) + (q.y.get() - 100).pow(2);
+    assert!(
+        off(out.points()[4]) < off(p(130, 120, 0)),
+        "{:?}",
+        out.points()
+    );
+    two_way(&input, &out, 4);
 }
 
 #[test]

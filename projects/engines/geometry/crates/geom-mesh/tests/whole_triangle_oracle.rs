@@ -3,6 +3,9 @@
 //! (i + j ≤ D) on it, and [`TriangleEnvelope::contains`] decides each exactly. A triangle the test
 //! calls covered must have every such point (inside the region, when there is one) in some body.
 //! A hand-built hole shows what the lattice cannot: a point bodies only touch is not covered.
+//! The file's name sorts after the other test files', so a run that stops at its first failure
+//! (cargo test runs the files in that order) reaches the quick tests of `envelope.rs` and
+//! `model.rs` before these slow ones.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -350,4 +353,31 @@ fn a_hole_whose_corners_other_bodies_only_touch_is_not_covered() {
         covers_within(&filled, t, Some(&region), &mut meter),
         Ok(true)
     );
+}
+
+/// The same hole with the long bodies alone: each corner of the hole is where two bodies' facet
+/// lines cross and is a corner of neither body's outline, so only the crossings of two different
+/// bodies' facets find it.
+#[test]
+fn a_hole_only_two_bodies_crossing_facets_bound_is_not_covered() {
+    let h = 2;
+    let surface = [
+        [p(-2, -6, 0), p(-2, 8, 0), p(-3, 1, 0)],
+        [p(-6, -2, 0), p(8, -2, 0), p(1, -3, 0)],
+        [p(4, -6, 0), p(4, 8, 0), p(5, 1, 0)],
+        [p(-6, 4, 0), p(8, 4, 0), p(1, 5, 0)],
+    ];
+    let bodies: Vec<TriangleEnvelope> = surface
+        .iter()
+        .map(|t| TriangleEnvelope::new(*t, h).unwrap())
+        .collect();
+    let refs: Vec<&TriangleEnvelope> = bodies.iter().collect();
+    let t = [p(-3, -3, 0), p(5, -3, 0), p(1, 5, 0)];
+    assert!(!bodies.iter().any(|b| b.contains(p(1, 1, 0)).unwrap()));
+    let mut meter = WorkMeter::new(Budget::of_work(1 << 40));
+    assert_eq!(covers_within(&refs, t, None, &mut meter), Ok(false));
+    let plug = TriangleEnvelope::new([p(0, 0, 0), p(2, 0, 0), p(1, 2, 0)], h).unwrap();
+    let mut filled = refs.clone();
+    filled.push(&plug);
+    assert_eq!(covers_within(&filled, t, None, &mut meter), Ok(true));
 }

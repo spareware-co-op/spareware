@@ -752,7 +752,8 @@ impl Surface {
                 return Ok(false);
             }
         }
-        if low[0] > high[0] {
+        // A patch that removed nothing took no coverage away.
+        if gone.is_empty() {
             return Ok(true);
         }
         for key in self.input.near_keys(low, high, meter)? {
@@ -837,10 +838,8 @@ fn check_surface(
     meter: &mut WorkMeter<'_>,
 ) -> Result<(), ModelError> {
     let mut directed: Vec<(u32, u32, u32)> = Vec::with_capacity(triangles.len().saturating_mul(3));
+    // A repeated corner has no area, refused as `Flat` before this is called.
     for (&[a, b, c], face) in triangles.iter().zip(0_u32..) {
-        if a == b || b == c || c == a {
-            return Err(ModelError::Flat { face });
-        }
         directed.extend([(a, b, face), (b, c, face), (c, a, face)]);
     }
     directed.sort_unstable();
