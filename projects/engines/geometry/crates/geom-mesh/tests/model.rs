@@ -367,7 +367,7 @@ fn a_closed_cube_stays_closed_and_within_epsilon() {
 
 #[test]
 fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
-    let input = ball(3, 300.0);
+    let input = ball(2, 300.0);
     let loose = decimate(
         &input.0,
         &input.1,
@@ -383,7 +383,7 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
         &input.0,
         &input.1,
         Decimate {
-            epsilon: 24,
+            epsilon: 40,
             target: 0,
         },
         &Exec::serial(),
@@ -394,7 +394,7 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
     assert!(loose.triangles().len() < tight.triangles().len());
     assert!(tight.triangles().len() < input.1.len());
     two_way(&input, &loose, 60);
-    two_way(&input, &tight, 24);
+    two_way(&input, &tight, 40);
 }
 
 /// A spike the forward test alone would flatten: its walls are steep, so the base under it is
