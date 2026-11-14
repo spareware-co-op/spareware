@@ -19,6 +19,13 @@
 //! - **Rounding that breaks the mesh is refused.** A triangle that turned over or closed up, or two
 //!   that came to touch, are [`Flaw`]s, with their faces. [`export`] returns
 //!   [`ExportError::RoundingFlip`] unless told to accept them, and then lists them.
+//! - **The triangles of a face cover what its rounded outline encloses, or it is refused.** A face
+//!   of more than three corners is triangulated on its corners rounded to the grid, and rounding can
+//!   fold its outline back along or over itself. [`triangles`] keeps exactly the triangles that the
+//!   rounded outline winds round once: the face as the rounding of its corners moved it, never a
+//!   triangle outside that or a hole in it. A face whose rounded sides cross, or that its rounded
+//!   outline winds round any other number of times than once or not at all, is refused with
+//!   [`ExportError::RoundingFlip`] and the face, accepted or not.
 //! - **Deterministic.** The bytes depend on the mesh and the options alone, and no floating-point
 //!   sum is done: an `f32` is built from its integer.
 //!
@@ -30,8 +37,9 @@
 //! through this crate's constrained Delaunay triangulation in the plan its normal leans on least.
 //! The zip a 3MF package needs is the exchange layer's, not this one's.
 //!
-//! Cost: O(n log n) for n triangles: one triangulation per face that is not a triangle, and a query
-//! of a box tree per triangle for the check, charged to the meter per test.
+//! Cost: O(n log n) for n triangles: one triangulation per face that is not a triangle, with a box
+//! tree of its sides to count them along its edges, and a query of a box tree per triangle for the
+//! check, charged to the meter per test.
 
 #![allow(
     clippy::many_single_char_names,
@@ -51,7 +59,7 @@ use geom_num::predicate::orient2d;
 use geom_num::{Exactness, NumError, Sign};
 use geom_run::{Exec, Stopped, WorkMeter};
 
-use crate::cdt::{CdtError, Site, triangulate};
+use crate::cdt::{Cdt, CdtError, Site, triangulate};
 use crate::contact::{Contact, triangles as contact};
 use crate::exact::build::span;
 use crate::exact::{ExactMesh, MeshFault, Parts, Vertex, at};
@@ -214,56 +222,130 @@ fn outward(parts: &Parts, f: u32) -> Result<[i128; 3], MeshFault> {
     })
 }
 
-/// The triangles inside the rings of a triangulation's constrained edges: those an odd number of
-/// constraints in from the outside.
-fn inside(triangles: &[[u32; 3]], constraints: &[[u32; 2]]) -> Result<Vec<usize>, ExportError> {
-    let key = |a: u32, b: u32| (a.min(b), a.max(b));
+/// Whether `c` lies on the closed segment from `a` to `b`.
+fn on_side(a: P2, b: P2, c: P2) -> Result<bool, NumError> {
+    let within = |u: i64, v: i64, w: i64| u.min(v) <= w && w <= u.max(v);
+    Ok(orient2d(a, b, c)? == Sign::Zero
+        && within(a.x.get(), b.x.get(), c.x.get())
+        && within(a.y.get(), b.y.get(), c.y.get()))
+}
+
+/// For each constrained edge of `cdt`, from its lower vertex to its higher, the number of sides of
+/// `outline` (pairs of `sites`) that run along it that way less the number that run the other way.
+fn along(
+    cdt: &Cdt<u32>,
+    sites: &[Site<u32>],
+    outline: &[[u32; 2]],
+    meter: &mut WorkMeter<'_>,
+) -> Result<BTreeMap<(u32, u32), i64>, ExportError> {
+    let site = |s: u32| -> Result<P2, ExportError> { Ok(at(sites, s)?.at) };
+    let mut entries = Vec::with_capacity(outline.len());
+    for (&[a, b], key) in outline.iter().zip(0_u64..) {
+        let (p, q) = (site(a)?, site(b)?);
+        let (px, py, qx, qy) = (p.x.get(), p.y.get(), q.x.get(), q.y.get());
+        entries.push(Entry {
+            key,
+            bbox: Aabb::new([px.min(qx), py.min(qy)], [px.max(qx), py.max(qy)])?,
+        });
+    }
+    let tree = BoxTree::build(&entries, &Exec::serial(), meter)?;
+    let mut counts = BTreeMap::new();
+    for &[u, v] in &cdt.constraints {
+        meter.charge(1)?;
+        let (pu, pv) = (at(&cdt.vertices, u)?.at, at(&cdt.vertices, v)?.at);
+        let (ux, uy, vx, vy) = (pu.x.get(), pu.y.get(), pv.x.get(), pv.y.get());
+        let piece = Aabb::new([ux.min(vx), uy.min(vy)], [ux.max(vx), uy.max(vy)])?;
+        let mut count = 0_i64;
+        for key in tree.overlapping(&piece, meter)? {
+            let at_side = usize::try_from(key).map_err(|_| ExportError::Full)?;
+            let &[a, b] = outline.get(at_side).ok_or(MeshFault::Shape)?;
+            let (pa, pb) = (site(a)?, site(b)?);
+            if on_side(pa, pb, pu)? && on_side(pa, pb, pv)? {
+                // The side and the edge lie on one line: the same way if their x (or, on a
+                // vertical line, their y) run the same way.
+                let same = (pa.x.get() < pb.x.get()) == (ux < vx)
+                    && (pa.y.get() < pb.y.get()) == (uy < vy);
+                count = if same {
+                    count.saturating_add(1)
+                } else {
+                    count.saturating_sub(1)
+                };
+            }
+        }
+        counts.insert((u, v), count);
+    }
+    Ok(counts)
+}
+
+/// The winding number of `outline`, whose sides are the constraints of `cdt`, about each of its
+/// triangles: 0 beyond the hull, and on crossing an edge into a triangle, the count of
+/// [`along`] of that edge the way the triangle runs round it. Each triangle runs counter-clockwise,
+/// so it lies to the left of its own edges, where a side running the same way raises the winding.
+fn windings(
+    cdt: &Cdt<u32>,
+    sites: &[Site<u32>],
+    outline: &[[u32; 2]],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<i64>, ExportError> {
+    let counts = along(cdt, sites, outline, meter)?;
+    // `counts` holds each edge from its lower vertex, so an edge run the other way is the other
+    // key, and a key that is neither is an edge no side runs along.
+    let raised = |x: u32, y: u32| -> i64 {
+        match counts.get(&(x, y)) {
+            Some(&count) => count,
+            None => counts
+                .get(&(y, x))
+                .map_or(0, |count| count.saturating_neg()),
+        }
+    };
     let mut edges: BTreeMap<(u32, u32), Vec<usize>> = BTreeMap::new();
-    for (t, corners) in triangles.iter().enumerate() {
-        let [a, b, c] = *corners;
+    for (t, &[a, b, c]) in cdt.triangles.iter().enumerate() {
         for (u, v) in [(a, b), (b, c), (c, a)] {
-            edges.entry(key(u, v)).or_default().push(t);
+            edges.entry((u.min(v), u.max(v))).or_default().push(t);
         }
     }
-    let walled = |edge: (u32, u32)| {
-        let (a, b) = edge;
-        constraints.binary_search(&[a, b]).is_ok()
-    };
-    let mut depth: Vec<Option<bool>> = alloc::vec![None; triangles.len()];
+    let mut winding: Vec<Option<i64>> = alloc::vec![None; cdt.triangles.len()];
     let mut work: Vec<usize> = Vec::new();
-    for (edge, holders) in &edges {
-        if let [t] = holders.as_slice() {
-            let slot = depth.get_mut(*t).ok_or(MeshFault::Shape)?;
-            if slot.is_none() {
-                *slot = Some(walled(*edge));
-                work.push(*t);
+    for (t, &[a, b, c]) in cdt.triangles.iter().enumerate() {
+        for (u, v) in [(a, b), (b, c), (c, a)] {
+            let hull = edges
+                .get(&(u.min(v), u.max(v)))
+                .is_some_and(|h| h.len() == 1);
+            let slot = winding.get_mut(t).ok_or(MeshFault::Shape)?;
+            if hull && slot.is_none() {
+                *slot = Some(raised(u, v));
+                work.push(t);
             }
         }
     }
     while let Some(t) = work.pop() {
-        let here = depth.get(t).copied().flatten().ok_or(MeshFault::Shape)?;
-        let [a, b, c] = *triangles.get(t).ok_or(MeshFault::Shape)?;
+        meter.charge(1)?;
+        let here = winding.get(t).copied().flatten().ok_or(MeshFault::Shape)?;
+        let [a, b, c] = *cdt.triangles.get(t).ok_or(MeshFault::Shape)?;
         for (u, v) in [(a, b), (b, c), (c, a)] {
-            let edge = key(u, v);
-            let beyond = here != walled(edge);
-            for &other in edges.get(&edge).ok_or(MeshFault::Shape)? {
-                let slot = depth.get_mut(other).ok_or(MeshFault::Shape)?;
+            for &other in edges.get(&(u.min(v), u.max(v))).ok_or(MeshFault::Shape)? {
+                let slot = winding.get_mut(other).ok_or(MeshFault::Shape)?;
                 if slot.is_none() {
-                    *slot = Some(beyond);
+                    // The other triangle runs round this edge from `v` to `u`.
+                    *slot = Some(here.saturating_sub(raised(u, v)));
                     work.push(other);
                 }
             }
         }
     }
-    Ok(depth
-        .iter()
-        .enumerate()
-        .filter(|(_, d)| **d == Some(true))
-        .map(|(t, _)| t)
-        .collect())
+    let mut out = Vec::with_capacity(winding.len());
+    for w in winding {
+        out.push(w.ok_or(MeshFault::Shape)?);
+    }
+    Ok(out)
 }
 
 /// The triangles of a face of several corners, as vertices of the mesh.
+///
+/// The corners round to the grid before the face is triangulated in the plan, and that can fold
+/// its outline back along itself, or over itself. So the triangles kept are those the rounded
+/// outline winds round once ([`windings`]), and a face whose rounded sides cross, or that the
+/// outline winds round any other number of times than once or not at all, is refused.
 fn split(
     points: &[P3],
     rings: &[Vec<u32>],
@@ -271,6 +353,9 @@ fn split(
     meter: &mut WorkMeter<'_>,
     out: &mut Vec<[u32; 3]>,
 ) -> Result<(), ExportError> {
+    let flip = || ExportError::RoundingFlip {
+        flaws: alloc::vec![Flaw::Flipped { face }],
+    };
     let (axes, up) = plan_axes(n);
     let mut sites: Vec<Site<u32>> = Vec::new();
     let mut seen: BTreeMap<(i64, i64), u32> = BTreeMap::new();
@@ -290,6 +375,7 @@ fn split(
             }
             numbers.push(number);
         }
+        // Each side in its ring's order: what the winding numbers count.
         let after = numbers.iter().cycle().skip(1);
         for (&a, &b) in numbers.iter().zip(after) {
             if a != b {
@@ -298,17 +384,25 @@ fn split(
         }
     }
     let cdt = triangulate(&sites, &constraints, None, meter)?;
-    let vertex = |t: u32| -> Result<u32, ExportError> {
-        at(&cdt.vertices, t)?
-            .key
-            .ok_or_else(|| ExportError::RoundingFlip {
-                flaws: alloc::vec![Flaw::Flipped { face }],
-            })
-    };
-    for t in inside(&cdt.triangles, &cdt.constraints)? {
-        let [a, b, c] = *cdt.triangles.get(t).ok_or(MeshFault::Shape)?;
-        let (a, b, c) = (vertex(a)?, vertex(b)?, vertex(c)?);
-        out.push(if up { [a, b, c] } else { [a, c, b] });
+    // A vertex the triangulation added is where two sides cross: the outline no longer bounds the
+    // face's shape, and the vertex is not the mesh's.
+    if cdt.vertices.len() != sites.len() {
+        return Err(flip());
+    }
+    let vertex =
+        |t: u32| -> Result<u32, ExportError> { at(&cdt.vertices, t)?.key.ok_or_else(flip) };
+    let winding = windings(&cdt, &sites, &constraints, meter)?;
+    for (&[a, b, c], w) in cdt.triangles.iter().zip(winding) {
+        // Seen from outside, each outer ring runs counter-clockwise; in a plan seen from inside
+        // (`up` false), clockwise, which winds the other way.
+        match if up { w } else { w.saturating_neg() } {
+            0 => {}
+            1 => {
+                let (a, b, c) = (vertex(a)?, vertex(b)?, vertex(c)?);
+                out.push(if up { [a, b, c] } else { [a, c, b] });
+            }
+            _ => return Err(flip()),
+        }
     }
     Ok(())
 }
@@ -317,8 +411,9 @@ fn split(
 ///
 /// # Errors
 ///
-/// An [`ExportError`]: a three-plane vertex outside the frame, a face the rounding made cross
-/// itself, or a stopped meter.
+/// An [`ExportError`]: a three-plane vertex outside the frame; [`ExportError::RoundingFlip`] for a
+/// face whose rounded sides cross, or whose rounded outline winds round some of it other than
+/// once or not at all; or a stopped meter.
 pub fn triangles(mesh: &ExactMesh, meter: &mut WorkMeter<'_>) -> Result<Triangles, ExportError> {
     let parts = mesh.parts();
     let mut vertices = Vec::with_capacity(parts.verts.len());
