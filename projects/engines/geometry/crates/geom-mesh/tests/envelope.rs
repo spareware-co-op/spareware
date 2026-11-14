@@ -198,6 +198,18 @@ fn every_corner_of_the_swept_cube_is_inside_and_on_a_facet() {
 }
 
 #[test]
+fn bodies_are_equal_when_made_round_the_same_triangle_and_cube() {
+    let t = [p(0, 0, 0), p(40, 3, 0), p(5, 30, 7)];
+    let body = TriangleEnvelope::new(t, 4).unwrap();
+    assert_eq!(body, TriangleEnvelope::new(t, 4).unwrap());
+    assert_ne!(body, TriangleEnvelope::new(t, 5).unwrap());
+    assert_ne!(
+        body,
+        TriangleEnvelope::new([t[0], t[1], p(5, 30, 8)], 4).unwrap()
+    );
+}
+
+#[test]
 fn a_flat_triangle_still_has_its_envelope() {
     let segment = [p(0, 0, 0), p(10, 0, 0), p(20, 0, 0)];
     let body = TriangleEnvelope::new(segment, 2).unwrap();

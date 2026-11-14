@@ -118,8 +118,11 @@ struct Tally {
     refused_cautiously: u64,
 }
 
-#[test]
-fn a_covered_triangle_has_every_lattice_point_in_a_body() {
+/// One of three parts of the oracle's cases: every case is drawn from one generator, in order, so
+/// the cases are the same however they are split, and part k asks the runs of 18 cases (each kind
+/// of surface with each kind of region) numbered k modulo 3. Three tests run the parts side by
+/// side.
+fn lattice_part(part: u64) {
     let seed = resolve("geom-mesh covers lattice oracle", Seed::DEFAULT).unwrap();
     let mut g = SplitMix64::new(seed);
     let cases: u64 = std::env::var("COVERS_ORACLE_CASES")
@@ -185,27 +188,30 @@ fn a_covered_triangle_has_every_lattice_point_in_a_body() {
                 triangles.push([p(x - 1, y - 1, z), p(x + 2, y - 1, z), p(x - 1, y + 2, z)]);
             }
         }
-        let bodies: Vec<TriangleEnvelope> = triangles
-            .iter()
-            .map(|t| TriangleEnvelope::new(*t, h).unwrap())
-            .collect();
-        let refs: Vec<&TriangleEnvelope> = bodies.iter().collect();
         // The region: none, the body of a triangle near one of the surface's, or of any triangle.
         let region = match (case / 6) % 3 {
             0 => None,
             1 => {
                 let near = triangles[below(&mut g, triangles.len() as u64) as usize];
-                let moved = near.map(|c| {
+                Some(near.map(|c| {
                     p(
                         c.x.get() + small(&mut g, 3),
                         c.y.get() + small(&mut g, 3),
                         c.z.get() + small(&mut g, 2),
                     )
-                });
-                Some(TriangleEnvelope::new(moved, h).unwrap())
+                }))
             }
-            _ => Some(TriangleEnvelope::new(soup(&mut g, 1, 40, 8)[0], h).unwrap()),
+            _ => Some(soup(&mut g, 1, 40, 8)[0]),
         };
+        if (case / 18) % 3 != part {
+            continue;
+        }
+        let region = region.map(|r| TriangleEnvelope::new(r, h).unwrap());
+        let bodies: Vec<TriangleEnvelope> = triangles
+            .iter()
+            .map(|t| TriangleEnvelope::new(*t, h).unwrap())
+            .collect();
+        let refs: Vec<&TriangleEnvelope> = bodies.iter().collect();
         tally.cases += 1;
         let mut meter = WorkMeter::new(Budget::of_work(1 << 40));
         let answer = match covers_within(&refs, t, region.as_ref(), &mut meter) {
@@ -264,7 +270,7 @@ fn a_covered_triangle_has_every_lattice_point_in_a_body() {
             tally.refused_cautiously += 1;
         }
     }
-    eprintln!("{seed:?} {tally:?}");
+    eprintln!("{seed:?} part {part} {tally:?}");
     assert!(wrong.is_empty(), "{seed:?}: {wrong:#?}");
     assert!(
         tally.covered_by_several * 50 > tally.cases
@@ -273,6 +279,21 @@ fn a_covered_triangle_has_every_lattice_point_in_a_body() {
             && tally.refused_pinned * 200 > tally.cases,
         "{seed:?}: too few covered cases to mean anything: {tally:?}"
     );
+}
+
+#[test]
+fn a_covered_triangle_has_every_lattice_point_in_a_body() {
+    lattice_part(0);
+}
+
+#[test]
+fn a_covered_triangle_has_every_lattice_point_in_a_body_part_2() {
+    lattice_part(1);
+}
+
+#[test]
+fn a_covered_triangle_has_every_lattice_point_in_a_body_part_3() {
+    lattice_part(2);
 }
 
 /// A hole only strictness and the two-body crossings can see. Four long bodies leave the square
