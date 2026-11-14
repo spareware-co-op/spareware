@@ -17,7 +17,12 @@ its bound, forgets the entry used longest ago first and answers only where the c
 covers the stored run; and, for Gate 2 (decision 32.46:
 a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
 every curve and surface kind built from any bytes keeps the kind contract kit
-(`geom_curve::contract`, `geom_surface::contract`) under any typed transform; `arenas` (`src/arenas.rs`,
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform, and after a budget
+stop still keeps the laws that need no conversion (`check_without_conversions`, under a meter of
+its own); `curve_offsets` (`src/curve_offsets.rs`) and `surface_offsets`
+(`src/surface_offsets.rs`), the same for the offset kinds alone, which read the same bytes with
+the kind made an offset: offsets cost nearly all of what the two kinds' targets spend, so
+`curves` and `surfaces` pass them unbuilt and the other kinds get the time; `arenas` (`src/arenas.rs`,
 G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see
 each other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives
 each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G104), `geom-op`'s

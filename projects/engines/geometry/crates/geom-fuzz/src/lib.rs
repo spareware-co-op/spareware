@@ -25,7 +25,10 @@
 //! every law at every step. [`adversarial`] holds the generators aimed at chapter 28.5's hard
 //! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.46) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
-//! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
+//! [`surfaces`], every surface kind likewise (G60, G65 to G68), each with the laws that need no
+//! conversion run again after a budget stop, and the offset kinds, which cost most of their
+//! inputs' work, in targets of their own, [`curve_offsets`] (G60, G62, G67, G68) and
+//! [`surface_offsets`] (G60, G66 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
 //! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
 //! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
@@ -231,6 +234,7 @@ pub mod boxtree;
 pub mod cache;
 pub mod cbor;
 pub mod contract;
+pub mod curve_offsets;
 pub mod curves;
 pub mod encoder;
 pub mod euler;
@@ -252,6 +256,7 @@ pub mod robustness;
 pub mod roots;
 pub mod seeded;
 pub mod sequence;
+pub mod surface_offsets;
 pub mod surfaces;
 pub mod transforms;
 pub mod variants;

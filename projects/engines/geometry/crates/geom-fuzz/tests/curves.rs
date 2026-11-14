@@ -1,5 +1,6 @@
 //! The curve kinds' fuzz target, run as tests on stable Rust: bolero's test mode, the seeded leg,
-//! the input bound, and a broken kind caught.
+//! the input bound, the offsets left to their own target, and a broken kind caught, in the
+//! contract and in the pass after a budget stop.
 //!
 //! - `curves_fuzz` wraps `geom_fuzz::curves::harness` in `bolero::check!`. Under `cargo test` it
 //!   replays the files in `tests/__fuzz__/curves/corpus` and `crashes`, if any, then runs
@@ -9,10 +10,15 @@
 //! - `curves_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), so every pull request also runs a fixed set of cases, the same
 //!   on every target.
-//! - `every_kind_is_reached` decodes one input per kind tag and checks each builds and keeps the
-//!   contract, so no kind is out of the fuzzer's reach.
+//! - `every_kind_is_reached` decodes one input per kind tag and checks each keeps the contract,
+//!   so no kind is out of the fuzzer's reach; the offset is passed unbuilt, as
+//!   `tests/curve_offsets.rs` reaches it.
+//! - `no_stored_file_of_this_target_is_an_offset`: no corpus or crash file here decodes to an
+//!   offset, which this target would pass without testing.
 //! - `a_broken_kind_is_a_finding`: a kind whose bound misses its own points is caught (28.4,
-//!   fault injection: a check that cannot fail proves nothing).
+//!   fault injection: a check that cannot fail proves nothing); and
+//!   `a_broken_kind_that_stops_is_a_finding`: so is one whose conversions spend the whole budget,
+//!   by the pass without conversions after the stop.
 
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them to build their inputs.
@@ -30,15 +36,20 @@
     clippy::indexing_slicing
 )]
 
+#[path = "broken/curve.rs"]
+mod broken;
 mod common;
 
+use std::path::Path;
+
+use broken::Broken;
 use common::holds;
-use geom_curve::{CurveError, CurveKind, Line, ParamCurve};
-use geom_fuzz::curves::{KINDS, MAX_INPUT_BYTES, PARAMS, check, check_with, decode, harness};
+use geom_curve::Line;
+use geom_fuzz::curves::{
+    KINDS, MAX_INPUT_BYTES, OFFSET, PARAMS, Reached, check_with, decode, harness, reached,
+};
 use geom_fuzz::seeded;
 use geom_math::{GridTransform, TypedTransform};
-use geom_nurbs::{Bounds, Limit};
-use geom_run::WorkMeter;
 use geom_test::Seed;
 
 /// Random byte strings per `cargo test` run of the fuzz target in bolero's test mode.
@@ -117,88 +128,70 @@ fn every_kind_is_reached() {
         for space in [false, true] {
             let case = decode(&input(kind, space)).0;
             assert_eq!(case.kind, kind);
-            holds(check(&case));
+            let reached = reached(&case).unwrap_or_else(|f| panic!("{f}"));
+            // The offset is passed unbuilt: `curve_offsets` fuzzes it.
+            if kind == OFFSET {
+                assert_eq!(reached, Reached::Unbuilt);
+            }
         }
     }
 }
 
-/// A line whose bound over a span misses the line: moved by one.
-#[derive(Debug)]
-struct Moved(Line<2>);
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the corpus folders from the host, which WASI cannot without a preopened folder"
+)]
+#[test]
+fn no_stored_file_of_this_target_is_an_offset() {
+    // This target passes an offset without building it, so an offset stored here would test
+    // nothing: offsets' files belong to `tests/__fuzz__/curve_offsets`, which reads the same bytes.
+    let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/__fuzz__/curves");
+    let mut files = 0;
+    for kind in ["corpus", "crashes"] {
+        let Ok(listing) = std::fs::read_dir(folder.join(kind)) else {
+            continue;
+        };
+        for f in listing {
+            let path = f.unwrap().path();
+            let case = decode(&std::fs::read(&path).unwrap()).0;
+            assert_ne!(case.kind, OFFSET, "{} is an offset", path.display());
+            files += 1;
+        }
+    }
+    assert!(files > 0, "no stored file, so this test checked nothing");
+}
 
-impl ParamCurve<2> for Moved {
-    fn domain(&self) -> (f64, f64) {
-        self.0.domain()
-    }
-    fn point(&self, t: f64, side: Limit) -> Result<[f64; 2], CurveError> {
-        self.0.point(t, side)
-    }
-    fn derivatives(&self, t: f64, side: Limit, out: &mut [[f64; 2]]) -> Result<(), CurveError> {
-        self.0.derivatives(t, side, out)
-    }
-    fn enclose(
-        &self,
-        t: f64,
-        side: Limit,
-        order: usize,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<Vec<[geom_num::interval::Interval; 2]>, CurveError> {
-        self.0.enclose(t, side, order, meter)
-    }
-    fn bound(&self, span: (f64, f64), meter: &mut WorkMeter<'_>) -> Result<Bounds<2>, CurveError> {
-        let b = self.0.bound(span, meter)?;
-        Ok(Bounds {
-            lo: b.lo.map(|x| x + 1.0),
-            hi: b.hi.map(|x| x + 1.0),
-        })
-    }
-    fn derivative_bound(
-        &self,
-        span: (f64, f64),
-        order: usize,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<geom_curve::DerivativeBound<2>, CurveError> {
-        self.0.derivative_bound(span, order, meter)
-    }
-    fn to_nurbs(
-        &self,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<geom_nurbs::Changed<geom_curve::map::NurbsForm<2>>, CurveError> {
-        self.0.to_nurbs(meter)
-    }
-    fn split(
-        &self,
-        t: f64,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<
-        (
-            geom_nurbs::Changed<CurveKind<2>>,
-            geom_nurbs::Changed<CurveKind<2>>,
-        ),
-        CurveError,
-    > {
-        self.0.split(t, meter)
-    }
-    fn reversed(
-        &self,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<geom_nurbs::Changed<CurveKind<2>>, CurveError> {
-        self.0.reversed(meter)
-    }
-    fn transformed(
-        &self,
-        transform: &TypedTransform,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<geom_nurbs::Changed<CurveKind<2>>, CurveError> {
-        self.0.transformed(transform, meter)
+/// A line from (0, 0) along (1, 2) over [0, 1], broken as asked.
+fn line(moved: bool, dear: bool) -> Broken<Line<2>> {
+    Broken {
+        inner: Line::new([0.0, 0.0], [1.0, 2.0], (0.0, 1.0)).unwrap(),
+        moved,
+        dear,
     }
 }
 
 #[test]
 fn a_broken_kind_is_a_finding() {
-    let line = Line::new([0.0, 0.0], [1.0, 2.0], (0.0, 1.0)).unwrap();
     let t = TypedTransform::Exact(GridTransform::quarter_turns(geom_math::Axis::Z, 1));
-    holds(check_with(&line, &[0, 85, 170, 255], &t));
-    let found = check_with(&Moved(line), &[0, 85, 170, 255], &t).unwrap_err();
+    holds(check_with(&line(false, false), &[0, 85, 170, 255], &t));
+    let found = check_with(&line(true, false), &[0, 85, 170, 255], &t).unwrap_err();
     assert!(found.law.contains("kind contract"), "{found}");
+}
+
+#[test]
+fn a_broken_kind_that_stops_is_a_finding() {
+    // Conversions that spend the whole budget stop the contract in the transform law, before any
+    // law at a parameter. The stop is legal; the pass without conversions then runs those laws
+    // under its own meter, and finds the bound that misses the line.
+    let t = TypedTransform::Exact(GridTransform::quarter_turns(geom_math::Axis::Z, 1));
+    let ps = [0, 85, 170, 255];
+    holds(check_with(&line(false, true), &ps, &t));
+    let found = check_with(&line(true, true), &ps, &t).unwrap_err();
+    assert!(
+        found
+            .law
+            .contains("without its conversions, after a budget stop"),
+        "{found}"
+    );
+    assert!(found.detail.contains("over its work budget"), "{found}");
 }

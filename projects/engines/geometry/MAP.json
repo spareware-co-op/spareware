@@ -2401,13 +2401,14 @@
           "target": "lib"
         },
         {
-          "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times; and for each of at most sixteen of the kind's breaks, two enclosures and three bounds.",
-          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The two laws of bounds are also checked over the span that is one parameter alone, at each parameter given and at the kind's own breaks ([`ParamCurve::breaks`]): there a bound must be a box that holds the value from both sides (the trait's rule for spans). The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30 of the largest value at that parameter, which catches a wrong formula, not rounding.",
+          "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times; and for each of at most sixteen of the kind's breaks, two enclosures and three bounds. Without the conversions, the same less one transform, one NURBS conversion and the two laws' evaluations at each parameter.",
+          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The two laws of bounds are also checked over the span that is one parameter alone, at each parameter given and at the kind's own breaks ([`ParamCurve::breaks`]): there a bound must be a box that holds the value from both sides (the trait's rule for spans). The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30 of the largest value at that parameter, which catches a wrong formula, not rounding. [`check_without_conversions`] runs the same laws less the two that need a conversion ([`Law::TransformMovesTheCurve`] and [`Law::NurbsWithinItsError`]), so a kind whose transform or NURBS form a budget cannot pay for is still held to the rest: the fuzz targets run it after [`check`] ends on a budget stop.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
           "guarantees": [
             "**Sound.** A law reported broken is broken: two certified enclosures of one exact value that do not overlap (after widening by the stated deviations) prove that one of them is false, and a refusal the law requires that did not come is a broken refusal.",
-            "**Deterministic.** The checks run in the order of the parameters given, each law in the order of [`Law`]; the same kind and parameters give the same verdict."
+            "**Deterministic.** The checks run in the order of the parameters given, each law in the order of [`Law`]; the same kind and parameters give the same verdict.",
+            "**One body, two entries.** Both entries run one function, [`check`] with the conversions and [`check_without_conversions`] without them, so the laws they share are the same code, run in the same order, and cannot drift apart. Without the conversions it makes no call [`check`] does not make, in the same order, and none more."
           ],
           "job": "The kind contract: the laws every curve kind must keep, as a check any kind's tests run (`projects/engines/geometry/AGENTS.md`, \"How to add a geometry kind\").",
           "method": {
@@ -4854,14 +4855,37 @@
           "target": "lib"
         },
         {
-          "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
-          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve kind (one of the 15 of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is built from, up to four parameters in its domain and a typed transform. [`check`] builds the kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.46).",
+          "cost": "one offset built, one contract check bounded by [`WORK`] work units and, after a budget stop, one pass bounded by [`PARTIAL_WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] reads a fuzzer's bytes exactly as `crate::curves` does and makes the kind an offset (`CurveKind::Offset`, tag [`crate::curves::OFFSET`]): an offset of an ellipse arc, in the plane or in space with a reference direction, built from the case's doubles. [`check`] builds it and holds it to `geom_curve::contract::check` under a meter of [`WORK`] units, and when that check ends on the budget, to `geom_curve::contract::check_without_conversions` under a meter of [`PARTIAL_WORK`], by the `curves` target's own code. [`harness`] is `decode` then `check`. Offsets are 45% of the curves inputs measured on 2026-11-13 and 91.7% of their instructions, so the `curves` target passes them and they are fuzzed here, where the other fourteen kinds take none of their time and they take none of the others'. It reaches pieces G60, G62, G67 and G68 (Gate 2, 32.46).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/curve_offsets.rs",
+          "guarantees": [
+            "**Any bytes are a case.** It is the same case the `curves` target decoded from them before the split, but for the kind: a file saved by either target replays here as the offset it would have built. The first byte is read and its value set aside.",
+            "**What is a finding.** As `crate::curves` says: a law broken with no error behind it, or a call failing as `CurveError::Defect`, in the contract or in the pass after a budget stop.",
+            "**No hang.** The contract runs under [`WORK`] units and the pass after a stop under [`PARTIAL_WORK`]; running out is a typed stop, which is legal.",
+            "**A bounded input.** At most [`MAX_INPUT_BYTES`] bytes, `crate::curves`'s bound."
+          ],
+          "job": "Fuzz target: the offset curve keeps the kind contract on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), as `crate::curves` (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::curve_offsets",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units, and after a budget stop one pass bounded by [`PARTIAL_WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve kind (one of the 15 of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is built from, up to four parameters in its domain and a typed transform. [`check`] builds the kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to (piece G60, with G68's derivative laws), under a bounded work meter; when that check ends on the budget, it runs `geom_curve::contract::check_without_conversions` under a meter of its own, so the laws that need no conversion still run on a kind whose transform or NURBS form the budget could not pay for. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). An offset curve (tag [`OFFSET`]) is passed without being built: offsets cost most of what this target's inputs charge, so they have a target of their own, `crate::curve_offsets`, which reads the same bytes with the kind made an offset and runs this module's code on it. It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.46).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/curves.rs",
           "guarantees": [
             "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case. Each double is read through a rule byte that makes the hard values common: 0, ±1, a whole number or a short binary fraction on a coarse grid (so coincident and parallel data come up), a tiny or huge power of two, or a double read from the input (non-finite ones replaced by 0).",
-            "**What is a finding.** A law of the contract broken with no error behind it, or any call failing as `CurveError::Defect` (an internal step the kernel says cannot fail), is a [`Finding`]; a kind that refuses to be built, or a call that refuses with a typed error (an overflow at an extreme size, a budget stop), is legal. A panic fails every engine.",
-            "**No hang.** Every call runs under a work meter of [`WORK`] units; running out is a typed stop, which is legal.",
+            "**What is a finding.** A law of the contract broken with no error behind it, or any call failing as `CurveError::Defect` (an internal step the kernel says cannot fail), is a [`Finding`], in the check or in the pass after a budget stop; a kind that refuses to be built, or a call that refuses with a typed error (an overflow at an extreme size, a budget stop), is legal. A panic fails every engine.",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units, and the pass after a stop under one of [`PARTIAL_WORK`]; running out is a typed stop, which is legal.",
             "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it."
           ],
           "job": "Fuzz target: every curve kind keeps the kind contract on any bytes.",
@@ -5349,14 +5373,37 @@
           "target": "lib"
         },
         {
-          "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
-          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 and G65 to G68 (Gate 2, 32.46).",
+          "cost": "one offset built, one contract check bounded by [`WORK`] work units and, after a budget stop, one pass bounded by [`PARTIAL_WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] reads a fuzzer's bytes exactly as `crate::surfaces` does and makes the kind an offset (`SurfaceKind::Offset`, tag [`crate::surfaces::OFFSET`]): an offset of a cylinder, built from the case's doubles. [`check`] builds it and holds it to `geom_surface::contract::check` under a meter of [`WORK`] units, and when that check ends on the budget, to `geom_surface::contract::check_without_conversions` under a meter of [`PARTIAL_WORK`], by the `surfaces` target's own code. [`harness`] is `decode` then `check`. Offsets are 56% of the surfaces inputs measured on 2026-11-13 and 99.2% of their instructions, so the `surfaces` target passes them and they are fuzzed here, where the other ten kinds take none of their time and they take none of the others'. It reaches pieces G60 and G66 to G68 (Gate 2, 32.46).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/surface_offsets.rs",
+          "guarantees": [
+            "**Any bytes are a case.** It is the same case the `surfaces` target decoded from them before the split, but for the kind: a file saved by either target replays here as the offset it would have built. The first byte is read and its value set aside.",
+            "**What is a finding.** As `crate::surfaces` says: a law broken with no error behind it, or a call failing as `CurveError::Defect`, in the contract or in the pass after a budget stop.",
+            "**No hang.** The contract runs under [`WORK`] units and the pass after a stop under [`PARTIAL_WORK`]; running out is a typed stop, which is legal.",
+            "**A bounded input.** At most [`MAX_INPUT_BYTES`] bytes, `crate::surfaces`'s bound."
+          ],
+          "job": "Fuzz target: the offset surface keeps the kind contract on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the kind contract of chapter 7 as `geom_surface::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), as `crate::surfaces` (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::surface_offsets",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units, and after a budget stop one pass bounded by [`PARTIAL_WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter; when that check ends on the budget, it runs `geom_surface::contract::check_without_conversions` under a meter of its own, so the laws that need no conversion still run on a kind whose transform or NURBS form the budget could not pay for. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). An offset surface (tag [`OFFSET`]) is passed without being built: offsets cost nearly all of what this target's inputs charge, so they have a target of their own, `crate::surface_offsets`, which reads the same bytes with the kind made an offset and runs this module's code on it. It reaches pieces G60 and G65 to G68 (Gate 2, 32.46).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/surfaces.rs",
           "guarantees": [
             "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case, through the same rule bytes as the `curves` target: 0, ±1, whole numbers and quarters on a coarse grid, tiny and huge powers of two, or a double read from the input.",
-            "**What is a finding.** A law of the contract broken with no error behind it, or any call failing as `CurveError::Defect`, is a [`Finding`]; a kind that refuses to be built, or a call that refuses with a typed error (an overflow, a normal that cannot be separated from zero, a budget stop), is legal. A panic fails every engine.",
-            "**No hang.** Every call runs under a work meter of [`WORK`] units; running out is a typed stop, which is legal.",
+            "**What is a finding.** A law of the contract broken with no error behind it, or any call failing as `CurveError::Defect`, is a [`Finding`], in the check or in the pass after a budget stop; a kind that refuses to be built, or a call that refuses with a typed error (an overflow, a normal that cannot be separated from zero, a budget stop), is legal. A panic fails every engine.",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units, and the pass after a stop under one of [`PARTIAL_WORK`]; running out is a typed stop, which is legal.",
             "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it."
           ],
           "job": "Fuzz target: every surface kind keeps the kind contract on any bytes.",
@@ -12052,13 +12099,14 @@
           "target": "lib"
         },
         {
-          "cost": "for each parameter pair, a few enclosures and bounds (the partials to order 2 among them), a split, a reversal and a transform.",
-          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it, as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within 2^−30 of the largest value there (a wrong formula, not rounding).",
+          "cost": "for each parameter pair, a few enclosures and bounds (the partials to order 2 among them), a split, a reversal and a transform. Without the conversions, the same less one transform, one NURBS conversion and the two laws' evaluations at each pair.",
+          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it, as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within 2^−30 of the largest value there (a wrong formula, not rounding). [`check_without_conversions`] runs the same laws less the two that need a conversion ([`Law::TransformMovesTheCurve`] and [`Law::NurbsWithinItsError`]), so a kind whose transform or NURBS form a budget cannot pay for is still held to the rest: the fuzz targets run it after [`check`] ends on a budget stop.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
           "guarantees": [
             "**Sound.** A law reported broken is broken (two certified enclosures of one value that miss each other, a sign the normal bound decides that the exact normal contradicts, or a refusal that did not come).",
-            "**Deterministic.** Parameters in the order given, laws in a fixed order."
+            "**Deterministic.** Parameters in the order given, laws in a fixed order.",
+            "**One body, two entries.** Both entries run one function, [`check`] with the conversions and [`check_without_conversions`] without them, so the laws they share are the same code, run in the same order, and cannot drift apart. Without the conversions it makes no call [`check`] does not make, in the same order, and none more."
           ],
           "job": "The kind contract for surfaces: the laws every surface kind must keep, as a check any kind's tests run (`projects/engines/geometry/AGENTS.md`, \"How to add a geometry kind\").",
           "method": {
