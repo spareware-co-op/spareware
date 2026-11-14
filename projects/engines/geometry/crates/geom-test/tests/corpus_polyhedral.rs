@@ -427,9 +427,9 @@ fn every_selection_of_ember_s_figures_is_the_unit_cells_and_the_reference() {
 fn every_figure_result_is_written_in_the_native_format() {
     // Every result of every selection is a body the native format stores (24.3), and has no
     // vertex the subdivision's boxes made: none on a plane that halves a grid step (11.3: the
-    // same result however the boxes fell). Imprint and general fuse fail both today (see the
-    // pull request): a seam their cuts hold open keeps a vertex where a box's plane crosses it,
-    // named by unreduced planes, which the format refuses.
+    // same result however the boxes fell). Imprint and general fuse once failed both: a cut lying
+    // in a face, parted by a box, held a seam on the box's plane, whose vertices were named by
+    // unreduced planes, which the format refuses (geom-poly's merge now nets a cut's parts).
     let mut wrong = Vec::new();
     for (figure, blocks) in figures() {
         for (pick, bodies) in picks().iter().zip(select_all(&blocks, &Exec::serial())) {
@@ -847,8 +847,8 @@ fn corpus(exec: &Exec<'_>) -> (Sha256, usize) {
         for bodies in select_all(&blocks, exec) {
             put(&mut total, &(bodies.len() as u64).to_le_bytes());
             for one in &bodies {
-                // A body the format refuses goes in by its refusal, as a refused model does:
-                // `every_figure_result_is_written_in_the_native_format` fails on it.
+                // A body the format refuses would go in by its refusal, as a refused model does;
+                // `every_figure_result_is_written_in_the_native_format` fails on any.
                 match write_body(&one.body, &mut meter()) {
                     Ok(stored) => {
                         for r in stored.chunks.iter().chain([&stored.index]) {

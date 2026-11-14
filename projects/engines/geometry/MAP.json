@@ -12841,7 +12841,7 @@
             "**Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by their Plücker coordinates, in at most 576 bits, and nothing is rounded.",
             "**Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has no partner across it, mean the pieces are no closed boundary: [`MergeError`].",
             "**Each fin knows its piece.** [`Fin::piece`] is an index into the pieces given, whose [`Outward::polygon`] names where it came from, for a caller's history.",
-            "**Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut that ends inside a face leaves it whole, with no slit.",
+            "**Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut that ends inside a face leaves it whole, with no slit. A cut lying in a face's own plane holds a seam only along its outline: its pieces on both sides of a line, as the boxes and the convex split part it, cancel, so a result has no vertex where the boxes fell.",
             "**No recursion.** Disjoint sets and rings are walked in loops (principle 13)."
           ],
           "job": "The maximal-face merge: the pieces a selection keeps, as faces, edges, rings and shells (11.3, step 5), shared by `geom-bool` and `geom-mesh` (19.5, 27).",
