@@ -12,9 +12,9 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
-use geom_num::NumError;
 use geom_num::plane::{Plane, Tpi};
-use geom_poly::convex::Piece;
+use geom_num::{NumError, P3, Sign};
+use geom_poly::convex::{Piece, convex_pieces};
 use geom_poly::subdivide::{
     LEAF_POLYGONS, Solved, around, around_on, arrange, arrange_reusing, arrange_with,
 };
@@ -615,6 +615,64 @@ fn a_small_budget_stops_the_arrangement() {
         ),
         "{got:?}"
     );
+}
+
+/// The triangle `a`, `b`, `c` as one convex piece of entry 0: its sides are the vertical planes
+/// through its edges, each with the third corner on its positive side.
+fn triangle(a: [i64; 3], b: [i64; 3], c: [i64; 3]) -> Polygon {
+    let at = |p: [i64; 3]| P3::new(p[0], p[1], p[2]).unwrap();
+    let side = |u: [i64; 3], v: [i64; 3], w: [i64; 3]| {
+        let s = Plane::through(at(u), at(v), at([u[0], u[1], u[2] + 1])).unwrap();
+        match s.side(at(w)).unwrap() {
+            Sign::Positive => s,
+            _ => Plane::new(s.n().map(|x| -x), -s.d()).unwrap(),
+        }
+    };
+    let face = Plane::through(at(a), at(b), at(c)).unwrap();
+    let ring = vec![side(a, b, c), side(b, c, a), side(c, a, b)];
+    let mut pieces = convex_pieces(&face, &[ring], &mut meter()).unwrap();
+    assert_eq!(pieces.len(), 1);
+    Polygon {
+        piece: pieces.pop().unwrap(),
+        entry: Some(0),
+    }
+}
+
+/// `m` slivers from one apex to a far edge a million steps away, 64 steps apart and curving up:
+/// the slivers meet at the apex and run side by side, each on its own plane, as the faces of
+/// Manifold's `Generic_Twin_7081.1.t0` models do (fans of up to 1,929 slivers within a tenth of
+/// a degree of each other).
+fn fan(m: i64) -> Vec<Polygon> {
+    let far = |i: i64| [1 << 20, 64 * i, i * i];
+    (0..m)
+        .map(|i| triangle([0; 3], far(i), far(i + 1)))
+        .collect()
+}
+
+#[test]
+fn a_fan_of_slivers_is_not_clipped_in_proportion_to_its_size() {
+    // Before a split had to pay, the boxes parted the slivers a few at a time and clipped each
+    // into pieces in proportion to the fan's size: 3,223 pieces at work 520,287 for 64 slivers,
+    // 15,157 at 2,627,533 for 128 and 60,830 for 256, about four times as many for each doubling. No split pays here, as
+    // every one copies most slivers, so the fan is one leaf: each sliver one piece (they never
+    // cross), and its local cuts' pairs the work, the square of the slivers and no more.
+    for (m, work) in [(64, 24_704), (128, 98_560)] {
+        let list = fan(m);
+        let cell = around(&list).unwrap();
+        let mut counted = meter();
+        let got = arrange(
+            &Exec::serial(),
+            cell,
+            Winding::new(),
+            &list,
+            LEAF_POLYGONS,
+            &[],
+            &mut counted,
+        )
+        .unwrap();
+        assert_eq!(got.len(), list.len(), "{m} slivers");
+        assert_eq!(counted.used().work, work, "{m} slivers");
+    }
 }
 
 fn any_block() -> impl Strategy<Value = Block> {
