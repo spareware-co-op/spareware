@@ -72,8 +72,8 @@ use super::named::{Keep, Moves, to};
 use crate::arenas::Arenas;
 use crate::body::{Body, BodyKind};
 use crate::entity::{
-    CurveIx, Edge, EdgeIx, Face, FaceIx, Fin, FinIx, Loop, LoopIx, Region, RegionIx, RegionKind,
-    Sense, Shell, ShellIx, SurfaceIx, Vertex, VertexIx,
+    CurveIx, Edge, EdgeIx, Face, FaceIx, Fin, FinIx, Loop, LoopIx, PointKind, Region, RegionIx,
+    RegionKind, Sense, Shell, ShellIx, SurfaceIx, Vertex, VertexIx,
 };
 use crate::error::{Refusal, TopoError};
 use crate::ix::{Arena, Ix, Kind};
@@ -290,7 +290,7 @@ impl Euler {
             Arena::Fin => &l.fins,
             Arena::Edge => &l.edges,
             Arena::Vertex => &l.vertices,
-            Arena::Surface | Arena::Curve | Arena::Pcurve | Arena::Point => &[],
+            Arena::Surface | Arena::Curve | Arena::Pcurve | Arena::Point | Arena::Plane => &[],
         };
         usize::try_from(row).ok().and_then(|r| mask.get(r)) == Some(&true)
     }
@@ -365,7 +365,7 @@ impl Euler {
     }
 
     fn add_vertex(&mut self, v: NewVertex) -> Result<VertexIx, TopoError> {
-        let point = self.arenas.points.push(v.point)?;
+        let point = self.arenas.points.push(PointKind::Grid(v.point))?;
         let ix = self.arenas.vertices.push(Vertex { point })?;
         self.names.vertices.push(v.name);
         self.live.vertices.push(true);
@@ -924,6 +924,8 @@ impl Euler {
                 .map(|p| Some(p.row()))
                 .zip(live.vertices.iter().copied()),
         );
+        // A plane is kept whichever vertices went: the pool is the body's, and its order the moves'.
+        let planes: Vec<bool> = a.planes.iter().map(|_| true).collect();
         let keep = |mask: &[bool]| Keep::new(mask.iter().copied());
         let moves = Moves {
             regions: keep(&live.regions),
@@ -937,6 +939,7 @@ impl Euler {
             curves: keep(&curves),
             pcurves: keep(&pcurves),
             points: keep(&points),
+            planes: keep(&planes),
         };
         let kept = moves.arenas(&arenas, meter)?;
         let names = Names {

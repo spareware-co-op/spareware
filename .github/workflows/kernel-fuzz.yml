@@ -28,9 +28,9 @@ name: Kernel fuzzing and proofs
 #   found.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
-# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-name, geom-num,
-# geom-nurbs, geom-op, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with
+# every crate of the workspace it depends on (geom-bench, geom-bool, geom-bvh, geom-check, geom-curve,
+# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-mesh, geom-name, geom-num,
+# geom-nurbs, geom-op, geom-poly, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with
 # engine-geometry and kit-core through geom-gen's facade generators;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
 # its job kani-op, geom-format for kani-format, the workspace
@@ -55,6 +55,7 @@ on:
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bool/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
@@ -97,6 +98,7 @@ on:
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bool/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
@@ -167,7 +169,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, contract_fuzz, curves_fuzz, encoder_fuzz, euler_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, naming_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, p21_fuzz, predicates_fuzz, prune_fuzz, records_fuzz, references_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, contract_fuzz, curves_fuzz, encoder_fuzz, euler_fuzz, exact_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, naming_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, p21_fuzz, planes_fuzz, predicates_fuzz, prune_fuzz, records_fuzz, references_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -295,6 +297,10 @@ jobs:
           - eft::proofs::two_prod_with_minus_a_tenth
           - eft::proofs::two_prod_with_the_largest_double
           - eft::proofs::two_prod_with_the_smallest_subnormal
+          - distance::proofs::cross_is_the_cross_product
+          - distance::proofs::point_line_has_the_sign_of_its_gap
+          - distance::proofs::point_point_has_the_sign_of_its_gap
+          - distance::proofs::triple_has_the_sign_of_its_gap
           - eft::proofs::two_prod_with_the_splitter
           - eft::proofs::two_prod_with_three
           - eft::proofs::two_prod_with_two_pow_996
@@ -511,12 +517,6 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
-  # Bounded proofs beside geom-op's own code (chapter 28.7; piece G86), as kani-num proves
-  # geom-num's: the canonical CBOR encoder's binary16 and binary32 narrowing, each proven exact and
-  # shortest for every finite double, and a refused double proven to write nothing. geom-op's
-  # tests/kani_harnesses.rs holds this list to the harnesses in the source. The budget: on a
-  # development machine (Kani 0.68.0) each proof took under 3 seconds after a one-minute build, so
-  # 60 minutes leaves room for Kani's install, which takes most of a job.
   kani-op:
     name: Kani, geom-op (${{ matrix.proof }})
     runs-on: ubuntu-latest

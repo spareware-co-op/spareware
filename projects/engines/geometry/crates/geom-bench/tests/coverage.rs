@@ -58,7 +58,8 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 28] = [
+const GEOM_NUM: [(&str, &str); 30] = [
+    ("distance", include_str!("../../geom-num/src/distance.rs")),
     ("ball", include_str!("../../geom-num/src/ball.rs")),
     ("brent", include_str!("../../geom-num/src/brent.rs")),
     ("dd", include_str!("../../geom-num/src/dd.rs")),
@@ -94,6 +95,7 @@ const GEOM_NUM: [(&str, &str); 28] = [
     ("rng", include_str!("../../geom-num/src/rng.rs")),
     ("scalar", include_str!("../../geom-num/src/scalar.rs")),
     ("sign", include_str!("../../geom-num/src/sign.rs")),
+    ("step", include_str!("../../geom-num/src/step.rs")),
     ("wide", include_str!("../../geom-num/src/wide.rs")),
     ("wide32", include_str!("../../geom-num/src/wide32.rs")),
 ];
@@ -535,6 +537,13 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_bool",
+        &[
+            ("batch", include_str!("../../geom-bool/src/batch.rs")),
+            ("combine", include_str!("../../geom-bool/src/combine.rs")),
+        ],
+    ),
+    (
         "geom_make",
         &[
             (
@@ -587,6 +596,20 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
             ("hash", include_str!("../../geom-op/src/hash.rs")),
             ("name", include_str!("../../geom-op/src/name.rs")),
             ("history", include_str!("../../geom-op/src/history.rs")),
+        ],
+    ),
+    (
+        "geom_mesh",
+        &[
+            ("cdt", include_str!("../../geom-mesh/src/cdt.rs")),
+            ("boolean", include_str!("../../geom-mesh/src/boolean.rs")),
+            ("classify", include_str!("../../geom-mesh/src/classify.rs")),
+            ("contact", include_str!("../../geom-mesh/src/contact.rs")),
+            ("envelope", include_str!("../../geom-mesh/src/envelope.rs")),
+            (
+                "exact::build",
+                include_str!("../../geom-mesh/src/exact/build.rs"),
+            ),
         ],
     ),
     (

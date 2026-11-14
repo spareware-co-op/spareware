@@ -484,34 +484,50 @@ fn group_2_runs_only_on_a_body_group_1_passed() {
 
 #[test]
 fn groups_2_and_3_charge_one_unit_per_row_and_pair_visited() {
-    let work = |rows: &Rows, level| {
+    let work = |rows: &Rows, record, level| {
         let body = rows.body(BodyKind::Solid);
         let mut m = meter();
-        check(&body, certified(1), level, &mut m).unwrap();
+        check(&body, record, level, &mut m).unwrap();
         m.used().get(BudgetKind::Work)
     };
     // Group 2, one unit per face, fin and edge, then one per face and per fin of a flat face for
     // its box; group 3, one per face, per pair of a face's edges, per pair of faces and per edge
-    // tested against a face, then one per face and fin for the loops, and one per shell, face,
-    // loop and fin for the volume, one per shell of its region. The cube: 6 faces, 24 fins and 12
-    // edges, 6 and 24; 6 faces, 6 pairs of edges in each, 15 pairs of faces, and each of the 12
-    // pairs that meet at an edge tests its 8 edges, then 6 and 24, and 1, 6, 6, 24 and 1. The
-    // cylinder with a seam: 3 faces, 6 fins and 3 edges, 3 and the caps' 2 fins; 3 faces, the 3
+    // tested against a face, then one per face and fin for the loops, and for the volume one per
+    // shell and one per shell of its region, with what the volume's walk visits between them.
+    // In a body recorded Exact that is each face, loop and fin of the shell once; in any other,
+    // each loop and fin for the faces' area vectors and each fin again for the corners that
+    // bracket the volume. The cube: 6 faces, 24 fins and 12
+    // edges and 8 vertices, 6 and 24; each fin outlined, 6 faces, 6 pairs of edges in each, 15
+    // pairs of faces, and each of the 12 pairs that meet at an edge takes the side of the second
+    // face's plane each of the first's 4 corners lies on, which settles it with no line cut, the
+    // parallel pairs' boxes settling them, then 6 and 24, and 1, 6, 6, 24 and 1, or 1, 6, 24, 24
+    // and 1. The
+    // cylinder with a seam: 2 vertices, 3 faces, 6 fins and 3 edges, 3 and the caps' 2 fins; the
+    // caps' 2 fins, which no outline takes, 3 faces, the 3
     // pairs of the side's edges, 3 pairs of faces (parallel caps, and caps that share a circle with
     // the side, tested without their edges), then 3 and the caps' 2, and the shell, its first
-    // face, cap and circle, and 1.
-    for (rows, rows_visited) in [
+    // cap's loop and circle, and 1.
+    let cube_before_its_volume =
+        (8 + 6 + 24 + 12) + (6 + 24) + (24 + 6 + 6 * 6 + 15 + 12 * 4) + (6 + 24);
+    for (rows, record, rows_visited) in [
         (
             cube(),
-            (6 + 24 + 12) + (6 + 24) + (6 + 6 * 6 + 15 + 12 * 8) + (6 + 24) + (1 + 6 + 6 + 24 + 1),
+            Exactness::Exact,
+            cube_before_its_volume + (1 + 6 + 6 + 24 + 1),
+        ),
+        (
+            cube(),
+            certified(1),
+            cube_before_its_volume + (1 + 6 + 24 + 24 + 1),
         ),
         (
             seamed_cylinder(),
-            (3 + 6 + 3) + (3 + 2) + (3 + 3 + 3) + (3 + 2) + (1 + 3 + 1),
+            certified(1),
+            (2 + 3 + 6 + 3) + (3 + 2) + (2 + 3 + 3 + 3) + (3 + 2) + (1 + 2 + 1),
         ),
     ] {
         assert_eq!(
-            work(&rows, Level::Full) - work(&rows, Level::Cheap),
+            work(&rows, record, Level::Full) - work(&rows, record, Level::Cheap),
             rows_visited
         );
     }

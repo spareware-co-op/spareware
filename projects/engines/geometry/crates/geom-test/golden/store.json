@@ -290,9 +290,15 @@
               "kind": "corpus",
               "piece": "G100",
               "why": "2 new count benchmarks in a new group: facade (G100, Gate 3's record: a registered operation found by name in the facade's table and its schema read, and make.box dispatched by name through the facade's re-export with its class checked against its schema); no existing digest moved"
+            },
+            {
+              "sha256": "cc13b5939bfbf8c3cdb3806d9d25ab4f91b827e92aef476a4e2096d84370ac59",
+              "kind": "corpus",
+              "piece": "Phase 4 train 1 (G123 to G155)",
+              "why": "Phase 4's first train, one record for its pieces' 32 new count benchmarks: 14 on geom-num's plane functions (G138: plane::determinant_sign and its fellows), mesh/cdt (G153), mesh/exact_build (G146), 6 on the distance comparisons and triangle contact (G151), mesh/envelope (G152), mesh/locate (G147), mesh/boolean (G148) and 7 scenarios of the flat boolean (G140); and topo/publish's input digest, which moves because a vertex's point is now a PointKind (the G129 fix), while its output digest stays.; and facade/lookup's output digest (main's G100), which moves because the train's query.area and query.volume schemas list one more error, ImplicitVertex (G129), so the error count the benchmark reads for those two operations is one more, while its input digest stays. No other existing digest moved"
             }
           ],
-          "sha256": "cc13b5939bfbf8c3cdb3806d9d25ab4f91b827e92aef476a4e2096d84370ac59"
+          "sha256": "00291a049e83434c5aa58f8967129acf76c325e23026f4fcdf63d56787119b20"
         },
         {
           "id": "geom-nurbs/operations",
@@ -687,6 +693,66 @@
             "function": "every_exhibit_opens_and_replays_on_this_target"
           },
           "sha256": "76634dd5ae283981eb2fbe1e5cf6e76a8e0d586a56ffbfa7a8bcb50c97749aa5"
+        },
+        {
+          "id": "geom-poly/commits",
+          "what": "geom-poly's committed planes (piece G142): seeded commits of a plane through an edge and a free plane, and their images under a quarter turn and a mirror, every coefficient and every deviation's bits.",
+          "check": {
+            "crate": "geom-poly",
+            "test": "commit_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "6cf5c186dfbe9dccc0f128643959d7c5f55872be7a2cc78b29f353bbe29bc2ba"
+        },
+        {
+          "id": "geom-test/naming-fixtures",
+          "what": "The naming and reference fixtures (piece G141): every reference of 13 parametric walls with doors and openings, resolved by geom_name::resolve after each upstream edit (regenerations, later cuts, a fill, a move and a mirror, the element deleted, the history pruned), one line each as geom_test::naming::report writes them: the NameIds compared on every target of the determinism matrix.",
+          "check": {
+            "crate": "geom-test",
+            "test": "naming",
+            "function": "the_names_are_the_same_on_every_target"
+          },
+          "sha256": "b0535c4ba04a79882804f8656f5e359da1df62128b9121b59d2b415a337ef900"
+        },
+        {
+          "id": "geom-mesh/cdt",
+          "what": "The constrained Delaunay triangulation of geom-mesh (piece G153): cocircular grids of 2 to 32 points a side, plain and with crossing constraints; 16 scatters with constraints between random points; 8 outlines refined to a quality. Vertices, triangles and constrained edges in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "cdt_determinism",
+            "function": "cdt_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e785c8bb58ed861f1eafccaa437e35dca30ec69a695ddf3abb238d1db057cb11"
+        },
+        {
+          "id": "geom-mesh/exact",
+          "what": "The exact mesh of geom-mesh (piece G146): boxes at five scales, 16 closed height fields and a cut pyramid with corners off the grid. Every array of each mesh and its volume, in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "exact_determinism",
+            "function": "exact_mesh_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "c5cb15aaf5ad8f21e50ad1dd903efb38d0dbc85e695e17afc662519ecbdbc134"
+        },
+        {
+          "id": "geom-test/names-on-every-target",
+          "what": "The law catalogue's names row (piece G155): from a fixed seed, 60 primitives (boxes, prisms, cylinders, cones, spheres and tori), each followed by up to three steps (grid moves, quarter turns, mirrors, pattern copies and, on flat bodies, unions, intersections and differences with a box); every body's names and every history in its canonical encoding, as tests/laws_names.rs records them.",
+          "check": {
+            "crate": "geom-test",
+            "test": "laws_names",
+            "function": "the_same_names_on_every_target"
+          },
+          "sha256": "e6c47d58967776c59d90e023a3a3c099377e17ab27ea3f3e5818d7e9893bd963"
+        },
+        {
+          "id": "geom-mesh/boolean",
+          "what": "Mesh booleans of geom-mesh (piece G148): the union, intersection and difference, in one arrangement, of the shapes bench's four pairs at size class 0 and radius 2^13 steps, and of three pairs of solids reaching ±(2^40 − 1). Every array of each result mesh, its runs and its volume, and its run-level history, in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "boolean_determinism",
+            "function": "boolean_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "7d7eb9015bb8b9744ca2e243265c55797173b2de30c2e84e0c0a1bfab3a68f7c"
         }
       ]
     }

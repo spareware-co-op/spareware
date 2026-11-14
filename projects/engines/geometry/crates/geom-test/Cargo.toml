@@ -40,6 +40,12 @@ geom-curve = { path = "../geom-curve" }
 geom-math = { path = "../geom-math" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
+# The second checker for exact meshes (G135, src/second_mesh.rs): the arrays it reads.
+geom-mesh = { path = "../geom-mesh" }
+# The naming fixtures (G141): the boolean that cuts their openings and the resolver their references
+# go through. Ours, Apache-2.0.
+geom-bool = { path = "../geom-bool" }
+geom-name = { path = "../geom-name" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 serde_json = "1.0.149"
 # Cargo's metadata in its typed model, and the command that asks for it, so the dependency rule
@@ -134,6 +140,17 @@ geom-nurbs = { path = "../geom-nurbs" }
 geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 geom-math = { path = "../geom-math" }
+# tests/second_mesh.rs: a mesh's runs are named.
+geom-op = { path = "../geom-op" }
+# The boolean, its primitives, topology, checker and polygon engine, which the law catalogue of 28.3
+# checks for booleans and cells, mass properties and names (G155, tests/laws_booleans.rs and its
+# sisters). Ours, Apache-2.0; development dependencies, so no kernel crate comes to depend on this one.
+geom-bool = { path = "../geom-bool" }
+geom-make = { path = "../geom-make" }
+geom-topo = { path = "../geom-topo" }
+geom-check = { path = "../geom-check" }
+geom-poly = { path = "../geom-poly" }
+geom-name = { path = "../geom-name" }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -14,6 +14,8 @@
 //! The first piece (G11) holds the parts every later test leans on, G15 adds the map, G16 the
 //! source ledger and the banned-source scan, and G19 the golden store and the determinism matrix:
 //!
+//! - [`second_mesh`]: 19.2's rules again for exact meshes, in exact rationals, sharing no code with
+//!   `geom-mesh`'s checker (chapter 28.4; G135).
 //! - [`seed`]: the seed discipline. Every seeded test prints `seed: <hex>` before it draws anything,
 //!   and the environment variable `SPAREKIT_SEED` replays any printed seed exactly (28.5, 28.17).
 //! - [`rng`]: `SplitMix64`, the small, specified, test-only generator behind every seeded test
@@ -42,6 +44,10 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`second_check`]: chapter 8.3's rules again, for flat bodies, in exact rationals, sharing no
+//!   code with `geom-check` (chapter 28.4; G135).
+//! - [`plane_bodies`]: polyhedra whose every vertex is the meeting of three planes, moved a step off
+//!   the grid (G135).
 //! - [`faults`]: checker fault injection (chapter 28.4; G110): valid bodies broken one fault at a
 //!   time, each caught with the right kind, and every valid body passed.
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
@@ -65,6 +71,9 @@
 //! - [`museum`]: the format museum (28.13, 24.6; G99): sample files and operation logs of every
 //!   released format version and edition, compiled in and held to their recorded hashes on every
 //!   target.
+//! - [`naming`]: the naming and reference fixtures (28.3; G141): parametric walls built by the
+//!   kernel's operations, every stored reference resolved after each upstream edit and held to its
+//!   expected outcome, and their names a golden on every target.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -129,7 +138,22 @@
 //!   a dense sample of exact or 400-bit values (`tests/truth`, each kind's definition written from
 //!   its documentation); fixed seeds on pull requests, fresh ones nightly (`kernel-nightly.yml`).
 //!
-//! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
+//! Piece G136 adds the reference for flat solids:
+//!
+//! - [`flat_reference`]: booleans, imprint, cells, plane sections, In-On-Out, volumes, centroids,
+//!   clash and first contact in exact rationals, by brute force over a full plane arrangement,
+//!   written from the definitions alone; `tests/flat_reference.rs` holds it to hand cases.
+//!
+//! Piece G155 adds the law catalogue of section 28.3 for numbers and frames, booleans and cells,
+//! flat mass properties, names and history, and formats:
+//!
+//! - `tests/laws_numbers.rs`, `tests/laws_booleans.rs`, `tests/laws_mass.rs`, `tests/laws_names.rs`
+//!   and `tests/laws_formats.rs`: each law of those rows as a seeded property test, the flat ones
+//!   held to [`flat_reference`] and every rounding to exact rationals; their shared draw, report
+//!   and flat solids are `tests/catalogue`. Fixed seeds on pull requests, fresh ones nightly
+//!   (`kernel-nightly.yml`); the names row's digest is the golden `geom-test/names-on-every-target`.
+//!
+//! The other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
@@ -206,6 +230,9 @@
 //!   a standalone native file, and the meter its readers take.
 //! - `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), development dependencies (G69):
 //!   the kinds and transforms the law catalogue checks.
+//! - `geom-bool`, `geom-make`, `geom-topo`, `geom-check`, `geom-poly` and `geom-name` (Apache-2.0,
+//!   ours), development dependencies (G155): the booleans, primitives, transforms, queries, checker
+//!   and names the law catalogue checks.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -241,6 +268,7 @@ pub mod deps;
 pub mod faults;
 pub mod fixed;
 pub mod fixture;
+pub mod flat_reference;
 pub mod foundation;
 pub mod golden;
 pub mod grid;
@@ -252,14 +280,18 @@ pub mod map;
 pub mod miri;
 pub mod museum;
 pub mod mutants;
+pub mod naming;
 pub mod nurbs_reference;
 pub mod oracle;
+pub mod plane_bodies;
 pub mod prop;
 pub mod quality_ledger;
 pub mod recursion;
 pub mod rng;
 pub mod rust_source;
 pub mod scan;
+pub mod second_check;
+pub mod second_mesh;
 pub mod seed;
 pub mod trip;
 

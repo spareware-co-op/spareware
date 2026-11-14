@@ -1,0 +1,2187 @@
+//! Attacks on chapter 8.3's groups 2 and 3 for plane-based bodies (G134): vertices where three
+//! planes meet, faces of any shape, on planes that cross, on one plane, and shells that nest.
+//!
+//! The polyhedra here have three faces at every vertex, so each can be tilted: every face's plane
+//! moved a step or so off its grid points, and every vertex the meeting of its three planes, at a
+//! place no grid point holds. Moving a plane so little changes no shape, so every tilted polyhedron
+//! must pass, and each fault planted in one must be found, by name.
+
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::redundant_closure_for_method_calls,
+    clippy::unwrap_used,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test fixtures; the rules are for kernel code"
+)]
+
+mod common;
+
+use common::{
+    CUBE_FACES, Rows, certified, faces_into, ix, kinds, level, line, meter, parallel, polyhedron,
+    report, round_cylinder, seamed_cylinder,
+};
+use geom_check::{Entity, Fault, FaultKind, Level, Report, check};
+use geom_curve::CurveKind;
+use geom_math::Box3;
+use geom_num::{Exactness, GridStep, P3, Steps};
+use geom_run::{Budget, Stop, WorkMeter};
+use geom_surface::{Plane, SurfaceKind};
+use geom_topo::{Body, BodyKind, RegionKind, Sense};
+
+/// A polyhedron: its corners, and for each solid region its shells, each a list of faces, each a
+/// list of loops of corner numbers, counter-clockwise seen from outside and holes clockwise.
+#[derive(Clone, Copy)]
+struct Spec<'a> {
+    points: &'a [[i64; 3]],
+    regions: &'a [&'a [&'a [&'a [&'a [u32]]]]],
+}
+
+/// Side 100, corners by bits: bit 0 x, bit 1 y, bit 2 z.
+const fn corners(o: [i64; 3], s: [i64; 3]) -> [[i64; 3]; 8] {
+    let [x, y, z] = o;
+    let [a, b, c] = s;
+    [
+        [x, y, z],
+        [x + a, y, z],
+        [x, y + b, z],
+        [x + a, y + b, z],
+        [x, y, z + c],
+        [x + a, y, z + c],
+        [x, y + b, z + c],
+        [x + a, y + b, z + c],
+    ]
+}
+
+const BOX_POINTS: [[i64; 3]; 8] = corners([0, 0, 0], [100, 100, 100]);
+
+/// The faces of a box from corner `n`, counter-clockwise from outside.
+macro_rules! box_faces {
+    ($n:expr) => {
+        [
+            &[&[$n, $n + 2, $n + 3, $n + 1]],
+            &[&[$n + 4, $n + 5, $n + 7, $n + 6]],
+            &[&[$n, $n + 1, $n + 5, $n + 4]],
+            &[&[$n + 2, $n + 6, $n + 7, $n + 3]],
+            &[&[$n, $n + 4, $n + 6, $n + 2]],
+            &[&[$n + 1, $n + 3, $n + 7, $n + 5]],
+        ]
+    };
+}
+
+/// The same box inside out, a cavity's shell.
+macro_rules! cavity_faces {
+    ($n:expr) => {
+        [
+            &[&[$n, $n + 1, $n + 3, $n + 2]],
+            &[&[$n + 4, $n + 6, $n + 7, $n + 5]],
+            &[&[$n, $n + 4, $n + 5, $n + 1]],
+            &[&[$n + 2, $n + 3, $n + 7, $n + 6]],
+            &[&[$n, $n + 2, $n + 6, $n + 4]],
+            &[&[$n + 1, $n + 5, $n + 7, $n + 3]],
+        ]
+    };
+}
+
+const BOX_SHELL: [&[&[u32]]; 6] = box_faces!(0);
+
+const BOX: Spec<'_> = Spec {
+    points: &BOX_POINTS,
+    regions: &[&[&BOX_SHELL]],
+};
+
+/// An L, extruded along z from 0 to 100: not convex, on either cap.
+const ELL_POINTS: [[i64; 3]; 12] = [
+    [0, 0, 0],
+    [200, 0, 0],
+    [200, 100, 0],
+    [100, 100, 0],
+    [100, 200, 0],
+    [0, 200, 0],
+    [0, 0, 100],
+    [200, 0, 100],
+    [200, 100, 100],
+    [100, 100, 100],
+    [100, 200, 100],
+    [0, 200, 100],
+];
+
+const ELL_SHELL: [&[&[u32]]; 8] = [
+    &[&[0, 5, 4, 3, 2, 1]],
+    &[&[6, 7, 8, 9, 10, 11]],
+    &[&[0, 1, 7, 6]],
+    &[&[1, 2, 8, 7]],
+    &[&[2, 3, 9, 8]],
+    &[&[3, 4, 10, 9]],
+    &[&[4, 5, 11, 10]],
+    &[&[5, 0, 6, 11]],
+];
+
+const ELL: Spec<'_> = Spec {
+    points: &ELL_POINTS,
+    regions: &[&[&ELL_SHELL]],
+};
+
+/// A wall with a window through it: two faces with holes.
+const WALL_POINTS: [[i64; 3]; 16] = [
+    [0, 0, 0],
+    [400, 0, 0],
+    [0, 0, 300],
+    [400, 0, 300],
+    [0, 50, 0],
+    [400, 50, 0],
+    [0, 50, 300],
+    [400, 50, 300],
+    [100, 0, 100],
+    [300, 0, 100],
+    [100, 0, 200],
+    [300, 0, 200],
+    [100, 50, 100],
+    [300, 50, 100],
+    [100, 50, 200],
+    [300, 50, 200],
+];
+
+const WALL_SHELL: [&[&[u32]]; 10] = [
+    &[&[0, 1, 3, 2], &[8, 10, 11, 9]],
+    &[&[4, 6, 7, 5], &[12, 13, 15, 14]],
+    &[&[0, 4, 5, 1]],
+    &[&[2, 3, 7, 6]],
+    &[&[0, 2, 6, 4]],
+    &[&[1, 5, 7, 3]],
+    &[&[8, 9, 13, 12]],
+    &[&[10, 14, 15, 11]],
+    &[&[8, 12, 14, 10]],
+    &[&[9, 11, 15, 13]],
+];
+
+const WALL: Spec<'_> = Spec {
+    points: &WALL_POINTS,
+    regions: &[&[&WALL_SHELL]],
+};
+
+/// A box and a second, apart.
+const TWO_POINTS: [[i64; 3]; 16] = {
+    let (a, b) = (
+        corners([0, 0, 0], [100, 100, 100]),
+        corners([300, 0, 0], [100, 100, 100]),
+    );
+    [
+        a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], b[0], b[1], b[2], b[3], b[4], b[5], b[6],
+        b[7],
+    ]
+};
+
+const SECOND_SHELL: [&[&[u32]]; 6] = box_faces!(8);
+
+const TWO: Spec<'_> = Spec {
+    points: &TWO_POINTS,
+    regions: &[&[&BOX_SHELL], &[&SECOND_SHELL]],
+};
+
+/// A box with a box-shaped cavity, and a third box floating in the cavity.
+const NEST_POINTS: [[i64; 3]; 24] = {
+    let (a, b, c) = (
+        corners([0, 0, 0], [900, 900, 900]),
+        corners([100, 100, 100], [700, 700, 700]),
+        corners([300, 300, 300], [300, 300, 300]),
+    );
+    [
+        a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], b[0], b[1], b[2], b[3], b[4], b[5], b[6],
+        b[7], c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
+    ]
+};
+
+const CAVITY_SHELL: [&[&[u32]]; 6] = cavity_faces!(8);
+const FLOATING_SHELL: [&[&[u32]]; 6] = box_faces!(16);
+
+const NEST: Spec<'_> = Spec {
+    points: &NEST_POINTS,
+    regions: &[&[&BOX_SHELL, &CAVITY_SHELL], &[&FLOATING_SHELL]],
+};
+
+const CORPUS: [Spec<'_>; 5] = [BOX, ELL, WALL, TWO, NEST];
+
+/// Three corners of `ring` that turn the way it runs, by the ring's area vector.
+fn anchors(points: &[[i64; 3]], ring: &[u32]) -> [[i64; 3]; 3] {
+    let at = |v: u32| points[v as usize].map(i128::from);
+    let cross = |p: [i128; 3], q: [i128; 3]| {
+        [
+            p[1] * q[2] - p[2] * q[1],
+            p[2] * q[0] - p[0] * q[2],
+            p[0] * q[1] - p[1] * q[0],
+        ]
+    };
+    let minus = |p: [i128; 3], q: [i128; 3]| [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+    let n = ring.len();
+    let mut area = [0_i128; 3];
+    for k in 0..n {
+        let c = cross(at(ring[k]), at(ring[(k + 1) % n]));
+        area = [0, 1, 2].map(|i| area[i] + c[i]);
+    }
+    for k in 0..n {
+        let (a, b, c) = (ring[k], ring[(k + 1) % n], ring[(k + 2) % n]);
+        let turn = cross(minus(at(b), at(a)), minus(at(c), at(a)));
+        if turn[0] * area[0] + turn[1] * area[1] + turn[2] * area[2] > 0 {
+            return [a, b, c].map(|v| points[v as usize]);
+        }
+    }
+    panic!("a ring with no convex corner")
+}
+
+/// `spec`'s body, every vertex the meeting of its three faces' planes, each plane through its
+/// face's anchors moved by `jog(face, anchor)`.
+fn tilted(spec: Spec<'_>, jog: &dyn Fn(usize, usize) -> [i64; 3]) -> Rows {
+    let mut r = Rows::empty();
+    let faces: Vec<&[&[u32]]> = spec
+        .regions
+        .iter()
+        .flat_map(|shells| shells.iter())
+        .flat_map(|faces| faces.iter().copied())
+        .collect();
+    let mut on: Vec<[[i64; 3]; 3]> = Vec::new();
+    for (k, loops) in faces.iter().enumerate() {
+        let moved = anchors(spec.points, loops[0]);
+        let mut a = 0;
+        let moved = moved.map(|p| {
+            let by = jog(k, a);
+            a += 1;
+            [p[0] + by[0], p[1] + by[1], p[2] + by[2]]
+        });
+        r.plane_through(moved);
+        on.push(moved);
+    }
+    for v in 0..spec.points.len() as u32 {
+        let mut planes = faces
+            .iter()
+            .enumerate()
+            .filter(|(_, loops)| loops.iter().any(|ring| ring.contains(&v)))
+            .map(|(k, _)| k as u32);
+        let triple = [
+            planes.next().unwrap(),
+            planes.next().unwrap(),
+            planes.next().unwrap(),
+        ];
+        assert_eq!(planes.next(), None, "three faces at a vertex");
+        r.meet(triple);
+    }
+    let mut face = 0;
+    for shells in spec.regions {
+        let solid = r.region(RegionKind::Solid);
+        for shell in *shells {
+            let s = r.shell(solid);
+            for loops in *shell {
+                let rings: Vec<Vec<(u32, Sense)>> =
+                    loops.iter().map(|ring| fins(&mut r, ring)).collect();
+                let rings: Vec<&[(u32, Sense)]> = rings.iter().map(Vec::as_slice).collect();
+                r.face_on(s, &rings, on[face]);
+                face += 1;
+            }
+        }
+    }
+    r
+}
+
+/// The fins of `ring`, each edge made the first time its two vertices meet.
+fn fins(r: &mut Rows, ring: &[u32]) -> Vec<(u32, Sense)> {
+    let n = ring.len();
+    (0..n)
+        .map(|k| {
+            let (a, b) = (ring[k], ring[(k + 1) % n]);
+            let key = (a.min(b), a.max(b));
+            let found = (0..r.edges.len()).find(|&e| {
+                r.edges[e].start.map(|v| v.row()) == Some(key.0)
+                    && r.edges[e].end.map(|v| v.row()) == Some(key.1)
+            });
+            let e = found.map_or_else(|| r.edge(Some(key)), |e| e as u32);
+            (
+                e,
+                if a < b {
+                    Sense::Forward
+                } else {
+                    Sense::Reversed
+                },
+            )
+        })
+        .collect()
+}
+
+/// No move at all: the planes through the grid points themselves.
+fn still(_: usize, _: usize) -> [i64; 3] {
+    [0; 3]
+}
+
+/// A step or so each way, different at every anchor of every face, from `seed`.
+fn jog(seed: u64) -> impl Fn(usize, usize) -> [i64; 3] {
+    move |face, anchor| {
+        let mix = |k: u64| {
+            let x = seed
+                .wrapping_add((face as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15))
+                .wrapping_add((anchor as u64 + 1).wrapping_mul(0xBF58_476D_1CE4_E5B9))
+                .wrapping_add(k.wrapping_mul(0x94D0_49BB_1331_11EB));
+            let x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            ((x ^ (x >> 27)) % 3) as i64 - 1
+        };
+        [mix(0), mix(1), mix(2)]
+    }
+}
+
+/// The seed of the random corpus: fixed, printed, and replaced by `SPAREKIT_SEED` in hex.
+fn seed() -> u64 {
+    let seed = std::env::var("SPAREKIT_SEED").map_or(0x6134_6134, |s| {
+        u64::from_str_radix(&s, 16).expect("SPAREKIT_SEED in hex")
+    });
+    println!("seed: {seed:x}");
+    seed
+}
+
+/// The faults of `body`, at the full level.
+fn full(body: &Body, exactness: Exactness) -> Report {
+    check(body, exactness, Level::Full, &mut meter()).unwrap()
+}
+
+/// The faults of `rows`, a solid recorded Exact.
+fn faults(rows: &Rows) -> Vec<Fault> {
+    full(&rows.body(BodyKind::Solid), Exactness::Exact)
+        .faults()
+        .to_vec()
+}
+
+#[test]
+fn the_planes_through_the_grid_points_pass_as_they_are() {
+    for spec in CORPUS {
+        let found = faults(&tilted(spec, &still));
+        assert!(found.is_empty(), "{found:?}");
+    }
+}
+
+#[test]
+fn every_tilted_polyhedron_passes() {
+    let seed = seed();
+    for k in 0..40 {
+        for spec in CORPUS {
+            let rows = tilted(spec, &jog(seed.wrapping_add(k)));
+            let found = faults(&rows);
+            assert!(found.is_empty(), "seed {seed:x} + {k}: {found:?}");
+        }
+    }
+}
+
+#[test]
+fn a_tilted_body_has_vertices_no_grid_point_holds() {
+    let rows = tilted(BOX, &jog(7));
+    let body = rows.body(BodyKind::Solid);
+    let implicit = (0..8).filter(|&v| {
+        matches!(
+            geom_topo::query::point(&body, ix(v)),
+            Err(geom_topo::query::QueryError::Implicit(_))
+        )
+    });
+    assert_eq!(implicit.count(), 8);
+}
+
+#[test]
+fn a_cut_corner_mixes_grid_vertices_and_meetings() {
+    // A cube of side 30 with its far corner cut by 3x + 4y + 7z = 370, which meets the three edges
+    // there at z = 160/7, y = 35/2 and x = 40/3.
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let corner = [
+        [0, 0, 0],
+        [30, 0, 0],
+        [0, 30, 0],
+        [30, 30, 0],
+        [0, 0, 30],
+        [30, 0, 30],
+        [0, 30, 30],
+    ];
+    for p in corner {
+        r.vertex(p);
+    }
+    let high_x = [[30, 0, 0], [30, 30, 0], [30, 0, 30]];
+    let high_y = [[0, 30, 0], [0, 30, 30], [30, 30, 0]];
+    let high_z = [[0, 0, 30], [30, 0, 30], [0, 30, 30]];
+    let cut = [[20, 25, 30], [24, 22, 30], [26, 24, 28]];
+    let x = r.plane_through(high_x);
+    let y = r.plane_through(high_y);
+    let z = r.plane_through(high_z);
+    let c = r.plane_through(cut);
+    let a = r.meet([x, y, c]);
+    let b = r.meet([x, z, c]);
+    let d = r.meet([y, z, c]);
+    let s = r.shell(solid);
+    let low_z = [[0, 0, 0], [0, 30, 0], [30, 0, 0]];
+    let low_y = [[0, 0, 0], [30, 0, 0], [0, 0, 30]];
+    let low_x = [[0, 0, 0], [0, 0, 30], [0, 30, 0]];
+    let faces: [(&[u32], [[i64; 3]; 3]); 7] = [
+        (&[0, 2, 3, 1], low_z),
+        (&[0, 1, 5, 4], low_y),
+        (&[0, 4, 6, 2], low_x),
+        (&[1, 3, a, b, 5], high_x),
+        (&[2, 6, d, a, 3], high_y),
+        (&[4, 5, b, d, 6], high_z),
+        (&[a, d, b], cut),
+    ];
+    for (ring, on) in faces {
+        let ring = fins(&mut r, ring);
+        r.face_on(s, &[&ring], on);
+    }
+    assert_eq!(faults(&r), []);
+}
+
+#[test]
+fn three_planes_that_do_not_meet_are_a_fault() {
+    let mut r = tilted(BOX, &still);
+    // Faces 0 and 1 are the box's two parallel faces.
+    r.meets[0].1 = [0, 1, 2];
+    let found = faults(&r);
+    assert_eq!(
+        found.first(),
+        Some(&Fault::at(FaultKind::MeetSingular, Entity::Vertex(ix(0))))
+    );
+}
+
+#[test]
+fn a_meeting_off_a_face_plane_is_a_fault_in_every_class() {
+    let mut r = tilted(BOX, &jog(3));
+    // Vertex 0 is given vertex 7's planes, which are the far three.
+    r.meets[0].1 = r.meets[7].1;
+    let body = r.body(BodyKind::Solid);
+    let certified = Exactness::Certified {
+        bound: Steps(1_000),
+        step: GridStep::Q0,
+    };
+    for exactness in [Exactness::Exact, certified] {
+        let report = full(&body, exactness);
+        assert!(
+            kinds(report.faults()).contains(&FaultKind::VertexOffSurface),
+            "{:?}",
+            report.faults()
+        );
+    }
+}
+
+#[test]
+fn a_shadow_line_a_long_way_from_its_vertex_is_a_fault() {
+    let mut r = tilted(BOX, &jog(3));
+    let p = r.points[0];
+    let q = r.points[1];
+    let at = |p: P3| [p.x.get(), p.y.get(), p.z.get()];
+    let e = (0..r.edges.len())
+        .find(|&e| r.edges[e].start.map(|v| v.row()) == Some(0))
+        .unwrap();
+    let curve = r.edges[e].curve.row() as usize;
+    let mut far = at(p);
+    far[2] += 5;
+    r.curves[curve] = line(far, at(q));
+    assert!(kinds(&faults(&r)).contains(&FaultKind::VertexOffCurve));
+}
+
+#[test]
+fn a_shadow_line_a_step_off_passes() {
+    let mut r = tilted(BOX, &still);
+    let at = |p: P3| [p.x.get(), p.y.get(), p.z.get()];
+    let e = (0..r.edges.len())
+        .find(|&e| r.edges[e].start.map(|v| v.row()) == Some(0))
+        .unwrap();
+    let curve = r.edges[e].curve.row() as usize;
+    let end = r.edges[e].end.unwrap().row() as usize;
+    let (start, end) = (at(r.points[0]), at(r.points[end]));
+    r.curves[curve] = line([start[0] + 1, start[1], start[2]], [end[0], end[1], end[2]]);
+    assert_eq!(faults(&r), []);
+}
+
+/// Adds a plane of constant x and one of constant y; the vertex where they meet z = 0, plane `z`.
+fn flat_corner(r: &mut Rows, z: u32, x: i64, y: i64) -> u32 {
+    let across = r.plane_through([[x, 0, 0], [x, 1, 0], [x, 0, 1]]);
+    let along = r.plane_through([[0, y, 0], [0, y, 1], [1, y, 0]]);
+    r.meet([z, across, along])
+}
+
+const FLOOR: [[i64; 3]; 3] = [[0, 0, 0], [100, 0, 0], [0, 100, 0]];
+
+/// A sheet on z = 0 with rings of corners in the plan given, every corner a meeting of planes.
+fn plan(rings: &[&[[i64; 2]]]) -> Rows {
+    let mut r = Rows::empty();
+    let z = r.plane_through(FLOOR);
+    let s = r.shell(0);
+    let mut numbered: Vec<([i64; 2], u32)> = Vec::new();
+    let rings: Vec<Vec<u32>> = rings
+        .iter()
+        .map(|ring| {
+            ring.iter()
+                .map(|&q| {
+                    if let Some(&(_, v)) = numbered.iter().find(|(p, _)| *p == q) {
+                        return v;
+                    }
+                    let v = flat_corner(&mut r, z, q[0], q[1]);
+                    numbered.push((q, v));
+                    v
+                })
+                .collect()
+        })
+        .collect();
+    let rings: Vec<Vec<(u32, Sense)>> = rings.iter().map(|ring| fins(&mut r, ring)).collect();
+    let rings: Vec<&[(u32, Sense)]> = rings.iter().map(Vec::as_slice).collect();
+    r.face_on(s, &rings, FLOOR);
+    r
+}
+
+/// The faults of a plan, a sheet recorded Exact.
+fn plan_faults(rings: &[&[[i64; 2]]]) -> Vec<Fault> {
+    let body = plan(rings).body(BodyKind::Sheet);
+    full(&body, Exactness::Exact).faults().to_vec()
+}
+
+#[test]
+fn a_plan_of_meetings_passes_with_a_hole_and_a_corner_in_a_straight_line() {
+    let square: &[[i64; 2]] = &[[0, 0], [50, 0], [100, 0], [100, 100], [0, 100]];
+    let hole: &[[i64; 2]] = &[[40, 40], [40, 60], [60, 60], [60, 40]];
+    assert_eq!(plan_faults(&[square, hole]), []);
+}
+
+#[test]
+fn two_edges_of_a_face_crossing_are_found() {
+    let found = plan_faults(&[&[[0, 10], [60, 10], [60, 40], [30, 40], [30, 0], [0, 0]]]);
+    assert!(kinds(&found).contains(&FaultKind::EdgesCross), "{found:?}");
+}
+
+#[test]
+fn a_hole_lying_along_the_outer_loop_is_found() {
+    let square: &[[i64; 2]] = &[[0, 0], [100, 0], [100, 100], [0, 100]];
+    let hole: &[[i64; 2]] = &[[40, 0], [40, 50], [60, 50], [60, 0]];
+    let found = plan_faults(&[square, hole]);
+    assert!(kinds(&found).contains(&FaultKind::EdgesCross), "{found:?}");
+}
+
+#[test]
+fn an_edge_folded_back_along_its_neighbour_is_found() {
+    let found = plan_faults(&[&[[0, 0], [100, 0], [50, 0], [50, 100], [0, 100]]]);
+    assert!(kinds(&found).contains(&FaultKind::EdgesCross), "{found:?}");
+}
+
+#[test]
+fn an_edge_on_no_plane_of_its_ends_fails_closed() {
+    // The edge from (0, 0) to (100, 100) lies on none of the planes its ends meet on.
+    let found = plan_faults(&[&[[0, 0], [100, 100], [0, 100]]]);
+    assert!(
+        kinds(&found).contains(&FaultKind::PairUnchecked),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_box_is_held_to_a_meetings_exact_place() {
+    // A triangle on z = 30 with a corner at (40/3, 30, 30), which rounds to x = 13: a box to x = 14
+    // holds it, and a box to x = 13, which holds its rounded place, does not.
+    let mut r = Rows::empty();
+    let s = r.shell(0);
+    let y = r.plane_through([[0, 30, 0], [0, 30, 30], [30, 30, 0]]);
+    let z = r.plane_through([[0, 0, 30], [30, 0, 30], [0, 30, 30]]);
+    let c = r.plane_through([[20, 25, 30], [24, 22, 30], [26, 24, 28]]);
+    let d = r.meet([y, z, c]);
+    // (12, 31, 30) is on the cut plane with the meeting, and (12, 30, 30) on y = 30 with it.
+    let others = [r.vertex([12, 31, 30]), r.vertex([12, 30, 30])];
+    let ring = fins(&mut r, &[d, others[0], others[1]]);
+    let f = r.face_on(s, &[&ring], [[0, 0, 30], [30, 0, 30], [0, 30, 30]]);
+    let reach = |x: i64| Box3::new(P3::new(11, 24, 29).unwrap(), P3::new(x, 32, 31).unwrap());
+    r.faces[f as usize].bound = reach(14).unwrap();
+    assert_eq!(
+        full(&r.body(BodyKind::Sheet), Exactness::Exact).faults(),
+        []
+    );
+    r.faces[f as usize].bound = reach(13).unwrap();
+    let found = full(&r.body(BodyKind::Sheet), Exactness::Exact);
+    assert_eq!(kinds(found.faults()), [FaultKind::FaceBound]);
+}
+
+#[test]
+fn a_lump_through_another_is_found() {
+    // Two tilted boxes, the second moved until it runs through the first.
+    let points: Vec<[i64; 3]> = TWO_POINTS
+        .iter()
+        .enumerate()
+        .map(|(k, p)| {
+            if k < 8 {
+                *p
+            } else {
+                [p[0] - 250, p[1] + 25, p[2] + 25]
+            }
+        })
+        .collect();
+    let spec = Spec {
+        points: &points,
+        regions: TWO.regions,
+    };
+    let found = faults(&tilted(spec, &jog(11)));
+    assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
+}
+
+#[test]
+fn a_tooth_through_a_window_and_a_tooth_into_the_wall_differ() {
+    // A box through the wall's window, not touching it, passes as far as faces go.
+    let mut points = WALL_POINTS.to_vec();
+    points.extend(corners([150, -50, 125], [100, 150, 50]));
+    let tooth: [&[&[u32]]; 6] = box_faces!(16);
+    let regions: [&[&[&[&[u32]]]]; 2] = [&[&WALL_SHELL], &[&tooth]];
+    let spec = Spec {
+        points: &points,
+        regions: &regions,
+    };
+    let through = faults(&tilted(spec, &jog(13)));
+    assert!(
+        !kinds(&through).contains(&FaultKind::FacesCross),
+        "{through:?}"
+    );
+    // Moved up until it runs through the window's head, it crosses.
+    let mut points = WALL_POINTS.to_vec();
+    points.extend(corners([150, -50, 175], [100, 150, 50]));
+    let spec = Spec {
+        points: &points,
+        regions: &regions,
+    };
+    let into = faults(&tilted(spec, &jog(13)));
+    assert!(kinds(&into).contains(&FaultKind::FacesCross), "{into:?}");
+}
+
+#[test]
+fn a_shell_turned_inside_out_is_found_by_its_certified_volume() {
+    let spec_faces: [&[&[u32]]; 6] = cavity_faces!(0);
+    let spec = Spec {
+        points: &BOX_POINTS,
+        regions: &[&[&spec_faces]],
+    };
+    let found = faults(&tilted(spec, &jog(17)));
+    assert!(kinds(&found).contains(&FaultKind::ShellInward), "{found:?}");
+}
+
+#[test]
+fn a_cavity_outside_its_shell_is_found_by_the_exact_ray() {
+    let points: Vec<[i64; 3]> = NEST_POINTS[..16]
+        .iter()
+        .enumerate()
+        .map(|(k, p)| if k < 8 { *p } else { [p[0] + 2000, p[1], p[2]] })
+        .collect();
+    let spec = Spec {
+        points: &points,
+        regions: &[&[&BOX_SHELL, &CAVITY_SHELL]],
+    };
+    let found = faults(&tilted(spec, &jog(19)));
+    assert_eq!(kinds(&found), [FaultKind::ShellNesting], "{found:?}");
+}
+
+#[test]
+fn a_lump_inside_another_is_found_by_the_exact_ray() {
+    let points: Vec<[i64; 3]> = TWO_POINTS
+        .iter()
+        .enumerate()
+        .map(|(k, p)| {
+            if k < 8 {
+                [p[0] * 9, p[1] * 9, p[2] * 9]
+            } else {
+                [p[0] - 200, p[1] + 300, p[2] + 300]
+            }
+        })
+        .collect();
+    let spec = Spec {
+        points: &points,
+        regions: TWO.regions,
+    };
+    let found = faults(&tilted(spec, &jog(23)));
+    assert!(
+        kinds(&found).contains(&FaultKind::ShellNesting),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_loop_run_backwards_is_found_by_its_certified_area() {
+    let mut r = tilted(BOX, &jog(29));
+    r.faces[0].sense = Sense::Reversed;
+    assert!(kinds(&faults(&r)).contains(&FaultKind::LoopSense));
+}
+
+/// A sheet on z = 0 of grid corners, a square with a square hole.
+fn ring_on_the_grid() -> Rows {
+    let mut r = Rows::empty();
+    let s = r.shell(0);
+    let mut ring = |points: &[[i64; 3]]| {
+        let numbers: Vec<u32> = points.iter().map(|p| r.vertex(*p)).collect();
+        fins(&mut r, &numbers)
+    };
+    let outer = ring(&[[0, 0, 0], [100, 0, 0], [100, 100, 0], [0, 100, 0]]);
+    let hole = ring(&[[40, 40, 0], [40, 60, 0], [60, 60, 0], [60, 40, 0]]);
+    r.face_on(s, &[&outer, &hole], FLOOR);
+    r
+}
+
+/// A sheet on z = 0 of meetings, a square with a square hole.
+fn ring_of_meetings() -> Rows {
+    plan(&[
+        &[[0, 0], [100, 0], [100, 100], [0, 100]],
+        &[[40, 40], [40, 60], [60, 60], [60, 40]],
+    ])
+}
+
+#[test]
+fn a_corner_resting_on_a_face_is_found_from_either_face() {
+    // No vertex in common, so nothing excuses the touch, whichever face is asked first.
+    let square: &[[i64; 3]] = &[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]];
+    let tooth: &[[i64; 3]] = &[[5, 5, 0], [8, 5, 6], [2, 5, 6]];
+    for rings in [[tooth, square], [square, tooth]] {
+        let found = report(&sheets(&rings), BodyKind::General, Exactness::Exact);
+        assert_eq!(kinds(found.faults()), [FaultKind::FacesCross]);
+    }
+}
+
+#[test]
+fn two_faces_along_one_line_with_only_its_ends_in_common_are_found() {
+    // Two corners in common and an edge each between them: the shared corners excuse their own
+    // places and nothing in between.
+    let r = sheets(&[
+        &[[0, 0, 0], [4, 0, 0], [10, 0, 0], [5, 5, 0]],
+        &[[0, 0, 0], [6, 0, 0], [10, 0, 0], [5, 0, 5]],
+    ]);
+    let found = report(&r, BodyKind::General, Exactness::Exact);
+    assert_eq!(kinds(found.faults()), [FaultKind::FacesCross]);
+}
+
+#[test]
+fn a_corner_in_the_middle_of_an_edge_of_its_own_face_is_found() {
+    // The way down x = 60 turns at (60, 0), which the edge along y = 0 passes through without ending
+    // there: nothing they share excuses it, though each of the two has an end there.
+    let found = plan_faults(&[&[
+        [60, 100],
+        [60, 0],
+        [60, -100],
+        [0, -100],
+        [0, 0],
+        [100, 0],
+        [100, 100],
+    ]]);
+    assert!(kinds(&found).contains(&FaultKind::EdgesCross), "{found:?}");
+}
+
+#[test]
+fn a_face_folded_flat_along_one_line_is_found() {
+    // Every corner on one line: each pair of edges lies along the other.
+    let found = plan_faults(&[&[[0, 0], [100, 0], [50, 0]]]);
+    assert!(kinds(&found).contains(&FaultKind::EdgesCross), "{found:?}");
+}
+
+#[test]
+fn a_bent_face_with_a_second_loop_has_no_star() {
+    // A star runs round one ring. This second loop turns on from the first as seen from the mean
+    // of all eight corners, so that a star through both would pass every test of a star: it must
+    // still have none, and the face beside it cannot be told apart from it.
+    let mut r = Rows::empty();
+    let shell = r.shell(0);
+    let numbers = |r: &mut Rows, ring: &[[i64; 3]]| -> Vec<u32> {
+        ring.iter().map(|p| r.vertex(*p)).collect()
+    };
+    let outer = numbers(&mut r, &[[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]]);
+    let inner = numbers(&mut r, &[[-1, 10, 0], [-2, 9, 0], [-3, 8, 0], [-4, 6, 0]]);
+    let (outer, inner) = (fins(&mut r, &outer), fins(&mut r, &inner));
+    r.face(shell, &[&outer, &inner]);
+    let shell = r.shell(0);
+    let beside = numbers(
+        &mut r,
+        &[[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]],
+    );
+    let beside = fins(&mut r, &beside);
+    r.face(shell, &[&beside]);
+    r.surfaces[0] = off_grid();
+    let found = report(&r, BodyKind::General, certified());
+    assert_eq!(kinds(found.faults()), [FaultKind::PairUnchecked]);
+}
+
+#[test]
+fn what_a_check_reserves_is_what_its_lists_hold() {
+    // Logical memory is budgeted as work is: a face's lists are reserved by their lengths, here to
+    // the byte. The ring of meetings keeps its outline, on which its edges are tested; the ring
+    // on the grid, a face of grid corners with no other face, keeps none.
+    for (body, bytes) in [
+        (ring_on_the_grid().body(BodyKind::Sheet), RING_BYTES),
+        (ring_of_meetings().body(BodyKind::Sheet), MEETINGS_BYTES),
+    ] {
+        let mut m = WorkMeter::new(Budget::UNLIMITED);
+        check(&body, Exactness::Exact, Level::Full, &mut m).unwrap();
+        assert_eq!(m.used().logical_bytes, bytes);
+    }
+}
+
+#[test]
+fn a_face_turned_with_its_one_hole_is_found() {
+    // Its hole now runs counter-clockwise and its outer loop clockwise: one of each.
+    for mut r in [ring_on_the_grid(), ring_of_meetings()] {
+        assert_eq!(
+            full(&r.body(BodyKind::Sheet), Exactness::Exact).faults(),
+            []
+        );
+        r.faces[0].sense = Sense::Reversed;
+        let body = r.body(BodyKind::Sheet);
+        let found = full(&body, Exactness::Exact).faults().to_vec();
+        assert_eq!(kinds(&found), [FaultKind::LoopSense]);
+    }
+}
+
+#[test]
+fn a_ring_too_thin_for_its_enclosures_fails_closed() {
+    // Four planes leaning a millionth of a step inside the sheet's edge at z = 0: each loop's area
+    // is decided, and what is left when they are added is far inside their enclosures.
+    let far = (1_i64 << 40) - 2;
+    let lean = 1 << 20;
+    let mut r = Rows::empty();
+    let z = r.plane_through(FLOOR);
+    let s = r.shell(0);
+    let outer =
+        [[0, 0], [far, 0], [far, far], [0, far]].map(|q| flat_corner(&mut r, z, q[0], q[1]));
+    let west = r.plane_through([[0, 0, 1], [0, 1, 1], [1, 0, 1 - lean]]);
+    let east = r.plane_through([[far, 0, -1], [far, 1, -1], [far - 1, 0, lean - 1]]);
+    let south = r.plane_through([[0, 0, 1], [1, 0, 1], [0, 1, 1 - lean]]);
+    let north = r.plane_through([[0, far, -1], [1, far, -1], [0, far - 1, lean - 1]]);
+    let hole = [[west, south], [west, north], [east, north], [east, south]]
+        .map(|[x, y]| r.meet([z, x, y]));
+    let (outer, hole) = (fins(&mut r, &outer), fins(&mut r, &hole));
+    r.face_on(s, &[&outer, &hole], FLOOR);
+    let body = r.body(BodyKind::Sheet);
+    let found = full(&body, Exactness::Exact).faults().to_vec();
+    assert_eq!(kinds(&found), [FaultKind::Unchecked], "{found:?}");
+}
+
+#[test]
+fn a_small_tilted_box_far_from_the_origin_keeps_its_sign() {
+    let far = 1_099_511_627_000_i64;
+    let points = corners([far, far, far], [100, 100, 100]);
+    let spec = Spec {
+        points: &points,
+        regions: &[&[&BOX_SHELL]],
+    };
+    for k in 0..5 {
+        let found = faults(&tilted(spec, &jog(31 + k)));
+        assert!(found.is_empty(), "{found:?}");
+    }
+}
+
+#[test]
+fn a_seam_between_faces_on_one_plane_passes() {
+    // A box whose top is split along x = 50, the two halves sharing the seam.
+    let mut points = corners([0, 0, 0], [100, 100, 100]).to_vec();
+    points.extend([[50, 0, 100], [50, 100, 100]]);
+    let faces: [&[u32]; 7] = [
+        &[0, 2, 3, 1],
+        &[4, 8, 9, 6],
+        &[8, 5, 7, 9],
+        &[0, 1, 5, 8, 4],
+        &[2, 6, 9, 7, 3],
+        &[0, 4, 6, 2],
+        &[1, 3, 7, 5],
+    ];
+    let found = faults(&polyhedron(&points, &faces));
+    assert_eq!(found, []);
+}
+
+#[test]
+fn two_faces_back_to_back_on_one_plane_are_found() {
+    // A shell of two triangles sharing all three edges: closed, and enclosing nothing.
+    let found = faults(&polyhedron(
+        &[[0, 0, 0], [100, 0, 0], [0, 100, 0]],
+        &[&[0, 1, 2], &[0, 2, 1]],
+    ));
+    assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
+}
+
+#[test]
+fn coplanar_faces_apart_pass_and_overlapping_ones_are_found() {
+    // Two lumps whose tops lie on one plane: apart, then overlapping, then one inside the other's
+    // box in plan, each on a body whose faces are not all convex.
+    let lump = |x: i64, side: i64| corners([x, 0, 0], [side, side, 100]);
+    let apart = [lump(0, 100), lump(200, 100)].concat();
+    let spec = Spec {
+        points: &apart,
+        regions: TWO.regions,
+    };
+    assert_eq!(faults(&tilted(spec, &still)), []);
+    let overlapping = [lump(0, 100), lump(50, 100)].concat();
+    let spec = Spec {
+        points: &overlapping,
+        regions: TWO.regions,
+    };
+    let found = faults(&tilted(spec, &still));
+    assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
+    let within = [lump(0, 300), lump(100, 100)].concat();
+    let spec = Spec {
+        points: &within,
+        regions: TWO.regions,
+    };
+    let found = faults(&tilted(spec, &still));
+    assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
+}
+
+#[test]
+fn a_lump_touching_another_at_a_corner_is_found() {
+    // The second box's corner rests on the middle of the first's top: no shared vertex.
+    let points: Vec<[i64; 3]> = TWO_POINTS
+        .iter()
+        .enumerate()
+        .map(|(k, p)| {
+            if k < 8 {
+                *p
+            } else {
+                [p[0] - 250, p[1] + 50, p[2] + 100]
+            }
+        })
+        .collect();
+    let spec = Spec {
+        points: &points,
+        regions: TWO.regions,
+    };
+    let found = faults(&tilted(spec, &still));
+    assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
+}
+
+#[test]
+fn every_face_pair_is_charged_and_a_stop_is_a_stop() {
+    let body = tilted(WALL, &jog(37)).body(BodyKind::Solid);
+    let mut last = None;
+    for work in [1, 10, 100, 400, 1_000, 4_000, 10_000] {
+        let mut meter = WorkMeter::new(Budget::of_work(work));
+        last = Some(check(&body, Exactness::Exact, Level::Full, &mut meter).is_err());
+    }
+    assert_eq!(last, Some(false), "the largest budget finishes");
+}
+
+#[test]
+fn the_same_body_gives_the_same_report() {
+    let body = tilted(WALL, &jog(41)).body(BodyKind::Solid);
+    assert_eq!(full(&body, Exactness::Exact), full(&body, Exactness::Exact));
+}
+
+#[test]
+fn a_curve_kind_on_a_plane_based_face_has_no_outline() {
+    let mut r = tilted(BOX, &jog(43));
+    let e = r.edges[0].curve.row() as usize;
+    r.curves[e] = CurveKind::Circle(
+        geom_curve::Circle::new(
+            [0.0; 3],
+            1.0,
+            geom_curve::Frame::standard().unwrap(),
+            (0.0, 1.0),
+        )
+        .unwrap(),
+    );
+    assert_ne!(faults(&r), []);
+}
+
+const TETRA_POINTS: [[i64; 3]; 4] = [[0, 0, 0], [300, 0, 0], [0, 300, 0], [0, 0, 300]];
+const TETRA_SHELL: [&[&[u32]]; 4] = [&[&[0, 2, 1]], &[&[0, 1, 3]], &[&[0, 3, 2]], &[&[1, 2, 3]]];
+const TETRA: Spec<'_> = Spec {
+    points: &TETRA_POINTS,
+    regions: &[&[&TETRA_SHELL]],
+};
+
+/// What a check of [`ring_on_the_grid`] reserves: nothing, as it keeps no outline.
+const RING_BYTES: u128 = 0;
+
+/// What a check of [`ring_of_meetings`] reserves.
+const MEETINGS_BYTES: u128 = 7_608;
+
+/// Every budget short of what checking `body` costs stops it, cleanly, and that much does not.
+fn stops_wherever_its_budget_ends(body: &Body) {
+    let mut whole = WorkMeter::new(Budget::UNLIMITED);
+    let report = check(body, Exactness::Exact, Level::Full, &mut whole).unwrap();
+    assert_eq!(report.faults(), []);
+    let work = u64::try_from(whole.used().work).unwrap();
+    for budget in 0..work {
+        let mut m = WorkMeter::new(Budget::of_work(budget));
+        let stopped = check(body, Exactness::Exact, Level::Full, &mut m);
+        assert_eq!(
+            stopped.map(|_| ()).map_err(geom_run::Stopped::reason),
+            Err(Stop::OverBudget(geom_run::BudgetKind::Work)),
+            "{budget}"
+        );
+    }
+    let mut m = WorkMeter::new(Budget::of_work(work));
+    assert!(check(body, Exactness::Exact, Level::Full, &mut m).is_ok());
+}
+
+#[test]
+fn a_check_stops_cleanly_wherever_its_budget_ends() {
+    stops_wherever_its_budget_ends(&tilted(TETRA, &jog(53)).body(BodyKind::Solid));
+    stops_wherever_its_budget_ends(&ring_on_the_grid().body(BodyKind::Sheet));
+    stops_wherever_its_budget_ends(&ring_of_meetings().body(BodyKind::Sheet));
+}
+
+#[test]
+fn a_meeting_that_cannot_meet_says_so() {
+    assert_eq!(
+        FaultKind::MeetSingular.what(),
+        "the vertex's three planes do not meet in one point"
+    );
+}
+
+/// `rings` in a sheet of grid corners, each ring a face, edges shared where two rings run along one
+/// pair of corners.
+fn sheet(rings: &[&[[i64; 3]]]) -> Rows {
+    let mut r = Rows::empty();
+    let s = r.shell(0);
+    let mut seen: Vec<[i64; 3]> = Vec::new();
+    for ring in rings {
+        let numbers: Vec<u32> = ring
+            .iter()
+            .map(|p| {
+                if let Some(k) = seen.iter().position(|q| q == p) {
+                    return k as u32;
+                }
+                seen.push(*p);
+                r.vertex(*p)
+            })
+            .collect();
+        let edges = fins(&mut r, &numbers);
+        r.face(s, &[&edges]);
+    }
+    r
+}
+
+/// `rings` as sheets of their own, each a shell, corners shared where two rings have one place.
+fn sheets(rings: &[&[[i64; 3]]]) -> Rows {
+    let mut r = Rows::empty();
+    let mut seen: Vec<[i64; 3]> = Vec::new();
+    for ring in rings {
+        let s = r.shell(0);
+        let numbers: Vec<u32> = ring
+            .iter()
+            .map(|p| {
+                if let Some(k) = seen.iter().position(|q| q == p) {
+                    return k as u32;
+                }
+                seen.push(*p);
+                r.vertex(*p)
+            })
+            .collect();
+        let edges = fins(&mut r, &numbers);
+        r.face(s, &[&edges]);
+    }
+    r
+}
+
+/// On z = 0: a square right of x = 50, sharing that edge with a face left of it that comes back
+/// over the line above it.
+const RIGHT: [[i64; 3]; 4] = [[50, 40, 0], [60, 40, 0], [60, 60, 0], [50, 60, 0]];
+
+#[test]
+fn two_faces_either_side_of_a_seam_may_return_past_each_other() {
+    // The left face crosses the seam's line again higher up, apart from the right face.
+    let apart = [
+        [0, 40, 0],
+        [50, 40, 0],
+        [50, 60, 0],
+        [40, 60, 0],
+        [40, 80, 0],
+        [70, 80, 0],
+        [70, 100, 0],
+        [0, 100, 0],
+    ];
+    let r = sheet(&[&apart, &RIGHT]);
+    assert_eq!(report(&r, BodyKind::Sheet, Exactness::Exact).faults(), []);
+    // And from the seam's end, touching the right face at the vertex they share and nowhere else.
+    let touching = [
+        [0, 40, 0],
+        [50, 40, 0],
+        [50, 60, 0],
+        [70, 80, 0],
+        [70, 100, 0],
+        [0, 100, 0],
+    ];
+    let r = sheet(&[&touching, &RIGHT]);
+    assert_eq!(report(&r, BodyKind::Sheet, Exactness::Exact).faults(), []);
+}
+
+#[test]
+fn two_collinear_edges_shared_join_up() {
+    // A box with a vertex in the middle of one edge, so two faces share two edges on one line.
+    let mut points = BOX_POINTS.to_vec();
+    points.push([50, 0, 100]);
+    let faces: [&[u32]; 6] = [
+        &[0, 2, 3, 1],
+        &[4, 8, 5, 7, 6],
+        &[0, 1, 5, 8, 4],
+        &[2, 6, 7, 3],
+        &[0, 4, 6, 2],
+        &[1, 3, 7, 5],
+    ];
+    assert_eq!(faults(&polyhedron(&points, &faces)), []);
+}
+
+#[test]
+fn two_faces_crossing_from_a_vertex_they_share_are_found() {
+    let r = sheets(&[
+        &[[0, 0, 0], [100, 0, 0], [100, 100, 0]],
+        &[[0, 0, 0], [100, 50, -50], [100, 50, 50]],
+    ]);
+    let found = report(&r, BodyKind::General, Exactness::Exact);
+    assert_eq!(kinds(found.faults()), [FaultKind::FacesCross]);
+}
+
+/// The plane z = 0 in doubles that are not grid points, so its plane must come from its corners.
+fn off_grid() -> SurfaceKind {
+    SurfaceKind::Plane(
+        Plane::new(
+            [0.25, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, 1.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    )
+}
+
+#[test]
+fn a_bent_face_on_doubles_stands_for_its_star() {
+    let mut r = sheet(&[&[[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]]]);
+    r.surfaces[0] = off_grid();
+    assert_eq!(report(&r, BodyKind::Sheet, certified()).faults(), []);
+}
+
+/// A certified record of `bound` steps.
+fn within(bound: u64) -> Exactness {
+    Exactness::Certified {
+        bound: Steps(bound),
+        step: GridStep::Q0,
+    }
+}
+
+/// The kinds of fault in two sheets, the first bent off z = 0 by `bound` steps at most, and the
+/// second `other`: for the first ring started at each of its corners in turn, and run each way,
+/// which must all be found the same.
+fn bent_beside(bent: &[[i64; 3]], other: &[[i64; 3]], bound: u64) -> Vec<FaultKind> {
+    let found = |ring: &[[i64; 3]], turned: bool| {
+        let mut r = sheets(&[ring, other]);
+        r.surfaces[0] = level(0.0);
+        if turned {
+            r.faces[0].sense = Sense::Reversed;
+        }
+        kinds(report(&r, BodyKind::General, within(bound)).faults())
+    };
+    let first = found(bent, false);
+    let mut ring = bent.to_vec();
+    for turned in [false, true] {
+        for start in 0..ring.len() {
+            let again = found(&ring, turned);
+            assert_eq!(again, first, "turned {turned}, start {start}");
+            ring.rotate_left(1);
+        }
+        // Run the other way, the face is one seen from below.
+        ring.reverse();
+    }
+    first
+}
+
+/// A face that crosses z = 0 well away from the bent faces here, on the plane x = 20.
+const ASIDE: [[i64; 3]; 4] = [[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]];
+
+#[test]
+fn a_flat_face_is_tested_against_each_triangle_of_a_star_on_its_plane() {
+    // The mean of the bent face's corners is (5, 5, 0), so the triangle of its star to the edge
+    // along y = 0 lies on z = 0, where the small squares are. The first is beside that triangle
+    // and above the three others; the second lies inside it.
+    let bent = [[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, -1]];
+    let beside = [[1, 8, 0], [3, 8, 0], [3, 9, 0], [1, 9, 0]];
+    assert_eq!(bent_beside(&bent, &beside, 1), []);
+    let inside = [[4, 1, 0], [6, 1, 0], [6, 2, 0], [4, 2, 0]];
+    assert_eq!(bent_beside(&bent, &inside, 1), [FaultKind::FacesCross]);
+}
+
+#[test]
+fn a_bent_face_has_its_star_wherever_its_ring_starts() {
+    // A straight corner, which no fan of triangles can start from, and a dent the mean sees past,
+    // which no fan can start beside: the star has no first corner, so neither matters.
+    let straight = [[0, 0, 0], [5, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]];
+    assert_eq!(bent_beside(&straight, &ASIDE, 1), []);
+    let dented = [[0, 0, 0], [5, 1, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]];
+    assert_eq!(bent_beside(&dented, &ASIDE, 1), []);
+    // And a face that does cross the bent one is found from every start.
+    let through = [[5, 2, -5], [5, 8, -5], [5, 8, 5], [5, 2, 5]];
+    assert_eq!(bent_beside(&straight, &through, 1), [FaultKind::FacesCross]);
+}
+
+#[test]
+fn a_bent_face_whose_mean_sees_an_edge_from_outside_has_no_star() {
+    // A notch cut back past the mean of the corners, (7, 3): the two triangles to the notch's
+    // edges turn against the ring, so no star stands for the face, wherever the ring starts.
+    let notched = [[0, 0, 0], [10, 0, 0], [10, 10, 1], [8, 2, 0]];
+    assert_eq!(bent_beside(&notched, &ASIDE, 1), [FaultKind::PairUnchecked]);
+    // Nor for a notch whose tip, (0, 3, 1), is the mean itself: the two triangles to the notch's
+    // edges have no area, so no plane.
+    let spiked = [[-4, -2, 0], [0, 3, 1], [4, -2, 2], [6, 8, 0], [-6, 8, 2]];
+    assert_eq!(bent_beside(&spiked, &ASIDE, 2), [FaultKind::PairUnchecked]);
+}
+
+#[test]
+fn a_face_is_read_on_the_plane_of_its_corners_however_its_own_is_written() {
+    // The same notch on a flat face, which no star stands for, under its own plane, a plane
+    // written half a step above its corners and one written a whole step above. The second is no
+    // plane of integers and the third is one, as the second scaled by two would be. Each time the
+    // face is read on the plane its corners fix, as the polygon it is: beside a face through its
+    // notch, which is inside its hull and outside it, and crossing a face through its inside.
+    let notched = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [8, 2, 0]];
+    let through_the_notch = [[4, 2, -5], [4, 4, -5], [4, 4, 5], [4, 2, 5]];
+    let through_the_inside = [[9, 1, -5], [9, 2, -5], [9, 2, 5], [9, 1, 5]];
+    let found = |above: f64, other: &[[i64; 3]]| {
+        let mut r = sheets(&[&notched, other]);
+        r.surfaces[0] = level(above);
+        kinds(report(&r, BodyKind::General, within(1)).faults())
+    };
+    for above in [0.0, 0.5, 1.0] {
+        assert_eq!(found(above, &ASIDE), [], "{above}");
+        assert_eq!(found(above, &through_the_notch), [], "{above}");
+        assert_eq!(
+            found(above, &through_the_inside),
+            [FaultKind::FacesCross],
+            "{above}"
+        );
+    }
+    // Two steps above under a bound of one, the corners are off their surface: group 2 says so
+    // of each, and no plane is read for a face that never reaches group 3.
+    for other in [&ASIDE, &through_the_notch, &through_the_inside] {
+        let far = found(2.0, other);
+        assert_eq!(
+            far.iter()
+                .filter(|k| **k == FaultKind::VertexOffSurface)
+                .count(),
+            4,
+            "{far:?}"
+        );
+        assert!(
+            far.iter()
+                .all(|k| matches!(k, FaultKind::VertexOffSurface | FaultKind::EdgeOffSurface)),
+            "{far:?}"
+        );
+    }
+}
+
+#[test]
+fn two_bent_faces_touching_at_their_means_are_found() {
+    // Two saddles with one mean, the origin, the second above the first everywhere else. The
+    // origin is a corner of every triangle of both stars and a vertex of neither face, so
+    // nothing excuses the touch.
+    let lower = [[10, 10, 2], [-10, 10, -2], [-10, -10, 2], [10, -10, -2]];
+    let upper = [[10, 10, 3], [-30, 30, -3], [-10, -10, 3], [30, -30, -3]];
+    let mut r = sheets(&[&lower, &upper]);
+    (r.surfaces[0], r.surfaces[1]) = (level(0.0), level(0.0));
+    let found = report(&r, BodyKind::General, within(3));
+    assert_eq!(kinds(found.faults()), [FaultKind::FacesCross]);
+    // Lifted a step, the upper one is clear of the lower.
+    let lifted = upper.map(|[x, y, z]| [x, y, z + 1]);
+    let mut r = sheets(&[&lower, &lifted]);
+    (r.surfaces[0], r.surfaces[1]) = (level(0.0), level(0.0));
+    assert_eq!(report(&r, BodyKind::General, within(4)).faults(), []);
+}
+
+#[test]
+fn a_ring_of_five_corners_across_the_frame_has_no_star_and_one_of_four_has() {
+    // A triangle of a star lies on a plane whose normal is the sum of n − 2 normals of triangles
+    // of grid points. Across the whole frame three of those pass a plane's budget and two do
+    // not: the ring of five waits, never with a wrong sign, and the ring of four is certified.
+    // The face beside them stands in the corner both rings cut off.
+    let beside = |m: i64| {
+        let (x, y) = (5 - m, m - 9);
+        [[x, y, -5], [x, y + 7, -5], [x, y + 7, 5], [x, y, 5]]
+    };
+    let five = |m: i64| [[-m, -m, 0], [m, -m, 0], [m, m, 1], [0, m, 0], [-m, 0, 0]];
+    let four = |m: i64| [[-m, -m, 0], [m, -m, 0], [m, m, 1], [-m, 0, 0]];
+    assert_eq!(
+        bent_beside(&five(FAR), &beside(FAR), 2),
+        [FaultKind::PairUnchecked]
+    );
+    assert_eq!(bent_beside(&four(FAR), &beside(FAR), 2), []);
+    // Half as wide, the ring of five has its star too.
+    assert_eq!(bent_beside(&five(FAR / 2), &beside(FAR / 2), 2), []);
+}
+
+#[test]
+fn a_flat_face_against_one_with_no_outline_fails_closed() {
+    let mut r = sheets(&[&[[5, 5, 0], [9, 5, 0], [9, 9, 0], [5, 9, 0]]]);
+    let e = r.edge(None);
+    let s = r.shell(0);
+    r.face(s, &[&[(e, Sense::Forward)]]);
+    let found = report(&r, BodyKind::General, certified());
+    assert_eq!(kinds(found.faults()), [FaultKind::PairUnchecked]);
+}
+
+/// Adds a box of corners `points`, facing outward, as a solid region of its own; its grid corners.
+fn add_lump(r: &mut Rows, points: &[[i64; 3]; 8]) {
+    let solid = r.region(RegionKind::Solid);
+    let s = r.shell(solid);
+    let base = r.vertices.len() as u32;
+    for p in points {
+        r.vertex(*p);
+    }
+    let rings: Vec<Vec<u32>> = BOX_SHELL
+        .iter()
+        .map(|f| f[0].iter().map(|v| v + base).collect())
+        .collect();
+    let refs: Vec<&[u32]> = rings.iter().map(Vec::as_slice).collect();
+    faces_into(r, s, &refs);
+}
+
+#[test]
+fn a_lump_of_grid_points_inside_a_shell_of_meetings_is_found() {
+    let big = corners([0, 0, 0], [900, 900, 900]);
+    let spec = Spec {
+        points: &big,
+        regions: &[&[&BOX_SHELL]],
+    };
+    let mut r = tilted(spec, &jog(47));
+    add_lump(&mut r, &corners([300, 300, 300], [100, 100, 100]));
+    assert_eq!(kinds(&faults(&r)), [FaultKind::ShellNesting]);
+}
+
+#[test]
+fn a_ray_along_a_seam_counts_one_of_its_two_faces() {
+    // A box whose top is split along y = 50, one corner a meeting of planes, and inside it a lump
+    // with a corner under the seam, so the ray meets the seam exactly.
+    let mut points = BOX_POINTS.to_vec();
+    points.extend([[0, 50, 100], [100, 50, 100]]);
+    let faces: [&[u32]; 7] = [
+        &[0, 2, 3, 1],
+        &[4, 5, 9, 8],
+        &[8, 9, 7, 6],
+        &[0, 1, 5, 4],
+        &[2, 6, 7, 3],
+        &[0, 4, 8, 6, 2],
+        &[1, 3, 7, 9, 5],
+    ];
+    let mut r = polyhedron(&points, &faces);
+    let x = r.plane_through([[100, 0, 0], [100, 1, 0], [100, 0, 1]]);
+    let y = r.plane_through([[0, 100, 0], [0, 100, 1], [1, 100, 0]]);
+    let z = r.plane_through([[0, 0, 100], [1, 0, 100], [0, 1, 100]]);
+    r.meets.push((7, [x, y, z]));
+    add_lump(&mut r, &corners([30, 50, 30], [10, 10, 10]));
+    assert_eq!(kinds(&faults(&r)), [FaultKind::ShellNesting]);
+}
+
+#[test]
+fn two_lumps_sharing_a_meeting_are_judged_by_their_other_corners() {
+    let mut r = Rows::empty();
+    let x = r.plane_through([[0, 0, 0], [0, 1, 0], [0, 0, 1]]);
+    let y = r.plane_through([[0, 0, 0], [0, 0, 1], [1, 0, 0]]);
+    let z = r.plane_through([[0, 0, 0], [1, 0, 0], [0, 1, 0]]);
+    let apex = r.meet([x, y, z]);
+    assert_eq!(apex, 0);
+    for p in [
+        [100, 0, 0],
+        [0, 100, 0],
+        [0, 0, 100],
+        [-100, 0, 0],
+        [0, -100, 0],
+        [0, 0, -100],
+    ] {
+        r.vertex(p);
+    }
+    let up = r.region(RegionKind::Solid);
+    let down = r.region(RegionKind::Solid);
+    let (s, t) = (r.shell(up), r.shell(down));
+    faces_into(&mut r, s, &[&[0, 2, 1], &[0, 1, 3], &[0, 3, 2], &[1, 2, 3]]);
+    faces_into(&mut r, t, &[&[0, 4, 5], &[0, 6, 4], &[0, 5, 6], &[4, 6, 5]]);
+    assert_eq!(faults(&r), []);
+}
+
+#[test]
+fn a_shell_of_meetings_inside_a_bent_one_is_found_through_its_stars() {
+    // The big lump has three bent faces, each read as its star: the ray from a corner of the
+    // tilted box is counted against their triangles, and finds the box inside the lump's
+    // material. While nesting read outlines only, the pair waited.
+    let mut r = tilted(BOX, &jog(59));
+    let mut bent = corners([-500, -500, -500], [1500, 1500, 1500]);
+    bent[7][2] += 1;
+    add_lump(&mut r, &bent);
+    let found = report(&r, BodyKind::Solid, within(2));
+    assert_eq!(kinds(found.faults()), [FaultKind::ShellNesting]);
+    assert_eq!(found.faults()[0].at, Entity::Shell(ix(0)));
+    assert_eq!(found.faults()[0].with, Some(Entity::Shell(ix(1))));
+}
+
+/// A box 20 wide and 40 high whose floor is bent: the corner at (20, 20) is lifted 8 steps, so
+/// the floor's four corners leave one plane and no other face's do. `start` is the corner the
+/// floor's ring starts at.
+fn box_with_a_bent_floor(start: usize) -> Rows {
+    let mut points = corners([0, 0, 0], [20, 20, 40]);
+    points[3][2] = 8;
+    let mut floor = BOX_SHELL[0][0].to_vec();
+    floor.rotate_left(start);
+    let mut faces: Vec<&[u32]> = BOX_SHELL.iter().map(|f| f[0]).collect();
+    faces[0] = &floor;
+    polyhedron(&points, &faces)
+}
+
+/// Adds a box of corners `points` to solid region `region` as a cavity's shell, facing inward.
+fn add_cavity(r: &mut Rows, region: u32, points: &[[i64; 3]; 8]) {
+    let s = r.shell(region);
+    let base = r.vertices.len() as u32;
+    for p in points {
+        r.vertex(*p);
+    }
+    let rings: Vec<Vec<u32>> = BOX_SHELL
+        .iter()
+        .map(|f| f[0].iter().rev().map(|v| v + base).collect())
+        .collect();
+    let refs: Vec<&[u32]> = rings.iter().map(Vec::as_slice).collect();
+    faces_into(r, s, &refs);
+}
+
+#[test]
+fn a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts() {
+    // The floor's star rises from its hub, (10, 10, 2), to 2.6 under the small box, which stands
+    // on z = 3: clear of the star and inside the big box. A fan from the floor's first corner is
+    // somewhere else. From (0, 0, 0) or (20, 20, 8) its fold runs between them, 3.6 high under
+    // the small box's first corner, which a count of crossings with that fan puts outside; from
+    // the other two corners its fold lies below. Read through the star there is one answer for
+    // every start: a cavity there is where a cavity may be, and a lump there is inside another
+    // lump's material.
+    let small = corners([9, 9, 3], [2, 2, 2]);
+    for start in 0..4 {
+        let mut hollow = box_with_a_bent_floor(start);
+        add_cavity(&mut hollow, 1, &small);
+        let found = report(&hollow, BodyKind::Solid, within(8));
+        assert_eq!(found.faults(), [], "{start}");
+        let mut lumps = box_with_a_bent_floor(start);
+        add_lump(&mut lumps, &small);
+        let found = report(&lumps, BodyKind::Solid, within(8));
+        assert_eq!(kinds(found.faults()), [FaultKind::ShellNesting], "{start}");
+    }
+    // A step lower the small box stands in the star, and is found crossing it, not nested.
+    let mut sunk = box_with_a_bent_floor(0);
+    add_cavity(&mut sunk, 1, &corners([9, 9, 2], [2, 2, 2]));
+    let found = report(&sunk, BodyKind::Solid, within(8));
+    assert!(kinds(found.faults()).contains(&FaultKind::FacesCross));
+    // In a body recorded Exact the floor's corners are off their plane, and nothing is read.
+    let exact = report(&box_with_a_bent_floor(0), BodyKind::Solid, Exactness::Exact);
+    assert!(kinds(exact.faults()).contains(&FaultKind::VertexOffSurface));
+}
+
+/// A slab over a square of side 20, `thick` steps thick, its floor and roof one saddle: the
+/// corners at (20, 0) and (0, 20) are `rise` steps higher than the other two. Each ring starts
+/// `start` corners on, and all run the other way if `turned`, which turns the slab inside out.
+fn saddle_slab(thick: i64, rise: i64, start: usize, turned: bool) -> Rows {
+    let mut points = corners([0, 0, 0], [20, 20, thick]);
+    for k in [1, 2, 5, 6] {
+        points[k][2] += rise;
+    }
+    let rings: Vec<Vec<u32>> = BOX_SHELL
+        .iter()
+        .enumerate()
+        .map(|(f, face)| {
+            let mut ring = face[0].to_vec();
+            if turned {
+                ring.reverse();
+            }
+            ring.rotate_left((start + f) % 4);
+            ring
+        })
+        .collect();
+    let faces: Vec<&[u32]> = rings.iter().map(Vec::as_slice).collect();
+    polyhedron(&points, &faces)
+}
+
+#[test]
+fn a_bent_shell_has_one_sign_wherever_its_rings_start() {
+    // Six times the slab's volume lies between 2400 t - 800 r and 2400 t + 800 r for thickness t
+    // and rise r: the floor's corners give its area vector 0 or -800 r, the roof's 800 t or
+    // 800 (t + r), and the two flat sides away from the origin 800 t each.
+    for start in 0..4 {
+        // Five thick and one high: outward, and a cavity's shell when turned, from every start.
+        let found = report(&saddle_slab(5, 1, start, false), BodyKind::Solid, within(8));
+        assert_eq!(found.faults(), [], "{start}");
+        let found = report(&saddle_slab(5, 1, start, true), BodyKind::Solid, within(8));
+        assert_eq!(kinds(found.faults()), [FaultKind::ShellInward], "{start}");
+        // One thick and four high, the bracket runs from -800 to 5600: the slab is thinner than
+        // its corners' rounding, and its sign waits, whichever way it faces. Read from each
+        // loop's first corner it was outward from one start and a cavity's from another.
+        for turned in [false, true] {
+            let found = report(
+                &saddle_slab(1, 4, start, turned),
+                BodyKind::Solid,
+                within(8),
+            );
+            assert_eq!(
+                kinds(found.faults()),
+                [FaultKind::Unchecked],
+                "{start} {turned}"
+            );
+            assert_eq!(found.faults()[0].at, Entity::Shell(ix(0)));
+        }
+        // One thick and three high, the least is exactly nothing: no sign either.
+        let found = report(&saddle_slab(1, 3, start, false), BodyKind::Solid, within(8));
+        assert_eq!(kinds(found.faults()), [FaultKind::Unchecked], "{start}");
+        // Two thick and three high, the least is 2400: outward.
+        let found = report(&saddle_slab(2, 3, start, false), BodyKind::Solid, within(8));
+        assert_eq!(found.faults(), [], "{start}");
+    }
+}
+
+#[test]
+fn a_shell_of_meetings_with_every_corner_on_another_fails_closed() {
+    // A cube dented on all six sides, and a cavity between four of the dents' tips, one tip a
+    // meeting of planes, so no corner of the cavity is off the cube.
+    let mut r = Rows::empty();
+    let region = r.region(RegionKind::Solid);
+    let outer = r.shell(region);
+    for c in corners([0, 0, 0], [12, 12, 12]) {
+        r.vertex(c);
+    }
+    for t in [
+        [6, 6, 2],
+        [6, 6, 10],
+        [6, 2, 6],
+        [6, 10, 6],
+        [2, 6, 6],
+        [10, 6, 6],
+    ] {
+        r.vertex(t);
+    }
+    let mut rings: Vec<Vec<u32>> = Vec::new();
+    for (f, ring) in CUBE_FACES.iter().enumerate() {
+        for k in 0..4 {
+            rings.push(vec![ring[k], ring[(k + 1) % 4], 8 + f as u32]);
+        }
+    }
+    let refs: Vec<&[u32]> = rings.iter().map(Vec::as_slice).collect();
+    faces_into(&mut r, outer, &refs);
+    let cavity = r.shell(region);
+    faces_into(
+        &mut r,
+        cavity,
+        &[&[8, 10, 9], &[8, 9, 12], &[8, 12, 10], &[9, 10, 12]],
+    );
+    let x = r.plane_through([[6, 0, 0], [6, 1, 0], [6, 0, 1]]);
+    let y = r.plane_through([[0, 6, 0], [0, 6, 1], [1, 6, 0]]);
+    let z = r.plane_through([[0, 0, 2], [1, 0, 2], [0, 1, 2]]);
+    r.meets.push((8, [x, y, z]));
+    assert_eq!(kinds(&faults(&r)), [FaultKind::PairUnchecked]);
+}
+
+/// The largest grid coordinate.
+const FAR: i64 = 1_099_511_627_775;
+
+#[test]
+fn a_flat_face_at_each_edge_of_the_grid_has_its_sides() {
+    // No neighbours, so each side's plane is stood on it, a step towards the origin.
+    for z in [FAR, -FAR] {
+        let inward = if z > 0 { z - 10 } else { z + 5 };
+        let r = sheets(&[
+            &[[0, 0, z], [10, 0, z], [10, 10, z], [0, 10, z]],
+            &[
+                [20, 0, inward],
+                [20, 10, inward],
+                [20, 10, inward + 5],
+                [20, 0, inward + 5],
+            ],
+        ]);
+        let found = report(&r, BodyKind::General, Exactness::Exact);
+        assert_eq!(found.faults(), []);
+    }
+}
+
+#[test]
+fn a_vertex_on_four_planes_keeps_three_and_its_edges_find_the_fourth() {
+    // An octahedron, four faces at each vertex. An edge's second plane is in neither end's three,
+    // so it can only come from the face across the edge.
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let m = 100;
+    let plane = |r: &mut Rows, x: i64, y: i64, z: i64| {
+        r.plane_through([[x * m, 0, 0], [0, y * m, 0], [0, 0, z * m]])
+    };
+    let mut planes = Vec::new();
+    for (x, y, z) in [
+        (1, 1, 1),
+        (1, 1, -1),
+        (1, -1, 1),
+        (1, -1, -1),
+        (-1, 1, 1),
+        (-1, 1, -1),
+        (-1, -1, 1),
+        (-1, -1, -1),
+    ] {
+        planes.push(plane(&mut r, x, y, z));
+    }
+    for [a, b, c] in [
+        [0, 2, 3],
+        [0, 4, 5],
+        [0, 2, 4],
+        [4, 5, 6],
+        [2, 3, 6],
+        [1, 3, 5],
+    ] {
+        r.meet([planes[a], planes[b], planes[c]]);
+    }
+    let s = r.shell(solid);
+    faces_into(
+        &mut r,
+        s,
+        &[
+            &[0, 1, 2],
+            &[0, 5, 1],
+            &[0, 2, 4],
+            &[0, 4, 5],
+            &[3, 2, 1],
+            &[3, 1, 5],
+            &[3, 4, 2],
+            &[3, 5, 4],
+        ],
+    );
+    assert_eq!(faults(&r), []);
+}
+
+#[test]
+fn a_face_with_a_hole_on_doubles_takes_its_plane_from_its_corners() {
+    let mut r = Rows::empty();
+    let (s, t) = (r.shell(0), r.shell(0));
+    for p in [
+        [0, 0, 0],
+        [100, 0, 0],
+        [100, 100, 0],
+        [0, 100, 0],
+        [40, 40, 0],
+        [40, 60, 0],
+        [60, 60, 0],
+        [60, 40, 0],
+        [200, 0, -50],
+        [200, 100, -50],
+        [200, 100, 50],
+        [200, 0, 50],
+    ] {
+        r.vertex(p);
+    }
+    let (outer, hole) = (fins(&mut r, &[0, 1, 2, 3]), fins(&mut r, &[4, 5, 6, 7]));
+    r.face(s, &[&outer, &hole]);
+    let other = fins(&mut r, &[8, 9, 10, 11]);
+    r.face(t, &[&other]);
+    r.surfaces[0] = off_grid();
+    assert_eq!(report(&r, BodyKind::General, certified()).faults(), []);
+}
+
+#[test]
+fn a_box_with_a_corner_lifted_is_a_star_on_each_bent_face() {
+    let mut points = BOX_POINTS.to_vec();
+    points[7][2] += 1;
+    let faces: Vec<&[u32]> = BOX_SHELL.iter().map(|f| f[0]).collect();
+    let r = polyhedron(&points, &faces);
+    let room = Exactness::Certified {
+        bound: Steps(2),
+        step: GridStep::Q0,
+    };
+    assert_eq!(report(&r, BodyKind::Solid, room).faults(), []);
+}
+
+#[test]
+fn faces_on_parallel_planes_nearer_than_they_may_stray_are_not_passed_as_apart() {
+    // Issue #783. The notched bent ring no star stands for, written under z = 1: three corners
+    // are a step below that plane, inside a bound of one. Its edge from (0, 0, 0) to (10, 0, 0)
+    // runs through the middle of a square on z = 0. The two written planes are parallel and a
+    // step apart, which says nothing of a face that may lie a step from its own: the pair waits,
+    // where it was once passed.
+    let notched = [[0, 0, 0], [10, 0, 0], [10, 10, 1], [8, 2, 0]];
+    // The square at height `at`, its last corner `dip` steps lower, under a bound of `bound`.
+    let found = |above: f64, at: i64, dip: i64, bound: u64| {
+        let square = [[4, -1, at], [6, -1, at], [6, 1, at], [4, 1, at - dip]];
+        let mut r = sheets(&[&notched, &square]);
+        r.surfaces[0] = level(above);
+        kinds(report(&r, BodyKind::General, within(bound)).faults())
+    };
+    assert_eq!(found(1.0, 0, 0, 1), [FaultKind::PairUnchecked]);
+    // Written under the square's own plane, it waits as it always did.
+    assert_eq!(found(0.0, 0, 0, 1), [FaultKind::PairUnchecked]);
+    // The square lies on its plane exactly, so only the ring may stray, by a step. Just beyond
+    // that, with the planes two steps apart, the faces cannot meet, and the body passes.
+    assert_eq!(found(1.0, -1, 0, 1), []);
+    // A wider bound takes the room back, and a third step gives it again.
+    assert_eq!(found(1.0, -1, 0, 2), [FaultKind::PairUnchecked]);
+    assert_eq!(found(1.0, -2, 0, 2), []);
+    // A square with a corner a step off its own plane may stray too: the planes must clear two
+    // steps, one for each face.
+    assert_eq!(found(1.0, -1, 1, 1), [FaultKind::PairUnchecked]);
+    assert_eq!(found(1.0, -2, 1, 1), []);
+}
+
+#[test]
+fn the_caps_of_a_cylinder_shorter_than_its_bound_are_apart() {
+    // A cylinder two steps high, recorded within a bound of one or of four. Its caps are discs
+    // whose circles lie on their planes exactly, so neither can stray from its plane, and two
+    // planes that are not one keep them apart however wide the bound is.
+    let mut r = round_cylinder();
+    r.curves[0] = parallel(2.0, 5.0);
+    r.surfaces[0] = level(2.0);
+    for bound in [1, 4] {
+        let found = report(&r, BodyKind::Solid, within(bound));
+        assert_eq!(found.faults(), [], "{bound}");
+    }
+}
+
+#[test]
+fn a_flat_notched_face_through_another_on_its_plane_is_found_however_its_plane_is_written() {
+    // The same ring flat on z = 0, with the square its edge runs through, both on one plane.
+    // Read on the plane its corners fix, the ring is found crossing the square whether its own
+    // plane is written on its corners, half a step above them or a whole step above. Read on a
+    // plane written a step above, it had no outline, and the pair was passed as two faces on
+    // parallel planes.
+    let flat = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [8, 2, 0]];
+    let square = [[4, -1, 0], [6, -1, 0], [6, 1, 0], [4, 1, 0]];
+    for above in [0.0, 0.5, 1.0] {
+        let mut r = sheets(&[&flat, &square]);
+        r.surfaces[0] = level(above);
+        let found = report(&r, BodyKind::General, within(1));
+        assert_eq!(kinds(found.faults()), [FaultKind::FacesCross], "{above}");
+    }
+}
+
+/// A linear congruential generator (Knuth's MMIX multiplier), its high bits taken.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        self.0 >> 33
+    }
+
+    fn below(&mut self, n: u64) -> i64 {
+        (self.next() % n) as i64
+    }
+}
+
+/// A ring about (20, 20) on z = 0, its corners in order of angle: often not convex.
+fn ring_about(g: &mut Lcg) -> Vec<[i64; 3]> {
+    let n = 3 + g.below(5) as usize;
+    let mut angles: Vec<f64> = (0..n).map(|_| g.below(6283) as f64 / 1000.0).collect();
+    angles.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let mut out: Vec<[i64; 3]> = Vec::new();
+    for t in angles {
+        let r = 3.0 + g.below(16) as f64;
+        // The kernel's own sine and cosine, of half-turns, so the rings are the same everywhere.
+        let turns = t / core::f64::consts::PI;
+        let (cos, sin) = (
+            geom_num::math::cospi(turns).unwrap().get(),
+            geom_num::math::sinpi(turns).unwrap().get(),
+        );
+        let p = [
+            (20.0 + r * cos).round() as i64,
+            (20.0 + r * sin).round() as i64,
+            0,
+        ];
+        if !out.contains(&p) {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// A square to set beside `ring`, in one of eight ways: through z = 0, standing on it, lying on
+/// it, a step above it, sloping through it, sharing a corner of the ring, sharing its first edge,
+/// and a step below it.
+fn beside_ring(g: &mut Lcg, ring: &[[i64; 3]], mode: u64) -> Vec<[i64; 3]> {
+    let c = 5 + g.below(30);
+    let y0 = 5 + g.below(28);
+    let y1 = y0 + 1 + g.below(6);
+    let x1 = c + 1 + g.below(6);
+    let (p, q) = (ring[0], ring[1]);
+    match mode {
+        0 => vec![[c, y0, -5], [c, y1, -5], [c, y1, 5], [c, y0, 5]],
+        1 => vec![[c, y0, 0], [c, y1, 0], [c, y1, 5], [c, y0, 5]],
+        2 => vec![[c, y0, 0], [x1, y0, 0], [x1, y1, 0], [c, y1, 0]],
+        3 => vec![[c, y0, 1], [x1, y0, 1], [x1, y1, 1], [c, y1, 1]],
+        4 => vec![[c, y0, -3], [x1, y0, -3], [x1, y1, 4], [c, y1, 4]],
+        5 => vec![p, [p[0], p[1], 5], [p[0] + 3, p[1], 5], [p[0] + 3, p[1], 0]],
+        6 => vec![p, q, [q[0], q[1], 5], [p[0], p[1], 5]],
+        _ => vec![[c, y0, -1], [x1, y0, -1], [x1, y1, -1], [c, y1, -1]],
+    }
+}
+
+/// Whether `ring`, on z = 0, has fewer than three corners or encloses no area.
+fn no_ring(ring: &[[i64; 3]]) -> bool {
+    let mut area = 0_i64;
+    for k in 0..ring.len() {
+        let (p, q) = (ring[k], ring[(k + 1) % ring.len()]);
+        area += p[0] * q[1] - p[1] * q[0];
+    }
+    ring.len() < 3 || area == 0
+}
+
+#[test]
+fn the_plane_written_for_a_flat_face_does_not_move_its_verdict() {
+    // An independent judge's cases for reading a face on the plane its corners fix: 1,500 rings
+    // on z = 0, most not convex, each beside a square, written under z = 0, half a step above, a
+    // step above and a step below, all within a bound of one. The verdict is the same four times,
+    // and the cases reach both sides of it. Read on the written plane, twenty of them were passed
+    // under a plane a step off though the faces crossed.
+    let mut g = Lcg(0x5eed_0134);
+    let (mut passed, mut crossed) = (0_u32, 0_u32);
+    for case in 0..1500 {
+        let ring = ring_about(&mut g);
+        let mode = g.next() % 8;
+        if no_ring(&ring) {
+            continue;
+        }
+        let other = beside_ring(&mut g, &ring, mode);
+        let found = |above: f64| {
+            let mut r = sheets(&[&ring, &other]);
+            r.surfaces[0] = level(above);
+            kinds(report(&r, BodyKind::General, within(1)).faults())
+        };
+        let own = found(0.0);
+        for above in [0.5, 1.0, -1.0] {
+            assert_eq!(found(above), own, "{case}, {above}: {ring:?} {other:?}");
+        }
+        passed += u32::from(own.is_empty());
+        crossed += u32::from(own.contains(&FaultKind::FacesCross));
+        // Two steps off, past the bound, group 2 speaks and group 3 never runs.
+        let far = found(2.0);
+        assert!(
+            far.contains(&FaultKind::VertexOffSurface)
+                && far
+                    .iter()
+                    .all(|k| matches!(k, FaultKind::VertexOffSurface | FaultKind::EdgeOffSurface)),
+            "{case}: {far:?}"
+        );
+    }
+    assert!(passed > 1000 && crossed > 150, "{passed} {crossed}");
+}
+
+#[test]
+fn the_plane_written_for_a_tilted_face_does_not_move_its_verdict() {
+    // The same rings and squares sheared onto the plane z = x, the ring written under its own
+    // plane and under the level planes z = 1/2 and z = 0, with a bound wide enough for the tilt.
+    let mut g = Lcg(0x5eed_0417);
+    let (mut passed, mut crossed) = (0_u32, 0_u32);
+    for case in 0..800 {
+        let flat = ring_about(&mut g);
+        let mode = g.next() % 8;
+        if no_ring(&flat) {
+            continue;
+        }
+        let other: Vec<[i64; 3]> = beside_ring(&mut g, &flat, mode)
+            .into_iter()
+            .map(|p| [p[0], p[1], p[2] + p[0]])
+            .collect();
+        let ring: Vec<[i64; 3]> = flat.iter().map(|p| [p[0], p[1], p[0]]).collect();
+        let found = |surface: SurfaceKind| {
+            let mut r = sheets(&[&ring, &other]);
+            r.surfaces[0] = surface;
+            kinds(report(&r, BodyKind::General, within(60)).faults())
+        };
+        let own = found(SurfaceKind::Plane(
+            Plane::new(
+                [0.0; 3],
+                [1.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0],
+                ((0.0, 1.0), (0.0, 1.0)),
+            )
+            .unwrap(),
+        ));
+        for above in [0.5, 0.0] {
+            assert_eq!(
+                found(level(above)),
+                own,
+                "{case}, {above}: {ring:?} {other:?}"
+            );
+        }
+        passed += u32::from(own.is_empty());
+        crossed += u32::from(own.contains(&FaultKind::FacesCross));
+    }
+    assert!(passed > 500 && crossed > 80, "{passed} {crossed}");
+}
+
+/// The L as a solid of grid corners, its two caps written `off` steps outside their corners.
+fn ell_with_caps_off(off: f64) -> Rows {
+    let faces: Vec<&[u32]> = ELL_SHELL.iter().map(|f| f[0]).collect();
+    let mut r = polyhedron(&ELL_POINTS, &faces);
+    r.surfaces[0] = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, -off],
+            [0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0],
+            ((0.0, 1.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    r.surfaces[1] = level(100.0 + off);
+    r
+}
+
+#[test]
+fn a_solid_with_caps_written_off_their_corners_is_judged_by_its_corners() {
+    // Caps that are not convex, written on their corners, half a step outside them and a whole
+    // step outside: each lump set against the L is found where its corners put it, the same
+    // three times.
+    for off in [0.0, 0.5, 1.0] {
+        let found = |lump: Option<[[i64; 3]; 8]>| {
+            let mut r = ell_with_caps_off(off);
+            if let Some(points) = lump {
+                add_lump(&mut r, &points);
+            }
+            kinds(report(&r, BodyKind::Solid, within(1)).faults())
+        };
+        assert_eq!(found(None), [], "{off}");
+        // A lump through the top cap.
+        assert_eq!(
+            found(Some(corners([20, 20, 50], [30, 30, 100]))),
+            [FaultKind::FacesCross; 4],
+            "{off}"
+        );
+        // A lump wholly inside the material.
+        assert_eq!(
+            found(Some(corners([20, 20, 20], [30, 30, 30]))),
+            [FaultKind::ShellNesting],
+            "{off}"
+        );
+        // A lump resting on the plane of the top cap's corners, z = 100, from above.
+        assert_eq!(
+            found(Some(corners([20, 20, 100], [30, 30, 30]))),
+            [FaultKind::FacesCross; 5],
+            "{off}"
+        );
+        // A lump a step above the corners, where the cap's plane is written at most: clear.
+        assert_eq!(
+            found(Some(corners([20, 20, 101], [30, 30, 30]))),
+            [],
+            "{off}"
+        );
+        // The L inside out.
+        let turned: Vec<Vec<u32>> = ELL_SHELL
+            .iter()
+            .map(|f| f[0].iter().rev().copied().collect())
+            .collect();
+        let refs: Vec<&[u32]> = turned.iter().map(Vec::as_slice).collect();
+        let mut out = polyhedron(&ELL_POINTS, &refs);
+        out.surfaces[0] = level(-off);
+        out.surfaces[1] = SurfaceKind::Plane(
+            Plane::new(
+                [0.0, 0.0, 100.0 + off],
+                [0.0, 1.0, 0.0],
+                [1.0, 0.0, 0.0],
+                ((0.0, 1.0), (0.0, 1.0)),
+            )
+            .unwrap(),
+        );
+        let found = report(&out, BodyKind::Solid, within(1));
+        assert_eq!(kinds(found.faults()), [FaultKind::ShellInward], "{off}");
+    }
+    // Two steps off under a bound of one: group 2 speaks.
+    let far = report(&ell_with_caps_off(2.0), BodyKind::Solid, within(1));
+    assert!(kinds(far.faults()).contains(&FaultKind::VertexOffSurface));
+}
+
+/// What a full check of `body`, recorded Exact and found valid, charges: its work units and the
+/// logical bytes it reserves.
+fn cost(body: &Body) -> (u128, u128) {
+    let mut m = WorkMeter::new(Budget::UNLIMITED);
+    let found = check(body, Exactness::Exact, Level::Full, &mut m).unwrap();
+    assert_eq!(found.faults(), []);
+    (m.used().work, m.used().logical_bytes)
+}
+
+#[test]
+fn the_faces_of_a_convex_body_are_told_apart_by_their_corners_alone() {
+    // Two faces of a box that share an edge each lie to one side of the other's plane and reach
+    // it only along that edge, so the first face's four corners settle the pair: a unit for the
+    // pair and one for each corner. Two opposite faces are settled by their boxes, for the pair's
+    // unit alone. No line is cut for any of the fifteen pairs, so nothing is sorted, and the
+    // corners are read from the faces' fins: no outline is kept and nothing is reserved. The
+    // numbers are the whole check's, so that a pair sent on to the cut, which finds the same
+    // answer, is seen here.
+    let cube = polyhedron(&BOX_POINTS, &CUBE_FACES);
+    let ell: Vec<&[u32]> = ELL_SHELL.iter().map(|loops| loops[0]).collect();
+    let got = [
+        cost(&cube.body(BodyKind::Solid)),
+        // The same of a box whose corners are meetings of its faces' planes, each tilted a step.
+        // Its edges are tested on its faces' outlines, which it keeps: a list of six, and for
+        // each face a list of its one outline and of its four sides.
+        cost(&tilted(BOX, &jog(7)).body(BodyKind::Solid)),
+        // An L is not convex, but of each two of its faces one keeps to one side of the other's
+        // plane: a wall under a cap, a wall beside a wall. So no line is cut for it either, and
+        // on grid corners it keeps no outline.
+        cost(&polyhedron(&ELL_POINTS, &ell).body(BodyKind::Solid)),
+        cost(&tilted(ELL, &still).body(BodyKind::Solid)),
+    ];
+    assert_eq!(got, [(546, 0), (675, 23_184), (863, 0), (1_068, 34_656)]);
+}
+
+#[test]
+fn a_body_of_many_faces_reserves_their_reads() {
+    // A prism on a polygon of 16 corners has 18 faces, more than a check holds on the stack: it
+    // reserves a list of their reads, 80 bytes each, and keeps no outline. Every face's pair is
+    // settled by its boxes or its corners. The corners are a regular polygon's of radius 1000,
+    // rounded to the grid, which leaves it convex.
+    let corners: [[i64; 2]; 16] = [
+        [1000, 0],
+        [924, 383],
+        [707, 707],
+        [383, 924],
+        [0, 1000],
+        [-383, 924],
+        [-707, 707],
+        [-924, 383],
+        [-1000, 0],
+        [-924, -383],
+        [-707, -707],
+        [-383, -924],
+        [0, -1000],
+        [383, -924],
+        [707, -707],
+        [924, -383],
+    ];
+    let mut points: Vec<[i64; 3]> = corners.iter().map(|p| [p[0], p[1], 0]).collect();
+    points.extend(corners.iter().map(|p| [p[0], p[1], 300]));
+    let bottom: Vec<u32> = (0..16).rev().collect();
+    let top: Vec<u32> = (16..32).collect();
+    let walls: Vec<Vec<u32>> = (0..16)
+        .map(|k| vec![k, (k + 1) % 16, (k + 1) % 16 + 16, k + 16])
+        .collect();
+    let mut faces: Vec<&[u32]> = vec![&bottom, &top];
+    faces.extend(walls.iter().map(Vec::as_slice));
+    let prism = polyhedron(&points, &faces);
+    assert_eq!(cost(&prism.body(BodyKind::Solid)), (2_772, 18 * 80));
+}
+
+#[test]
+fn faces_with_neither_an_outline_nor_a_star_keep_nothing() {
+    // A cylinder's caps are flat but round a circle, its side is curved: no face has an outline
+    // or a star, every pair goes to the carriers' test, and nothing is kept or reserved. The same
+    // with a seam, whose caps' circles start at vertices.
+    for r in [round_cylinder(), seamed_cylinder()] {
+        let mut m = WorkMeter::new(Budget::UNLIMITED);
+        let found = check(&r.body(BodyKind::Solid), certified(), Level::Full, &mut m).unwrap();
+        assert!(found.passed(), "{:?}", found.faults());
+        assert_eq!(m.used().logical_bytes, 0);
+    }
+}
+
+#[test]
+fn a_face_with_nothing_to_keep_is_kept_as_nothing() {
+    // The ring of meetings keeps its outlines, and with them a slot for every face: a disc above
+    // it, round a circle, has neither an outline nor a star, so its slot is empty and its pair
+    // goes to the carriers' test, which keeps the two planes apart.
+    let mut r = ring_of_meetings();
+    let e = r.edge(None);
+    r.curves[e as usize] = parallel(50.0, 5.0);
+    let s = r.shell(0);
+    let f = r.face(s, &[&[(e, Sense::Forward)]]);
+    r.surfaces[f as usize] = level(50.0);
+    let mut m = WorkMeter::new(Budget::UNLIMITED);
+    let found = check(&r.body(BodyKind::Sheet), certified(), Level::Full, &mut m).unwrap();
+    assert!(found.passed(), "{:?}", found.faults());
+    // The ring's lists, and the disc's slot, a list of no outline: no ring is read for a star.
+    assert_eq!(m.used().logical_bytes, MEETINGS_BYTES + 24);
+}
+
+#[test]
+fn faces_whose_corners_do_not_settle_them_are_kept_and_cut() {
+    // Each of these two sheets has corners on both sides of the other's plane, so their line is
+    // cut, on their outlines, kept then: a list of two slots, and for each a list of its one
+    // outline and of its six sides, then the lists of the cut.
+    let wall = [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, 0, -5],
+        [15, 0, -5],
+        [15, 0, 10],
+        [0, 0, 10],
+    ];
+    let body = sheets(&[&FLOOR_PAST_THE_AXIS, &wall]).body(BodyKind::General);
+    let mut m = WorkMeter::new(Budget::UNLIMITED);
+    let found = check(&body, Exactness::Exact, Level::Full, &mut m).unwrap();
+    assert_eq!(found.faults(), []);
+    assert_eq!((m.used().work, m.used().logical_bytes), (268, 8_208));
+}
+
+/// On z = 0, a face along the x axis from 0 to 10 that also holds the axis from −5 to 0, so that
+/// it has corners on both sides of y = 0.
+const FLOOR_PAST_THE_AXIS: [[i64; 3]; 6] = [
+    [0, 0, 0],
+    [10, 0, 0],
+    [10, 10, 0],
+    [-5, 10, 0],
+    [-5, -5, 0],
+    [0, -5, 0],
+];
+
+#[test]
+fn two_faces_through_each_others_planes_are_cut_along_their_line() {
+    // Each face has corners on both sides of the other's plane, so no corner's sign settles the
+    // pair and the planes' line, the x axis, is cut. The floor holds it from −5 to 10. The first
+    // wall holds it from 0 to 15, so they have the edge from 0 to 10 in common, which they
+    // share: apart.
+    let wall = [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, 0, -5],
+        [15, 0, -5],
+        [15, 0, 10],
+        [0, 0, 10],
+    ];
+    let found = |wall: &[[i64; 3]]| {
+        let r = sheets(&[&FLOOR_PAST_THE_AXIS, wall]);
+        kinds(report(&r, BodyKind::General, Exactness::Exact).faults())
+    };
+    assert_eq!(found(&wall), []);
+    // A wall that holds the axis from −3 to 10 has the stretch from −3 to 0 in common with the
+    // floor as well, where they share nothing.
+    let back = [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, 0, 10],
+        [-3, 0, 10],
+        [-3, 0, -5],
+        [0, 0, -5],
+    ];
+    assert_eq!(found(&back), [FaultKind::FacesCross]);
+    // A wall that holds the axis from 10 to 15 has only the corner at 10 in common with the
+    // floor, which they share: apart. Moved a step back along the axis it has the stretch from 9
+    // to 10 in common with it and no corner.
+    let beyond = [
+        [10, 0, 0],
+        [10, 0, -5],
+        [15, 0, -5],
+        [15, 0, 10],
+        [12, 0, 10],
+    ];
+    assert_eq!(found(&beyond), []);
+    let nearer = beyond.map(|[x, y, z]| [x - 1, y, z]);
+    assert_eq!(found(&nearer), [FaultKind::FacesCross]);
+}
+
+#[test]
+fn two_edges_between_the_same_two_corners_are_not_one_shared_edge() {
+    // Two triangles on crossing planes, each with an edge of its own from (0, 0, 0) to
+    // (10, 0, 0). Each lies to one side of the other's plane and reaches it along that edge, but
+    // they share only its two ends, which excuse their own places and nothing between them.
+    let mut r = Rows::empty();
+    let corner = [[0, 0, 0], [10, 0, 0], [5, 5, 0], [5, 0, 5]].map(|p| r.vertex(p));
+    for apex in [2, 3] {
+        let s = r.shell(0);
+        let ring = [(0, 1), (1, apex), (apex, 0)]
+            .map(|(a, b)| (r.edge(Some((corner[a], corner[b]))), Sense::Forward));
+        r.face(s, &[&ring]);
+    }
+    let found = report(&r, BodyKind::General, Exactness::Exact);
+    assert_eq!(kinds(found.faults()), [FaultKind::FacesCross]);
+    // With the one edge between them shared, the same two triangles pass.
+    let shared = sheets(&[
+        &[[0, 0, 0], [10, 0, 0], [5, 5, 0]],
+        &[[0, 0, 0], [10, 0, 0], [5, 0, 5]],
+    ]);
+    assert_eq!(
+        report(&shared, BodyKind::General, Exactness::Exact).faults(),
+        []
+    );
+}

@@ -36,6 +36,7 @@ use engine_geometry::operations::{
     move_by, pattern, prism, rotate, scale, six_volume, sphere, torus, twice_area, validity,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Scale, TypedTransform};
+use geom_num::plane::Plane;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::history::History;
 use geom_op::{ErrorKind, Family, NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath};
@@ -48,7 +49,7 @@ use geom_test::contract::{
 use geom_test::history::check_laws;
 use geom_test::rng::SplitMix64;
 use geom_topo::ix::Arena;
-use geom_topo::{Body, BodyKind, Builder, Ix, SurfaceKind};
+use geom_topo::{Body, BodyKind, Builder, Ix, PointKind, SurfaceKind};
 
 /// A call, its answer the text of its whole result.
 type S = Subject<'static, String>;
@@ -604,7 +605,7 @@ fn drive_rotate() -> Driver {
         })
     };
     let bx = Held::new(a_box());
-    let flat = Held::new(prism(&ctx(), &a_prism()).unwrap());
+    let cyl = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
     let shown = rotate(
         &ctx(),
         unit_box().moved(None),
@@ -649,7 +650,9 @@ fn drive_rotate() -> Driver {
                 }),
             ),
             trigger("NotAccepted", turned(&bx, None)),
-            trigger("NotCertifiedYet", turned(&flat, Some(certified(64)))),
+            // A flat body's rounded corners are certified since G129's meeting points; curved
+            // faces moved by a deviation still wait for the checker of piece G177.
+            trigger("NotCertifiedYet", turned(&cyl, Some(certified(64)))),
         ],
         accept: Some(Box::new(move |class| turned(&accepting, class))),
         range: Some((quarter(&unit_box(), 0), quarter(&unit_box(), 1))),
@@ -673,7 +676,6 @@ fn drive_scale() -> Driver {
     let bx = Held::new(a_box());
     let ballish = Held::new(sphere(&ctx(), &ball(p(1, 2, 3), 5)).unwrap());
     let cyl = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
-    let flat = Held::new(prism(&ctx(), &a_prism()).unwrap());
     let shown = scale(
         &ctx(),
         unit_box().moved(None),
@@ -701,9 +703,11 @@ fn drive_scale() -> Driver {
             ),
             trigger("NotAccepted", by(&ballish, [(2, 1); 3], None)),
             trigger("KindNotCertified", by(&cyl, wide(2), Some(certified(64)))),
+            // A uniform scale keeps circles, and the cylinder's curved faces it moves by a
+            // deviation wait for piece G177's checker (a flat body's rounded corners no longer do).
             trigger(
                 "NotCertifiedYet",
-                by(&flat, [(1, 3), (1, 7), (1, 1)], Some(certified(64))),
+                by(&cyl, [(1, 3); 3], Some(certified(64))),
             ),
         ],
         accept: Some(Box::new(move |class| by(&accepting, [(2, 1); 3], class))),
@@ -727,7 +731,6 @@ fn drive_pattern() -> Driver {
     };
     let bx = Held::new(a_box());
     let cyl = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
-    let flat = Held::new(prism(&ctx(), &a_prism()).unwrap());
     let two = || vec![shift(1, 20), shift(2, 40)];
     let shown = pattern(&ctx(), unit_box().moved(None), &two()).unwrap();
     let accepting = bx.clone();
@@ -754,9 +757,11 @@ fn drive_pattern() -> Driver {
                     vec![matrix([[2, 0, 0], [0, 1, 0], [0, 0, 1]])],
                 ),
             ),
+            // Curved faces moved by a deviation wait for piece G177's checker; a flat body's
+            // rounded corners are certified since G129's meeting points.
             trigger(
                 "NotCertifiedYet",
-                of(&flat, Some(certified(64)), vec![tilted(1)]),
+                of(&cyl, Some(certified(64)), vec![tilted(1)]),
             ),
         ],
         accept: Some(Box::new(move |class| {
@@ -848,6 +853,32 @@ fn sheet() -> Held {
     edited(BodyKind::Sheet, |_| {})
 }
 
+/// The box with every corner held as where its three face planes meet, as the rebuild stores a
+/// point off the grid (G129): the same places, with no grid point for the exact sums.
+fn met() -> Held {
+    edited(BodyKind::Solid, |b| {
+        let a = &mut b.arenas;
+        let corners: Vec<P3> = a.points.iter().map(|q| q.grid().unwrap()).collect();
+        for (row, q) in (0..).zip(corners) {
+            let mut plane = |k: usize, at: i64| {
+                let mut n = [0; 3];
+                n[k] = 1;
+                a.planes
+                    .push(Plane::new(n, -i128::from(at)).unwrap())
+                    .unwrap()
+            };
+            let planes = [
+                plane(0, q.x.get()),
+                plane(1, q.y.get()),
+                plane(2, q.z.get()),
+            ];
+            a.points
+                .set(Ix::new(row).unwrap(), PointKind::Meet(planes))
+                .unwrap();
+        }
+    })
+}
+
 /// The first face of `held` on a plane, or the first not on one.
 fn face_of(held: &Held, plane: bool) -> u32 {
     let a = held.body.arenas();
@@ -905,6 +936,7 @@ fn drive_area() -> Driver {
             trigger("CurvedFace", area_of(cyl, face_of(cyl, false))),
             trigger("CurvedEdge", area_of(cyl, face_of(cyl, true))),
             trigger("NoLoops", area_of(&loopless(), 0)),
+            trigger("ImplicitVertex", area_of(&met(), 0)),
         ],
         edge: Some(area_of(&filling(), 0)),
         example: Some((vec![], shown.exactness)),
@@ -932,6 +964,7 @@ fn drive_volume() -> Driver {
             trigger("CurvedEdge", volume_of(cyl)),
             trigger("CurvedFace", volume_of(ball)),
             trigger("NoLoops", volume_of(&loopless())),
+            trigger("ImplicitVertex", volume_of(&met())),
             trigger("NotSolid", volume_of(&sheet())),
         ],
         edge: Some(volume_of(&filling())),

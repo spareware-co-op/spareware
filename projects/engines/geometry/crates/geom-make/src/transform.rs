@@ -70,7 +70,7 @@ use geom_surface::{ParamSurface, SurfaceKind};
 use geom_topo::ix::Arena;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Body, Builder, Edge, Face, Fin, Ix, Loop, Region, Sense, Shell, TopoError, Vertex,
+    Body, Builder, Edge, Face, Fin, Ix, Loop, PointKind, Region, Sense, Shell, TopoError, Vertex,
 };
 
 use crate::build::{Made, Motion, PHASE, Unpassed, charge_rows, fail, finish, unbuilt};
@@ -307,6 +307,20 @@ fn run(
     })
 }
 
+/// The body of `input` under `t`, as `crate::placed` materialises a placement.
+///
+/// # Errors
+///
+/// [`run`]'s.
+pub(crate) fn placed_copy(
+    ctx: &OpContext<'_>,
+    input: Moved<'_>,
+    t: &TypedTransform,
+    motion: Motion,
+) -> Result<OpOutput<Made>, OpError> {
+    run(ctx, input, *t, motion)
+}
+
 /// An entity's new name, its origin, and the name itself when the copy made it (a transform keeps
 /// its input's name and makes none).
 pub(crate) type Renamed = (NameId, Origin, Option<TopoName>);
@@ -393,9 +407,12 @@ pub(crate) fn moved_copy(
     let mut rounded = false;
     let mut points = Vec::new();
     for p in every(a.rows(Arena::Vertex)).filter_map(|v| a.vertices.point.get(v)) {
-        let image = t
-            .apply(*a.points.get(*p).ok_or_else(defect)?)
-            .map_err(num)?;
+        let place = a.points.get(*p).ok_or_else(defect)?;
+        // The rebuild that first makes such a body brings the move of its planes (G129).
+        let Some(point) = place.grid() else {
+            return Err(fail(ctx, MakeDetail::NotCertifiedYet { piece: "G129" }));
+        };
+        let image = t.apply(point).map_err(num)?;
         rounded |= !image.is_exact();
         points.push(image.value());
     }
@@ -432,8 +449,10 @@ pub(crate) fn moved_copy(
     }
     let exactness = record(ctx, input, stretch, rounded, deviation)?;
     // What a checker failure means (`Unpassed`): the piece is the one that widens the checker for
-    // the body's kind of geometry.
-    let piece = if curved(input.body) { "G177" } else { "G134" };
+    // the body's kind of geometry. From G134 a rounded flat face stands for the star of triangles
+    // from the mean of its corners, so what still waits is a flat face no star can stand for: one
+    // with a hole, or with an edge the mean does not see from inside.
+    let piece = if curved(input.body) { "G177" } else { "G417" };
     let unpassed = if rounded || deviation > 0.0 {
         Unpassed::Rounded { piece }
     } else if matches!(exactness, Exactness::Exact) {
@@ -540,7 +559,7 @@ pub(crate) fn moved_copy(
         out.surfaces.extend(surfaces)?;
         out.curves.extend(curves)?;
         out.pcurves.extend(pcurves)?;
-        out.points.extend(points)
+        out.points.extend(points.into_iter().map(PointKind::Grid))
     };
     fill().map_err(|e| unbuilt(ctx, meter, e))?;
     // Names: each renamed, and its record.

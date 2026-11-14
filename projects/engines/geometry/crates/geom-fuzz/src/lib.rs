@@ -4,7 +4,7 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has seven targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has these targets: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -39,17 +39,21 @@
 //! the same twice and give a body that writes and reads to itself (G94); [`names`], the names,
 //! history, recipe and attributes records accept only the one encoding of what they read (G95);
 //! [`operations`], the operation record likewise (G96); and [`open`], containers come back from a
-//! file to the same blobs and trust on open keeps damage with the body it is in (G108). For the
-//! Gate 3 code no other target reaches (30.1's standard bar), [`euler`] holds `geom-topo`'s Euler
-//! operators to their table of counts, Euler's formula and their refusals (G81); [`naming`] holds
-//! names, the name graph, the duplicate detector and the ordinal order to their laws (G87); [`references`],
-//! reference resolution gives 20.4's outcome on any history (G89); [`prune`], `PruneHistory`
-//! keeps every held reference and its record reads back, and reads only its one encoding (G109);
-//! and [`contract`], the operation contract's errors keep their detail's kind and chapter 22's
-//! remedies, write text that names what they hold, and every schema the facade lists names details
-//! the contract has, whose MCP tool descriptions parse and round-trip (G82).
-//! The layout every target follows, and how each engine runs it locally and in CI, is in this
-//! crate's `README.md`.
+//! file to the same blobs and trust on open keeps damage with the body it is in (G108). Phase 4
+//! adds [`planes`] (G123), `geom-poly`'s canonical planes and arrangement predicates give one entry
+//! to one plane and one order to any points or rays, and [`cdt`] (G153), `geom-mesh`'s
+//! triangulation is a true constrained Delaunay triangulation and one answer in any input order,
+//! and [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a mesh and gives one mesh in
+//! any input order. For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
+//! holds `geom-topo`'s Euler operators to their table of counts, Euler's formula and their
+//! refusals (G81); [`naming`] holds names, the name graph, the duplicate detector and the ordinal
+//! order to their laws (G87); [`references`], reference resolution gives 20.4's outcome on any
+//! history (G89); [`prune`], `PruneHistory` keeps every held reference and its record reads back,
+//! and reads only its one encoding (G109); and [`contract`], the operation contract's errors keep
+//! their detail's kind and chapter 22's remedies, write text that names what they hold, and every
+//! schema the facade lists names details the contract has, whose MCP tool descriptions parse and
+//! round-trip (G82). The layout every target follows, and how each engine runs it locally and in
+//! CI, is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
@@ -148,6 +152,8 @@
 //! - `bolero` 0.13.7, a development dependency only: the `check!` front end, with its test-mode
 //!   engine and, under cargo-bolero, the engine chosen (`bolero-libfuzzer`, `bolero-afl`,
 //!   `bolero-honggfuzz` or `bolero-kani`).
+//! - `geom-mesh`, `geom-op` and `geom-run` (Apache-2.0, ours), the meshes under test, their names
+//!   and their meter.
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
@@ -230,10 +236,12 @@ pub mod bodies;
 pub mod boxtree;
 pub mod cache;
 pub mod cbor;
+pub mod cdt;
 pub mod contract;
 pub mod curves;
 pub mod encoder;
 pub mod euler;
+pub mod exact;
 pub mod linalg;
 pub mod make;
 pub mod maths;
@@ -244,6 +252,7 @@ pub mod open;
 pub mod operations;
 pub mod orient2d;
 pub mod p21;
+pub mod planes;
 pub mod predicates;
 pub mod prune;
 pub mod records;
