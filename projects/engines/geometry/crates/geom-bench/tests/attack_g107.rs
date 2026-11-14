@@ -537,7 +537,7 @@ fn night(night: &str, ns: f64, chrome: &str) -> Record {
              time native 1 g/b/typical {ns} 1000 {ns} 90\n\
              time native 1 g/c/typical {ns} 1000 {ns} -\n\
              time native 8 g/a/typical {ns} 1000 {ns} 45\n\
-             time native 8 scenario/door_move/full {} 1 {} 40\n\
+             time native 8 scenario/moved_door/full {} 1 {} 40\n\
              time native 8 scenario/level_change/full 700000000 1 700000000 40\n\
              time chrome 1 scenario/door_move_small/full 3000000 1 3000000 5\n\
              time chrome 1 scenario/level_change/full 7000000000 1 7000000000 5\n\
@@ -555,7 +555,7 @@ fn the_report_compares_quiet_timings_and_judges_the_shares() {
     let only = report(std::slice::from_ref(&first));
     assert!(only.contains("This is the first night recorded."));
     // 3 ms door move: within its 4 ms share; the 700 ms level change is over its 600 ms.
-    assert!(only.contains("| door_move | Move a door in under 16 ms | 4.00 ms | native | 8 | `scenario/door_move/full` | 3.00 ms | within |"), "{only}");
+    assert!(only.contains("| door_move | Move a door in under 16 ms | 4.00 ms | native | 8 | `scenario/moved_door/full` | 3.00 ms | within |"), "{only}");
     assert!(only.contains("| level_change | Change a level height touching 2,000 walls in under 1 s | 600 ms | native | 8 | `scenario/level_change/full` | 700 ms | **over**"), "{only}");
     assert!(only.contains("| browser_door_move | In a browser | estimate: up to 4.00 ms | chrome | 1 | `scenario/door_move_small/full` | 3.00 ms | inside the estimate |"), "{only}");
     assert!(only.contains("| browser_level_change | In a browser | estimate: 1.00 s to 6.00 s | chrome | 1 | `scenario/level_change/full` | 7.00 s | outside the estimate |"), "{only}");
@@ -584,7 +584,7 @@ fn the_report_compares_quiet_timings_and_judges_the_shares() {
         "{both}"
     );
     assert!(
-        both.contains("| native | 8 | `scenario/door_move/full` | 3.00 ms | 3.30 ms | +10.0% |"),
+        both.contains("| native | 8 | `scenario/moved_door/full` | 3.00 ms | 3.30 ms | +10.0% |"),
         "{both}"
     );
     assert!(
@@ -708,6 +708,56 @@ fn the_guest_times_at_a_thread_count() {
 }
 
 #[test]
+fn the_door_moves_share_reads_a_scenario_the_runner_times() {
+    // 23.1's door move (4 ms of 16 ms) is the wall's re-cut at full size (G140), which `list timed`
+    // lists and `time` accepts; the other shares wait for G451's scenarios.
+    let timed = geom_bench::catalogue::timed_names();
+    let door = SHARES.iter().find(|s| s.id == "door_move").unwrap();
+    assert_eq!(door.benchmark, "scenario/moved_door/full");
+    assert!(timed.iter().any(|name| name == door.benchmark));
+    let guest = env!("CARGO_BIN_EXE_geom-bench-guest");
+    let (status, listed, err) = run(guest, &["list", "timed"]);
+    assert_eq!(status, 0, "{err}");
+    assert_eq!(listed.lines().collect::<Vec<_>>(), timed);
+    let (_, all, _) = run(guest, &["list"]);
+    assert!(
+        !all.lines().any(|name| name.ends_with("/full")),
+        "the fuel gate reads `list` and never runs a full size"
+    );
+    // The tool takes a night that timed it.
+    let names = vec![door.benchmark.to_string()];
+    let jobs = done("native", 8, 1500, door.benchmark, 3e6)
+        + &done("native", 1, 2500, door.benchmark, 9e6);
+    let head = header("complete", &[("native", "n")]);
+    let record = assemble(&head, BUSY, &jobs, &names).unwrap();
+    assert_eq!(record.timings.len(), 2);
+    let written = report(std::slice::from_ref(&record));
+    assert!(
+        written.contains("| door_move | Move a door in under 16 ms | 4.00 ms | native | 8 | `scenario/moved_door/full` | 3.00 ms | within |"),
+        "{written}"
+    );
+}
+
+#[test]
+fn the_guest_times_the_door_move_at_full_size() {
+    // One thread, one round of a millisecond: the reduced batch's digests are checked and a full
+    // run succeeds before anything is timed.
+    let guest = env!("CARGO_BIN_EXE_geom-bench-guest");
+    let (status, out, err) = run(guest, &["time", "scenario/moved_door/full", "1", "1"]);
+    assert_eq!(status, 0, "{err}");
+    let fields: Vec<&str> = out.trim_end().split(' ').collect();
+    assert_eq!(
+        (fields.len(), fields[0], fields[3]),
+        (5, "scenario/moved_door/full", "1"),
+        "{out}"
+    );
+    for unknown in ["scenario/door_move/full", "scenario/moved_door/full/"] {
+        let (status, _, err) = run(guest, &["time", unknown, "1", "1"]);
+        assert_eq!(status, 2, "{unknown}: {err}");
+    }
+}
+
+#[test]
 fn the_tool_assembles_checks_and_reports() {
     let tool = env!("CARGO_BIN_EXE_geom-bench-timings");
     let dir = std::env::temp_dir().join(format!("geom-bench-g107-{}", std::process::id()));
@@ -789,6 +839,8 @@ fn the_runner_writes_what_the_tool_reads() {
     // Every worker runs one guest at one thread; the native jobs pass the night's thread count.
     assert!(PAGE.contains(r#"["geom-bench-guest", "time", name, String(round), "1"]"#));
     assert!(RUNNER.contains(r".\\guest.exe time $name $round $threads"));
+    // It times the catalogue and the scenarios at full size, so the door move's share is measured.
+    assert!(RUNNER.contains(r"win ./guest.exe list timed | tr -d '\r'"));
     // Job lines in the order `assemble` reads them.
     assert!(RUNNER.contains(r#"echo "job native $threads $start $end $code $text""#));
     assert!(PAGE.contains("`${count} ${start} ${end} ${status} ${text}`"));

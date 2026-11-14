@@ -26,7 +26,10 @@ name: Kernel nightly
 # bytes back, and the test fails on any byte that differs. Piece G97 adds the slow fixtures (28.16):
 # geom-test's `fixture run --tier slow`. Piece G114 adds the fetched corpora (28.12): geom-test's
 # `corpus fetch` downloads each at its pinned source and checks it against the register's digest, so
-# a source that moves or disappears shows up the night it happens. Later pieces add the rest of
+# a source that moves or disappears shows up the night it happens. Gate 4 (G156) adds the polyhedral
+# corpus's nightly tier: Manifold's seven models of more than 1,500 faces, each united alone and
+# with a moved copy and held to the flat reference (geom-test's tests/corpus_polyhedral.rs, whose
+# pull-request tier runs in every release leg of kernel.yml). Later pieces add the rest of
 # 28.17's nightly list (hours of fuzzing, the other outside oracles).
 #
 # --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
@@ -80,6 +83,22 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - name: Every fetched corpus, unmodified
         run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora"
+
+  large-models:
+    name: Manifold's large models against the reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The seven models of more than 1,500 faces, united alone and with a moved copy
+        run: >-
+          cargo test --locked --release -p geom-test --test corpus_polyhedral --
+          --ignored --exact the_large_models_unite_to_the_reference
 
   predicates:
     name: Predicates with a fresh seed

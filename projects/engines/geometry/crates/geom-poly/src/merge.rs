@@ -25,7 +25,9 @@
 //!   [`Outward::polygon`] names where it came from, for a caller's history.
 //! - **Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a
 //!   seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut
-//!   that ends inside a face leaves it whole, with no slit.
+//!   that ends inside a face leaves it whole, with no slit. A cut lying in a face's own plane
+//!   holds a seam only along its outline: its pieces on both sides of a line, as the boxes and
+//!   the convex split part it, cancel, so a result has no vertex where the boxes fell.
 //! - **No recursion.** Disjoint sets and rings are walked in loops (principle 13).
 //!
 //! Method: chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), which
@@ -344,6 +346,9 @@ struct Held<'p> {
     given: usize,
     /// Its face in canonical form, reduced once, which [`nest`]'s tracing reads.
     face: Canonical,
+    /// Its plane, either way it faces, among the sheets' planes in their order; for a cut on
+    /// none of them, [`NO_SHEET`].
+    plane: usize,
 }
 
 /// A corner of a piece: the point where its face and two of its bounds meet, which holds those
@@ -919,6 +924,10 @@ struct Side {
     sheet: usize,
     /// The piece, an index into the held pieces.
     held: usize,
+    /// Its piece's plane among the sheets' planes, as [`Held::plane`].
+    plane: usize,
+    /// Whether its piece faces the other way from its plane's canonical form.
+    flipped: bool,
     /// The bound the side lies on, positive inside the piece.
     bound: Plane,
 }
@@ -995,6 +1004,9 @@ fn join(parents: &mut [usize], a: usize, b: usize) {
 /// The sheet of a side no face owns: a cut's, which only holds seams open.
 const CUT: usize = usize::MAX;
 
+/// The plane of a cut that lies on no sheet's plane.
+const NO_SHEET: usize = usize::MAX;
+
 /// What one stretch of a line holds of one sheet: the net of its sides, and a side each way.
 type Holding<'s> = (i32, Option<&'s Side>, Option<&'s Side>);
 
@@ -1060,12 +1072,21 @@ fn stretch<'s, I>(
 where
     I: Iterator<Item = &'s Side>,
 {
-    let mut cut = false;
+    // The cuts along the stretch, each plane and facing with the net of its sides, in that order.
+    let mut cuts: Vec<((usize, bool), i32)> = Vec::new();
     // Each sheet's holding, in sheet order: a stretch holds few sheets, so a sorted list.
     let mut held: Vec<(usize, Holding<'s>)> = Vec::with_capacity(2);
     for side in active {
         if side.sheet == CUT {
-            cut = true;
+            let (key, way) = ((side.plane, side.flipped), if side.rising { 1 } else { -1 });
+            match cuts.binary_search_by_key(&key, |(on, _)| *on) {
+                Ok(at) => {
+                    for (_, net) in cuts.iter_mut().skip(at).take(1) {
+                        *net = net.saturating_add(way);
+                    }
+                }
+                Err(at) => cuts.insert(at, (key, way)),
+            }
             continue;
         }
         let at = match held.binary_search_by_key(&side.sheet, |(sheet, _)| *sheet) {
@@ -1083,6 +1104,12 @@ where
             }
         }
     }
+    // A cut holds a sheet's seam open unless it lies in the sheet's own plane with pieces of it on
+    // both sides, facing one way: one cut the boxes or the convex split parted, which cancels.
+    let holds_open = |a: &Side| {
+        cuts.iter()
+            .any(|((plane, _), net)| *plane != a.plane || *net != 0)
+    };
     let mut fins = Vec::with_capacity(held.len());
     for (sheet, (net, up, down)) in held {
         let fin = |side: &Side, rising: bool| RunFin {
@@ -1092,7 +1119,7 @@ where
             bound: side.bound,
         };
         match (net, up, down) {
-            (0, Some(a), Some(b)) if cut => {
+            (0, Some(a), Some(b)) if holds_open(a) => {
                 fins.push(fin(a, true));
                 fins.push(fin(b, false));
             }
@@ -1132,6 +1159,11 @@ fn whole_runs(runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
         }
     }
     whole
+}
+
+/// A canonical plane's coefficients, either way it faces: what the sheets are sorted by first.
+fn plane_key(face: &Canonical) -> (i128, [i128; 3]) {
+    (face.plane.d(), face.plane.n())
 }
 
 /// A piece's place among the sheets: its canonical plane, which way it faces, and with seams kept
@@ -1196,9 +1228,15 @@ fn sheets_of<'p>(
     let mut sheets: Vec<Sheet> = Vec::new();
     let mut held = Vec::with_capacity(order.len());
     let mut last: Option<&SheetKey> = None;
+    // How many planes the sheets so far lie on: the keys start with the plane, so one plane's
+    // sheets come together.
+    let mut planes = 0usize;
     for at in order {
         let outward = pieces.get(at).ok_or(MergeError::Open)?;
         let (key, face) = keys.get(at).ok_or(MergeError::Open)?;
+        if last.map(|k| k.0) != Some(key.0) {
+            planes = planes.saturating_add(1);
+        }
         if last != Some(key) {
             sheets.push(Sheet {
                 face: outward.piece.face,
@@ -1212,6 +1250,7 @@ fn sheets_of<'p>(
             piece: &outward.piece,
             given: at,
             face: *face,
+            plane: planes.saturating_sub(1),
         });
     }
     Ok((sheets, held))
@@ -1645,6 +1684,8 @@ fn sides_of(
                     rising: from < to,
                     sheet: entry.sheet,
                     held: at,
+                    plane: entry.plane,
+                    flipped: entry.face.flipped,
                     bound: *bound,
                 });
             }
@@ -2368,6 +2409,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
             piece,
             given,
             face: canonical(&piece.face)?,
+            plane: NO_SHEET,
         });
     }
     let made = corners_of(&held, &[], &Exec::serial(), meter)?;
@@ -2483,13 +2525,22 @@ fn merged(
 ) -> Result<(Merged, Option<Memo>), MergeError> {
     let (sheets, mut held) = sheets_of(pieces, mode, exec, meter)?;
     let kept = held.len();
-    for piece in rules.cuts {
-        held.push(Held {
-            sheet: CUT,
-            piece,
-            given: CUT,
-            face: canonical(&piece.face)?,
-        });
+    if !rules.cuts.is_empty() {
+        // The sheets' planes, in the held pieces' order, which is theirs: a cut on one of them
+        // takes its number.
+        let mut on: Vec<(i128, [i128; 3])> =
+            held.iter().map(|entry| plane_key(&entry.face)).collect();
+        on.dedup();
+        for piece in rules.cuts {
+            let face = canonical(&piece.face)?;
+            held.push(Held {
+                sheet: CUT,
+                piece,
+                given: CUT,
+                plane: on.binary_search(&plane_key(&face)).unwrap_or(NO_SHEET),
+                face,
+            });
+        }
     }
     // With a memo to keep: each piece's key, its parts where the last memo holds them, and the
     // orders to start the sorts from.
