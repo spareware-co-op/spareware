@@ -31,5 +31,6 @@ Licence text:
 | [core-math.txt](core-math.txt) | CORE-MATH (Inria), ported into `geom-num`'s `math` module by piece G05 |
 | [usd-brep.txt](usd-brep.txt) | NLib, in NVIDIA's USD BRep, ported into `geom-nurbs` by piece G56 |
 | [tinyspline.txt](tinyspline.txt) | tinyspline's double-reflection frames, ported into `geom-surface`'s `frame_rule` by piece G254 |
+| [solidcore.txt](solidcore.txt) | solidcore's ISO 10303-21 reader and writer, ported into `geom-p21` by piece G415 |
 | [solidcore-c248d5c6.txt](solidcore-c248d5c6.txt) | solidcore at c248d5c6: its quadric edge-collapse simplifier, ported into `geom-mesh`'s `model::decimate` by piece G300 |
 | [pmp-215975ca.txt](pmp-215975ca.txt) | PMP's uniform remeshing, ported into `geom-mesh`'s `model::remesh` by piece G300 |

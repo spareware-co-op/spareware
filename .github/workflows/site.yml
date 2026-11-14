@@ -4,9 +4,17 @@ name: Site
 # Layout: /index.html (hub), /<program>/index.html (demo), /<program>/features.json, /<program>/FEATURES.md
 
 on:
-  # Every merge to main: the contributor map (/contributors.html) counts merged pull requests.
+  # Every merge to main: the contributor map (/contributors.html) counts merged pull requests,
+  # and the kernel progress page (/kernel-progress.html) counts the board's pieces.
   push:
     branches: [main]
+  # A pull request that changes the site or its page builders builds the site to check it; only main deploys.
+  pull_request:
+    paths:
+      - 'site/**'
+      - 'tools/contributor-map/**'
+      - 'tools/kernel-progress/**'
+      - '.github/workflows/site.yml'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +24,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: ${{ github.event_name == 'pull_request' && format('site-pr-{0}', github.ref) || 'pages' }}
   cancel-in-progress: true
 
 jobs:
@@ -49,6 +57,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/contributor-map/build.py _site/contributors.html
+      - name: Build the kernel progress page
+        env:
+          # Read-only: branches, the merge trains' MAP.json and open pull requests.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/kernel-progress/test_build.py
+          python3 tools/kernel-progress/build.py _site/kernel-progress.html
           find _site -maxdepth 2 | sort
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
@@ -56,6 +71,7 @@ jobs:
           path: _site
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:
