@@ -442,6 +442,126 @@ fn decimation_is_deterministic() {
     assert_eq!(run(), run());
 }
 
+/// A bent, tilted sheet in 4 × 4 cells of 60 steps, no plane of it parallel to another or to an
+/// axis.
+fn bent() -> (Vec<P3>, Vec<[u32; 3]>) {
+    sheet(4, 60, |i, j| {
+        3 * i * i + 11 * j - 2 * i * j + 5 * (i * j * j % 3)
+    })
+}
+
+/// The points as (x, y, z).
+fn coordinates(out: &Modelled) -> Vec<(i64, i64, i64)> {
+    out.points()
+        .iter()
+        .map(|q| (q.x.get(), q.y.get(), q.z.get()))
+        .collect()
+}
+
+/// Which collapse goes first and where its point lands are the quadrics' choice: the planes of
+/// the faces and of the open sides, their sums, their best points and the queue's order. Each is
+/// pinned here by the whole result on a sheet where no plane is special. Stopped at 16 triangles,
+/// every collapse tried is kept, and most of the points are best points rather than ends or
+/// middles (the corner (0, 0, 0) moves below the sheet there, to where its planes meet best).
+/// With ε = 6 and no target, most collapses are refused, so the order the candidates are tried in
+/// after a refusal is pinned too.
+#[test]
+fn decimation_takes_the_cheapest_collapse_at_its_best_point() {
+    let input = bent();
+    let run = |epsilon: u64, target: usize| {
+        let out = decimate(
+            &input.0,
+            &input.1,
+            Decimate { epsilon, target },
+            &Exec::serial(),
+            &mut meter(),
+        )
+        .unwrap();
+        two_way(&input, &out, epsilon);
+        out
+    };
+    let out = run(10, 16);
+    assert_eq!(out.operations(), (12, 0));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, -2),
+            (154, 0, 18),
+            (240, 0, 48),
+            (63, 104, 25),
+            (112, 89, 33),
+            (240, 90, 58),
+            (0, 132, 24),
+            (186, 160, 41),
+            (88, 170, 29),
+            (240, 180, 57),
+            (0, 240, 43),
+            (176, 240, 49),
+            (240, 240, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [7, 9, 12],
+            [7, 5, 9],
+            [6, 3, 8],
+            [6, 8, 10],
+            [4, 7, 8],
+            [3, 4, 8],
+            [7, 12, 11],
+            [8, 7, 11],
+            [8, 11, 10],
+            [0, 3, 6],
+            [0, 4, 3],
+            [1, 5, 7],
+            [1, 2, 5],
+            [4, 1, 7],
+            [0, 1, 4]
+        ]
+    );
+    let out = run(6, 0);
+    assert_eq!(out.operations(), (12, 104));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, -2),
+            (145, 0, 16),
+            (240, 0, 48),
+            (0, 105, 18),
+            (112, 89, 33),
+            (180, 60, 32),
+            (240, 90, 58),
+            (186, 160, 41),
+            (88, 170, 29),
+            (240, 180, 57),
+            (0, 240, 43),
+            (176, 240, 49),
+            (240, 240, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [7, 9, 12],
+            [5, 6, 7],
+            [7, 6, 9],
+            [1, 2, 6],
+            [1, 6, 5],
+            [4, 5, 7],
+            [1, 5, 4],
+            [4, 7, 8],
+            [7, 12, 11],
+            [8, 7, 11],
+            [8, 11, 10],
+            [0, 1, 4],
+            [3, 8, 10],
+            [3, 4, 8],
+            [0, 4, 3]
+        ]
+    );
+}
+
 #[test]
 fn a_coarse_sheet_remeshes_toward_the_target_length() {
     // A gently bent sheet of 2 × 2 cells of 400 steps, remeshed toward edges of 150.

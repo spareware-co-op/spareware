@@ -43,7 +43,7 @@
 
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
-use core::cmp::Ordering;
+use core::cmp::{Ordering, Reverse};
 
 use geom_num::grid::P3;
 use geom_run::{Exec, WorkMeter};
@@ -118,7 +118,8 @@ impl Quadric {
     /// normal n / |n|, formed by dividing by n · n. A zero normal gives the zero quadric.
     fn plane(n: [f64; 3], d: f64, w: f64) -> Quadric {
         let length = dot(n, n);
-        if length.partial_cmp(&0.0) != Some(Ordering::Greater) || !length.is_finite() {
+        // n · n is never negative, so a normal double is one above zero and finite.
+        if !length.is_normal() {
             return Quadric::default();
         }
         let s = w / length;
@@ -191,35 +192,16 @@ impl Quadric {
 }
 
 /// A candidate collapse: its cost, its ends, and their versions when it was costed (a later
-/// change to either end makes it stale).
-#[derive(Clone, Copy, Debug)]
+/// change to either end makes it stale). Ordered by those fields in turn, the latest versions
+/// first, so the queue's least is the cheapest and no two candidates are equal unless they are
+/// the same. The cost is held as its bit pattern: a cost is never negative or NaN
+/// ([`Quadric::at`]), and the bit patterns of such doubles rise as the numbers do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Candidate {
-    cost: f64,
+    cost: u64,
     u: u32,
     v: u32,
-    stamps: (u32, u32),
-}
-
-impl PartialEq for Candidate {
-    fn eq(&self, o: &Self) -> bool {
-        self.cmp(o) == Ordering::Equal
-    }
-}
-impl Eq for Candidate {}
-impl PartialOrd for Candidate {
-    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-        Some(self.cmp(o))
-    }
-}
-impl Ord for Candidate {
-    /// The cheapest greatest (the queue pops the greatest), ties by the ends and then their
-    /// versions, so no two candidates are equal unless they are the same.
-    fn cmp(&self, o: &Self) -> Ordering {
-        o.cost
-            .total_cmp(&self.cost)
-            .then_with(|| (o.u, o.v).cmp(&(self.u, self.v)))
-            .then_with(|| self.stamps.cmp(&o.stamps))
-    }
+    stamps: Reverse<(u32, u32)>,
 }
 
 struct Collapser {
@@ -330,21 +312,28 @@ impl Collapser {
         else {
             return;
         };
-        let stamps = (
+        let stamps = Reverse((
             self.stamp.get(u as usize).copied().unwrap_or(0),
             self.stamp.get(v as usize).copied().unwrap_or(0),
-        );
-        self.queue.insert(Candidate { cost, u, v, stamps });
+        ));
+        self.queue.insert(Candidate {
+            cost: cost.to_bits(),
+            u,
+            v,
+            stamps,
+        });
     }
 
     fn collapse_to(&mut self, target: usize, meter: &mut WorkMeter<'_>) -> Result<(), ModelError> {
         while self.surface.live() > target {
-            let Some(c) = self.queue.pop_last() else {
+            let Some(c) = self.queue.pop_first() else {
                 return Ok(());
             };
             meter.charge(1)?;
             let stamp = |i: u32| self.stamp.get(i as usize).copied().unwrap_or(u32::MAX);
-            if (stamp(c.u), stamp(c.v)) != c.stamps || self.surface.faces_at(c.v).is_empty() {
+            if Reverse((stamp(c.u), stamp(c.v))) != c.stamps
+                || self.surface.faces_at(c.v).is_empty()
+            {
                 continue;
             }
             self.collapse(c.u, c.v, meter)?;
