@@ -6,8 +6,9 @@
 //!
 //! - `assemble <header> <busy> <jobs> <names>`: prints the night's record, built from the header
 //!   file (a record's lines up to the engines), the machine's busy samples and the runner's job
-//!   lines, against the benchmarks the names file lists, one per line, each a benchmark of this
-//!   build's catalogue: every benchmark for a night, a few for a test of the runner
+//!   lines, against the benchmarks the names file lists, one per line, each a benchmark this
+//!   build's runner times (`geom_bench::catalogue::timed_names`: the catalogue and the scenarios
+//!   at full size): every one for a night, a few for a test of the runner
 //!   (`geom_bench::timings::assemble`).
 //! - `check <record>...`: reads each record and prints how many timings and failures it holds.
 //! - `report <history folder>`: reads every `*.txt` record in the folder, in the order of their
@@ -31,7 +32,7 @@ use std::io::Write as _;
 use std::path::Path;
 
 #[cfg(any(unix, windows))]
-use geom_bench::catalogue::names;
+use geom_bench::catalogue::timed_names;
 #[cfg(any(unix, windows))]
 use geom_bench::timings::{Record, assemble, report};
 
@@ -81,7 +82,7 @@ fn assemble_files(header: &str, busy: &str, jobs: &str, listed: &str) -> Result<
     let header_text = read(header)?;
     let busy_text = read(busy)?;
     let jobs_text = read(jobs)?;
-    let catalogue = names();
+    let catalogue = timed_names();
     let mut timed: Vec<String> = Vec::new();
     for name in read(listed)?.lines().filter(|l| !l.is_empty()) {
         if !catalogue.iter().any(|known| known == name) {

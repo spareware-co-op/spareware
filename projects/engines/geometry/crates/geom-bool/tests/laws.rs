@@ -1,7 +1,8 @@
 //! The flat boolean's laws over random grid boxes, against an exact count of unit cells: the
 //! volume of every selection, inclusion and exclusion, A less A, and commutation with the exact
 //! transforms, translation by a grid vector and a quarter turn (G140; 11.17's polyhedral
-//! verification corpus, the exact-volume pattern of csgrs' hypermesh).
+//! verification corpus, the exact-volume pattern of csgrs' hypermesh). Every result passes the
+//! full checker and the second checker of 28.4, which agree (Gate 4, G156).
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -19,6 +20,7 @@ use geom_make::{BoxInput, Made, make_box};
 use geom_num::{Exactness, P3, Steps};
 use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
 use geom_run::{Budget, Exec, WorkMeter};
+use geom_test::agree::judge;
 use geom_topo::query::volume;
 use geom_topo::{Body, BodyKind, PointKind};
 use proptest::prelude::*;
@@ -86,6 +88,9 @@ fn sixfold(out: &OpOutput<Combined>) -> Option<i128> {
     let body = &out.result.body;
     let report = check(body, Exactness::Exact, Level::Full, &mut meter()).unwrap();
     assert!(report.passed(), "{report:?}");
+    // The second checker of 28.4 reads every result too, and agrees (Gate 4, G156).
+    let both = judge(body, Exactness::Exact).unwrap();
+    assert!(both.agree() && both.unjudged == 0, "{both:?}");
     match body.kind() {
         BodyKind::Solid => Some(volume(body, &mut meter()).unwrap().to_i128().unwrap()),
         _ if body.arenas().faces.is_empty() => Some(0),

@@ -1005,6 +1005,7 @@ dependencies = [
  "geom-poly",
  "geom-run",
  "geom-surface",
+ "geom-test",
  "geom-topo",
  "proptest",
 ]

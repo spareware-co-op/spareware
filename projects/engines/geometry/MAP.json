@@ -14187,6 +14187,28 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "both checkers' costs: the full check's, and the second checker's product of the faces' edges for each pair of faces.",
+          "does": "[`judge`] runs both on a body and sorts what each finds into one list of [`Rule`]s, the rules of chapter 8.3 both read: structure, three planes that do not meet, a corner off its plane or its line, a corner outside its face's box, crossing edges, crossing faces, a loop's sense, a shell's sense and a shell's nesting. Two checkers agree when they find the same rules broken: both pass, or both refuse with matching findings. What a checker says it cannot judge (`geom-check`'s `Unchecked` and `PairUnchecked`, the second checker's [`Finding::Unjudged`]) is counted beside the verdict, never read as a pass or a fault, so a corpus can state how much of it the second checker did not read.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/agree.rs",
+          "guarantees": [
+            "**One map.** Every fault kind of `geom-check` and every finding of the second checker has exactly one rule or is counted as not judged ([`rule_of_kind`], [`rule_of_finding`]); a test holds every kind to it.",
+            "**Nothing is dropped.** [`Verdict::agree`] compares the whole sets of rules, so a fault one checker finds and the other misses is a disagreement, whichever finds it."
+          ],
+          "job": "Both checkers on one body: `geom-check`'s full check and the second checker of chapter 28.4 ([`crate::second_check`]), and whether they agree (Gate 4, G156: \"the second checker agrees on the whole corpus\").",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 28.4's second checker standing behind the first (`projects/engines/geometry/architecture/28-testing.md`), with chapter 8.3's rules as the common ground (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_test::agree",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`check` reads every vendored byte once; `fetch` costs its downloads.",
           "does": null,
           "family": [],
@@ -14788,7 +14810,7 @@
           "target": "lib"
         },
         {
-          "cost": "`p` planes cut the box into up to O(p³) cells, each cut costing every face of every cell, and rationals grow with each cut. This reference accepts that, because it runs on small cases only. No recursion.",
+          "cost": "`p` planes cut the box into up to O(p³) cells, each cut costing every face of every cell, and rationals grow with each cut. This reference accepts that, because it runs on small cases only. [`six_volume_where`] costs each pair of faces whose boxes meet, found by a sweep, the pieces those cut each face into, and two rays a piece for each solid, each against the faces filed in the ray's bucket of a grid across it. No recursion.",
           "does": "a [`Solid`] is a closed, oriented set of planar polygons with rational corners. Everything else comes from one object, the arrangement of a set of planes: every plane cuts a large box and every cell already cut, so [`arrangement`] gives convex [`Cell`]s meeting face to face. Each cell lies wholly in or out of each solid whose face planes were among the cuts, and one point of it decides which, by [`Solid::locate`]: a ray from the point, counted against every face.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/flat_reference.rs",
@@ -14804,9 +14826,10 @@
               "https://doi.org/10.1145/360767.360802",
               "https://doi.org/10.1137/0215024",
               "https://doi.org/10.1016/0020-0190(79",
-              "https://doi.org/10.1109/TPAMI.1986.4767788"
+              "https://doi.org/10.1109/TPAMI.1986.4767788",
+              "https://doi.org/10.1109/PROC.1985.13108"
             ],
-            "text": "Sutherland and Hodgman's clip of a polygon by a plane, \"Reentrant polygon clipping\", CACM 17(1), 1974, <https://doi.org/10.1145/360767.360802>; ray parity for point location; Edelsbrunner, O'Rourke and Seidel, \"Constructing arrangements of lines and hyperplanes\", SIAM J. Computing 15(2), 1986, <https://doi.org/10.1137/0215024>, for the arrangement as a cell complex, whose faces meet exactly; Andrew's monotone chain, 1979, <https://doi.org/10.1016/0020-0190(79)90072-3>, for a cut's outline; the divergence theorem over a fan of tetrahedra for volume and centroid; Canny's vertex-face and edge-edge contact events for polyhedra under translation, <https://doi.org/10.1109/TPAMI.1986.4767788>."
+            "text": "Sutherland and Hodgman's clip of a polygon by a plane, \"Reentrant polygon clipping\", CACM 17(1), 1974, <https://doi.org/10.1145/360767.360802>; ray parity for point location; Edelsbrunner, O'Rourke and Seidel, \"Constructing arrangements of lines and hyperplanes\", SIAM J. Computing 15(2), 1986, <https://doi.org/10.1137/0215024>, for the arrangement as a cell complex, whose faces meet exactly; Andrew's monotone chain, 1979, <https://doi.org/10.1016/0020-0190(79)90072-3>, for a cut's outline; the divergence theorem over a fan of tetrahedra for volume and centroid; Canny's vertex-face and edge-edge contact events for polyhedra under translation, <https://doi.org/10.1109/TPAMI.1986.4767788>; boundary evaluation, a boolean's boundary as the pieces of its operands' faces with the result on one side only (Requicha and Voelcker, \"Boolean operations in solid modeling: boundary evaluation and merging algorithms\", Proceedings of the IEEE 73(1), 1985, <https://doi.org/10.1109/PROC.1985.13108>), with the winding number of a closed surface as a signed count of ray crossings."
           },
           "path": "geom_test::flat_reference",
           "provenance": [],
@@ -15769,6 +15792,29 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the file; each coordinate costs a big-integer parse and, at the scale, one division by a power of ten.",
+          "does": "[`read`] takes the `v` and `f` lines of an OBJ file and nothing else (texture coordinates, normals, groups and materials are skipped). Each coordinate is read as the exact decimal it is written as: its digits are one integer, parsed by `dashu`'s integer parser, and its point and exponent a power of ten, so `13009.6982000000007246854` is exactly that number. [`Read::to_grid`] then puts the mesh on the grid at one scale for the whole model:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/obj.rs",
+          "guarantees": [
+            "**Exact.** No coordinate passes through a double: the grid value is the written decimal rounded once, half to even, at the stated scale.",
+            "**Refused, never guessed.** A malformed number, a face of fewer than three corners, an index outside the vertex list and a file without vertices are [`ObjError`]s, with the line.",
+            "**The same on every target.** Integer arithmetic only."
+          ],
+          "job": "A test-only reader of Wavefront OBJ meshes onto the grid: the polyhedral corpus's way in for Manifold's regression models (chapter 11.17's item 15; Gate 4, G156), before the kernel's own readers (chapter 24) exist.",
+          "method": {
+            "links": [
+              "https://paulbourke.net/dataformats/obj/",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229"
+            ],
+            "text": "the OBJ format's `v` and `f` statements as Wavefront's specification gives them (Wavefront Technologies, \"Object Files (.obj)\", Advanced Visualizer manual, appendix B1, <https://paulbourke.net/dataformats/obj/>); rounding half to even, IEEE 754-2019's roundTiesToEven applied to an exact decimal (<https://doi.org/10.1109/IEEESTD.2019.8766229>)."
+          },
+          "path": "geom_test::obj",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "as each part's header states.",
           "does": "this crate holds the jobs and the comparison code; every oracle that is not a permissive Rust crate runs out of process, in its own container, from the oracle repository.",
           "family": [],
@@ -15920,6 +15966,39 @@
           },
           "path": "geom_test::plane_bodies",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the figures are a few dozen boxes; [`unit_cells`] visits every unit cell of the boxes' span once for each box; a model's polygons and solid are linear in its faces.",
+          "does": "",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/polyhedral.rs",
+          "guarantees": [
+            "**Exact.** Every corner is a grid point; the counts and the reference are exact.",
+            "**Unmodified data.** The models are the stored corpus's bytes, compiled in, so every target reads the same ones; the corpus register's check holds the folder to its digest."
+          ],
+          "job": "The polyhedral corpus of chapter 11.17's item 15 that random grid boxes do not cover (Gate 4, G156): EMBER's figures 24 and 25 as generated boxes, and Manifold's regression models, stored in this crate as the corpus `manifold-models`, each with its exact reference.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/3528223.3530181",
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "EMBER's figures 24 and 25 (<https://doi.org/10.1145/3528223.3530181>) and Manifold's regression models, chapter 11.17's polyhedral verification corpus (`projects/engines/geometry/architecture/11-booleans.md`); the unit-cell count is the exact-volume pattern of csgrs' hypermesh tests that G140's laws follow."
+          },
+          "path": "geom_test::polyhedral",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/elalish/manifold/tree/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/test/models",
+              "method_note": null,
+              "name": "Manifold",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its regression models, stored unmodified as the corpus `manifold-models`. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -18465,6 +18544,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/elalish/manifold/tree/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/test/models",
+      "method_note": null,
+      "name": "Manifold",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/polyhedral.rs"
       ]
     },
     {

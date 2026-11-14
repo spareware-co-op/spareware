@@ -745,6 +745,16 @@
           "sha256": "e6c47d58967776c59d90e023a3a3c099377e17ab27ea3f3e5818d7e9893bd963"
         },
         {
+          "id": "geom-test/polyhedral-corpus",
+          "what": "Gate 4's polyhedral corpus (piece G156): EMBER's figures 24 and 25 as boxes under every selection of one arrangement (union, intersection, the first less the rest, at least two, exactly one, imprint, split, general fuse, cells and section), each result body's native records (or the format's refusal of it), and Manifold's regression models of at most 1,500 faces read onto the grid, each united alone and with a moved copy by geom-mesh's boolean, every array of each result mesh and its runs (or the builder's refusal), as tests/corpus_polyhedral.rs records them.",
+          "check": {
+            "crate": "geom-test",
+            "test": "corpus_polyhedral",
+            "function": "the_polyhedral_corpus_is_the_same_on_every_target"
+          },
+          "sha256": "c91fea7cebb7a96d6cd052e0978b47f29fa13490bf3b2d24a8de5b9f5a6414d5"
+        },
+        {
           "id": "geom-mesh/boolean",
           "what": "Mesh booleans of geom-mesh (piece G148): the union, intersection and difference, in one arrangement, of the shapes bench's four pairs at size class 0 and radius 2^13 steps, and of three pairs of solids reaching ±(2^40 − 1). Every array of each result mesh, its runs and its volume, and its run-level history, in canonical order.",
           "check": {

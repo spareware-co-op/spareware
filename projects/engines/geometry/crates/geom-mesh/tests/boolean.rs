@@ -688,3 +688,37 @@ fn the_meter_stops_a_boolean() {
         Err(MeshError::Stopped(_) | MeshError::BudgetExceeded(_))
     ));
 }
+
+#[test]
+fn a_face_whose_lowest_corner_is_in_a_hole_sorts_into_canonical_order() {
+    // Gate 4's corpus (G156): Manifold's regression model degenerate_split_quad_shared_a, on the
+    // grid, mirrored in x and united with a copy moved by (-1333334, 891786, 1333334). The union
+    // has faces with holes whose lowest vertex is in a hole; the builder sorted faces by their
+    // first three vertices after the outer loop's lowest, left them in the order they came, and
+    // the checker refused the result (`FacesOutOfOrder`). The same union unmirrored passed.
+    use geom_test::polyhedral::{MODELS, mesh_polygons};
+    let text = MODELS
+        .iter()
+        .find(|(name, _)| *name == "degenerate_split_quad_shared_a")
+        .unwrap()
+        .1;
+    let mut grid = geom_test::obj::read(text).unwrap().to_grid().unwrap();
+    for p in &mut grid.points {
+        p[0] = -p[0];
+    }
+    for f in &mut grid.faces {
+        f.reverse();
+    }
+    let a = build(
+        &mesh_polygons(&grid, [0; 3], 1).unwrap(),
+        &Exec::serial(),
+        &mut meter(),
+    )
+    .unwrap();
+    let moved = mesh_polygons(&grid, [-1_333_334, 891_786, 1_333_334], 2).unwrap();
+    let b = build(&moved, &Exec::serial(), &mut meter()).unwrap();
+    let union = one(&[&a, &b], WindingTest::unite());
+    assert!(union.mesh.is_solid());
+    // Either way round, the same mesh.
+    assert_eq!(one(&[&b, &a], WindingTest::unite()).mesh, union.mesh);
+}

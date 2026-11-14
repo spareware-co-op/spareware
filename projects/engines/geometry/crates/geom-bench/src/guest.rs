@@ -16,6 +16,9 @@
 //! Commands (arguments after the program name):
 //!
 //! - `list`: every benchmark name, one per line.
+//! - `list timed`: every name the reference runner times (piece G107), one per line: the names of
+//!   `list`, then each flat-boolean scenario at full size, `scenario/<op>/full`
+//!   ([`crate::catalogue::timed_names`]), which the fuel gate, reading `list`, never runs.
 //! - `run <name> <passes>`: build the benchmark and run `passes` passes (0 to 255; the host asks
 //!   for 1 and 2), printing nothing.
 //! - `check <name>`: build the benchmark, run one pass, and check its digests against
@@ -38,7 +41,7 @@
 
 use core::hint::black_box;
 
-use crate::catalogue::{names, prepare_named};
+use crate::catalogue::{names, prepare_named, timed_names};
 use crate::golden;
 use crate::harness::Bench;
 
@@ -60,7 +63,7 @@ impl Outcome {
             status: 2,
             stdout: String::new(),
             stderr: format!(
-                "{message}\nusage: geom-bench-guest list | run <name> <passes> | check <name>\n"
+                "{message}\nusage: geom-bench-guest list [timed] | run <name> <passes> | check <name>\n"
             ),
         }
     }
@@ -72,6 +75,10 @@ pub fn main(args: &[&str]) -> Outcome {
     match args {
         ["list"] => Outcome {
             stdout: names().into_iter().map(|n| n + "\n").collect(),
+            ..Outcome::default()
+        },
+        ["list", "timed"] => Outcome {
+            stdout: timed_names().into_iter().map(|n| n + "\n").collect(),
             ..Outcome::default()
         },
         ["run", name, passes] => {
@@ -121,6 +128,11 @@ mod tests {
         let list = main(&["list"]);
         assert_eq!(list.status, 0);
         assert_eq!(list.stdout.lines().count(), names().len());
+        let timed = main(&["list", "timed"]);
+        assert_eq!(timed.status, 0);
+        assert!(timed.stdout.starts_with(&list.stdout));
+        assert!(timed.stdout.contains("\nscenario/moved_door/full\n"));
+        assert_eq!(main(&["list", "all"]).status, 2);
         assert_eq!(
             main(&["run", "predicate/orient2d/typical", "2"]),
             Outcome::default()

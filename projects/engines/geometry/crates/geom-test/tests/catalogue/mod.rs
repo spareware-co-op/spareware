@@ -5,6 +5,9 @@
 //!
 //! Every law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull requests run the fixed
 //! default seed given to [`seed`], and the nightly workflow a fresh one (`kernel-nightly.yml`).
+//!
+//! Every body a flat law gets back goes through both checkers ([`Findings::both`]; Gate 4, G156:
+//! the second checker agrees on the whole corpus).
 
 #![allow(
     dead_code,
@@ -16,8 +19,11 @@ pub mod flat;
 
 use core::num::NonZeroU64;
 
+use geom_num::Exactness;
+use geom_test::agree::judge;
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
+use geom_topo::Body;
 
 /// The draws of one law, from the seed the run gives it.
 pub struct Draw(pub SplitMix64);
@@ -84,6 +90,33 @@ impl Findings {
     pub fn check(&mut self, holds: bool, case: &str, detail: impl FnOnce() -> String) {
         if !holds {
             self.add(case, detail);
+        }
+    }
+
+    /// Both checkers on `body`, a flat body the law got back, recorded Exact: a failure unless they
+    /// agree (both pass, or both refuse with the same rules broken), and one for each face or edge
+    /// the second checker could not judge, which a flat body has none of. `what` names the body.
+    pub fn both(&mut self, body: &Body, what: impl FnOnce() -> String) {
+        match judge(body, Exactness::Exact) {
+            Ok(v) => {
+                if !v.agree() {
+                    self.add("the two checkers disagree", || {
+                        format!(
+                            "{}: geom-check {:?}, second {:?}",
+                            what(),
+                            v.first,
+                            v.second
+                        )
+                    });
+                } else if v.unjudged != 0 {
+                    self.add("a flat body the second checker cannot judge", || {
+                        format!("{}: {} unjudged", what(), v.unjudged)
+                    });
+                }
+            }
+            Err(stopped) => self.add("the full check stopped", || {
+                format!("{}: {stopped:?}", what())
+            }),
         }
     }
 
