@@ -43,11 +43,15 @@
 //!   for `continuity_along`, which measures an edge at even stations and keeps the stations that
 //!   answer; replaced here by a certified bound over every piece. No code copied.
 //!
-//! Cost: each piece is one `class_a::at` and one `class_a::over` (O(1) each); a join of smooth
-//! surfaces whose measure is not constant needs O(log(1/tight)) rounds of a few pieces near the
-//! maximum, one whose measure is the same all along (an exact join) O(L/√tight) pieces, L the
-//! length of t's range, since the centred form's excess shrinks with the square of a piece's
-//! width; never more than [`Ask::pieces`]. Memory: the pieces kept. No recursion.
+//! Cost: each piece is one `class_a::at` and one `class_a::over` (O(1) each), never more than
+//! [`Ask::pieces`] pieces. For the gap and the normal angle on a join of smooth surfaces, the
+//! centred form's excess shrinks with the square of a piece's width: a measure that is not
+//! constant needs O(log(1/tight)) rounds of a few pieces near the maximum, one that is the same
+//! all along (an exact join) O(L/√tight) pieces, L the length of t's range. For
+//! curvature the bound's excess shrinks only about as fast as a piece's width, so a tight ask can
+//! take thousands of pieces: 10,227 and 6,223 for two random Bezier joins at 1e-6 (and up to 911
+//! for its change). Callers cap them with [`Ask::with_pieces`]; a capped run is still certified,
+//! only wider. Memory: the pieces kept. No recursion.
 
 use alloc::vec::Vec;
 use core::fmt;
