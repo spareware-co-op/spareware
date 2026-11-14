@@ -1,7 +1,8 @@
 //! Attacks on piece G101's claims: every primitive and every transform passes all four checker
 //! groups and the history laws; primitives name their entities by role, never by position;
 //! transforms keep every name, stay exact where the transform is and refuse a less exact result
-//! the caller did not accept; mirrors keep solids facing outward; patterns name their copies as
+//! the caller did not accept; a vertex where three planes meet moves with its planes, exactly where
+//! the transform is; mirrors keep solids facing outward; patterns name their copies as
 //! copies and read each copy's stretch from its transform; the class never rises; a coordinate past
 //! the grid is the numbers layer's error, never a defect; a stop publishes nothing; bad input gets
 //! a typed error with its remedy.
@@ -25,6 +26,8 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+use geom_bool::combine::intersect;
+use geom_bool::operand::{Operand, OperandKey, OperandKind};
 use geom_check::{Level, check};
 use geom_curve::{CurveKind, ParamCurve};
 use geom_make::{
@@ -34,6 +37,7 @@ use geom_make::{
 use geom_math::{
     Axis, GridTransform, RationalTransform, Rotation, Scale, Transform, TypedTransform,
 };
+use geom_num::plane::Plane;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_nurbs::Limit;
 use geom_op::history::Origin;
@@ -41,10 +45,10 @@ use geom_op::{
     Bound, ErrorKind, MakeDetail, NameId, NameList, NameSet, OpContext, OpErrorDetail, OpId,
     OpOutput, OpPath, Remedy, Role, RoleArg, TopoName, Value,
 };
-use geom_run::{Budget, CancelToken, WorkMeter};
+use geom_run::{Budget, CancelToken, Exec, WorkMeter};
 use geom_surface::ParamSurface;
 use geom_topo::ix::Arena;
-use geom_topo::{Body, Builder, Ix, Sense};
+use geom_topo::{Body, Builder, Ix, PointKind, Sense};
 use proptest::prelude::*;
 
 fn ctx() -> OpContext<'static> {
@@ -366,20 +370,210 @@ fn transforms_keep_names_and_pass_the_checker() {
     }
 }
 
+/// The body of the names laws' seed 24a51bd2917cc57a: a prism with slanted sides cut by a box, so the
+/// box's face y = 0 crosses two slanted edges off the grid and leaves vertices where three planes
+/// meet.
+fn a_cut_prism() -> Body {
+    let c = ctx();
+    let tilted = prism(
+        &c,
+        &PrismInput {
+            base: vec![p(-6, 1, 3), p(-8, -1, 3), p(-3, -3, 3)],
+            height: Steps(2),
+        },
+    )
+    .unwrap()
+    .result
+    .body;
+    let cutter = make_box(
+        &OpContext::new(c.path().item([0xb0; 16]), Budget::UNLIMITED),
+        &BoxInput {
+            min: p(-9, 0, -17),
+            size: [Steps(26), Steps(14), Steps(24)],
+        },
+    )
+    .unwrap()
+    .result
+    .body;
+    let solid = |n: u8, body| Operand {
+        key: OperandKey([n; 16]),
+        body,
+        kind: OperandKind::Solid,
+        exactness: Exactness::Exact,
+    };
+    let cut = intersect(&c, &Exec::serial(), &[solid(1, &tilted), solid(2, &cutter)]).unwrap();
+    assert_eq!(cut.exactness, Exactness::Exact);
+    cut.result.body
+}
+
+/// Each vertex's point: where three planes meet, as those planes, or the grid point.
+fn places(body: &Body) -> Vec<Result<P3, Box<[Plane; 3]>>> {
+    let a = body.arenas();
+    (0..a.rows(Arena::Vertex))
+        .map(|v| {
+            let point = a.vertices.point.get(Ix::new(v).unwrap()).unwrap();
+            match *a.points.get(*point).unwrap() {
+                PointKind::Grid(q) => Ok(q),
+                PointKind::Meet(rows) => Err(Box::new(rows.map(|r| *a.planes.get(r).unwrap()))),
+            }
+        })
+        .collect()
+}
+
+/// n · q + d, exactly.
+fn side(plane: &Plane, q: P3) -> i128 {
+    let n = plane.n();
+    n[0] * i128::from(q.x.get())
+        + n[1] * i128::from(q.y.get())
+        + n[2] * i128::from(q.z.get())
+        + plane.d()
+}
+
 #[test]
-fn a_body_whose_vertices_meet_on_planes_waits_for_the_move_of_its_planes() {
+fn a_body_whose_vertices_meet_on_planes_moves_with_its_planes() {
+    let body = a_cut_prism();
+    let before = places(&body);
+    let meets = before.iter().filter(|v| v.is_err()).count();
+    assert!(meets >= 2, "{before:?}");
+    let moved = Moved {
+        body: &body,
+        exactness: Exactness::Exact,
+        accept: None,
+    };
+    let c = ctx();
+    let whole = |k| Scale::new(k, 1).unwrap();
+    // Each transform, and how much it multiplies a moved plane's value at a moved point: the
+    // determinant of its linear part over the cofactors' common factor, so 1 for every rigid
+    // motion (a mirror's determinant is -1, and the plane is turned to keep its sides), 2 for a
+    // doubling (8 over 4) and 6 for scales of 2, 1 and 3 (6 over 1).
+    for (how, result, values) in [
+        ("move", move_by(&c, moved, [-15, 22, 25]), 1),
+        (
+            "quarter turn",
+            rotate(&c, moved, Axis::Z, Rotation::quarter_turns(1), p(1, 2, 3)),
+            1,
+        ),
+        (
+            "half turn",
+            rotate(&c, moved, Axis::Y, Rotation::quarter_turns(2), p(-4, 0, 7)),
+            1,
+        ),
+        ("mirror", mirror(&c, moved, Axis::X, p(2, 0, 0)), 1),
+        ("double", scale(&c, moved, [whole(2); 3], p(0, 1, 0)), 2),
+        (
+            "stretch",
+            scale(&c, moved, [whole(2), whole(1), whole(3)], p(1, 0, -1)),
+            6,
+        ),
+    ] {
+        let out = valid(how, result.unwrap());
+        assert_eq!(out.exactness, Exactness::Exact, "{how}");
+        let after_body = &out.result.body;
+        assert_eq!(after_body.names(), body.names(), "{how}");
+        // The checker held every meeting to the faces' planes, which their surfaces moved on their
+        // own; here each moved plane is the image of its plane, exactly: its value at the image of
+        // every grid vertex is the old value at that vertex, times the transform's factor.
+        let after = places(after_body);
+        let kept = before
+            .iter()
+            .zip(&after)
+            .filter_map(|(old, new)| old.as_ref().err().zip(new.as_ref().err()))
+            .collect::<Vec<_>>();
+        assert!(!kept.is_empty(), "{how}: no meeting is left");
+        if values == 1 {
+            assert_eq!(
+                kept.len(),
+                meets,
+                "{how}: a rigid motion keeps every meeting"
+            );
+        }
+        for (old, new) in kept {
+            for (q, image) in before.iter().zip(&after) {
+                let (Ok(q), Ok(image)) = (q, image) else {
+                    continue;
+                };
+                for (p_old, p_new) in old.iter().zip(new.iter()) {
+                    assert_eq!(side(p_new, *image), values * side(p_old, *q), "{how}");
+                }
+            }
+        }
+    }
+    // A copy is moved the same way, under its own names.
+    let copies = pattern(
+        &c,
+        moved,
+        &[Instance {
+            key: [99; 16],
+            transform: TypedTransform::Exact(GridTransform::translation([-15, 22, 25]).unwrap()),
+        }],
+    )
+    .unwrap();
+    assert_eq!(copies.exactness, Exactness::Exact);
+    let (_, copy) = copies.result.into_iter().next().unwrap();
+    let copy = valid("copy", OpOutput::new(copy, Exactness::Exact));
+    let by = [-15, 22, 25];
+    let corners = |b: &Body, at: [i64; 3]| {
+        let mut all: Vec<[i64; 3]> = places(b)
+            .into_iter()
+            .filter_map(Result::ok)
+            .map(|q| [q.x.get() + at[0], q.y.get() + at[1], q.z.get() + at[2]])
+            .collect();
+        all.sort_unstable();
+        all
+    };
+    assert_eq!(corners(&copy.result.body, [0; 3]), corners(&body, by));
+    let pool = |b: &Body, at: [i64; 3]| {
+        let mut all: Vec<([i128; 3], i128)> = b
+            .arenas()
+            .planes
+            .iter()
+            .map(|plane| {
+                let n = plane.n();
+                let moved = (0..3).fold(0, |s, k| s + n[k] * i128::from(at[k]));
+                (n, plane.d() - moved)
+            })
+            .collect();
+        all.sort_unstable();
+        all
+    };
+    assert_eq!(pool(&copy.result.body, [0; 3]), pool(&body, by));
+    assert_eq!(
+        places(&copy.result.body)
+            .iter()
+            .filter(|v| v.is_err())
+            .count(),
+        meets
+    );
+}
+
+#[test]
+fn a_meeting_on_the_grid_moves_to_a_grid_point() {
+    // A box whose first vertex is written as the meeting of the three planes through it: moved, it
+    // is the grid point that meeting is, and the pool keeps no plane nothing names.
     let made = a_box();
     let mut b = Builder::edit(&made.result.body);
-    let plane = |n: [i128; 3]| geom_num::plane::Plane::new(n, 0).unwrap();
+    let a = made.result.body.arenas();
+    let corner = a
+        .points
+        .get(*a.vertices.point.get(Ix::new(0).unwrap()).unwrap())
+        .unwrap()
+        .grid()
+        .unwrap();
+    let at = [corner.x, corner.y, corner.z].map(|c| -i128::from(c.get()));
+    let plane = |n: [i128; 3], d| Plane::new(n, d).unwrap();
     b.arenas
         .planes
-        .extend([plane([1, 0, 0]), plane([0, 1, 0]), plane([0, 0, 1])])
+        .extend([
+            plane([1, 0, 0], at[0]),
+            plane([0, 1, 0], at[1]),
+            plane([0, 0, 1], at[2]),
+        ])
         .unwrap();
     b.arenas
         .points
         .set(
-            Ix::new(0).unwrap(),
-            geom_topo::PointKind::Meet([0, 1, 2].map(|k| Ix::new(k).unwrap())),
+            *a.vertices.point.get(Ix::new(0).unwrap()).unwrap(),
+            PointKind::Meet([0, 1, 2].map(|k| Ix::new(k).unwrap())),
         )
         .unwrap();
     let body = b
@@ -390,16 +584,49 @@ fn a_body_whose_vertices_meet_on_planes_waits_for_the_move_of_its_planes() {
             &mut WorkMeter::new(Budget::UNLIMITED),
         )
         .unwrap();
-    let moved = Moved {
-        body: &body,
-        exactness: made.exactness,
+    assert!(places(&body)[0].is_err());
+    let moved = |b| Moved {
+        body: b,
+        exactness: Exactness::Exact,
         accept: None,
     };
-    let e = move_by(&ctx(), moved, [1, 0, 0]).unwrap_err();
-    assert_eq!(
-        *e.detail(),
-        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece: "G129" })
-    );
+    let c = ctx();
+    let out = valid("moved", move_by(&c, moved(&body), [1, -2, 3]).unwrap());
+    let plain = move_by(&c, moved(&made.result.body), [1, -2, 3]).unwrap();
+    assert_eq!(out.exactness, Exactness::Exact);
+    assert_eq!(out.result.body.arenas().planes.len(), 0);
+    assert_eq!(places(&out.result.body), places(&plain.result.body));
+}
+
+#[test]
+fn a_general_rotation_commits_a_meeting_and_counts_it() {
+    // No plane stays exact under a rotation by the direction (4, 3): each meeting is committed to
+    // the grid and turned as a grid point is, and the bound has a step for the commit on top of
+    // the step for rounding.
+    let body = a_cut_prism();
+    let turn = |accept| {
+        rotate(
+            &ctx(),
+            Moved {
+                body: &body,
+                exactness: Exactness::Exact,
+                accept,
+            },
+            Axis::Z,
+            Rotation::direction(4, 3).unwrap(),
+            p(0, 0, 0),
+        )
+    };
+    let refused = turn(None).unwrap_err();
+    let OpErrorDetail::Make(MakeDetail::NotAccepted { would }) = *refused.detail() else {
+        panic!("{refused:?}");
+    };
+    let out = valid("turned", turn(Some(would)).unwrap());
+    assert_eq!(out.exactness, would);
+    assert!(places(&out.result.body).iter().all(Result::is_ok));
+    assert_eq!(out.result.body.arenas().planes.len(), 0);
+    let (bound, _) = would.bound().unwrap();
+    assert_eq!(bound.get(), 3, "{would:?}");
 }
 
 #[test]

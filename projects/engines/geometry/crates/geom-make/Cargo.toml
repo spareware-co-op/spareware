@@ -69,6 +69,9 @@ geom-name = { path = "../geom-name" }
 geom-test = { path = "../geom-test" }
 # The side a test reads a surface from at a break.
 geom-nurbs = { path = "../geom-nurbs" }
+# Bodies a boolean leaves, with vertices where three planes meet, for the transforms' tests (ours,
+# Apache-2.0).
+geom-bool = { path = "../geom-bool" }
 # Every test build runs all four checker groups (chapter 28.4), release builds included.
 geom-check = { path = "../geom-check", features = ["full"] }
 # An allocator that refuses allocations past a limit, so the tests reach every refused
