@@ -2113,6 +2113,15 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 &mut meter,
             )
         })),
+        ("mesh", "hull") => fold(inputs::mesh::hull(class).iter().map(|points| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::hull::Hull::of(points, &mut meter)
+        })),
+        ("mesh", "slice") => fold(inputs::mesh::slice(class).iter().map(|layers| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let exec = geom_run::Exec::serial();
+            geom_mesh::slice::slice(&layers.solid, &layers.planes, &exec, &mut meter)
+        })),
         ("mesh", "cdt") => fold(inputs::mesh::cdt(class).iter().map(|t| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::triangulate(&t.sites, &t.constraints, None, &mut meter)
