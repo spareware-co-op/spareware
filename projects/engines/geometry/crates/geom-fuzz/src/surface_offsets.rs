@@ -41,18 +41,28 @@ pub use crate::surfaces::{Case, Reached};
 /// are read the same way.
 pub const MAX_INPUT_BYTES: usize = surfaces::MAX_INPUT_BYTES;
 
-/// The work units the contract may spend on one offset: 4,000,000.
+/// The work units the contract may spend on one offset: 6,000,000.
 ///
-/// The `surfaces` target's budget, which offsets had there before they were split out, and kept.
-/// The contract builds an offset's NURBS cache twice (for the transform law and for the NURBS
-/// law), so an offset whose contract completes charges 2,246,820 units at the median and
-/// 3,955,108 at the most measured: this budget is 1.8 times an ordinary offset, and a quarter of
-/// the offsets stop on it. The pass of [`PARTIAL_WORK`] then runs every law that needs no
-/// conversion. A stop costs 1.0 to 1.96 s on a hosted runner (the 2026-11-12 campaign).
-pub const WORK: u64 = surfaces::WORK;
+/// Set by the time rule (the fuzz-budgets design note): the most one case may charge, this and
+/// the pass of [`PARTIAL_WORK`] together, 8,000,000 units, must cost at most about 4 s on a hosted
+/// runner at the dearest rate measured on offsets, a margin of 2.5 under the campaign's 10-second
+/// limit on one input. The meter is honest on offset surfaces (408 to 650 release instructions a
+/// unit over the stored inputs of 2026-11-13), and an offset that spent the `surfaces` target's
+/// 4,000,000, which offsets had before they were split out, cost 1.0 to 1.96 s on a hosted runner
+/// (the 2026-11-12 campaign), so twice that is about 3.9 s. MEASURED_SURFACES
+///
+/// What it buys: the contract builds an offset's NURBS cache twice (for the transform law and for
+/// the NURBS law), so an offset whose contract completes charges 2,246,820 units at the median and
+/// 3,955,108 at the most measured, and on the 449 stored offsets this budget took the offsets that
+/// stop from 112 to 73 and the whole contracts from 240 to 275. A contract of 16,000,000 would
+/// stop 22 but cost about 8 s a case, too near the limit.
+pub const WORK: u64 = 6_000_000;
 
-/// The work units of the pass without conversions after a budget stop: `crate::surfaces`'s,
-/// derived there on the offsets.
+/// The work units of the pass without conversions after a budget stop: 2,000,000.
+///
+/// `crate::surfaces`'s, derived there on the offsets: the laws that need no conversion charge a
+/// whole offset contract 215,460 units at the median and 1,662,780 at the 95th percentile. With
+/// [`WORK`] a case may charge 8,000,000 units, the sum the time rule bounds.
 pub const PARTIAL_WORK: u64 = surfaces::PARTIAL_WORK;
 
 /// Any bytes as a case, the kind made an offset, and how many bytes were read.
