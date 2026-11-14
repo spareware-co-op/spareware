@@ -221,25 +221,41 @@
     },
     {
       "id": "ezpz",
-      "what": "ezpz",
+      "what": "ezpz, Zoo's sketch solver",
       "licence": "MIT",
-      "run": "dev-dependency",
-      "state": "planned",
-      "checks": "Sketch solutions, degrees of freedom, redundant and conflicting constraints",
-      "source": "crates.io: ezpz",
-      "pin": null,
-      "never_linked": [],
-      "piece": "G231"
+      "run": "out-of-process",
+      "state": "live",
+      "checks": "Sketch solutions, compared with the block solver's and the truth they were drawn from (G222); degrees of freedom, redundancy and conflicts against the families' known diagnoses (G231)",
+      "source": "https://github.com/KittyCAD/ezpz",
+      "pin": "0.2.29",
+      "never_linked": [
+        "ezpz"
+      ],
+      "piece": "G222"
+    },
+    {
+      "id": "fiksi",
+      "what": "fiksi, Linebender's sketch solver",
+      "licence": "Apache-2.0 OR MIT",
+      "run": "out-of-process",
+      "state": "live",
+      "checks": "Sketch solutions on the kinds it states, compared with the block solver's and the truth they were drawn from (G222)",
+      "source": "https://github.com/endoli/fiksi",
+      "pin": "ff4850546738fb82e95ff27c4db63e924d938473",
+      "never_linked": [
+        "fiksi"
+      ],
+      "piece": "G222"
     },
     {
       "id": "solvespace",
       "what": "SolveSpace",
       "licence": "GPL-3.0-only",
       "run": "out-of-process",
-      "state": "planned",
-      "checks": "Sketch solutions",
+      "state": "live",
+      "checks": "Sketch solutions on every kind the jobs state, and degrees of freedom and conflicts: compared with the block solver's, the truth they were drawn from and the families' known diagnoses (G231). Its source is not read: papers and documentation only (29.9)",
       "source": "https://github.com/solvespace/solvespace",
-      "pin": null,
+      "pin": "97d0a25cd99e32a2d326017e249fb17b8fa2aa15",
       "never_linked": [
         "solvespace"
       ],
@@ -250,10 +266,10 @@
       "what": "FreeCAD's planegcs",
       "licence": "LGPL-2.1-or-later",
       "run": "out-of-process",
-      "state": "planned",
-      "checks": "Sketch solutions",
+      "state": "live",
+      "checks": "Sketch solutions on every kind the jobs state but a midpoint, and degrees of freedom, redundant and conflicting constraints: compared with the block solver's, the truth they were drawn from and the families' known diagnoses (G231). Method only (A11): its source is not copied",
       "source": "https://github.com/FreeCAD/FreeCAD",
-      "pin": null,
+      "pin": "1.1.4",
       "never_linked": [
         "planegcs"
       ],

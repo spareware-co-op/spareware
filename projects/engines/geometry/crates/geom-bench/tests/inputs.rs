@@ -2615,6 +2615,22 @@ fn linalg_typical_batches_all_succeed() {
     all_ok("svd_jacobi", k::svd_jacobi, &m::svd_jacobi(Typical));
 }
 
+/// Every typical batch of `geom-sketch`'s spline benchmarks (decision 32.44) reads, measures and
+/// assembles every sketch.
+#[test]
+fn spline_typical_batches_all_succeed() {
+    use geom_bench::inputs::spline as m;
+    use geom_bench::kernels::spline as k;
+    all_ok("length", k::lengths, &m::lengths(Typical));
+    all_ok("solve_join", k::solved_joins, &m::pulled_joins(Typical));
+    all_ok("settle_fit", k::settled_fits, &m::dragged_fits(Typical));
+    all_ok(
+        "rational_rules",
+        k::rational_rules,
+        &m::rational_rules(Typical),
+    );
+}
+
 /// Every typical batch of `geom-make`'s benchmarks (decision 32.46) builds or moves every body.
 #[test]
 fn make_typical_batches_all_succeed() {
@@ -2624,6 +2640,20 @@ fn make_typical_batches_all_succeed() {
     all_ok("cylinder", k::cylinders, &m::cylinders(Typical));
     all_ok("move_box", k::moved_boxes, &m::moved_boxes(Typical));
     all_ok("turn_box", k::turned_boxes, &m::turned_boxes(Typical));
+}
+
+/// Every typical batch of `geom-sketch`'s benchmarks (decision 32.44) reads, diagnoses and factors
+/// every sketch.
+#[test]
+fn sketch_typical_batches_all_succeed() {
+    use geom_bench::inputs::sketch as m;
+    use geom_bench::kernels::sketch as k;
+    all_ok(
+        "diagnose_chain",
+        k::diagnosed,
+        &m::determined_chains(Typical),
+    );
+    all_ok("free_motions_chain", k::motions, &m::free_chains(Typical));
 }
 
 /// Every typical batch of the core queries' benchmarks (piece G102; decision 32.46) answers every
@@ -2781,6 +2811,24 @@ fn topo_typical_batches_all_succeed() {
     assert!(columns.iter().all(|(values, _, _)| values.len() == m::ROWS));
     all_ok("column_edit", k::column_edit, &columns);
     all_ok("publish", k::publish, &m::publish(Typical));
+}
+
+/// Every typical batch of `geom-2d`'s entity benchmarks (decision 32.44) builds every polyline and
+/// puts every shape through its classification.
+#[test]
+fn entity_typical_batches_all_succeed() {
+    use geom_bench::inputs::entity as m;
+    use geom_bench::kernels::entity as k;
+    all_ok("polyline", k::polyline, &m::polyline(Typical));
+    all_ok("under", k::under, &m::under(Typical));
+    all_ok("arrange", k::arrange, &m::arrange(Typical));
+    all_ok(
+        "arrange_curves",
+        k::arrange_curves,
+        &m::arrange_curves(Typical),
+    );
+    all_ok("place", k::place, &m::place(Typical));
+    all_ok("length", k::length, &m::length(Typical));
 }
 
 /// Every typical batch of the batch runner's benchmarks (decision 32.46) runs every item and
@@ -2954,6 +3002,341 @@ fn roots_typical_batches_all_succeed() {
     );
 }
 
+/// The carrier and rational-point batches are what their classes claim, for the module and for the
+/// generated functions it calls (piece G187).
+#[test]
+fn the_carrier_classes_are_what_they_say() {
+    use geom_bench::inputs::{carrier as c, generated as i};
+    use geom_num::carrier::Rational2;
+    use geom_num::generated as gp;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(c::side(class).len(), BATCH, "{class}");
+        assert_eq!(c::order(class).len(), BATCH, "{class}");
+        assert_eq!(c::cmp_x(class).len(), BATCH, "{class}");
+        assert_eq!(c::orient(class).len(), BATCH, "{class}");
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        assert_eq!(c::meet(class).len(), BATCH, "{class}");
+    }
+    assert!(
+        c::side(Degenerate)
+            .iter()
+            .all(|(l, p)| l.side(p) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::side(Typical)
+            .iter()
+            .all(|(l, p)| l.side(p) != Ok(Sign::Zero))
+    );
+    assert!(
+        c::side(NearlyDegenerate)
+            .iter()
+            .all(|(l, p)| l.side(p) != Ok(Sign::Zero))
+    );
+    assert!(
+        c::order(Degenerate)
+            .iter()
+            .all(|(l, p, q)| l.order(p, q) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::order(NearlyDegenerate)
+            .iter()
+            .all(|(l, p, q)| l.order(p, q) != Ok(Sign::Zero))
+    );
+    assert!(
+        c::cmp_x(Degenerate)
+            .iter()
+            .all(|(p, q)| p.cmp_x(q) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::cmp_x(NearlyDegenerate)
+            .iter()
+            .all(|(p, q)| p.cmp_x(q) != Ok(Sign::Zero))
+    );
+    let turn = |[p, q, r]: &[Rational2; 3]| Rational2::orient(p, q, r);
+    assert!(
+        c::orient(Degenerate)
+            .iter()
+            .all(|t| turn(t) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::orient(NearlyDegenerate)
+            .iter()
+            .all(|t| turn(t) != Ok(Sign::Zero))
+    );
+    assert!(
+        c::meet(Degenerate)
+            .iter()
+            .all(|(l, m)| l.meet(m).err() == Some(NumError::Degenerate))
+    );
+    assert!(c::meet(Typical).iter().all(|(l, m)| l.meet(m).is_ok()));
+
+    assert!(
+        i::carrier_side_filter(Typical)
+            .iter()
+            .all(|&([a, b, l], [x, y, w])| gp::carrier_side::filter(a, b, l, x, y, w).is_some())
+    );
+    assert!(
+        i::carrier_side_filter(NearlyDegenerate)
+            .iter()
+            .all(|&([a, b, l], [x, y, w])| gp::carrier_side::filter(a, b, l, x, y, w).is_none())
+    );
+    assert!(
+        i::carrier_side_value(Degenerate)
+            .iter()
+            .all(
+                |&([a, b, l], [x, y, w])| gp::carrier_side::exact(a, b, l, x, y, w)
+                    == Some(Sign::Zero)
+            )
+    );
+    assert!(i::carrier_order_filter(Typical).iter().all(
+        |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            gp::carrier_order::filter(a, b, xp, yp, xq, yq, wp, wq).is_some()
+        }
+    ));
+    assert!(i::carrier_order_filter(NearlyDegenerate).iter().all(
+        |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            gp::carrier_order::filter(a, b, xp, yp, xq, yq, wp, wq).is_none()
+        }
+    ));
+    assert!(i::carrier_order_value(Degenerate).iter().all(
+        |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            gp::carrier_order::exact(a, b, xp, yp, xq, yq, wp, wq) == Some(Sign::Zero)
+        }
+    ));
+    assert!(
+        i::rational_cmp_filter(Typical)
+            .iter()
+            .all(|&[p, q, wp, wq]| gp::rational_cmp::filter(p, q, wp, wq).is_some())
+    );
+    assert!(
+        i::rational_cmp_filter(NearlyDegenerate)
+            .iter()
+            .all(|&[p, q, wp, wq]| gp::rational_cmp::filter(p, q, wp, wq).is_none())
+    );
+    assert!(
+        i::rational_cmp_value(Degenerate)
+            .iter()
+            .all(|&[p, q, wp, wq]| gp::rational_cmp::exact(p, q, wp, wq) == Some(Sign::Zero))
+    );
+    assert!(i::rational_orient_filter(Typical).iter().all(
+        |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            gp::rational_orient::filter(xa, ya, xb, yb, xc, yc, wa, wb, wc).is_some()
+        }
+    ));
+    assert!(i::rational_orient_filter(NearlyDegenerate).iter().all(
+        |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            gp::rational_orient::filter(xa, ya, xb, yb, xc, yc, wa, wb, wc).is_none()
+        }
+    ));
+    assert!(i::rational_orient_value(Degenerate).iter().all(
+        |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            gp::rational_orient::exact(xa, ya, xb, yb, xc, yc, wa, wb, wc) == Some(Sign::Zero)
+        }
+    ));
+}
+
+/// The circle batches are what their classes claim, for the module and for the generated functions
+/// it calls (piece G188).
+#[test]
+fn the_circle_classes_are_what_they_say() {
+    use geom_bench::inputs::{arc as a, generated as i};
+    use geom_num::arc::Contact;
+    use geom_num::generated as gp;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(a::round_grid(class).len(), BATCH, "{class}");
+        assert_eq!(a::round_side(class).len(), BATCH, "{class}");
+        assert_eq!(a::round_meets(class).len(), BATCH, "{class}");
+        assert_eq!(a::circle_side(class).len(), BATCH, "{class}");
+        assert_eq!(a::circle_meets(class).len(), BATCH, "{class}");
+    }
+    assert!(
+        a::round_grid(Degenerate)
+            .iter()
+            .all(|(r, z)| r.side_of_grid(*z) == Ok(Sign::Zero))
+    );
+    assert!(
+        a::round_side(Degenerate)
+            .iter()
+            .all(|(r, z)| r.side(z) == Ok(Sign::Zero))
+    );
+    assert!(
+        a::round_meets(Degenerate)
+            .iter()
+            .all(|(r, l)| r.meets(l) == Ok(Contact::Tangent))
+    );
+    assert!(
+        a::circle_side(Degenerate)
+            .iter()
+            .all(|(c, z)| c.side(z) == Ok(Sign::Zero))
+    );
+    assert!(
+        a::circle_meets(Degenerate)
+            .iter()
+            .all(|(c, l)| c.meets(l) == Ok(Contact::Tangent))
+    );
+
+    assert!(
+        i::round_grid_filter(Typical)
+            .iter()
+            .all(|&(z, p, [cx, cy, w])| gp::round_grid::filter(z, p, cx, cy, w).is_some())
+    );
+    assert!(
+        i::round_grid_filter(NearlyDegenerate)
+            .iter()
+            .all(|&(z, p, [cx, cy, w])| gp::round_grid::filter(z, p, cx, cy, w).is_none())
+    );
+    assert!(
+        i::circle_gap_filter(NearlyDegenerate)
+            .iter()
+            .all(|&(a, b, t)| gp::circle_gap::filter(a, b, t).is_none())
+    );
+    assert!(
+        i::circle_gap_value(Degenerate)
+            .iter()
+            .all(|&(a, b, t)| gp::circle_gap::exact(a, b, t) == Some(Sign::Zero))
+    );
+}
+
+/// The one-root batches are what their classes claim (piece G189).
+#[test]
+fn the_one_root_classes_are_what_they_say() {
+    use geom_bench::inputs::one_root as r;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(r::cmp_x(class).len(), BATCH, "{class}");
+        assert_eq!(r::side(class).len(), BATCH, "{class}");
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        assert_eq!(r::of_circle(class).len(), BATCH, "{class}");
+        assert_eq!(r::against_circle(class).len(), BATCH, "{class}");
+    }
+    assert_eq!(r::of_round(Typical).len(), BATCH);
+    assert_eq!(r::of_round(Degenerate).len(), BATCH);
+    assert_eq!(r::order_crossings(Typical).len(), BATCH);
+    assert!(
+        r::cmp_x(Typical)
+            .iter()
+            .all(|(p, q)| p.cmp_x_filter(q).is_some())
+    );
+    assert!(
+        r::cmp_x(NearlyDegenerate)
+            .iter()
+            .all(|(p, q)| p.cmp_x_filter(q).is_none())
+    );
+    assert!(
+        r::cmp_x(Degenerate)
+            .iter()
+            .all(|(p, q)| p.same(q) == Ok(true))
+    );
+    assert!(
+        r::side(Degenerate)
+            .iter()
+            .all(|(p, l)| p.side(l) == Ok(Sign::Zero))
+    );
+    assert!(
+        r::side(NearlyDegenerate)
+            .iter()
+            .all(|(p, l)| p.side(l) != Ok(Sign::Zero))
+    );
+    assert!(
+        r::against_circle(Degenerate)
+            .iter()
+            .all(|(p, c)| p.against_circle(c) == Ok(Sign::Zero))
+    );
+    assert!(r::of_circle(Degenerate).iter().all(|(l, c)| {
+        geom_num::one_root::Crossing2::of_circle(l, c, geom_num::one_root::Root::First)
+            .is_ok_and(|p| p.parts().2.is_zero())
+    }));
+}
+
+/// The conic batches are what their classes claim, for the module and for the generated functions
+/// it calls (piece G190).
+#[test]
+fn the_conic_classes_are_what_they_say() {
+    use geom_bench::inputs::{conic as c, generated as i};
+    use geom_num::arc::Contact;
+    use geom_num::conic::{Conic, Meeting};
+    use geom_num::generated as gp;
+    use geom_num::one_root::{Crossing2, Root};
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(c::side(class).len(), BATCH, "{class}");
+        assert_eq!(c::meets(class).len(), BATCH, "{class}");
+        assert_eq!(c::meeting(class).len(), BATCH, "{class}");
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        assert_eq!(c::of_ellipse(class).len(), BATCH, "{class}");
+        assert_eq!(c::against_ellipse(class).len(), BATCH, "{class}");
+        assert_eq!(c::compare(class).len(), BATCH, "{class}");
+    }
+    assert!(
+        c::side(Degenerate)
+            .iter()
+            .all(|(e, z)| e.side(z) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::side(NearlyDegenerate)
+            .iter()
+            .all(|(e, z)| e.side(z) == Ok(Sign::Positive))
+    );
+    assert!(
+        c::meets(Degenerate)
+            .iter()
+            .all(|(e, l)| e.meets(l) == Ok(Contact::Tangent))
+    );
+    assert!(
+        c::meets(NearlyDegenerate)
+            .iter()
+            .all(|(e, l)| e.meets(l) == Ok(Contact::Crossing))
+    );
+    assert!(c::of_ellipse(Degenerate).iter().all(|(l, e)| {
+        Crossing2::of_ellipse(l, e, Root::First).is_ok_and(|p| p.parts().2.is_zero())
+    }));
+    assert!(
+        c::against_ellipse(Degenerate)
+            .iter()
+            .all(|(p, e)| p.against_ellipse(e) == Ok(Sign::Zero))
+    );
+    assert!(c::meeting(Typical).iter().all(|(e, o)| {
+        let meeting = Conic::of_ellipse(o).and_then(|c| e.meeting(&c));
+        matches!(meeting, Ok(Meeting::At { roots, .. }) if roots.count() == 4)
+    }));
+    assert!(c::meeting(Degenerate).iter().all(|(e, o)| {
+        let meeting = Conic::of_ellipse(o).and_then(|c| e.meeting(&c));
+        matches!(meeting, Ok(Meeting::At { roots, .. })
+            if roots.count() == 2 && roots.iter().all(|r| r.multiplicity() == 2))
+    }));
+    assert!(
+        c::compare(Degenerate)
+            .iter()
+            .all(|(p, a, q, b)| geom_num::quartic::compare(p, a, q, b) == Ok(Sign::Zero))
+    );
+
+    assert!(
+        i::ellipse_side_filter(Typical)
+            .iter()
+            .all(|&([x, y, w], k, [mx, my, p, q])| {
+                gp::ellipse_side::filter(x, y, w, k, mx, my, p, q).is_some()
+            })
+    );
+    assert!(i::ellipse_side_filter(NearlyDegenerate).iter().all(
+        |&([x, y, w], k, [mx, my, p, q])| {
+            gp::ellipse_side::filter(x, y, w, k, mx, my, p, q).is_none()
+        }
+    ));
+    assert!(i::ellipse_line_filter(NearlyDegenerate).iter().all(
+        |&([a, b, d], k, [mx, my, p, q])| {
+            gp::ellipse_line::filter(a, b, d, k, mx, my, p, q).is_none()
+        }
+    ));
+    assert!(
+        i::ellipse_line_value(Degenerate)
+            .iter()
+            .all(|&([a, b, d], k, [mx, my, p, q])| {
+                gp::ellipse_line::exact(a, b, d, k, mx, my, p, q) == Some(Sign::Zero)
+            })
+    );
+}
+
 /// Every typical batch of `geom-intersect`'s benchmarks (decision 32.46) orders every list and
 /// reads every key.
 #[test]
@@ -2967,6 +3350,11 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("curve_circles", k::met, &m::circle_pairs(Typical));
     all_ok("curve_line_circle", k::met, &m::line_circles(Typical));
     all_ok("curve_cubics", k::met, &m::cubic_pairs(Typical));
+    all_ok(
+        "contact_spline_line",
+        k::contacted,
+        &m::spline_lines(Typical),
+    );
     all_ok("curve_loop", k::crossed, &m::loops(Typical));
     all_ok("surface_plane", k::pierced, &m::line_planes(Typical));
     all_ok("surface_torus", k::pierced, &m::line_tori(Typical));

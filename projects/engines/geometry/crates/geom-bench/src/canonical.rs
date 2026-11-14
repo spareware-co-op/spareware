@@ -25,6 +25,12 @@
 
 use core::cmp::Ordering;
 
+use geom_2d::arrange::Curve;
+use geom_2d::entity::{Frac, Shape};
+use geom_math::Classification;
+use geom_num::arc::{Arc2, Circle2, Contact, Round};
+use geom_num::carrier::{Carrier, Rational2};
+use geom_num::conic::{Ellipse2, Meeting};
 use geom_num::crossing::Ssi;
 use geom_num::dd::DD;
 use geom_num::exact_sum::ExactSum;
@@ -32,7 +38,9 @@ use geom_num::grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::{Flagged, IsolateError, Isolation, Reason, Zero};
 use geom_num::newton::{NewtonError, Precision, Verdict};
+use geom_num::one_root::Crossing2;
 use geom_num::plane::{Lpi, Plane, Tpi};
+use geom_num::quartic::{Quartic, RealRoot};
 use geom_num::real::Real;
 use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
@@ -214,6 +222,166 @@ impl Canonical for Ssi {
     fn encode(&self, h: &mut Sha256) {
         for p in self.points() {
             p.encode(h);
+        }
+    }
+}
+
+impl Canonical for Frac {
+    // A fraction is exactly its reduced numerator and denominator.
+    fn encode(&self, h: &mut Sha256) {
+        self.numerator().encode(h);
+        self.denominator().encode(h);
+    }
+}
+
+// A shape and a classification are plain data whose derived `Debug` text lists every field in
+// declaration order with integers in decimal: that text is the same on every target, and it
+// separates any two different values, so the digest of the text is a canonical digest of the
+// value. Writing a field-by-field encoding of all eighteen shape kinds would repeat the type.
+impl Canonical for Shape {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(format!("{self:?}").as_bytes());
+    }
+}
+
+impl Canonical for Classification {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(format!("{self:?}").as_bytes());
+    }
+}
+
+impl Canonical for Carrier {
+    // A carrier is exactly its coefficients.
+    fn encode(&self, h: &mut Sha256) {
+        let ([a, b], c) = self.coefficients();
+        a.encode(h);
+        b.encode(h);
+        c.encode(h);
+    }
+}
+
+impl Canonical for Rational2 {
+    // A rational point is exactly its three integers, its weight positive.
+    fn encode(&self, h: &mut Sha256) {
+        let ([x, y], w) = self.coordinates();
+        x.encode(h);
+        y.encode(h);
+        w.encode(h);
+    }
+}
+
+impl Canonical for Round {
+    // A round is exactly the grid point it passes through and its centre.
+    fn encode(&self, h: &mut Sha256) {
+        self.on().encode(h);
+        self.centre().encode(h);
+    }
+}
+
+impl Canonical for Circle2 {
+    fn encode(&self, h: &mut Sha256) {
+        self.centre().encode(h);
+        self.radius().encode(h);
+    }
+}
+
+impl Canonical for Contact {
+    fn encode(&self, h: &mut Sha256) {
+        let tag: u32 = match self {
+            Contact::Apart => 0,
+            Contact::Tangent => 1,
+            Contact::Crossing => 2,
+        };
+        tag.encode(h);
+    }
+}
+
+impl Canonical for Arc2 {
+    // An arc is exactly its circle and its end.
+    fn encode(&self, h: &mut Sha256) {
+        self.round().encode(h);
+        self.end().encode(h);
+    }
+}
+
+impl Canonical for Crossing2 {
+    // A crossing is exactly its integers; its enclosure follows from them.
+    fn encode(&self, h: &mut Sha256) {
+        let ([ax, ay], [bx, by], k, w) = self.parts();
+        ax.encode(h);
+        ay.encode(h);
+        bx.encode(h);
+        by.encode(h);
+        k.encode(h);
+        w.encode(h);
+    }
+}
+
+impl Canonical for Ellipse2 {
+    fn encode(&self, h: &mut Sha256) {
+        self.centre().encode(h);
+        self.major().encode(h);
+        self.ratio().0.encode(h);
+        self.ratio().1.encode(h);
+    }
+}
+
+impl Canonical for Curve {
+    // A tag, then the curve's own data: a segment's ends, an arc, an ellipse, or an elliptic arc's
+    // ellipse and the text of its two parameters (plain data, its derived `Debug` text the same on
+    // every target, as for `Shape`).
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Curve::Segment(a, b) => {
+                0_u32.encode(h);
+                a.encode(h);
+                b.encode(h);
+            }
+            Curve::Arc(arc) => {
+                1_u32.encode(h);
+                arc.encode(h);
+            }
+            Curve::Ellipse(e) => {
+                2_u32.encode(h);
+                e.encode(h);
+            }
+            Curve::EllipticArc {
+                ellipse,
+                start,
+                end,
+            } => {
+                3_u32.encode(h);
+                ellipse.encode(h);
+                h.update(format!("{start:?} {end:?}").as_bytes());
+            }
+        }
+    }
+}
+
+impl Canonical for Quartic {
+    fn encode(&self, h: &mut Sha256) {
+        self.coefficients().encode(h);
+    }
+}
+
+impl Canonical for RealRoot {
+    // A root is its stretch and multiplicity; its interval follows from its quartic.
+    fn encode(&self, h: &mut Sha256) {
+        (self.piece() as u32).encode(h);
+        u32::from(self.multiplicity()).encode(h);
+    }
+}
+
+impl Canonical for Meeting {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Meeting::Same => 0_u32.encode(h),
+            Meeting::At { roots, .. } => {
+                (1 + roots.count() as u32).encode(h);
+                for root in roots.iter() {
+                    root.encode(h);
+                }
+            }
         }
     }
 }
@@ -733,6 +901,23 @@ impl<T: Canonical> Canonical for Result<T, geom_linalg::LinalgError> {
 }
 
 // `geom-topo`'s types (decision 32.46's count benchmarks for piece G80).
+
+impl<T: Canonical> Canonical for Result<T, geom_sketch::model::SketchError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-bvh`'s types (decision 32.44's count benchmarks for pieces G54 and G55).
 
 impl Canonical for geom_topo::Builder {
     fn encode(&self, h: &mut Sha256) {
@@ -1341,6 +1526,13 @@ impl Canonical for geom_intersect::Item {
 }
 
 impl Canonical for geom_intersect::Intersection {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_2d::contact::Contact {
+    // Piece G195's contacts, by the same rule: a kind, two intervals and a box.
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
     }

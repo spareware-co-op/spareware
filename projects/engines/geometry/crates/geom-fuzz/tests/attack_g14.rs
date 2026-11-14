@@ -39,11 +39,12 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, crossings,
-    curves, encoder, euler, exact, general, intersect, level, linalg, make, maths, names, naming,
-    natural, nurbs, open, operations, orient2d, p21, pencils, piercing, planes, predicates,
-    project, prune, quadric, records, reductions, references, roots, sequence, surfaces,
-    transforms, variants, wide,
+    Harness, arenas, arrange, arrange_curves, attributes, batch, bodies, boxtree, cache, cbor, cdt,
+    contract, crossings, curves, edit, encoder, entity, euler, exact, general, intersect, level,
+    linalg, make, maths, names, naming, natural, nurbs, open, operations, orient2d, p21, pencils,
+    piercing, planes, predicates, project, prune, quadric, records, reductions, references, roots,
+    sequence, sketch_corpus, sketch_motions, sketch_splines, sketch_text, snap, surfaces,
+    transforms, variants, wide, zone,
 };
 
 use geom_num::Sign;
@@ -56,8 +57,10 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 44] = [
+const TARGETS: [(&str, Harness); 54] = [
     ("arenas", arenas::harness),
+    ("arrange", arrange::harness),
+    ("arrange_curves", arrange_curves::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
     ("bodies", bodies::harness),
@@ -67,6 +70,8 @@ const TARGETS: [(&str, Harness); 44] = [
     ("cdt", cdt::harness),
     ("contract", contract::harness),
     ("curves", curves::harness),
+    ("edit", edit::harness),
+    ("entity", entity::harness),
     ("encoder", encoder::harness),
     ("euler", euler::harness),
     ("exact", exact::harness),
@@ -93,13 +98,19 @@ const TARGETS: [(&str, Harness); 44] = [
     ("records", records::harness),
     ("references", references::harness),
     ("roots", roots::harness),
+    ("sketch_text", sketch_text::harness),
+    ("snap", snap::harness),
     ("sequence", sequence::harness),
+    ("sketch_corpus", sketch_corpus::harness),
+    ("sketch_motions", sketch_motions::harness),
+    ("sketch_splines", sketch_splines::harness),
     ("surfaces", surfaces::harness),
     ("transforms", transforms::harness),
     ("quadric", quadric::harness),
     ("reductions", reductions::harness),
     ("variants", variants::harness),
     ("wide", wide::harness),
+    ("zone", zone::harness),
     ("crossings", crossings::harness),
 ];
 

@@ -667,7 +667,11 @@ mod repository {
         ("geom-check", 5, "base curve topo intersect"),
         ("geom-poly", 6, "base math topo"),
         ("geom-bool", 6, "base poly intersect topo name check bvh"),
-        ("geom-2d", 6, "base math curve topo name intersect bvh"),
+        (
+            "geom-2d",
+            6,
+            "base math curve nurbs surface topo name intersect bvh",
+        ),
         (
             "geom-mesh",
             7,
@@ -690,7 +694,7 @@ mod repository {
             10,
             "base bool intersect surface skeleton topo",
         ),
-        ("geom-sketch", 10, "base math curve linalg"),
+        ("geom-sketch", 10, "base math curve nurbs linalg"),
         (
             "geom-profile",
             10,
@@ -1202,11 +1206,6 @@ mod repository {
 
     /// Every piece of `30-build-order.json` whose crate field names the crate.
     const STATUS_PIECES: &[(&str, &str)] = &[
-        (
-            "geom-2d",
-            "G192 G193 G194 G195 G196 G197 G198 G199 G200 G201 G202 G203 G204 G205 G206 G207 \
-             G208 G209 G210 G211 G212 G213 G359 G360 G361",
-        ),
         ("geom-3dm", "G438"),
         ("geom-align", "G373 G374 G376"),
         ("geom-analysis", "G346 G347 G348 G349"),
@@ -1235,10 +1234,6 @@ mod repository {
         ("geom-panel", "G342 G343 G344 G345"),
         ("geom-profile", "G229 G230"),
         ("geom-skeleton", "G271 G272 G274 G471"),
-        (
-            "geom-sketch",
-            "G216 G217 G218 G219 G220 G221 G222 G223 G224 G225 G226 G227 G228 G230 G477 G478",
-        ),
         ("geom-spatial", "G293 G294 G295 G296 G297"),
         ("geom-step", "G427 G428 G429 G476"),
         ("geom-subd", "G315 G316 G319 G323 G325"),

@@ -32,15 +32,20 @@ use geom_num::grid::{COORD_MAX, Coord, P2, P3};
 
 use crate::rng::{SplitMix64, seed_for};
 
+pub mod arc;
+
 pub mod attributes;
 pub mod batch;
 pub mod bvh;
+pub mod carrier;
 pub mod cbor;
+pub mod conic;
 pub mod crossing;
 pub mod curve;
 pub mod dd;
 pub mod eft;
 pub mod encoder;
+pub mod entity;
 pub mod exact_sum;
 pub mod exactness;
 pub mod facade;
@@ -60,6 +65,7 @@ pub mod mesh;
 pub mod naming;
 pub mod newton;
 pub mod nurbs;
+pub mod one_root;
 pub mod perturb;
 pub mod plane;
 pub mod predicate;
@@ -71,6 +77,8 @@ pub mod rng;
 pub mod roots;
 pub mod scenario;
 pub mod sign;
+pub mod sketch;
+pub mod spline;
 pub mod surface;
 pub mod topo;
 pub mod wide;

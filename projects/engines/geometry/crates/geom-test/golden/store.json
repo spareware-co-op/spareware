@@ -302,9 +302,15 @@
               "kind": "corpus",
               "piece": "Phase 5 train 1 (G158 to G180)",
               "why": "Phase 5's first train, one record for its pieces' 39 new count benchmarks (groups intersect, quadric: geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils). No existing digest moved"
+            },
+            {
+              "sha256": "fa383b5b884aa4a756c993c513ae25afd00c77f65983bc9f85c3e519e6bd0946",
+              "kind": "corpus",
+              "piece": "Phase 6 train 1 (G187 to G231)",
+              "why": "Phase 6's first train, one record for its pieces' 283 new count benchmarks (groups crossing, entity, generated, intersect, sketch, spline: geom-num's 2D predicates on carriers, rational points, rational-centre circles and arcs, one-root crossings, ellipses and quartics, with their generated filters, exact paths and plain and limb variants; geom-2d's entity model, edits, arrangements, zone insertion and spline-line contacts; geom-sketch's spline rules and diagnosis). No existing digest moved"
             }
           ],
-          "sha256": "fa383b5b884aa4a756c993c513ae25afd00c77f65983bc9f85c3e519e6bd0946"
+          "sha256": "d707996cee763418496ee960e2c0de90f0e0d064b5f392b82a96cdd960869994"
         },
         {
           "id": "geom-nurbs/operations",
@@ -631,6 +637,44 @@
           "history": []
         },
         {
+          "id": "geom-sketch/catalogue",
+          "what": "The constraint catalogue of geom-sketch (piece G218): one scene with every kind on points, lines, circles and arcs, as sketch v1, then assembled off its solution, every byte of the text and every residual and Jacobian entry's bits.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "catalogue",
+            "function": "catalogue_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "f0791529ec71673cbfa4dfe996529e245ea4c029302255db02df636d712b996d"
+        },
+        {
+          "id": "geom-sketch/assembly",
+          "what": "Sketches of geom-sketch (piece G217): 64 chains of points, joined by distances, point-line distances and fixed values, each through sketch v1 and back, then assembled, every byte of the text and every residual and Jacobian entry's bits.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "sketch_determinism",
+            "function": "sketch_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "226999eece58b368d864b2c8bc5c915e27a0bd5b8edde14d31d3f43ee39d6a0a",
+          "history": [
+            {
+              "sha256": "c06cdc5c309b31d8f1e30bd702b179362f9f35e285e5f8a812b4e67af689ced2",
+              "kind": "bug",
+              "piece": "G218",
+              "why": "G217's assembly wrote a variable's partial derivative once per row, so where a variable appears twice in one row the second partial replaced the first instead of adding to it. The corpus has such rows: a point-line distance whose point is one of its own line's ends, where the true partials sum to exactly zero (the point stays on the line). G218 adds them. The sketch text, the residuals and every other entry are unchanged: 128 Jacobian entries moved (1,022 of the corpus's 212,671 bytes), each now exactly 0. The same new digest native on Linux and Windows."
+            }
+          ]
+        },
+        {
+          "id": "geom-test/sketch-families",
+          "what": "Generated sketch cases of geom-test (piece G231): 120 cases from six families (chain, loose, ladder, growth, redundant, conflicting), each as its sketch v1 text with its expected, kernel and exact-rank degrees of freedom, redundancy and conflicts, and the Bareiss rank of its Jacobian in exact rationals with the longest entry and the multiplications it cost.",
+          "check": {
+            "crate": "geom-test",
+            "test": "sketch_families_replay",
+            "function": "sketch_families_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "c517a1a4f74f1887c5c92d5563f0958cafe7ef31bc48f76db0bf2320bc76a17c"
+        },
+        {
           "id": "geom-linalg/dense",
           "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
           "check": {
@@ -769,6 +813,106 @@
             "function": "the_catalogue_is_pinned"
           },
           "sha256": "72833e2e0e317cd26acba70110f485d2ad8a6bc8b8ed6f2cdcf04beadc0031db"
+        },
+        {
+          "id": "geom-num/carrier",
+          "what": "Integer carriers and rational points (piece G187): 600 seeded carriers and 600 seeded points at every scale up to each budget, the meetings of neighbouring carriers, and the extreme values, every question of geom_num::carrier asked of them, each answer and error one byte and each point its integers, in tests/carrier_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "carrier_determinism",
+            "function": "carrier_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "89a8f906d45699813237faacf81cf7ecdabd392d96397381913ad260a0cda2c0"
+        },
+        {
+          "id": "geom-num/arc",
+          "what": "Circles and arcs (piece G188): 1,500 seeded rounds, circles, chords and carriers at every scale up to each budget, and the extreme values, every question of geom_num::arc asked of them, each answer and error one byte, in tests/arc_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "arc_determinism",
+            "function": "arc_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "f167e9fa37b10ef0ce740530d38e5333363d430fc3d081bd6555ae45fbb9fc1c"
+        },
+        {
+          "id": "geom-num/one-root",
+          "what": "One-root numbers (piece G189): 1,500 seeded circles and carriers near them at every scale up to each budget, their crossings, the arcs they lie on and the extreme values, every question of geom_num::one_root asked of them, each answer and error one byte and each crossing its integers, in tests/one_root_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "one_root_determinism",
+            "function": "one_root_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "bdfcc773c361382a95057a0ea8a8401b9052e9642959d4da271d1475ac9a648a"
+        },
+        {
+          "id": "geom-num/conic",
+          "what": "Ellipses and quartics (piece G190): 300 seeded ellipses at every scale up to each budget, every question of geom_num::conic asked of them and of carriers and points about them, their crossings of geom_num::one_root, how pairs on one centre meet and how the roots of two pairs compare, each answer and error one byte and each crossing and quartic its integers, in tests/conic_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "conic_determinism",
+            "function": "conic_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "67f723a655784de8fcea10b89d169ce7b8a332e703de1581154ea801b0b709c1"
+        },
+        {
+          "id": "geom-linalg/sparse",
+          "what": "The column order and the sparse factorisations and solves of geom-linalg (piece G215): sparse matrices of every shape from 2 x 2 to 23 x 23 in steps of three through colamd, the analyses, sparse QR, Cholesky and LDLT, every order and solution's bits, and the refusals of budgets too small to start.",
+          "check": {
+            "crate": "geom-linalg",
+            "test": "sparse_determinism",
+            "function": "sparse_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e68d26596c3a333daec2af7e3acd4bccf86ea191b961f61a060777d96d8c3a8e"
+        },
+        {
+          "id": "geom-sketch/splines",
+          "what": "Spline joins of geom-sketch (piece G220): 64 pairs of cubic splines with a join of every order or a spline end along a line, each through sketch v1 and back, then assembled and measured, every byte of the text, every residual and Jacobian entry's bits and the measured smoothness.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "spline_determinism",
+            "function": "spline_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "d5829819091d2271145f5b094a3e80cb5119d327c9e6daf73b21f2661dcfcdb3"
+        },
+        {
+          "id": "geom-sketch/splines-more",
+          "what": "The rest of the spline rules of geom-sketch (piece G220): 48 drawings of two rational quadratic splines, a line and an arc with a join, a spline against a line or an arc, a length or a pinned point, each through sketch v1 and back, assembled and measured, every byte of the text, every residual and Jacobian entry's bits and both splines' arc length with its error bound; and 16 fit-point splines through seven points, with their control points, knots, parameters and certified error.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "spline_more_determinism",
+            "function": "spline_more_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "2973f22a918646a7c3cae627a992a239db8656edf9be15b27e6023a0c65b82db"
+        },
+        {
+          "id": "geom-sketch/solve",
+          "what": "The block solver of geom-sketch (piece G222): ezpz's 28 test problems in sketch v1, each solved from its own start, every solved variable's bits and the iterations taken; the inconsistent one, which is refused, by its name alone.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "solve",
+            "function": "solved_values_are_the_same_on_every_target"
+          },
+          "sha256": "b835783ee649429b7f0a426e22bf0c28b9a42ae8d9da57aff43efe9acbd3def1"
+        },
+        {
+          "id": "geom-sketch/solved-splines",
+          "what": "Spline joins of geom-sketch with the solver (piece G220a): 48 cut cubics pulled off their join by an amount from a fixed sequence, with a join of each order, each through sketch v1 and back, solved and measured (every solved value, the report's counts, the measured gaps and the join's sense); and 8 fit-point splines through six points with the middle one dragged, settled (rounds, whether they settled, every solved value).",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "solved_splines_determinism",
+            "function": "solved_splines_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e4cff9338fb7ef18533588fdde8296d578243c472d12b8ad41dbf6ab83e27bab"
+        },
+        {
+          "id": "geom-sketch/diagnose",
+          "what": "The diagnosis of geom-sketch (piece G224): 51 sketches (a free pair, a triangle, three collinear points under a triangle's distances, and 48 chains with an extra distance that is the chain's own or not), each diagnosed, the report text, every pivot's equation, size bits and verdict, and every group's defect bits and equations.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "diagnose_determinism",
+            "function": "diagnose_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "f4698e6ab9dd38a2ac8d0c0545353fbc493398314e6f869b05127e232dfe5c70"
         }
       ]
     }

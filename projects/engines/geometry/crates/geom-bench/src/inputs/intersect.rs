@@ -488,6 +488,20 @@ pub fn cubic_pairs(class: Class) -> Vec<(CurveKind<2>, CurveKind<2>)> {
     })
 }
 
+/// A cubic rising across its span, and a segment across it at a drawn height: a spline a line
+/// cuts, as drafting meets it (piece G195).
+#[must_use]
+pub fn spline_lines(class: Class) -> Vec<(CurveKind<2>, CurveKind<2>)> {
+    typical(class, "intersect::spline_lines", |g| {
+        let w = f64::from(1 << 12);
+        let mut height = || plain(g) / 256.0;
+        let (a, b, h) = (height(), height(), height() / 4.0);
+        let rising = cubic(&[[0.0, -w], [w, a], [2.0 * w, b], [3.0 * w, w]])?;
+        let line = Line::segment([-w, h], [4.0 * w, h]).ok()?;
+        Some((rising, CurveKind::Line(line.value)))
+    })
+}
+
 /// A cubic with a loop, its size drawn.
 #[must_use]
 pub fn loops(class: Class) -> Vec<CurveKind<2>> {

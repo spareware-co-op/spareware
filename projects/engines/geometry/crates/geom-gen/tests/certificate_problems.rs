@@ -77,7 +77,7 @@ struct Filter {
 }
 
 /// Every generated predicate, each with every problem committed for it.
-const FILTERS: [Filter; 17] = [
+const FILTERS: [Filter; 29] = [
     Filter {
         name: "orient2d",
         module: include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -296,6 +296,145 @@ const FILTERS: [Filter; 17] = [
         fptaylor: (
             "fptaylor-ssi-side.fpt",
             include_str!("../generated/fptaylor-ssi-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "carrier_side",
+        module: include_str!("../../geom-num/src/generated/carrier_side.rs"),
+        gappa: &[
+            (
+                "gappa-carrier-side-n-p.g",
+                include_str!("../generated/gappa-carrier-side-n-p.g"),
+            ),
+            (
+                "gappa-carrier-side-d-w.g",
+                include_str!("../generated/gappa-carrier-side-d-w.g"),
+            ),
+        ],
+        fptaylor: (
+            "fptaylor-carrier-side.fpt",
+            include_str!("../generated/fptaylor-carrier-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "carrier_order",
+        module: include_str!("../../geom-num/src/generated/carrier_order.rs"),
+        gappa: &[(
+            "gappa-carrier-order.g",
+            include_str!("../generated/gappa-carrier-order.g"),
+        )],
+        fptaylor: (
+            "fptaylor-carrier-order.fpt",
+            include_str!("../generated/fptaylor-carrier-order.fpt"),
+        ),
+    },
+    Filter {
+        name: "rational_cmp",
+        module: include_str!("../../geom-num/src/generated/rational_cmp.rs"),
+        gappa: &[(
+            "gappa-rational-cmp.g",
+            include_str!("../generated/gappa-rational-cmp.g"),
+        )],
+        fptaylor: (
+            "fptaylor-rational-cmp.fpt",
+            include_str!("../generated/fptaylor-rational-cmp.fpt"),
+        ),
+    },
+    Filter {
+        name: "rational_orient",
+        module: include_str!("../../geom-num/src/generated/rational_orient.rs"),
+        gappa: &[(
+            "gappa-rational-orient.g",
+            include_str!("../generated/gappa-rational-orient.g"),
+        )],
+        fptaylor: (
+            "fptaylor-rational-orient.fpt",
+            include_str!("../generated/fptaylor-rational-orient.fpt"),
+        ),
+    },
+    Filter {
+        name: "round_grid",
+        module: include_str!("../../geom-num/src/generated/round_grid.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-round-grid.fpt",
+            include_str!("../generated/fptaylor-round-grid.fpt"),
+        ),
+    },
+    Filter {
+        name: "round_rational",
+        module: include_str!("../../geom-num/src/generated/round_rational.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-round-rational.fpt",
+            include_str!("../generated/fptaylor-round-rational.fpt"),
+        ),
+    },
+    Filter {
+        name: "round_line",
+        module: include_str!("../../geom-num/src/generated/round_line.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-round-line.fpt",
+            include_str!("../generated/fptaylor-round-line.fpt"),
+        ),
+    },
+    Filter {
+        name: "circle_side",
+        module: include_str!("../../geom-num/src/generated/circle_side.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-circle-side.fpt",
+            include_str!("../generated/fptaylor-circle-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "circle_line",
+        module: include_str!("../../geom-num/src/generated/circle_line.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-circle-line.fpt",
+            include_str!("../generated/fptaylor-circle-line.fpt"),
+        ),
+    },
+    Filter {
+        name: "circle_gap",
+        module: include_str!("../../geom-num/src/generated/circle_gap.rs"),
+        gappa: &[
+            (
+                "gappa-circle-gap-x-x.g",
+                include_str!("../generated/gappa-circle-gap-x-x.g"),
+            ),
+            (
+                "gappa-circle-gap-y-y.g",
+                include_str!("../generated/gappa-circle-gap-y-y.g"),
+            ),
+            (
+                "gappa-circle-gap-t-t.g",
+                include_str!("../generated/gappa-circle-gap-t-t.g"),
+            ),
+        ],
+        fptaylor: (
+            "fptaylor-circle-gap.fpt",
+            include_str!("../generated/fptaylor-circle-gap.fpt"),
+        ),
+    },
+    Filter {
+        name: "ellipse_side",
+        module: include_str!("../../geom-num/src/generated/ellipse_side.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-ellipse-side.fpt",
+            include_str!("../generated/fptaylor-ellipse-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "ellipse_line",
+        module: include_str!("../../geom-num/src/generated/ellipse_line.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-ellipse-line.fpt",
+            include_str!("../generated/fptaylor-ellipse-line.fpt"),
         ),
     },
 ];

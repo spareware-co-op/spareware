@@ -109,6 +109,9 @@ dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] 
 # The intersection harness (G160): the kernel's kinds a corpus case becomes and the result type an
 # answer comes back in. Ours, Apache-2.0.
 geom-intersect = { path = "../geom-intersect" }
+# The sketch oracles (G222): the block solver the jobs are solved with and the sketch v1 reader they
+# are written for. Ours, Apache-2.0.
+geom-sketch = { path = "../geom-sketch" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 # The timeout of `fixture fails`, so a fixture that hangs on the merge base counts as failing there

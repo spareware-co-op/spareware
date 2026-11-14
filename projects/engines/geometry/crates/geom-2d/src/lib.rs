@@ -25,7 +25,29 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G192, G193, G194, G195, G196, G197, G198, G199, G200,
-//! G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.
+//! Status: carriers, points and commits (G192), tangent constructions (G193), the entity model
+//! (G194), contacts read from the certified curve-curve intersection (G195), the arrangement of
+//! lines, arcs and ellipses (G196, first part), snaps, tracking and the 2D index (G198), updates and
+//! point location for lines (G199), region finding (G200), transform and length edits (G206) and
+//! spline fitting and biarcs (G213); built on by pieces G197, G199 (arcs), G201, G202, G203, G204,
+//! G205, G207, G208, G209, G210, G211, G212, G359, G360, G361.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod accept;
+pub mod arrange;
+pub mod carrier;
+pub mod commit;
+pub mod contact;
+pub mod edit;
+pub mod entity;
+pub mod fit;
+mod ideal;
+pub mod index;
+pub mod point;
+pub mod region;
+pub mod snap;
+pub mod tangent;
+pub mod update;

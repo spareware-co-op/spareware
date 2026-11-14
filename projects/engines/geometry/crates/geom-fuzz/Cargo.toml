@@ -71,6 +71,12 @@ serde_json = "=1.0.154"
 # The arenas target (G80) tests geom-topo's arenas and builder, and the batch target (G104)
 # geom-op's batch driver, both listed above with the make target; the curve and surface kinds,
 # nurbs and run crates they also need are listed above too.
+# The kinds and transforms the curves and surfaces targets hold to the kind contract (Gate 2, 32.44). Ours,
+# Apache-2.0.
+# The entity target (G194): geom-2d's entity model, under test (ours, Apache-2.0).
+geom-2d = { path = "../geom-2d" }
+# The sketch_text target (G217): the parser under test (Apache-2.0, ours).
+geom-sketch = { path = "../geom-sketch" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

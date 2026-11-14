@@ -1,5 +1,30 @@
 {
   "format": 1,
   "about": "Every triaged oracle difference (chapter 28.10), by signature: a nightly run fails only on a signature not here, and each ends as a fixture.",
-  "records": []
+  "records": [
+    {
+      "signature": {
+        "operation": "solve",
+        "oracle": "fiksi",
+        "kind": "oracle",
+        "family": "another-root"
+      },
+      "outcome": "within-bounds",
+      "fixture": "sketch-oracles/2324-fiksi-another-root",
+      "reference": null,
+      "why": "fiksi's answer meets every rule within its stopping residual but is another root of the sketch, tens of units from the drawn start (job 2324 of seed 000000099eaf7747, 35 units: a sketch of distances has mirrored solutions); the kernel stays on the drawn branch, as chapter 15.7's least change asks. Both are solutions."
+    },
+    {
+      "signature": {
+        "operation": "solve",
+        "oracle": "fiksi",
+        "kind": "oracle",
+        "family": "unmet"
+      },
+      "outcome": "theirs",
+      "fixture": "sketch-oracles/2149-fiksi-unmet",
+      "reference": "https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/solve/lm.rs#L109-L167",
+      "why": "fiksi stopped short of a solution: its answer misses rules by up to a third of a unit (job 2149 of seed 000000099eaf7747), where its Levenberg-Marquardt loop gives up after 100 steps or on a relative change below 10^-6, which its own comment there says may stall short of a root; the kernel meets every rule on the truth."
+    }
+  ]
 }

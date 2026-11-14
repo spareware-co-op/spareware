@@ -6,6 +6,8 @@
 //! cargo run -p geom-test --bin oracle -- check [--root <dir>] [--repository <oracle checkout>]
 //! cargo run -p geom-test --bin oracle -- jobs geomdl --seed <hex> --count <n>
 //! cargo run -p geom-test --bin oracle -- compare geomdl --jobs <file> --answers <file>
+//! cargo run -p geom-test --bin oracle -- families --seed <hex> --count <n>
+//! cargo run -p geom-test --bin oracle -- diagnose planegcs --cases <file> --reports <file>
 //! cargo run -p geom-test --bin oracle -- triage geomdl --jobs <file> --id <n> --kind <kind>
 //!     --outcome <ours|theirs|within-bounds|undecided> --fixture <id> --why <words>
 //!     [--reference <words>] [--root <dir>]
@@ -18,6 +20,9 @@
 //!   nothing can publish an image, and every base image is pinned by digest.
 //! - `jobs` writes a night's jobs, one JSON line each, to standard output, seed printed to standard
 //!   error, for the harness in the oracle repository.
+//! - `families` writes a night's sketch cases (G231), each with the degrees of freedom, redundancy and
+//!   conflicts it is built to have; `diagnose` judges a sketch solver's report of the same three
+//!   counts against them and the kernel's.
 //! - `compare` judges each answer and prints the differences by signature. It fails only on a
 //!   signature the triage register does not hold: each is judged once (28.10).
 //! - `triage` records one signature's outcome in the register and writes its fixture from what the
@@ -47,9 +52,10 @@ use geom_test::fixture::{OpLog, Triage};
 use geom_test::golden::store::Store;
 use geom_test::map::repo::workspace_root;
 use geom_test::oracle::catalogue::{self, Catalogue, audit, linked};
+use geom_test::oracle::families::{self, Case, Diagnosis};
 use geom_test::oracle::geomdl::{self, Answer, Compared, Job, judge_for};
-use geom_test::oracle::smlib;
 use geom_test::oracle::triage::{self, Record, Register, Signature, fixture as fixture_of, group};
+use geom_test::oracle::{sketches, smlib};
 use geom_test::seed::Seed;
 
 /// The outside oracles' tool.
@@ -89,6 +95,26 @@ enum Tool {
         /// How many.
         #[arg(long)]
         count: u64,
+    },
+    /// Write a night's sketch cases, each with the diagnosis it is built to have (G231).
+    Families {
+        /// The seed, in hexadecimal.
+        #[arg(long)]
+        seed: String,
+        /// How many.
+        #[arg(long)]
+        count: u64,
+    },
+    /// Judge a sketch solver's reports of degrees of freedom, redundancy and conflicts (G231).
+    Diagnose {
+        /// The oracle.
+        oracle: String,
+        /// The cases, one JSON line each.
+        #[arg(long)]
+        cases: PathBuf,
+        /// The reports, one JSON line each.
+        #[arg(long)]
+        reports: PathBuf,
     },
     /// Judge the answers.
     Compare {
@@ -207,17 +233,37 @@ fn check(repository: Option<&Path>, root: &Root) -> Result<ExitCode, String> {
 }
 
 fn known(oracle: &str) -> Result<(), String> {
-    if oracle == geomdl::ID || oracle == smlib::ID {
+    if oracle == geomdl::ID || oracle == smlib::ID || sketch(oracle) {
         Ok(())
     } else {
         Err(format!("no jobs for {oracle}"))
     }
 }
 
+/// Whether `oracle` is a sketch solver, whose jobs are sketches (G222).
+fn sketch(oracle: &str) -> bool {
+    [
+        sketches::EZPZ,
+        sketches::FIKSI,
+        sketches::SOLVESPACE,
+        sketches::PLANEGCS,
+    ]
+    .contains(&oracle)
+}
+
 fn jobs(oracle: &str, seed: &str, count: u64) -> Result<ExitCode, String> {
     known(oracle)?;
     let seed = u64::from_str_radix(seed, 16).map_err(|e| format!("the seed {seed:?}: {e}"))?;
     eprintln!("seed: {seed:016x}");
+    if let Some(drawn) = sketches::jobs(oracle, Seed(seed), count) {
+        for job in drawn {
+            println!(
+                "{}",
+                serde_json::to_string(&job).map_err(|e| e.to_string())?
+            );
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
     let drawn = if oracle == smlib::ID {
         smlib::jobs(Seed(seed), count)
     } else {
@@ -241,19 +287,30 @@ fn lines<T: serde::de::DeserializeOwned>(text: &str, what: &str) -> Result<Vec<T
 
 fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String> {
     known(oracle)?;
-    let jobs: Vec<Job> = lines(&read(jobs)?, "a job")?;
-    let answers: Vec<Answer> = lines(&read(answers)?, "an answer")?;
-    if jobs.len() != answers.len() {
-        return Err(format!(
-            "{} jobs and {} answers: the harness stopped early",
-            jobs.len(),
-            answers.len()
-        ));
-    }
+    let (count, judged) = if sketch(oracle) {
+        let jobs: Vec<sketches::Job> = lines(&read(jobs)?, "a job")?;
+        let answers: Vec<sketches::Answer> = lines(&read(answers)?, "an answer")?;
+        let judged = paired(&jobs, &answers)?
+            .map(|(job, answer)| Ok((job.id, sketches::judge(oracle, job, answer)?)))
+            .collect::<Result<Vec<_>, String>>()?;
+        (jobs.len(), judged)
+    } else {
+        let jobs: Vec<Job> = lines(&read(jobs)?, "a job")?;
+        let answers: Vec<Answer> = lines(&read(answers)?, "an answer")?;
+        let judged = paired(&jobs, &answers)?
+            .map(|(job, answer)| Ok((job.id, judge_for(oracle, job, answer)?)))
+            .collect::<Result<Vec<_>, String>>()?;
+        (jobs.len(), judged)
+    };
+    finish(count, judged)
+}
+
+/// Prints the differences by signature and fails on a signature the register does not hold.
+fn finish(count: usize, judged: Vec<(u64, Compared)>) -> Result<ExitCode, String> {
     let mut differences = Vec::new();
-    for (job, answer) in jobs.iter().zip(&answers) {
-        if let Compared::Differ { signature, settled } = judge_for(oracle, job, answer)? {
-            println!("job {}: {signature}: {settled}", job.id);
+    for (id, compared) in judged {
+        if let Compared::Differ { signature, settled } = compared {
+            println!("job {id}: {signature}: {settled}");
             differences.push(signature);
         }
     }
@@ -264,7 +321,7 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String
     let new = register.new_signatures(&differences);
     println!(
         "oracle compare: {} jobs, {} differences, {} new signatures",
-        jobs.len(),
+        count,
         differences.len(),
         new.len()
     );
@@ -278,8 +335,57 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String
     })
 }
 
+/// A night's sketch cases to standard output, one JSON line each.
+fn family_cases(seed: &str, count: u64) -> Result<ExitCode, String> {
+    let seed = u64::from_str_radix(seed, 16).map_err(|e| format!("the seed {seed:?}: {e}"))?;
+    eprintln!("seed: {seed:016x}");
+    for case in families::cases(Seed(seed), count) {
+        println!(
+            "{}",
+            serde_json::to_string(&case).map_err(|e| e.to_string())?
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Judges a sketch solver's diagnoses of the cases.
+fn diagnose(oracle: &str, cases: &Path, reports: &Path) -> Result<ExitCode, String> {
+    known(oracle)?;
+    if !sketch(oracle) {
+        return Err(format!("{oracle} is no sketch solver"));
+    }
+    let cases: Vec<Case> = lines(&read(cases)?, "a case")?;
+    let reports: Vec<Diagnosis> = lines(&read(reports)?, "a report")?;
+    let judged = paired(&cases, &reports)?
+        .map(|(case, report)| Ok((case.job.id, families::judge(oracle, case, report)?)))
+        .collect::<Result<Vec<_>, String>>()?;
+    finish(cases.len(), judged)
+}
+
+/// Each job with its answer, refusing answers that stop early.
+fn paired<'a, J, A>(
+    jobs: &'a [J],
+    answers: &'a [A],
+) -> Result<impl Iterator<Item = (&'a J, &'a A)>, String> {
+    if jobs.len() == answers.len() {
+        Ok(jobs.iter().zip(answers))
+    } else {
+        Err(format!(
+            "{} jobs and {} answers: the harness stopped early",
+            jobs.len(),
+            answers.len()
+        ))
+    }
+}
+
 fn triage_command(t: &Triaging) -> Result<ExitCode, String> {
     known(&t.oracle)?;
+    if sketch(&t.oracle) {
+        return Err(format!(
+            "{}: a sketch job is triaged by hand until G231 writes its fixtures",
+            t.oracle
+        ));
+    }
     let root = match &t.root.root {
         Some(r) => r.clone(),
         None => workspace_root().map_err(|e| e.to_string())?,
@@ -337,6 +443,12 @@ fn command(tool: Tool) -> Result<ExitCode, String> {
             seed,
             count,
         } => jobs(&oracle, &seed, count),
+        Tool::Families { seed, count } => family_cases(&seed, count),
+        Tool::Diagnose {
+            oracle,
+            cases,
+            reports,
+        } => diagnose(&oracle, &cases, &reports),
         Tool::Compare {
             oracle,
             jobs,

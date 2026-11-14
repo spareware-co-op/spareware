@@ -65,6 +65,29 @@ the contract has, whose MCP tool descriptions parse and round-trip. `src/adversa
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
+Phase 6, the 2D drafting and the sketches, adds these. `entity` (`src/entity.rs`, G194):
+`geom-2d`'s entity model keeps its fraction, tag, polyline and kind-change laws. `arrange`
+(`src/arrange.rs`, G196a): the arrangement of segments built from any bytes has exactly the end
+points and proper crossings the cross-product formula gives as its vertices, satisfies Euler's
+formula, puts every half-edge on one cycle and every cycle on one face, and does not depend on the
+input order. Its replay corpus, 18 seed files in `tests/__fuzz__/arrange/corpus`, covers every
+segment count from none to eight. `arrange_curves` (`src/arrange_curves.rs`, G196b): the
+arrangement of segments, circular arcs and whole ellipses built from any bytes is refused only
+where an ellipse meets a circle or another ellipse, and otherwise has exactly the vertices a
+pairwise oracle finds on the curves' own carriers and circles, keeps Euler's formula and the cycle
+laws, and gives the same arrangement for the curves in the opposite order. Its replay corpus is in
+`tests/__fuzz__/arrange_curves/corpus`. `snap` (`src/snap.rs`, G198): the snap index answers what a
+scan of every entity answers, the same when asked twice, and within the aperture. `zone`
+(`src/zone.rs`, G199, G199a): segments and arcs inserted one by one give the sweep's arrangement,
+in either order and as an overlay, and locate what it locates. `edit` (`src/edit.rs`, G206): the
+placements and lengths keep their definitions and certified bounds. `sketch_text`
+(`src/sketch_text.rs`, G217): any bytes are refused cleanly or read as a sketch that writes back to
+one fixed text. `sketch_splines` (`src/sketch_splines.rs`, G220a): two cubic splines and a few rules
+on them, and everything `geom-sketch` does with splines holds its laws. `sketch_motions`
+(`src/sketch_motions.rs`, G224): the motions the sparse form finds for a small sketch are motions.
+`sketch_corpus` (`src/sketch_corpus.rs`, G231): any bytes seed a night of generated sketch cases,
+each of which gets the diagnosis it is built to have.
+
 ## One law, four engines
 
 A target is one law and its oracle, written once as a plain function, and run by every engine:

@@ -1476,7 +1476,13 @@ struct Row {
 }
 
 /// Every test file the matrix names, read when the test is built.
-const FILES: [(&str, &str); 6] = [
+const FILES: [(&str, &str); 12] = [
+    ("attack_g196b.rs", include_str!("attack_g196b.rs")),
+    ("attack_g193.rs", include_str!("attack_g193.rs")),
+    ("attack_g190.rs", include_str!("attack_g190.rs")),
+    ("attack_g189.rs", include_str!("attack_g189.rs")),
+    ("attack_g188.rs", include_str!("attack_g188.rs")),
+    ("attack_g187.rs", include_str!("attack_g187.rs")),
     ("attack_g28.rs", include_str!("attack_g28.rs")),
     ("attack_g29.rs", include_str!("attack_g29.rs")),
     ("attack_g30.rs", include_str!("attack_g30.rs")),
@@ -1486,7 +1492,13 @@ const FILES: [(&str, &str); 6] = [
 ];
 
 /// The sources whose public predicates the matrix must list.
-const SOURCES: [(&str, &str); 4] = [
+const SOURCES: [(&str, &str); 10] = [
+    ("arc", include_str!("../src/arc.rs")),
+    ("conic_root", include_str!("../src/conic_root.rs")),
+    ("carrier", include_str!("../src/carrier.rs")),
+    ("conic", include_str!("../src/conic.rs")),
+    ("one_root", include_str!("../src/one_root.rs")),
+    ("quartic", include_str!("../src/quartic.rs")),
     ("predicate", include_str!("../src/predicate.rs")),
     ("plane", include_str!("../src/plane.rs")),
     ("crossing", include_str!("../src/crossing.rs")),
@@ -1578,6 +1590,230 @@ fn implicit(
     }
 }
 
+/// A predicate of `carrier`: every class in `attack_g187.rs`, by one test each but the boundary.
+fn on_carrier(
+    predicate: &'static str,
+    call: &'static str,
+    one_step: &'static str,
+    boundary: &'static str,
+) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (
+                Random,
+                Test(
+                    "attack_g187.rs",
+                    "random_inputs_at_every_scale_match_the_oracle",
+                ),
+            ),
+            (OneStep, Test("attack_g187.rs", one_step)),
+            (Boundary, Test("attack_g187.rs", boundary)),
+            (
+                Corners,
+                Test(
+                    "attack_g187.rs",
+                    "the_extreme_values_reach_every_width_and_every_step_fits",
+                ),
+            ),
+            (
+                Laws,
+                Test(
+                    "attack_g187.rs",
+                    "order_and_turn_change_sign_as_they_should",
+                ),
+            ),
+        ],
+    }
+}
+
+/// A predicate with no filter, every call on the exact path: every class but the boundary in
+/// `attack_g193.rs`.
+fn exact_only(
+    predicate: &'static str,
+    random: &'static str,
+    one_step: &'static str,
+    corners: &'static str,
+    laws: &'static str,
+) -> Row {
+    use Class::*;
+    use Where::{NotApplicable, Test};
+    Row {
+        predicate,
+        call: ".side",
+        classes: [
+            (Random, Test("attack_g193.rs", random)),
+            (OneStep, Test("attack_g193.rs", one_step)),
+            (
+                Boundary,
+                NotApplicable("no filter: every call takes the exact path"),
+            ),
+            (Corners, Test("attack_g193.rs", corners)),
+            (Laws, Test("attack_g193.rs", laws)),
+        ],
+    }
+}
+
+/// A predicate of `one_root` that piece G193 added: every class in `attack_g193.rs`.
+fn on_g193_crossing(predicate: &'static str, call: &'static str, boundary: Where) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (
+                Random,
+                Test(
+                    "attack_g193.rs",
+                    "crossings_read_discs_and_fine_lines_as_their_rounds_and_carriers",
+                ),
+            ),
+            (
+                OneStep,
+                Test(
+                    "attack_g193.rs",
+                    "one_step_from_a_disc_or_a_fine_line_is_decided_by_the_exact_path",
+                ),
+            ),
+            (Boundary, boundary),
+            (
+                Corners,
+                Test(
+                    "attack_g193.rs",
+                    "crossings_at_the_extremes_read_discs_and_fine_lines_exactly",
+                ),
+            ),
+            (
+                Laws,
+                Test(
+                    "attack_g193.rs",
+                    "a_crossing_s_disc_and_fine_line_keep_their_laws",
+                ),
+            ),
+        ],
+    }
+}
+
+/// A predicate of a conic: every class in `attack_g190.rs`.
+fn on_conic(
+    predicate: &'static str,
+    call: &'static str,
+    random: &'static str,
+    boundary: Where,
+    laws: &'static str,
+) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (Random, Test("attack_g190.rs", random)),
+            (
+                OneStep,
+                Test(
+                    "attack_g190.rs",
+                    "one_step_from_an_ellipse_is_decided_by_the_exact_path",
+                ),
+            ),
+            (Boundary, boundary),
+            (
+                Corners,
+                Test(
+                    "attack_g190.rs",
+                    "the_extreme_values_reach_every_width_and_every_step_fits",
+                ),
+            ),
+            (Laws, Test("attack_g190.rs", laws)),
+        ],
+    }
+}
+
+/// A predicate of `one_root`: every class in `attack_g189.rs`.
+fn on_root(
+    predicate: &'static str,
+    call: &'static str,
+    random: &'static str,
+    boundary: Where,
+) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (Random, Test("attack_g189.rs", random)),
+            (
+                OneStep,
+                Test(
+                    "attack_g189.rs",
+                    "one_step_from_a_crossing_is_decided_by_the_exact_path",
+                ),
+            ),
+            (Boundary, boundary),
+            (
+                Corners,
+                Test(
+                    "attack_g189.rs",
+                    "the_extreme_values_reach_every_width_and_every_step_fits",
+                ),
+            ),
+            (
+                Laws,
+                Test(
+                    "attack_g189.rs",
+                    "comparison_side_and_order_keep_their_laws",
+                ),
+            ),
+        ],
+    }
+}
+
+/// A predicate of `arc` on a circle: every class in `attack_g188.rs`.
+fn on_circle(predicate: &'static str, call: &'static str, boundary: &'static str) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (
+                Random,
+                Test(
+                    "attack_g188.rs",
+                    "random_inputs_at_every_scale_match_the_oracle",
+                ),
+            ),
+            (
+                OneStep,
+                Test(
+                    "attack_g188.rs",
+                    "one_step_from_a_circle_is_decided_by_the_exact_path",
+                ),
+            ),
+            (Boundary, Test("attack_g188.rs", boundary)),
+            (
+                Corners,
+                Test(
+                    "attack_g188.rs",
+                    "the_extreme_values_reach_every_width_and_every_step_fits",
+                ),
+            ),
+            (
+                Laws,
+                Test(
+                    "attack_g188.rs",
+                    "circles_keep_their_answers_under_a_move_and_any_weight",
+                ),
+            ),
+        ],
+    }
+}
+
 fn perturbed(
     predicate: &'static str,
     call: &'static str,
@@ -1616,6 +1852,10 @@ fn perturbed(
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one row per public predicate, a table written out"
+)]
 /// The rows of the determinants of plane coefficients: `plane::determinant_sign`, whose sign times
 /// the weight is a point's side, and `plane::normals_sign`, the weight's sign. The same tests serve
 /// every class but the boundary.
@@ -1658,7 +1898,24 @@ fn determinants() -> [Row; 2] {
     ]
 }
 
+/// Every public predicate's row, in order: the parts below, each a page of whole rows.
 fn matrix() -> Vec<Row> {
+    let mut rows = Vec::new();
+    for part in [
+        matrix_part_1(),
+        matrix_part_2(),
+        matrix_part_3(),
+        matrix_part_4(),
+        matrix_part_5(),
+        matrix_part_6(),
+    ] {
+        rows.extend(part);
+    }
+    rows
+}
+
+/// Rows 1 to 15 of [`matrix`], in its order.
+fn matrix_part_1() -> Vec<Row> {
     use Class::*;
     use Where::{NotApplicable, Test};
     let [determinant_sign, normals_sign] = determinants();
@@ -1709,6 +1966,381 @@ fn matrix() -> Vec<Row> {
             "ssi_orient2d_filter_boundary_crossed_both_ways",
             ("verification.rs", "crossing_laws"),
         ),
+        on_carrier(
+            "carrier::Carrier::side",
+            ".side",
+            "one_step_from_a_carrier_is_decided_by_the_exact_path",
+            "side_filter_boundary_crossed_both_ways",
+        ),
+        on_carrier(
+            "carrier::Carrier::order",
+            ".order",
+            "one_step_along_a_carrier_is_decided_by_the_exact_path",
+            "order_filter_boundary_crossed_both_ways",
+        ),
+        on_carrier(
+            "carrier::Rational2::cmp_x",
+            ".cmp_x",
+            "one_step_along_a_carrier_is_decided_by_the_exact_path",
+            "cmp_filter_boundary_crossed_both_ways",
+        ),
+        on_carrier(
+            "carrier::Rational2::cmp_y",
+            ".cmp_y",
+            "one_step_along_a_carrier_is_decided_by_the_exact_path",
+            "cmp_filter_boundary_crossed_both_ways",
+        ),
+        on_carrier(
+            "carrier::Rational2::orient",
+            "Rational2::orient",
+            "one_step_along_a_carrier_is_decided_by_the_exact_path",
+            "orient_filter_boundary_crossed_both_ways",
+        ),
+    ]
+}
+
+/// Rows 16 to 19 of [`matrix`], in its order.
+fn matrix_part_2() -> Vec<Row> {
+    vec![
+        on_conic(
+            "conic::Ellipse2::side",
+            ".side",
+            "random_inputs_at_every_scale_match_the_oracle",
+            Where::Test(
+                "attack_g190.rs",
+                "ellipse_filters_cross_their_boundary_both_ways",
+            ),
+            "ellipses_keep_their_laws",
+        ),
+        on_conic(
+            "one_root::Crossing2::against_ellipse",
+            ".against_ellipse",
+            "random_inputs_at_every_scale_match_the_oracle",
+            Where::NotApplicable("no filter: every call takes the exact path"),
+            "ellipses_keep_their_laws",
+        ),
+        on_conic(
+            "quartic::compare",
+            "compare",
+            "random_quartics_give_back_their_roots",
+            Where::NotApplicable("no filter: stretches apart are its first step, and exact"),
+            "roots_of_two_quartics_compare_exactly",
+        ),
+        // The questions of a conic-root point (G196b), in attack_g196b.rs.
+        Row {
+            predicate: "conic_root::ConicRoot::sign_of",
+            call: ".sign_of",
+            classes: [
+                (
+                    Class::Random,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::OneStep,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_lies_exactly_on_both_curves_and_on_the_right_side_of_others",
+                    ),
+                ),
+                (
+                    Class::Boundary,
+                    Where::NotApplicable("no filter: every call takes the exact path"),
+                ),
+                (
+                    Class::Corners,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::Laws,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_lies_exactly_on_both_curves_and_on_the_right_side_of_others",
+                    ),
+                ),
+            ],
+        },
+    ]
+}
+
+/// Rows 20 to 21 of [`matrix`], in its order.
+fn matrix_part_3() -> Vec<Row> {
+    vec![
+        Row {
+            predicate: "conic_root::ConicRoot::cmp_rational",
+            call: ".cmp_rational",
+            classes: [
+                (
+                    Class::Random,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::OneStep,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_s_coordinates_compare_exactly_with_rational_points",
+                    ),
+                ),
+                (
+                    Class::Boundary,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_s_coordinates_compare_exactly_with_rational_points",
+                    ),
+                ),
+                (
+                    Class::Corners,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::Laws,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_s_coordinates_compare_exactly_with_rational_points",
+                    ),
+                ),
+            ],
+        },
+        Row {
+            predicate: "conic_root::ConicRoot::half",
+            call: ".half",
+            classes: [
+                (
+                    Class::Random,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::OneStep,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "points_of_one_ellipse_compare_along_its_halves_and_across_its_chords",
+                    ),
+                ),
+                (
+                    Class::Boundary,
+                    Where::NotApplicable("no filter: every call takes the exact path"),
+                ),
+                (
+                    Class::Corners,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::Laws,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "points_of_one_ellipse_compare_along_its_halves_and_across_its_chords",
+                    ),
+                ),
+            ],
+        },
+        // The sign of a quartic at another's root (G196b): its attacks are in attack_g196b.rs.
+    ]
+}
+
+/// Rows 22 to 30 of [`matrix`], in its order.
+fn matrix_part_4() -> Vec<Row> {
+    vec![
+        Row {
+            predicate: "quartic::sign_at_root",
+            call: "sign_at_root",
+            classes: [
+                (
+                    Class::Random,
+                    Where::Test("attack_g196b.rs", "the_sign_at_every_root_is_the_oracle_s"),
+                ),
+                (
+                    Class::OneStep,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_shared_root_is_zero_at_every_multiplicity_and_a_near_one_is_not",
+                    ),
+                ),
+                (
+                    Class::Boundary,
+                    Where::NotApplicable("no filter: every call takes the exact path"),
+                ),
+                (
+                    Class::Corners,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "the_exact_roots_and_infinity_are_read_exactly",
+                    ),
+                ),
+                (
+                    Class::Laws,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_half_turn_keeps_every_root_and_orders_them_as_minus_one_over_t",
+                    ),
+                ),
+            ],
+        },
+        on_root(
+            "one_root::sign_of_root",
+            "sign_of_root",
+            "random_rounds_orders_and_roots_match_the_oracle",
+            Where::NotApplicable("no filter: it is what the exact paths call"),
+        ),
+        on_root(
+            "one_root::sign_of_two_roots",
+            "sign_of_two_roots",
+            "two_roots_match_the_oracle_at_every_scale",
+            Where::NotApplicable("no filter: it is what the exact paths call"),
+        ),
+        on_root(
+            "one_root::Crossing2::cmp_x",
+            ".cmp_x",
+            "random_crossings_match_the_oracle",
+            Where::Test("attack_g189.rs", "filters_cross_their_boundary_both_ways"),
+        ),
+        on_root(
+            "one_root::Crossing2::cmp_y",
+            ".cmp_y",
+            "random_crossings_match_the_oracle",
+            Where::Test("attack_g189.rs", "filters_cross_their_boundary_both_ways"),
+        ),
+        on_root(
+            "one_root::Crossing2::side",
+            ".side",
+            "random_crossings_match_the_oracle",
+            Where::Test("attack_g189.rs", "filters_cross_their_boundary_both_ways"),
+        ),
+        on_root(
+            "one_root::Crossing2::against_round",
+            ".against_round",
+            "random_rounds_orders_and_roots_match_the_oracle",
+            Where::NotApplicable("no filter: every call takes the exact path"),
+        ),
+        on_root(
+            "one_root::Crossing2::against_circle",
+            ".against_circle",
+            "random_crossings_match_the_oracle",
+            Where::NotApplicable("no filter: every call takes the exact path"),
+        ),
+        on_root(
+            "one_root::Crossing2::order",
+            ".order",
+            "random_rounds_orders_and_roots_match_the_oracle",
+            Where::NotApplicable("defers to cmp_x's and cmp_y's filter"),
+        ),
+    ]
+}
+
+/// Rows 31 to 38 of [`matrix`], in its order.
+fn matrix_part_5() -> Vec<Row> {
+    vec![
+        on_root(
+            "one_root::Arc2::order_crossings",
+            ".order_crossings",
+            "random_rounds_orders_and_roots_match_the_oracle",
+            Where::NotApplicable("no filter: every call takes the exact path"),
+        ),
+        on_circle(
+            "arc::Round::side_of_grid",
+            ".side_of_grid",
+            "round_filters_cross_their_boundary_both_ways",
+        ),
+        on_circle(
+            "arc::Round::side",
+            ".side",
+            "round_filters_cross_their_boundary_both_ways",
+        ),
+        on_circle(
+            "arc::Circle2::side",
+            ".side",
+            "circle_filters_cross_their_boundary_both_ways",
+        ),
+        exact_only(
+            "arc::Disc::side",
+            "a_disc_answers_as_the_oracle_does_at_random",
+            "a_disc_on_the_circle_exactly_is_zero_and_one_step_off_is_not",
+            "a_disc_answers_as_the_oracle_does_at_the_extremes",
+            "a_disc_s_side_keeps_its_laws",
+        ),
+        on_g193_crossing(
+            "one_root::Crossing2::against_disc",
+            ".against_disc",
+            Where::NotApplicable("no filter: every call takes the exact path"),
+        ),
+        on_g193_crossing(
+            "one_root::Crossing2::side_of_fine",
+            ".side_of_fine",
+            Where::NotApplicable(
+                "its filter is `Crossing2::side`'s: both read one `side_of`, whose boundary the row of `side` crosses",
+            ),
+        ),
+        exact_only(
+            "carrier::FineLine::side",
+            "a_fine_line_has_its_side",
+            "a_fine_line_has_its_side",
+            "a_fine_line_s_side_is_exact_at_the_extremes",
+            "a_fine_line_s_side_keeps_its_laws",
+        ),
+    ]
+}
+
+/// Rows 39 to 43 of [`matrix`], in its order.
+fn matrix_part_6() -> Vec<Row> {
+    use Class::*;
+    use Where::{NotApplicable, Test};
+    vec![
+        Row {
+            predicate: "arc::Arc2::order",
+            call: ".order",
+            classes: [
+                (
+                    Random,
+                    Test(
+                        "attack_g188.rs",
+                        "random_inputs_at_every_scale_match_the_oracle",
+                    ),
+                ),
+                (
+                    OneStep,
+                    Test(
+                        "attack_g188.rs",
+                        "order_along_an_arc_agrees_with_walking_it",
+                    ),
+                ),
+                (
+                    Boundary,
+                    NotApplicable(
+                        "it has no filter of its own: `Rational2::orient`'s boundary is its",
+                    ),
+                ),
+                (
+                    Corners,
+                    Test(
+                        "attack_g188.rs",
+                        "the_extreme_values_reach_every_width_and_every_step_fits",
+                    ),
+                ),
+                (
+                    Laws,
+                    Test(
+                        "attack_g188.rs",
+                        "order_along_an_arc_agrees_with_walking_it",
+                    ),
+                ),
+            ],
+        },
         perturbed(
             "perturb::orient2d",
             "perturb::orient2d",

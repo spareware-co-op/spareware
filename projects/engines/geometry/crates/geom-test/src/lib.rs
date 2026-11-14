@@ -53,6 +53,8 @@
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
 //!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
 //!   proptest generators of valid histories and chains.
+//! - [`arc_reference`]: the 2D arrangement reference in one-root numbers: arrangement, booleans,
+//!   offsets and the boundary identity (chapter 28.9, piece G191)
 //! - [`canonical`]: the canonical output of one case and its SHA-256, a fixture's golden hash
 //!   (28.13; G96): bodies, names, history, exactness and diagnostics, or an error's kind, entities
 //!   and evidence.
@@ -240,6 +242,8 @@
 //!   law catalogue checks (G69), and what [`ssi`] builds a corpus case from (G160).
 //! - `geom-intersect` (Apache-2.0, ours), a dependency (G160): the result type [`ssi`] reads an answer
 //!   from.
+//! - `geom-sketch` (Apache-2.0, ours), a dependency (G222): the block solver [`oracle::sketches`] solves
+//!   a sketch job with, and the `sketch v1` reader it writes the job for.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -266,12 +270,14 @@
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
+pub mod arc_reference;
 pub mod canonical;
 pub mod completeness;
 pub mod contract;
 pub mod corpus;
 pub mod coverage;
 pub mod deps;
+pub mod exact_rank;
 pub mod faults;
 pub mod fixed;
 pub mod fixture;

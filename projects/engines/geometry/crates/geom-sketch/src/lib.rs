@@ -23,7 +23,57 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224,
-//! G225, G226, G227, G228, G230, G477, G478.
+//! Modules today:
+//!
+//! - [`place`]: the rigid motion that places a cluster, by Kabsch's method, in any dimension (piece
+//!   G223).
+//! - [`plane`]: sketch planes, their maps into 3D and the Gram metric (piece G216).
+//! - [`model`]: entities, variables and constraints, in authoring order (piece G217).
+//! - [`cluster`]: rigid clusters by the Hoffmann–Lomonosov–Sitharam method, for any number of rigid
+//!   motions (piece G223).
+//! - [`certify`]: chained Krawczyk certificates, block by block in the plan's order (piece G227).
+//! - [`check`]: the checks after a commit: root choices decided again and every bounded constraint
+//!   held to an interval bound under the fit ceiling (piece G226).
+//! - [`commit`]: the commit plan, from a solved sketch to stored geometry with every declared
+//!   incidence exact (piece G225).
+//! - [`drag`]: dragging with held targets, `AtLimit` and `DragLimit`, and a release that replays the
+//!   logged path and commits it (piece G228).
+//! - [`diagnose`]: degrees of freedom, free motions, redundant and conflicting groups and the report
+//!   text (piece G224).
+//! - [`motions`]: free motions, sparse and per entity (piece G224).
+//! - [`equation`]: each constraint's residual and singular set, and the Jacobian's assembly (pieces
+//!   G217 and G218).
+//! - [`author`]: the plain constraints a macro writes, for fixing an entity and for offset chains
+//!   (piece G218).
+//! - [`smooth`]: spline ends' derivatives and the smoothness of a join, measured (piece G220).
+//! - [`flow`]: maximum flow and the cheapest cut, for the cluster search (piece G223).
+//! - [`structure`]: substitution, components, matching and the Dulmage–Mendelsohn decomposition
+//!   (piece G221).
+//! - [`solve`]: Gauss–Newton steps with Moré's damping on each block, and continuation (piece G222).
+//! - [`text`]: the `sketch v1` text form (piece G217).
+//!
+//! Status: built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227,
+//! G228, G230, G477, G478; G216, G217, G218, G221 and G222 are done.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+pub mod author;
+pub mod certify;
+pub mod check;
+pub mod cluster;
+pub mod commit;
+pub mod diagnose;
+pub mod drag;
+pub mod equation;
+pub mod fit;
+pub mod flow;
+pub mod length;
+mod linear;
+pub mod model;
+pub mod motions;
+pub mod place;
+pub mod plane;
+pub mod smooth;
+pub mod solve;
+pub mod structure;
+pub mod text;

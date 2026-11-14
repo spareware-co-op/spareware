@@ -64,11 +64,14 @@ use geom_bench::inputs::{self, BATCH, Class};
 use geom_bench::kernels;
 use geom_bench::rng::{SplitMix64, fnv1a, seed_for};
 use geom_bench::sha256::{Digest, Sha256};
+use geom_num::carrier::Rational2;
+use geom_num::conic::Conic;
 use geom_num::crossing::Ssi;
 use geom_num::dd::{self as dd, DD};
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
+use geom_num::one_root::{Crossing2, Root};
 use geom_num::plane::{Lpi, Plane, Tpi, determinant_sign, normals_sign};
 use geom_num::real::Real;
 use geom_num::rng::{self as rng, Philox, RngError, Seed, Stream, StreamId, StreamRange};
@@ -1407,6 +1410,106 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|(s, p, q)| s.orient2d(p, q)),
         ),
+        ("crossing", "carrier_side") => {
+            fold(inputs::carrier::side(class).iter().map(|(l, p)| l.side(p)))
+        }
+        ("crossing", "carrier_order") => fold(
+            inputs::carrier::order(class)
+                .iter()
+                .map(|(l, p, q)| l.order(p, q)),
+        ),
+        ("crossing", "carrier_meet") => {
+            fold(inputs::carrier::meet(class).iter().map(|(l, m)| l.meet(m)))
+        }
+        ("crossing", "rational_cmp_x") => fold(
+            inputs::carrier::cmp_x(class)
+                .iter()
+                .map(|(p, q)| p.cmp_x(q)),
+        ),
+        ("crossing", "rational_orient") => fold(
+            inputs::carrier::orient(class)
+                .iter()
+                .map(|[p, q, r]| Rational2::orient(p, q, r)),
+        ),
+        ("crossing", "round_side_of_grid") => fold(
+            inputs::arc::round_grid(class)
+                .iter()
+                .map(|(r, z)| r.side_of_grid(*z)),
+        ),
+        ("crossing", "round_side") => fold(
+            inputs::arc::round_side(class)
+                .iter()
+                .map(|(r, z)| r.side(z)),
+        ),
+        ("crossing", "round_meets") => fold(
+            inputs::arc::round_meets(class)
+                .iter()
+                .map(|(r, l)| r.meets(l)),
+        ),
+        ("crossing", "circle_side") => fold(
+            inputs::arc::circle_side(class)
+                .iter()
+                .map(|(c, z)| c.side(z)),
+        ),
+        ("crossing", "circle_meets") => fold(
+            inputs::arc::circle_meets(class)
+                .iter()
+                .map(|(c, l)| c.meets(l)),
+        ),
+        ("crossing", "crossing_of_circle") => fold(
+            inputs::one_root::of_circle(class)
+                .iter()
+                .map(|(l, c)| Crossing2::of_circle(l, c, Root::First)),
+        ),
+        ("crossing", "crossing_of_round") => fold(
+            inputs::one_root::of_round(class)
+                .iter()
+                .map(|(l, r)| Crossing2::of_round(l, r, Root::First)),
+        ),
+        ("crossing", "crossing_cmp_x") => fold(
+            inputs::one_root::cmp_x(class)
+                .iter()
+                .map(|(p, q)| p.cmp_x(q)),
+        ),
+        ("crossing", "crossing_side") => {
+            fold(inputs::one_root::side(class).iter().map(|(p, l)| p.side(l)))
+        }
+        ("crossing", "crossing_against_circle") => fold(
+            inputs::one_root::against_circle(class)
+                .iter()
+                .map(|(p, c)| p.against_circle(c)),
+        ),
+        ("crossing", "arc_order_crossings") => fold(
+            inputs::one_root::order_crossings(class)
+                .iter()
+                .map(|(arc, a, b)| arc.order_crossings(a, b)),
+        ),
+        ("crossing", "ellipse_side") => {
+            fold(inputs::conic::side(class).iter().map(|(e, z)| e.side(z)))
+        }
+        ("crossing", "ellipse_meets") => {
+            fold(inputs::conic::meets(class).iter().map(|(e, l)| e.meets(l)))
+        }
+        ("crossing", "crossing_of_ellipse") => fold(
+            inputs::conic::of_ellipse(class)
+                .iter()
+                .map(|(l, e)| Crossing2::of_ellipse(l, e, Root::First)),
+        ),
+        ("crossing", "crossing_against_ellipse") => fold(
+            inputs::conic::against_ellipse(class)
+                .iter()
+                .map(|(p, e)| p.against_ellipse(e)),
+        ),
+        ("crossing", "ellipse_meeting") => fold(
+            inputs::conic::meeting(class)
+                .iter()
+                .map(|(e, o)| Conic::of_ellipse(o).and_then(|c| e.meeting(&c))),
+        ),
+        ("crossing", "quartic_compare") => fold(
+            inputs::conic::compare(class)
+                .iter()
+                .map(|(p, a, q, b)| geom_num::quartic::compare(p, a, q, b)),
+        ),
         ("crossing", "ssi_to_grid") => fold(
             inputs::crossing::ssi_to_grid(class)
                 .iter()
@@ -1720,6 +1823,12 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
             }))
         }
+        ("intersect", "contact_spline_line") => {
+            fold(inputs::intersect::spline_lines(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_2d::contact::contacts(a, b, &mut meter)
+            }))
+        }
         ("intersect", "curve_loop") => fold(inputs::intersect::loops(class).iter().map(|c| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_intersect::curve::self_crossings(c, &mut meter)
@@ -1996,6 +2105,72 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
             )
         })),
+        ("spline", "length") => fold(inputs::spline::lengths(class).iter().map(|text| {
+            let sketch = geom_sketch::text::parse(text)?;
+            let l =
+                geom_sketch::length::spline_length(&sketch, geom_sketch::model::ItemId::new(2, 0))?;
+            Ok::<_, geom_sketch::model::SketchError>([l.value, l.error])
+        })),
+        ("spline", "solve_join") => fold(inputs::spline::pulled_joins(class).iter().map(|text| {
+            let sketch = geom_sketch::text::parse(text)?;
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let (solved, joins) = geom_sketch::smooth::solve_and_measure(&sketch, &mut meter)?;
+            let gap = joins.first().map_or(0.0, |j| j.continuity.tangent);
+            let iterations = u32::try_from(solved.report.iterations).map_or(f64::MAX, f64::from);
+            Ok::<_, geom_sketch::model::SketchError>([solved.report.largest, iterations, gap])
+        })),
+        ("spline", "settle_fit") => fold(inputs::spline::dragged_fits(class).iter().map(|text| {
+            let sketch = geom_sketch::text::parse(text)?;
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let s = geom_sketch::fit::settle(
+                &sketch,
+                geom_sketch::model::ItemId::new(2, 0),
+                &mut meter,
+            )?;
+            Ok::<_, geom_sketch::model::SketchError>([
+                f64::from(s.rounds),
+                f64::from(u8::from(s.settled)),
+                s.moved,
+            ])
+        })),
+        ("spline", "rational_rules") => {
+            fold(inputs::spline::rational_rules(class).iter().map(|text| {
+                let sketch = geom_sketch::text::parse(text)?;
+                let mut a = geom_sketch::equation::Assembly::new(&sketch)?;
+                a.evaluate(&sketch)?;
+                let sum: f64 = a.residuals().iter().sum();
+                let sizes: f64 = a.residuals().iter().map(|r| r.abs()).sum();
+                Ok::<_, geom_sketch::model::SketchError>([sum, sizes])
+            }))
+        }
+        ("sketch", "diagnose_chain") => {
+            fold(inputs::sketch::determined_chains(class).iter().map(|text| {
+                let sketch = geom_sketch::text::parse(text)?;
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let r = geom_sketch::diagnose::diagnose(&sketch, 10_000.0, &mut meter)?;
+                Ok::<_, geom_sketch::model::SketchError>([
+                    u32::try_from(r.dof_least).unwrap_or(u32::MAX),
+                    u32::try_from(r.dof_most).unwrap_or(u32::MAX),
+                    u32::try_from(r.redundant.len()).unwrap_or(u32::MAX),
+                    u32::try_from(r.conflicting.len()).unwrap_or(u32::MAX),
+                ])
+            }))
+        }
+        ("sketch", "free_motions_chain") => {
+            fold(inputs::sketch::free_chains(class).iter().map(|text| {
+                let sketch = geom_sketch::text::parse(text)?;
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let finder = geom_sketch::motions::MotionFinder::new(&sketch, &mut meter)?;
+                let all = finder.all(&mut meter)?;
+                let moved: usize = all.iter().map(|m| m.moves.len()).sum();
+                Ok::<_, geom_sketch::model::SketchError>([
+                    u32::try_from(finder.dof()).unwrap_or(u32::MAX),
+                    u32::try_from(all.len()).unwrap_or(u32::MAX),
+                    u32::try_from(moved).unwrap_or(u32::MAX),
+                    0,
+                ])
+            }))
+        }
         ("nurbs", "bernstein_bound") => fold(
             inputs::nurbs::bernstein_bound(class)
                 .into_iter()
@@ -2174,6 +2349,101 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 let a: u64 = original.iter().fold(0, |s, v| s.wrapping_add(*v));
                 let b: u64 = column.iter().fold(0, |s, v| s.wrapping_add(*v));
                 Ok(a.wrapping_add(b))
+            },
+        )),
+        ("entity", "polyline") => fold(inputs::entity::polyline(class).into_iter().map(
+            |(vertices, bulges)| -> Result<u64, geom_num::NumError> {
+                geom_2d::entity::Polyline::new(vertices, bulges, None, false)
+                    .map(|p| p.vertices().len() as u64)
+                    .map_err(|_| geom_num::NumError::Degenerate)
+            },
+        )),
+        ("entity", "arrange") => fold(inputs::entity::arrange(class).into_iter().map(
+            |segments| -> Result<u64, geom_num::NumError> {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let a = geom_2d::arrange::arrange(&segments, &mut meter)
+                    .map_err(|_| geom_num::NumError::Degenerate)?;
+                Ok((a.vertices().len() as u64) * 1_000_003
+                    + (a.edges().len() as u64) * 1_009
+                    + a.faces().len() as u64)
+            },
+        )),
+        ("entity", "arrange_curves") => {
+            fold(inputs::entity::arrange_curves(class).into_iter().map(
+                |curves| -> Result<u64, geom_num::NumError> {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    let a = geom_2d::arrange::arrange_curves(&curves, &mut meter)
+                        .map_err(|_| geom_num::NumError::Degenerate)?;
+                    Ok((a.vertices().len() as u64) * 1_000_003
+                        + (a.edges().len() as u64) * 1_009
+                        + a.faces().len() as u64)
+                },
+            ))
+        }
+        ("entity", "zone_insert") => fold(inputs::entity::zone(class).into_iter().map(
+            |segments| -> Result<u64, geom_num::NumError> {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let mut live = geom_2d::update::Live::new();
+                for (label, (a, b)) in segments.iter().enumerate() {
+                    live = live
+                        .insert(*a, *b, label as u32, &mut meter)
+                        .map_err(|_| geom_num::NumError::Degenerate)?;
+                }
+                let sources: usize = live.pieces().map(|p| p.sources().len()).sum();
+                let at = geom_num::carrier::Rational2::new(201, 201, 2)?;
+                let found = match live
+                    .locate(&at, &mut meter)
+                    .map_err(|_| geom_num::NumError::Degenerate)?
+                {
+                    geom_2d::update::Location::Vertex(_) => 1,
+                    geom_2d::update::Location::Edge(..) => 2,
+                    geom_2d::update::Location::Face(None) => 3,
+                    geom_2d::update::Location::Face(Some(_)) => 4,
+                };
+                Ok((live.len() as u64) * 1_000_003 + (sources as u64) * 1_009 + found)
+            },
+        )),
+        ("entity", "place") => fold(inputs::entity::place(class).into_iter().map(
+            |((vertices, bulges), k)| -> Result<u64, geom_num::NumError> {
+                use geom_2d::edit::{Similarity, place_polyline};
+                let o = geom_num::grid::P2::new(0, 0)?;
+                let map = match k {
+                    0 => Similarity::quarter_turns(0, o),
+                    1 => Similarity::quarter_turns(1, o),
+                    2 => Similarity::quarter_turns(2, o),
+                    3 => Similarity::quarter_turns(3, o),
+                    4 => Similarity::mirror_in_row(7),
+                    5 => Similarity::mirror_in_column(-5),
+                    6 => Similarity::scaling(3, o),
+                    _ => Ok(Similarity::translation(11, -4)),
+                }
+                .map_err(|_| geom_num::NumError::Degenerate)?;
+                let poly = geom_2d::entity::Polyline::new(vertices, bulges, None, false)
+                    .map_err(|_| geom_num::NumError::Degenerate)?;
+                let placed =
+                    place_polyline(&poly, &map).map_err(|_| geom_num::NumError::Degenerate)?;
+                Ok(placed.vertices()[0].x.get().unsigned_abs() + placed.bulges().len() as u64)
+            },
+        )),
+        ("entity", "length") => fold(inputs::entity::length(class).into_iter().map(
+            |(vertices, bulges)| -> Result<u64, geom_num::NumError> {
+                let poly = geom_2d::entity::Polyline::new(vertices, bulges, None, false)
+                    .map_err(|_| geom_num::NumError::Degenerate)?;
+                geom_2d::edit::polyline_length(&poly)
+                    .map(|i| i.hi().to_bits())
+                    .map_err(|_| geom_num::NumError::Degenerate)
+            },
+        )),
+        ("entity", "under") => fold(inputs::entity::under(class).iter().map(
+            |(shape, class)| -> Result<u64, geom_num::NumError> {
+                let change = shape
+                    .under(*class)
+                    .map_err(|_| geom_num::NumError::Degenerate)?;
+                let tag = match change.becomes {
+                    geom_2d::entity::Becomes::One(tag) => u64::from(tag.as_u8()),
+                    geom_2d::entity::Becomes::Run => 0,
+                };
+                Ok(tag * 2 + u64::from(change.mirror))
             },
         )),
         ("topo", "publish") => fold(inputs::topo::publish(class).iter().map(
@@ -2747,6 +3017,122 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[a, b, c, d]| gp::ssi_weight::filter(a, b, c, d)),
         ),
+        "carrier_side_filter" => fold(
+            i::carrier_side_filter(class)
+                .into_iter()
+                .map(|([a, b, c], [x, y, w])| gp::carrier_side::filter(a, b, c, x, y, w)),
+        ),
+        "carrier_side_value" => fold(
+            i::carrier_side_value(class)
+                .into_iter()
+                .map(|([a, b, c], [x, y, w])| gp::carrier_side::value(a, b, c, x, y, w)),
+        ),
+        "carrier_order_filter" => fold(i::carrier_order_filter(class).into_iter().map(
+            |([a, b], [xp, yp, wp], [xq, yq, wq])| {
+                gp::carrier_order::filter(a, b, xp, yp, xq, yq, wp, wq)
+            },
+        )),
+        "carrier_order_value" => fold(i::carrier_order_value(class).into_iter().map(
+            |([a, b], [xp, yp, wp], [xq, yq, wq])| {
+                gp::carrier_order::value(a, b, xp, yp, xq, yq, wp, wq)
+            },
+        )),
+        "rational_cmp_filter" => fold(
+            i::rational_cmp_filter(class)
+                .into_iter()
+                .map(|[p, q, wp, wq]| gp::rational_cmp::filter(p, q, wp, wq)),
+        ),
+        "rational_cmp_value" => fold(
+            i::rational_cmp_value(class)
+                .into_iter()
+                .map(|[p, q, wp, wq]| gp::rational_cmp::value(p, q, wp, wq)),
+        ),
+        "rational_orient_filter" => fold(i::rational_orient_filter(class).into_iter().map(
+            |[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+                gp::rational_orient::filter(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+            },
+        )),
+        "rational_orient_value" => fold(i::rational_orient_value(class).into_iter().map(
+            |[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+                gp::rational_orient::value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+            },
+        )),
+        "round_grid_filter" => fold(
+            i::round_grid_filter(class)
+                .into_iter()
+                .map(|(z, p, [cx, cy, w])| gp::round_grid::filter(z, p, cx, cy, w)),
+        ),
+        "round_grid_value" => fold(
+            i::round_grid_value(class)
+                .into_iter()
+                .map(|(z, p, [cx, cy, w])| gp::round_grid::value(z, p, cx, cy, w)),
+        ),
+        "round_rational_filter" => fold(
+            i::round_rational_filter(class)
+                .into_iter()
+                .map(|([x, y, v], q, [cx, cy, w])| {
+                    gp::round_rational::filter(x, y, v, q, cx, cy, w)
+                }),
+        ),
+        "round_rational_value" => fold(
+            i::round_rational_value(class)
+                .into_iter()
+                .map(|([x, y, v], q, [cx, cy, w])| {
+                    gp::round_rational::value(x, y, v, q, cx, cy, w)
+                }),
+        ),
+        "round_line_filter" => fold(
+            i::round_line_filter(class)
+                .into_iter()
+                .map(|([a, b, d], p, [cx, cy, w])| gp::round_line::filter(a, b, d, p, cx, cy, w)),
+        ),
+        "round_line_value" => fold(
+            i::round_line_value(class)
+                .into_iter()
+                .map(|([a, b, d], p, [cx, cy, w])| gp::round_line::value(a, b, d, p, cx, cy, w)),
+        ),
+        "circle_side_filter" => fold(
+            i::circle_side_filter(class)
+                .into_iter()
+                .map(|([x, y, v], k, r)| gp::circle_side::filter(x, y, v, k, r)),
+        ),
+        "circle_side_value" => fold(
+            i::circle_side_value(class)
+                .into_iter()
+                .map(|([x, y, v], k, r)| gp::circle_side::value(x, y, v, k, r)),
+        ),
+        "circle_line_filter" => fold(
+            i::circle_line_filter(class)
+                .into_iter()
+                .map(|([a, b, d], k, r)| gp::circle_line::filter(a, b, d, k, r)),
+        ),
+        "circle_line_value" => fold(
+            i::circle_line_value(class)
+                .into_iter()
+                .map(|([a, b, d], k, r)| gp::circle_line::value(a, b, d, k, r)),
+        ),
+        "circle_gap_filter" => fold(
+            i::circle_gap_filter(class)
+                .into_iter()
+                .map(|(a, b, t)| gp::circle_gap::filter(a, b, t)),
+        ),
+        "circle_gap_value" => fold(
+            i::circle_gap_value(class)
+                .into_iter()
+                .map(|(a, b, t)| gp::circle_gap::value(a, b, t)),
+        ),
+        "ellipse_side_filter" => fold(i::ellipse_side_filter(class).into_iter().map(
+            |([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::filter(x, y, w, k, mx, my, p, q),
+        )),
+        "ellipse_side_value" => fold(i::ellipse_side_value(class).into_iter().map(
+            |([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::value(x, y, w, k, mx, my, p, q),
+        )),
+        "ellipse_line_filter" => fold(i::ellipse_line_filter(class).into_iter().map(
+            |([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::filter(a, b, d, k, mx, my, p, q),
+        )),
+        "ellipse_line_value" => fold(i::ellipse_line_value(class).into_iter().map(
+            |([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::value(a, b, d, k, mx, my, p, q),
+        )),
         "ssi_side_filter" => fold(
             i::ssi_side_filter(class)
                 .into_iter()
@@ -2848,6 +3234,64 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[a, b, c, d]| gp::ssi_weight::value(a, b, c, d)),
         ),
+        "carrier_side_value_plain" => fold(
+            i::carrier_side_value_plain(class)
+                .into_iter()
+                .map(|([a, b, c], [x, y, w])| gp::carrier_side::value(a, b, c, x, y, w)),
+        ),
+        "carrier_order_value_plain" => fold(i::carrier_order_value_plain(class).into_iter().map(
+            |([a, b], [xp, yp, wp], [xq, yq, wq])| {
+                gp::carrier_order::value(a, b, xp, yp, xq, yq, wp, wq)
+            },
+        )),
+        "rational_cmp_value_plain" => fold(
+            i::rational_cmp_value_plain(class)
+                .into_iter()
+                .map(|[p, q, wp, wq]| gp::rational_cmp::value(p, q, wp, wq)),
+        ),
+        "rational_orient_value_plain" => {
+            fold(i::rational_orient_value_plain(class).into_iter().map(
+                |[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+                    gp::rational_orient::value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+                },
+            ))
+        }
+        "round_grid_value_plain" => fold(
+            i::round_grid_value_plain(class)
+                .into_iter()
+                .map(|(z, p, [cx, cy, w])| gp::round_grid::value(z, p, cx, cy, w)),
+        ),
+        "round_rational_value_plain" => {
+            fold(i::round_rational_value_plain(class).into_iter().map(
+                |([x, y, v], q, [cx, cy, w])| gp::round_rational::value(x, y, v, q, cx, cy, w),
+            ))
+        }
+        "round_line_value_plain" => fold(
+            i::round_line_value_plain(class)
+                .into_iter()
+                .map(|([a, b, d], p, [cx, cy, w])| gp::round_line::value(a, b, d, p, cx, cy, w)),
+        ),
+        "circle_side_value_plain" => fold(
+            i::circle_side_value_plain(class)
+                .into_iter()
+                .map(|([x, y, v], k, r)| gp::circle_side::value(x, y, v, k, r)),
+        ),
+        "circle_line_value_plain" => fold(
+            i::circle_line_value_plain(class)
+                .into_iter()
+                .map(|([a, b, d], k, r)| gp::circle_line::value(a, b, d, k, r)),
+        ),
+        "circle_gap_value_plain" => fold(
+            i::circle_gap_value_plain(class)
+                .into_iter()
+                .map(|(a, b, t)| gp::circle_gap::value(a, b, t)),
+        ),
+        "ellipse_side_value_plain" => fold(i::ellipse_side_value_plain(class).into_iter().map(
+            |([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::value(x, y, w, k, mx, my, p, q),
+        )),
+        "ellipse_line_value_plain" => fold(i::ellipse_line_value_plain(class).into_iter().map(
+            |([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::value(a, b, d, k, mx, my, p, q),
+        )),
         "ssi_side_value_plain" => fold(
             i::ssi_side_value_plain(class)
                 .into_iter()
@@ -2923,6 +3367,64 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[a, b, c, d]| gp::ssi_weight::value(a, b, c, d)),
         ),
+        "carrier_side_value_limbs" => fold(
+            i::carrier_side_value_limbs(class)
+                .into_iter()
+                .map(|([a, b, c], [x, y, w])| gp::carrier_side::value(a, b, c, x, y, w)),
+        ),
+        "carrier_order_value_limbs" => fold(i::carrier_order_value_limbs(class).into_iter().map(
+            |([a, b], [xp, yp, wp], [xq, yq, wq])| {
+                gp::carrier_order::value(a, b, xp, yp, xq, yq, wp, wq)
+            },
+        )),
+        "rational_cmp_value_limbs" => fold(
+            i::rational_cmp_value_limbs(class)
+                .into_iter()
+                .map(|[p, q, wp, wq]| gp::rational_cmp::value(p, q, wp, wq)),
+        ),
+        "rational_orient_value_limbs" => {
+            fold(i::rational_orient_value_limbs(class).into_iter().map(
+                |[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+                    gp::rational_orient::value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+                },
+            ))
+        }
+        "round_grid_value_limbs" => fold(
+            i::round_grid_value_limbs(class)
+                .into_iter()
+                .map(|(z, p, [cx, cy, w])| gp::round_grid::value(z, p, cx, cy, w)),
+        ),
+        "round_rational_value_limbs" => {
+            fold(i::round_rational_value_limbs(class).into_iter().map(
+                |([x, y, v], q, [cx, cy, w])| gp::round_rational::value(x, y, v, q, cx, cy, w),
+            ))
+        }
+        "round_line_value_limbs" => fold(
+            i::round_line_value_limbs(class)
+                .into_iter()
+                .map(|([a, b, d], p, [cx, cy, w])| gp::round_line::value(a, b, d, p, cx, cy, w)),
+        ),
+        "circle_side_value_limbs" => fold(
+            i::circle_side_value_limbs(class)
+                .into_iter()
+                .map(|([x, y, v], k, r)| gp::circle_side::value(x, y, v, k, r)),
+        ),
+        "circle_line_value_limbs" => fold(
+            i::circle_line_value_limbs(class)
+                .into_iter()
+                .map(|([a, b, d], k, r)| gp::circle_line::value(a, b, d, k, r)),
+        ),
+        "circle_gap_value_limbs" => fold(
+            i::circle_gap_value_limbs(class)
+                .into_iter()
+                .map(|(a, b, t)| gp::circle_gap::value(a, b, t)),
+        ),
+        "ellipse_side_value_limbs" => fold(i::ellipse_side_value_limbs(class).into_iter().map(
+            |([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::value(x, y, w, k, mx, my, p, q),
+        )),
+        "ellipse_line_value_limbs" => fold(i::ellipse_line_value_limbs(class).into_iter().map(
+            |([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::value(a, b, d, k, mx, my, p, q),
+        )),
         "ssi_side_value_limbs" => fold(
             i::ssi_side_value_limbs(class)
                 .into_iter()

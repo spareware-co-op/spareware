@@ -94,8 +94,12 @@
 // vector, reserved fallibly and charged to the caller's logical-memory budget (chapter 23.10).
 extern crate alloc;
 
+pub mod arc;
 pub mod ball;
 pub mod brent;
+pub mod carrier;
+pub mod conic;
+pub mod conic_root;
 pub mod crossing;
 pub mod dd;
 pub mod distance;
@@ -111,6 +115,7 @@ pub mod isolate;
 pub mod ladder;
 pub mod math;
 pub mod newton;
+pub mod one_root;
 pub mod pencil;
 pub mod perturb;
 pub mod plane;
@@ -118,6 +123,7 @@ pub mod predicate;
 pub mod quadrature;
 pub mod quadrature_rules;
 pub mod quadric;
+pub mod quartic;
 pub mod real;
 pub mod rng;
 pub mod scalar;
