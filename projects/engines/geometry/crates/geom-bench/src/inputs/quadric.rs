@@ -1,4 +1,4 @@
-//! Inputs for the exact decisions on lines and quadrics (pieces G159 and G166, decision 32.44): lines
+//! Inputs for the exact decisions on lines and quadrics (pieces G159 and G166, decision 32.46): lines
 //! against a sphere, a cylinder, a cone and a torus, parallel axes, pairs whose axes meet, and the
 //! pencils of a sphere and a cylinder, in general position and touching inside.
 //!

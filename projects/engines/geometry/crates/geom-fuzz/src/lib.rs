@@ -28,8 +28,12 @@
 //! chain counts the roots a polynomial was built from; [`project`] (G162), a nearest point is
 //! never beaten by a sample of the kind; [`crossings`] (G163), every point of any two curves lies
 //! on both, and two cubic graphs that change sides have an item between them; [`piercing`] (G164),
-//! every point of a curve and a surface lies on both; and [`natural`] (G165), every curve two
-//! natural quadrics are said to share lies on each by its own equation.
+//! every point of a curve and a surface lies on both; [`natural`] (G165), every curve two
+//! natural quadrics are said to share lies on each by its own equation; [`pencils`] (G166), what
+//! a pencil says two curved quadrics share is so; [`reductions`] (G167), every curve of a torus's
+//! special position lies on it; [`level`] (G168), a level curve misses nothing a dense grid can
+//! see; and [`general`] (G169, G170), subdivision leaves no crossing outside its settled or
+//! flagged pairs, and marching stays on both surfaces.
 //! [`adversarial`] holds the generators aimed at chapter 28.5's hard
 //! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.46) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
@@ -175,7 +179,7 @@
 //!   and their meter.
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
-//! - `geom-sketch` (MPL-2.0, ours), the code the [`sketch_text`], [`sketch_splines`],
+//! - `geom-sketch` (Apache-2.0, ours), the code the [`sketch_text`], [`sketch_splines`],
 //!   [`sketch_motions`] and [`sketch_corpus`] targets test.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
 //!   the work meter it reads with, and of the [`cache`] target with `geom-op`.
@@ -188,8 +192,8 @@
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `geom-op`, `geom-curve`, `geom-surface`, `geom-nurbs` and `geom-run` (Apache-2.0, ours), the
 //!   code under test of the [`batch`] target.
-//! - `geom-intersect` (MPL-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
-//!   `geom-math`, `geom-run` and `geom-surface` (MPL-2.0, ours), what its cases are made of.
+//! - `geom-intersect` (Apache-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
+//!   `geom-math`, `geom-run` and `geom-surface` (Apache-2.0, ours), what its cases are made of.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.

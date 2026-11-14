@@ -1029,7 +1029,9 @@ fn each_trace_takes_the_work_it_always_took() {
             &torus,
             &outline,
             1e-2,
-            244_468,
+            // 244,468 before a torus's partials paid for the arctangent's 192-bit corners (issue
+            // #765): the same trace, charged more.
+            1_236_148,
             292,
             4_576_913_829_044_423_827,
         ),

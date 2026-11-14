@@ -238,11 +238,11 @@
 //! - `geom-bool`, `geom-make`, `geom-topo`, `geom-check`, `geom-poly` and `geom-name` (Apache-2.0,
 //!   ours), development dependencies (G155): the booleans, primitives, transforms, queries, checker
 //!   and names the law catalogue checks.
-//! - `geom-curve` and `geom-surface` (MPL-2.0, ours), dependencies: the kinds and transforms the
+//! - `geom-curve` and `geom-surface` (Apache-2.0, ours), dependencies: the kinds and transforms the
 //!   law catalogue checks (G69), and what [`ssi`] builds a corpus case from (G160).
-//! - `geom-intersect` (MPL-2.0, ours), a dependency (G160): the result type [`ssi`] reads an answer
+//! - `geom-intersect` (Apache-2.0, ours), a dependency (G160): the result type [`ssi`] reads an answer
 //!   from.
-//! - `geom-sketch` (MPL-2.0, ours), a dependency (G222): the block solver [`oracle::sketches`] solves
+//! - `geom-sketch` (Apache-2.0, ours), a dependency (G222): the block solver [`oracle::sketches`] solves
 //!   a sketch job with, and the `sketch v1` reader it writes the job for.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'

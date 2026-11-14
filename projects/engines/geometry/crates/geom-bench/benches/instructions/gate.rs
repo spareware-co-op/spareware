@@ -3756,7 +3756,7 @@ pub mod quadrature {
 }
 
 /// geom-intersect's hot paths (pieces G158, G162, G168, G169, G170, G173, G174 and G176; decision
-/// 32.44).
+/// 32.46).
 pub mod intersect {
     use super::*;
 
@@ -3976,7 +3976,7 @@ pub mod intersect {
     );
 }
 
-/// The exact decisions on lines and quadrics (piece G159; decision 32.44).
+/// The exact decisions on lines and quadrics (piece G159; decision 32.46).
 pub mod quadric {
     use super::*;
 

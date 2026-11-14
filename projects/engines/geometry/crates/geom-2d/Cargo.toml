@@ -26,7 +26,7 @@ geom-surface = { path = "../geom-surface" }
 # Seeds, the test generator, and the golden store (piece G19): the kernel's development crate, a
 # development dependency only (chapter 28.1).
 geom-test = { path = "../geom-test" }
-# Splines for the contact tests (piece G195). Ours, MPL-2.0.
+# Splines for the contact tests (piece G195). Ours, Apache-2.0.
 geom-nurbs = { path = "../geom-nurbs" }
 
 # The snap query on a million entities (piece G198), with the standard library's clock only.
