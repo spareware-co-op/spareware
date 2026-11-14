@@ -1,5 +1,24 @@
 //! Land use truth tests: trip generation of packs/nz/landuse-plus.js (person and vehicle trips, the adjustments in order, how a zone's table reaches the
-//! model, the tables, the RR 422 check and trip_generation.csv) against the prototype (tools/transport-truth/gen-census.mjs).
+//! model, the tables, the RR 422 check and `trip_generation.csv`) against the prototype (tools/transport-truth/gen-census.mjs).
+
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
 
 mod census_support;
 mod edit_support;
@@ -59,9 +78,7 @@ fn mode_shares_and_rate_flags_match_the_prototype() {
         ck.check(&format!("sharesOf[{i}]"), &got, &c["out"]);
     }
     for (i, c) in ex["rateFlag"].as_array().expect("cases").iter().enumerate() {
-        let year = if c["in"].get("undefined").is_some() {
-            f64::NAN
-        } else if c["in"].get("nonFinite").is_some() {
+        let year = if c["in"].get("undefined").is_some() || c["in"].get("nonFinite").is_some() {
             f64::NAN
         } else {
             value_to_number(&c["in"])

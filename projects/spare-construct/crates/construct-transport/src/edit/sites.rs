@@ -11,7 +11,7 @@ use super::IdSource;
 use super::collate::locale_compare_f64;
 use crate::graph::{js_sort_by, js_str_lt};
 use crate::jsnum::{JsNum, Maybe, value_to_number, value_truthy};
-use crate::project::{Link, OrderedMap, Project, Scenario, Site, SiteSource, road_class};
+use crate::project::{Link, Node, OrderedMap, Project, Scenario, Site, SiteSource, road_class};
 use crate::util::{self, LatLng};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -110,6 +110,7 @@ pub struct DetectResult {
 }
 
 /// `Sites.of(sc, nodeId)`: the first site that has this node.
+#[must_use]
 pub fn of<'a>(sc: &'a Scenario, node_id: &str) -> Option<&'a Site> {
     sc.sites
         .get()?
@@ -117,14 +118,13 @@ pub fn of<'a>(sc: &'a Scenario, node_id: &str) -> Option<&'a Site> {
         .find(|s| s.nodes.iter().any(|n| n == node_id))
 }
 
-/// SameValueZero for the site numbers of AT points.
-fn same_value(a: &Option<Value>, b: &Option<Value>) -> bool {
+/// `SameValueZero` for the site numbers of AT points.
+fn same_value(a: Option<&Value>, b: Option<&Value>) -> bool {
     match (a, b) {
-        (None, None) => true,
+        (None, None) | (Some(Value::Null), Some(Value::Null)) => true,
         (Some(Value::Number(x)), Some(Value::Number(y))) => x.as_f64() == y.as_f64(),
         (Some(Value::String(x)), Some(Value::String(y))) => x == y,
         (Some(Value::Bool(x)), Some(Value::Bool(y))) => x == y,
-        (Some(Value::Null), Some(Value::Null)) => true,
         _ => false,
     }
 }
@@ -163,34 +163,188 @@ fn blank_site(id: &str) -> Site {
 /// `Sites.detect(sc, opts)`: groups the nodes of each intersection into sites, replacing the sites an earlier detection made
 /// (src.nodes "auto") and keeping the ones made by hand. Leaves `sc.sites` set (empty when there are none).
 pub fn detect(sc: &mut Scenario, ids: &mut dyn IdSource, opts: &DetectOpts) -> DetectResult {
-    let r = &opts.rules;
     if !sc.sites.is_set() {
         sc.sites = Maybe::Set(OrderedMap::new());
     }
-    // Sites made by hand stay, and their nodes are not candidates; the earlier automatic ones go
-    let keep_n;
-    let mut kept: HashSet<String> = HashSet::new();
-    {
-        let sites = sc.sites.get_mut().expect("just set");
-        let auto = |s: &Site| s.src.get().is_some_and(|x| x.nodes.is("auto"));
-        keep_n = sites.values().filter(|s| !auto(s)).count();
-        for s in sites.values().filter(|s| !auto(s)) {
-            for n in &s.nodes {
-                kept.insert(n.clone());
-            }
-        }
-        let gone: Vec<String> = sites
-            .values()
-            .filter(|s| auto(s))
-            .map(|s| s.id.clone())
-            .collect();
-        for id in gone {
-            sites.remove(&id);
+    let (keep_n, kept) = drop_auto_sites(sc);
+    let new_sites: Vec<Site> = {
+        let net = Detection::new(sc, opts, &kept);
+        let groups = net.groups();
+        net.sites(&groups, ids)
+    };
+    let made = new_sites.len();
+    let in_sites: usize = new_sites.iter().map(|s| s.nodes.len()).sum();
+    // site.name = this.name(sc, site); sc.sites[id] = site
+    for mut site in new_sites {
+        site.name = Maybe::Set(name(sc, &site));
+        let id = site.id.clone();
+        // sc.sites was set at the start
+        if let Some(sites) = sc.sites.get_mut() {
+            sites.insert(id, site);
         }
     }
-    let new_sites: Vec<Site> = {
+    DetectResult {
+        sites: made,
+        nodes: in_sites,
+        kept: keep_n,
+    }
+}
+
+/// Sites made by hand stay, and their nodes are not candidates; the earlier automatic ones go. Returns how many sites were
+/// kept and the nodes in them.
+fn drop_auto_sites(sc: &mut Scenario) -> (usize, HashSet<String>) {
+    let mut kept: HashSet<String> = HashSet::new();
+    let Some(sites) = sc.sites.get_mut() else {
+        return (0, kept);
+    };
+    let auto = |s: &Site| s.src.get().is_some_and(|x| x.nodes.is("auto"));
+    let keep_n = sites.values().filter(|s| !auto(s)).count();
+    for s in sites.values().filter(|s| !auto(s)) {
+        for n in &s.nodes {
+            kept.insert(n.clone());
+        }
+    }
+    let gone: Vec<String> = sites
+        .values()
+        .filter(|s| auto(s))
+        .map(|s| s.id.clone())
+        .collect();
+    for id in gone {
+        sites.remove(&id);
+    }
+    (keep_n, kept)
+}
+
+/// Candidate nodes, in the order the links first reach them, and each one's position in that list: nodes with a control,
+/// or with three or more links one of which is of collector rank or higher, and no motorway or ramp link. Nodes of sites
+/// made by hand (`kept`) are not candidates.
+fn candidates<'a>(
+    nodes: &OrderedMap<Node>,
+    links: &[&'a Link],
+    kept: &HashSet<String>,
+) -> (Vec<&'a str>, HashMap<&'a str, usize>) {
+    // The links at each node, in the order the links first reach them
+    let mut inc: Vec<(&'a str, Vec<usize>)> = Vec::new();
+    let mut inc_ix: HashMap<&'a str, usize> = HashMap::new();
+    for (li, &l) in links.iter().enumerate() {
+        for n in [l.a.as_str(), l.b.as_str()] {
+            if let Some(&k) = inc_ix.get(n) {
+                // inc_ix holds positions in inc only
+                if let Some(entry) = inc.get_mut(k) {
+                    entry.1.push(li);
+                }
+            } else {
+                inc_ix.insert(n, inc.len());
+                inc.push((n, vec![li]));
+            }
+        }
+    }
+    let rank = |l: &Link| road_class(l.cls.as_str()).rank;
+    let mut cand: Vec<&'a str> = Vec::new();
+    let mut cand_ix: HashMap<&'a str, usize> = HashMap::new();
+    for (id, ls) in &inc {
+        if kept.contains(*id)
+            || ls
+                .iter()
+                .any(|&li| links.get(li).is_some_and(|&l| rank(l) >= 5.0))
+        {
+            continue;
+        }
+        let controlled = nodes.get(id).is_some_and(|n| n.control.str_or("none") != "none");
+        let max_rank = ls
+            .iter()
+            .filter_map(|&li| links.get(li))
+            .map(|&l| rank(l))
+            .fold(f64::NEG_INFINITY, f64::max);
+        if controlled || (ls.len() >= 3 && max_rank >= 3.0) {
+            cand_ix.insert(*id, cand.len());
+            cand.push(*id);
+        }
+    }
+    (cand, cand_ix)
+}
+
+/// One-way links between candidates short enough to be one carriageway of a pair: the link's index, bearing and midpoint.
+fn carriageways(
+    sc: &Scenario,
+    links: &[&Link],
+    lens: &[f64],
+    cand_ix: &HashMap<&str, usize>,
+    wide: f64,
+) -> Vec<(usize, f64, LatLng)> {
+    let oneway = |l: &Link| !(l.lanes_ab.int32() > 0 && l.lanes_ba.int32() > 0);
+    let mut ow: Vec<(usize, f64, LatLng)> = Vec::new();
+    for (li, (&l, &len)) in links.iter().zip(lens).enumerate() {
+        if oneway(l)
+            && cand_ix.contains_key(l.a.as_str())
+            && cand_ix.contains_key(l.b.as_str())
+            && len <= wide
+        {
+            let g = sc.geom(l);
+            // A link's geometry always holds its two end nodes
+            let (Some(first), Some(last)) = (g.first(), g.last()) else {
+                continue;
+            };
+            let brg = if l.lanes_ab.int32() > 0 {
+                util::bearing(first, last)
+            } else {
+                util::bearing(last, first)
+            };
+            let mid = util::along(&g, &util::cum_len(&g), len / 2.0).p;
+            ow.push((li, brg, mid));
+        }
+    }
+    ow
+}
+
+/// Union-find over the candidates: each candidate's parent, and each root's members (None for a candidate that is not a root).
+struct Groups {
+    par: Vec<usize>,
+    mem: Vec<Option<Vec<usize>>>,
+}
+
+impl Groups {
+    fn new(n: usize) -> Self {
+        Groups {
+            par: (0..n).collect(),
+            mem: (0..n).map(|i| Some(vec![i])).collect(),
+        }
+    }
+}
+
+/// The root of candidate i, halving the path on the way.
+fn find(par: &mut [usize], mut i: usize) -> usize {
+    // Every parent is an index into par (it starts as 0..n and only ever takes roots), so the lookups never miss
+    while let Some(&up) = par.get(i)
+        && up != i
+    {
+        let grand = par.get(up).copied().unwrap_or(up);
+        if let Some(slot) = par.get_mut(i) {
+            *slot = grand;
+        }
+        i = grand;
+    }
+    i
+}
+
+/// The scenario as `Sites.detect` reads it: open links between two different existing nodes, their lengths, the
+/// roundabout ring nodes, the candidates and the one-way carriageways.
+struct Detection<'a> {
+    sc: &'a Scenario,
+    rules: &'a SiteRules,
+    points: &'a [AtPoint],
+    links: Vec<&'a Link>,
+    lens: Vec<f64>,
+    ring: HashSet<&'a str>,
+    cand: Vec<&'a str>,
+    cand_ix: HashMap<&'a str, usize>,
+    ow: Vec<(usize, f64, LatLng)>,
+}
+
+impl<'a> Detection<'a> {
+    fn new(sc: &'a Scenario, opts: &'a DetectOpts, kept: &HashSet<String>) -> Self {
         let nodes = &sc.nodes;
-        let links: Vec<&Link> = sc
+        let links: Vec<&'a Link> = sc
             .links
             .values()
             .filter(|l| {
@@ -200,176 +354,171 @@ pub fn detect(sc: &mut Scenario, ids: &mut dyn IdSource, opts: &DetectOpts) -> D
                     && l.a != l.b
             })
             .collect();
-        // The links at each node, in the order the links first reach them
-        let mut inc: Vec<(&str, Vec<usize>)> = Vec::new();
-        let mut inc_ix: HashMap<&str, usize> = HashMap::new();
-        for (li, l) in links.iter().enumerate() {
-            for n in [l.a.as_str(), l.b.as_str()] {
-                match inc_ix.get(n) {
-                    Some(&k) => inc[k].1.push(li),
-                    None => {
-                        inc_ix.insert(n, inc.len());
-                        inc.push((n, vec![li]));
-                    }
-                }
-            }
-        }
-        let rank = |l: &Link| road_class(l.cls.as_str()).rank;
-        let mut ring: HashSet<&str> = HashSet::new();
-        for l in &links {
+        let mut ring: HashSet<&'a str> = HashSet::new();
+        for &l in &links {
             if l.ring.truthy() {
                 ring.insert(l.a.as_str());
                 ring.insert(l.b.as_str());
             }
         }
-        // Candidate nodes, in the order the links first reach them
-        let mut cand: Vec<&str> = Vec::new();
-        let mut cand_ix: HashMap<&str, usize> = HashMap::new();
-        for (id, ls) in &inc {
-            if kept.contains(*id) || ls.iter().any(|&li| rank(links[li]) >= 5.0) {
-                continue;
-            }
-            let controlled = nodes[*id].control.str_or("none") != "none";
-            let max_rank = ls
-                .iter()
-                .map(|&li| rank(links[li]))
-                .fold(f64::NEG_INFINITY, f64::max);
-            if controlled || (ls.len() >= 3 && max_rank >= 3.0) {
-                cand_ix.insert(*id, cand.len());
-                cand.push(*id);
-            }
-        }
-        let ll = |id: &str| -> LatLng { nodes[id].ll() };
+        let (cand, cand_ix) = candidates(nodes, &links, kept);
         let lens: Vec<f64> = links.iter().map(|l| sc.link_len(l)).collect();
-        let oneway = |l: &Link| !(l.lanes_ab.int32() > 0 && l.lanes_ba.int32() > 0);
-        // One-way links between candidates short enough to be one carriageway of a pair: bearing and midpoint
-        let mut ow: Vec<(usize, f64, LatLng)> = Vec::new();
-        for (li, l) in links.iter().enumerate() {
-            if oneway(l)
-                && cand_ix.contains_key(l.a.as_str())
-                && cand_ix.contains_key(l.b.as_str())
-                && lens[li] <= r.wide
-            {
-                let g = sc.geom(l);
-                let brg = if l.lanes_ab.int32() > 0 {
-                    util::bearing(&g[0], &g[g.len() - 1])
-                } else {
-                    util::bearing(&g[g.len() - 1], &g[0])
-                };
-                let mid = util::along(&g, &util::cum_len(&g), lens[li] / 2.0).p;
-                ow.push((li, brg, mid));
-            }
+        let ow = carriageways(sc, &links, &lens, &cand_ix, opts.rules.wide);
+        Detection {
+            sc,
+            rules: &opts.rules,
+            points: &opts.points,
+            links,
+            lens,
+            ring,
+            cand,
+            cand_ix,
+            ow,
         }
-        let dual = |li: usize| -> bool {
-            let Some(me) = ow.iter().find(|o| o.0 == li) else {
-                return false;
-            };
-            ow.iter().any(|m| {
-                m.0 != li
-                    && util::ang_diff(me.1, m.1) >= 180.0 - r.dual_bearing
-                    && util::dist(&me.2, &m.2) <= r.dual_gap
-            })
+    }
+
+    fn ll(&self, id: &str) -> LatLng {
+        self.sc.nodes.get(id).map_or([f64::NAN; 2], Node::ll)
+    }
+
+    /// True when link li is one carriageway of a dual pair.
+    fn dual(&self, li: usize) -> bool {
+        let Some(me) = self.ow.iter().find(|o| o.0 == li) else {
+            return false;
         };
-        let near_at = |id: &str| -> Vec<Option<Value>> {
-            let p0 = ll(id);
-            opts.points
+        self.ow.iter().any(|m| {
+            m.0 != li
+                && util::ang_diff(me.1, m.1) >= 180.0 - self.rules.dual_bearing
+                && util::dist(&me.2, &m.2) <= self.rules.dual_gap
+        })
+    }
+
+    /// The site numbers of the AT points near a node.
+    fn near_at(&self, id: &str) -> Vec<Option<Value>> {
+        let p0 = self.ll(id);
+        self.points
+            .iter()
+            .filter(|p| util::dist(&p0, &[p.lat, p.lng]) <= self.rules.at)
+            .map(|p| p.key.clone())
+            .collect()
+    }
+
+    /// True when two nodes are near the same AT point.
+    fn same_at(&self, a: &str, b: &str) -> bool {
+        let here = self.near_at(a);
+        !here.is_empty()
+            && self
+                .near_at(b)
                 .iter()
-                .filter(|p| util::dist(&p0, &[p.lat, p.lng]) <= r.at)
-                .map(|p| p.key.clone())
-                .collect()
-        };
-        let same_at = |a: &str, b: &str| -> bool {
-            let x = near_at(a);
-            !x.is_empty()
-                && near_at(b)
-                    .iter()
-                    .any(|k| x.iter().any(|v| same_value(k, v)))
-        };
-        // union-find, refusing a join that would make the site wider than r.diameter
-        let mut par: Vec<usize> = (0..cand.len()).collect();
-        let mut mem: Vec<Option<Vec<usize>>> = (0..cand.len()).map(|i| Some(vec![i])).collect();
-        fn find(par: &mut [usize], mut i: usize) -> usize {
-            while par[i] != i {
-                par[i] = par[par[i]];
-                i = par[i];
-            }
-            i
+                .any(|key| here.iter().any(|other| same_value(key.as_ref(), other.as_ref())))
+    }
+
+    /// Joins the groups of candidates a and b, unless they are one group already or the site would then be wider than
+    /// the rules' diameter.
+    fn join(&self, groups: &mut Groups, a: usize, b: usize) {
+        let (left, right) = (find(&mut groups.par, a), find(&mut groups.par, b));
+        if left == right {
+            return;
         }
-        let mut join = |par: &mut Vec<usize>, a: usize, b: usize| -> bool {
-            let (x, y) = (find(par, a), find(par, b));
-            if x == y {
-                return false;
-            }
-            let mut all: Vec<usize> = mem[x].clone().expect("a root has members");
-            all.extend(mem[y].clone().expect("a root has members"));
-            for i in 0..all.len() {
-                for j in (i + 1)..all.len() {
-                    if util::dist(&ll(cand[all[i]]), &ll(cand[all[j]])) > r.diameter {
-                        return false;
-                    }
+        // A root always has members
+        let (Some(Some(left_mem)), Some(Some(right_mem))) = (groups.mem.get(left), groups.mem.get(right)) else {
+            return;
+        };
+        let mut all: Vec<usize> = left_mem.clone();
+        all.extend(right_mem.iter().copied());
+        let pos = |ci: usize| self.cand.get(ci).map_or([f64::NAN; 2], |id| self.ll(id));
+        // Every pair, in order
+        let mut rest = all.as_slice();
+        while let Some((&first, tail)) = rest.split_first() {
+            for &other in tail {
+                if util::dist(&pos(first), &pos(other)) > self.rules.diameter {
+                    return;
                 }
             }
-            par[y] = x;
-            mem[x] = Some(all);
-            mem[y] = None;
-            true
-        };
+            rest = tail;
+        }
+        if let Some(slot) = groups.par.get_mut(right) {
+            *slot = left;
+        }
+        if let Some(slot) = groups.mem.get_mut(left) {
+            *slot = Some(all);
+        }
+        if let Some(slot) = groups.mem.get_mut(right) {
+            *slot = None;
+        }
+    }
+
+    /// The candidates grouped by joining along the links between them, shortest first.
+    fn groups(&self) -> Groups {
+        let rules = self.rules;
+        let mut groups = Groups::new(self.cand.len());
         let mut order: Vec<(usize, f64)> = Vec::new();
-        for (li, l) in links.iter().enumerate() {
-            if cand_ix.contains_key(l.a.as_str()) && cand_ix.contains_key(l.b.as_str()) {
-                order.push((li, lens[li]));
+        for (li, (l, &len)) in self.links.iter().zip(&self.lens).enumerate() {
+            if self.cand_ix.contains_key(l.a.as_str()) && self.cand_ix.contains_key(l.b.as_str()) {
+                order.push((li, len));
             }
         }
-        js_sort_by(&mut order, |p, q| p.1 - q.1);
-        for (li, d) in order {
-            let l = links[li];
-            let (ra, rb) = (ring.contains(l.a.as_str()), ring.contains(l.b.as_str()));
-            let (ia, ib) = (cand_ix[l.a.as_str()], cand_ix[l.b.as_str()]);
+        js_sort_by(&mut order, |first, second| first.1 - second.1);
+        for (li, len) in order {
+            let Some(l) = self.links.get(li) else {
+                continue;
+            };
+            let (ra, rb) = (self.ring.contains(l.a.as_str()), self.ring.contains(l.b.as_str()));
+            // order holds only links between two candidates
+            let (Some(&ia), Some(&ib)) = (self.cand_ix.get(l.a.as_str()), self.cand_ix.get(l.b.as_str())) else {
+                continue;
+            };
             if l.ring.truthy() && ra && rb {
-                join(&mut par, ia, ib);
+                self.join(&mut groups, ia, ib);
                 continue;
             }
             if ra || rb {
                 continue; // a roundabout is not merged with a junction beside it
             }
-            let sig = nodes[l.a.as_str()].control.is("signals")
-                && nodes[l.b.as_str()].control.is("signals");
-            if d <= r.near || (d <= r.wide && (sig || dual(li) || same_at(&l.a, &l.b))) {
-                join(&mut par, ia, ib);
+            let nodes = &self.sc.nodes;
+            let sig = nodes.get(l.a.as_str()).is_some_and(|n| n.control.is("signals"))
+                && nodes.get(l.b.as_str()).is_some_and(|n| n.control.is("signals"));
+            if len <= rules.near || (len <= rules.wide && (sig || self.dual(li) || self.same_at(&l.a, &l.b))) {
+                self.join(&mut groups, ia, ib);
             }
         }
-        // The sites, in the order of their first candidate
+        groups
+    }
+
+    /// The sites of the groups of two or more candidates, in the order of their first candidate.
+    fn sites(&self, groups: &Groups, ids: &mut dyn IdSource) -> Vec<Site> {
+        let rules = self.rules;
         let today = ids.today();
         let mut out: Vec<Site> = Vec::new();
-        for m in mem.iter().flatten().filter(|m| m.len() >= 2) {
-            let members: Vec<&str> = m.iter().map(|&i| cand[i]).collect();
+        for m in groups.mem.iter().flatten().filter(|m| m.len() >= 2) {
+            let members: Vec<&str> = m.iter().filter_map(|&ci| self.cand.get(ci).copied()).collect();
             let id = ids.uid("j");
             // new Set(m.flatMap(nearAT))
             let mut at: Vec<Option<Value>> = Vec::new();
             for n in &members {
-                for k in near_at(n) {
-                    if !at.iter().any(|v| same_value(v, &k)) {
-                        at.push(k);
+                for key in self.near_at(n) {
+                    if !at.iter().any(|seen| same_value(seen.as_ref(), key.as_ref())) {
+                        at.push(key);
                     }
                 }
             }
-            let mut sorted: Vec<String> = members.iter().map(|s| s.to_string()).collect();
+            let mut sorted: Vec<String> = members.iter().map(std::string::ToString::to_string).collect();
             sort_ids(&mut sorted);
             let mut site = blank_site(&id);
             site.nodes = sorted;
-            site.at_site_no = match at.len() {
-                0 => Maybe::Null,
-                1 => at[0].clone().map_or(Maybe::Missing, Maybe::Set),
+            site.at_site_no = match at.as_slice() {
+                [] => Maybe::Null,
+                [one] => one.clone().map_or(Maybe::Missing, Maybe::Set),
                 _ => Maybe::Set(Value::Array(
                     at.iter()
-                        .map(|k| k.clone().unwrap_or(Value::Null))
+                        .map(|key| key.clone().unwrap_or(Value::Null))
                         .collect(),
                 )),
             };
             site.src = Maybe::Set(SiteSource {
                 nodes: Maybe::Set("auto".to_string()),
                 at: Maybe::Set(today.clone()),
-                rule: Maybe::Set(r.source.clone()),
+                rule: Maybe::Set(rules.source.clone()),
                 at_site_no: if at.is_empty() {
                     Maybe::Missing
                 } else {
@@ -380,19 +529,6 @@ pub fn detect(sc: &mut Scenario, ids: &mut dyn IdSource, opts: &DetectOpts) -> D
             out.push(site);
         }
         out
-    };
-    let made = new_sites.len();
-    let in_sites: usize = new_sites.iter().map(|s| s.nodes.len()).sum();
-    // site.name = this.name(sc, site); sc.sites[id] = site
-    for mut site in new_sites {
-        site.name = Maybe::Set(name(sc, &site));
-        let id = site.id.clone();
-        sc.sites.get_mut().expect("set above").insert(id, site);
-    }
-    DetectResult {
-        sites: made,
-        nodes: in_sites,
-        kept: keep_n,
     }
 }
 
@@ -444,8 +580,9 @@ pub fn merge(sc: &mut Scenario, ids: &mut dyn IdSource, items: &[String]) -> Opt
     }
     let mut nodes: Vec<String> = Vec::new();
     let mut old: Vec<(String, String)> = Vec::new(); // (key, id the site carries)
+    // sc.sites was set just above
+    let sites = sc.sites.get()?;
     for id in items {
-        let sites = sc.sites.get().expect("set above");
         let found: Option<(String, &Site)> = match sites.get(id) {
             Some(s) => Some((id.clone(), s)),
             None if sc.nodes.contains_key(id) => sites
@@ -474,8 +611,10 @@ pub fn merge(sc: &mut Scenario, ids: &mut dyn IdSource, items: &[String]) -> Opt
         .first()
         .and_then(|(k, _)| sc.sites.get().and_then(|s| s.get(k)).cloned());
     let id = ids.uid("j");
-    for (_, sid) in &old {
-        sc.sites.get_mut().expect("set above").remove(sid);
+    if let Some(sites) = sc.sites.get_mut() {
+        for (_, sid) in &old {
+            sites.remove(sid);
+        }
     }
     sort_ids(&mut nodes);
     let mut site = blank_site(&id);
@@ -505,10 +644,9 @@ pub fn merge(sc: &mut Scenario, ids: &mut dyn IdSource, items: &[String]) -> Opt
         at_site_no: Maybe::Missing,
         extra: serde_json::Map::new(),
     });
-    sc.sites
-        .get_mut()
-        .expect("set above")
-        .insert(id.clone(), site);
+    if let Some(sites) = sc.sites.get_mut() {
+        sites.insert(id.clone(), site);
+    }
     Some(id)
 }
 

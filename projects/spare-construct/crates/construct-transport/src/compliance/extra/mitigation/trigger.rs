@@ -17,6 +17,7 @@ use std::collections::HashSet;
 
 /// `storageOf(sc, linkId, nodeId)`: the queue storage on an approach: the approach road back to the upstream junction, chained through simple nodes
 /// (two roads, no control) up to 3000 m: `{ m, links }`; null for a roundabout circulating link (junction-internal) and for a missing road.
+#[must_use]
 pub fn storage_of(sc: &V, link_id: &str, node_id: &str) -> V {
     let mut l: &V = sc.g("links").g(link_id);
     let mut at = node_id.to_string();
@@ -29,7 +30,8 @@ pub fn storage_of(sc: &V, link_id: &str, node_id: &str) -> V {
     while l.t() && !seen.contains(&l.g("id").s()) && m < max_chain {
         seen.push(l.g("id").s());
         m += net::len(sc, l);
-        n += 1;
+        // Bound: one per link of the chain, far below usize::MAX
+        n = n.saturating_add(1);
         let far = if l.g("a").eq_s(&at) { l.g("b") } else { l.g("a") };
         let node = sc.g("nodes").g(&far.s());
         let others: Vec<&V> = net::road_links(sc, &far.s()).into_iter().filter(|x| !x.g("id").strict_eq(l.g("id"))).collect();
@@ -38,7 +40,9 @@ pub fn storage_of(sc: &V, link_id: &str, node_id: &str) -> V {
             break;
         }
         at = far.s();
-        l = others[0];
+        // others holds exactly one road here
+        let Some(&next) = others.first() else { break };
+        l = next;
     }
     jobj! { "m" => m, "links" => n }
 }
@@ -48,17 +52,18 @@ fn los_of(nr: &V) -> Option<V> {
     if nr.g("intersectionLos").t() { Some(nr.g("intersectionLos").clone()) } else { nr.get("los").cloned() }
 }
 
-/// `LETTERS.indexOf(v)` of a loose value (-1 for anything that is not a letter grade).
-fn los_index(v: &V) -> i32 {
-    v.as_str().and_then(|s| ["A", "B", "C", "D", "E", "F"].iter().position(|l| *l == s)).map_or(-1, |i| i as i32)
+/// `LETTERS.indexOf(v)` of a loose value (None, which orders below every index as -1 does, for anything that is not a letter grade).
+fn los_index(v: &V) -> Option<usize> {
+    v.as_str().and_then(|s| ["A", "B", "C", "D", "E", "F"].iter().position(|l| *l == s))
 }
 
 /// `failsAt(sc, res, crit, only)`: the junctions of a result that fail the criteria `{ dos, los, queue, minStorage }` (degree of saturation above the
 /// limit, level of service worse than the limit, a 95th-percentile queue longer than the storage back to the upstream junction), `only` limiting the
 /// junctions looked at: `[{ id, why: [text], dos, los, delay }]`.
-pub fn fails_at(sc: &V, res: &V, crit: &V, only: Option<&HashSet<String>>) -> V {
+#[must_use]
+pub fn fails_at<S: std::hash::BuildHasher>(sc: &V, res: &V, crit: &V, only: Option<&HashSet<String, S>>) -> V {
     let mut out: Vec<V> = Vec::new();
-    let min_st = if !crit.g("minStorage").nullish() { crit.g("minStorage").n() } else { xdata("STD.trigger.minStorage").n() };
+    let min_st = if crit.g("minStorage").nullish() { xdata("STD.trigger.minStorage").n() } else { crit.g("minStorage").n() };
     for (id, nr) in res.g("nodes").entries() {
         if only.is_some_and(|o| !o.contains(id)) {
             continue;
@@ -68,15 +73,15 @@ pub fn fails_at(sc: &V, res: &V, crit: &V, only: Option<&HashSet<String>>) -> V 
         if !crit.g("dos").nullish() && nr.g("dos").n() > crit.g("dos").n() {
             why.push(V::String(format!("DoS {} > {}", num(nr.g("dos"), 2), crit.g("dos").s())));
         }
-        if let Some(l) = los.as_ref().filter(|l| l.t()) {
-            if crit.g("los").t() && los_index(l) > los_index(crit.g("los")) {
+        if let Some(l) = los.as_ref().filter(|l| l.t())
+            && crit.g("los").t() && los_index(l) > los_index(crit.g("los")) {
                 why.push(V::String(format!("LoS {} worse than {}", l.s(), crit.g("los").s())));
             }
-        }
         if crit.g("queue").t() {
             for a in nr.g("appr").items() {
                 let st = storage_of(sc, &a.g("link").s(), id);
-                if st.nullish() || st.g("m").n() < min_st || !(a.g("q95").n() > st.g("m").n()) {
+                let (q95, room) = (a.g("q95").n(), st.g("m").n());
+                if st.nullish() || room < min_st || q95 <= room || q95.is_nan() || room.is_nan() {
                     continue;
                 }
                 let name = if a.g("name").t() { a.g("name").s() } else { ctx::link_name(sc.g("links").g(&a.g("link").s())) };
@@ -108,6 +113,7 @@ pub fn fails_at(sc: &V, res: &V, crit: &V, only: Option<&HashSet<String>>) -> V 
 
 /// `anopFitOf(scB, rB, scJ, rJ, c)`: the ANOP fit of one corridor for a project result against the do-minimum result ("High", "Moderate", "Low"; None
 /// when nothing could be assessed).
+#[must_use]
 pub fn anop_fit_of(sc_b: &V, r_b: &V, sc_j: &V, r_j: &V, c: &V) -> Option<String> {
     let lb = anop::anop_los(sc_b, r_b, c);
     let lj = anop::anop_los(sc_j, r_j, c);
@@ -124,11 +130,13 @@ pub fn anop_fit_of(sc_b: &V, r_b: &V, sc_j: &V, r_j: &V, c: &V) -> Option<String
 }
 
 /// `ordinal(n)`: a number with its English ordinal ending ("1st", "22nd", "1,013th").
+#[must_use]
 pub fn ordinal(n: f64) -> String {
     let s = ["th", "st", "nd", "rd"];
     let v = n % 100.0;
-    let idx = |x: f64| -> Option<usize> { if x >= 0.0 && x < 4.0 && x == x.trunc() { Some(x as usize) } else { None } };
-    fmt::int(n) + s[idx((v - 20.0) % 10.0).or_else(|| idx(v)).unwrap_or(0)]
+    let idx = |x: f64| -> Option<usize> { if (0.0..4.0).contains(&x) && x == x.trunc() { Some(crate::jsnum::f64_to_usize(x)) } else { None } };
+    // idx gives 0 to 3, the four endings
+    fmt::int(n) + s.get(idx((v - 20.0) % 10.0).or_else(|| idx(v)).unwrap_or(0)).copied().unwrap_or("th")
 }
 
 /* =====================================================================================
@@ -225,7 +233,7 @@ impl Run<'_> {
 
 /// `why.join('; ')` of a failure's reasons.
 fn join_why(why: &V) -> String {
-    why.items().iter().map(|w| w.sn()).collect::<Vec<_>>().join("; ")
+    why.items().iter().map(crate::compliance::jv::Jx::sn).collect::<Vec<_>>().join("; ")
 }
 
 /// `triggerFinder(P, opts)`: steps the build-out of a scenario for the periods (default AM and PM) and reports, for the scenario without an upgrade
@@ -235,58 +243,29 @@ fn join_why(why: &V) -> String {
 pub fn trigger_finder(p: &mut V, opts: &V) -> V {
     let res = find(p, opts);
     // `data(P)` also fills the record's defaults in, saved or not
-    let record = ctx::data_mut(p);
-    if !opts.g("save").strict_eq(&V::Bool(false)) {
+    if let Some(record) = ctx::data_mut(p)
+        && !opts.g("save").strict_eq(&V::Bool(false))
+    {
         record.set("triggers", res.clone());
     }
     res
 }
 
-fn find(p: &V, opts: &V) -> V {
-    let pr = ctx::pair(p);
-    let sc: &V = ctx::sc_by_id(p, opts.g("scId")).unwrap_or(pr.opt);
-    let t_ = xdata("STD.trigger");
-    let step = {
-        let s = opts.g("step").n();
-        math_max(1.0, math_min(50.0, if truthy_number(s) { s } else { t_.g("step").n() }))
-    };
+/// The finder's criteria (`crit`): the options where given, else the defaults.
+fn criteria(opts: &V, t_: &V) -> V {
     let pick = |k: &str, d: &V| if opts.has(k) { opts.g(k).clone() } else { d.clone() };
     let num_or = |k: &str, d: &V| V::Number(if nn(opts.g(k)).is_some() { opts.g(k).n() } else { d.n() });
-    let crit = jobj! {
+    jobj! {
         "dos" => pick("dos", t_.g("dos")), "los" => pick("los", t_.g("los")),
         "queue" => if opts.has("queue") { opts.g("queue").t() } else { t_.g("queue").t() },
         "minStorage" => num_or("minStorage", t_.g("minStorage")),
         "anop" => if opts.has("anop") { opts.g("anop").t() } else { t_.g("anop").t() },
         "worsen" => jobj! { "dos" => num_or("worsenDos", t_.g("worsen").g("dos")), "delay" => num_or("worsenDelay", t_.g("worsen").g("delay")) },
-    };
-    let periods: Vec<V> = if opts.g("periods").t() && opts.g("periods").jlen() > 0 {
-        opts.g("periods").items().to_vec()
-    } else {
-        let have = ctx::periods_of(sc);
-        if !have.is_empty() { have.into_iter().filter(|x| *x != "IP").map(|x| V::String(x.to_string())).collect() } else { vec![V::String("AM".into()), V::String("PM".into())] }
-    };
-    let up_ids: Vec<V> = if opts.g("upgrades").t() {
-        opts.g("upgrades").items().to_vec()
-    } else {
-        match pr.mit.filter(|m| !std::ptr::eq(*m, sc)) {
-            Some(m) => vec![m.g("id").clone()],
-            None => Vec::new(),
-        }
-    };
-    let mut ups: Vec<&V> = Vec::new();
-    for id in &up_ids {
-        if let Some(s) = ctx::sc_by_id(p, id) {
-            if !std::ptr::eq(s, sc) && !ups.iter().any(|u| std::ptr::eq(*u, s)) {
-                ups.push(s);
-            }
-        }
     }
-    let only: Option<HashSet<String>> = if opts.g("nodes").t() && opts.g("nodes").jlen() > 0 { Some(opts.g("nodes").items().iter().map(|n| n.s()).collect()) } else { None };
-    // the ANOP criterion compares each step with the do-minimum, so it needs a do-minimum other than the stepped scenario
-    let anop_on = crit.g("anop").t() && pr.base.t() && !std::ptr::eq(pr.base, sc);
-    let cors = if anop_on { anop::anop_corridors(p) } else { V::Array(Vec::new()) };
-    let mut variants: Vec<Variant> = vec![Variant { id: sc.g("id").clone(), label: format!("{} (without upgrade)", tstr(sc, "name")), sc, upgrade: false }];
-    variants.extend(ups.iter().map(|u| Variant { id: u.g("id").clone(), label: format!("{} (with upgrade)", tstr(u, "name")), sc: u, upgrade: true }));
+}
+
+/// The build-out steps (%): from 0, `step` apart, with 100 always last.
+fn build_steps(step: f64) -> Vec<f64> {
     let mut steps: Vec<f64> = Vec::new();
     let mut k = 0.0f64;
     while k <= 100.0 + 1e-9 {
@@ -296,138 +275,173 @@ fn find(p: &V, opts: &V) -> V {
     if steps.last() != Some(&100.0) {
         steps.push(100.0);
     }
-    let base = if sc.g("buildout").entered() { sc.g("buildout").n() } else { 100.0 };
-    let run = Run { p, periods: &periods, crit: &crit, only: only.as_ref(), opts, base, anop_on, pr_base: pr.base, cors: &cors };
-    let t0 = now_ms();
-    let fit_rank = xdata("FIT_RANK");
-    let mut rows: Vec<V> = Vec::new();
-    for v in &variants {
-        let mut existing: Option<Vec<Existing>> = None;
-        let mut fit0 = V::Null;
-        let mut first = V::Null;
-        let mut last_pass: Option<(f64, f64, f64)> = None;
-        let mut last: Option<(f64, V)> = None;
-        let mut trace: Vec<V> = Vec::new();
-        for &k in &steps {
-            let s = run.eval_step(v.sc, k);
-            last = Some((k, s.metrics.clone()));
-            let (dw, gfa) = (sum_dw(&s.c), sum_gfa(&s.c));
-            if existing.is_none() {
-                let mut map: Vec<Existing> = Vec::new();
-                for f in &s.fails {
-                    let e = Existing {
-                        id: f.g("id").clone(),
-                        key: f.g("key").s(),
-                        name: f.g("name").s(),
-                        period: f.g("period").clone(),
-                        why: join_why(f.g("why")),
-                        at0: s.metrics.g(&f.g("key").s()).clone(),
-                        worsened_at: None,
-                    };
-                    // a Map keeps the first place of a key and the last value
-                    match map.iter_mut().find(|x| x.key == e.key) {
-                        Some(slot) => *slot = e,
-                        None => map.push(e),
-                    }
-                }
-                existing = Some(map);
-                fit0 = s.fits.clone();
-            }
-            let ex = existing.as_mut().expect("set above");
-            let mut new_f: Vec<V> = s.fails.iter().filter(|f| !ex.iter().any(|e| e.key == f.g("key").s())).cloned().collect();
-            // an existing deficiency counts once the development worsens it (change in DoS or in delay, Spare Construct assumption)
-            let (w_dos, w_delay) = (crit.g("worsen").g("dos").n(), crit.g("worsen").g("delay").n());
-            for e in ex.iter_mut() {
-                let m = s.metrics.g(&e.key);
-                if !m.t() || !e.at0.t() {
-                    continue;
-                }
-                if m.g("dos").n() - e.at0.g("dos").n() >= w_dos || m.g("delay").n() - e.at0.g("delay").n() >= w_delay {
-                    if e.worsened_at.is_none() {
-                        e.worsened_at = Some(k);
-                    }
-                    let mut o = jobj! { "id" => &e.id, "key" => e.key.as_str(), "name" => e.name.as_str(), "period" => &e.period, "worsened" => true };
-                    if let Some(x) = m.get("dos") {
-                        o.set("dos", x.clone());
-                    }
-                    if let Some(x) = m.get("los") {
-                        o.set("los", x.clone());
-                    }
-                    o.set(
-                        "why",
-                        V::Array(vec![V::String(format!(
-                            "existing deficiency worsened by the development: DoS {} \u{2192} {}, delay {} \u{2192} {} s",
-                            num(e.at0.g("dos"), 2),
-                            num(m.g("dos"), 2),
-                            num(e.at0.g("delay"), 0),
-                            num(m.g("delay"), 0)
-                        ))]),
-                    );
-                    new_f.push(o);
-                }
-            }
-            // the ANOP fit drops a class against its 0% value
-            if anop_on {
-                for (key, f) in s.fits.entries() {
-                    let f0 = fit0.g(key);
-                    if f0.t() && f0.g("fit").t() && f.g("fit").t() {
-                        let (r1, r0) = (fit_rank.g(&f.g("fit").s()), fit_rank.g(&f0.g("fit").s()));
-                        if r1.is_num() && r0.is_num() && r1.n() < r0.n() {
-                            new_f.push(jobj! { "id" => format!("anop:{key}"), "key" => format!("anop:{key}"), "name" => format!("{} (ANOP corridor)", f.g("name").s()), "period" => f.g("period"), "anop" => true,
-                                "why" => vec![format!("ANOP fit drops from {} to {}", f0.g("fit").s(), f.g("fit").s())] });
-                        }
-                    }
-                }
-            }
-            trace.push(jobj! { "pct" => k, "dwellings" => dw, "gfa" => gfa, "fails" => new_f.len(), "keys" => new_f.iter().map(|f| f.g("key").clone()).collect::<Vec<V>>(),
-                "worst" => new_f.first().cloned().unwrap_or(V::Null) });
-            if let Some(w) = new_f.first() {
-                first = jobj! { "pct" => k, "dwellings" => dw, "gfa" => gfa, "before" => last_pass.map_or(0.0, |l| l.1).floor() + 1.0, "sites" => new_f.clone(), "node" => w.g("id"), "key" => w.g("key"),
-                    "name" => w.g("name"), "period" => w.g("period"), "why" => join_why(w.g("why")), "worsened" => w.g("worsened").t() };
-                break;
-            }
-            last_pass = Some((k, dw, gfa));
-        }
-        // existing deficiencies with their 0% and full build-out values (one more run per period when the search stopped early)
-        let ex = existing.as_ref().expect("a build-out step ran");
-        if !ex.is_empty() && last.as_ref().is_some_and(|l| l.0 != 100.0) {
-            last = Some((100.0, run.eval_step(v.sc, 100.0).metrics));
-        }
-        let existing_v: Vec<V> = ex
-            .iter()
-            .map(|e| {
-                let at100 = last.as_ref().map_or(V::Null, |l| if l.1.g(&e.key).t() { l.1.g(&e.key).clone() } else { V::Null });
-                jobj! { "id" => &e.id, "name" => e.name.as_str(), "period" => &e.period, "why" => e.why.as_str(), "at0" => if e.at0.t() { e.at0.clone() } else { V::Null }, "at100" => at100,
-                    "worsenedAt" => e.worsened_at }
-            })
-            .collect();
-        let text = if first.t() {
-            format!("First fails at {}% build-out ({} dwellings): {}, {} peak ({}).", first.g("pct").s(), fmt::int(first.g("dwellings").n()), first.g("name").s(), first.g("period").s(), first.g("why").s())
-        } else {
-            format!("No assessed site fails up to 100% build-out ({} dwellings).", fmt::int(trace.last().map_or(0.0, |t| t.g("dwellings").n())))
+    steps
+}
+
+/// The existing deficiencies: the sites that fail at the first step (0% build-out).
+fn existing_of(s: &Step) -> Vec<Existing> {
+    let mut map: Vec<Existing> = Vec::new();
+    for f in &s.fails {
+        let e = Existing {
+            id: f.g("id").clone(),
+            key: f.g("key").s(),
+            name: f.g("name").s(),
+            period: f.g("period").clone(),
+            why: join_why(f.g("why")),
+            at0: s.metrics.g(&f.g("key").s()).clone(),
+            worsened_at: None,
         };
-        let last_pass_v = match last_pass {
-            Some((pct, dwellings, gfa)) => jobj! { "pct" => pct, "dwellings" => dwellings, "gfa" => gfa },
-            None => V::Null,
-        };
-        rows.push(jobj! { "variant" => &v.id, "label" => v.label.as_str(), "upgrade" => v.upgrade, "first" => first, "lastPass" => last_pass_v, "existing" => existing_v, "trace" => trace, "text" => text });
+        // a Map keeps the first place of a key and the last value
+        match map.iter_mut().find(|x| x.key == e.key) {
+            Some(slot) => *slot = e,
+            None => map.push(e),
+        }
     }
-    // Resolved Y/N (mitigation-staging Table M2): does each upgrade clear the trigger of the variant without it?
-    let w0 = rows.first().map(|r| r.g("first").clone()).filter(|f| f.t());
+    map
+}
+
+/// The existing deficiencies a step's metrics show worsened by the development (change in `DoS` or in delay, Spare Construct assumption), as new
+/// failures; each one's first worsening step is recorded.
+fn worsened(ex: &mut [Existing], metrics: &V, crit: &V, pct: f64) -> Vec<V> {
+    let mut out: Vec<V> = Vec::new();
+    let (w_dos, w_delay) = (crit.g("worsen").g("dos").n(), crit.g("worsen").g("delay").n());
+    for e in ex.iter_mut() {
+        let m = metrics.g(&e.key);
+        if !m.t() || !e.at0.t() {
+            continue;
+        }
+        if m.g("dos").n() - e.at0.g("dos").n() >= w_dos || m.g("delay").n() - e.at0.g("delay").n() >= w_delay {
+            if e.worsened_at.is_none() {
+                e.worsened_at = Some(pct);
+            }
+            let mut o = jobj! { "id" => &e.id, "key" => e.key.as_str(), "name" => e.name.as_str(), "period" => &e.period, "worsened" => true };
+            if let Some(x) = m.get("dos") {
+                o.set("dos", x.clone());
+            }
+            if let Some(x) = m.get("los") {
+                o.set("los", x.clone());
+            }
+            o.set(
+                "why",
+                V::Array(vec![V::String(format!(
+                    "existing deficiency worsened by the development: DoS {} \u{2192} {}, delay {} \u{2192} {} s",
+                    num(e.at0.g("dos"), 2),
+                    num(m.g("dos"), 2),
+                    num(e.at0.g("delay"), 0),
+                    num(m.g("delay"), 0)
+                ))]),
+            );
+            out.push(o);
+        }
+    }
+    out
+}
+
+/// The ANOP corridors whose fit drops a class against its 0% value, as new failures.
+fn anop_drops(fits: &V, base_fits: &V, fit_rank: &V) -> Vec<V> {
+    let mut out: Vec<V> = Vec::new();
+    for (key, f) in fits.entries() {
+        let f0 = base_fits.g(key);
+        if f0.t() && f0.g("fit").t() && f.g("fit").t() {
+            let (fit_now, fit_base) = (fit_rank.g(&f.g("fit").s()), fit_rank.g(&f0.g("fit").s()));
+            if fit_now.is_num() && fit_base.is_num() && fit_now.n() < fit_base.n() {
+                out.push(jobj! { "id" => format!("anop:{key}"), "key" => format!("anop:{key}"), "name" => format!("{} (ANOP corridor)", f.g("name").s()), "period" => f.g("period"), "anop" => true,
+                    "why" => vec![format!("ANOP fit drops from {} to {}", f0.g("fit").s(), f.g("fit").s())] });
+            }
+        }
+    }
+    out
+}
+
+/// What stepping one variant found.
+struct Stepped {
+    existing: Vec<Existing>,
+    first: V,
+    last_pass: Option<(f64, f64, f64)>,
+    last: Option<(f64, V)>,
+    trace: Vec<V>,
+}
+
+/// Steps one variant's build-out until a site fails (or every step passes).
+fn step_variant(run: &Run, sc: &V, steps: &[f64], crit: &V, fit_rank: &V) -> Stepped {
+    let mut existing: Option<Vec<Existing>> = None;
+    let mut fit0 = V::Null;
+    let mut first = V::Null;
+    let mut last_pass: Option<(f64, f64, f64)> = None;
+    let mut last: Option<(f64, V)> = None;
+    let mut trace: Vec<V> = Vec::new();
+    for &pct in steps {
+        let st = run.eval_step(sc, pct);
+        last = Some((pct, st.metrics.clone()));
+        let (dw, gfa) = (sum_dw(&st.c), sum_gfa(&st.c));
+        if existing.is_none() {
+            fit0 = st.fits.clone();
+        }
+        let ex = existing.get_or_insert_with(|| existing_of(&st));
+        let mut new_f: Vec<V> = st.fails.iter().filter(|f| !ex.iter().any(|e| e.key == f.g("key").s())).cloned().collect();
+        // an existing deficiency counts once the development worsens it
+        new_f.extend(worsened(ex, &st.metrics, crit, pct));
+        // the ANOP fit drops a class against its 0% value
+        if run.anop_on {
+            new_f.extend(anop_drops(&st.fits, &fit0, fit_rank));
+        }
+        trace.push(jobj! { "pct" => pct, "dwellings" => dw, "gfa" => gfa, "fails" => new_f.len(), "keys" => new_f.iter().map(|f| f.g("key").clone()).collect::<Vec<V>>(),
+            "worst" => new_f.first().cloned().unwrap_or(V::Null) });
+        if let Some(w) = new_f.first() {
+            first = jobj! { "pct" => pct, "dwellings" => dw, "gfa" => gfa, "before" => last_pass.map_or(0.0, |lp| lp.1).floor() + 1.0, "sites" => new_f.clone(), "node" => w.g("id"), "key" => w.g("key"),
+                "name" => w.g("name"), "period" => w.g("period"), "why" => join_why(w.g("why")), "worsened" => w.g("worsened").t() };
+            break;
+        }
+        last_pass = Some((pct, dw, gfa));
+    }
+    // the steps always hold 100%, so a step ran and the existing deficiencies are set
+    Stepped { existing: existing.unwrap_or_default(), first, last_pass, last, trace }
+}
+
+/// The result row of one variant: its first failure, last passing step, existing deficiencies (with their 0% and full build-out values: one more
+/// run per period when the search stopped early) and trace.
+fn variant_row(run: &Run, v: &Variant, stepped: Stepped) -> V {
+    let Stepped { existing, first, last_pass, mut last, trace } = stepped;
+    if !existing.is_empty() && last.as_ref().is_some_and(|l| l.0 != 100.0) {
+        last = Some((100.0, run.eval_step(v.sc, 100.0).metrics));
+    }
+    let existing_v: Vec<V> = existing
+        .iter()
+        .map(|e| {
+            let at100 = last.as_ref().map_or(V::Null, |l| if l.1.g(&e.key).t() { l.1.g(&e.key).clone() } else { V::Null });
+            jobj! { "id" => &e.id, "name" => e.name.as_str(), "period" => &e.period, "why" => e.why.as_str(), "at0" => if e.at0.t() { e.at0.clone() } else { V::Null }, "at100" => at100,
+                "worsenedAt" => e.worsened_at }
+        })
+        .collect();
+    let text = if first.t() {
+        format!("First fails at {}% build-out ({} dwellings): {}, {} peak ({}).", first.g("pct").s(), fmt::int(first.g("dwellings").n()), first.g("name").s(), first.g("period").s(), first.g("why").s())
+    } else {
+        format!("No assessed site fails up to 100% build-out ({} dwellings).", fmt::int(trace.last().map_or(0.0, |t| t.g("dwellings").n())))
+    };
+    let last_pass_v = match last_pass {
+        Some((pct, dwellings, gfa)) => jobj! { "pct" => pct, "dwellings" => dwellings, "gfa" => gfa },
+        None => V::Null,
+    };
+    jobj! { "variant" => &v.id, "label" => v.label.as_str(), "upgrade" => v.upgrade, "first" => first, "lastPass" => last_pass_v, "existing" => existing_v, "trace" => trace, "text" => text }
+}
+
+/// Resolved Y/N (mitigation-staging Table M2): whether each upgrade clears the trigger of the variant without it (the first row).
+fn mark_resolved(rows: &mut [V]) {
+    let w0 = rows.first().map(|r| r.g("first").clone()).filter(crate::compliance::jv::Jx::t);
     for r in rows.iter_mut().skip(1) {
         let resolved = match &w0 {
             None => jobj! { "state" => V::Null, "text" => "Nothing to resolve: no trigger without the upgrade" },
             Some(w0) => {
-                let t = r.g("trace").items().iter().find(|x| x.g("pct").n() == w0.g("pct").n());
-                let f = r.g("first");
-                let (state, text) = if !f.t() {
+                let hit = r.g("trace").items().iter().find(|x| x.g("pct").n() == w0.g("pct").n());
+                let fst = r.g("first");
+                let (state, text) = if !fst.t() {
                     ("Y", format!("Yes: no assessed site fails up to 100% build-out with {}", r.g("label").s()))
-                } else if f.g("pct").n() > w0.g("pct").n() {
-                    ("Y", format!("Yes: the first failure moves from {}% to {}% build-out", w0.g("pct").s(), f.g("pct").s()))
-                } else if f.g("pct").n() < w0.g("pct").n() {
-                    ("N", format!("No: fails earlier, at {}% ({}, {})", f.g("pct").s(), f.g("name").s(), f.g("period").s()))
-                } else if t.is_some_and(|t| !t.g("keys").items().iter().any(|k| k.strict_eq(w0.g("key")))) {
-                    ("Partly", format!("Partly: {} is resolved, but {} fails at the same build-out ({}%)", w0.g("name").s(), f.g("name").s(), f.g("pct").s()))
+                } else if fst.g("pct").n() > w0.g("pct").n() {
+                    ("Y", format!("Yes: the first failure moves from {}% to {}% build-out", w0.g("pct").s(), fst.g("pct").s()))
+                } else if fst.g("pct").n() < w0.g("pct").n() {
+                    ("N", format!("No: fails earlier, at {}% ({}, {})", fst.g("pct").s(), fst.g("name").s(), fst.g("period").s()))
+                } else if hit.is_some_and(|x| !x.g("keys").items().iter().any(|k| k.strict_eq(w0.g("key")))) {
+                    ("Partly", format!("Partly: {} is resolved, but {} fails at the same build-out ({}%)", w0.g("name").s(), fst.g("name").s(), fst.g("pct").s()))
                 } else {
                     ("N", format!("No: {} still fails at {}% build-out", w0.g("name").s(), w0.g("pct").s()))
                 };
@@ -436,6 +450,10 @@ fn find(p: &V, opts: &V) -> V {
         };
         r.set("resolved", resolved);
     }
+}
+
+/// The wording of the finder's criteria (`basis`).
+fn basis_text(crit: &V, anop_on: bool) -> String {
     let crit_dos = crit.g("dos").s();
     let queue_part = if crit.g("queue").t() {
         format!(", or a 95th-percentile queue longer than the storage back to the upstream junction (storage under {} m is not tested: usually junction-internal coding)", crit.g("minStorage").s())
@@ -449,7 +467,7 @@ fn find(p: &V, opts: &V) -> V {
     } else {
         ""
     };
-    let basis = format!(
+    format!(
         "{} criteria: worst DoS above {}, LoS worse than {}{}; an existing deficiency counts when the development raises its DoS by {} or its delay by {} s{}",
         ctx::assumption(),
         crit_dos,
@@ -458,7 +476,53 @@ fn find(p: &V, opts: &V) -> V {
         crit.g("worsen").g("dos").s(),
         crit.g("worsen").g("delay").s(),
         anop_part
-    );
+    )
+}
+
+fn find(p: &V, opts: &V) -> V {
+    let pr = ctx::pair(p);
+    let sc: &V = ctx::sc_by_id(p, opts.g("scId")).unwrap_or(pr.opt);
+    let t_ = xdata("STD.trigger");
+    let step = {
+        let raw = opts.g("step").n();
+        math_max(1.0, math_min(50.0, if truthy_number(raw) { raw } else { t_.g("step").n() }))
+    };
+    let crit = criteria(opts, t_);
+    let periods: Vec<V> = if opts.g("periods").t() && opts.g("periods").jlen() > 0 {
+        opts.g("periods").items().to_vec()
+    } else {
+        let have = ctx::periods_of(sc);
+        if have.is_empty() { vec![V::String("AM".into()), V::String("PM".into())] } else { have.into_iter().filter(|x| *x != "IP").map(|x| V::String(x.to_string())).collect() }
+    };
+    let up_ids: Vec<V> = if opts.g("upgrades").t() {
+        opts.g("upgrades").items().to_vec()
+    } else {
+        match pr.mit.filter(|mit| !std::ptr::eq(*mit, sc)) {
+            Some(mit) => vec![mit.g("id").clone()],
+            None => Vec::new(),
+        }
+    };
+    let mut ups: Vec<&V> = Vec::new();
+    for id in &up_ids {
+        if let Some(found) = ctx::sc_by_id(p, id)
+            && !std::ptr::eq(found, sc) && !ups.iter().any(|u| std::ptr::eq(*u, found)) {
+                ups.push(found);
+            }
+    }
+    let only: Option<HashSet<String>> = if opts.g("nodes").t() && opts.g("nodes").jlen() > 0 { Some(opts.g("nodes").items().iter().map(crate::compliance::jv::Jx::s).collect()) } else { None };
+    // the ANOP criterion compares each step with the do-minimum, so it needs a do-minimum other than the stepped scenario
+    let anop_on = crit.g("anop").t() && pr.base.t() && !std::ptr::eq(pr.base, sc);
+    let cors = if anop_on { anop::anop_corridors(p) } else { V::Array(Vec::new()) };
+    let mut variants: Vec<Variant> = vec![Variant { id: sc.g("id").clone(), label: format!("{} (without upgrade)", tstr(sc, "name")), sc, upgrade: false }];
+    variants.extend(ups.iter().map(|u| Variant { id: u.g("id").clone(), label: format!("{} (with upgrade)", tstr(u, "name")), sc: u, upgrade: true }));
+    let steps = build_steps(step);
+    let base = if sc.g("buildout").entered() { sc.g("buildout").n() } else { 100.0 };
+    let run = Run { p, periods: &periods, crit: &crit, only: only.as_ref(), opts, base, anop_on, pr_base: pr.base, cors: &cors };
+    let t0 = now_ms();
+    let fit_rank = xdata("FIT_RANK");
+    let mut rows: Vec<V> = variants.iter().map(|var| variant_row(&run, var, step_variant(&run, var.sc, &steps, &crit, fit_rank))).collect();
+    mark_resolved(&mut rows);
+    let basis = basis_text(&crit, anop_on);
     let mut res = jobj! { "at" => crate::edit::ids::iso_string(now_ms()) };
     if sc.has("id") {
         res.set("scId", sc.g("id").clone());
@@ -473,16 +537,16 @@ fn find(p: &V, opts: &V) -> V {
     res.set("rows", V::Array(rows.clone()));
     res.set("ms", V::Number(now_ms() - t0));
     res.set("label", xdata("STD.labels.junction").clone());
-    let w = rows.first().map(|r| r.g("first")).filter(|f| f.t());
+    let head = rows.first().map(|r| r.g("first")).filter(|fst| fst.t());
     let cx = ctx::data(p);
-    let m = cx.g("mitigation").items().iter().find(|x| x.g("measure").t());
+    let measure_row = cx.g("mitigation").items().iter().find(|x| x.g("measure").t());
     res.set(
         "copy",
-        V::String(match w {
-            Some(w) => format!(
+        V::String(match head {
+            Some(head) => format!(
                 "Prior to occupation of the {} dwelling, {} (parameter only: the condition wording is for the planner).",
-                ordinal(w.g("before").n()),
-                m.map_or("<measure>".to_string(), |m| m.g("measure").s())
+                ordinal(head.g("before").n()),
+                measure_row.map_or("<measure>".to_string(), |row| row.g("measure").s())
             ),
             None => String::new(),
         }),
@@ -494,7 +558,7 @@ fn find(p: &V, opts: &V) -> V {
    Tables
    ===================================================================================== */
 
-/// `mvalH(x)`: a junction's values at a build-out as table text ("DoS 0.95, 12 s, LoS D"), an en dash when there are none.
+/// `mvalH(x)`: a junction's values at a build-out as table text ("`DoS` 0.95, 12 s, `LoS` D"), an en dash when there are none.
 fn mval_h(x: &V) -> String {
     if x.t() { format!("DoS {}, {} s, LoS {}", num(x.g("dos"), 2), num(x.g("delay"), 0), esc(&if x.g("los").t() { x.g("los").clone() } else { V::String("\u{2013}".into()) })) } else { "\u{2013}".to_string() }
 }
@@ -533,7 +597,7 @@ pub fn trigger_tables(t: &V) -> String {
                 esc(e.g("period")),
                 mval_h(e.g("at0")),
                 mval_h(e.g("at100")),
-                if !e.g("worsenedAt").nullish() { pill_x(&format!("worsened from {}%", e.g("worsenedAt").s()), "bad") } else { "not beyond the threshold".to_string() },
+                if e.g("worsenedAt").nullish() { "not beyond the threshold".to_string() } else { pill_x(&format!("worsened from {}%", e.g("worsenedAt").s()), "bad") },
             ]));
         }
     }

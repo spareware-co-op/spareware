@@ -5,7 +5,10 @@ use super::cmd_network::{FieldKind, apply_fields};
 use super::helpers::val;
 use super::registry::Registry;
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
+use crate::schema::{
+    Params, boolean, choice, free_object, integer, none, number, params, string, strings,
+};
+use crate::transport::helpers::{scenario_at, scenario_at_mut};
 use construct_transport::edit::scenarios::{self, CreateSetOpts};
 use construct_transport::edit::{self};
 use construct_transport::jsnum::{Maybe, math_round};
@@ -14,6 +17,12 @@ use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 
 pub(super) fn register(r: &mut Registry) {
+    register_1(r);
+    register_2(r);
+}
+
+/// Part 1 of [`register`]: `transport.scenario.list` to `transport.scenario.set_base`.
+fn register_1(r: &mut Registry) {
     let sc = || string("Scenario id or name (default: the active scenario).");
     r.add(
         "transport.scenario.list",
@@ -21,7 +30,7 @@ pub(super) fn register(r: &mut Registry) {
         false,
         none(),
         |s, _| {
-            let list: Vec<Value> = (0..s.project.scenarios.len()).map(|i| s.scenario_brief(i)).collect();
+            let list: Vec<Value> = s.project.scenarios.iter().map(|sc| s.scenario_brief(sc)).collect();
             Ok(json!({ "active": s.project.active.as_str(), "base": s.project.base.as_str(), "scenarios": list }))
         },
     );
@@ -99,6 +108,11 @@ pub(super) fn register(r: &mut Registry) {
         params(vec![("scenario", sc())], &[]),
         scenario_set_base,
     );
+}
+
+/// Part 2 of [`register`]: `transport.scenario.set_year` to `transport.scenario.check`.
+fn register_2(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
     r.add(
         "transport.scenario.set_year",
         "Set a scenario's forecast year (1900 to 2200); results go out of date.",
@@ -130,7 +144,7 @@ pub(super) fn register(r: &mut Registry) {
         params(vec![("scenario", sc())], &[]),
         |s, p| {
             let i = s.pick_scenario(p, "scenario")?;
-            Ok(val(&scenarios::describe(&s.project.scenarios[i], &s.project)))
+            Ok(val(&scenarios::describe(scenario_at(&s.project.scenarios, i)?, &s.project)))
         },
     );
     r.add(
@@ -164,18 +178,18 @@ pub(super) fn register(r: &mut Registry) {
         params(vec![("scenario", sc())], &[]),
         |s, p| {
             let i = s.pick_scenario(p, "scenario")?;
-            let c = scenarios::check(&s.project.scenarios[i], &s.project);
-            Ok(json!({ "scenario": s.sid(i), "blocks": c.iter().filter(|x| x.level == "block").count(), "findings": val(&c) }))
+            let c = scenarios::check(scenario_at(&s.project.scenarios, i)?, &s.project);
+            Ok(json!({ "scenario": s.sid(i)?, "blocks": c.iter().filter(|x| x.level == "block").count(), "findings": val(&c) }))
         },
     );
 }
 
-fn scenario_select(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_select(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.scenario_index(p.str("scenario")?)?;
-    let id = s.sid(i);
+    let id = s.sid(i)?;
     s.project.active = Maybe::Set(id.clone());
     s.touch();
-    Ok(json!({ "active": id, "name": s.project.scenarios[i].name.as_str() }))
+    Ok(json!({ "active": id, "name": scenario_at(&s.project.scenarios, i)?.name.as_str() }))
 }
 
 fn name_set(s: &Session) -> HashSet<String> {
@@ -188,17 +202,18 @@ fn name_set(s: &Session) -> HashSet<String> {
 
 fn next_name(s: &Session) -> String {
     let names = name_set(s);
-    let mut n = s.project.scenarios.len() + 1;
+    // the names are finite, so this stops long before usize::MAX
+    let mut n = s.project.scenarios.len().saturating_add(1);
     while names.contains(&format!("Scenario {n}")) {
-        n += 1;
+        n = n.saturating_add(1);
     }
     format!("Scenario {n}")
 }
 
 /// `duplicateScenario()` of ui.js: a copy of the active scenario without results, named "Scenario N", made active.
-fn scenario_copy(s: &mut Session, p: &Params) -> ApiResult {
-    let i = s.target(p)?;
-    let mut c = s.project.scenarios[i].clone();
+fn scenario_copy(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let idx = s.target(p)?;
+    let mut c = scenario_at(&s.project.scenarios, idx)?.clone();
     let name = match p.opt_str("name")? {
         Some(n) if !n.trim().is_empty() => n.trim().to_string(),
         _ => next_name(s),
@@ -207,7 +222,7 @@ fn scenario_copy(s: &mut Session, p: &Params) -> ApiResult {
     c.id = edit::IdSource::uid(&mut s.ids, "s");
     c.name = Maybe::Set(name.clone());
     let id = c.id.clone();
-    let from = s.project.scenarios[i]
+    let from = scenario_at(&s.project.scenarios, idx)?
         .name
         .as_str()
         .unwrap_or("")
@@ -221,10 +236,10 @@ fn scenario_copy(s: &mut Session, p: &Params) -> ApiResult {
     }))
 }
 
-fn scenario_add(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_add(s: &mut Session, p: Params<'_>) -> ApiResult {
     let name = match p.opt_str("name")? {
         Some(n) if !n.trim().is_empty() => n.trim().to_string(),
-        _ => format!("Scenario {}", s.project.scenarios.len() + 1),
+        _ => format!("Scenario {}", s.project.scenarios.len().saturating_add(1)),
     };
     let sc = edit::new_scenario(&mut s.ids, &name);
     let id = sc.id.clone();
@@ -234,14 +249,14 @@ fn scenario_add(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "id": id, "name": name }))
 }
 
-fn scenario_create_set(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_create_set(s: &mut Session, p: Params<'_>) -> ApiResult {
     let mut o = CreateSetOpts {
         pathway: p.opt_str("pathway")?.map(str::to_string),
         count_year: p.opt_f64("countYear")?,
         opening: p.opt_f64("opening")?,
         design: p.opt_f64("design")?,
         from: match p.opt_str("from")? {
-            Some(k) => Some(s.sid(s.scenario_index(k)?)),
+            Some(k) => Some(s.sid(s.scenario_index(k)?)?),
             None => None,
         },
         mitigation: p.opt_bool("mitigation")?,
@@ -261,42 +276,42 @@ fn scenario_create_set(s: &mut Session, p: &Params) -> ApiResult {
     let list: Vec<Value> = made
         .scenarios
         .iter()
-        .filter_map(|id| s.project.scenarios.iter().position(|x| &x.id == id))
-        .map(|i| s.scenario_brief(i))
+        .filter_map(|id| s.project.scenarios.iter().find(|x| &x.id == id))
+        .map(|sc| s.scenario_brief(sc))
         .collect();
     Ok(
         json!({ "scenarios": list, "excluded": made.excluded, "warnings": made.warnings, "set": made.set }),
     )
 }
 
-fn scenario_sensitivity_copy(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_sensitivity_copy(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let id = s.sid(i);
+    let id = s.sid(i)?;
     let unfunded = p.flag("unfunded")?;
     let made = scenarios::sensitivity_of(&mut s.project, &mut s.ids, &id, unfunded)
         .ok_or_else(|| ApiError::not_found("There is no such scenario."))?;
     s.touch();
-    let at = s
-        .project
-        .scenarios
+    let list = &s.project.scenarios;
+    let sc = list
         .iter()
-        .position(|x| x.id == made)
-        .unwrap_or(0);
-    Ok(s.scenario_brief(at))
+        .find(|x| x.id == made)
+        .or_else(|| list.first())
+        .ok_or_else(|| ApiError::invalid_state("The project has no scenarios."))?;
+    Ok(s.scenario_brief(sc))
 }
 
-fn scenario_rename(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_rename(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let name = p.str("name")?;
     if name.is_empty() {
         return Err(ApiError::bad_params("The name cannot be blank."));
     }
-    s.project.scenarios[i].name = Maybe::Set(name.to_string());
+    scenario_at_mut(&mut s.project.scenarios, i)?.name = Maybe::Set(name.to_string());
     s.touch();
-    Ok(json!({ "id": s.sid(i), "name": name }))
+    Ok(json!({ "id": s.sid(i)?, "name": name }))
 }
 
-fn scenario_delete(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_delete(s: &mut Session, p: Params<'_>) -> ApiResult {
     if s.project.scenarios.len() < 2 {
         return Err(ApiError::invalid_state(
             "A project needs at least one scenario.",
@@ -305,7 +320,12 @@ fn scenario_delete(s: &mut Session, p: &Params) -> ApiResult {
     let i = s.scenario_index(p.str("scenario")?)?;
     // the app deletes the active scenario, so the one named becomes active first
     let removed = s.project.scenarios.remove(i);
-    let first = s.project.scenarios[0].id.clone();
+    let first = s
+        .project
+        .scenarios
+        .first()
+        .map(|x| x.id.clone())
+        .ok_or_else(|| ApiError::invalid_state("The project has no scenarios."))?;
     s.project.active = Maybe::Set(first.clone());
     if s.project.base.is(&removed.id) {
         s.project.base = Maybe::Set(first.clone());
@@ -321,12 +341,12 @@ fn scenario_delete(s: &mut Session, p: &Params) -> ApiResult {
     }))
 }
 
-fn scenario_set_base(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_set_base(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
-    let id = s.sid(i);
+    let id = s.sid(i)?;
     s.project.base = Maybe::Set(id.clone());
     s.touch();
-    let name = s.project.scenarios[i]
+    let name = scenario_at(&s.project.scenarios, i)?
         .name
         .as_str()
         .unwrap_or("")
@@ -334,7 +354,7 @@ fn scenario_set_base(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "base": id, "message": format!("{name} is now the base (do-minimum).") }))
 }
 
-fn scenario_set_year(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_set_year(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let y = math_round(p.f64("year")?);
     if !(1900.0..=2200.0).contains(&y) {
@@ -342,28 +362,31 @@ fn scenario_set_year(s: &mut Session, p: &Params) -> ApiResult {
             "Enter a forecast year between 1900 and 2200.",
         ));
     }
-    let cur = year_of(Some(&s.project.scenarios[i]), &s.project.settings);
-    if y == cur && !s.project.scenarios[i].year.is_nullish() {
+    let cur = year_of(
+        Some(scenario_at(&s.project.scenarios, i)?),
+        &s.project.settings,
+    );
+    if y == cur && !scenario_at(&s.project.scenarios, i)?.year.is_nullish() {
         return Ok(json!({ "year": y, "changed": false }));
     }
     s.snap(&format!(
         "forecast year {}",
         construct_transport::jsnum::number_to_js_string(y)
     ));
-    s.project.scenarios[i].year = construct_transport::jsnum::Num::number(y);
+    scenario_at_mut(&mut s.project.scenarios, i)?.year = construct_transport::jsnum::Num::number(y);
     s.edited();
     Ok(json!({ "year": y, "changed": true }))
 }
 
-fn scenario_set(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_set(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
-    let id = s.sid(i);
+    let id = s.sid(i)?;
     let values = p.object("values")?;
     apply_fields(s, FieldKind::Scenario, &id, values)
 }
 
-fn scenario_clear_results(s: &mut Session, p: &Params) -> ApiResult {
+fn scenario_clear_results(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     s.clear_res(i);
-    Ok(json!({ "scenario": s.sid(i), "cleared": true }))
+    Ok(json!({ "scenario": s.sid(i)?, "cleared": true }))
 }

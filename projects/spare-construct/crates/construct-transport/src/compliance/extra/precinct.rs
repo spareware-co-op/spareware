@@ -33,6 +33,7 @@ fn r3t(v: &V) -> String {
 }
 
 /// `precinctList(P)`: the precincts the tracker knows: I450 and I451 as data, then the author's own (`precinct.custom`), keyed by id.
+#[must_use]
 pub fn precinct_list(p: &V) -> V {
     let mut out = xdata("PRECINCTS").clone();
     let cx = ctx::data(p);
@@ -47,6 +48,7 @@ pub fn precinct_list(p: &V) -> V {
 }
 
 /// `precinctOf(P)`: the project's precinct: the author's choice, or the one the Compliance tab found for the site; None when there is none.
+#[must_use]
 pub fn precinct_of(p: &V) -> Option<V> {
     let cx = ctx::data(p);
     let list = precinct_list(p);
@@ -67,12 +69,14 @@ pub fn precinct_of(p: &V) -> Option<V> {
 }
 
 /// `deemedMet(st, augier)`: an upgrade counts as in place when it is operational, or under construction or delivered by the applicant with the Augier agreement.
+#[must_use]
 pub fn deemed_met(st: &V, augier: &V) -> bool {
     st.eq_s("operational") || ((st.eq_s("construction") || st.eq_s("applicant")) && augier.t())
 }
 
 /// `precinctNode(P, sc, pr)`: the junction of the I450.9(4) inter-peak test in a scenario: the author's pick, or the junction whose roads carry
 /// both names (the one with most roads when several do); null when none is found.
+#[must_use]
 pub fn precinct_node(p: &V, sc: &V, pr: &V) -> V {
     let cx = ctx::data(p);
     let pick = cx.g("precinct").g("ipNode");
@@ -98,6 +102,7 @@ pub fn precinct_node(p: &V, sc: &V, pr: &V) -> V {
 
 /// `mixTrips(mix, sc)`: the trips (leaving plus arriving) of a mix of dwellings and floor area for the AM and PM peaks, from the engine's trip
 /// rates on a made-up zone with the project's settings: `[{ p, trips }]`.
+#[must_use]
 pub fn mix_trips(p: &V, mix: &V, sc: &V) -> V {
     let z = jobj! { "id" => "_mix", "kind" => "zone", "lu" => jobj! { "residential" => n0(mix.g("dw")), "retail" => n0(mix.g("retail")), "office" => n0(mix.g("commercial")), "medical" => n0(mix.g("community")) } };
     V::Array(
@@ -111,17 +116,8 @@ pub fn mix_trips(p: &V, mix: &V, sc: &V) -> V {
     )
 }
 
-/// `precinctCheck(P, sc)`: the staging check of the project's precinct: `{ precinct, rows (with upgrade states), cumulative, proposal, total, row
-/// (applicable), rowIndex, breach, why, status, statusText, headroom, ip, trips, banner, pc120Note, warnings, register, monitorText }`, or null when no
-/// precinct applies.
-pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
-    let Some(pr) = precinct_of(p) else { return V::Null };
-    let sc = sc.unwrap_or_else(|| ctx::active_sc(p));
-    let cx = ctx::data(p);
-    let pc = cx.g("precinct");
-    let ups = pc.g("upgrades");
-    let reg: Vec<V> = pc.g("register").items().iter().filter(|r| r.t() && !r.g("excluded").strict_eq(&V::Bool(true))).cloned().collect();
-    let measures = xdata("MEASURES").items();
+/// The register's cumulative totals, the proposal and their sum, by measure (`{ key: n }` each), and the sums in the measures' order.
+fn precinct_totals(measures: &[V], reg: &[V], pc: &V) -> (V, V, V, Vec<f64>) {
     let (mut cumulative, mut proposal, mut total) = (V::object(), V::object(), V::object());
     let (mut cum_n, mut prop_n, mut tot_n) = (Vec::new(), Vec::new(), Vec::new());
     for m in measures {
@@ -136,11 +132,17 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
         proposal.set(k, V::Number(x));
         prop_n.push(x);
     }
-    for (i, m) in measures.iter().enumerate() {
-        let t = cum_n[i] + prop_n[i];
+    // cum_n and prop_n hold one value per measure, in the measures' order
+    for (m, (c, x)) in measures.iter().zip(cum_n.iter().zip(&prop_n)) {
+        let t = c + x;
         total.set(m.ix(0).s(), V::Number(t));
         tot_n.push(t);
     }
+    (cumulative, proposal, total, tot_n)
+}
+
+/// The precinct's staging rows with the state of each upgrade and whether the row's upgrades are all met.
+fn precinct_rows(pr: &V, ups: &V, pc: &V) -> Vec<V> {
     let statuses = xdata("UPGRADE_STATUS");
     let mut rows: Vec<V> = pr
         .g("rows")
@@ -163,31 +165,16 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
             merge(r, &jobj! { "up" => up })
         })
         .collect();
-    for r in rows.iter_mut() {
+    for r in &mut rows {
         let m = r.g("up").items().iter().all(|u| u.g("met").t());
         r.set("met", V::Bool(m));
     }
-    let idx = rows.iter().position(|r| !r.g("met").t());
-    let beyond = idx.is_none();
-    let row_index = idx.unwrap_or(rows.len() - 1);
-    let row = rows[row_index].clone();
-    let mut why: Vec<String> = Vec::new();
-    for (i, m) in measures.iter().enumerate() {
-        let cap = row.g(&m.ix(0).s());
-        if !cap.nullish() && tot_n[i] > cap.n() {
-            why.push(format!("{}: {} against the row ({}) cap of {}", m.ix(2).s(), fmt::int(tot_n[i]), tstr(&row, "row"), fmt::int(cap.n())));
-        }
-    }
-    let breach = !why.is_empty();
-    let unmet_a5 = row.g("up").items().iter().filter(|u| !u.g("met").t()).any(|u| u.g("status").eq_s("A5"));
-    let status: Option<&str> = if breach { Some(if pc.g("amendment").t() { "A9" } else if beyond { "A6" } else if unmet_a5 { "A5" } else { "A6" }) } else { None };
-    let mut headroom = V::object();
-    for (i, m) in measures.iter().enumerate() {
-        let cap = row.g(&m.ix(0).s());
-        headroom.set(m.ix(0).s(), if cap.nullish() { V::Null } else { V::Number(cap.n() - tot_n[i]) });
-    }
-    // inter-peak LoS at the named junction (I450.9(4)): an IP result if there is one, otherwise the LoS the author enters
-    let node_id = precinct_node(p, sc, &pr);
+    rows
+}
+
+/// The inter-peak `LoS` at the precinct's named junction (I450.9(4)): an IP result if there is one, otherwise the `LoS` the author enters.
+fn precinct_ip(p: &V, sc: &V, pr: &V, pc: &V) -> V {
+    let node_id = precinct_node(p, sc, pr);
     let nr: &V = match ctx::res_of(sc, "IP") {
         Some(r) if node_id.t() && r.g("nodes").t() => r.g("nodes").g(&node_id.s()),
         _ => &NULL,
@@ -221,25 +208,67 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
         ip.set("rule", pr.g("ita").clone());
     }
     ip.set("test", V::String(format!("inter-peak overall LoS generally no worse than {}", test_los.s())));
-    // trip equivalence: cumulative + proposed mix against the table mix at the same row
+    ip
+}
+
+/// The trip equivalence test: the cumulative and proposed mix against the table mix at the same row.
+fn precinct_trips(p: &V, sc: &V, total: &V, row: &V) -> V {
     let or0 = |k: &str| if row.g(k).t() { row.g(k).clone() } else { V::Number(0.0) };
     let mix_row = jobj! { "dw" => row.g("dw"), "retail" => or0("retail"), "commercial" => or0("commercial"), "community" => or0("community") };
-    let (a, b) = (mix_trips(p, &total, sc), mix_trips(p, &mix_row, sc));
+    let (a, b) = (mix_trips(p, total, sc), mix_trips(p, &mix_row, sc));
     let similar = xdata("STD.precinctTest.similar").n();
     let mut rr: Vec<V> = Vec::new();
     let mut all_similar = true;
     for (i, x) in a.items().iter().enumerate() {
         let (xt, bt) = (x.g("trips").n(), b.ix(i).g("trips").n());
         let ratio = if bt > 0.0 { Some(xt / bt) } else { None };
-        if let Some(r) = ratio {
-            if !(r <= similar) {
+        if let Some(r) = ratio
+            && (r > similar || r.is_nan() || similar.is_nan()) {
                 all_similar = false;
             }
-        }
         rr.push(jobj! { "period" => x.g("p"), "proposed" => xt, "table" => bt, "ratio" => ratio });
     }
-    let trips = jobj! { "rows" => rr, "pass" => all_similar, "basis" => xdata("STD.precinctTest.similarBasis"),
-        "mapping" => format!("{}: community GFA uses the medical-centre rate and other commercial the office rate", ctx::assumption()) };
+    jobj! { "rows" => rr, "pass" => all_similar, "basis" => xdata("STD.precinctTest.similarBasis"),
+        "mapping" => format!("{}: community GFA uses the medical-centre rate and other commercial the office rate", ctx::assumption()) }
+}
+
+/// `precinctCheck(P, sc)`: the staging check of the project's precinct: `{ precinct, rows (with upgrade states), cumulative, proposal, total, row
+/// (applicable), rowIndex, breach, why, status, statusText, headroom, ip, trips, banner, pc120Note, warnings, register, monitorText }`, or null when no
+/// precinct applies.
+#[must_use]
+pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
+    let Some(pr) = precinct_of(p) else { return V::Null };
+    let sc = sc.unwrap_or_else(|| ctx::active_sc(p));
+    let cx = ctx::data(p);
+    let pc = cx.g("precinct");
+    let ups = pc.g("upgrades");
+    let reg: Vec<V> = pc.g("register").items().iter().filter(|r| r.t() && !r.g("excluded").strict_eq(&V::Bool(true))).cloned().collect();
+    let measures = xdata("MEASURES").items();
+    let (cumulative, proposal, total, tot_n) = precinct_totals(measures, &reg, pc);
+    let rows = precinct_rows(&pr, ups, pc);
+    let idx = rows.iter().position(|r| !r.g("met").t());
+    let beyond = idx.is_none();
+    let row_index = idx.unwrap_or(rows.len().saturating_sub(1));
+    // A precinct table always has rows; null (an undefined row) is only the total fallback
+    let row = rows.get(row_index).cloned().unwrap_or(V::Null);
+    let mut why: Vec<String> = Vec::new();
+    // tot_n holds one total per measure, in the measures' order
+    for (m, &tot) in measures.iter().zip(&tot_n) {
+        let cap = row.g(&m.ix(0).s());
+        if !cap.nullish() && tot > cap.n() {
+            why.push(format!("{}: {} against the row ({}) cap of {}", m.ix(2).s(), fmt::int(tot), tstr(&row, "row"), fmt::int(cap.n())));
+        }
+    }
+    let breach = !why.is_empty();
+    let unmet_a5 = row.g("up").items().iter().filter(|u| !u.g("met").t()).any(|u| u.g("status").eq_s("A5"));
+    let status: Option<&str> = if breach { Some(if pc.g("amendment").t() { "A9" } else if beyond { "A6" } else if unmet_a5 { "A5" } else { "A6" }) } else { None };
+    let mut headroom = V::object();
+    for (m, &tot) in measures.iter().zip(&tot_n) {
+        let cap = row.g(&m.ix(0).s());
+        headroom.set(m.ix(0).s(), if cap.nullish() { V::Null } else { V::Number(cap.n() - tot) });
+    }
+    let ip = precinct_ip(p, sc, &pr, pc);
+    let trips = precinct_trips(p, sc, &total, &row);
     let mut warnings: Vec<V> = Vec::new();
     if rows.iter().any(|r| r.g("up").items().iter().any(|u| u.g("needsAugier").t())) {
         warnings.push(V::String(format!(
@@ -247,7 +276,8 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
             tstr(&pr, "deemed")
         )));
     }
-    if beyond && row.has("dw") && tot_n[0] > row.g("dw").n() {
+    // the first measure is the dwellings; undefined (no measures) is not above anything
+    if beyond && row.has("dw") && tot_n.first().is_some_and(|&dw| dw > row.g("dw").n()) {
         warnings.push(V::String(format!("The total exceeds the final row of {}: the table does not provide for it.", tstr(&pr, "table"))));
     }
     if pr.g("note").t() {
@@ -274,6 +304,7 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
 }
 
 /// `precinctCSV(P)`: the precinct staging table, register, proposal and tests as a CSV with the version stamp and disclaimers in footer rows.
+#[must_use]
 pub fn precinct_csv(p: &V) -> String {
     let c = precinct_check(p, None);
     let s = |x: &str| V::String(x.to_string());
@@ -325,7 +356,7 @@ pub fn precinct_csv(p: &V) -> String {
     rows.push(vec![s("Total"), total.g("dw").clone(), total.g("retail").clone(), total.g("commercial").clone(), total.g("community").clone()]);
     rows.push(vec![]);
     rows.push(vec![s("Applicable row"), c.g("row").g("row").clone()]);
-    let why = c.g("why").items().iter().map(|w| w.s()).collect::<Vec<_>>().join("; ");
+    let why = c.g("why").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("; ");
     rows.push(vec![s("Result"), s(&if c.g("breach").t() { format!("Breach: {why}") } else { "Within the caps".to_string() })]);
     rows.push(vec![s("Activity status"), c.g("statusText").clone()]);
     let ip = c.g("ip");
@@ -364,7 +395,7 @@ fn precinct_report(p: &V, rctx: Option<&dyn ReportCtx>) -> String {
         })
         .collect();
     let (total, cum, prop) = (x.g("total"), x.g("cumulative"), x.g("proposal"));
-    let why = x.g("why").items().iter().map(|w| w.s()).collect::<Vec<_>>().join("; ");
+    let why = x.g("why").items().iter().map(crate::compliance::jv::Jx::s).collect::<Vec<_>>().join("; ");
     let verdict = if x.g("breach").t() {
         ctx::esc_s(&format!("Breach of row ({}): {}. {}.", tstr(x.g("row"), "row"), why, tstr(&x, "statusText")))
     } else {
@@ -391,6 +422,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-precinct"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, rctx: Option<&dyn ReportCtx>) -> Option<String> {
     (id == "compliance-extra-precinct").then(|| precinct_report(p, rctx))
 }
@@ -399,11 +431,13 @@ pub fn report(id: &str, p: &V, rctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-precinct"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     (id == "compliance-extra-precinct").then(|| precinct_csv(p))
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     (id == "compliance-extra-precinct").then(|| precinct_of(p).is_some())
 }

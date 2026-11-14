@@ -59,10 +59,13 @@ pub fn cells_between(x0: i64, y0: i64, x1: i64, y1: i64) -> Vec<(i64, i64)> {
 /// What one pass did: the body each element built to, by document, and how far it got.
 #[derive(Debug, Default, PartialEq)]
 pub struct Pass {
+    /// The log number it regenerated through.
     pub through: u64,
+    /// The body content ID each element built to, by document and then by element.
     pub bodies: BTreeMap<Id, BTreeMap<Id, Id>>,
 }
 
+/// Keeps one store's derived shapes up to date with its logs.
 pub struct Regenerator<K: Kv, F: FileStore> {
     kv: K,
     files: F,
@@ -70,6 +73,7 @@ pub struct Regenerator<K: Kv, F: FileStore> {
 }
 
 impl<K: Kv, F: FileStore> Regenerator<K, F> {
+    /// A regenerator over a store and its file storage, building with `geometry`.
     pub fn new(kv: K, files: F, geometry: Arc<dyn Geometry>) -> Self {
         Self {
             kv,
@@ -80,6 +84,10 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
 
     /// Brings a project's shapes up to the end of its log. Safe to run on any server, any number
     /// of times: the store lets one pass win and the others start again from where it stopped.
+    ///
+    /// # Errors
+    ///
+    /// A [`StoreError`] when the store fails or holds a record it can't read.
     pub async fn catch_up(&self, project: &Id) -> Result<Pass, StoreError> {
         let mut pass = Pass::default();
         loop {
@@ -93,6 +101,10 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     /// Throws a project's derived rows away and makes them again from its log, which is only safe
     /// because nothing here is the truth. Files stay: they are named by their hash, so the same
     /// bytes come back to the same place. An operator's tool, for a project nobody is editing.
+    ///
+    /// # Errors
+    ///
+    /// A [`StoreError`] when the store fails or holds a record it can't read.
     pub async fn rebuild(&self, project: &Id) -> Result<Pass, StoreError> {
         let mut snapshot = self.kv.snapshot().await?;
         let mut keys = vec![
@@ -116,6 +128,10 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
 
     /// Builds each element's recipe again and compares it with what is stored, bytes included.
     /// Returns how many shapes it checked. A mismatch here is the failure checkpoints look for.
+    ///
+    /// # Errors
+    ///
+    /// What differs, or what could not be read, in words.
     pub async fn verify(&self, project: &Id) -> Result<usize, String> {
         let fault = |e: StoreError| e.to_string();
         let mut snapshot = self.caught_up(project).await.map_err(fault)?;
@@ -203,6 +219,10 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
 
     /// A snapshot in which regeneration has reached the end of the log. A running server may add
     /// to the log meanwhile, so this looks again a few times before giving up.
+    ///
+    /// # Errors
+    ///
+    /// A [`StoreError`] when the store fails, or when the log kept growing past every try.
     pub async fn caught_up(&self, project: &Id) -> Result<K::Snapshot, StoreError> {
         let scope = Scope::Project(project.clone());
         let cursor = Place::Regenerated {
@@ -262,7 +282,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         if through >= head {
             return Ok(true);
         }
-        let to = head.min(through + BATCH);
+        let to = head.min(through.saturating_add(BATCH));
         let entries = read_log(&mut snapshot, &scope, through, to).await?;
 
         let mut txn = self.kv.begin().await?;
@@ -452,6 +472,10 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     }
 
     /// Reads bytes back, checking them against their name.
+    ///
+    /// # Errors
+    ///
+    /// A [`StoreError`] when they can't be read, or when they don't match their content ID.
     pub async fn read_bytes(&self, stored: &Stored, id: &Id) -> Result<Vec<u8>, StoreError> {
         let bytes = match stored {
             Stored::Here { hex } => hex::decode(hex).map_err(damaged)?,
@@ -491,7 +515,11 @@ fn occupied(element: &Element, built: &Built) -> Option<Vec<(i64, i64)>> {
         at.x.saturating_add(built.bounds.max[0]),
         at.y.saturating_add(built.bounds.max[1]),
     );
-    let across = |a: i64, b: i64| (b.div_euclid(CELL_MM) - a.div_euclid(CELL_MM)).saturating_add(1);
+    let across = |a: i64, b: i64| {
+        b.div_euclid(CELL_MM)
+            .saturating_sub(a.div_euclid(CELL_MM))
+            .saturating_add(1)
+    };
     (across(x0, x1).saturating_mul(across(y0, y1)) <= MOST_CELLS)
         .then(|| cells_between(x0, y0, x1, y1))
 }

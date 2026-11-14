@@ -1,6 +1,6 @@
 //! What the simulation reads from an assignment result.
 
-use crate::jsnum::{Maybe, truthy_number};
+use crate::jsnum::{Maybe, f64_to_usize, truthy_number};
 use crate::results::Res;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -59,6 +59,7 @@ fn plain_num(v: &Value) -> Option<f64> {
 
 impl SimResults {
     /// Reads a typed result (`Engine.assign`'s answer) for the simulation.
+    #[must_use]
     pub fn from_res(res: &Res) -> SimResults {
         SimResults {
             period: Some(res.period.clone()).filter(|p| !p.is_empty()),
@@ -132,7 +133,7 @@ impl SimResults {
                             .as_array()
                             .map(|a| {
                                 a.iter()
-                                    .map(|x| x.as_f64().unwrap_or(f64::NAN) as usize)
+                                    .map(|x| f64_to_usize(x.as_f64().unwrap_or(f64::NAN)))
                                     .collect()
                             })
                             .unwrap_or_default(),

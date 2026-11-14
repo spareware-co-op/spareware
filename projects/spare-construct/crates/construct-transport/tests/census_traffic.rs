@@ -2,6 +2,25 @@
 //! scenario, the text naming a gateway's count and setting a gateway from one chosen count) against the prototype (tools/transport-truth/gen-census.mjs).
 //! The results come from this crate's own assignment, which the assignment truth tests hold to the prototype's.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod census_support;
 mod edit_support;
 mod support;
@@ -115,7 +134,7 @@ fn the_scenario_without_the_development_is_chosen_as_the_prototype_does() {
         if let Some(l) = c["landuse"].as_object().filter(|l| !l.is_empty()) {
             p.extra.insert("landuse".into(), Value::Object(l.clone()));
         }
-        let i = |p: &mut Project, id: &str| p.scenarios.iter_mut().find(|s| s.id == id).map(|s| s as *mut Scenario);
+        let i = |p: &mut Project, id: &str| p.scenarios.iter_mut().find(|s| s.id == id).map(std::ptr::from_mut::<Scenario>);
         let _ = i;
         match name {
             "no baseline, base is same year" => {
@@ -127,7 +146,7 @@ fn the_scenario_without_the_development_is_chosen_as_the_prototype_does() {
                 sc_mut(&mut p, "sMit").role = Maybe::Set("mitigation".into());
             }
             "only a different year" => {
-                for s in p.scenarios.iter_mut() {
+                for s in &mut p.scenarios {
                     if s.id != "sWith" && s.id != "sOld" {
                         s.year = Maybe::Set(JsNum::Number(2040.0));
                     }
@@ -135,7 +154,7 @@ fn the_scenario_without_the_development_is_chosen_as_the_prototype_does() {
             }
             "nothing else" => p.scenarios.retain(|s| s.id == "sWith"),
             "project year" => {
-                for s in p.scenarios.iter_mut() {
+                for s in &mut p.scenarios {
                     s.year = Maybe::Missing;
                 }
                 p.settings.year = Maybe::Set(JsNum::Number(2026.0));

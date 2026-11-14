@@ -1,6 +1,17 @@
 //! The `construct` command line: spawns the built binary and checks one command, writing the project back, batch mode, the command
 //! list, the options and the exit codes.
 
+// The crates deny these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "test helpers; the rules are for the crate's own code"
+)]
+
 use serde_json::{Value, json};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -27,13 +38,13 @@ fn temp_project(name: &str) -> PathBuf {
     p
 }
 
-struct Out {
+struct Ran {
     code: i32,
     out: String,
     err: String,
 }
 
-fn construct(args: &[&str], stdin: Option<&str>) -> Out {
+fn construct(args: &[&str], stdin: Option<&str>) -> Ran {
     let mut c = Command::new(env!("CARGO_BIN_EXE_construct"));
     c.args(args)
         .stdin(Stdio::piped())
@@ -50,7 +61,7 @@ fn construct(args: &[&str], stdin: Option<&str>) -> Out {
     }
     drop(child.stdin.take());
     let o = child.wait_with_output().unwrap();
-    Out {
+    Ran {
         code: o.status.code().unwrap_or(-1),
         out: String::from_utf8_lossy(&o.stdout).into_owned(),
         err: String::from_utf8_lossy(&o.stderr).into_owned(),
@@ -61,7 +72,7 @@ fn path(p: &Path) -> &str {
     p.to_str().unwrap()
 }
 
-fn json_of(o: &Out) -> Value {
+fn json_of(o: &Ran) -> Value {
     assert_eq!(o.code, 0, "stderr: {}", o.err);
     serde_json::from_str(o.out.trim()).unwrap_or_else(|e| panic!("not JSON ({e}): {}", o.out))
 }
@@ -106,7 +117,7 @@ fn one_command_prints_its_json_result() {
 #[test]
 fn parameters_come_from_params_param_and_files() {
     let p = temp_project("grid");
-    let a = json_of(&construct(
+    let two = json_of(&construct(
         &[
             "transport",
             "network.list",
@@ -117,8 +128,8 @@ fn parameters_come_from_params_param_and_files() {
         ],
         None,
     ));
-    assert_eq!(a["count"], json!(2));
-    let b = json_of(&construct(
+    assert_eq!(two["count"], json!(2));
+    let three = json_of(&construct(
         &[
             "transport",
             "network.list",
@@ -131,17 +142,17 @@ fn parameters_come_from_params_param_and_files() {
         ],
         None,
     ));
-    assert_eq!(b["count"], json!(3));
+    assert_eq!(three["count"], json!(3));
     // text stays text where the schema says text, even when it looks like a number
-    let n = json_of(&construct(
+    let renamed = json_of(&construct(
         &["transport", "project.rename", "--param", "name=2026"],
         None,
     ));
-    assert_eq!(n["name"], json!("2026"));
+    assert_eq!(renamed["name"], json!("2026"));
     // a file, and standard input
-    let f = p.with_extension("params.json");
-    std::fs::write(&f, r#"{"kind":"link","limit":4}"#).unwrap();
-    let at_file = format!("@{}", path(&f));
+    let file = p.with_extension("params.json");
+    std::fs::write(&file, r#"{"kind":"link","limit":4}"#).unwrap();
+    let at_file = format!("@{}", path(&file));
     assert_eq!(
         json_of(&construct(
             &[
@@ -449,7 +460,7 @@ fn batch_runs_json_lines_and_writes_the_project_once() {
         r#"{"id":"add","command":"transport.network.add_node","params":{"point":[-36.9,174.8]}}"#,
         "",
         r#"{"id":3,"command":"network.get","params":{"kind":"node","id":"nope"}}"#,
-        r#"not json"#,
+        "not json",
         r#"{"id":5,"command":"network.summary"}"#,
     ]
     .join("\n");

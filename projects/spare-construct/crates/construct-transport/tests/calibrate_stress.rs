@@ -4,6 +4,25 @@
 //! junction delay, with the stored base result, a stale one, none, another period and another scenario. Each run
 //! assigns with the real Rust assignment.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod calibrate_support;
 mod support;
 
@@ -61,7 +80,7 @@ fn stress_tests() {
                 "links": r.links.iter().map(|l| json!({ "key": l.key, "link": l.link, "vc": pn(l.vc), "f": pn(l.f) })).collect::<Vec<_>>(),
             });
             let (mut got, mut want) = (got, c["state"].clone());
-            if factors.as_ref().is_some_and(|f| f.is_empty()) {
+            if factors.as_ref().is_some_and(std::vec::Vec::is_empty) {
                 // every junction ties (no runs), so the list keeps the order of the base result's junctions; a result kept in
                 // the project is held as JSON, whose objects serde_json sorts by key, so only the set of junctions is compared
                 for v in [&mut got, &mut want] {

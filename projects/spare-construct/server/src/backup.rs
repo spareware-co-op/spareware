@@ -35,6 +35,12 @@ fn damaged(e: impl std::fmt::Display) -> StoreError {
     StoreError::Damaged(e.to_string())
 }
 
+/// Writes every key from one snapshot, and every file, under `name` in `target`, with a manifest
+/// of what it wrote and their hashes.
+///
+/// # Errors
+///
+/// A [`StoreError`] when either store fails.
 pub async fn backup<K: Kv, F: FileStore, T: FileStore>(
     kv: &K,
     files: &F,
@@ -79,6 +85,11 @@ pub async fn backup<K: Kv, F: FileStore, T: FileStore>(
 }
 
 /// Restores into an empty store only, so it can never overwrite live work.
+///
+/// # Errors
+///
+/// A [`StoreError`] when the store isn't empty, a backup file doesn't match its manifest, or
+/// either store fails.
 pub async fn restore<K: Kv, F: FileStore, S: FileStore>(
     kv: &K,
     files: &F,
@@ -140,6 +151,10 @@ pub async fn restore<K: Kv, F: FileStore, S: FileStore>(
 }
 
 /// One hash over every key, value and file, to compare two stores.
+///
+/// # Errors
+///
+/// A [`StoreError`] when the store fails.
 pub async fn digest<K: Kv, F: FileStore>(kv: &K, files: &F) -> Result<String, StoreError> {
     let mut snapshot = kv.snapshot().await?;
     let mut hash = Sha256::new();

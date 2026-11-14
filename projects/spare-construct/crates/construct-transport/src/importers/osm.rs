@@ -18,7 +18,7 @@ use crate::util::{self, LatLng, r7};
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 
-/// model.js OSM_CLASS: the OpenStreetMap `highway` values the import reads, in its order, with the road class each becomes.
+/// model.js `OSM_CLASS`: the OpenStreetMap `highway` values the import reads, in its order, with the road class each becomes.
 pub const OSM_CLASS: [(&str, &str); 14] = [
     ("motorway", "motorway"),
     ("trunk", "arterial"),
@@ -45,6 +45,7 @@ pub const OVERPASS: [&str; 4] = [
 ];
 
 /// `OSM_CLASS[highway]`: the road class a `highway` value becomes.
+#[must_use]
 pub fn osm_class(highway: &str) -> Option<&'static str> {
     OSM_CLASS
         .iter()
@@ -75,6 +76,7 @@ pub struct OverpassOpts {
 }
 
 /// The Overpass QL query of `Importers.overpass(b, opts)`: every way with one of the road `highway` values inside the box.
+#[must_use]
 pub fn overpass_query(b: &Bounds, opts: &OverpassOpts) -> String {
     let types: Vec<&str> = OSM_CLASS
         .iter()
@@ -121,7 +123,7 @@ fn tag<'a>(t: &'a Value, k: &str) -> Option<std::borrow::Cow<'a, str>> {
 
 /// `t[k] || ''` as text.
 fn tag_or_empty(t: &Value, k: &str) -> String {
-    tag(t, k).map(|s| s.into_owned()).unwrap_or_default()
+    tag(t, k).map(std::borrow::Cow::into_owned).unwrap_or_default()
 }
 
 /// `a.b.includes` on tags: the OpenStreetMap elements of one data set in file order, looked up by id.
@@ -134,7 +136,7 @@ impl<'a> Elements<'a> {
     fn get(&self, id: &Value) -> Option<&'a Value> {
         key_of(id)
             .and_then(|k| self.index.get(&k))
-            .map(|&i| self.list[i])
+            .and_then(|&i| self.list.get(i).copied())
     }
     fn has(&self, id: &Value) -> bool {
         key_of(id).is_some_and(|k| self.index.contains_key(&k))
@@ -158,22 +160,27 @@ struct State<'a> {
     touched_set: HashSet<String>,
     ring_nodes: HashSet<String>,
     added: usize,
+    // How many ways use each OpenStreetMap node (ends twice)
+    used: HashMap<u64, f64>,
+    // The way segments the scenario already has
+    have: HashSet<String>,
 }
 
 impl State<'_> {
-    /// `getNode(oid)`: the junction for an OpenStreetMap node, made when it is not there yet.
-    fn get_node(&mut self, sc: &mut Scenario, ids: &mut dyn IdSource, oid: &Value) -> String {
-        let k = key_of(oid).expect("a number id");
+    /// `getNode(oid)`: the junction for an OpenStreetMap node, made when it is not there yet (None for
+    /// an id that is not a node element, which the import never asks for).
+    fn get_node(&mut self, sc: &mut Scenario, ids: &mut dyn IdSource, oid: &Value) -> Option<String> {
+        let k = key_of(oid)?;
         if let Some(id) = self.by_osm.get(&k)
             && !id.is_empty()
         {
-            return id.clone();
+            return Some(id.clone());
         }
-        let o = self.nodes.get(oid).expect("a node element");
+        let o = self.nodes.get(oid)?;
         let ll = [field_num(o, "lat"), field_num(o, "lon")];
         let id = net::add_node(sc, ids, ll, &NodeProps::new().osm(oid.clone()));
         self.by_osm.insert(k, id.clone());
-        id
+        Some(id)
     }
 
     /// `addSeg(seg, key)`: one road between the segment's end nodes, with the way's tags as props.
@@ -186,21 +193,24 @@ impl State<'_> {
         props: &mut LinkProps,
         ring: bool,
     ) {
-        let a = self.get_node(sc, ids, seg[0]);
-        let b = self.get_node(sc, ids, seg[seg.len() - 1]);
+        let (Some(&first), Some(&last)) = (seg.first(), seg.last()) else {
+            return;
+        };
+        let (Some(a), Some(b)) = (self.get_node(sc, ids, first), self.get_node(sc, ids, last)) else {
+            return;
+        };
         if a == b {
             return;
         }
-        let pts: Vec<LatLng> = seg[1..seg.len() - 1]
+        let middle = seg.get(1..seg.len().saturating_sub(1)).unwrap_or_default();
+        let pts: Vec<LatLng> = middle
             .iter()
-            .map(|id| {
-                let o = self.nodes.get(id).expect("a node element");
-                [field_num(o, "lat"), field_num(o, "lon")]
-            })
+            .filter_map(|id| self.nodes.get(id))
+            .map(|o| [field_num(o, "lat"), field_num(o, "lon")])
             .collect();
         props.0.osm = Maybe::Set(Value::String(key));
         net::add_link(sc, ids, &a, &b, &pts, props);
-        self.added += 1;
+        self.added = self.added.saturating_add(1);
         for n in [&a, &b] {
             if self.touched_set.insert(n.clone()) {
                 self.touched.push(n.clone());
@@ -209,6 +219,46 @@ impl State<'_> {
         if ring {
             self.ring_nodes.insert(a);
             self.ring_nodes.insert(b);
+        }
+    }
+
+    /// One way's roads: split at every node another way uses (or the way's ends), each piece once.
+    fn add_way(&mut self, sc: &mut Scenario, ids: &mut dyn IdSource, w: &Value, props: &mut LinkProps, ring: bool) {
+        let way_id = value_to_js_string(&w["id"]);
+        let node_ids: Vec<&Value> = w
+            .get("nodes")
+            .and_then(Value::as_array)
+            .map_or(&[][..], Vec::as_slice)
+            .iter()
+            .filter(|id| self.nodes.has(id))
+            .collect();
+        let mut s = 0usize;
+        for (i, id) in node_ids.iter().enumerate().skip(1) {
+            let is_last = i.saturating_add(1) == node_ids.len();
+            if !is_last && key_of(id).and_then(|k| self.used.get(&k)).copied().unwrap_or(0.0) < 2.0 {
+                continue;
+            }
+            let seg: Vec<&Value> = node_ids.get(s..=i).map(<[_]>::to_vec).unwrap_or_default();
+            let key = format!("{way_id}:{s}");
+            s = i;
+            if self.have.contains(&key) || self.have.contains(&format!("{key}a")) {
+                continue;
+            }
+            let first = seg.first().and_then(|v| key_of(v));
+            let last = seg.last().and_then(|v| key_of(v));
+            if first == last {
+                if seg.len() < 4 {
+                    continue;
+                }
+                let m = seg.len() >> 1;
+                let (Some(head), Some(tail)) = (seg.get(..=m), seg.get(m..)) else {
+                    continue;
+                };
+                self.add_seg(sc, ids, head, format!("{key}a"), props, ring);
+                self.add_seg(sc, ids, tail, format!("{key}b"), props, ring);
+            } else {
+                self.add_seg(sc, ids, &seg, key, props, ring);
+            }
         }
     }
 }
@@ -225,71 +275,16 @@ pub fn osm_to_scenario(
     data: &Value,
     opts: &OsmOpts,
 ) -> usize {
-    let mut nodes = Elements {
-        list: Vec::new(),
-        index: HashMap::new(),
-    };
-    let mut ways: Vec<&Value> = Vec::new();
-    if let Some(els) = data.get("elements").and_then(Value::as_array) {
-        for e in els {
-            match e.get("type").and_then(Value::as_str) {
-                Some("node") => {
-                    // Map.set: a repeated id keeps its first place and takes the later element
-                    if let Some(k) = e.get("id").and_then(key_of) {
-                        match nodes.index.get(&k) {
-                            Some(&i) => nodes.list[i] = e,
-                            None => {
-                                nodes.index.insert(k, nodes.list.len());
-                                nodes.list.push(e);
-                            }
-                        }
-                    }
-                }
-                Some("way") => {
-                    if e.get("nodes")
-                        .and_then(Value::as_array)
-                        .is_some_and(|n| n.len() > 1)
-                    {
-                        ways.push(e);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
+    let (nodes, ways) = elements(data);
     let empty = json!({});
-    let keep: Vec<&Value> = ways
-        .iter()
-        .copied()
-        .filter(|w| {
-            let t = w.get("tags").filter(|t| t.is_object()).unwrap_or(&empty);
-            let hw = tag(t, "highway");
-            let Some(cls) = hw.as_deref().and_then(osm_class) else {
-                return false;
-            };
-            if t.get("area").and_then(Value::as_str) == Some("yes") {
-                return false;
-            }
-            let access = tag_or_empty(t, "access");
-            if cls == "local" && (access == "no" || access == "private") {
-                return false;
-            }
-            if hw.as_deref() == Some("service") {
-                let svc = tag_or_empty(t, "service");
-                if !svc.is_empty() && svc != "alley" {
-                    return false;
-                }
-            }
-            true
-        })
-        .collect();
+    let keep: Vec<&Value> = ways.into_iter().filter(|w| kept_way(w, &empty)).collect();
     // How many ways use each node: ends count twice, so a shared node or an end is a junction
     let mut used: HashMap<u64, f64> = HashMap::new();
     for w in &keep {
-        let ns = w["nodes"].as_array().expect("nodes");
+        let ns = w.get("nodes").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
         for (i, id) in ns.iter().enumerate() {
             if let Some(k) = key_of(id) {
-                *used.entry(k).or_insert(0.0) += if i == 0 || i == ns.len() - 1 {
+                *used.entry(k).or_insert(0.0) += if i == 0 || i.saturating_add(1) == ns.len() {
                     2.0
                 } else {
                     1.0
@@ -304,6 +299,8 @@ pub fn osm_to_scenario(
         touched_set: HashSet::new(),
         ring_nodes: HashSet::new(),
         added: 0,
+        used,
+        have: HashSet::new(),
     };
     for n in sc.nodes.values() {
         if let Maybe::Set(osm) = &n.osm
@@ -313,156 +310,20 @@ pub fn osm_to_scenario(
             st.by_osm.insert(k, n.id.clone());
         }
     }
-    let mut have: HashSet<String> = HashSet::new();
     for l in sc.links.values() {
         if let Maybe::Set(osm) = &l.osm
             && crate::jsnum::value_truthy(osm)
         {
-            have.insert(value_to_js_string(osm));
+            st.have.insert(value_to_js_string(osm));
         }
     }
     for w in &keep {
         let t = w.get("tags").filter(|t| t.is_object()).unwrap_or(&empty);
-        let hw = tag_or_empty(t, "highway");
-        let cls = osm_class(&hw).expect("kept ways have a class");
-        let c = road_class_exact(cls).expect("a known class");
-        let junction = tag_or_empty(t, "junction");
-        let ring = junction == "roundabout" || junction == "circular";
-        let mut ow: i32 = if ring || hw == "motorway" || hw == "motorway_link" {
-            1
-        } else {
-            0
+        // Every kept way has a class, so this always gives its roads' properties
+        let Some((mut props, ring)) = way_props(t) else {
+            continue;
         };
-        let oneway = tag_or_empty(t, "oneway");
-        if is_yes(&oneway) {
-            ow = 1;
-        } else if oneway == "-1" || oneway == "reverse" {
-            ow = -1;
-        } else if oneway == "no" && !ring {
-            ow = 0;
-        }
-        let lanes_t = parse_int10_value(t.get("lanes"));
-        let (mut ab, mut ba);
-        if ow != 0 {
-            let n = if lanes_t > 0.0 {
-                lanes_t
-            } else if cls == "motorway" {
-                2.0
-            } else {
-                1.0
-            };
-            ab = if ow > 0 { n } else { 0.0 };
-            ba = if ow < 0 { n } else { 0.0 };
-        } else {
-            let f = parse_int10_value(t.get("lanes:forward"));
-            let bk = parse_int10_value(t.get("lanes:backward"));
-            ab = if f > 0.0 {
-                f
-            } else if lanes_t > 1.0 {
-                (lanes_t / 2.0).ceil()
-            } else {
-                1.0
-            };
-            ba = if bk > 0.0 {
-                bk
-            } else if lanes_t > 1.0 {
-                (lanes_t / 2.0).floor()
-            } else {
-                1.0
-            };
-        }
-        ab = math_min(ab, 6.0);
-        ba = math_min(ba, 6.0);
-        let maxspeed = tag(t, "maxspeed");
-        let mut speed = parse_int10_value(t.get("maxspeed"));
-        if !(speed > 0.0) {
-            speed = if maxspeed.as_deref() == Some("NZ:rural") {
-                100.0
-            } else if maxspeed.as_deref() == Some("NZ:urban") {
-                50.0
-            } else if hw == "trunk" {
-                80.0
-            } else {
-                c.speed
-            };
-        }
-        // [t.cycleway, t['cycleway:left'], ...].join(' ')
-        let cyc = [
-            "cycleway",
-            "cycleway:left",
-            "cycleway:right",
-            "cycleway:both",
-        ]
-        .iter()
-        .map(|k| tag_or_empty(t, k))
-        .collect::<Vec<_>>()
-        .join(" ");
-        let bus_lanes = tag_or_empty(t, "bus:lanes");
-        let mut bus_lane = bus_lanes.starts_with("designated")
-            || bus_lanes.contains("|designated")
-            || tag_or_empty(t, "lanes:psv").contains("bus");
-        if bus_lane && math_max(ab, ba) < 2.0 {
-            bus_lane = false;
-        }
-        let name = {
-            let n = tag_or_empty(t, "name");
-            if n.is_empty() {
-                tag_or_empty(t, "ref")
-            } else {
-                n
-            }
-        };
-        let cycle = if cyc.contains("track") || cyc.contains("separate") {
-            "separated"
-        } else if cyc.contains("lane") {
-            "painted"
-        } else {
-            "none"
-        };
-        let mut props = LinkProps::new()
-            .cls(cls)
-            .lanes(ab, ba)
-            .speed(speed)
-            .name(&name)
-            .status("existing")
-            .ring(ring)
-            .bus_lane(bus_lane)
-            .cycle(cycle);
-        let way_id = value_to_js_string(&w["id"]);
-        let node_ids: Vec<&Value> = w["nodes"]
-            .as_array()
-            .expect("nodes")
-            .iter()
-            .filter(|id| st.nodes.has(id))
-            .collect();
-        let mut s = 0usize;
-        for i in 1..node_ids.len() {
-            if i < node_ids.len() - 1
-                && used
-                    .get(&key_of(node_ids[i]).expect("id"))
-                    .copied()
-                    .unwrap_or(0.0)
-                    < 2.0
-            {
-                continue;
-            }
-            let seg: Vec<&Value> = node_ids[s..=i].to_vec();
-            let key = format!("{way_id}:{s}");
-            s = i;
-            if have.contains(&key) || have.contains(&format!("{key}a")) {
-                continue;
-            }
-            if key_of(seg[0]) == key_of(seg[seg.len() - 1]) {
-                if seg.len() < 4 {
-                    continue;
-                }
-                let m = seg.len() >> 1;
-                st.add_seg(sc, ids, &seg[..=m], format!("{key}a"), &mut props, ring);
-                st.add_seg(sc, ids, &seg[m..], format!("{key}b"), &mut props, ring);
-            } else {
-                st.add_seg(sc, ids, &seg, key, &mut props, ring);
-            }
-        }
+        st.add_way(sc, ids, w, &mut props, ring);
     }
     let State {
         nodes,
@@ -472,7 +333,201 @@ pub fn osm_to_scenario(
         added,
         ..
     } = st;
-    // Junction control from tags and geometry; motorway-only nodes (merges, diverges) stay uncontrolled
+    junction_controls(sc, &nodes, &by_osm, &touched, &ring_nodes);
+    if opts.sites && added > 0 {
+        sites::detect(
+            sc,
+            ids,
+            &DetectOpts {
+                points: opts.points.clone(),
+                ..Default::default()
+            },
+        );
+    }
+    added
+}
+
+// The answer's node elements (looked up by id) and its ways with two or more nodes, in file order
+fn elements(data: &Value) -> (Elements<'_>, Vec<&Value>) {
+    let mut nodes = Elements {
+        list: Vec::new(),
+        index: HashMap::new(),
+    };
+    let mut ways: Vec<&Value> = Vec::new();
+    let Some(els) = data.get("elements").and_then(Value::as_array) else {
+        return (nodes, ways);
+    };
+    for e in els {
+        match e.get("type").and_then(Value::as_str) {
+            Some("node") => {
+                // Map.set: a repeated id keeps its first place and takes the later element
+                if let Some(k) = e.get("id").and_then(key_of) {
+                    if let Some(slot) = nodes.index.get(&k).and_then(|&i| nodes.list.get_mut(i)) {
+                        *slot = e;
+                    } else {
+                        nodes.index.insert(k, nodes.list.len());
+                        nodes.list.push(e);
+                    }
+                }
+            }
+            Some("way")
+                if e.get("nodes")
+                    .and_then(Value::as_array)
+                    .is_some_and(|n| n.len() > 1) =>
+            {
+                ways.push(e);
+            }
+            _ => {}
+        }
+    }
+    (nodes, ways)
+}
+
+// A way the import keeps: a road class, not an area, not a private local street, and of the service
+// ways only alleys and untagged ones
+fn kept_way(w: &Value, empty: &Value) -> bool {
+    let t = w.get("tags").filter(|t| t.is_object()).unwrap_or(empty);
+    let hw = tag(t, "highway");
+    let Some(cls) = hw.as_deref().and_then(osm_class) else {
+        return false;
+    };
+    if t.get("area").and_then(Value::as_str) == Some("yes") {
+        return false;
+    }
+    let access = tag_or_empty(t, "access");
+    if cls == "local" && (access == "no" || access == "private") {
+        return false;
+    }
+    if hw.as_deref() == Some("service") {
+        let svc = tag_or_empty(t, "service");
+        if !svc.is_empty() && svc != "alley" {
+            return false;
+        }
+    }
+    true
+}
+
+// A kept way's road properties from its tags (class, lanes, speed, name, ring, bus lane, cycle
+// provision), and whether it is a roundabout ring; None for a way without a road class
+fn way_props(t: &Value) -> Option<(LinkProps, bool)> {
+    let hw = tag_or_empty(t, "highway");
+    let cls = osm_class(&hw)?;
+    let class = road_class_exact(cls)?;
+    let junction = tag_or_empty(t, "junction");
+    let ring = junction == "roundabout" || junction == "circular";
+    let mut ow: i32 = i32::from(ring || hw == "motorway" || hw == "motorway_link");
+    let oneway = tag_or_empty(t, "oneway");
+    if is_yes(&oneway) {
+        ow = 1;
+    } else if oneway == "-1" || oneway == "reverse" {
+        ow = -1;
+    } else if oneway == "no" && !ring {
+        ow = 0;
+    }
+    let (ab, ba) = way_lanes(t, ow, cls);
+    let maxspeed = tag(t, "maxspeed");
+    let mut speed = parse_int10_value(t.get("maxspeed"));
+    // !(speed > 0): NaN takes this branch too
+    if speed <= 0.0 || speed.is_nan() {
+        speed = if maxspeed.as_deref() == Some("NZ:rural") {
+            100.0
+        } else if maxspeed.as_deref() == Some("NZ:urban") {
+            50.0
+        } else if hw == "trunk" {
+            80.0
+        } else {
+            class.speed
+        };
+    }
+    // [t.cycleway, t['cycleway:left'], ...].join(' ')
+    let cyc = [
+        "cycleway",
+        "cycleway:left",
+        "cycleway:right",
+        "cycleway:both",
+    ]
+    .iter()
+    .map(|k| tag_or_empty(t, k))
+    .collect::<Vec<_>>()
+    .join(" ");
+    let bus_lanes = tag_or_empty(t, "bus:lanes");
+    let mut bus_lane = bus_lanes.starts_with("designated")
+        || bus_lanes.contains("|designated")
+        || tag_or_empty(t, "lanes:psv").contains("bus");
+    if bus_lane && math_max(ab, ba) < 2.0 {
+        bus_lane = false;
+    }
+    let name = {
+        let n = tag_or_empty(t, "name");
+        if n.is_empty() {
+            tag_or_empty(t, "ref")
+        } else {
+            n
+        }
+    };
+    let cycle = if cyc.contains("track") || cyc.contains("separate") {
+        "separated"
+    } else if cyc.contains("lane") {
+        "painted"
+    } else {
+        "none"
+    };
+    let props = LinkProps::new()
+        .cls(cls)
+        .lanes(ab, ba)
+        .speed(speed)
+        .name(&name)
+        .status("existing")
+        .ring(ring)
+        .bus_lane(bus_lane)
+        .cycle(cycle);
+    Some((props, ring))
+}
+
+// Lanes each way (at most 6) from the tags, for a one-way rule ow (1, -1, or 0 for two-way)
+fn way_lanes(t: &Value, ow: i32, cls: &str) -> (f64, f64) {
+    let lanes_t = parse_int10_value(t.get("lanes"));
+    let (ab, ba);
+    if ow != 0 {
+        let n = if lanes_t > 0.0 {
+            lanes_t
+        } else if cls == "motorway" {
+            2.0
+        } else {
+            1.0
+        };
+        ab = if ow > 0 { n } else { 0.0 };
+        ba = if ow < 0 { n } else { 0.0 };
+    } else {
+        let fwd = parse_int10_value(t.get("lanes:forward"));
+        let bk = parse_int10_value(t.get("lanes:backward"));
+        ab = if fwd > 0.0 {
+            fwd
+        } else if lanes_t > 1.0 {
+            (lanes_t / 2.0).ceil()
+        } else {
+            1.0
+        };
+        ba = if bk > 0.0 {
+            bk
+        } else if lanes_t > 1.0 {
+            (lanes_t / 2.0).floor()
+        } else {
+            1.0
+        };
+    }
+    (math_min(ab, 6.0), math_min(ba, 6.0))
+}
+
+// Junction control from tags and geometry on the nodes the import touched; motorway-only nodes
+// (merges, diverges) stay uncontrolled
+fn junction_controls(
+    sc: &mut Scenario,
+    nodes: &Elements,
+    by_osm: &HashMap<u64, String>,
+    touched: &[String],
+    ring_nodes: &HashSet<String>,
+) {
     let deg = net::degree(sc);
     let mut fwy: HashMap<String, bool> = HashMap::new();
     for l in sc.links.values() {
@@ -482,9 +537,9 @@ pub fn osm_to_scenario(
             fwy.insert(id.clone(), prev && rank >= 5.0);
         }
     }
-    for nid in &touched {
-        let d = deg.get(nid).copied().unwrap_or(0) as f64;
-        let osm = sc.nodes[nid.as_str()].osm.get().cloned();
+    for nid in touched {
+        let d = deg.get(nid).copied().unwrap_or(0);
+        let osm = sc.nodes.get(nid.as_str()).and_then(|n| n.osm.get().cloned());
         let tags: Value = osm
             .as_ref()
             .and_then(|o| nodes.get(o))
@@ -493,13 +548,15 @@ pub fn osm_to_scenario(
             .cloned()
             .unwrap_or_else(|| json!({}));
         let hwtag = tags.get("highway").and_then(Value::as_str);
-        let n = sc.nodes.get_mut(nid).expect("a touched node");
-        if ring_nodes.contains(nid) && d >= 3.0 {
+        let Some(n) = sc.nodes.get_mut(nid) else {
+            continue;
+        };
+        if ring_nodes.contains(nid) && d >= 3 {
             n.control = Maybe::Set("roundabout".to_string());
-        } else if d >= 3.0 && n.control.is("none") && !fwy.get(nid).copied().unwrap_or(false) {
+        } else if d >= 3 && n.control.is("none") && !fwy.get(nid).copied().unwrap_or(false) {
             n.control = Maybe::Set("priority".to_string());
         }
-        if hwtag == Some("stop") && d >= 3.0 {
+        if hwtag == Some("stop") && d >= 3 {
             n.control = Maybe::Set("stop".to_string());
         }
         if hwtag == Some("traffic_signals") {
@@ -529,46 +586,39 @@ pub fn osm_to_scenario(
         let mut best: Option<&String> = None;
         let mut bd = 45.0;
         for j in &junctions {
-            let n = &sc.nodes[j.as_str()];
+            let Some(n) = sc.nodes.get(j.as_str()) else {
+                continue;
+            };
             let d = util::dist(&at, &n.ll());
             if d < bd {
                 bd = d;
                 best = Some(j);
             }
         }
-        if let Some(b) = best {
-            sc.nodes.get_mut(b).expect("a node").control = Maybe::Set("signals".to_string());
+        if let Some(n) = best.and_then(|b| sc.nodes.get_mut(b)) {
+            n.control = Maybe::Set("signals".to_string());
         }
     }
     // A signal tagged on a plain road bend is a pedestrian crossing; keep it only if it splits a link
-    for nid in &touched {
-        let n = sc.nodes.get_mut(nid).expect("a touched node");
-        if n.control.is("signals") && deg.get(nid).copied().unwrap_or(0) < 2 {
+    for nid in touched {
+        if let Some(n) = sc.nodes.get_mut(nid)
+            && n.control.is("signals")
+            && deg.get(nid).copied().unwrap_or(0) < 2
+        {
             n.control = Maybe::Set("none".to_string());
         }
     }
-    if opts.sites && added > 0 {
-        sites::detect(
-            sc,
-            ids,
-            &DetectOpts {
-                points: opts.points.clone(),
-                ..Default::default()
-            },
-        );
-    }
-    added
 }
 
 /// `Importers.autoGateways(sc, b, only)`: external zones (gateways) where roads leave the imported area, loaded with indicative
 /// through traffic only. `only` limits it to those dead-end nodes (for instance the nodes one import added), so roads imported
 /// earlier somewhere else never get gateways for this area. A dead end of collector rank or higher, within 5% of the box's
 /// edge and not closed, gets a zone 60 m beyond it with flows from the road class and lanes. Returns how many were made.
-pub fn auto_gateways(
+pub fn auto_gateways<H: std::hash::BuildHasher>(
     sc: &mut Scenario,
     ids: &mut dyn IdSource,
     b: &Bounds,
-    only: Option<&HashSet<String>>,
+    only: Option<&HashSet<String, H>>,
 ) -> usize {
     // The links at each node, in the order the links first reach them
     let mut adj: Vec<(String, Vec<String>)> = Vec::new();
@@ -577,14 +627,14 @@ pub fn auto_gateways(
         for n in [&l.a, &l.b] {
             let k = *adj_ix.entry(n.clone()).or_insert_with(|| {
                 adj.push((n.clone(), Vec::new()));
-                adj.len() - 1
+                adj.len().saturating_sub(1)
             });
-            adj[k].1.push(l.id.clone());
+            if let Some(entry) = adj.get_mut(k) {
+                entry.1.push(l.id.clone());
+            }
         }
     }
-    let w = b.east - b.west;
-    let h = b.north - b.south;
-    let (mx, my) = (w * 0.05, h * 0.05);
+    let (mx, my) = ((b.east - b.west) * 0.05, (b.north - b.south) * 0.05);
     let mut pinned: HashSet<String> = sc
         .zones
         .values()
@@ -603,9 +653,11 @@ pub fn auto_gateways(
         let Some(n) = sc.nodes.get(nid) else {
             continue;
         };
-        let l = &sc.links[ls[0].as_str()];
-        let c = road_class(l.cls.as_str());
-        if c.rank < 3.0 || l.status.is("closed") {
+        let Some(l) = ls.first().and_then(|id| sc.links.get(id.as_str())) else {
+            continue;
+        };
+        let class = road_class(l.cls.as_str());
+        if class.rank < 3.0 || l.status.is("closed") {
             continue;
         }
         if let Some(o) = only
@@ -619,80 +671,94 @@ pub fn auto_gateways(
         if !near {
             continue;
         }
-        let at_a = l.a == *nid;
-        let (in_lanes, out_lanes) = if at_a {
-            (l.lanes_ab.num(), l.lanes_ba.num())
-        } else {
-            (l.lanes_ba.num(), l.lanes_ab.num())
+        let Some(z) = gateway_zone(sc, ids, nid, l, [nlat, nlng]) else {
+            continue;
         };
-        let per = match l.cls.as_str() {
-            Some("motorway") => 1500.0,
-            Some("ramp") => 650.0,
-            Some("arterial") => 550.0,
-            Some("collector") => 320.0,
-            _ => 250.0,
-        };
-        let inb = math_round(in_lanes * per * 0.85 / 10.0) * 10.0;
-        let outb = math_round(out_lanes * per * 0.85 / 10.0) * 10.0;
-        // place the gateway marker 60 m beyond the road end
-        let g = sc.geom(l);
-        let far = if at_a { g[1] } else { g[g.len() - 2] };
-        let d_lat = nlat - far[0];
-        let d_lng = nlng - far[1];
-        let hyp = math_hypot(&[
-            d_lat,
-            d_lng * crate::jsmath::cos(nlat * std::f64::consts::PI / 180.0),
-        ]);
-        let m = if hyp != 0.0 && !hyp.is_nan() {
-            hyp
-        } else {
-            1.0
-        };
-        let k = 60.0 / 111000.0 / m;
-        let label = l.name.str_or(c.label).to_string();
-        let lat = r7(nlat + d_lat * k);
-        let lng = r7(nlng + d_lng * k);
-        let id = ids.uid("z");
-        let gw: OrderedMap<Num> = [
-            ("AMin", inb),
-            ("AMout", outb),
-            ("PMin", inb),
-            ("PMout", outb),
-        ]
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), Num::number(v)))
-        .collect();
-        let z = Zone {
-            id: id.clone(),
-            kind: Maybe::Set("gateway".to_string()),
-            name: Maybe::Set(format!("{label} gateway")),
-            lat: Num::number(lat),
-            lng: Num::number(lng),
-            lu: Maybe::Missing,
-            connectors: Maybe::Missing,
-            role: Maybe::Missing,
-            year: Maybe::Missing,
-            buildout: Maybe::Missing,
-            existing: Maybe::Missing,
-            src: Maybe::Missing,
-            node: Maybe::Set(nid.clone()),
-            gw: Maybe::Set(gw),
-            gw_src: Maybe::Missing,
-            tg: Maybe::Missing,
-            tg_load: Maybe::Missing,
-            extra_trips: Maybe::Missing,
-            reduction: Maybe::Missing,
-            reg: Maybe::Missing,
-            extra: Map::new(),
-        };
+        let id = z.id.clone();
         sc.zones.insert(id, z);
         pinned.insert(nid.clone());
-        made += 1;
+        made = made.saturating_add(1);
     }
     made
 }
 
+// autoGateways' zone for the dead end nid of link l at [nlat, nlng]: 60 m beyond the road end, with
+// indicative flows from the road class and lanes; None for a link with fewer than two points
+fn gateway_zone(sc: &Scenario, ids: &mut dyn IdSource, nid: &str, l: &crate::project::Link, at: LatLng) -> Option<Zone> {
+    let [nlat, nlng] = at;
+    let class = road_class(l.cls.as_str());
+    let at_a = l.a == nid;
+    let (in_lanes, out_lanes) = if at_a {
+        (l.lanes_ab.num(), l.lanes_ba.num())
+    } else {
+        (l.lanes_ba.num(), l.lanes_ab.num())
+    };
+    let per = match l.cls.as_str() {
+        Some("motorway") => 1500.0,
+        Some("ramp") => 650.0,
+        Some("arterial") => 550.0,
+        Some("collector") => 320.0,
+        _ => 250.0,
+    };
+    let inb = math_round(in_lanes * per * 0.85 / 10.0) * 10.0;
+    let outb = math_round(out_lanes * per * 0.85 / 10.0) * 10.0;
+    // place the gateway marker 60 m beyond the road end
+    let geom = sc.geom(l);
+    let far = if at_a {
+        geom.get(1)
+    } else {
+        geom.len().checked_sub(2).and_then(|i| geom.get(i))
+    }?;
+    let d_lat = nlat - far[0];
+    let d_lng = nlng - far[1];
+    let hyp = math_hypot(&[
+        d_lat,
+        d_lng * crate::jsmath::cos(nlat * std::f64::consts::PI / 180.0),
+    ]);
+    let scale = if hyp != 0.0 && !hyp.is_nan() {
+        hyp
+    } else {
+        1.0
+    };
+    let step = 60.0 / 111_000.0 / scale;
+    let label = l.name.str_or(class.label).to_string();
+    let gw: OrderedMap<Num> = [
+        ("AMin", inb),
+        ("AMout", outb),
+        ("PMin", inb),
+        ("PMout", outb),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), Num::number(v)))
+    .collect();
+    Some(Zone {
+        id: ids.uid("z"),
+        kind: Maybe::Set("gateway".to_string()),
+        name: Maybe::Set(format!("{label} gateway")),
+        lat: Num::number(r7(nlat + d_lat * step)),
+        lng: Num::number(r7(nlng + d_lng * step)),
+        lu: Maybe::Missing,
+        connectors: Maybe::Missing,
+        role: Maybe::Missing,
+        year: Maybe::Missing,
+        buildout: Maybe::Missing,
+        existing: Maybe::Missing,
+        src: Maybe::Missing,
+        node: Maybe::Set(nid.to_string()),
+        gw: Maybe::Set(gw),
+        gw_src: Maybe::Missing,
+        tg: Maybe::Missing,
+        tg_load: Maybe::Missing,
+        extra_trips: Maybe::Missing,
+        reduction: Maybe::Missing,
+        reg: Maybe::Missing,
+        extra: Map::new(),
+    })
+}
+
 /// `parseInt` of the text of a tag, for callers that already hold it as text.
+#[must_use]
 pub fn parse_tag_int(s: &str) -> f64 {
     parse_int10(s)
 }
+
