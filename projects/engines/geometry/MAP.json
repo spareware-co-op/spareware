@@ -14165,15 +14165,16 @@
           "target": "lib"
         },
         {
-          "cost": "a job's boolean is the kernel's; sampling is the sample points times the triangles of the other side, on solids of a few dozen triangles; the exact reference runs only on a difference.",
+          "cost": "a job's boolean is the kernel's; sampling is the sample points times the triangles or faces of the other side, on solids of a few dozen; the exact reference runs only on a difference.",
           "does": "[`jobs`] draws a night's seeded pairs of closed solids with integer corners and a boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra. Each job is one JSON line in whole grid steps, so an exact oracle reads what the kernel read and a floating-point one reads integers an `f64` holds exactly, with no conversion to round. The harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer with `geom-mesh`'s boolean, and settles a difference by the exact reference ([`crate::flat_reference`]): whether the kernel's volume is the reference's.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/oracle/meshes.rs",
           "guarantees": [
             "**Exact oracles are compared exactly**: a rational volume, equal or not.",
             "**The others can only refute**: volume and area are held to both sides' stated bounds, capped at ours plus the fit bound ([`Allowance`]), and the Hausdorff distance is measured by dense deterministic sampling, so it is a lower bound on the true distance.",
+            "**The kernel's side is its exact result**: its volume and area are computed exactly from its corners, and the distance is measured from and to its exact faces, each corner the double nearest its place, never from the export's triangles, whose corners are rounded to the grid. So the oracle is held to the kernel's exact answer, and no rounding of ours is allowed for.",
             "**Refusals are compared**: a job one side refuses and the other answers is a difference, of kind `refused`, never a pass.",
-            "**A result the kernel cannot measure is a difference**: a floating oracle is compared on the kernel's result in triangles, and a result that will not triangulate (its rounding to the grid crosses a face) is a difference of kind `unmeasured`, never a pass and never the end of the night. An exact oracle needs only the exact volume, so it is never unmeasured.",
+            "**A result the kernel cannot measure is a difference**: a result whose corners cannot be placed, which only a defect can cause, is a difference of kind `unmeasured`, never a pass and never the end of the night.",
             "**Truth settles it**: an oracle is never trusted; [`Compared::Differ`]'s `settled` says what the reference found."
           ],
           "job": "Mesh booleans against outside oracles (chapter 28.10; piece G154): CGAL's Nef polyhedra compared exactly; Manifold, manifold-rust's rational engine and Cherchi's exact booleans, whose results leave them as decimals, by volume, area and two-sided Hausdorff distance.",
@@ -14181,7 +14182,7 @@
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
             ],
-            "text": "chapter 28.10 (`projects/engines/geometry/architecture/28-testing.md`). A solid's volume is the divergence theorem over a fan of each loop; a point on a face or an edge is Ericson, \"Real-Time Collision Detection\", 2005, section 5.1.5, closest point on a triangle."
+            "text": "chapter 28.10 (`projects/engines/geometry/architecture/28-testing.md`). A solid's volume is the divergence theorem over a fan of each loop; a point on a face or an edge is Ericson, \"Real-Time Collision Detection\", 2005, section 5.1.5, closest point on a triangle, and section 5.1.2 on a segment; whether a point of a face's plane is inside its loops is the crossing test (W. Randolph Franklin's PNPOLY, as in Haines, \"Point in Polygon Strategies\", Graphics Gems IV, 1994). An exact face is sampled along its sides and on a lattice over its box in the plan its normal leans on least, lifted to its plane where the lattice is inside it."
           },
           "path": "geom_test::oracle::meshes",
           "provenance": [],

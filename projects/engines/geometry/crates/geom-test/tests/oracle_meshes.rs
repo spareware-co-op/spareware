@@ -14,9 +14,9 @@ use std::collections::BTreeSet;
 
 use geom_test::oracle::exact::float;
 use geom_test::oracle::meshes::{
-    Answer, CGAL, CHERCHI, Compared, Job, MANIFOLD, MANIFOLD_RUST, Op, Solid, cuboid, hausdorff,
-    holds, jobs, judge, operation, own_answer, own_volume, prism, reference, replay, run,
-    tetrahedron, volume,
+    Answer, CGAL, CHERCHI, Compared, Job, MANIFOLD, MANIFOLD_RUST, Op, cuboid, hausdorff, holds,
+    jobs, judge, operation, own_answer, own_volume, prism, reference, replay, run, tetrahedron,
+    volume,
 };
 use geom_test::seed::Seed;
 
@@ -199,41 +199,80 @@ fn a_refusal_is_a_difference() {
     );
 }
 
-/// A tetrahedron cut by a box whose result, rounded to the grid, crosses a face: the first night's
-/// job 742 (seed 0000000a235056b2).
-fn untriangulable() -> Job {
-    Job {
-        id: 742,
-        family: "tetrahedra".to_owned(),
-        op: Op::Intersection,
-        a: Solid {
-            vertices: vec![[4, 11, 7], [16, 9, 16], [14, 16, 3], [4, 10, 10]],
-            triangles: vec![[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2]],
-        },
-        b: cuboid([10, 10, 4], [14, 14, 8]),
-    }
+/// One of Manifold's first answers that differed, with its job and night.
+#[derive(serde::Deserialize)]
+struct Night {
+    run: String,
+    job: Job,
+    answer: Answer,
+}
+
+/// Manifold's answers to the four jobs of its first nights that differed (chapter 28.10): job 742
+/// of run 43542140594, 1623 of run 43548038439, and 1763 and 1891 of run 43548473272. Each was
+/// measured against the export's triangles of the kernel's result, whose corners are rounded to
+/// the grid: on 1763 they folded, and the other three will not triangulate.
+fn first_nights() -> Vec<Night> {
+    include_str!("oracle_meshes/manifold.jsonl")
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
 }
 
 #[test]
-fn a_result_that_will_not_triangulate_is_unmeasured_not_the_end_of_the_night() {
-    let job = untriangulable();
-    assert!(run(&job).is_ok());
-    assert!(own_answer(&job).is_err());
-    let answered = Answer {
-        id: job.id,
-        volume: Some("1.733".to_owned()),
-        ..Answer::default()
-    };
-    let (kind, settled) = kind_and_settled(judge(MANIFOLD, &job, &answered).unwrap());
-    assert_eq!(kind, "unmeasured");
+fn manifolds_first_differences_were_the_rounding_of_our_measure() {
+    let nights = first_nights();
+    let ids: Vec<u64> = nights.iter().map(|n| n.job.id).collect();
+    assert_eq!(ids, [742, 1623, 1763, 1891]);
+    for night in &nights {
+        let job = &night.job;
+        // The kernel's exact volume is the reference's, and Manifold's answer, measured from the
+        // kernel's exact faces, agrees with it.
+        assert_eq!(
+            volume(&run(job).unwrap()).unwrap(),
+            reference(job).unwrap(),
+            "job {}",
+            job.id
+        );
+        assert_eq!(
+            judge(MANIFOLD, job, &night.answer).unwrap(),
+            Compared::Agree,
+            "job {} of run {}",
+            job.id,
+            night.run
+        );
+        // An exact oracle needs only the volume, so it agrees with the right one too.
+        let exact = Answer {
+            id: job.id,
+            volume: Some(own_volume(job).unwrap()),
+            ..Answer::default()
+        };
+        assert_eq!(judge(CGAL, job, &exact).unwrap(), Compared::Agree);
+    }
+    // The export still refuses the three whose rounded sides cross, and covers 1763's faces.
+    let refused: Vec<u64> = nights
+        .iter()
+        .filter(|n| own_answer(&n.job).is_err())
+        .map(|n| n.job.id)
+        .collect();
+    assert_eq!(refused, [742, 1623, 1891]);
+}
+
+#[test]
+fn an_answer_off_the_exact_faces_is_a_hausdorff_difference() {
+    // Job 1763 with one of Manifold's corners moved far off, its volume ours and its stated
+    // tolerance a step: the volume and area pass, so the distance from the exact faces must catch
+    // it.
+    let night = first_nights().swap_remove(2);
+    let mut moved = night.answer.clone();
+    let triangles = moved.triangles.as_mut().unwrap();
+    let x: f64 = triangles[0][1][0].parse().unwrap();
+    triangles[0][1][0] = float(x + 30.0).unwrap();
+    moved.tolerance = Some(float(1.0).unwrap());
+    let ours = volume(&run(&night.job).unwrap()).unwrap();
+    moved.volume = Some(float(ours.to_f64().value()).unwrap());
+    let (kind, settled) = kind_and_settled(judge(MANIFOLD, &night.job, &moved).unwrap());
+    assert_eq!(kind, "hausdorff");
     assert!(settled.starts_with("theirs"), "{settled}");
-    // An exact oracle needs only the volume, so it still agrees with the right one.
-    let exact = Answer {
-        id: job.id,
-        volume: Some(own_volume(&job).unwrap()),
-        ..Answer::default()
-    };
-    assert_eq!(judge(CGAL, &job, &exact).unwrap(), Compared::Agree);
 }
 
 #[test]

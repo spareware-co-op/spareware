@@ -16,21 +16,29 @@
 //! - **The others can only refute**: volume and area are held to both sides' stated bounds, capped
 //!   at ours plus the fit bound ([`Allowance`]), and the Hausdorff distance is measured by dense
 //!   deterministic sampling, so it is a lower bound on the true distance.
+//! - **The kernel's side is its exact result**: its volume and area are computed exactly from its
+//!   corners, and the distance is measured from and to its exact faces, each corner the double
+//!   nearest its place, never from the export's triangles, whose corners are rounded to the grid.
+//!   So the oracle is held to the kernel's exact answer, and no rounding of ours is allowed for.
 //! - **Refusals are compared**: a job one side refuses and the other answers is a difference, of
 //!   kind `refused`, never a pass.
-//! - **A result the kernel cannot measure is a difference**: a floating oracle is compared on the
-//!   kernel's result in triangles, and a result that will not triangulate (its rounding to the
-//!   grid crosses a face) is a difference of kind `unmeasured`, never a pass and never the end of
-//!   the night. An exact oracle needs only the exact volume, so it is never unmeasured.
+//! - **A result the kernel cannot measure is a difference**: a result whose corners cannot be
+//!   placed, which only a defect can cause, is a difference of kind `unmeasured`, never a pass and
+//!   never the end of the night.
 //! - **Truth settles it**: an oracle is never trusted; [`Compared::Differ`]'s `settled` says what
 //!   the reference found.
 //!
 //! Method: chapter 28.10 (`projects/engines/geometry/architecture/28-testing.md`). A solid's volume
 //! is the divergence theorem over a fan of each loop; a point on a face or an edge is Ericson,
-//! "Real-Time Collision Detection", 2005, section 5.1.5, closest point on a triangle.
+//! "Real-Time Collision Detection", 2005, section 5.1.5, closest point on a triangle, and section
+//! 5.1.2 on a segment; whether a point of a face's plane is inside its loops is the crossing test
+//! (W. Randolph Franklin's PNPOLY, as in Haines, "Point in Polygon Strategies", Graphics Gems IV,
+//! 1994). An exact face is sampled along its sides and on a lattice over its box in the plan its
+//! normal leans on least, lifted to its plane where the lattice is inside it.
 //!
-//! Cost: a job's boolean is the kernel's; sampling is the sample points times the triangles of the
-//! other side, on solids of a few dozen triangles; the exact reference runs only on a difference.
+//! Cost: a job's boolean is the kernel's; sampling is the sample points times the triangles or
+//! faces of the other side, on solids of a few dozen; the exact reference runs only on a
+//! difference.
 
 use core::num::NonZeroU64;
 
@@ -688,28 +696,36 @@ const DENSITY: u32 = 8;
 /// the triangle it came from rounds to about this, and it is far under anything that matters.
 const SAMPLED: f64 = 1e-6;
 
-/// The largest distance from a sample of `from` to the nearest of `to`.
-fn one_way(from: &[Triangle], to: &[Triangle]) -> f64 {
-    let mut far: f64 = 0.0;
+/// Samples of each triangle of `triangles`: a lattice of `DENSITY` steps along two of its sides.
+fn triangle_samples(triangles: &[Triangle]) -> Vec<[f64; 3]> {
+    let mut out = Vec::new();
     let density = f64::from(DENSITY);
-    for &[a, b, c] in from {
+    for &[a, b, c] in triangles {
         let (u, v) = (sub(b, a), sub(c, a));
         for i in 0..=DENSITY {
             for j in 0..=DENSITY.saturating_sub(i) {
-                let p = along(
+                out.push(along(
                     along(a, u, f64::from(i) / density),
                     v,
                     f64::from(j) / density,
-                );
-                let near = to
-                    .iter()
-                    .map(|t| distance(p, t))
-                    .fold(f64::INFINITY, smaller);
-                far = larger(far, near);
+                ));
             }
         }
     }
-    far
+    out
+}
+
+/// The largest of `near` over `samples`.
+fn farthest(samples: &[[f64; 3]], near: impl Fn([f64; 3]) -> f64) -> f64 {
+    samples.iter().map(|&p| near(p)).fold(0.0, larger)
+}
+
+/// How far `p` is from the nearest of `triangles`; infinite if there are none.
+fn to_triangles(p: [f64; 3], triangles: &[Triangle]) -> f64 {
+    triangles
+        .iter()
+        .map(|t| distance(p, t))
+        .fold(f64::INFINITY, smaller)
 }
 
 /// The two-sided Hausdorff distance between two triangle sets, by sampling, so it can only refute.
@@ -719,43 +735,211 @@ pub fn hausdorff(a: &[Triangle], b: &[Triangle]) -> f64 {
     if a.is_empty() && b.is_empty() {
         return 0.0;
     }
-    larger(one_way(a, b), one_way(b, a))
+    larger(
+        farthest(&triangle_samples(a), |p| to_triangles(p, b)),
+        farthest(&triangle_samples(b), |p| to_triangles(p, a)),
+    )
 }
 
-/// What the kernel made of a job, as a comparison reads it: each corner the double nearest its
-/// exact place, not the grid point it would be written at.
+/// One face of the kernel's result, each corner the double nearest its exact place.
+struct Face {
+    /// The unit normal of its plane.
+    normal: [f64; 3],
+    /// Where its plane is: `normal · x + offset` is 0 on it.
+    offset: f64,
+    /// The two axes of the plan it is drawn in, the axes its normal leans on least, and the axis it
+    /// is lifted along.
+    axes: [usize; 3],
+    /// Its loops, the outer first.
+    rings: Vec<Vec<[f64; 3]>>,
+}
+
+/// Coordinate `axis` of `p`.
+fn coordinate_of(p: [f64; 3], axis: usize) -> f64 {
+    p.get(axis).copied().unwrap_or(0.0)
+}
+
+/// Each side of each loop of `face`, from a corner to the next.
+fn sides_of(face: &Face) -> impl Iterator<Item = ([f64; 3], [f64; 3])> + '_ {
+    face.rings.iter().flat_map(|ring| {
+        let after = ring.iter().cycle().skip(1);
+        ring.iter().copied().zip(after.copied())
+    })
+}
+
+/// Whether `p`, a point of `face`'s plane, is inside its loops: whether a ray from it along the
+/// plan's first axis crosses their sides an odd number of times (the crossing test).
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the plan's axes i, j and k and a point's x and y, as in the crossing test"
+)]
+fn encloses(face: &Face, p: [f64; 3]) -> bool {
+    let [i, j, _] = face.axes;
+    let (x, y) = (coordinate_of(p, i), coordinate_of(p, j));
+    let mut inside = false;
+    for (a, b) in sides_of(face) {
+        let (ax, ay) = (coordinate_of(a, i), coordinate_of(a, j));
+        let (bx, by) = (coordinate_of(b, i), coordinate_of(b, j));
+        if (ay > y) != (by > y) && x < ax + (y - ay) * (bx - ax) / (by - ay) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+/// How far `p` is from the segment from `a` to `b`: Ericson's section 5.1.2.
+fn to_segment(p: [f64; 3], a: [f64; 3], b: [f64; 3]) -> f64 {
+    let ab = sub(b, a);
+    let length = dot(ab, ab);
+    let t = if length > 0.0 {
+        larger(0.0, smaller(1.0, dot(sub(p, a), ab) / length))
+    } else {
+        0.0
+    };
+    let gap = sub(p, along(a, ab, t));
+    dot(gap, gap).sqrt()
+}
+
+/// How far `p` is from `face`: from its plane if its foot there is inside the face, or else from
+/// the nearest side.
+fn to_face(p: [f64; 3], face: &Face) -> f64 {
+    let height = dot(face.normal, p) + face.offset;
+    if encloses(face, along(p, face.normal, -height)) {
+        return height.abs();
+    }
+    sides_of(face)
+        .map(|(a, b)| to_segment(p, a, b))
+        .fold(f64::INFINITY, smaller)
+}
+
+/// How far `p` is from the nearest of `faces`; infinite if there are none.
+fn to_faces(p: [f64; 3], faces: &[Face]) -> f64 {
+    faces
+        .iter()
+        .map(|f| to_face(p, f))
+        .fold(f64::INFINITY, smaller)
+}
+
+/// Samples of each face of `faces`: `DENSITY` steps along each side, and a lattice of `DENSITY`
+/// steps each way over its box in the plan, lifted to its plane where it is inside the face.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the plan's axes i, j and k and a point's x and y, as in the crossing test"
+)]
+fn face_samples(faces: &[Face]) -> Vec<[f64; 3]> {
+    let mut out = Vec::new();
+    let density = f64::from(DENSITY);
+    for face in faces {
+        let [i, j, k] = face.axes;
+        let (mut low, mut high) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        for (a, b) in sides_of(face) {
+            for s in 0..=DENSITY {
+                out.push(along(a, sub(b, a), f64::from(s) / density));
+            }
+            for ((l, h), axis) in low.iter_mut().zip(&mut high).zip([i, j]) {
+                *l = smaller(*l, coordinate_of(a, axis));
+                *h = larger(*h, coordinate_of(a, axis));
+            }
+        }
+        let [low_x, low_y] = low;
+        let [high_x, high_y] = high;
+        let lean = coordinate_of(face.normal, k);
+        for s in 0..=DENSITY {
+            for t in 0..=DENSITY {
+                let x = low_x + (high_x - low_x) * f64::from(s) / density;
+                let y = low_y + (high_y - low_y) * f64::from(t) / density;
+                let lifted = -(face.offset
+                    + coordinate_of(face.normal, i) * x
+                    + coordinate_of(face.normal, j) * y)
+                    / lean;
+                let mut p = [0.0; 3];
+                for (axis, value) in [(i, x), (j, y), (k, lifted)] {
+                    if let Some(slot) = p.get_mut(axis) {
+                        *slot = value;
+                    }
+                }
+                if encloses(face, p) {
+                    out.push(p);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The two-sided Hausdorff distance between the kernel's exact `faces` and an oracle's
+/// `triangles`, by sampling both, so it can only refute. Infinite if exactly one side is empty.
+fn hausdorff_exact(faces: &[Face], triangles: &[Triangle]) -> f64 {
+    if faces.is_empty() && triangles.is_empty() {
+        return 0.0;
+    }
+    larger(
+        farthest(&face_samples(faces), |p| to_triangles(p, triangles)),
+        farthest(&triangle_samples(triangles), |p| to_faces(p, faces)),
+    )
+}
+
+/// Each face of `mesh` from its exact `corners`.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "doubles, which cannot overflow here"
+)]
+fn exact_faces(mesh: &ExactMesh, corners: &[[RBig; 3]]) -> Result<Vec<Face>, String> {
+    let parts = mesh.parts();
+    let mut out = Vec::new();
+    for (rings, facing) in faces_of(mesh)?.into_iter().zip(&parts.face_plane) {
+        let plane = parts
+            .planes
+            .get(facing.row as usize)
+            .ok_or_else(|| "a plane past the pool".to_owned())?;
+        let double = |x: i128| RBig::from(x).to_f64().value();
+        let n = plane.n().map(double);
+        let size = dot(n, n).sqrt();
+        let normal = n.map(|x| x / size);
+        let [a, b, c] = n.map(f64::abs);
+        let axes = if a >= b && a >= c {
+            [1, 2, 0]
+        } else if b >= c {
+            [2, 0, 1]
+        } else {
+            [0, 1, 2]
+        };
+        let mut loops = Vec::with_capacity(rings.len());
+        for ring in rings {
+            let mut points = Vec::with_capacity(ring.len());
+            for v in ring {
+                points.push(row(corners, Some(v))?.clone().map(|x| x.to_f64().value()));
+            }
+            loops.push(points);
+        }
+        out.push(Face {
+            normal,
+            offset: double(plane.d()) / size,
+            axes,
+            rings: loops,
+        });
+    }
+    Ok(out)
+}
+
+/// What the kernel made of a job, as a comparison reads it: its exact volume, its area and the
+/// length of its loops from its exact corners, and its faces, each corner the double nearest its
+/// exact place, not the grid point the export would write.
 struct Made {
     volume: RBig,
     area: f64,
     edges: f64,
-    triangles: Vec<Triangle>,
-    /// Whether a corner was off the grid: triangles are drawn between rounded corners, so one may
-    /// stray from its face by up to a step.
-    rounded: bool,
+    faces: Vec<Face>,
 }
 
 fn made(mesh: &ExactMesh) -> Result<Made, String> {
-    let mut meter = WorkMeter::new(Budget::UNLIMITED);
-    let drawn = triangles(mesh, &mut meter).map_err(|e| format!("{e:?}"))?;
-    let vertex = |v: u32| {
-        let at = mesh
-            .parts()
-            .verts
-            .get(v as usize)
-            .ok_or_else(|| "a corner past the table".to_owned())?;
-        Ok::<[f64; 3], String>(corner(mesh, *at)?.map(|x| x.to_f64().value()))
-    };
-    let mut all = Vec::with_capacity(drawn.corners.len());
-    for &[a, b, c] in &drawn.corners {
-        all.push([vertex(a)?, vertex(b)?, vertex(c)?]);
-    }
+    let corners = corners_of(mesh)?;
     let (area, edges) = sizes(mesh)?;
     Ok(Made {
         volume: volume(mesh)?,
         area,
         edges,
-        triangles: all,
-        rounded: drawn.rounded,
+        faces: exact_faces(mesh, &corners)?,
     })
 }
 
@@ -859,13 +1043,13 @@ fn floating(oracle: &str, job: &Job, ours: &Made, answer: &Answer) -> Result<Com
     let our_volume = ours.volume.to_f64().value();
     let by_volume = allowance(larger(our_area, area), 0.0, our_volume.abs() * f64::EPSILON);
     let by_area = allowance(edges, 0.0, our_area * f64::EPSILON * 16.0);
-    let moved = if ours.rounded { 1.0 } else { 0.0 };
-    let by_gap = allowance(1.0, moved, SAMPLED);
+    // Measured from the exact faces: nothing of ours is rounded.
+    let by_gap = allowance(1.0, 0.0, SAMPLED);
     let kind = if !within(our_volume, theirs, &by_volume) {
         "volume"
     } else if !within(our_area, area, &by_area) {
         "area"
-    } else if hausdorff(&ours.triangles, &shape) > by_gap.total() {
+    } else if hausdorff_exact(&ours.faces, &shape) > by_gap.total() {
         "hausdorff"
     } else {
         return Ok(Compared::Agree);
@@ -907,7 +1091,7 @@ pub fn judge(oracle: &str, job: &Job, answer: &Answer) -> Result<Compared, Strin
                     oracle,
                     job,
                     "unmeasured",
-                    format!("{settled}; its result does not triangulate: {why}"),
+                    format!("{settled}; its result cannot be measured: {why}"),
                 ))
             }
         };
@@ -942,7 +1126,9 @@ pub fn operation(job: &Job) -> Result<Operation, String> {
     })
 }
 
-/// Runs an operation [`operation`] wrote; `None` for any other operation.
+/// Runs an operation [`operation`] wrote; `None` for any other operation. Its two bodies are the
+/// hashes of the result's exact volume and of its triangles as the export makes them (or the
+/// export's refusal), so a triaged case's fixture holds both.
 #[must_use]
 pub fn replay(operation: &Operation) -> Option<Ran> {
     if ![Op::Union, Op::Intersection, Op::Difference]
@@ -952,6 +1138,25 @@ pub fn replay(operation: &Operation) -> Option<Ran> {
         return None;
     }
     Some(replayed(operation).unwrap_or_else(Ran::Refused))
+}
+
+/// The SHA-256 of what the export makes of `mesh` in triangles: each vertex and each triangle with
+/// its face, in order, as text, or the refusal.
+fn exported(mesh: &ExactMesh) -> [u8; 32] {
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let mut sha = Sha256::new();
+    match triangles(mesh, &mut meter) {
+        Ok(drawn) => {
+            for p in &drawn.vertices {
+                sha.write(format!("v {} {} {}\n", p.x.get(), p.y.get(), p.z.get()).as_bytes());
+            }
+            for (&[a, b, c], face) in drawn.corners.iter().zip(&drawn.faces) {
+                sha.write(format!("t {a} {b} {c} {face}\n").as_bytes());
+            }
+        }
+        Err(e) => sha.write(format!("refused {e:?}\n").as_bytes()),
+    }
+    sha.finish()
 }
 
 fn replayed(operation: &Operation) -> Result<Ran, String> {
@@ -969,7 +1174,7 @@ fn replayed(operation: &Operation) -> Result<Ran, String> {
     let mut sha = Sha256::new();
     sha.write(volume(&mesh)?.to_string().as_bytes());
     Ok(Ran::Done(Step {
-        bodies: vec![sha.finish()],
+        bodies: vec![sha.finish(), exported(&mesh)],
         names: NameSet::default(),
         history: None,
         exactness: Exactness::Exact,
@@ -985,19 +1190,28 @@ fn replayed(operation: &Operation) -> Result<Ran, String> {
 ///
 /// A job the kernel refuses.
 pub fn own_answer(job: &Job) -> Result<Answer, String> {
-    let ours = made(&run(job)?)?;
+    let mesh = run(job)?;
+    let ours = made(&mesh)?;
+    let corners = corners_of(&mesh)?;
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let drawn = triangles(&mesh, &mut meter).map_err(|e| format!("{e:?}"))?;
+    let place = |v: u32| -> Result<[f64; 3], String> {
+        Ok(row(&corners, Some(&v))?.clone().map(|x| x.to_f64().value()))
+    };
+    let mut shape = Vec::with_capacity(drawn.corners.len());
+    for &[a, b, c] in &drawn.corners {
+        shape.push([place(a)?, place(b)?, place(c)?]);
+    }
     let text = |x: f64| float(x).unwrap_or_default();
+    // The export's triangles, split on corners rounded to the grid and drawn between the exact
+    // ones, so where a corner was rounded one may stray from its face by up to a step.
+    let stated = if drawn.rounded { 1.0 } else { 0.0 };
     Ok(Answer {
         id: job.id,
         volume: Some(text(ours.volume.to_f64().value())),
         area: Some(text(ours.area)),
-        tolerance: Some(text(0.0)),
-        triangles: Some(
-            ours.triangles
-                .iter()
-                .map(|t| t.map(|p| p.map(text)))
-                .collect(),
-        ),
+        tolerance: Some(text(stated)),
+        triangles: Some(shape.iter().map(|t| t.map(|p| p.map(text))).collect()),
     })
 }
 
