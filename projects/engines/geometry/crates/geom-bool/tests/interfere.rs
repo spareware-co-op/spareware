@@ -20,7 +20,7 @@ use geom_bool::interfere::{
     Arrangement, BuildError, EdgeIn, Interfered, Interference, VertexIn, interfere,
 };
 use geom_bool::merge::default_remaining;
-use geom_bool::pave::{History, OrderError, Pave, blocks, order, split};
+use geom_bool::pave::{History, OrderError, Pave, PaveError, blocks, order, split};
 use geom_curve::{Circle, CurveKind, Frame, Line, ParamCurve};
 use geom_num::P3;
 use geom_num::interval::Interval;
@@ -406,4 +406,84 @@ fn a_closed_edge_wraps_round_and_keeps_its_history() {
     assert_eq!(once.len(), 1);
     assert_eq!(once[0].history, History::Split);
     assert!(once[0].block.wraps);
+}
+
+/// Two straight edges of different operands between the same two merged vertices, the second on
+/// the line through `origin` along `direction`, run from parameter 0 to 1.
+fn two_straight_edges(origin: [f64; 3], direction: [f64; 3]) -> Interfered {
+    let mut b = Build::new();
+    b.segment(p(0, 0, 0), p(1000, 0, 0), 0);
+    let line = Line::new(origin, direction, (0.0, 1.0)).unwrap();
+    let ends = [b.vertex(p(0, 0, 0), 1), b.vertex(p(1000, 0, 0), 1)];
+    b.edge(CurveKind::Line(line), Some(ends), 1);
+    b.run().unwrap()
+}
+
+#[test]
+fn parallel_straight_edges_a_step_apart_are_not_one_block() {
+    // The second runs along y = 1: its ends merge with the first's, but its line is another, so
+    // the exact test says no and there is no common block.
+    let out = two_straight_edges([0.0, 1.0, 0.0], [1000.0, 0.0, 0.0]);
+    assert_eq!(out.vertices.len(), 2, "{:?}", out.vertices);
+    assert!(out.common.is_empty(), "{:?}", out.common);
+}
+
+#[test]
+fn a_straight_edge_off_the_grid_is_one_block_only_by_the_contact_rule() {
+    // The second's line runs a quarter step above the first's: not whole numbers, so the exact
+    // test is not asked, and the contact rule makes the two one.
+    let out = two_straight_edges([0.0, 0.25, 0.0], [1000.0, 0.0, 0.0]);
+    assert_eq!(out.common.len(), 1, "{:?}", out.common);
+    assert!(
+        matches!(out.common[0].proof, Proof::Contact(_)),
+        "{:?}",
+        out.common[0].proof
+    );
+}
+
+/// Two straight edges on the x axis from 0 to 1000 of different operands, the second's line
+/// given from an origin `far` steps along the axis, running back.
+fn on_the_axis_from(far: f64) -> Interfered {
+    let mut b = Build::new();
+    b.segment(p(0, 0, 0), p(1000, 0, 0), 0);
+    let line = Line::new([far, 0.0, 0.0], [-1.0, 0.0, 0.0], (far - 1000.0, far)).unwrap();
+    let ends = [b.vertex(p(1000, 0, 0), 1), b.vertex(p(0, 0, 0), 1)];
+    b.edge(CurveKind::Line(line), Some(ends), 1);
+    b.run().unwrap()
+}
+
+#[test]
+fn a_line_whose_origin_is_whole_up_to_nine_times_ten_to_the_fifteen_is_compared_exactly() {
+    let out = on_the_axis_from(9.0e15);
+    assert_eq!(out.common.len(), 1, "{:?}", out.common);
+    assert_eq!(out.common[0].proof, Proof::Exact);
+}
+
+#[test]
+fn a_line_whose_origin_is_past_nine_times_ten_to_the_fifteen_goes_to_the_contact_rule() {
+    // One more than the bound, still a whole double, is beyond what the exact test takes.
+    let out = on_the_axis_from(9.0e15 + 1.0);
+    assert_eq!(out.common.len(), 1, "{:?}", out.common);
+    assert!(
+        matches!(out.common[0].proof, Proof::Contact(_)),
+        "{:?}",
+        out.common[0].proof
+    );
+}
+
+#[test]
+fn an_unproven_pave_order_names_its_vertices_and_edge() {
+    let pave = |vertex: usize| Pave {
+        vertex,
+        t: Interval::new(0.25, 0.5).unwrap(),
+    };
+    let error = PaveError {
+        edge: 7,
+        first: pave(2),
+        second: pave(3),
+    };
+    assert_eq!(
+        error.to_string(),
+        "the order of vertices 2 and 3 on edge 7 is not proven: their parameters meet"
+    );
 }

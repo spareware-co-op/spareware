@@ -8621,14 +8621,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
-      "mutant": "replace touch -> bool with true",
-      "line_text": "let tangent = match (first, second) {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "bend_order asks touch only for two lines or circles given by whole numbers in a flat face's plane that leave a shared vertex on one side of the reference with a cross product their tangents' enclosures cannot sign. Such curves either touch there, where touch is true and the mutant agrees, or cross at an angle below those enclosures' width, a few units in the last place of a coordinate; their whole numbers allow that only when their two crossings lie within a small fraction of a step of each other, and the edge stage has then made them the one vertex by the contact rule, a touch of the arrangement. The mutant orders those by curvature as the touch the arrangement made of them, where the original refuses with UndecidedOrder; no input made of whole lines and circles a step or more apart tells them apart."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
       "mutant": "replace > with >= in seen_from_outside",
       "line_text": "normal.get(dropped).is_some_and(|n: &i128| *n > 0)",
       "occurrences": 1,

@@ -42,10 +42,12 @@
 //!   integers where both are whole (a line between grid points, a section's n₁ × n₂), from
 //!   enclosures otherwise. The reference at a vertex is the first ray direction of
 //!   [`crate::inside::DIRECTIONS`] whose line no tangent's enclosure there meets, so a tangent
-//!   along an axis, as a circle's at its top, is ordered as any other. Two pieces along one
-//!   tangent are ordered by their curvature where they are proven to touch there exactly: on a
-//!   flat face, two circles or a line and a circle given by whole numbers in its plane, the
-//!   distance of their centres (or of the centre from the line) compared exactly with their radii.
+//!   along an axis, as a circle's at its top, is ordered as any other. Two pieces whose tangents'
+//!   cross product is not proven are ordered by their curvature where both are lines or circles
+//!   given by whole numbers in a flat face's plane: such curves touch there, or cross again
+//!   within a fraction of a step, where the edge stage has made both crossings one vertex, a
+//!   touch of the arrangement (`bend_order` gives the reason in full). Their curvatures, each a
+//!   side and a whole radius, are compared exactly.
 //!   Any other pair whose cross product is not proven, and a vertex no direction serves, fail
 //!   with [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance compares two.
 //! - **Each loop's sense is proven.** A loop's area is enclosed piece by piece: a straight piece's
@@ -77,8 +79,9 @@
 //! (`SmTrimmingTools::OrderCurvesIntoLoops`), read in solidcore's Rust port; it compares tangents
 //! in doubles within a tolerance, and where they agree goes on to curvature, and its outer loops
 //! are found by the areas of tessellations. None of that is taken: tangents are compared by proven
-//! signs, and two along one tangent go on to curvature only where their touching is proven
-//! exactly, never because two tangents agree within a tolerance. The order is counted from a
+//! signs, and two go on to curvature only where their tangents cannot be told apart and both are
+//! whole lines or circles, never because two tangents agree within a tolerance. The order is
+//! counted from a
 //! reference direction chosen to avoid every tangent at the vertex, so no tangent sits where the
 //! count starts and ends: counted from a fixed axis, a curve leaving along the axis could belong
 //! at either end.
@@ -300,10 +303,10 @@ fn turning(a: &Dir, b: &Dir, r: (i64, i64)) -> Option<Ordering> {
 /// radius (1 for a line).
 #[derive(Clone, Copy, Debug)]
 enum Planar {
-    /// A line: its origin and direction.
-    Straight([I256; 3], [I256; 3]),
-    /// A circle: its centre and radius, and the side of its tangent its centre lies on.
-    Round([I256; 3], I256, Sign),
+    /// A line.
+    Straight,
+    /// A circle: its radius, and the side of its tangent its centre lies on.
+    Round(I256, Sign),
 }
 
 /// Three doubles as whole numbers, if each is one.
@@ -319,17 +322,6 @@ fn dot_whole(a: &[I256; 3], b: &[I256; 3]) -> Option<I256> {
     a0.checked_mul(b0)?
         .checked_add(&a1.checked_mul(b1)?)?
         .checked_add(&a2.checked_mul(b2)?)
-}
-
-/// a − b, exactly.
-fn minus_whole(a: &[I256; 3], b: &[I256; 3]) -> Option<[I256; 3]> {
-    let [a0, a1, a2] = a;
-    let [b0, b1, b2] = b;
-    Some([
-        a0.checked_sub(b0)?,
-        a1.checked_sub(b1)?,
-        a2.checked_sub(b2)?,
-    ])
 }
 
 /// a × b, exactly.
@@ -391,7 +383,7 @@ impl Planar {
                 let held = [on_plane(&origin), square_to(&direction)];
                 held.iter()
                     .all(|one| *one == Some(true))
-                    .then_some(Planar::Straight(origin, direction))
+                    .then_some(Planar::Straight)
             }
             CurveKind::Circle(circle) => {
                 let (Some(centre), Some(radius), Some(axis)) = (
@@ -421,7 +413,7 @@ impl Planar {
                     .certain_sign();
                 match side {
                     Some(sign @ (Sign::Positive | Sign::Negative)) => {
-                        Some(Planar::Round(centre, radius, sign))
+                        Some(Planar::Round(radius, sign))
                     }
                     _ => None,
                 }
@@ -433,59 +425,32 @@ impl Planar {
     /// The signed curvature as a fraction: its side and its radius.
     fn bend(&self) -> (Sign, I256) {
         match self {
-            Planar::Straight(..) => (Sign::Zero, I256::from_i64(1)),
-            Planar::Round(_, radius, side) => (*side, *radius),
+            Planar::Straight => (Sign::Zero, I256::from_i64(1)),
+            Planar::Round(radius, side) => (*side, *radius),
         }
     }
-}
-
-/// Whether two pieces of a flat face are proven, exactly, to touch where they meet: two circles
-/// in its plane whose centres lie the sum or the difference of their radii apart, or a line and a
-/// circle whose centre lies its radius from the line. Two such curves meet in one point, so at a
-/// vertex both leave they leave along one tangent.
-fn touch(first: &Planar, second: &Planar) -> bool {
-    let tangent = match (first, second) {
-        (Planar::Round(c1, r1, _), Planar::Round(c2, r2, _)) => (|| {
-            let gap = minus_whole(c1, c2)?;
-            let apart = dot_whole(&gap, &gap)?;
-            if apart.signum() == Sign::Zero {
-                return Some(false);
-            }
-            // ((r₁ + r₂)² − d²)((r₁ − r₂)² − d²) is nothing just when one factor is: one sign.
-            let off =
-                |radius: I256| -> Option<I256> { radius.checked_mul(&radius)?.checked_sub(&apart) };
-            let both = off(r1.checked_add(r2)?)?.checked_mul(&off(r1.checked_sub(r2)?)?)?;
-            Some(both.signum() == Sign::Zero)
-        })(),
-        (Planar::Straight(origin, along), Planar::Round(centre, radius, _))
-        | (Planar::Round(centre, radius, _), Planar::Straight(origin, along)) => (|| {
-            let across = cross_whole(along, &minus_whole(centre, origin)?)?;
-            let far = dot_whole(&across, &across)?;
-            let length = dot_whole(along, along)?;
-            Some(
-                radius
-                    .checked_mul(radius)?
-                    .checked_mul(&length)?
-                    .checked_sub(&far)?
-                    .signum()
-                    == Sign::Zero,
-            )
-        })(),
-        (Planar::Straight(..), Planar::Straight(..)) => None,
-    };
-    tangent == Some(true)
 }
 
 /// Two half-edges leaving one vertex, each with its tangent there.
 type Leaving<'d> = (&'d (usize, Dir), &'d (usize, Dir));
 
 /// The curvature step (11.4 step 5): the turning order of half-edges `a` and `b`, leaving one
-/// vertex of a flat face along one tangent, when both pieces are proven to touch there
-/// ([`touch`]). Leaving along one direction, the one that bends further to the left in the
-/// picture, with the larger signed curvature, lies further counter-clockwise. A flat picture is
-/// an affine map of the plane, which scales both curves' bend from their common tangent by one
-/// factor, so the order of the curvatures in the plane, taken with the sides read in the picture,
-/// is the order in the picture. `None` for any other pair, and for two that bend alike.
+/// vertex of a flat face along tangents whose enclosures cannot tell their order. Leaving along
+/// one direction, the one that bends further to the left in the picture, with the larger signed
+/// curvature, lies further counter-clockwise. A flat picture is an affine map of the plane, which
+/// scales both curves' bend from their common tangent by one factor, so the order of the
+/// curvatures in the plane, taken with the sides read in the picture, is the order in the
+/// picture. `None` for any pair but lines and circles given by whole numbers in the face's plane,
+/// and for two that bend alike.
+///
+/// No test that the two touch is needed. Two such curves whose tangents' enclosures overlap at a
+/// shared vertex either touch there or cross at an angle below the width of those enclosures,
+/// and whole lines and circles crossing at so small an angle cross again within a fraction of a
+/// step: a line and a circle meet in a chord of 2r·sin θ, and two circles in 2r₁r₂·sin θ / d,
+/// where an internal crossing has sin θ at least about 1/r from the whole numbers alone, so
+/// either chord is at most about twice the arc the tangents were enclosed over. The edge stage
+/// has then made both crossings the one vertex by the contact rule, a touch of the arrangement,
+/// and beyond it the curvatures order the pieces.
 fn bend_order(
     arr: &Arrangement,
     pieces: &[Bounding<'_>],
@@ -512,9 +477,6 @@ fn bend_order(
     ) else {
         return Ok(None);
     };
-    if !touch(&first, &second) {
-        return Ok(None);
-    }
     let ((s1, r1), (s2, r2)) = (first.bend(), second.bend());
     let signed = |s: Sign, r: &I256| -> Option<I256> {
         match s {
@@ -2011,33 +1973,10 @@ mod tests {
     }
 
     #[test]
-    fn touching_is_proven_exactly_from_whole_data() {
-        let w = |v: [i64; 3]| v.map(I256::from_i64);
-        let round = |c: [i64; 3], r: i64| Planar::Round(w(c), I256::from_i64(r), Sign::Positive);
-        let straight = |o: [i64; 3], d: [i64; 3]| Planar::Straight(w(o), w(d));
-        // Circles touching from outside and from inside, and two that cross.
-        assert!(touch(&round([0, 0, 0], 3), &round([5, 0, 0], 2)));
-        assert!(touch(&round([0, 0, 0], 5), &round([3, 4, 0], 10)));
-        assert!(touch(&round([0, 0, 0], 5), &round([0, 3, 0], 2)));
-        assert!(!touch(&round([0, 0, 0], 5), &round([0, 3, 0], 3)));
-        // Circles about one centre never touch.
-        assert!(!touch(&round([1, 1, 0], 5), &round([1, 1, 0], 3)));
-        // A line along y = 5 touches the circle of radius 5 about the origin, either way round;
-        // along y = 4 it crosses it, and two lines are no touch of this kind.
-        assert!(touch(&straight([7, 5, 0], [2, 0, 0]), &round([0, 0, 0], 5)));
-        assert!(touch(&round([0, 0, 0], 5), &straight([7, 5, 0], [2, 0, 0])));
-        assert!(!touch(
-            &straight([7, 4, 0], [2, 0, 0]),
-            &round([0, 0, 0], 5)
-        ));
-        assert!(!touch(
-            &straight([0, 0, 0], [1, 0, 0]),
-            &straight([0, 1, 0], [1, 0, 0])
-        ));
-        // A line's curvature is nothing, a circle's its side over its radius.
-        let (s, r) = straight([0, 0, 0], [1, 0, 0]).bend();
+    fn a_line_bends_by_nothing_and_a_circle_by_its_side_over_its_radius() {
+        let (s, r) = Planar::Straight.bend();
         assert_eq!((s, r.signum()), (Sign::Zero, Sign::Positive));
-        let (s, r) = round([0, 0, 0], 5).bend();
+        let (s, r) = Planar::Round(I256::from_i64(5), Sign::Positive).bend();
         assert_eq!(s, Sign::Positive);
         assert_eq!(
             r.checked_sub(&I256::from_i64(5)).unwrap().signum(),

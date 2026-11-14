@@ -14,7 +14,7 @@
     reason = "test code: a failure should stop loudly"
 )]
 
-use geom_bool::carrier::{Bound, CarrierIx, PointGeom, SortedVec};
+use geom_bool::carrier::{Bound, CarrierIx, CurveGeom, PointGeom, SortedVec};
 use geom_bool::decide::{Meeting, plane_cylinder, plane_sphere, point_cone, point_sphere};
 use geom_bool::distance::Carriers;
 use geom_bool::merge::{default_remaining, merge_cluster, merge_stage};
@@ -23,6 +23,7 @@ use geom_num::interval::Interval;
 use geom_num::plane::Plane;
 use geom_num::quadric::{Cone, Cylinder, Slope, Sphere};
 use geom_num::{NumError, P3, Sign, Steps};
+use geom_poly::plane::PlaneIx;
 use geom_run::{Budget, WorkMeter};
 
 fn meter() -> WorkMeter<'static> {
@@ -211,4 +212,20 @@ fn a_cluster_of_one_is_unchanged_and_a_lone_merge_is_refused_without_members() {
     // An out-of-range pair index is refused, never read past.
     let bad = merge_stage(&c, &[one], &[(0, 1)], default_remaining(), &mut meter());
     assert_eq!(bad, Err(ContactError::Num(NumError::Degenerate)));
+}
+
+#[test]
+fn a_sorted_set_holds_what_it_was_given_and_nothing_else() {
+    let set = SortedVec::from_items([5_u32, 1, 3, 1]);
+    assert_eq!(set.as_slice(), [1, 3, 5]);
+    assert!(set.contains(&3));
+    assert!(!set.contains(&2));
+    assert!(!set.contains(&9));
+}
+
+#[test]
+fn only_the_meeting_of_two_planes_is_an_exact_curve() {
+    let plane = PlaneIx::default();
+    assert!(CurveGeom::Line([plane, plane]).is_exact());
+    assert!(!CurveGeom::Section(0).is_exact());
 }
