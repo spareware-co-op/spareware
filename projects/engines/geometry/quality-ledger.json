@@ -6977,6 +6977,230 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Without the box around the shells sides_of_first takes around_on's box for the same polygons, also a step clear of every one with its faces on odd half steps. classify_inside gives the same vectors for any box that holds every polygon strictly inside (the path runs along its walls just inside, where no polygon is), around_on charges nothing and the trace charges by polygon, so the counts and the work are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace TriangleEnvelope::reaches_body -> bool with true",
+      "line_text": "let (low, high) = other.bounds();",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "reaches_body only prunes: covers_within skips a body whose box misses the region's, and a pair of bodies whose boxes miss. With true no body and no pair is skipped. A body that misses the region's box holds no point of the part, so it adds a holder that is never needed (a body holding all of the triangle still proves the part covered), and a crossing of two bodies whose boxes miss cannot lie in both, so it is never asked. Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace TriangleEnvelope::misses -> bool with false",
+      "line_text": "let n = plane.n();",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "misses only prunes facet lines: true proves that no point of the plane is in the body. With false, covers_within keeps every crossing plane, but a point on a plane that the region misses is not in the region, and a point on a plane that the other body misses is not in that body, so each point the pruning dropped still fails the in_part or holds test before it is asked. Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace || with && in TriangleEnvelope::misses",
+      "line_text": "low.checked_sub(w).is_some_and(|l| l > 0) || high.checked_add(w).is_some_and(|h| h < 0)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "low is at most high and the width w is not negative, so low − w > 0 makes high + w > 0: the two tests are never both true, and the mutant is misses always false. That only prunes less: a point on a plane the region or the other body misses still fails the in_part or holds test before it is asked, so every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace > with == in TriangleEnvelope::misses",
+      "line_text": "low.checked_sub(w).is_some_and(|l| l > 0) || high.checked_add(w).is_some_and(|h| h < 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also calls a plane missed when the body only touches it (its least or greatest value over the body's corners is exactly 0), and so prunes less elsewhere. A plane the body only touches meets it in a face, and pruning it drops no point the proof needs. For the region R: if R is on the plane's outer side, body i meets the part C only inside the plane, in no area, so no ray of the uncovered set runs along that line with a cell of body i beside it; if R is on the inner side, C has no points past the line, so a ray along it is a side of C, whose crossings are asked as C's own. For another body j: a crossing of body i's facet line with body j's that lies in body j and on a plane body j only touches is a corner of j's polygon in the triangle's plane, or on an edge of it along that line, so it is also the crossing of two of j's facet lines, asked in the pair (j, j), and body i, on whose facet it lies, holds it strictly in neither case. Every answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace > with >= in TriangleEnvelope::misses",
+      "line_text": "low.checked_sub(w).is_some_and(|l| l > 0) || high.checked_add(w).is_some_and(|h| h < 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also calls a plane missed when the body only touches it (its least or greatest value over the body's corners is exactly 0), and so prunes less elsewhere. A plane the body only touches meets it in a face, and pruning it drops no point the proof needs. For the region R: if R is on the plane's outer side, body i meets the part C only inside the plane, in no area, so no ray of the uncovered set runs along that line with a cell of body i beside it; if R is on the inner side, C has no points past the line, so a ray along it is a side of C, whose crossings are asked as C's own. For another body j: a crossing of body i's facet line with body j's that lies in body j and on a plane body j only touches is a corner of j's polygon in the triangle's plane, or on an edge of it along that line, so it is also the crossing of two of j's facet lines, asked in the pair (j, j), and body i, on whose facet it lies, holds it strictly in neither case. Every answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace < with == in TriangleEnvelope::misses",
+      "line_text": "low.checked_sub(w).is_some_and(|l| l > 0) || high.checked_add(w).is_some_and(|h| h < 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also calls a plane missed when the body only touches it (its least or greatest value over the body's corners is exactly 0), and so prunes less elsewhere. A plane the body only touches meets it in a face, and pruning it drops no point the proof needs. For the region R: if R is on the plane's outer side, body i meets the part C only inside the plane, in no area, so no ray of the uncovered set runs along that line with a cell of body i beside it; if R is on the inner side, C has no points past the line, so a ray along it is a side of C, whose crossings are asked as C's own. For another body j: a crossing of body i's facet line with body j's that lies in body j and on a plane body j only touches is a corner of j's polygon in the triangle's plane, or on an edge of it along that line, so it is also the crossing of two of j's facet lines, asked in the pair (j, j), and body i, on whose facet it lies, holds it strictly in neither case. Every answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace < with <= in TriangleEnvelope::misses",
+      "line_text": "low.checked_sub(w).is_some_and(|l| l > 0) || high.checked_add(w).is_some_and(|h| h < 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also calls a plane missed when the body only touches it (its least or greatest value over the body's corners is exactly 0), and so prunes less elsewhere. A plane the body only touches meets it in a face, and pruning it drops no point the proof needs. For the region R: if R is on the plane's outer side, body i meets the part C only inside the plane, in no area, so no ray of the uncovered set runs along that line with a cell of body i beside it; if R is on the inner side, C has no points past the line, so a ray along it is a side of C, whose crossings are asked as C's own. For another body j: a crossing of body i's facet line with body j's that lies in body j and on a plane body j only touches is a corner of j's polygon in the triangle's plane, or on an edge of it along that line, so it is also the crossing of two of j's facet lines, asked in the pair (j, j), and body i, on whose facet it lies, holds it strictly in neither case. Every answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace cramer -> Option<[Interval; 3]> with None",
+      "line_text": "let [[a1, b1, c1, d1], [a2, b2, c2, d2], [a3, b3, c3, d3]] = planes.map(|p| *p);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "cramer is a filter: None sends Asked::new to the intervals of the exact homogeneous coordinates instead, which hold the point too, and every sign the intervals leave open is decided exactly. With None every three-plane point takes that slower path, and every answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace != with == in cramer",
+      "line_text": "weight.certain_sign().filter(|s| *s != Sign::Zero)?;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With == cramer goes on only when the weight's interval is exactly zero, and then dividing by it fails, so cramer always gives None. None is a filter's refusal: Asked::new takes the intervals of the exact homogeneous coordinates instead, which hold the point too, and every sign the intervals leave open is decided exactly. Every answer is the same, more slowly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace Asked::outside -> bool with false",
+      "line_text": "#[allow(",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "outside is a shortcut in holds: a point certainly outside the body's box is outside the body. With false holds always goes on to the facet planes, which decide the same point the same way, exactly. Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace || with && in Asked::outside",
+      "line_text": "let past = |v: Interval, l: i64, h: i64| v.hi() < l as f64 || v.lo() > h as f64;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "An interval's low end is at most its high end and a body's box has low at most high, so hi < l and lo > h are never both true: with && an off-grid point is never called outside its box, and holds goes on to the facet planes, which decide it the same way, exactly. Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace < with == in Asked::outside",
+      "line_text": "let past = |v: Interval, l: i64, h: i64| v.hi() < l as f64 || v.lo() > h as f64;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Every interval operation widens its result a step each way, so an off-grid point's interval has its high end strictly above the point's exact coordinate: hi == l means the point is below l, outside the box, so the mutant calls a point outside only when it is, and misses the points with hi < l, which holds then decides by the facet planes, the box's own sides among them, exactly. holds gives the same answer for every point, at a different cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace < with <= in Asked::outside",
+      "line_text": "let past = |v: Interval, l: i64, h: i64| v.hi() < l as f64 || v.lo() > h as f64;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Every interval operation widens its result a step each way, so an off-grid point's interval has its high end strictly above the point's exact coordinate: hi == l means the point is below l, outside the box. So hi <= l, like hi < l, calls a point outside only when it is outside the box, and so outside the body, which is inside its box. holds gives the same answer for every point."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace > with == in Asked::outside",
+      "line_text": "let past = |v: Interval, l: i64, h: i64| v.hi() < l as f64 || v.lo() > h as f64;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Every interval operation widens its result a step each way, so an off-grid point's interval has its low end strictly below the point's exact coordinate: lo == h means the point is above h, outside the box, so the mutant calls a point outside only when it is, and misses the points with lo > h, which holds then decides by the facet planes, the box's own sides among them, exactly. holds gives the same answer for every point, at a different cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace > with >= in Asked::outside",
+      "line_text": "let past = |v: Interval, l: i64, h: i64| v.hi() < l as f64 || v.lo() > h as f64;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Every interval operation widens its result a step each way, so an off-grid point's interval has its low end strictly below the point's exact coordinate: lo == h means the point is above h, outside the box. So lo >= h, like lo > h, calls a point outside only when it is outside the box, and so outside the body, which is inside its box. holds gives the same answer for every point."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "delete match arm (Point::Grid(p), _) in Asked::outside",
+      "line_text": "(Point::Grid(p), _) => [p.x.get(), p.y.get(), p.z.get()]",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A grid point has no intervals, so without its arm it falls to the last arm and is never called outside its box: holds then decides it by the facet planes, the box's own sides among them, exactly. The same answer for every point, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "delete match arm (_, Some(at)) in Asked::outside",
+      "line_text": "(_, Some(at)) => at",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Without its arm an off-grid point falls to the last arm and is never called outside its box: holds then decides it by the facet planes, the box's own sides among them, exactly. The same answer for every point, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace || with && in Asked::outside",
+      "line_text": ".any(|(v, (l, h))| v < l || v > h),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A box has low at most high, so a coordinate is never both below low and above high: with && a grid point is never called outside its box, and holds decides it by the facet planes, the box's own sides among them, exactly. The same answer for every point, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace != with == in Asked::side",
+      "line_text": "&& sign != Sign::Zero",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With == the intervals are trusted only for a certain zero, which a widened interval never is (it is zero only when both ends are), so every sign falls through to the exact predicate, which gives the same sign the intervals would have. The same answer for every point and plane, more slowly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace && with || in covers_within",
+      "line_text": "sides.contains(&Sign::Positive) && sides.contains(&Sign::Negative)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "crosses only prunes facets. With || it also keeps a facet whose plane has every corner of the triangle strictly on one side, a plane that misses the triangle: no edge crosses it, and every point on its line in the triangle's plane is outside the triangle, so the rim planes keep each such point out of the part before it is asked. Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace && with || in covers_within",
+      "line_text": "if crosses(plane)? && within.is_none_or(|region| !region.misses(plane)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The condition only prunes facet lines. With || a facet is also kept when its plane misses the triangle (every point of its line in the triangle's plane is then outside the triangle, and the rim planes keep each out of the part before it is asked) or when the region misses it (no point of the plane is in the region, so in_part refuses each). Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace || with && in covers_within",
+      "line_text": "if sp == Sign::Zero || sq == Sign::Zero || sp == sq {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With && an edge whose one end is on the plane and the other off it is no longer skipped, and its crossing is that end, a corner of the triangle, asked again as a line-plane point. The corner was asked first, as itself, against every near body, and a body whose facet the corner is on cannot hold it strictly, so the second ask gives the answer the first gave. Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace == with != in covers_within",
+      "line_text": ".filter(|(b, plane, _)| *b == k && (i == j || !other.misses(plane)))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "For a pair of two bodies the mutant keeps every facet line of each, with no pruning by misses, and for a body paired with itself it asks whether the body misses its own facet's plane, which it never does (the facet is on the body), so it keeps them all, as before. Pruning less only adds points on planes the other body misses, which are not in that body, so the holds test refuses each before it is asked. Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/model/mod.rs",
+      "mutant": "replace || with && in Surface::collapse",
+      "line_text": "if shared.is_empty() || shared.len() > 2 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The collapse is asked only of an edge of live triangles: decimation offers edges of triangles and drops a candidate when either end has changed since, and an edge's triangles change only when an end does; remeshing checks edge_faces before it asks. On a surface an edge has one or two triangles. So shared is never empty and never more than two, the two tests are never true, and with && the condition is false exactly when it was. Every answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/model/mod.rs",
+      "mutant": "replace || with && in Surface::split",
+      "line_text": "if shared.is_empty() || shared.len() > 2 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Splitting is asked only of an edge from the list of live edges made at the start of the pass, and an edge leaves the mesh only when it is itself split, once a pass, so it always has one or two triangles: the two tests are never true, and with && the condition is false exactly when it was. Every answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/model/mod.rs",
+      "mutant": "replace > with == in check_surface",
+      "line_text": "if walked > link.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Directed edges are checked unique first, so in a vertex's link each point has at most one edge out (two triangles (v, x, ...) would run v to x twice) and at most one in: the link is paths and cycles, and the walk from a path's start, or round a cycle back to its start, takes at most as many steps as the link has edges. walked never passes link.len(), so the guard against a longer walk never fires, whether it stops at more than, at or at equal to the length."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/model/mod.rs",
+      "mutant": "replace > with >= in check_surface",
+      "line_text": "if walked > link.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Directed edges are checked unique first, so in a vertex's link each point has at most one edge out (two triangles (v, x, ...) would run v to x twice) and at most one in: the link is paths and cycles, and the walk from a path's start, or round a cycle back to its start, takes at most as many steps as the link has edges. walked never passes link.len(), so the guard against a longer walk never fires, whether it stops at more than, at or at equal to the length."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/model/mod.rs",
+      "mutant": "replace Surface::collapse -> Option<Patch> with Some(Default::default())",
+      "line_text": "let shared = self.edge_faces(keep, gone);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "An empty patch removes and adds nothing, passes every check and is counted as kept, and decimation then offers the end's edges again, so its queue never empties while the triangle count stays above the target: the loop ends only when the budget runs out, far past the time limit."
     }
   ],
   "coverage_off": [
