@@ -51,7 +51,7 @@ use geom_math::gcd_u128;
 use geom_num::grid::P3;
 use geom_num::interval::Interval;
 use geom_num::plane::{Lpi, Plane, Tpi};
-use geom_num::wide::{I256, Wide};
+use geom_num::wide::Wide;
 use geom_num::{NumError, Sign};
 use geom_run::{Exec, Stopped, WorkMeter};
 
@@ -197,16 +197,14 @@ fn reach(t: [P3; 3], pad: i64) -> ([i64; 3], [i64; 3]) {
 #[derive(Clone, Debug)]
 pub struct TriangleEnvelope {
     planes: Vec<Plane>,
-    /// Each plane's coefficients as intervals, for the triangle test's filter.
-    approx: Vec<Approx>,
     /// The triangle it was made round.
     t: [P3; 3],
     /// The cube's half side.
     h: u64,
 }
 
-/// Bodies are equal when made round the same triangle with the same cube: the planes and their
-/// intervals follow from those.
+/// Bodies are equal when made round the same triangle with the same cube: the planes follow from
+/// those.
 impl PartialEq for TriangleEnvelope {
     fn eq(&self, other: &Self) -> bool {
         self.t == other.t && self.h == other.h
@@ -246,13 +244,17 @@ pub(crate) fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError>
     Ok(if negative { sum.neg() } else { sum })
 }
 
-/// The interval round an `i128`.
+/// The interval round an `i128`: the doubles on either side of the one nearest it. Rust converts
+/// an integer to the nearest double (ties to even), which is within half a step of the value, so
+/// its two neighbours hold the value. The triangle test makes one for every coefficient of every
+/// plane it asks, so this costs a conversion where [`enclose`] costs a sum of digits.
 fn enclose_i128(v: i128) -> Result<Interval, NumError> {
-    enclose(
-        &I256::from_i128(v)
-            .resize::<2>()
-            .ok_or(NumError::BudgetExceeded)?,
-    )
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "rounded to nearest, then widened by a step each way"
+    )]
+    let f = v as f64;
+    Interval::new(f.next_down(), f.next_up())
 }
 
 /// A plane's coefficients as intervals.
@@ -277,24 +279,28 @@ impl TriangleEnvelope {
         let [a, b, c] = t;
         let axes: [[i128; 3]; 3] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
         // Each normal with the directions to keep: both for the axes and the triangle's normal.
-        let mut normals: Vec<([i128; 3], bool, bool)> = Vec::with_capacity(13);
-        normals.extend(axes.map(|n| (n, true, true)));
-        normals.push((cross(run(a, b), run(a, c)), true, true));
         // An edge crossed with an axis bounds a face only on the side away from the third corner:
         // on the other side the triangle touches the plane at that corner alone, so the plane
         // meets the body in a segment and bounds nothing the other planes do not.
-        for (p, q, r) in [(a, b, c), (b, c, a), (c, a, b)] {
-            for axis in axes {
-                let n = cross(run(p, q), axis);
-                // Each part of n is below 2^42 and of r − p below 2^41: the dot fits.
-                let [x, y, z] = run(p, r);
-                let behind = n[0]
-                    .wrapping_mul(x)
-                    .wrapping_add(n[1].wrapping_mul(y))
-                    .wrapping_add(n[2].wrapping_mul(z));
-                normals.push((n, behind <= 0, behind >= 0));
-            }
-        }
+        let edges = [(a, b, c), (b, c, a), (c, a, b)]
+            .into_iter()
+            .flat_map(|(p, q, r)| {
+                axes.map(|axis| {
+                    let n = cross(run(p, q), axis);
+                    // Each part of n is below 2^42 and of r − p below 2^41: the dot fits.
+                    let [x, y, z] = run(p, r);
+                    let behind = n[0]
+                        .wrapping_mul(x)
+                        .wrapping_add(n[1].wrapping_mul(y))
+                        .wrapping_add(n[2].wrapping_mul(z));
+                    (n, behind <= 0, behind >= 0)
+                })
+            });
+        let normals = axes
+            .map(|n| (n, true, true))
+            .into_iter()
+            .chain(core::iter::once((cross(run(a, b), run(a, c)), true, true)))
+            .chain(edges);
         let mut planes = Vec::with_capacity(17);
         for (n, forward, backward) in normals {
             if let Some(m) = primitive(n) {
@@ -310,16 +316,7 @@ impl TriangleEnvelope {
         // gives the same plane twice.
         planes.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
         planes.dedup();
-        let approx = planes
-            .iter()
-            .map(approximate)
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self {
-            planes,
-            approx,
-            t,
-            h,
-        })
+        Ok(Self { planes, t, h })
     }
 
     /// The facets' planes, each looking outward.
@@ -451,8 +448,8 @@ impl TriangleEnvelope {
         if p.outside(self.bounds()) {
             return Ok(false);
         }
-        for (plane, approx) in self.planes.iter().zip(&self.approx) {
-            match p.side(plane, approx)? {
+        for plane in &self.planes {
+            match p.side(plane)? {
                 Sign::Positive => return Ok(false),
                 Sign::Zero if strictly => return Ok(false),
                 _ => {}
@@ -596,9 +593,9 @@ impl Asked {
 
     /// Which side of `plane` the point is on: by the intervals when they decide a strict sign,
     /// exactly otherwise.
-    fn side(&self, plane: &Plane, approx: &Approx) -> Result<Sign, NumError> {
+    fn side(&self, plane: &Plane) -> Result<Sign, NumError> {
         if let Some([x, y, z]) = self.at {
-            let [a, b, c, d] = *approx;
+            let [a, b, c, d] = approximate(plane)?;
             let value = a
                 .mul(x)
                 .and_then(|ax| ax.add(b.mul(y)?))
@@ -750,16 +747,11 @@ pub fn covers_within(
     let [a, b, c] = t;
     let base = Plane::through(a, b, c)?;
     let rims = rim(t, base.n())?;
-    let rims = [
-        (rims[0], approximate(&rims[0])?),
-        (rims[1], approximate(&rims[1])?),
-        (rims[2], approximate(&rims[2])?),
-    ];
     // Whether a point of the triangle's plane is in C.
     let in_part = |p: &Asked, on_rim: bool| -> Result<bool, NumError> {
         if !on_rim {
-            for (edge, approx) in &rims {
-                if p.side(edge, approx)? == Sign::Positive {
+            for edge in &rims {
+                if p.side(edge)? == Sign::Positive {
                     return Ok(false);
                 }
             }
@@ -777,17 +769,17 @@ pub fn covers_within(
     };
     let mut cut: Vec<(Plane, Approx)> = Vec::new();
     if let Some(region) = within {
-        for (plane, approx) in region.planes.iter().zip(&region.approx) {
+        for plane in &region.planes {
             if crosses(plane)? {
-                cut.push((*plane, *approx));
+                cut.push((*plane, approximate(plane)?));
             }
         }
     }
     let mut lines: Vec<(usize, Plane, Approx)> = Vec::new();
     for (i, body) in near.iter().enumerate() {
-        for (plane, approx) in body.planes.iter().zip(&body.approx) {
+        for plane in &body.planes {
             if crosses(plane)? && within.is_none_or(|region| !region.misses(plane)) {
-                lines.push((i, *plane, *approx));
+                lines.push((i, *plane, approximate(plane)?));
             }
         }
     }

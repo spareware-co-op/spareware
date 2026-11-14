@@ -43,7 +43,7 @@
 //! that may meet, against the result triangles whose bodies' boxes meet that body's, found by a
 //! scan of every result triangle's box, so linear in the mesh for each. Each triangle's body is
 //! made once, when the triangle is, and dropped when an operation that removes the triangle is
-//! kept. Memory is linear in the mesh for the bodies (about 2 KB a triangle: the input's, twice,
+//! kept. Memory is linear in the mesh for the bodies (about 1 KB a triangle: the input's, twice,
 //! and the result's) and grows by a few words for each triangle and vertex a kept operation
 //! makes, since numbers are never reused: a dead triangle keeps its corners and a dead vertex its
 //! point, so that every number stays valid.
