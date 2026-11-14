@@ -189,7 +189,7 @@ projects/engines/
    ├─ MAP.json                    generated map of crates, modules, operations, invariants, errors
    ├─ NOTICE                      added: every origin licence text and credit, shipped with every binary (29.20)
    ├─ PROVENANCE.md               added: the source ledger, generated from the code (29.20)
-   ├─ PATENTS.md                  added: the patent register (29.20)
+   ├─ PATENTS.md                  added: the patent register (29.20); not built, closed by the owner (32.49)
    ├─ architecture/               added to the tree: the chapters, one file per section
    ├─ format/                     added: SPEC.md, REGISTRY.md and the CDDL schemas of the native format (24.2, 24.6)
    ├─ methods/                    added: method notes from the method-only procedure (29.20, rule 6)

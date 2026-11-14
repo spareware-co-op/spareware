@@ -48,6 +48,7 @@ pub mod encoder;
 pub mod entity;
 pub mod exact_sum;
 pub mod exactness;
+pub mod facade;
 pub mod format;
 pub mod generated;
 pub mod grid;

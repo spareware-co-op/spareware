@@ -2758,6 +2758,34 @@ fn naming_typical_batches_all_succeed() {
     all_some("record_read", k::record_read, &m::pruned_payloads(Typical));
 }
 
+/// Every typical batch of the facade's benchmarks (piece G100; decision 32.46) finds its
+/// operations: every name is in the facade's table, every registered operation is drawn, and every
+/// call of `make.box` by name builds a box in a class its schema lists.
+#[test]
+fn facade_typical_batches_all_succeed() {
+    use engine_geometry::operations::OPERATIONS;
+    use geom_bench::inputs::facade as m;
+    use geom_bench::kernels::facade as k;
+    let names = m::names(Typical);
+    let found = all_some("lookup", k::lookup, &names);
+    let places: BTreeSet<u32> = found.iter().map(|row| row[0]).collect();
+    assert!(
+        places.len() * 2 > OPERATIONS.len(),
+        "the lookups reach only {places:?}"
+    );
+    for (name, row) in names.iter().zip(&found) {
+        assert_eq!(OPERATIONS[row[0] as usize].schema.name, *name);
+    }
+    let made = all_some("dispatch", k::dispatch, &m::calls(Typical));
+    for (i, r) in made.iter().enumerate() {
+        let counts = r
+            .as_ref()
+            .unwrap_or_else(|e| panic!("call {i} refused: {e:?}"));
+        assert_eq!(counts[..3], [6, 12, 8], "call {i}");
+        assert_eq!(counts[4], 1, "call {i}: a class make.box does not list");
+    }
+}
+
 /// Every typical batch of `geom-bvh`'s benchmarks (decision 32.46) builds every scene and answers
 /// every query.
 #[test]
@@ -3355,6 +3383,7 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("march_poles", k::through_poles, &m::poles(Typical));
     all_ok("known_tangent", k::known_cut, &m::tangents(Typical));
     all_ok("selfcross_sweep", k::self_cross, &m::sweeps(Typical));
+    all_ok("fit_curve", k::fit_curve, &m::crossings(Typical));
     all_ok("analyse_rest", k::touched, &m::rests(Typical));
     all_ok("trace_silhouette", k::silhouettes, &m::tori(Typical));
 }

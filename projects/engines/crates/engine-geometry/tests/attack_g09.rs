@@ -1231,7 +1231,6 @@ mod repository {
         ("geom-landxml", "G437"),
         ("geom-meshio", "G354 G434 G435"),
         ("geom-offset", "G270 G275 G276 G277 G278 G279"),
-        ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
         ("geom-profile", "G229 G230"),
         ("geom-skeleton", "G271 G272 G274 G471"),

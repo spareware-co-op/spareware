@@ -25,25 +25,22 @@ mod gate;
 use gate::{
     attributes::attributes, ball::ball, batch::batch, body_record::body_record, brent::brent,
     bvh::bvh, cbor::cbor, crossing::crossing, curve::curve, dd::dd, dual::dual, eft::eft,
-    encoder::encoder, entity::entity, exact_sum::exact_sum, exactness::exactness, format::format,
-    generated::generated, grid::grid, growth::growth, helper::helper, history::history,
-    intersect::intersect, interval::interval, isolate::isolate, linalg::linalg, make::make,
-    math::math, math_types::math_types, mesh::mesh, name_record::name_record, names::names,
-    newton::newton, nurbs::nurbs, op_record::op_record, open::open, perturb::perturb, plane::plane,
-    predicate::predicate, prune::prune, quadrature::quadrature, quadric::quadric, query::query,
-    real::real, record::record, resolve::resolve, rng::rng, scenario::scenario, sign::sign,
-    sketch::sketch, spline::spline, surface::surface, topo::topo, unproven::unproven, wide::wide,
-    wide32::wide32,
+    encoder::encoder, entity::entity, exact_sum::exact_sum, exactness::exactness, facade::facade,
+    format::format, generated::generated, grid::grid, growth::growth, helper::helper,
+    history::history, intersect::intersect, interval::interval, isolate::isolate, linalg::linalg,
+    make::make, math::math, math_types::math_types, mesh::mesh, name_record::name_record,
+    names::names, newton::newton, nurbs::nurbs, op_record::op_record, open::open, perturb::perturb,
+    plane::plane, predicate::predicate, prune::prune, quadrature::quadrature, quadric::quadric,
+    query::query, real::real, record::record, resolve::resolve, rng::rng, scenario::scenario,
+    sign::sign, sketch::sketch, spline::spline, surface::surface, topo::topo, unproven::unproven,
+    wide::wide, wide32::wide32,
 };
 
 #[cfg(target_os = "linux")]
 gungraun::main!(
     config = gate::config();
     library_benchmark_groups = predicate, sign, wide, wide32, plane, crossing, eft, interval, grid, real, exactness,
-        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, attributes, topo, batch, mesh, nurbs, curve, surface, format, brent, quadrature, helper, scenario, growth, make, cbor, record, body_record, name_record, op_record, open, query, encoder, names, history, resolve, prune, intersect, quadric,
-        entity,
-        spline,
-        sketch
+        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, attributes, topo, batch, mesh, nurbs, curve, surface, format, brent, quadrature, helper, scenario, growth, make, cbor, record, body_record, name_record, op_record, open, query, encoder, names, history, resolve, prune, intersect, quadric, entity, spline, sketch, facade
 );
 
 /// Off Linux: explain where the gate runs, and succeed.

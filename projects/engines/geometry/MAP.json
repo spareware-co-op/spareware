@@ -1578,6 +1578,26 @@
           "target": "lib"
         },
         {
+          "cost": "one or a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": "[`names`] draws, per input, the name of one operation the facade registers (`engine_geometry::operations::OPERATIONS`), each with equal chance, which the benchmark finds in the table and reads the schema of; [`calls`] draws, per input, a call of `make.box` by its name with a box within ±2^20 grid steps of the origin, as `geom-make`'s own benchmark draws them ([`super::make`]), which the benchmark finds by name and runs through the facade's re-export.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/facade.rs",
+          "guarantees": [
+            "every typical batch is full, every name is registered and every box is valid, so every lookup finds its operation and every call succeeds (`tests/inputs.rs`), and each input has its own draws. Only the typical class exists: an unknown name is the caller's refusal, not the facade's, and `make.box`'s refusals are tested in `geom-make` itself."
+          ],
+          "job": "Inputs for the facade, `engine-geometry` (piece G100, decision 32.46): the names a program or an AI tool calls operations by, and the calls it dispatches through the facade.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the facade's own table, read as `geom-fuzz`'s `contract` target reads it, and the calls of `engine-geometry`'s `tests/attack_g101.rs`, cut to one operation; each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::facade",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(`BATCH`) draws; a batch of versions shares one body's chunks.",
           "does": "[`cache_key`] gives an edition and an input's seed per call; [`memo_get`] gives the place of a key in the store [`store`] fills; [`next_version`] gives a first version of the body [`faces`] with a body one row changed from it.",
           "family": [],
@@ -1685,7 +1705,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G167, decision 32.46): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, natural quadrics, four rows of 12.7, and a sphere and a cylinder in general position, whose curve is walked, and three reductions of 12.7.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G176, decision 32.46): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, natural quadrics, four rows of 12.7, a sphere and a cylinder in general position, whose curve is walked, three reductions of 12.7, surfaces cut by a sphere and seen in silhouette, planes through a whole sphere's poles, sheets tangent to a plane along a known line (G174), marched crossings to fit as intersection curves (G175), swept loops crossing themselves (G176) and a sphere resting on a plane (G171).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -3952,6 +3972,29 @@
           "target": "lib"
         },
         {
+          "cost": "the NURBS kind's costs on the caches; a split or reversal is linear in the spans and the chain.",
+          "does": "[`IntersectionCurve`] stores its definition (chapter 12.12): the two surfaces as opaque [`SurfaceRef`]s into the geometry pool that holds it, and the certified chain of marched points in (u₁, v₁, u₂, v₂), each with its parameter on the curve. Beside it are the caches, all on one parameter t: the 3D curve C(t), and the pcurves p₁(t) and p₂(t) in each surface's parameters. [`Span`] records, for each span of the 3D cache, how far C may be from the true curve there, and how far each mapped pcurve Sᵢ(pᵢ(t)) may be from C(t). `geom-curve` sits below `geom-surface` and cannot see surfaces (chapter 27), so it evaluates, bounds, splits and converts the kind through its 3D cache alone, as for [`crate::OnSurface`]; `geom-intersect` builds the caches and their bounds, and reaches the true curve from the definition.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/intersection.rs",
+          "guarantees": [
+            "**The contract on the cache.** Every evaluation, bound, split and transform is the NURBS kind's on the 3D cache, certified for the cache.",
+            "**A bound for every span.** The spans tile the domain, end to end, each with three finite bounds that are not negative; the curve's [`IntersectionCurve::error`] is the largest. A split adds its deviation to every bound of the two halves; a reversal mirrors the spans and adds its deviation; a transform scales every bound by an upper bound on the transform's stretch (its linear part's Frobenius norm) and adds its deviation. The pcurves are never approximated here: a split trims them, a reversal reverses them, a transform leaves them (the surfaces move with the pool, their parameters do not).",
+            "**The definition travels.** A split keeps each chain point on the half whose domain holds its parameter, both halves the one at the cut; a reversal reverses the chain and negates its parameters."
+          ],
+          "job": "The intersection curve kind: a branch where two surfaces meet, held by its definition, with its 3D curve and both pcurves as certified NURBS caches.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the procedural intersection curve of chapter 12.12 (`projects/engines/geometry/architecture/12-intersections.md`), its cache-only contract that of chapter 7 (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::intersection",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant per evaluation; conversion O(n·p²) for n eighths of a turn.",
           "does": "[`Involute`] stores the base circle's center, radius and frame (the involute leaves the circle at x̂ when t = 0 and unwinds towards ŷ for t > 0, the other way for t < 0), or, as the affine image of one, the vectors u and v themselves ([`Axes`]). The point t = 0 is a cusp: the derivative vanishes there, and the bounds say so. Gear teeth flanks are its common use.",
           "family": [],
@@ -5737,7 +5780,7 @@
           "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
           "guarantees": [
             "**Value for value.** A kind read back equals the one written (`PartialEq`), every double with its bits, a negative zero included: a kind keeps what defines it, never a refit.",
-            "**Caches are rebuilt, not stored.** An offset's fitted NURBS cache is a function of the offset; the item says whether it was there and reading computes it again (`Offset::cached`), which gives the same bits on every target (23.1). A curve on a surface keeps its 3D curve, which defines it.",
+            "**Caches are rebuilt, not stored.** An offset's fitted NURBS cache is a function of the offset; the item says whether it was there and reading computes it again (`Offset::cached`), which gives the same bits on every target (23.1). A curve on a surface keeps its 3D curve, which defines it. An intersection curve keeps its definition and its caches with their certified bounds (24.4's procedural caches): `geom-intersect` fitted them, this crate cannot fit them again, and a later edition might fit them otherwise.",
             "**Infinite ends.** A parameter interval's end may be infinite only on its own side (a ray or line); it is written `[]`.",
             "**Bounded.** Every kind nests at most [`DEPTH`] containers deep: a surface offset at most `geom_surface::offset::MAX_NESTING` (4) times, over a swept surface whose profile is a conic on axes on a frame."
           ],
@@ -6792,6 +6835,28 @@
             "text": "an exact oracle for a predicate, the first of chapter 28.6's checks (`projects/engines/geometry/architecture/28-testing.md`), with bounded Kani proofs of sign agreement with an exact integer reference, as evidence report 08 recommends for predicates (`projects/kit/notes/G01-evidence/08-standards-coverage-testing.md`, \"Recommended test architecture\", item 1). The reference is the 3 × 3 determinant of the definition, expanded by cofactors along the column of ones, in Shewchuk's paper: J. R. Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", *Discrete & Computational Geometry* 18 (1997), 305–363, <https://doi.org/10.1007/PL00009321>."
           },
           "path": "geom_fuzz::orient2d",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "four reads and two writes of the input at most, each linear in its length.",
+          "does": "[`harness`] reads the fuzzer's bytes as an ISO 10303-21 file, as the reader must read any file (24.7: \"is a fuzz target from its first commit\").",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/p21.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; nothing is decoded first, except that the first byte also chooses how the second read is cut.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input."
+          ],
+          "job": "Fuzz target: `geom-p21`'s Part 21 reader never panics, refuses inside its input, reads the same however its bytes arrive, and what it accepts writes to a fixed point.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the reader and writer laws of `geom-p21`'s module headers (`projects/engines/geometry/architecture/24-file-format-exchange.md`, 24.7 and 24.10), on arbitrary bytes, the property-based fuzzing of 28.5 (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::p21",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -8104,6 +8169,31 @@
             "text": "chapter 12.16's error kinds, with `geom-run`'s stops (`projects/engines/geometry/architecture/12-intersections.md`)."
           },
           "path": "geom_intersect::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each round is one approximation of the branch's points and two least-squares fits, and per span up to 2^[`PIECES`] pieces, each a few reads of the surfaces to second order. Refinement doubles the data in a failing span at most [`ROUNDS`] times. Recursion: none.",
+          "does": "[`fit`] takes a [`Branch`] of [`crate::march`] and its two surfaces. It fits the 3D curve through the surfaces' points at the branch's vertices by The NURBS Book's approximation with knot removal (`geom_nurbs::Curve::approximate`), then both pcurves by least squares on the same parameters and basis, their ends held, so all three share t. For each span of the 3D cache it bounds, by the mean-value form, how far each mapped pcurve Sᵢ(pᵢ(t)) is from the cache C(t), and from those two distances, the angle at which the surfaces cross and their curvature, how far C(t) is from the true curve. A span over the ceiling is refined: a point of the true curve is added between each two data points in it, and the whole fit is made again. [`true_point`] finds the point of the true curve in the plane across the cache at t, proven unique.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/fit.rs",
+          "guarantees": [
+            "**Every span is certified within the ceiling, or there is no curve.** A span's bound is proven, as below; a fit whose spans do not all come within `ceiling` after [`ROUNDS`] rounds of refinement is [`IntersectError::BudgetExceeded`], never a curve with a wider bound.",
+            "**The pcurve bounds.** Over a piece [a, b] of a span with middle m and half-width h, every value of f(t) = Sᵢ(pᵢ(t)) − C(t) is within h·sup|f′| of f(m), and f′ = `S_u`·p′ᵤ + `S_v`·p′ᵥ − C′ is enclosed from the kinds' own bounds over the pcurve's box. A span is cut into up to 2^[`PIECES`] pieces until its bounds come within the ceiling.",
+            "**The curve bound.** C(t) is within d₁ of S₁ and d₂ of S₂. Within r of C(t), where the surfaces cross at a sine of at least s and turn their normals by at most κ per unit length, the crossing is within e/(s − 2κ·r₀) of C(t), e = d₁ + d₂ and r₀ = 2e/s, whenever s − 2κ·r₀ ≥ s/2: 12.2's bound, as [`crate::bound`] proves it. s and κ are enclosed over the pcurve's box widened by (r₀ + dᵢ)/σᵢ in parameters, σᵢ a lower bound on how fast Sᵢ moves there, so that box holds every point within r₀ of C(t). κ is |dN|/|dS| ≤ √(|`n_u`|² + |`n_v`|²)·√(E + G)/|n|², n = `S_u` × `S_v`, and σ ≥ |n|/√(E + G), from the first fundamental form's least eigenvalue, at least EG−F² over E + G.",
+            "**One true point.** [`true_point`] proves its point the only zero of S₁ − S₂ and the plane condition in its box, by the interval engine (12.3).",
+            "**The definition kept.** The curve's chain is the branch's vertices, each with its parameter on the caches; points added in refinement are fit data only."
+          ],
+          "job": "The procedural intersection curve's caches and their bounds (12.12): a marched branch fitted to a 3D NURBS and two pcurves on one parameter, each span certified, and any point of the true curve recovered from the caches by refinement on the definition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "chapter 12.12 (`projects/engines/geometry/architecture/12-intersections.md`); the fit is The NURBS Book's section 9.4 (Piegl and Tiller, 2nd ed., Springer 1997, <https://doi.org/10.1007/978-3-642-59223-2>) as `geom-nurbs` builds it; the bound is 12.2's."
+          },
+          "path": "geom_intersect::fit",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -14681,25 +14771,421 @@
         30
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "What was wrong with a Part 21 text.",
+          "file": "projects/engines/geometry/crates/geom-p21/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The byte source failed.",
+              "name": "Source",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The caller's work meter stopped the read: over its budget, or cancelled.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The text does not start with `ISO-10303-21;`.",
+              "name": "NotP21",
+              "shape": "unit"
+            },
+            {
+              "doc": "The first section is not `HEADER;`.",
+              "name": "MissingHeader",
+              "shape": "unit"
+            },
+            {
+              "doc": "The text ends before `END-ISO-10303-21;`.",
+              "name": "UnexpectedEnd",
+              "shape": "unit"
+            },
+            {
+              "doc": "A `/*` with no `*/` after it.",
+              "name": "UnterminatedComment",
+              "shape": "unit"
+            },
+            {
+              "doc": "A `'` with no closing `'` after it.",
+              "name": "UnterminatedString",
+              "shape": "unit"
+            },
+            {
+              "doc": "This byte was expected and another was found.",
+              "name": "Expected",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A keyword was expected.",
+              "name": "ExpectedKeyword",
+              "shape": "unit"
+            },
+            {
+              "doc": "A byte that starts no parameter.",
+              "name": "UnexpectedByte",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A keyword that opens no section here: a second `HEADER`, or a name that is no section.",
+              "name": "UnexpectedSection",
+              "shape": "unit"
+            },
+            {
+              "doc": "A number that is not `[+-]digits[.digits][E[+-]digits]` with a digit in its mantissa.",
+              "name": "BadNumber",
+              "shape": "unit"
+            },
+            {
+              "doc": "An integer beyond `i64`.",
+              "name": "IntegerOutOfRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "A real beyond `f64`'s finite range.",
+              "name": "RealOutOfRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "A `#` that is not followed by digits within `u64`.",
+              "name": "BadInstanceName",
+              "shape": "unit"
+            },
+            {
+              "doc": "A `.` that does not open `.NAME.`.",
+              "name": "BadEnumeration",
+              "shape": "unit"
+            },
+            {
+              "doc": "A `\"...\"` that is not a first digit `0` to `3` and upper-case hexadecimal digits after it.",
+              "name": "BadBinary",
+              "shape": "unit"
+            },
+            {
+              "doc": "A string that is not UTF-8, or an `\\X2\\` or `\\X4\\` run that is not whole groups of hexadecimal digits naming Unicode characters ([`crate::Options::lossy_text`] replaces them instead).",
+              "name": "BadText",
+              "shape": "unit"
+            },
+            {
+              "doc": "An instance with no record: `#1=();`.",
+              "name": "EmptyInstance",
+              "shape": "unit"
+            },
+            {
+              "doc": "Lists nested deeper than [`crate::MAX_DEPTH`].",
+              "name": "TooDeep",
+              "shape": "unit"
+            },
+            {
+              "doc": "One record or instance holds more items than [`crate::Options::items`].",
+              "name": "TooManyItems",
+              "shape": "unit"
+            },
+            {
+              "doc": "One record or instance holds more text than [`crate::Options::text_bytes`].",
+              "name": "TooMuchText",
+              "shape": "unit"
+            },
+            {
+              "doc": "The text is longer than [`crate::exchange::Totals::bytes`].",
+              "name": "TooLarge",
+              "shape": "unit"
+            },
+            {
+              "doc": "More instances than [`crate::exchange::Totals::instances`].",
+              "name": "TooManyInstances",
+              "shape": "unit"
+            },
+            {
+              "doc": "More records than [`crate::exchange::Totals::records`].",
+              "name": "TooManyRecords",
+              "shape": "unit"
+            },
+            {
+              "doc": "More parameters than [`crate::exchange::Totals::params`].",
+              "name": "TooManyParams",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_p21::error",
+          "name": "ErrorKind",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "A refusal of the canonical writer.",
+          "file": "projects/engines/geometry/crates/geom-p21/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The sink failed; the number is the program's.",
+              "name": "Sink",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A call out of the file's order: a record outside its section, a section inside another, or anything after the end.",
+              "name": "OutOfOrder",
+              "shape": "unit"
+            },
+            {
+              "doc": "An instance whose id is not above the one written before it.",
+              "name": "InstanceOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "An instance with no record.",
+              "name": "EmptyInstance",
+              "shape": "unit"
+            },
+            {
+              "doc": "A real that is infinite or not a number.",
+              "name": "NonFiniteReal",
+              "shape": "unit"
+            },
+            {
+              "doc": "A record or typed-value name that is not `[!]` and then `[A-Z_][A-Z0-9_]*`.",
+              "name": "BadName",
+              "shape": "unit"
+            },
+            {
+              "doc": "An enumeration that is not `[A-Z_][A-Z0-9_]*`.",
+              "name": "BadEnumeration",
+              "shape": "unit"
+            },
+            {
+              "doc": "A binary that is not a first digit `0` to `3` and upper-case hexadecimal digits after it.",
+              "name": "BadBinary",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_p21::error",
+          "name": "WriteError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-p21/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-p21",
       "invariants": [
         "Schema-free: it knows the encoding, not the entities (24.8).",
-        "Reads through the `no_std` byte-source traits, checks every length, walks nesting with an explicit stack, and returns typed errors with the byte offset or line, never a panic (24.7).",
+        "Reads through the `no_std` byte-source traits, checks every length, walks nesting without recursion, and returns typed errors with the line and the byte offset, never a panic (24.7).",
+        "Streams: the reader holds one record at a time, so memory does not grow with the file.",
         "The writer is canonical: canonical instance order and each `f64` as its shortest round-trip decimal, so write, read, write gives identical bytes (24.10, 24.12).",
-        "Starts only once a licensed copy of ISO 10303-21 is obtained; parser methods are studied in ruststep and foxtrot and the code is our own (24.11)."
+        "A port of solidcore's Part 21 reader and writer, converted to the kernel's rules; each module's `Source:` record says what changed (24.11, 29.20)."
       ],
       "job": "The ISO 10303-21 clear-text encoding: tokenizer, streaming parser, canonical writer.",
       "kind": "kernel",
       "layer": "12",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant time and no allocation.",
+          "does": "[`Error`] is every refusal of the reader ([`crate::read`]) and of the collected exchange ([`crate::exchange`]): an [`ErrorKind`] with the line (counted from 1) and the byte offset where reading stopped. [`WriteError`] is every refusal of the canonical writer ([`crate::write`]).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-p21/src/error.rs",
+          "guarantees": [
+            "**A refusal is a value.** No kind carries text copied from the file, so an error costs no allocation and is `Copy`.",
+            "**The place is inside the input.** `offset` is the number of bytes read when the reader stopped, never more than the input's length; `line` is one more than the line feeds among them."
+          ],
+          "job": "Why a Part 21 text was refused or could not be written: one typed error for the reader, with the line and the byte offset, and one for the writer.",
+          "method": {
+            "none": "an error enum and its `Display` and `Error` implementations."
+          },
+          "path": "geom_p21::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the file for the read and the write, with a map insertion (logarithmic in the instances so far) for each instance. Memory is the tree of every instance. Recursion: none here.",
+          "does": "[`Exchange::read`] drives the streaming reader ([`crate::read`]) to the end and collects the header ([`Header`]) and the instances of every `DATA` section into one map by id. [`Exchange::write`] writes it with the canonical writer ([`crate::write`]): the header, then one `DATA` section of every instance in id order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-p21/src/exchange.rs",
+          "guarantees": [
+            "**Bounded by [`Totals`].** A read refuses, with a typed error, a text with more bytes, instances, records or parameters than the caller's totals, before it holds them.",
+            "**Deterministic order.** The instances are in a `BTreeMap`, so every walk is in id order.",
+            "**A repeated id is reported, never merged.** The first definition is kept and the id is listed in [`Exchange::duplicates`]; a repeat still counts against the totals.",
+            "**Reading what was written gives the same file**: `read(write(x))` writes the same bytes as `x`. Header records other than the three Part 21 requires are kept as they were read."
+          ],
+          "job": "A whole Part 21 file in memory: its header and every entity instance by id, read with caps on the whole and written back canonically.",
+          "method": {
+            "links": [
+              "https://www.iso.org/standard/63141.html",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "the header section and data sections of ISO 10303-21 (<https://www.iso.org/standard/63141.html>), collected as chapter 24.8 of `projects/engines/geometry/architecture/24-file-format-exchange.md` describes."
+          },
+          "path": "geom_p21::exchange",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-record/src/step/p21.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "<https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-step/src/write.rs>",
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "`Exchange`, `Header` and the collecting half of `parse_limited`, on the streaming reader in `no_std` Rust. The caps on entities, records and parameters are the caller's `Totals` (the origin's constants are its defaults), the byte cap is checked as the text is read and not on a string already in memory, and progress and cancellation go through the work meter (the origin had a trait of its own). The header's schemas moved into `Header`, its other records are kept, and the three copies of header fields the origin held beside it are gone. `write` is the origin's `Writer::file`, taking the header as given.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the bytes read; one pass, one call of the source per buffer. Allocation only when a record is larger than every one before it. Recursion: none.",
+          "does": "a [`Reader`] pulls bytes from a [`ByteSource`] through one fixed buffer and hands back [`Event`]s in file order: a section opening, a header record, an entity instance, a section's end, a skipped section. The record or instance just read is in the reader's [`Tokens`], a flat list ([`Token`]) the next call overwrites, so reading costs no allocation once the buffers have grown to the largest record. [`Tokens::records`] gives the same thing as a tree ([`crate::value`]).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-p21/src/read.rs",
+          "guarantees": [
+            "**Every malformed input is a typed error**, an [`Error`] with the line and byte offset where reading stopped, never a panic, and the reader gives the same error again if asked again.",
+            "**The split never matters.** The events, tokens and errors are the same however the source cuts its reads and whatever [`Options::buffer_bytes`] is.",
+            "**Memory is bounded by the options, not the file.** The reader holds its buffer and one record or instance: at most [`Options::items`] items and [`Options::text_bytes`] of text, plus one buffer more ([`Reader::held_bytes`] reports it). Offsets and lines are 64-bit, so files beyond 4 GiB read on a 32-bit target.",
+            "**No recursion.** Lists nest to [`MAX_DEPTH`] and are walked by a counter.",
+            "**The work is metered.** Every byte taken from the source is one unit charged to the caller's [`WorkMeter`], which also carries the cancellation, read at each refill."
+          ],
+          "job": "The streaming Part 21 reader: one header record or entity instance at a time from a byte source, in memory that does not grow with the file.",
+          "method": {
+            "links": [
+              "https://www.iso.org/standard/63141.html",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "a hand-written scanner and state machine over ISO 10303-21's exchange structure (<https://www.iso.org/standard/63141.html>), under the reader rules of chapter 24.7 of `projects/engines/geometry/architecture/24-file-format-exchange.md`."
+          },
+          "path": "geom_p21::read",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-record/src/step/p21.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "the `Lexer` and `parse_limited`, turned inside out into a pull reader over a byte source in `no_std` Rust: it yields one record at a time as flat tokens where the origin parsed a whole `&str` into a map. Errors are kinds with a line and an offset counted as bytes are read (the origin formatted messages and recounted lines). Parameter lists are walked by a counter, not by recursion. The caps on the whole file moved to `exchange`, and caps on one record took their place here. Stricter than the origin: a number follows the grammar above (the origin took any run of digits, signs, points and `E` that Rust then parsed), a real beyond `f64` is refused (it read as infinity), an enumeration and a binary are checked (any bytes between the marks were taken), an instance needs a record (`#1=();` was read), `HEADER` must come first and once, and a malformed header record is an error (the origin skipped to the next line, in silence). Skipped sections are scanned by token (the origin's stated limit: the first raw `ENDSEC;`). The cap of 64 parts on a complex instance is gone: the item cap bounds it. The table of AP203 short entity names is not taken: it is schema knowledge, for the reader of the schema.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "each function is linear in its input and allocates only by growing its output.",
+          "does": "[`decode`] turns the bytes between a string's quotes into Unicode text, reading the control directives `\\\\`, `\\X\\hh`, `\\X2\\...\\X0\\`, `\\X4\\...\\X0\\` and `\\S\\c`. [`encode`] writes text back as a string every reader takes: printable ASCII as it is, a quote doubled, a backslash doubled, and every other character in an `\\X2\\` or `\\X4\\` run. [`real`] writes a finite double as Part 21 writes a real: always with a decimal point, the exponent after `E`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-p21/src/text.rs",
+          "guarantees": [
+            "**Decoding what was encoded gives the text back**, for every string, control characters included.",
+            "**A backslash that opens no whole directive is itself.** So a Windows path written without doubled backslashes reads as it looks. A run that has its `\\X0\\` but whose digits are not whole groups naming Unicode characters is refused, or, when the caller asks for lossy text, each bad group becomes U+FFFD and is counted; the same holds for bytes that are not UTF-8.",
+            "**A real reads back to the same bits.** [`real`] writes the shortest decimal that rounds to the double, and Rust's parser rounds correctly.",
+            "**Linear time**, however many unterminated runs a string holds."
+          ],
+          "job": "Part 21's strings and reals as text: the string escapes decoded and written, and a double as its shortest decimal.",
+          "method": {
+            "links": [
+              "https://www.iso.org/standard/63141.html",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://doi.org/10.1145/3192366.3192369"
+            ],
+            "text": "the string and real encodings of ISO 10303-21 (<https://www.iso.org/standard/63141.html>); the shortest round-trip decimal that chapter 24.10 of `projects/engines/geometry/architecture/24-file-format-exchange.md` asks for is the one Rust's `core::fmt` prints for a double (Grisu with a Dragon fallback, the same digits as Ryū, Adams 2018, <https://doi.org/10.1145/3192366.3192369>)."
+          },
+          "path": "geom_p21::text",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-record/src/step/p21.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "<https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-step/src/write.rs>",
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "`decode_string_with`, `string` and `real` in `no_std` Rust, writing into the caller's buffer. Decoding kept its one remembered search for a run's end. Hex digits are read as digits only (`from_str_radix` took a sign, so `\\X\\+A` read as a line feed); a bad group in a terminated run, an unpaired surrogate and bytes that are not UTF-8 are a typed error, or counted replacements, where they were dropped or became `?` in silence. The writer keeps control characters, in `\\X2\\` runs, where they were dropped, joins neighbouring characters into one run, and refuses a real that is not finite where `0.` was written.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "each accessor is constant time, except [`Entity::record`] and [`Entity::has`], linear in the instance's records. [`List::new`] is linear in its items. Dropping or cloning a value is linear in its size and recurses [`MAX_DEPTH`] deep at most.",
+          "does": "[`Param`] is one parameter value, [`Record`] an entity name with its parameters, and [`Entity`] the records of one instance (one for a simple instance, several for a complex one). A nested list is a [`List`], which knows how deep it nests and cannot be built deeper than [`MAX_DEPTH`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-p21/src/value.rs",
+          "guarantees": [
+            "**Nesting is bounded.** No [`Param`] nests more than [`MAX_DEPTH`] lists, however it was made: [`List::new`] refuses a deeper one, and a list's items cannot be changed once it is built. So dropping, cloning, comparing and printing a value never go deeper than that.",
+            "**Exact or absent.** [`Param::as_f64`] gives an integer as a real only where the real holds it exactly, and never gives a value that is not finite."
+          ],
+          "job": "The values of a Part 21 file as a tree: a parameter, a record and an entity instance.",
+          "method": {
+            "links": [
+              "https://www.iso.org/standard/63141.html",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "the parameter kinds of ISO 10303-21's exchange structure (<https://www.iso.org/standard/63141.html>), as chapter 24.8 of `projects/engines/geometry/architecture/24-file-format-exchange.md` asks: the encoding, not the entities."
+          },
+          "path": "geom_p21::value",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-record/src/step/p21.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "`Param`, `Record` and `Entity` with their accessors, in `no_std` Rust. A list is the new `List` type, which carries its depth, so the nesting bound holds for values a caller builds and not only for parsed ones. `as_f64` gives an integer only where a double holds it exactly (it rounded beyond 2^53) and looks one typed value deep, without recursion. `as_i64` no longer reads a real with no fraction as an integer: that is a repair of one writer's files, which belongs to the reader of the schema.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "linear in what is written; one call of the sink per 64 KiB. Recursion: none.",
+          "does": "a [`Writer`] writes an exchange structure to a [`ByteSink`] a record at a time, in file order: [`Writer::begin`], header records, [`Writer::end_section`], then any number of `DATA` sections of instances, then [`Writer::finish`]. The canonical form:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-p21/src/write.rs",
+          "guarantees": [
+            "**What it writes, the reader reads**, to the same values: every name, enumeration, binary and real is checked first, and what Part 21 cannot hold is a [`WriteError`], with nothing of that record written.",
+            "**Canonical.** The bytes depend only on the values written, never on the machine, the thread or the time: the header's time stamp and author are the caller's inputs.",
+            "**Memory does not grow with the file.** The writer holds one line and hands the sink at most about 64 KiB at a time.",
+            "**No recursion.** Nested lists are walked with an explicit stack."
+          ],
+          "job": "The canonical Part 21 writer: one way to write each file, so writing, reading and writing again gives the same bytes.",
+          "method": {
+            "links": [
+              "https://www.iso.org/standard/63141.html",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "the exchange structure of ISO 10303-21 (<https://www.iso.org/standard/63141.html>), written deterministically as chapter 24.10 of `projects/engines/geometry/architecture/24-file-format-exchange.md` asks."
+          },
+          "path": "geom_p21::write",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-step/src/write.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "the Part 21 half of the origin's `Writer` (`param`, `params`, `simple`, `add_complex` and `file`), in `no_std` Rust, streaming to a sink where the origin kept every line and built one `String`. The caller gives each instance its id, in rising order; the origin numbered them itself and shared identical ones through a `HashMap`, which is the schema writer's business and a type the kernel bans. The header is the caller's records (the origin wrote a fixed one naming its own product). Lists are walked with a stack, not by recursion, and every value is checked before it is written (the origin wrote any name and wrote `0.` for a real that is not finite).",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        }
+      ],
       "name": "geom-p21",
       "provenance": [],
       "sections": "24.7, 24.8, 24.10 and 24.11; open question OQ-24.6; 30.5, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G415.",
+      "status": "built by piece G415.",
       "summary": "Spare Kit geometry kernel: the ISO 10303-21 encoding."
     },
     {
@@ -20646,6 +21132,16 @@
       "tier": "Preview since 2026-10-31"
     },
     {
+      "evidence": {},
+      "missing": [
+        "contract",
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Intersection",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
       "evidence": {
         "contract": [
           "projects/engines/geometry/crates/geom-curve/tests/analytic.rs",
@@ -21520,6 +22016,31 @@
       "take": "port",
       "used_by": [
         "projects/engines/geometry/crates/geom-surface/src/frame_rule.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-record/src/step/p21.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-p21/src/exchange.rs",
+        "projects/engines/geometry/crates/geom-p21/src/read.rs",
+        "projects/engines/geometry/crates/geom-p21/src/text.rs",
+        "projects/engines/geometry/crates/geom-p21/src/value.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-step/src/write.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-p21/src/write.rs"
       ]
     },
     {

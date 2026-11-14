@@ -3,7 +3,9 @@ name = "geom-p21"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-license.workspace = true
+# Ported files (solidcore, Apache-2.0) keep their licence; it is the workspace's own, written out
+# because a crate with a ported file names its licences itself (HEADERS.md).
+license = "Apache-2.0"
 description = "Spare Kit geometry kernel: the ISO 10303-21 clear-text encoding."
 
 [dependencies]
@@ -14,6 +16,11 @@ geom-run = { path = "../geom-run", default-features = false }
 geom-format = { path = "../geom-format" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
+
+# The codec's benchmarks (piece G415), with the standard library's clock only.
+[[bench]]
+name = "p21"
+harness = false
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -48,7 +48,9 @@ same twice and give a body that writes and reads to itself; `names` (`src/names.
 records accept only the one encoding of what they read; and `open` (`src/open.rs`, G108), a
 container comes back from a file to the same blobs and trust on open keeps damage with the body
 it is in. Their corpora start from the writers' output for the fixtures of `geom-format`'s own
-tests. For the Gate 3 pieces that `make` and `sequence` do not reach (30.1: a fuzz target per
+tests. `p21` (`src/p21.rs`, G415), `geom-p21`'s Part 21 reader never panics, refuses inside its
+input, reads the same however its bytes arrive, and what it accepts writes to a fixed point. For
+the Gate 3 pieces that `make` and `sequence` do not reach (30.1: a fuzz target per
 code piece): `euler` (`src/euler.rs`, G81), the Euler operators change the counts by their table,
 keep Euler's formula, refuse dead rows without a trace and publish back to themselves; `naming`
 (`src/naming.rs`, G87), names get the one ID their bytes hash to, the name

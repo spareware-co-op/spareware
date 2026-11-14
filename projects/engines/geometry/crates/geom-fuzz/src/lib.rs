@@ -186,6 +186,8 @@
 //! - `geom-topo`, `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), the code under
 //!   test of the [`arenas`] target and the values that fill its arenas.
 //! - `geom-name` and `geom-op` (Apache-2.0, ours), the code under test of the [`attributes`] target.
+//! - `geom-p21` (Apache-2.0, ours, with files ported from solidcore, Apache-2.0), the code under
+//!   test of the [`p21`] target, read through `geom-format`'s byte sources.
 //! - `geom-make`, `geom-check` and `geom-op` (Apache-2.0, ours), with the crates above, the code
 //!   under test of the [`make`] target and the checker it judges them by.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
@@ -289,6 +291,7 @@ pub mod nurbs;
 pub mod open;
 pub mod operations;
 pub mod orient2d;
+pub mod p21;
 pub mod pencils;
 pub mod piercing;
 pub mod planes;

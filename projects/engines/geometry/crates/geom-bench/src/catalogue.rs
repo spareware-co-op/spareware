@@ -596,6 +596,10 @@ pub static OPS: &[Op] = &[
     Op { group: "prune", name: "steps", measures: "geom_name::prune::prune", classes: T, prepare: |c| bind(inputs::naming::prunes(c), kernels::naming::pruned) },
     Op { group: "prune", name: "record_write", measures: "geom_format::pruned::pruned_record", classes: T, prepare: |c| bind(inputs::naming::pruned(c), kernels::naming::record_write) },
     Op { group: "prune", name: "record_read", measures: "geom_format::pruned::read_pruned", classes: T, prepare: |c| bind(inputs::naming::pruned_payloads(c), kernels::naming::record_read) },
+    // The facade (piece G100; decision 32.46): an operation found by name in its table, and a call
+    // dispatched by name through its re-export.
+    Op { group: "facade", name: "lookup", measures: "engine_geometry::operations::OPERATIONS", classes: T, prepare: |c| bind(inputs::facade::names(c), kernels::facade::lookup) },
+    Op { group: "facade", name: "dispatch", measures: "engine_geometry::operations::make_box", classes: T, prepare: |c| bind(inputs::facade::calls(c), kernels::facade::dispatch) },
     // Root finding and quadrature (piece G51; decision 32.46).
     // The exact decisions on lines and quadrics (piece G159; decision 32.46).
     Op { group: "quadric", name: "line_sphere", measures: "quadric::line_sphere", classes: T, prepare: |c| bind(inputs::quadric::spheres(c), kernels::quadric::spheres) },
@@ -646,6 +650,8 @@ pub static OPS: &[Op] = &[
     // Known curves (piece G174; decision 32.46): sheets tangent to a plane along a known line,
     // the tube about it proven and taken out of the search.
     Op { group: "intersect", name: "known_tangent", measures: "geom_intersect::known::subdivide_known", classes: T, prepare: |c| bind(inputs::intersect::tangents(c), kernels::intersect::known_cut) },
+    // The intersection curve (piece G175; decision 32.44): marched crossings fitted, every span certified.
+    Op { group: "intersect", name: "fit_curve", measures: "geom_intersect::fit::fit", classes: T, prepare: |c| bind(inputs::intersect::crossings(c), kernels::intersect::fit_curve) },
     // Self-intersection (piece G176; decision 32.46): swept loops crossing themselves along a line.
     Op { group: "intersect", name: "selfcross_sweep", measures: "geom_intersect::selfcross::self_intersect", classes: T, prepare: |c| bind(inputs::intersect::sweeps(c), kernels::intersect::self_cross) },
     // Contact analysis (piece G171; decision 32.46): a sphere resting on a plane patch.
@@ -729,7 +735,7 @@ pub fn full_scenario(op: &str) -> Option<Prepared> {
 }
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 55] = [
+pub const GROUPS: [&str; 56] = [
     "predicate",
     "sign",
     "wide",
@@ -783,6 +789,7 @@ pub const GROUPS: [&str; 55] = [
     "history",
     "resolve",
     "prune",
+    "facade",
     "intersect",
     "quadric",
 ];

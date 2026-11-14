@@ -288,23 +288,29 @@
             {
               "sha256": "ddee718ce2bebe394e4cd1a975a27851b9d21b1ad9aace84539343ce83ac7e94",
               "kind": "corpus",
-              "piece": "Phase 4 train 1 (G123 to G155)",
-              "why": "Phase 4's first train, one record for its pieces' 32 new count benchmarks: 14 on geom-num's plane functions (G138: plane::determinant_sign and its fellows), mesh/cdt (G153), mesh/exact_build (G146), 6 on the distance comparisons and triangle contact (G151), mesh/envelope (G152), mesh/locate (G147), mesh/boolean (G148) and 7 scenarios of the flat boolean (G140); and topo/publish's input digest, which moves because a vertex's point is now a PointKind (the G129 fix), while its output digest stays. No other existing digest moved"
+              "piece": "G100",
+              "why": "2 new count benchmarks in a new group: facade (G100, Gate 3's record: a registered operation found by name in the facade's table and its schema read, and make.box dispatched by name through the facade's re-export with its class checked against its schema); no existing digest moved"
             },
             {
-              "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b",
+              "sha256": "cc13b5939bfbf8c3cdb3806d9d25ab4f91b827e92aef476a4e2096d84370ac59",
+              "kind": "corpus",
+              "piece": "Phase 4 train 1 (G123 to G155)",
+              "why": "Phase 4's first train, one record for its pieces' 32 new count benchmarks: 14 on geom-num's plane functions (G138: plane::determinant_sign and its fellows), mesh/cdt (G153), mesh/exact_build (G146), 6 on the distance comparisons and triangle contact (G151), mesh/envelope (G152), mesh/locate (G147), mesh/boolean (G148) and 7 scenarios of the flat boolean (G140); and topo/publish's input digest, which moves because a vertex's point is now a PointKind (the G129 fix), while its output digest stays.; and facade/lookup's output digest (main's G100), which moves because the train's query.area and query.volume schemas list one more error, ImplicitVertex (G129), so the error count the benchmark reads for those two operations is one more, while its input digest stays. No other existing digest moved"
+            },
+            {
+              "sha256": "00291a049e83434c5aa58f8967129acf76c325e23026f4fcdf63d56787119b20",
               "kind": "corpus",
               "piece": "Phase 5 train 1 (G158 to G180)",
-              "why": "Phase 5's first train, one record for its pieces' 38 new count benchmarks (groups intersect, quadric: geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils). No existing digest moved"
+              "why": "Phase 5's first train, one record for its pieces' 39 new count benchmarks (groups intersect, quadric: geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils). No existing digest moved"
             },
             {
-              "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4",
+              "sha256": "fa383b5b884aa4a756c993c513ae25afd00c77f65983bc9f85c3e519e6bd0946",
               "kind": "corpus",
               "piece": "Phase 6 train 1 (G187 to G231)",
               "why": "Phase 6's first train, one record for its pieces' 283 new count benchmarks (groups crossing, entity, generated, intersect, sketch, spline: geom-num's 2D predicates on carriers, rational points, rational-centre circles and arcs, one-root crossings, ellipses and quartics, with their generated filters, exact paths and plain and limb variants; geom-2d's entity model, edits, arrangements, zone insertion and spline-line contacts; geom-sketch's spline rules and diagnosis). No existing digest moved"
             }
           ],
-          "sha256": "63a2d7097efa16e228ffe06e6fab3f887389914244cd38d4249eba4f86ef7c78"
+          "sha256": "d707996cee763418496ee960e2c0de90f0e0d064b5f392b82a96cdd960869994"
         },
         {
           "id": "geom-nurbs/operations",
