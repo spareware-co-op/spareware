@@ -297,14 +297,11 @@ impl ConicRoot {
         }
         let image = mirror(&self.ellipse, axis, &self.quartic)?;
         let theirs = on_half(&self.ellipse, axis, half.negate(), &image)?;
-        let count = theirs.iter().flatten().count();
-        let at = budget(
-            count
-                .checked_sub(1)
-                .and_then(|n| rank.and_then(|r| n.checked_sub(r))),
-        )?;
-        let carried = budget(theirs.get(at).copied().flatten())?;
-        Ok((image, carried))
+        // Their roots fill the list from its start, so the one `rank` places from the other end
+        // is the `rank`-th of them taken backwards.
+        let rank = budget(rank)?;
+        let carried = theirs.iter().flatten().rev().nth(rank).copied();
+        Ok((image, budget(carried)?))
     }
 }
 

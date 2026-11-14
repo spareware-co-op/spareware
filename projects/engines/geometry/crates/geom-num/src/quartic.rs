@@ -1134,13 +1134,8 @@ fn sort_open<const L: usize, const W: usize>(
                 continue;
             };
             let (pc, qc) = (simple(&p)?, simple(&q)?);
-            let x = order(
-                Stretch::of(&p.root)?,
-                &pc,
-                Stretch::of(&q.root)?,
-                &qc,
-                limit,
-            )?;
+            let (ps, qs) = (Stretch::of(&p.root)?, Stretch::of(&q.root)?);
+            let x = order(ps, &pc, qs, &qc, limit)?;
             let t = if piece.falling() { x.negate() } else { x };
             if t == Sign::Positive {
                 here.swap(k, next);
