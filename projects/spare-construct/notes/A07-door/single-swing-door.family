@@ -1,0 +1,82 @@
+// The same door as single-swing-door.family.json, in a sketch of a purpose-built recipe
+// language. Illustrative only: no parser exists for it.
+
+family "Single swing door"
+category door
+host wall cuts Opening reads Thickness
+
+// Type parameters: one value per type.
+type Width: length = 820 mm
+type Height: length = 2040 mm
+type FrameWidth: length = 40 mm
+type LeafThickness: length = 40 mm
+type Clearance: length = 3 mm
+type Undercut: length = 10 mm
+type FireRating: text = ""
+type FrameMaterial: material = "Timber, painted"
+type LeafMaterial: material = "Timber, painted"
+
+// Instance parameters: one value per placed door.
+instance Swing: choice(left, right) = left
+instance Opens: choice(in, out) = in
+
+// Derived values.
+let LeafWidth = Width - 2 * FrameWidth - 2 * Clearance
+let LeafHeight = Height - FrameWidth - Clearance - Undercut
+let FrameDepth = host.Thickness
+
+// Reference planes.
+plane Centre = x(0 mm) fixed
+plane Sill = z(0 mm) fixed
+plane Left = Centre - Width / 2
+plane Right = Centre + Width / 2
+plane Head = Sill + Height
+plane Exterior = host.face(exterior)
+plane Interior = host.face(interior)
+plane HostCentre = midway(Exterior, Interior)
+
+// Sketches, on the elevation.
+sketch FrameOutline on elevation {
+  outer rect(Left, Right, Sill, Head)
+  hole rect(Left + FrameWidth, Right - FrameWidth, Sill, Head - FrameWidth)
+}
+sketch LeafOutline on elevation {
+  outer rect(Left + FrameWidth + Clearance, Right - FrameWidth - Clearance,
+             Sill + Undercut, Sill + Undercut + LeafHeight)
+}
+sketch OpeningOutline on elevation {
+  outer rect(Left, Right, Sill, Head)
+}
+
+// Solids and the void cut in the host.
+solid Frame = extrude(FrameOutline, between: Exterior .. Interior)
+  material FrameMaterial
+  visible in plan, elevation, section, 3d at medium, fine
+
+solid Leaf = if Opens == in
+  then extrude(LeafOutline, from: Interior, depth: -LeafThickness)
+  else extrude(LeafOutline, from: Exterior, depth: LeafThickness)
+  material LeafMaterial
+  visible in plan, elevation, section, 3d at medium, fine
+
+void Opening = extrude(OpeningOutline, through: host)
+
+// Plan symbols.
+symbol LeafOpen in plan at coarse, medium, fine =
+  line((Left + FrameWidth, Interior), (Left + FrameWidth, Interior + LeafWidth))
+symbol SwingArc in plan at coarse, medium, fine style thin =
+  arc(centre: (Left + FrameWidth, Interior), radius: LeafWidth, from: 0 deg, to: 90 deg)
+symbol OpeningLines in plan at coarse =
+  line((Left, Exterior), (Left, Interior)),
+  line((Right, Exterior), (Right, Interior))
+
+// Handing.
+mirror about Centre when Swing == right
+flip symbols about HostCentre when Opens == out
+
+// Types.
+types {
+  "820 x 2040" {}
+  "920 x 2040" { Width = 920 mm }
+  "920 x 2040 FR30" { Width = 920 mm, LeafThickness = 45 mm, FireRating = "FR30" }
+}
