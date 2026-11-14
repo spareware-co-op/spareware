@@ -25,6 +25,9 @@ geom-topo = { path = "../geom-topo" }
 geom-make = { path = "../geom-make" }
 # Surfaces for the tests' faces (ours, Apache-2.0).
 geom-surface = { path = "../geom-surface" }
+# The kernel development crate: the second checker of 28.4, which tests/laws.rs holds every
+# result to beside geom-check (Gate 4, G156), a development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
 # Property tests only, never linked into the kernel. MIT OR Apache-2.0.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 

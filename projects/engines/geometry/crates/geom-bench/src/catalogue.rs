@@ -5,7 +5,8 @@
 //! [`OPS`] and [`GROWTH`] are the single list. Every harness finds its benchmarks here: the
 //! instruction-count gate looks each one up by name ([`prepare_named`]), the WebAssembly fuel gate
 //! runs every name ([`names`]), the wall-clock harness runs every case, and the golden tests check
-//! every digest. Tests check that the gate's source lists exactly these benchmarks
+//! every digest. The reference runner times every name and the scenarios at full size
+//! ([`timed_names`]), each checked before it is timed ([`prepare_checked`]). Tests check that the gate's source lists exactly these benchmarks
 //! (`tests/coverage.rs`), and that every public function of `geom-num` is either measured here or
 //! named in [`UNMEASURED`] with a reason (principle 12: every operation ships with a benchmark).
 //!
@@ -589,6 +590,56 @@ pub fn full_scenario(op: &str) -> Option<Prepared> {
     }
 }
 
+/// The variant a full-size scenario is named by: `scenario/<op>/full`.
+pub const FULL: &str = "full";
+
+/// Every benchmark the reference runner times each night (piece G107; 28.14): [`names`], then each
+/// of [`SCENARIOS`] at full size, `scenario/<op>/full`, the size 23.1's shares and 11.17's targets
+/// are stated at (the door move's share reads `scenario/moved_door/full`). The count gates and the
+/// fuel gate never run the full sizes, so [`names`] does not hold them.
+#[must_use]
+pub fn timed_names() -> Vec<String> {
+    let mut all = names();
+    all.extend(SCENARIOS.iter().map(|op| format!("scenario/{op}/{FULL}")));
+    all
+}
+
+/// Why [`prepare_checked`] has no benchmark to time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Unready {
+    /// No benchmark of [`timed_names`] has this name.
+    Unknown,
+    /// Its digests differ from `golden.txt`, or a full-size run failed: the message says which.
+    Wrong(String),
+}
+
+/// The benchmark named `name` of [`timed_names`], ready to time once it is known to compute the
+/// right thing: a catalogued benchmark when one pass's digests are `golden.txt`'s; a full-size
+/// scenario, which has no digest, when its reduced batch (`scenario/<op>/typical`) has
+/// `golden.txt`'s digests and one full-size run succeeds, as the wall-clock harness checks it.
+///
+/// # Errors
+///
+/// [`Unready::Unknown`] for a name [`timed_names`] does not hold; [`Unready::Wrong`] when the
+/// digests differ or the full-size run fails.
+pub fn prepare_checked(name: &str) -> Result<Prepared, Unready> {
+    let full = name
+        .strip_prefix("scenario/")
+        .and_then(|rest| rest.strip_suffix(FULL))
+        .and_then(|rest| rest.strip_suffix('/'))
+        .filter(|op| SCENARIOS.contains(op));
+    let Some(op) = full else {
+        let mut bench = prepare_named(name).ok_or(Unready::Unknown)?;
+        crate::golden::check(name, &bench.run()).map_err(Unready::Wrong)?;
+        return Ok(bench);
+    };
+    let reduced = format!("scenario/{op}/typical");
+    let mut checked = prepare_named(&reduced).ok_or(Unready::Unknown)?;
+    crate::golden::check(&reduced, &checked.run()).map_err(Unready::Wrong)?;
+    full_scenario(op)
+        .ok_or_else(|| Unready::Wrong(format!("{name}: a run at full size did not succeed")))
+}
+
 /// The groups of [`OPS`], in order.
 pub const GROUPS: [&str; 51] = [
     "predicate",
@@ -921,6 +972,32 @@ mod tests {
             "nope/a/b",
         ] {
             assert!(prepare_named(bad).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_timed_names_are_the_catalogue_and_each_scenario_at_full_size() {
+        let (all, timed) = (names(), timed_names());
+        assert_eq!(timed[..all.len()], all[..]);
+        let full: Vec<&str> = timed[all.len()..].iter().map(String::as_str).collect();
+        assert_eq!(full.len(), SCENARIOS.len());
+        assert!(full.contains(&"scenario/moved_door/full"));
+        for name in &full {
+            // The gates never prepare a full size: only the timing path knows them.
+            assert!(prepare_named(name).is_none(), "{name}");
+        }
+        assert!(prepare_checked("predicate/orient2d/typical").is_ok());
+        for bad in [
+            "scenario/nope/full",
+            "scenario/moved_door/full/",
+            "scenario/moved_doorfull",
+            "scenario//full",
+            "nope/a/b",
+        ] {
+            assert!(
+                matches!(prepare_checked(bad), Err(Unready::Unknown)),
+                "{bad}"
+            );
         }
     }
 

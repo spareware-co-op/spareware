@@ -688,3 +688,86 @@ fn the_meter_stops_a_boolean() {
         Err(MeshError::Stopped(_) | MeshError::BudgetExceeded(_))
     ));
 }
+
+#[test]
+fn a_face_whose_lowest_corner_is_in_a_hole_sorts_into_canonical_order() {
+    // Gate 4's corpus (G156): Manifold's regression model degenerate_split_quad_shared_a, on the
+    // grid, mirrored in x and united with a copy moved by (-1333334, 891786, 1333334). The union
+    // has faces with holes whose lowest vertex is in a hole; the builder sorted faces by their
+    // first three vertices after the outer loop's lowest, left them in the order they came, and
+    // the checker refused the result (`FacesOutOfOrder`). The same union unmirrored passed.
+    use geom_test::polyhedral::{MODELS, mesh_polygons};
+    let text = MODELS
+        .iter()
+        .find(|(name, _)| *name == "degenerate_split_quad_shared_a")
+        .unwrap()
+        .1;
+    let mut grid = geom_test::obj::read(text).unwrap().to_grid().unwrap();
+    for p in &mut grid.points {
+        p[0] = -p[0];
+    }
+    for f in &mut grid.faces {
+        f.reverse();
+    }
+    let a = build(
+        &mesh_polygons(&grid, [0; 3], 1).unwrap(),
+        &Exec::serial(),
+        &mut meter(),
+    )
+    .unwrap();
+    let moved = mesh_polygons(&grid, [-1_333_334, 891_786, 1_333_334], 2).unwrap();
+    let b = build(&moved, &Exec::serial(), &mut meter()).unwrap();
+    let union = one(&[&a, &b], WindingTest::unite());
+    assert!(union.mesh.is_solid());
+    // Either way round, the same mesh.
+    assert_eq!(one(&[&b, &a], WindingTest::unite()).mesh, union.mesh);
+}
+
+#[test]
+fn faces_that_start_with_the_same_three_vertices_are_refused_by_pairing() {
+    // The only faces the builder's full sort orders are two of one run that start with the same
+    // three vertices: they run the same two edges the same way at one angle. Two shells of one run
+    // that overlap, a tetrahedron and a pyramid on one base corner, have such a pair, the bases
+    // (v0, v1, v2) and (v0, v1, v2, v3); pairing finds their half-edges side by side, one way, and
+    // refuses the mesh in either order (the quality ledger's reason for the sort's mutants).
+    use geom_test::obj::Grid;
+    use geom_test::polyhedral::mesh_polygons;
+    let points = vec![
+        [0, 0, 0],
+        [0, 4, 0],
+        [4, 4, 0],
+        [4, 0, 0],
+        [1, 3, 4],
+        [2, 2, 4],
+    ];
+    let pyramid: Vec<Vec<u32>> = vec![
+        vec![0, 1, 2, 3],
+        vec![1, 0, 5],
+        vec![2, 1, 5],
+        vec![3, 2, 5],
+        vec![0, 3, 5],
+    ];
+    let tetrahedron: Vec<Vec<u32>> =
+        vec![vec![0, 1, 2], vec![1, 0, 4], vec![2, 1, 4], vec![0, 2, 4]];
+    let made = |faces: Vec<Vec<u32>>| {
+        let grid = Grid {
+            points: points.clone(),
+            faces,
+            scale: 0,
+        };
+        let refused = build(
+            &mesh_polygons(&grid, [0; 3], 1).unwrap(),
+            &Exec::serial(),
+            &mut meter(),
+        )
+        .unwrap_err();
+        format!("{refused:?}")
+    };
+    for faces in [
+        [pyramid.clone(), tetrahedron.clone()].concat(),
+        [tetrahedron, pyramid].concat(),
+    ] {
+        let why = made(faces);
+        assert!(why.starts_with("Fault(UnevenEdge"), "{why}");
+    }
+}

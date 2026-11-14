@@ -5868,6 +5868,30 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace in_full_order -> Result<(), MeshFault> with Ok(())",
+      "line_text": "let mut begin = 0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "in_full_order only reorders faces of one run that tie on the first three vertices they are written with, which run the same two edges the same way at one angle. Pairing then finds two half-edges of one way side by side about each of those edges and refuses the mesh (UnevenEdge) in whichever order the faces stand, as geom-mesh's tests/boolean.rs faces_that_start_with_the_same_three_vertices_are_refused_by_pairing shows for two overlapping shells, so on every mesh the builder accepts the sort changes nothing. It stays so that such a mesh, were pairing ever to accept one, is ordered by its whole sequence rather than by the order it came in."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace < with > in in_full_order",
+      "line_text": "while begin < sorted.len() {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "in_full_order only reorders faces of one run that tie on the first three vertices they are written with, which run the same two edges the same way at one angle. Pairing then finds two half-edges of one way side by side about each of those edges and refuses the mesh (UnevenEdge) in whichever order the faces stand, as geom-mesh's tests/boolean.rs faces_that_start_with_the_same_three_vertices_are_refused_by_pairing shows for two overlapping shells, so on every mesh the builder accepts the sort changes nothing. It stays so that such a mesh, were pairing ever to accept one, is ordered by its whole sequence rather than by the order it came in."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace == with != in in_full_order",
+      "line_text": ".is_some_and(|k| (k.run, k.lowest) == (head.run, head.lowest))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "in_full_order only reorders faces of one run that tie on the first three vertices they are written with, which run the same two edges the same way at one angle. Pairing then finds two half-edges of one way side by side about each of those edges and refuses the mesh (UnevenEdge) in whichever order the faces stand, as geom-mesh's tests/boolean.rs faces_that_start_with_the_same_three_vertices_are_refused_by_pairing shows for two overlapping shells, so on every mesh the builder accepts the sort changes nothing. It stays so that such a mesh, were pairing ever to accept one, is ordered by its whole sequence rather than by the order it came in."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
       "mutant": "delete match arm (Ok(a), Ok(b)) in part",
       "line_text": "(Ok(a), Ok(b)) => a.checked_div(b).map_or(0, i128::from),",
       "occurrences": 1,

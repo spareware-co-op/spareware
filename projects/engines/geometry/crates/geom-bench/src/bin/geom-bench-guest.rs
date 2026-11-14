@@ -14,9 +14,11 @@
 //!   millisecond) costs at most a millisecond per round. Timing lives in this program, not in the
 //!   library, whose results never depend on a clock.
 //! - `time <name> <milliseconds> <threads>`: the reference runner's form (piece G107; chapter
-//!   23.13, "Wall clock and scaling"), at 1 to 64 threads. Each thread builds its own batch and
-//!   checks it against `golden.txt` (one pass and its digests), so nothing is timed that computes
-//!   the wrong thing; once every thread is ready they start together, and each times its own batch
+//!   23.13, "Wall clock and scaling"), at 1 to 64 threads, for every name of `list timed`. Each
+//!   thread builds its own batch and checks it against `golden.txt` (one pass and its digests; a
+//!   scenario at full size, which has none, by its reduced batch's and one full run,
+//!   `geom_bench::catalogue::prepare_checked`), so nothing is timed that computes the wrong
+//!   thing; once every thread is ready they start together, and each times its own batch
 //!   with the rounds above. The numbers layer has no pool and starts no thread of its own, so N
 //!   threads are N copies of the benchmark running at once, one per thread, as N Web Workers are
 //!   in a browser; one thread is the program's own, so a WebAssembly build, which cannot start
@@ -51,6 +53,7 @@ use std::sync::{Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use geom_bench::catalogue::{Unready, prepare_checked, timed_names};
 use geom_bench::harness::Bench;
 
 /// Rounds of `time`, the first a warm-up.
@@ -126,6 +129,15 @@ impl Refusal {
     }
 }
 
+/// Why a benchmark of `list timed` cannot be timed, as `time` exits: 2 for an unknown name, 1 for
+/// digests that differ or a full-size run that failed.
+fn refused(unready: Unready) -> Refusal {
+    match unready {
+        Unready::Unknown => Refusal::usage("no benchmark of `list timed` by that name".to_string()),
+        Unready::Wrong(message) => Refusal { status: 1, message },
+    }
+}
+
 /// Where the threads of `time` stand: how many have built and checked their batch, the first
 /// check that failed, and the start signal (`Some(true)` to time, `Some(false)` to stop).
 #[derive(Default)]
@@ -156,17 +168,15 @@ fn time_threads(name: &str, milliseconds: &str, threads: &str) -> Result<String,
              guest per worker"
         )));
     }
-    let Some(mut bench) = geom_bench::catalogue::prepare_named(name) else {
+    if !timed_names().iter().any(|known| known == name) {
         return Err(Refusal::usage(format!("no benchmark named {name}")));
-    };
+    }
     if threads == 1 {
         // One thread times on this one, so WebAssembly, which cannot start threads, can run it.
-        geom_bench::golden::check(name, &bench.run())
-            .map_err(|message| Refusal { status: 1, message })?;
+        let mut bench = prepare_checked(name).map_err(refused)?;
         let (median, passes) = rounds(&mut *bench, budget);
         return Ok(format!("{name} {median:.3} {passes} 1 {median:.3}\n"));
     }
-    drop(bench);
     let signal: Signal = (Mutex::new(Start::default()), Condvar::new());
     let results = thread::scope(|scope| {
         let mut handles = Vec::with_capacity(threads);
@@ -222,17 +232,17 @@ fn time_threads(name: &str, milliseconds: &str, threads: &str) -> Result<String,
 /// One thread of `time`: builds and checks its own batch, reports ready, waits for the start
 /// signal and times its rounds; `None` when told to stop, or when the benchmark is unknown.
 fn one_thread(name: &str, budget: Duration, signal: &Signal) -> Option<(f64, u64)> {
-    let mut bench = geom_bench::catalogue::prepare_named(name);
-    let checked = match bench.as_mut() {
-        Some(bench) => geom_bench::golden::check(name, &bench.run()),
-        None => Err(format!("no benchmark named {name}")),
-    };
+    let checked = prepare_checked(name).map_err(|unready| refused(unready).message);
     let (lock, wake) = signal;
     let mut state = lock.lock().unwrap_or_else(PoisonError::into_inner);
     state.ready = state.ready.saturating_add(1);
-    if let Err(message) = checked {
-        state.failed.get_or_insert(message);
-    }
+    let bench = match checked {
+        Ok(bench) => Some(bench),
+        Err(message) => {
+            state.failed.get_or_insert(message);
+            None
+        }
+    };
     wake.notify_all();
     while state.go.is_none() {
         state = wake.wait(state).unwrap_or_else(PoisonError::into_inner);

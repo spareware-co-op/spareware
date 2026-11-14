@@ -448,6 +448,53 @@ fn a_cut_nowhere_near_changes_nothing() {
 }
 
 #[test]
+fn a_cut_on_a_face_holds_its_outline_and_not_where_the_boxes_parted_it() {
+    // Gate 4's corpus (EMBER's figures 24 and 25, imprint and general fuse) found seams on the
+    // boxes' planes: a cut lying in a face, parted by a box, held a seam along the part, so the
+    // result had vertices on odd half steps and changed with the leaf size. A imprinted by a
+    // square in its side at x = 4, and by a block standing on its side at y = 4, is A with that
+    // side cut round the square, however small the boxes. The block's outline is held by its
+    // face on y = 4 and its sides, whose sides along it run opposite ways: cuts of different
+    // planes never cancel. Neither side is the first of A's planes in the sheets' order, so a
+    // cut must find its own plane among them.
+    let square = Block {
+        low: [4, 1, 1],
+        high: [4, 3, 3],
+    };
+    let standing = block([1, 4, 1], [3, 6, 3]);
+    let mut with_square = scene(&[A]);
+    with_square.push(Polygon {
+        piece: side(&square, 0, 4, true),
+        entry: None,
+    });
+    for polygons in [with_square, scene(&[A, standing])] {
+        for leaf in [1, 2, LEAF_POLYGONS] {
+            let found = classified(&polygons, leaf);
+            // A's pieces, as an imprint keeps its target's; the others' are cuts.
+            let test = WindingTest::new(vec![Term::Inside(0)]).unwrap();
+            let kept = select(&test, &found).unwrap();
+            let cuts: Vec<Piece> = found
+                .iter()
+                .filter(|c| c.polygon >= 6)
+                .map(|c| c.piece.clone())
+                .collect();
+            let rules = Rules {
+                cuts: &cuts,
+                open: false,
+            };
+            let m = merge_with(&kept, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+            closed(&m, &kept);
+            // The side is a ring round the square and the square: one more face and ring, the
+            // square's four edges and corners.
+            assert_eq!(counts(&m), [1, 7, 8, 16, 12], "leaf {leaf}");
+            for v in &m.vertices {
+                assert!(v.to_grid().unwrap().is_exact(), "leaf {leaf}: {v:?}");
+            }
+        }
+    }
+}
+
+#[test]
 fn a_wall_back_to_back_makes_two_cells_whichever_fin_comes_first() {
     let (found, solid) = with_wall([-1, -1], [5, 5]);
     let (kept, wall) = parts(&found, solid);

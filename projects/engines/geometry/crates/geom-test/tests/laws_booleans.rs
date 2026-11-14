@@ -30,6 +30,10 @@
 //! - **Against the reference.** On two boxes, the kernel's union, intersection and difference have
 //!   exactly the volumes the reference's brute force over a full plane arrangement gives.
 //!
+//! - **Both checkers agree** (Gate 4, G156): every body a law gets back also goes through the
+//!   second checker (`geom_test::second_check`), and the two find the same rules broken, which for
+//!   a valid result is none (`catalogue::Findings::both`).
+//!
 //! Seeds: each law prints `seed: <hex>`, replays with `SPAREKIT_SEED`; pull requests run the fixed
 //! default seed and the nightly workflow a fresh one.
 
@@ -259,6 +263,9 @@ fn run(label: &str, default: u64, law: impl Fn(&mut Findings, &mut Draw, &Shape,
         match draw_pair(&mut d) {
             Ok((a, b)) => {
                 f.ran();
+                // A shape of two boxes is their union: a body a boolean returned.
+                f.both(&a.body, || format!("A {:?}", a.parts));
+                f.both(&b.body, || format!("B {:?}", b.parts));
                 law(&mut f, &mut d, &a, &b);
             }
             Err(why) => f.add("a shape the kernel would not build", || why),
@@ -336,6 +343,7 @@ fn volumes_add_up_exactly() {
                 "full checker",
                 || format!("{name} of {}", describe(a, b)),
             );
+            f.both(body, || format!("{name} of {}", describe(a, b)));
         }
     });
 }
@@ -353,6 +361,7 @@ fn a_solid_minus_itself_is_empty_and_united_with_itself_is_itself() {
             "A - A",
             subtract(&ctx(), &SERIAL, key(1), &twin),
         ) {
+            f.both(&none.result.body, || format!("A - A of {:?}", a.parts));
             f.check(
                 none.result.body.arenas().edges.is_empty(),
                 "A - A is empty",
@@ -366,6 +375,7 @@ fn a_solid_minus_itself_is_empty_and_united_with_itself_is_itself() {
             );
         }
         if let Some(same) = took(f, "refused", "A u A", unite(&ctx(), &SERIAL, &twin)) {
+            f.both(&same.result.body, || format!("A u A of {:?}", a.parts));
             f.check(
                 six(&same.result.body) == six(&a.body),
                 "A u A has A's volume",
@@ -423,6 +433,13 @@ fn imprint_keeps_the_volume_and_the_cells_partition_the_union() {
         ) else {
             return;
         };
+        for (k, bodies) in out.result.iter().enumerate() {
+            for cell in bodies {
+                f.both(&cell.body, || {
+                    format!("selection {k} of {}", describe(a, b))
+                });
+            }
+        }
         let volumes: Vec<Result<i128, String>> = out
             .result
             .iter()
@@ -509,6 +526,13 @@ fn a_point_is_in_the_result_when_the_operation_says_so_of_its_classes() {
         ) else {
             return;
         };
+        for (name, body) in [
+            ("union", &u.result.body),
+            ("intersection", &i.result.body),
+            ("difference", &s.result.body),
+        ] {
+            f.both(body, || format!("{name} of {}", describe(a, b)));
+        }
         for _ in 0..24 {
             let x = [0; 3].map(|_: i64| 2 * d.between(-1, 7) + 1);
             let (ia, ib) = (a.contains(x), b.contains(x));
@@ -569,6 +593,7 @@ fn the_kernels_volumes_are_the_references() {
             ("intersection", &i.result.body, Op::Intersection),
             ("difference", &s.result.body, Op::Difference),
         ] {
+            f.both(kernel, || format!("{name} of {ca:?} and {cb:?}"));
             let reference = boolean(&ra, &rb, op).unwrap().volume() * int(6);
             let got = six(kernel).map(|v| int(i64::try_from(v).unwrap()));
             f.check(got.as_ref() == Ok(&reference), name, || {
@@ -607,6 +632,8 @@ fn union_and_intersection_commute() {
             ) else {
                 continue;
             };
+            f.both(&ab, || format!("{op} of {}", describe(a, b)));
+            f.both(&ba, || format!("{op} of B and A, {}", describe(a, b)));
             f.check(
                 six(&ab) == six(&ba),
                 &format!("{op} commutes in volume"),
@@ -711,6 +738,8 @@ fn grid_moves_commute_with_every_boolean() {
         ) else {
             return;
         };
+        f.both(&ma, || format!("A moved by {m:?}, {}", describe(a, b)));
+        f.both(&mb, || format!("B moved by {m:?}, {}", describe(a, b)));
         for op in ["union", "intersection", "difference"] {
             let (Some(first), Some(moved_first)) = (
                 took(f, "refused", op, operate(op, &a.body, &b.body)),
@@ -718,6 +747,10 @@ fn grid_moves_commute_with_every_boolean() {
             ) else {
                 continue;
             };
+            f.both(&first, || format!("{op} of {}", describe(a, b)));
+            f.both(&moved_first, || {
+                format!("{op} moved by {m:?}, {}", describe(a, b))
+            });
             let expected: BTreeSet<[i64; 3]> =
                 vertices(&first).into_iter().map(|q| m.point(q)).collect();
             let name = format!("{op} commutes with {m:?}");
@@ -779,6 +812,10 @@ fn a_batch_cut_equals_the_cuts_one_at_a_time_in_any_order() {
             continue;
         };
         let cut_body = &by_cut.result[0].result.body;
+        f.both(&batch.result.body, || {
+            format!("A {:?} less two tools", a.parts)
+        });
+        f.both(cut_body, || format!("batch::cut of A {:?}", a.parts));
         f.check(
             six(cut_body) == six(&batch.result.body)
                 && vertices(cut_body) == vertices(&batch.result.body),
@@ -791,6 +828,9 @@ fn a_batch_cut_equals_the_cuts_one_at_a_time_in_any_order() {
             let Some(one_by_one) = took(&mut f, "refused", name, step2) else {
                 continue;
             };
+            f.both(&one_by_one, || {
+                format!("A {:?} less its tools, {name}", a.parts)
+            });
             f.check(
                 six(&batch.result.body) == six(&one_by_one),
                 &format!("batch = one at a time, {name} (volume)"),
@@ -828,6 +868,9 @@ fn the_cells_partition_the_union() {
             f.add("one list per selection", || describe(a, b));
             return;
         };
+        for (k, cell) in cells.iter().chain(union).enumerate() {
+            f.both(&cell.body, || format!("cell {k} of {}", describe(a, b)));
+        }
         let sizes: Result<Vec<i128>, String> = cells.iter().map(|c| six(&c.body)).collect();
         let whole: Result<i128, String> = union.iter().map(|c| six(&c.body)).sum();
         match (sizes, whole) {
@@ -1002,7 +1045,12 @@ fn a_cut_again_from_any_cache_is_a_fresh_cut() {
                 );
             }
             match fresh {
-                Ok(out) => caches.push(out.result[0].cache.clone()),
+                Ok(out) => {
+                    f.both(&out.result[0].result.body, || {
+                        format!("host {:?} cut by {tools:?}", host.parts)
+                    });
+                    caches.push(out.result[0].cache.clone());
+                }
                 Err(e) => {
                     f.add("refused", || format!("a cut: {e:?}"));
                     break;

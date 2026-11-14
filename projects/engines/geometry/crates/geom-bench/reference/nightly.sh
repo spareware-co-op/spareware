@@ -165,7 +165,9 @@ mask8="$(mask_of "${cores[@]:0:8}")"
 say "performance cores ${cores[*]}; 1 thread on mask $mask1, 8 threads on mask $mask8"
 
 # --- The benchmarks ----------------------------------------------------------------------------
-win ./guest.exe list | tr -d '\r' > "$tonight/all.txt"
+# Every benchmark of the catalogue and each flat-boolean scenario at full size (the door move's
+# share reads scenario/moved_door/full).
+win ./guest.exe list timed | tr -d '\r' > "$tonight/all.txt"
 if [ -n "$cases" ]; then grep -E "$cases" "$tonight/all.txt" > "$tonight/cases.txt" || true; else cp "$tonight/all.txt" "$tonight/cases.txt"; fi
 [ -s "$tonight/cases.txt" ] || fail "no benchmark matches --cases $cases"
 cp "$tonight/cases.txt" "$windows_dir/cases.txt"
