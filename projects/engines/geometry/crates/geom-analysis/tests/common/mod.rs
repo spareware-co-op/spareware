@@ -255,7 +255,7 @@ pub fn box_builder(pcurves: bool) -> Builder {
             (0..8)
                 .map(|v| {
                     let c = corner(v);
-                    P3::new(c[0], c[1], c[2]).unwrap()
+                    geom_topo::PointKind::Grid(P3::new(c[0], c[1], c[2]).unwrap())
                 })
                 .collect::<Vec<_>>(),
         )
