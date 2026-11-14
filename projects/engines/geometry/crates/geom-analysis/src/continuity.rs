@@ -264,7 +264,9 @@ pub fn join(
     let mut queue = first_pieces(sides, (lo, hi), meter)?;
     let mut live: Vec<Piece> = Vec::new();
     let mut measured = 0_usize;
-    loop {
+    // Each round measures the pieces the last one halved, so a round always has work to do and an
+    // empty queue ends the run, whatever the test below decides.
+    while !queue.is_empty() {
         for piece in queue.drain(..) {
             measured = measured.saturating_add(1);
             meter.charge(1)?;

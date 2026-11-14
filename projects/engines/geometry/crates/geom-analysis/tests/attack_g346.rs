@@ -147,7 +147,10 @@ fn an_edge_into_a_pole_is_unresolved_there() {
     let p = CurveKind::Line(Line::new([0.5, 0.0], [0.0, 0.5], (0.0, 1.0)).unwrap());
     let m = continuity::join(
         pair(&sphere, &sphere, &p),
-        Ask::new(Measure::NormalAngle, 1e-6).unwrap(),
+        // The pole is never bounded, so the run goes to its cap: a small one keeps it short.
+        Ask::new(Measure::NormalAngle, 1e-6)
+            .unwrap()
+            .with_pieces(2_048),
         &mut meter(),
     )
     .unwrap();

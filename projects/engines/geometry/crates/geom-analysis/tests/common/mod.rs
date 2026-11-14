@@ -30,9 +30,11 @@ use geom_topo::{
     Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense, Shell, Vertex,
 };
 
-/// A meter with no cap and no cancellation.
+/// A meter with no cancellation and a cap of work far above any run here (a few hundred pieces
+/// at most) but below a run of the default cap's 2¹⁴ pieces, so a change that would halve to that
+/// cap stops at once instead.
 pub fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::new(1_000_000, 1 << 28))
 }
 
 /// The index of row `row`.
