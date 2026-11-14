@@ -6645,7 +6645,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace || with && in divide",
-      "line_text": "if in_plane || places.len().saturating_add(parts) >= enough {",
+      "line_text": "if in_plane || below.saturating_add(above) >= enough {",
       "occurrences": 1,
       "kind": "hangs",
       "reason": "With && a split that separates too few polygons is taken anyway: the polygons that span it go to both halves, so each child holds about as many as the box and is split again, down to boxes a step wide, and the work grows until the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."

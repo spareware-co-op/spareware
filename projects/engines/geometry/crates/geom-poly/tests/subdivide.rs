@@ -691,6 +691,40 @@ fn a_fan_of_slivers_is_not_clipped_in_proportion_to_its_size() {
     assert!(got.len() > list.len(), "{}", got.len());
 }
 
+#[test]
+fn a_split_with_an_empty_half_pays_and_is_taken() {
+    // Eight overlapping cubes near the origin and one far away. Once the far cube is split off,
+    // the cubes near the origin lie in one half of their box: a split there copies nothing, its
+    // halves hold exactly the box's pairs, and it is taken, so the box closes in on them instead
+    // of stopping as a leaf of 48 polygons the size of half the frame (refusing it gives 170
+    // pieces at work 45,464: fewer pieces, at half as much work again).
+    let mut blocks: Vec<Block> = (0..8)
+        .map(|i| Block {
+            low: [i, i % 2, 0],
+            high: [i + 3, i % 2 + 3, 3],
+        })
+        .collect();
+    blocks.push(Block {
+        low: [1000; 3],
+        high: [1003; 3],
+    });
+    let list = polygons(&blocks);
+    let cell = around(&list).unwrap();
+    let mut counted = meter();
+    let got = arrange(
+        &Exec::serial(),
+        cell,
+        Winding::new(),
+        &list,
+        LEAF_POLYGONS,
+        &[],
+        &mut counted,
+    )
+    .unwrap();
+    agrees(&blocks, &got);
+    assert_eq!((got.len(), counted.used().work), (224, 29_706));
+}
+
 fn any_block() -> impl Strategy<Value = Block> {
     ([-6i64..6, -6i64..6, -6i64..6], [1i64..6, 1i64..6, 1i64..6]).prop_map(|(low, size)| Block {
         low,
