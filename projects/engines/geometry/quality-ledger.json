@@ -8612,6 +8612,38 @@
       "reason": "The two differ only when two of the normal's coordinates are largest in size together (z = x + 50 has normal (1, 0, -1)): the mutant then takes the later axis as k, the original the earlier. Both nk have the same size, so d divides by either or by neither, c lies as far along either axis, and the other two coordinates are the same numbers in another order, so every test that returns None agrees. Either way the surface holds the same plane exactly, so the closed forms meet the same plane and give the same curves, only parameterised from another point of it; no rule of the piece picks one axis of a tie over the other."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace < with <= in RoundFace::place",
+      "line_text": "if picture.depth_of(point)?.add(slack)?.hi() < *floor {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the upper end of the point's depth, widened by its bound and gap, equals the floor, the least depth of the sphere face's boundary box, exactly. No point of the face lies shallower than its boundary, and one as shallow as the floor would lie on the boundary within the bound of the vertex, which the contact rule above has then already put On a boundary edge. So the mutant answers Out only for a point that stands for no point of the face, a right answer, where the original goes on to the reach and the ray test, which answer Out or refuse; the piece promises a proven answer or a refusal, never which of the two at such a tie."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace < with <= in RoundFace::place",
+      "line_text": "if height.add(slack)?.hi() < graph.floor() {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the upper end of the point's height from the torus's middle plane, widened by its bound, equals the floor, the least height of the face's boundary box, exactly. No point of the face lies lower than its boundary in its half, and one as low as the floor would lie on the boundary within the bound of the vertex, which the contact rule above has then already put On a boundary edge. So the mutant answers Out only for a point that stands for no point of the face, a right answer, where the original goes on to the reach and the ray test, which answer Out or refuse; the piece promises a proven answer or a refusal, never which of the two at such a tie."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
+      "mutant": "replace touch -> bool with true",
+      "line_text": "let tangent = match (first, second) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "bend_order asks touch only for two lines or circles given by whole numbers in a flat face's plane that leave a shared vertex on one side of the reference with a cross product their tangents' enclosures cannot sign. Such curves either touch there, where touch is true and the mutant agrees, or cross at an angle below those enclosures' width, a few units in the last place of a coordinate; their whole numbers allow that only when their two crossings lie within a small fraction of a step of each other, and the edge stage has then made them the one vertex by the contact rule, a touch of the arrangement. The mutant orders those by curvature as the touch the arrangement made of them, where the original refuses with UndecidedOrder; no input made of whole lines and circles a step or more apart tells them apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
+      "mutant": "replace > with >= in seen_from_outside",
+      "line_text": "normal.get(dropped).is_some_and(|n: &i128| *n > 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The dropped coordinate is the one a flat face's plane normal is largest in size (FlatFace::new's choice, which the picture's keep records), and a plane of the table has a normal that is not zero, so that coordinate is never 0 and > 0 and >= 0 agree on every plane."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
       "mutant": "replace > with >= in near_point",
       "line_text": "if w > reach {",

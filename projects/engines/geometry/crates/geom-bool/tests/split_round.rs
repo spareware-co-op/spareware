@@ -1353,6 +1353,9 @@ fn a_sphere_s_loop_says_which_side_is_the_face() {
         // circle's height and that of the point the rest is seen from: shallower there than the
         // rest's boundary.
         let high = b.certified(P3::new(0, 27_129, 42_000).unwrap(), face, 1.0, 1);
+        // In the cap at height 45, as high as the point the rest is seen from: no depth there,
+        // where the picture holds nothing, but shallower than the rest's boundary, so Out of it.
+        let level = b.certified(P3::new(0, 21_794, 45_000).unwrap(), face, 1.0, 1);
         let (out, splitting) = b.run();
         assert!(
             splitting.waiting.is_empty(),
@@ -1360,7 +1363,7 @@ fn a_sphere_s_loop_says_which_side_is_the_face() {
             splitting.waiting
         );
         let held = if forward {
-            vec![north, high]
+            vec![north, high, level]
         } else {
             vec![south]
         };
