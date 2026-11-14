@@ -19,7 +19,7 @@
   const WORKS = new Set([
     'go', 'view', 'vtab', 'vclose', 'vcloseothers', 'browser', 'uipal', 'dockreset', 'pref', 'zoom',
     'tool', 'dtool', 'seltool', 'deselect', 'closeAll', 'dgclose', 'discmenu', 'account', 'vbmenu',
-    'detailset',
+    'detailset', 'disc',
   ]);
 
   const C = {
@@ -95,7 +95,8 @@
     VB.l2 = VB.l1;
     FLOORV.splice(0, FLOORV.length, 'l1', 'l2');
     HOMEV.architecture = 'l1';
-    for (const discipline of DISCS) discipline[4] = discipline[0] === 'architecture' ? 1 : 0;
+    // Architecture is connected to the project; Workshop builds its parts with the geometry kernel in the browser
+    for (const discipline of DISCS) discipline[4] = ['architecture', 'workshop'].includes(discipline[0]) ? 1 : 0;
     renderDisc();
     for (const side of $$('#props-host .side')) side.remove();
     S.view = 'l1';
@@ -150,7 +151,9 @@
     };
     ACT.account = account;
 
-    R.plan = plan;
+    // a discipline whose view is its own page (Workshop's) keeps the demo's way of opening it
+    const framePlan = R.plan;
+    R.plan = () => (FRAMEV[S.view] ? framePlan() : plan());
     R['3d'] = threeD;
     for (const [screen] of SCREENS) {
       if (screen !== 'plan' && screen !== '3d') {

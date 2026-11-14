@@ -84,6 +84,16 @@ pub fn routes(app: Shared) -> Router {
         .route("/connect.css", get(connect_style))
         .route("/shapes/construct_shapes.js", get(shapes_script))
         .route("/shapes/construct_shapes_bg.wasm", get(shapes_wasm))
+        .route("/workshop/", get(workshop_page))
+        .route("/workshop/js/{file}", get(workshop_script))
+        .route(
+            "/workshop/pkg/construct_workshop.js",
+            get(workshop_kernel_script),
+        )
+        .route(
+            "/workshop/pkg/construct_workshop_bg.wasm",
+            get(workshop_kernel_wasm),
+        )
         .route("/design/ribbon/ribbon.js", get(ribbon_script))
         .route("/design/ribbon/ribbon.css", get(ribbon_style))
         .route("/health", get(health))
@@ -179,6 +189,55 @@ async fn shapes_wasm() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "application/wasm")],
         &include_bytes!("../../app/pkg/construct_shapes_bg.wasm")[..],
+    )
+}
+
+/// Workshop, the discipline for parts, assemblies and drawings: the demo's own page, which the
+/// demo's frame opens at `workshop/`, unchanged, with its scripts and the geometry kernel's builder
+/// compiled for the browser (`construct-workshop`).
+async fn workshop_page() -> Html<&'static str> {
+    Html(include_str!("../../demo/workshop/index.html"))
+}
+
+const WORKSHOP_SCRIPTS: [(&str, &str); 6] = [
+    ("build.js", include_str!("../../demo/workshop/js/build.js")),
+    (
+        "drawing.js",
+        include_str!("../../demo/workshop/js/drawing.js"),
+    ),
+    (
+        "kernel.js",
+        include_str!("../../demo/workshop/js/kernel.js"),
+    ),
+    ("model.js", include_str!("../../demo/workshop/js/model.js")),
+    ("ui.js", include_str!("../../demo/workshop/js/ui.js")),
+    (
+        "view3d.js",
+        include_str!("../../demo/workshop/js/view3d.js"),
+    ),
+];
+
+async fn workshop_script(Path(file): Path<String>) -> Response {
+    WORKSHOP_SCRIPTS
+        .iter()
+        .find(|(name, _)| *name == file)
+        .map_or_else(
+            || StatusCode::NOT_FOUND.into_response(),
+            |(_, text)| ([JAVASCRIPT], *text).into_response(),
+        )
+}
+
+async fn workshop_kernel_script() -> impl IntoResponse {
+    (
+        [JAVASCRIPT],
+        include_str!("../../demo/workshop/pkg/construct_workshop.js"),
+    )
+}
+
+async fn workshop_kernel_wasm() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/wasm")],
+        &include_bytes!("../../demo/workshop/pkg/construct_workshop_bg.wasm")[..],
     )
 }
 
