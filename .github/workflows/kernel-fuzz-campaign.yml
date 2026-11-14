@@ -1,14 +1,12 @@
 name: Kernel fuzz campaign
 
-# Measurement only, on a throwaway branch (never merged): the offset fuzz targets' per-input times
-# on a hosted runner at the budgets of fix/offset-budgets. For each of curve_offsets_fuzz and
-# surface_offsets_fuzz it builds the libFuzzer target exactly as the campaign does (cargo-bolero,
-# the dated nightly, address sanitizer and coverage), runs it on every stored curves or surfaces
-# input one file at a time (libFuzzer prints "Executed <file> in <n> ms"), then fuzzes it for the
-# hours asked, seeded with the same inputs, with the campaign's 10 s limit and slow units of 3 s
-# or more reported.
+# Measurement only, on a throwaway branch (never merged): the curve_offsets fuzz target's time on
+# the five slowest stored inputs of run 43564862778, on a hosted runner, at the budget of
+# fix/offset-budgets. It builds the libFuzzer target exactly as the campaign does (cargo-bolero,
+# the dated nightly, address sanitizer and coverage) and runs each of the five files three times,
+# one file at a time (libFuzzer prints "Executed <file> in <n> ms"). No fuzzing.
 
-run-name: "Offset budgets measurement, ${{ inputs.hours || '1' }} h of fuzzing, on ${{ github.sha }}"
+run-name: "Offset budgets measurement, the five slowest curve offsets, on ${{ github.sha }}"
 
 on:
   workflow_dispatch:
@@ -22,7 +20,7 @@ on:
           - wide
           - all
       hours:
-        description: "Hours of fuzzing after the replay"
+        description: "ignored here"
         required: false
         default: "1"
         type: choice
@@ -47,13 +45,13 @@ env:
 
 jobs:
   measure:
-    name: ${{ matrix.target }}, replay and fuzz
+    name: ${{ matrix.target }}, the five slowest
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        target: [curve_offsets_fuzz, surface_offsets_fuzz]
+        target: [curve_offsets_fuzz]
     defaults:
       run:
         shell: bash
@@ -81,52 +79,21 @@ jobs:
         run: |
           touch "$RUNNER_TEMP/stamp"
           cargo bolero test "$TARGET" --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 1s --timeout 30s
-          find target -type f -executable -newer "$RUNNER_TEMP/stamp" -name "${TARGET%_fuzz}-*" -printf '%s %p\n'
-          nproc; grep -m1 "model name" /proc/cpuinfo
-      - name: Replay every stored input, one file at a time
+          grep -m1 "model name" /proc/cpuinfo
+      - name: Replay the five slowest stored inputs, each three times
         run: |
           name="${TARGET%_fuzz}"
           exe=$(find target -type f -executable -newer "$RUNNER_TEMP/stamp" -name "${name}-*" | head -1)
           echo "binary: $exe"
           dir="measure/inputs/$name"
-          out="$RUNNER_TEMP/times.txt"
-          : > "$out"
-          ls "$dir" | split -l 200 - "$RUNNER_TEMP/chunk."
-          for c in "$RUNNER_TEMP"/chunk.*; do
-            files=$(sed "s|^|$dir/|" "$c" | paste -sd ' ')
-            BOLERO_TEST_NAME="$TARGET" BOLERO_LIBTEST_HARNESS=1 \
-              BOLERO_LIBFUZZER_ARGS="-timeout=0 -rss_limit_mb=0 $files" \
-              "$exe" "$TARGET" --exact --nocapture --quiet --test-threads 1 2>&1 \
-              | grep -E '^Executed|ERROR|panicked|deadly|SUMMARY' >> "$out" || true
+          files=""
+          for f in 36a4848b78ebd5c702581573be8cd6917d4b548a 44fc6556c24258bece19b0d65142ae3c1f03ca6b \
+                   830f8b78736d8e70f42d4a0a6b7e75f3d75d44d7 8c111277d6928986186f866e18af266a96fec569 \
+                   0d5f2126685e3f1d5b467ac70bcc5b6d8759d2ad; do
+            files="$files $dir/$f $dir/$f $dir/$f"
           done
-          echo "inputs: $(ls "$dir" | wc -l), executed: $(grep -c '^Executed' "$out")"
-          grep -vE '^Executed' "$out" | head -40 || true
-          echo "slowest 30 (ms):"
-          grep '^Executed' "$out" | sort -k4,4 -n -r | head -30
-          grep '^Executed' "$out" | awk '{s+=$4; if ($4>=1000) n1++; if ($4>=2000) n2++; if ($4>=3000) n3++; if ($4>=4000) n4++} END {printf "total %d ms; at least 1 s: %d, 2 s: %d, 3 s: %d, 4 s: %d\n", s, n1, n2, n3, n4}'
-          cp "$out" "times-$name.txt"
-      - name: Upload the times
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: times-${{ matrix.target }}
-          path: times-*.txt
-          if-no-files-found: ignore
-      - name: Fuzz the target for the hours asked, seeded with the stored inputs
-        timeout-minutes: 330
-        env:
-          HOURS: ${{ inputs.hours || '1' }}
-        run: |
-          name="${TARGET%_fuzz}"
-          mkdir -p "$RUNNER_TEMP/seed"
-          cp "measure/inputs/$name"/* "$RUNNER_TEMP/seed/"
-          cargo bolero test "$TARGET" --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer \
-            -T "$((HOURS * 3600))s" --timeout 10s --corpus-dir "$RUNNER_TEMP/seed" \
-            --engine-args=-report_slow_units=3
-      - name: Upload slow units and crashing inputs
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: slow-${{ matrix.target }}
-          path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/crashes/
-          if-no-files-found: ignore
+          out="$RUNNER_TEMP/out.txt"
+          BOLERO_TEST_NAME="$TARGET" BOLERO_LIBTEST_HARNESS=1 \
+            BOLERO_LIBFUZZER_ARGS="-timeout=0 -rss_limit_mb=0${files}" \
+            "$exe" "$TARGET" --exact --nocapture --quiet --test-threads 1 > "$out" 2>&1 || echo "exit $?"
+          grep -E '^Executed|ERROR|panicked|deadly|SUMMARY' "$out"

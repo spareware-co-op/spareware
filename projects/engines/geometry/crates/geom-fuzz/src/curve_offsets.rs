@@ -41,23 +41,27 @@ pub use crate::curves::{Case, Reached};
 /// read the same way.
 pub const MAX_INPUT_BYTES: usize = curves::MAX_INPUT_BYTES;
 
-/// The work units the contract may spend on one offset: 8,000,000.
+/// The work units the contract may spend on one offset: 7,000,000.
 ///
-/// Set by the time rule (the fuzz-budgets design note): the most one case may charge, this and
-/// the pass of [`PARTIAL_WORK`] together, 8,250,000 units, must cost at most about 4 s on a hosted
-/// runner at the dearest rate measured on offsets, a margin of 2.5 under the campaign's 10-second
-/// limit on one input. The rule could be applied only once the offset path was charged what it
-/// costs: on the `curves` target's 2,000,000, which offsets had before they were split out, five
-/// stored 3D offsets ran 1,843 to 4,262 instructions a unit where the usual offset runs 316.
-/// Issues #852 and #853 priced that path; since then the dearest stored curves input of 100,000
-/// units or more runs 471 release instructions a unit, so 8,250,000 units is at most 3.9
-/// thousand million instructions, about 3 to 3.9 s at the hosted runner's 0.75 to 1 s a
-/// thousand million (the 2026-11-12 campaign). MEASURED_CURVES
+/// Set by the time rule (the fuzz-budgets design note): the slowest stored input, charged this
+/// and the pass of [`PARTIAL_WORK`], must take at most 4 s on a hosted runner, a margin of 2.5
+/// under the campaign's 10-second limit on one input. The rule could be applied only once the
+/// offset path was charged what it costs: on the `curves` target's 2,000,000, which offsets had
+/// before they were split out, five stored 3D offsets ran 1,843 to 4,262 instructions a unit
+/// where the usual offset runs 316, and issues #852 and #853 priced that path.
 ///
-/// What it buys: on the 1,626 stored offsets of 2026-11-13 (on the charges before #852), four
-/// times the old budget took the offsets that stop from 553 to 122 and the whole contracts from
-/// 377 to 756. 16,000,000 would stop 37 but cost about 8 s a case, too near the limit.
-pub const WORK: u64 = 8_000_000;
+/// Measured on a hosted runner with the campaign's libFuzzer build, each of the 3,856 stored
+/// curves inputs run once as an offset (run 43564862778): at 8,000,000 the slowest took 4.31 s
+/// (`36a4848b`) and the next 3.85 s (`44fc6556`), every other 2.87 s or less. Both spend the
+/// whole budget and stop in the NURBS law, and their release instructions scale with it
+/// (2.64 thousand million at 8,000,000, 2.31 at 7,000,000, for `36a4848b`), so 8,000,000 broke
+/// the rule and 7,500,000 would put `36a4848b` at about 4.04 s. At 7,000,000 the five slowest,
+/// each run three times, took at most MEASURED_CURVES.
+///
+/// What it buys: on the 1,626 stored offsets of 2026-11-13 (on the charges before #852), 4,000,000
+/// took the offsets that stop from 553 at the old budget to 313 and 8,000,000 to 122; this budget
+/// lies between.
+pub const WORK: u64 = 7_000_000;
 
 /// The work units of the pass without conversions after a budget stop: `crate::curves`'s,
 /// derived there on the offsets.
