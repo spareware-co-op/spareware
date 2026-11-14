@@ -12,11 +12,19 @@
 //! - **Exact where the transform is.** A move by whole steps, quarter turns, mirrors across grid
 //!   planes and whole-number uniform scales map grid points to grid points and keep planes given
 //!   by integers: an Exact body stays Exact.
+//! - **Planes move with their meetings.** A vertex where three planes of the body's plane pool
+//!   meet (6.3, as a boolean leaves one) moves with its planes: under a transform that maps the
+//!   grid onto itself each plane moves exactly, by the transform's cofactors, and the vertex stays
+//!   where the moved planes meet, or becomes the grid point that meeting is. Its edges' lines,
+//!   only shadows of the edges (8.3), are drawn again between their ends' new places on the grid,
+//!   as the rebuild draws them. Under any other transform no plane can stay exact, so the vertex is
+//!   committed to the grid (6.3's half a step on each axis) and then moves as a grid point does;
+//!   the bound counts the commit, stretched.
 //! - **Rounded once, and said so.** Any other rotation or scale rounds each vertex to the grid once
 //!   (at most √3/2 of a step), and moves curves and surfaces by their own typed transforms, each
 //!   with a certified deviation. The result's bound is the input's, stretched by the most the
-//!   transform can stretch a length, plus one step if any vertex rounded, plus the largest
-//!   deviation, rounded up.
+//!   transform can stretch a length, plus one step if any vertex rounded, plus the steps a
+//!   committed meeting can stray, plus the largest deviation, rounded up.
 //! - **The class never rises.** The result keeps the input's class or a less exact one: an
 //!   Approximate body stays Approximate whatever its bound does (principle 3).
 //! - **Accepted, or refused.** A result less exact than the input is returned only when the caller
@@ -45,7 +53,9 @@
 //!
 //! Method: chapter 7's typed transforms and their kind changes
 //! (`projects/engines/geometry/architecture/07-geometry-types.md`), applied as `geom-math`,
-//! `geom-curve` and `geom-surface` define them; chapter 20.2's naming rule for one-to-one changes.
+//! `geom-curve` and `geom-surface` define them; a plane moved by the cofactor matrix of the
+//! transform's linear part (the inverse transpose, scaled to integers: the textbook rule for
+//! transforming plane equations); chapter 20.2's naming rule for one-to-one changes.
 //!
 //! Cost: linear in the body's rows, one meter unit each, plus each curve's and surface's transform
 //! and the checker. Recursion: none.
@@ -57,11 +67,13 @@
 
 use alloc::vec::Vec;
 
-use geom_curve::{CurveError, CurveKind, ParamCurve};
+use geom_curve::{CurveError, CurveKind, Line, ParamCurve};
 use geom_math::{
-    Axis, Box3, GridTransform, RationalTransform, Rotation, Scale, TransformKind, TypedTransform,
+    Axis, Box3, GridTransform, RationalTransform, Rotation, Rounded, Scale, TransformKind,
+    TypedTransform, gcd_u128,
 };
 use geom_num::interval::Interval;
+use geom_num::plane::{Plane, Tpi};
 use geom_num::{Exactness, GridStep, NumError, P3, Steps};
 use geom_op::history::{Origin, Record};
 use geom_op::{MakeDetail, NameId, NameSet, OpContext, OpError, OpOutput, TopoName};
@@ -70,7 +82,8 @@ use geom_surface::{ParamSurface, SurfaceKind};
 use geom_topo::ix::Arena;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Body, Builder, Edge, Face, Fin, Ix, Loop, PointKind, Region, Sense, Shell, TopoError, Vertex,
+    Body, Builder, Edge, Face, Fin, Ix, Loop, PlaneIx, PointKind, Region, Sense, Shell, TopoError,
+    Vertex,
 };
 
 use crate::build::{Made, Motion, PHASE, Unpassed, charge_rows, fail, finish, unbuilt};
@@ -403,23 +416,91 @@ pub(crate) fn moved_copy(
     charge_rows(ctx, meter, rows)?;
     let mut b = Builder::new();
     let out = &mut b.arenas;
-    // Points: rounded once each.
+    // Planes: moved exactly where `t` maps the grid onto itself, so a vertex where three of them
+    // meet keeps its exact place (6.3). Under any other transform there is none to keep it on.
+    let moved_planes: Option<Vec<Plane>> = match grid_map(t) {
+        Some(map) => Some(
+            a.planes
+                .iter()
+                .map(|plane| moved_plane(&map, plane))
+                .collect::<Result<_, _>>()
+                .map_err(num)?,
+        ),
+        None => None,
+    };
+    // Points: grid points rounded once each. A vertex where three planes meet stays where its
+    // moved planes meet, or on the grid if that is a grid point; under a transform that moves no
+    // plane exactly it is committed to the grid (6.3) and then moves as a grid point does. Each
+    // vertex's place on the grid, and whether it is exactly there, is kept for its edges' shadows.
     let mut rounded = false;
+    let mut committed = false;
     let mut points = Vec::new();
-    for p in every(a.rows(Arena::Vertex)).filter_map(|v| a.vertices.point.get(v)) {
-        let place = a.points.get(*p).ok_or_else(defect)?;
-        // The rebuild that first makes such a body brings the move of its planes (G129).
-        let Some(point) = place.grid() else {
-            return Err(fail(ctx, MakeDetail::NotCertifiedYet { piece: "G129" }));
+    let mut ends: Vec<(P3, bool)> = Vec::new();
+    let mut meets: Vec<bool> = Vec::new();
+    for v in every::<Vertex>(a.rows(Arena::Vertex)) {
+        let place = a
+            .vertices
+            .point
+            .get(v)
+            .and_then(|p| a.points.get(*p))
+            .ok_or_else(defect)?;
+        let grid = |image: Rounded<P3>| (PointKind::Grid(image.value()), (image.value(), true));
+        let (point, end) = match (*place, &moved_planes) {
+            (PointKind::Grid(point), _) => {
+                let image = t.apply(point).map_err(num)?;
+                rounded |= !image.is_exact();
+                grid(image)
+            }
+            (PointKind::Meet(rows), Some(moved)) => {
+                let [p, q, r] =
+                    meeting(rows, |ix| moved.get(ix.to_usize()).copied()).ok_or_else(defect)?;
+                let near = Tpi::new(p, q, r).and_then(|m| m.to_grid()).map_err(num)?;
+                let point = if near.is_exact() {
+                    PointKind::Grid(near.value())
+                } else {
+                    PointKind::Meet(rows)
+                };
+                (point, (near.value(), near.is_exact()))
+            }
+            (PointKind::Meet(rows), None) => {
+                let [p, q, r] = meeting(rows, |ix| a.planes.get(ix).copied()).ok_or_else(defect)?;
+                let near = Tpi::new(p, q, r).and_then(|m| m.to_grid()).map_err(num)?;
+                committed |= !near.is_exact();
+                let image = t.apply(near.value()).map_err(num)?;
+                rounded |= !image.is_exact();
+                grid(image)
+            }
         };
-        let image = t.apply(point).map_err(num)?;
-        rounded |= !image.is_exact();
-        points.push(image.value());
+        points.push(point);
+        ends.push(end);
+        meets.push(matches!(place, PointKind::Meet(_)));
     }
-    // Curves and surfaces: by their own typed transforms, each with its deviation.
+    // The plane pool: the moved planes some meeting still names, each meeting renumbered to them.
+    let planes =
+        compacted(&mut points, moved_planes.as_deref().unwrap_or(&[])).ok_or_else(defect)?;
+    let commit = if committed {
+        commit_steps(stretch).ok_or_else(defect)?
+    } else {
+        0
+    };
+    // Curves and surfaces: by their own typed transforms, each with its deviation; an edge with
+    // an end where three planes meet has a line that only shadows it (8.3), drawn again between
+    // its ends' new places.
     let mut deviation: f64 = 0.0;
     let mut curves = Vec::new();
     for e in every(a.rows(Arena::Edge)) {
+        let row = |end: Option<&Option<Ix<Vertex>>>| end.copied().flatten().map(Ix::to_usize);
+        let [start, end] = [a.edges.start.get(e), a.edges.end.get(e)].map(row);
+        let shadowed = [start, end]
+            .into_iter()
+            .flatten()
+            .any(|v| meets.get(v).copied().unwrap_or(false));
+        if shadowed {
+            let at = |v: Option<usize>| v.and_then(|v| ends.get(v).copied());
+            let (from, to) = at(start).zip(at(end)).ok_or_else(defect)?;
+            curves.push(shadow(from, to).map_err(|_| defect())?);
+            continue;
+        }
         let c = a
             .edges
             .curve
@@ -445,15 +526,15 @@ pub(crate) fn moved_copy(
     let mut bounds = Vec::new();
     for f in every(a.rows(Arena::Face)) {
         let bound = *a.faces.bound.get(f).ok_or_else(defect)?;
-        bounds.push(moved_box(t, bound).map_err(num)?);
+        bounds.push(moved_box(t, bound, commit).map_err(num)?);
     }
-    let exactness = record(ctx, input, stretch, rounded, deviation)?;
+    let exactness = record(ctx, input, stretch, rounded, commit, deviation)?;
     // What a checker failure means (`Unpassed`): the piece is the one that widens the checker for
     // the body's kind of geometry. From G134 a rounded flat face stands for the star of triangles
     // from the mean of its corners, so what still waits is a flat face no star can stand for: one
     // with a hole, or with an edge the mean does not see from inside.
     let piece = if curved(input.body) { "G177" } else { "G417" };
-    let unpassed = if rounded || deviation > 0.0 {
+    let unpassed = if rounded || committed || deviation > 0.0 {
         Unpassed::Rounded { piece }
     } else if matches!(exactness, Exactness::Exact) {
         Unpassed::Defect
@@ -559,7 +640,8 @@ pub(crate) fn moved_copy(
         out.surfaces.extend(surfaces)?;
         out.curves.extend(curves)?;
         out.pcurves.extend(pcurves)?;
-        out.points.extend(points.into_iter().map(PointKind::Grid))
+        out.points.extend(points)?;
+        out.planes.extend(planes)
     };
     fill().map_err(|e| unbuilt(ctx, meter, e))?;
     // Names: each renamed, and its record.
@@ -601,19 +683,173 @@ fn every<K>(n: u32) -> impl Iterator<Item = Ix<K>> {
     (0..n).filter_map(Ix::new)
 }
 
+/// `t` as an integer matrix A and translation τ, p ↦ A·p + τ, when it maps every grid point to a
+/// grid point: a grid transform, or a rational one whose canonical denominator is one (its entries
+/// and translation share no factor with a larger denominator, so any other leaves the grid).
+fn grid_map(t: &TypedTransform) -> Option<GridMap> {
+    match t {
+        TypedTransform::Exact(g) => Some((
+            g.matrix().map(|row| row.map(i128::from)),
+            g.translation_part().map(i128::from),
+        )),
+        TypedTransform::Rational(r) if r.denominator() == 1 => Some((
+            r.matrix().map(|row| row.map(i128::from)),
+            r.translation_part(),
+        )),
+        TypedTransform::Rational(_)
+        | TypedTransform::Rotation(_)
+        | TypedTransform::Certified(_) => None,
+    }
+}
+
+/// An integer map p ↦ A·p + τ: A's rows, and τ.
+type GridMap = ([[i128; 3]; 3], [i128; 3]);
+
+/// `plane` moved by the integer map `map`, exactly. With C the cofactor matrix of A, the image of
+/// n · p + d = 0 is (C n) · p' + det(A) d − (C n) · τ = 0, since (C n) · A p = det(A) n · p. Every
+/// coefficient is divided by the cofactors' greatest common divisor, which divides det(A) too
+/// (it is a row of A times a row of C), and is the same for every plane, so planes that differ stay
+/// different; and multiplied by the sign of det(A), so the side the plane calls positive is the
+/// image of the side it did.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] for a moved plane past 6.2's plane budget, or a step that does not
+/// fit an `i128` on the way to one.
+fn moved_plane(map: &GridMap, plane: &Plane) -> Result<Plane, NumError> {
+    let ([[a, b, c], [d, e, f], [g, h, i]], tau) = *map;
+    let over = NumError::BudgetExceeded;
+    // p·s − q·r.
+    let minor = |p: i128, q: i128, r: i128, s: i128| {
+        p.checked_mul(s)
+            .zip(q.checked_mul(r))
+            .and_then(|(x, y)| x.checked_sub(y))
+            .ok_or(over)
+    };
+    let cofactors = [
+        [minor(e, f, h, i)?, minor(f, d, i, g)?, minor(d, e, g, h)?],
+        [minor(h, i, b, c)?, minor(i, g, c, a)?, minor(g, h, a, b)?],
+        [minor(b, c, e, f)?, minor(c, a, f, d)?, minor(a, b, d, e)?],
+    ];
+    let dot = |x: [i128; 3], y: [i128; 3]| {
+        x.into_iter().zip(y).try_fold(0i128, |sum, (p, q)| {
+            p.checked_mul(q).and_then(|v| sum.checked_add(v))
+        })
+    };
+    let det = dot([a, b, c], cofactors[0]).ok_or(over)?;
+    let common = cofactors
+        .iter()
+        .flatten()
+        .fold(0u128, |k, v| gcd_u128(k, v.unsigned_abs()));
+    // Never zero: A is invertible (a singular transform was refused), so some cofactor is not.
+    let common = i128::try_from(common).map_err(|_| over)?;
+    let sign = det.signum();
+    let scaled = |v: i128| {
+        v.checked_div(common)
+            .and_then(|q| q.checked_mul(sign))
+            .ok_or(over)
+    };
+    let mut normal = [0i128; 3];
+    for (out, row) in normal.iter_mut().zip(cofactors) {
+        let [x, y, z] = row;
+        *out = dot([scaled(x)?, scaled(y)?, scaled(z)?], plane.n()).ok_or(over)?;
+    }
+    let offset = scaled(det)?
+        .checked_mul(plane.d())
+        .zip(dot(normal, tau))
+        .and_then(|(x, y)| x.checked_sub(y))
+        .ok_or(over)?;
+    Plane::new(normal, offset)
+}
+
+/// The three planes a meeting names, read through `plane`.
+fn meeting(rows: [PlaneIx; 3], plane: impl Fn(PlaneIx) -> Option<Plane>) -> Option<[Plane; 3]> {
+    let [p, q, r] = rows.map(plane);
+    Some([p?, q?, r?])
+}
+
+/// The planes of `pool` that some meeting in `points` names, in the order first named, with each
+/// meeting renumbered to them; `None` for a meeting naming a plane past the pool.
+fn compacted(points: &mut [PointKind], pool: &[Plane]) -> Option<Vec<Plane>> {
+    let mut new_row: Vec<Option<PlaneIx>> = pool.iter().map(|_| None).collect();
+    let mut kept = Vec::new();
+    for point in points.iter_mut() {
+        let PointKind::Meet(rows) = point else {
+            continue;
+        };
+        for ix in rows.iter_mut() {
+            let slot = new_row.get_mut(ix.to_usize())?;
+            if slot.is_none() {
+                *slot = Some(Ix::from_usize(kept.len())?);
+                kept.push(*pool.get(ix.to_usize())?);
+            }
+            *ix = (*slot)?;
+        }
+    }
+    Some(kept)
+}
+
+/// How far, in whole steps, a vertex where three planes meet can lie from its exact image once it
+/// is committed to the grid and moved by a transform stretching lengths by at most `stretch`: the
+/// commit moves it at most half a step on each axis, √3/2 of a step, and the transform stretches
+/// that. √3/2 is 0.866..., below 7/8, so ⌈7·num / (8·den)⌉ is at least the distance and a whole
+/// number the record can hold. (The image's own rounding is the record's step for rounding.)
+fn commit_steps((num, den): (u64, u64)) -> Option<u64> {
+    let top = u128::from(num).checked_mul(7)?;
+    let bottom = u128::from(den).checked_mul(8)?;
+    let whole = top.checked_div(bottom)?;
+    let more = u128::from(top.checked_rem(bottom)? != 0);
+    u64::try_from(whole.checked_add(more)?).ok()
+}
+
+/// The line of an edge with an end where three planes meet, between its ends' places on the grid,
+/// as the rebuild that makes such bodies draws it (8.3): only a shadow of the edge, which the
+/// checker holds to a vertex on the grid exactly and to a meeting within a step. Ends that round to
+/// one point stand a step apart, from the end that is on the grid.
+fn shadow(from: (P3, bool), to: (P3, bool)) -> Result<CurveKind<3>, CurveError> {
+    let ((p, from_exact), (q, _)) = (from, to);
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a coordinate is below 2^40, which a double holds"
+    )]
+    let double = |p: P3| [p.x.get() as f64, p.y.get() as f64, p.z.get() as f64];
+    let (origin, there) = (double(p), double(q));
+    let [ox, oy, oz] = origin;
+    let [tx, ty, tz] = there;
+    let direction = [tx - ox, ty - oy, tz - oz];
+    let line = if direction != [0.0; 3] {
+        Line::new(origin, direction, (0.0, 1.0))
+    } else if from_exact {
+        Line::new(origin, [1.0, 0.0, 0.0], (0.0, 1.0))
+    } else {
+        Line::new(origin, [1.0, 0.0, 0.0], (-1.0, 0.0))
+    };
+    line.map(CurveKind::Line)
+}
+
 /// The box holding `bound`'s image under `t`: its eight corners moved, and one step wider each way
-/// when a corner rounds.
-fn moved_box(t: &TypedTransform, bound: Box3) -> Result<Box3, NumError> {
+/// when a corner rounds. When a vertex where three planes meet was committed to the grid it can
+/// stray from its exact image by `commit` and the half step its image rounds by, and a corner's
+/// rounding takes half a step off the box, so the box is `commit` and one step wider.
+fn moved_box(t: &TypedTransform, bound: Box3, commit: u64) -> Result<Box3, NumError> {
     let (lo, hi) = (bound.min(), bound.max());
     let mut min = [i64::MAX; 3];
     let mut max = [i64::MIN; 3];
-    let mut widen = 0i64;
+    let more = if commit == 0 {
+        0
+    } else {
+        i64::try_from(commit)
+            .ok()
+            .and_then(|c| c.checked_add(1))
+            .ok_or(NumError::OutOfRange { value: i128::MAX })?
+    };
+    let mut widen = more;
     for x in [lo.x, hi.x] {
         for y in [lo.y, hi.y] {
             for z in [lo.z, hi.z] {
                 let image = t.apply(P3 { x, y, z })?;
                 if !image.is_exact() {
-                    widen = 1;
+                    widen = widen.max(1);
                 }
                 let p = image.value();
                 for ((low, high), c) in min.iter_mut().zip(&mut max).zip([p.x, p.y, p.z]) {
@@ -629,12 +865,14 @@ fn moved_box(t: &TypedTransform, bound: Box3) -> Result<Box3, NumError> {
 }
 
 /// The record of the moved body, and whether the caller accepts it: the input's bound stretched by
-/// `stretch`, plus one step if a vertex `rounded`, plus `deviation` rounded up.
+/// `stretch`, plus one step if a vertex `rounded`, plus the `commit` steps of a vertex where three
+/// planes meet committed to the grid ([`commit_steps`]), plus `deviation` rounded up.
 fn record(
     ctx: &OpContext<'_>,
     input: Moved<'_>,
     stretch: (u64, u64),
     rounded: bool,
+    commit: u64,
     deviation: f64,
 ) -> Result<Exactness, OpError> {
     let defect = || fail(ctx, MakeDetail::BuildFailed);
@@ -667,6 +905,7 @@ fn record(
         .ok_or_else(defect)?;
     let bound = stretched
         .checked_add(u128::from(rounded))
+        .and_then(|x| x.checked_add(u128::from(commit)))
         .and_then(|x| x.checked_add(u128::from(dev)))
         .and_then(|x| u64::try_from(x).ok())
         .ok_or_else(defect)?;
