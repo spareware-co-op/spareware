@@ -7132,22 +7132,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
-      "mutant": "replace && with || in covers_within",
-      "line_text": "sides.contains(&Sign::Positive) && sides.contains(&Sign::Negative)",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "crosses only prunes facets. With || it also keeps a facet whose plane has every corner of the triangle strictly on one side, a plane that misses the triangle: no edge crosses it, and every point on its line in the triangle's plane is outside the triangle, so the rim planes keep each such point out of the part before it is asked. Every answer is the same, at more cost."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
-      "mutant": "replace && with || in covers_within",
-      "line_text": "if crosses(plane)? && within.is_none_or(|region| !region.misses(plane)) {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The condition only prunes facet lines. With || a facet is also kept when its plane misses the triangle (every point of its line in the triangle's plane is then outside the triangle, and the rim planes keep each out of the part before it is asked) or when the region misses it (no point of the plane is in the region, so in_part refuses each). Every answer is the same, at more cost."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
       "mutant": "replace || with && in covers_within",
       "line_text": "if sp == Sign::Zero || sq == Sign::Zero || sp == sq {",
       "occurrences": 1,
@@ -7193,6 +7177,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Directed edges are checked unique first, so in a vertex's link each point has at most one edge out (two triangles (v, x, ...) would run v to x twice) and at most one in: the link is paths and cycles, and the walk from a path's start, or round a cycle back to its start, takes at most as many steps as the link has edges. walked never passes link.len(), so the guard against a longer walk never fires, whether it stops at more than, at or at equal to the length."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+      "mutant": "replace != with == in covers_within",
+      "line_text": "|| sides.contains(&Sign::Zero) && sides.iter().any(|s| *s != Sign::Zero),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "crosses only prunes facets. With == it also keeps a facet whose plane holds the whole triangle (every corner on it): an edge in that plane has both ends on it, so its crossing is skipped, and the plane meets the triangle's own plane in no line, so every meeting with it is Degenerate and gives no point. Every answer is the same, at more cost."
     }
   ],
   "coverage_off": [
