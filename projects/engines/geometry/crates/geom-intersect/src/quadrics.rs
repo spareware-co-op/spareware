@@ -68,6 +68,9 @@ const STEP: f64 = 2.0;
 /// How far a shared domain is written, in each parameter of a surface with no end.
 const REACH: f64 = 1_099_511_627_776.0;
 
+/// The most periods a loop's parameter is moved by to bring it into the loop's domain.
+const WRAPS: usize = 1 << 20;
+
 /// What a pair's closed form finds.
 pub(crate) enum Piece {
     /// A curve on both.
@@ -1525,14 +1528,19 @@ fn cut_at(
     };
     let (lo, hi) = crate::curve::finite(curve)?;
     let mut t = tight::middle(s);
-    // On a loop the turns wrap.
+    // On a loop the turns wrap. The count, not t, ends the loop: the angle is between −1 and 2
+    // half-turns, so [`WRAPS`] periods bring it into any loop's domain that starts within 2^19
+    // turns of zero; one further out is taken as not cut here.
     if closed(curve) {
         let period = hi - lo;
-        while t < lo {
-            t += period;
-        }
-        while t >= hi {
-            t -= period;
+        for _ in 0..WRAPS {
+            if t < lo {
+                t += period;
+            } else if t >= hi {
+                t -= period;
+            } else {
+                break;
+            }
         }
     }
     if t < lo || t > hi {
