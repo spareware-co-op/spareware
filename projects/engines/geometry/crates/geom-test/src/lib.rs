@@ -100,15 +100,14 @@
 //!   `coverage(off)` mark's proof.
 //! - [`rust_source`]: reads Rust source for them: test code, functions, branch sites and marks.
 //! - [`miri`]: the plan of the weekly Miri run, one job per kernel test suite.
-//! - [`fuzz_scope`]: which of `kernel-fuzz.yml`'s fuzz targets and Kani proofs a pull request's
-//!   change can affect, by the crate graph, so the pull request runs only those
+//! - [`fuzz_scope`]: which of `geom-fuzz`'s targets and `kernel-fuzz.yml`'s Kani proofs a pull
+//!   request's change can affect, by the crate graph, so the pull request proves only those
 //!   (`kernel-quality fuzz-scope`).
 //!
 //! Gate 1 (piece G43) adds:
 //!
 //! - [`trip`]: one planted violation for each gate whose verdict is an outside tool's (rustfmt,
-//!   Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun, Wasmtime's fuel, Gappa with Rocq, and
-//!   HOL Light). The binary `trip` plants it, runs the gate's own command and requires the tool's
+//!   Verus, Kani, Gungraun, Wasmtime's fuel, Gappa with Rocq, and HOL Light). The binary `trip` plants it, runs the gate's own command and requires the tool's
 //!   report of it (`cargo run -p geom-test --bin trip -- <violation> -- <command>`); each of those
 //!   workflow jobs runs it.
 //! - `guard prove --golden-run <arguments>`: the toolchain guard's proof through `golden run`, so

@@ -1,16 +1,14 @@
-//! Which of `kernel-fuzz.yml`'s fuzz targets and Kani proofs a change can affect, so that a pull
-//! request fuzzes and proves only those (chapter 28.5: "each pull request fuzzes the crates it
-//! changes briefly"; 28.7 and 28.17: on a pull request, the proofs the change can reach), while a
-//! push to main, a release tag and the nightly campaign run every one.
+//! Which of `geom-fuzz`'s targets and `kernel-fuzz.yml`'s Kani proofs a change can affect, so that
+//! a pull request proves only those (28.7 and 28.17: on a pull request, the proofs the change can
+//! reach), while a push to main and a release tag run every one.
 //!
 //! What it does: [`Scope::read`] reads the workspace's crate graph from `cargo metadata` and
 //! `geom-fuzz`'s sources, and [`Scope::select`] takes the files a change touches (`git diff
-//! --name-only`, one path from the repository root each) and decides, for each job of [`JOBS`],
-//! whether it runs and, for the fuzz jobs, which targets, each with the file that selected it and
-//! why. [`Selection::outputs`] writes the decision as the step outputs the workflow's jobs read: a
-//! job's `if` reads `<output>`, and a fuzz job's matrix excludes `<output>_exclude` (`fromJSON`), so
-//! the workflow's own matrix lists stay the catalogue of what exists. [`Selection::report`] writes
-//! it for the job's log: every target and proof, run or skipped, and why. `kernel-quality
+//! --name-only`, one path from the repository root each) and decides, for each target of
+//! `geom-fuzz`, whether the change reaches it, and for each job of [`JOBS`] whether it runs, each
+//! with the file that selected it and why. [`Selection::outputs`] writes the jobs' decisions as the
+//! step outputs the workflow's jobs read: a job's `if` reads `<output>`. [`Selection::report`]
+//! writes it for the job's log: every target and proof, reached or not, and why. `kernel-quality
 //! fuzz-scope` is the command line.
 //!
 //! A changed file reaches:
@@ -26,9 +24,10 @@
 //! - in another crate's `tests/`, `benches/` or `examples/` folder, nothing here: cargo builds
 //!   those only for that crate's own test targets, and no harness here is one. `MAP.json`,
 //!   `PROVENANCE.md` and `NOTICE` count as `geom-test`'s tests, which check them.
-//! - any other file of a crate C, every harness whose build holds C: a fuzz target whose code names
-//!   C, or a crate that depends on C through normal or build dependencies, transitively; the Kani
-//!   proofs beside a crate's code, when that crate is C or depends on it so.
+//! - any other file of a crate C, every target whose build holds C: a target whose code names C, or
+//!   a crate that depends on C through normal or build dependencies, transitively; the Kani proofs
+//!   of `geom-fuzz`'s tests, when a target whose tests hold one is reached; the Kani proofs beside a
+//!   crate's code, when that crate is C or depends on it so.
 //!
 //! Development dependencies are not followed from one crate to the next: cargo builds a crate's
 //! development dependencies only for that crate's own tests, never when the crate is a dependency.
@@ -54,9 +53,7 @@
 //! edges, and cargo's rule that development dependencies build only for the package's own tests
 //! (<https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies>);
 //! the sources are read with `proc-macro2`, Rust's lexer, so a word in a comment or a string is
-//! never a name. GitHub Actions' matrix `exclude` and `fromJSON`
-//! (<https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idstrategymatrixexclude>)
-//! apply the decision.
+//! never a name.
 //!
 //! Cost: linear in the size of the metadata and of `geom-fuzz`'s sources, and in the changed
 //! files times the workspace's crates.
@@ -85,26 +82,10 @@ pub const TEST_FOLDERS: [&str; 3] = ["tests/", "benches/", "examples/"];
 /// What a job of the workflow runs, and so which files can affect it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reach {
-    /// Each of `geom-fuzz`'s fuzz targets on its own, as the matrix entry `<target>_fuzz`.
-    FuzzTargets,
     /// The Kani proofs in `geom-fuzz`'s tests, together: the targets whose tests hold one.
     ProofTargets,
     /// The Kani proofs beside a crate's own code, together.
     Crate(&'static str),
-    /// Whatever another job runs (its seeded run).
-    Job(&'static str),
-}
-
-/// How a job's matrix is narrowed to what runs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Narrow {
-    /// The whole job runs or is skipped.
-    Whole,
-    /// The matrix excludes each skipped target by this variable (`{"target": "p21_fuzz"}`).
-    Entries(&'static str),
-    /// The matrix excludes, by this variable, the shards beyond the number of targets that run,
-    /// so that no shard is left without one.
-    Shards(&'static str),
 }
 
 /// One job of `kernel-fuzz.yml` that the selection decides.
@@ -112,70 +93,44 @@ pub enum Narrow {
 pub struct Job {
     /// The job's id in the workflow.
     pub name: &'static str,
-    /// The step output its `if` reads; `<output>_exclude` and `<output>_targets` go with it.
+    /// The step output its `if` reads.
     pub output: &'static str,
     /// What it runs.
     pub reach: Reach,
-    /// How its matrix is narrowed.
-    pub narrow: Narrow,
 }
 
-/// The catalogue: every job of `kernel-fuzz.yml` that fuzzes or proves, and what it runs.
+/// The catalogue: every job of `kernel-fuzz.yml` that proves, and what it runs.
 /// `tests/fuzz_scope.rs` holds it to the workflow: every other job is one of [`UNSCOPED_JOBS`].
-pub const JOBS: [Job; 9] = [
-    Job {
-        name: "libfuzzer",
-        output: "libfuzzer",
-        reach: Reach::FuzzTargets,
-        narrow: Narrow::Entries("target"),
-    },
+pub const JOBS: [Job; 6] = [
     Job {
         name: "kani",
         output: "kani",
         reach: Reach::ProofTargets,
-        narrow: Narrow::Whole,
     },
     Job {
         name: "kani-num",
         output: "kani_num",
         reach: Reach::Crate("geom-num"),
-        narrow: Narrow::Whole,
     },
     Job {
         name: "kani-topo",
         output: "kani_topo",
         reach: Reach::Crate("geom-topo"),
-        narrow: Narrow::Whole,
     },
     Job {
         name: "kani-limbs",
         output: "kani_limbs",
         reach: Reach::Crate("geom-num"),
-        narrow: Narrow::Whole,
     },
     Job {
         name: "kani-op",
         output: "kani_op",
         reach: Reach::Crate("geom-op"),
-        narrow: Narrow::Whole,
     },
     Job {
         name: "kani-format",
         output: "kani_format",
         reach: Reach::Crate("geom-format"),
-        narrow: Narrow::Whole,
-    },
-    Job {
-        name: "clusterfuzzlite",
-        output: "clusterfuzzlite",
-        reach: Reach::FuzzTargets,
-        narrow: Narrow::Shards("shard"),
-    },
-    Job {
-        name: "clusterfuzzlite-seeded",
-        output: "clusterfuzzlite_seeded",
-        reach: Reach::Job("clusterfuzzlite"),
-        narrow: Narrow::Whole,
     },
 ];
 
@@ -220,7 +175,7 @@ enum Place {
     Crate(String),
 }
 
-/// The decision for one target of a fuzz job.
+/// The decision for one target.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
     /// The matrix value: `<target>_fuzz`.
@@ -236,15 +191,15 @@ pub struct JobSelection {
     pub job: Job,
     /// Why it runs, or `None` when it is skipped.
     pub why: Option<String>,
-    /// For a fuzz job, every target, in name order.
-    pub entries: Vec<Entry>,
 }
 
-/// The decision for every job of [`JOBS`].
+/// The decision for every target of `geom-fuzz` and every job of [`JOBS`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Selection {
     /// The changed files it was made from, or `None` for every target and proof.
     pub changed: Option<Vec<String>>,
+    /// Every target of `geom-fuzz`, in name order, each named `<target>_fuzz`.
+    pub targets: Vec<Entry>,
     /// One per job of [`JOBS`], in that order.
     pub jobs: Vec<JobSelection>,
 }
@@ -492,42 +447,24 @@ impl Scope {
                 why: first(&|f| self.selects_target(f, name, t)),
             })
             .collect();
-        let mut jobs: Vec<JobSelection> = Vec::new();
-        for job in JOBS {
-            let (why, listed) = match job.reach {
-                Reach::FuzzTargets => {
-                    let running = entries.iter().filter(|e| e.why.is_some()).count();
-                    let why = (running > 0)
-                        .then(|| format!("{running} of {} targets run", entries.len()));
-                    (why, entries.clone())
-                }
-                Reach::ProofTargets => {
-                    let why = first(&|f| {
+        let jobs = JOBS
+            .iter()
+            .map(|job| {
+                let why = match job.reach {
+                    Reach::ProofTargets => first(&|f| {
                         self.proof_targets.iter().find_map(|name| {
                             let t = self.targets.get(name)?;
                             self.selects_target(f, name, t)
                         })
-                    });
-                    (why, Vec::new())
-                }
-                Reach::Crate(krate) => (first(&|f| self.selects_crate(f, krate)), Vec::new()),
-                Reach::Job(other) => {
-                    let why = jobs
-                        .iter()
-                        .find(|j| j.job.name == other)
-                        .and_then(|j| j.why.as_ref())
-                        .map(|_| format!("{other} runs, and this is its seeded run"));
-                    (why, Vec::new())
-                }
-            };
-            jobs.push(JobSelection {
-                job,
-                why,
-                entries: listed,
-            });
-        }
+                    }),
+                    Reach::Crate(krate) => first(&|f| self.selects_crate(f, krate)),
+                };
+                JobSelection { job: *job, why }
+            })
+            .collect();
         Selection {
             changed: files,
+            targets: entries,
             jobs,
         }
     }
@@ -540,64 +477,17 @@ impl Selection {
         self.jobs.iter().find(|j| j.job.name == name)
     }
 
-    /// The step outputs, as `(name, value)`: for each job `<output>` (`true` or `false`); for a
-    /// fuzz job `<output>_targets`, the JSON list of the targets that run, and `<output>_exclude`,
-    /// the JSON list of matrix entries to leave out (empty when the job is skipped: it runs no
-    /// matrix). A sharded job's exclusions are the shards beyond the number of targets that run,
-    /// of `shards` in its matrix; without `shards` (the campaign, which has no such job) they are
-    /// left out.
-    ///
-    /// # Errors
-    ///
-    /// `shards` of 0.
-    pub fn outputs(&self, shards: Option<usize>) -> Result<Vec<(String, String)>, String> {
-        let mut out = Vec::new();
-        for j in &self.jobs {
-            let runs = j.why.is_some();
-            out.push((j.job.output.to_owned(), runs.to_string()));
-            if j.job.reach == Reach::FuzzTargets {
-                let running: Vec<Value> = j
-                    .entries
-                    .iter()
-                    .filter(|e| e.why.is_some())
-                    .map(|e| Value::String(e.name.clone()))
-                    .collect();
-                let count = running.len();
-                out.push((
-                    format!("{}_targets", j.job.output),
-                    Value::Array(running).to_string(),
-                ));
-                let exclude: Vec<Value> = match j.job.narrow {
-                    Narrow::Shards(_) if shards.is_none() => continue,
-                    _ if !runs => Vec::new(),
-                    Narrow::Whole => Vec::new(),
-                    Narrow::Entries(variable) => j
-                        .entries
-                        .iter()
-                        .filter(|e| e.why.is_none())
-                        .map(|e| one(variable, Value::String(e.name.clone())))
-                        .collect(),
-                    Narrow::Shards(variable) => {
-                        let total = shards
-                            .filter(|n| *n > 0)
-                            .ok_or("a sharded job has at least one shard")?;
-                        (count.min(total)..total)
-                            .filter_map(|i| i.checked_add(1))
-                            .map(|n| one(variable, Value::from(n)))
-                            .collect()
-                    }
-                };
-                out.push((
-                    format!("{}_exclude", j.job.output),
-                    Value::Array(exclude).to_string(),
-                ));
-            }
-        }
-        Ok(out)
+    /// The step outputs, as `(name, value)`: for each job `<output>`, `true` or `false`.
+    #[must_use]
+    pub fn outputs(&self) -> Vec<(String, String)> {
+        self.jobs
+            .iter()
+            .map(|j| (j.job.output.to_owned(), j.why.is_some().to_string()))
+            .collect()
     }
 
-    /// The decision, for the job's log and summary: the changed files, then every job, and for a
-    /// fuzz job every target, each with whether it runs and why.
+    /// The decision, for the job's log and summary: the changed files, every target, then every
+    /// job, each with whether it is reached or runs and why.
     #[must_use]
     pub fn report(&self) -> String {
         let mut out = String::new();
@@ -612,6 +502,22 @@ impl Selection {
                 }
             }
         }
+        let reached = self.targets.iter().filter(|e| e.why.is_some()).count();
+        let _ = writeln!(
+            out,
+            "\nThe change reaches {reached} of {} targets:",
+            self.targets.len()
+        );
+        for e in &self.targets {
+            match &e.why {
+                Some(why) => {
+                    let _ = writeln!(out, "- reaches {}: {why}", e.name);
+                }
+                None => {
+                    let _ = writeln!(out, "- not {}: {UNREACHED}", e.name);
+                }
+            }
+        }
         for j in &self.jobs {
             let _ = writeln!(out);
             match &j.why {
@@ -622,26 +528,9 @@ impl Selection {
                     let _ = writeln!(out, "{}: skipped: {UNREACHED}.", j.job.name);
                 }
             }
-            for e in &j.entries {
-                match &e.why {
-                    Some(why) => {
-                        let _ = writeln!(out, "- runs {}: {why}", e.name);
-                    }
-                    None => {
-                        let _ = writeln!(out, "- skips {}: {UNREACHED}", e.name);
-                    }
-                }
-            }
         }
         out
     }
-}
-
-/// `{variable: value}`, one matrix entry to exclude.
-fn one(variable: &str, value: Value) -> Value {
-    let mut map = serde_json::Map::new();
-    map.insert(variable.to_owned(), value);
-    Value::Object(map)
 }
 
 /// A workspace member, as the selection needs it.
@@ -1011,52 +900,5 @@ mod tests {
             "#[test]\n#[cfg_attr(kani, kani::proof)]\nfn p() {}"
         )));
         assert!(!names_kani_proof(&stream("// kani::proof\nfn p() {}")));
-    }
-
-    #[test]
-    fn shards_beyond_the_targets_that_run_are_excluded() {
-        let entries = |run: usize| -> Vec<Entry> {
-            (0..5)
-                .map(|i| Entry {
-                    name: format!("t{i}_fuzz"),
-                    why: (i < run).then(|| "x".to_owned()),
-                })
-                .collect()
-        };
-        let selection = |run: usize| Selection {
-            changed: Some(Vec::new()),
-            jobs: vec![JobSelection {
-                job: JOBS[7],
-                why: (run > 0).then(|| "x".to_owned()),
-                entries: entries(run),
-            }],
-        };
-        let get = |run: usize, key: &str| {
-            selection(run)
-                .outputs(Some(4))
-                .unwrap()
-                .into_iter()
-                .find(|(k, _)| k == key)
-                .unwrap()
-                .1
-        };
-        assert_eq!(
-            get(2, "clusterfuzzlite_exclude"),
-            r#"[{"shard":3},{"shard":4}]"#
-        );
-        assert_eq!(get(5, "clusterfuzzlite_exclude"), "[]");
-        assert_eq!(get(0, "clusterfuzzlite_exclude"), "[]");
-        assert_eq!(get(0, "clusterfuzzlite"), "false");
-        assert_eq!(
-            get(2, "clusterfuzzlite_targets"),
-            r#"["t0_fuzz","t1_fuzz"]"#
-        );
-        let unsharded = selection(2).outputs(None).unwrap();
-        assert!(
-            unsharded
-                .iter()
-                .all(|(k, _)| k != "clusterfuzzlite_exclude")
-        );
-        assert!(selection(2).outputs(Some(0)).is_err());
     }
 }

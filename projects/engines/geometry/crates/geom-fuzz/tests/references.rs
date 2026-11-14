@@ -1,5 +1,5 @@
 //! The reference resolution fuzz target (piece G89), as tests: `references_fuzz` is bolero's test
-//! mode, which cargo-bolero and `ClusterFuzzLite` select by name, and `references_seeded` the
+//! mode, a property test on bytes bolero draws, and `references_seeded` the
 //! seeded leg that runs on every target, WebAssembly included (the crate README sets out the
 //! layout). Each hands the fuzzer's raw bytes to `geom_fuzz::references::harness`. The input bound
 //! is reached and never passed, and the seeded leg's inputs reach every outcome of 20.4's table.
@@ -26,7 +26,11 @@ use geom_test::{Seed, SplitMix64};
 const ITERATIONS: usize = 5_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 5_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 5,000 cases in 0.097 s), about 1.9 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 100_000;
 
 /// The longest byte string the seeded leg draws: past the bound, so the bound is met.
 const MAX_LEN: u16 = 80;

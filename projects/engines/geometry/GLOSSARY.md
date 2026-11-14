@@ -119,7 +119,7 @@ How to read an entry:
 
 **Canonical output**: An operation's whole result in canonical bytes (bodies, names, history, exactness, diagnostics), or its error with its kind, entities and evidence; its SHA-256 is compared with a golden value (28.13; piece G96).
 
-**cargo-bolero**: The tool that runs bolero harnesses under a coverage-guided fuzzer such as libFuzzer (piece G14).
+**cargo-bolero**: The tool that runs bolero harnesses under other engines; the kernel uses only bolero's test mode and Kani (piece G14; decision 32.52).
 
 **cargo-deny**: A tool that checks a dependency graph's licences, security advisories, sources and banned crates; the merge gate runs it over every crate of the kernel's family (28.8).
 
@@ -182,8 +182,6 @@ How to read an entry:
 **Closed enum**: An enum whose variants are all known, matched exhaustively. Curve and surface kinds are stored in closed enums, one variant per kind (7).
 
 **Clothoid**: A spiral whose curvature changes linearly with length, used in road and rail alignments; a curve kind (7; piece G63).
-
-**ClusterFuzzLite**: A service that runs fuzz targets in CI on pull requests (piece G14; piece G116).
 
 **Coarsening**: Converting coordinates to a coarser grid step: it divides by a power of 25, rounds, never ties, and reports that it rounded (6.1; 6.3; piece G22). Compare refinement.
 
@@ -573,7 +571,7 @@ How to read an entry:
 
 **Lemon and apple**: The degenerate forms of a torus whose tube is wider than its centre circle; surface kinds (7).
 
-**libFuzzer**: LLVM's coverage-guided fuzzer, run through cargo-bolero (piece G14).
+**libFuzzer**: LLVM's coverage-guided fuzzer, which the kernel does not use: its fuzz harnesses are seeded tests of the suite (decision 32.52).
 
 **`libm`**: The pure-Rust maths library (MIT), the one published crate a kernel crate depends on today, for square roots, fused multiply-add, rounding and the unproven functions (6.4; 29.1).
 

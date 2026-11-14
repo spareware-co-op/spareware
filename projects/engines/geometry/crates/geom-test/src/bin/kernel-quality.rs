@@ -22,10 +22,9 @@
 //!   naming on standard error) any without a function to measure ([`geom_test::coverage::has_code`]).
 //! - `miri-packages` prints the `-p` arguments of every kernel crate for the Miri run
 //!   ([`geom_test::miri`]).
-//! - `fuzz-scope` prints which of `kernel-fuzz.yml`'s fuzz targets and Kani proofs a change can
-//!   affect, and why, and writes the step outputs that job's matrices read
-//!   ([`geom_test::fuzz_scope`]); `.github/workflows/kernel-fuzz.yml`'s job `select` and
-//!   `kernel-fuzz-campaign.yml`'s run it.
+//! - `fuzz-scope` prints which of `geom-fuzz`'s targets and `kernel-fuzz.yml`'s Kani proofs a
+//!   change can affect, and why, and writes the step outputs that workflow's jobs read
+//!   ([`geom_test::fuzz_scope`]); `.github/workflows/kernel-fuzz.yml`'s job `select` runs it.
 //!
 //! Guarantees:
 //!
@@ -165,9 +164,6 @@ enum Command {
         /// The files the change touches, one path per line from the repository root.
         #[arg(long, value_name = "FILES.txt")]
         changed: Option<PathBuf>,
-        /// The number of shards in the `clusterfuzzlite` job's matrix.
-        #[arg(long, value_name = "N")]
-        shards: Option<usize>,
         /// Appends the step outputs to this file (GitHub's `$GITHUB_OUTPUT`) instead of printing
         /// them.
         #[arg(long, value_name = "FILE")]
@@ -278,7 +274,6 @@ fn judge_coverage(scope: &Scope, dir: &Path, repo: &Repo) -> Result<bool, String
 fn fuzz_scope(
     all: bool,
     changed: Option<&Path>,
-    shards: Option<usize>,
     github_output: Option<&Path>,
     repo: &Path,
 ) -> Result<bool, String> {
@@ -294,7 +289,7 @@ fn fuzz_scope(
     let selection = scope.select(files.as_deref());
     print!("{}", selection.report());
     let mut lines = String::new();
-    for (key, value) in selection.outputs(shards)? {
+    for (key, value) in selection.outputs() {
         lines.push_str(&key);
         lines.push('=');
         lines.push_str(&value);
@@ -411,16 +406,9 @@ fn run(cli: Cli) -> Result<bool, String> {
         Command::FuzzScope {
             all,
             changed,
-            shards,
             github_output,
             repo,
-        } => fuzz_scope(
-            all,
-            changed.as_deref(),
-            shards,
-            github_output.as_deref(),
-            &repo,
-        ),
+        } => fuzz_scope(all, changed.as_deref(), github_output.as_deref(), &repo),
     }
 }
 

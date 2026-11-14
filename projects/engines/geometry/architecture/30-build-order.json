@@ -259,7 +259,7 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "I128, I256, I320 and I384 (and the I576 and I768 widths reserved for later predicates) with add, subtract, multiply, compare and sign, every step checked, so overflow is reported in every build; differential fuzzing against a big-integer oracle (num-bigint or dashu, 29.3) for 24 hours clean; extreme-value tests at every width's limits; benchmark per operation on x86-64, aarch64 and wasm32.",
+  "done_when": "I128, I256, I320 and I384 (and the I576 and I768 widths reserved for later predicates) with add, subtract, multiply, compare and sign, every step checked, so overflow is reported in every build; a seeded differential test against a big-integer oracle (num-bigint or dashu, 29.3), of fixed size, passing in the suite, with its saved cases replaying; extreme-value tests at every width's limits; benchmark per operation on x86-64, aarch64 and wasm32.",
   "depends_on": [
    "G22"
   ],
@@ -1399,7 +1399,7 @@
   "phase": "Phase 3",
   "crate": "geom-fuzz",
   "size": "Large",
-  "done_when": "Generators (sub-grid snaps, one-step moves, full range, deep trees, Tolerant bodies); a sequence fuzz target with checker, laws and replay as oracles; per-operation templates; ClusterFuzzLite on pull requests; nightly runs; robustness scoreboard per family.",
+  "done_when": "Generators (sub-grid snaps, one-step moves, full range, deep trees, Tolerant bodies); a sequence fuzz target with checker, laws and replay as oracles; per-operation templates; seeded tests in the suite on every pull request; robustness scoreboard per family.",
   "depends_on": [
    "G101",
    "G97",
@@ -1427,7 +1427,7 @@
   "phase": "Phase 3",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "Every primitive and transform passes the contract and history laws and all four checker groups; fault injection catches every catalogued fault for those groups; bodies and names save and reload bit-identically; the replay corpus is green on every leg, including the shipped-checker leg and reference mode; the topology model is proven in Verus; sequence fuzzing runs clean for seven consecutive nights; the reference runner records nightly times. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "Every primitive and transform passes the contract and history laws and all four checker groups; fault injection catches every catalogued fault for those groups; bodies and names save and reload bit-identically; the replay corpus is green on every leg, including the shipped-checker leg and reference mode; the topology model is proven in Verus; the sequence harness's seeded test passes in the suite on the gate's commit, and its saved cases replay; the reference runner records nightly times. A kernel owner records the result, with the CI runs that show it, in the decision log.",
   "depends_on": [
    "G99",
    "G102",
@@ -3080,7 +3080,7 @@
   "phase": "Phase 7",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "I576 and I768 with add, subtract, multiply, compare and sign, overflow checked; differential fuzzing against dashu for 24 hours clean; extreme-value tests at both widths; Verus proofs as for I384; a benchmark per operation on three targets.",
+  "done_when": "I576 and I768 with add, subtract, multiply, compare and sign, overflow checked; a seeded differential test against dashu, of fixed size, passing in the suite, with its saved cases replaying; extreme-value tests at both widths; Verus proofs as for I384; a benchmark per operation on three targets.",
   "depends_on": [
    "G240",
    "G156",
@@ -3528,7 +3528,7 @@
   "phase": "Phase 7",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "The curved boolean and chapter 13 corpora have no Failed case, only Known typed errors; the never-a-hole fuzz campaign runs clean for seven consecutive nights; every closed-form case is within its bound; the sweep, blend, offset, manufacturing and curved-mass law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "The curved boolean and chapter 13 corpora have no Failed case, only Known typed errors; the never-a-hole harness's seeded test passes in the suite on the gate's commit, and its saved cases replay; every closed-form case is within its bound; the sweep, blend, offset, manufacturing and curved-mass law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
   "depends_on": [
    "G249",
    "G261",

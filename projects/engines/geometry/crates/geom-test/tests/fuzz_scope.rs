@@ -1,15 +1,12 @@
-//! The selection of fuzz targets and Kani proofs a pull request runs (`geom_test::fuzz_scope`;
-//! chapters 28.5, 28.7 and 28.17), held to the crate graph, to `geom-fuzz`'s code and to
-//! `.github/workflows/kernel-fuzz.yml`, which applies it. Each check is a function of what it reads,
+//! The selection of fuzz targets and Kani proofs a change reaches (`geom_test::fuzz_scope`;
+//! chapters 28.7 and 28.17), held to the crate graph, to `geom-fuzz`'s code and to
+//! `.github/workflows/kernel-fuzz.yml`, which applies it to the Kani proofs. Each check is a function of what it reads,
 //! and each is shown to fail on planted mistakes, so none passes by reading nothing:
 //!
 //! - `the_catalogue_is_every_job_and_target_of_the_workflow`: every job of the workflow is in the
-//!   selection's catalogue (`fuzz_scope::JOBS`) or is one it does not decide; every target in the
-//!   libFuzzer matrix is a target of `geom-fuzz` and every target is in it; every Kani harness of
+//!   selection's catalogue (`fuzz_scope::JOBS`) or is one it does not decide; every Kani harness of
 //!   the `kani` job is defined by a target whose tests hold a proof; and each job reads the
-//!   selection: it needs `select`, its `if` reads its output, its matrix excludes what the selection
-//!   leaves out, `select` hands on every output, and the shard count `select` is given is the
-//!   `ClusterFuzzLite` matrix's.
+//!   selection: it needs `select`, its `if` reads its output, and `select` hands on every output.
 //! - `a_change_selects_every_harness_that_builds_it`: for every workspace crate, a change to it
 //!   selects every target whose code names it or a crate that depends on it through normal or build
 //!   dependencies, read here from the targets' `use` items (syn) and the resolved graph, and every
@@ -21,9 +18,6 @@
 //! - `geom_fuzz_files_select_the_targets_they_are_part_of`: a target's tests, corpus and crash
 //!   files select it alone, its module selects it and every target that uses the module, and a
 //!   file of the crate no one target owns selects every target.
-//! - `the_clusterfuzzlite_steps_fuzz_each_selected_target_once`: the job's step that keeps the
-//!   selected targets, then its shard step for each shard the selection leaves, run in bash on a
-//!   build-out of every target, fuzz each selected target in exactly one shard and no other.
 
 // The crate denies native arithmetic in kernel code (Cargo.toml); tests may use it.
 #![allow(
@@ -45,7 +39,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use geom_test::deps::cargo_metadata;
-use geom_test::fuzz_scope::{JOBS, Job, Narrow, Reach, Scope, Selection, UNSCOPED_JOBS};
+use geom_test::fuzz_scope::{JOBS, Job, Reach, Scope, Selection, UNSCOPED_JOBS};
 use serde_json::Value;
 use yaml_rust2::{Yaml, YamlLoader};
 
@@ -124,15 +118,6 @@ fn matrix_variable(job: &Yaml) -> Option<String> {
     }
 }
 
-/// The selection's own targets, as `<target>_fuzz`.
-fn fuzz_entries(scope: &Scope) -> BTreeSet<String> {
-    scope
-        .targets()
-        .keys()
-        .map(|t| format!("{t}_fuzz"))
-        .collect()
-}
-
 /// What is wrong with the catalogue `jobs` against the workflow's text and the scope.
 fn catalogue_problems(workflow: &str, jobs: &[Job], scope: &Scope) -> Vec<String> {
     let mut found = Vec::new();
@@ -154,7 +139,7 @@ fn catalogue_problems(workflow: &str, jobs: &[Job], scope: &Scope) -> Vec<String
         .find(|r| r.contains("fuzz-scope"))
         .unwrap_or_default()
         .replace('\n', " ");
-    if !run.contains("kernel-quality -- fuzz-scope $SCOPE") {
+    if !run.contains("kernel-quality -- fuzz-scope $SCOPE ") {
         found.push(format!(
             "the job select does not run `kernel-quality fuzz-scope $SCOPE`: {run:?}"
         ));
@@ -184,68 +169,10 @@ fn catalogue_problems(workflow: &str, jobs: &[Job], scope: &Scope) -> Vec<String
         if !handed(job.output) {
             found.push(format!("select does not hand on {}", job.output));
         }
-        let exclude = y["strategy"]["matrix"]["exclude"].as_str();
-        let wanted = format!(
-            "${{{{ fromJSON(needs.select.outputs.{}_exclude) }}}}",
-            job.output
-        );
-        match job.narrow {
-            Narrow::Whole => {
-                if exclude.is_some() {
-                    found.push(format!("{} excludes entries it runs whole", job.name));
-                }
-            }
-            Narrow::Entries(_) | Narrow::Shards(_) => {
-                if exclude != Some(wanted.as_str()) {
-                    found.push(format!(
-                        "{}'s matrix does not exclude what the selection leaves out: {exclude:?}",
-                        job.name
-                    ));
-                }
-                if !handed(&format!("{}_exclude", job.output)) {
-                    found.push(format!("select does not hand on {}_exclude", job.output));
-                }
-            }
-        }
-        if let Narrow::Shards(variable) = job.narrow {
-            let shards = strings(&y["strategy"]["matrix"][variable]).len();
-            if !run.contains(&format!("--shards {shards} ")) {
-                found.push(format!(
-                    "select is not given {}'s {shards} shards: {run:?}",
-                    job.name
-                ));
-            }
-            let targets = format!("${{{{ needs.select.outputs.{}_targets }}}}", job.output);
-            let given = y["steps"]
-                .as_vec()
-                .into_iter()
-                .flatten()
-                .any(|s| s["env"]["TARGETS"].as_str() == Some(targets.as_str()));
-            if !given || !handed(&format!("{}_targets", job.output)) {
-                found.push(format!(
-                    "{}'s steps are not given the targets the selection keeps",
-                    job.name
-                ));
-            }
+        if !y["strategy"]["matrix"]["exclude"].is_badvalue() {
+            found.push(format!("{} excludes entries it runs whole", job.name));
         }
         match job.reach {
-            Reach::FuzzTargets => {
-                if let Narrow::Entries(variable) = job.narrow {
-                    let listed: BTreeSet<String> = strings(&y["strategy"]["matrix"][variable])
-                        .into_iter()
-                        .collect();
-                    let own = fuzz_entries(scope);
-                    for v in listed.difference(&own) {
-                        found.push(format!(
-                            "{}'s entry {v} names no target of geom-fuzz",
-                            job.name
-                        ));
-                    }
-                    for v in own.difference(&listed) {
-                        found.push(format!("the target {v} is not in {}'s matrix", job.name));
-                    }
-                }
-            }
             Reach::ProofTargets => {
                 let Some(variable) = matrix_variable(y) else {
                     found.push(format!("{} has no matrix of harnesses", job.name));
@@ -268,14 +195,6 @@ fn catalogue_problems(workflow: &str, jobs: &[Job], scope: &Scope) -> Vec<String
                 if !scope.folders().contains_key(krate) {
                     found.push(format!(
                         "{}'s crate {krate} is not in the workspace",
-                        job.name
-                    ));
-                }
-            }
-            Reach::Job(other) => {
-                if !jobs.iter().any(|j| j.name == other) {
-                    found.push(format!(
-                        "{} goes with {other}, which is not in the catalogue",
                         job.name
                     ));
                 }
@@ -329,20 +248,7 @@ fn the_catalogue_is_every_job_and_target_of_the_workflow() {
         &JOBS,
         "job kani-extra is not in the selection's catalogue",
     );
-    // A libFuzzer entry that is no target, a target missing from the matrix, and a Kani harness
-    // of a target without proofs.
-    planted(
-        "extra",
-        &edited("[arenas_fuzz, ", "[arenas_fuzz, extra_fuzz, "),
-        &JOBS,
-        "entry extra_fuzz names no target",
-    );
-    planted(
-        "missing",
-        &edited(" orient2d_fuzz,", ""),
-        &JOBS,
-        "target orient2d_fuzz is not in libfuzzer's matrix",
-    );
+    // A Kani harness of a target without proofs.
     planted(
         "harness",
         &edited("- orient2d_proof\n", "- wide_proof\n"),
@@ -350,15 +256,6 @@ fn the_catalogue_is_every_job_and_target_of_the_workflow() {
         "harness wide_proof is defined by no target",
     );
     // A job that does not read the selection, in each of the ways it reads it.
-    planted(
-        "no-exclude",
-        &edited(
-            "        exclude: ${{ fromJSON(needs.select.outputs.libfuzzer_exclude) }}\n",
-            "",
-        ),
-        &JOBS,
-        "libfuzzer's matrix does not exclude",
-    );
     planted(
         "no-if",
         &edited("    if: needs.select.outputs.kani_num == 'true'\n", ""),
@@ -382,21 +279,6 @@ fn the_catalogue_is_every_job_and_target_of_the_workflow() {
         ),
         &JOBS,
         "select does not hand on kani_topo",
-    );
-    planted(
-        "shards",
-        &edited("--shards 4", "--shards 3"),
-        &JOBS,
-        "select is not given clusterfuzzlite's 4 shards",
-    );
-    planted(
-        "no-targets",
-        &edited(
-            "TARGETS: ${{ needs.select.outputs.clusterfuzzlite_targets }}",
-            "TARGETS: '[]'",
-        ),
-        &JOBS,
-        "clusterfuzzlite's steps are not given the targets",
     );
 }
 
@@ -625,16 +507,14 @@ fn dependency_problems(
             if !built.contains(krate) {
                 continue;
             }
-            for job in ["libfuzzer", "clusterfuzzlite"] {
-                let entry = selection
-                    .job(job)
-                    .and_then(|j| j.entries.iter().find(|e| e.name == format!("{t}_fuzz")));
-                if entry.is_none_or(|e| e.why.is_none()) {
-                    found.push(format!(
-                        "a change to {krate} does not select {t}_fuzz in {job}, though the target \
-                         builds it"
-                    ));
-                }
+            let entry = selection
+                .targets
+                .iter()
+                .find(|e| e.name == format!("{t}_fuzz"));
+            if entry.is_none_or(|e| e.why.is_none()) {
+                found.push(format!(
+                    "a change to {krate} does not select {t}_fuzz, though the target builds it"
+                ));
             }
             if proof_targets.contains(t) && !runs("kani") {
                 found.push(format!(
@@ -653,6 +533,12 @@ fn dependency_problems(
             }
         }
         if !reachable.contains(krate) {
+            for e in selection.targets.iter().filter(|e| e.why.is_some()) {
+                found.push(format!(
+                    "a change to {krate}, which no harness builds, selects {}",
+                    e.name
+                ));
+            }
             for j in &selection.jobs {
                 if j.why.is_some() {
                     found.push(format!(
@@ -663,6 +549,12 @@ fn dependency_problems(
             }
         }
         let tests = select(&[format!("{folder}tests/a_test.rs")]);
+        for e in tests.targets.iter().filter(|e| e.why.is_some()) {
+            found.push(format!(
+                "a change to {krate}'s tests, which no harness builds, selects {}",
+                e.name
+            ));
+        }
         for j in &tests.jobs {
             if j.why.is_some() {
                 found.push(format!(
@@ -690,8 +582,8 @@ fn a_change_selects_every_harness_that_builds_it() {
     // The check reaches something on each side: geom-p21 is built by one target, and geom-bool by
     // no harness.
     let p21 = select(&["projects/engines/geometry/crates/geom-p21/src/lib.rs".to_owned()]);
-    let running: Vec<&str> = p21.jobs[0]
-        .entries
+    let running: Vec<&str> = p21
+        .targets
         .iter()
         .filter(|e| e.why.is_some())
         .map(|e| e.name.as_str())
@@ -762,9 +654,9 @@ fn left_out(selection: &Selection) -> Vec<String> {
         if j.why.is_none() {
             out.push(j.job.name.to_owned());
         }
-        for e in j.entries.iter().filter(|e| e.why.is_none()) {
-            out.push(format!("{} in {}", e.name, j.job.name));
-        }
+    }
+    for e in selection.targets.iter().filter(|e| e.why.is_none()) {
+        out.push(e.name.clone());
     }
     out
 }
@@ -803,13 +695,8 @@ fn a_file_outside_every_crate_selects_everything() {
     let found = outside_problems(&|f| scope.select(Some(f)));
     assert!(found.is_empty(), "{found:#?}");
     assert_eq!(left_out(&scope.select(None)), Vec::<String>::new());
-    let outputs = scope.select(None).outputs(Some(4)).unwrap();
-    for (key, value) in &outputs {
-        if key.ends_with("_exclude") {
-            assert_eq!(value, "[]", "{key}");
-        } else if !key.ends_with("_targets") {
-            assert_eq!(value, "true", "{key}");
-        }
+    for (key, value) in &scope.select(None).outputs() {
+        assert_eq!(value, "true", "{key}");
     }
 
     // Planted: a selection that reads only the files under projects/.
@@ -840,8 +727,8 @@ fn fuzz_file_problems(
     let used: BTreeMap<&String, BTreeSet<String>> =
         sources.iter().map(|(f, text)| (f, uses(text).1)).collect();
     let running = |files: &[String]| -> BTreeSet<String> {
-        select(files).jobs[0]
-            .entries
+        select(files)
+            .targets
             .iter()
             .filter(|e| e.why.is_some())
             .map(|e| e.name.trim_end_matches("_fuzz").to_owned())
@@ -907,8 +794,8 @@ fn geom_fuzz_files_select_the_targets_they_are_part_of() {
     assert!(found.is_empty(), "{found:#?}");
     // The module cbor is the target cbor's, and the target contract uses it too.
     let cbor = scope.select(Some(&[format!("{FUZZ}/src/cbor.rs")]));
-    let running: Vec<&str> = cbor.jobs[0]
-        .entries
+    let running: Vec<&str> = cbor
+        .targets
         .iter()
         .filter(|e| e.why.is_some())
         .map(|e| e.name.as_str())
@@ -948,209 +835,4 @@ fn geom_fuzz_files_select_the_targets_they_are_part_of() {
             .any(|p| p.contains("/tests/__fuzz__/make/corpus/") && p.contains("not make alone")),
         "{found:#?}"
     );
-}
-
-/// A step's `env` value as GitHub gives it to the job of index `index` of `total`, with the
-/// selection's targets: the strategy's index and total and the selection's output; other text as
-/// written.
-fn evaluated(value: &str, index: usize, total: usize, targets: &str) -> String {
-    match value.trim() {
-        "${{ strategy.job-index }}" => index.to_string(),
-        "${{ strategy.job-total }}" => total.to_string(),
-        "${{ needs.select.outputs.clusterfuzzlite_targets }}" => targets.to_owned(),
-        other => other.to_owned(),
-    }
-}
-
-/// Runs the `clusterfuzzlite` job's steps from the one that keeps the selected targets to the
-/// shard step, in bash, as the job of index `index` of `total` would, on a build-out in
-/// `workspace` of every target's start-up script and seed corpus; `sudo` runs its command, as the
-/// runner's passwordless sudo does. The targets left, or why a step failed.
-fn run_steps(
-    steps: &[Yaml],
-    all: &[String],
-    targets: &str,
-    workspace: &Path,
-    (index, total): (usize, usize),
-) -> Result<Vec<String>, String> {
-    let _ = std::fs::remove_dir_all(workspace);
-    let out = workspace.join("build-out");
-    for t in all {
-        let dir = out.join(format!("{}-0123456789abcdef", t.trim_end_matches("_fuzz")));
-        std::fs::create_dir_all(&dir).unwrap();
-        for file in [format!("{t}_fuzzer"), format!("{t}_fuzzer_seed_corpus.zip")] {
-            std::fs::write(dir.join(file), "").unwrap();
-        }
-    }
-    for step in steps {
-        let mut command = std::process::Command::new("bash");
-        command
-            .args(["--noprofile", "--norc", "-eo", "pipefail", "-c"])
-            .arg(format!(
-                "sudo() {{ \"$@\"; }}\n{}",
-                step["run"].as_str().unwrap()
-            ))
-            .env("GITHUB_WORKSPACE", workspace);
-        for (key, value) in step["env"].as_hash().into_iter().flatten() {
-            let value = match value {
-                Yaml::String(s) => s.clone(),
-                other => format!("{other:?}"),
-            };
-            command.env(
-                key.as_str().unwrap(),
-                evaluated(&value, index, total, targets),
-            );
-        }
-        let output = command.output().expect("bash runs");
-        if !output.status.success() {
-            return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
-        }
-    }
-    Ok(all
-        .iter()
-        .filter(|t| {
-            let dir = out.join(format!("{}-0123456789abcdef", t.trim_end_matches("_fuzz")));
-            dir.join(format!("{t}_fuzzer")).exists()
-        })
-        .cloned()
-        .collect())
-}
-
-/// The `clusterfuzzlite` job's outputs of a selection: its targets and its exclusions.
-fn shard_outputs(workflow: &str, selection: &Selection) -> (String, String) {
-    let shards =
-        strings(&parse(workflow)["jobs"]["clusterfuzzlite"]["strategy"]["matrix"]["shard"]);
-    let outputs: BTreeMap<String, String> = selection
-        .outputs(Some(shards.len()))
-        .unwrap()
-        .into_iter()
-        .collect();
-    (
-        outputs["clusterfuzzlite_targets"].clone(),
-        outputs["clusterfuzzlite_exclude"].clone(),
-    )
-}
-
-/// What goes wrong when the `clusterfuzzlite` job runs with the selection's outputs `targets` and
-/// `exclude`: each shard the exclusions leave runs the two steps; every selected target must be
-/// fuzzed by one shard and every other target by none.
-fn shard_problems(workflow: &str, (targets, exclude): (&str, &str), scratch: &Path) -> Vec<String> {
-    let w = parse(workflow);
-    let job = &w["jobs"]["clusterfuzzlite"];
-    let steps = job["steps"].as_vec().unwrap();
-    let keep = steps
-        .iter()
-        .position(|s| s["name"].as_str() == Some("Keep the targets the change can affect"));
-    let shard = steps
-        .iter()
-        .position(|s| s["name"].as_str() == Some("Keep this shard's targets"));
-    let (Some(keep), Some(shard)) = (keep, shard) else {
-        return vec![
-            "the job has no step that keeps the selected targets before its shard step".to_owned(),
-        ];
-    };
-    if keep >= shard {
-        return vec!["the selected targets are kept after the shards are cut".to_owned()];
-    }
-    let steps = [steps[keep].clone(), steps[shard].clone()];
-    let shards = strings(&job["strategy"]["matrix"]["shard"]);
-    let excluded: Vec<Value> = serde_json::from_str(exclude).unwrap();
-    let left: Vec<&String> = shards
-        .iter()
-        .filter(|s| {
-            !excluded
-                .iter()
-                .any(|e| e["shard"].as_u64().is_some_and(|n| s.parse() == Ok(n)))
-        })
-        .collect();
-    let selected: BTreeSet<String> = serde_json::from_str(targets).unwrap();
-    let all: Vec<String> = strings(&w["jobs"]["libfuzzer"]["strategy"]["matrix"]["target"]);
-    let mut fuzzed: BTreeMap<String, usize> = all.iter().map(|t| (t.clone(), 0)).collect();
-    let mut found = Vec::new();
-    for (index, s) in left.iter().enumerate() {
-        match run_steps(
-            &steps,
-            &all,
-            targets,
-            &scratch.join(format!("shard-{s}")),
-            (index, left.len()),
-        ) {
-            Ok(kept) => {
-                for t in kept {
-                    *fuzzed.get_mut(&t).unwrap() += 1;
-                }
-            }
-            Err(why) => found.push(format!("shard {s} of {} fails: {why}", left.len())),
-        }
-    }
-    for (t, count) in fuzzed {
-        let want = usize::from(selected.contains(&t));
-        if count != want {
-            found.push(format!("{t} is fuzzed by {count} shards, not {want}"));
-        }
-    }
-    found
-}
-
-#[cfg_attr(
-    not(target_os = "linux"),
-    ignore = "runs the workflow's steps in bash, with GNU find, as the Ubuntu runner does"
-)]
-#[test]
-fn the_clusterfuzzlite_steps_fuzz_each_selected_target_once() {
-    let workflow = read(WORKFLOW);
-    let scope = Scope::new(&metadata(), &sources()).unwrap();
-    let scratch = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fuzz-scope-shards");
-    // Two targets (fewer than the shards), one, and every target.
-    let changes: [&[&str]; 3] = [
-        &[
-            "projects/engines/geometry/crates/geom-p21/src/lib.rs",
-            "projects/engines/geometry/crates/geom-fuzz/tests/make.rs",
-        ],
-        &["projects/engines/geometry/crates/geom-fuzz/tests/wide.rs"],
-        &["Cargo.lock"],
-    ];
-    for (i, change) in changes.iter().enumerate() {
-        let files: Vec<String> = change.iter().map(|f| (*f).to_owned()).collect();
-        let (targets, exclude) = shard_outputs(&workflow, &scope.select(Some(&files)));
-        let found = shard_problems(
-            &workflow,
-            (&targets, &exclude),
-            &scratch.join(format!("as-written-{i}")),
-        );
-        assert!(found.is_empty(), "{change:?}: {found:#?}");
-    }
-
-    let two = scope.select(Some(&[
-        "projects/engines/geometry/crates/geom-p21/src/lib.rs".to_owned(),
-        "projects/engines/geometry/crates/geom-fuzz/tests/make.rs".to_owned(),
-    ]));
-    let (targets, exclude) = shard_outputs(&workflow, &two);
-    assert_eq!(targets, r#"["make_fuzz","p21_fuzz"]"#);
-    assert_eq!(exclude, r#"[{"shard":3},{"shard":4}]"#);
-    // Planted: every shard run though the change has two targets: two shards keep nothing.
-    let found = shard_problems(&workflow, (&targets, "[]"), &scratch.join("every-shard"));
-    assert!(found.iter().any(|p| p.contains("keeps none")), "{found:#?}");
-    // Planted: no step keeps the selected targets, so the shards cut every target.
-    let late = workflow.replacen(
-        "name: Keep the targets the change can affect",
-        "name: Keep the targets later",
-        1,
-    );
-    assert_ne!(late, workflow, "the planted edit applies");
-    let found = shard_problems(&late, (&targets, &exclude), &scratch.join("late"));
-    assert!(
-        found.iter().any(|p| p.contains("no step that keeps")),
-        "{found:#?}"
-    );
-    // Planted: the step matches no target's name, so a selected target goes unfuzzed and the
-    // step must fail rather than pass with fewer.
-    let unbuilt = workflow.replacen(
-        "*\"\\\"${name%_fuzzer}\\\"\"*)",
-        "*\"\\\"${name%_fuzzer}x\\\"\"*)",
-        1,
-    );
-    assert_ne!(unbuilt, workflow, "the planted edit applies");
-    let found = shard_problems(&unbuilt, (&targets, &exclude), &scratch.join("unbuilt"));
-    assert!(found.iter().any(|p| p.contains("were built")), "{found:#?}");
 }

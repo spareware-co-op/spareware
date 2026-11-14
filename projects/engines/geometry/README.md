@@ -41,7 +41,7 @@ Each crate has one job, written at the top of its `lib.rs`. [crates/README.md](c
 
 ### 4. How a change is checked (two minutes)
 
-Thirteen workflows in `.github/workflows/` guard and measure the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
+Twelve workflows in `.github/workflows/` guard and measure the kernel. [AGENTS.md](AGENTS.md), section 3, lists the commands to run them yourself.
 
 | Workflow | What it proves |
 | --- | --- |
@@ -50,8 +50,7 @@ Thirteen workflows in `.github/workflows/` guard and measure the kernel. [AGENTS
 | `kernel-gate.yml` | The merge gate: licences, advisories and sources (cargo-deny), chapter 21's bans on platform maths, hash maps, clocks and randomness, no global state, and `no_std` builds, each shown to fail on a seeded violation |
 | `kernel-dev.yml` | The development crates on WebAssembly, every generated file current, and every header complete with `MAP.json` current |
 | `kernel-bench.yml` | The count gates: no benchmark more than 5% more expensive than on the merge base |
-| `kernel-fuzz.yml` | The fuzz targets: each `geom-fuzz` target under libFuzzer for a minute and under ClusterFuzzLite, and its bounded Kani proofs, the same harness under every engine |
-| `kernel-fuzz-campaign.yml` | Long libFuzzer campaigns: every fuzz target for five hours every night; and on demand the wide integers against a big-integer oracle for 25 CPU hours, started by the `fuzz-campaign` label on a pull request or by hand; by hand it can also run every target, as a night does, on the branch or tag it is started on (`targets: all`) |
+| `kernel-fuzz.yml` | The bounded Kani proofs of the `geom-fuzz` targets and of `geom-num`, `geom-op`, `geom-topo` and `geom-format`, each run when the change reaches it; the fuzz harnesses themselves are seeded tests of the suite (`kernel.yml`) |
 | `kernel-golden.yml` | The golden store: every golden is in the store, every pinned file unchanged, and any edit to a golden carries its record and an owner's approval |
 | `kernel-quality.yml` | The mutation and coverage gates (28.8): every mutant in a change caught, or kept in the quality ledger with its reason; every line and branch of the foundation set run, unless the ledger lists it as awaiting its proof; 90% of lines elsewhere; and Miri over the test suites weekly |
 | `kernel-nightly.yml` | Every night, the exact predicates' verification suite and attack tests with a fresh seed, printed so a failure replays; and the proven maths functions against the big-number oracle, on every input of CORE-MATH's worst-case lists and ten million fresh inputs per function |

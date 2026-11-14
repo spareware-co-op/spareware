@@ -63,6 +63,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.44 | SMLib's and solidcore's Numerical Recipes routines and fixtures | Accepted (owner, 2026-11-03): the licensing points raised about SMLib and solidcore are not a concern; their Numerical Recipes-derived routines may be ported and compiled like the rest of the release | 12, 29 | geom-test's source scan exemptions |
 | 32.45 | The project's licence is Apache-2.0 | Decided (owner, 2026-11-05): every file of the project is relicensed from MPL-2.0 to Apache-2.0, to match NVIDIA's USD BRep (SMLib) and solidcore, so code can move both ways; ported files keep their origin's licence as an `AND` operand | 29 | the licence fields, headers, NOTICE and checkers |
 | 32.49 | No patent searches | Decided (owner, 2026-11-13): no patent searches, and no work stops or waits for a patent, known or not; the board's patent pieces are removed | 11, 13, 16, 19, 29, 30, 31 | Nothing |
+| 32.52 | Fuzzing as tests in the suite | Decided (owner, 2026-11-15): fuzz the way solidcore tests. Each harness runs seeded random and hostile cases, sized to about two seconds optimised, in the ordinary suite on every pull request it can be reached by; every saved input replays; no libFuzzer, ClusterFuzzLite or campaigns | 28, 30 | Nothing |
 | 32.51 | G484: shape identity | Decided 2026-11-14: the same shape is equal under a rotation and a move only, exact, names and the cutting of faces ignored, holes and cuts counted, mirror images reported apart (`MirrorOnly`, `mirror_id`); `ShapeScheme v1` hashed with SHA-256; about 1,120-bit integers and a `Wide<N>` greatest common divisor for three-plane corners, accepted into 6.2 on 32.29's conditions | 6, 8, 10, 30 | G483, shape identity |
 
 ## 32.1 The grid ladder (decision 1)
@@ -811,7 +812,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-bench.yml` | `checks` | The tools of `kernel.yml`'s `lint`: `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
 | `kernel-bench.yml` | `instructions` | `trip gungraun`, on both legs; J: `geom-bench/tests/attack_g18a.rs::a_real_rise_in_estimated_cycles_fails`, `geom-bench/tests/attack_g18a.rs::the_command_line_passes_fails_and_refuses_as_the_rule_says` |
 | `kernel-bench.yml` | `fuel` | `trip fuel`; J: `geom-bench/src/counts.rs::growth_passes_the_stated_order_and_fails_the_next`, `geom-bench/src/counts.rs::compare_finds_rises_listings_removals_and_additions` |
-| `kernel-fuzz.yml` | `libfuzzer` | `trip libfuzzer` |
+| `kernel-fuzz.yml` | `libfuzzer` | Removed by decision 32.52, after the gate: `trip libfuzzer` |
 | `kernel-fuzz.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-fuzz.yml` | `select` | Not a gate: it decides which of this workflow's targets and proofs a pull request's change can affect, by the crate graph, and names in its log each one and why; a skipped job was not affected. J: `geom-test/tests/fuzz_scope.rs::a_change_selects_every_harness_that_builds_it`, `geom-test/tests/fuzz_scope.rs::a_file_outside_every_crate_selects_everything`, `geom-test/tests/fuzz_scope.rs::the_catalogue_is_every_job_and_target_of_the_workflow` |
 | `kernel-fuzz.yml` | `kani` | `trip kani-fuzz` |
@@ -820,8 +821,8 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-fuzz.yml` | `kani-op` | `trip kani-op` |
 | `kernel-fuzz.yml` | `kani-topo` | `trip kani-topo` |
 | `kernel-fuzz.yml` | `kani-limbs` | `trip kani-limbs` |
-| `kernel-fuzz.yml` | `clusterfuzzlite` | `trip clusterfuzzlite`, run by the job `clusterfuzzlite-seeded` through this job's actions' own images with this job's inputs: the actions build a fresh clone of the pull request, which a planted line never reaches |
-| `kernel-fuzz.yml` | `clusterfuzzlite-seeded` | `trip clusterfuzzlite`: the job is `clusterfuzzlite`'s seeded run, and fails if ClusterFuzzLite's build and fuzzing stop finding the planted crash |
+| `kernel-fuzz.yml` | `clusterfuzzlite` | Removed by decision 32.52, after the gate: `trip clusterfuzzlite`, run by the job `clusterfuzzlite-seeded` through this job's actions' own images with this job's inputs: the actions build a fresh clone of the pull request, which a planted line never reaches |
+| `kernel-fuzz.yml` | `clusterfuzzlite-seeded` | Removed by decision 32.52, after the gate: `trip clusterfuzzlite`: the job is `clusterfuzzlite`'s seeded run, and fails if ClusterFuzzLite's build and fuzzing stop finding the planted crash |
 | `kernel-quality.yml` | `mutants-plan` | J: `geom-test/tests/quality_gates.rs::shard_plans_fit_the_budget_and_a_matrix` |
 | `kernel-quality.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-quality.yml` | `mutants` | R: `geom-test/tests/seeded_gates.rs::a_seeded_survivor_fails_the_mutation_gate_until_a_test_catches_it`; J: `geom-test/tests/kernel_quality_workflow.rs::every_gate_is_judged_and_tool_failures_are_not_swallowed` |
@@ -833,8 +834,8 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-certificates.yml` | `gappa` | `trip gappa`: orient2d's Gappa problem with its claimed bound K halved, which Gappa must fail to prove (its report names the property and the best enclosure it found, the shipped K), so that its Rocq output holds no theorem and Rocq refuses it |
 | `kernel-certificates.yml` | `fptaylor` | `trip hol-light`, on orient2d's leg: every bound of `FPTaylor`'s certificate halved as HOL Light's session loads it, which HOL Light must refuse to prove |
 | `kernel-certificates.yml` | `fptaylor-problems` | Not a gate: it lists the FPTaylor problems, one `fptaylor` job each |
-| `kernel-fuzz-campaign.yml` | `campaign` | Not a gate: nightly, or on a pull request only when it is labelled `fuzz-campaign` |
-| `kernel-fuzz-campaign.yml` | `select` | Not a gate: it runs only for a campaign started by hand with `affected_since`, never on a pull request, and picks the targets that campaign fuzzes |
+| `kernel-fuzz-campaign.yml` | `campaign` | Removed by decision 32.52, after the gate: Not a gate: nightly, or on a pull request only when it is labelled `fuzz-campaign` |
+| `kernel-fuzz-campaign.yml` | `select` | Removed by decision 32.52, after the gate: Not a gate: it runs only for a campaign started by hand with `affected_since`, never on a pull request, and picks the targets that campaign fuzzes |
 | `kernel-variants.yml` | `native` | Not a gate: timings for the variant report, on a pull request only when it is labelled `variant-bench` (its header: never a gate) |
 | `kernel-variants.yml` | `wasm` | Not a gate: as `native` |
 | `kernel-variants.yml` | `browsers` | Not a gate: as `native` |
@@ -1066,3 +1067,19 @@ The price falls on Spare Construct, not the kernel. A copy rotated so that its c
 Why: one mark for two shapes cuts a wrong part, while two marks for one shape cost only a spare drawing. An exact comparison that answers `NotCompared` for whatever it cannot settle only ever errs the safe way, and the kernel's exact corners are what make it possible.
 
 **Changes:** this record; 6.2's list; 8.1 and 10.2; 30.4, 30.5 and 30.7, and `30-build-order.json` (G483, G484 and G485).
+
+## 32.52 Fuzzing as tests in the suite
+
+**Decided by the owner, 2026-11-15.** The owner's words: "we're over fuzzing... do it more like solidcore's testing"; earlier the same morning, "Only fuzz what needs to be"; and on the tests themselves, that they should go after the extreme inputs that break things, as solidcore's do, and may take "slightly longer if needed, a few more seconds if it helps".
+
+What solidcore does (tangency-labs/solidcore at commit `a3a8244566081e0777284dc182f77a91bb1a456d`, `crates/solidcore/tests/support/panic_fuzz.rs` and the tests that use it): its fuzz tests are seeded random tests inside the normal test suite, mixing a fixed list of hostile values (NaN, infinities, huge, tiny, zero) into generated cases, with case counts sized so each family takes about two seconds optimised; they run on every pull request, and each finding is saved as a case every run replays.
+
+What it changed here:
+- Every `geom-fuzz` harness's seeded test (`geom_fuzz::seeded`) draws half its cases hostile: solidcore's `HOSTILE` values, ported, integer words at their domains' ends, repeated and nearly repeated runs of bytes (coincident and near-coincident values, zero lengths and areas, slivers), evenly spaced words (collinear and coplanar values) and fills of one byte, each cut to every length. Each harness's count is sized by the release suite's measured time for about two seconds of an optimised build, and up to ten where two would give too few cases; a build with debug assertions runs the first tenth.
+- Every saved corpus and crash file of every target replays on every run (`geom-fuzz`'s `tests/attack_g14.rs`).
+- `kernel-fuzz-campaign.yml`, the pull requests' libFuzzer and ClusterFuzzLite jobs in `kernel-fuzz.yml`, `.clusterfuzzlite/` and the tests that held only their shape are gone, with the planted violations `trip libfuzzer` and `trip clusterfuzzlite`. The Kani proofs stay: they are proofs, not fuzzing, and still run only where the crate graph says a change reaches them.
+- A gate or piece condition that named a fuzz campaign, hours of fuzzing or clean nights of fuzzing reads instead: the harness's seeded test passes in the suite on the gate's commit, and its saved cases replay. Records of gates already passed stay as they were, as facts about what was run.
+
+Why: a campaign re-fuzzed code that had not changed for hours each night, and most of its time went after coverage had stopped growing (the last campaign, run 43596836655: orient2d's coverage stopped at its first minute, of five hours). Seeded hostile cases in the suite give the same answer on every machine, run where the change is, and keep every finding.
+
+**Changes:** this record; 28.5 and 28.17; `30-build-order.json`'s done-when texts that named campaigns; `geom-fuzz` (`seeded`, its tests' counts, its README and header); `geom-test` (`fuzz_scope`, `trip`, `kernel-quality fuzz-scope`, the attack tests); `kernel-fuzz.yml` and `kernel-release.yml`.
