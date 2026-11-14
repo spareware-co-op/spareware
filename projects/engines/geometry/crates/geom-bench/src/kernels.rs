@@ -2366,7 +2366,7 @@ pub mod roots {
     }
 }
 
-/// `geom-intersect`'s hot paths (pieces G158, G162 and G168, decision 32.44): items put in
+/// `geom-intersect`'s hot paths (pieces G158, G162 and G168, decision 32.46): items put in
 /// canonical order, a key read, a pair put in order, a point projected and a level curve traced,
 /// under an unlimited budget.
 pub mod intersect {
@@ -2652,7 +2652,7 @@ pub mod intersect {
     }
 }
 
-/// The exact decisions on lines and quadrics (piece G159, decision 32.44): each discriminant through
+/// The exact decisions on lines and quadrics (piece G159, decision 32.46): each discriminant through
 /// its filter, a torus's roots, and the tangent sphere of a cylinder and a cone.
 pub mod quadric {
     use geom_num::pencil::{Entry, Form, Topology, classify};

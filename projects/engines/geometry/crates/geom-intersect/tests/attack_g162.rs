@@ -30,9 +30,12 @@ use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind, Tor
 use geom_test::Seed;
 use geom_test::rng::SplitMix64;
 
-/// A meter above what any case here takes, so a search that loses its way fails, not hangs.
+/// A meter above what any case here takes, so a search that loses its way fails, not hangs. A
+/// torus's partials pay for the arctangent corners that take the certified arctangent's 192-bit
+/// path (`geom_curve::extent::FAR_CORNER`, issue #765), so a search on a torus is charged several
+/// times what it was before that charge, for the same steps.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::of_work(1 << 18))
+    WorkMeter::new(Budget::of_work(1 << 21))
 }
 
 const FLOOR: f64 = 1e-6;
@@ -580,7 +583,7 @@ fn a_floor_below_the_doubles_still_ends() {
 
 /// The least budget a call finishes under.
 fn least_work(call: &dyn Fn(&mut WorkMeter<'_>) -> bool) -> u64 {
-    let (mut too_little, mut enough) = (0u64, 1u64 << 17);
+    let (mut too_little, mut enough) = (0u64, 1u64 << 19);
     // A search that cannot finish here has lost its way, and bisecting would only take longer.
     assert!(call(&mut WorkMeter::new(Budget::of_work(enough))));
     while too_little + 1 < enough {
@@ -595,7 +598,10 @@ fn least_work(call: &dyn Fn(&mut WorkMeter<'_>) -> bool) -> u64 {
 }
 
 /// The searches' work, to the unit: a search is a pure function, so a change here is a change to
-/// what is pruned, which no answer shows. The pinned numbers move only with the search itself.
+/// what is pruned, which no answer shows. The pinned numbers move only with the search itself, or
+/// with what the kinds charge: the torus's moved from 59,498 to 275,498 when its partials began to
+/// pay for the arctangent's 192-bit corners (issue #765), with the same steps and the same answer
+/// (the old number comes back with `FAR_CORNER` set to 0).
 #[test]
 fn each_search_takes_the_work_it_always_took() {
     let frame = Frame::standard().unwrap();
@@ -633,7 +639,7 @@ fn each_search_takes_the_work_it_always_took() {
     let surfaces: [(&SurfaceKind, [f64; 3], u64); 3] = [
         (&sphere, [1.0, 2.0, 0.5], 46_607),
         (&cone, [1.0, 2.0, 0.5], 2_093),
-        (&torus, [5.0, 2.0, 1.0], 59_498),
+        (&torus, [5.0, 2.0, 1.0], 275_498),
     ];
     for (surface, p, pinned) in surfaces {
         let call = |m: &mut WorkMeter<'_>| project_surface(surface, &p, FLOOR, m).is_ok();

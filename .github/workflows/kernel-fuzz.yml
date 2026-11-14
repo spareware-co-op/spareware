@@ -613,7 +613,10 @@ jobs:
     needs: cheap
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Code-change mode fuzzes each target the change reaches for about a minute, after a build of
+    # about 20. With Phase 5's targets a change to a crate they all use (geom-num, geom-curve)
+    # reaches about 47 targets, past an hour in all; the time per target is unchanged.
+    timeout-minutes: 90
     steps:
       - name: Build the fuzz targets
         id: build

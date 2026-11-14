@@ -1,4 +1,4 @@
-//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G167, decision 32.44): a list of
+//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G167, decision 32.46): a list of
 //! items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a
 //! point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5
 //! once, curves through surfaces, each path of 12.6 once, natural quadrics, four rows of 12.7, and a
