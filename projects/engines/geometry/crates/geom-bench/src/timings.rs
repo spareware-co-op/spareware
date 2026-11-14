@@ -924,7 +924,9 @@ pub struct Share {
     /// performance cores; 1 for a single trivial operation and for the browsers, where the kernel
     /// runs serially in one Web Worker (23.4).
     pub threads: u32,
-    /// The benchmark that measures it: the full-scale scenario that piece G451 adds, named
+    /// The benchmark that measures it: a full-scale scenario, `scenario/<name>/full`. The door
+    /// move's is G140's wall re-cut at full size, `scenario/moved_door/full`, which the reference
+    /// runner times (`catalogue::timed_names`); the others are the scenarios piece G451 adds, named
     /// `scenario/<id>/full`.
     pub benchmark: &'static str,
 }
@@ -936,7 +938,7 @@ pub struct Share {
 pub static SHARES: &[Share] = &[
     Share { id: "open", target: "Open the 230,000-element model to first view in under 3 s; a 20-building block in under 5 s", words: "1 s", limit: Limit::Within(1e9), on: On::Native, threads: 8, benchmark: "scenario/open/full" },
     Share { id: "open_block", target: "Open the 230,000-element model to first view in under 3 s; a 20-building block in under 5 s", words: "1.5 s for the block", limit: Limit::Within(1.5e9), on: On::Native, threads: 8, benchmark: "scenario/open_block/full" },
-    Share { id: "door_move", target: "Move a door in under 16 ms", words: "4 ms", limit: Limit::Within(4e6), on: On::Native, threads: 8, benchmark: "scenario/door_move/full" },
+    Share { id: "door_move", target: "Move a door in under 16 ms", words: "4 ms", limit: Limit::Within(4e6), on: On::Native, threads: 8, benchmark: "scenario/moved_door/full" },
     Share { id: "level_change", target: "Change a level height touching 2,000 walls in under 1 s", words: "600 ms", limit: Limit::Within(6e8), on: On::Native, threads: 8, benchmark: "scenario/level_change/full" },
     Share { id: "navigate", target: "Navigate 1,000,000 instances at 60 fps", words: "Nothing per frame", limit: Limit::NotTimed("the kernel is never in the frame loop"), on: On::Native, threads: 8, benchmark: "scenario/navigate/full" },
     Share { id: "plan_first", target: "Plan view: first draw under 500 ms, under 16 ms after an edit", words: "250 ms first", limit: Limit::Within(2.5e8), on: On::Native, threads: 8, benchmark: "scenario/plan_first/full" },
@@ -1008,6 +1010,12 @@ fn share_value(night: &Record, share: &Share, engine: &str) -> Result<f64, Strin
             x.engine == engine && x.threads == share.threads && x.benchmark == share.benchmark
         }) {
             Some(x) => Err(format!("failed: {}", x.reason)),
+            None if crate::catalogue::timed_names()
+                .iter()
+                .any(|name| name == share.benchmark) =>
+            {
+                Err("not timed that night".to_string())
+            }
             None => Err("not measured yet: no such benchmark (piece G451 adds it)".to_string()),
         },
     }

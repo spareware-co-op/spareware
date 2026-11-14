@@ -19,6 +19,12 @@
 //!   arrangement vertex, so testing every cell vertex decides it.
 //! - [`first_contact`] finds when a moving solid first touches a still one, from every vertex and
 //!   face pair and every edge pair.
+//! - [`six_volume_where`] is the volume of any boolean of solids of many faces (Gate 4's corpus:
+//!   EMBER's figures and Manifold's models), without an arrangement of space: each face is cut by
+//!   the planes of the faces that pass through it, and a piece bounds the result when the winding
+//!   numbers just in front of it and just behind it ([`Solid::winding`], signed counts of the faces
+//!   a ray crosses) fall on different sides of the boolean, for a surface that crosses itself
+//!   too.
 //!
 //! Guarantees:
 //!
@@ -40,11 +46,17 @@
 //! exactly; Andrew's monotone chain, 1979, <https://doi.org/10.1016/0020-0190(79)90072-3>, for a cut's
 //! outline; the divergence theorem over a fan of tetrahedra for volume and centroid; Canny's
 //! vertex-face and edge-edge contact events for polyhedra under translation,
-//! <https://doi.org/10.1109/TPAMI.1986.4767788>.
+//! <https://doi.org/10.1109/TPAMI.1986.4767788>; boundary evaluation, a boolean's boundary as the
+//! pieces of its operands' faces with the result on one side only (Requicha and Voelcker,
+//! "Boolean operations in solid modeling: boundary evaluation and merging algorithms", Proceedings
+//! of the IEEE 73(1), 1985, <https://doi.org/10.1109/PROC.1985.13108>), with the winding number of
+//! a closed surface as a signed count of ray crossings.
 //!
 //! Cost: `p` planes cut the box into up to O(p³) cells, each cut costing every face of every cell,
 //! and rationals grow with each cut. This reference accepts that, because it runs on small cases
-//! only. No recursion.
+//! only. [`six_volume_where`] costs each pair of faces whose boxes meet, found by a sweep, the
+//! pieces those cut each face into, and two rays a piece for each solid, each against the faces
+//! filed in the ray's bucket of a grid across it. No recursion.
 
 // The lint is for fixed-width arithmetic, which can overflow. Every operator here is on dashu's
 // arbitrary-precision rationals, which cannot, and every division is by a value shown nonzero
@@ -317,7 +329,12 @@ impl Polygon {
     /// outline. The polygon need not be convex.
     fn locate_in_plane(&self, p: &Point) -> Where {
         let (u, v) = axes(&self.area_vector());
-        let (pu, pv) = (at(p, u), at(p, v));
+        self.locate_across(at(p, u), at(p, v), (u, v))
+    }
+
+    /// As [`Polygon::locate_in_plane`], for a point given by its coordinates `(pu, pv)` on the
+    /// polygon's two axes `(u, v)` (those [`axes`] gives its normal).
+    fn locate_across(&self, pu: &Q, pv: &Q, (u, v): (usize, usize)) -> Where {
         let mut inside = false;
         for (a, b) in edges(&self.corners) {
             let (au, av, bu, bv) = (at(a, u), at(a, v), at(b, u), at(b, v));
@@ -785,6 +802,581 @@ pub fn labelled_cells(
             (cell, inside)
         })
         .collect())
+}
+
+/// A face as a ray meets it: its polygon, plane and canonical plane, the two axes it is located
+/// on, and its box in every coordinate.
+struct Target {
+    polygon: Polygon,
+    plane: Plane,
+    key: Plane,
+    axes: (usize, usize),
+    low: [Q; 3],
+    high: [Q; 3],
+}
+
+/// The least and greatest of `values`, or zeros for none.
+fn span<'q>(values: impl Iterator<Item = &'q Q>) -> (Q, Q) {
+    let mut out: Option<(Q, Q)> = None;
+    for v in values {
+        out = Some(match out {
+            None => (v.clone(), v.clone()),
+            Some((lo, hi)) => (lo.min(v.clone()), hi.max(v.clone())),
+        });
+    }
+    out.unwrap_or((Q::ZERO, Q::ZERO))
+}
+
+impl Target {
+    fn of(face: &Polygon) -> Target {
+        let [(x0, x1), (y0, y1), (z0, z1)] =
+            [0, 1, 2].map(|k| span(face.corners.iter().map(|c| at(c, k))));
+        let plane = face.plane();
+        Target {
+            polygon: face.clone(),
+            key: plane.canonical(),
+            axes: axes(plane.normal()),
+            plane,
+            low: [x0, y0, z0],
+            high: [x1, y1, z1],
+        }
+    }
+
+    /// Whether the two boxes meet, touching included.
+    fn meets(&self, other: &Target) -> bool {
+        (0..3).all(|k| {
+            at(&self.low, k) <= at(&other.high, k) && at(&other.low, k) <= at(&self.high, k)
+        })
+    }
+}
+
+/// The two coordinates other than `axis`.
+fn across(axis: usize) -> (usize, usize) {
+    match axis {
+        0 => (1, 2),
+        1 => (2, 0),
+        _ => (0, 1),
+    }
+}
+
+/// A solid's faces filed by where they lie across one axis, so that a ray along it from a point
+/// meets only the faces of the point's bucket: a grid of `m` by `m` buckets over the faces' extent
+/// in the other two coordinates, `m²` about the number of faces, a face filed in every bucket its
+/// box touches.
+struct Rays {
+    origin: [Q; 2],
+    /// `m` over the extent, in each of the other two coordinates.
+    scale: [Q; 2],
+    buckets: BTreeMap<(IBig, IBig), Vec<usize>>,
+}
+
+impl Rays {
+    fn new(targets: &[Target], axis: usize) -> Rays {
+        let (u, v) = across(axis);
+        let (lu, hu) = span(targets.iter().flat_map(|t| [at(&t.low, u), at(&t.high, u)]));
+        let (lv, hv) = span(targets.iter().flat_map(|t| [at(&t.low, v), at(&t.high, v)]));
+        let mut m = 1_u64;
+        let faces = u128::try_from(targets.len()).unwrap_or(u128::MAX);
+        while u128::from(m) * u128::from(m) < faces {
+            m += 1;
+        }
+        let per = |low: &Q, high: &Q| {
+            let extent = high - low;
+            if extent == Q::ZERO {
+                Q::ONE
+            } else {
+                Q::from(IBig::from(m)) / extent
+            }
+        };
+        let mut rays = Rays {
+            scale: [per(&lu, &hu), per(&lv, &hv)],
+            origin: [lu, lv],
+            buckets: BTreeMap::new(),
+        };
+        for (i, t) in targets.iter().enumerate() {
+            let (u0, v0) = rays.bucket(at(&t.low, u), at(&t.low, v));
+            let (u1, v1) = rays.bucket(at(&t.high, u), at(&t.high, v));
+            let mut a = u0;
+            while a <= u1 {
+                let mut b = v0.clone();
+                while b <= v1 {
+                    rays.buckets
+                        .entry((a.clone(), b.clone()))
+                        .or_default()
+                        .push(i);
+                    b += IBig::ONE;
+                }
+                a += IBig::ONE;
+            }
+        }
+        rays
+    }
+
+    /// The bucket of the point whose other two coordinates are `(a, b)`.
+    fn bucket(&self, a: &Q, b: &Q) -> (IBig, IBig) {
+        let ([oa, ob], [sa, sb]) = (&self.origin, &self.scale);
+        (((a - oa) * sa).floor(), ((b - ob) * sb).floor())
+    }
+}
+
+/// A solid read for rays: its faces, its box, and its faces filed for a ray along each axis.
+struct Shot {
+    targets: Vec<Target>,
+    low: [Q; 3],
+    high: [Q; 3],
+    rays: [Rays; 3],
+}
+
+impl Shot {
+    fn new(solid: &Solid) -> Shot {
+        let targets: Vec<Target> = solid.faces.iter().map(Target::of).collect();
+        let [(x0, x1), (y0, y1), (z0, z1)] =
+            [0, 1, 2].map(|k| span(targets.iter().flat_map(|t| [at(&t.low, k), at(&t.high, k)])));
+        let rays = [0, 1, 2].map(|axis| Rays::new(&targets, axis));
+        Shot {
+            targets,
+            low: [x0, y0, z0],
+            high: [x1, y1, z1],
+            rays,
+        }
+    }
+
+    /// The winding number of the solid's surface just off `p` along the open ray from `p` along
+    /// `axis`, forward when `forward`: each face the ray crosses counts one, plus where its normal
+    /// points along the ray and minus where against it. Faces of the plane `own` (canonical), the
+    /// one `p` lies on, are where the ray starts and do not count. `None` when the ray meets an
+    /// outline, lies in a face's plane or passes through `p` on another face.
+    fn along(&self, p: &Point, axis: usize, forward: bool, own: &Plane) -> Option<i64> {
+        let (u, v) = across(axis);
+        let (pu, pv, pa) = (at(p, u), at(p, v), at(p, axis));
+        // A ray that misses the solid's box crosses none of it.
+        let beyond = if forward {
+            pa > at(&self.high, axis)
+        } else {
+            pa < at(&self.low, axis)
+        };
+        if beyond
+            || pu < at(&self.low, u)
+            || pu > at(&self.high, u)
+            || pv < at(&self.low, v)
+            || pv > at(&self.high, v)
+        {
+            return Some(0);
+        }
+        let rays = self.rays.get(axis)?;
+        let Some(filed) = rays.buckets.get(&rays.bucket(pu, pv)) else {
+            return Some(0);
+        };
+        let mut winding = 0_i64;
+        for &i in filed {
+            let t = self.targets.get(i)?;
+            let behind = if forward {
+                at(&t.high, axis) < pa
+            } else {
+                at(&t.low, axis) > pa
+            };
+            if behind
+                || pu < at(&t.low, u)
+                || pu > at(&t.high, u)
+                || pv < at(&t.low, v)
+                || pv > at(&t.high, v)
+            {
+                continue;
+            }
+            let n = t.plane.normal();
+            let na = at(n, axis);
+            if *na == Q::ZERO {
+                if t.plane.side(p) == Ordering::Equal {
+                    return None;
+                }
+                continue;
+            }
+            let hit = (&t.plane.offset - at(n, u) * pu - at(n, v) * pv) / na;
+            let ahead = if forward { &hit - pa } else { pa - &hit };
+            if ahead < Q::ZERO {
+                continue;
+            }
+            let coordinate = |k: usize| if k == axis { &hit } else { at(p, k) };
+            let (tu, tv) = t.axes;
+            let found = t
+                .polygon
+                .locate_across(coordinate(tu), coordinate(tv), t.axes);
+            if ahead == Q::ZERO {
+                if t.key == *own {
+                    continue;
+                }
+                if found != Where::Out {
+                    return None;
+                }
+                continue;
+            }
+            match found {
+                Where::On => return None,
+                Where::In => winding += if (*na > Q::ZERO) == forward { 1 } else { -1 },
+                Where::Out => {}
+            }
+        }
+        Some(winding)
+    }
+
+    /// As [`Shot::along`] for a slanted ray in `direction`, against every face.
+    fn slanted(&self, p: &Point, direction: &Point, own: &Plane) -> Option<i64> {
+        let mut winding = 0_i64;
+        for t in &self.targets {
+            let slope = dot(t.plane.normal(), direction);
+            if slope == Q::ZERO {
+                if t.plane.side(p) == Ordering::Equal {
+                    return None;
+                }
+                continue;
+            }
+            let s = (&t.plane.offset - dot(t.plane.normal(), p)) / &slope;
+            if s < Q::ZERO {
+                continue;
+            }
+            let found = t.polygon.locate_in_plane(&plus(p, &times(direction, &s)));
+            if s == Q::ZERO {
+                if t.key == *own {
+                    continue;
+                }
+                if found != Where::Out {
+                    return None;
+                }
+                continue;
+            }
+            match found {
+                Where::On => return None,
+                Where::In => winding += if slope > Q::ZERO { 1 } else { -1 },
+                Where::Out => {}
+            }
+        }
+        Some(winding)
+    }
+}
+
+/// Whether the faces `f` and `g`, of different planes, meet along a stretch of the line where their
+/// planes cross: `g` cuts `f` there, so the winding numbers beside `f` may change across it. Faces
+/// that touch at a point, or whose planes cross away from one of them, do not.
+fn crosses(f: &Target, g: &Target) -> bool {
+    let reaches = |t: &Target, plane: &Plane| {
+        let s: BTreeSet<Ordering> = t.polygon.corners().iter().map(|c| plane.side(c)).collect();
+        s.len() > 1 || s.contains(&Ordering::Equal)
+    };
+    if !reaches(f, &g.plane) || !reaches(g, &f.plane) {
+        return false;
+    }
+    let (p, r) = (&f.plane, &g.plane);
+    let along = cross(p.normal(), r.normal());
+    if is_zero(&along) {
+        return false;
+    }
+    let n1n2 = cross(r.normal(), &along);
+    let n3n1 = cross(&along, p.normal());
+    let denominator = dot(&along, &along);
+    let from = times(
+        &plus(&times(&n1n2, &p.offset), &times(&n3n1, &r.offset)),
+        &(Q::ONE / denominator),
+    );
+    let on_g = line_in_polygon(&g.polygon, &from, &along);
+    line_in_polygon(&f.polygon, &from, &along)
+        .iter()
+        .any(|(s0, s1)| {
+            on_g.iter()
+                .any(|(t0, t1)| s0.clone().max(t0.clone()) < s1.clone().min(t1.clone()))
+        })
+}
+
+/// The winding numbers of every solid just in front of a face piece, on the side its normal
+/// points to, read at a point of the open piece: along an axis its plane is not parallel to, from
+/// the piece's mean or a point moved from it toward a corner when that ray meets an outline, and
+/// along slanted rays when every one does.
+fn in_front(shots: &[Shot], piece: &Polygon, plane: &Plane, own: &Plane) -> Option<Vec<i64>> {
+    let n = plane.normal();
+    let axis = (0..3).find(|k| *at(n, *k) != Q::ZERO)?;
+    let ahead = *at(n, axis) > Q::ZERO;
+    let corners = piece.corners();
+    let count = u64::try_from(corners.len()).ok()?;
+    let mut mean = [Q::ZERO, Q::ZERO, Q::ZERO];
+    for c in corners {
+        mean = plus(&mean, c);
+    }
+    let mean = times(&mean, &ratio(1, count));
+    let three = int(3);
+    let points = core::iter::once(mean.clone()).chain(
+        corners
+            .iter()
+            .map(|c| times(&plus(&times(&mean, &three), c), &ratio(1, 4))),
+    );
+    for p in points {
+        let front: Option<Vec<i64>> = shots
+            .iter()
+            .map(|s| s.along(&p, axis, ahead, own))
+            .collect();
+        if front.is_some() {
+            return front;
+        }
+    }
+    for k in 1..u64::MAX {
+        let d = [Q::ONE, ratio(1, 1009 + k), ratio(1, 2003 + 7 * k)];
+        let along = dot(&d, n);
+        if along == Q::ZERO {
+            continue;
+        }
+        let forth = if along > Q::ZERO {
+            d
+        } else {
+            times(&d, &int(-1))
+        };
+        let front: Option<Vec<i64>> = shots
+            .iter()
+            .map(|s| s.slanted(&mean, &forth, own))
+            .collect();
+        if front.is_some() {
+            return front;
+        }
+    }
+    None
+}
+
+/// Six times the volume where `keep` holds of the winding numbers of `solids`' surfaces, in
+/// `solids`' order: the regularised result of any boolean of them, by evaluating its boundary.
+///
+/// What it does: every face is cut, as a polygon, by the plane of every other face (of any solid,
+/// its own included) that meets it along a stretch of a line, and by the planes
+/// along the edges of every face in its own plane whose box it meets; the pieces are convex and
+/// no face crosses one's inside. Just in front of a piece each solid has one winding number, read
+/// by a ray; just behind it each is more by one for each face of its plane over the piece that
+/// faces the piece's way, and less by one for each that faces the other way. The piece is on the
+/// result's boundary when `keep` differs on its two sides, facing the way that leaves the kept
+/// side, and where faces of one plane overlap, only the first face of them, in `solids`' and their
+/// faces' order, counts the piece. The volume is the divergence theorem's sum over the boundary
+/// pieces.
+///
+/// The winding number counts a surface that crosses itself (a mesh read from a file may) as the
+/// regularised booleans of 11.1 and 19.5 do: a point is inside a solid where its winding number is
+/// above zero. Where [`labelled_cells`] cuts space by every plane, this cuts only the faces, so it
+/// serves solids of thousands of faces.
+///
+/// # Errors
+///
+/// [`ReferenceError::NoArea`] if `keep` holds outside every solid (the result would be unbounded)
+/// or a piece has no point a ray can read, which a closed solid cannot give.
+pub fn six_volume_where(
+    solids: &[&Solid],
+    keep: impl Fn(&[i64]) -> bool,
+) -> Result<Q, ReferenceError> {
+    let one: [Test<'_>; 1] = [&keep];
+    let mut out = six_volumes_where(solids, &one)?;
+    out.pop().ok_or(ReferenceError::NoArea)
+}
+
+/// [`six_volume_where`] for several tests at once, one volume each, in order: the faces are cut and
+/// each piece's winding numbers read once for all of them.
+///
+/// # Errors
+///
+/// As [`six_volume_where`], for any of the tests.
+pub fn six_volumes_where(solids: &[&Solid], keeps: &[Test<'_>]) -> Result<Vec<Q>, ReferenceError> {
+    if keeps.iter().any(|keep| keep(&vec![0; solids.len()])) {
+        return Err(ReferenceError::NoArea);
+    }
+    let shots: Vec<Shot> = solids.iter().map(|s| Shot::new(s)).collect();
+    let mut all: Vec<Face<'_>> = Vec::new();
+    for (s, shot) in shots.iter().enumerate() {
+        for (f, t) in shot.targets.iter().enumerate() {
+            all.push((s, f, t));
+        }
+    }
+    let near = near_pairs(&all);
+    let mut sixes = vec![Q::ZERO; keeps.len()];
+    for (i, (s, f, t)) in all.iter().enumerate() {
+        let (pieces, level) =
+            pieces_of(t, near.get(i).map(Vec::as_slice).unwrap_or_default(), &all);
+        for piece in &pieces {
+            let mut middle = [Q::ZERO, Q::ZERO, Q::ZERO];
+            for c in piece.corners() {
+                middle = plus(&middle, c);
+            }
+            let count = u64::try_from(piece.corners().len()).unwrap_or(1);
+            let middle = times(&middle, &ratio(1, count));
+            let over: Vec<&Face<'_>> = level
+                .iter()
+                .filter_map(|&j| all.get(j))
+                .filter(|(_, _, g)| g.polygon.holds(&middle))
+                .collect();
+            // Where faces of one plane overlap, the first of them counts the piece.
+            if over.iter().any(|(gs, gf, _)| (*gs, *gf) < (*s, *f)) {
+                continue;
+            }
+            let front = in_front(&shots, piece, &t.plane, &t.key).ok_or(ReferenceError::NoArea)?;
+            let mut back = front.clone();
+            if let Some(w) = back.get_mut(*s) {
+                *w += 1;
+            }
+            for (gs, _, g) in &over {
+                if let Some(w) = back.get_mut(*gs) {
+                    *w += if dot(g.plane.normal(), t.plane.normal()) > Q::ZERO {
+                        1
+                    } else {
+                        -1
+                    };
+                }
+            }
+            let mut fan: Option<Q> = None;
+            for (keep, six) in keeps.iter().zip(&mut sixes) {
+                let (inside, outside) = (keep(&back), keep(&front));
+                if inside == outside {
+                    continue;
+                }
+                let area = fan.get_or_insert_with(|| fan_of(piece));
+                if inside {
+                    *six += &*area;
+                } else {
+                    *six -= &*area;
+                }
+            }
+        }
+    }
+    Ok(sixes)
+}
+
+/// A face, by its solid and its row there.
+type Face<'t> = (usize, usize, &'t Target);
+
+/// A test on the winding numbers of solids, in their order.
+pub type Test<'k> = &'k dyn Fn(&[i64]) -> bool;
+
+/// Six times the volume of the fan of tetrahedra from the origin over a polygon.
+fn fan_of(piece: &Polygon) -> Q {
+    let mut sum = Q::ZERO;
+    if let Some((first, rest)) = piece.corners().split_first() {
+        for pair in rest.windows(2) {
+            if let [b, c] = pair {
+                sum += dot(first, &cross(b, c));
+            }
+        }
+    }
+    sum
+}
+
+/// For each face, the faces whose boxes meet its box, by a sweep along x.
+fn near_pairs(all: &[Face<'_>]) -> Vec<Vec<usize>> {
+    let mut order: Vec<usize> = (0..all.len()).collect();
+    order.sort_by(|a, b| {
+        let key = |i: &usize| all.get(*i).map(|(_, _, t)| at(&t.low, 0));
+        key(a).cmp(&key(b))
+    });
+    let mut near: Vec<Vec<usize>> = vec![Vec::new(); all.len()];
+    for (k, &i) in order.iter().enumerate() {
+        let Some((_, _, ti)) = all.get(i) else {
+            continue;
+        };
+        for &j in order.iter().skip(k + 1) {
+            let Some((_, _, tj)) = all.get(j) else {
+                continue;
+            };
+            if at(&tj.low, 0) > at(&ti.high, 0) {
+                break;
+            }
+            if ti.meets(tj) {
+                if let Some(list) = near.get_mut(i) {
+                    list.push(j);
+                }
+                if let Some(list) = near.get_mut(j) {
+                    list.push(i);
+                }
+            }
+        }
+    }
+    near
+}
+
+/// Face `t` cut into convex pieces no other face crosses, by the planes of the faces `near` it
+/// that cross it and the edges of those in its own plane; with those of its own plane.
+fn pieces_of(t: &Target, near: &[usize], all: &[Face<'_>]) -> (Vec<Polygon>, Vec<usize>) {
+    let mut cuts: BTreeSet<Plane> = BTreeSet::new();
+    let mut level: Vec<usize> = Vec::new();
+    for &j in near {
+        let Some((_, _, g)) = all.get(j) else {
+            continue;
+        };
+        if g.key == t.key {
+            level.push(j);
+            for (a, b) in edges(g.polygon.corners()) {
+                let normal = cross(&minus(b, a), t.plane.normal());
+                if !is_zero(&normal) {
+                    let offset = dot(&normal, a);
+                    cuts.insert(Plane { normal, offset }.canonical());
+                }
+            }
+            continue;
+        }
+        if crosses(t, g) {
+            cuts.insert(g.key.clone());
+        }
+    }
+    let mut pieces = vec![t.polygon.clone()];
+    for cut in &cuts {
+        let mut next = Vec::with_capacity(pieces.len());
+        for piece in pieces {
+            let across_cut: Vec<Ordering> = piece.corners().iter().map(|c| cut.side(c)).collect();
+            if across_cut.contains(&Ordering::Less) && across_cut.contains(&Ordering::Greater) {
+                let (low, high, _) = clip(&piece, cut);
+                next.extend(low);
+                next.extend(high);
+            } else {
+                next.push(piece);
+            }
+        }
+        pieces = next;
+    }
+    (pieces, level)
+}
+
+impl Solid {
+    /// The winding number of the solid's surface about `p`, a point on none of its faces, by a ray
+    /// in a slanted direction as [`Solid::locate`] casts it: each face crossed counts one, plus
+    /// where its normal points along the ray and minus where against it. `None` for a point on a
+    /// face. For a solid whose faces do not cross, it is 1 inside and 0 outside.
+    #[must_use]
+    pub fn winding(&self, p: &Point) -> Option<i64> {
+        if self.faces.iter().any(|face| face.holds(p)) {
+            return None;
+        }
+        for k in 1..u64::MAX {
+            let direction = [Q::ONE, ratio(1, 1009 + k), ratio(1, 2003 + 7 * k)];
+            if let Some(w) = self.ray_winding(p, &direction) {
+                return Some(w);
+            }
+        }
+        None
+    }
+
+    /// The signed count of faces the ray from `p` along `direction` crosses; `None` if it meets an
+    /// outline or lies in a face's plane.
+    fn ray_winding(&self, p: &Point, direction: &Point) -> Option<i64> {
+        let mut winding = 0_i64;
+        for face in &self.faces {
+            let plane = face.plane();
+            let slope = dot(plane.normal(), direction);
+            if slope == Q::ZERO {
+                if plane.side(p) == Ordering::Equal {
+                    return None;
+                }
+                continue;
+            }
+            let t = (&plane.offset - dot(plane.normal(), p)) / &slope;
+            if t <= Q::ZERO {
+                continue;
+            }
+            match face.locate_in_plane(&plus(p, &times(direction, &t))) {
+                Where::On => return None,
+                Where::In => winding += if slope > Q::ZERO { 1 } else { -1 },
+                Where::Out => {}
+            }
+        }
+        Some(winding)
+    }
 }
 
 /// A boolean operation.

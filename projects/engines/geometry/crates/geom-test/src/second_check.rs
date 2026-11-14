@@ -531,13 +531,17 @@ fn shared(r: &Read, f: &Plate, g: &Plate, x: &V3) -> bool {
     })
 }
 
-/// Whether any of `list` lies in both faces away from what they share.
+/// Whether any of `list`, points of both faces' planes, lies in both faces away from what they
+/// share. Each face is read in its own plane, dropping the coordinate its own normal is largest
+/// in: dropped along the other face's, a face square to it is a segment, which holds every point
+/// of its plane's line in that segment's shadow, in the face or not.
 fn any_crossing(r: &Read, f: &Plate, g: &Plate, list: &[V3]) -> Option<bool> {
-    let axis = largest(&f.n);
-    let (one, other) = (flats(&sides(r, f)?, axis), flats(&sides(r, g)?, axis));
+    let (fa, ga) = (largest(&f.n), largest(&g.n));
+    let (one, other) = (flats(&sides(r, f)?, fa), flats(&sides(r, g)?, ga));
     Some(list.iter().any(|x| {
-        let at = flat(x, axis);
-        locate(&one, &at) != Place::Out && locate(&other, &at) != Place::Out && !shared(r, f, g, x)
+        locate(&one, &flat(x, fa)) != Place::Out
+            && locate(&other, &flat(x, ga)) != Place::Out
+            && !shared(r, f, g, x)
     }))
 }
 

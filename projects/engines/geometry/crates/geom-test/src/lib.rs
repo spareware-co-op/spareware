@@ -153,6 +153,17 @@
 //!   and flat solids are `tests/catalogue`. Fixed seeds on pull requests, fresh ones nightly
 //!   (`kernel-nightly.yml`); the names row's digest is the golden `geom-test/names-on-every-target`.
 //!
+//! Gate 4 (piece G156) completes 11.17's polyhedral corpus and puts the second checker over it:
+//!
+//! - [`polyhedral`]: EMBER's figures 24 and 25 as generated boxes, and Manifold's regression
+//!   models (the stored corpus `manifold-models`) read onto the grid by [`obj`], a test-only OBJ
+//!   reader with exact decimal-to-grid rounding; `tests/corpus_polyhedral.rs` holds every result
+//!   to [`flat_reference`] and the unit-cell count, with exact transforms, and its digest is the
+//!   golden `geom-test/polyhedral-corpus`.
+//! - [`agree`]: both checkers on one body, `geom-check`'s and [`second_check`], and whether they
+//!   find the same rules broken; the law catalogue's bodies, the scenarios and the corpus go
+//!   through it.
+//!
 //! The other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
@@ -259,6 +270,7 @@
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
+pub mod agree;
 pub mod canonical;
 pub mod completeness;
 pub mod contract;
@@ -282,8 +294,10 @@ pub mod museum;
 pub mod mutants;
 pub mod naming;
 pub mod nurbs_reference;
+pub mod obj;
 pub mod oracle;
 pub mod plane_bodies;
+pub mod polyhedral;
 pub mod prop;
 pub mod quality_ledger;
 pub mod recursion;
