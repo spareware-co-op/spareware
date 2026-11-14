@@ -21,7 +21,8 @@ name: Kernel fuzzing and proofs
 #   campaign (G26).
 # - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
 #   with cargo-bolero's build-clusterfuzz command, and ClusterFuzzLite fuzzes them in turn
-#   (code-change mode, address sanitizer). OSS-Fuzz's build check cannot read the start-up
+#   (code-change mode, address sanitizer), a quarter of the targets in each of four jobs (the
+#   job's comment says why). OSS-Fuzz's build check cannot read the start-up
 #   scripts cargo-bolero packs, so it is turned off here and build.sh makes the same checks on the
 #   binaries they start. A second job, clusterfuzzlite-seeded, runs ClusterFuzzLite's own images on
 #   the checkout with a crash planted (gate 1, G43; .clusterfuzzlite/seeded.sh), and must see it
@@ -609,12 +610,25 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
+  # Shards: run_fuzzers fuzzes every target it finds in build-out in turn, and before each one it
+  # looks for the target's corpus among the repository's artifacts, a listing of every artifact
+  # the repository holds (about 71 seconds each at 15,000 artifacts, on run 43548399796, and
+  # growing with them). fuzz-seconds is the job's total, shared evenly among its targets. One job
+  # of 35 targets took 18 minutes to build and 81 seconds a target, past its hour. So each of four
+  # jobs builds every target, keeps a quarter of them in build-out (sorted by name, every fourth
+  # from the job's index) and gives them the whole fuzz-seconds: every target is fuzzed in one job,
+  # for longer than the one job gave it. geom-test's tests/attack_g43.rs runs the step below for
+  # every shard and holds it to that.
   clusterfuzzlite:
-    name: ClusterFuzzLite (address sanitizer)
+    name: ClusterFuzzLite (address sanitizer, shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     needs: cheap
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Build the fuzz targets
         id: build
@@ -624,6 +638,33 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           sanitizer: address
           bad-build-check: false
+      # The action's container wrote build-out as root, so the runner's user removes through sudo.
+      - name: Keep this shard's targets
+        shell: bash
+        env:
+          SHARD: ${{ strategy.job-index }}
+          SHARDS: ${{ strategy.job-total }}
+        run: |
+          out="$GITHUB_WORKSPACE/build-out"
+          mapfile -t targets < <(find "$out" -type f -name '*_fuzz_fuzzer' -printf '%f\t%p\n' | sort)
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No target was built in $out" >&2
+            exit 1
+          fi
+          kept=()
+          for i in "${!targets[@]}"; do
+            path="${targets[$i]#*$'\t'}"
+            if [ $((i % SHARDS)) -eq "$SHARD" ]; then
+              kept+=("$(basename "$path")")
+            else
+              sudo rm -f -- "$path" "${path}_seed_corpus.zip"
+            fi
+          done
+          if [ "${#kept[@]}" -eq 0 ]; then
+            echo "Shard $((SHARD + 1)) of $SHARDS keeps none of the ${#targets[@]} targets" >&2
+            exit 1
+          fi
+          echo "Shard $((SHARD + 1)) of $SHARDS fuzzes ${#kept[@]} of the ${#targets[@]} targets: ${kept[*]}"
       - name: Fuzz the targets
         id: run
         uses: google/clusterfuzzlite/actions/run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c # main, 2026-02-12 (v1 and two documentation changes)
@@ -636,7 +677,7 @@ jobs:
         if: failure() && steps.build.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: clusterfuzzlite-artifacts
+          name: clusterfuzzlite-artifacts-${{ matrix.shard }}
           path: ./out/artifacts
           if-no-files-found: ignore
 

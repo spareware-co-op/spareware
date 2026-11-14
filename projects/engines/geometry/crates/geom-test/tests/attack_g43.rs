@@ -25,6 +25,10 @@
 //!   once it is, no CI run may be pending and no row open.
 //! - `the_thread_counts_are_the_boards`: `geom_test::golden::THREAD_COUNTS` is the done-when's
 //!   "1, 2, 3 and 8 threads", and every test the record cites for them reaches it.
+//! - `every_target_is_fuzzed_by_one_clusterfuzzlite_shard`: the `clusterfuzzlite` job's shards,
+//!   numbered 1 to n, each keep their share of the targets between the build and the run; its
+//!   step, run in bash for each shard (on Linux) over a build-out of every target, leaves each
+//!   target with its seed corpus to exactly one shard.
 //!
 //! Each check is also shown to fail on a seeded violation.
 
@@ -1031,5 +1035,238 @@ fn the_thread_counts_are_the_boards() {
         thread_problems(&record, &board, THREAD_COUNTS, &own_list)
             .iter()
             .any(|p| p.contains("does not run THREAD_COUNTS"))
+    );
+}
+
+/// The `clusterfuzzlite` job's step that leaves each of its shards its share of the targets.
+const SHARD_STEP: &str = "Keep this shard's targets";
+
+/// The `ClusterFuzzLite` action a step uses (`build_fuzzers`, `run_fuzzers`), if it uses one.
+fn clusterfuzzlite_action(step: &Yaml) -> Option<&str> {
+    step["uses"]
+        .as_str()
+        .and_then(|u| u.strip_prefix(CLUSTERFUZZLITE))
+        .and_then(|a| a.split('@').next())
+}
+
+/// A step's `env` value in the job of index `index` of `total` and matrix shard `shard`, as GitHub
+/// evaluates it: the strategy's index and total and the matrix's shard; other text as written.
+fn evaluated(value: &str, index: usize, total: usize, shard: &str) -> String {
+    match value.trim() {
+        "${{ strategy.job-index }}" => index.to_string(),
+        "${{ strategy.job-total }}" => total.to_string(),
+        "${{ matrix.shard }}" => shard.to_owned(),
+        other => other.to_owned(),
+    }
+}
+
+/// The build-out folder of a target, as `.clusterfuzzlite/build.sh` names it: the test binary's
+/// name and cargo's hashes.
+fn target_folder(out: &Path, target: &str) -> PathBuf {
+    out.join(format!(
+        "{}-0123456789abcdef-fedcba9876543210",
+        target.trim_end_matches("_fuzz")
+    ))
+}
+
+/// Runs the shard step's `script` as the job of index `index` of `total` would, in bash with
+/// GitHub's options for `shell: bash`, on a build-out in `workspace` holding every target's
+/// start-up script, seed corpus and binary. `sudo` is a function that runs its command, as the
+/// runner's passwordless sudo does. The targets whose script is left, or why the step failed.
+fn run_shard(
+    step: &Yaml,
+    script: &str,
+    targets: &[String],
+    workspace: &Path,
+    (index, total, shard): (usize, usize, &str),
+) -> Result<Vec<String>, String> {
+    let _ = std::fs::remove_dir_all(workspace);
+    let out = workspace.join("build-out");
+    for t in targets {
+        let dir = target_folder(&out, t);
+        std::fs::create_dir_all(&dir).unwrap();
+        for file in [
+            format!("{t}_fuzzer"),
+            format!("{t}_fuzzer_seed_corpus.zip"),
+            format!("{}.cargo", t.trim_end_matches("_fuzz")),
+        ] {
+            std::fs::write(dir.join(file), "").unwrap();
+        }
+    }
+    let mut command = std::process::Command::new("bash");
+    command
+        .args(["--noprofile", "--norc", "-eo", "pipefail", "-c"])
+        .arg(format!("sudo() {{ \"$@\"; }}\n{script}"))
+        .env("GITHUB_WORKSPACE", workspace);
+    for (key, value) in step["env"].as_hash().into_iter().flatten() {
+        let value = match value {
+            Yaml::String(s) => s.clone(),
+            Yaml::Integer(i) => i.to_string(),
+            other => format!("{other:?}"),
+        };
+        if let Some(key) = key.as_str() {
+            command.env(key, evaluated(&value, index, total, shard));
+        }
+    }
+    let output = command.output().expect("bash runs");
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
+    }
+    let mut kept = Vec::new();
+    for t in targets {
+        let dir = target_folder(&out, t);
+        let script_left = dir.join(format!("{t}_fuzzer")).exists();
+        let corpus_left = dir.join(format!("{t}_fuzzer_seed_corpus.zip")).exists();
+        if script_left != corpus_left {
+            return Err(format!(
+                "it leaves {t}'s start-up script ({script_left}) and seed corpus ({corpus_left}) \
+                 apart"
+            ));
+        }
+        if script_left {
+            kept.push(t.clone());
+        }
+    }
+    Ok(kept)
+}
+
+/// What is wrong with the `clusterfuzzlite` job's shards: its matrix numbers them 1 to n; its shard
+/// step runs between `build_fuzzers` and `run_fuzzers`, in bash, with no expression GitHub would
+/// write into the script; and run for each of the n jobs on a build-out of every target (the
+/// libFuzzer matrix's, which `geom-fuzz`'s `tests/attack_g14.rs` holds to the targets), it leaves
+/// each target, with its seed corpus, to exactly one job. `scratch` is a folder it may fill.
+fn shard_problems(workflow: &str, scratch: &Path) -> Vec<String> {
+    let w = parse(workflow);
+    let job = &w["jobs"]["clusterfuzzlite"];
+    let shards: Vec<String> = job["strategy"]["matrix"]["shard"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .map(|v| match v {
+            Yaml::Integer(i) => i.to_string(),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    let numbered: Vec<String> = (1..=shards.len()).map(|i| i.to_string()).collect();
+    if shards.is_empty() || shards != numbered {
+        return vec![format!("the job's shards are {shards:?}, not 1 to n")];
+    }
+    let steps = job["steps"].as_vec().cloned().unwrap_or_default();
+    let build = steps
+        .iter()
+        .position(|s| clusterfuzzlite_action(s) == Some("build_fuzzers"));
+    let run = steps
+        .iter()
+        .position(|s| clusterfuzzlite_action(s) == Some("run_fuzzers"));
+    let at = steps
+        .iter()
+        .position(|s| s["name"].as_str() == Some(SHARD_STEP));
+    let (Some(build), Some(at), Some(run)) = (build, at, run) else {
+        return vec![format!(
+            "the job has no build_fuzzers, `{SHARD_STEP}` or run_fuzzers step"
+        )];
+    };
+    let mut found = Vec::new();
+    if !(build < at && at < run) {
+        found.push(format!(
+            "`{SHARD_STEP}` does not run between build_fuzzers and run_fuzzers"
+        ));
+    }
+    let step = &steps[at];
+    if step["shell"].as_str() != Some("bash") {
+        found.push(format!("`{SHARD_STEP}` does not run in bash"));
+    }
+    let script = step["run"].as_str().unwrap_or_default();
+    if script.contains("${{") {
+        found.push(format!(
+            "`{SHARD_STEP}` has an expression GitHub would write into its script; pass it in env"
+        ));
+    }
+    let targets = matrix_values(&w["jobs"]["libfuzzer"], "target");
+    let total = shards.len();
+    let mut fuzzed: BTreeMap<&str, usize> = targets.iter().map(|t| (t.as_str(), 0)).collect();
+    for (index, shard) in shards.iter().enumerate() {
+        let workspace = scratch.join(format!("shard-{shard}"));
+        match run_shard(step, script, &targets, &workspace, (index, total, shard)) {
+            Ok(kept) => {
+                for t in &kept {
+                    *fuzzed.get_mut(t.as_str()).unwrap() += 1;
+                }
+            }
+            Err(why) => found.push(format!("shard {shard} of {total} fails: {why}")),
+        }
+    }
+    for (target, count) in fuzzed {
+        if count != 1 {
+            found.push(format!(
+                "{target} is fuzzed by {count} of the {total} shards, not one"
+            ));
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    not(target_os = "linux"),
+    ignore = "runs the workflow step's script in bash, with GNU find, as the Ubuntu runner does"
+)]
+#[test]
+fn every_target_is_fuzzed_by_one_clusterfuzzlite_shard() {
+    let workflow = read(&format!("{WORKFLOWS}/kernel-fuzz.yml"));
+    let scratch = Path::new(env!("CARGO_TARGET_TMPDIR")).join("attack-g43-shards");
+    let found = shard_problems(&workflow, &scratch.join("as-written"));
+    assert!(found.is_empty(), "{found:#?}");
+
+    // Seeded: each edit must be reported.
+    let seeded = |label: &str, from: &str, to: &str, expect: &str| {
+        let edited = workflow.replacen(from, to, 1);
+        assert_ne!(edited, workflow, "the seeded edit {label} applies");
+        let found = shard_problems(&edited, &scratch.join(label));
+        assert!(
+            found.iter().any(|p| p.contains(expect)),
+            "{label}: {found:#?}"
+        );
+    };
+    // The shard numbered from the matrix's 1 instead of the strategy's 0: the first shard's
+    // targets are fuzzed by none.
+    seeded(
+        "matrix-index",
+        "SHARD: ${{ strategy.job-index }}",
+        "SHARD: ${{ matrix.shard }}",
+        "fuzzed by 0 of the",
+    );
+    // The count written down, one short of the matrix: the last shard keeps nothing.
+    seeded(
+        "fixed-total",
+        "SHARDS: ${{ strategy.job-total }}",
+        "SHARDS: 3",
+        "keeps none",
+    );
+    // The test inverted: each target is fuzzed by every shard but one.
+    seeded(
+        "inverted",
+        "-eq \"$SHARD\" ]",
+        "-ne \"$SHARD\" ]",
+        "not one",
+    );
+    // The seed corpus left behind for a target the shard drops.
+    seeded(
+        "corpus-kept",
+        "sudo rm -f -- \"$path\" \"${path}_seed_corpus.zip\"",
+        "sudo rm -f -- \"$path\"",
+        "apart",
+    );
+    // A shard missing from the matrix, and the step gone.
+    seeded(
+        "gap",
+        "shard: [1, 2, 3, 4]",
+        "shard: [1, 2, 4]",
+        "not 1 to n",
+    );
+    seeded(
+        "no-step",
+        &format!("name: {SHARD_STEP}"),
+        "name: Keep every target",
+        "has no build_fuzzers",
     );
 }
