@@ -8653,6 +8653,14 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace > with >= in flat_surface",
+      "line_text": "if here.unsigned_abs() > best.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when two of the normal's coordinates are largest in size together (z = x + 50 has normal (1, 0, -1)): the mutant then takes the later axis as k, the original the earlier. Both nk have the same size, so d divides by either or by neither, c lies as far along either axis, and the other two coordinates are the same numbers in another order, so every test that returns None agrees. Either way the surface holds the same plane exactly, so the closed forms meet the same plane and give the same curves, only parameterised from another point of it; no rule of the piece picks one axis of a tie over the other."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
       "mutant": "replace > with >= in near_point",
       "line_text": "if w > reach {",
       "occurrences": 1,
