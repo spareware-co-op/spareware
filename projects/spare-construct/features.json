@@ -1135,7 +1135,7 @@
        "kind": "research",
        "size": "small",
        "depends_on": [],
-       "piece": null
+       "piece": "A21"
       }
      ]
     },
@@ -3075,7 +3075,8 @@
        "kind": "library",
        "size": "small",
        "depends_on": [
-        "CON-A8-F1-P1"
+        "CON-A8-F1-P1",
+        "CON-A8-F1-P8"
        ],
        "piece": null
       },
@@ -3134,6 +3135,15 @@
         "CON-A7-F1-P4"
        ],
        "piece": null
+      },
+      {
+       "id": "CON-A8-F1-P8",
+       "name": "View range decision",
+       "what": "A decision note on matching Revit's view range (top, cut plane, bottom, view depth) or a simpler model, which fixes the planes passed to the drawing engine and what each plan view stores.",
+       "kind": "research",
+       "size": "small",
+       "depends_on": [],
+       "piece": "A22"
       }
      ]
     },
@@ -3353,6 +3363,15 @@
         "CON-A8-F4-P1"
        ],
        "piece": null
+      },
+      {
+       "id": "CON-A8-F4-P5",
+       "name": "Stand-in 3D view",
+       "what": "The app's three.js view, kept until the renderer is ready, drawing one instanced mesh per element type rather than one mesh per element.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [],
+       "piece": "A20"
       }
      ]
     },
@@ -9077,6 +9096,28 @@
        "size": "small",
        "depends_on": [],
        "piece": null
+      },
+      {
+       "id": "CON-A24-F7-P3",
+       "name": "Program agent guide",
+       "what": "Spare Construct's own AGENTS.md: what to read first, what each crate, the server and the app own, the commands that build and test each, and the program's rules, on top of the repo-wide one.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "CON-A24-F7-P1"
+       ],
+       "piece": "A18"
+      },
+      {
+       "id": "CON-A24-F7-P4",
+       "name": "Never-crash lints",
+       "what": "The geometry kernel's lint tables in every Spare Construct crate and the server: no unwrap, expect, panic, unchecked indexing, unchecked arithmetic or lossy casts outside tests, denied in CI.",
+       "kind": "service",
+       "size": "medium",
+       "depends_on": [
+        "CON-A24-F7-P1"
+       ],
+       "piece": "A19"
       }
      ]
     }
