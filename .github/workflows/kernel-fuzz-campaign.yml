@@ -1,57 +1,20 @@
 name: Kernel fuzz campaign
 
-# Long libFuzzer campaigns on the geometry kernel's fuzz targets (kernel architecture, chapter
-# 28.5), each target under libFuzzer with coverage instrumentation and the address sanitizer. Each
-# shard is its own libFuzzer process with its own random seed, the way OSS-Fuzz counts fuzzing
-# time. A crash fails its shard and its input is uploaded; put the file in
-# projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/<target>/crashes and `cargo test`
-# replays it forever (28.16). Each shard also uploads the corpus it grew, the record of what it
-# covered.
-#
-# When it runs, and what:
-#
-# - Every night (28.17, "hours of fuzzing per target"; piece G10): every target for five hours,
-#   one shard each. The targets are kernel-fuzz.yml's libFuzzer matrix (geom-test's
-#   tests/attack_g10.rs holds the two lists equal).
-# - On a release tag, called by kernel-release.yml: the same as a night.
-# - On demand: the board's G26 asks for the wide integers' differential fuzzing against a
-#   big-integer oracle "for 24 hours clean", so `wide_fuzz` (geom-fuzz's `wide` target, the wide
-#   integers against num-bigint at every width) runs in five shards of five hours each, 25 CPU
-#   hours in all: on a pull request when someone adds the label `fuzz-campaign` (a pull request's
-#   own copy of this file runs, so a campaign can run before the file reaches main), and by hand
-#   from the Actions tab (workflow_dispatch), on any branch, once this file is on main.
-# - By hand, the whole set: a dispatch with `targets` set to `all` runs what a night runs, every
-#   target in one shard, on the head of the branch or tag it is started on. A gate that needs its
-#   campaign on one commit starts it there and does not wait for the night's run:
-#   `gh workflow run kernel-fuzz-campaign.yml --ref <branch or tag> -f targets=all`. `hours`
-#   (default 5) shortens every shard of a dispatched run, for a trial. A dispatched run's name in
-#   the run list says which targets it fuzzed, for how long, and on which commit; every other
-#   run keeps the name GitHub gives it.
-#
-# Never on an ordinary push. kernel-fuzz.yml keeps the minute of libFuzzer every pull request gets.
-# The machines are GitHub's hosted runners, free for a public repository (decision 32.4), until
-# OSS-Fuzz accepts the project.
-#
-# Pins: as kernel-fuzz.yml's, which this file repeats: the workspace's compiler, the dated nightly
-# for libFuzzer's flags, cargo-bolero's exact version from its published lockfile, every action
-# pinned to a full commit; Cargo.lock is held to the reviewed one before anything builds.
+# Measurement only, on a throwaway branch (never merged): the offset fuzz targets' per-input times
+# on a hosted runner at the budgets of fix/offset-budgets. For each of curve_offsets_fuzz and
+# surface_offsets_fuzz it builds the libFuzzer target exactly as the campaign does (cargo-bolero,
+# the dated nightly, address sanitizer and coverage), runs it on every stored curves or surfaces
+# input one file at a time (libFuzzer prints "Executed <file> in <n> ms"), then fuzzes it for the
+# hours asked, seeded with the same inputs, with the campaign's 10 s limit and slow units of 3 s
+# or more reported.
 
-# A run started by hand says what it fuzzed. The other two names are GitHub's own defaults: a
-# pull request's title, and this workflow's name for a scheduled run (a called run has its
-# caller's name).
-run-name: >-
-  ${{ github.event_name == 'workflow_dispatch'
-  && format('Kernel fuzz campaign by hand: {0}, {1} h a shard, on {2}', inputs.targets == 'all' && 'all targets' || 'wide_fuzz in five shards', inputs.hours || '5', github.sha)
-  || github.event.pull_request.title
-  || 'Kernel fuzz campaign' }}
+run-name: "Offset budgets measurement, ${{ inputs.hours || '1' }} h of fuzzing, on ${{ github.sha }}"
 
 on:
-  pull_request:
-    types: [labeled]
   workflow_dispatch:
     inputs:
       targets:
-        description: "wide: wide_fuzz in five shards (G26). all: every target in one shard, as a night runs"
+        description: "ignored here"
         required: false
         default: wide
         type: choice
@@ -59,9 +22,9 @@ on:
           - wide
           - all
       hours:
-        description: "Hours of fuzzing in each shard (a hosted job may run six hours, so five at most)"
+        description: "Hours of fuzzing after the replay"
         required: false
-        default: "5"
+        default: "1"
         type: choice
         options:
           - "5"
@@ -69,58 +32,33 @@ on:
           - "3"
           - "2"
           - "1"
-  schedule:
-    # Every night at 12:47 UTC, before the nightly predicate suite (kernel-nightly.yml).
-    - cron: "47 12 * * *"
-  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
-  workflow_call:
 
 permissions:
   contents: read
 
-# Runs of one kind on one ref queue behind each other, and none is cancelled once it has started.
-# The kinds are apart, so a run started by hand never waits behind the night's run on the same
-# branch, and the night's run never waits behind it. Every run started by hand is a group of its
-# own: GitHub keeps only the newest waiting run of a group and cancels the others, which would
-# lose a campaign someone asked for.
 concurrency:
-  group: kernel-fuzz-campaign-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event_name }}
+  group: offset-budgets-measure-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
-  # The workspace's pinned compiler (rust-toolchain.toml), for building the tools.
   RUST_TOOLCHAIN: "1.99.0"
-  # The nightly compiler cargo-bolero builds libFuzzer targets with (sanitizer flags are
-  # nightly-only), as in kernel-fuzz.yml.
   FUZZ_NIGHTLY: nightly-2026-10-01
   CARGO_BOLERO_VERSION: 0.13.5
 
 jobs:
-  campaign:
-    name: ${{ matrix.target }} under libFuzzer for ${{ (inputs.hours || '5') == '5' && 'five hours' || format('{0} h', inputs.hours) }} (shard ${{ matrix.shard }})
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      || github.event_name == 'schedule'
-      || github.event.label.name == 'fuzz-campaign'
-      || startsWith(github.ref, 'refs/tags/geom-v')
+  measure:
+    name: ${{ matrix.target }}, replay and fuzz
     runs-on: ubuntu-latest
-    # The six hours a hosted job may run, the most GitHub allows. The fuzz step has its own limit
-    # of 330 minutes (below), so a step that overruns still leaves 30 minutes for the uploads.
-    # On the night of 2026-11-12 (run 43221765733) the slowest shard, variants_fuzz built from a
-    # cold cache, ended every step clean 308 minutes in, 22 inside the old job limit of 330, but
-    # GitHub did not record the job as done until that limit passed and then cancelled it, so a
-    # clean night counted as not clean. This limit stands 52 minutes past that shard's work.
     timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
-        # Nightly, on a release and by hand with `targets: all`: every target, one shard each.
-        # Otherwise on demand: wide_fuzz in five. Both lines choose by the same condition.
-        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '["arenas_fuzz", "attributes_fuzz", "batch_fuzz", "bodies_fuzz", "boxtree_fuzz", "cache_fuzz", "cbor_fuzz", "contract_fuzz", "curve_offsets_fuzz", "curves_fuzz", "encoder_fuzz", "euler_fuzz", "linalg_fuzz", "make_fuzz", "maths_fuzz", "names_fuzz", "naming_fuzz", "nurbs_fuzz", "open_fuzz", "operations_fuzz", "orient2d_fuzz", "p21_fuzz", "predicates_fuzz", "prune_fuzz", "records_fuzz", "references_fuzz", "roots_fuzz", "sequence_fuzz", "surface_offsets_fuzz", "surfaces_fuzz", "transforms_fuzz", "variants_fuzz", "wide_fuzz"]' || '["wide_fuzz"]') }}
-        shard: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '[1]' || '[1, 2, 3, 4, 5]') }}
+        target: [curve_offsets_fuzz, surface_offsets_fuzz]
     defaults:
       run:
         shell: bash
+    env:
+      TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,42 +70,63 @@ jobs:
         run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: false
       - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
         run: >-
           cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
           --no-default-features --features libfuzzer
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
-      # --timeout: an input that runs for ten seconds stops the shard, which fails, and libFuzzer
-      # saves it as timeout-<sha1> beside the crash files, which the next step uploads. A timeout
-      # file is a slow or hung input, not a broken law: find why it is slow rather than add it to
-      # the crash files, where `cargo test` would replay it every time. libFuzzer enforces the
-      # limit only on the thread it fuzzes on, which under the test harness is not the one its
-      # timer signals, so geom-fuzz's tests signal that thread themselves (tests/common/mod.rs,
-      # issue #764); before that the limit never fired.
-      - name: Fuzz ${{ matrix.target }} with libFuzzer for ${{ (inputs.hours || '5') == '5' && 'five hours' || format('{0} h', inputs.hours) }}
-        # Five hours of fuzzing at most and 30 minutes to build the target first: a cold build
-        # took 6 min 41 s on 2026-11-12, and the slowest step 307 minutes in all, 23 inside this.
-        timeout-minutes: 330
-        env:
-          HOURS: ${{ inputs.hours || '5' }}
-        run: >-
-          cargo bolero test "${{ matrix.target }}" --package geom-fuzz
-          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T "$((HOURS * 3600))s" --timeout 10s
-      - name: Upload the crashing input
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: campaign-crashes-${{ matrix.target }}-shard-${{ matrix.shard }}
-          path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/crashes/
-          if-no-files-found: ignore
-      - name: Upload the corpus the shard grew
+      - name: Build the target and fuzz it one second
+        run: |
+          touch "$RUNNER_TEMP/stamp"
+          cargo bolero test "$TARGET" --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 1s --timeout 30s
+          find target -type f -executable -newer "$RUNNER_TEMP/stamp" -name "${TARGET%_fuzz}-*" -printf '%s %p\n'
+          nproc; grep -m1 "model name" /proc/cpuinfo
+      - name: Replay every stored input, one file at a time
+        run: |
+          name="${TARGET%_fuzz}"
+          exe=$(find target -type f -executable -newer "$RUNNER_TEMP/stamp" -name "${name}-*" | head -1)
+          echo "binary: $exe"
+          dir="measure/inputs/$name"
+          out="$RUNNER_TEMP/times.txt"
+          : > "$out"
+          ls "$dir" | split -l 200 - "$RUNNER_TEMP/chunk."
+          for c in "$RUNNER_TEMP"/chunk.*; do
+            files=$(sed "s|^|$dir/|" "$c" | paste -sd ' ')
+            BOLERO_TEST_NAME="$TARGET" BOLERO_LIBTEST_HARNESS=1 \
+              BOLERO_LIBFUZZER_ARGS="-timeout=0 -rss_limit_mb=0 $files" \
+              "$exe" "$TARGET" --exact --nocapture --quiet --test-threads 1 2>&1 \
+              | grep -E '^Executed|ERROR|panicked|deadly|SUMMARY' >> "$out" || true
+          done
+          echo "inputs: $(ls "$dir" | wc -l), executed: $(grep -c '^Executed' "$out")"
+          grep -vE '^Executed' "$out" | head -40 || true
+          echo "slowest 30 (ms):"
+          grep '^Executed' "$out" | sort -k4,4 -n -r | head -30
+          grep '^Executed' "$out" | awk '{s+=$4; if ($4>=1000) n1++; if ($4>=2000) n2++; if ($4>=3000) n3++; if ($4>=4000) n4++} END {printf "total %d ms; at least 1 s: %d, 2 s: %d, 3 s: %d, 4 s: %d\n", s, n1, n2, n3, n4}'
+          cp "$out" "times-$name.txt"
+      - name: Upload the times
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: campaign-corpus-${{ matrix.target }}-shard-${{ matrix.shard }}
-          path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/corpus/
+          name: times-${{ matrix.target }}
+          path: times-*.txt
+          if-no-files-found: ignore
+      - name: Fuzz the target for the hours asked, seeded with the stored inputs
+        timeout-minutes: 330
+        env:
+          HOURS: ${{ inputs.hours || '1' }}
+        run: |
+          name="${TARGET%_fuzz}"
+          mkdir -p "$RUNNER_TEMP/seed"
+          cp "measure/inputs/$name"/* "$RUNNER_TEMP/seed/"
+          cargo bolero test "$TARGET" --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer \
+            -T "$((HOURS * 3600))s" --timeout 10s --corpus-dir "$RUNNER_TEMP/seed" \
+            --engine-args=-report_slow_units=3
+      - name: Upload slow units and crashing inputs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: slow-${{ matrix.target }}
+          path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/crashes/
           if-no-files-found: ignore
