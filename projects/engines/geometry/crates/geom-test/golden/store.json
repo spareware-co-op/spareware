@@ -688,7 +688,15 @@
             "test": "determinism",
             "function": "replay_corpus_golden"
           },
-          "sha256": "742f10a75747ba3c3181572802a374545b6b27194162608d37bd8c5ccf240d30"
+          "sha256": "643f66ef93012eaa71bba74004b70dca3910ebb20dc4cb10014aac5108affc66",
+          "history": [
+            {
+              "sha256": "742f10a75747ba3c3181572802a374545b6b27194162608d37bd8c5ccf240d30",
+              "kind": "corpus",
+              "piece": "G154",
+              "why": "Four new stored fixtures, geom-test/fixtures/meshes/0001 to 0004, the triage records of Manifold's first four mesh differences (chapter 28.10); no existing fixture or log moved."
+            }
+          ]
         },
         {
           "id": "geom-test/museum",

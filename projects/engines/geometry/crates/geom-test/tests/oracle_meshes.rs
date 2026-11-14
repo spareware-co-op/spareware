@@ -199,6 +199,82 @@ fn a_refusal_is_a_difference() {
     );
 }
 
+/// One of Manifold's first answers that differed, with its job and night.
+#[derive(serde::Deserialize)]
+struct Night {
+    run: String,
+    job: Job,
+    answer: Answer,
+}
+
+/// Manifold's answers to the four jobs of its first nights that differed (chapter 28.10): job 742
+/// of run 43542140594, 1623 of run 43548038439, and 1763 and 1891 of run 43548473272. Each was
+/// measured against the export's triangles of the kernel's result, whose corners are rounded to
+/// the grid: on 1763 they folded, and the other three will not triangulate.
+fn first_nights() -> Vec<Night> {
+    include_str!("oracle_meshes/manifold.jsonl")
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+#[test]
+fn manifolds_first_differences_were_the_rounding_of_our_measure() {
+    let nights = first_nights();
+    let ids: Vec<u64> = nights.iter().map(|n| n.job.id).collect();
+    assert_eq!(ids, [742, 1623, 1763, 1891]);
+    for night in &nights {
+        let job = &night.job;
+        // The kernel's exact volume is the reference's, and Manifold's answer, measured from the
+        // kernel's exact faces, agrees with it.
+        assert_eq!(
+            volume(&run(job).unwrap()).unwrap(),
+            reference(job).unwrap(),
+            "job {}",
+            job.id
+        );
+        assert_eq!(
+            judge(MANIFOLD, job, &night.answer).unwrap(),
+            Compared::Agree,
+            "job {} of run {}",
+            job.id,
+            night.run
+        );
+        // An exact oracle needs only the volume, so it agrees with the right one too.
+        let exact = Answer {
+            id: job.id,
+            volume: Some(own_volume(job).unwrap()),
+            ..Answer::default()
+        };
+        assert_eq!(judge(CGAL, job, &exact).unwrap(), Compared::Agree);
+    }
+    // The export still refuses the three whose rounded sides cross, and covers 1763's faces.
+    let refused: Vec<u64> = nights
+        .iter()
+        .filter(|n| own_answer(&n.job).is_err())
+        .map(|n| n.job.id)
+        .collect();
+    assert_eq!(refused, [742, 1623, 1891]);
+}
+
+#[test]
+fn an_answer_off_the_exact_faces_is_a_hausdorff_difference() {
+    // Job 1763 with one of Manifold's corners moved far off, its volume ours and its stated
+    // tolerance a step: the volume and area pass, so the distance from the exact faces must catch
+    // it.
+    let night = first_nights().swap_remove(2);
+    let mut moved = night.answer.clone();
+    let triangles = moved.triangles.as_mut().unwrap();
+    let x: f64 = triangles[0][1][0].parse().unwrap();
+    triangles[0][1][0] = float(x + 30.0).unwrap();
+    moved.tolerance = Some(float(1.0).unwrap());
+    let ours = volume(&run(&night.job).unwrap()).unwrap();
+    moved.volume = Some(float(ours.to_f64().value()).unwrap());
+    let (kind, settled) = kind_and_settled(judge(MANIFOLD, &night.job, &moved).unwrap());
+    assert_eq!(kind, "hausdorff");
+    assert!(settled.starts_with("theirs"), "{settled}");
+}
+
 #[test]
 fn a_broken_harness_is_never_a_pass() {
     let job = overlapping();
