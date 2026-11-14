@@ -1,8 +1,9 @@
 //! Settings. Moving from one free server to three paid ones changes these and no code:
-//! STACK_PD lists three addresses, and STACK_FILES_URL names S3 or Google Cloud Storage.
+//! `STACK_PD` lists three addresses, and `STACK_FILES_URL` names S3 or Google Cloud Storage.
 
 use clap::Args;
 
+/// The server's settings, from its command line or its environment.
 #[derive(Args, Clone, Debug)]
 pub struct Settings {
     /// Where this server listens.
@@ -23,7 +24,7 @@ pub struct Settings {
         value_delimiter = ','
     )]
     pub pd: Vec<String>,
-    /// Where files go: s3://bucket, gs://bucket or file:///path.
+    /// Where files go: `s3://bucket`, `gs://bucket` or `file:///path`.
     #[arg(long, env = "STACK_FILES_URL", default_value = "s3://spare-files")]
     pub files_url: String,
     /// Where backups go, best somewhere other than this server.
@@ -36,8 +37,10 @@ pub struct Settings {
         default_value = "https://accounts.google.com"
     )]
     pub oidc_issuer: String,
+    /// This server's client ID at the sign-in provider.
     #[arg(long, env = "OIDC_CLIENT_ID", default_value = "")]
     pub oidc_client_id: String,
+    /// This server's client secret at the sign-in provider.
     #[arg(long, env = "OIDC_CLIENT_SECRET", default_value = "")]
     pub oidc_client_secret: String,
     /// Maps people to the addresses that sign in as them: anna=someone@gmail.com,dan=...

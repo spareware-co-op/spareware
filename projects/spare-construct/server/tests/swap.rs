@@ -3,6 +3,23 @@
 //! few lines more than the normal setup. Then the stores are compared: the data layout and the edit
 //! log are identical, and only the shapes differ.
 
+// The server denies these outside tests (Cargo.toml). Tests may use them, as the geometry kernel's
+// do: clippy.toml's allow-*-in-tests settings don't reach helpers outside `#[test]` functions, and
+// a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    reason = "tests; the rules are for the server's own code"
+)]
+
 mod support;
 
 use construct_model::geometry::{
@@ -185,7 +202,10 @@ async fn a_second_generator_runs_the_whole_server_and_changes_only_the_shapes() 
 #[test]
 fn only_the_regen_crate_knows_the_stand_in() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
-    let mut files = vec![format!("{root}/app/connect.js")];
+    let mut files = vec![
+        format!("{root}/app/connect.js"),
+        format!("{root}/app/view3d.js"),
+    ];
     for folder in [
         "server/src",
         "crates/construct-api/src/cloud",

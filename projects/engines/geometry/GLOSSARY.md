@@ -727,10 +727,6 @@ How to read an entry:
 
 ## P
 
-**Patent register** (also: `PATENTS.md`): The planned record of every known patent and every family's patent search status (29.17; piece G115). Not kept: the owner closed it on 2026-11-13 (32.49).
-
-**Patent search**: A recorded search for patents that may cover a method, reviewed by an owner (29.17; owner actions G73 and G74). None is made: the owner decided on 2026-11-13 that no family waits for one (32.49).
-
 **Pave block**: In a boolean, the piece of an edge between two neighbouring paves, the points where something touches it (11.4).
 
 **Payload cap**: The largest payload one native record may hold, 64 MiB by the proposal (24.2).

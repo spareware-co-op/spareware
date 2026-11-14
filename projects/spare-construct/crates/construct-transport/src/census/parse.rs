@@ -5,7 +5,7 @@ use super::geo::{Poly, Ring, rings_of};
 use crate::jsnum::{js_trim, number_to_js_string, value_to_js_string, value_to_number, value_truthy};
 use serde_json::{Map, Value, json};
 
-/// One downloaded ArcGIS layer: its field list (from `?f=json`) and its features.
+/// One downloaded `ArcGIS` layer: its field list (from `?f=json`) and its features.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Layer {
     /// The layer's fields, each `{ name, alias, domain }`.
@@ -44,6 +44,7 @@ fn field_name(f: &Value) -> Option<&str> {
 }
 
 /// `resolve(fields, spec, year)`: finds each item's field by its alias text (the layer's year must say "Year: 2023"), else by its known code, else reports it missing.
+#[must_use]
 pub fn resolve(fields: &[Value], spec: &[VarSpec], year: f64) -> Vec<Resolved> {
     let yr = format!("year: {}", number_to_js_string(year));
     spec.iter()
@@ -68,7 +69,7 @@ pub fn resolve(fields: &[Value], spec: &[VarSpec], year: f64) -> Vec<Resolved> {
 fn is_code_field(name: &str, prefix: &str) -> bool {
     let Some(rest) = name.strip_prefix(prefix) else { return false };
     let b = rest.as_bytes();
-    if b.len() < 4 || !b[..4].iter().all(u8::is_ascii_digit) {
+    if !b.get(..4).is_some_and(|d| d.iter().all(u8::is_ascii_digit)) {
         return false;
     }
     let Some(rest) = rest[4..].strip_prefix("_V") else { return false };
@@ -77,16 +78,19 @@ fn is_code_field(name: &str, prefix: &str) -> bool {
 }
 
 /// `codeField(fields, re)` for the SA1 code field (`SA1\d{4}_V\d+_00`), or None.
+#[must_use]
 pub fn sa1_code_field(fields: &[Value]) -> Option<String> {
     fields.iter().find_map(|f| field_name(f).filter(|n| is_code_field(n, "SA1")).map(str::to_string))
 }
 
 /// `codeField(fields, re)` for the SA2 code field (`SA2\d{4}_V\d+_00`), or None.
+#[must_use]
 pub fn sa2_code_field(fields: &[Value]) -> Option<String> {
     fields.iter().find_map(|f| field_name(f).filter(|n| is_code_field(n, "SA2")).map(str::to_string))
 }
 
 /// `val(a, name)`: a count from a feature's attributes; missing, non-numeric and negative cells (suppressed) are None.
+#[must_use]
 pub fn val(a: &Value, name: Option<&str>) -> Option<f64> {
     let name = name?;
     let v = a.get(name)?;
@@ -109,7 +113,10 @@ fn set_p(o: &mut Map<String, Value>, k: &str, v: Option<f64>) {
             if !e.is_object() {
                 *e = Value::Object(Map::new());
             }
-            e.as_object_mut().expect("an object").insert(p1.to_string(), value);
+            // e is an object now, so this always inserts
+            if let Value::Object(obj) = e {
+                obj.insert(p1.to_string(), value);
+            }
         }
     }
 }
@@ -162,6 +169,7 @@ pub struct CensusLayers {
 
 impl CensusLayers {
     /// The layer with this key ("ind0", "ind2", "dw", "hh").
+    #[must_use]
     pub fn get(&self, k: &str) -> Option<&Layer> {
         match k {
             "ind0" => self.ind0.as_ref(),
@@ -174,6 +182,7 @@ impl CensusLayers {
 }
 
 /// `parseCensus(layers)`: the SA1s with their values from whichever layers loaded, how each item was found, and what is missing.
+#[must_use]
 pub fn parse_census(layers: &CensusLayers) -> CensusData {
     let mut by_code: Vec<(String, Sa1)> = Vec::new();
     let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -206,10 +215,12 @@ pub fn parse_census(layers: &CensusLayers) -> CensusData {
                 continue;
             }
             let i = *index.entry(code.clone()).or_insert_with(|| {
+                let at = by_code.len();
                 by_code.push((code.clone(), Sa1 { code: code.clone(), poly: Poly { rings: Vec::new(), bb: [f64::NAN; 4] }, v: Map::new() }));
-                by_code.len() - 1
+                at
             });
-            let o = &mut by_code[i].1;
+            // index holds positions in by_code, so this is always found
+            let Some((_, o)) = by_code.get_mut(i) else { continue };
             let rg = rings_of(f.get("geometry"));
             if !rg.is_empty() && o.poly.rings.is_empty() {
                 o.poly = Poly::new(rg);
@@ -229,6 +240,7 @@ pub fn parse_census(layers: &CensusLayers) -> CensusData {
 }
 
 /// `censusFields(lk)(fields)`: the field names to ask a Census layer for: the SA1 code field and every item that was found.
+#[must_use]
 pub fn census_fields(lk: &str, fields: &[Value]) -> Vec<String> {
     let mut out = vec![sa1_code_field(fields).unwrap_or_else(|| "SA12023_V1_00".to_string())];
     out.extend(resolve(fields, &consts::census_vars_of(lk), 2023.0).into_iter().filter_map(|r| r.name));
@@ -270,6 +282,7 @@ fn ec_year(name: &str) -> Option<f64> {
 }
 
 /// `parseEmployees(L)`: SA2 employee counts, using the latest `ecYYYY` field in the layer.
+#[must_use]
 pub fn parse_employees(l: &Layer) -> EmployeeData {
     let fl = &l.fields;
     let cf = sa2_code_field(fl).unwrap_or_else(|| "SA22023_V1_00".to_string());
@@ -305,6 +318,7 @@ pub fn parse_employees(l: &Layer) -> EmployeeData {
 }
 
 /// The Ministry of Education fields asked for, by directory ("schools" or "ece").
+#[must_use]
 pub fn moe_fields(kind: &str) -> &'static [&'static str] {
     if kind == "ece" {
         &["ECE_Id", "Org_Name", "Org_Type", "All_Children", "Total", "Roll_Date", "Latitude", "Longitude"]
@@ -342,6 +356,7 @@ pub struct Moe {
 
 impl Moe {
     /// The record as JSON, in the prototype's shape (`type` is the organisation type).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let n = |x: Option<f64>| x.map_or(Value::Null, crate::jsnum::json_number);
         json!({ "id": self.id, "kind": self.kind, "name": self.name, "type": self.kind_of_org, "roll": n(self.roll), "places": n(self.places),
@@ -355,28 +370,27 @@ fn find_ci(hay: &str, needle: &str) -> Option<usize> {
     if n.is_empty() || h.len() < n.len() {
         return None;
     }
-    (0..=h.len() - n.len()).find(|&i| h[i..i + n.len()].eq_ignore_ascii_case(n))
+    // The windows start at 0, 1, ..., h.len() - n.len(), in order; n is not empty
+    h.windows(n.len()).position(|w| w.eq_ignore_ascii_case(n))
 }
 
 // /\(Proposed opening date:\s*(\d{4})-(\d\d)-(\d\d)\)/i: the year of the first match
+// Bound (here and in strip_proposed): positions are byte offsets in the name, far below usize::MAX
 fn proposed_year(name: &str) -> Option<f64> {
     const LIT: &str = "(proposed opening date:";
-    let mut from = 0;
+    let mut from = 0usize;
     while let Some(i) = find_ci(&name[from..], LIT) {
-        let at = from + i + LIT.len();
+        let at = from.saturating_add(i).saturating_add(LIT.len());
         let rest = name[at..].trim_start_matches(crate::jsnum::is_js_space);
-        let b = rest.as_bytes();
-        let ok = b.len() >= 11
-            && b[..4].iter().all(u8::is_ascii_digit)
-            && b[4] == b'-'
-            && b[5..7].iter().all(u8::is_ascii_digit)
-            && b[7] == b'-'
-            && b[8..10].iter().all(u8::is_ascii_digit)
-            && b[10] == b')';
+        let ok = matches!(
+            rest.as_bytes(),
+            [y0, y1, y2, y3, b'-', m0, m1, b'-', d0, d1, b')', ..]
+                if [y0, y1, y2, y3, m0, m1, d0, d1].iter().all(|c| c.is_ascii_digit())
+        );
         if ok {
-            return rest[..4].parse().ok();
+            return rest.get(..4).and_then(|y| y.parse().ok());
         }
-        from = from + i + 1;
+        from = from.saturating_add(i).saturating_add(1);
     }
     None
 }
@@ -384,16 +398,16 @@ fn proposed_year(name: &str) -> Option<f64> {
 // name.replace(/\s*\(Proposed opening date:[^)]*\)/i, '')
 fn strip_proposed(name: &str) -> String {
     const LIT: &str = "(proposed opening date:";
-    let mut from = 0;
+    let mut from = 0usize;
     while let Some(i) = find_ci(&name[from..], LIT) {
-        let start = from + i;
-        let after = start + LIT.len();
+        let start = from.saturating_add(i);
+        let after = start.saturating_add(LIT.len());
         if let Some(close) = name[after..].find(')') {
-            let end = after + close + 1;
+            let end = after.saturating_add(close).saturating_add(1);
             let head = name[..start].trim_end_matches(crate::jsnum::is_js_space);
             return format!("{head}{}", &name[end..]);
         }
-        from = start + 1;
+        from = start.saturating_add(1);
     }
     name.to_string()
 }
@@ -406,6 +420,7 @@ fn plain_text(v: Option<&Value>) -> String {
 }
 
 /// `parseMoE(records, kind)`: directory records with a location that are not closed.
+#[must_use]
 pub fn parse_moe(records: &[Value], kind: &str) -> Vec<Moe> {
     let num = |v: Option<&Value>| -> Option<f64> {
         let v = v?;
@@ -422,11 +437,11 @@ pub fn parse_moe(records: &[Value], kind: &str) -> Vec<Moe> {
             let m = proposed_year(&name);
             let id = {
                 let a = plain_text(r.get("School_Id"));
-                if !a.is_empty() {
-                    a
-                } else {
+                if a.is_empty() {
                     let b = plain_text(r.get("ECE_Id"));
                     if b.is_empty() { name.clone() } else { b }
+                } else {
+                    a
                 }
             };
             let roll_date: String = plain_text(r.get("Roll_Date")).chars().take(10).collect();
@@ -501,6 +516,7 @@ fn dom_get(d: &[(String, String)], key: &str) -> String {
 }
 
 /// `parseAUP(L)`: the zone polygons with their names, groups and status from the layer's coded domains.
+#[must_use]
 pub fn parse_aup(l: &Layer) -> AupData {
     let fl = &l.fields;
     let (zn, gn, vs) = (domain(fl, "ZONE"), domain(fl, "GROUPZONE"), domain(fl, "VERSIONSTATUS"));

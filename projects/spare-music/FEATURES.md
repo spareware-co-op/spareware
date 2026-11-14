@@ -185,7 +185,7 @@ Search, browsing by genre, mood and place, every new release from artists you fo
 | MUS-A4-F6-P1 | **Radio**: A queue that keeps filling by a published rule from similar listeners' plays and shared genres, respecting Human, AI or both. | library | medium | MUS-A4-F4-P1, MUS-A2-F2-P1 |  |
 | MUS-A4-F7-P1 | **People's playlists to browse**: Public playlists by genre and mood, made by people, never paid for, each showing who made it. | service | small | MUS-A3-F2-P1, MUS-A3-F2-P3 |  |
 | MUS-A4-F8-P1 | **Reviews and articles**: Long posts with players inside, written by members and labelled when paid for. | service | medium | MUS-A16-F1-P1 |  |
-| MUS-A4-F9-P1 | **Song recognition**: Matches a few seconds recorded on the phone against the catalogue's fingerprints (MUS-A11-F1-P2), using only a method the patent check cleared. | library | large | MUS-A11-F1-P2, MUS-A11-F1-P1 |  |
+| MUS-A4-F9-P1 | **Song recognition**: Matches a few seconds recorded on the phone against the catalogue's fingerprints (MUS-A11-F1-P2), using the method MUS-A11-F1-P1 chose. | library | large | MUS-A11-F1-P2, MUS-A11-F1-P1 |  |
 
 ## MUS-A5 Human and AI sections
 
@@ -445,7 +445,7 @@ Uploads are fingerprinted and compared with the catalogue so nobody can upload s
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| MUS-A11-F1-P1 | **Fingerprint method study**: Compares open audio fingerprinting methods, such as Chromaprint (LGPL-2.1 as a whole) and landmark methods like audfprint (MIT), on accuracy with noise and edits, speed, licence and patents (the first landmark fingerprint patent, US 6,990,453, has expired; later patents need a search), before any code is chosen. | research | medium |  |  |
+| MUS-A11-F1-P1 | **Fingerprint method study**: Compares open audio fingerprinting methods, such as Chromaprint (LGPL-2.1 as a whole) and landmark methods like audfprint (MIT), on accuracy with noise and edits, speed and licence, before any code is chosen. | research | medium |  |  |
 | MUS-A11-F1-P2 | **Fingerprint index**: Fingerprints every uploaded recording and keeps a searchable index of the whole catalogue. | library | large | MUS-A11-F1-P1, MUS-A16-F2-P1 |  |
 | MUS-A11-F1-P3 | **Upload check**: Each new upload is compared with the index; a close match to someone else's recording holds the release for review before it goes live. | service | medium | MUS-A11-F1-P2, MUS-A6-F1-P1 |  |
 | MUS-A11-F1-P4 | **Matches reviewed by people**: A trained moderator compares a held match with both rights declarations; the uploader can show a licence, and nothing becomes a strike without a person's decision. | service | medium | MUS-A11-F1-P3, MUS-A14-F7-P2 |  |
@@ -462,8 +462,8 @@ Uploads are fingerprinted and compared with the catalogue so nobody can upload s
 | MUS-A11-F5-P3 | **What happens to fake plays**: Fake plays earn nothing and count for nothing; the money stays with the listener's share or the pool, never the co-op, and repeat offenders follow the ladder. | legal | small | MUS-A11-F5-P1, MUS-A14-F6-P1 |  |
 | MUS-A11-F6-P1 | **Copy protection decision note**: Compares closed playback locks (DRM, each needing an agreement with the company that owns it), a hidden watermark in each copy, and no lock, on what each stops, cost, licence and fairness to listeners. | research | medium |  |  |
 | MUS-A11-F6-P2 | **Offline copies kept in the app**: Streamed music saved for offline is kept encrypted in the app's own storage, if the decision picks it; bought music stays the buyer's to copy. | library | medium | MUS-A11-F6-P1, MUS-A2-F6-P1 |  |
-| MUS-A11-F7-P1 | **Watermark study**: Compares open audio watermarking methods, such as AudioSeal (MIT), on how well marks survive re-recording and compression, sound quality, licence and patents. | research | medium |  |  |
-| MUS-A11-F7-P2 | **Per-copy watermark**: A hidden mark in each copy, if the decision picks it, using an openly licensed method cleared for patents. | library | large | MUS-A11-F7-P1, MUS-A11-F6-P1, MUS-A16-F3-P1 |  |
+| MUS-A11-F7-P1 | **Watermark study**: Compares open audio watermarking methods, such as AudioSeal (MIT), on how well marks survive re-recording and compression, sound quality and licence. | research | medium |  |  |
+| MUS-A11-F7-P2 | **Per-copy watermark**: A hidden mark in each copy, if the decision picks it, using an openly licensed method. | library | large | MUS-A11-F7-P1, MUS-A11-F6-P1, MUS-A16-F3-P1 |  |
 | MUS-A11-F8-P1 | **Copies on other sites**: Looks for a recording's fingerprint on sites whose terms allow it, and gives the artist the evidence to send their own notice. | research | medium | MUS-A11-F1-P2 |  |
 
 ## MUS-A12 Artists and fans together
@@ -800,7 +800,7 @@ Everything a person can do, a script or AI agent can do through the same command
 - Does a society member's own upload still need that society's licence in each launch country, what would those licences cost an at-cost service, and is the rule for who carries the cost fair (MUS-A8-F1-P2, MUS-A8-F3-P2)?
 - Can Spare Music report plays and sales to each country's societies in their formats without a large staff, and which countries should come first?
 - Are covers allowed at launch only where a licence covers them (MUS-A7-F4), and is asking for proof for every sample workable for independent artists?
-- Which fingerprinting method is accurate enough, licensed for the core (Chromaprint is LGPL-2.1 as a whole) and clear of patents, and how many held matches can people review each week (MUS-A11-F1)?
+- Which fingerprinting method is accurate enough, licensed for the core (Chromaprint is LGPL-2.1 as a whole), and how many held matches can people review each week (MUS-A11-F1)?
 - Which copy protection, if any: a closed DRM lock, a watermark in each copy, or none, given that nothing stops someone recording the sound as it plays (MUS-A11-F6, MUS-A11-F7)?
 - Does 'remove only what the law requires' hold up for music, where hate lyrics, impersonation and AI copies of real voices sit close to the line (MUS-A14-F3-P4, MUS-A5-F5)?
 - Can the Human and AI sections be enforced fairly when AI is used for mastering, drums or backing vocals, and where should AI-assisted end (MUS-A5-F1-P3)?
@@ -809,6 +809,6 @@ Everything a person can do, a script or AI agent can do through the same command
 - Who votes on what: artists on fees and rules, listeners on the pass, and members on major changes (MUS-A21-F1-P2)?
 - What do lossless masters and delivery cost per artist and per listener each month, and who covers free listening (MUS-A16-F4-P4, MUS-A9-F6)?
 - Which candidate kit parts should move down from Spare Music so other apps can use them: audio fingerprinting, rights packs, society reporting and split payouts?
-- Which parts carry legal risk under 'Built legally, or not at all': fingerprint and watermark patents, the DDEX licence terms, the OpenSubsonic site notice, MusicBrainz's non-commercial supplementary data and AcoustID's non-commercial service?
+- Which parts carry legal risk under 'Built legally, or not at all': the DDEX licence terms, the OpenSubsonic site notice, MusicBrainz's non-commercial supplementary data and AcoustID's non-commercial service?
 - Is this map the right size for contributors with spare tokens, and what is the smallest slice worth building and demonstrating first?
 - What numbers would prove the demo works, such as time to first sound on a slow phone connection, time from upload to live, and running cost per listener per month?

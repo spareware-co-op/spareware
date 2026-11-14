@@ -4,6 +4,25 @@
 //! file's key order for nodes, links, zones, routes and sites, and the defaults and
 //! constructors match what model.js makes (expected/util-cases.json, "model").
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_transport::jsnum::{JsNum, Maybe};
@@ -97,7 +116,7 @@ fn is_array_index(k: &str) -> bool {
     !k.is_empty()
         && k.bytes().all(|c| c.is_ascii_digit())
         && (k == "0" || !k.starts_with('0'))
-        && k.parse::<u64>().is_ok_and(|n| n < 4294967295)
+        && k.parse::<u64>().is_ok_and(|n| n < 4_294_967_295)
 }
 
 #[test]
@@ -239,7 +258,7 @@ fn ordered_map_behaves_like_a_javascript_object() {
     assert_eq!(m.remove("b"), Some(1));
     m.insert("b", 4);
     assert_eq!(m.keys().collect::<Vec<_>>(), ["a", "c", "b"]);
-    assert_eq!((m["a"], m["c"], m["b"]), (20, 3, 4));
+    assert_eq!((*m.get("a").unwrap(), *m.get("c").unwrap(), *m.get("b").unwrap()), (20, 3, 4));
     assert_eq!(m.index_of("b"), Some(2));
     m.retain(|k, _| k != "c");
     assert_eq!(m.iter().collect::<Vec<_>>(), [("a", &20), ("b", &4)]);
@@ -298,7 +317,7 @@ fn defaults_and_constructors_match_the_prototype() {
         &m["newScenario"],
         "newScenario()",
     );
-    let n1 = Node::new("n1", [-36.84851234567, 174.76331234567]);
+    let n1 = Node::new("n1", [-36.848_512_345_67, 174.763_312_345_67]);
     let mut n2 = Node::new("n2", [-36.85, 174.77]);
     n2.control = Maybe::Set("signals".to_string());
     assert_same(
@@ -311,7 +330,7 @@ fn defaults_and_constructors_match_the_prototype() {
         &m["addNode"][1],
         "Net.addNode with control",
     );
-    let pts = [[-36.8491111111111, 174.765555555555], [-36.8495, 174.7688]];
+    let pts = [[-36.849_111_111_111_1, 174.765_555_555_555], [-36.8495, 174.7688]];
     for (i, c) in m["addLink"].as_array().unwrap().iter().enumerate() {
         let l = Link::new(&format!("l{i}"), "n1", "n2", &pts, c["cls"].as_str());
         assert_same(
@@ -322,7 +341,7 @@ fn defaults_and_constructors_match_the_prototype() {
     }
     let mut sc: Scenario = serde_json::from_value(m["geomScenario"].clone()).unwrap();
     for g in m["geom"].as_array().unwrap() {
-        let l = &sc.links[g["link"].as_str().unwrap()];
+        let l = &sc.links.get(g["link"].as_str().unwrap()).unwrap();
         let want: Vec<[f64; 2]> = serde_json::from_value(g["geom"].clone()).unwrap();
         assert_eq!(sc.geom(l), want, "Net.geom {}", l.id);
         assert_eq!(
@@ -333,9 +352,9 @@ fn defaults_and_constructors_match_the_prototype() {
         );
     }
     sc.add_node("n3", [-36.91, 174.77]);
-    sc.add_link("l3", "n2", "n3", &[], Some("arterial")).name = Maybe::Set("New".to_string());
+    sc.add_link("l3", "n2", "n3", &[], Some("arterial")).unwrap().name = Maybe::Set("New".to_string());
     assert_eq!(sc.links.keys().last(), Some("l3"));
-    assert_eq!(sc.links["l3"].lanes_ab.num(), 2.0);
+    assert_eq!(sc.links.get("l3").unwrap().lanes_ab.num(), 2.0);
     for c in m["linkStage"].as_array().unwrap() {
         let l: Link = serde_json::from_value(c["link"].clone()).unwrap();
         assert_eq!(

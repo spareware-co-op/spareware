@@ -20,16 +20,21 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{Arc, LazyLock};
 
+/// What every handler reaches: the service and the settings.
 pub struct App {
+    /// Every rule, and the only way to the store.
     pub service: Service<Tikv, Files>,
+    /// The server's settings.
     pub settings: Settings,
 }
 
+/// The app, shared between handlers.
 pub type Shared = Arc<App>;
 
 const COOKIE: &str = "spare_session";
 const SESSION_DAYS: i64 = 14;
 
+/// A refusal, answered as an HTTP status and a message a person can read.
 pub struct ApiError(pub Refusal);
 
 impl<E: Into<Refusal>> From<E> for ApiError {
@@ -59,6 +64,10 @@ impl IntoResponse for ApiError {
 }
 
 /// Reads an ID from a web address. Anything else can't name anything, so it isn't found.
+///
+/// # Errors
+///
+/// Not found, when the text isn't an ID.
 pub fn id(text: &str) -> Result<Id, ApiError> {
     Id::parse(text).map_err(|_| ApiError(Refusal::NotFound))
 }
@@ -77,10 +86,12 @@ impl FromRequestParts<Shared> for Me {
     }
 }
 
+/// Every page and API route, each a handler over the app.
 pub fn routes(app: Shared) -> Router {
     Router::new()
         .route("/", get(page))
         .route("/connect.js", get(connect_script))
+        .route("/view3d.js", get(view_script))
         .route("/connect.css", get(connect_style))
         .route("/shapes/construct_shapes.js", get(shapes_script))
         .route("/shapes/construct_shapes_bg.wasm", get(shapes_wasm))
@@ -161,6 +172,11 @@ const FOREVER: (header::HeaderName, &str) = (
 
 async fn connect_script() -> impl IntoResponse {
     ([JAVASCRIPT], include_str!("../../app/connect.js"))
+}
+
+/// What the 3D view draws, as a module connect.js loads when the view opens.
+async fn view_script() -> impl IntoResponse {
+    ([JAVASCRIPT], include_str!("../../app/view3d.js"))
 }
 
 async fn connect_style() -> impl IntoResponse {

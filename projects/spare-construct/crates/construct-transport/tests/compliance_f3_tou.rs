@@ -1,6 +1,25 @@
 //! Time-of-use charging screening against the JavaScript's recorded answers (expected/compliance-f3-tou.json, from
 //! tools/transport-truth/gen-compliance-f3.mjs). The screening runs the assignment, so these cases take a while.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod compliance_f3_support;
 mod compliance_support;
 mod support;
@@ -37,7 +56,7 @@ fn time_of_use_matches_the_prototype() {
                 let sc = p.g("scenarios").ix(args.g("sci").n() as usize);
                 let per = args.g("per").s();
                 let g = engine::build_graph(&p, sc, None);
-                let zs: Vec<String> = sc.g("zones").keys().into_iter().map(|k| k.to_string()).collect();
+                let zs: Vec<String> = sc.g("zones").keys().into_iter().map(std::string::ToString::to_string).collect();
                 let charged = if args.g("charged").t() { Some(tou::tou_charged(sc, &polygon_of(args.g("poly")), "cordon")) } else { None };
                 let applied: Option<HashMap<String, f64>> =
                     if args.g("applied").t() { Some(args.g("applied").entries().into_iter().map(|(k, v)| (k.to_string(), v.n())).collect()) } else { None };

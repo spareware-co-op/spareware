@@ -78,7 +78,7 @@ The geometry is the same for all three options; only where the rules live differ
 | --- | --- |
 | Members: rolled, welded and cold-formed profiles, straight and curved | G229 profiles from sketches; G255 extrude; G256 general sweeps; curved booleans for rolled sections' root radii (G242 to G252, Gate 7, G284) |
 | Copes, cut-backs, notches and end cuts | G130 operands and half-spaces; G131 n-ary cut; G244 face splitting on flat and analytic faces |
-| Plates, holes and slots | G229 and G255 for sketched plates; G202 2D booleans for outlines; G138 batch cutting, so every hole in a member is one call; bent plates on the `geom-sheet` toolkit (G472, after the patent search G446) |
+| Plates, holes and slots | G229 and G255 for sketched plates; G202 2D booleans for outlines; G138 batch cutting, so every hole in a member is one call; bent plates on the `geom-sheet` toolkit (G472) |
 | Bolts, anchors, studs | G145 placed instances; G295 the instance tree, so 100,000 bolts are one definition placed many times ([23](../../engines/geometry/architecture/23-performance.md)) |
 | Welds | Persistent names and reference resolution (G87 to G89), so a weld keeps its edges through edits or reports why it lost them; bevel preparations by G263 chamfers; bead geometry, if wanted, by G256 sweeps |
 | Connections that find their members | G151 exact contact predicates and G292 closed-form distances to find which members meet and how; G89 to keep the connection's references |

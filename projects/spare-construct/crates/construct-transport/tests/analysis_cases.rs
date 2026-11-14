@@ -9,6 +9,25 @@
 //! A case names its project; results are { scenario, period } in expected/<project>.json with an
 //! optional patch, and settings are the project's with a patch (see the generator).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod recorded;
 mod support;
 
@@ -159,7 +178,7 @@ fn res_ref(rec: &Recorded, v: Option<&Value>) -> Option<Res> {
     let v = v.filter(|v| !v.is_null())?;
     let sid = v["scenario"].as_str().unwrap();
     let period = v["period"].as_str().unwrap();
-    let r = rec.scenarios[sid].periods[period].res.clone();
+    let r = rec.scenarios.get(sid).unwrap().periods.get(period).unwrap().res.clone();
     Some(patch_res(r, v.get("patch")))
 }
 
@@ -238,7 +257,7 @@ fn run(case: &Case, ctx: &mut Ctx) -> Value {
                     if change.is_some_and(Value::is_null) {
                         continue;
                     }
-                    let r = rec.scenarios[sid].periods[period].res.clone();
+                    let r = rec.scenarios.get(sid).unwrap().periods.get(period).unwrap().res.clone();
                     out.insert(period, patch_res(r, change));
                 }
                 out
@@ -371,7 +390,7 @@ fn run(case: &Case, ctx: &mut Ctx) -> Value {
                 .as_ref()
                 .unwrap()
                 .iter()
-                .map(|per| &rec.scenarios[sid].periods[per.as_str()].res)
+                .map(|per| &rec.scenarios.get(sid).unwrap().periods.get(per.as_str()).unwrap().res)
                 .collect();
             json(&dev_distribution(sc, &list))
         }

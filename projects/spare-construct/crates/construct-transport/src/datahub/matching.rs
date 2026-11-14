@@ -14,29 +14,20 @@ fn is_word(c: char) -> bool {
 fn strip_brackets(s: &str) -> String {
     let cs: Vec<char> = s.chars().collect();
     let mut out = String::with_capacity(s.len());
-    let mut i = 0;
-    while i < cs.len() {
-        if cs[i] == '(' {
-            let mut j = i + 1;
-            let mut found = None;
-            while j < cs.len() {
-                match cs[j] {
-                    ')' => {
-                        found = Some(j);
-                        break;
-                    }
-                    '\n' | '\r' | '\u{2028}' | '\u{2029}' => break,
-                    _ => j += 1,
-                }
-            }
-            if let Some(j) = found {
-                out.push(' ');
-                i = j + 1;
-                continue;
-            }
+    let mut rest: &[char] = &cs;
+    while let Some((&c, after)) = rest.split_first() {
+        // the first ')' before any line break closes the piece
+        if c == '('
+            && let Some(k) = after.iter().position(|&x| matches!(x, ')' | '\n' | '\r' | '\u{2028}' | '\u{2029}'))
+            && after.get(k) == Some(&')')
+            && let Some(tail) = after.get(k.saturating_add(1)..)
+        {
+            out.push(' ');
+            rest = tail;
+            continue;
         }
-        out.push(cs[i]);
-        i += 1;
+        out.push(c);
+        rest = after;
     }
     out
 }
@@ -46,19 +37,19 @@ fn replace_word(s: &str, word: &str, repl: &str) -> String {
     let cs: Vec<char> = s.chars().collect();
     let w: Vec<char> = word.chars().collect();
     let mut out = String::with_capacity(s.len());
-    let mut i = 0;
-    while i < cs.len() {
-        let end = i + w.len();
-        if end <= cs.len()
-            && cs[i..end] == w[..]
-            && (i == 0 || !is_word(cs[i - 1]))
-            && (end == cs.len() || !is_word(cs[end]))
+    // Bound: positions in a string held in memory, far below usize::MAX
+    let mut i: usize = 0;
+    while let Some(&c) = cs.get(i) {
+        let end = i.saturating_add(w.len());
+        if cs.get(i..end) == Some(w.as_slice())
+            && i.checked_sub(1).and_then(|p| cs.get(p)).is_none_or(|&b| !is_word(b))
+            && cs.get(end).is_none_or(|&a| !is_word(a))
         {
             out.push_str(repl);
             i = end;
         } else {
-            out.push(cs[i]);
-            i += 1;
+            out.push(c);
+            i = i.saturating_add(1);
         }
     }
     out
@@ -68,31 +59,38 @@ fn replace_word(s: &str, word: &str, repl: &str) -> String {
 fn replace_sh(s: &str) -> String {
     let cs: Vec<char> = s.chars().collect();
     let mut out = String::with_capacity(s.len());
-    let mut i = 0;
-    while i < cs.len() {
-        if cs[i] == 's' && i + 1 < cs.len() && cs[i + 1] == 'h' && (i == 0 || !is_word(cs[i - 1])) {
-            let mut j = i + 2;
-            while j < cs.len() && is_js_space(cs[j]) {
-                j += 1;
+    // Bound: positions in a string held in memory, far below usize::MAX
+    let mut i: usize = 0;
+    while let Some(&c) = cs.get(i) {
+        if c == 's'
+            && cs.get(i.saturating_add(1)) == Some(&'h')
+            && i.checked_sub(1).and_then(|p| cs.get(p)).is_none_or(|&b| !is_word(b))
+        {
+            let mut j = i.saturating_add(2);
+            while cs.get(j).is_some_and(|&x| is_js_space(x)) {
+                j = j.saturating_add(1);
             }
             let d0 = j;
-            while j < cs.len() && cs[j].is_ascii_digit() {
-                j += 1;
+            while cs.get(j).is_some_and(char::is_ascii_digit) {
+                j = j.saturating_add(1);
             }
-            if j > d0 {
+            if j > d0
+                && let Some(digits) = cs.get(d0..j)
+            {
                 out.push_str("sh");
-                out.extend(&cs[d0..j]);
+                out.extend(digits);
                 i = j;
                 continue;
             }
         }
-        out.push(cs[i]);
-        i += 1;
+        out.push(c);
+        i = i.saturating_add(1);
     }
     out
 }
 
 /// `DataHub.norm(s)`: a road name for comparison: lower case, bracketed text removed, the usual abbreviations written out (rd, st, ave, dr, pl, cres, hwy, pde, tce, ln, mwy, "sh 16"), anything but letters and digits a space, spaces collapsed.
+#[must_use]
 pub fn norm(s: &str) -> String {
     let mut t = strip_brackets(&s.to_lowercase());
     for (w, r) in [("rd", "road"), ("st", "street")] {
@@ -134,6 +132,7 @@ pub fn norm(s: &str) -> String {
 }
 
 /// `norm(x || y)` for loose values: the first that is truthy, as text, normalised.
+#[must_use]
 pub fn norm_of(a: &crate::jsnum::Num, b: &crate::jsnum::Num) -> String {
     norm(&or_text(a, b))
 }
@@ -157,15 +156,17 @@ pub struct Match {
 pub type Matches = OrderedMap<Match>;
 
 /// `Net.project(sc, L, ll).d`: distance (m) from a point to the nearest point on a polyline of [lat, lng].
+#[must_use]
 pub fn project_dist(g: &[LatLng], ll: &LatLng) -> f64 {
-    let f = flat(ll[0]);
-    let px = f.x(ll);
-    let py = f.y(ll);
+    let fl = flat(ll[0]);
+    let px = fl.x(ll);
+    let py = fl.y(ll);
     let mut best = f64::INFINITY;
-    for i in 0..g.len().saturating_sub(1) {
-        let r = seg_dist(px, py, f.x(&g[i]), f.y(&g[i]), f.x(&g[i + 1]), f.y(&g[i + 1]));
-        if r.d < best {
-            best = r.d;
+    for seg in g.windows(2) {
+        let [a, b] = seg else { continue };
+        let near = seg_dist(px, py, fl.x(a), fl.y(a), fl.x(b), fl.y(b));
+        if near.d < best {
+            best = near.d;
         }
     }
     best
@@ -183,6 +184,18 @@ struct Item<'a> {
     b_ab: f64,
 }
 
+// The latitude and longitude range of a shape: (min lat, max lat, min lng, max lng)
+fn shape_box(g: &[LatLng]) -> (f64, f64, f64, f64) {
+    let (mut la0, mut la1, mut ln0, mut ln1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for p in g {
+        la0 = math_min(la0, p[0]);
+        la1 = math_max(la1, p[0]);
+        ln0 = math_min(ln0, p[1]);
+        ln1 = math_max(ln1, p[1]);
+    }
+    (la0, la1, ln0, ln1)
+}
+
 /// `DataHub.match(sc, counts)`: each count matched to the best link within the match radius.
 ///
 /// Links that are closed or have a missing end node are left out. A count is a candidate for a link within the
@@ -190,6 +203,7 @@ struct Item<'a> {
 /// (the road class adds 30 m below arterial); other counts with a road name need the link's name to match unless
 /// they sit within 12 m of it (a mismatch adds 25 m). A directional count matches a link carrying traffic within
 /// 80 degrees of its direction, and the direction it counts. A link of the count's own name wins whenever one is in range.
+#[must_use]
 pub fn match_counts(sc: &Scenario, s: &Settings, counts: &[Rc<Count>]) -> Matches {
     let r = s.data.get().map_or(40.0, |d| d.match_radius.or(40.0));
     let mut items: Vec<Item> = Vec::new();
@@ -198,17 +212,15 @@ pub fn match_counts(sc: &Scenario, s: &Settings, counts: &[Rc<Count>]) -> Matche
             continue;
         }
         let g = sc.geom(lk);
-        let (mut la0, mut la1, mut ln0, mut ln1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
-        for p in &g {
-            la0 = math_min(la0, p[0]);
-            la1 = math_max(la1, p[0]);
-            ln0 = math_min(ln0, p[1]);
-            ln1 = math_max(ln1, p[1]);
-        }
-        let b_ab = bearing(&g[0], &g[g.len() - 1]);
+        let (la0, la1, ln0, ln1) = shape_box(&g);
+        // Both end nodes exist (checked above), so the shape holds at least two points
+        let b_ab = match (g.first(), g.last()) {
+            (Some(first), Some(last)) => bearing(first, last),
+            _ => f64::NAN,
+        };
         items.push(Item {
             link: lk,
-            nm: norm(&lk.name.as_str().unwrap_or("")),
+            nm: norm(lk.name.as_str().unwrap_or("")),
             rank: lk.class().rank,
             b_ab,
             g,

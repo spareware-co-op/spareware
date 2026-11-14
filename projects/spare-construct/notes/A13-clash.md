@@ -198,7 +198,7 @@ The counts above settle the broad phase. When the Rust code exists, the benchmar
 1. **Services are missing from the sample.** The model has 6 pipes and no ducts, so the density in plant rooms and ceiling voids, where clash matters most, is unmeasured.
 2. **The counts lean high.** Boxes came rounded to about 3 mm and were grown outward. Revit's boxes may also be loose around rotated families (*unverified*). Exact integer boxes would give fewer candidates.
 3. **Time is unmeasured.** No Rust toolchain was available. The 0.3 ms-per-pair figure and the 100 ms target are proposals, not measurements.
-4. **Patents.** G01 section [29.17](../../engines/geometry/architecture/29-sources-licences.md#2917-patents-known) lists clash, clearance and continuous collision detection as families no patent search has covered. The clash crates wait for its "Patent register" piece, and so does any product feature that needs them.
+4. **Patents.** No work waits for a patent (G01 decision [32.49](../../engines/geometry/architecture/32-decisions.md#3249-no-patent-searches)).
 5. **Standards licensing.** Point 7 needs an owner's decision before any clearance values are shipped.
 6. **BCF licence.** Implementing a format published under CC BY-ND is believed to be fine, as long as the schemas are only shipped unchanged (*unverified*). An owner should confirm this.
 7. **G01 isn't merged.** If 19.9 to 19.11 change in review, this note follows them.

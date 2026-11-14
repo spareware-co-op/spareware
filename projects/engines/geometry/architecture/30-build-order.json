@@ -886,26 +886,6 @@
   "chapter": "23, 32"
  },
  {
-  "id": "G73",
-  "title": "Who searches for patents (owner)",
-  "phase": "Phase 3",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent searches are made, so nobody is named to search or review.",
-  "depends_on": [],
-  "chapter": "29, 32"
- },
- {
-  "id": "G74",
-  "title": "Patent search: persistent naming and reference resolution (owner)",
-  "phase": "Phase 3",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of persistent naming and reference resolution is made, and G87 no longer needs this piece.",
-  "depends_on": [],
-  "chapter": "20, 29"
- },
- {
   "id": "G75",
   "title": "Copyleft tools as CI oracles (owner)",
   "phase": "Phase 3",
@@ -1414,19 +1394,6 @@
   "chapter": "28, 29"
  },
  {
-  "id": "G115",
-  "title": "Patent register",
-  "phase": "Phase 3",
-  "crate": "geometry/PATENTS.md",
-  "size": "Medium",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent register is kept, and no CI check asks for a recorded search; gate 3 (G118) no longer needs this piece.",
-  "depends_on": [
-   "G15",
-   "G70"
-  ],
-  "chapter": "29"
- },
- {
   "id": "G116",
   "title": "Adversarial generators and sequence fuzzing",
   "phase": "Phase 3",
@@ -1479,16 +1446,6 @@
   "chapter": "28, 30"
  },
  {
-  "id": "G119",
-  "title": "Patent search: slicing and toolpaths (owner)",
-  "phase": "Phase 4",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of slicing and toolpath methods is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "19, 29"
- },
- {
   "id": "G120",
   "title": "Committed planes and how bounds add up (owner)",
   "phase": "Phase 4",
@@ -1509,16 +1466,6 @@
   "chapter": "6, 23, 32"
  },
  {
-  "id": "G122",
-  "title": "Patent search: booleans, cellular models and batch cutting (owner)",
-  "phase": "Phase 4",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of EMBER, Nehring-Wirxel's integer plane arithmetic, Campen and Kobbelt's plane-based booleans, cellular models and batch cutting is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "11, 29"
- },
- {
   "id": "G123",
   "title": "Plane type, canonical planes and arrangement predicates",
   "phase": "Phase 4",
@@ -1529,7 +1476,6 @@
    "G29",
    "G30",
    "G81",
-   "G122",
    "G118"
   ],
   "chapter": "11, 23",
@@ -1872,8 +1818,7 @@
   "size": "Medium",
   "done_when": "Plane slices to closed contours; exact quickhull with symbolic perturbation; coplanar merge into a faceted B-rep that passes the checker; per-format export precision (exact decimals for OBJ, ASCII STL and 3MF, chunk-relative f32 for binary STL and glTF) with the post-rounding re-check; 1M faces sliced into 1,000 layers in 1 s on 8 threads.",
   "depends_on": [
-   "G148",
-   "G119"
+   "G148"
   ],
   "chapter": "19"
  },
@@ -2310,26 +2255,6 @@
   "chapter": "28, 30"
  },
  {
-  "id": "G182",
-  "title": "Patent search: clash, clearance and continuous collision detection (owner)",
-  "phase": "Phase 6",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of distance, clearance, clash and continuous collision detection is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "14, 19, 29"
- },
- {
-  "id": "G183",
-  "title": "Patent search: constraint solving and sketch diagnosis (owner)",
-  "phase": "Phase 6",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of constraint solving and sketch diagnosis is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "15, 29"
- },
- {
   "id": "G184",
   "title": "Pattern and linetype library process (owner)",
   "phase": "Phase 6",
@@ -2633,8 +2558,7 @@
   "depends_on": [
    "G198",
    "G195",
-   "G190",
-   "G182"
+   "G190"
   ],
   "chapter": "14"
  },
@@ -2769,7 +2693,6 @@
   "depends_on": [
    "G52",
    "G62",
-   "G183",
    "G181"
   ],
   "chapter": "15"
@@ -2987,46 +2910,6 @@
    "G232"
   ],
   "chapter": "28, 30"
- },
- {
-  "id": "G234",
-  "title": "Patent search: straight-skeleton roofs (owner)",
-  "phase": "Phase 7",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of straight skeletons and roof generation is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
- },
- {
-  "id": "G235",
-  "title": "Patent search: shells, offsets and thickening (owner)",
-  "phase": "Phase 7",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of shells, offsets and thickening, IntegrityWare's claim included is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
- },
- {
-  "id": "G236",
-  "title": "Patent search: Class-A blends and variable fillets (owner)",
-  "phase": "Phase 7",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of G2 and G3 Class-A blends and variable fillets is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
- },
- {
-  "id": "G237",
-  "title": "Patent search: direct face edits (owner)",
-  "phase": "Phase 7",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of face move, replace and delete with healing is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
  },
  {
   "id": "G238",
@@ -3405,8 +3288,7 @@
   "size": "Large",
   "done_when": "Radius laws along chains, constant-chord and hold-line trimlines; certified deviation against the procedural definition.",
   "depends_on": [
-   "G265",
-   "G236"
+   "G265"
   ],
   "chapter": "13"
  },
@@ -3457,8 +3339,7 @@
   "done_when": "Offsets in kind (cones by apex shift), procedural offsets with certified caches, local and global self-intersection trimming; cusp regions found on known curvature.",
   "depends_on": [
    "G66",
-   "G253",
-   "G235"
+   "G253"
   ],
   "chapter": "13"
  },
@@ -3472,8 +3353,7 @@
   "depends_on": [
    "G142",
    "G196",
-   "G251",
-   "G234"
+   "G251"
   ],
   "chapter": "13"
  },
@@ -3525,8 +3405,7 @@
   "done_when": "Intersect joins through the 3D skeleton, per-face distances, thicken with rims; exact volumes on polyhedra; a 200-face body offset benchmarked.",
   "depends_on": [
    "G274",
-   "G144",
-   "G235"
+   "G144"
   ],
   "chapter": "13"
  },
@@ -3581,8 +3460,7 @@
   "depends_on": [
    "G260",
    "G144",
-   "G253",
-   "G237"
+   "G253"
   ],
   "chapter": "13"
  },
@@ -3673,26 +3551,6 @@
   "chapter": "19, 29, 32"
  },
  {
-  "id": "G286",
-  "title": "Patent search: simplification, remeshing and subdivision to NURBS (owner)",
-  "phase": "Phase 8",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of mesh simplification, remeshing and conversion from subdivision to NURBS is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "16, 19, 29"
- },
- {
-  "id": "G287",
-  "title": "Patent review: edge-first tessellation (owner)",
-  "phase": "Phase 8",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no review of how 19.3's edge-first tessellation relates to the claims of US 10,614,195 is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "19, 29"
- },
- {
   "id": "G288",
   "title": "Edge-first certified tessellation",
   "phase": "Phase 8",
@@ -3705,7 +3563,6 @@
    "G68",
    "G162",
    "G177",
-   "G287",
    "G156",
    "G181"
   ],
@@ -3744,8 +3601,7 @@
   "size": "Large",
   "done_when": "Safe no_std port of meshoptimizer's simplifier and meshlet builder with licence kept; byte-identical across targets and threads; error within 5% of the C++ library.",
   "depends_on": [
-   "G290",
-   "G286"
+   "G290"
   ],
   "chapter": "19, 23"
  },
@@ -3759,7 +3615,6 @@
   "depends_on": [
    "G165",
    "G151",
-   "G182",
    "G156",
    "G181"
   ],
@@ -3775,8 +3630,7 @@
   "depends_on": [
    "G289",
    "G147",
-   "G54",
-   "G182"
+   "G54"
   ],
   "chapter": "19"
  },
@@ -3837,7 +3691,6 @@
   "depends_on": [
    "G151",
    "G54",
-   "G182",
    "G285",
    "G156",
    "G181"
@@ -3882,7 +3735,6 @@
   "done_when": "Quadric collapses and isotropic remeshing as local operations with rollback, accepted only inside the two-way envelope; results Certified(eps).",
   "depends_on": [
    "G152",
-   "G286",
    "G156",
    "G181"
   ],
@@ -4004,33 +3856,13 @@
  },
  {
   "id": "G309",
-  "title": "Patent search and legal check: general swept volumes (owner)",
+  "title": "Legal check: general swept volumes (owner)",
   "phase": "Phase 9",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "The patent search on Lifted Surfacing and general swept volumes is closed by the owner on 2026-11-13 (32.49): none is made. Left: chapter 13's legal check (question 7): the Adobe-licensed dependencies and libigl's copyleft module listed in section 29 as never to be read.",
+  "done_when": "Chapter 13's legal check (question 7) of Lifted Surfacing's dependencies: the Adobe-licensed dependencies and libigl's copyleft module listed in section 29 as never to be read.",
   "depends_on": [],
   "chapter": "13, 16, 29"
- },
- {
-  "id": "G310",
-  "title": "Patent search: point-cloud fitting and registration (owner)",
-  "phase": "Phase 9",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of point-cloud fitting and registration is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "16, 17, 29"
- },
- {
-  "id": "G311",
-  "title": "Patent search: panelisation (owner)",
-  "phase": "Phase 9",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of panelisation (Evolute, Pottmann et al.) is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "16, 29"
  },
  {
   "id": "G312",
@@ -4044,11 +3876,11 @@
  },
  {
   "id": "G313",
-  "title": "Patent and licence clearance for chapter 16 methods (owner)",
+  "title": "OpenSubdiv licence review (owner)",
   "phase": "Phase 9",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "The patent searches for the 16.6 methods and flagged patents are closed by the owner on 2026-11-13 (32.49): none is made. Left: the OpenSubdiv licence review and counsel sign-off; nothing in this phase reaches Stable before it.",
+  "done_when": "The OpenSubdiv licence review and counsel sign-off; nothing in this phase reaches Stable before it.",
   "depends_on": [],
   "chapter": "16, 29"
  },
@@ -4177,8 +4009,7 @@
   "size": "Large",
   "done_when": "Regular faces packed Exact and named Merged; PCCM at extraordinary vertices with its level chosen from the requested \u03b5, a certified ring-by-ring bound and measured deviation; G0 closure at darts and corners, or a typed refusal when G1 is required; exporters take an explicit conversion option; a 10,000-face net converted in 2 s.",
   "depends_on": [
-   "G322",
-   "G286"
+   "G322"
   ],
   "chapter": "16"
  },
@@ -4470,8 +4301,7 @@
   "depends_on": [
    "G342",
    "G123",
-   "G32",
-   "G311"
+   "G32"
   ],
   "chapter": "16"
  },
@@ -4550,8 +4380,7 @@
   "depends_on": [
    "G335",
    "G32",
-   "G215",
-   "G310"
+   "G215"
   ],
   "chapter": "16"
  },
@@ -4633,22 +4462,12 @@
   "chapter": "28, 30"
  },
  {
-  "id": "G356",
-  "title": "Patent search: terrain, corridors and alignments (owner)",
-  "phase": "Phase 10",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of terrain, corridor and alignment methods is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "17, 29"
- },
- {
   "id": "G357",
   "title": "Alignment curve kinds (owner)",
   "phase": "Phase 10",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "An owner decides whether the Helmert, Bloss, Viennese bend and cubic spiral transitions and IFC's gradient and segmented reference curves are named kinds or compositions, with the decision note 26.1 requires; the Viennese bend's trademark and patent status is checked first (17).",
+  "done_when": "An owner decides whether the Helmert, Bloss, Viennese bend and cubic spiral transitions and IFC's gradient and segmented reference curves are named kinds or compositions, with the decision note 26.1 requires; the Viennese bend's trademark status is checked first (17).",
   "depends_on": [],
   "chapter": "7, 17, 26, 32"
  },
@@ -4717,7 +4536,6 @@
    "G30",
    "G146",
    "G358",
-   "G356",
    "G284"
   ],
   "chapter": "17"
@@ -4866,8 +4684,7 @@
    "G162",
    "G48",
    "G87",
-   "G371",
-   "G356"
+   "G371"
   ],
   "chapter": "17"
  },
@@ -4967,8 +4784,7 @@
    "G379",
    "G32",
    "G58",
-   "G364",
-   "G310"
+   "G364"
   ],
   "chapter": "17"
  },
@@ -5004,16 +4820,6 @@
    "G381"
   ],
   "chapter": "28, 30"
- },
- {
-  "id": "G383",
-  "title": "Patent search: hidden lines, sections and drawings (owner)",
-  "phase": "Phase 11",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of hidden lines, sections and drawing generation is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "18, 29"
  },
  {
   "id": "G384",
@@ -5059,8 +4865,7 @@
   "done_when": "ViewDef with parallel, perspective and developed projections, bands, crops, sheet placement, DrawItems with roles; every InvalidView case tested.",
   "depends_on": [
    "G45",
-   "G386",
-   "G383"
+   "G386"
   ],
   "chapter": "18"
  },
@@ -5862,26 +5667,6 @@
   "chapter": "28, 30"
  },
  {
-  "id": "G445",
-  "title": "Patent search: circuit-board pours and clearance (owner)",
-  "phase": "Phase 13",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of circuit-board pours and clearance is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "14, 29"
- },
- {
-  "id": "G446",
-  "title": "Patent search: sheet-metal bending and unfolding (owner)",
-  "phase": "Phase 13",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of sheet-metal bending and unfolding is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
- },
- {
   "id": "G447",
   "title": "Gerber and IPC-2581 terms (owner)",
   "phase": "Phase 13",
@@ -6242,7 +6027,6 @@
    "G261",
    "G343",
    "G256",
-   "G446",
    "G444"
   ],
   "chapter": "13, 26"
@@ -6259,7 +6043,6 @@
    "G207",
    "G210",
    "G206",
-   "G445",
    "G444"
   ],
   "chapter": "14, 26"

@@ -14,14 +14,14 @@ pub type Sink<'a> = &'a mut dyn FnMut(&Value);
 #[derive(Clone, Copy)]
 pub enum Handler {
     /// A command that finishes at once.
-    Plain(fn(&mut Session, &Params) -> ApiResult),
+    Plain(fn(&mut Session, Params<'_>) -> ApiResult),
     /// A command that reports progress while it runs.
-    Streaming(fn(&mut Session, &Params, Sink<'_>) -> ApiResult),
+    Streaming(fn(&mut Session, Params<'_>, Sink<'_>) -> ApiResult),
 }
 
 /// One command of the transport API.
 pub struct Command {
-    /// Stable dot-form name, for example transport.network.add_link.
+    /// Stable dot-form name, for example `transport.network.add_link`.
     pub name: &'static str,
     /// One line saying what the command does.
     pub description: &'static str,
@@ -53,7 +53,7 @@ impl Registry {
         description: &'static str,
         changes: bool,
         schema: Value,
-        handler: fn(&mut Session, &Params) -> ApiResult,
+        handler: fn(&mut Session, Params<'_>) -> ApiResult,
     ) {
         self.push(name, description, changes, schema, Handler::Plain(handler));
     }
@@ -64,7 +64,7 @@ impl Registry {
         description: &'static str,
         changes: bool,
         schema: Value,
-        handler: fn(&mut Session, &Params, Sink<'_>) -> ApiResult,
+        handler: fn(&mut Session, Params<'_>, Sink<'_>) -> ApiResult,
     ) {
         self.push(
             name,
@@ -96,14 +96,17 @@ impl Registry {
         });
     }
     /// The command with this name.
+    #[must_use]
     pub fn get(&self, name: &str) -> Option<&Command> {
-        self.by_name.get(name).map(|&i| &self.list[i])
+        self.by_name.get(name).and_then(|&i| self.list.get(i))
     }
     /// Every command in order.
+    #[must_use]
     pub fn all(&self) -> &[Command] {
         &self.list
     }
     /// Every command as JSON: name, description, changes and the parameter schema.
+    #[must_use]
     pub fn describe(&self) -> Value {
         Value::Array(
             self.list

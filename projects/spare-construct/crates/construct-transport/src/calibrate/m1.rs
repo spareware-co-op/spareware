@@ -230,6 +230,7 @@ fn mc_field(mc: &Value, k: &str) -> Option<f64> {
 }
 
 /// `meStats(period)` for the project's record of the period: None when there is no record.
+#[must_use]
 pub fn me_stats(p: &Project, period: &str) -> Option<MeStats> {
     let info = p
         .me
@@ -256,10 +257,10 @@ pub fn me_stats(p: &Project, period: &str) -> Option<MeStats> {
         Some(m) => m.total_pct,
         None => mc_field(mc, "totalPct").unwrap_or(f64::NAN),
     };
-    let cells_ok = cells_slope.is_some_and(|s| s >= tag::CELLS_SLOPE[0] && s <= tag::CELLS_SLOPE[1])
+    let cells_ok = cells_slope.is_some_and(|s| (tag::CELLS_SLOPE[0]..=tag::CELLS_SLOPE[1]).contains(&s))
         && cells_r2.is_some_and(|r| r > tag::CELLS_R2)
         && !(m1.is_some() && cells_flag);
-    let ends_ok = ends_slope.is_some_and(|s| s >= tag::ENDS_SLOPE[0] && s <= tag::ENDS_SLOPE[1])
+    let ends_ok = ends_slope.is_some_and(|s| (tag::ENDS_SLOPE[0]..=tag::ENDS_SLOPE[1]).contains(&s))
         && ends_r2.is_some_and(|r| r > tag::ENDS_R2);
     let tld = m1.as_ref().map(|m| PairVal {
         ok: m.tld.mean_pct.abs() <= tag::TLD_V && m.tld.sd_pct.abs() <= tag::TLD_V,

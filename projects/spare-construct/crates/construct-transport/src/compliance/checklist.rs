@@ -53,6 +53,7 @@ pub struct X<'a> {
 
 impl<'a> X<'a> {
     /// `X` for a project.
+    #[must_use]
     pub fn new(p: &'a V) -> X<'a> {
         let c = state(p);
         let sc = active_sc(p);
@@ -138,8 +139,8 @@ pub fn applies(item: &V, x: &X) -> bool {
     }
 }
 
-fn r(state: &str, text: impl Into<String>) -> Option<(String, String)> {
-    Some((state.to_string(), text.into()))
+fn r(state: &str, text: impl Into<String>) -> (String, String) {
+    (state.to_string(), text.into())
 }
 
 fn plural(n: usize) -> &'static str {
@@ -148,8 +149,19 @@ fn plural(n: usize) -> &'static str {
 
 /// The automatic evaluator of a checklist item: `(state, text)`, None when Spare Construct has no automatic status for it.
 pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
+    if id.starts_with("X-") {
+        auto_x(id, x)
+    } else if id.starts_with("RC-") {
+        auto_rc(id, x)
+    } else {
+        auto_other(id, x)
+    }
+}
+
+// The X items of [`auto`].
+fn auto_x(id: &str, x: &X) -> Option<(String, String)> {
     let p = x.p;
-    match id {
+    let out = match id {
         "X-01" => {
             let code = x.r.g("code");
             if code.eq_s("unset") || code.eq_s("undated") { r("todo", x.r.g("text").s()) } else { r("done", format!("{}: {}", x.r.g("pathwayLabel").s(), x.r.g("text").s())) }
@@ -170,7 +182,7 @@ pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
         }
         "X-05" => {
             let l: Vec<String> = x.lint().items().iter().filter(|l| rx(r"count-|rates$", "").test(&l.g("id").s())).map(|l| l.g("text").s()).collect();
-            if !l.is_empty() { r("warn", l.join("; ")) } else { r("done", "Data sources are dated (data vintage table in Appendix G).") }
+            if l.is_empty() { r("done", "Data sources are dated (data vintage table in Appendix G).") } else { r("warn", l.join("; ")) }
         }
         "X-06" => if x.lint().items().iter().any(|l| l.g("id").eq_s("sens")) { r("todo", "No sensitivity scenario yet.") } else { r("done", "A sensitivity scenario exists.") },
         "X-07" => {
@@ -183,6 +195,15 @@ pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
             let n = m.items().iter().filter(|i| i.g("locked").t()).count();
             r(if n == m.jlen() { "done" } else { "todo" }, format!("{} of {} scoping items agreed and locked.", n, m.jlen()))
         }
+        _ => return None,
+    };
+    Some(out)
+}
+
+// The RC items of [`auto`].
+fn auto_rc(id: &str, x: &X) -> Option<(String, String)> {
+    let p = x.p;
+    let out = match id {
         "RC-01" => {
             let (e, site) = (x.e27(), &x.site);
             if site.g("looked").t() || site.g("zone").t() {
@@ -223,7 +244,7 @@ pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
         }
         "RC-17" => {
             if x.c.g("access").jlen() == 0 {
-                return r("todo", "Add the proposed access points.");
+                return Some(r("todo", "Add the proposed access points."));
             }
             let acc = x.acc();
             let nc = acc.iter().filter(|a| a.g("unchecked").jlen() > 0).count();
@@ -232,7 +253,7 @@ pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
         }
         "RC-18" => {
             if x.c.g("access").jlen() == 0 {
-                return r("todo", "Add the proposed access points with frontage, crossings, widths and queues.");
+                return Some(r("todo", "Add the proposed access points with frontage, crossings, widths and queues."));
             }
             let re = rx(r"Table|E27\.6\.4\.3", "");
             r(if x.acc().iter().any(|a| a.g("flags").items().iter().any(|f| re.test(&f.g("rule").s()))) { "warn" } else { "done" }, "Crossing number, width, passing bays and queues checked from the entered values.")
@@ -250,13 +271,22 @@ pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
                 r("todo", o.g("note").s())
             }
         }
+        _ => return None,
+    };
+    Some(out)
+}
+
+// The SH, SPD, FUND and EV items of [`auto`].
+fn auto_other(id: &str, x: &X) -> Option<(String, String)> {
+    let p = x.p;
+    let out = match id {
         "SH-03" => {
             let n = x.shc().g("motorway").items().iter().filter(|m| !m.g("confirmed").t()).count();
-            if n > 0 { r("warn", format!("{n} zone{} connected straight to a motorway: GRPA s84 special authorisation, or move the connector (confirm in Compliance \u{203a} State highways).", plural(n))) } else { None }
+            if n > 0 { r("warn", format!("{n} zone{} connected straight to a motorway: GRPA s84 special authorisation, or move the connector (confirm in Compliance \u{203a} State highways).", plural(n))) } else { return None; }
         }
         "SH-01" => {
             let t = x.shc().g("triggers");
-            r(if t.jlen() > 0 { "warn" } else { "done" }, if t.jlen() > 0 { format!("{}: seek NZTA written approval (s95E(3)(a)).", t.items().iter().map(|v| v.s()).collect::<Vec<_>>().join("; ")) } else { "No NZTA trigger case found.".into() })
+            r(if t.jlen() > 0 { "warn" } else { "done" }, if t.jlen() > 0 { format!("{}: seek NZTA written approval (s95E(3)(a)).", t.items().iter().map(super::jv::Jx::s).collect::<Vec<_>>().join("; ")) } else { "No NZTA trigger case found.".into() })
         }
         "SH-04" => {
             let t = x.shc().g("tech");
@@ -284,11 +314,13 @@ pub fn auto(id: &str, x: &X) -> Option<(String, String)> {
             if n > 0 { r("done", format!("{n} further-information clock{} tracked.", plural(n))) } else { r("todo", "Record s92 or cl 23 requests to track their deadlines.") }
         }
         "EV-02" => if x.clocks().items().iter().any(|c| c.g("kind").eq_s("hearing")) { r("done", "Hearing evidence dates calculated.") } else { r("todo", "Enter the hearing date for the s103B evidence dates.") },
-        _ => None,
-    }
+        _ => return None,
+    };
+    Some(out)
 }
 
 /// `checklist(P)`: every checklist item with whether it applies, its status (the author's record wins over the automatic one), the finding and the author's note, by and date.
+#[must_use]
 pub fn checklist(p: &V) -> V {
     let x = X::new(p);
     let c = &x.c;
@@ -304,11 +336,11 @@ pub fn checklist(p: &V) -> V {
                 let man = if c.g("checks").has(&id) && c.g("checks").g(&id).is_obj() { c.g("checks").g(&id).clone() } else { V::object() };
                 let st_ = if ok { auto(&id, &x) } else { None };
                 let manual = man.has("state") && man.g("state").t() && states.contains(&man.g("state").s().as_str());
-                let state_s = if !ok { "na".to_string() } else if manual { man.g("state").s() } else if let Some(s) = &st_ { s.0.clone() } else { "todo".to_string() };
+                let shown = if !ok { "na".to_string() } else if manual { man.g("state").s() } else if let Some(s) = &st_ { s.0.clone() } else { "todo".to_string() };
                 let mut o = it.clone();
                 o.set("groupLabel", if groups.g(&it.g("group").s()).t() { groups.g(&it.g("group").s()).clone() } else { it.g("group").clone() });
                 o.set("applies", V::Bool(ok));
-                o.set("state", st(state_s));
+                o.set("state", st(shown));
                 o.set("auto", V::Bool(st_.is_some() && !manual));
                 o.set("text", st(st_.map_or(String::new(), |s| s.1)));
                 let own = |k: &str| if man.has(k) { if man.g(k).t() { man.g(k).s() } else { String::new() } } else { String::new() };
@@ -322,6 +354,7 @@ pub fn checklist(p: &V) -> V {
 }
 
 /// `checklistCSV(P)`: the checklist as a stamped CSV.
+#[must_use]
 pub fn checklist_csv(p: &V, now: &V) -> String {
     let _ = now;
     let mut rows: Vec<Vec<V>> = vec![["ID", "Pathway", "Item", "Source", "Spare Construct fills", "Applies", "Status", "Spare Construct finding", "Author note", "By", "Date", "Evidence"].iter().map(|s| st(*s)).collect()];

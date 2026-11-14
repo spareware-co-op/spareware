@@ -2,6 +2,25 @@
 //! lts, exportReady, modelMeta (and every result's own meta), modelStatus, yearOf. The inputs are
 //! the recorded results themselves (expected/<name>.json res), read as the typed `Res`.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod recorded;
 mod support;
 
@@ -41,7 +60,7 @@ fn travel_and_isochrone_as_recorded() {
                 .filter(|z| !z.kind.is("gateway"))
                 .map(|z| z.id.as_str())
                 .collect();
-            for (period, r) in rec.scenarios[&sc.id].periods.iter() {
+            for (period, r) in rec.scenarios.get(&sc.id).unwrap().periods.iter() {
                 let path = format!("{name}.{}.{period}", sc.id);
                 if zl.len() >= 2 {
                     let t = travel(sc, &p.settings, Some(&r.res), zl[0], zl[1]);
@@ -74,7 +93,7 @@ fn select_link_lts_export_ready_and_meta_as_recorded() {
         let (p, rec) = project_and_record(name);
         let s = &p.settings;
         for sc in &p.scenarios {
-            for (period, r) in rec.scenarios[&sc.id].periods.iter() {
+            for (period, r) in rec.scenarios.get(&sc.id).unwrap().periods.iter() {
                 let path = format!("{name}.{}.{period}", sc.id);
                 let res = &r.res;
                 // the busiest arc, as gen-expected.mjs picks it
@@ -127,7 +146,7 @@ fn model_status_and_year_as_recorded() {
         for sc in &p.scenarios {
             assert_close(
                 &json!(year_of(Some(sc), &p.settings)),
-                &rec.scenarios[&sc.id].year_of,
+                &rec.scenarios.get(&sc.id).unwrap().year_of,
                 &format!("{name}.{}.yearOf", sc.id),
             );
         }
@@ -275,8 +294,8 @@ fn js_sort_is_stable_and_reads_nan_as_equal() {
     let mut seed = 7u64;
     let mut next = || {
         seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         (seed >> 33) % 13
     };
     for n in [0usize, 1, 2, 3, 7, 16, 33, 100] {

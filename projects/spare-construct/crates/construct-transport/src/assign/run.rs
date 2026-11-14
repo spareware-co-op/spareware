@@ -6,6 +6,7 @@
 //! its arrays (flows, costs, directions) as plain vectors in the same order and the same loops,
 //! so the floating-point sums come out in the same order.
 
+use super::Progress;
 use super::paths::{NewPath, PathSet, add_paths, merge_paths, scale_paths};
 use crate::demand::Demand;
 use crate::graph::{Graph, zc_idx};
@@ -26,7 +27,8 @@ pub(super) struct Od {
     pub j: usize,
     pub q: f64,
     pub c: usize,
-    pub od: usize,
+    /// The pair's number among all OD pairs with trips (its slot in the selection's OD flows).
+    pub pair: usize,
 }
 
 /// A flow that is averaged with the main flows' steps: the flow x, the conjugate direction s and the all-or-nothing flow y.
@@ -74,10 +76,23 @@ pub(super) const T_C1: usize = 0;
 pub(super) const T_C2: usize = 1;
 pub(super) const T_TD: usize = 2;
 
-/// The progress callback: iteration, gap and a message ("" for none).
-pub(super) type Progress<'p> = &'p mut (dyn FnMut(u32, f64, &str) + 'p);
+/// A development trip row: zone index, trips from it and trips to it.
+pub(super) type DevRow = (usize, f64, f64);
+
+/// The OD pairs with trips by origin, with their class totals and development rows.
+struct OdSet {
+    list: Vec<Vec<Od>>,
+    cls_trips: [f64; 3],
+    dev_gw: Vec<DevRow>,
+    dev_zone: Vec<DevRow>,
+    trips: f64,
+    n_od: usize,
+}
 
 /// One assignment in progress.
+///
+/// Paths are stored (`paths` and `sp` are set) for up to 300 zones, and the junction-site
+/// movements are traced (`ix.m` and `ix.md` are set) when the graph has site movement slots.
 pub(super) struct Run<'a, 'p> {
     pub g: Graph,
     pub s: &'a Settings,
@@ -104,17 +119,15 @@ pub(super) struct Run<'a, 'p> {
     pub w: Workspace,
     pub od_list: Vec<Vec<Od>>,
     pub cls_trips: [f64; 3],
-    pub dev_gw: Vec<(usize, f64, f64)>,
-    pub dev_zone: Vec<(usize, f64, f64)>,
+    pub dev_gw: Vec<DevRow>,
+    pub dev_zone: Vec<DevRow>,
     pub sel: Option<Sel>,
     pub trips: f64,
-    pub store_paths: bool,
     pub paths: Option<PathSet>,
     sp: Option<PathSet>,
     pub unserved: f64,
     pub trk: Vec<Trk>,
     pub ix: TrkIx,
-    sm_on: bool,
     pend: Vec<i32>,
     opened: Vec<usize>,
     s_dir: Vec<f64>,
@@ -132,6 +145,212 @@ pub(super) struct Run<'a, 'p> {
     progress: Option<Progress<'p>>,
 }
 
+// An arc, turn or slot index from one of the search's i32 arrays: -1 (none) and a missing entry give None
+fn at(v: &[i32], i: usize) -> Option<usize> {
+    v.get(i).and_then(|&e| usize::try_from(e).ok())
+}
+
+// Adds q to v[i]; every caller passes an index from the run's own tables, so it is always there
+fn add_at(v: &mut [f64], i: usize, q: f64) {
+    if let Some(e) = v.get_mut(i) {
+        *e += q;
+    }
+}
+
+// Adds q to the all-or-nothing flow of tracked flow t at index i (both from the run's own tables)
+fn add_trk(trk: &mut [Trk], t: usize, i: usize, q: f64) {
+    if let Some(e) = trk.get_mut(t).and_then(|tr| tr.y.get_mut(i)) {
+        *e += q;
+    }
+}
+
+// The row of a zone in a development table, added last (with no trips) when it is not there yet
+fn dev_row(rows: &mut Vec<DevRow>, zone: usize) -> Option<&mut DevRow> {
+    if let Some(found) = rows.iter().position(|r| r.0 == zone) {
+        rows.get_mut(found)
+    } else {
+        rows.push((zone, 0.0, 0.0));
+        rows.last_mut()
+    }
+}
+
+// Bus preloads (pcu/h) on the arcs of each route, except arcs with a bus lane
+fn bus_preload(g: &Graph, routes: &[Route], route_arcs: &[Vec<usize>], period: &str, bus_pcu: f64) -> Vec<f64> {
+    let mut pre = vec![0.0f64; g.m];
+    for (route, arcs) in routes.iter().zip(route_arcs) {
+        let freq = bus_freq(route, Some(period));
+        for &ai in arcs {
+            if g.arcs.get(ai).is_some_and(|arc| !arc.bus())
+                && let Some(slot) = pre.get_mut(ai)
+            {
+                *slot += freq * bus_pcu;
+            }
+        }
+    }
+    pre
+}
+
+/* Additive generalised cost per arc (s): time-of-use charges (L.toll via buildGraph, and opts.arcPenalty keyed by
+arc key or link id). Fixed per traversal, so they add no curvature; they are not time (see results). */
+fn charges(g: &Graph, opts: &AssignOpts) -> (Vec<f64>, bool) {
+    let mut apen = vec![0.0f64; g.m];
+    let ap = match &opts.arc_penalty {
+        Some(Value::Object(o)) => Some(o),
+        _ => None,
+    };
+    let mut has_pen = false;
+    for (arc, slot) in g.arcs.iter().zip(apen.iter_mut()) {
+        if arc.conn() {
+            continue;
+        }
+        let mut charge = arc.toll;
+        if let Some(ap) = ap {
+            let pick = |k: &str| ap.get(k).filter(|v| !v.is_null());
+            let extra = pick(&arc.key)
+                .or_else(|| pick(&arc.link))
+                .map_or(0.0, crate::jsnum::value_to_number);
+            if extra > 0.0 && extra.is_finite() {
+                charge += extra;
+            }
+        }
+        if charge > 0.0 {
+            *slot = charge;
+            has_pen = true;
+        }
+    }
+    (apen, has_pen)
+}
+
+// Selection: a zone (OD pairs with either end there), an arc or a turn (paths that use it)
+fn selection(g: &Graph, opts: &AssignOpts) -> Option<Sel> {
+    let req = opts.select.clone().filter(value_truthy)?;
+    let get = |k: &str| req.get(k).filter(|v| !v.is_null());
+    // Bound: zone and arc indexes are counts of things in memory, far below i64::MAX
+    let zone: i64 = match get("zone") {
+        Some(z) => g
+            .zones
+            .iter()
+            .position(|zz| z.as_str() == Some(zz.id.as_str()))
+            .and_then(|found| i64::try_from(found).ok())
+            .unwrap_or(-1),
+        None => -1,
+    };
+    let arc: i64 = match get("arc").and_then(|v| v.as_str()) {
+        Some(k) => g.key_idx.get(k).and_then(|&ai| i64::try_from(ai).ok()).unwrap_or(-1),
+        None => -1,
+    };
+    let mut turn: i64 = -1;
+    if let Some(Value::Array(t)) = req.get("turn") {
+        let from = t.first().and_then(|v| v.as_str()).and_then(|k| g.key_idx.get(k));
+        let to = t.get(1).and_then(|v| v.as_str()).and_then(|k| g.key_idx.get(k));
+        if let (Some(&from), Some(&to)) = (from, to) {
+            turn = i64::from(g.turn_idx(from, to));
+        }
+    }
+    let on = zone >= 0 || arc >= 0 || turn >= 0;
+    Some(Sel { req, zone, arc, turn, on })
+}
+
+// The OD list with its classes: every pair with more than 0.0005 trips, by origin
+fn od_classes(g: &Graph, dem: &Demand, pf: f64) -> OdSet {
+    let zn = dem.z;
+    let zc: Vec<usize> = g.zones.iter().map(|z| zc_idx(Some(z))).collect();
+    let is_gw: Vec<bool> = g.zones.iter().map(|z| z.kind.is("gateway")).collect();
+    let mut set = OdSet {
+        list: Vec::with_capacity(zn),
+        cls_trips: [0.0f64; 3],
+        dev_gw: Vec::new(),
+        dev_zone: Vec::new(),
+        trips: 0.0,
+        n_od: 0,
+    };
+    for i in 0..zn {
+        // The matrix is zn by zn, row by row; a missing entry reads as no trips (undefined in the JavaScript)
+        let row: &[f64] = i.checked_mul(zn).and_then(|start| dem.t.get(start..)).unwrap_or_default();
+        // zc and is_gw have an entry for every zone of the matrix
+        let (cls_i, gw_i) = (zc.get(i).copied().unwrap_or(0), is_gw.get(i).copied().unwrap_or(false));
+        let mut ods = Vec::new();
+        for j in 0..zn {
+            let Some(&q) = row.get(j) else {
+                continue;
+            };
+            if !(q > 0.0005) {
+                continue;
+            }
+            let (cls_j, gw_j) = (zc.get(j).copied().unwrap_or(0), is_gw.get(j).copied().unwrap_or(false));
+            let c = cls_i.max(cls_j);
+            ods.push(Od {
+                j,
+                q: q * pf,
+                c,
+                pair: set.n_od,
+            });
+            // Bound: one per OD pair, at most zn * zn of them
+            set.n_od = set.n_od.saturating_add(1);
+            set.trips += q;
+            if let Some(total) = set.cls_trips.get_mut(c) {
+                *total += q;
+            }
+            if c == 2 {
+                // development trips: where they cross the boundary, and each development zone's own trips
+                let gi = if gw_i {
+                    Some(i)
+                } else if gw_j {
+                    Some(j)
+                } else {
+                    None
+                };
+                if let Some(gi) = gi
+                    && let Some(r) = dev_row(&mut set.dev_gw, gi)
+                {
+                    if gi == i {
+                        r.1 += q;
+                    } else {
+                        r.2 += q;
+                    }
+                }
+                if cls_i == 2
+                    && let Some(r) = dev_row(&mut set.dev_zone, i)
+                {
+                    r.1 += q;
+                }
+                if cls_j == 2
+                    && let Some(r) = dev_row(&mut set.dev_zone, j)
+                {
+                    r.2 += q;
+                }
+            }
+        }
+        set.list.push(ods);
+    }
+    set
+}
+
+// Tracked flows [x, s (conjugate direction), y (all-or-nothing)]: committed and development link flows, development
+// turn flows, and the selection's link, turn and OD flows; all are averaged with the main flows' steps
+fn tracked(n_arcs: usize, nt: usize, n_od: usize, sel_on: bool, n_slots: usize) -> (Vec<Trk>, TrkIx) {
+    let mut trk: Vec<Trk> = vec![Trk::new(n_arcs), Trk::new(n_arcs), Trk::new(nt)];
+    let mut ix = TrkIx::default();
+    if sel_on {
+        ix.s = Some(trk.len());
+        trk.push(Trk::new(n_arcs));
+        ix.ts = Some(trk.len());
+        trk.push(Trk::new(nt));
+        ix.od = Some(trk.len());
+        trk.push(Trk::new(n_od));
+    }
+    /* Junction-site movements traced along each path (entry arc to exit arc), all traffic and development traffic.
+    Walking a path backwards, an exit arc opens its site and the site's entry arc closes it; an arc between two
+    sites closes the downstream one before it opens the upstream one. */
+    if n_slots > 0 {
+        ix.m = Some(trk.len());
+        trk.push(Trk::new(n_slots));
+        ix.md = Some(trk.len());
+        trk.push(Trk::new(n_slots));
+    }
+    (trk, ix)
+}
+
 impl<'a, 'p> Run<'a, 'p> {
     /// The start of `assign` up to the first all-or-nothing loading: bus preloads, charges, the OD list with its classes, the selection and the tracked flows.
     pub fn new(
@@ -145,171 +364,23 @@ impl<'a, 'p> Run<'a, 'p> {
     ) -> Run<'a, 'p> {
         let pf = pcu_f(s);
         let zn = dem.z;
-        let m = g.m;
-        let mut pre = vec![0.0f64; m];
+        let n_arcs = g.m;
         let bus_pcu = bus_pcu_of(s);
         let routes: Vec<Route> = sc.routes.values().cloned().collect();
         let route_arcs: Vec<Vec<usize>> = routes.iter().map(|r| g.resolve_route(r, None)).collect();
-        for (k, r) in routes.iter().enumerate() {
-            let f = bus_freq(r, Some(period));
-            for &ai in &route_arcs[k] {
-                if !g.arcs[ai].bus {
-                    pre[ai] += f * bus_pcu;
-                }
-            }
-        }
-        /* Additive generalised cost per arc (s): time-of-use charges (L.toll via buildGraph, and opts.arcPenalty keyed by
-        arc key or link id). Fixed per traversal, so they add no curvature; they are not time (see results). */
-        let mut apen = vec![0.0f64; m];
-        let ap = match &opts.arc_penalty {
-            Some(Value::Object(o)) => Some(o),
-            _ => None,
-        };
-        let mut has_pen = false;
-        for a in 0..m {
-            let arc = &g.arcs[a];
-            if arc.conn {
-                continue;
-            }
-            let mut p = arc.toll;
-            if let Some(ap) = ap {
-                let pick = |k: &str| ap.get(k).filter(|v| !v.is_null());
-                let v = match (pick(&arc.key), pick(&arc.link)) {
-                    (Some(v), _) => crate::jsnum::value_to_number(v),
-                    (None, Some(v)) => crate::jsnum::value_to_number(v),
-                    (None, None) => 0.0,
-                };
-                if v > 0.0 && v.is_finite() {
-                    p += v;
-                }
-            }
-            if p > 0.0 {
-                apen[a] = p;
-                has_pen = true;
-            }
-        }
+        let pre = bus_preload(&g, &routes, &route_arcs, period, bus_pcu);
+        let (apen, has_pen) = charges(&g, opts);
         let nt = g.n_t;
         let pc: Vec<f64> = g.tpen().iter().map(|&p| if p == f64::INFINITY { 0.0 } else { p }).collect();
-        let zc: Vec<usize> = g.zones.iter().map(|z| zc_idx(Some(z))).collect();
-        let is_gw: Vec<bool> = g.zones.iter().map(|z| z.kind.is("gateway")).collect();
-        // Selection: a zone (OD pairs with either end there), an arc or a turn (paths that use it)
-        let req = opts.select.clone().filter(value_truthy);
-        let get = |k: &str| req.as_ref().and_then(|r| r.get(k)).filter(|v| !v.is_null());
-        let sel_zone: i64 = match get("zone") {
-            Some(z) => g
-                .zones
-                .iter()
-                .position(|zz| z.as_str() == Some(zz.id.as_str()))
-                .map_or(-1, |p| p as i64),
-            None => -1,
-        };
-        let sel_arc: i64 = match get("arc").and_then(|v| v.as_str()) {
-            Some(k) => g.key_idx.get(k).map_or(-1, |&a| a as i64),
-            None => -1,
-        };
-        let mut sel_turn: i64 = -1;
-        if let Some(Value::Array(t)) = req.as_ref().and_then(|r| r.get("turn")) {
-            let a = t.first().and_then(|v| v.as_str()).and_then(|k| g.key_idx.get(k));
-            let b = t.get(1).and_then(|v| v.as_str()).and_then(|k| g.key_idx.get(k));
-            if let (Some(&a), Some(&b)) = (a, b) {
-                sel_turn = g.turn_idx(a, b) as i64;
-            }
-        }
-        let sel_on = req.is_some() && (sel_zone >= 0 || sel_arc >= 0 || sel_turn >= 0);
-        let sel = req.map(|req| Sel {
-            req,
-            zone: sel_zone,
-            arc: sel_arc,
-            turn: sel_turn,
-            on: sel_on,
-        });
-        let mut od_list: Vec<Vec<Od>> = Vec::with_capacity(zn);
-        let mut cls_trips = [0.0f64; 3];
-        let mut dev_gw: Vec<(usize, f64, f64)> = Vec::new();
-        let mut dev_zone: Vec<(usize, f64, f64)> = Vec::new();
-        let (mut trips, mut n_od) = (0.0f64, 0usize);
-        for i in 0..zn {
-            let mut l = Vec::new();
-            for j in 0..zn {
-                let q = dem.t[i * zn + j];
-                if !(q > 0.0005) {
-                    continue;
-                }
-                let c = zc[i].max(zc[j]);
-                l.push(Od {
-                    j,
-                    q: q * pf,
-                    c,
-                    od: n_od,
-                });
-                n_od += 1;
-                trips += q;
-                cls_trips[c] += q;
-                if c == 2 {
-                    // development trips: where they cross the boundary, and each development zone's own trips
-                    let gi = if is_gw[i] {
-                        Some(i)
-                    } else if is_gw[j] {
-                        Some(j)
-                    } else {
-                        None
-                    };
-                    if let Some(gi) = gi {
-                        let at = dev_gw.iter().position(|r| r.0 == gi).unwrap_or_else(|| {
-                            dev_gw.push((gi, 0.0, 0.0));
-                            dev_gw.len() - 1
-                        });
-                        if gi == i {
-                            dev_gw[at].1 += q;
-                        } else {
-                            dev_gw[at].2 += q;
-                        }
-                    }
-                    if zc[i] == 2 {
-                        let at = dev_zone.iter().position(|r| r.0 == i).unwrap_or_else(|| {
-                            dev_zone.push((i, 0.0, 0.0));
-                            dev_zone.len() - 1
-                        });
-                        dev_zone[at].1 += q;
-                    }
-                    if zc[j] == 2 {
-                        let at = dev_zone.iter().position(|r| r.0 == j).unwrap_or_else(|| {
-                            dev_zone.push((j, 0.0, 0.0));
-                            dev_zone.len() - 1
-                        });
-                        dev_zone[at].2 += q;
-                    }
-                }
-            }
-            od_list.push(l);
-        }
+        let sel = selection(&g, opts);
+        let sel_on = sel.as_ref().is_some_and(|x| x.on);
+        let ods = od_classes(&g, dem, pf);
         let store_paths = zn <= 300;
-        // Tracked flows [x, s (conjugate direction), y (all-or-nothing)]: committed and development link flows, development
-        // turn flows, and the selection's link, turn and OD flows; all are averaged with the main flows' steps
-        let mut trk: Vec<Trk> = vec![Trk::new(m), Trk::new(m), Trk::new(nt)];
-        let mut ix = TrkIx::default();
-        if sel_on {
-            ix.s = Some(trk.len());
-            trk.push(Trk::new(m));
-            ix.ts = Some(trk.len());
-            trk.push(Trk::new(nt));
-            ix.od = Some(trk.len());
-            trk.push(Trk::new(n_od));
-        }
-        /* Junction-site movements traced along each path (entry arc to exit arc), all traffic and development traffic.
-        Walking a path backwards, an exit arc opens its site and the site's entry arc closes it; an arc between two
-        sites closes the downstream one before it opens the upstream one. */
-        let sm_n = g.sm.as_ref().map_or(0, |sm| sm.n);
-        let sm_on = sm_n > 0;
-        if sm_on {
-            ix.m = Some(trk.len());
-            trk.push(Trk::new(sm_n));
-            ix.md = Some(trk.len());
-            trk.push(Trk::new(sm_n));
-        }
+        let n_slots = g.sm.as_ref().map_or(0, |sm| sm.n);
+        let (trk, ix) = tracked(n_arcs, nt, ods.n_od, sel_on, n_slots);
         let pend = vec![-1i32; g.sm.as_ref().map_or(0, |sm| sm.list.len())];
-        if sm_on {
-            g.sm_x = Some(vec![0.0; sm_n]);
+        if n_slots > 0 {
+            g.sm_x = Some(vec![0.0; n_slots]);
         }
         g.mv_detail = false; // lane rows for the junction tables are built on the last capacity update only
         let cv = conv_set(
@@ -319,13 +390,13 @@ impl<'a, 'p> Run<'a, 'p> {
                 max_iter: Some(opts.max_iter.num()),
             },
         );
-        let w = g.workspace();
+        let workspace = g.workspace();
         Run {
             perf: PerfSet::new(s),
             s,
             period: period.to_string(),
             cv,
-            m,
+            m: n_arcs,
             nt,
             zn,
             pf,
@@ -335,34 +406,32 @@ impl<'a, 'p> Run<'a, 'p> {
             pre,
             apen,
             has_pen,
-            x: vec![0.0; m],
-            y: vec![0.0; m],
-            cost: vec![0.0; m],
-            xt: vec![0.0; m],
+            x: vec![0.0; n_arcs],
+            y: vec![0.0; n_arcs],
+            cost: vec![0.0; n_arcs],
+            xt: vec![0.0; n_arcs],
             x_t: vec![0.0; nt],
             y_t: vec![0.0; nt],
             pc,
-            w,
-            od_list,
-            cls_trips,
-            dev_gw,
-            dev_zone,
+            w: workspace,
+            od_list: ods.list,
+            cls_trips: ods.cls_trips,
+            dev_gw: ods.dev_gw,
+            dev_zone: ods.dev_zone,
             sel,
-            trips,
-            store_paths,
+            trips: ods.trips,
             paths: store_paths.then(PathSet::new),
             sp: store_paths.then(PathSet::new),
             unserved: 0.0,
             trk,
             ix,
-            sm_on,
             pend,
             opened: Vec::new(),
-            s_dir: vec![0.0; m],
+            s_dir: vec![0.0; n_arcs],
             s_t: vec![0.0; nt],
             has_s: false,
             conv: Vec::new(),
-            x_prev: vec![0.0; m],
+            x_prev: vec![0.0; n_arcs],
             hist: VecDeque::new(),
             consec_p: 0.0,
             k_cap: 0,
@@ -384,30 +453,98 @@ impl<'a, 'p> Run<'a, 'p> {
 
 impl Run<'_, '_> {
     fn set_xt(&mut self) {
-        for a in 0..self.m {
-            self.xt[a] = self.x[a] + self.pre[a];
+        for ((xt, &xa), &pa) in self.xt.iter_mut().zip(&self.x).zip(&self.pre) {
+            *xt = xa + pa;
         }
     }
 
     fn costs(&mut self) {
-        for a in 0..self.m {
-            self.cost[a] = arc_time(&self.g.arcs[a], self.x[a] + self.pre[a], &self.perf) + self.apen[a];
+        let arcs = self.g.arcs.iter().zip(&self.apen);
+        for (((ct, &xa), &pa), (arc, &ap)) in self.cost.iter_mut().zip(&self.x).zip(&self.pre).zip(arcs) {
+            *ct = arc_time(arc, xa + pa, &self.perf) + ap;
         }
     }
 
     // `G.smX` is the traced site flows xM, live in the JavaScript; here it is copied in before each capacity update
     fn sync_sm(&mut self) {
-        if let (Some(i), Some(buf)) = (self.ix.m, self.g.sm_x.as_mut()) {
-            buf.copy_from_slice(&self.trk[i].x);
+        if let (Some(tr), Some(buf)) = (self.ix.m.and_then(|i| self.trk.get(i)), self.g.sm_x.as_mut()) {
+            buf.copy_from_slice(&tr.x);
         }
     }
 
     // `caps()`: junction capacities from the current flows; MSA damping (1 / kCap) after the first update of a phase
     fn caps(&mut self) {
-        self.k_cap += 1;
-        let w = if self.cv.msa && self.k_cap > 1 { 1.0 / self.k_cap as f64 } else { 1.0 };
+        // Bound: one per iteration of a phase, far below u32::MAX
+        self.k_cap = self.k_cap.saturating_add(1);
+        let w = if self.cv.msa && self.k_cap > 1 { 1.0 / f64::from(self.k_cap) } else { 1.0 };
         self.sync_sm();
         update_node_caps(&mut self.g, &self.xt, w, Some(&self.x_t));
+    }
+
+    // The junction-site movement step of a path walked backwards at arc a: an entry arc closes its site's open
+    // movement (adding q to it), an exit arc opens one. Does nothing unless site movements are traced.
+    fn trace_site(&mut self, a: usize, q: f64, dev: bool) {
+        let (Some(sm), Some(xm), Some(xd)) = (self.g.sm.as_ref(), self.ix.m, self.ix.md) else {
+            return;
+        };
+        if let Some(site) = at(&sm.ent_s, a)
+            && let Some(open) = at(&self.pend, site)
+        {
+            // Bound: the slot lies in the site's block of sm.n slots, far below usize::MAX
+            if let (Some(st), Some(ei)) = (sm.list.get(site), at(&sm.ent_i, a)) {
+                let kk = st.off.saturating_add(ei.saturating_mul(st.nx)).saturating_add(open);
+                add_trk(&mut self.trk, xm, kk, q);
+                if dev {
+                    add_trk(&mut self.trk, xd, kk, q);
+                }
+            }
+            if let Some(slot) = self.pend.get_mut(site) {
+                *slot = -1;
+            }
+        }
+        if let Some(site) = at(&sm.ext_s, a) {
+            if let Some(slot) = self.pend.get_mut(site) {
+                *slot = sm.ext_i.get(a).copied().unwrap_or(-1);
+            }
+            self.opened.push(site);
+        }
+    }
+
+    // The selection's flows for OD pair (i, j) ending at node dn: when the pair touches the selected zone or its
+    // path uses the selected arc or turn, its trips go on the selection's OD, link and turn flows
+    fn select_track(&mut self, i: usize, j: usize, dn: usize, q: f64, pair: usize) {
+        let Some((zone, arc, turn)) = self.sel.as_ref().filter(|sel| sel.on).map(|sel| (sel.zone, sel.arc, sel.turn)) else {
+            return;
+        };
+        let mut hit = i64::try_from(i).is_ok_and(|v| v == zone) || i64::try_from(j).is_ok_and(|v| v == zone);
+        if !hit {
+            let mut cur = at(&self.w.na, dn);
+            while let Some(ai) = cur {
+                if i64::try_from(ai).is_ok_and(|v| v == arc)
+                    || (turn >= 0 && self.w.pt.get(ai).is_some_and(|&t| i64::from(t) == turn))
+                {
+                    hit = true;
+                    break;
+                }
+                cur = at(&self.w.pred, ai);
+            }
+        }
+        // The selection's tracked flows are made whenever the selection is on
+        let (Some(xs), Some(xts), Some(xod)) = (self.ix.s, self.ix.ts, self.ix.od) else {
+            return;
+        };
+        if !hit {
+            return;
+        }
+        add_trk(&mut self.trk, xod, pair, q);
+        let mut cur = at(&self.w.na, dn);
+        while let Some(ai) = cur {
+            add_trk(&mut self.trk, xs, ai, q);
+            if let Some(t) = at(&self.w.pt, ai) {
+                add_trk(&mut self.trk, xts, t, q);
+            }
+            cur = at(&self.w.pred, ai);
+        }
     }
 
     /// `aon(np)`: all-or-nothing loading on the current costs; np (when given) collects each OD pair's path.
@@ -419,108 +556,70 @@ impl Run<'_, '_> {
         for t in &mut self.trk {
             t.y.fill(0.0);
         }
-        let (sel_on, sel_zone, sel_arc, sel_turn) = match &self.sel {
-            Some(s) => (s.on, s.zone, s.arc, s.turn),
-            None => (false, -1, -1, -1),
-        };
         for i in 0..zn {
-            if self.od_list[i].is_empty() {
+            let n_dest = self.od_list.get(i).map_or(0, Vec::len);
+            if n_dest == 0 {
                 continue;
             }
-            self.g.spt(&self.cost, self.g.zone_node[i], &mut self.w, -1, -1);
-            for k in 0..self.od_list[i].len() {
-                let Od { j, q, c, od } = self.od_list[i][k];
-                let dn = self.g.zone_node[j];
-                if !self.w.nd[dn].is_finite() {
+            // zone_node has an entry for every zone of the matrix
+            let Some(&src) = self.g.zone_node.get(i) else {
+                continue;
+            };
+            self.g.spt(&self.cost, src, &mut self.w, -1, -1);
+            for k in 0..n_dest {
+                let Some(&Od { j, q, c, pair }) = self.od_list.get(i).and_then(|l| l.get(k)) else {
+                    continue;
+                };
+                // A destination not reached (or with no node: nd[undefined] in the JavaScript) is unserved
+                let Some(dn) = self
+                    .g
+                    .zone_node
+                    .get(j)
+                    .copied()
+                    .filter(|&d| self.w.nd.get(d).is_some_and(|nd| nd.is_finite()))
+                else {
                     self.unserved += q;
                     continue;
-                }
-                let mut p: Option<Vec<usize>> = np.is_some().then(Vec::new);
+                };
+                let mut path: Option<Vec<usize>> = np.is_some().then(Vec::new);
                 let ycl = match c {
                     2 => Some(T_C2),
                     1 => Some(T_C1),
                     _ => None,
                 };
-                let mut ai = self.w.na[dn];
-                while ai >= 0 {
-                    let a = ai as usize;
-                    self.y[a] += q;
-                    let pt = self.w.pt[a];
-                    if pt >= 0 {
-                        self.y_t[pt as usize] += q;
+                let mut cur = at(&self.w.na, dn);
+                while let Some(a) = cur {
+                    add_at(&mut self.y, a, q);
+                    if let Some(t) = at(&self.w.pt, a) {
+                        add_at(&mut self.y_t, t, q);
                         if c == 2 {
-                            self.trk[T_TD].y[pt as usize] += q;
+                            add_trk(&mut self.trk, T_TD, t, q);
                         }
                     }
                     if let Some(t) = ycl {
-                        self.trk[t].y[a] += q;
+                        add_trk(&mut self.trk, t, a, q);
                     }
-                    if let Some(p) = p.as_mut() {
+                    if let Some(p) = path.as_mut() {
                         p.push(a);
                     }
-                    if self.sm_on {
-                        let sm = self.g.sm.as_ref().expect("site moves");
-                        let (xm, xd) = (self.ix.m.expect("traced flows"), self.ix.md.expect("traced flows"));
-                        let s = sm.ent_s[a];
-                        if s >= 0 && self.pend[s as usize] >= 0 {
-                            let st = &sm.list[s as usize];
-                            let kk = st.off + sm.ent_i[a] as usize * st.nx + self.pend[s as usize] as usize;
-                            self.trk[xm].y[kk] += q;
-                            if c == 2 {
-                                self.trk[xd].y[kk] += q;
-                            }
-                            self.pend[s as usize] = -1;
-                        }
-                        let s = sm.ext_s[a];
-                        if s >= 0 {
-                            self.pend[s as usize] = sm.ext_i[a];
-                            self.opened.push(s as usize);
-                        }
-                    }
-                    ai = self.w.pred[a];
+                    self.trace_site(a, q, c == 2);
+                    cur = at(&self.w.pred, a);
                 }
                 if !self.opened.is_empty() {
-                    for &s in &self.opened {
-                        self.pend[s] = -1;
+                    for &site in &self.opened {
+                        if let Some(slot) = self.pend.get_mut(site) {
+                            *slot = -1;
+                        }
                     }
                     self.opened.clear();
                 }
-                if sel_on {
-                    let mut hit = i as i64 == sel_zone || j as i64 == sel_zone;
-                    if !hit {
-                        let mut a2 = self.w.na[dn];
-                        while a2 >= 0 {
-                            if a2 as i64 == sel_arc || (sel_turn >= 0 && self.w.pt[a2 as usize] as i64 == sel_turn) {
-                                hit = true;
-                                break;
-                            }
-                            a2 = self.w.pred[a2 as usize];
-                        }
-                    }
-                    if hit {
-                        let (xs, xts, xod) = (
-                            self.ix.s.expect("selection"),
-                            self.ix.ts.expect("selection"),
-                            self.ix.od.expect("selection"),
-                        );
-                        self.trk[xod].y[od] += q;
-                        let mut a2 = self.w.na[dn];
-                        while a2 >= 0 {
-                            let a = a2 as usize;
-                            self.trk[xs].y[a] += q;
-                            let pt = self.w.pt[a];
-                            if pt >= 0 {
-                                self.trk[xts].y[pt as usize] += q;
-                            }
-                            a2 = self.w.pred[a];
-                        }
-                    }
-                }
+                self.select_track(i, j, dn, q, pair);
                 if let Some(np) = np.as_mut()
-                    && let Some(mut p) = p
+                    && let Some(mut p) = path
                 {
                     p.reverse();
-                    np.push((i * zn + j, p, q));
+                    // Bound: paths are stored for up to 300 zones only, so i * zn + j stays small
+                    np.push((i.saturating_mul(zn).saturating_add(j), p, q));
                 }
             }
         }
@@ -535,18 +634,21 @@ impl Run<'_, '_> {
         let mut al = 0.0f64;
         if self.has_s {
             let (mut num, mut den) = (0.0f64, 0.0f64);
-            for a in 0..self.m {
-                let ds = self.s_dir[a] - self.x[a];
+            let arcs = self.g.arcs.iter().zip(&self.apen).zip(&self.cost);
+            for ((((&sd, &xa), &pa), &ya), ((arc, &ap), &ct)) in
+                self.s_dir.iter().zip(&self.x).zip(&self.pre).zip(&self.y).zip(arcs)
+            {
+                let ds = sd - xa;
                 if ds == 0.0 {
                     continue;
                 }
-                let q = self.x[a] + self.pre[a];
+                let q = xa + pa;
                 let h = math_max(1.0, q * 0.01);
-                let hs = (arc_time(&self.g.arcs[a], q + h, &self.perf) + self.apen[a] - self.cost[a]) / h;
-                num += ds * hs * (self.y[a] - self.x[a]);
-                den += ds * hs * (self.y[a] - self.s_dir[a]);
+                let hs = (arc_time(arc, q + h, &self.perf) + ap - ct) / h;
+                num += ds * hs * (ya - xa);
+                den += ds * hs * (ya - sd);
             }
-            al = if den != 0.0 { num / den } else { 0.0 };
+            al = if den == 0.0 { 0.0 } else { num / den };
             al = if al > 0.99 {
                 0.99
             } else if al > 0.0 {
@@ -555,19 +657,21 @@ impl Run<'_, '_> {
                 0.0
             };
         }
-        for a in 0..self.m {
-            self.s_dir[a] = al * self.s_dir[a] + (1.0 - al) * self.y[a];
+        for (sd, &ya) in self.s_dir.iter_mut().zip(&self.y) {
+            *sd = al * *sd + (1.0 - al) * ya;
         }
-        for t in 0..self.nt {
-            self.s_t[t] = al * self.s_t[t] + (1.0 - al) * self.y_t[t];
+        for (st, &yt) in self.s_t.iter_mut().zip(&self.y_t) {
+            *st = al * *st + (1.0 - al) * yt;
         }
         for tr in &mut self.trk {
-            for k in 0..tr.s.len() {
-                tr.s[k] = al * tr.s[k] + (1.0 - al) * tr.y[k];
+            for (sv, &yv) in tr.s.iter_mut().zip(&tr.y) {
+                *sv = al * *sv + (1.0 - al) * yv;
             }
         }
-        if let Some(np) = np {
-            let sp = self.sp.as_mut().expect("paths are stored");
+        // np is given only when paths are stored, so sp is there
+        if let Some(np) = np
+            && let Some(sp) = self.sp.as_mut()
+        {
             if al > 0.0 {
                 scale_paths(sp, al);
             } else {
@@ -581,15 +685,16 @@ impl Run<'_, '_> {
     // `derivative(lam)`: the slope of the objective along the direction at step lam
     fn derivative(&self, lam: f64) -> f64 {
         let mut r = 0.0f64;
-        for a in 0..self.m {
-            let d = self.s_dir[a] - self.x[a];
+        let arcs = self.g.arcs.iter().zip(&self.apen);
+        for (((&sd, &xa), &pa), (arc, &ap)) in self.s_dir.iter().zip(&self.x).zip(&self.pre).zip(arcs) {
+            let d = sd - xa;
             if d != 0.0 {
-                r += d * (arc_time(&self.g.arcs[a], self.x[a] + lam * d + self.pre[a], &self.perf) + self.apen[a]);
+                r += d * (arc_time(arc, xa + lam * d + pa, &self.perf) + ap);
             }
         }
-        for t in 0..self.nt {
-            if truthy_number(self.pc[t]) {
-                r += (self.s_t[t] - self.x_t[t]) * self.pc[t];
+        for ((&pcv, &st), &xt) in self.pc.iter().zip(&self.s_t).zip(&self.x_t) {
+            if truthy_number(pcv) {
+                r += (st - xt) * pcv;
             }
         }
         r
@@ -602,14 +707,14 @@ impl Run<'_, '_> {
         }
         let (mut lo, mut hi) = (0.0f64, 1.0f64);
         for _ in 0..20 {
-            let m = (lo + hi) / 2.0;
+            let m = f64::midpoint(lo, hi);
             if self.derivative(m) > 0.0 {
                 hi = m;
             } else {
                 lo = m;
             }
         }
-        (lo + hi) / 2.0
+        f64::midpoint(lo, hi)
     }
 
     /// `iterate(maxIt, tol, final)`: equilibrium iterations until the gap is under tol (and, for the final phase under the stability rule, the flows are stable) or maxIt is reached.
@@ -628,27 +733,29 @@ impl Run<'_, '_> {
             self.set_xt();
             self.caps();
             self.costs();
-            let mut np: Option<Vec<NewPath>> = self.store_paths.then(Vec::new);
+            let mut np: Option<Vec<NewPath>> = self.paths.is_some().then(Vec::new);
             self.aon(np.as_mut());
             let (mut num, mut den, mut vh) = (0.0f64, 0.0f64, 0.0f64);
-            for a in 0..self.m {
-                num += self.cost[a] * (self.x[a] - self.y[a]);
-                den += self.cost[a] * self.x[a];
-                if !self.g.arcs[a].conn {
-                    vh += self.x[a] * (self.cost[a] - self.apen[a]);
+            let arcs = self.g.arcs.iter().zip(&self.apen);
+            for (((&ct, &xa), &ya), (arc, &ap)) in self.cost.iter().zip(&self.x).zip(&self.y).zip(arcs) {
+                num += ct * (xa - ya);
+                den += ct * xa;
+                if !arc.conn() {
+                    vh += xa * (ct - ap);
                 }
             }
-            for t in 0..self.nt {
-                if truthy_number(self.pc[t]) {
-                    num += self.pc[t] * (self.x_t[t] - self.y_t[t]);
-                    den += self.pc[t] * self.x_t[t];
-                    vh += self.pc[t] * self.x_t[t];
+            for ((&pcv, &xt), &yt) in self.pc.iter().zip(&self.x_t).zip(&self.y_t) {
+                if truthy_number(pcv) {
+                    num += pcv * (xt - yt);
+                    den += pcv * xt;
+                    vh += pcv * xt;
                 }
             }
             self.gap = if den > 0.0 { (num / den).abs() } else { 0.0 };
-            self.it += 1;
+            // Bound: one per iteration, far below u32::MAX
+            self.it = self.it.saturating_add(1);
             self.conv.push(ConvRow {
-                it: self.it as f64,
+                it: f64::from(self.it),
                 gap: string_to_number(&to_precision(self.gap, 3)),
                 p: self.last_p.map(r3),
                 vht: r1(vh / self.pf / 3600.0),
@@ -662,44 +769,80 @@ impl Run<'_, '_> {
             self.direction(np);
             let lam = self.line_search();
             self.x_prev.copy_from_slice(&self.x);
-            for a in 0..self.m {
-                self.x[a] += lam * (self.s_dir[a] - self.x[a]);
+            for (xa, &sd) in self.x.iter_mut().zip(&self.s_dir) {
+                *xa += lam * (sd - *xa);
             }
-            for t in 0..self.nt {
-                self.x_t[t] += lam * (self.s_t[t] - self.x_t[t]);
+            for (xt, &st) in self.x_t.iter_mut().zip(&self.s_t) {
+                *xt += lam * (st - *xt);
             }
             for tr in &mut self.trk {
-                for kk in 0..tr.x.len() {
-                    tr.x[kk] += lam * (tr.s[kk] - tr.x[kk]);
+                for (xv, &sv) in tr.x.iter_mut().zip(&tr.s) {
+                    *xv += lam * (sv - *xv);
                 }
             }
             let (mut n_p, mut ok_p) = (0u32, 0u32);
-            for a in 0..self.m {
-                if self.g.arcs[a].conn || !(self.x_prev[a] > 1.0) {
+            for ((arc, &xp), &xa) in self.g.arcs.iter().zip(&self.x_prev).zip(&self.x) {
+                if arc.conn() || !(xp > 1.0) {
                     continue;
                 }
-                n_p += 1;
-                if (self.x[a] - self.x_prev[a]).abs() < self.cv.chg * self.x_prev[a] {
-                    ok_p += 1;
+                // Bound: counts of arcs, far below u32::MAX
+                n_p = n_p.saturating_add(1);
+                if (xa - xp).abs() < self.cv.chg * xp {
+                    ok_p = ok_p.saturating_add(1);
                 }
             }
-            let last_p = if n_p > 0 { ok_p as f64 / n_p as f64 } else { 1.0 };
+            let last_p = if n_p > 0 { f64::from(ok_p) / f64::from(n_p) } else { 1.0 };
             self.last_p = Some(last_p);
             self.consec_p = if last_p > self.cv.share { self.consec_p + 1.0 } else { 0.0 };
             self.hist.push_back(self.x.clone());
             if self.hist.len() > 6 {
                 self.hist.pop_front();
             }
-            if self.store_paths {
-                let paths = self.paths.as_mut().expect("paths are stored");
+            if let (Some(paths), Some(sp)) = (self.paths.as_mut(), self.sp.as_ref()) {
                 scale_paths(paths, 1.0 - lam);
-                merge_paths(paths, self.sp.as_ref().expect("paths are stored"), lam);
+                merge_paths(paths, sp, lam);
             }
             if self.it.is_multiple_of(2) {
                 let (it, gap) = (self.it, self.gap);
                 self.prog(it, gap, "");
             }
             k += 1.0;
+        }
+    }
+
+    // Webster timings for signal controller k from the current flows: the cycle from the critical flow ratios of the
+    // two phases, and the green split between them
+    fn retime(&mut self, k: usize) {
+        let Some(ctl) = self.g.ctl.get(k) else {
+            return;
+        };
+        // a site's own cycle and fixed timing, or the node's
+        if ctl.src.fixed_timing.truthy() {
+            return;
+        }
+        let mut yv = [0.02f64, 0.02f64];
+        for &ai in &ctl.arcs {
+            // A controller's entry arcs are arcs of the graph, with flows
+            let (Some(arc), Some(&xt)) = (self.g.arcs.get(ai), self.xt.get(ai)) else {
+                continue;
+            };
+            // Phases are 0 and 1; the JavaScript would set an unused property for any other
+            if let Some(slot) = yv.get_mut(usize::from(arc.phase.unwrap_or(0))) {
+                *slot = math_max(*slot, xt / (f64::from(arc.gl) * self.s.sat_flow.num()));
+            }
+        }
+        let [y0, y1] = yv;
+        let yy = math_min(0.92, y0 + y1);
+        let cycle = ctl.src.cycle.num();
+        // Only controllers with a signal timing are re-timed
+        let Some(timing) = self.g.ctl.get_mut(k).and_then(|c| c.signal.as_mut()) else {
+            return;
+        };
+        timing.c = or_default(cycle, math_round(clamp((1.5 * timing.lost + 5.0) / (1.0 - yy), 50.0, 140.0)));
+        let s0 = clamp(y0 / (y0 + y1), 0.2, 0.8);
+        timing.split = vec![s0, 1.0 - s0];
+        if let Some(ctl) = self.g.ctl.get(k) {
+            crate::graph::apply_signal(ctl, &mut self.g.arcs);
         }
     }
 
@@ -714,24 +857,28 @@ impl Run<'_, '_> {
         self.set_xt();
         self.caps();
         self.costs();
-        let mut np: Option<Vec<NewPath>> = self.store_paths.then(Vec::new);
+        let mut np: Option<Vec<NewPath>> = self.paths.is_some().then(Vec::new);
         self.aon(np.as_mut());
         self.x.copy_from_slice(&self.y);
         self.x_t.copy_from_slice(&self.y_t);
         for tr in &mut self.trk {
             tr.x.copy_from_slice(&tr.y);
         }
-        if let Some(np) = np {
-            add_paths(np, 1.0, self.paths.as_mut().expect("paths are stored"));
+        if let Some(np) = np
+            && let Some(paths) = self.paths.as_mut()
+        {
+            add_paths(np, 1.0, paths);
         }
         self.gap = 1.0;
         self.it = 1;
         let cv = self.cv;
-        let sig_nodes: Vec<usize> = (0..self.g.ctl.len())
-            .filter(|&k| {
-                let c = &self.g.ctl[k];
-                c.kind == "signals" && c.signal.as_ref().is_some_and(|t| !t.single)
-            })
+        let sig_nodes: Vec<usize> = self
+            .g
+            .ctl
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.kind == "signals" && c.signal.as_ref().is_some_and(|t| !t.single))
+            .map(|(k, _)| k)
             .collect();
         let sig_opt = self.s.signal_opt.truthy() && !sig_nodes.is_empty();
         let loose = math_max(cv.gap_tol, 1e-3);
@@ -746,24 +893,7 @@ impl Run<'_, '_> {
             for round in 0..2 {
                 self.set_xt();
                 for &k in &sig_nodes {
-                    // a site's own cycle and fixed timing, or the node's
-                    if self.g.ctl[k].src.fixed_timing.truthy() {
-                        continue;
-                    }
-                    let mut yv = [0.02f64, 0.02f64];
-                    for &ai in &self.g.ctl[k].arcs {
-                        let a = &self.g.arcs[ai];
-                        let ph = a.phase.unwrap_or(0) as usize;
-                        yv[ph] = math_max(yv[ph], self.xt[ai] / (a.gl as f64 * self.s.sat_flow.num()));
-                    }
-                    let yy = math_min(0.92, yv[0] + yv[1]);
-                    let cycle = self.g.ctl[k].src.cycle.num();
-                    let ctl = &mut self.g.ctl[k];
-                    let timing = ctl.signal.as_mut().expect("signal timing");
-                    timing.c = or_default(cycle, math_round(clamp((1.5 * timing.lost + 5.0) / (1.0 - yy), 50.0, 140.0)));
-                    let s0 = clamp(yv[0] / (yv[0] + yv[1]), 0.2, 0.8);
-                    timing.split = vec![s0, 1.0 - s0];
-                    crate::graph::apply_signal(&self.g.ctl[k], &mut self.g.arcs);
+                    self.retime(k);
                 }
                 let (it, gap) = (self.it, self.gap);
                 self.prog(it, gap, "Optimising signal timings");
@@ -772,7 +902,7 @@ impl Run<'_, '_> {
                 } else if round == 0 {
                     self.iterate(third, loose, false);
                 } else {
-                    self.iterate(math_max(third, cv.max_iter - self.it as f64 + 1.0), cv.gap_tol, true);
+                    self.iterate(math_max(third, cv.max_iter - f64::from(self.it) + 1.0), cv.gap_tol, true);
                 }
             }
         }

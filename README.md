@@ -126,7 +126,7 @@ Every line of Spareware is our own work or used under a licence that allows it. 
 - **Never decompile, disassemble or reverse-engineer proprietary software, and never use leaked or stolen source code.** If a piece of work needs knowledge that only comes from inside someone else's product, it does not get done.
 - **Only use open-source code whose licence allows it**, keep its licence and credit, and record where it came from. No GPL or AGPL code in the core.
 - **Respect trademarks.** Our products have their own names. Other companies' product names appear only to say what we replace.
-- **Respect patents, terms of service and API licences.** If a method might be patented, or a data source has terms that forbid our use, stop and raise it with an owner.
+- **Respect terms of service and API licences.** If a data source has terms that forbid our use, stop and raise it with an owner. A patent is no reason to stop (geometry decision 32.49).
 - **Reading other formats** (IFC, DXF, Revit files and so on) comes only from published specifications or from work an owner has cleared after legal advice.
 - **Unsure? Stop and ask.** A pull request that cannot show where its ideas and code came from does not merge.
 

@@ -3,6 +3,25 @@
 //! windows), the whole download (a HEAD then the zip), the bus routes made on each scenario's network and applying them.
 //! Recorded by tools/transport-truth/gen-feeds.mjs (expected/feeds-gtfs.json, fixtures/data/gtfs-*.zip and gtfs-catalogue-*.csv).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod feeds_support;
 mod support;
 
@@ -26,9 +45,9 @@ fn catalogue_searches_match() {
         let b = bounds_of(&rec["bounds"]);
         let timeout_s = rec["cfg"]["timeout"].as_f64().unwrap_or(30.0);
         let log = rec["requests"].as_array().unwrap();
-        let mut first = Catalogue::new(b.clone(), timeout_s, None);
-        let (used, res) = replay(&mut first, log, 0, &label);
-        res.expect("the search");
+        let mut first = Catalogue::new(b, timeout_s, None);
+        let (used, outcome) = replay(&mut first, log, 0, &label);
+        outcome.expect("the search");
         all_used(log, used, &label);
         let kept: Option<Vec<GtfsFeed>> = first.fresh_list().map(<[GtfsFeed]>::to_vec);
         if let Some(l) = &kept {
@@ -119,13 +138,13 @@ fn downloads_routes_and_keeping_match() {
         let mut load = GtfsLoad::new(feed_of(&rec["feed"]), &bounds_of(&rec["bounds"]), now, 30.0);
         assert_close(&opts_value(load.opts()), &rec["opts"], &format!("{label} reader options"));
         let log = rec["requests"].as_array().unwrap();
-        let (used, res) = replay(&mut load, log, 0, &label);
+        let (used, outcome) = replay(&mut load, log, 0, &label);
         all_used(log, used, &label);
         if let Some(t) = rec.get("thrown") {
-            assert_eq!(res.expect_err("the download fails"), t.as_str().unwrap(), "{label}: error");
+            assert_eq!(outcome.expect_err("the download fails"), t.as_str().unwrap(), "{label}: error");
             continue;
         }
-        res.expect("the download");
+        outcome.expect("the download");
         assert_eq!(json!(load.statuses()), rec["statuses"], "{label}: status lines");
         let g = load.finish().expect("a reading");
         assert_close(&serde_json::to_value(&g).unwrap(), &without_ms(&rec["loaded"]), &format!("{label} reading"));

@@ -37,7 +37,7 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 | R13 | Proven-bound maths is late or does not port | Low for the five functions ported (G05); Medium for the rest | High | The maths piece not merged before the first survey piece |
 | R14 | Keeping every old version forever | Medium | High | Format museum failures; size of kept versions |
 | R15 | Hostile files | Medium | Medium to High | Reader fuzzing crashes, hangs or memory spikes |
-| R16 | Patents on methods we use | Low each, Medium overall | Severe for core methods | Unsearched families on the build path |
+| R16 | Patents on methods we use | Low each, Medium overall | Severe for core methods | A patent holder's notice about a method we use |
 | R17 | Licences and terms awaiting confirmation | High | Medium each | Number and age of ledger rows waiting on an owner |
 | R18 | Copyleft or non-free code hiding inside permissive sources | High that it is met; Medium that it gets in | High | A banned-source scanner hit |
 | R19 | Learning from proprietary programs crosses the line | Medium | High | An expected value that cites Revit or AutoCAD behaviour |
@@ -343,13 +343,13 @@ Some may stay open for years, leaving gaps where the incumbents give an approxim
 
 ### R16. Patents on methods we use
 
-**What could go wrong.** A patent protects a method, so writing our own code does not escape it. Only subdivision, T-splines, watertight trimming and lattices have been searched. Sixteen catalogue families have had no search at all (29.17), including booleans, Class-A blends, naming, offsets, clash, hidden lines and skeleton roofs. Nobody has searched EMBER, the method under the whole flat-solid core (11). Even inside the areas already searched, 18 methods adopted in chapters 13 and 16 have had no search, among them PCCM, Manifold Dual Contouring and Instant Meshes (13, 16). Known active patents sit near planned work: Autodesk's lattice hollowing (US 10,635,088), and the watertightCAD family (US 10,614,195 and two related patents), which is close to edge-first tessellation. The status of the patents found so far was read from Google Patents and is an assumption until counsel confirms it (16). Apache-2.0's patent grant does not clearly cover a re-implementation.
+**What could go wrong.** A method someone has patented may be used. A patent protects a method, so writing our own code does not escape it, and Apache-2.0's patent grant does not clearly cover a re-implementation. Known active patents sit near planned work: Autodesk's lattice hollowing (US 10,635,088), and the watertightCAD family (US 10,614,195 and two related patents), which is close to edge-first tessellation (29.17).
 
 **Likelihood:** Low for any one family; Medium over decades. **Impact:** Severe for a core method, which could be pulled after files depend on it; Medium for a niche one.
 
 **Mitigation built into the plan.**
 - Versioned operations let a method be replaced while old files still open from stored geometry (26.2).
-- The patent register, the search before each family's Build stage and the EMBER check were planned here and in 32.7. **The owner closed them on 2026-11-13 (32.49): no patent searches are made and no register is kept,** so the owner accepts this risk as it stands.
+- The owner accepts this risk as it stands (32.49).
 
 **Early warning.**
 - A patent holder's notice about a method we use.
@@ -439,24 +439,22 @@ If such code entered Spare Kit, it would have to be torn out and rewritten clean
 
 ### R21. Legal work has no budget or counsel
 
-**What could go wrong.** The set leans on lawyers throughout: a patent search before the first geom-poly merge (32.7), a legal review of OpenSubdiv's TOST licence (32.9), a reading of Onshape's terms for the ABC dataset and of step-conformance's parts (32.11), the Revit and AutoCAD terms checks (32.10), any clearance of DWG (README), and counsel's view on AI-written code (R20). K06's cost model leaves legal advice out, because no public rates were found. If no lawyer is funded, all of these wait, and under 32.7's recommendation the boolean core cannot start. The patent search no longer waits: the owner decided on 2026-11-13 that none is made (32.49).
+**What could go wrong.** The set leans on lawyers throughout: a legal review of OpenSubdiv's TOST licence (32.9), a reading of Onshape's terms for the ABC dataset and of step-conformance's parts (32.11), the Revit and AutoCAD terms checks (32.10), any clearance of DWG (README), and counsel's view on AI-written code (R20). K06's cost model leaves legal advice out, because no public rates were found. If no lawyer is funded, all of these wait.
 
 **Likelihood:** High. **Impact:** High.
 
 **Mitigation built into the plan.**
 - Work that needs counsel waits rather than going ahead without it.
 - Meanwhile methods come from papers and unclear data stays fetch-only (29).
-- Section 32.7 asks the owner to fund the work, and names a fallback if a lawyer cannot be funded in time.
 
 **Early warning (proposed).**
 - The number of items waiting on counsel, and the age of the oldest, in STATUS.md.
-- The first geom-poly piece ready to start with no recorded search.
 
 ## 31.5 People and process risks
 
 ### R22. Owner decisions and reviews become the bottleneck
 
-**What could go wrong.** The set raises 212 open questions and routes dozens of approvals to "an owner" or "a kernel owner": golden-hash changes, reference implementations, ledger rows, method notes, patent reviews and CI cost. Kernel owners are not named anywhere. The README also puts any change to an architecture decision to a member vote, and the set proposes dozens of amendments to the spine. A poll for each would stall the work. Pieces queue behind decisions, and contributors' tokens go elsewhere.
+**What could go wrong.** The set raises 212 open questions and routes dozens of approvals to "an owner" or "a kernel owner": golden-hash changes, reference implementations, ledger rows, method notes and CI cost. Kernel owners are not named anywhere. The README also puts any change to an architecture decision to a member vote, and the set proposes dozens of amendments to the spine. A poll for each would stall the work. Pieces queue behind decisions, and contributors' tokens go elsewhere.
 
 **Likelihood:** High. **Impact:** High.
 
@@ -596,7 +594,6 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The edition guarantee and checker fixes: the guarantee covers valid results only | 28 | 32.4 |
 | Who approves as a kernel owner; who reviews proofs; who accepts spine amendments; who sets the kernel's share of Spare Construct's targets | 23, 26, 28, 29 | 32.5 |
 | GPL and LGPL tools as out-of-process oracles; reading GPL source; Numerical Recipes code in oracle builds; the method-only procedure as the standard; the Unlicense and CC0-1.0 on the code allow-list | 24, 28, 29 | 32.6; the out-of-process oracles decided yes by owner action G75 |
-| Patent searches, who does them and who pays: EMBER, Lifted Surfacing, Topological Offsets, transfinite patches, developable lofts, sheet-metal unfolding, the section 16 methods, Autodesk US 10,635,088, nTop's filings, IntegrityWare's claim, the sixteen unsearched families, and the trade mark and any patent on "Viennese Bend". The Google Patents status of the Pixar, Stam, T-spline and watertightCAD patents is an assumption until counsel confirms. **Closed by the owner on 2026-11-13: no searches and no register** | 11, 13, 16, 17, 29 | 32.7 and 32.49 |
 | NLib's chain of title, the narrowing of option D, how "notices kept" is done, and an issue to NVIDIA | 12, 29 | 32.8, decided 2026-10-24: A, for all of the SMLib release |
 | Writing to EMBER's authors, the csgrs and Hyper author, CADCraft, tangency-labs, McNeel (openNURBS, and so Rhino subdivision exchange) and Pixar (OpenSubdiv's TOST licence); the order of contacts | 11, 14, 16, 24, 29 | 32.9 |
 | Revit exports in a public repository; anonymised real projects; an AutoCAD seat and terms check; the ruling on black-box observation of proprietary programs, and so CADCraft's test scenarios; checking our exports in proprietary programs | 14, 28, 29 | 32.10 |
@@ -946,7 +943,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | The drawing checker in geom-draw (chosen), or one checker crate moved above geom-draw | 18 | Piece "Drawing checker" |
 | Continuous collision detection lives in geom-spatial | 19 | Piece "Time of first contact (Tight Inclusion method)" |
 | Sheet metal reuses geom-panel's unroll, or unrolling moves to a shared crate; subdivision displacement belongs to a content-creation toolkit | 16 | Decision note under 26.1 when a second program needs it |
-| Add geometry/PROVENANCE.md, NOTICE, methods/ and PATENTS.md to 26.3's file table and 27's folder tree | 29 | Editorial fix; piece "Provenance records" |
+| Add geometry/PROVENANCE.md, NOTICE and methods/ to 26.3's file table and 27's folder tree | 29 | Editorial fix; piece "Provenance records" |
 | Chapter 27's table and the scaffold's `table.rs` (G09) are two copies of the crate graph that nothing compares | G09 build | Piece "MAP.json generator and module-header grammar", or the merge gate |
 | The header grammar: G09's interim grammar (job, layer, invariants, sections), its Status and "dependencies still to add" lines, which name board pieces and go stale when a piece splits (30.7), and which chapters a Sections line lists. `geom-num` has no Layer line, which G09's table records as a known gap. G11's development crates state their job but no layer, invariants or sections in that grammar, so the scaffold check fails on them when G09 and G11 have both merged | G09 and G11 builds; 26, 27 | Piece "MAP.json generator and module-header grammar" |
 | Content hashes for reuse below `geom-format`: 23.8 puts hashing, `CacheKey` and the memo store in `geom-format` (27, accepted in 32.13), but `geom-bool`'s arrangement cache (11.6), `geom-draw`'s per-element caches (18.9) and `geom-spatial`'s instances (19.11, 19.12) key by content hash and sit below it. Either the caller passes the hash in as a key, or the hash of canonical bytes moves into `geom-op`'s canonical encoder, as NameId hashing already does (30.6) | 11, 18, 19, 23; G08 | Piece "Canonical encoder and safe hash" (G86) |

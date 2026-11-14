@@ -6,9 +6,10 @@ use super::ctx::{Ctx, Head, Row, Tbl, TableOpts, cells, disc, disc_with, h, hn, 
 use super::js;
 use super::shared::{RegCtx, assessed_sites, crash_years, j_sum, junction_count, junction_rows, model_version, reg_ctx, plural};
 use crate::edit::json::JsonValue;
-use crate::jsnum::{number_to_js_string, value_truthy};
+use crate::jsnum::{number_to_js_string, usize_to_f64, value_truthy};
 use crate::results::iso_day_of_ms;
 use crate::util::{esc, fmt};
+use std::fmt::Write as _;
 
 /// `day(t)` of a stored time.
 fn day(v: Option<&JsonValue>) -> String {
@@ -48,61 +49,70 @@ fn at_lic() -> &'static str {
 
 /// The rows of the data vintage table (`vintageRows`), unescaped.
 pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
-    let l = r.loaded();
-    let mut rows: Vec<Vec<String>> = Vec::new();
+    let loaded = r.loaded();
     let fv0 = js::path(Some(r.raw), &["feeds", "vintage"]).filter(|v| v.is_object());
+    let (mut rows, seen) = standard_vintage_rows(r, loaded, fv0);
+    loaded_vintage_rows(loaded, &seen, &mut rows);
+    feed_vintage_rows(fv0, &mut rows);
+    landuse_vintage_rows(r, &mut rows);
+    rows
+}
+
+/// The data vintage rows of the standard sources, and the keys they cover.
+fn standard_vintage_rows(r: &super::Rep, loaded: Option<&JsonValue>, fv0: Option<&JsonValue>) -> (Vec<Vec<String>>, Vec<&'static str>) {
+    let mut rows: Vec<Vec<String>> = Vec::new();
     let any_osm = r
         .project
         .scenarios
         .iter()
         .any(|s| s.links.values().any(|lk| lk.osm.get().is_some_and(value_truthy)));
-    let mut seen: Vec<&str> = Vec::new();
-    for (k, src, ds, lic) in VINTAGE.iter() {
-        seen.push(k);
-        let x = js::get(l, k).filter(|v| v.truthy());
-        let feed_key = if *k == "ags23" { "ags" } else { k };
-        if x.is_none() && js::get(fv0, feed_key).is_some_and(JsonValue::truthy) {
+    let mut seen: Vec<&'static str> = Vec::new();
+    for (key, src, ds, lic) in &VINTAGE {
+        seen.push(*key);
+        let entry = js::get(loaded, key).filter(|v| v.truthy());
+        let feed_key = if *key == "ags23" { "ags" } else { key };
+        if entry.is_none() && js::get(fv0, feed_key).is_some_and(JsonValue::truthy) {
             continue; // loaded by the feeds feature: its own row follows
         }
         let lic_text = match lic {
             Licence::Fixed(t) => t.to_string(),
             Licence::At => at_lic().to_string(),
         };
-        if *k == "osm" && x.is_none() {
-            let n = r
+        if *key == "osm" && entry.is_none() {
+            let links = r
                 .project
                 .scenarios
                 .first()
-                .map_or(0.0, |s| s.links.values().filter(|lk| lk.osm.get().is_some_and(value_truthy)).count() as f64);
+                .map_or(0.0, |s| usize_to_f64(s.links.values().filter(|lk| lk.osm.get().is_some_and(value_truthy)).count()));
             rows.push(vec![
                 src.to_string(),
                 ds.to_string(),
                 if any_osm { "Imported (query date not recorded)".to_string() } else { "Not used".to_string() },
-                if any_osm { plural(n, "link", "links") } else { fmt::DASH.to_string() },
+                if any_osm { plural(links, "link", "links") } else { fmt::DASH.to_string() },
                 lic_text,
             ]);
             continue;
         }
-        let at = x.and_then(|x| js::get(Some(x), "at")).filter(|a| a.truthy());
-        let n_cell = match x {
-            Some(x) => {
-                let n = js::get(Some(x), "n").filter(|n| !n.is_null());
-                let base = match n {
+        let at = entry.and_then(|x| js::get(Some(x), "at")).filter(|a| a.truthy());
+        let n_cell = match entry {
+            Some(e) => {
+                let count = js::get(Some(e), "n").filter(|n| !n.is_null());
+                let base = match count {
                     Some(n) => {
                         let v = n.to_number();
                         if v.is_finite() { fmt::int(v) } else { fmt::DASH.to_string() }
                     }
                     None => fmt::DASH.to_string(),
                 };
-                let lab = js::get(Some(x), "label").filter(|v| v.truthy());
+                let lab = js::get(Some(e), "label").filter(|v| v.truthy());
                 match lab {
-                    Some(l) if *k == "cas" => format!("{base} ({})", l.js_string()),
+                    Some(l) if *key == "cas" => format!("{base} ({})", l.js_string()),
                     _ => base,
                 }
             }
             None => fmt::DASH.to_string(),
         };
-        let licence = x
+        let licence = entry
             .and_then(|x| js::get(Some(x), "licence"))
             .filter(|v| v.truthy())
             .map_or(lic_text, JsonValue::js_string);
@@ -117,7 +127,12 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             licence,
         ]);
     }
-    for (k, x) in js::entries(l) {
+    (rows, seen)
+}
+
+/// The data vintage rows of the other loaded sources (each with its own source, dataset and licence).
+fn loaded_vintage_rows<'a>(loaded: Option<&'a JsonValue>, seen: &[&'a str], rows: &mut Vec<Vec<String>>) {
+    for (k, x) in js::entries(loaded) {
         if seen.contains(&k) || !(x.is_object() || x.is_array()) {
             continue;
         }
@@ -139,7 +154,10 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             g("licence").map_or("See source".to_string(), JsonValue::js_string),
         ]);
     }
-    // the official feeds and the land-use sources keep their own logs
+}
+
+/// The data vintage rows of the official feeds, which keep their own log.
+fn feed_vintage_rows(fv0: Option<&JsonValue>, rows: &mut Vec<Vec<String>>) {
     for (k, x) in js::entries(fv0) {
         if !(x.is_object() || x.is_array()) {
             continue;
@@ -155,8 +173,8 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             ),
             match g("at") {
                 Some(a) => {
-                    let d = day(Some(a));
-                    if d.is_empty() { fmt::DASH.to_string() } else { d }
+                    let when = day(Some(a));
+                    if when.is_empty() { fmt::DASH.to_string() } else { when }
                 }
                 None => fmt::DASH.to_string(),
             },
@@ -167,6 +185,10 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             g("licence").map_or("See source".to_string(), JsonValue::js_string),
         ]);
     }
+}
+
+/// The data vintage rows of the land-use sources, which keep their own log.
+fn landuse_vintage_rows(r: &super::Rep, rows: &mut Vec<Vec<String>>) {
     let ls = js::path(Some(r.raw), &["landuse", "sources"]).filter(|v| v.is_object());
     for (k, x) in js::entries(ls) {
         if !(x.is_object() || x.is_array()) {
@@ -178,8 +200,8 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             g("vintage").map_or(k.to_string(), JsonValue::js_string),
             match g("at") {
                 Some(a) => {
-                    let d = day(Some(a));
-                    if d.is_empty() { fmt::DASH.to_string() } else { d }
+                    let when = day(Some(a));
+                    if when.is_empty() { fmt::DASH.to_string() } else { when }
                 }
                 None => fmt::DASH.to_string(),
             },
@@ -190,7 +212,6 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             g("licence").map_or("See source".to_string(), JsonValue::js_string),
         ]);
     }
-    rows
 }
 
 /// `report-cover`.
@@ -207,7 +228,7 @@ pub(crate) fn cover(c: &mut Ctx) -> String {
         )
     };
     let stale = (0..r.project.scenarios.len()).any(|i| {
-        PERIODS.iter().any(|p| r.results[i].get(p).is_some_and(|res| res.stale))
+        PERIODS.iter().any(|p| r.results.get(i).and_then(|m| m.get(p)).is_some_and(|res| res.stale))
     });
     let with = c.sel.with.map(|i| {
         format!(
@@ -366,10 +387,10 @@ pub(crate) fn model_status(c: &mut Ctx) -> String {
         para(&format!(
             "Model purpose: NZTA TMDG category <b>{}</b>. {}",
             esc(&cat),
-            if !just.is_empty() {
-                format!("Justification: {}", esc(&just))
-            } else {
+            if just.is_empty() {
                 "<span class=\"warn\">The justification for this category has not been given (Settings \u{203a} Calibration and validation \u{203a} Why this category).</span>".to_string()
+            } else {
+                format!("Justification: {}", esc(&just))
             }
         )),
         c.table("Calibration and validation status", Tbl::new(vec![h("Period"), h("Status"), h("Date")], rows), &TableOpts::default()),
@@ -417,6 +438,33 @@ pub(crate) fn limitations(c: &mut Ctx) -> String {
     )
 }
 
+/// The executive summary's junction bullet: how many junctions are assessed and the one with the highest degree of saturation.
+fn junction_bullet(r: &super::Rep, sel: &super::Sel, with: usize) -> Option<String> {
+    let js_rows = junction_rows(r, sel, with, None);
+    let mut with_s: Vec<&super::shared::JRow> = js_rows.iter().filter(|x| x.s.is_some()).collect();
+    crate::graph::js_sort_by(&mut with_s, |a, b| b.s.as_ref().map_or(0.0, |s| s.dos) - a.s.as_ref().map_or(0.0, |s| s.dos));
+    let worst = with_s.first().copied();
+    let mut ids: Vec<String> = Vec::new();
+    for x in &js_rows {
+        if !ids.contains(&x.id) {
+            ids.push(x.id.clone());
+        }
+    }
+    let (nodes, junctions) = junction_count(r, sel, &ids);
+    // the rows were filtered on having a summary
+    let wr = worst?;
+    let sum = wr.s.as_ref()?;
+    Some(format!(
+        "{} assessed{}; the highest degree of saturation is {} in the {} peak (DoS {}, LoS {}). Indicative, not SIDRA output.",
+        plural(usize_to_f64(junctions), "junction", "junctions"),
+        if junctions == nodes { String::new() } else { format!(" ({})", plural(usize_to_f64(nodes), "modelled node", "modelled nodes")) },
+        esc(&wr.name),
+        wr.p,
+        r_dos(sum.dos),
+        esc(&sum.los_text)
+    ))
+}
+
 /// The report's executive summary bullets (`execBullets`).
 fn exec_bullets(c: &mut Ctx) -> Vec<String> {
     let r = c.r;
@@ -436,7 +484,7 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
             .rep_periods(w)
             .iter()
             .filter_map(|p| {
-                let res = r.results[w].get(p)?;
+                let res = r.results.get(w).and_then(|m| m.get(p))?;
                 Some(format!("{} veh/h in the {} peak hour", r_veh(res.dev.trips), p))
             })
             .collect();
@@ -448,31 +496,8 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
                 esc(r.sc(w).name())
             ));
         }
-        let js_rows = junction_rows(r, &c.sel.clone(), w, None);
-        let mut worst: Option<&super::shared::JRow> = None;
-        let mut with_s: Vec<&super::shared::JRow> = js_rows.iter().filter(|x| x.s.is_some()).collect();
-        crate::graph::js_sort_by(&mut with_s, |a, b| b.s.as_ref().map_or(0.0, |s| s.dos) - a.s.as_ref().map_or(0.0, |s| s.dos));
-        if let Some(x) = with_s.first() {
-            worst = Some(x);
-        }
-        let mut ids: Vec<String> = Vec::new();
-        for x in &js_rows {
-            if !ids.contains(&x.id) {
-                ids.push(x.id.clone());
-            }
-        }
-        let (nodes, junctions) = junction_count(r, &c.sel, &ids);
-        if let Some(wr) = worst {
-            let s = wr.s.as_ref().expect("a summary");
-            out.push(format!(
-                "{} assessed{}; the highest degree of saturation is {} in the {} peak (DoS {}, LoS {}). Indicative, not SIDRA output.",
-                plural(junctions as f64, "junction", "junctions"),
-                if junctions != nodes { format!(" ({})", plural(nodes as f64, "modelled node", "modelled nodes")) } else { String::new() },
-                esc(&wr.name),
-                wr.p,
-                r_dos(s.dos),
-                esc(&s.los_text)
-            ));
+        if let Some(b) = junction_bullet(r, &c.sel, w) {
+            out.push(b);
         }
     }
     let ex = super::sections_assess::extent_data(c);
@@ -483,8 +508,8 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
                 .map(|e| format!(
                     "{} peak {} and {} over the 5%/10% thresholds",
                     e.p,
-                    plural(e.x.rows.iter().filter(|r| r.included).count() as f64, "link direction", "link directions"),
-                    plural(e.x.sites.len() as f64, "junction", "junctions")
+                    plural(usize_to_f64(e.x.rows.iter().filter(|r| r.included).count()), "link direction", "link directions"),
+                    plural(usize_to_f64(e.x.sites.len()), "junction", "junctions")
                 ))
                 .collect::<Vec<_>>()
                 .join("; ")
@@ -500,7 +525,7 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
         ));
     }
     let conv_n = (0..r.project.scenarios.len())
-        .flat_map(|i| r.rep_periods(i).into_iter().filter_map(move |p| r.results[i].get(p)))
+        .flat_map(|i| r.rep_periods(i).into_iter().filter_map(move |p| r.results.get(i).and_then(|m| m.get(p))))
         .filter(|res| !res.converged)
         .count();
     out.push(format!(
@@ -511,7 +536,7 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
             .collect::<Vec<_>>()
             .join(", "),
         if conv_n > 0 {
-            format!("<span class=\"warn\">{} did not converge</span>", plural(conv_n as f64, "run", "runs"))
+            format!("<span class=\"warn\">{} did not converge</span>", plural(usize_to_f64(conv_n), "run", "runs"))
         } else {
             "every stored run converged".to_string()
         }
@@ -535,9 +560,14 @@ pub(crate) fn r_dos(v: f64) -> String {
 /// `report-exec`.
 pub(crate) fn exec(c: &mut Ctx) -> String {
     let bullets = exec_bullets(c);
+    let items = bullets.iter().fold(String::new(), |mut acc, b| {
+        // Writing to a String cannot fail
+        let _ = write!(acc, "<li>{b}</li>");
+        acc
+    });
     format!(
         "<ul class=\"bul\">{}</ul>{}",
-        bullets.iter().map(|b| format!("<li>{b}</li>")).collect::<String>(),
+        items,
         c.author("exec", "Summarise the pathway, the triggers, the key effects, the mitigation and its triggers, and whether the proposal aligns with the transport network and policy.")
     )
 }

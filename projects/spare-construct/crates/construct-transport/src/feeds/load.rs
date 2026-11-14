@@ -6,8 +6,8 @@ use super::arcgis::{ArcgisPager, Bounds, FetchFailure, HttpRequest, LoadError, A
 use super::nztime::{date_of, month_year, utc_date};
 use crate::datahub::{dir_of, ensure_data, source, Count};
 use crate::edit::json::JsonValue;
-use crate::jsnum::{json_number, number_to_js_string};
-use crate::project::Project;
+use crate::jsnum::{json_number, number_to_js_string, usize_to_f64};
+use crate::project::{OrderedMap, Project, ProjectData};
 use crate::safety::{cas_tuple, cas_window, conflate_fc, title, CasWindow, FutureConnect, CAS_FIELDS, CAS_LONG_YEARS, CAS_OUT};
 use crate::util::{fmt, r7};
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,7 @@ pub const NZTA_CAS: &str = "https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/
 pub const AT_COUNTS: &str = "https://services2.arcgis.com/JkPEgZJGxhSjYOo0/arcgis/rest/services/TrafficService/FeatureServer/0";
 /// `AT_FC`: the Auckland Transport Future Connect integrated network layer.
 pub const AT_FC: &str = "https://services2.arcgis.com/JkPEgZJGxhSjYOo0/arcgis/rest/services/FutureConnect_IntegratedNetwork/FeatureServer/0";
-/// `AT_CI`: the Auckland Transport controlled intersections layer (RoadingService layer 2).
+/// `AT_CI`: the Auckland Transport controlled intersections layer (`RoadingService` layer 2).
 pub const AT_CI: &str = "https://services2.arcgis.com/JkPEgZJGxhSjYOo0/arcgis/rest/services/RoadingService/FeatureServer/2";
 /// `AT_LICENCE`: the licence text kept with Auckland Transport data.
 pub const AT_LICENCE: &str = "Auckland Transport open data, CC BY 4.0 as stated on the AT open data portal (confirm before publishing)";
@@ -77,8 +77,9 @@ fn geometry_xy(x: &JsonValue) -> (f64, f64) {
     (r7(num(g.and_then(|g| g.get("y")))), r7(num(g.and_then(|g| g.get("x")))))
 }
 
-fn count_of(o: &JsonValue) -> Count {
-    serde_json::from_value::<Count>(o.to_value()).expect("a count reads")
+// Every field of a Count reads any JSON value, so the error never shows
+fn count_of(o: &JsonValue) -> Result<Count, String> {
+    serde_json::from_value::<Count>(o.to_value()).map_err(|e| e.to_string())
 }
 
 // /\bramp\b/i.test(text)
@@ -89,13 +90,22 @@ fn has_word_ramp(text: &str) -> bool {
     if cs.len() < 4 {
         return false;
     }
-    (0..=cs.len() - 4).any(|i| cs[i..i + 4] == pat[..] && (i == 0 || !word(cs[i - 1])) && (i + 4 == cs.len() || !word(cs[i + 4])))
+    // a window at i, with no word character just before it or just after it (i + 4 is at most the length)
+    cs.windows(4).enumerate().any(|(i, w)| {
+        w == pat.as_slice()
+            && i.checked_sub(1).and_then(|j| cs.get(j)).is_none_or(|&c| !word(c))
+            && cs.get(i.saturating_add(4)).is_none_or(|&c| !word(c))
+    })
 }
 
 /// `loadNZTA(b)` after the download: state highway count sites from the layer's features, as the project holds them.
 ///
 /// Each site with a position and a positive daily volume (last year's, else the year before) becomes a directional count
 /// with its five years of history; an error is the text the prototype's error would carry.
+///
+/// # Errors
+///
+/// The prototype's error text for a feature without attributes or with a state highway number that is not text.
 pub fn parse_nzta(features: &[JsonValue]) -> Result<Vec<Count>, String> {
     let mut out = Vec::new();
     for x in features.iter().filter(|x| truthy(x.get("geometry"))) {
@@ -164,7 +174,7 @@ pub fn parse_nzta(features: &[JsonValue]) -> Result<Vec<Count>, String> {
                 )
             }),
         );
-        out.push(count_of(&o));
+        out.push(count_of(&o)?);
     }
     Ok(out)
 }
@@ -172,31 +182,34 @@ pub fn parse_nzta(features: &[JsonValue]) -> Result<Vec<Count>, String> {
 // /^SH\s*\d/i.test(text)
 fn is_state_highway_name(text: &str) -> bool {
     let cs: Vec<char> = text.chars().collect();
-    if cs.len() < 3 || !(cs[0] == 'S' || cs[0] == 's') || !(cs[1] == 'H' || cs[1] == 'h') {
+    let [first, second, rest @ ..] = cs.as_slice() else {
+        return false;
+    };
+    if rest.is_empty() || !matches!(*first, 'S' | 's') || !matches!(*second, 'H' | 'h') {
         return false;
     }
-    let mut i = 2;
-    while i < cs.len() && crate::jsnum::is_js_space(cs[i]) {
-        i += 1;
-    }
-    i < cs.len() && cs[i].is_ascii_digit()
+    rest.iter().find(|c| !crate::jsnum::is_js_space(**c)).is_some_and(char::is_ascii_digit)
 }
 
 // padStart(4, '0')
 fn pad_start4(s: &str) -> String {
     let n = s.encode_utf16().count();
-    if n >= 4 { s.to_string() } else { format!("{}{}", "0".repeat(4 - n), s) }
+    if n >= 4 { s.to_string() } else { format!("{}{}", "0".repeat(4usize.saturating_sub(n)), s) }
 }
 
 fn slice16(s: &str, from: usize, to: Option<usize>) -> String {
     let u: Vec<u16> = s.encode_utf16().collect();
     let to = to.unwrap_or(u.len()).min(u.len());
-    if from >= to { String::new() } else { String::from_utf16_lossy(&u[from..to]) }
+    if from >= to { String::new() } else { u.get(from..to).map_or_else(String::new, String::from_utf16_lossy) }
 }
 
 /// `loadAT(b)` after the download: Auckland Transport count sites from the layer's features (state highways left out, NZTA's own counts cover them).
 ///
 /// Sites with a position and a positive ADT become two-way counts with the counted peak hour. An error is the text the prototype's error would carry.
+///
+/// # Errors
+///
+/// The prototype's error text for a feature without attributes or with a count date that is not a date.
 pub fn parse_at(features: &[JsonValue]) -> Result<Vec<Count>, String> {
     let mut out = Vec::new();
     for x in features.iter().filter(|x| truthy(x.get("geometry"))) {
@@ -257,7 +270,7 @@ pub fn parse_at(features: &[JsonValue]) -> Result<Vec<Count>, String> {
                 }
             )),
         );
-        out.push(count_of(&o));
+        out.push(count_of(&o)?);
     }
     Ok(out)
 }
@@ -268,6 +281,7 @@ pub fn parse_cas(features: &[JsonValue]) -> Vec<Vec<Value>> {
 }
 
 /// `loadFutureConnect(b)` after the download: Future Connect sections that have polylines, with their classes now and in the first decade.
+#[must_use]
 pub fn parse_future_connect(features: &[JsonValue]) -> Vec<FutureConnect> {
     let empty = JsonValue::object();
     features
@@ -336,23 +350,18 @@ pub struct ControlledSite {
 // String.replace(/^\(\d+\)\s*/, '')
 pub(crate) fn strip_site_prefix(s: &str) -> String {
     let cs: Vec<char> = s.chars().collect();
-    if cs.first() == Some(&'(') {
-        let mut i = 1;
-        while i < cs.len() && cs[i].is_ascii_digit() {
-            i += 1;
-        }
-        if i > 1 && i < cs.len() && cs[i] == ')' {
-            i += 1;
-            while i < cs.len() && crate::jsnum::is_js_space(cs[i]) {
-                i += 1;
-            }
-            return cs[i..].iter().collect();
-        }
+    if let Some((&'(', after)) = cs.split_first()
+        && let Some((digits, tail)) = after.split_at_checked(after.iter().take_while(|c| c.is_ascii_digit()).count())
+        && !digits.is_empty()
+        && let Some((&')', rest)) = tail.split_first()
+    {
+        return rest.iter().skip_while(|c| crate::jsnum::is_js_space(**c)).collect();
     }
     s.to_string()
 }
 
 /// `loadControlled(b)` after the download: the controlled intersections that have a position.
+#[must_use]
 pub fn parse_controlled(features: &[JsonValue]) -> Vec<ControlledSite> {
     let empty = JsonValue::object();
     features
@@ -417,10 +426,11 @@ pub struct LoadAll {
 
 impl LoadAll {
     /// A load of these sources (the prototype's default is nzta, at and cas) for an area, at a time (ms since 1970).
+    #[must_use]
     pub fn new(bounds: Bounds, which: &[&str], opts: &LoadOptions, now_ms: f64) -> LoadAll {
         LoadAll {
             bounds,
-            which: which.iter().map(|s| s.to_string()).collect(),
+            which: which.iter().map(std::string::ToString::to_string).collect(),
             idx: 0,
             timeout_ms: match opts.timeout_ms {
                 Some(t) if t > 0.0 => t,
@@ -440,14 +450,20 @@ impl LoadAll {
         self.cancelled = true;
     }
     /// What the load reports so far, one line per source.
+    #[must_use]
     pub fn messages(&self) -> &[String] {
         &self.msgs
     }
     /// The progress lines the prototype passes to its `status` callback, in order.
+    #[must_use]
     pub fn statuses(&self) -> &[String] {
         &self.statuses
     }
     /// The next request to send, or None when every source is done. The first call makes sure the project has its data store (`D()`).
+    ///
+    /// # Errors
+    ///
+    /// [`LoadError::Cancelled`] once the user has cancelled.
     pub fn next_request(&mut self, p: &mut Project) -> Result<Option<HttpRequest>, LoadError> {
         if !self.started {
             self.started = true;
@@ -463,11 +479,11 @@ impl LoadAll {
             if self.cancelled {
                 return Err(LoadError::Cancelled);
             }
-            if self.idx >= self.which.len() {
+            let Some(w) = self.which.get(self.idx).cloned() else {
                 return Ok(None);
-            }
-            let w = self.which[self.idx].clone();
-            self.idx += 1;
+            };
+            // Bound: a position in the list of sources
+            self.idx = self.idx.saturating_add(1);
             let b = self.bounds;
             let t = self.timeout_ms;
             let (pager, cw) = match w.as_str() {
@@ -507,6 +523,10 @@ impl LoadAll {
         }
     }
     /// Takes the answer to the last request. A failed source is added to the messages and the load goes on with the next; only a cancel is an error.
+    ///
+    /// # Errors
+    ///
+    /// [`LoadError::Cancelled`] when the host reports the request cancelled.
     pub fn answer(&mut self, p: &mut Project, a: Result<JsonValue, FetchFailure>) -> Result<(), LoadError> {
         let Some(cur) = self.current.as_mut() else { return Ok(()) };
         match cur.pager.answer(a) {
@@ -524,7 +544,8 @@ impl LoadAll {
         if !cur.pager.is_done() {
             return Ok(());
         }
-        let cur = self.current.take().expect("current source");
+        // current was there above and nothing since removed it
+        let Some(cur) = self.current.take() else { return Ok(()) };
         let features = cur.pager.into_features();
         match self.finish_source(p, &cur.w, cur.cw.as_ref(), &features) {
             Ok(m) => self.msgs.push(m),
@@ -533,96 +554,111 @@ impl LoadAll {
         Ok(())
     }
 
-    fn finish_source(&self, p: &mut Project, w: &str, cw: Option<&CasWindow>, features: &[JsonValue]) -> Result<String, String> {
+    fn finish_source(&self, p: &mut Project, src: &str, cw: Option<&CasWindow>, features: &[JsonValue]) -> Result<String, String> {
         ensure_data(p);
         let now = json_number(self.now_ms);
-        let b = self.bounds;
-        match w {
+        let bounds = self.bounds;
+        match src {
             "cas" | "cas10" => {
-                let cw = cw.expect("a crash window");
+                // next_request gives both crash sources their window
+                let Some(cw) = cw else { return Err("no crash window".to_string()) };
                 let tuples = parse_cas(features);
-                let n = tuples.len();
-                let arr = Value::Array(tuples.iter().map(|t| Value::Array(t.clone())).collect());
-                let d = p.data.get_mut().expect("data");
+                let total = tuples.len();
+                let arr = Value::Array(tuples.iter().map(|tuple| Value::Array(tuple.clone())).collect());
+                let data = data_store(p)?;
                 let lag = cw.lag_year.map_or(Value::Null, json_number);
-                if w == "cas" {
-                    let n_ytd = tuples.iter().filter(|c| c.get(3).and_then(Value::as_f64) == Some(cw.ytd)).count();
-                    d.extra.insert("crashes".to_string(), arr);
-                    d.loaded.get_mut().expect("loaded").insert(
+                if src == "cas" {
+                    let n_ytd = tuples.iter().filter(|crash| crash.get(3).and_then(Value::as_f64) == Some(cw.ytd)).count();
+                    data.extra.insert("crashes".to_string(), arr);
+                    loaded_of(data)?.insert(
                         "cas".to_string(),
-                        json!({ "at": now, "n": n, "from": json_number(cw.from), "to": json_number(cw.to), "ytd": json_number(cw.ytd), "years": json_number(cw.years), "nYTD": n_ytd, "lagYear": lag, "label": cw.label, "fields": CAS_FIELDS }),
+                        json!({ "at": now, "n": total, "from": json_number(cw.from), "to": json_number(cw.to), "ytd": json_number(cw.ytd), "years": json_number(cw.years), "nYTD": n_ytd, "lagYear": lag, "label": cw.label, "fields": CAS_FIELDS }),
                     );
-                    Ok(format!("{} crashes", fmt::int(n as f64)))
+                    Ok(format!("{} crashes", fmt::int(usize_to_f64(total))))
                 } else {
-                    d.extra.insert("crashesLong".to_string(), arr);
-                    d.loaded.get_mut().expect("loaded").insert(
+                    data.extra.insert("crashesLong".to_string(), arr);
+                    loaded_of(data)?.insert(
                         "casLong".to_string(),
                         json!({
-                            "at": now, "n": n, "from": json_number(cw.from), "to": json_number(cw.to), "ytd": json_number(cw.ytd), "years": json_number(cw.years), "lagYear": lag, "label": cw.label,
+                            "at": now, "n": total, "from": json_number(cw.from), "to": json_number(cw.to), "ytd": json_number(cw.ytd), "years": json_number(cw.years), "lagYear": lag, "label": cw.label,
                             "purpose": "state highway accesses",
-                            "bounds": [[json_number(r7(b.south)), json_number(r7(b.west))], [json_number(r7(b.north)), json_number(r7(b.east))]],
+                            "bounds": [[json_number(r7(bounds.south)), json_number(r7(bounds.west))], [json_number(r7(bounds.north)), json_number(r7(bounds.east))]],
                             "fields": CAS_FIELDS,
                         }),
                     );
-                    Ok(format!("{} crashes over {} years (state highway accesses)", fmt::int(n as f64), number_to_js_string(cw.years)))
+                    Ok(format!("{} crashes over {} years (state highway accesses)", fmt::int(usize_to_f64(total)), number_to_js_string(cw.years)))
                 }
             }
             "fc" => {
                 let fc = parse_future_connect(features);
-                let n = fc.len();
+                let total = fc.len();
                 let idx = {
                     let active = p.active.as_str().and_then(|id| p.scenarios.iter().position(|s| s.id == id));
                     active.or(if p.scenarios.is_empty() { None } else { Some(0) })
                 };
-                let Some(idx) = idx else { return Err("Cannot read properties of undefined (reading 'nodes')".to_string()) };
-                let m = conflate_fc(&mut p.scenarios[idx], &fc, None, None, self.now_ms);
-                let d = p.data.get_mut().expect("data");
-                d.extra.insert("fc".to_string(), serde_json::to_value(&fc).expect("fc"));
-                d.loaded.get_mut().expect("loaded").insert(
+                let Some(sc) = idx.and_then(|i| p.scenarios.get_mut(i)) else { return Err("Cannot read properties of undefined (reading 'nodes')".to_string()) };
+                let matched = conflate_fc(sc, &fc, None, None, self.now_ms);
+                let data = data_store(p)?;
+                data.extra.insert("fc".to_string(), serde_json::to_value(&fc).map_err(|e| e.to_string())?);
+                loaded_of(data)?.insert(
                     "fc".to_string(),
-                    json!({ "at": now, "n": n, "source": "AT Future Connect (integrated network)", "url": AT_FC, "licence": AT_LICENCE, "matched": m.matched, "links": m.links, "arterialShare": m.arterial_share.map_or(Value::Null, json_number) }),
+                    json!({ "at": now, "n": total, "source": "AT Future Connect (integrated network)", "url": AT_FC, "licence": AT_LICENCE, "matched": matched.matched, "links": matched.links, "arterialShare": matched.arterial_share.map_or(Value::Null, json_number) }),
                 );
-                Ok(format!("{} Future Connect sections ({} of {} links classified)", n, m.matched, m.links))
+                Ok(format!("{} Future Connect sections ({} of {} links classified)", total, matched.matched, matched.links))
             }
             "controlled" => {
                 let list = parse_controlled(features);
-                let n = list.len();
-                let d = p.data.get_mut().expect("data");
-                d.controlled = crate::jsnum::Maybe::Set(serde_json::to_value(&list).expect("sites"));
-                d.loaded.get_mut().expect("loaded").insert(
+                let total = list.len();
+                let data = data_store(p)?;
+                data.controlled = crate::jsnum::Maybe::Set(serde_json::to_value(&list).map_err(|e| e.to_string())?);
+                loaded_of(data)?.insert(
                     "controlled".to_string(),
-                    json!({ "at": now, "n": n, "source": "AT controlled intersections (RoadingService layer 2)", "url": AT_CI, "licence": AT_LICENCE }),
+                    json!({ "at": now, "n": total, "source": "AT controlled intersections (RoadingService layer 2)", "url": AT_CI, "licence": AT_LICENCE }),
                 );
-                Ok(format!("{n} AT controlled intersections"))
+                Ok(format!("{total} AT controlled intersections"))
             }
             _ => {
-                let list = if w == "nzta" { parse_nzta(features)? } else { parse_at(features)? };
-                let d = p.data.get_mut().expect("data");
-                let old: Vec<Value> = match d.extra.get("counts") {
+                let list = if src == "nzta" { parse_nzta(features)? } else { parse_at(features)? };
+                let data = data_store(p)?;
+                let old: Vec<Value> = match data.extra.get("counts") {
                     Some(Value::Array(a)) => a.clone(),
                     _ => Vec::new(),
                 };
-                let src_is = |c: &Value| c.get("src").and_then(Value::as_str) == Some(w);
-                let keep: Vec<&Value> = old.iter().filter(|c| src_is(c)).collect();
-                let mut counts: Vec<Value> = old.iter().filter(|c| !src_is(c)).cloned().collect();
-                for c in &list {
-                    let mut v = serde_json::to_value(c).expect("count");
-                    let prior = keep.iter().find(|k| k.get("id").and_then(Value::as_str) == Some(c.id.as_str()));
-                    // off: the earlier record's switch where there is one, else false
-                    match prior {
-                        Some(k) => {
-                            if let Some(off) = k.get("off") {
-                                v["off"] = off.clone();
+                let src_is = |row: &Value| row.get("src").and_then(Value::as_str) == Some(src);
+                let keep: Vec<&Value> = old.iter().filter(|row| src_is(row)).collect();
+                let mut counts: Vec<Value> = old.iter().filter(|row| !src_is(row)).cloned().collect();
+                for site in &list {
+                    let mut row = serde_json::to_value(site).map_err(|e| e.to_string())?;
+                    let prior = keep.iter().find(|earlier| earlier.get("id").and_then(Value::as_str) == Some(site.id.as_str()));
+                    // off: the earlier record's switch where there is one, else false (a count is written as an object)
+                    if let Some(obj) = row.as_object_mut() {
+                        match prior {
+                            Some(earlier) => {
+                                if let Some(off) = earlier.get("off") {
+                                    obj.insert("off".to_string(), off.clone());
+                                }
+                            }
+                            None => {
+                                obj.insert("off".to_string(), Value::Bool(false));
                             }
                         }
-                        None => v["off"] = Value::Bool(false),
                     }
-                    counts.push(v);
+                    counts.push(row);
                 }
-                d.extra.insert("counts".to_string(), Value::Array(counts));
-                d.loaded.get_mut().expect("loaded").insert(w.to_string(), json!({ "at": now, "n": list.len() }));
-                Ok(format!("{} {} count sites", list.len(), source(w).map_or("", |s| s.short)))
+                data.extra.insert("counts".to_string(), Value::Array(counts));
+                loaded_of(data)?.insert(src.to_string(), json!({ "at": now, "n": list.len() }));
+                Ok(format!("{} {} count sites", list.len(), source(src).map_or("", |s| s.short)))
             }
         }
     }
+}
+
+// The project's data store; finish_source calls ensure_data first, which makes it, so the error never shows
+fn data_store(p: &mut Project) -> Result<&mut ProjectData, String> {
+    p.data.get_mut().ok_or_else(|| "the project has no data store".to_string())
+}
+
+// The store's record of loads, which ensure_data also makes
+fn loaded_of(d: &mut ProjectData) -> Result<&mut OrderedMap<Value>, String> {
+    d.loaded.get_mut().ok_or_else(|| "the data store has no record of loads".to_string())
 }

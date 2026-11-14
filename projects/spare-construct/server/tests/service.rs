@@ -2,6 +2,23 @@
 //! data goes in first through the real doors, then each test tries the doors it shouldn't be able
 //! to open. `tests/checklist.rs` runs the same story on the real stack.
 
+// The server denies these outside tests (Cargo.toml). Tests may use them, as the geometry kernel's
+// do: clippy.toml's allow-*-in-tests settings don't reach helpers outside `#[test]` functions, and
+// a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    reason = "tests; the rules are for the server's own code"
+)]
+
 mod support;
 
 use construct_api::cloud::spaces::folders;
@@ -60,7 +77,9 @@ async fn seeded() -> Stack {
 }
 
 fn refused<T: std::fmt::Debug>(answer: Result<T, Refusal>) -> bool {
-    matches!(answer, Err(Refusal::Refused(_)))
+    answer
+        .err()
+        .is_some_and(|refusal| matches!(refusal, Refusal::Refused(_)))
 }
 
 const VIEW: View = View {

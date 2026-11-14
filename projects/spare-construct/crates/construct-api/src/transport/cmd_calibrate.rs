@@ -9,13 +9,17 @@ use super::cmd_run::held;
 use super::helpers::val;
 use super::registry::{Registry, Sink};
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
+use crate::schema::{
+    Params, array, boolean, choice, free_object, integer, latlng, latlng_of, none, number, params,
+    string, strings,
+};
+use crate::transport::helpers::{put, scenario_at, scenario_at_mut};
 use construct_transport::calibrate::{
     self, Ctx, EvOpts, FitOpts, Recorded, RunMeOpts, Screenline, count_rows, in_area, in_set,
 };
 use construct_transport::datahub::{self, Data};
 use construct_transport::edit::IdSource;
-use construct_transport::jsnum::{Maybe, json_number};
+use construct_transport::jsnum::{Maybe, f64_to_usize, json_number};
 use construct_transport::project::Point;
 use serde_json::{Map, Value, json};
 
@@ -24,6 +28,14 @@ use serde_json::{Map, Value, json};
 pub(crate) struct CalibState {}
 
 pub(super) fn register(r: &mut Registry) {
+    register_1(r);
+    register_2(r);
+    register_3(r);
+    register_4(r);
+}
+
+/// Part 1 of [`register`]: `transport.calibration.counts` to `transport.calibration.report`.
+fn register_1(r: &mut Registry) {
     let sc = || string("Scenario id or name (default: the active scenario).");
     let per = || {
         choice(
@@ -114,6 +126,17 @@ pub(super) fn register(r: &mut Registry) {
         params(vec![("scenario", sc()), ("period", per())], &[]),
         calibration_report,
     );
+}
+
+/// Part 2 of [`register`]: `transport.calibration.assess` to `transport.calibration.trip_end_factors_apply`.
+fn register_2(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
+    let per = || {
+        choice(
+            &["AM", "PM"],
+            "Peak hour (default the project's current period).",
+        )
+    };
     r.add(
         "transport.calibration.assess",
         "Assess the model's counts against the validation criteria (TMDG category or TAG): each test with its got, target and verdict.",
@@ -182,7 +205,7 @@ pub(super) fn register(r: &mut Registry) {
         params(vec![("scenario", sc()), ("period", per())], &[]),
         |s, p| {
             let (i, _, period) = sci(s, p)?;
-            let c = calibrate::can_apply(&s.project.scenarios[i], &period);
+            let c = calibrate::can_apply(scenario_at(&s.project.scenarios, i)?, &period);
             Ok(json!({ "ok": c.ok, "why": c.why }))
         },
     );
@@ -199,6 +222,17 @@ pub(super) fn register(r: &mut Registry) {
             Ok(json!({ "applied": applied, "warnings": warnings }))
         },
     );
+}
+
+/// Part 3 of [`register`]: `transport.calibration.trip_end_factors_revert` to `transport.calibration.screenline_add`.
+fn register_3(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
+    let per = || {
+        choice(
+            &["AM", "PM"],
+            "Peak hour (default the project's current period).",
+        )
+    };
     r.add(
         "transport.calibration.trip_end_factors_revert",
         "Take the applied trip-end factors off again (results go out of date).",
@@ -285,6 +319,17 @@ pub(super) fn register(r: &mut Registry) {
         ),
         screenline_add,
     );
+}
+
+/// Part 4 of [`register`]: `transport.calibration.screenline_delete` to `transport.calibration.network_checks`.
+fn register_4(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
+    let per = || {
+        choice(
+            &["AM", "PM"],
+            "Peak hour (default the project's current period).",
+        )
+    };
     r.add(
         "transport.calibration.screenline_delete",
         "Delete a screenline or cordon.",
@@ -349,9 +394,9 @@ fn after_change(s: &mut Session) -> Vec<String> {
     bad
 }
 
-fn sci(s: &Session, p: &Params) -> ApiResult<(usize, String, String)> {
+fn sci(s: &Session, p: Params<'_>) -> ApiResult<(usize, String, String)> {
     let i = s.pick_scenario(p, "scenario")?;
-    Ok((i, s.sid(i), s.period_of(p)?))
+    Ok((i, s.sid(i)?, s.period_of(p)?))
 }
 
 fn row_json(r: &calibrate::CountRow) -> Value {
@@ -364,10 +409,10 @@ fn row_json(r: &calibrate::CountRow) -> Value {
 
 // ------------------------------------------------------------------ counts and roles
 
-fn counts_list(s: &mut Session, p: &Params) -> ApiResult {
-    let (i, _, period) = sci(s, p)?;
+fn counts_list(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (idx, _, period) = sci(s, p)?;
     let ctx = Ctx::new(&s.project);
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, idx)?;
     let m = ctx.matches(sc);
     let rows: Vec<Value> = ctx
         .data
@@ -375,12 +420,13 @@ fn counts_list(s: &mut Session, p: &Params) -> ApiResult {
         .iter()
         .map(|c| {
             let mut v = val(&**c);
-            v["inUse"] = json!(ctx.data.in_use(c));
-            v["role"] = json!(ctx.role_of(c, &period, false));
-            v["match"] = match m.get(&c.id) {
+            put(&mut v, "inUse", json!(ctx.data.in_use(c)));
+            put(&mut v, "role", json!(ctx.role_of(c, &period, false)));
+            let matched = match m.get(&c.id) {
                 Some(mt) => json!({ "link": mt.link, "dir": mt.dir, "distanceM": json_number(mt.d), "named": mt.named }),
                 None => Value::Null,
             };
+            put(&mut v, "match", matched);
             v
         })
         .collect();
@@ -390,7 +436,7 @@ fn counts_list(s: &mut Session, p: &Params) -> ApiResult {
     )
 }
 
-fn counts_add(s: &mut Session, p: &Params) -> ApiResult {
+fn counts_add(s: &mut Session, p: Params<'_>) -> ApiResult {
     let list = p.array("counts")?;
     let mut parsed: Vec<datahub::Count> = Vec::new();
     for (k, v) in list.iter().enumerate() {
@@ -403,8 +449,12 @@ fn counts_add(s: &mut Session, p: &Params) -> ApiResult {
     }
     datahub::ensure_data(&mut s.project);
     let now = s.ids.now_ms();
-    let d = s.project.data.get_mut().expect("ensured");
-    let arr = d
+    let data = s
+        .project
+        .data
+        .get_mut()
+        .ok_or_else(|| ApiError::new("internal", "The project has no data store."))?;
+    let arr = data
         .extra
         .entry("counts".to_string())
         .or_insert_with(|| json!([]));
@@ -416,16 +466,16 @@ fn counts_add(s: &mut Session, p: &Params) -> ApiResult {
     for c in &parsed {
         let v = serde_json::to_value(c).map_err(|e| ApiError::new("internal", e.to_string()))?;
         match a
-            .iter()
-            .position(|x| x.get("id").and_then(Value::as_str) == Some(c.id.as_str()))
+            .iter_mut()
+            .find(|x| x.get("id").and_then(Value::as_str) == Some(c.id.as_str()))
         {
-            Some(at) => a[at] = v,
+            Some(slot) => *slot = v,
             None => a.push(v),
         }
     }
     let total = a.len();
     if let Some(src) = p.opt_str("source")?
-        && let Maybe::Set(l) = &mut d.loaded
+        && let Maybe::Set(l) = &mut data.loaded
     {
         l.insert(src, json!({ "at": now, "n": parsed.len() }));
     }
@@ -433,7 +483,7 @@ fn counts_add(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "added": parsed.len(), "total": total }))
 }
 
-fn counts_import_csv(s: &mut Session, p: &Params) -> ApiResult {
+fn counts_import_csv(s: &mut Session, p: Params<'_>) -> ApiResult {
     let n = datahub::import_csv(&mut s.project, p.str("csv")?, &mut s.ids)
         .map_err(ApiError::bad_params)?;
     s.touch();
@@ -442,7 +492,7 @@ fn counts_import_csv(s: &mut Session, p: &Params) -> ApiResult {
     )
 }
 
-fn set_role(s: &mut Session, p: &Params) -> ApiResult {
+fn set_role(s: &mut Session, p: Params<'_>) -> ApiResult {
     let id = p.str("count")?;
     if !Data::read(&s.project).counts.iter().any(|c| c.id == id) {
         return Err(ApiError::not_found(format!("There is no count {id}.")));
@@ -452,12 +502,14 @@ fn set_role(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "count": id, "role": p.str("role")? }))
 }
 
-fn hold_out(s: &mut Session, p: &Params) -> ApiResult {
+fn hold_out(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
     let every = p
         .opt_f64("every")?
-        .map_or(calibrate::corridor::HOLD_EVERY, |x| x.max(2.0) as usize);
-    let sid = s.sid(i);
+        .map_or(calibrate::corridor::HOLD_EVERY, |x| {
+            f64_to_usize(x.max(2.0))
+        });
+    let sid = s.sid(i)?;
     let (valid, calib) = calibrate::hold_out(&mut s.project, &sid, every);
     s.touch();
     Ok(json!({ "validation": valid, "calibration": calib }))
@@ -465,11 +517,11 @@ fn hold_out(s: &mut Session, p: &Params) -> ApiResult {
 
 // ------------------------------------------------------------------ the model against the counts
 
-fn calibration_summary(s: &mut Session, p: &Params) -> ApiResult {
+fn calibration_summary(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, sid, period) = sci(s, p)?;
-    let limit = p.opt_f64("limit")?.map_or(20, |x| x.max(0.0) as usize);
+    let limit = p.opt_f64("limit")?.map_or(20, |x| f64_to_usize(x.max(0.0)));
     let data = Data::read(&s.project);
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let sum = datahub::calibration(
         sc,
         s.result(&sid, &period),
@@ -490,14 +542,16 @@ fn calibration_summary(s: &mut Session, p: &Params) -> ApiResult {
     })
 }
 
-fn calibration_rows(s: &mut Session, p: &Params) -> ApiResult {
+fn calibration_rows(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, sid, period) = sci(s, p)?;
     let res = held(s, i, &period)?;
     let ctx = Ctx::new(&s.project);
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let set = p.opt_str("set")?.unwrap_or("all");
     let area = p.opt_str("area")?.unwrap_or("all");
-    let limit = p.opt_f64("limit")?.map_or(200, |x| x.max(0.0) as usize);
+    let limit = p
+        .opt_f64("limit")?
+        .map_or(200, |x| f64_to_usize(x.max(0.0)));
     let rows = count_rows(&ctx, sc, &period, Some(res), p.flag("raw")?);
     let total = rows.len();
     let keep: Vec<Value> = rows
@@ -511,19 +565,19 @@ fn calibration_rows(s: &mut Session, p: &Params) -> ApiResult {
     )
 }
 
-fn calibration_report(s: &mut Session, p: &Params) -> ApiResult {
+fn calibration_report(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, sid, period) = sci(s, p)?;
     let r = calibrate::report(
         &s.project,
-        &s.project.scenarios[i],
+        scenario_at(&s.project.scenarios, i)?,
         &period,
         s.result(&sid, &period),
     );
     Ok(json!({ "scenario": sid, "report": val(&r) }))
 }
 
-fn calibration_assess(s: &mut Session, p: &Params) -> ApiResult {
-    let (i, sid, period) = sci(s, p)?;
+fn calibration_assess(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (idx, sid, period) = sci(s, p)?;
     let ctx = Ctx::new(&s.project);
     let category = match p.opt_str("category")? {
         Some(c) => {
@@ -551,7 +605,7 @@ fn calibration_assess(s: &mut Session, p: &Params) -> ApiResult {
     };
     let a = calibrate::assess(
         &ctx,
-        &s.project.scenarios[i],
+        scenario_at(&s.project.scenarios, idx)?,
         &period,
         s.result(&sid, &period),
         &o,
@@ -568,15 +622,20 @@ fn calibration_assess(s: &mut Session, p: &Params) -> ApiResult {
         .collect();
     Ok(json!({
         "scenario": sid, "period": period, "standard": a.standard, "category": a.category.to_string(), "status": a.status, "pass": a.pass,
-        "also": a.also.iter().map(|c| c.to_string()).collect::<Vec<_>>(), "line": a.line, "rows": rows,
+        "also": a.also.iter().map(std::string::ToString::to_string).collect::<Vec<_>>(), "line": a.line, "rows": rows,
         "fails": a.fails.iter().map(|f| json!({ "category": f.cat.to_string(), "test": f.test, "got": f.got, "target": f.target })).collect::<Vec<_>>(),
     }))
 }
 
-fn me_report(s: &mut Session, p: &Params) -> ApiResult {
+fn me_report(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, sid, period) = sci(s, p)?;
     let now = s.ids.now_iso();
-    match calibrate::me_report(&s.project, &s.project.scenarios[i], &period, &now) {
+    match calibrate::me_report(
+        &s.project,
+        scenario_at(&s.project.scenarios, i)?,
+        &period,
+        &now,
+    ) {
         Some(m) => Ok(json!({ "scenario": sid, "period": period, "report": val(&m) })),
         None => Err(ApiError::invalid_state(format!(
             "The {period} peak has no matrix estimation factors. Fit to counts first."
@@ -586,7 +645,7 @@ fn me_report(s: &mut Session, p: &Params) -> ApiResult {
 
 // ------------------------------------------------------------------ estimation
 
-fn run_me(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
+fn run_me(s: &mut Session, p: Params<'_>, sink: Sink<'_>) -> ApiResult {
     let (i, sid, period) = sci(s, p)?;
     let date = s.ids.now_iso();
     let opts = RunMeOpts {
@@ -594,7 +653,7 @@ fn run_me(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
         xamax: p.opt_f64("xamax")?,
         date: Some(&date),
     };
-    let name = s.project.scenarios[i]
+    let name = scenario_at(&s.project.scenarios, i)?
         .name
         .as_str()
         .unwrap_or("")
@@ -612,7 +671,7 @@ fn run_me(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
     )
 }
 
-fn calibration_fit(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
+fn calibration_fit(s: &mut Session, p: Params<'_>, sink: Sink<'_>) -> ApiResult {
     let (i, sid, period) = sci(s, p)?;
     let date = s.ids.now_iso();
     let ids = p.opt_strings("countIds")?;
@@ -631,7 +690,7 @@ fn calibration_fit(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
         groups: None,
         date: Some(&date),
     };
-    let name = s.project.scenarios[i]
+    let name = scenario_at(&s.project.scenarios, i)?
         .name
         .as_str()
         .unwrap_or("")
@@ -646,10 +705,10 @@ fn calibration_fit(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
     Ok(json!({ "scenario": sid, "period": period, "fit": val(&r), "warnings": warnings }))
 }
 
-fn trip_end_factors(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
+fn trip_end_factors(s: &mut Session, p: Params<'_>, sink: Sink<'_>) -> ApiResult {
     let (i, sid, period) = sci(s, p)?;
     let date = s.ids.now_iso();
-    let name = s.project.scenarios[i]
+    let name = scenario_at(&s.project.scenarios, i)?
         .name
         .as_str()
         .unwrap_or("")
@@ -671,14 +730,14 @@ fn trip_end_factors(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
     )
 }
 
-fn calibration_clear(s: &mut Session, p: &Params) -> ApiResult {
+fn calibration_clear(s: &mut Session, p: Params<'_>) -> ApiResult {
     let period = p.opt_str("period")?;
     let n = calibrate::clear(&mut s.project, period);
     let warnings = after_change(s);
     Ok(json!({ "pairsCleared": n, "warnings": warnings }))
 }
 
-fn calibration_validate(s: &mut Session, p: &Params) -> ApiResult {
+fn calibration_validate(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (_, sid, period) = sci(s, p)?;
     let now = s.ids.now_iso();
     let r = calibrate::record_validation(&mut s.project, &sid, &period, &now);
@@ -692,13 +751,17 @@ fn calibration_validate(s: &mut Session, p: &Params) -> ApiResult {
     })
 }
 
-fn gateways_from_counts(s: &mut Session, p: &Params) -> ApiResult {
+fn gateways_from_counts(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
     let data = Data::read(&s.project);
     let settings = s.project.settings.clone();
     let mut n_active = 0;
     for j in 0..s.project.scenarios.len() {
-        let k = datahub::gateways_from_counts(&mut s.project.scenarios[j], &settings, &data);
+        let k = datahub::gateways_from_counts(
+            scenario_at_mut(&mut s.project.scenarios, j)?,
+            &settings,
+            &data,
+        );
         if j == i {
             n_active = k;
         }
@@ -716,7 +779,7 @@ fn gateways_from_counts(s: &mut Session, p: &Params) -> ApiResult {
 
 // ------------------------------------------------------------------ screenlines, exports, turning counts, tests
 
-fn screenline_add(s: &mut Session, p: &Params) -> ApiResult {
+fn screenline_add(s: &mut Session, p: Params<'_>) -> ApiResult {
     let pts: Vec<Point> = p
         .array("points")?
         .iter()
@@ -729,7 +792,7 @@ fn screenline_add(s: &mut Session, p: &Params) -> ApiResult {
     }
     let mut st = calibrate::CalibStore::read(&s.project);
     let id = s.ids.uid("sl");
-    let n = st.screenlines.len() + 1;
+    let n = st.screenlines.len().saturating_add(1);
     let mut m = Map::new();
     m.insert("id".into(), json!(id));
     m.insert(
@@ -760,7 +823,7 @@ fn screenline_add(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "id": id, "screenlines": st.screenlines.len() }))
 }
 
-fn screenline_delete(s: &mut Session, p: &Params) -> ApiResult {
+fn screenline_delete(s: &mut Session, p: Params<'_>) -> ApiResult {
     let id = p.str("id")?;
     let mut st = calibrate::CalibStore::read(&s.project);
     let before = st.screenlines.len();
@@ -773,7 +836,7 @@ fn screenline_delete(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "deleted": id }))
 }
 
-fn screenline_rows(s: &mut Session, p: &Params) -> ApiResult {
+fn screenline_rows(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, sid, period) = sci(s, p)?;
     let id = p.str("id")?;
     let ctx = Ctx::new(&s.project);
@@ -785,7 +848,7 @@ fn screenline_rows(s: &mut Session, p: &Params) -> ApiResult {
         .ok_or_else(|| ApiError::not_found(format!("There is no screenline {id}.")))?;
     let rows = calibrate::sl_rows(
         &ctx,
-        &s.project.scenarios[i],
+        scenario_at(&s.project.scenarios, i)?,
         sl,
         &period,
         s.result(&sid, &period),
@@ -794,11 +857,11 @@ fn screenline_rows(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "scenario": sid, "period": period, "screenline": id, "rows": val(&rows) }))
 }
 
-fn calibration_export(s: &mut Session, p: &Params) -> ApiResult {
+fn calibration_export(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let sid = s.sid(i);
+    let sid = s.sid(i)?;
     let ctx = Ctx::new(&s.project);
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let res_of = |per: &str| s.result(&sid, per).cloned();
     let kind = p.str("kind")?;
     let text = match kind {
@@ -810,7 +873,7 @@ fn calibration_export(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "kind": kind, "text": text }))
 }
 
-fn turn_counts_import(s: &mut Session, p: &Params) -> ApiResult {
+fn turn_counts_import(s: &mut Session, p: Params<'_>) -> ApiResult {
     let name = p.opt_str("name")?.unwrap_or("turning counts");
     let r = calibrate::import_turn_csv(&mut s.project, p.str("csv")?, name, &mut s.ids)
         .map_err(ApiError::bad_params)?;
@@ -820,7 +883,7 @@ fn turn_counts_import(s: &mut Session, p: &Params) -> ApiResult {
     )
 }
 
-fn stress_test(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
+fn stress_test(s: &mut Session, p: Params<'_>, sink: Sink<'_>) -> ApiResult {
     let (_, sid, period) = sci(s, p)?;
     let factors: Option<Vec<f64>> = p
         .opt_array("factors")?
@@ -848,12 +911,12 @@ fn stress_test(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
     }))
 }
 
-fn network_checks(s: &mut Session, p: &Params) -> ApiResult {
+fn network_checks(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, sid, period) = sci(s, p)?;
     let ctx = Ctx::new(&s.project);
     let r = calibrate::network_checks(
         &ctx,
-        &s.project.scenarios[i],
+        scenario_at(&s.project.scenarios, i)?,
         &period,
         s.result(&sid, &period),
     );

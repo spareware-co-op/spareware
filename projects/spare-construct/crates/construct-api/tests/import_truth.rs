@@ -1,6 +1,18 @@
 //! The import and export commands against the prototype (tools/transport-truth gen-import.mjs): an OpenStreetMap answer read into a
-//! scenario, gateways at the box edge, GeoJSON lines read as roads, junction sites from controlled-intersection points, and the network
-//! written as GeoJSON and CSV with and without results. The same seeded ids and the same made-up input files as the JavaScript.
+//! scenario, gateways at the box edge, `GeoJSON` lines read as roads, junction sites from controlled-intersection points, and the network
+//! written as `GeoJSON` and CSV with and without results. The same seeded ids and the same made-up input files as the JavaScript.
+
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    reason = "test code; the rules are for the crate's own code"
+)]
 
 mod support;
 
@@ -96,7 +108,7 @@ fn imports_and_exports_do_what_the_prototype_does() {
                         .nodes
                         .keys()
                         .map(str::to_string)
-                        .collect()
+                        .collect();
                 }
                 "osm" => {
                     let data: Value = serde_json::from_str(&read_truth(&format!(

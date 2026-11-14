@@ -10,16 +10,19 @@ use super::jv::{Jx, V, jarr, jobj, merge, obj_at, slice, st};
 use super::rx::rx;
 
 /// The version date of the regulatory data (`VERSION`).
+#[must_use]
 pub fn version() -> &'static str {
     table("VERSION").as_str().unwrap_or("")
 }
 
 /// The label of an assumption the author can change (`ASSUMPTION`).
+#[must_use]
 pub fn assumption() -> &'static str {
     table("ASSUMPTION").as_str().unwrap_or("")
 }
 
 /// A project's blank compliance record (`blank()`): the defaults every entry starts from.
+#[must_use]
 pub fn blank() -> V {
     jobj! {
         "v" => 1,
@@ -44,15 +47,15 @@ pub fn fill(dst: &mut V, def: &V) {
         let missing = !dst.has(k);
         if missing {
             dst.set(k, v.clone());
-        } else if v.is_obj() && dst.g(k).is_obj() {
-            if let Some(d) = dst.get_mut(k) {
+        } else if v.is_obj() && dst.g(k).is_obj()
+            && let Some(d) = dst.get_mut(k) {
                 fill(d, v);
             }
-        }
     }
 }
 
 /// `state(P)`: the project's compliance record with the defaults filled in (the project is not changed).
+#[must_use]
 pub fn state(p: &V) -> V {
     let mut c = if p.g("compliance").is_obj() { p.g("compliance").clone() } else { V::object() };
     fill(&mut c, &blank());
@@ -60,17 +63,20 @@ pub fn state(p: &V) -> V {
 }
 
 /// `state(P)` for changing: the project's compliance record, created and filled with the defaults first.
-pub fn state_mut(p: &mut V) -> &mut V {
+///
+/// Always Some for a project (an object); None when `p` is not an object (no field can be set on it).
+pub fn state_mut(p: &mut V) -> Option<&mut V> {
     if !p.g("compliance").is_obj() {
         p.set("compliance", V::object());
     }
     let b = blank();
-    let c = p.get_mut("compliance").expect("set above");
+    let c = p.get_mut("compliance")?;
     fill(c, &b);
-    c
+    Some(c)
 }
 
 /// `S_(P)`: the regulatory settings (affected operator thresholds, tier 1 area, evidence radius, extra precincts), filled with the defaults.
+#[must_use]
 pub fn settings(p: &V) -> V {
     let mut o = jobj! { "dvc" => table("OPS.dvc"), "ddelay" => table("OPS.ddelay"), "vicinity" => table("E27.tier1Area.m"), "evidence" => table("ACCESS.evidenceM"), "precincts" => "" };
     let own = p.g("settings").g("compliance");
@@ -83,29 +89,34 @@ pub fn settings(p: &V) -> V {
 }
 
 /// `activeSc(P)`: the active scenario (the first when none is named).
+#[must_use]
 pub fn active_sc(p: &V) -> &V {
     let scs = p.g("scenarios").items();
     scs.iter().find(|s| s.g("id").strict_eq(p.g("active"))).or(scs.first()).unwrap_or(&super::jv::NULL)
 }
 
 /// `baseSc(P)`: the base scenario (the first when none is named).
+#[must_use]
 pub fn base_sc(p: &V) -> &V {
     let scs = p.g("scenarios").items();
     scs.iter().find(|s| s.g("id").strict_eq(p.g("base"))).or(scs.first()).unwrap_or(&super::jv::NULL)
 }
 
 /// `resOf(sc, period)`: the results of a scenario for a period (null when none).
+#[must_use]
 pub fn res_of<'a>(sc: &'a V, period: &str) -> Option<&'a V> {
     let r = sc.g("res").g(period);
     if r.t() { Some(r) } else { None }
 }
 
 /// `periodsOf(sc)`: the modelled peaks that have results, in AM, PM order.
+#[must_use]
 pub fn periods_of(sc: &V) -> Vec<&'static str> {
     ["AM", "PM"].into_iter().filter(|p| res_of(sc, p).is_some()).collect()
 }
 
 /// `PATHWAYS[pathway]`: the pathway's entry (None when the pathway is not set or unknown).
+#[must_use]
 pub fn pathway_entry(key: &V) -> Option<&'static V> {
     let t = table("PATHWAYS");
     let k = key.s();
@@ -113,31 +124,37 @@ pub fn pathway_entry(key: &V) -> Option<&'static V> {
 }
 
 /// `pw(P)`: the entry of the project's pathway.
+#[must_use]
 pub fn pw(p: &V) -> Option<&'static V> {
     pathway_entry(state(p).g("ctx").g("pathway"))
 }
 
 /// `inAuckland(P)`: the project is in Auckland (every region but "other").
+#[must_use]
 pub fn in_auckland(p: &V) -> bool {
     !state(p).g("ctx").g("region").eq_s("other")
 }
 
 /// `esc` of the compliance tab: null and undefined print as nothing, then HTML-escaped.
+#[must_use]
 pub fn esc(v: &V) -> String {
     crate::util::esc(&v.sn())
 }
 
 /// `esc` of text.
+#[must_use]
 pub fn esc_s(s: &str) -> String {
     crate::util::esc(s)
 }
 
 /// `num(v, d)`: a number as the reports print it, an en dash for null and non-finite values.
+#[must_use]
 pub fn num(v: &V, d: usize) -> String {
     if v.nullish() || !v.n().is_finite() { crate::util::fmt::DASH.to_string() } else { crate::util::fmt::num(v.n(), d) }
 }
 
 /// `num(x, d)` for a number.
+#[must_use]
 pub fn numf(x: f64, d: usize) -> String {
     num(&V::Number(x), d)
 }
@@ -210,41 +227,43 @@ pub fn regime(p: &V) -> V {
 /// `stamp(P, now)`: the version stamp printed on the title page and in every exported table footer.
 ///
 /// `now` is the date the stamp is made on (see [`today`]): a day as text, a timestamp, or null for the clock.
+#[must_use]
 pub fn stamp(p: &V, now: &V) -> V {
-    let r = regime(p);
-    let c = state(p);
-    let d = today(now);
-    let side = r.g("side");
-    let rma: String = if side.eq_s("pre") { "as in force immediately before 30 Sep 2026".into() } else if side.eq_s("transition") { format!("as at {}", long_date_v(r.g("date"))) } else { "\u{2013}".into() };
+    let reg = regime(p);
+    let cs = state(p);
+    let day = today(now);
+    let side = reg.g("side");
+    let rma: String = if side.eq_s("pre") { "as in force immediately before 30 Sep 2026".into() } else if side.eq_s("transition") { format!("as at {}", long_date_v(reg.g("date"))) } else { "\u{2013}".into() };
     let ftaa = "as at 10 Jul 2026";
     // an edition whose next known change has passed is marked, so a stamp printed later does not look current
-    let ed = |id: &str, e: &str| -> String {
-        let s = table("STANDARDS").items().iter().find(|x| x.g("id").eq_s(id));
-        let n = s.map(|s| s.g("next")).unwrap_or(&super::jv::NULL);
-        if n.t() && n.g("date").t() && d.as_str() >= n.g("date").s().as_str() { format!("{e} (changed {}: check)", long_date_v(n.g("date"))) } else { e.to_string() }
+    let ed = |id: &str, edition: &str| -> String {
+        let row = table("STANDARDS").items().iter().find(|item| item.g("id").eq_s(id));
+        let next = row.map_or(&super::jv::NULL, |found| found.g("next"));
+        if next.t() && next.g("date").t() && day.as_str() >= next.g("date").s().as_str() { format!("{edition} (changed {}: check)", long_date_v(next.g("date"))) } else { edition.to_string() }
     };
-    let docs: Vec<(String, String)> = table("STAMP_DOCS").items().iter().map(|r| (r.ix(1).s(), ed(&r.ix(0).s(), &r.ix(2).s()))).collect();
+    let docs: Vec<(String, String)> = table("STAMP_DOCS").items().iter().map(|row| (row.ix(1).s(), ed(&row.ix(0).s(), &row.ix(2).s()))).collect();
     let mut lines: Vec<V> = vec![
-        jarr!["Pathway", r.g("pathwayLabel")],
-        jarr!["Lodgement", if r.g("date").t() { format!("{}{}", long_date_v(r.g("date")), if c.g("ctx").g("lodgementActual").t() { "" } else { " (planned)" }) } else { "not set".into() }],
-        jarr!["Regime", r.g("text")],
+        jarr!["Pathway", reg.g("pathwayLabel")],
+        jarr!["Lodgement", if reg.g("date").t() { format!("{}{}", long_date_v(reg.g("date")), if cs.g("ctx").g("lodgementActual").t() { "" } else { " (planned)" }) } else { "not set".into() }],
+        jarr!["Regime", reg.g("text")],
         jarr!["RMA version", rma.as_str()],
         jarr!["FTAA version", ftaa],
-        jarr!["Planning Act", r.g("transitionText")],
+        jarr!["Planning Act", reg.g("transitionText")],
     ];
-    for (n, e) in &docs {
-        lines.push(jarr![n.as_str(), e.as_str()]);
+    for (name, edition) in &docs {
+        lines.push(jarr![name.as_str(), edition.as_str()]);
     }
     lines.push(jarr!["Spare Construct regulatory data", format!("as at {}", long_date(version()))]);
-    let clause = if r.g("clause").t() { format!(" ({})", r.g("clause").s()) } else { String::new() };
-    let rma_part = if rma != "\u{2013}" { format!("RMA {rma} \u{b7} ") } else { String::new() };
-    let text = format!("{}{} \u{b7} {}FTAA {} \u{b7} {} \u{b7} ", r.g("short").sn(), clause, rma_part, ftaa, r.g("transitionText").sn())
-        + &docs.iter().map(|(n, e)| format!("{n} {e}")).collect::<Vec<_>>().join(" \u{b7} ")
+    let clause = if reg.g("clause").t() { format!(" ({})", reg.g("clause").s()) } else { String::new() };
+    let rma_part = if rma == "\u{2013}" { String::new() } else { format!("RMA {rma} \u{b7} ") };
+    let text = format!("{}{} \u{b7} {}FTAA {} \u{b7} {} \u{b7} ", reg.g("short").sn(), clause, rma_part, ftaa, reg.g("transitionText").sn())
+        + &docs.iter().map(|(name, edition)| format!("{name} {edition}")).collect::<Vec<_>>().join(" \u{b7} ")
         + &format!(" \u{b7} Spare Construct regulatory data {}", version());
-    jobj! { "regime" => r, "lines" => V::Array(lines), "text" => &text, "footer" => format!("Version stamp: {text}"), "at" => d }
+    jobj! { "regime" => reg, "lines" => V::Array(lines), "text" => &text, "footer" => format!("Version stamp: {text}"), "at" => day }
 }
 
 /// `usedDocs(P)`: the standards an output relies on: the stamped documents plus the pathway's own law.
+#[must_use]
 pub fn used_docs(p: &V) -> Vec<String> {
     let pe = pw(p);
     let mut out: Vec<String> = Vec::new();
@@ -272,16 +291,21 @@ pub fn record_outputs(p: &mut V, now: &V) -> V {
     let r = regime(p);
     let d = today(now);
     let ids = used_docs(p);
-    let c = state_mut(p);
+    // A project is an object, so its record is always there
+    let Some(c) = state_mut(p) else {
+        return V::Null;
+    };
     c.set("outputs", jobj! { "at" => d.as_str(), "lodgement" => r.g("date"), "side" => r.g("side"), "regime" => r.g("code") });
-    let used = obj_at(c, "used");
-    for id in ids {
-        used.set(id, st(d.clone()));
+    if let Some(used) = obj_at(c, "used") {
+        for id in ids {
+            used.set(id, st(d.clone()));
+        }
     }
     c.g("outputs").clone()
 }
 
 /// `recheck(P)`: the re-check banner: outputs were generated before the lodgement date moved across 30 Oct 2026 (RMA pathways only).
+#[must_use]
 pub fn recheck(p: &V) -> V {
     let c = state(p);
     let o = c.g("outputs");
@@ -296,6 +320,7 @@ pub fn recheck(p: &V) -> V {
 }
 
 /// The compliance data tables (for tests and callers that print them).
+#[must_use]
 pub fn data_tables() -> &'static V {
     core()
 }

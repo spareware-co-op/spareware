@@ -31,14 +31,23 @@ pub struct LaneApproach {
 #[allow(unused_variables)]
 pub trait SampleHooks {
     /// `Feeds.nslr.all(near, [src], status)`: the legal speed limits of the roads of the first scenario.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn nslr_all(&mut self, p: &mut Project, near: &Bx, scenario: usize, status: &mut dyn FnMut(&str)) -> Result<(), SampleError> {
         Ok(())
     }
     /// `Feeds.tms.load(Feeds.tms.sites(), { status })`: the NZTA TMS daily counts of the count sites loaded.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn tms_load(&mut self, p: &mut Project, status: &mut dyn FnMut(&str)) -> Result<(), SampleError> {
         Ok(())
     }
     /// `Feeds.hazards.load(near, { status })`: the flood plains and coastal inundation areas.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn hazards_load(&mut self, p: &mut Project, near: &Bx, status: &mut dyn FnMut(&str)) -> Result<Hazards, SampleError> {
         Ok(Hazards::default())
     }
@@ -47,10 +56,16 @@ pub trait SampleHooks {
         Value::Null
     }
     /// `Feeds.gtfs.catalogue(near)`: the first bus timetable that covers the area (None when none does).
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn gtfs_first_feed(&mut self, near: &Bx) -> Result<Option<Value>, SampleError> {
         Ok(None)
     }
     /// `Feeds.gtfs.load`, `routes`, `apply` and `keep`: loads the timetable, puts its bus routes in the scenario and keeps what they use; gives the number of routes.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn gtfs_apply(&mut self, p: &mut Project, feed: &Value, near: &Bx, scenario: usize, status: &mut dyn FnMut(&str)) -> Result<usize, SampleError> {
         Ok(0)
     }
@@ -61,14 +76,23 @@ pub trait SampleHooks {
     /// `Compliance.state(P)` then `Object.assign(C.ctx, ctx)` and, when given, `Object.assign(C.site, site)`.
     fn compliance_context(&mut self, p: &mut Project, ctx: &Map<String, Value>, site: Option<&Map<String, Value>>) {}
     /// `Compliance.lookupSite(P)`: the site's zone, precinct and FDS area from Auckland Council.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn lookup_site(&mut self, p: &mut Project) -> Result<(), SampleError> {
         Ok(())
     }
     /// `Compliance.loadSH(P, { sc })`: the NZTA state highway network, for one scenario.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn load_sh(&mut self, p: &mut Project, scenario: usize) -> Result<(), SampleError> {
         Ok(())
     }
     /// `Compliance.loadOverlays(P, { sc })`: the Auckland Unitary Plan arterial and access controls, for one scenario.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn load_overlays(&mut self, p: &mut Project, scenario: usize) -> Result<(), SampleError> {
         Ok(())
     }
@@ -79,6 +103,9 @@ pub trait SampleHooks {
     /// `ComplianceExtra.data(P).precinct`: sets the precinct id, the register of its committed growth and the proposal.
     fn precinct(&mut self, p: &mut Project, id: &str, register: Vec<Value>, proposal: Value) {}
     /// `ComplianceExtra.seedMitigation(P)`: seeds the mitigation register from the modelled effects and the mitigation scenario.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn seed_mitigation(&mut self, p: &mut Project) -> Result<(), SampleError> {
         Ok(())
     }
@@ -89,18 +116,30 @@ pub trait SampleHooks {
     /// Replaces `ComplianceExtra.data(P).mitigation`.
     fn set_mitigation(&mut self, p: &mut Project, list: Vec<Value>) {}
     /// `ComplianceExtra.effects(P)`: the modelled effects, each with an `id` and a `dos` or `vc`.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn effects(&mut self, p: &mut Project) -> Result<Vec<Value>, SampleError> {
         Ok(Vec::new())
     }
     /// `ComplianceExtra.seedConditions(P)`: seeds the condition parameters.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails or is cancelled (the build notes a failure and carries on).
     fn seed_conditions(&mut self, p: &mut Project) -> Result<(), SampleError> {
         Ok(())
     }
     /// `Report.staging(P, { steps, onProgress })`: the proposal at each build-out step. `progress(k, n, text)` is called as each step finishes and gives an error when the build was cancelled.
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails, or [`SampleError::Cancelled`] when `progress` says the build was cancelled.
     fn staging(&mut self, p: &mut Project, steps: &[f64], progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>) -> Result<(), SampleError> {
         Ok(())
     }
     /// `Report.sensitivity(P, { tests, onProgress })`: the sensitivity tests. `progress` is as for [`SampleHooks::staging`].
+    ///
+    /// # Errors
+    /// A [`SampleError`] when the step fails, or [`SampleError::Cancelled`] when `progress` says the build was cancelled.
     fn sensitivity(&mut self, p: &mut Project, tests: &[&str], progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>) -> Result<(), SampleError> {
         Ok(())
     }

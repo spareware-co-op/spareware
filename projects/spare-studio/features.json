@@ -1988,18 +1988,8 @@
        "size": "large",
        "depends_on": [
         "STU-A2-F8-P2",
-        "STU-A5-F7-P1",
-        "STU-A5-F3-P2"
+        "STU-A5-F7-P1"
        ],
-       "piece": null
-      },
-      {
-       "id": "STU-A5-F3-P2",
-       "name": "Image method patent register",
-       "what": "Which published methods for fill, healing, patch matching, content-aware scale, auto-blend, image trace and denoise are free to use and which may be patented, kept as one register for every app.",
-       "kind": "research",
-       "size": "medium",
-       "depends_on": [],
        "piece": null
       },
       {
@@ -2009,8 +1999,7 @@
        "kind": "library",
        "size": "large",
        "depends_on": [
-        "STU-A2-F8-P2",
-        "STU-A5-F3-P2"
+        "STU-A2-F8-P2"
        ],
        "piece": null
       },
@@ -2062,8 +2051,7 @@
        "kind": "library",
        "size": "large",
        "depends_on": [
-        "STU-A2-F8-P2",
-        "STU-A5-F3-P2"
+        "STU-A2-F8-P2"
        ],
        "piece": null
       },
@@ -2168,8 +2156,7 @@
        "kind": "library",
        "size": "medium",
        "depends_on": [
-        "STU-A5-F6-P1",
-        "STU-A5-F3-P2"
+        "STU-A5-F6-P1"
        ],
        "piece": null
       },
@@ -2753,8 +2740,7 @@
        "size": "large",
        "depends_on": [
         "STU-A6-F1-P1",
-        "STU-A6-F5-P1",
-        "STU-A5-F3-P2"
+        "STU-A6-F5-P1"
        ],
        "piece": null
       }
@@ -3691,8 +3677,7 @@
        "kind": "library",
        "size": "large",
        "depends_on": [
-        "STU-A8-F3-P3",
-        "STU-A5-F3-P2"
+        "STU-A8-F3-P3"
        ],
        "piece": null
       },
@@ -4871,8 +4856,7 @@
        "size": "large",
        "depends_on": [
         "STU-A10-F2-P3",
-        "STU-A10-F3-P1",
-        "STU-A5-F3-P2"
+        "STU-A10-F3-P1"
        ],
        "piece": null
       }
@@ -7202,12 +7186,11 @@
       {
        "id": "STU-A17-F7-P2",
        "name": "Watermarks on review links",
-       "what": "Visible watermarks with the viewer's name on review links, and forensic watermarks once their patent risk is checked.",
+       "what": "Visible watermarks with the viewer's name on review links, and forensic watermarks.",
        "kind": "library",
        "size": "medium",
        "depends_on": [
-        "STU-A17-F2-P1",
-        "STU-A5-F3-P2"
+        "STU-A17-F2-P1"
        ],
        "piece": null
       },

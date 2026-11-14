@@ -1,6 +1,15 @@
 //! Fuzz targets for building shapes. Each runs as a property test in `cargo test`, and under
 //! libFuzzer with `cargo bolero test <name> --package construct-regen` (the `kit` workflow).
 
+// The crate denies native arithmetic, lossy casts and unchecked indexing outside tests
+// (Cargo.toml); a test's helpers may use them, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::indexing_slicing,
+    reason = "test helpers; the rules are for the crate's own code"
+)]
+
 use bolero::check;
 use construct_model::geometry::{Geometry, Recipe};
 use construct_regen::stand_in::Boxes;
@@ -44,8 +53,8 @@ fn any_recipe_builds_or_says_why() {
             let (first, second) = (Boxes.build(&recipe), Boxes.build(&recipe));
             assert_eq!(first, second, "a build is a pure function");
             let Ok(built) = first else { return };
-            assert!(!built.body.is_empty());
-            assert!(!built.displays.is_empty());
+            assert_ne!(built.body, Vec::<u8>::new());
+            assert_ne!(built.displays, Vec::new());
             for display in &built.displays {
                 let points = (display.mesh.positions.len() / 3) as u32;
                 assert_eq!(display.mesh.positions.len() % 3, 0);

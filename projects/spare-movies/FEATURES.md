@@ -568,16 +568,16 @@ Making films hard to copy and pass around without paying, honestly: the open dec
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| MOV-A16-F1-P1 | **Protection decision**: Compare locked playback (Widevine, FairPlay and PlayReady are closed systems and each needs an agreement with its company), a hidden per-viewer watermark and no lock, on cost, reach, privacy, patents and what filmmakers and their investors require. | research | medium |  |  |
+| MOV-A16-F1-P1 | **Protection decision**: Compare locked playback (Widevine, FairPlay and PlayReady are closed systems and each needs an agreement with its company), a hidden per-viewer watermark and no lock, on cost, reach, privacy and what filmmakers and their investors require. | research | medium |  |  |
 | MOV-A16-F1-P2 | **Encrypted delivery**: Films encrypted once with the Common Encryption standard (CENC, cbcs), so the same files work with any locked system if one is chosen. | library | medium | MOV-A18-F3-P1, MOV-A16-F1-P1 |  |
 | MOV-A16-F1-P3 | **Key service**: Gives out playback keys per session after checking the access right, the country and the device limit, on the kit's encryption and keys (KIT-A22-F5-P5). | service | large | MOV-A16-F1-P2, KIT-A22-F5-P5 |  |
 | MOV-A16-F1-P4 | **Signed, expiring links**: Delivery links tied to the session that expire, on the kit's sharing rules (KIT-A15-F8-P1). | integration | small | KIT-A15-F8-P1 |  |
-| MOV-A16-F2-P1 | **Fingerprint method**: Compare open video and audio fingerprinting methods on accuracy, speed and licence, starting with Meta's TMK+PDQF and vPDQ (BSD-2-Clause), with a patent search before any code. | research | medium |  |  |
+| MOV-A16-F2-P1 | **Fingerprint method**: Compare open video and audio fingerprinting methods on accuracy, speed and licence, starting with Meta's TMK+PDQF and vPDQ (BSD-2-Clause). | research | medium |  |  |
 | MOV-A16-F2-P2 | **Fingerprint every film**: Fingerprints made for every film and trailer on upload and stored privately. | service | medium | MOV-A16-F2-P1, MOV-A18-F1-P1 |  |
 | MOV-A16-F2-P3 | **Check every upload**: New uploads are matched against every film; a match pauses publishing and goes to a person, never removed or paid automatically. | service | medium | MOV-A16-F2-P2 |  |
 | MOV-A16-F2-P4 | **Match review**: Both films side by side with the matching stretches, for a moderator to decide, logged in public. | interface | small | MOV-A16-F2-P3, MOV-A17-F7-P1 |  |
 | MOV-A16-F3-P1 | **Protection promise**: Plain words on what protection is used, that it installs nothing hidden and tracks nothing, and which devices can play. | legal | small | MOV-A16-F1-P1 |  |
-| MOV-A16-F4-P1 | **Watermark method**: Compare watermarking methods, such as two marked copies of each piece with every viewer getting a unique pattern of them, with a patent search before any code; the field is heavily patented (unverified). | research | medium |  |  |
+| MOV-A16-F4-P1 | **Watermark method**: Compare watermarking methods, such as two marked copies of each piece with every viewer getting a unique pattern of them. | research | medium |  |  |
 | MOV-A16-F4-P2 | **Watermarked delivery**: Each session gets its own pattern of marked pieces, chosen at delivery from two marked copies of each piece. | service | large | MOV-A16-F4-P1, MOV-A18-F3-P1 |  |
 | MOV-A16-F4-P3 | **Leak tracing**: Reads the mark from a leaked copy and finds the account; a person reviews before any action, and the action is logged. | service | medium | MOV-A16-F4-P2 |  |
 | MOV-A16-F5-P1 | **Copy check and notice**: The filmmaker submits a link; the copy is checked against the fingerprint and a notice is prepared on the kit's notice templates (KIT-A10-F21-P2) for the filmmaker to send. | service | small | MOV-A16-F2-P2, KIT-A10-F21-P2 |  |
