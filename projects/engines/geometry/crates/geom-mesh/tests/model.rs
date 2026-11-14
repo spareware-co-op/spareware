@@ -592,6 +592,13 @@ fn flips_and_smoothing_work_on_a_flat_sheet() {
         // Every vertex is still there, in its number, so the middle is still number 4.
         assert_eq!(out.points().len(), input.0.len());
         assert_eq!(valence(out.triangles()), 7, "{:?}", out.triangles());
+        // It was that edge: the diagonal 0–4 became 1–3.
+        let joins = |u: u32, v: u32| {
+            out.triangles()
+                .iter()
+                .any(|t| t.contains(&u) && t.contains(&v))
+        };
+        assert!(joins(1, 3) && !joins(0, 4), "{:?}", out.triangles());
         two_way(&input, &out, 4);
     }
     let mut moved = points;
