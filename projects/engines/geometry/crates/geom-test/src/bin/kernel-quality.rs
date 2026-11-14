@@ -22,6 +22,10 @@
 //!   naming on standard error) any without a function to measure ([`geom_test::coverage::has_code`]).
 //! - `miri-packages` prints the `-p` arguments of every kernel crate for the Miri run
 //!   ([`geom_test::miri`]).
+//! - `fuzz-scope` prints which of `kernel-fuzz.yml`'s fuzz targets and Kani proofs a change can
+//!   affect, and why, and writes the step outputs that job's matrices read
+//!   ([`geom_test::fuzz_scope`]); `.github/workflows/kernel-fuzz.yml`'s job `select` and
+//!   `kernel-fuzz-campaign.yml`'s run it.
 //!
 //! Guarantees:
 //!
@@ -36,13 +40,14 @@
 //! (<https://docs.rs/clap/4.6.7/clap/_derive/index.html>), over the library's gates.
 //!
 //! Cost: what each gate costs (see its module), plus one `cargo metadata` run for `affected
-//! --changed` and `miri-packages`.
+//! --changed`, `miri-packages` and `fuzz-scope`.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use geom_test::coverage::{self, CrateReport};
+use geom_test::fuzz_scope;
 use geom_test::mutants::{self, Mode};
 use geom_test::quality_ledger::{LEDGER_PATH, Ledger};
 use regex_lite::Regex;
@@ -152,6 +157,25 @@ enum Command {
         #[arg(long, default_value = ".")]
         repo: PathBuf,
     },
+    /// Prints which fuzz targets and Kani proofs a change can affect, and why.
+    FuzzScope {
+        /// Every target and proof: a push to main, a release tag.
+        #[arg(long, conflicts_with = "changed", required_unless_present = "changed")]
+        all: bool,
+        /// The files the change touches, one path per line from the repository root.
+        #[arg(long, value_name = "FILES.txt")]
+        changed: Option<PathBuf>,
+        /// The number of shards in the `clusterfuzzlite` job's matrix.
+        #[arg(long, value_name = "N")]
+        shards: Option<usize>,
+        /// Appends the step outputs to this file (GitHub's `$GITHUB_OUTPUT`) instead of printing
+        /// them.
+        #[arg(long, value_name = "FILE")]
+        github_output: Option<PathBuf>,
+        /// The repository root.
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+    },
 }
 
 fn canonical(repo: &Path) -> Result<PathBuf, String> {
@@ -250,6 +274,47 @@ fn judge_coverage(scope: &Scope, dir: &Path, repo: &Repo) -> Result<bool, String
     Ok(failures.is_empty())
 }
 
+/// `fuzz-scope`: the decision for every job, printed, and its step outputs written.
+fn fuzz_scope(
+    all: bool,
+    changed: Option<&Path>,
+    shards: Option<usize>,
+    github_output: Option<&Path>,
+    repo: &Path,
+) -> Result<bool, String> {
+    let scope = fuzz_scope::Scope::read(&metadata(&canonical(repo)?)?)?;
+    let files: Option<Vec<String>> = match changed {
+        Some(file) if !all => {
+            let text =
+                std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+            Some(text.lines().map(str::to_owned).collect())
+        }
+        _ => None,
+    };
+    let selection = scope.select(files.as_deref());
+    print!("{}", selection.report());
+    let mut lines = String::new();
+    for (key, value) in selection.outputs(shards)? {
+        lines.push_str(&key);
+        lines.push('=');
+        lines.push_str(&value);
+        lines.push('\n');
+    }
+    if let Some(path) = github_output {
+        use std::io::Write as _;
+        std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path)
+            .and_then(|mut f| f.write_all(lines.as_bytes()))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+    } else {
+        println!();
+        print!("{lines}");
+    }
+    Ok(true)
+}
+
 /// A `--files` regular expression, in the syntax cargo-mutants' `--re` takes.
 fn regex(files: &str) -> Result<Regex, String> {
     Regex::new(files).map_err(|e| format!("--files {files:?}: {e}"))
@@ -343,6 +408,19 @@ fn run(cli: Cli) -> Result<bool, String> {
             println!("{}", geom_test::miri::cargo_args(&packages));
             Ok(true)
         }
+        Command::FuzzScope {
+            all,
+            changed,
+            shards,
+            github_output,
+            repo,
+        } => fuzz_scope(
+            all,
+            changed.as_deref(),
+            shards,
+            github_output.as_deref(),
+            &repo,
+        ),
     }
 }
 

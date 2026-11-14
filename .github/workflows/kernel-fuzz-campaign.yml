@@ -27,6 +27,12 @@ name: Kernel fuzz campaign
 #   (default 5) shortens every shard of a dispatched run, for a trial. A dispatched run's name in
 #   the run list says which targets it fuzzed, for how long, and on which commit; every other
 #   run keeps the name GitHub gives it.
+# - By hand, the targets a change can affect: a dispatch with `affected_since` set to a base ref
+#   (`-f affected_since=main`) fuzzes, one shard each, the targets geom-test's `kernel-quality
+#   fuzz-scope` picks for the diff from that base's merge base with the dispatched ref to its head,
+#   by the rule kernel-fuzz.yml's pull requests use (a changed file in no crate picks every
+#   target); the job `select` names each target and why. `targets: all` still runs every target,
+#   whatever `affected_since` says, and with `affected_since` empty a dispatch runs as before.
 #
 # Never on an ordinary push. kernel-fuzz.yml keeps the minute of libFuzzer every pull request gets.
 # The machines are GitHub's hosted runners, free for a public repository (decision 32.4), until
@@ -41,7 +47,7 @@ name: Kernel fuzz campaign
 # caller's name).
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
-  && format('Kernel fuzz campaign by hand: {0}, {1} h a shard, on {2}', inputs.targets == 'all' && 'all targets' || 'wide_fuzz in five shards', inputs.hours || '5', github.sha)
+  && format('Kernel fuzz campaign by hand: {0}, {1} h a shard, on {2}', inputs.targets == 'all' && 'all targets' || inputs.affected_since != '' && format('the targets affected since {0}', inputs.affected_since) || 'wide_fuzz in five shards', inputs.hours || '5', github.sha)
   || github.event.pull_request.title
   || 'Kernel fuzz campaign' }}
 
@@ -69,6 +75,11 @@ on:
           - "3"
           - "2"
           - "1"
+      affected_since:
+        description: "A base ref (main): fuzz only the targets the change from it can affect, one shard each. Empty: as targets says"
+        required: false
+        default: ""
+        type: string
   schedule:
     # Every night at 12:47 UTC, before the nightly predicate suite (kernel-nightly.yml).
     - cron: "47 12 * * *"
@@ -96,13 +107,63 @@ env:
   CARGO_BOLERO_VERSION: 0.13.5
 
 jobs:
+  # By hand with `affected_since` (and `targets` not `all`): the targets the change from that base
+  # can affect, as kernel-fuzz.yml's job `select` picks them for a pull request. Its log and the
+  # run's summary name every target and why it runs or not. Skipped on every other run, which
+  # then fuzzes as it always has.
+  select:
+    name: The targets the change since ${{ inputs.affected_since }} can affect
+    if: github.event_name == 'workflow_dispatch' && inputs.affected_since != '' && inputs.targets != 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      any: ${{ steps.scope.outputs.libfuzzer }}
+      targets: ${{ steps.scope.outputs.libfuzzer_targets }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The change, as a pull request from the dispatched ref into the base would show it: from
+      # their merge base to the dispatched head, renames as a removed and an added file.
+      - name: The files changed since the base
+        env:
+          BASE: ${{ inputs.affected_since }}
+        run: |
+          git fetch --no-tags --quiet origin "$BASE"
+          base=$(git merge-base FETCH_HEAD HEAD)
+          echo "The change since $BASE: $base to $(git rev-parse HEAD)"
+          git diff --no-ext-diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed.txt"
+      - name: The targets it can affect, and why
+        id: scope
+        run: >-
+          cargo run --locked -q -p geom-test --bin kernel-quality -- fuzz-scope
+          --changed "$RUNNER_TEMP/changed.txt" --github-output "$GITHUB_OUTPUT"
+          | tee -a "$GITHUB_STEP_SUMMARY"
+
   campaign:
     name: ${{ matrix.target }} under libFuzzer for ${{ (inputs.hours || '5') == '5' && 'five hours' || format('{0} h', inputs.hours) }} (shard ${{ matrix.shard }})
+    # `select` runs only for a dispatch with `affected_since`; every other run goes on without it
+    # (!cancelled() lets a job start after a skipped one). A selection that picked nothing fuzzes
+    # nothing.
+    needs: select
     if: >-
-      github.event_name == 'workflow_dispatch'
+      !cancelled() && needs.select.result != 'failure'
+      && (github.event_name == 'workflow_dispatch' && (needs.select.result != 'success' || needs.select.outputs.any == 'true')
       || github.event_name == 'schedule'
       || github.event.label.name == 'fuzz-campaign'
-      || startsWith(github.ref, 'refs/tags/geom-v')
+      || startsWith(github.ref, 'refs/tags/geom-v'))
     runs-on: ubuntu-latest
     # The six hours a hosted job may run, the most GitHub allows. The fuzz step has its own limit
     # of 330 minutes (below), so a step that overruns still leaves 30 minutes for the uploads.
@@ -115,9 +176,10 @@ jobs:
       fail-fast: false
       matrix:
         # Nightly, on a release and by hand with `targets: all`: every target, one shard each.
-        # Otherwise on demand: wide_fuzz in five. Both lines choose by the same condition.
-        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '["arenas_fuzz", "attributes_fuzz", "batch_fuzz", "bodies_fuzz", "boxtree_fuzz", "cache_fuzz", "cbor_fuzz", "contract_fuzz", "curve_offsets_fuzz", "curves_fuzz", "encoder_fuzz", "euler_fuzz", "linalg_fuzz", "make_fuzz", "maths_fuzz", "names_fuzz", "naming_fuzz", "nurbs_fuzz", "open_fuzz", "operations_fuzz", "orient2d_fuzz", "p21_fuzz", "predicates_fuzz", "prune_fuzz", "records_fuzz", "references_fuzz", "roots_fuzz", "sequence_fuzz", "surface_offsets_fuzz", "surfaces_fuzz", "transforms_fuzz", "variants_fuzz", "wide_fuzz"]' || '["wide_fuzz"]') }}
-        shard: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '[1]' || '[1, 2, 3, 4, 5]') }}
+        # By hand with `affected_since`: the targets `select` picked, one shard each. Otherwise on
+        # demand: wide_fuzz in five. Both lines choose by the same conditions.
+        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '["arenas_fuzz", "attributes_fuzz", "batch_fuzz", "bodies_fuzz", "boxtree_fuzz", "cache_fuzz", "cbor_fuzz", "contract_fuzz", "curve_offsets_fuzz", "curves_fuzz", "encoder_fuzz", "euler_fuzz", "linalg_fuzz", "make_fuzz", "maths_fuzz", "names_fuzz", "naming_fuzz", "nurbs_fuzz", "open_fuzz", "operations_fuzz", "orient2d_fuzz", "p21_fuzz", "predicates_fuzz", "prune_fuzz", "records_fuzz", "references_fuzz", "roots_fuzz", "sequence_fuzz", "surface_offsets_fuzz", "surfaces_fuzz", "transforms_fuzz", "variants_fuzz", "wide_fuzz"]' || needs.select.result == 'success' && needs.select.outputs.targets || '["wide_fuzz"]') }}
+        shard: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '[1]' || needs.select.result == 'success' && '[1]' || '[1, 2, 3, 4, 5]') }}
     defaults:
       run:
         shell: bash

@@ -21,11 +21,27 @@ name: Kernel fuzzing and proofs
 #   campaign (G26).
 # - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
 #   with cargo-bolero's build-clusterfuzz command, and ClusterFuzzLite fuzzes them in turn
-#   (code-change mode, address sanitizer). OSS-Fuzz's build check cannot read the start-up
+#   (code-change mode, address sanitizer), the targets the change can affect shared among up to
+#   four jobs (the job's comment says why). OSS-Fuzz's build check cannot read the start-up
 #   scripts cargo-bolero packs, so it is turned off here and build.sh makes the same checks on the
 #   binaries they start. A second job, clusterfuzzlite-seeded, runs ClusterFuzzLite's own images on
 #   the checkout with a crash planted (gate 1, G43; .clusterfuzzlite/seeded.sh), and must see it
 #   found.
+#
+# What a pull request runs (28.5, "each pull request fuzzes the crates it changes briefly"; 28.7
+# and 28.17): only the targets and proofs its change can affect. The job `select` runs geom-test's
+# `kernel-quality fuzz-scope` on the files of the pull request's merge commit against its base: a
+# target runs when a changed file is in a crate its code builds (by the workspace's crate graph,
+# through normal and build dependencies, transitively) or among its own files in geom-fuzz (its
+# module, tests, corpus and crashes); a crate's Kani proofs run when a changed file is in a crate
+# that crate builds; a changed file in no crate (a workflow, Cargo.lock, .cargo, the toolchain
+# file, an architecture chapter) runs everything. geom-test's src/fuzz_scope.rs gives the whole
+# rule. Each job's `if` reads its output, the fuzz jobs' matrices exclude what it leaves out
+# (`fromJSON`), and its log and the run's summary name every target and proof, whether it runs
+# and why: a skipped job was not affected, not failed. A push to main and a release tag run
+# everything. The lists in the matrices below stay the catalogue of what exists, which the tests
+# named below hold to the code; geom-test's tests/fuzz_scope.rs holds the selection to the crate
+# graph and each job to the selection.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
 # every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
@@ -159,15 +175,71 @@ jobs:
     # fails one of them stops here; every heavy job below lists this job under `needs`.
     uses: ./.github/workflows/cheap-checks.yml
 
+  # Which targets and proofs the change can affect (the paragraph above): on a pull request, the
+  # files of its merge commit's diff against its base; on any other run, everything. Its outputs
+  # are each job's `if` and the fuzz jobs' exclusions. It runs beside `cheap`, so it adds no wait.
+  select:
+    name: Which targets and proofs the change can affect
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      libfuzzer: ${{ steps.scope.outputs.libfuzzer }}
+      libfuzzer_exclude: ${{ steps.scope.outputs.libfuzzer_exclude }}
+      kani: ${{ steps.scope.outputs.kani }}
+      kani_num: ${{ steps.scope.outputs.kani_num }}
+      kani_topo: ${{ steps.scope.outputs.kani_topo }}
+      kani_limbs: ${{ steps.scope.outputs.kani_limbs }}
+      kani_op: ${{ steps.scope.outputs.kani_op }}
+      kani_format: ${{ steps.scope.outputs.kani_format }}
+      clusterfuzzlite: ${{ steps.scope.outputs.clusterfuzzlite }}
+      clusterfuzzlite_targets: ${{ steps.scope.outputs.clusterfuzzlite_targets }}
+      clusterfuzzlite_exclude: ${{ steps.scope.outputs.clusterfuzzlite_exclude }}
+      clusterfuzzlite_seeded: ${{ steps.scope.outputs.clusterfuzzlite_seeded }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # A pull request's checkout is its merge commit, whose first parent is the base: the diff
+      # between them is the change, renames as a removed and an added file.
+      - name: The files the change touches
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+            git diff --no-ext-diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: The targets and proofs it can affect, and why
+        id: scope
+        run: >-
+          cargo run --locked -q -p geom-test --bin kernel-quality -- fuzz-scope $SCOPE --shards 4
+          --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
   libfuzzer:
     name: libFuzzer under cargo-bolero (${{ matrix.target }})
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.libfuzzer == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, contract_fuzz, curve_offsets_fuzz, curves_fuzz, encoder_fuzz, euler_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, naming_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, p21_fuzz, predicates_fuzz, prune_fuzz, records_fuzz, references_fuzz, roots_fuzz, sequence_fuzz, surface_offsets_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        # The targets the change cannot affect (the job `select`).
+        exclude: ${{ fromJSON(needs.select.outputs.libfuzzer_exclude) }}
     defaults:
       run:
         shell: bash
@@ -219,7 +291,8 @@ jobs:
 
   kani:
     name: Kani (${{ matrix.harness }})
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.kani == 'true'
     runs-on: ubuntu-latest
     # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
     # path reaches, kissat proved it in 47 minutes (run 40291338626) and then in 75 (run
@@ -279,7 +352,8 @@ jobs:
   # splitter 54 and dd's from_i128 46; 120 minutes is the margin orient2d_proof's job above keeps.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.kani_num == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -416,6 +490,8 @@ jobs:
   # for every assertion, which ran a runner out of memory.
   kani-topo:
     name: Kani, geom-topo (${{ matrix.proof }})
+    needs: select
+    if: needs.select.outputs.kani_topo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -468,7 +544,8 @@ jobs:
 
   kani-limbs:
     name: Kani, geom-num limb steps
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.kani_limbs == 'true'
     runs-on: ubuntu-latest
     # Piece G42: one bounded proof for every kind of step the generated limb variant performs
     # (chapter 23.3), all in one run so they share one build; the generator writes them beside the
@@ -519,6 +596,8 @@ jobs:
   # 60 minutes leaves room for Kani's install, which takes most of a job.
   kani-op:
     name: Kani, geom-op (${{ matrix.proof }})
+    needs: select
+    if: needs.select.outputs.kani_op == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -567,6 +646,8 @@ jobs:
   # tests/kani_harnesses.rs holds this list to the harnesses in the source.
   kani-format:
     name: Kani, geom-format (${{ matrix.proof }})
+    needs: select
+    if: needs.select.outputs.kani_format == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -609,12 +690,36 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
+  # Shards: run_fuzzers fuzzes every target it finds in build-out in turn. fuzz-seconds is the
+  # job's total, shared evenly among its targets. One job of 35 targets took 18 minutes to build
+  # and 81 seconds a target, past its hour (run 43548399796). So each of four jobs builds every
+  # target, keeps a quarter of them in build-out (sorted by name, every fourth from the job's
+  # index) and gives them the whole fuzz-seconds: every target is fuzzed in one job, for longer
+  # than the one job gave it. geom-test's tests/attack_g43.rs runs the step below for every shard
+  # and holds it to that.
+  #
+  # The corpus lookup: before each target run_fuzzers looks for a corpus kept by an earlier run.
+  # Its default store, the repository's artifacts, has none (nothing here runs the batch or prune
+  # modes that keep one), and finding that out lists every artifact the repository holds: 71 of
+  # each target's 81 seconds at 15,000 artifacts, and growing with them. Its storage-repo input
+  # keeps corpora in a git repository instead (`corpus/<target>` on storage-repo-branch, main by
+  # default): this public repository, cloned once a job, whose main has no corpus folder either,
+  # so each lookup finds nothing, as before, in about a second. Crashes, and the earlier build a
+  # crash is compared with, stay in the artifacts (the git store hands them to the artifact one),
+  # and each target still starts from the seed corpus build.sh packs beside it.
   clusterfuzzlite:
-    name: ClusterFuzzLite (address sanitizer)
-    needs: cheap
-    if: github.event_name == 'pull_request'
+    name: ClusterFuzzLite (address sanitizer, shard ${{ matrix.shard }} of ${{ strategy.job-total }})
+    needs: [cheap, select]
+    if: github.event_name == 'pull_request' && needs.select.outputs.clusterfuzzlite == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        # No more shards than the change has targets, so that every shard keeps one (the job
+        # `select`); strategy.job-total counts the shards left.
+        exclude: ${{ fromJSON(needs.select.outputs.clusterfuzzlite_exclude) }}
     steps:
       - name: Build the fuzz targets
         id: build
@@ -624,6 +729,56 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           sanitizer: address
           bad-build-check: false
+      # The targets the change cannot affect (the job `select`) leave build-out before the shards
+      # are cut, so the shards share the rest; every target the change can affect must have been
+      # built. TARGETS is the JSON list of those targets' fuzz tests.
+      - name: Keep the targets the change can affect
+        shell: bash
+        env:
+          TARGETS: ${{ needs.select.outputs.clusterfuzzlite_targets }}
+        run: |
+          out="$GITHUB_WORKSPACE/build-out"
+          wanted=$( (grep -o '"[^"]*"' <<< "$TARGETS" || true) | wc -l)
+          kept=()
+          while IFS= read -r path; do
+            name=$(basename "$path")
+            case "$TARGETS" in
+              *"\"${name%_fuzzer}\""*) kept+=("${name%_fuzzer}") ;;
+              *) sudo rm -f -- "${path}_seed_corpus.zip" "$path" ;;
+            esac
+          done < <(find "$out" -type f -name '*_fuzz_fuzzer')
+          if [ "${#kept[@]}" -ne "$wanted" ] || [ "$wanted" -eq 0 ]; then
+            echo "The change can affect $wanted target(s), $TARGETS, but ${#kept[@]} of them were built" >&2
+            exit 1
+          fi
+          echo "The change can affect ${#kept[@]} target(s): ${kept[*]}"
+      # The action's container wrote build-out as root, so the runner's user removes through sudo.
+      - name: Keep this shard's targets
+        shell: bash
+        env:
+          SHARD: ${{ strategy.job-index }}
+          SHARDS: ${{ strategy.job-total }}
+        run: |
+          out="$GITHUB_WORKSPACE/build-out"
+          mapfile -t targets < <(find "$out" -type f -name '*_fuzz_fuzzer' -printf '%f\t%p\n' | sort)
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No target was built in $out" >&2
+            exit 1
+          fi
+          kept=()
+          for i in "${!targets[@]}"; do
+            path="${targets[$i]#*$'\t'}"
+            if [ $((i % SHARDS)) -eq "$SHARD" ]; then
+              kept+=("$(basename "$path")")
+            else
+              sudo rm -f -- "$path" "${path}_seed_corpus.zip"
+            fi
+          done
+          if [ "${#kept[@]}" -eq 0 ]; then
+            echo "Shard $((SHARD + 1)) of $SHARDS keeps none of the ${#targets[@]} targets" >&2
+            exit 1
+          fi
+          echo "Shard $((SHARD + 1)) of $SHARDS fuzzes ${#kept[@]} of the ${#targets[@]} targets: ${kept[*]}"
       - name: Fuzz the targets
         id: run
         uses: google/clusterfuzzlite/actions/run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c # main, 2026-02-12 (v1 and two documentation changes)
@@ -632,11 +787,12 @@ jobs:
           fuzz-seconds: 300
           mode: code-change
           sanitizer: address
+          storage-repo: https://github.com/spareware-co-op/spareware.git
       - name: Upload the crashing input
         if: failure() && steps.build.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: clusterfuzzlite-artifacts
+          name: clusterfuzzlite-artifacts-${{ matrix.shard }}
           path: ./out/artifacts
           if-no-files-found: ignore
 
@@ -646,8 +802,8 @@ jobs:
   # (.clusterfuzzlite/seeded.sh says what differs and why). run_fuzzers must report the crash.
   clusterfuzzlite-seeded:
     name: ClusterFuzzLite finds a planted violation
-    needs: cheap
-    if: github.event_name == 'pull_request'
+    needs: [cheap, select]
+    if: github.event_name == 'pull_request' && needs.select.outputs.clusterfuzzlite_seeded == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

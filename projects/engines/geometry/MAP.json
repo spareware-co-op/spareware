@@ -12537,7 +12537,7 @@
           "target": "bin"
         },
         {
-          "cost": "what each gate costs (see its module), plus one `cargo metadata` run for `affected --changed` and `miri-packages`.",
+          "cost": "what each gate costs (see its module), plus one `cargo metadata` run for `affected --changed`, `miri-packages` and `fuzz-scope`.",
           "does": "one subcommand per step of the workflow, each a thin front to a module of `geom_test`; `kernel-quality --help` lists them and `kernel-quality <command> --help` gives each one's options.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/kernel-quality.rs",
@@ -13088,6 +13088,31 @@
             "text": "chapter 27's rule \"one folder per crate, folder name = crate name\" (`projects/engines/geometry/architecture/27-crates-folders.md`) makes a crate's name its folder's name, so a path classifies by its components alone; the set and the bars are 28.8's (`projects/engines/geometry/architecture/28-testing.md`)."
           },
           "path": "geom_test::foundation",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the metadata and of `geom-fuzz`'s sources, and in the changed files times the workspace's crates.",
+          "does": "[`Scope::read`] reads the workspace's crate graph from `cargo metadata` and `geom-fuzz`'s sources, and [`Scope::select`] takes the files a change touches (`git diff --name-only`, one path from the repository root each) and decides, for each job of [`JOBS`], whether it runs and, for the fuzz jobs, which targets, each with the file that selected it and why. [`Selection::outputs`] writes the decision as the step outputs the workflow's jobs read: a job's `if` reads `<output>`, and a fuzz job's matrix excludes `<output>_exclude` (`fromJSON`), so the workflow's own matrix lists stay the catalogue of what exists. [`Selection::report`] writes it for the job's log: every target and proof, run or skipped, and why. `kernel-quality fuzz-scope` is the command line.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fuzz_scope.rs",
+          "guarantees": [
+            "**Over, never under.** A harness is skipped only when no changed file is in its build as above; whatever cannot be placed (a file in no crate, a `geom-fuzz` file no one target owns) selects every harness it could reach. `tests/fuzz_scope.rs` holds the selection to the crate graph and to the `use` lines of every target, with planted mistakes.",
+            "**Everything without a change.** [`Scope::select`] given no list (a push, a tag, a night) runs every job and every target.",
+            "**An error, never a guess.** Metadata without the graph, a `geom-fuzz` source that does not lex as Rust, or a target without its tests file is an error, and the workflow's later jobs do not start.",
+            "**Every decision is written down.** The report names each target and proof, whether it runs, and the changed file that selected it or that none did."
+          ],
+          "job": "Which of `kernel-fuzz.yml`'s fuzz targets and Kani proofs a change can affect, so that a pull request fuzzes and proves only those (chapter 28.5: \"each pull request fuzzes the crates it changes briefly\"; 28.7 and 28.17: on a pull request, the proofs the change can reach), while a push to main, a release tag and the nightly campaign run every one.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
+              "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies",
+              "https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idstrategymatrixexclude"
+            ],
+            "text": "`cargo metadata`'s resolved graph (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>), read for normal and build edges, and cargo's rule that development dependencies build only for the package's own tests (<https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies>); the sources are read with `proc-macro2`, Rust's lexer, so a word in a comment or a string is never a name. GitHub Actions' matrix `exclude` and `fromJSON` (<https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idstrategymatrixexclude>) apply the decision."
+          },
+          "path": "geom_test::fuzz_scope",
           "provenance": [],
           "spdx": null,
           "target": "lib"

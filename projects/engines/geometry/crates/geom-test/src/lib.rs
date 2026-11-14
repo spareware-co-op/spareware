@@ -100,6 +100,9 @@
 //!   `coverage(off)` mark's proof.
 //! - [`rust_source`]: reads Rust source for them: test code, functions, branch sites and marks.
 //! - [`miri`]: the plan of the weekly Miri run, one job per kernel test suite.
+//! - [`fuzz_scope`]: which of `kernel-fuzz.yml`'s fuzz targets and Kani proofs a pull request's
+//!   change can affect, by the crate graph, so the pull request runs only those
+//!   (`kernel-quality fuzz-scope`).
 //!
 //! Gate 1 (piece G43) adds:
 //!
@@ -242,6 +245,7 @@ pub mod faults;
 pub mod fixed;
 pub mod fixture;
 pub mod foundation;
+pub mod fuzz_scope;
 pub mod golden;
 pub mod grid;
 pub mod guard;
