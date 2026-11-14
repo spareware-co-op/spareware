@@ -542,6 +542,33 @@ fn a_flat_face_with_its_loop_the_wrong_way_is_refused() {
         split(&b.arr, &out, &mut meter()),
         Err(BuildError::BrokenLoop { face, ring: 0 })
     );
+    // Two closed edges in one loop: neither ends where the other starts.
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let k = S as f64;
+    let rings: Vec<usize> = [200.0, 100.0]
+        .iter()
+        .map(|&r| {
+            let circle = Circle::new([500.0 * k, 500.0 * k, 0.0], r * k, frame, (0.0, 2.0));
+            b.edge(CurveKind::Circle(circle.unwrap()), None, 0)
+        })
+        .collect();
+    let uses = vec![
+        EdgeUse {
+            edge: rings[0],
+            forward: true,
+        },
+        EdgeUse {
+            edge: rings[1],
+            forward: false,
+        },
+    ];
+    let face = b.flat(([0, 0, 1], 0), vec![uses], 0);
+    let out = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut meter()).unwrap();
+    assert_eq!(
+        split(&b.arr, &out, &mut meter()),
+        Err(BuildError::BrokenLoop { face, ring: 0 })
+    );
 }
 
 /// A disc of radius 200 and, on the same plane, a disc of another operand of radius 100 inside it
@@ -588,6 +615,42 @@ fn circles_that_touch_are_ordered_by_curvature() {
         ]
     );
     assert_eq!(of_face(&splitting, small).len(), 1);
+    // A vertex of a third operand on the small circle, opposite the touching point, cuts it in
+    // two arcs: one leaves the touching point and the other arrives there, each read at its own
+    // end, and the order is the same.
+    let mut b = Build::default();
+    let (big, rim) = disc(&mut b, 500.0, 200.0, 0);
+    let (small, inner) = disc(&mut b, 600.0, 100.0, 1);
+    b.vertex(p(500, 500, 0), 2);
+    let (out, splitting) = b.run();
+    let arcs: Vec<Piece> = (0..out.splits.len())
+        .filter(|k| out.splits[*k].source == inner)
+        .map(Piece::Split)
+        .collect();
+    assert_eq!(arcs.len(), 2, "{:?}", out.splits);
+    let mut parts: Vec<Vec<Use>> = of_face(&splitting, big)
+        .iter()
+        .map(|s| s.outer.clone())
+        .collect();
+    parts.sort_by_key(Vec::len);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    assert_eq!(parts[0].len(), 2, "{parts:?}");
+    assert!(
+        parts[0]
+            .iter()
+            .all(|u| u.forward && arcs.contains(&u.piece))
+    );
+    assert_eq!(parts[1].len(), 3, "{parts:?}");
+    let rim = Piece::Split(out.splits.iter().position(|s| s.source == rim).unwrap());
+    assert!(parts[1].contains(&use_of(rim, true)), "{parts:?}");
+    assert!(
+        parts[1]
+            .iter()
+            .filter(|u| arcs.contains(&u.piece))
+            .all(|u| !u.forward),
+        "{parts:?}"
+    );
+    assert_eq!(of_face(&splitting, small).len(), 1);
 }
 
 /// A square and, on the same plane, a disc of another operand inside it that touches its lower
@@ -595,26 +658,32 @@ fn circles_that_touch_are_ordered_by_curvature() {
 /// circle leaves along the edge's right half and arrives along its left: the line and the circle
 /// are proven to touch exactly (the centre lies the radius from the edge's line), and the circle
 /// bends to the left of each, so it lies counter-clockwise of the right half and clockwise of the
-/// left. The square splits into the disc and the rest, whose loop runs the square's five pieces
-/// and the circle back.
+/// left. The plane is z = 7, away from the origin. The square splits into the disc and the rest,
+/// whose loop runs the square's five pieces and the circle back.
 #[test]
 fn a_circle_that_touches_a_line_is_ordered_by_curvature() {
     let mut b = Build::default();
     let corners: Vec<usize> = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
         .iter()
-        .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+        .map(|&(x, y)| b.vertex(p(x, y, 7), 0))
         .collect();
-    let square = b.polygon(&corners, [0, 0, 1], 0, 0);
+    let square = b.polygon(&corners, [0, 0, 1], -7 * i128::from(S), 0);
     let k = S as f64;
     let frame = Frame::new([0.0, -1.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
-    let at = b.vertex(p(500, 0, 0), 1);
-    let circle = Circle::new([500.0 * k, 200.0 * k, 0.0], 200.0 * k, frame, (0.0, 2.0)).unwrap();
+    let at = b.vertex(p(500, 0, 7), 1);
+    let circle = Circle::new(
+        [500.0 * k, 200.0 * k, 7.0 * k],
+        200.0 * k,
+        frame,
+        (0.0, 2.0),
+    )
+    .unwrap();
     let rim = b.edge(CurveKind::Circle(circle), Some([at, at]), 1);
     let forward = EdgeUse {
         edge: rim,
         forward: true,
     };
-    let disc = b.flat(([0, 0, 1], 0), vec![vec![forward]], 1);
+    let disc = b.flat(([0, 0, 1], -7 * i128::from(S)), vec![vec![forward]], 1);
     let (out, splitting) = b.run();
     let circle = Piece::Split(out.splits.iter().position(|s| s.source == rim).unwrap());
     let mut parts: Vec<Vec<Use>> = of_face(&splitting, square)

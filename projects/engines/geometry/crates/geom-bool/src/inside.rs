@@ -654,9 +654,7 @@ impl RoundFace {
                 if height.sub(slack)?.lo() <= 0.0 {
                     return Err(unclassified);
                 }
-                let Some(reach) = graph.reach(point, steps)? else {
-                    return Err(unclassified);
-                };
+                let reach = graph.reach(point, steps)?;
                 (Picture::Flat { keep: graph.keep() }, reach)
             }
         };

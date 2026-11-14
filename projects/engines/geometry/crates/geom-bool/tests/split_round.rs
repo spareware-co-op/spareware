@@ -15,8 +15,10 @@
     reason = "test code: a failure should stop loudly"
 )]
 
-use geom_bool::carrier::{CarrierIx, CurveGeom, PointGeom};
-use geom_bool::interfere::{Arrangement, EdgeIn, EdgeUse, FaceIn, Interfered, VertexIn, interfere};
+use geom_bool::carrier::{Bound, CarrierIx, CurveGeom, PointGeom, SortedVec};
+use geom_bool::interfere::{
+    Arrangement, BuildError, EdgeIn, EdgeUse, FaceIn, Interfered, VertexIn, interfere,
+};
 use geom_bool::merge::default_remaining;
 use geom_bool::split::{Piece, SplitFace, Splitting, Use, split};
 use geom_curve::{Circle, CurveKind, Frame, Line};
@@ -30,7 +32,7 @@ use geom_topo::SurfaceKind;
 const S: i64 = 1000;
 
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::of_work(1 << 28))
+    WorkMeter::new(Budget::of_work(1 << 22))
 }
 
 fn p(x: i64, y: i64, z: i64) -> P3 {
@@ -360,6 +362,24 @@ fn a_vertex_on_a_cylinder_s_side_is_placed() {
     for v in [beyond, on_seam, on_rim, off] {
         assert!(!out.faces[side].in_vertices.contains(&v), "vertex {v}");
     }
+}
+
+/// A vertex 30 steps outside a cylinder's side, known within 31 steps, and 80 steps above the
+/// lower rim: it touches the side, and it is further from the rim than its bound. But the
+/// picture puts it where the ray from the picture's centre through it meets the side, which lies
+/// well over a hundred steps from it, as far as the rim, so the vertex is not placed: refused,
+/// not guessed.
+#[test]
+fn a_vertex_near_a_cylinder_s_rim_whose_picture_may_cross_it_is_refused() {
+    let mut b = Build::default();
+    let (side, _, _) = b.tube((p(0, 0, 0), 2, 1.0), 50, (0, 100), 0);
+    let near = P3::new(50 * S + 30, 0, 80).unwrap();
+    b.certified(near, side, 31.0, 1);
+    let found = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut meter());
+    assert!(
+        matches!(found, Err(BuildError::Unclassified { face, at }) if face == side && at == near),
+        "{found:?}"
+    );
 }
 
 /// The pieces of a split face's outer loop and holes, each list in order.
@@ -1023,6 +1043,27 @@ fn a_tilted_plane_cuts_a_cylinder_in_an_ellipse() {
     assert_eq!(inside[0].outer[0].piece, ellipse);
 }
 
+/// A face on the plane 2y + z = 0, whose normal is largest in the second coordinate: its picture
+/// keeps the first and the third, which run as the normal turns them the other way, so the loop
+/// as given is turned over in the picture and the face is one face, not refused.
+#[test]
+fn a_flat_face_seen_down_its_second_coordinate_is_one_face() {
+    let mut b = Build::default();
+    let face = b.quad(
+        [
+            [0, 0, 0],
+            [1000 * S, 0, 0],
+            [1000 * S, 500 * S, -1000 * S],
+            [0, 500 * S, -1000 * S],
+        ],
+        0,
+    );
+    let (_, splitting) = b.run();
+    let parts = of_face(&splitting, face);
+    assert_eq!(parts.len(), 1, "{parts:?}");
+    assert_eq!(parts[0].outer.len(), 4, "{parts:?}");
+}
+
 /// A plane x + 2z = 1 step: its table form has no point on the z axis a double holds as a whole
 /// number (the plane crosses it at half a step), so no surface holds it exactly and the closed
 /// forms are not asked. The pair waits rather than meet a plane that is not the face's.
@@ -1306,20 +1347,54 @@ fn a_sphere_s_loop_says_which_side_is_the_face() {
         let (face, rim) = b.on_ball((40, 30), forward, 0);
         let north = b.vertex(p(0, 0, 50), 1);
         let south = b.vertex(p(0, 0, -50), 1);
+        // Above the north pole, off the sphere: in no face.
+        b.vertex(p(0, 0, 60), 1);
+        // In the cap, a fifth of a step inside the sphere and known within a step, between the
+        // circle's height and that of the point the rest is seen from: shallower there than the
+        // rest's boundary.
+        let high = b.certified(P3::new(0, 27_129, 42_000).unwrap(), face, 1.0, 1);
         let (out, splitting) = b.run();
         assert!(
             splitting.waiting.is_empty(),
             "{forward}: {:?}",
             splitting.waiting
         );
-        let held = if forward { north } else { south };
-        assert_eq!(out.faces[face].in_vertices, vec![held], "{forward}");
+        let held = if forward {
+            vec![north, high]
+        } else {
+            vec![south]
+        };
+        assert_eq!(out.faces[face].in_vertices, held, "{forward}");
         let parts = of_face(&splitting, face);
         assert_eq!(parts.len(), 1, "{forward}: {parts:?}");
         assert_eq!(parts[0].outer, vec![run(whole_piece(&out, rim), forward)]);
         assert!(parts[0].holes.is_empty(), "{forward}: {parts:?}");
-        assert_eq!(parts[0].inside, vec![held], "{forward}");
+        assert_eq!(parts[0].inside, held, "{forward}");
     }
+}
+
+/// The rest of a sphere beyond a circle a step below its north pole holds a cap round every pole
+/// but that one, and the point halfway from the circle to the north pole is no grid point inside
+/// the sphere in front of the circle: no picture holds the face, and it waits.
+#[test]
+fn a_sphere_s_face_round_all_but_a_step_of_a_pole_waits() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let radius = 50.0 * S as f64;
+    let height = radius - 1.0;
+    let ring = Circle::new(
+        [0.0, 0.0, height],
+        (radius * radius - height * height).sqrt(),
+        frame,
+        (0.0, 2.0),
+    )
+    .unwrap();
+    let rim = b.edge(CurveKind::Circle(ring), None, 0);
+    let ball = Sphere::new([0.0; 3], radius, frame, ((0.0, 2.0), (-0.5, 0.5))).unwrap();
+    let ix = b.surface(SurfaceKind::Sphere(ball));
+    let rest = b.face_with(ix, vec![vec![back(rim)]], 0);
+    let (_, splitting) = b.run();
+    assert_eq!(splitting.waiting, vec![rest]);
 }
 
 /// The upper half of a sphere and the plane at height 30 across it: the carriers cross in the
@@ -1393,6 +1468,41 @@ fn faces_on_one_sphere_split_each_other() {
     assert_eq!(of_face(&splitting, cap).len(), 1);
 }
 
+/// A sphere about the same centre with another radius, or of the same radius about another
+/// centre, is another carrier: faces on them are not one carrier's.
+#[test]
+fn spheres_of_another_radius_or_centre_are_other_carriers() {
+    // Each with a cap above a circle on it, (height, radius).
+    for (centre, radius, (h, r)) in [
+        ([0.0; 3], 40.0, (32, 24)),
+        ([0.0, 0.0, 10.0], 50.0, (50, 30)),
+    ] {
+        let mut b = Build::default();
+        let (half, _) = b.on_ball((0, 50), true, 0);
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let rim = b.circle(p(0, 0, h), r, frame, 1);
+        let k = S as f64;
+        let ball = Sphere::new(
+            centre.map(|c| c * k),
+            radius * k,
+            frame,
+            ((0.0, 2.0), (-0.5, 0.5)),
+        )
+        .unwrap();
+        let ix = b.surface(SurfaceKind::Sphere(ball));
+        let other = b.face_with(ix, vec![vec![ahead(rim)]], 1);
+        let out = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut meter()).unwrap();
+        assert!(
+            out.faces[half].same_carrier.is_empty(),
+            "{centre:?} {radius}"
+        );
+        assert!(
+            out.faces[other].same_carrier.is_empty(),
+            "{centre:?} {radius}"
+        );
+    }
+}
+
 impl Build {
     /// A face on the torus of radii 50 and 25 about the third coordinate through the origin, in
     /// the tests' unit, bounded by its two circles at height `h` (of radii 50 + √(625 − h²) and
@@ -1449,6 +1559,10 @@ fn a_torus_s_face_above_its_middle_plane_is_seen_along_its_axis() {
     // the torus.
     b.vertex(p(74, 0, 7), 1);
     b.vertex(p(50, 0, 30), 1);
+    // A step above the outer equator, known within two steps: its point may lie below the middle
+    // plane or above it, and either way far below the band, so it is Out.
+    let low = P3::new(75 * S, 0, 1).unwrap();
+    b.certified(low, band, 2.0, 1);
     let (out, splitting) = b.run();
     assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
     assert_eq!(out.faces[band].in_vertices, tops);
@@ -1465,6 +1579,50 @@ fn a_torus_s_face_above_its_middle_plane_is_seen_along_its_axis() {
     let (rest, _, _) = b.on_torus((15, [70, 30]), false, 0);
     let (_, splitting) = b.run();
     assert_eq!(splitting.waiting, vec![rest]);
+}
+
+impl Build {
+    /// A vertex of `operand` at the grid point `at`, known within `steps` of face `f`'s carrier.
+    fn certified(&mut self, at: P3, f: usize, steps: f64, operand: u32) -> usize {
+        let on = SortedVec::from_items([self.arr.faces[f].surface]);
+        self.arr.vertices.push(VertexIn {
+            point: PointGeom::Certified {
+                at,
+                on,
+                within: Bound::of(steps).unwrap(),
+            },
+            operand,
+        });
+        self.arr.vertices.len() - 1
+    }
+}
+
+/// A vertex on the band of the torus above height 15 known within 50 steps, 65 steps from the
+/// band's outer circle up the tube: proven apart from the circle by more than its bound, but the
+/// torus there is steep in the picture along the axis, so the points of the torus over the
+/// picture's 50 steps reach further than that circle, and it is not placed: refused, not guessed.
+/// So too a vertex 177.2 steps up the tube from the inner circle of the band above height 7,
+/// where the torus falls towards the axis: the points of the torus whose pictures lie 50 steps
+/// nearer the axis reach that circle exactly.
+#[test]
+fn a_vertex_known_loosely_near_a_torus_band_s_steep_edge_is_refused() {
+    // Each band (height, radii), and the vertex: 39 steps in and 52 up from the outer circle's
+    // point (70, 0, 15) in the unit, and 50 out and 170 up from the inner circle's point
+    // (26, 0, 7), each on the torus to a quarter of a step.
+    for (band_at, near) in [
+        ((15, [70, 30]), [70 * S - 39, 0, 15 * S + 52]),
+        ((7, [74, 26]), [26 * S + 50, 0, 7 * S + 170]),
+    ] {
+        let mut b = Build::default();
+        let (band, _, _) = b.on_torus(band_at, true, 0);
+        let near = P3::new(near[0], near[1], near[2]).unwrap();
+        b.certified(near, band, 50.0, 1);
+        let found = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut meter());
+        assert!(
+            matches!(found, Err(BuildError::Unclassified { face, at }) if face == band && at == near),
+            "{near:?}: {found:?}"
+        );
+    }
 }
 
 /// A torus whose axis is tilted off every coordinate, and one whose tube reaches its axis, have

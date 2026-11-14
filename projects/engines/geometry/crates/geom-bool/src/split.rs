@@ -387,7 +387,10 @@ impl Planar {
                 else {
                     return Ok(None);
                 };
-                (on_plane(&origin) == Some(true) && square_to(&direction) == Some(true))
+                // Its origin in the plane, and its direction along it.
+                let held = [on_plane(&origin), square_to(&direction)];
+                held.iter()
+                    .all(|one| *one == Some(true))
                     .then_some(Planar::Straight(origin, direction))
             }
             CurveKind::Circle(circle) => {
@@ -398,7 +401,9 @@ impl Planar {
                 ) else {
                     return Ok(None);
                 };
-                if on_plane(&centre) != Some(true) || parallel(&axis) != Some(true) {
+                // Its centre in the plane, and its axis square to it.
+                let held = [on_plane(&centre), parallel(&axis)];
+                if !held.iter().all(|one| *one == Some(true)) {
                     return Ok(None);
                 }
                 // The side of the tangent the centre lies on, in the picture.
@@ -446,10 +451,11 @@ fn touch(first: &Planar, second: &Planar) -> bool {
             if apart.signum() == Sign::Zero {
                 return Some(false);
             }
-            let is = |radius: I256| -> Option<bool> {
-                Some(radius.checked_mul(&radius)?.checked_sub(&apart)?.signum() == Sign::Zero)
-            };
-            Some(is(r1.checked_add(r2)?)? || is(r1.checked_sub(r2)?)?)
+            // ((r₁ + r₂)² − d²)((r₁ − r₂)² − d²) is nothing just when one factor is: one sign.
+            let off =
+                |radius: I256| -> Option<I256> { radius.checked_mul(&radius)?.checked_sub(&apart) };
+            let both = off(r1.checked_add(r2)?)?.checked_mul(&off(r1.checked_sub(r2)?)?)?;
+            Some(both.signum() == Sign::Zero)
         })(),
         (Planar::Straight(origin, along), Planar::Round(centre, radius, _))
         | (Planar::Round(centre, radius, _), Planar::Straight(origin, along)) => (|| {

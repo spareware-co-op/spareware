@@ -529,15 +529,16 @@ impl Graph {
     }
 
     /// How far from the grid point `p` a point of the face's half may lie whose picture is within
-    /// `slack` of `p`'s: `None` when no point of the torus has such a picture.
+    /// `slack` of `p`'s.
     ///
     /// Such a point's distance ρ from the axis is within `slack` of `p`'s, and its height h is
     /// √(r² − (ρ − R)²); it lies within √(slack² + (h − hₚ)²) of `p`, with hₚ `p`'s own height.
+    /// Where r² − (ρ − R)² is below nothing no point of the torus lies, and nothing is taken.
     ///
     /// # Errors
     ///
     /// An enclosure's.
-    pub(crate) fn reach(&self, p: P3, slack: f64) -> Result<Option<f64>, NumError> {
+    pub(crate) fn reach(&self, p: P3, slack: f64) -> Result<f64, NumError> {
         let (h, rho) = self.tube.place_of(p)?;
         let own = if self.up { h } else { h.neg() };
         let off = rho
@@ -546,12 +547,9 @@ impl Graph {
         let room = Interval::point(self.tube.minor)?
             .square()?
             .sub(off.square()?)?;
-        if room.hi() < 0.0 {
-            return Ok(None);
-        }
-        let heights = Interval::new(greater(room.lo(), 0.0), room.hi())?.sqrt()?;
+        let heights = Interval::new(greater(room.lo(), 0.0), greater(room.hi(), 0.0))?.sqrt()?;
         let rise = magnitude(heights.sub(own)?)?;
-        Ok(Some(Interval::norm(&[Interval::point(slack)?, rise])?.hi()))
+        Ok(Interval::norm(&[Interval::point(slack)?, rise])?.hi())
     }
 }
 
@@ -1530,16 +1528,18 @@ mod tests {
         let graph = graph.unwrap();
         // On the top circle, a picture within 3 holds points of the half at most about 3 away in
         // the picture and next to nothing in height.
-        let reach = graph.reach(grid(50, 0, 25), 3.0).unwrap().unwrap();
+        let reach = graph.reach(grid(50, 0, 25), 3.0).unwrap();
         assert!((3.0..3.3).contains(&reach), "{reach}");
         // At the band's outer circle the half is steep: a picture within 3 reaches far further
         // in height. The height at radius 73 is √(625 − 529) = 9.8 or so.
-        let reach = graph.reach(grid(70, 0, 15), 3.0).unwrap().unwrap();
+        let reach = graph.reach(grid(70, 0, 15), 3.0).unwrap();
         assert!(reach > 5.9 && reach < 6.1, "{reach}");
-        // Nothing of the torus has its picture within 3 of the axis.
-        assert_eq!(graph.reach(grid(0, 0, 15), 3.0).unwrap(), None);
+        // Nothing of the torus has its picture within 3 of the axis: the heights there are taken
+        // as nothing, and the reach is the point's own height.
+        let reach = graph.reach(grid(0, 0, 15), 3.0).unwrap();
+        assert!(reach > 15.0 && reach < 15.4, "{reach}");
         // With no slack, a point on the torus reaches only itself.
-        let reach = graph.reach(grid(50, 0, 25), 0.0).unwrap().unwrap();
+        let reach = graph.reach(grid(50, 0, 25), 0.0).unwrap();
         assert!(reach < 1e-6, "{reach}");
     }
 
