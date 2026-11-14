@@ -37,11 +37,6 @@
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
 //! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
 //! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
-//! [`entity`], `geom-2d`'s entity model keeps its fraction, tag, polyline and kind-change laws (G194), and
-//! [`arrange`] and [`arrange_curves`], `geom-2d`'s arrangement of segments (G196a), and of
-//! segments, arcs and ellipses (G196b), has a pairwise oracle's vertices, keeps Euler's formula and
-//! does not depend on the input order, and
-//! [`edit`], `geom-2d`'s placements and lengths keep their definitions and certified bounds (G206), and
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
@@ -57,7 +52,18 @@
 //! to one plane and one order to any points or rays, and [`cdt`] (G153), `geom-mesh`'s
 //! triangulation is a true constrained Delaunay triangulation and one answer in any input order,
 //! and [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a mesh and gives one mesh in
-//! any input order. For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
+//! any input order. Phase 6, the 2D drafting and the sketches, adds [`entity`] (G194), `geom-2d`'s
+//! entity model keeps its fraction, tag, polyline and kind-change laws; [`arrange`] and
+//! [`arrange_curves`], `geom-2d`'s arrangement of segments (G196a), and of segments, arcs and
+//! ellipses (G196b), has a pairwise oracle's vertices, keeps Euler's formula and does not depend on
+//! the input order; [`snap`] (G198), the snap index answers as a scan of every entity does, the
+//! same twice and within the aperture; [`zone`] (G199, G199a), segments and arcs inserted one by
+//! one give the sweep's arrangement; [`edit`] (G206), the placements and lengths keep their
+//! definitions and certified bounds; [`sketch_text`] (G217), any bytes are refused cleanly or read
+//! as a sketch that writes back to one fixed text; [`sketch_splines`] (G220a), everything
+//! `geom-sketch` does with splines holds its laws; [`sketch_motions`] (G224), the motions the sparse
+//! form finds are motions; and [`sketch_corpus`] (G231), every generated sketch family's case gets
+//! the diagnosis it is built to have. For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
 //! holds `geom-topo`'s Euler operators to their table of counts, Euler's formula and their
 //! refusals (G81); [`naming`] holds names, the name graph, the duplicate detector and the ordinal
 //! order to their laws (G87); [`references`], reference resolution gives 20.4's outcome on any
@@ -169,7 +175,8 @@
 //!   and their meter.
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
-//! - `geom-sketch` (MPL-2.0, ours), the code the [`sketch_text`] target tests.
+//! - `geom-sketch` (MPL-2.0, ours), the code the [`sketch_text`], [`sketch_splines`],
+//!   [`sketch_motions`] and [`sketch_corpus`] targets test.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
 //!   the work meter it reads with, and of the [`cache`] target with `geom-op`.
 //! - `geom-topo`, `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), the code under
@@ -183,7 +190,6 @@
 //!   code under test of the [`batch`] target.
 //! - `geom-intersect` (MPL-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
 //!   `geom-math`, `geom-run` and `geom-surface` (MPL-2.0, ours), what its cases are made of.
-//! - `geom-sketch` (MPL-2.0, ours), the code the [`sketch_text`] target tests.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
