@@ -12,8 +12,8 @@
 //!   with no gap and no curvature jump; an edge with a fin that has no pcurve, or with one fin,
 //!   is refused.
 //! - **The maximum holds every value.** Over random graph joins (a printed seed; `SPAREKIT_SEED`
-//!   replays one), the value at random parameters is never above the upper end, and the
-//!   witness's lower end never above it either.
+//!   replays one), each run capped at 2¹¹ pieces, the value at random parameters is never above
+//!   the upper end, and the witness's lower end never above it either.
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
@@ -234,8 +234,14 @@ fn the_maximum_holds_every_value_along_the_join() {
                 turned: false,
             },
         ];
+        // A curvature maximum to 1e-6 can take thousands of pieces here (10,227 in one of the 40
+        // release rounds), as the centred form's excess on curvature shrinks only about as fast
+        // as a piece's width. So each run is capped at 2¹¹ pieces, whose answer is as certified,
+        // only wider: at under 300 units a piece (292 at most over 64 seeds), a run fits `meter`'s
+        // 10⁶, so a budget stop here means a piece has come to cost more.
         for m in all {
-            let x = continuity::join(s, Ask::new(m, 1e-6).unwrap(), &mut meter()).unwrap();
+            let ask = Ask::new(m, 1e-6).unwrap().with_pieces(1 << 11);
+            let x = continuity::join(s, ask, &mut meter()).unwrap();
             let u = upper(&x);
             assert!(x.lower() <= u, "{m:?}: {x:?}");
             for _ in 0..20 {
