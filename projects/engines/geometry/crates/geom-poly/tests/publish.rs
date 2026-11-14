@@ -658,6 +658,32 @@ fn names_put_a_published_body_in_their_order() {
 }
 
 #[test]
+fn a_rounding_given_is_the_one_published() {
+    let m = leaning(&WindingTest::unite());
+    let carriers = carriers(&m, Sense::Forward);
+    let own = publish_with(&m, &carriers, false, (None, None), &mut meter()).unwrap();
+    let given: Vec<_> = m.vertices.iter().map(Tpi::to_grid).collect();
+    let same = publish_with(&m, &carriers, false, (None, Some(&given)), &mut meter()).unwrap();
+    assert_eq!(list(&same.arenas().points), list(&own.arenas().points));
+    assert_eq!(list(&same.arenas().planes), list(&own.arenas().planes));
+    // A list shorter than the vertices leaves the rest to round themselves.
+    let short = publish_with(
+        &m,
+        &carriers,
+        false,
+        (None, Some(&given[..1])),
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(list(&short.arenas().points), list(&own.arenas().points));
+    // A rounding that was refused is the publication's refusal.
+    let mut refused = given.clone();
+    refused[0] = Err(NumError::Degenerate);
+    let err = publish_with(&m, &carriers, false, (None, Some(&refused)), &mut meter()).unwrap_err();
+    assert_eq!(err, PublishError::Num(NumError::Degenerate));
+}
+
+#[test]
 fn a_wire_edge_shorter_than_the_grid_stands_a_step_from_its_grid_end_and_names_order_it() {
     // The origin, on the grid, and the point a quarter step along x, which rounds to it: the edge
     // between them stands a step long from the origin.
