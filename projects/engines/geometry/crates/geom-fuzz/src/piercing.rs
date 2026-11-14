@@ -39,7 +39,13 @@ use crate::Finding;
 
 /// The work a case may take: a curve lying near a surface walks its length at the floor, and a stop
 /// there is an answer the laws accept.
-pub const WORK: u64 = 1 << 24;
+///
+/// Set by libFuzzer's ten seconds a case. Such a walk costs about 2,100 release instructions a
+/// unit, and the hosted fuzz build runs about a second for each thousand million of them, so the
+/// 2^24 this was ran a stopped case for 35 thousand million and timed out on two inputs of the
+/// 14 November campaign (`tests/__fuzz__/piercing/crashes`). 2^20 stops at about 2.2 thousand
+/// million, and a case answered within it runs the engine at most twice more.
+pub const WORK: u64 = 1 << 20;
 
 /// The most bytes [`decode`] reads from any input: 16.
 ///

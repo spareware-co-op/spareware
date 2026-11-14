@@ -30,6 +30,8 @@
 //!   (k + 1) · 2^−53. Each `FPTaylor` problem bounds the sum of its error terms at once exactly
 //!   when `predicate_certificates::EXACT_OPTIMISATION` names its filter, and then the total HOL
 //!   Light proves is the largest double at most K; otherwise it bounds each term and names none.
+//!   A problem names the shards HOL Light checks its terms in exactly when
+//!   `predicate_certificates::SHARDED` names its filter, more than one, and only term by term.
 //! - `the_problems_are_current_and_registered`: the committed problems are what the registered
 //!   generators write now, the registry generates no other problem, and every generated filter is
 //!   held here.
@@ -62,7 +64,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use geom_gen::Generate;
 use geom_gen::predicate_certificates::{
-    EXACT_OPTIMISATION, UNPROVEN, fptaylor_problem, gappa_case_problem, gappa_cases, gappa_problem,
+    EXACT_OPTIMISATION, SHARDED, UNPROVEN, fptaylor_problem, gappa_case_problem, gappa_cases,
+    gappa_problem,
 };
 use geom_gen::predicates::{PREDICATES, derivation};
 use geom_gen::registry::REGISTRY;
@@ -1072,6 +1075,21 @@ fn the_bounds_are_the_constant_less_its_roundings() {
                 );
             }
             None => assert!(!exact, "{name}, {file}: no total for the exact problem"),
+        }
+        // The shards HOL Light checks the terms in: exactly those SHARDED names, more than one,
+        // and only for a problem bounded term by term.
+        let sharded = SHARDED.iter().find(|(n, _)| *n == name).map(|(_, s)| *s);
+        assert_eq!(
+            header("hol-light-shards").map(|s| s.parse::<u32>().unwrap()),
+            sharded,
+            "{name}, {file}: the shards"
+        );
+        if let Some(shards) = sharded {
+            assert!(shards > 1, "{name}, {file}: one shard is the whole problem");
+            assert!(
+                !exact,
+                "{name}, {file}: the exact problem has no terms to share"
+            );
         }
     }
 }

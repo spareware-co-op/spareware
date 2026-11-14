@@ -3,8 +3,10 @@
 //! pencils of a sphere and a cylinder, in general position and touching inside.
 //!
 //! Class `typical` only: each input lies within ±2^20 grid steps of the origin, radii and slopes
-//! from 1 to 2^16, so every call succeeds. Refusals and the budgets' extremes are tested in
-//! `geom-num` (`tests/attack_g159.rs`).
+//! from 1 to 2^16, so every call succeeds; the simple pencils are those shapes divided by 2^12
+//! (within ±2^8, sizes from 1 to 2^4 and the sphere's radius 2^4 more), the same pencils on smaller
+//! integers, so that their batch runs inside the count gates' jobs. Refusals and the budgets'
+//! extremes are tested in `geom-num` (`tests/attack_g159.rs`).
 //!
 //! Guarantees: every batch is full and the same on every target, and every result of a typical
 //! batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly
@@ -134,20 +136,42 @@ pub fn tangents(class: Class) -> Vec<(Cylinder, Cone)> {
     typical(class, "quadric::tangents", |g| (cylinder(g), cone(g)))
 }
 
-/// A sphere and a cylinder through it, about the sphere's centre: four simple roots or two.
+/// The reach of a simple pencil's points, in grid steps: [`REACH`] divided by 2^12.
+const PENCIL_REACH: i64 = 1 << 8;
+
+/// The bound on a simple pencil's sizes, in grid steps: 2^16 divided by 2^12.
+const PENCIL_SIZE: i64 = 1 << 4;
+
+/// A point within [`PENCIL_REACH`].
+fn pencil_point(g: &mut SplitMix64) -> P3 {
+    p3(
+        within(g, PENCIL_REACH),
+        within(g, PENCIL_REACH),
+        within(g, PENCIL_REACH),
+    )
+}
+
+/// A size below [`PENCIL_SIZE`].
+fn pencil_size(g: &mut SplitMix64) -> Steps {
+    Steps(g.range(1, PENCIL_SIZE).unsigned_abs())
+}
+
+/// A sphere and a cylinder through it, about the sphere's centre: four simple roots or two. The
+/// shapes are the other inputs' divided by 2^12, so the pencil's integers, and its exact
+/// classification's cost, are smaller.
 #[must_use]
 pub fn simple_pencils(class: Class) -> Vec<(Form<Entry>, Form<Entry>)> {
     typical(class, "quadric::simple_pencils", |g| {
-        let radius = size(g).0 + (1 << 16);
-        let centre = point(g);
+        let radius = pencil_size(g).0 + PENCIL_SIZE.unsigned_abs();
+        let centre = pencil_point(g);
         let sphere = Sphere {
             centre,
             radius: Steps(radius),
         };
         let cylinder = Cylinder {
-            base: point(g),
-            along: point(g),
-            radius: size(g),
+            base: pencil_point(g),
+            along: pencil_point(g),
+            radius: pencil_size(g),
         };
         (
             sphere_form(&sphere, centre).unwrap_or([[Entry::ZERO; 4]; 4]),

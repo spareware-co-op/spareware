@@ -11,6 +11,13 @@
 # The job fails if a certificate does not check; a certificate whose bound is above K is reported,
 # not failed: FPTaylor's bound is its own, rounded up to a double, and can exceed a K that Gappa
 # proves (the method note).
+# A problem's `// hol-light-shards: n` line (geom-gen's SHARDED) has HOL Light check its terms in
+# n jobs, all of one certificate: FPTAYLOR_OUT=<dir> runs FPTaylor alone and writes each
+# problem's certificate there as <problem>.proof; FPTAYLOR_SHARD=k with FPTAYLOR_CERTIFICATES=<dir>
+# checks one problem's certificate from that folder, proving its k-th term and every n-th after it
+# and assuming the others, and fails unless it proved exactly those. Shards 1 to n, each green,
+# prove every term of the one certificate; their theorems are its bound under the terms the others
+# proved.
 # Usage: fptaylor.sh <problem.fpt>...  (geom-gen writes the problems: generated/fptaylor-*.fpt)
 #
 # OCaml 4.11: FPTaylor saves certificates as marshalled `Num` values, and HOL Light uses the Num
@@ -24,6 +31,20 @@ HOL_LIGHT_COMMIT=d30e8239887b2348a063f82232a864de1cc2df15   # 2026-10-20 (BSD-st
 
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
+
+out=${FPTAYLOR_OUT:-}
+certificates=${FPTAYLOR_CERTIFICATES:-}
+shard=${FPTAYLOR_SHARD:-}
+shards=1
+if [ -n "$shard" ]; then
+  [ $# -eq 1 ] && [ -n "$certificates" ] && [ -z "$out" ] ||
+    { echo "a shard checks one problem's certificate from FPTAYLOR_CERTIFICATES"; exit 1; }
+  shards=$(sed -n 's|^// hol-light-shards: ||p' "$1")
+  [[ $shards =~ ^[1-9][0-9]*$ && $shard =~ ^[1-9][0-9]*$ ]] && [ "$shard" -le "$shards" ] ||
+    { echo "$1: no shard $shard of '$shards'"; exit 1; }
+elif [ -n "$certificates" ]; then
+  echo "FPTAYLOR_CERTIFICATES is for a shard"; exit 1
+fi
 
 # The image's user installs system packages through sudo; a root user needs none.
 SUDO=$(command -v sudo || true)
@@ -54,9 +75,20 @@ done
 sed -i "s/^let max_dim = 8;;$/let max_dim = $most;;/" "$work/hol-light/Formal_ineqs/taylor/m_taylor.hl"
 grep -n '^let max_dim' "$work/hol-light/Formal_ineqs/taylor/m_taylor.hl"
 
-echo "::group::Build FPTaylor"
-make -C "$work/FPTaylor" >/dev/null
-echo "::endgroup::"
+# FPTaylor's checker proves each term's inequality in turn (formal/build_tform2.hl,
+# prove_opt_approx). Here it proves those of this shard, the k-th and every n-th after it, naming
+# each, and assumes the others, so the theorem it ends with holds under them; with one shard
+# (k = n = 1) it proves every term, as written.
+checker="$work/FPTaylor/formal/build_tform2.hl"
+sed -i 's|^\(\s*\)prove_bound_cond pp tm) bound_conds in$|\1(if (!counter - 1) mod shard_count = shard_index - 1 then (let th = prove_bound_cond pp tm in report (sprintf "Proved: %d/%d" !counter total_bounds); th) else ASSUME tm)) bound_conds in|' "$checker"
+[ "$(grep -c 'mod shard_count = shard_index - 1 then' "$checker")" = 1 ] ||
+  { echo "$checker: no term loop to shard"; exit 1; }
+
+if [ -z "$certificates" ]; then
+  echo "::group::Build FPTaylor"
+  make -C "$work/FPTaylor" >/dev/null
+  echo "::endgroup::"
+fi
 
 # Each problem runs in a folder of its own: FPTaylor names a certificate after its expression, and
 # two problems may share one (`det`).
@@ -77,11 +109,21 @@ for problem in "$@"; do
   esac
   # The problem's absolute path, found before FPTaylor runs in its own folder.
   path="$(cd "$(dirname "$problem")" && pwd)/$(basename "$problem")"
-  echo "::group::FPTaylor on $name"
-  (cd "$run" && "$work/FPTaylor/fptaylor" -c fptaylor.cfg "$path")
-  echo "::endgroup::"
+  if [ -n "$certificates" ]; then
+    mkdir -p "$run/proofs"
+    cp "$certificates/$name.proof" "$run/proofs/$expression.proof"
+  else
+    echo "::group::FPTaylor on $name"
+    (cd "$run" && "$work/FPTaylor/fptaylor" -c fptaylor.cfg "$path")
+    echo "::endgroup::"
+  fi
+  if [ -n "$out" ]; then
+    cp "$run/proofs/$expression.proof" "$out/$name.proof"
+  fi
+  echo "$name: certificate sha256 $(sha256sum <"$run/proofs/$expression.proof" | cut -d' ' -f1)"
   checks+=("$run/proofs|$expression|$bound|$name|$total")
 done
+[ -z "$out" ] || exit 0
 
 echo "::group::Build HOL Light"
 make -C "$work/hol-light" >/dev/null
@@ -110,19 +152,25 @@ session="$work/session.ml"
   echo 'Arith_options.min_exp := 300;;'
   echo 'needs "Multivariate/realanalysis.ml";;'
   echo 'needs "verifier/m_verifier_main.hl";;'
+  echo "let shard_index = ${shard:-1} and shard_count = $shards;;"
   echo 'needs "build_tform2.hl";;'
   echo 'needs "tests/utils.hl";;'
+  # A shard's theorems hold under the terms it assumed: their conclusions are printed, with how
+  # many terms they assume.
+  echo 'let print_bound th = if hyp th = [] then print_thm th else (print_term (concl th); Printf.printf "\n(assuming %d terms)" (length (hyp th)));;'
   for check in "${checks[@]}"; do
     IFS='|' read -r proofs expression bound name total <<<"$check"
+    echo "print_endline \"PROBLEM: $name\";;"
     echo "path := \"$proofs\";;"
     if [ -n "$total" ]; then
       echo "let _, bound_th, time = let k = float_of_string \"$total\" in if (hd (load \"$expression.proof\").proof_opts).total_bound <= k then validate_gen 10 \"$expression.proof\" k else validate 10 \"$expression.proof\";;"
     else
       echo "let _, bound_th, time = validate 10 \"$expression.proof\";;"
     fi
-    echo 'print_endline "CERTIFICATE:";; print_thm bound_th;; print_newline ();;'
+    echo 'print_endline "CERTIFICATE:";; print_bound bound_th;; print_newline ();;'
     echo "Printf.printf \"checked $name in %.0f s\\n\" time;;"
-    echo "(try let th = trans_bound bound_th \`$bound\` in print_thm th; print_newline (); print_endline \"$name: within K\" with Failure _ -> print_endline \"$name: above K\");;"
+    echo "Printf.printf \"$name assumed %d terms\\n\" (length (hyp bound_th));;"
+    echo "(try let th = trans_bound bound_th \`$bound\` in print_bound th; print_newline (); print_endline \"$name: within K\" with Failure _ -> print_endline \"$name: above K\");;"
   done
 } >"$session"
 cat "$session"
@@ -136,4 +184,17 @@ for check in "${checks[@]}"; do
   IFS='|' read -r _ _ _ name _ <<<"$check"
   grep -q "^\(# \)*checked $name " "$work/hol.log" || { echo "HOL Light did not check $name"; exit 1; }
   grep -h "^\(# \)*$name: \(within\|above\) K$" "$work/hol.log" || echo "$name: K not compared"
+  # Every term is proven, or for a shard exactly its own, the rest assumed. The exact problem
+  # is one inequality, and names no terms.
+  awk -v n="$name" '/^(# )*PROBLEM: / { on = ($NF == n) } on' "$work/hol.log" >"$work/$name.log"
+  terms=$(sed -n 's/^\(# \)*Bounds: \([0-9][0-9]*\)$/\2/p' "$work/$name.log")
+  [ -n "$terms" ] || terms=0
+  proved=$(sed -n 's|^\(# \)*Proved: \([0-9][0-9]*\)/[0-9]*$|\2|p' "$work/$name.log" | tr '\n' ' ')
+  want=$(if [ "$terms" -gt 0 ]; then seq "${shard:-1}" "$shards" "$terms" | tr '\n' ' '; fi)
+  assumed=$(sed -n "s/^\\(# \\)*$name assumed \\([0-9][0-9]*\\) terms$/\\2/p" "$work/$name.log")
+  if [ "$proved" != "$want" ] || [ "$assumed" != "$((terms - $(wc -w <<<"$want")))" ]; then
+    echo "$name: proved terms '$proved' and assumed '$assumed' of $terms, not shard ${shard:-1} of $shards"
+    exit 1
+  fi
+  [ -z "$shard" ] || echo "$name: shard $shard of $shards proved terms ${want% } of $terms and assumed the other $assumed"
 done

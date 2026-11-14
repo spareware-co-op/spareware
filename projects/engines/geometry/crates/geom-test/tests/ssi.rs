@@ -1891,6 +1891,10 @@ fn judged_run(dir: &Path, cases: &[Case], stand_in: StandIn, ceilings: &Ceilings
 }
 
 #[test]
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "writes its run to a temporary folder, which a WebAssembly test run has none of"
+)]
 fn a_report_publishes_every_case() {
     let dir = scratch("report");
     let mut sourced = named("f16_cylinders_external");
@@ -1939,6 +1943,10 @@ fn a_report_publishes_every_case() {
 }
 
 #[test]
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "writes its run to a temporary folder, which a WebAssembly test run has none of"
+)]
 fn a_scorers_infinity_is_not_a_reason_to_stop() {
     let dir = scratch("infinity");
     let case = named("f_seam_line");
@@ -1974,6 +1982,10 @@ fn a_scorers_infinity_is_not_a_reason_to_stop() {
 }
 
 #[test]
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "writes its run to a temporary folder, which a WebAssembly test run has none of"
+)]
 fn a_runner_that_wrote_nothing_is_a_failure_with_its_verdict() {
     let dir = scratch("crash");
     let case = named("f_seam_line");
@@ -2100,6 +2112,10 @@ fn the_catalogue_covers_the_lists_it_rebuilds() {
 }
 
 #[test]
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "writes its run to a temporary folder, which a WebAssembly test run has none of"
+)]
 fn the_catalogue_writes_the_corpus_schema() {
     let dir = scratch("catalogue");
     catalogue::write(&dir.join("cases")).expect("wrote");

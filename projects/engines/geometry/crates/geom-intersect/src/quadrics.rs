@@ -1413,12 +1413,18 @@ fn along_curve(curve: &CurveKind<3>, at: Vector) -> Result<Option<Interval>, Int
                 return Ok(None);
             };
             let [a, b] = solved(h.center(), u, v)?;
-            let term = a.add(b)?;
-            // cosh t + sinh t is positive; on the other branch this is no point of the curve.
+            // cosh t + sinh t is e^t and cosh t - sinh t is e^-t, both positive; on the other
+            // branch neither is, and this is no point of the curve. Each is read where it is the
+            // larger, by the sign of sinh t: far down the branch the other subtracts two near-equal
+            // numbers, and a box a few hundredths wide (a cut found on an edge) left it straddling
+            // zero, so the cut on the branch's far end was lost and the piece ran on past both
+            // domains.
+            let ahead = b.lo() + b.hi() >= 0.0;
+            let term = if ahead { a.add(b)? } else { a.sub(b)? };
             if term.lo() <= 0.0 {
                 return Ok(None);
             }
-            term.ln()?
+            if ahead { term.ln()? } else { term.ln()?.neg() }
         }
         CurveKind::Parabola(p) => {
             let Axes::Vectors { u, v } = p.axes() else {
