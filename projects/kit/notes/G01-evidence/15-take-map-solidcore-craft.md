@@ -27,10 +27,9 @@ Status was read from the work queue and `gh pr list` on 2026-11-05, and from mai
 
 Two owner actions in this note's scope are already decided and on main: G157 ([32.23](../../../engines/geometry/architecture/32-decisions.md), relaxed by 32.44) and G239 ([32.28](../../../engines/geometry/architecture/32-decisions.md), PR [#337](https://github.com/spareware-co-op/spareware/pull/337)). G409 is on main too (PR [#359](https://github.com/spareware-co-op/spareware/pull/359)).
 
-### Two facts that shape every entry
+### What shapes every entry
 
-1. **Most Phase 7 pieces cannot start yet.** G254 (frame rules and laws), G253 (surface extension), G262 (blend feasibility) and G275 (flat-body offset) all depend on a gate: G156 (gate 4, exact core) or G233 (gate 6, 2D and sketches). Neither has started. Where an entry says "not now", this is why. What can start now is test data, case lists and specifications.
-2. **G270 and G275 depend on G235**, a patent search for shells, offsets and thickening, and G266 depends on G236, one for Class-A and variable blends. Neither is started. They are board dependencies, not something this note changes.
+**Most Phase 7 pieces cannot start yet.** G254 (frame rules and laws), G253 (surface extension), G262 (blend feasibility) and G275 (flat-body offset) all depend on a gate: G156 (gate 4, exact core) or G233 (gate 6, 2D and sketches). Neither has started. Where an entry says "not now", this is why. What can start now is test data, case lists and specifications.
 
 ### Not confirmed
 
@@ -177,7 +176,7 @@ The nondeterminism entries ([ND-1, ND-3, ND-491, ND-493](https://github.com/tang
 
 ### 8. Blends (G262 to G269): solidcore's generic blend
 
-**Status:** all not started. Deps: G262 needs G144 (PR #540), G171 (PR [#494](https://github.com/spareware-co-op/spareware/pull/494)), G68 (main), G156 and G233 (not started). G264 also needs G168 (PR [#473](https://github.com/spareware-co-op/spareware/pull/473)). G266 needs G236 (patent search, not started). G267 and G268 need G260 (not started).
+**Status:** all not started. Deps: G262 needs G144 (PR #540), G171 (PR [#494](https://github.com/spareware-co-op/spareware/pull/494)), G68 (main), G156 and G233 (not started). G264 also needs G168 (PR [#473](https://github.com/spareware-co-op/spareware/pull/473)). G267 and G268 need G260 (not started).
 
 **Outside, the whole.** The design page [docs/generic-blend.md](https://github.com/tangency-labs/solidcore/blob/b4de2149/docs/generic-blend.md) (154 KB) and the code in [`crates/solidcore/src/blend/`](https://github.com/tangency-labs/solidcore/tree/b4de2149/crates/solidcore/src/blend): `fillet_section/` (the section, its definition and its certificate), `fillet_exact` (the exact classes), `blend_setback/`, `blend_corner/`, `fillet_cliff_overflow.rs`, `band_room.rs`, `blend_refusal.rs`. Its one rule: every case is one construction, a spine, two rails and a section; a failure is fixed in that construction, never by a fallback. The kernel-case corpus has [265 fillet cases](https://github.com/tangency-labs/solidcore/tree/b4de2149/crates/solidcore/tests/kernel_cases) (counted by file name). Its open work (about 16 issues, #2343 to #2406, in section 6 of the page) tells us where it is still weak: several concave rounds at one vertex, four blends over three faces, chamfers meeting at a vertex, a G2 setback fill.
 
@@ -199,7 +198,7 @@ The nondeterminism entries ([ND-1, ND-3, ND-491, ND-493](https://github.com/tang
 
 ### 9. Offsets, shells and thicken (G270, G275, G277)
 
-**Status:** not started. G270 needs G66 (main), G253 and G235 (not started). G275 needs G274, G144 (PR #540) and G235. G277 needs G275, G270 and G248.
+**Status:** not started. G270 needs G66 (main) and G253 (not started). G275 needs G274 and G144 (PR #540). G277 needs G275, G270 and G248.
 
 - *Outside:* [`offset/`](https://github.com/tangency-labs/solidcore/tree/b4de2149/crates/solidcore/src/offset): `offset_executive/` (two 220 KB files and parts for loops, edge uses, cavities), [`offset_geometry_creation.rs`](https://github.com/tangency-labs/solidcore/blob/b4de2149/crates/solidcore/src/offset/offset_geometry_creation.rs) (235 KB), [`wall_room.rs`](https://github.com/tangency-labs/solidcore/blob/b4de2149/crates/solidcore/src/offset/wall_room.rs), [`draft.rs`](https://github.com/tangency-labs/solidcore/blob/b4de2149/crates/solidcore/src/offset/draft.rs), the ops wrapper [`offset/`](https://github.com/tangency-labs/solidcore/tree/b4de2149/crates/solidcore-ops/src/offset) with its tests, [commit 5d1c9ab5](https://github.com/tangency-labs/solidcore/commit/5d1c9ab5) (extension past a side with certified margins). Tests: 54 files by name with `offset`, `shell` or `thicken` in [`crates/solidcore/tests/`](https://github.com/tangency-labs/solidcore/tree/b4de2149/crates/solidcore/tests), including `issue_1060_offset_mitred_*`, `issue_1795_shell_hole_through_arc.rs`, `hang_51_extrusion_old_offset.rs`; 36 shell cases in the kernel-case corpus; SolidCraft oracle cases 44 to 46 (shell) and its [`shell_regressions.rs`](https://github.com/tangency-labs/solidcraft/blob/6029a38e/crates/engine/tests/shell_regressions.rs) (4 tests).
 - *Take:* the shell and offset case lists and the mitred offset cases. G277's done-when names "SMLib's 25 shell fixtures": solidcore's 36 shell cases are a larger set, in the record format described below. Extension with certified margins (5d1c9ab5) as a case list for G253.

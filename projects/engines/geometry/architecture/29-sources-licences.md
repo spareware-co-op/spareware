@@ -17,7 +17,7 @@ What this chapter guarantees:
 
 What it never does:
 
-- Give legal advice. Where the evidence leaves a licence, an ownership chain or a patent unclear, the row says so and the work waits for an owner.
+- Give legal advice. Where the evidence leaves a licence or an ownership chain unclear, the row says so and the work waits for an owner.
 - Decide architecture. A row's Planned column says how the kernel means to use a source and names the section that owns that choice. Sections still being drafted confirm or change it.
 
 Terms used below:
@@ -315,7 +315,7 @@ From [09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), [10](..
 | Boundary-first flattening | MIT | PORT | PORT (16) | Parameterisation and unrolling |
 | Topological Offsets (Zint et al. 2025), [`d75b55e`](https://github.com/wildmeshing/topological-offsets/tree/d75b55e4477dc95cd9e4781e0413d3a9d474d67d) | MIT for its own files. Its build fetches VolumeRemesher (LGPL-3.0, not verified per commit; row below) and GMP (LGPL), among other recipes such as libigl and fast-envelope, whose rows apply (13.11; checked 2026-10-21) | PORT of its own files only; VolumeRemesher and GMP PORT METHOD | PORT candidate (19.6) | Mesh offsets whose topology is guaranteed. Its distance band is checked by the exact tests of 19.10, not trusted (19.6). A design note confirms its guarantees before porting (19, open questions) |
 | VolumeRemesher, [`8927a1e`](https://github.com/JcDai/VolumeRemesher/tree/8927a1e057c643f1193ed50117bb3fb311b81b09) (the repository now redirects to `wildmeshing/VolumeRemesher`) | LGPL-3.0 by its repository's licence. That commit has no root LICENSE file, so the licence is not verified per commit (13, open question 7; checked 2026-10-21) | PORT METHOD | PORT METHOD, only if the Topological Offsets port needs its method (19.6) | Method-only procedure (rule 6) |
-| Lifted Surfacing of generalised sweep volumes (Ju, Zhou, Du, Carr and Ju 2025), [`Jurwen/Swept-Volume`](https://github.com/Jurwen/Swept-Volume/tree/0bb260118443545029c98db2e98278fac27ba460) | Repository Apache-2.0; core dependencies under the Adobe Research Licence (non-commercial research only) and libigl's GPL CGAL module (each LICENSE.txt read for 13.17, at `0bb2601`, `c0e7253`, `b4c4a7e`, `5933c16` and `a798adb`) | PORT METHOD from the paper and its erratum only | PORT METHOD (13.17), after a patent check (29.17) | Swept tool volumes and clearance envelopes for motions that routes 1 and 2 of 13.17 do not cover. Neither the repository nor its dependencies are read; its README's claim that all third-party libraries are open source is wrong (13.17). Its output is Approximate until a certificate is proven |
+| Lifted Surfacing of generalised sweep volumes (Ju, Zhou, Du, Carr and Ju 2025), [`Jurwen/Swept-Volume`](https://github.com/Jurwen/Swept-Volume/tree/0bb260118443545029c98db2e98278fac27ba460) | Repository Apache-2.0; core dependencies under the Adobe Research Licence (non-commercial research only) and libigl's GPL CGAL module (each LICENSE.txt read for 13.17, at `0bb2601`, `c0e7253`, `b4c4a7e`, `5933c16` and `a798adb`) | PORT METHOD from the paper and its erratum only | PORT METHOD (13.17) | Swept tool volumes and clearance envelopes for motions that routes 1 and 2 of 13.17 do not cover. Neither the repository nor its dependencies are read; its README's claim that all third-party libraries are open source is wrong (13.17). Its output is Approximate until a certificate is proven |
 | adobe-research/mtetcol [`c0e7253`](https://github.com/adobe-research/mtetcol/tree/c0e7253dd59f5f20b37f0bff541b86d226b83ac5); adobe-research/space-time-functions [`b4c4a7e`](https://github.com/adobe-research/space-time-functions/tree/b4c4a7e54400a2fa0389b2b738301e472c06282e); adobe-research/arrangement-benchmark [`5933c16`](https://github.com/adobe-research/arrangement-benchmark/tree/5933c167f2277a10c1342e3e4c6de72bdfb94b4a); qnzhou/mtet (moving `main`, [`a798adb`](https://github.com/qnzhou/mtet/tree/a798adb85558584364f04474bc4fd54df66e1c26) when checked) | Adobe Research Licence: non-commercial research use only (13.17) | REJECT | REJECT | Never read. Lifted Surfacing's core comes from these |
 | swept-volumes (Sellán); voroffset; PFPOffset | MIT; MIT; BSD-3-Clause | PORT | STUDY | — |
 | offsets-and-remeshing; PCO | GPL-3.0 | Papers only | STUDY through the papers | Source not read |
@@ -326,7 +326,7 @@ From [09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), [10](..
 | Rhino.Compute | MIT | PORT | STUDY | Caching by content hash, which is sound only when results are deterministic |
 | Evolute's tools; nTop | Commercial | REJECT | REJECT | Their papers and public talks only |
 | IRIT | Free for non-commercial use only | REJECT | REJECT | Elber's papers instead |
-| SMLib fillet, blend and offset solvers | Apache-2.0. Their IntegrityWare lineage is accepted with the rest of the release (32.8, decided 2026-10-24) | PORT | STUDY, and PORT where section 13 takes a method (13) | Each method starts from its primary paper (Vida, Martin and Várady; Piegl and Tiller on offsets), and may be followed closely in this code and ported, rebuilt to section 3 with NVIDIA's notice kept. Offsets and shells first stop for IntegrityWare's patent claim (29.17). Its offset-surface defects, WR-160 to WR-165 in solidcore's catalogue (WR marks a wrong result), tell us what not to reproduce |
+| SMLib fillet, blend and offset solvers | Apache-2.0. Their IntegrityWare lineage is accepted with the rest of the release (32.8, decided 2026-10-24) | PORT | STUDY, and PORT where section 13 takes a method (13) | Each method starts from its primary paper (Vida, Martin and Várady; Piegl and Tiller on offsets), and may be followed closely in this code and ported, rebuilt to section 3 with NVIDIA's notice kept. Its offset-surface defects, WR-160 to WR-165 in solidcore's catalogue (WR marks a wrong result), tell us what not to reproduce |
 | Papers on subdivision: Stam 1998; Lacewell and Burley 2007; Biermann, Levin and Zorin 2000 | Papers | PORT METHOD | PORT METHOD (16.1) | Section 16.1 takes their methods, not their code: any reference code the authors published is not used. Eigen-tables come from our own generator |
 | Papers: Pottmann et al., *Architectural Geometry*; ShapeUp; LSCM; ARAP; Vida, Martin and Várady; Maekawa; Plantinga and Vegter; Duff; Snyder; Pasko et al.; Ju et al. (dual contouring) | Papers | PORT METHOD | PORT METHOD (13, 16) | Check 29.17 first for T-splines, watertight trimming and lattices |
 
@@ -405,7 +405,7 @@ From [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), [04
 | OpenUSD AOUSD proposals | OpenUSD Technical Proposal Supplemental Terms | STUDY | STUDY | Read where they are published upstream; nothing copied |
 | miniz_oxide | MIT OR Zlib OR Apache-2.0 in its crate manifest (checked 2026-10-21 at [`cdd7ddd5`](https://github.com/Frommi/miniz_oxide/blob/cdd7ddd56cf57a6255203bb9f5c6a92bf1144bbf/miniz_oxide/Cargo.toml)) | PORT, DEPEND | PORT into `geom-exchange` (24.7): inflate and deflate, notice kept, run inside our size and ratio budgets | It is `no_std` and forbids `unsafe` code (24.7) |
 | LandXML 1.2 schema ([landxml.org](http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd)) | Terms not found (checked again 2026-10-28); it cannot be pinned to a commit (17.13) | PORT METHOD: implemented from its definitions, never copied or generated from, fetched only to validate (owner action G408, 32.38) | PORT METHOD (17.13): `geom-landxml` reads surfaces, alignments, profiles, COGO points and parcels | It names sixteen spiral types without formulas; each mapping to a curve kind waits for the curve-kind decision note (17.13) |
-| The "Viennese Bend" transition curve, in IFC 4.3's alignment documentation | IFC's documentation writes "Viennese Bend (R)", a registered trademark; its owner and any patent are unverified (17, open questions) | PORT METHOD | PORT METHOD of IFC's published definition (17.8), under our own name, the cant-coupled transition (32.33); no patent check or stop (32.49) | The name is used only to identify the IFC and LandXML type, never as the name of our own feature |
+| The "Viennese Bend" transition curve, in IFC 4.3's alignment documentation | IFC's documentation writes "Viennese Bend (R)", a registered trademark; its owner is unverified (17, open questions) | PORT METHOD | PORT METHOD of IFC's published definition (17.8), under our own name, the cant-coupled transition (32.33) | The name is used only to identify the IFC and LandXML type, never as the name of our own feature |
 
 ## 29.15 Test corpora (`geom-test`)
 
@@ -474,29 +474,7 @@ A patent protects a method, not code, so a clean re-implementation does not esca
 | US 2008/0043023 A1 | Application by Loop and Schaefer | Approximate Catmull–Clark patches | Abandoned in 2012; never granted | Free to use, but not CAD-grade |
 | nTop's "patent-pending" implicit modelling | nTop | Unknown | Unverified | Not avoided (32.49) |
 | IntegrityWare's "patented never-fail shelling and offsetting" | IntegrityWare | Unknown; no number found | Unverified | Not avoided (32.49): SMLib's offset and shell methods may be followed and ported (32.8) |
-| The "Viennese Bend" transition curve | Unknown | A rail transition curve whose curvature depends on cant (17.8) | Unverified; not searched. IFC's documentation marks the name as a registered trademark | Built from IFC's published definition under our own name, the cant-coupled transition (32.33); no patent stop (32.49) |
-
-**Families not yet searched.** The evidence searched only subdivision, T-splines, watertight trimming and lattices. These catalogue families (10.2) have had no search at all:
-
-- direct face edits: move, replace and delete with healing;
-- G2 and G3 Class-A blends and variable fillets;
-- shells, offsets and thickening (beyond IntegrityWare's claim);
-- booleans, cellular models and batch cutting;
-- sheet-metal bending and unfolding;
-- constraint solving and sketch diagnosis;
-- persistent naming and reference resolution;
-- clash, clearance and continuous collision detection;
-- hidden lines, sections and drawing generation;
-- straight-skeleton roofs;
-- terrain, corridors and alignments;
-- slicing and toolpaths;
-- swept volumes of general motion (Lifted Surfacing, whose authors include Adobe researchers; 13.17);
-- circuit-board pours and clearance;
-- point-cloud fitting and registration;
-- mesh simplification, remeshing and conversion from subdivision to NURBS;
-- panelisation (Evolute, Pottmann et al.).
-
-**No searches (owner, 2026-11-13; 32.49).** No patent searches are made, and there is no patent register. A family on this list does not wait for a search before it enters the Build stage: it is built like any other, existing code first (solidcore, SMLib and other permissive sources, ported to Rust, as the kernel's AGENTS.md says). Owner actions G73 and G74 and piece G115, the patent register, are closed, and the search pieces that needed G73 are recorded as needing no search (30.5). The list above and the table before it stay as a record of what the evidence found.
+| The "Viennese Bend" transition curve | Unknown | A rail transition curve whose curvature depends on cant (17.8) | Unverified. IFC's documentation marks the name as a registered trademark | Built from IFC's published definition under our own name, the cant-coupled transition (32.33); not avoided (32.49) |
 
 Apache-2.0's patent grant (SMLib, Manifold, OpenSubdiv's licence) covers the licensor's own code as contributed. It does not clearly cover a re-implementation of the method.
 
@@ -613,7 +591,7 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
    - Data with no licence, or with restrictive terms, is not used until an owner decides (rule 11).
    - Recorded oracle outputs are data we generate. They are vendored with the tool's name and version and the inputs.
    - Fixtures are never copied from copyleft or proprietary projects. Failure cases from issue trackers are rebuilt from their descriptions with our own inputs.
-10. **Patents.** A patent stops no work (owner, 2026-11-13; 32.49). No searches are made, no method is avoided because a patent on it is known or claimed, and a paper or vendor that mentions a patent, or calls a method "patent-pending", is no reason to stop. 29.17 records the patents already known, with their expiry dates.
+10. **Patents.** A patent stops no work (owner, 2026-11-13; 32.49). No method is avoided because a patent on it is known or claimed, and a paper or vendor that mentions a patent, or calls a method "patent-pending", is no reason to stop. 29.17 records the patents already known, with their expiry dates.
 11. **When to stop and ask an owner.** Stop, note it on the pull request, and ask the contributor to raise it with an owner (AGENTS.md section 5) when:
     - a licence is missing, unclear, modified, contradicted inside the source, or stated only outside the repository;
     - you want to DEPEND on or PORT a source that is not in this ledger, add a STUDY row for a copyleft or unclear source, or move a source to a more permissive class;
@@ -632,7 +610,7 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
 - A STUDY row for a copyleft, unclear or unlicensed source, and any new DEPEND or PORT row, needs a kernel owner's yes in review.
 - A licence exception or a legal judgment needs a decision note an owner accepts.
 
-This adds four entries to the file table in 26.3 and the folder tree in section 27: `geometry/PROVENANCE.md` (this ledger, generated and kept current), `geometry/NOTICE` (every origin licence text and credit, shipped with every binary), `geometry/methods/` (method notes from the method-only procedure) and `geometry/PATENTS.md` (the patent register). The patent register is not built: the owner closed it on 2026-11-13 (32.49).
+This adds three entries to the file table in 26.3 and the folder tree in section 27: `geometry/PROVENANCE.md` (this ledger, generated and kept current), `geometry/NOTICE` (every origin licence text and credit, shipped with every binary) and `geometry/methods/` (method notes from the method-only procedure).
 
 ## 29.21 People and projects worth contacting
 

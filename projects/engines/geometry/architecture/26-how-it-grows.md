@@ -39,7 +39,6 @@ A newcomer, human or AI, should be able to find where anything is done, what it 
 | `geometry/MAP.json` | A machine-readable map of every crate, module, operation, geometry kind, invariant and error kind, with links. Generated from annotations in the code and checked in CI, so it can never drift from the code |
 | `geometry/NOTICE` | Every origin licence text and credit, shipped with every binary (29.20) |
 | `geometry/PROVENANCE.md` | The source ledger, generated from the code (29.20) |
-| `geometry/PATENTS.md` | The patent register (29.20); not built, closed by the owner on 2026-11-13 (32.49) |
 | `geometry/architecture/` | The chapters of this note, one file per section |
 | `geometry/format/` | `SPEC.md`, `REGISTRY.md` and the CDDL schemas of the native format (24.2, 24.6) |
 | `geometry/methods/` | Method notes from the method-only procedure (29.20, rule 6) |
