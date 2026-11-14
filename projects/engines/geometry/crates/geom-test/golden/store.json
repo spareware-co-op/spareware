@@ -304,7 +304,7 @@
               "why": "Phase 5's first train, one record for its pieces' 39 new count benchmarks (groups intersect, quadric: geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils). No existing digest moved"
             }
           ],
-          "sha256": "fa383b5b884aa4a756c993c513ae25afd00c77f65983bc9f85c3e519e6bd0946"
+          "sha256": "e55cd29908504d7e5d1006f5d6995d84d9ec356e57b4a9d482858cf3a0e560e2"
         },
         {
           "id": "geom-nurbs/operations",

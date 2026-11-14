@@ -2373,18 +2373,24 @@ pub mod intersect {
 
     use super::run;
 
-    /// The floor of a projection: a micrometre, in metres.
-    const FLOOR: f64 = 1e-6;
+    /// The floor of a projection: a millimetre, in metres. Each foot takes about log2(length/floor)
+    /// halvings, so a coarser floor keeps a batch inside the count gates' jobs.
+    const FLOOR: f64 = 1e-3;
 
     /// The floor of a trace. A trace reads a function thousands of times, so a benchmark keeps it
     /// coarse: the path is the same at any floor.
     const COARSE: f64 = 1e-3;
 
-    /// The ceiling of a trace.
-    const CEILING: f64 = 1e-1;
+    /// The ceiling of a trace: a unit, a fifth of the sphere's radius and half the torus's tube.
+    /// Boxes along a branch number about its length times the square root of its curvature over
+    /// the ceiling, so a coarse ceiling keeps a batch inside the count gates' jobs; the paths are
+    /// the same at any ceiling.
+    const CEILING: f64 = 1.0;
 
-    /// The floor of an analysis, which reads each flagged pair to the second order.
-    const TOUCHING: f64 = 1e-2;
+    /// The floor of an analysis, which reads each flagged pair to the second order: a quarter, a
+    /// twelfth of the largest ball, which still flags the contact as a point and keeps a batch
+    /// inside the count gates' jobs.
+    const TOUCHING: f64 = 0.25;
 
     /// A meter of its own, under no limit.
     fn meter() -> WorkMeter<'static> {
@@ -2547,7 +2553,9 @@ pub mod intersect {
         });
     }
 
-    /// `subdivide` of a sphere of radius 5 about each centre against its plane patch.
+    /// `subdivide` of a quarter of a sphere's band, radius 5, about each centre against its plane
+    /// patch: an arc of the circle they meet in, settled and flagged as the whole circle is, in a
+    /// quarter of the pairs.
     #[inline(never)]
     pub fn subdivided(
         batch: &[(SurfaceKind, [f64; 3])],
@@ -2555,13 +2563,14 @@ pub mod intersect {
     ) {
         run(batch, out, |(surface, centre)| {
             let frame = geom_curve::Frame::standard().map_err(|_| IntersectError::Internal)?;
-            let domain = ((0.0, 1.875), (-0.45, 0.45));
+            let domain = ((0.0, 0.5), (-0.45, 0.45));
             let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 5.0, frame, domain)?);
             subdivide(surface, &sphere, 1.0, &mut meter())
         });
     }
 
-    /// `march` through what `subdivide` leaves of a sphere and its plane patch.
+    /// `march` through what `subdivide` leaves of an eighth of a sphere's band and its plane
+    /// patch: one branch, from the band's edge to its edge, as on the whole band.
     #[inline(never)]
     pub fn marched(
         batch: &[(SurfaceKind, [f64; 3])],
@@ -2569,22 +2578,25 @@ pub mod intersect {
     ) {
         run(batch, out, |(surface, centre)| {
             let frame = geom_curve::Frame::standard().map_err(|_| IntersectError::Internal)?;
-            let domain = ((0.0, 1.875), (-0.45, 0.45));
+            let domain = ((0.0, 0.25), (-0.45, 0.45));
             let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 5.0, frame, domain)?);
             let found = subdivide(surface, &sphere, 1.0, &mut meter())?;
             march(surface, &sphere, &found, 1.0, 1.0, &mut meter())
         });
     }
 
-    /// `self_intersect` of each swept loop.
+    /// `self_intersect` of each swept loop, to a floor of 1/32: on the short sweeps of
+    /// [`crate::inputs::intersect::sweeps`] that floor settles the crossing with fewer flagged pieces
+    /// than 1/16 does.
     #[inline(never)]
     pub fn self_cross(batch: &[SurfaceKind], out: &mut Vec<Result<SelfCrossing, IntersectError>>) {
         run(batch, out, |sheet| {
-            self_intersect(sheet, 1.0 / 16.0, 1.0 / 4.0, &mut meter())
+            self_intersect(sheet, 1.0 / 32.0, 1.0 / 4.0, &mut meter())
         });
     }
 
-    /// `fit` of each marched crossing to an intersection curve, within 1/256.
+    /// `fit` of each marched crossing to an intersection curve, within a quarter: every span is
+    /// certified as at any ceiling, in fewer pieces.
     #[inline(never)]
     pub fn fit_curve(
         batch: &[(SurfaceKind, Branch)],
@@ -2598,7 +2610,7 @@ pub mod intersect {
                 ((-4.0, 4.0), (-4.0, 4.0)),
             )?);
             let refs = [geom_curve::SurfaceRef(1), geom_curve::SurfaceRef(2)];
-            fit((sheet, &ground), refs, branch, 1.0 / 256.0, &mut meter())
+            fit((sheet, &ground), refs, branch, 0.25, &mut meter())
         });
     }
 
@@ -2625,7 +2637,9 @@ pub mod intersect {
         });
     }
 
-    /// `march` through what `subdivide` leaves of a whole sphere and a plane through its poles.
+    /// `march` through what `subdivide` leaves of a whole sphere of radius 2 and a plane through its
+    /// poles, to a floor of half a unit: the same ratio of floor to radius as the one loop through
+    /// both poles needs, on a smaller sphere, so a batch runs inside the count gates' jobs.
     #[inline(never)]
     pub fn through_poles(
         batch: &[(SurfaceKind, [f64; 3])],
@@ -2634,9 +2648,9 @@ pub mod intersect {
         run(batch, out, |(surface, centre)| {
             let frame = geom_curve::Frame::standard().map_err(|_| IntersectError::Internal)?;
             let domain = ((0.0, 2.0), (-0.5, 0.5));
-            let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 5.0, frame, domain)?);
-            let found = subdivide(&sphere, surface, 0.25, &mut meter())?;
-            march(&sphere, surface, &found, 0.25, 1.0, &mut meter())
+            let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 2.0, frame, domain)?);
+            let found = subdivide(&sphere, surface, 0.5, &mut meter())?;
+            march(&sphere, surface, &found, 0.5, 1.0, &mut meter())
         });
     }
 

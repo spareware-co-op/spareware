@@ -9,7 +9,11 @@
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
-//! `geom-intersect` itself.
+//! `geom-intersect` itself. The general searches, traces and marches are sized so that a batch of
+//! 64 runs inside the count gates' jobs, each still on the path it measures: the spheres projected
+//! on are the others divided by 2^8, the torus seen in silhouette is a band of it each view crosses
+//! once, the swept loops reach an eighth of a unit each way, the known line is cut in four, and
+//! the kernels take a band of a sphere and coarse floors (`kernels::intersect`).
 //!
 //! Guarantees: every batch is full and the same on every target, and every result of a typical
 //! batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly
@@ -155,14 +159,21 @@ pub fn spheres(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
         return Vec::new();
     }
     let mut g = rng("intersect::spheres", class);
+    // The other inputs divided by 2^8 (module documentation).
+    let near = |g: &mut SplitMix64| {
+        let mut c = || f64::from(i32::try_from(within(g, REACH >> 8)).unwrap_or(0));
+        [c(), c(), c()]
+    };
     batch_of(|_| {
+        let centre = near(&mut g);
+        let r = f64::from(i32::try_from(g.range(1, 1 << 8)).ok()?);
         let band = Sphere::new(
-            point(&mut g),
-            radius(&mut g)?,
+            centre,
+            r,
             Frame::standard().ok()?,
             ((0.0, 1.5), (-0.4, 0.4)),
         );
-        Some((SurfaceKind::Sphere(band.ok()?), point(&mut g)))
+        Some((SurfaceKind::Sphere(band.ok()?), near(&mut g)))
     })
 }
 
@@ -266,9 +277,11 @@ pub fn tangents(class: Class) -> Vec<(SurfaceKind, Known)> {
         }
         let sheet = Surface::new(along, across, &net).ok()?;
         let point = |x: f64| Interval::point(x).ok();
+        // Four stretches, half a unit each: every stretch takes the same tries, so fewer of them
+        // keep a batch inside the count gates' jobs.
         let mut vertices = Vec::new();
-        for step in -4..=4 {
-            let u = f64::from(step) / 4.0;
+        for step in -2..=2 {
+            let u = f64::from(step) / 2.0;
             vertices.push([point(u)?, point(0.0)?, point(u)?, point(0.0)?]);
         }
         let known = Known {
@@ -338,9 +351,11 @@ pub fn sweeps(class: Class) -> Vec<SurfaceKind> {
         }
         let across = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).ok()?;
         let along = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).ok()?;
+        // A sweep an eighth of a unit each way: the crossing is as long as the sweep, so a short one
+        // keeps a batch inside the count gates' jobs.
         let mut net = Vec::new();
         for i in 0..4 {
-            for (y, row) in [-1.0, 1.0].into_iter().zip(&rows) {
+            for (y, row) in [-0.125, 0.125].into_iter().zip(&rows) {
                 let [x, z] = *row.get(i)?;
                 net.push([x, y, z]);
             }
@@ -387,12 +402,14 @@ pub fn tori(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
     }
     let mut g = rng("intersect::tori", class);
     batch_of(|_| {
+        // A sixth of a turn round the axis and four tenths round the tube, which every view of the
+        // batch crosses once: one silhouette branch, from edge to edge, as on most of the torus.
         let band = Torus::new(
             point(&mut g),
             8.0,
             2.0,
             Frame::standard().ok()?,
-            ((0.1, 1.9), (0.1, 1.9)),
+            ((0.1, 0.4), (0.1, 0.9)),
         );
         let run = f64::from(i32::try_from(g.range(1, 4)).ok()?);
         Some((SurfaceKind::Torus(band.ok()?), [run, 1.0, 2.0]))
@@ -618,14 +635,19 @@ pub fn tees(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
     })
 }
 
+/// How far each cone of [`apexes`] reaches along its axis either way: each ruling is cut where it
+/// leaves the other cone's domain, so a shorter reach than [`TALL`] keeps a batch inside the count
+/// gates' jobs.
+const NAPPE: (f64, f64) = (-1024.0, 1024.0);
+
 /// Two cones through one apex, on crossing axes, which meet in rulings.
 #[must_use]
 pub fn apexes(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
     typical(class, "intersect::apexes", |g| {
         let at = point(g);
         let across = Frame::new([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]).ok()?;
-        let first = Cone::new(at, 0.0, 2.0, Frame::standard().ok()?, (TURN, TALL)).ok()?;
-        let second = Cone::new(at, 0.0, 2.0, across, (TURN, TALL)).ok()?;
+        let first = Cone::new(at, 0.0, 2.0, Frame::standard().ok()?, (TURN, NAPPE)).ok()?;
+        let second = Cone::new(at, 0.0, 2.0, across, (TURN, NAPPE)).ok()?;
         Some((SurfaceKind::Cone(first), SurfaceKind::Cone(second)))
     })
 }
