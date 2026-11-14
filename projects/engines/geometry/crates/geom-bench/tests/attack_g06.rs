@@ -1758,6 +1758,19 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_intersect::selfcross::self_intersect(sheet, 1.0 / 16.0, 1.0 / 4.0, &mut meter)
             }))
         }
+        ("intersect", "fit_curve") => fold(inputs::intersect::crossings(class).iter().map(
+            |(sheet, branch)| {
+                let ground = geom_surface::SurfaceKind::Plane(geom_surface::Plane::new(
+                    [0.0; 3],
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    ((-4.0, 4.0), (-4.0, 4.0)),
+                )?);
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let refs = [geom_curve::SurfaceRef(1), geom_curve::SurfaceRef(2)];
+                geom_intersect::fit::fit((sheet, &ground), refs, branch, 1.0 / 256.0, &mut meter)
+            },
+        )),
         ("intersect", "analyse_rest") => {
             fold(inputs::intersect::rests(class).iter().map(|(plate, ball)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

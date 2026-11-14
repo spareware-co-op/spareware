@@ -295,10 +295,10 @@
               "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b",
               "kind": "corpus",
               "piece": "Phase 5 train 1 (G158 to G180)",
-              "why": "Phase 5's first train, one record for its pieces' 38 new count benchmarks (groups intersect, quadric: geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils). No existing digest moved"
+              "why": "Phase 5's first train, one record for its pieces' 39 new count benchmarks (groups intersect, quadric: geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils). No existing digest moved"
             }
           ],
-          "sha256": "cca9134caf881478d2e8f8c0b0300118621361d4b32ce9f5692e0b398a35c6b4"
+          "sha256": "92ba0660401fb50bb12eb7079dceb6e4433322cfc93f51d23456e587c2cbfc5f"
         },
         {
           "id": "geom-nurbs/operations",

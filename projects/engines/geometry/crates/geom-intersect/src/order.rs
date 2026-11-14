@@ -86,6 +86,7 @@ const fn curve_rank(curve: &CurveKind<3>) -> u16 {
         CurveKind::Composite(_) => 12,
         CurveKind::Offset(_) => 13,
         CurveKind::OnSurface(_) => 14,
+        CurveKind::Intersection(_) => 15,
     }
 }
 

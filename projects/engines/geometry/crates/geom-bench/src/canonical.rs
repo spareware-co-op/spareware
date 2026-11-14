@@ -1304,6 +1304,18 @@ impl Canonical for geom_intersect::march::Traced {
     }
 }
 
+impl Canonical for geom_intersect::march::Branch {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_curve::IntersectionCurve<3> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_intersect::selfcross::SelfCrossing {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);

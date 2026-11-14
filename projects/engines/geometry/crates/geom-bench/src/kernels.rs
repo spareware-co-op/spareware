@@ -2355,9 +2355,10 @@ pub mod intersect {
     use geom_intersect::contact::{Reading, analyse};
     use geom_intersect::curve::{curves, self_crossings};
     use geom_intersect::curve_surface::curve_surface;
+    use geom_intersect::fit::fit;
     use geom_intersect::general::{Subdivided, subdivide};
     use geom_intersect::known::{Known, subdivide_known};
-    use geom_intersect::march::{Traced, march};
+    use geom_intersect::march::{Branch, Traced, march};
     use geom_intersect::quadrics::natural;
     use geom_intersect::quartic::meet;
     use geom_intersect::selfcross::{SelfCrossing, self_intersect};
@@ -2580,6 +2581,24 @@ pub mod intersect {
     pub fn self_cross(batch: &[SurfaceKind], out: &mut Vec<Result<SelfCrossing, IntersectError>>) {
         run(batch, out, |sheet| {
             self_intersect(sheet, 1.0 / 16.0, 1.0 / 4.0, &mut meter())
+        });
+    }
+
+    /// `fit` of each marched crossing to an intersection curve, within 1/256.
+    #[inline(never)]
+    pub fn fit_curve(
+        batch: &[(SurfaceKind, Branch)],
+        out: &mut Vec<Result<geom_curve::IntersectionCurve<3>, IntersectError>>,
+    ) {
+        run(batch, out, |(sheet, branch)| {
+            let ground = SurfaceKind::Plane(geom_surface::Plane::new(
+                [0.0; 3],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                ((-4.0, 4.0), (-4.0, 4.0)),
+            )?);
+            let refs = [geom_curve::SurfaceRef(1), geom_curve::SurfaceRef(2)];
+            fit((sheet, &ground), refs, branch, 1.0 / 256.0, &mut meter())
         });
     }
 
