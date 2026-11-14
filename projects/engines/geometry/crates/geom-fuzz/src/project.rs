@@ -53,8 +53,11 @@ const FLOOR: f64 = 1e-6;
 /// Set by libFuzzer's ten seconds a case. A search costs about 5,200 release instructions a unit,
 /// and the hosted fuzz build runs about a second for each thousand million of them; an input of
 /// the 14 November campaign (`tests/__fuzz__/project/crashes`) searched for 19 thousand million
-/// under the 2^24 this was and timed out. 2^19 stops at about 2.7 thousand million.
-const WORK: u64 = 1 << 19;
+/// under the 2^24 this was and timed out. 2^20 stops at about 5.5 thousand million, inside the ten
+/// seconds. Of 4,000 random inputs, 14 searched to an answer with between 2^19 and 2^20
+/// units, so 2^19 would have skipped their laws; 4 more need up to 2^21 and the stored input 2^22,
+/// budgets that run a stopped search past the ten seconds.
+const WORK: u64 = 1 << 20;
 
 /// What rounding may add to a distance or a point worked out in doubles.
 const SLACK: f64 = 1e-9;
