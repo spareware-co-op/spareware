@@ -1044,7 +1044,7 @@ Reopen this if a measured operation on real models spends most of its time in gr
 What it changed:
 - No work stops or waits for a patent, known or not. The kernel's methods come from the free sources it already uses, existing code first: solidcore, SMLib and other permissive sources, ported to Rust (the kernel's AGENTS.md).
 - 32.7's recommendation is set aside. 29.17's table of patents already known stays as a record only, with each patent's expiry date.
-- The board's patent pieces are removed with every need on them: owner action G73, the owner actions G74, G119, G122, G182, G183, G234 to G237, G286, G287, G310, G311, G356, G383, G445 and G446, and piece G115. G309 and G313 stay for their non-patent work: chapter 13's legal check of Lifted Surfacing's dependencies, and the OpenSubdiv licence review (30.4, 30.5). The owner asked on 2026-11-14 for the rows to go rather than stay as closed records.
+- The board's patent pieces are removed with every need on them: owner actions G73, G74, G119, G122, G182, G183, G234 to G237, G286, G287, G310, G311, G356, G383, G445 and G446, and piece G115. G309 and G313 stay for their non-patent work: chapter 13's legal check of Lifted Surfacing's dependencies, and the OpenSubdiv licence review (30.4, 30.5). The owner asked on 2026-11-14 for the rows to go rather than stay as closed records.
 - The risk that remains is R16 (31): a method someone has patented may be used.
 
 **Changes:** this record; 32.7; chapters 11, 13, 16, 19, 26, 27, 29, 30 and 31, and `30-build-order.json`; the root AGENTS.md and README.md; GLOSSARY.md.
