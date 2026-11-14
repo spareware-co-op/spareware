@@ -7193,14 +7193,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Directed edges are checked unique first, so in a vertex's link each point has at most one edge out (two triangles (v, x, ...) would run v to x twice) and at most one in: the link is paths and cycles, and the walk from a path's start, or round a cycle back to its start, takes at most as many steps as the link has edges. walked never passes link.len(), so the guard against a longer walk never fires, whether it stops at more than, at or at equal to the length."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/model/mod.rs",
-      "mutant": "replace Surface::collapse -> Option<Patch> with Some(Default::default())",
-      "line_text": "let shared = self.edge_faces(keep, gone);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "An empty patch removes and adds nothing, passes every check and is counted as kept, and decimation then offers the end's edges again, so its queue never empties while the triangle count stays above the target: the loop ends only when the budget runs out, far past the time limit."
     }
   ],
   "coverage_off": [
