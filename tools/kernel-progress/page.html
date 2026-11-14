@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spare Kit geometry kernel: progress</title>
+<link rel="stylesheet" href="./tokens.css">
+<style>
+/* The kernel's progress in the shared look: one bar overall and one per phase. Tokens only. */
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.5;
+  padding: 20px max(16px, env(safe-area-inset-right, 0px)) 32px max(16px, env(safe-area-inset-left, 0px)); }
+.wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 16px; }
+h1 { font-size: clamp(24px, 4vw, 34px); margin: 0; text-wrap: balance; }
+h1 a { color: inherit; text-decoration: none; }
+.sub { color: var(--ink-2); margin: 2px 0 0; max-width: 64ch; }
+.card { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 16px; display: grid; gap: 10px; }
+.big { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.big .pct { font-size: clamp(40px, 9vw, 56px); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.big .what { color: var(--ink-2); }
+.num { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }
+.bar { display: flex; height: 14px; border-radius: var(--radius); overflow: hidden; background: var(--sink); border: 1px solid var(--hairline); }
+.card > .bar { height: 22px; }
+.bar span { display: block; height: 100%; }
+.s-main, .k-main { background: var(--spare-red); }
+.s-wait, .k-wait { background: repeating-linear-gradient(135deg, var(--spare-red-tint) 0 4px, var(--panel) 4px 7px); box-shadow: inset 0 0 0 1px var(--spare-red); }
+.s-none, .k-none { background: var(--sink); }
+.k { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin: 0 5px 0 0; vertical-align: -1px; border: 1px solid var(--rule); }
+.k-main { border-color: var(--spare-red); }
+.legend, .counts { font-size: 13px; color: var(--ink-2); margin: 0; }
+.legend > span, .counts > span { display: inline-block; white-space: nowrap; margin-right: 12px; }
+.next { margin: 0; padding: 8px 12px; background: var(--panel-alt); border-left: 3px solid var(--spare-red); }
+.phases { display: grid; gap: 10px; }
+.phase { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+.phase-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.phase h3 { font-size: 15px; margin: 0; font-weight: 600; text-wrap: balance; }
+.pn { color: var(--ink-2); font-weight: 400; margin-right: 4px; }
+details summary { cursor: pointer; font-size: 13px; color: var(--spare-red); width: max-content; }
+details h4 { font-size: 12px; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); font-weight: 600; }
+details ul { list-style: none; margin: 0; padding: 0; font-size: 13px; display: grid; gap: 2px; }
+details li { overflow-wrap: anywhere; }
+.id { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); display: inline-block; min-width: 3.4em; }
+:focus-visible { outline: 2px solid var(--spare-red); outline-offset: 2px; }
+footer { font-size: 12px; color: var(--ink-2); display: grid; gap: 4px; }
+footer p { margin: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><a href="./">Spareware</a> · The geometry kernel</h1>
+    <p class="sub">How far the Spare Kit geometry kernel has come, against its build board of {{SIZE}} pieces in {{PHASES}} phases. Each phase ends at a gate, a review that proves the phase before the next one leans on it.</p>
+  </header>
+  <div class="card">
+    <div class="big"><span class="pct">{{PCT}}%</span><span class="what">on main, and {{PCT_BUILT}}% built counting the work waiting to land</span></div>
+    {{BAR}}
+    <p class="legend"><span><span class="k k-main"></span>{{ON_MAIN}} on main</span><span><span class="k k-wait"></span>{{WAITING}} built, waiting to land</span><span><span class="k k-none"></span>{{NOT_STARTED}} not started</span></p>
+    <p class="next">{{NEXT}}</p>
+  </div>
+  <div class="phases">
+{{PHASE_LIST}}
+  </div>
+  <footer>
+    <p><b>On main</b> means merged into the kernel. <b>Built, waiting to land</b> means the work is done and pushed, on a merge train, in an open pull request or on its own branch, but not merged yet. Owner decisions count as pieces; gates are shown on their phase's line instead.</p>
+    <p>{{SOURCE}}</p>
+    <p>Last built {{BUILT}}, by <code>tools/kernel-progress/build.py</code> on every push to main.</p>
+  </footer>
+</div>
+</body>
+</html>
