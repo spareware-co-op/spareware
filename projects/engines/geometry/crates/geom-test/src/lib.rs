@@ -224,6 +224,8 @@
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
+//! - `geom-mesh` and `geom-poly` (Apache-2.0, ours): the booleans `oracle::meshes` (G154) compares
+//!   with the mesh oracles.
 //! - `geom-nurbs` (Apache-2.0, ours): the curves `tests/nurbs_reference.rs` (G57) compares with the
 //!   reference, and `oracle::geomdl` (G113) with the first outside oracle.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), dependencies (G97): a fixture's operation log is
@@ -249,6 +251,11 @@
 //!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
 //!   `static_assertions`.
 //! - Apache-2.0: `num-modular`, which `dashu-int` brings in.
+//! - Apache-2.0: `manifold-rust`, a development dependency (G154), the mesh oracle one of its
+//!   tests runs.
+//! - Apache-2.0 OR MIT: `rustc-hash`, which `manifold-rust` brings in.
+//! - MIT OR Apache-2.0: `rustversion`, which the older dashu crates of `manifold-rust` bring in.
+//! - BSL-1.0: `clipper2-rust`, which `manifold-rust` brings in (chapter 29 lists it as an oracle).
 //! - MIT/Apache-2.0: `lcov` and `arraydeque` (the older spelling of MIT OR Apache-2.0).
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident` and `unicode-normalization`.

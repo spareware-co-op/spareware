@@ -16141,6 +16141,29 @@
           "target": "lib"
         },
         {
+          "cost": "a job's boolean is the kernel's; sampling is the sample points times the triangles of the other side, on solids of a few dozen triangles; the exact reference runs only on a difference.",
+          "does": "[`jobs`] draws a night's seeded pairs of closed solids with integer corners and a boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra. Each job is one JSON line in whole grid steps, so an exact oracle reads what the kernel read and a floating-point one reads integers an `f64` holds exactly, with no conversion to round. The harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer with `geom-mesh`'s boolean, and settles a difference by the exact reference ([`crate::flat_reference`]): whether the kernel's volume is the reference's.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/meshes.rs",
+          "guarantees": [
+            "**Exact oracles are compared exactly**: a rational volume, equal or not.",
+            "**The others can only refute**: volume and area are held to both sides' stated bounds, capped at ours plus the fit bound ([`Allowance`]), and the Hausdorff distance is measured by dense deterministic sampling, so it is a lower bound on the true distance.",
+            "**Refusals are compared**: a job one side refuses and the other answers is a difference, of kind `refused`, never a pass.",
+            "**Truth settles it**: an oracle is never trusted; [`Compared::Differ`]'s `settled` says what the reference found."
+          ],
+          "job": "Mesh booleans against outside oracles (chapter 28.10; piece G154): CGAL's Nef polyhedra compared exactly; Manifold, manifold-rust's rational engine and Cherchi's exact booleans, whose results leave them as decimals, by volume, area and two-sided Hausdorff distance.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.10 (`projects/engines/geometry/architecture/28-testing.md`). A solid's volume is the divergence theorem over a fan of each loop; a point on a face or an edge is Ericson, \"Real-Time Collision Detection\", 2005, section 5.1.5, closest point on a triangle."
+          },
+          "path": "geom_test::oracle::meshes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the register for each lookup.",
           "does": "a [`Signature`] groups differences: operation, oracle, kind of difference, input family. [`Register`] is the record of triaged signatures (`oracles/triaged.json`, [`REGISTER_PATH`]): [`Register::new_signatures`] says which of a night's are new, and only those fail it. [`fixture`] turns a triaged case into the [`Fixture`] 28.16 asks for.",
           "family": [],
