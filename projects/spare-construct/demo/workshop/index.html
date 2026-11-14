@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en" data-app="construct" data-disc="workshop">
+<head>
+<script>
+/* Workshop is a discipline inside Spare Construct: opened on its own, it goes to the Spare Construct frame, whose ribbon carries its tools. */
+if (window.parent === window) location.replace('../#plan:workshop');
+</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workshop · Spare Construct demo</title>
+<style>
+/* copied from design/tokens.css */
+:root {
+  --spare-red: #C8102E;
+  --spare-red-hover: #A80D26;
+  --spare-red-tint: #FCE9EC;
+  --ink: #1A1A1A;
+  --ink-2: #595959;
+  --ink-3: #8A8A8A;
+  --page: #FAF8F5;
+  --panel: #FFFFFF;
+  --panel-alt: #F7F6F3;
+  --sink: #F1EFEA;
+  --hairline: #E5E5E3;
+  --rule: #C9C9C9;
+  --danger: #B91C1C;  --danger-tint: #FDE8E8;
+  --success: #15803D; --success-tint: #E3F6E8;
+  --info: #1D4ED8;    --info-tint: #E3ECFD;
+  --font-ui: system-ui, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --text: 13px;
+  --radius: 3px;
+  --space: 8px;
+}
+/* Workshop's own light colour, the same as on Spare Construct's discipline button */
+html[data-disc="workshop"] { --app: #F2AFCF; --app-strong: #9A2C66; --app-tint: #FDEEF5; }
+
+/* Spare Construct · Workshop: browser 260 | view | properties 300, the same layout as every Spare Construct discipline.
+   Every colour, font and space comes from the tokens above. */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { font: var(--text)/1.4 var(--font-ui); color: var(--ink); background: var(--page); overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.app { display: grid; grid-template-columns: 260px minmax(0, 1fr) 300px; height: 100%; }
+aside { overflow: auto; background: var(--panel); min-width: 0; }
+#left { border-right: 1px solid var(--hairline); padding-bottom: 40px; }
+#right { border-left: 1px solid var(--hairline); padding-bottom: 40px; }
+.sec { padding: var(--space); border-bottom: 1px solid var(--hairline); }
+.lbl { display: flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin-bottom: 6px; }
+.lbl.sub { margin-top: var(--space); }
+.lbl .mini { margin-left: auto; }
+.pad { padding: var(--space); }
+.small { font-size: 12px; }
+.faint { color: var(--ink-2); }
+.mt { margin-top: var(--space); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+.seg { display: flex; margin: var(--space); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+.seg button { flex: 1; padding: 5px 0; border: 0; border-right: 1px solid var(--rule); background: var(--panel); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--app); font-weight: 600; }
+.list { list-style: none; margin: 0; padding: 0; }
+.leaf { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; border: 0; border-left: 3px solid transparent; background: none; text-align: left; cursor: pointer; }
+.leaf:hover { background: var(--app-tint); }
+.leaf.cur { background: var(--app-tint); border-left-color: var(--app-strong); font-weight: 600; }
+.leaf .n { margin-left: auto; color: var(--ink-2); font-size: 12px; font-weight: 400; font-family: var(--font-mono); }
+.mini { padding: 0 4px; min-width: 20px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); cursor: pointer; line-height: 18px; }
+.mini:disabled { color: var(--ink-3); cursor: default; }
+.params { width: 100%; border-collapse: collapse; }
+.params td { padding: 1px 0; }
+.params tr.cur .pname { font-weight: 600; color: var(--app-strong); }
+.params tr.bad input { border-color: var(--danger); }
+.pname { border: 0; background: none; padding: 0 4px 0 0; cursor: pointer; font-family: var(--font-mono); font-size: 12px; text-align: left; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.params input { width: 100%; padding: 2px 4px; border: 1px solid var(--hairline); border-radius: var(--radius); font-family: var(--font-mono); font-size: 12px; }
+.u { color: var(--ink-3); font-size: 11px; padding-left: 4px; }
+.hist { list-style: none; margin: 0; padding: 0; }
+.hist li button { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; border: 0; border-left: 3px solid transparent; background: none; text-align: left; cursor: pointer; }
+.hist li button:hover { background: var(--app-tint); }
+.hist li.cur button { background: var(--app-tint); border-left-color: var(--app-strong); font-weight: 600; }
+.hist .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist li.rolled_back, .hist li.suppressed { color: var(--ink-3); }
+.hist li.suppressed .nm { text-decoration: line-through; }
+.hist li.waits .ic { color: var(--ink-3); }
+.endm { display: flex; align-items: center; gap: 4px; margin: 2px 0; padding: 2px 6px; border-top: 2px solid var(--app-strong); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--app-strong); }
+.endm span { flex: 1; }
+.badge { flex: none; padding: 0 5px; border: 1px solid var(--rule); border-radius: var(--radius); font-size: 11px; font-weight: 400; background: var(--panel); }
+.badge.wait { border-color: var(--app-strong); background: var(--app-tint); }
+.badge.bad { border-color: var(--danger); background: var(--danger-tint); }
+.badge.n { color: var(--ink-2); }
+main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.vhead { display: flex; align-items: center; gap: var(--space); padding: 6px 10px; border-bottom: 1px solid var(--hairline); background: var(--panel); }
+.vhead h2 { margin: 0; font-size: 13px; }
+.eng { padding: 0 6px; border: 1px solid var(--app-strong); border-radius: var(--radius); background: var(--app-tint); font-size: 11px; }
+.eng[data-engine="kernel"] { background: var(--app); }
+#vinfo { margin-left: auto; color: var(--ink-2); font-size: 12px; }
+#v3d { position: relative; flex: 1; min-height: 0; background: var(--panel); }
+#v3d canvas { display: block; }
+#vdraw { flex: 1; min-height: 0; overflow: auto; padding: 16px; background: var(--sink); }
+#vdraw .sheet { display: block; width: 100%; max-width: 1200px; height: auto; margin: 0 auto; }
+.sheet .paper { fill: var(--panel); }
+.sheet .frame, .sheet .tb rect, .sheet .pl rect { fill: none; stroke: var(--ink); stroke-width: .5; }
+.sheet .tb path, .sheet .pl path { fill: none; stroke: var(--ink); stroke-width: .25; }
+.sheet .view path { fill: none; stroke: var(--ink); stroke-width: .35; stroke-linejoin: round; }
+.sheet .dim path { fill: none; stroke: var(--ink-2); stroke-width: .18; }
+.sheet .dim path.ar { fill: var(--ink-2); stroke: none; }
+.sheet text { font-family: var(--font-ui); font-size: 3.2px; fill: var(--ink); }
+.sheet .tl { font-size: 2.2px; fill: var(--ink-3); letter-spacing: .1px; }
+.sheet .tv { font-size: 3.6px; }
+.sheet .vl { font-size: 2.8px; fill: var(--ink-2); }
+.sheet .note { font-size: 2.6px; fill: var(--ink-2); }
+.sheet .bal path { fill: none; stroke: var(--ink); stroke-width: .2; }
+.sheet .bal circle { fill: var(--ink); }
+.sheet .bal circle.o { fill: var(--panel); stroke: var(--ink); stroke-width: .3; }
+#toast { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: 80%; padding: 6px 12px; border: 1px solid var(--ink); border-radius: var(--radius); background: var(--panel); }
+.fld { display: block; margin-bottom: 6px; }
+.fld span { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 2px; }
+.fld input, .fld select, .fld textarea { width: 100%; padding: 3px 6px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); }
+.fld input:focus, .fld select:focus, .fld textarea:focus, button:focus-visible { outline: 2px solid var(--app-strong); outline-offset: 1px; }
+.fld input[type="range"] { padding: 0; border: 0; accent-color: var(--app-strong); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.pts { width: 100%; border-collapse: collapse; }
+.pts input { width: 100%; padding: 2px 4px; border: 1px solid var(--hairline); border-radius: var(--radius); font-family: var(--font-mono); font-size: 12px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); cursor: pointer; }
+.btn:hover { border-color: var(--ink); }
+.btn:disabled { color: var(--ink-3); cursor: default; border-color: var(--hairline); }
+.btn.on { background: var(--app); border-color: var(--app-strong); }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.note { padding: 6px 8px; border-left: 3px solid var(--rule); background: var(--panel-alt); margin-bottom: 6px; }
+.note.ok { border-left-color: var(--success); background: var(--success-tint); }
+.note.bad { border-left-color: var(--danger); background: var(--danger-tint); }
+.note.wait { border-left-color: var(--app-strong); background: var(--app-tint); }
+.props { width: 100%; border-collapse: collapse; font-size: 12px; }
+.props th { text-align: left; font-weight: 400; color: var(--ink-2); padding: 2px 8px 2px 0; vertical-align: top; white-space: nowrap; }
+.props td { padding: 2px 0; font-family: var(--font-mono); }
+.waits { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.waits li { display: flex; gap: 6px; padding: 3px 0; color: var(--ink-2); }
+.waits b { color: var(--ink); font-weight: 600; }
+.skv { display: block; width: 100%; height: 150px; margin: 6px 0; border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--panel-alt); }
+.skv path { fill: var(--app-tint); stroke: var(--app-strong); stroke-width: .6%; vector-effect: non-scaling-stroke; }
+.skv circle { fill: var(--app-strong); }
+.skv.bad path { fill: var(--danger-tint); stroke: var(--danger); }
+.skv[data-act] { cursor: crosshair; }
+@media (max-width: 760px) { .app { grid-template-columns: 1fr; grid-template-rows: auto 60vh auto; overflow: auto; } body { overflow: auto; } }
+</style>
+<link rel="stylesheet" href="../../../../design/ribbon/ribbon.css">
+<script src="../../../../design/ribbon/ribbon.js"></script>
+<!-- three.js 0.170.0, MIT licence: the same version the Spare Construct app loads (app/head.html). -->
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="app">
+  <aside id="left" aria-label="Workspaces, parts, parameters and history"></aside>
+  <main>
+    <div class="vhead"><h2 id="vtitle">Part</h2><span id="engine" class="eng" data-engine="prototype">Prototype</span><span id="vinfo" aria-live="polite"></span></div>
+    <div id="v3d" aria-label="3D view: drag to turn, scroll to zoom, click a body to select its feature"></div>
+    <div id="vdraw" hidden></div>
+    <div id="toast" role="status" hidden></div>
+  </main>
+  <aside id="right" aria-label="Properties"></aside>
+</div>
+<datalist id="pnames"></datalist>
+<script type="module" src="js/ui.js"></script>
+</body>
+</html>
