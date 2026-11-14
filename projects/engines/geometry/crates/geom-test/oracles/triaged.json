@@ -1,5 +1,54 @@
 {
   "format": 1,
   "about": "Every triaged oracle difference (chapter 28.10), by signature: a nightly run fails only on a signature not here, and each ends as a fixture.",
-  "records": []
+  "records": [
+    {
+      "signature": {
+        "operation": "mesh.union",
+        "oracle": "manifold",
+        "kind": "hausdorff",
+        "family": "tetrahedra"
+      },
+      "outcome": "ours",
+      "fixture": "meshes/0001-union-fold-in-the-export",
+      "reference": "spareware PR #878 (fix/G154-export-fold c3b02f41: the export's triangles cover what a face's rounded outline encloses) and join/oracles-live 56e2e078 (the comparison measures the kernel's exact result)",
+      "why": "Ours: the comparison measured the kernel's result through the export's triangles, whose rounded outline of face x = 8 folded back along itself, so they left part of the face bare (1.022 steps from Manifold's right answer); the exact volume was the reference's. Oracle run 43548473272, job 1763."
+    },
+    {
+      "signature": {
+        "operation": "mesh.union",
+        "oracle": "manifold",
+        "kind": "unmeasured",
+        "family": "tetrahedra"
+      },
+      "outcome": "ours",
+      "fixture": "meshes/0002-union-measured-through-rounding",
+      "reference": "join/oracles-live 56e2e078 (the comparison measures the kernel's exact result, not the export's triangles)",
+      "why": "Ours: the comparison measured the kernel's result through the export's triangles, which rightly refuse face 0 because its rounded sides cross, so the job went unmeasured; the exact volume was the reference's and Manifold's answer agrees with the exact faces. Oracle run 43548473272, job 1891."
+    },
+    {
+      "signature": {
+        "operation": "mesh.difference",
+        "oracle": "manifold",
+        "kind": "unmeasured",
+        "family": "tetrahedra"
+      },
+      "outcome": "ours",
+      "fixture": "meshes/0003-difference-measured-through-rounding",
+      "reference": "join/oracles-live 56e2e078 (the comparison measures the kernel's exact result, not the export's triangles)",
+      "why": "Ours: the comparison measured the kernel's result through the export's triangles, which rightly refuse face 10 because its rounded sides cross, so the job went unmeasured; the exact volume was the reference's and Manifold's answer agrees with the exact faces. Oracle run 43548038439, job 1623."
+    },
+    {
+      "signature": {
+        "operation": "mesh.intersection",
+        "oracle": "manifold",
+        "kind": "unmeasured",
+        "family": "tetrahedra"
+      },
+      "outcome": "ours",
+      "fixture": "meshes/0004-intersection-measured-through-rounding",
+      "reference": "join/oracles-live 56e2e078 (the comparison measures the kernel's exact result, not the export's triangles)",
+      "why": "Ours: the comparison measured the kernel's result through the export's triangles, which rightly refuse face 3 because its rounded sides cross, so the job went unmeasured (and before 994fc5dd ended the night); the exact volume was the reference's and Manifold's answer agrees with the exact faces. Oracle run 43542140594, job 742."
+    }
+  ]
 }

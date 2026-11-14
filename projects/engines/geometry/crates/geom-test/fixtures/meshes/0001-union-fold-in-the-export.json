@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "id": "meshes/0001-union-fold-in-the-export",
+  "source": {
+    "oracle": {
+      "oracle": "manifold",
+      "signature": "mesh.union/manifold/hausdorff/tetrahedra",
+      "outcome": "ours"
+    }
+  },
+  "fixed_by": "spareware PR #878 (fix/G154-export-fold c3b02f41: the export's triangles cover what a face's rounded outline encloses) and join/oracles-live 56e2e078 (the comparison measures the kernel's exact result)",
+  "speed": "fast",
+  "log": "d9d9f8da534b474643424f5286010101805834878201000001a70118400210031902800419190005190c800601073821831200007173706172652d6b69742066697874757265a01ab36d7aa3861401018059019c868150727272727272727272727272727272726a6d6573682e756e696f6e01805901667901637b226964223a313736332c2266616d696c79223a2274657472616865647261222c226f70223a22756e696f6e222c2261223a7b227665727469636573223a5b5b392c31322c395d2c5b31302c31312c365d2c5b31352c31332c31365d2c5b362c362c31335d5d2c22747269616e676c6573223a5b5b302c322c315d2c5b302c312c335d2c5b312c322c335d2c5b302c332c325d5d7d2c2262223a7b227665727469636573223a5b5b322c362c31305d2c5b382c362c31305d2c5b382c31322c31305d2c5b322c31322c31305d2c5b322c362c31365d2c5b382c362c31365d2c5b382c31322c31365d2c5b322c31322c31365d5d2c22747269616e676c6573223a5b5b302c322c315d2c5b302c332c325d2c5b342c352c365d2c5b342c362c375d2c5b302c312c355d2c5b302c352c345d2c5b312c322c365d2c5b312c362c355d2c5b322c332c375d2c5b322c372c365d2c5b332c302c345d2c5b332c342c375d5d7d7d821bffffffffffffffff1bffffffffffffffff1a8b3c68a686020101805824820258207105a3eb6b8d55d37bc73220c1824b8b51b670debe9de0003b99b58604d038991a91577a50",
+  "expect": [
+    {
+      "edition": "pre-edition",
+      "operations": {
+        "mesh.union": 1
+      },
+      "expect": {
+        "ok": {
+          "hash": "d3a3551edf3947f42a6b420cc194438d2bc1eb00d9bb46e11979645dfdd72b1e",
+          "work": {
+            "work": 0,
+            "logical_bytes": 0
+          },
+          "measures": {
+            "volume6": null,
+            "area2": null,
+            "counts": {
+              "bodies": 0,
+              "shells": 0,
+              "faces": 0,
+              "edges": 0,
+              "vertices": 0
+            },
+            "box": null,
+            "exactness": "exact"
+          }
+        }
+      }
+    }
+  ],
+  "status": "pass",
+  "history": []
+}
