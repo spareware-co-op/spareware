@@ -285,6 +285,10 @@ fn a_closed_cube_stays_closed_and_within_epsilon() {
         "{}",
         out.triangles().len()
     );
+    // On a closed surface every kept collapse removes two triangles.
+    let (kept, _) = out.operations();
+    assert_eq!(kept, (input.1.len() - out.triangles().len()) as u64 / 2);
+    assert_eq!(out.epsilon(), epsilon);
     two_way(&input, &out, epsilon);
 }
 
@@ -318,6 +322,32 @@ fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
     assert!(tight.triangles().len() < input.1.len());
     two_way(&input, &loose, 60);
     two_way(&input, &tight, 24);
+}
+
+/// A spike the forward test alone would flatten: its walls are steep, so the base under it is
+/// within h of them and a flat patch there lies inside the input's envelope, but its tip is far from
+/// any flat patch. Only the backward test (the input inside the result's envelope) keeps it.
+#[test]
+fn a_thin_spike_is_kept_by_the_backward_test() {
+    let input = sheet(4, 10, |i, j| if (i, j) == (2, 2) { 100 } else { 0 });
+    let epsilon = 24;
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate { epsilon, target: 0 },
+        &Exec::serial(),
+        &mut meter(),
+    )
+    .unwrap();
+    assert!(
+        out.points()
+            .iter()
+            .any(|q| q.z.get() > 100 - epsilon as i64),
+        "{:?}",
+        out.points()
+    );
+    assert!(out.triangles().len() < input.1.len());
+    two_way(&input, &out, epsilon);
 }
 
 #[test]
@@ -445,6 +475,28 @@ fn inputs_that_are_not_surfaces_are_refused() {
         run(&bow, &[[0, 1, 2], [0, 3, 4]]),
         Err(ModelError::NotSurface { .. })
     ));
+}
+
+#[test]
+fn errors_say_what_went_wrong() {
+    assert_eq!(
+        ModelError::Index { face: 3 }.to_string(),
+        "triangle 3 names a missing vertex"
+    );
+    assert_eq!(
+        ModelError::Flat { face: 1 }.to_string(),
+        "triangle 1 has no area"
+    );
+    assert_eq!(
+        ModelError::NotSurface { face: 2 }.to_string(),
+        "triangle 2 does not join the others as a surface"
+    );
+    assert_eq!(
+        ModelError::Full.to_string(),
+        "more vertices or triangles than a u32 numbers"
+    );
+    let inner = EnvelopeError::Num(NumError::Degenerate);
+    assert_eq!(ModelError::Envelope(inner).to_string(), inner.to_string());
 }
 
 #[test]

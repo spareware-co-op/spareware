@@ -283,6 +283,77 @@ fn a_surface_answers_for_every_triangle() {
 }
 
 #[test]
+fn boxes_and_triangles_near_a_body_are_found_and_far_ones_are_not() {
+    // The body's box: the triangle's, padded by h = 2, from (−2, −2, −2) to (12, 12, 2).
+    let body = TriangleEnvelope::new([p(0, 0, 0), p(10, 0, 0), p(0, 10, 0)], 2).unwrap();
+    assert!(body.reaches([1, 1, 0], [2, 2, 0]));
+    // Touching at a corner, from above and from below.
+    assert!(body.reaches([12, 12, 2], [20, 20, 20]));
+    assert!(body.reaches([-9, -9, -9], [-2, -2, -2]));
+    // A step past each side.
+    for (low, high) in [
+        ([13, 0, 0], [20, 1, 1]),
+        ([-20, 0, 0], [-3, 1, 1]),
+        ([0, 13, 0], [1, 20, 1]),
+        ([0, -20, 0], [1, -3, 1]),
+        ([0, 0, 3], [1, 1, 5]),
+        ([0, 0, -5], [1, 1, -3]),
+    ] {
+        assert!(!body.reaches(low, high), "{low:?} {high:?}");
+    }
+    assert!(
+        body.may_meet([p(5, 5, 1), p(30, 5, 1), p(5, 30, 1)])
+            .unwrap()
+    );
+    assert!(
+        !body
+            .may_meet([p(5, 5, 3), p(30, 5, 3), p(5, 30, 3)])
+            .unwrap()
+    );
+    // A surface's triangles near a box, by their positions in the list.
+    let triangles = [
+        [p(0, 0, 0), p(100, 0, 0), p(0, 100, 0)],
+        [p(200, 200, 50), p(300, 200, 50), p(200, 300, 50)],
+    ];
+    let envelope = Envelope::new(&triangles, 10, &Exec::serial(), &mut meter()).unwrap();
+    let mut m = meter();
+    assert_eq!(
+        envelope
+            .near_keys([10, 10, 0], [20, 20, 0], &mut m)
+            .unwrap(),
+        [0]
+    );
+    assert_eq!(
+        envelope
+            .near_keys([250, 250, 50], [260, 260, 50], &mut m)
+            .unwrap(),
+        [1]
+    );
+    let mut both = envelope
+        .near_keys([0, 0, 0], [300, 300, 50], &mut m)
+        .unwrap();
+    both.sort_unstable();
+    assert_eq!(both, [0, 1]);
+    assert_eq!(
+        envelope
+            .near_keys([500, 500, 500], [600, 600, 600], &mut m)
+            .unwrap(),
+        Vec::<u64>::new()
+    );
+    // Whole triangles: one on the surface is inside, one lifted past the envelope is not.
+    assert!(
+        envelope
+            .covers([p(10, 10, 2), p(60, 10, 2), p(10, 60, 2)], &mut m)
+            .unwrap()
+    );
+    assert!(
+        !envelope
+            .covers([p(10, 10, 9), p(60, 10, 9), p(10, 60, 9)], &mut m)
+            .unwrap()
+    );
+}
+
+#[test]
 fn the_width_is_absolute() {
     // The same triangle at either end of the frame has the same envelope, moved.
     let e = (1_i64 << 40) - 200;
