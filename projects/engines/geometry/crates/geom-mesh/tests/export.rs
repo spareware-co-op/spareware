@@ -19,18 +19,21 @@
 #[cfg(not(target_family = "wasm"))]
 use std::num::NonZeroUsize;
 
+use geom_mesh::boolean::boolean;
 use geom_mesh::exact::ExactMesh;
 use geom_mesh::exact::build::{Polygons, build};
 use geom_mesh::export::{Export, ExportError, Flaw, Format, decimal, export, triangles};
 use geom_num::Exactness;
 use geom_num::grid::{GridStep, Steps};
+use geom_op::{OpId, OpPath};
+use geom_poly::winding::WindingTest;
 #[cfg(not(target_family = "wasm"))]
 use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
 
 mod shapes;
 
-use shapes::{cuboid, frustum, g, join, soup};
+use shapes::{cuboid, frustum, g, join, soup, source};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 22))
@@ -435,6 +438,117 @@ fn plates_that_come_to_touch_are_named() {
         flaws.iter().any(|f| matches!(f, Flaw::Touching { .. })),
         "{flaws:?}"
     );
+}
+
+/// A solid as an oracle job writes it: corners, and triangles counter-clockwise from outside.
+fn solid(corners: &[[i64; 3]], triangles: &[[u32; 3]], name: u8) -> ExactMesh {
+    let faces: Vec<&[u32]> = triangles.iter().map(<[u32; 3]>::as_slice).collect();
+    let mut input = soup(
+        corners.iter().map(|&[x, y, z]| g(x, y, z)).collect(),
+        &faces,
+    );
+    input.runs = vec![source(name)];
+    mesh(&input)
+}
+
+/// The box from `low` to `high`, as the mesh oracles' jobs write it.
+fn boxed(low: [i64; 3], high: [i64; 3]) -> ExactMesh {
+    let ([a, b, c], [x, y, z]) = (low, high);
+    let corners = [
+        [a, b, c],
+        [x, b, c],
+        [x, y, c],
+        [a, y, c],
+        [a, b, z],
+        [x, b, z],
+        [x, y, z],
+        [a, y, z],
+    ];
+    let triangles = [
+        [0, 2, 1],
+        [0, 3, 2],
+        [4, 5, 6],
+        [4, 6, 7],
+        [0, 1, 5],
+        [0, 5, 4],
+        [1, 2, 6],
+        [1, 6, 5],
+        [2, 3, 7],
+        [2, 7, 6],
+        [3, 0, 4],
+        [3, 4, 7],
+    ];
+    solid(&corners, &triangles, 2)
+}
+
+/// The tetrahedron on `corners`, in the order a mesh oracle's job gives them.
+fn job_tetrahedron(corners: &[[i64; 3]; 4]) -> ExactMesh {
+    solid(corners, &[[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2]], 1)
+}
+
+/// What `test` keeps of `a` and `b`.
+fn combined(a: &ExactMesh, b: &ExactMesh, test: WindingTest) -> ExactMesh {
+    let path = OpPath::new(OpId::from_bytes([0x72; 16]));
+    let mut unmetered = WorkMeter::new(Budget::UNLIMITED);
+    let made = boolean(&[a, b], &[test], &path, &Exec::serial(), &mut unmetered).unwrap();
+    made.into_iter().next().unwrap().mesh
+}
+
+#[test]
+fn a_face_whose_rounded_outline_runs_back_along_itself_is_still_covered() {
+    // Job 1763 of the Manifold night of seed 0000000a23b0f7b8 (chapter 28.10): a tetrahedron and
+    // a box, united. The box's side x = 8 keeps the outline of a notch the tetrahedron makes in
+    // it, whose corners (y, z) (8.39, 10), (7.56, 13.67), (10, 10.33) and (9.4, 10) round to
+    // (8, 10), (8, 14), (10, 10) and (9, 10), so the rounded outline runs from (10, 10) back to
+    // (9, 10) and on along z = 10 over the same stretch. Its triangles kept one inside the notch
+    // and left two bare, nearly a third of the face, which a Hausdorff distance against
+    // Manifold's answer showed.
+    let tet = job_tetrahedron(&[[9, 12, 9], [10, 11, 6], [15, 13, 16], [6, 6, 13]]);
+    let m = combined(&tet, &boxed([2, 6, 10], [8, 12, 16]), WindingTest::unite());
+    let plane = m.parts().planes[m.parts().face_plane[7].row as usize];
+    assert_eq!((plane.n(), plane.d()), ([1, 0, 0], -8));
+    let t = triangles(&m, &mut meter()).unwrap();
+    let mut twice = 0;
+    for (corner, &face) in t.corners.iter().zip(&t.faces) {
+        if face == 7 {
+            let [p, q, r] = corner.map(|v| {
+                let p = t.vertices[v as usize];
+                [p.y.get(), p.z.get()]
+            });
+            let area = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+            assert!(area > 0, "{corner:?} is turned over");
+            twice += area;
+        }
+    }
+    // The rounded outline holds the square from (6, 10) to (12, 16), 36, less the notch's
+    // triangle (8, 10), (8, 14), (10, 10), 4.
+    assert_eq!(twice, 2 * (36 - 4));
+}
+
+#[test]
+fn a_face_whose_rounded_sides_cross_is_refused() {
+    // Job 742 of the Manifold night of seed 0000000a235056b2: a tetrahedron and a box,
+    // intersected. On the face y = 14 the corners (z, x) round to (7, 14), (6, 14), (5, 10) and
+    // (5, 11), whose sides from (6, 14) to (5, 10) and from (5, 11) to (7, 14) cross: no triangles
+    // between those corners are the face, so it is refused, even when rounding is accepted.
+    let tet = job_tetrahedron(&[[4, 11, 7], [16, 9, 16], [14, 16, 3], [4, 10, 10]]);
+    let m = combined(
+        &tet,
+        &boxed([10, 10, 4], [14, 14, 8]),
+        WindingTest::intersect(2),
+    );
+    let flaws = vec![Flaw::Flipped { face: 3 }];
+    let refused = ExportError::RoundingFlip { flaws };
+    assert_eq!(triangles(&m, &mut meter()), Err(refused.clone()));
+    let accepted = export(
+        &m,
+        Format::Obj,
+        GridStep::Q0,
+        true,
+        &Exec::serial(),
+        &mut meter(),
+    );
+    assert_eq!(accepted, Err(refused));
 }
 
 #[cfg(not(target_family = "wasm"))]
