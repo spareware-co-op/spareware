@@ -73,7 +73,7 @@ use geom_topo::{
     Sense, Shell, TopoError, Vertex,
 };
 
-mod piece;
+pub(crate) mod piece;
 
 use piece::{
     On, Piece, Shapes, Way, circles_of, cmp_pt, cut, cut_oval, cut_oval_arc, cut_whole, meetings,
@@ -578,7 +578,7 @@ pub fn arrange(
 /// plus its major-axis vector round to its centre less it and back, which list the circle; `None`
 /// for any other ellipse, or for one whose points there are off the grid. The sweep cuts the circle
 /// whole, at its leftmost and rightmost points only.
-fn as_circle(e: &Ellipse2) -> Option<[Arc2; 2]> {
+pub(crate) fn as_circle(e: &Ellipse2) -> Option<[Arc2; 2]> {
     if e.ratio() != (1, 1) {
         return None;
     }

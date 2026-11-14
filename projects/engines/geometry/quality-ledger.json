@@ -9037,14 +9037,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-2d/src/update.rs",
-      "mutant": "replace > with >= in angle_cmp",
-      "line_text": "let half = |v: [i128; 2]| u8::from(!(v[1] > 0 || (v[1] == 0 && v[0] > 0)));",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "The comparisons only say which half a key's angle is in. With >= at the first, the negative x axis (angle pi) moves into the upper half, where it still orders after every angle in (0, pi) and before the lower half, and ties only with the positive x axis; with >= at the second only (0, 0) moves, and no turn of a nonzero direction is (0, 0). A key on the positive x axis is a turn of nothing: the way back itself in face_cycle, passed over whenever there is another way, or straight up in locate, which cannot leave the vertex the ray meets first (an edge going up from it would be met first). So no order asked for changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-2d/src/update.rs",
       "mutant": "replace < with <= in find",
       "line_text": "while a < b {",
       "occurrences": 2,

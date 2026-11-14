@@ -33,10 +33,10 @@
     clippy::many_single_char_names
 )]
 
-use geom_2d::arrange::{ArrangeError, Arrangement, arrange};
-use geom_2d::update::{Cost, Half, Live, Location};
+use geom_2d::arrange::{ArrangeError, Arrangement, At, arrange};
+use geom_2d::update::{Cost, Half, Live, Location, Track};
 use geom_num::Sign;
-use geom_num::carrier::Rational2;
+use geom_num::carrier::{Carrier, Rational2};
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
 
@@ -248,6 +248,10 @@ fn rat(x: i128, y: i128, w: i128) -> Rational2 {
     Rational2::new(x, y, w).unwrap()
 }
 
+fn at(x: i128, y: i128, w: i128) -> At {
+    At::Rational(rat(x, y, w))
+}
+
 fn as_f64(r: &Rational2) -> (f64, f64) {
     let ([x, y], w) = r.coordinates();
     (x as f64 / w as f64, y as f64 / w as f64)
@@ -311,7 +315,7 @@ fn oracle_face(a: &Arrangement, at: (f64, f64)) -> Option<usize> {
 
 /// The face of the sweep's arrangement that has the half-edge `h` on its left.
 fn face_of_half(a: &Arrangement, h: &Half) -> usize {
-    let same = |r: &Rational2, v: u32| r.same(&vertex(a, v)).unwrap();
+    let same = |r: &At, v: u32| r.same(&a.vertices()[v as usize]).unwrap();
     let e = a
         .edges()
         .iter()
@@ -363,13 +367,17 @@ fn location_agrees_with_point_in_polygon_over_the_sweeps_cycles() {
             match got {
                 Location::Vertex(v) => {
                     vertices += 1;
-                    assert!(is_vertex && v.same(&at).unwrap(), "round {round}");
+                    assert!(
+                        is_vertex && v.same(&At::Rational(at)).unwrap(),
+                        "round {round}"
+                    );
                 }
-                Location::Edge(lo, hi) => {
+                Location::Edge(h) => {
                     edges += 1;
                     assert!(!is_vertex, "round {round}");
                     let found = a.edges().iter().any(|e| {
-                        lo.same(&vertex(&a, e.from)).unwrap() && hi.same(&vertex(&a, e.to)).unwrap()
+                        h.from.same(&a.vertices()[e.from as usize]).unwrap()
+                            && h.to.same(&a.vertices()[e.to as usize]).unwrap()
                     });
                     assert!(found, "round {round}: an edge of the sweep");
                 }
@@ -455,12 +463,18 @@ fn a_face_cycle_runs_round_the_boundary() {
     assert_eq!(live.face_cycle(&h, &mut m).unwrap().len(), 3);
 }
 
-/// The vertices of `cycle` as whole-step pairs, for comparing with a list.
-fn steps(cycle: &[Rational2]) -> Vec<(i128, i128)> {
-    cycle
+/// The vertices the half-edges of `cycle` start at, as whole-step pairs, for comparing with a list.
+fn steps(cycle: &[Half]) -> Vec<(i128, i128)> {
+    let starts: Vec<At> = cycle.iter().map(|h| h.from.clone()).collect();
+    steps_of(&starts)
+}
+
+/// Rational points as whole-step pairs.
+fn steps_of(points: &[At]) -> Vec<(i128, i128)> {
+    points
         .iter()
         .map(|v| {
-            let ([x, y], w) = v.coordinates();
+            let ([x, y], w) = v.rational().expect("a rational point").coordinates();
             assert_eq!((x % w, y % w), (0, 0), "{v:?} is a whole step");
             (x / w, y / w)
         })
@@ -501,8 +515,9 @@ fn a_walk_round_a_drawing_that_was_not_noded_stops_at_its_limit() {
     ])
     .unwrap();
     let half = Half {
-        from: rat(0, 0, 1),
-        to: rat(0, 3, 1),
+        from: at(0, 0, 1),
+        to: at(0, 3, 1),
+        on: Track::Line(Carrier::through(p(0, 0), p(0, 3)).unwrap()),
     };
     assert!(matches!(
         live.face_cycle(&half, &mut unlimited()),
@@ -510,8 +525,9 @@ fn a_walk_round_a_drawing_that_was_not_noded_stops_at_its_limit() {
     ));
     // A half-edge that is not an edge of the drawing is refused too.
     let stray = Half {
-        from: rat(0, 0, 1),
-        to: rat(1, 1, 1),
+        from: at(0, 0, 1),
+        to: at(1, 1, 1),
+        on: Track::Line(Carrier::through(p(0, 0), p(1, 1)).unwrap()),
     };
     assert!(matches!(
         live.face_cycle(&stray, &mut unlimited()),
@@ -523,7 +539,14 @@ fn a_walk_round_a_drawing_that_was_not_noded_stops_at_its_limit() {
 /// runs.
 fn assert_pieces_run_low_to_high(drawing: &Live, what: &str) {
     for piece in drawing.pieces() {
-        let (lo, hi, line) = (piece.lo(), piece.hi(), piece.line());
+        let Track::Line(line) = piece.track().unwrap() else {
+            panic!("{what}: a segment's piece on a circle: {piece:?}");
+        };
+        let (lo, hi) = (
+            *piece.lo().rational().unwrap(),
+            *piece.hi().rational().unwrap(),
+        );
+        let (lo, hi) = (&lo, &hi);
         assert_eq!(line.side(lo).unwrap(), Sign::Zero, "{what}: {piece:?}");
         assert_eq!(line.side(hi).unwrap(), Sign::Zero, "{what}: {piece:?}");
         let d = line.direction();
@@ -658,7 +681,7 @@ fn an_insert_costs_exactly_what_its_zone_needs() {
     assert_eq!(along.len(), live.len());
     let piece = along
         .pieces()
-        .find(|e| e.lo().same(&rat(10, 10, 1)).unwrap() && e.hi().same(&rat(11, 10, 1)).unwrap())
+        .find(|e| e.lo().same(&at(10, 10, 1)).unwrap() && e.hi().same(&at(11, 10, 1)).unwrap())
         .unwrap();
     assert_eq!(piece.sources().len(), 2);
     assert_eq!(piece.sources()[1], label);
@@ -715,7 +738,10 @@ fn location_and_face_walks_cross_chunks() {
     let Location::Face(Some(h)) = live.locate(&rat(10, 45, 1), &mut m).unwrap() else {
         panic!("a face");
     };
-    assert_eq!(steps(&[h.from, h.to]), [(10, 40), (11, 40)]);
+    assert_eq!(
+        steps_of(&[h.from.clone(), h.to.clone()]),
+        [(10, 40), (11, 40)]
+    );
     let outline = live.face_cycle(&h, &mut m).unwrap();
     assert_eq!(outline.len(), 160);
     // A corner and a point on a unit segment.

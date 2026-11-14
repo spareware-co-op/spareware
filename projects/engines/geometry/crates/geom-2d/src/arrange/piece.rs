@@ -9,7 +9,9 @@
 //! ([`side`]), where two pieces meet ([`meetings`]), and in what order pieces leave a point
 //! ([`order_at`]): by the half-plane their tangent points into, counter-clockwise from the negative x
 //! direction, then by the tangent's turn, then by curvature. The circles are listed once each
-//! ([`circles_of`]), so two arcs of one circle name the same circle.
+//! ([`circles_of`]), so two arcs of one circle name the same circle. The live arrangement
+//! (`crate::update`) asks the same questions of its pieces, and [`same_circle`] tells it when two
+//! arcs lie on one circle.
 //!
 //! A whole ellipse is cut at its leftmost and rightmost points, the one-root points
 //! `Crossing2::of_ellipse_extreme` gives ([`cut_oval`]), into a lower and an upper half split by the
@@ -132,7 +134,7 @@ pub(super) const fn ordering(s: Sign) -> Ordering {
 }
 
 /// Lexicographic order of (x, y).
-pub(super) fn cmp_pt(a: &At, b: &At) -> Result<Ordering, ArrangeError> {
+pub(crate) fn cmp_pt(a: &At, b: &At) -> Result<Ordering, ArrangeError> {
     match ordering(a.cmp_x(b)?) {
         Ordering::Equal => Ok(ordering(a.cmp_y(b)?)),
         other => Ok(other),
@@ -141,7 +143,7 @@ pub(super) fn cmp_pt(a: &At, b: &At) -> Result<Ordering, ArrangeError> {
 
 /// The cross product of two directions, as a sign; each part below 2^42, so each product is below
 /// 2^84 and fits.
-pub(super) fn cross_sign(a: [i128; 2], b: [i128; 2]) -> Result<Ordering, ArrangeError> {
+pub(crate) fn cross_sign(a: [i128; 2], b: [i128; 2]) -> Result<Ordering, ArrangeError> {
     let [ax, ay] = a;
     let [bx, by] = b;
     let l = ax.checked_mul(by).ok_or(ArrangeError::Range)?;
@@ -151,20 +153,20 @@ pub(super) fn cross_sign(a: [i128; 2], b: [i128; 2]) -> Result<Ordering, Arrange
 
 /// A circle the arcs lie on, with what its questions need.
 #[derive(Clone, Debug)]
-pub(super) struct Circle {
+pub(crate) struct Circle {
     /// The circle, in the form its canonical arc gives it.
-    pub(super) round: Round,
+    pub(crate) round: Round,
     /// Its centre.
-    centre: Rational2,
+    pub(crate) centre: Rational2,
     /// Its centre as a one-root point, for comparison with one.
     middle: Crossing2,
     /// The same circle about its centre, with its squared radius over the centre's weight squared.
-    disc: Disc,
+    pub(crate) disc: Disc,
 }
 
 impl Circle {
     /// The circle `round`, with its centre and squared radius read out once.
-    fn of(round: Round) -> Result<Circle, ArrangeError> {
+    pub(crate) fn of(round: Round) -> Result<Circle, ArrangeError> {
         let centre = round.centre();
         Ok(Circle {
             round,
@@ -177,7 +179,7 @@ impl Circle {
 
 /// An ellipse the pieces lie on, with what its questions need.
 #[derive(Clone, Debug)]
-pub(super) struct Oval {
+pub(crate) struct Oval {
     /// The ellipse, in the form its least-integer copy gives it.
     pub(super) ellipse: Ellipse2,
     /// A, B and C of its form, about its centre: below 2^126 each.
@@ -273,16 +275,16 @@ impl Oval {
 
 /// The circles and ellipses the pieces lie on, each listed once.
 #[derive(Clone, Debug, Default)]
-pub(super) struct Shapes {
+pub(crate) struct Shapes {
     /// The circles, as [`circles_of`] lists them.
-    pub(super) circles: Vec<Circle>,
+    pub(crate) circles: Vec<Circle>,
     /// The ellipses, as [`ovals_of`] lists them.
-    pub(super) ovals: Vec<Oval>,
+    pub(crate) ovals: Vec<Oval>,
 }
 
 /// What a piece lies on.
 #[derive(Clone, Copy, Debug)]
-pub(super) enum On {
+pub(crate) enum On {
     /// A line: its smallest carrier, running from the piece's lower end to its higher, and that
     /// direction, hi − lo divided by the parts' common factor.
     Line {
@@ -310,13 +312,13 @@ pub(super) enum On {
 
 /// A piece of the sweep, from its lexicographically lower end to its higher.
 #[derive(Clone, Debug)]
-pub(super) struct Piece {
+pub(crate) struct Piece {
     /// The lower end.
-    pub(super) lo: At,
+    pub(crate) lo: At,
     /// The higher end.
-    pub(super) hi: At,
+    pub(crate) hi: At,
     /// What it lies on.
-    pub(super) on: On,
+    pub(crate) on: On,
 }
 
 /// Which way a curve leaves a point: along a line, or along a circle or an ellipse,
@@ -324,7 +326,7 @@ pub(super) struct Piece {
 /// counter-clockwise (or the other way), or the ellipse's form's gradient at p turned so; and its
 /// curvature 0, 1 / r or −1 / r, or of an ellipse's sign.
 #[derive(Clone, Copy, Debug)]
-pub(super) enum Way<'a> {
+pub(crate) enum Way<'a> {
     /// Along a line, this way.
     Line([i128; 2]),
     /// Along a circle.
@@ -346,7 +348,7 @@ pub(super) enum Way<'a> {
 }
 
 /// The circle at `at` in the list.
-pub(super) fn circle_of(circles: &[Circle], at: u32) -> Result<&Circle, ArrangeError> {
+pub(crate) fn circle_of(circles: &[Circle], at: u32) -> Result<&Circle, ArrangeError> {
     usize::try_from(at)
         .ok()
         .and_then(|i| circles.get(i))
@@ -362,7 +364,7 @@ pub(super) fn oval_of(ovals: &[Oval], at: u32) -> Result<&Oval, ArrangeError> {
 }
 
 /// The way `piece` runs from its lower end, or from its higher end back when `back`.
-pub(super) fn way<'a>(
+pub(crate) fn way<'a>(
     piece: &Piece,
     shapes: &'a Shapes,
     back: bool,
@@ -418,7 +420,7 @@ fn against(p: &At, c: &Circle) -> Result<Sign, NumError> {
 /// # Errors
 ///
 /// [`ArrangeError::Range`] if a step did not fit.
-pub(super) fn side(piece: &Piece, shapes: &Shapes, p: &At) -> Result<Sign, ArrangeError> {
+pub(crate) fn side(piece: &Piece, shapes: &Shapes, p: &At) -> Result<Sign, ArrangeError> {
     match piece.on {
         On::Line { line, .. } => Ok(match p {
             At::Rational(r) => line.side(r)?,
@@ -625,7 +627,7 @@ fn apart(
 ///
 /// [`ArrangeError::Range`] if a step did not fit, and [`ArrangeError::Conic`] for a piece of an
 /// ellipse and a piece of a circle or of another ellipse that may meet ([`apart`]).
-pub(super) fn meetings(
+pub(crate) fn meetings(
     s: &Piece,
     t: &Piece,
     shapes: &Shapes,
@@ -980,7 +982,7 @@ fn bend(a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, ArrangeError> {
 /// # Errors
 ///
 /// [`ArrangeError::Range`] if a step did not fit.
-pub(super) fn order_at(p: &At, a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, ArrangeError> {
+pub(crate) fn order_at(p: &At, a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, ArrangeError> {
     let (ha, hb) = (half(tangent(p, a)?), half(tangent(p, b)?));
     if ha != hb {
         return Ok(ha.cmp(&hb));
@@ -993,6 +995,24 @@ pub(super) fn order_at(p: &At, a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, Arr
     }
 }
 
+/// The order of two circles by centre x, then y, then radius: `Equal` exactly when they are one
+/// circle, however each is stored.
+///
+/// # Errors
+///
+/// [`ArrangeError::Range`] if a step did not fit.
+pub(crate) fn same_circle(c: &Circle, e: &Circle) -> Result<Ordering, ArrangeError> {
+    match ordering(c.centre.cmp_x(&e.centre)?) {
+        Ordering::Equal => {}
+        other => return Ok(other),
+    }
+    match ordering(c.centre.cmp_y(&e.centre)?) {
+        Ordering::Equal => {}
+        other => return Ok(other),
+    }
+    radius(c, e)
+}
+
 /// The circles of `arcs`, each once, in order of centre x, then y, then radius, and for each arc its
 /// circle's place. Of the arcs on one circle, the one whose start, then centre, has the least
 /// integers gives the circle its stored form, so the list does not depend on the arcs' order.
@@ -1002,17 +1022,6 @@ pub(super) fn order_at(p: &At, a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, Arr
 /// [`ArrangeError::Range`] if a step did not fit, and [`ArrangeError::TooMany`] past 2^32 circles.
 pub(super) fn circles_of(arcs: &[Arc2]) -> Result<(Vec<Circle>, Vec<u32>), ArrangeError> {
     let all: Result<Vec<Circle>, _> = arcs.iter().map(|a| Circle::of(a.round())).collect();
-    let same_circle = |c: &Circle, e: &Circle| -> Result<Ordering, ArrangeError> {
-        match ordering(c.centre.cmp_x(&e.centre)?) {
-            Ordering::Equal => {}
-            other => return Ok(other),
-        }
-        match ordering(c.centre.cmp_y(&e.centre)?) {
-            Ordering::Equal => {}
-            other => return Ok(other),
-        }
-        radius(c, e)
-    };
     let form = |c: &Circle| {
         let on = c.round.on();
         let ([x, y], w) = c.centre.coordinates();
@@ -1070,7 +1079,7 @@ fn listed<T: Clone, K: Ord>(
 /// # Errors
 ///
 /// [`ArrangeError::Range`] if a step did not fit.
-pub(super) fn cut(
+pub(crate) fn cut(
     arc: &Arc2,
     circle: u32,
     circles: &[Circle],
@@ -1117,7 +1126,7 @@ pub(super) fn cut(
 /// # Errors
 ///
 /// [`ArrangeError::Range`] if a step did not fit.
-pub(super) fn cut_whole(
+pub(crate) fn cut_whole(
     circle: u32,
     circles: &[Circle],
     out: &mut Vec<Piece>,
