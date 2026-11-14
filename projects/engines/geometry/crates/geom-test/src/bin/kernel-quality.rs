@@ -1,5 +1,5 @@
 //! `kernel-quality`: the CI tool behind the geometry kernel's mutation and coverage gates and its
-//! weekly Miri run (section 28.8; `.github/workflows/kernel-quality.yml`).
+//! Miri run (section 28.8; `.github/workflows/kernel-quality.yml`).
 //!
 //! What it does: one subcommand per step of the workflow, each a thin front to a module of
 //! `geom_test`; `kernel-quality --help` lists them and `kernel-quality <command> --help` gives each
@@ -21,7 +21,9 @@
 //! - `affected` prints the kernel crates a coverage run measures, one per line, leaving out (and
 //!   naming on standard error) any without a function to measure ([`geom_test::coverage::has_code`]).
 //! - `miri-packages` prints the `-p` arguments of every kernel crate for the Miri run
-//!   ([`geom_test::miri`]).
+//!   ([`geom_test::miri`]); with `--changed`, of those whose tests the change reaches.
+//! - `mutants-files` prints the regular expression of the files a push to main's full mutation
+//!   run mutates ([`geom_test::mutants::push_files`]).
 //! - `fuzz-scope` prints which of `geom-fuzz`'s targets and `kernel-fuzz.yml`'s Kani proofs a
 //!   change can affect, and why, and writes the step outputs that workflow's jobs read
 //!   ([`geom_test::fuzz_scope`]); `.github/workflows/kernel-fuzz.yml`'s job `select` runs it.
@@ -97,7 +99,7 @@ struct Scope {
 enum ModeArg {
     /// A pull request's diff.
     Diff,
-    /// The weekly run over every mutant.
+    /// A full run over every mutant, or every mutant of some files.
     Full,
 }
 
@@ -158,9 +160,25 @@ enum Command {
     },
     /// Prints the `-p` arguments of every kernel crate, for the Miri run.
     MiriPackages {
+        /// Only the kernel crates whose tests these changed files reach (`test-scope`'s rule):
+        /// one path per line from the repository root.
+        #[arg(long, value_name = "FILES.txt")]
+        changed: Option<PathBuf>,
         /// The repository root.
         #[arg(long, default_value = ".")]
         repo: PathBuf,
+    },
+    /// Prints the regular expression of the files a push to main's full mutation run mutates
+    /// (empty: none), for `cargo mutants --re` and the judge's `--files`.
+    MutantsFiles {
+        /// The files the push touches, one path per line from the repository root.
+        #[arg(long, value_name = "FILES.txt")]
+        changed: PathBuf,
+        /// The push's unified diff of its Rust files.
+        #[arg(long, value_name = "DIFF")]
+        diff: PathBuf,
+        #[command(flatten)]
+        repo: Repo,
     },
     /// Prints which crates' tests a change can reach, and why.
     TestScope {
@@ -198,6 +216,13 @@ enum Command {
         #[arg(long, default_value = ".")]
         repo: PathBuf,
     },
+}
+
+/// A file's lines: one path each.
+fn read_lines(file: &Path) -> Result<Vec<String>, String> {
+    std::fs::read_to_string(file)
+        .map(|text| text.lines().map(str::to_owned).collect())
+        .map_err(|e| format!("{}: {e}", file.display()))
 }
 
 fn canonical(repo: &Path) -> Result<PathBuf, String> {
@@ -495,9 +520,33 @@ fn run(cli: Cli) -> Result<bool, String> {
             }
             Ok(true)
         }
-        Command::MiriPackages { repo } => {
-            let packages = geom_test::miri::packages(&metadata(&canonical(&repo)?)?)?;
+        Command::MiriPackages { changed, repo } => {
+            let metadata = metadata(&canonical(&repo)?)?;
+            let mut packages = geom_test::miri::packages(&metadata)?;
+            if let Some(file) = changed {
+                let files = read_lines(&file)?;
+                let selection = test_scope::Scope::read(&metadata)?.select(Some(&files));
+                let running = selection.running();
+                packages.retain(|p| running.contains(&p.as_str()));
+            }
             println!("{}", geom_test::miri::cargo_args(&packages));
+            Ok(true)
+        }
+        Command::MutantsFiles {
+            changed,
+            diff,
+            repo,
+        } => {
+            let root = canonical(&repo.repo)?;
+            let ledger = read_ledger(&root, repo.ledger.as_deref())?;
+            let kernel = geom_test::foundation::kernel_crates(&root).map_err(|e| e.to_string())?;
+            let diff =
+                std::fs::read_to_string(&diff).map_err(|e| format!("{}: {e}", diff.display()))?;
+            let files = mutants::push_files(&read_lines(&changed)?, &diff, &ledger, &kernel);
+            for f in &files {
+                eprintln!("mutates {f}");
+            }
+            println!("{}", mutants::files_pattern(&files));
             Ok(true)
         }
         Command::TestScope {

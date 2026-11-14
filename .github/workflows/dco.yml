@@ -11,6 +11,13 @@ name: Sign-off
 # branch in, and their sign-off is not its author's to give. The compare API says whether a commit
 # is on the default branch: "ahead" or "identical" from the commit to the branch means the branch
 # holds it. A failed call fails the check, so a commit is skipped only when GitHub says so.
+#
+# GitHub's merge queue for main merges with a merge commit of its own, with no sign-off (the
+# queue's merge method is "merge", .github/rulesets/protect-main.json, so a train keeps its signed
+# commits and merges as they are; a squash or rebase would rewrite them). Main is then moved to
+# exactly that commit, so every such commit is on the default branch from the moment it lands, and
+# the rule above skips it on every later pull request that carries it. A queue commit that never
+# lands is in no pull request.
 
 on:
   pull_request:

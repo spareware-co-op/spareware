@@ -12,8 +12,8 @@
 //! boundaries). Each starts with a few random bytes, so the words fall on every alignment of the
 //! harness's own fields, and is cut to the case's length, so every hostile kind also comes short.
 //! The test's count is sized for an optimised build (about two seconds, at most ten for the
-//! slowest harnesses); a build with debug assertions runs the first tenth of the cases
-//! ([`DEBUG_SHARE`]), the same cases, so the debug legs take about as long.
+//! slowest harnesses); an unoptimised build runs the first tenth of the cases ([`DEBUG_SHARE`]),
+//! the same cases, so the debug legs take about as long.
 //!
 //! Guarantees:
 //!
@@ -124,14 +124,17 @@ pub fn run(
     run_cases(label, seed, for_this_build(cases), max_len, harness)
 }
 
-/// A build with debug assertions runs one case in this many of a test's count: its first cases.
+/// An unoptimised build runs one case in this many of a test's count: its first cases.
 pub const DEBUG_SHARE: u32 = 10;
 
-/// The cases [`run`] runs of `cases`, sized for an optimised build: all of them, or with debug
-/// assertions on the first [`DEBUG_SHARE`]th (at least one, when `cases` is not zero).
+/// The cases [`run`] runs of `cases`, sized for an optimised build: all of them, or in an
+/// unoptimised build (`opt-level` 0, `cfg(unoptimised)`, which `build.rs` sets) the first
+/// [`DEBUG_SHARE`]th (at least one, when `cases` is not zero). An optimised build with debug
+/// assertions on, as the pull requests' test run is (the owner's testing principle 3), runs them
+/// all.
 #[must_use]
 pub fn for_this_build(cases: u32) -> u32 {
-    if cfg!(debug_assertions) {
+    if cfg!(unoptimised) {
         cases
             .checked_div(DEBUG_SHARE)
             .unwrap_or(0)
@@ -461,7 +464,7 @@ mod tests {
         let hostile: Vec<Hostile> = kinds.iter().skip(1).step_by(2).flatten().copied().collect();
         assert_eq!(hostile, HOSTILE_KINDS);
         assert_eq!(for_this_build(0), 0);
-        if cfg!(debug_assertions) {
+        if cfg!(unoptimised) {
             assert_eq!((for_this_build(5), for_this_build(1_000)), (1, 100));
         } else {
             assert_eq!(for_this_build(1_000), 1_000);

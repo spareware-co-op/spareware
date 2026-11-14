@@ -51,10 +51,10 @@ Twelve workflows in `.github/workflows/` guard and measure the kernel. [AGENTS.m
 | `kernel-dev.yml` | The development crates on WebAssembly, every generated file current, and every header complete with `MAP.json` current |
 | `kernel-bench.yml` | The count gates: no benchmark more than 5% more expensive than on the merge base |
 | `kernel-fuzz.yml` | The bounded Kani proofs of the `geom-fuzz` targets and of `geom-num`, `geom-op`, `geom-topo` and `geom-format`, each run when the change reaches it; the fuzz harnesses themselves are seeded tests of the suite (`kernel.yml`) |
-| `kernel-golden.yml` | The golden store: every golden is in the store, every pinned file unchanged, and any edit to a golden carries its record and an owner's approval |
-| `kernel-quality.yml` | The mutation and coverage gates (28.8): every mutant in a change caught, or kept in the quality ledger with its reason; every line and branch of the foundation set run, unless the ledger lists it as awaiting its proof; 90% of lines elsewhere; and Miri over the test suites weekly |
-| `kernel-nightly.yml` | Every night, the exact predicates' verification suite and attack tests with a fresh seed, printed so a failure replays; and the proven maths functions against the big-number oracle, on every input of CORE-MATH's worst-case lists and ten million fresh inputs per function |
-| `kernel-certificates.yml` | The filters' error bounds, machine-checked: Gappa's proofs checked by Rocq and FPTaylor's certificates checked by HOL Light, each tool in a container pinned by digest, on every change and every night |
+| `kernel-golden.yml` | The golden store: every golden is in the store, every pinned file unchanged, and any edit to a golden carries its record and an approval |
+| `kernel-quality.yml` | The mutation and coverage gates (28.8): every mutant in a change caught, or kept in the quality ledger with its reason; every line and branch of the foundation set run, unless the ledger lists it as awaiting its proof; 90% of lines elsewhere, once a change is ready to land; and Miri over the test suites of the crates each push to main reaches |
+| `kernel-oracles.yml` | After a push to main, for what it reaches: the slow fixtures, the fetched corpora and the outside oracles in containers (Clothoids, cbor2, zcbor); never on a timer |
+| `kernel-certificates.yml` | The filters' error bounds, machine-checked: Gappa's proofs checked by Rocq and FPTaylor's certificates checked by HOL Light, each tool in a container pinned by digest, on every change to a problem or a pinned tool |
 | `kernel-release.yml` | A release: on a `geom-v` tag, every workflow above run whole on the tagged commit, then the golden store attached to the tag's draft release as its record |
 | `kernel-variants.yml` | Not a gate: on a pull request labelled `variant-bench`, the wall-clock timings of every exact-path variant natively, in Wasmtime, Node and four browsers, with and without wide arithmetic, for chapter 23.3's report (piece G42) |
 
@@ -68,7 +68,7 @@ Every decision has a chapter in [architecture/](architecture/), numbered to matc
 
 ### 7. What comes next (one minute)
 
-[Chapter 30](architecture/30-build-order.md) is the work board: every piece in build order, each with what "done" means, in thirteen phases that each end at a gate an owner records. Phase 1 builds the ground and the numbers and ends when every predicate is proven or labelled and the same bits come out on every target; phase 2 adds points, frames, NURBS and every curve and surface kind; phase 3 adds topology, names, the operation contract and the native format. Each piece is checked out as a branch, `piece/<ID>` (the repository's [AGENTS.md](../../../AGENTS.md)).
+[Chapter 30](architecture/30-build-order.md) is the work board: every piece in build order, each with what "done" means, in thirteen phases that each end at a gate the main session records. Phase 1 builds the ground and the numbers and ends when every predicate is proven or labelled and the same bits come out on every target; phase 2 adds points, frames, NURBS and every curve and surface kind; phase 3 adds topology, names, the operation contract and the native format. Each piece is checked out as a branch, `piece/<ID>` (the repository's [AGENTS.md](../../../AGENTS.md)).
 
 ## Where things live
 

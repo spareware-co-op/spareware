@@ -375,16 +375,15 @@ fn workflow_problems(kernel: &str, bench: &str) -> Vec<String> {
     }
     if !runs
         .iter()
-        .any(|r| r.contains("git diff --no-ext-diff --no-renames --name-only HEAD^1 HEAD"))
+        .any(|r| r.contains("git diff --no-ext-diff --no-renames --name-only \"$BASE\" HEAD"))
+        || text(&scope["steps"][3]["env"]["BASE"]) != "${{ needs.changes.outputs.base }}"
     {
-        found.push(
-            "kernel.yml's job scope does not read the pull request's changed files".to_owned(),
-        );
+        found.push("kernel.yml's job scope does not read the change's files".to_owned());
     }
     if text(&scope["outputs"]["crates"]) != "${{ steps.scope.outputs.crates }}" {
         found.push("kernel.yml's job scope does not hand on its crates".to_owned());
     }
-    for job in ["suite", "wasm-suite"] {
+    for job in ["linux", "suite", "wasm-suite"] {
         let y = &k["jobs"][job];
         let needs: Vec<String> = y["needs"]
             .as_vec()
@@ -395,9 +394,10 @@ fn workflow_problems(kernel: &str, bench: &str) -> Vec<String> {
         if !needs.iter().any(|n| n == "scope") {
             found.push(format!("{job} does not need the job scope"));
         }
-        if !y["if"].is_badvalue() {
+        // A job is skipped by its event, never by the selection as a whole, so each part reports.
+        if text(&y["if"]).contains("scope") {
             found.push(format!(
-                "{job} has a job condition, so a skipped run would not report under its names"
+                "{job} is skipped on the selection as a whole, so its parts would not report"
             ));
         }
         let steps: Vec<&Yaml> = y["steps"].as_vec().into_iter().flatten().collect();
@@ -477,6 +477,16 @@ fn the_suites_run_the_selection() {
             "&& env.KERNEL_CRATES != ''",
             "",
             "runs with no crate selected",
+        ),
+        (
+            "--name-only \"$BASE\" HEAD > \"$RUNNER_TEMP/changed.txt\"\n            echo \"SCOPE=--changed",
+            "--name-only HEAD^1 HEAD > \"$RUNNER_TEMP/changed.txt\"\n            echo \"SCOPE=--changed",
+            "does not read the change's files",
+        ),
+        (
+            "debug run on Linux x86-64.\n    if: github.event_name",
+            "debug run on Linux x86-64.\n    if: needs.scope.outputs.crates != '' && github.event_name",
+            "skipped on the selection as a whole",
         ),
         (
             "\"$RUNNER_TEMP/changed.txt\" --build-of geom-bench",

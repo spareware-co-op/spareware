@@ -5,8 +5,12 @@
 //!
 //! - `every_tier_names_workflows_that_run_on_its_trigger`: the as-built table has 28.17's tiers in
 //!   28.17's order; each workflow a row names exists and runs on that tier's trigger (a pull
-//!   request; a daily schedule; a weekly schedule; a pull request that changes
-//!   `rust-toolchain.toml` or `Cargo.lock`; a `geom-v` tag); and every kernel workflow is named.
+//!   request; GitHub's merge queue; a push to main; a pull request that changes
+//!   `rust-toolchain.toml` or `Cargo.lock`; a `geom-v` tag; a run by hand); and every kernel
+//!   workflow is named.
+//! - `no_workflow_runs_on_a_timer`: no workflow has a `schedule:` trigger but the housekeeping
+//!   that tests nothing ([`HOUSEKEEPING`]), and no kernel workflow ever does (the owner's testing
+//!   principle 2, decision 32.53: nothing reruns on code that has not changed).
 //! - `the_release_runs_every_kernel_workflow_whole`: `kernel-release.yml` runs on `geom-v` tags
 //!   and nothing else, calls every other kernel workflow once (each takes `workflow_call`),
 //!   records the golden store only after every call has passed, and only that job may write.
@@ -41,6 +45,10 @@ use yaml_rust2::{Yaml, YamlLoader};
 const WORKFLOWS: &str = ".github/workflows";
 const RELEASE: &str = "kernel-release.yml";
 const CHAPTER: &str = "projects/engines/geometry/architecture/28-testing.md";
+
+/// The only workflows that may run on a timer: housekeeping that tests nothing (the pieces bot,
+/// which releases idle pieces, and the build cache's pruning).
+const HOUSEKEEPING: [&str; 2] = ["pieces.yml", "cache-prune.yml"];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -198,32 +206,26 @@ fn tiers(chapter: &str) -> (Vec<String>, Vec<(String, Vec<String>)>) {
     (tiers, built)
 }
 
-/// The cron schedules of a workflow, each as its five fields.
-fn crons(w: &Yaml) -> Vec<Vec<String>> {
-    w["on"]["schedule"]
-        .as_vec()
-        .map(|v| {
-            v.iter()
-                .filter_map(|s| s["cron"].as_str())
-                .map(|c| c.split_whitespace().map(str::to_owned).collect())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// Whether a workflow runs on a tier's trigger; `None` for a tier this check does not know.
 fn runs_on_tier(tier: &str, w: &Yaml) -> Option<bool> {
-    let day_fields = |c: &Vec<String>| c.len() == 5 && c[2] == "*" && c[3] == "*";
+    let on = keys(&w["on"]);
     Some(match tier {
-        "Every pull request" => !w["on"]["pull_request"].is_badvalue(),
-        "Nightly" => crons(w).iter().any(|c| day_fields(c) && c[4] == "*"),
-        "Weekly" => crons(w).iter().any(|c| day_fields(c) && c[4] != "*"),
+        "Every push to a pull request" => on.iter().any(|k| k == "pull_request"),
+        "The merge queue" => on.iter().any(|k| k == "merge_group"),
+        "Each push to main" => strings(&w["on"]["push"]["branches"])
+            .iter()
+            .any(|b| b == "main"),
+        // A pull request with no path filter runs on every change, these files' among them.
         "Toolchain or dependency change" => {
-            let paths = strings(&w["on"]["pull_request"]["paths"]);
-            ["rust-toolchain.toml", "Cargo.lock"]
-                .iter()
-                .all(|p| paths.iter().any(|q| q == p))
+            let pr = &w["on"]["pull_request"];
+            let paths = strings(&pr["paths"]);
+            on.iter().any(|k| k == "pull_request")
+                && (pr["paths"].is_badvalue()
+                    || ["rust-toolchain.toml", "Cargo.lock"]
+                        .iter()
+                        .all(|p| paths.iter().any(|q| q == p)))
         }
+        "By hand" => on.iter().any(|k| k == "workflow_dispatch"),
         "Each release and edition" => strings(&w["on"]["push"]["tags"])
             .iter()
             .any(|t| t == "geom-v*"),
@@ -514,16 +516,18 @@ fn every_tier_names_workflows_that_run_on_its_trigger() {
     assert_eq!(tier_violations(&chapter, &workflows), Vec::<String>::new());
 
     // Seeded violations: each must be reported.
-    let mut no_nightly = workflows.clone();
-    let text = no_nightly.get_mut("kernel-nightly.yml").unwrap();
-    assert!(text.contains("  schedule:\n"));
-    *text = text.replacen("  schedule:\n", "  schedulx:\n", 1);
+    let mut no_queue = workflows.clone();
+    let text = no_queue.get_mut("kernel.yml").unwrap();
+    assert!(text.contains("  merge_group:\n"));
+    *text = text.replacen("  merge_group:\n", "  merge_grouq:\n", 1);
     assert!(
-        tier_violations(&chapter, &no_nightly)
+        tier_violations(&chapter, &no_queue)
             .iter()
-            .any(|v| v.contains("kernel-nightly.yml does not run on the tier \"Nightly\""))
+            .any(|v| v.contains("kernel.yml does not run on the tier \"The merge queue\""))
     );
-    let unnamed = chapter.replacen("`kernel-gate.yml`, ", "", 1);
+    let unnamed = chapter
+        .replace("`kernel-gate.yml`, ", "")
+        .replace(", `kernel-gate.yml`", "");
     assert_ne!(unnamed, chapter);
     assert!(
         tier_violations(&unnamed, &workflows)
@@ -531,15 +535,15 @@ fn every_tier_names_workflows_that_run_on_its_trigger() {
             .any(|v| v.contains("kernel-gate.yml is in no tier"))
     );
     let wrong_tier = chapter.replacen(
-        "| Weekly | `kernel-quality.yml` |",
-        "| Weekly | `kernel.yml` |",
+        "| The merge queue | `kernel.yml`, ",
+        "| The merge queue | `kernel-dev.yml`, `kernel.yml`, ",
         1,
     );
     assert_ne!(wrong_tier, chapter);
     assert!(
         tier_violations(&wrong_tier, &workflows)
             .iter()
-            .any(|v| v.contains("kernel.yml does not run on the tier \"Weekly\""))
+            .any(|v| v.contains("kernel-dev.yml does not run on the tier \"The merge queue\""))
     );
     let missing = chapter.replacen(
         "`kernel-release.yml` | The format",
@@ -574,7 +578,7 @@ fn the_release_runs_every_kernel_workflow_whole() {
     assert!(
         seeded(
             RELEASE,
-            "  nightly:\n    uses: ./.github/workflows/kernel-nightly.yml\n",
+            "  oracles:\n    uses: ./.github/workflows/kernel-oracles.yml\n",
             ""
         )
         .iter()
@@ -595,7 +599,7 @@ fn the_release_runs_every_kernel_workflow_whole() {
         .any(|v| v.contains("must run on a geom-v tag"))
     );
     assert!(
-        seeded(RELEASE, " fuzz, quality, nightly]", " fuzz, quality]")
+        seeded(RELEASE, " fuzz, quality, oracles]", " fuzz, quality]")
             .iter()
             .any(|v| v.contains("the freeze job needs"))
     );
@@ -646,4 +650,75 @@ fn the_matrix_has_every_runner_in_both_modes() {
             .iter()
             .any(|v| v.contains("own CPU"))
     );
+}
+
+/// Every workflow of the repository, by file name, as text.
+fn all_workflows() -> BTreeMap<String, String> {
+    std::fs::read_dir(root().join(WORKFLOWS))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| is_workflow(n))
+        .map(|n| {
+            let text = read(&format!("{WORKFLOWS}/{n}"));
+            (n, text)
+        })
+        .collect()
+}
+
+/// The workflows that run on a timer and may not: any with a `schedule:` trigger but
+/// [`HOUSEKEEPING`], and any kernel workflow with one whatever its name.
+fn timed_runs(workflows: &BTreeMap<String, String>) -> Vec<String> {
+    workflows
+        .iter()
+        .filter(|(name, text)| {
+            let timed = keys(&parse(text)["on"]).iter().any(|k| k == "schedule");
+            timed && (name.starts_with("kernel") || !HOUSEKEEPING.contains(&name.as_str()))
+        })
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn no_workflow_runs_on_a_timer() {
+    let workflows = all_workflows();
+    assert_eq!(timed_runs(&workflows), Vec::<String>::new());
+    // The housekeeping really is timed, so the check reads the trigger where it is.
+    for name in HOUSEKEEPING {
+        assert!(
+            keys(&parse(&workflows[name])["on"])
+                .iter()
+                .any(|k| k == "schedule"),
+            "{name}"
+        );
+    }
+
+    // Seeded violations: a kernel workflow and any other gaining a timer are each reported.
+    for file in [
+        "kernel.yml",
+        "kernel-quality.yml",
+        "kernel-certificates.yml",
+        "kernel-oracles.yml",
+        "kit.yml",
+    ] {
+        let mut w = workflows.clone();
+        let text = w.get_mut(file).unwrap();
+        assert!(text.contains("\non:\n"), "{file}");
+        *text = text.replacen(
+            "\non:\n",
+            "\non:\n  schedule:\n    - cron: \"17 13 * * *\"\n",
+            1,
+        );
+        assert_eq!(timed_runs(&w), [file.to_owned()], "{file}");
+    }
+    // A kernel workflow named like housekeeping is still a kernel workflow.
+    let mut w = workflows.clone();
+    w.insert(
+        "kernel-pieces.yml".to_owned(),
+        "on:\n  schedule:\n    - cron: \"17 13 * * *\"\njobs: {}\n".to_owned(),
+    );
+    assert_eq!(timed_runs(&w), ["kernel-pieces.yml".to_owned()]);
 }

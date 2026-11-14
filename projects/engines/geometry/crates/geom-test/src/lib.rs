@@ -99,7 +99,7 @@
 //! - [`coverage`]: judges cargo-llvm-cov's LCOV data against the bars, and checks every
 //!   `coverage(off)` mark's proof.
 //! - [`rust_source`]: reads Rust source for them: test code, functions, branch sites and marks.
-//! - [`miri`]: the plan of the weekly Miri run, one job per kernel test suite.
+//! - [`miri`]: the plan of the Miri run, one job per kernel test suite.
 //! - [`fuzz_scope`]: which of `geom-fuzz`'s targets and `kernel-fuzz.yml`'s Kani proofs a pull
 //!   request's change can affect, by the crate graph, so the pull request proves only those
 //!   (`kernel-quality fuzz-scope`).
@@ -132,7 +132,7 @@
 //! - `tests/laws_nurbs.rs`, `tests/laws_curves.rs` and `tests/laws_surfaces.rs`: each law of 28.3's
 //!   NURBS and kinds rows as a seeded property test, every stated bound refuted, if it is wrong, by
 //!   a dense sample of exact or 400-bit values (`tests/truth`, each kind's definition written from
-//!   its documentation); fixed seeds on pull requests, fresh ones nightly (`kernel-nightly.yml`).
+//!   its documentation); fixed, printed seeds on every change they reach (`SPAREKIT_SEED` replays another).
 //!
 //! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
