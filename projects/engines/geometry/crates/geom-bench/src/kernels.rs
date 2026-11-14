@@ -1965,6 +1965,8 @@ pub mod mesh {
     use geom_mesh::envelope::TriangleEnvelope;
     use geom_mesh::exact::build::{Polygons, build};
     use geom_mesh::exact::{ExactMesh, MeshError};
+    use geom_mesh::hull::{Hull, HullError};
+    use geom_mesh::slice::{Contour, slice as cut};
     use geom_mesh::{Cdt, CdtError, contact, triangulate};
     use geom_num::grid::P3;
     use geom_num::{NumError, Sign, distance};
@@ -2079,6 +2081,27 @@ pub mod mesh {
                 &Exec::serial(),
                 &mut meter,
             )
+        });
+    }
+
+    /// `geom_mesh::hull::Hull::of` on each set of points, under an unlimited budget.
+    #[inline(never)]
+    pub fn hull(batch: &[Vec<P3>], out: &mut Vec<Result<Hull, HullError>>) {
+        run(batch, out, |points| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            Hull::of(points, &mut meter)
+        });
+    }
+
+    /// `geom_mesh::slice::slice` on each solid's planes, serially, under an unlimited budget.
+    #[inline(never)]
+    pub fn slice(
+        batch: &[crate::inputs::mesh::Layers],
+        out: &mut Vec<Result<Vec<Vec<Contour>>, MeshError>>,
+    ) {
+        run(batch, out, |layers| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            cut(&layers.solid, &layers.planes, &Exec::serial(), &mut meter)
         });
     }
 
