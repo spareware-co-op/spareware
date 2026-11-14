@@ -27,6 +27,7 @@
 )]
 
 use geom_bool::combine::intersect;
+use geom_bool::half_space::half_space;
 use geom_bool::operand::{Operand, OperandKey, OperandKind};
 use geom_check::{Level, check};
 use geom_curve::{CurveKind, ParamCurve};
@@ -37,7 +38,7 @@ use geom_make::{
 use geom_math::{
     Axis, GridTransform, RationalTransform, Rotation, Scale, Transform, TypedTransform,
 };
-use geom_num::plane::Plane;
+use geom_num::plane::{Plane, Tpi};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_nurbs::Limit;
 use geom_op::history::Origin;
@@ -550,6 +551,41 @@ fn a_body_whose_vertices_meet_on_planes_moves_with_its_planes() {
 fn a_meeting_on_the_grid_moves_to_a_grid_point() {
     // A box whose first vertex is written as the meeting of the three planes through it: moved, it
     // is the grid point that meeting is, and the pool keeps no plane nothing names.
+    let (made, body) = a_box_with_a_meeting();
+    let moved = |b| Moved {
+        body: b,
+        exactness: Exactness::Exact,
+        accept: None,
+    };
+    let c = ctx();
+    let out = valid("moved", move_by(&c, moved(&body), [1, -2, 3]).unwrap());
+    let plain = move_by(&c, moved(&made.result.body), [1, -2, 3]).unwrap();
+    assert_eq!(out.exactness, Exactness::Exact);
+    assert_eq!(out.result.body.arenas().planes.len(), 0);
+    assert_eq!(places(&out.result.body), places(&plain.result.body));
+    // Turned by the direction (4, 3), which takes the box's corners, multiples of 5 apart, onto
+    // the grid: the meeting is committed without moving and its image lands on the grid, so the
+    // bound is the plain box's, with no step for rounding or for the commit.
+    let turned = |b| {
+        let e = rotate(
+            &c,
+            moved(b),
+            Axis::Z,
+            Rotation::direction(4, 3).unwrap(),
+            p(0, 0, 0),
+        )
+        .unwrap_err();
+        let OpErrorDetail::Make(MakeDetail::NotAccepted { would }) = *e.detail() else {
+            panic!("{e:?}");
+        };
+        would
+    };
+    assert_eq!(turned(&body), turned(&made.result.body));
+}
+
+/// The box of [`a_box`] with its first vertex written as the meeting of the three planes through
+/// it, and the box as made.
+fn a_box_with_a_meeting() -> (OpOutput<Made>, Body) {
     let made = a_box();
     let mut b = Builder::edit(&made.result.body);
     let a = made.result.body.arenas();
@@ -585,17 +621,180 @@ fn a_meeting_on_the_grid_moves_to_a_grid_point() {
         )
         .unwrap();
     assert!(places(&body)[0].is_err());
-    let moved = |b| Moved {
-        body: b,
-        exactness: Exactness::Exact,
-        accept: None,
+    (made, body)
+}
+
+#[test]
+fn a_commit_counts_the_transform_s_stretch() {
+    // Scaled by 3/2, which keeps no plane exact: each meeting is committed to the grid, half a
+    // step on each axis, and stretched by 3/2 that is 7/8 of 3/2 rounded up, two steps more than
+    // the uncut prism's bound under the same scale.
+    let half = |body: &Body| {
+        let e = scale(
+            &ctx(),
+            Moved {
+                body,
+                exactness: Exactness::Exact,
+                accept: None,
+            },
+            [Scale::new(3, 2).unwrap(); 3],
+            p(0, 0, 0),
+        )
+        .unwrap_err();
+        let OpErrorDetail::Make(MakeDetail::NotAccepted { would }) = *e.detail() else {
+            panic!("{e:?}");
+        };
+        would.bound().unwrap().0.get()
     };
-    let c = ctx();
-    let out = valid("moved", move_by(&c, moved(&body), [1, -2, 3]).unwrap());
-    let plain = move_by(&c, moved(&made.result.body), [1, -2, 3]).unwrap();
-    assert_eq!(out.exactness, Exactness::Exact);
-    assert_eq!(out.result.body.arenas().planes.len(), 0);
-    assert_eq!(places(&out.result.body), places(&plain.result.body));
+    let uncut = prism(
+        &ctx(),
+        &PrismInput {
+            base: vec![p(-6, 1, 3), p(-8, -1, 3), p(-3, -3, 3)],
+            height: Steps(2),
+        },
+    )
+    .unwrap()
+    .result
+    .body;
+    assert_eq!(half(&a_cut_prism()), half(&uncut) + 2);
+}
+
+#[test]
+fn a_rounded_result_the_checker_cannot_pass_waits_even_with_no_deviation() {
+    // A body of one lone vertex, recorded Exact but published as a solid with no material, so
+    // the checker finds it wrong. It has no surface or curve to deviate, and a half scale rounds
+    // its odd vertex: since this transform rounded, the checker is not trusted in full on its
+    // data, and its failure is a wait, never a defect. (Any face or edge would bring a deviation,
+    // which makes it a wait on its own.)
+    let mut b = Builder::new();
+    b.arenas
+        .regions
+        .extend(&[geom_topo::Region {
+            kind: geom_topo::RegionKind::Void,
+            first_shell: None,
+        }])
+        .unwrap();
+    b.arenas
+        .vertices
+        .extend(&[geom_topo::Vertex {
+            point: Ix::new(0).unwrap(),
+        }])
+        .unwrap();
+    b.arenas
+        .points
+        .extend([PointKind::Grid(p(3, 5, 7))])
+        .unwrap();
+    let names = geom_topo::order::Names {
+        regions: vec![geom_topo::order::NameKey([1; 16])],
+        faces: Vec::new(),
+        edges: Vec::new(),
+        vertices: vec![geom_topo::order::NameKey([2; 16])],
+    };
+    let lone = b
+        .publish_named(
+            &names,
+            geom_topo::BodyKind::Solid,
+            Ix::new(0).unwrap(),
+            &mut WorkMeter::new(Budget::UNLIMITED),
+        )
+        .unwrap();
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let report = check(&lone, Exactness::Exact, Level::Full, &mut meter).unwrap();
+    assert!(!report.passed() && !report.uncertified(), "{report:?}");
+    let e = scale(
+        &ctx(),
+        Moved {
+            body: &lone,
+            exactness: Exactness::Exact,
+            accept: Some(certified(64)),
+        },
+        [Scale::new(1, 2).unwrap(); 3],
+        p(0, 0, 0),
+    )
+    .unwrap_err();
+    assert_eq!(
+        *e.detail(),
+        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece: "G417" })
+    );
+}
+
+#[test]
+fn a_short_edge_from_a_meeting_moves_with_its_shadow_a_step_long() {
+    // A plane that crosses a box's edge three tenths of a step from a corner it keeps leaves an
+    // edge whose ends round to one point. Its shadow stands a step long from the end on the grid,
+    // backwards when that end is the edge's end; moved, the shadow is drawn the same way.
+    fn solid(n: u8, body: &Body) -> Operand<'_> {
+        Operand {
+            key: OperandKey([n; 16]),
+            body,
+            kind: OperandKind::Solid,
+            exactness: Exactness::Exact,
+        }
+    }
+    let cube = make_box(
+        &ctx(),
+        &BoxInput {
+            min: p(0, 0, 0),
+            size: [Steps(10); 3],
+        },
+    )
+    .unwrap()
+    .result
+    .body;
+    // 10x - 97y = 3 crosses y = 0 at x = 0.3; 10x + 97y = 97 crosses it at x = 9.7.
+    let planes = [
+        [p(10, 1, 0), p(107, 11, 0), p(10, 1, 1)],
+        [p(0, 1, 0), p(97, -9, 0), p(0, 1, 1)],
+    ];
+    let mut backwards = 0;
+    let mut cuts = 0;
+    for [a, b, c] in planes {
+        for points in [[a, b, c], [a, c, b]] {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let side = half_space(ctx().path(), points, &mut meter).unwrap();
+            let cut = intersect(&ctx(), &Exec::serial(), &[solid(1, &cube), solid(2, &side)]);
+            let Ok(cut) = cut else {
+                continue;
+            };
+            cuts += 1;
+            let body = cut.result.body;
+            let at = places(&body);
+            let near = |v: &Result<P3, Box<[Plane; 3]>>| match v {
+                Ok(q) => *q,
+                Err(planes) => {
+                    let [p0, p1, p2] = **planes;
+                    Tpi::new(p0, p1, p2).unwrap().to_grid().unwrap().value()
+                }
+            };
+            let a = body.arenas();
+            for e in 0..a.rows(Arena::Edge) {
+                let e = Ix::new(e).unwrap();
+                let (s, t) = (
+                    a.edges.start.get(e).copied().flatten().unwrap().to_usize(),
+                    a.edges.end.get(e).copied().flatten().unwrap().to_usize(),
+                );
+                if near(&at[s]) == near(&at[t]) && at[s].is_err() && at[t].is_ok() {
+                    backwards += 1;
+                }
+            }
+            let moved = move_by(
+                &ctx(),
+                Moved {
+                    body: &body,
+                    exactness: Exactness::Exact,
+                    accept: None,
+                },
+                [3, -4, 5],
+            );
+            let out = valid("short edge moved", moved.unwrap());
+            assert_eq!(out.exactness, Exactness::Exact);
+        }
+    }
+    assert!(cuts >= 2, "{cuts} cuts");
+    assert!(
+        backwards > 0,
+        "no edge runs from a meeting to a grid point it rounds onto"
+    );
 }
 
 #[test]
