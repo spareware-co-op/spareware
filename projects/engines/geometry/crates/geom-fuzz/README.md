@@ -64,9 +64,9 @@ A target is one law and its oracle, written once as a plain function, and run by
 | --- | --- | --- | --- |
 | bolero's test mode | Replays the target's stored corpus and crash files, then tries 10,000 random inputs | `cargo test`, every operating system (kernel.yml, kernel-dev.yml) | `<target>_fuzz` |
 | The seeded leg | Runs the harness on 20,000 byte strings from a printed seed, the same on every target | `cargo test`, every target, WebAssembly included | `<target>_seeded` |
-| libFuzzer, under cargo-bolero | Coverage-guided fuzzing with the address sanitizer, on a nightly compiler | Linux and macOS; a minute per target on every pull request (kernel-fuzz.yml) | `<target>_fuzz` |
-| ClusterFuzzLite | OSS-Fuzz's fuzzing service for pull requests, on the same libFuzzer binary | Pull requests (kernel-fuzz.yml), in OSS-Fuzz's container | `<target>_fuzz` |
-| Kani | Proves the law for every case of a bounded domain | Linux and macOS; every pull request (kernel-fuzz.yml) | `<target>_proof` |
+| libFuzzer, under cargo-bolero | Coverage-guided fuzzing with the address sanitizer, on a nightly compiler | Linux and macOS; a minute per target on every pull request that can affect it (kernel-fuzz.yml) | `<target>_fuzz` |
+| ClusterFuzzLite | OSS-Fuzz's fuzzing service for pull requests, on the same libFuzzer binary | Pull requests that can affect the target (kernel-fuzz.yml), in OSS-Fuzz's container | `<target>_fuzz` |
+| Kani | Proves the law for every case of a bounded domain | Linux and macOS; every pull request that can affect it (kernel-fuzz.yml) | `<target>_proof` |
 
 The three fuzzing engines drive the same function on the same bytes, so a corpus or crash file
 from any of them replays in the others and in `cargo test`.
@@ -171,7 +171,10 @@ Rules:
   grow.
 - A new target is registered in `.github/workflows/kernel-fuzz.yml`: its `_fuzz` test in the
   libFuzzer matrix, its `_proof` test in the Kani matrix, and every crate it fuzzes in the path
-  filters. `tests/attack_g14.rs` fails until it is.
+  filters. `tests/attack_g14.rs` fails until it is. On a pull request the job `select` runs a
+  target only when the change can affect it: when a crate its code names (or a crate that one
+  builds) changed, or its own module, tests, corpus or crashes did (`geom_test::fuzz_scope`, which
+  reads the crates a target uses from its `use` lines and paths, so nothing more is registered).
 
 ## Running a target
 

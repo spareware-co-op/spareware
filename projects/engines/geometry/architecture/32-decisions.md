@@ -813,6 +813,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-bench.yml` | `fuel` | `trip fuel`; J: `geom-bench/src/counts.rs::growth_passes_the_stated_order_and_fails_the_next`, `geom-bench/src/counts.rs::compare_finds_rises_listings_removals_and_additions` |
 | `kernel-fuzz.yml` | `libfuzzer` | `trip libfuzzer` |
 | `kernel-fuzz.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
+| `kernel-fuzz.yml` | `select` | Not a gate: it decides which of this workflow's targets and proofs a pull request's change can affect, by the crate graph, and names in its log each one and why; a skipped job was not affected. J: `geom-test/tests/fuzz_scope.rs::a_change_selects_every_harness_that_builds_it`, `geom-test/tests/fuzz_scope.rs::a_file_outside_every_crate_selects_everything`, `geom-test/tests/fuzz_scope.rs::the_catalogue_is_every_job_and_target_of_the_workflow` |
 | `kernel-fuzz.yml` | `kani` | `trip kani-fuzz` |
 | `kernel-fuzz.yml` | `kani-num` | `trip kani-num` |
 | `kernel-fuzz.yml` | `kani-format` | `trip kani-format` |
@@ -833,6 +834,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-certificates.yml` | `fptaylor` | `trip hol-light`, on orient2d's leg: every bound of `FPTaylor`'s certificate halved as HOL Light's session loads it, which HOL Light must refuse to prove |
 | `kernel-certificates.yml` | `fptaylor-problems` | Not a gate: it lists the FPTaylor problems, one `fptaylor` job each |
 | `kernel-fuzz-campaign.yml` | `campaign` | Not a gate: nightly, or on a pull request only when it is labelled `fuzz-campaign` |
+| `kernel-fuzz-campaign.yml` | `select` | Not a gate: it runs only for a campaign started by hand with `affected_since`, never on a pull request, and picks the targets that campaign fuzzes |
 | `kernel-variants.yml` | `native` | Not a gate: timings for the variant report, on a pull request only when it is labelled `variant-bench` (its header: never a gate) |
 | `kernel-variants.yml` | `wasm` | Not a gate: as `native` |
 | `kernel-variants.yml` | `browsers` | Not a gate: as `native` |
