@@ -76,8 +76,10 @@ fn parse_opts(args: &[String]) -> Res<Opts> {
     let mut opts = Opts::default();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
+        // `--name=value` splits at the first `=`, so `--param=KEY=VALUE` gives `--param` the pair
+        // `KEY=VALUE`, as `--param KEY=VALUE` does.
         let (flag, inline) = match arg.split_once('=') {
-            Some((name, given)) if name.starts_with("--") && !["--param"].contains(&name) => {
+            Some((name, given)) if name.starts_with("--") => {
                 (name.to_string(), Some(given.to_string()))
             }
             _ => (arg.clone(), None),
@@ -96,10 +98,7 @@ fn parse_opts(args: &[String]) -> Res<Opts> {
             "--params" => opts.params = Some(value("--params")?),
             "--input" => opts.input = Some(value("--input")?),
             "--param" => {
-                let pair = match arg.strip_prefix("--param=") {
-                    Some(rest) => rest.to_string(),
-                    None => value("--param")?,
-                };
+                let pair = value("--param")?;
                 match pair.split_once('=') {
                     Some((key, given)) if !key.is_empty() => {
                         opts.kv.push((key.to_string(), given.to_string()));
