@@ -686,8 +686,11 @@ fn conditioned(
     let (cu, cv) = (f64::midpoint(u0, u1), f64::midpoint(v0, v1));
     let one = order.checked_add(1).ok_or(CurveError::Defect)?;
     let two = order.checked_add(2).ok_or(CurveError::Defect)?;
-    let at = surface.partials_over(((cu, cu), (cv, cv)), (limit, limit), one, meter)?;
-    let over = surface.partials_over(wide, (limit, limit), two, meter)?;
+    // Both through `partials`, so a centre or a widened side that is one parameter on an end of
+    // the domain is read from inside it: an offset split at its base's crease ends there, and its
+    // base's partials beyond the end are the other piece's.
+    let at = partials(surface, ((cu, cu), (cv, cv)), one, limit, meter)?;
+    let over = partials(surface, wide, two, limit, meter)?;
     let (su, sv) = (offset_from(region.0, cu)?, offset_from(region.1, cv)?);
     let half = tight::point(0.5)?;
     let (uu, uv, vv) = (
@@ -730,16 +733,11 @@ fn conditioned(
 /// around it (between the nearest `breaks` or the domain's ends), and cut to that piece; as it
 /// is where that piece is not finite.
 fn widened((lo, hi): (f64, f64), breaks: &[f64], (a, b): (f64, f64)) -> (f64, f64) {
-    let below = breaks
-        .iter()
-        .copied()
-        .filter(|&x| x < lo)
-        .fold(a, tight::larger);
-    let above = breaks
-        .iter()
-        .copied()
-        .filter(|&x| x > hi)
-        .fold(b, tight::smaller);
+    // The breaks increase (`ParamSurface::breaks`) and none lies in [lo, hi] (the caller's test),
+    // so those below the side are a run at the start and the rest lie above it.
+    let (before, after) = breaks.split_at(breaks.partition_point(|x| x.total_cmp(&lo).is_lt()));
+    let below = before.iter().copied().fold(a, tight::larger);
+    let above = after.iter().copied().fold(b, tight::smaller);
     let piece = above - below;
     if !piece.is_finite() {
         return (lo, hi);
@@ -770,11 +768,9 @@ fn partials(
             &[Limit::FromRight]
         } else if breaks.contains(&lo) {
             &[Limit::FromLeft, Limit::FromRight]
-        } else if lo == b && a < b {
-            &[Limit::FromLeft]
         } else if lo == a {
             &[Limit::FromRight]
-        } else if matches!(limit, Limit::FromLeft) {
+        } else if lo == b || matches!(limit, Limit::FromLeft) {
             &[Limit::FromLeft]
         } else {
             &[Limit::FromRight]

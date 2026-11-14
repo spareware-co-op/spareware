@@ -290,7 +290,9 @@ pub fn join(
             keep(&mut live, Piece { lo, hi, upper }, meter)?;
         }
         let floor = best.map_or(0.0, |w| w.value.lo());
-        live.retain(|p| p.upper.is_none_or(|u| u > floor));
+        // A piece bounded by the floor itself holds nothing larger either: kept, it would change
+        // nothing but the bytes charged, so only those strictly above it, in totalOrder, stay.
+        live.retain(|p| p.upper.is_none_or(|u| u.total_cmp(&floor).is_gt()));
         let wide = |p: &Piece| p.upper.is_none_or(|u| u - floor > ask.tight);
         let halves = live
             .iter()
@@ -366,7 +368,10 @@ fn finish(
                 from: p.lo,
                 to: p.hi,
             },
-            (Upper::Bounded(u), Some(v)) => Upper::Bounded(if v > u { v } else { u }),
+            // The larger in totalOrder: the same bits whichever comes first (chapter 21).
+            (Upper::Bounded(u), Some(v)) => {
+                Upper::Bounded(if v.total_cmp(&u).is_gt() { v } else { u })
+            }
         };
     }
     let as_asked = match upper {
@@ -453,7 +458,7 @@ pub fn edge(
         Ok(Side {
             surface,
             pcurve,
-            turned: face.sense == Sense::Reversed,
+            turned: matches!(face.sense, Sense::Reversed),
         })
     };
     join([side(first)?, side(second)?], ask, meter)
