@@ -302,6 +302,40 @@ fn a_flat_sheet_decimates_to_few_triangles_on_the_same_plane() {
     );
 }
 
+/// Decimation stops as soon as the mesh has no more triangles than asked: a collapse inside the
+/// sheet removes two, one on its edge removes one, so it stops at the target or one below.
+#[test]
+fn decimation_stops_at_its_target() {
+    let input = sheet(4, 100, |_, _| 0);
+    for target in [10, 20, 31] {
+        let out = decimate(
+            &input.0,
+            &input.1,
+            Decimate { epsilon: 8, target },
+            &Exec::serial(),
+            &mut meter(),
+        )
+        .unwrap();
+        let n = out.triangles().len();
+        assert!(n == target || n + 1 == target, "{target}: {n}");
+        two_way(&input, &out, 8);
+    }
+    // A target the mesh already meets changes nothing.
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon: 8,
+            target: 32,
+        },
+        &Exec::serial(),
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(out.triangles(), input.1.as_slice());
+    assert_eq!(out.operations(), (0, 0));
+}
+
 #[test]
 fn a_closed_cube_stays_closed_and_within_epsilon() {
     let input = cube(2, 64, |c| c);
@@ -546,13 +580,20 @@ fn flips_and_smoothing_work_on_a_flat_sheet() {
         length: 110,
         iterations: 1,
     };
-    let input = (points.clone(), triangles.clone());
-    let out = remesh(&input.0, &input.1, settings, &Exec::serial(), &mut meter()).unwrap();
-    assert_eq!(out.triangles().len(), input.1.len());
-    // Every vertex is still there, in its number, so the middle is still number 4.
-    assert_eq!(out.points().len(), input.0.len());
-    assert!(valence(out.triangles()) < 8, "{:?}", out.triangles());
-    two_way(&input, &out, 4);
+    // The first flip is of the edge from the middle to corner 0, between the first two
+    // triangles; the first is given turned each of three ways, so the flip finds its edge from
+    // each place of the third corner. After it no flip evens the valences out further.
+    for first in [[0, 1, 4], [1, 4, 0], [4, 0, 1]] {
+        let mut turned = triangles.clone();
+        turned[0] = first;
+        let input = (points.clone(), turned);
+        let out = remesh(&input.0, &input.1, settings, &Exec::serial(), &mut meter()).unwrap();
+        assert_eq!(out.triangles().len(), input.1.len());
+        // Every vertex is still there, in its number, so the middle is still number 4.
+        assert_eq!(out.points().len(), input.0.len());
+        assert_eq!(valence(out.triangles()), 7, "{:?}", out.triangles());
+        two_way(&input, &out, 4);
+    }
     let mut moved = points;
     moved[4] = p(130, 120, 0);
     let input = (moved, triangles);
