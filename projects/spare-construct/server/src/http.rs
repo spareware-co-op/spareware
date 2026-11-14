@@ -91,6 +91,7 @@ pub fn routes(app: Shared) -> Router {
     Router::new()
         .route("/", get(page))
         .route("/connect.js", get(connect_script))
+        .route("/view3d.js", get(view_script))
         .route("/connect.css", get(connect_style))
         .route("/shapes/construct_shapes.js", get(shapes_script))
         .route("/shapes/construct_shapes_bg.wasm", get(shapes_wasm))
@@ -171,6 +172,11 @@ const FOREVER: (header::HeaderName, &str) = (
 
 async fn connect_script() -> impl IntoResponse {
     ([JAVASCRIPT], include_str!("../../app/connect.js"))
+}
+
+/// What the 3D view draws, as a module connect.js loads when the view opens.
+async fn view_script() -> impl IntoResponse {
+    ([JAVASCRIPT], include_str!("../../app/view3d.js"))
 }
 
 async fn connect_style() -> impl IntoResponse {
