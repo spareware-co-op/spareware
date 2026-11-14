@@ -734,6 +734,142 @@ fn flips_and_smoothing_work_on_a_flat_sheet() {
     two_way(&input, &out, 4);
 }
 
+/// Which edge remeshing collapses into which end, which edges it flips and where smoothing moves a
+/// vertex are PMP's rules on lengths, valences and area-weighted centroids. Each is pinned here by
+/// the whole result on the bent sheet. Toward edges of 90 within 6, the sheet's edges of 60 are
+/// too short but no collapse is kept, so the result is the flips and the smoothing's moves alone;
+/// toward edges of 120 within 10, collapses are kept too.
+#[test]
+fn remeshing_collapses_flips_and_smooths_as_pmp_does() {
+    let input = bent();
+    let run = |epsilon: u64, length: u64| {
+        let out = remesh(
+            &input.0,
+            &input.1,
+            Remesh {
+                epsilon,
+                length,
+                iterations: 1,
+            },
+            &Exec::serial(),
+            &mut meter(),
+        )
+        .unwrap();
+        two_way(&input, &out, epsilon);
+        out
+    };
+    let out = run(6, 90);
+    assert_eq!(out.operations(), (11, 8));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, 0),
+            (60, 0, 3),
+            (120, 0, 12),
+            (180, 0, 27),
+            (240, 0, 48),
+            (0, 60, 11),
+            (60, 60, 17),
+            (120, 59, 29),
+            (182, 60, 32),
+            (240, 60, 56),
+            (0, 120, 22),
+            (60, 120, 26),
+            (120, 120, 36),
+            (181, 120, 37),
+            (240, 120, 59),
+            (0, 180, 33),
+            (60, 181, 30),
+            (121, 181, 33),
+            (181, 180, 42),
+            (240, 180, 57),
+            (0, 240, 44),
+            (60, 240, 44),
+            (120, 240, 50),
+            (180, 240, 47),
+            (240, 240, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [0, 1, 6],
+            [0, 6, 5],
+            [3, 4, 9],
+            [5, 6, 11],
+            [5, 11, 10],
+            [15, 21, 20],
+            [13, 14, 19],
+            [10, 11, 16],
+            [10, 16, 15],
+            [15, 16, 21],
+            [16, 22, 21],
+            [18, 19, 24],
+            [18, 24, 23],
+            [13, 19, 18],
+            [1, 2, 7],
+            [1, 7, 6],
+            [2, 3, 8],
+            [3, 9, 8],
+            [8, 9, 14],
+            [8, 14, 13],
+            [2, 8, 7],
+            [7, 8, 13],
+            [6, 12, 11],
+            [12, 13, 18],
+            [6, 7, 12],
+            [7, 13, 12],
+            [17, 23, 22],
+            [11, 17, 16],
+            [16, 17, 22],
+            [17, 18, 23],
+            [11, 12, 17],
+            [12, 18, 17]
+        ]
+    );
+    let out = run(10, 120);
+    assert_eq!(out.operations(), (27, 22));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, 0),
+            (60, 0, 3),
+            (180, 0, 27),
+            (240, 0, 48),
+            (0, 60, 11),
+            (96, 62, 25),
+            (178, 118, 36),
+            (240, 120, 59),
+            (0, 180, 33),
+            (89, 153, 29),
+            (0, 240, 44),
+            (60, 240, 44),
+            (180, 240, 47),
+            (240, 240, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [8, 11, 10],
+            [4, 9, 8],
+            [8, 9, 11],
+            [9, 12, 11],
+            [1, 2, 5],
+            [1, 5, 0],
+            [0, 5, 4],
+            [5, 9, 4],
+            [7, 6, 3],
+            [6, 2, 3],
+            [7, 13, 6],
+            [13, 12, 6],
+            [12, 9, 6],
+            [5, 2, 6],
+            [9, 5, 6]
+        ]
+    );
+}
+
 #[test]
 fn a_fine_ball_remeshes_coarser_within_epsilon() {
     let input = ball(3, 300.0);
