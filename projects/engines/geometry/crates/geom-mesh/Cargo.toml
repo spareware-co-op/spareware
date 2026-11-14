@@ -24,6 +24,8 @@ geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
 
 [dev-dependencies]
+# The B-rep checker, that a faceted body passes (ours, MPL-2.0).
+geom-check = { path = "../geom-check" }
 # Without its default fork and timeout features, which pull in code that has no WebAssembly
 # (WASI) build, so the tests also run on wasm32-wasip1. MIT OR Apache-2.0.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
@@ -47,6 +49,11 @@ harness = false
 # Booleans' timing (piece G148), at 1 and 8 threads.
 [[bench]]
 name = "boolean"
+harness = false
+
+# Slicing's timing (piece G149), at 1 and 8 threads.
+[[bench]]
+name = "slice"
 harness = false
 
 # The triangle contact test's timing (piece G151).

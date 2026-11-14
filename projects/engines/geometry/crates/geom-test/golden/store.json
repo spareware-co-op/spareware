@@ -300,11 +300,17 @@
             {
               "sha256": "00291a049e83434c5aa58f8967129acf76c325e23026f4fcdf63d56787119b20",
               "kind": "corpus",
+              "piece": "G149",
+              "why": "2 new count benchmarks on exact hulls and plane slices (decision 32.44): mesh/hull and mesh/slice; no existing digest moved"
+            },
+            {
+              "sha256": "ef2e7744a975d6279d2566bbcca4d6499e149b51751de6c21f97ed54769f02f7",
+              "kind": "corpus",
               "piece": "G300",
-              "why": "2 new count benchmarks on decimation and remeshing inside the two-way envelope: mesh/decimate and mesh/remesh; no existing digest moved"
+              "why": "2 new count benchmarks on decimation and remeshing inside the two-way envelope: mesh/decimate and mesh/remesh; no existing digest moved; merged after G149's mesh/hull and mesh/slice, whose rows are kept unchanged"
             }
           ],
-          "sha256": "aec5481e123b144e58501b77f999734f60715eaa3aa0f94a1b2aef8249b15b19"
+          "sha256": "cbdddc09e354202cec78137cd106d62efe9f2ae2f7559980011a15514b5b0823"
         },
         {
           "id": "geom-nurbs/operations",
@@ -688,7 +694,15 @@
             "test": "determinism",
             "function": "replay_corpus_golden"
           },
-          "sha256": "742f10a75747ba3c3181572802a374545b6b27194162608d37bd8c5ccf240d30"
+          "sha256": "643f66ef93012eaa71bba74004b70dca3910ebb20dc4cb10014aac5108affc66",
+          "history": [
+            {
+              "sha256": "742f10a75747ba3c3181572802a374545b6b27194162608d37bd8c5ccf240d30",
+              "kind": "corpus",
+              "piece": "G154",
+              "why": "Four new stored fixtures, geom-test/fixtures/meshes/0001 to 0004, the triage records of Manifold's first four mesh differences (chapter 28.10); no existing fixture or log moved."
+            }
+          ]
         },
         {
           "id": "geom-test/museum",
