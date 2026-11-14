@@ -653,9 +653,10 @@ fn fan(m: i64) -> Vec<Polygon> {
 fn a_fan_of_slivers_is_not_clipped_in_proportion_to_its_size() {
     // Before a split had to pay, the boxes parted the slivers a few at a time and clipped each
     // into pieces in proportion to the fan's size: 3,223 pieces at work 520,287 for 64 slivers,
-    // 15,157 at 2,627,533 for 128 and 60,830 for 256, about four times as many for each doubling. No split pays here, as
-    // every one copies most slivers, so the fan is one leaf: each sliver one piece (they never
-    // cross), and its local cuts' pairs the work, the square of the slivers and no more.
+    // 15,157 at 2,627,533 for 128 and 60,830 for 256, about four times as many for each
+    // doubling. No split pays here, as every one copies most slivers, so the fan is one leaf:
+    // each sliver one piece (they never cross), and its local cuts' pairs the work, the square
+    // of the slivers and no more.
     for (m, work) in [(64, 24_704), (128, 98_560)] {
         let list = fan(m);
         let cell = around(&list).unwrap();
@@ -673,6 +674,21 @@ fn a_fan_of_slivers_is_not_clipped_in_proportion_to_its_size() {
         assert_eq!(got.len(), list.len(), "{m} slivers");
         assert_eq!(counted.used().work, work, "{m} slivers");
     }
+    // A box of at most `LEAF_POLYGONS` splits as long as a split separates its polygons, for a
+    // caller that asks for smaller leaves: 32 slivers in leaves of 16 are clipped.
+    let list = fan(32);
+    let cell = around(&list).unwrap();
+    let got = arrange(
+        &Exec::serial(),
+        cell,
+        Winding::new(),
+        &list,
+        16,
+        &[],
+        &mut meter(),
+    )
+    .unwrap();
+    assert!(got.len() > list.len(), "{}", got.len());
 }
 
 fn any_block() -> impl Strategy<Value = Block> {
