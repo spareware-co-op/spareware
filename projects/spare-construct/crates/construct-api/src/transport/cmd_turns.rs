@@ -4,7 +4,8 @@ use super::Session;
 use super::cmd_run::{held, pick};
 use super::registry::Registry;
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
+use crate::schema::{Params, array, boolean, choice, number, params, string, strings};
+use crate::transport::helpers::scenario_at;
 use construct_transport::results::Res;
 use construct_transport::turns::{self, DiagramOpts, SidraOpts};
 use serde_json::{Value, json};
@@ -35,7 +36,7 @@ pub(super) fn register(r: &mut Registry) {
         |s, p| {
             let i = s.pick_scenario(p, "scenario")?;
             let n = p.str("node")?;
-            let sc = &s.project.scenarios[i];
+            let sc = scenario_at(&s.project.scenarios, i)?;
             if !sc.nodes.contains_key(n) {
                 return Err(ApiError::not_found(format!(
                     "There is no junction {n} in this scenario."
@@ -87,11 +88,11 @@ pub(super) fn register(r: &mut Registry) {
     );
 }
 
-fn turns_movements(s: &mut Session, p: &Params) -> ApiResult {
+fn turns_movements(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
     let res = held(s, i, &period)?;
     let id = p.str("id")?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let is_site = res.sites.as_ref().is_some_and(|m| m.contains_key(id));
     if !is_site && !sc.nodes.contains_key(id) {
         return Err(ApiError::not_found(format!(
@@ -119,16 +120,16 @@ fn turns_movements(s: &mut Session, p: &Params) -> ApiResult {
     };
     Ok(json!({
         "scenario": sc.id, "period": period, "id": id, "site": is_site, "name": name, "empty": empty,
-        "rows": m.rows.iter().map(|r| r.to_value()).collect::<Vec<_>>(),
+        "rows": m.rows.iter().map(construct_transport::turns::MovementRow::to_value).collect::<Vec<_>>(),
         "arms": m.arms.iter().map(|a| a.to_value(true)).collect::<Vec<_>>(),
     }))
 }
 
-fn turns_diagram(s: &mut Session, p: &Params) -> ApiResult {
+fn turns_diagram(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
     let node = p.str("node")?;
-    let sid = s.sid(i);
-    let sc = &s.project.scenarios[i];
+    let sid = s.sid(i)?;
+    let sc = scenario_at(&s.project.scenarios, i)?;
     if !sc.nodes.contains_key(node) {
         return Err(ApiError::not_found(format!(
             "There is no junction {node} in this scenario."
@@ -149,11 +150,11 @@ fn turns_diagram(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "scenario": sid, "period": period, "node": node, "svg": svg }))
 }
 
-fn turns_count_csv(s: &mut Session, p: &Params) -> ApiResult {
+fn turns_count_csv(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
     let node = p.str("node")?;
-    let sid = s.sid(i);
-    let sc = &s.project.scenarios[i];
+    let sid = s.sid(i)?;
+    let sc = scenario_at(&s.project.scenarios, i)?;
     if !sc.nodes.contains_key(node) {
         return Err(ApiError::not_found(format!(
             "There is no junction {node} in this scenario."
@@ -165,15 +166,15 @@ fn turns_count_csv(s: &mut Session, p: &Params) -> ApiResult {
     )
 }
 
-fn turns_sidra_csv(s: &mut Session, p: &Params) -> ApiResult {
+fn turns_sidra_csv(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let sid = s.sid(i);
+    let sid = s.sid(i)?;
     let periods: Vec<String> = match p.opt_strings("periods")? {
         Some(v) => v,
         None => ["AM", "PM"]
             .iter()
             .filter(|x| s.result(&sid, x).is_some())
-            .map(|x| x.to_string())
+            .map(std::string::ToString::to_string)
             .collect(),
     };
     let list: Vec<&Res> = periods.iter().filter_map(|x| s.result(&sid, x)).collect();
@@ -184,7 +185,7 @@ fn turns_sidra_csv(s: &mut Session, p: &Params) -> ApiResult {
         force: p.flag("force")?,
     };
     let e = turns::sidra_export(
-        Some(&s.project.scenarios[i]),
+        Some(scenario_at(&s.project.scenarios, i)?),
         &list,
         &s.project.settings,
         nodes.as_deref(),

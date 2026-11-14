@@ -9,12 +9,15 @@ use super::helpers::{
 };
 use super::registry::Registry;
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
+use crate::schema::{
+    Params, array, boolean, choice, free_object, integer, latlng, number, params, string, strings,
+};
+use crate::transport::helpers::scenario_at;
 use construct_transport::edit::IdSource;
 use construct_transport::edit::ROUTE_COLOURS;
 use construct_transport::edit::json::JsonValue;
 use construct_transport::edit::net::{self, NodeProps};
-use construct_transport::jsnum::{Maybe, Num, math_max, math_round, to_int32};
+use construct_transport::jsnum::{Maybe, Num, f64_to_usize, math_max, math_round, to_int32};
 use construct_transport::project::{
     CLASSES, Link, Node, Route, Scenario, Zone, road_class, road_class_exact,
 };
@@ -23,6 +26,14 @@ use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 
 pub(super) fn register(r: &mut Registry) {
+    register_1(r);
+    register_2(r);
+    register_3(r);
+    register_4(r);
+}
+
+/// Part 1 of [`register`]: `transport.network.list` to `transport.network.add_link`.
+fn register_1(r: &mut Registry) {
     let sc = || string("Scenario id or name (default: the active scenario).");
     let kind4 = || {
         choice(
@@ -113,6 +124,17 @@ pub(super) fn register(r: &mut Registry) {
         ),
         network_add_link,
     );
+}
+
+/// Part 2 of [`register`]: `transport.network.add_road` to `transport.network.set`.
+fn register_2(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
+    let kind4 = || {
+        choice(
+            &["node", "link", "zone", "route"],
+            "What kind of thing: node (junction), link (road), zone (zone or gateway) or route (bus route).",
+        )
+    };
     r.add(
         "transport.network.add_road",
         "Draw a road along points as the Draw road tool does: ends and clicks on roads snap or split, new junctions are made, roads are added between them and junction control is set; one undo step.",
@@ -199,6 +221,11 @@ pub(super) fn register(r: &mut Registry) {
             set_fields(s, p, kind)
         },
     );
+}
+
+/// Part 3 of [`register`]: `transport.zone.add` to `transport.route.set`.
+fn register_3(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
     r.add(
         "transport.zone.add",
         "Add a land-use zone at a position as the Zone tool does (200 houses unless land use is given).",
@@ -284,6 +311,11 @@ pub(super) fn register(r: &mut Registry) {
         ),
         |s, p| set_fields(s, p, FieldKind::Route),
     );
+}
+
+/// Part 4 of [`register`]: `transport.route.delete` to `transport.route.delete`.
+fn register_4(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
     r.add(
         "transport.route.delete",
         "Delete a bus route.",
@@ -346,83 +378,89 @@ fn kind_name(kind: &str) -> &'static str {
     }
 }
 
-fn in_box(ll: LatLng, b: &[f64]) -> bool {
-    ll[0] >= b[0] && ll[0] <= b[2] && ll[1] >= b[1] && ll[1] <= b[3]
+/// Whether a position is in a box of [south, west, north, east].
+fn in_box(ll: LatLng, b: &[f64; 4]) -> bool {
+    let [south, west, north, east] = *b;
+    ll[0] >= south && ll[0] <= north && ll[1] >= west && ll[1] <= east
 }
 
 fn link_json(sc: &Scenario, l: &Link) -> Value {
     let mut v = val(l);
-    if !missing_end(sc, l) {
-        v["lengthM"] = json!(construct_transport::util::r1(sc.link_len(l)));
+    if !missing_end(sc, l)
+        && let Some(o) = v.as_object_mut()
+    {
+        o.insert(
+            "lengthM".to_string(),
+            json!(construct_transport::util::r1(sc.link_len(l))),
+        );
     }
     v
 }
 
 // ------------------------------------------------------------------ reads
 
-fn network_list(s: &mut Session, p: &Params) -> ApiResult {
+fn network_list(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let kind = p.str("kind")?;
-    let ids: Option<HashSet<String>> = p.opt_strings("ids")?.map(|v| v.into_iter().collect());
-    let bbox: Option<Vec<f64>> = match p.opt_array("bbox")? {
+    let ids: Option<HashSet<String>> = p.opt_strings("ids")?.map(|list| list.into_iter().collect());
+    let bbox: Option<[f64; 4]> = match p.opt_array("bbox")? {
         None => None,
-        Some(a) => {
-            let v: Vec<f64> = a.iter().filter_map(Value::as_f64).collect();
-            if v.len() != 4 {
+        Some(given) => {
+            let nums: Vec<f64> = given.iter().filter_map(Value::as_f64).collect();
+            let Ok(corners) = <[f64; 4]>::try_from(nums) else {
                 return Err(ApiError::bad_params(
                     "`bbox` must be [south, west, north, east]",
                 ));
-            }
-            Some(v)
+            };
+            Some(corners)
         }
     };
-    let limit = p.opt_f64("limit")?.map_or(200, |x| x.max(0.0) as usize);
-    let offset = p.opt_f64("offset")?.map_or(0, |x| x.max(0.0) as usize);
-    let keep = |id: &str| ids.as_ref().is_none_or(|s| s.contains(id));
+    let limit = p
+        .opt_f64("limit")?
+        .map_or(200, |x| f64_to_usize(x.max(0.0)));
+    let offset = p.opt_f64("offset")?.map_or(0, |x| f64_to_usize(x.max(0.0)));
+    let keep = |id: &str| ids.as_ref().is_none_or(|set| set.contains(id));
     let mut items: Vec<Value> = Vec::new();
     let mut total = 0usize;
-    let mut push = |v: Value| {
+    let mut push = |item: Value| {
         if total >= offset && items.len() < limit {
-            items.push(v);
+            items.push(item);
         }
-        total += 1;
+        // one per record in the scenario: far below usize::MAX
+        total = total.saturating_add(1);
     };
     match kind {
         "node" => {
-            for n in sc
-                .nodes
-                .values()
-                .filter(|n| keep(&n.id) && bbox.as_ref().is_none_or(|b| in_box(n.ll(), b)))
-            {
-                push(val(n));
+            for node in sc.nodes.values().filter(|node| {
+                keep(&node.id) && bbox.as_ref().is_none_or(|bx| in_box(node.ll(), bx))
+            }) {
+                push(val(node));
             }
         }
         "link" => {
-            for l in sc.links.values().filter(|l| keep(&l.id)) {
-                if let Some(b) = &bbox {
-                    if missing_end(sc, l) {
+            for link in sc.links.values().filter(|link| keep(&link.id)) {
+                if let Some(bx) = &bbox {
+                    if missing_end(sc, link) {
                         continue;
                     }
-                    if !sc.geom(l).iter().any(|q| in_box(*q, b)) {
+                    if !sc.geom(link).iter().any(|pt| in_box(*pt, bx)) {
                         continue;
                     }
                 }
-                push(link_json(sc, l));
+                push(link_json(sc, link));
             }
         }
         "zone" => {
-            for z in sc
-                .zones
-                .values()
-                .filter(|z| keep(&z.id) && bbox.as_ref().is_none_or(|b| in_box(z.ll(), b)))
-            {
-                push(val(z));
+            for zone in sc.zones.values().filter(|zone| {
+                keep(&zone.id) && bbox.as_ref().is_none_or(|bx| in_box(zone.ll(), bx))
+            }) {
+                push(val(zone));
             }
         }
         _ => {
-            for r in sc.routes.values().filter(|r| keep(&r.id)) {
-                push(val(r));
+            for route in sc.routes.values().filter(|route| keep(&route.id)) {
+                push(val(route));
             }
         }
     }
@@ -431,9 +469,9 @@ fn network_list(s: &mut Session, p: &Params) -> ApiResult {
     )
 }
 
-fn network_get(s: &mut Session, p: &Params) -> ApiResult {
+fn network_get(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let (kind, id) = (p.str("kind")?, p.str("id")?);
     let nf = || {
         ApiError::not_found(format!(
@@ -475,9 +513,9 @@ fn network_get(s: &mut Session, p: &Params) -> ApiResult {
     }
 }
 
-fn network_summary(s: &mut Session, p: &Params) -> ApiResult {
+fn network_summary(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let mut km = 0.0;
     let mut proposed = 0.0;
     let mut by_class: Vec<(String, f64, usize)> = CLASSES
@@ -485,51 +523,56 @@ fn network_summary(s: &mut Session, p: &Params) -> ApiResult {
         .map(|c| (c.key.to_string(), 0.0, 0))
         .collect();
     let mut controls: Vec<(String, usize)> = Vec::new();
-    for l in sc.links.values() {
-        if missing_end(sc, l) {
+    // the counts below count roads and junctions of one scenario: far below usize::MAX
+    for link in sc.links.values() {
+        if missing_end(sc, link) {
             continue;
         }
-        let len = sc.link_len(l) / 1000.0;
+        let len = sc.link_len(link) / 1000.0;
         km += len;
-        if l.status.is("proposed") {
+        if link.status.is("proposed") {
             proposed += len;
         }
-        let key = road_class(l.cls.as_str()).key;
-        if let Some(e) = by_class.iter_mut().find(|e| e.0 == key) {
-            e.1 += len;
-            e.2 += 1;
+        let key = road_class(link.cls.as_str()).key;
+        if let Some(entry) = by_class.iter_mut().find(|entry| entry.0 == key) {
+            entry.1 += len;
+            entry.2 = entry.2.saturating_add(1);
         }
     }
-    for n in sc.nodes.values() {
-        let c = n.control.as_str().unwrap_or("none").to_string();
-        match controls.iter_mut().find(|e| e.0 == c) {
-            Some(e) => e.1 += 1,
-            None => controls.push((c, 1)),
+    for node in sc.nodes.values() {
+        let control = node.control.as_str().unwrap_or("none").to_string();
+        match controls.iter_mut().find(|entry| entry.0 == control) {
+            Some(entry) => entry.1 = entry.1.saturating_add(1),
+            None => controls.push((control, 1)),
         }
     }
-    let gateways = sc.zones.values().filter(|z| z.kind.is("gateway")).count();
+    let gateways = sc
+        .zones
+        .values()
+        .filter(|zone| zone.kind.is("gateway"))
+        .count();
     Ok(json!({
         "scenario": sc.id, "name": sc.name.as_str(),
-        "nodes": sc.nodes.len(), "links": sc.links.len(), "zones": sc.zones.len() - gateways, "gateways": gateways, "routes": sc.routes.len(),
+        "nodes": sc.nodes.len(), "links": sc.links.len(), "zones": sc.zones.len().saturating_sub(gateways), "gateways": gateways, "routes": sc.routes.len(),
         "lengthKm": km, "proposedKm": proposed,
-        "byClass": by_class.iter().map(|(k, l, n)| json!({ "cls": k, "links": n, "lengthKm": l })).collect::<Vec<_>>(),
-        "controls": controls.iter().map(|(k, n)| json!({ "control": k, "nodes": n })).collect::<Vec<_>>(),
+        "byClass": by_class.iter().map(|(cls, len, count)| json!({ "cls": cls, "links": count, "lengthKm": len })).collect::<Vec<_>>(),
+        "controls": controls.iter().map(|(control, count)| json!({ "control": control, "nodes": count })).collect::<Vec<_>>(),
     }))
 }
 
-fn network_nearest(s: &mut Session, p: &Params) -> ApiResult {
+fn network_nearest(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let at = p.latlng("point")?;
     let max_m = p.opt_f64("maxM")?.unwrap_or(100.0);
     if p.str("kind")? == "node" {
         let connected = p.opt_bool("connectedOnly")?.unwrap_or(true);
         let deg = net::degree(sc);
-        let f = move |n: &Node| !connected || deg.get(&n.id).copied().unwrap_or(0) > 0;
-        let id = net::nearest_node(sc, at, max_m, Some(&f));
+        let wanted = move |node: &Node| !connected || deg.get(&node.id).copied().unwrap_or(0) > 0;
+        let id = net::nearest_node(sc, at, max_m, Some(&wanted));
         Ok(match id.and_then(|id| sc.nodes.get(&id)) {
-            Some(n) => {
-                json!({ "found": true, "id": n.id, "point": n.ll(), "distanceM": construct_transport::util::dist(&at, &n.ll()), "name": kit_junction_name(sc, &n.id) })
+            Some(node) => {
+                json!({ "found": true, "id": node.id, "point": node.ll(), "distanceM": construct_transport::util::dist(&at, &node.ll()), "name": kit_junction_name(sc, &node.id) })
             }
             None => json!({ "found": false }),
         })
@@ -543,6 +586,10 @@ fn network_nearest(s: &mut Session, p: &Params) -> ApiResult {
 
 mod edit;
 mod fields;
-use edit::*;
-use fields::*;
+use edit::{
+    delete_kind, network_add_link, network_add_node, network_add_road, network_auto_control,
+    network_delete, network_move, network_reverse, network_split, route_add, zone_add,
+    zone_add_gateway,
+};
+use fields::set_fields;
 pub(super) use fields::{FieldKind, apply_fields};

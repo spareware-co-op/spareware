@@ -25,7 +25,9 @@ use std::fmt;
 /// runs this edition, and moving to another is an ordered operation that reports what changed.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Edition {
+    /// Which implementation built them, such as the stand-in or the kernel.
     pub engine: String,
+    /// That implementation's version.
     pub version: u32,
     /// The kernel's `NameScheme`: how faces and edges are named.
     pub name_scheme: u32,
@@ -40,6 +42,7 @@ pub struct Recipe {
     pub schema: u32,
     /// The operation, by the name Spare Construct knows it: `wall.straight`, not how it is made.
     pub op: String,
+    /// The operation's version, so an old recipe still builds as it did.
     pub op_version: u32,
     /// The payload. Its meaning is the operation's. Numbers in it are whole, in millimetres, so a
     /// hash never depends on how a float prints. Sorted by key, so the bytes are canonical.
@@ -63,7 +66,9 @@ impl Recipe {
 /// A box around a shape, in whole millimetres, in the shape's own frame.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bounds {
+    /// The lowest x, y and z.
     pub min: [i64; 3],
+    /// The highest x, y and z.
     pub max: [i64; 3],
 }
 
@@ -80,7 +85,9 @@ pub struct FaceName {
 /// A triangle mesh in millimetres: `positions` holds x, y, z in turn.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Mesh {
+    /// The vertices: x, y and z of each in turn.
     pub positions: Vec<i64>,
+    /// The triangles: three vertex numbers each.
     pub indices: Vec<u32>,
 }
 
@@ -91,6 +98,7 @@ pub struct Display {
     pub lod: u32,
     /// How far this level strays from the body, in millimetres.
     pub deviation: i64,
+    /// The triangles to draw.
     pub mesh: Mesh,
     /// The shape's outline seen from above, as the plan draws it.
     pub outline: Vec<[i64; 2]>,
@@ -116,7 +124,9 @@ impl Display {
 pub struct Built {
     /// The body's canonical bytes. Opaque: nothing above this interface reads inside.
     pub body: Vec<u8>,
+    /// A box around the body.
     pub bounds: Bounds,
+    /// The persistent names of the body's faces.
     pub names: Vec<FaceName>,
     /// Finest first.
     pub displays: Vec<Display>,
@@ -134,7 +144,9 @@ impl Built {
 /// model state, not a crash: the same on every machine.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GeometryError {
+    /// A short code that names what went wrong, for programs.
     pub code: String,
+    /// What went wrong, in words for people.
     pub message: String,
 }
 
@@ -152,5 +164,9 @@ pub trait Geometry: Send + Sync + 'static {
     fn edition(&self) -> Edition;
 
     /// Builds a recipe. A pure function: no clock, no randomness, no state.
+    ///
+    /// # Errors
+    ///
+    /// A [`GeometryError`] when the recipe can't be built, the same on every machine.
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError>;
 }

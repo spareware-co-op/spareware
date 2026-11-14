@@ -11,13 +11,15 @@ use construct_model::rows::{Model, Project};
 use kit_core::Id;
 use kit_ops::{Decider, Question};
 use kit_store::{Kv, Place as KitPlace, Reader, StoreError, read_row};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
-/// The rules, and the shape of what they talk about.
+/// The rules of who may do what, in Cedar.
 pub const POLICY: &str = include_str!("../../policy/access.cedar");
+/// The Cedar schema of the people, places and actions [`POLICY`] talks about.
 pub const SCHEMA: &str = include_str!("../../policy/access.cedarschema");
 
+/// Who may do what: reads the entities a request needs from the store and asks the decider.
 pub struct Access<K: Kv, D: Decider> {
     kv: K,
     decider: D,
@@ -26,13 +28,21 @@ pub struct Access<K: Kv, D: Decider> {
 /// What a request acts on.
 #[derive(Clone, Copy, Debug)]
 pub enum Target<'a> {
+    /// The directory of hubs and people.
     Directory,
+    /// A person.
     Person(&'a Id),
+    /// A hub.
     Hub(&'a Id),
+    /// A project.
     Project(&'a Id),
+    /// A team: its project and the team.
     Team(&'a Id, &'a Id),
+    /// A folder: its project, team and folder.
     Folder(&'a Id, &'a Id, &'a Id),
+    /// A model: its project and the model.
     Model(&'a Id, &'a Id),
+    /// A package: its project, team, folder and the package.
     Package(&'a Id, &'a Id, &'a Id, &'a Id),
 }
 
@@ -60,7 +70,11 @@ struct Slice {
 
 impl Slice {
     fn add(&mut self, kind: &str, id: &str, attrs: Value, parents: Vec<Value>) {
-        let entity = json!({ "uid": uid(kind, id), "attrs": attrs, "parents": parents });
+        let mut entity = Map::new();
+        entity.insert("uid".to_owned(), uid(kind, id));
+        entity.insert("attrs".to_owned(), attrs);
+        entity.insert("parents".to_owned(), Value::Array(parents));
+        let entity = Value::Object(entity);
         self.entities
             .insert((kind.to_owned(), id.to_owned()), entity);
     }
@@ -162,11 +176,16 @@ impl Slice {
 }
 
 impl<K: Kv, D: Decider> Access<K, D> {
+    /// Access over this store, with this decider.
     pub fn new(kv: K, decider: D) -> Self {
         Self { kv, decider }
     }
 
     /// Asks the decider.
+    ///
+    /// # Errors
+    ///
+    /// A store error while reading the entities the request needs.
     pub async fn allowed(
         &self,
         person: &Id,

@@ -4,15 +4,24 @@ use super::Session;
 use super::helpers::val;
 use super::registry::{Registry, Sink};
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
+use crate::schema::{
+    Params, array, boolean, choice, free_object, integer, none, number, params, string, strings,
+};
+use crate::transport::helpers::{put, scenario_at};
 use construct_transport::assign::assign;
 use construct_transport::demand::trip_ends;
-use construct_transport::jsnum::json_number;
+use construct_transport::jsnum::{f64_to_usize, json_number};
 use construct_transport::results::{AssignOpts, Res};
 use construct_transport::util::fmt;
 use serde_json::{Map, Value, json};
 
 pub(super) fn register(r: &mut Registry) {
+    register_1(r);
+    register_2(r);
+}
+
+/// Part 1 of [`register`]: `transport.run` to `transport.results.nodes`.
+fn register_1(r: &mut Registry) {
     let sc = || string("Scenario id or name (default: the active scenario).");
     let per = || {
         choice(
@@ -45,7 +54,7 @@ pub(super) fn register(r: &mut Registry) {
         "List every result the project holds: scenario, period, year, convergence, whether it is out of date and the headline numbers.",
         false,
         none(),
-        results_list,
+        |s, _| Ok(results_list(s)),
     );
     r.add(
         "transport.results.get",
@@ -101,6 +110,17 @@ pub(super) fn register(r: &mut Registry) {
         ),
         results_nodes,
     );
+}
+
+/// Part 2 of [`register`]: `transport.results.turns` to `transport.results.trip_ends`.
+fn register_2(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
+    let per = || {
+        choice(
+            &["AM", "PM"],
+            "Peak hour (default the project's current period).",
+        )
+    };
     r.add(
         "transport.results.turns",
         "Turning movements by junction from the assignment (arc in, arc out, movement, flow in veh/h and pcu/h).",
@@ -125,7 +145,7 @@ pub(super) fn register(r: &mut Registry) {
         |s, p| {
             let (i, period) = pick(s, p)?;
             let res = held(s, i, &period)?;
-            Ok(json!({ "scenario": s.sid(i), "period": period, "busPcu": res.bus_pcu, "routes": val(&res.routes) }))
+            Ok(json!({ "scenario": s.sid(i)?, "period": period, "busPcu": res.bus_pcu, "routes": val(&res.routes) }))
         },
     );
     r.add(
@@ -137,7 +157,7 @@ pub(super) fn register(r: &mut Registry) {
             let (i, period) = pick(s, p)?;
             let res = held(s, i, &period)?;
             Ok(json!({
-                "scenario": s.sid(i), "period": period,
+                "scenario": s.sid(i)?, "period": period,
                 "sites": val(&res.sites), "siteTurns": val(&res.site_turns), "siteTurnsBasis": res.site_turns_basis,
             }))
         },
@@ -159,13 +179,13 @@ pub(super) fn register(r: &mut Registry) {
 }
 
 /// The scenario and period a results command asks about.
-pub(super) fn pick(s: &Session, p: &Params) -> ApiResult<(usize, String)> {
+pub(super) fn pick(s: &Session, p: Params<'_>) -> ApiResult<(usize, String)> {
     Ok((s.pick_scenario(p, "scenario")?, s.period_of(p)?))
 }
 
 /// The result held for a scenario and period, or the reason there is none.
 pub(super) fn held<'a>(s: &'a Session, i: usize, period: &str) -> ApiResult<&'a Res> {
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     s.result(&sc.id, period).ok_or_else(|| {
         ApiError::invalid_state(format!(
             "{} has no {period} result. Run the model first (transport.run).",
@@ -174,11 +194,11 @@ pub(super) fn held<'a>(s: &'a Session, i: usize, period: &str) -> ApiResult<&'a 
     })
 }
 
-fn page(p: &Params, default_limit: usize) -> ApiResult<(usize, usize)> {
+fn page(p: Params<'_>, default_limit: usize) -> ApiResult<(usize, usize)> {
     let limit = p
         .opt_f64("limit")?
-        .map_or(default_limit, |x| x.max(0.0) as usize);
-    let offset = p.opt_f64("offset")?.map_or(0, |x| x.max(0.0) as usize);
+        .map_or(default_limit, |x| f64_to_usize(x.max(0.0)));
+    let offset = p.opt_f64("offset")?.map_or(0, |x| f64_to_usize(x.max(0.0)));
     Ok((limit, offset))
 }
 
@@ -190,7 +210,8 @@ fn headline(res: &Res) -> Value {
 
 // ------------------------------------------------------------------ run
 
-fn run_model(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
+/// The scenarios and periods `transport.run` is asked to run, in order; None when only the stale ones are asked for and none is.
+fn run_list(s: &Session, p: Params<'_>) -> ApiResult<Option<Vec<(usize, String)>>> {
     let periods: Vec<String> = match p.opt_strings("periods")? {
         Some(v) if !v.is_empty() => v,
         _ => vec!["AM".to_string(), "PM".to_string()],
@@ -211,9 +232,7 @@ fn run_model(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
             }
         }
         if pairs.is_empty() {
-            return Ok(
-                json!({ "runs": [], "skipped": [], "message": "Every result is up to date." }),
-            );
+            return Ok(None);
         }
     } else {
         let idx: Vec<usize> = if p.flag("all")? {
@@ -231,6 +250,13 @@ fn run_model(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
             }
         }
     }
+    Ok(Some(pairs))
+}
+
+fn run_model(s: &mut Session, p: Params<'_>, sink: Sink<'_>) -> ApiResult {
+    let Some(pairs) = run_list(s, p)? else {
+        return Ok(json!({ "runs": [], "skipped": [], "message": "Every result is up to date." }));
+    };
     let base_opts: AssignOpts = match p.opt_object("assign")? {
         Some(o) => serde_json::from_value(Value::Object(o.clone())).map_err(|e| {
             ApiError::bad_params(format!("`assign` does not fit the assignment options: {e}"))
@@ -244,13 +270,13 @@ fn run_model(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
     let mut done_sc: Vec<usize> = Vec::new();
     for (n, (i, period)) in pairs.into_iter().enumerate() {
         let (sid, name) = {
-            let sc = &s.project.scenarios[i];
+            let sc = scenario_at(&s.project.scenarios, i)?;
             (
                 sc.id.clone(),
                 sc.name.as_str().unwrap_or(&sc.id).to_string(),
             )
         };
-        let sc = &s.project.scenarios[i];
+        let sc = scenario_at(&s.project.scenarios, i)?;
         if sc.links.is_empty() {
             skipped.push(json!({ "scenario": sid, "name": name, "period": period, "reason": format!("{name} has no roads yet. Import or draw some first.") }));
             continue;
@@ -264,17 +290,17 @@ fn run_model(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
         let res = {
             let project = &s.project;
             sink(
-                &json!({ "event": "run_start", "scenario": sid, "name": name, "period": period, "run": n + 1, "runs": total }),
+                &json!({ "event": "run_start", "scenario": sid, "name": name, "period": period, "run": n.saturating_add(1), "runs": total }),
             );
             let mut cb = |it: u32, gap: f64, msg: &str| {
                 sink(&json!({
-                    "event": "progress", "scenario": sid, "name": name, "period": period, "run": n + 1, "runs": total,
+                    "event": "progress", "scenario": sid, "name": name, "period": period, "run": n.saturating_add(1), "runs": total,
                     "iteration": it, "gap": json_number(gap), "message": msg,
                 }));
             };
             assign(
                 project,
-                &project.scenarios[i],
+                scenario_at(&project.scenarios, i)?,
                 &project.settings,
                 &opts,
                 Some(&mut cb),
@@ -289,7 +315,7 @@ fn run_model(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
             not_converged.push(format!("{name} {period}"));
         }
         sink(
-            &json!({ "event": "run_done", "scenario": sid, "period": period, "run": n + 1, "runs": total }),
+            &json!({ "event": "run_done", "scenario": sid, "period": period, "run": n.saturating_add(1), "runs": total }),
         );
         s.store_res(i, &period, res)?;
         if !done_sc.contains(&i) {
@@ -298,35 +324,32 @@ fn run_model(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
         runs.push(summary);
     }
     let ok = runs.len();
-    let mut message = if ok == 0 {
-        "Nothing was run.".to_string()
-    } else if ok == 1 {
-        let r = &runs[0];
-        format!(
-            "Model run ({}): {} peak {} veh/h, average speed {} km/h, {} road{} over capacity.",
-            r["name"].as_str().unwrap_or(""),
-            r["period"].as_str().unwrap_or(""),
-            fmt::int(r["kpi"]["trips"].as_f64().unwrap_or(f64::NAN)),
-            fmt::num(r["kpi"]["spd"].as_f64().unwrap_or(f64::NAN), 1),
-            fmt::int(r["kpi"]["over"].as_f64().unwrap_or(f64::NAN)),
-            if r["kpi"]["over"].as_f64() == Some(1.0) {
-                ""
-            } else {
-                "s"
-            }
-        )
-    } else {
-        format!(
+    let mut message = match runs.as_slice() {
+        [] => "Nothing was run.".to_string(),
+        [r] => {
+            let text = |k: &str| r.get(k).and_then(Value::as_str).unwrap_or("");
+            let kpi = |k: &str| r.get("kpi").and_then(|x| x.get(k)).and_then(Value::as_f64);
+            format!(
+                "Model run ({}): {} peak {} veh/h, average speed {} km/h, {} road{} over capacity.",
+                text("name"),
+                text("period"),
+                fmt::int(kpi("trips").unwrap_or(f64::NAN)),
+                fmt::num(kpi("spd").unwrap_or(f64::NAN), 1),
+                fmt::int(kpi("over").unwrap_or(f64::NAN)),
+                if kpi("over") == Some(1.0) { "" } else { "s" }
+            )
+        }
+        _ => format!(
             "Ran {ok} model runs ({} scenario{}).",
             done_sc.len(),
             if done_sc.len() == 1 { "" } else { "s" }
-        )
+        ),
     };
     if !not_converged.is_empty() {
-        message.push_str(&format!(
-            " Not fully converged: {}.",
+        message = format!(
+            "{message} Not fully converged: {}.",
             not_converged.join(", ")
-        ));
+        );
     }
     Ok(
         json!({ "runs": runs, "skipped": skipped, "notConverged": not_converged, "message": message }),
@@ -335,7 +358,7 @@ fn run_model(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
 
 // ------------------------------------------------------------------ results
 
-fn results_list(s: &mut Session, _: &Params) -> ApiResult {
+fn results_list(s: &Session) -> Value {
     let mut rows: Vec<Value> = Vec::new();
     for sc in &s.project.scenarios {
         if let Some(r) = s.results.get(&sc.id) {
@@ -347,10 +370,10 @@ fn results_list(s: &mut Session, _: &Params) -> ApiResult {
             }
         }
     }
-    Ok(json!({ "results": rows }))
+    json!({ "results": rows })
 }
 
-fn results_get(s: &mut Session, p: &Params) -> ApiResult {
+fn results_get(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
     let res = held(s, i, &period)?;
     let mut v = val(res);
@@ -363,21 +386,21 @@ fn results_get(s: &mut Session, p: &Params) -> ApiResult {
     Ok(v)
 }
 
-fn results_summary(s: &mut Session, p: &Params) -> ApiResult {
+fn results_summary(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
     let res = held(s, i, &period)?;
     Ok(json!({
-        "scenario": s.sid(i), "name": s.project.scenarios[i].name.as_str(), "period": res.period, "year": res.year, "stale": res.stale,
+        "scenario": s.sid(i)?, "name": scenario_at(&s.project.scenarios, i)?.name.as_str(), "period": res.period, "year": res.year, "stale": res.stale,
         "kpi": val(&res.kpi), "iterations": res.it, "gap": val(&res.gap), "gapTol": res.gap_tol, "maxIter": res.max_iter,
         "converged": res.converged, "hitMax": res.hit_max, "stableRule": res.stable_rule, "convNote": res.conv_note,
         "conv": val(&res.conv), "noise95": val(&res.noise95), "growth": val(&res.growth), "junction": val(&res.junction),
         "meta": val(&res.meta), "note": res.note, "manual": res.manual, "busPcu": res.bus_pcu, "ms": res.ms,
-        "counts": { "arcs": res.arcs.len(), "junctions": res.nodes.len(), "zones": res.zone_ids.len(), "busRoutes": res.routes.len(), "sites": res.sites.as_ref().map_or(0, |x| x.len()) },
+        "counts": { "arcs": res.arcs.len(), "junctions": res.nodes.len(), "zones": res.zone_ids.len(), "busRoutes": res.routes.len(), "sites": res.sites.as_ref().map_or(0, construct_transport::project::OrderedMap::len) },
         "hasPaths": res.paths.get().is_some(),
     }))
 }
 
-fn results_arcs(s: &mut Session, p: &Params) -> ApiResult {
+fn results_arcs(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
     let res = held(s, i, &period)?;
     let (limit, offset) = page(p, 200)?;
@@ -413,7 +436,7 @@ fn results_arcs(s: &mut Session, p: &Params) -> ApiResult {
             rows.reverse();
         }
     }
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let total = rows.len();
     let items: Vec<Value> = rows
         .into_iter()
@@ -422,9 +445,13 @@ fn results_arcs(s: &mut Session, p: &Params) -> ApiResult {
         .map(|(k, a)| {
             let link = k.rsplit_once(':').map_or(k, |x| x.0);
             let mut v = val(a);
-            v["key"] = json!(k);
-            v["link"] = json!(link);
-            v["name"] = json!(sc.links.get(link).and_then(|l| l.name.as_str()));
+            put(&mut v, "key", json!(k));
+            put(&mut v, "link", json!(link));
+            put(
+                &mut v,
+                "name",
+                json!(sc.links.get(link).and_then(|l| l.name.as_str())),
+            );
             v
         })
         .collect();
@@ -433,7 +460,7 @@ fn results_arcs(s: &mut Session, p: &Params) -> ApiResult {
     )
 }
 
-fn results_nodes(s: &mut Session, p: &Params) -> ApiResult {
+fn results_nodes(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
     let res = held(s, i, &period)?;
     let (limit, offset) = page(p, 100)?;
@@ -459,7 +486,7 @@ fn results_nodes(s: &mut Session, p: &Params) -> ApiResult {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
     }
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let total = rows.len();
     let items: Vec<Value> = rows
         .into_iter()
@@ -472,8 +499,12 @@ fn results_nodes(s: &mut Session, p: &Params) -> ApiResult {
                 m.remove("appr");
                 m.insert("approaches".to_string(), json!(approaches));
             }
-            v["id"] = json!(k);
-            v["name"] = json!(construct_transport::turns::junction_name(sc, k, None));
+            put(&mut v, "id", json!(k));
+            put(
+                &mut v,
+                "name",
+                json!(construct_transport::turns::junction_name(sc, k, None)),
+            );
             v
         })
         .collect();
@@ -482,7 +513,7 @@ fn results_nodes(s: &mut Session, p: &Params) -> ApiResult {
     )
 }
 
-fn results_turns(s: &mut Session, p: &Params) -> ApiResult {
+fn results_turns(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
     let res = held(s, i, &period)?;
     let (limit, offset) = page(p, 100)?;
@@ -491,7 +522,7 @@ fn results_turns(s: &mut Session, p: &Params) -> ApiResult {
             ApiError::not_found(format!("There are no turns at {n} in this result."))
         })?;
         return Ok(
-            json!({ "scenario": s.sid(i), "period": period, "node": n, "turns": val(rows) }),
+            json!({ "scenario": s.sid(i)?, "period": period, "node": n, "turns": val(rows) }),
         );
     }
     let total = res.turns.len();
@@ -500,14 +531,14 @@ fn results_turns(s: &mut Session, p: &Params) -> ApiResult {
         m.insert(k.to_string(), val(rows));
     }
     Ok(
-        json!({ "scenario": s.sid(i), "period": period, "total": total, "offset": offset, "count": m.len(), "turns": m }),
+        json!({ "scenario": s.sid(i)?, "period": period, "total": total, "offset": offset, "count": m.len(), "turns": m }),
     )
 }
 
-fn results_od(s: &mut Session, p: &Params) -> ApiResult {
-    let (i, period) = pick(s, p)?;
-    let res = held(s, i, &period)?;
-    let sc = &s.project.scenarios[i];
+fn results_od(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (idx, period) = pick(s, p)?;
+    let res = held(s, idx, &period)?;
+    let sc = scenario_at(&s.project.scenarios, idx)?;
     let z = res.zone_ids.len();
     let name = |id: &str| {
         sc.zones
@@ -516,11 +547,13 @@ fn results_od(s: &mut Session, p: &Params) -> ApiResult {
             .unwrap_or(id)
             .to_string()
     };
-    let zones: Vec<Value> = res.zone_ids.iter().enumerate().map(|(k, id)| json!({ "id": id, "name": name(id), "O": val(&res.o[k]), "D": val(&res.d[k]) })).collect();
+    let zones: Vec<Value> = res.zone_ids.iter().enumerate().map(|(k, id)| json!({ "id": id, "name": name(id), "O": val(&res.o.get(k)), "D": val(&res.d.get(k)) })).collect();
+    // t holds the matrix row by row, z numbers to a row
     let matrix: Value = match &res.t {
         Some(t) => Value::Array(
-            (0..z)
-                .map(|a| Value::Array((0..z).map(|b| json_number(t[a * z + b])).collect()))
+            t.chunks(z.max(1))
+                .take(z)
+                .map(|row| Value::Array(row.iter().take(z).map(|x| json_number(*x)).collect()))
                 .collect(),
         ),
         None => Value::Null,
@@ -532,9 +565,9 @@ fn results_od(s: &mut Session, p: &Params) -> ApiResult {
     }))
 }
 
-fn results_trip_ends(s: &mut Session, p: &Params) -> ApiResult {
+fn results_trip_ends(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let st = &s.project.settings;
     let mut rows: Vec<Value> = Vec::new();
     let mut tot = [0.0f64; 4];

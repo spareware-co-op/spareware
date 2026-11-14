@@ -5,6 +5,20 @@
 //! made, the undo and redo labels and which results were out of date. The command layer replays the same steps with the same seed
 //! and clock, so every id must match, and the project after each step must equal the JavaScript's.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_api::Session;
@@ -23,10 +37,10 @@ impl Tally {
         if total > 0 {
             let mut m = format!("{total} difference(s) under {path}:");
             for d in diffs.iter().take(6) {
-                m.push_str(&format!(
-                    "\n  {}\n      expected {}\n      actual   {}",
+                m = format!(
+                    "{m}\n  {}\n      expected {}\n      actual   {}",
                     d.path, d.expected, d.actual
-                ));
+                );
             }
             self.failures.push(m);
         }
@@ -203,7 +217,7 @@ fn every_edit_does_what_the_interface_does() {
                     }
                     "addBus" => t.check(&format!("{at}.id"), &json!([r["id"]]), &want["routes"]),
                     "addZone" | "addGateway" => {
-                        t.check(&format!("{at}.id"), &json!([r["id"]]), &want["zones"])
+                        t.check(&format!("{at}.id"), &json!([r["id"]]), &want["zones"]);
                     }
                     "copy" | "newScenario" => t.check(&format!("{at}.id"), &r["id"], &want["id"]),
                     _ => {}
@@ -222,7 +236,7 @@ fn every_edit_does_what_the_interface_does() {
                 .iter()
                 .map(|x| {
                     json!({
-                        "id": x.id, "name": x.name.as_str(), "year": x.year.get().map(|y| y.to_number()),
+                        "id": x.id, "name": x.name.as_str(), "year": x.year.get().map(construct_transport::jsnum::JsNum::to_number),
                         "nodes": x.nodes.len(), "links": x.links.len(), "zones": x.zones.len(), "routes": x.routes.len(),
                     })
                 })

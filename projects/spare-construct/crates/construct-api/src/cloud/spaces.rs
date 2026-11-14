@@ -16,48 +16,68 @@ use kit_sync::{Applied, Context, Elsewhere, Outcome};
 use serde::Deserialize;
 use serde_json::json;
 
+/// `model.add`: a new model in a team's WIP folder.
 #[derive(Deserialize)]
 pub struct AddModel {
+    /// The team whose WIP folder it goes in.
     #[serde(with = "kit_ops::id")]
     pub team: Id,
+    /// The name people see.
     pub name: String,
+    /// What publishing it makes, as in "Arch package".
     pub package: String,
     /// Where package numbers carry on from, for a model that started elsewhere.
     #[serde(default)]
     pub last_version: u32,
 }
 
+/// `model.publish`: a numbered package of a model, into its team's Shared folder.
 #[derive(Deserialize)]
 pub struct Publish {
+    /// The team publishing it.
     #[serde(with = "kit_ops::id")]
     pub team: Id,
+    /// The log number the package freezes the model at.
     pub seq: u64,
+    /// Where its bytes are in file storage.
     pub file: String,
+    /// The SHA-256 its bytes must have, in hex.
     pub sha256: String,
+    /// How many elements it holds.
     pub elements: usize,
 }
 
+/// `package.bridge`: a package sent to a team in a project of another hub.
 #[derive(Deserialize)]
 pub struct Bridge {
+    /// The team whose Shared folder holds the package.
     #[serde(with = "kit_ops::id")]
     pub team: Id,
+    /// The project it goes to.
     #[serde(with = "kit_ops::id")]
     pub to_project: Id,
+    /// The team there that will take it in.
     #[serde(with = "kit_ops::id")]
     pub to_team: Id,
 }
 
+/// `package.take`: a bridged package taken into a team's Consumed folder.
 #[derive(Deserialize)]
 pub struct Take {
+    /// The team taking it in.
     #[serde(with = "kit_ops::id")]
     pub team: Id,
 }
 
+/// `link.add`: a link from a model to another model or to a package.
 #[derive(Deserialize)]
 pub struct AddLink {
+    /// Which of the three ways it links.
     pub kind: LinkKind,
+    /// The team whose folder holds the package, for a link to a package.
     #[serde(default, with = "kit_ops::id::option")]
     pub team: Option<Id>,
+    /// The model or package linked.
     #[serde(with = "kit_ops::id")]
     pub source: Id,
 }
@@ -98,14 +118,17 @@ pub mod folders {
         Id::parse(name).unwrap_or_else(|_| Id::from_time_and_random(0, [0; 10]))
     }
 
+    /// Work in progress: a team's own models.
     #[must_use]
     pub fn wip() -> Id {
         known("wip")
     }
+    /// The packages a team has published.
     #[must_use]
     pub fn shared() -> Id {
         known("shared")
     }
+    /// The packages a team has taken in from others.
     #[must_use]
     pub fn consumed() -> Id {
         known("consumed")
@@ -165,7 +188,15 @@ async fn publish<T: Txn>(
         project: project.clone(),
         model: model_id.clone(),
     };
-    let version = read_row::<u32, T>(txn, &place.key()).await?.unwrap_or(0) + 1;
+    let Some(version) = read_row::<u32, T>(txn, &place.key())
+        .await?
+        .unwrap_or(0)
+        .checked_add(1)
+    else {
+        return Ok(Err(
+            "That model has as many packages as it can hold.".to_owned()
+        ));
+    };
     txn.put(place.key(), to_row(&version)?).await?;
     let name = format!("{} v{version}", model.package);
     let item = Item {
@@ -180,7 +211,8 @@ async fn publish<T: Txn>(
         by: edit.person.clone(),
         from: None,
         bridged_to: Vec::new(),
-        entry: context.head + 1,
+        // the log entry this command makes: the head counts entries, far below u64::MAX
+        entry: context.head.saturating_add(1),
     };
     txn.put(shared(project, &args.team, &item.id).key(), to_row(&item)?)
         .await?;
@@ -350,6 +382,10 @@ async fn add_link<T: Txn>(txn: &mut T, project: &Id, edit: &Edit) -> Result<Outc
 }
 
 /// Runs a folder command.
+///
+/// # Errors
+///
+/// A store error; a command that cannot be made is the outcome's error instead.
 pub async fn apply<T: Txn>(
     txn: &mut T,
     project: &Id,

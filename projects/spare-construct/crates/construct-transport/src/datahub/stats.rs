@@ -3,19 +3,21 @@
 
 use super::{Count, Data, Match, is_estimate, matches, period_vol};
 use crate::graph::js_sort_by;
-use crate::jsnum::math_max;
+use crate::jsnum::{math_max, usize_to_f64};
 use crate::project::{Scenario, Settings};
 use crate::results::{Res, plain};
 use serde::Serialize;
 use std::rc::Rc;
 
 /// `Math.sqrt(2 * (m - c) ** 2 / Math.max(1, m + c))`: the GEH statistic of a modelled flow m and a count c (veh/h).
+#[must_use]
 pub fn geh(m: f64, c: f64) -> f64 {
     let d = m - c;
     (2.0 * (d * d) / math_max(1.0, m + c)).sqrt()
 }
 
 /// The modelled flow at a matched count: the arc it counts (or both arcs of the link added), None when that arc has no result.
+#[must_use]
 pub fn model_flow(res: &Res, mt: &Match) -> Option<f64> {
     let a = res.arcs.get(&format!("{}:ab", mt.link));
     let b = res.arcs.get(&format!("{}:ba", mt.link));
@@ -53,6 +55,7 @@ pub struct Regression {
 }
 
 /// `DataHub.regression(x, y)`: slope through the origin and the three R² of model (y) against counts (x); None where undefined.
+#[must_use]
 pub fn regression(x: &[f64], y: &[f64]) -> Regression {
     let n = x.len().min(y.len());
     let mut out = Regression {
@@ -68,40 +71,41 @@ pub fn regression(x: &[f64], y: &[f64]) -> Regression {
         return out;
     }
     let (mut sx, mut sy, mut sxy, mut sxx, mut syy) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64);
-    for i in 0..n {
-        sx += x[i];
-        sy += y[i];
-        sxy += x[i] * y[i];
-        sxx += x[i] * x[i];
-        syy += y[i] * y[i];
+    // zip stops at the shorter of the two, so the pairs are the first n, in order
+    for (&xi, &yi) in x.iter().zip(y) {
+        sx += xi;
+        sy += yi;
+        sxy += xi * yi;
+        sxx += xi * xi;
+        syy += yi * yi;
     }
-    let mx = sx / n as f64;
-    let my = sy / n as f64;
+    let mx = sx / usize_to_f64(n);
+    let my = sy / usize_to_f64(n);
     if sxx > 0.0 {
         let b0 = sxy / sxx;
         let (mut se, mut st) = (0.0f64, 0.0f64);
-        for i in 0..n {
-            let e = y[i] - b0 * x[i];
-            let t = y[i] - my;
-            se += e * e;
-            st += t * t;
+        for (&xi, &yi) in x.iter().zip(y) {
+            let err = yi - b0 * xi;
+            let dev = yi - my;
+            se += err * err;
+            st += dev * dev;
         }
         out.b0 = Some(b0);
         out.r2_origin_centred = if st > 0.0 { Some(1.0 - se / st) } else { None };
         out.r2_origin_excel = if syy > 0.0 { Some(1.0 - se / syy) } else { None };
     }
     let (mut cxy, mut cxx, mut cyy) = (0.0f64, 0.0f64, 0.0f64);
-    for i in 0..n {
-        let a = x[i] - mx;
-        let b = y[i] - my;
-        cxy += a * b;
-        cxx += a * a;
-        cyy += b * b;
+    for (&xi, &yi) in x.iter().zip(y) {
+        let dx = xi - mx;
+        let dy = yi - my;
+        cxy += dx * dy;
+        cxx += dx * dx;
+        cyy += dy * dy;
     }
     if cxx > 0.0 {
-        let b = cxy / cxx;
-        out.ols_b = Some(b);
-        out.ols_a = Some(my - b * mx);
+        let slope = cxy / cxx;
+        out.ols_b = Some(slope);
+        out.ols_a = Some(my - slope * mx);
     }
     if cxx > 0.0 && cyy > 0.0 {
         out.r2_ols = Some(cxy * cxy / (cxx * cyy));
@@ -224,7 +228,7 @@ pub fn calibration(
     let tot_obs = rows.iter().fold(0.0f64, |s, r| s + r.obs);
     let tot_mod = rows.iter().fold(0.0f64, |s, r| s + r.model);
     js_sort_by(&mut rows, |x, y| y.geh - x.geh);
-    let pass = rows.iter().filter(|r| r.geh < 5.0).count() as f64 / n as f64;
+    let pass = usize_to_f64(rows.iter().filter(|r| r.geh < 5.0).count()) / usize_to_f64(n);
     Some(CalibrationSummary {
         rows,
         n,
@@ -325,8 +329,10 @@ pub struct JtCheck {
 }
 
 /// `DataHub.jtCheck(modelS, obsS)`: the journey-time check of a modelled against an observed time (s), None unless the modelled time is 0 or more and the observed time above 0.
+#[must_use]
 pub fn jt_check(model_s: f64, obs_s: f64) -> Option<JtCheck> {
-    if !(model_s >= 0.0) || !(obs_s > 0.0) {
+    // `!(modelS >= 0) || !(obsS > 0)`: NaN fails both tests
+    if model_s < 0.0 || model_s.is_nan() || obs_s <= 0.0 || obs_s.is_nan() {
         return None;
     }
     let diff = model_s - obs_s;

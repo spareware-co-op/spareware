@@ -27,6 +27,7 @@ use crate::compliance::html::ReportCtx;
 use crate::compliance::jv::V;
 
 /// The HTML of a Compliance+ report section (`REPORT[id].render(P, ctx)`), None when no part has a section with that id.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if let Some(h) = lint::report(id, p, ctx) {
         return Some(h);
@@ -74,6 +75,7 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
 }
 
 /// The text of a Compliance+ export (`EXPORTS`, id "compliance-extra-<id>"), None when no part has an export with that id.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     if let Some(t) = lint::export_build(id, p) {
         return Some(t);
@@ -121,6 +123,7 @@ pub fn export_build(id: &str, p: &V) -> Option<String> {
 }
 
 /// Whether a Compliance+ export is offered for the project, None when no part has an export with that id.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     if let Some(b) = lint::export_enabled(id, p) {
         return Some(b);

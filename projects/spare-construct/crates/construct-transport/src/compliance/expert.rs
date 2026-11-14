@@ -47,6 +47,10 @@ fn or_obj(v: &V) -> V {
    ==================================================================================================== */
 
 /// `signOff(P, who, now)`: records a sign-off of the inputs for a role by a named person with qualifications (`{ role, name, quals, date, fp }`); an error text when the name or qualifications are missing. Changes the project.
+///
+/// # Errors
+///
+/// The message to show when the name or the qualifications are missing.
 pub fn sign_off(p: &mut V, who: &V, now: &V) -> Result<V, String> {
     state_mut(p);
     let c = state(p);
@@ -65,7 +69,10 @@ pub fn sign_off(p: &mut V, who: &V, now: &V) -> Result<V, String> {
         return Err("Enter the name and qualifications of the person signing off.".to_string());
     }
     let s = jobj! { "role" => &role, "name" => name.as_str(), "quals" => quals.as_str(), "date" => today(now), "fp" => fingerprint(p) };
-    let e = obj_at(state_mut(p), "expert");
+    // A project is an object, so its record and the record's expert part are always there
+    let Some(e) = state_mut(p).and_then(|c| obj_at(c, "expert")) else {
+        return Ok(s);
+    };
     let mut kept: Vec<V> = e.g("signoffs").items().iter().filter(|x| !x.g("role").strict_eq(&role)).cloned().collect();
     kept.push(s.clone());
     e.set("signoffs", V::Array(kept));
@@ -87,10 +94,14 @@ pub fn clear_stale(p: &mut V, now: &V) -> usize {
         return 0;
     }
     let d = today(now);
-    let e = obj_at(state_mut(p), "expert");
-    let history = arr_at(e, "history");
-    for s in &stale {
-        history.push(merge(s, &jobj! { "cleared" => d.as_str(), "reason" => "inputs changed after sign-off" }));
+    // A project is an object, so its record and the record's expert part are always there
+    let Some(e) = state_mut(p).and_then(|c| obj_at(c, "expert")) else {
+        return 0;
+    };
+    if let Some(history) = arr_at(e, "history") {
+        for s in &stale {
+            history.push(merge(s, &jobj! { "cleared" => d.as_str(), "reason" => "inputs changed after sign-off" }));
+        }
     }
     let kept: Vec<V> = e.g("signoffs").items().iter().filter(|s| s.g("fp").eq_s(&fp)).cloned().collect();
     e.set("signoffs", V::Array(kept));
@@ -99,6 +110,7 @@ pub fn clear_stale(p: &mut V, now: &V) -> usize {
 }
 
 /// `dataSources(P)`: every data source with its date and basis: `[{ source, date, detail, basis }]`.
+#[must_use]
 pub fn data_sources(p: &V) -> V {
     let c = state(p);
     let loaded = or_obj(p.g("data").g("loaded"));
@@ -119,7 +131,7 @@ pub fn data_sources(p: &V) -> V {
             } else {
                 names.iter().find(|n| n.0 == k).map_or_else(|| st(k), |n| st(n.1))
             };
-            let detail = [if !v.g("n").nullish() { format!("{} records", v.g("n").s()) } else { String::new() }, or_blank(v.g("label")), or_blank(v.g("licence"))]
+            let detail = [if v.g("n").nullish() { String::new() } else { format!("{} records", v.g("n").s()) }, or_blank(v.g("label")), or_blank(v.g("licence"))]
                 .into_iter()
                 .filter(|x| !x.is_empty())
                 .collect::<Vec<_>>()
@@ -196,6 +208,7 @@ pub fn data_sources(p: &V) -> V {
 }
 
 /// `appendixG(P)`: the expert disclosure material: `{ title, disclaimer, sections, signoffs, watermark, prompt }`.
+#[must_use]
 pub fn appendix_g(p: &V) -> V {
     let c = state(p);
     let e = c.g("expert");
@@ -324,65 +337,85 @@ fn put(o: &mut V, k: &str, v: V) {
     if !safe_key(k) {
         return;
     }
-    let p: Vec<&str> = k.split('.').collect();
-    let mut x = o;
-    for seg in &p[..p.len() - 1] {
-        if !x.has(seg) || !x.g(seg).is_obj() {
-            x.set(*seg, V::object());
+    let segs: Vec<&str> = k.split('.').collect();
+    // split always gives at least one segment
+    let Some((last, steps)) = segs.split_last() else {
+        return;
+    };
+    let mut node = o;
+    for seg in steps {
+        if !node.has(seg) || !node.g(seg).is_obj() {
+            node.set(*seg, V::object());
         }
-        x = x.get_mut(seg).expect("segment set above");
+        // The segment holds an object: it was there or was set just above
+        let Some(next) = node.get_mut(seg) else {
+            return;
+        };
+        node = next;
     }
-    x.set(p[p.len() - 1], v);
+    node.set(*last, v);
 }
 
 /// `JSON.parse(text)` as V8 reads it: the value, or the message V8's error carries (`Unexpected token '}', "{"a":}" is not valid JSON`).
+///
+/// # Errors
+///
+/// V8's message when the text is not valid JSON.
 pub fn parse_json(text: &str) -> Result<V, String> {
     jsonparse::parse(text)
 }
 
 /// `parseOther(text)`: the other party's parameters (a Spare Construct project file, a settings object or a key,value CSV) as an object of only the parameters compared; an error text when it cannot be read.
+///
+/// # Errors
+///
+/// The message to show when the text is empty, is not valid JSON, or is JSON without settings.
 pub fn parse_other(text: &str) -> Result<V, String> {
-    let t = trim(text);
-    if t.is_empty() {
+    let body = trim(text);
+    if body.is_empty() {
         return Err("Paste the other party's Spare Construct project file, settings JSON or a key,value CSV.".to_string());
     }
-    let mut o = V::object();
-    if rx(r"^[{[]", "").test(t) {
-        let j = jsonparse::parse(t).map_err(|e| format!("That is not valid JSON: {e}"))?;
-        let s = if j.t() && j.g("settings").is_obj() { j.g("settings") } else { &j };
-        if !s.is_obj() {
+    let mut out = V::object();
+    if rx(r"^[{[]", "").test(body) {
+        let json = jsonparse::parse(body).map_err(|err| format!("That is not valid JSON: {err}"))?;
+        let settings = if json.t() && json.g("settings").is_obj() { json.g("settings") } else { &json };
+        if !settings.is_obj() {
             return Err("That JSON holds no settings. Paste a Spare Construct project file or a settings object.".to_string());
         }
-        let mut f = V::object();
-        flatten(s, "", &mut f);
-        for (k, v) in f.entries() {
-            put(&mut o, k, v.clone());
+        let mut flat = V::object();
+        flatten(settings, "", &mut flat);
+        for (key, val) in flat.entries() {
+            put(&mut out, key, val.clone());
         }
-        return Ok(o);
+        return Ok(out);
     }
     // a key,value template, or Spare Construct's own 'Assumptions (CSV)' export (setting,label,value,default,unit): read the value column
     let re_hash = rx(r"^\s*#", "");
-    let mut rows: Vec<Vec<String>> = parse_csv(t).into_iter().filter(|r| !r.is_empty() && !re_hash.test(r.first().map_or("", |s| s.as_str()))).collect();
+    let mut rows: Vec<Vec<String>> = parse_csv(body).into_iter().filter(|row| !row.is_empty() && !re_hash.test(row.first().map_or("", |c| c.as_str()))).collect();
     let (mut ki, mut vi) = (0usize, 1usize);
-    let h: Vec<String> = rows.first().map(|r| r.iter().map(|x| lower(trim(x))).collect()).unwrap_or_default();
+    let head: Vec<String> = rows.first().map(|row| row.iter().map(|c| lower(trim(c))).collect()).unwrap_or_default();
     let re_key = rx(r"^(setting|key|item|parameter)$", "");
-    if h.iter().any(|x| x == "value") && h.iter().any(|x| re_key.test(x)) {
-        ki = h.iter().position(|x| re_key.test(x)).unwrap_or(0);
-        vi = h.iter().position(|x| x == "value").unwrap_or(1);
+    if head.iter().any(|name| name == "value") && head.iter().any(|name| re_key.test(name)) {
+        ki = head.iter().position(|name| re_key.test(name)).unwrap_or(0);
+        vi = head.iter().position(|name| name == "value").unwrap_or(1);
         rows.remove(0);
     }
     let re_head = rx(r"^(item|key|setting)$", "i");
-    for r in &rows {
-        let k = trim(r.get(ki).map_or("", |s| s.as_str())).to_string();
-        if k.is_empty() || re_head.test(&k) {
+    for row in &rows {
+        let key = trim(row.get(ki).map_or("", |c| c.as_str())).to_string();
+        if key.is_empty() || re_head.test(&key) {
             continue;
         }
-        put(&mut o, &k, cell(r.get(vi)));
+        put(&mut out, &key, cell(row.get(vi)));
     }
-    Ok(o)
+    Ok(out)
 }
 
 /// `diffParams(P, other)`: the parameters that differ from the other party's (text or an object): `[{ key, a, b }]`.
+///
+/// # Errors
+///
+/// The message of [`parse_other`] when the other party's text cannot be read.
 pub fn diff_params(p: &V, other: &V) -> Result<V, String> {
     let mut a = V::object();
     flatten(p.g("settings"), "", &mut a);
@@ -427,41 +460,49 @@ fn child_mut<'a>(t: &'a mut V, k: &str) -> Option<&'a mut V> {
 
 /// `t[k] = v` on an object or array (false for a name on an array, which a JSON copy would not keep).
 fn set_child(t: &mut V, k: &str, v: V) -> bool {
-    match t {
-        V::Array(a) => match k.parse::<usize>() {
-            Ok(i) => {
-                while a.len() <= i {
-                    a.push(V::Null);
-                }
-                a[i] = v;
-                true
+    if let V::Array(a) = t { match k.parse::<usize>() {
+        Ok(i) => {
+            while a.len() <= i {
+                a.push(V::Null);
             }
-            Err(_) => false,
-        },
-        _ => {
-            t.set(k, v);
+            // The loop above made the array long enough
+            if let Some(slot) = a.get_mut(i) {
+                *slot = v;
+            }
             true
         }
+        Err(_) => false,
+    } } else {
+        t.set(k, v);
+        true
     }
 }
 
 /// `Kit.setPath(o, k, v)`: sets a dotted path, making an object of a missing or empty step; a path with a refused segment, and a step that holds a plain value, stop the write (false).
 fn kit_set_path(o: &mut V, k: &str, v: V) -> bool {
-    let p: Vec<&str> = k.split('.').collect();
-    if !(o.is_obj() || o.is_arr()) || p.iter().any(|x| bad_seg(x)) {
+    let segs: Vec<&str> = k.split('.').collect();
+    if !(o.is_obj() || o.is_arr()) || segs.iter().any(|seg| bad_seg(seg)) {
         return false;
     }
-    let mut t: &mut V = o;
-    for seg in &p[..p.len() - 1] {
-        if !child(t, seg).is_some_and(|x| x.t()) && !set_child(t, seg, V::object()) {
+    // split always gives at least one segment
+    let Some((last, steps)) = segs.split_last() else {
+        return false;
+    };
+    let mut node: &mut V = o;
+    for seg in steps {
+        if !child(node, seg).is_some_and(super::jv::Jx::t) && !set_child(node, seg, V::object()) {
             return false;
         }
-        t = child_mut(t, seg).expect("step set above");
-        if !(t.is_obj() || t.is_arr()) {
+        // The step is there: it held a truthy value or was set just above
+        let Some(next) = child_mut(node, seg) else {
+            return false;
+        };
+        node = next;
+        if !(node.is_obj() || node.is_arr()) {
             return false;
         }
     }
-    set_child(t, p[p.len() - 1], v)
+    set_child(node, last, v)
 }
 
 /// The worst junction values of a result and its totals (`metric(r)` of `runDiff`).
@@ -488,6 +529,7 @@ fn metric(r: &V) -> V {
 /// `runDiff(P, diffs, opts)`: runs each difference alone against the project and ranks them by effect: `{ period, central, rows, ms, note }`.
 ///
 /// `opts` can hold `sc` (the scenario, the active one by default), `period` (the project's by default) and `maxIter` for the assignments.
+#[must_use]
 pub fn run_diff(p: &V, diffs: &V, opts: &V) -> V {
     let sc = if opts.g("sc").t() { opts.g("sc").clone() } else { active_sc(p).clone() };
     let period = if opts.g("period").t() {
@@ -529,6 +571,7 @@ pub fn run_diff(p: &V, diffs: &V, opts: &V) -> V {
 }
 
 /// `jwsCSV(P, result)`: the joint witness statement input table as a stamped CSV.
+#[must_use]
 pub fn jws_csv(p: &V, result: &V) -> String {
     let mut rows: Vec<Vec<V>> = vec![["Item", "Party A (this project)", "Party B", "Effect", "Agreed?"].iter().map(|x| st(*x)).collect()];
     for r in result.g("rows").items() {
@@ -548,6 +591,7 @@ pub fn jws_csv(p: &V, result: &V) -> String {
    ==================================================================================================== */
 
 /// `badge(P, period)`: the model status badge: the model status with `html` and `text`.
+#[must_use]
 pub fn badge(p: &V, period: &str) -> V {
     let m = engine::model_status(&engine_view(p), period);
     let tone = if m.g("status").eq_s("validated") {
@@ -569,6 +613,7 @@ fn decode(h: &str) -> String {
 ///
 /// A disclaimer counts as present when the HTML marks it (`data-disclaimer` or `data-d`) or carries its opening words. The HTML is decoded
 /// first and only the text before any placeholder is compared. A kind that is not one of the known ones asks for nothing.
+#[must_use]
 pub fn missing_disclaimers(html: &str, kinds: &[&str]) -> Vec<String> {
     let map: [(&str, &str); 11] =
         [("junction", "D3"), ("economics", "D4"), ("anop", "D5"), ("validation", "D6"), ("model", "D7"), ("safety", "D8"), ("cbds", "D9"), ("regulatory", "D10"), ("authority", "D11"), ("handover", "D12"), ("assumption", "D13")];
@@ -592,11 +637,12 @@ pub fn missing_disclaimers(html: &str, kinds: &[&str]) -> Vec<String> {
             let head = slice(trim(&spaces.replace_with(before, " ")), 0, Some(60));
             !text.contains(&head)
         })
-        .map(|id| id.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 
 /// `supersession(P, now)`: the standards that changed since the project's outputs were stamped: `[{ id, doc, edition, next, used, text }]`.
+#[must_use]
 pub fn supersession(p: &V, now: &V) -> V {
     let c = state(p);
     let d = today(now);

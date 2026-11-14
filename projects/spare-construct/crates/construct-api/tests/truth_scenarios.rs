@@ -4,6 +4,16 @@
 //! The recorded project (built in the JavaScript by a long list of engine calls, with a register and committed developments) is
 //! opened from its recorded state; the seeded id generator is put where the JavaScript's stood, so the ids made must match.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::panic,
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_api::Session;
@@ -80,7 +90,7 @@ fn assessment_set_commands_match_the_prototype() {
                 &at,
             ),
             "createSet" => {
-                let opts = &o["opts"];
+                let given = &o["opts"];
                 let mut p = json!({});
                 for (k, v) in [
                     ("type", "pathway"),
@@ -92,8 +102,8 @@ fn assessment_set_commands_match_the_prototype() {
                     ("buildout", "buildout"),
                     ("from", "from"),
                 ] {
-                    if !opts[k].is_null() {
-                        p[v] = opts[k].clone();
+                    if !given[k].is_null() {
+                        p[v] = given[k].clone();
                     }
                 }
                 // an unknown pathway reads as the default one

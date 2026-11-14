@@ -7,6 +7,25 @@
 //! controller are compared. The movement-capacity functions, delayText, convText and the
 //! settings readers are compared over the grids in expected/junction-functions.json.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 mod graph_dump;
 
@@ -55,7 +74,7 @@ fn state_value(g: &Graph, p: &PerfSet, xt: &[f64], mv: bool) -> Value {
                 m.insert("ts".into(), json!([0.0, 1200.0, 2400.0].iter().map(|&x| n(arc_time(a, x, p))).collect::<Vec<_>>()));
                 if mv {
                     m.insert("mj".into(), a.mj.map_or(Value::Null, |j| j.to_value()));
-                    m.insert("mvRes".into(), a.mv_res.as_ref().map_or(Value::Null, |r| r.to_value()));
+                    m.insert("mvRes".into(), a.mv_res.as_ref().map_or(Value::Null, construct_transport::junction::EntryRes::to_value));
                 }
                 Value::Object(m)
             })
@@ -180,12 +199,17 @@ fn lmv(v: &Value) -> Lmv {
 fn entry_from(v: &Value) -> MoveEntry {
     MoveEntry {
         i: 0,
-        major: v["major"].as_bool().unwrap_or(false),
+        priority: if v["major"].as_bool().unwrap_or(false) {
+            construct_transport::graph::Priority::Major
+        } else if v["stop"].as_bool().unwrap_or(false) {
+            construct_transport::graph::Priority::Stop
+        } else {
+            construct_transport::graph::Priority::Neither
+        },
         in_b: opt_num(&v["inB"]),
         leg: v["leg"].as_str().unwrap_or("").to_string(),
         gl: num(&v["gl"]),
         s_lane: num(&v["sLane"]),
-        stop: v["stop"].as_bool().unwrap_or(false),
         gaps: if v["gaps"].is_null() { None } else { Some(v["gaps"].clone()) },
         lanes: lanes_from(&v["lanes"]),
         median: v["median"].as_bool().unwrap_or(false),
@@ -269,7 +293,7 @@ fn movement_functions_match_the_prototype() {
         let idx = |k: Option<usize>| k.map_or(Value::Null, |k| json!(k));
         let got: Vec<Value> = ent
             .iter()
-            .map(|e| json!({ "res": e.res.as_ref().map_or(Value::Null, |r| r.to_value()), "g": e.g.map_or(Value::Null, |g| g.to_value()),
+            .map(|e| json!({ "res": e.res.as_ref().map_or(Value::Null, construct_transport::junction::EntryRes::to_value), "g": e.g.map_or(Value::Null, |g| g.to_value()),
                 "n": idx(e.near), "f": idx(e.far), "o": idx(e.opp_minor), "opp": idx(e.opp) }))
             .collect();
         // The prototype keeps an override's gap value as saved ("3.9") and only ever uses it in

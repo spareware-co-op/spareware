@@ -1,4 +1,4 @@
-//! Live traffic from TomTom and traffic-aware travel times from Google (the end of data.js).
+//! Live traffic from `TomTom` and traffic-aware travel times from Google (the end of data.js).
 //!
 //! Both need the user's own key (never saved in a project file). Each has a function that builds the request and one that
 //! reads the answer; the host sends the request.
@@ -8,18 +8,23 @@ use super::nztime::{date_utc, nz_parts, DAY_MS};
 use crate::edit::ids::iso_string;
 use crate::edit::json::JsonValue;
 use crate::importers::jsparse::parse_float;
-use crate::jsnum::to_fixed;
+use crate::jsnum::{i64_to_f64, to_fixed};
 use crate::util::LatLng;
 use serde::Serialize;
 use serde_json::Value;
 
-/// `tomtomTiles()`: the address pattern of TomTom's traffic flow map tiles ({z}, {x} and {y} are filled in by the map), or None without a key.
+/// `tomtomTiles()`: the address pattern of `TomTom`'s traffic flow map tiles ({z}, {x} and {y} are filled in by the map), or None without a key.
+#[must_use]
 pub fn tomtom_tiles(key: Option<&str>) -> Option<String> {
     let key = key.filter(|k| !k.is_empty())?;
     Some(format!("https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{{z}}/{{x}}/{{y}}.png?key={}&tileSize=256", encode_uri_component(key)))
 }
 
 /// `tomtomSpeed(ll)`: the request for the current speed and free-flow speed on the road nearest a point; Err without a key.
+///
+/// # Errors
+///
+/// The message the prototype shows when no `TomTom` key is set.
 pub fn tomtom_speed_request(ll: LatLng, key: Option<&str>) -> Result<HttpRequest, String> {
     let Some(key) = key.filter(|k| !k.is_empty()) else { return Err("Add a TomTom key in the Data tab first.".to_string()) };
     Ok(HttpRequest {
@@ -37,7 +42,7 @@ pub fn tomtom_speed_request(ll: LatLng, key: Option<&str>) -> Result<HttpRequest
     })
 }
 
-/// What `tomtomSpeed` gives: the speed now, the free-flow speed, how sure TomTom is, and whether the road is closed.
+/// What `tomtomSpeed` gives: the speed now, the free-flow speed, how sure `TomTom` is, and whether the road is closed.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TomtomSpeed {
     /// Current speed (km/h).
@@ -67,6 +72,10 @@ fn failure_text(f: &FetchFailure) -> String {
 }
 
 /// The answer of [`tomtom_speed_request`]: the speed, or why not (a refused key, an error status).
+///
+/// # Errors
+///
+/// The message for a failed request, a refused key, an error status or an answer without `flowSegmentData`.
 pub fn tomtom_speed_result(a: Result<&JsonValue, FetchFailure>, now_ms: f64) -> Result<TomtomSpeed, String> {
     match a {
         Err(FetchFailure::Http(s)) => Err(if s == 403 || s == 401 { "TomTom refused the key".to_string() } else { format!("TomTom answered HTTP {s}") }),
@@ -82,26 +91,28 @@ pub fn tomtom_speed_result(a: Result<&JsonValue, FetchFailure>, now_ms: f64) -> 
 }
 
 /// `nextWeekdayNZ(hour)`: the next Tuesday, Wednesday or Thursday (from tomorrow) at hh:00 New Zealand time, as an ISO instant and a label ("Thu, 22 Oct, 8:00 am"); None when none of the next nine days is one.
+#[must_use]
 pub fn next_weekday_nz(now_ms: f64, hour: f64) -> Option<(String, String)> {
     for add in 1..10 {
-        let t = now_ms + add as f64 * DAY_MS;
+        let t = now_ms + f64::from(add) * DAY_MS;
         let p = nz_parts(t);
         if !matches!(p.weekday, 2..=4) {
             continue;
         }
-        let (y, mo, dd) = (p.year as f64, p.month as f64 - 1.0, p.day as f64);
+        let (y, mo, dd) = (i64_to_f64(p.year), f64::from(p.month) - 1.0, f64::from(p.day));
         let mut guess = date_utc(y, mo, dd) + hour * 3_600_000.0 - 12.0 * 3_600_000.0;
         for _ in 0..3 {
             let q = nz_parts(guess);
-            let diff_h = hour - q.hour as f64 + if q.day as f64 != dd { if q.day as f64 > dd { -24.0 } else { 24.0 } } else { 0.0 };
+            let diff_h = hour - f64::from(q.hour) + if f64::from(q.day) == dd { 0.0 } else if f64::from(q.day) > dd { -24.0 } else { 24.0 };
             if diff_h == 0.0 {
                 break;
             }
             guess += diff_h * 3_600_000.0;
         }
         let q = nz_parts(guess);
-        let wk = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][q.weekday as usize];
-        let h12 = if q.hour % 12 == 0 { 12 } else { q.hour % 12 };
+        // getDay() is always 0 to 6; "undefined" is what the template would write for anything else
+        let wk = usize::try_from(q.weekday).ok().and_then(|i| ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].get(i).copied()).unwrap_or("undefined");
+        let h12 = if q.hour.is_multiple_of(12) { 12 } else { q.hour % 12 };
         let label = format!("{}, {} {}, {}:{:02} {}", wk, q.day, super::nztime::month_short(q.month), h12, q.minute, if q.hour >= 12 { "pm" } else { "am" });
         return Some((iso_string(guess), label));
     }
@@ -109,6 +120,10 @@ pub fn next_weekday_nz(now_ms: f64, hour: f64) -> Option<(String, String)> {
 }
 
 /// `googleTime(from, to, period)`: the Routes API request for the traffic-aware drive time between two points for the next Tuesday to Thursday at 8:00 (AM) or 17:00 (any other period); Err without a key or a day. Gives the request and the departure label.
+///
+/// # Errors
+///
+/// The message the prototype shows when no Google key is set, or when no departure day is found.
 pub fn google_request(from: LatLng, to: LatLng, period: &str, key: Option<&str>, now_ms: f64) -> Result<(HttpRequest, String), String> {
     let Some(key) = key.filter(|k| !k.is_empty()) else { return Err("Add a Google Maps Platform key in the Data tab first.".to_string()) };
     let Some((iso, label)) = next_weekday_nz(now_ms, if period == "AM" { 8.0 } else { 17.0 }) else {
@@ -160,6 +175,10 @@ pub struct GoogleTime {
 }
 
 /// The answer of [`google_request`]: `status` and the body (an unreadable body is read as an empty object, as the prototype does).
+///
+/// # Errors
+///
+/// Google's error message (or the status) for a failed answer, or a message when the answer has no route.
 pub fn google_result(status: u16, ok: bool, body: &JsonValue, when: &str, now_ms: f64) -> Result<GoogleTime, String> {
     let err = body.get("error").filter(|e| e.truthy());
     if !ok || err.is_some() {

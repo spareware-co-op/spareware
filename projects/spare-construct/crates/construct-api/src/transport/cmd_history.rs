@@ -1,7 +1,7 @@
 //! Undo and redo.
 
 use super::registry::Registry;
-use crate::schema::*;
+use crate::schema::none;
 use serde_json::json;
 
 pub(super) fn register(r: &mut Registry) {
@@ -10,14 +10,14 @@ pub(super) fn register(r: &mut Registry) {
         "Undo the latest change, switching to its scenario if it was in another; the labels say what each step was.",
         true,
         none(),
-        |s, _| s.step_back(false),
+        |s, _| Ok(s.step_back(false)),
     );
     r.add(
         "transport.history.redo",
         "Redo the step the last undo took back.",
         true,
         none(),
-        |s, _| s.step_back(true),
+        |s, _| Ok(s.step_back(true)),
     );
     r.add(
         "transport.history.state",

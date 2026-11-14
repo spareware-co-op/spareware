@@ -2,6 +2,14 @@
 //! counts of every kind is opened, the matrix is estimated through `transport.calibration.fit`, and the fit's result and the
 //! validation report afterwards must equal the JavaScript's.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::indexing_slicing,
+    clippy::too_many_lines,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_api::Session;

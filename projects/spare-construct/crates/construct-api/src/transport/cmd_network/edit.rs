@@ -1,7 +1,12 @@
 //! The edits of the network commands: add, draw, split, delete, reverse, control, move, zones, gateways and bus routes.
 
-use super::*;
+use super::{
+    ApiError, ApiResult, IdSource, LatLng, Map, Maybe, Node, NodeProps, Num, Params, ROUTE_COLOURS,
+    Route, Scenario, Session, Value, Zone, json, kind_name, kit_junction_name, link_json,
+    link_props, math_round, missing_end, net, non_empty, r7, road_class, road_template, val,
+};
 use crate::schema::latlng_of;
+use crate::transport::helpers::{lost, scenario_at, scenario_at_mut};
 
 // ------------------------------------------------------------------ props
 
@@ -25,34 +30,51 @@ fn node_ll(sc: &Scenario, id: &str, what: &str) -> ApiResult<LatLng> {
 
 // ------------------------------------------------------------------ add
 
-pub(super) fn network_add_node(s: &mut Session, p: &Params) -> ApiResult {
+pub(super) fn network_add_node(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let at = p.latlng("point")?;
     let props = node_props(p.opt_object("props")?)?;
     s.snap("new junction");
-    let id = net::add_node(&mut s.project.scenarios[i], &mut s.ids, at, &props);
+    let id = net::add_node(
+        scenario_at_mut(&mut s.project.scenarios, i)?,
+        &mut s.ids,
+        at,
+        &props,
+    );
     s.edited();
-    Ok(json!({ "id": id, "node": val(&s.project.scenarios[i].nodes[id.as_str()]) }))
+    let node = scenario_at(&s.project.scenarios, i)?
+        .nodes
+        .get(id.as_str())
+        .ok_or_else(|| lost("junction", &id))?;
+    Ok(json!({ "id": id, "node": val(node) }))
 }
 
-pub(super) fn network_add_link(s: &mut Session, p: &Params) -> ApiResult {
-    let i = s.target(p)?;
+pub(super) fn network_add_link(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let idx = s.target(p)?;
     let (a, b) = (p.str("a")?, p.str("b")?);
-    node_ll(&s.project.scenarios[i], a, "start")?;
-    node_ll(&s.project.scenarios[i], b, "end")?;
+    node_ll(scenario_at(&s.project.scenarios, idx)?, a, "start")?;
+    node_ll(scenario_at(&s.project.scenarios, idx)?, b, "end")?;
     let pts: Vec<LatLng> = match p.opt_array("points")? {
         None => Vec::new(),
-        Some(v) => v
+        Some(list) => list
             .iter()
             .map(|x| latlng_of(x, "points"))
             .collect::<ApiResult<_>>()?,
     };
     let props = link_props(p.opt_object("props")?)?;
     s.snap("new road");
-    let id = net::add_link(&mut s.project.scenarios[i], &mut s.ids, a, b, &pts, &props);
+    let id = net::add_link(
+        scenario_at_mut(&mut s.project.scenarios, idx)?,
+        &mut s.ids,
+        a,
+        b,
+        &pts,
+        &props,
+    );
     s.edited();
-    let sc = &s.project.scenarios[i];
-    Ok(json!({ "id": id, "link": link_json(sc, &sc.links[id.as_str()]) }))
+    let sc = scenario_at(&s.project.scenarios, idx)?;
+    let link = sc.links.get(id.as_str()).ok_or_else(|| lost("road", &id))?;
+    Ok(json!({ "id": id, "link": link_json(sc, link) }))
 }
 
 /// One point of a road being drawn, after snapping: a junction to use, a road to split at a position, or a free position.
@@ -68,7 +90,7 @@ enum Seq {
     Ll(LatLng),
 }
 
-fn draw_points(sc: &Scenario, p: &Params) -> ApiResult<Vec<DrawPt>> {
+fn draw_points(sc: &Scenario, p: Params<'_>) -> ApiResult<Vec<DrawPt>> {
     let snap_m = p.opt_f64("snapM")?.unwrap_or(8.0);
     let mut out = Vec::new();
     for (k, v) in p.array("points")?.iter().enumerate() {
@@ -91,14 +113,14 @@ fn draw_points(sc: &Scenario, p: &Params) -> ApiResult<Vec<DrawPt>> {
                 let id = id.ok_or_else(|| {
                     ApiError::bad_params(format!("`points[{k}]` is a node and needs an id"))
                 })?;
-                if !sc.nodes.contains_key(&id) {
+                let Some(node) = sc.nodes.get(&id) else {
                     return Err(ApiError::not_found(format!(
                         "There is no junction {id} (points[{k}])."
                     )));
-                }
+                };
                 DrawPt {
                     kind: "node",
-                    ll: sc.nodes[id.as_str()].ll(),
+                    ll: node.ll(),
                     id: Some(id),
                 }
             }
@@ -108,10 +130,12 @@ fn draw_points(sc: &Scenario, p: &Params) -> ApiResult<Vec<DrawPt>> {
                 ll,
             },
             "auto" => {
-                if let Some(n) = net::nearest_node(sc, ll, snap_m, None) {
+                if let Some((n, node)) = net::nearest_node(sc, ll, snap_m, None)
+                    .and_then(|n| sc.nodes.get(n.as_str()).map(|node| (n, node)))
+                {
                     DrawPt {
                         kind: "node",
-                        ll: sc.nodes[n.as_str()].ll(),
+                        ll: node.ll(),
                         id: Some(n),
                     }
                 } else if let Some(nl) = net::nearest_link(sc, ll, snap_m, None) {
@@ -142,61 +166,77 @@ fn draw_points(sc: &Scenario, p: &Params) -> ApiResult<Vec<DrawPt>> {
     Ok(out)
 }
 
+/// The first half of `finishRoad()`: each drawn point as a junction (one there, a new one at an end, or one made by splitting
+/// the road it is on) or a shape point. A failed split stops it, with the error.
+fn snap_points(
+    sc: &mut Scenario,
+    ids: &mut impl IdSource,
+    pts: &[DrawPt],
+) -> (Vec<Seq>, Option<ApiError>) {
+    let last = pts.len().saturating_sub(1);
+    let mut seq: Vec<Seq> = Vec::new();
+    for (k, pt) in pts.iter().enumerate() {
+        if pt.kind == "node"
+            && let Some(id) = pt
+                .id
+                .as_ref()
+                .filter(|id| sc.nodes.contains_key(id.as_str()))
+        {
+            seq.push(Seq::Node(id.clone()));
+            continue;
+        }
+        if pt.kind == "link"
+            && let Some(nl) = net::nearest_link(sc, pt.ll, 6.0, None)
+        {
+            match net::split_link(sc, ids, &nl.id, pt.ll) {
+                Ok(n) => {
+                    seq.push(Seq::Node(n));
+                    continue;
+                }
+                Err(e) => return (seq, Some(e.into())),
+            }
+        }
+        if k == 0 || k == last {
+            seq.push(Seq::Node(net::add_node(sc, ids, pt.ll, &NodeProps::new())));
+        } else {
+            seq.push(Seq::Ll(pt.ll));
+        }
+    }
+    (seq, None)
+}
+
 /// `finishRoad()` of ui.js: snaps, splits, adds the roads between junctions and sets junction control.
-pub(super) fn network_add_road(s: &mut Session, p: &Params) -> ApiResult {
+pub(super) fn network_add_road(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
-    let pts = draw_points(&s.project.scenarios[i], p)?;
+    let pts = draw_points(scenario_at(&s.project.scenarios, i)?, p)?;
     let props = road_template(p)?;
     let cls = props.0.cls.as_str().unwrap_or("arterial").to_string();
     let cls = cls.as_str();
     s.snap("new road");
-    let n_pts = pts.len();
-    let mut seq: Vec<Seq> = Vec::new();
-    let mut failure: Option<ApiError> = None;
     let mut made: Vec<String> = Vec::new();
     let nodes: Vec<String>;
+    let failure;
     {
         let Session { project, ids, .. } = &mut *s;
-        let sc = &mut project.scenarios[i];
-        for (k, pt) in pts.iter().enumerate() {
-            if pt.kind == "node" && pt.id.as_ref().is_some_and(|id| sc.nodes.contains_key(id)) {
-                seq.push(Seq::Node(pt.id.clone().expect("checked")));
-                continue;
-            }
-            if pt.kind == "link"
-                && let Some(nl) = net::nearest_link(sc, pt.ll, 6.0, None)
-            {
-                match net::split_link(sc, ids, &nl.id, pt.ll) {
-                    Ok(n) => {
-                        seq.push(Seq::Node(n));
-                        continue;
-                    }
-                    Err(e) => {
-                        failure = Some(e.into());
-                        break;
-                    }
-                }
-            }
-            if k == 0 || k == n_pts - 1 {
-                seq.push(Seq::Node(net::add_node(sc, ids, pt.ll, &NodeProps::new())));
-            } else {
-                seq.push(Seq::Ll(pt.ll));
-            }
-        }
-        if failure.is_none() {
-            let mut start = match &seq[0] {
+        let sc = scenario_at_mut(&mut project.scenarios, i)?;
+        let seq;
+        (seq, failure) = snap_points(sc, ids, &pts);
+        if failure.is_none()
+            && let Some((first, rest)) = seq.split_first()
+        {
+            let mut start = match first {
                 Seq::Node(n) => n.clone(),
                 Seq::Ll(_) => String::new(),
             };
             let mut shape: Vec<LatLng> = Vec::new();
-            for st in &seq[1..] {
+            for st in rest {
                 match st {
                     Seq::Ll(ll) => shape.push(*ll),
                     Seq::Node(n) => {
                         if *n != start {
                             made.push(net::add_link(sc, ids, &start, n, &shape, &props));
                         }
-                        start = n.clone();
+                        start.clone_from(n);
                         shape.clear();
                     }
                 }
@@ -227,10 +267,11 @@ pub(super) fn network_add_road(s: &mut Session, p: &Params) -> ApiResult {
             json!({ "links": [], "nodes": nodes, "message": "No road was added: the points do not run between two different junctions." }),
         );
     }
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let len: f64 = made
         .iter()
-        .map(|id| net::len(sc, &sc.links[id.as_str()]))
+        .filter_map(|id| sc.links.get(id.as_str()))
+        .map(|l| net::len(sc, l))
         .sum();
     let joined = pts.iter().any(|x| x.kind != "free") || sc.links.len() == made.len();
     s.edited();
@@ -253,16 +294,16 @@ pub(super) fn network_add_road(s: &mut Session, p: &Params) -> ApiResult {
     )
 }
 
-pub(super) fn network_split(s: &mut Session, p: &Params) -> ApiResult {
+pub(super) fn network_split(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let (id, at) = (p.str("link")?, p.latlng("point")?);
-    match s.project.scenarios[i].links.get(id) {
+    match scenario_at(&s.project.scenarios, i)?.links.get(id) {
         None => {
             return Err(ApiError::not_found(format!(
                 "There is no road {id} in this scenario."
             )));
         }
-        Some(l) if missing_end(&s.project.scenarios[i], l) => {
+        Some(l) if missing_end(scenario_at(&s.project.scenarios, i)?, l) => {
             return Err(ApiError::invalid_state(format!(
                 "Road {id} has a missing end junction."
             )));
@@ -270,9 +311,14 @@ pub(super) fn network_split(s: &mut Session, p: &Params) -> ApiResult {
         _ => {}
     }
     s.snap("splitting road");
-    let before = s.project.scenarios[i].nodes.len();
-    let node = net::split_link(&mut s.project.scenarios[i], &mut s.ids, id, at)?;
-    let created = s.project.scenarios[i].nodes.len() > before;
+    let before = scenario_at(&s.project.scenarios, i)?.nodes.len();
+    let node = net::split_link(
+        scenario_at_mut(&mut s.project.scenarios, i)?,
+        &mut s.ids,
+        id,
+        at,
+    )?;
+    let created = scenario_at(&s.project.scenarios, i)?.nodes.len() > before;
     if created {
         s.edited();
     } else {
@@ -283,18 +329,18 @@ pub(super) fn network_split(s: &mut Session, p: &Params) -> ApiResult {
 
 // ------------------------------------------------------------------ delete, reverse, control, move
 
-pub(super) fn delete_kind(s: &mut Session, p: &Params, kind: &str) -> ApiResult {
+pub(super) fn delete_kind(s: &mut Session, p: Params<'_>, kind: &str) -> ApiResult {
     delete_object(s, p, kind, p.str("id")?)
 }
 
-pub(super) fn network_delete(s: &mut Session, p: &Params) -> ApiResult {
+pub(super) fn network_delete(s: &mut Session, p: Params<'_>) -> ApiResult {
     delete_object(s, p, p.str("kind")?, p.str("id")?)
 }
 
 /// `deleteSelected()` of ui.js.
-fn delete_object(s: &mut Session, p: &Params, kind: &str, id: &str) -> ApiResult {
+fn delete_object(s: &mut Session, p: Params<'_>, kind: &str, id: &str) -> ApiResult {
     let i = s.target(p)?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let (name, gateway) = match kind {
         "link" => {
             let l = sc
@@ -339,7 +385,7 @@ fn delete_object(s: &mut Session, p: &Params, kind: &str, id: &str) -> ApiResult
         name
     );
     s.snap(&format!("deleting {what}"));
-    let sc = &mut s.project.scenarios[i];
+    let sc = scenario_at_mut(&mut s.project.scenarios, i)?;
     match kind {
         "link" => net::delete_link(sc, id),
         "node" => net::delete_node(sc, id),
@@ -354,26 +400,29 @@ fn delete_object(s: &mut Session, p: &Params, kind: &str, id: &str) -> ApiResult
     Ok(json!({ "deleted": id, "kind": kind, "message": format!("Deleted {what}.") }))
 }
 
-pub(super) fn network_reverse(s: &mut Session, p: &Params) -> ApiResult {
+pub(super) fn network_reverse(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let id = p.str("link")?;
-    if !s.project.scenarios[i].links.contains_key(id) {
+    if !scenario_at(&s.project.scenarios, i)?.links.contains_key(id) {
         return Err(ApiError::not_found(format!(
             "There is no road {id} in this scenario."
         )));
     }
     s.snap("");
-    net::reverse(&mut s.project.scenarios[i], id)?;
+    net::reverse(scenario_at_mut(&mut s.project.scenarios, i)?, id)?;
     s.edited();
-    let l = &s.project.scenarios[i].links[id];
+    let l = scenario_at(&s.project.scenarios, i)?
+        .links
+        .get(id)
+        .ok_or_else(|| lost("road", id))?;
     Ok(json!({ "link": id, "lanesAB": val(&l.lanes_ab), "lanesBA": val(&l.lanes_ba) }))
 }
 
-pub(super) fn network_auto_control(s: &mut Session, p: &Params) -> ApiResult {
+pub(super) fn network_auto_control(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let ids: Vec<String> = match p.opt_strings("nodes")? {
         Some(v) => v,
-        None => s.project.scenarios[i]
+        None => scenario_at(&s.project.scenarios, i)?
             .nodes
             .keys()
             .map(str::to_string)
@@ -384,13 +433,11 @@ pub(super) fn network_auto_control(s: &mut Session, p: &Params) -> ApiResult {
             .get(n)
             .and_then(|x| x.control.as_str().map(str::to_string))
     };
-    let before: Vec<Option<String>> = ids
-        .iter()
-        .map(|n| control_of(&s.project.scenarios[i], n))
-        .collect();
+    let here = scenario_at(&s.project.scenarios, i)?;
+    let before: Vec<Option<String>> = ids.iter().map(|n| control_of(here, n)).collect();
     s.snap("default junction control");
-    net::auto_control(&mut s.project.scenarios[i], &ids);
-    let sc = &s.project.scenarios[i];
+    net::auto_control(scenario_at_mut(&mut s.project.scenarios, i)?, &ids);
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let changed = ids
         .iter()
         .zip(&before)
@@ -400,10 +447,10 @@ pub(super) fn network_auto_control(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "looked": ids.len(), "changed": changed }))
 }
 
-pub(super) fn network_move(s: &mut Session, p: &Params) -> ApiResult {
+pub(super) fn network_move(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let (kind, id, at) = (p.str("kind")?, p.str("id")?, p.latlng("point")?);
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let label = if kind == "node" {
         if !sc.nodes.contains_key(id) {
             return Err(ApiError::not_found(format!("There is no junction {id}.")));
@@ -417,13 +464,13 @@ pub(super) fn network_move(s: &mut Session, p: &Params) -> ApiResult {
         format!("moving {}", non_empty(&z.name).unwrap_or("a zone"))
     };
     s.snap(&label);
-    let sc = &mut s.project.scenarios[i];
+    let sc = scenario_at_mut(&mut s.project.scenarios, i)?;
     if kind == "node" {
-        let n = sc.nodes.get_mut(id).expect("checked");
+        let n = sc.nodes.get_mut(id).ok_or_else(|| lost("junction", id))?;
         n.lat = Num::number(r7(at[0]));
         n.lng = Num::number(r7(at[1]));
     } else {
-        let z = sc.zones.get_mut(id).expect("checked");
+        let z = sc.zones.get_mut(id).ok_or_else(|| lost("zone", id))?;
         z.lat = Num::number(r7(at[0]));
         z.lng = Num::number(r7(at[1]));
     }
@@ -439,45 +486,48 @@ fn zone_from(m: Map<String, Value>) -> ApiResult<Zone> {
 }
 
 /// The zone tool of ui.js: a zone with 200 houses at a position.
-pub(super) fn zone_add(s: &mut Session, p: &Params) -> ApiResult {
-    let i = s.target(p)?;
+pub(super) fn zone_add(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let idx = s.target(p)?;
     let at = p.latlng("point")?;
     let id = s.ids.uid("z");
-    let n = s.project.scenarios[i]
+    // one more than the zones there are: far below usize::MAX
+    let n = scenario_at(&s.project.scenarios, idx)?
         .zones
         .values()
         .filter(|z| !z.kind.is("gateway"))
         .count()
-        + 1;
+        .saturating_add(1);
     let name = match p.opt_str("name")? {
         Some(x) if !x.trim().is_empty() => x.trim().to_string(),
         _ => format!("Zone {n}"),
     };
-    let mut m = Map::new();
+    let mut fields = Map::new();
     if let Some(extra) = p.opt_object("props")? {
         for (k, v) in extra {
             if !["id", "kind", "name", "lat", "lng", "lu"].contains(&k.as_str()) {
-                m.insert(k.clone(), v.clone());
+                fields.insert(k.clone(), v.clone());
             }
         }
     }
-    m.insert("id".into(), json!(id));
-    m.insert("kind".into(), json!("zone"));
-    m.insert("name".into(), json!(name));
-    m.insert("lat".into(), json!(r7(at[0])));
-    m.insert("lng".into(), json!(r7(at[1])));
-    m.insert(
+    fields.insert("id".into(), json!(id));
+    fields.insert("kind".into(), json!("zone"));
+    fields.insert("name".into(), json!(name));
+    fields.insert("lat".into(), json!(r7(at[0])));
+    fields.insert("lng".into(), json!(r7(at[1])));
+    fields.insert(
         "lu".into(),
         p.get("lu")
             .cloned()
             .unwrap_or_else(|| json!({ "residential": 200 })),
     );
-    if !m.contains_key("connectors") {
-        m.insert("connectors".into(), Value::Null);
+    if !fields.contains_key("connectors") {
+        fields.insert("connectors".into(), Value::Null);
     }
-    let z = zone_from(m)?;
+    let z = zone_from(fields)?;
     s.snap(&format!("new zone {name}"));
-    s.project.scenarios[i].zones.insert(id.clone(), z);
+    scenario_at_mut(&mut s.project.scenarios, idx)?
+        .zones
+        .insert(id.clone(), z);
     s.edited();
     Ok(
         json!({ "id": id, "name": name, "message": "Zone added with 200 houses. Change its land use with transport.zone.set." }),
@@ -485,38 +535,35 @@ pub(super) fn zone_add(s: &mut Session, p: &Params) -> ApiResult {
 }
 
 /// The gateway tool of ui.js: a gateway on a road end with flows estimated from the busiest road's class and lanes.
-pub(super) fn zone_add_gateway(s: &mut Session, p: &Params) -> ApiResult {
-    let i = s.target(p)?;
+pub(super) fn zone_add_gateway(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let idx = s.target(p)?;
     let max_m = p.opt_f64("maxM")?.unwrap_or(80.0);
     let at = p.opt_latlng("point")?;
-    let sc = &s.project.scenarios[i];
-    let nid = match p.opt_str("node")? {
-        Some(n) => {
-            if !sc.nodes.contains_key(n) {
-                return Err(ApiError::not_found(format!("There is no junction {n}.")));
-            }
-            n.to_string()
+    let sc = scenario_at(&s.project.scenarios, idx)?;
+    let nid = if let Some(n) = p.opt_str("node")? {
+        if !sc.nodes.contains_key(n) {
+            return Err(ApiError::not_found(format!("There is no junction {n}.")));
         }
-        None => {
-            let at = at.ok_or_else(|| {
-                ApiError::bad_params("Give a `node`, or a `point` near the end of a road.")
-            })?;
-            let deg = net::degree(sc);
-            let f = move |n: &Node| deg.get(&n.id).copied().unwrap_or(0) > 0;
-            net::nearest_node(sc, at, max_m, Some(&f)).ok_or_else(|| {
-                ApiError::not_found(
-                    "There is no road end near that point. Click on or near the end of a road.",
-                )
-            })?
-        }
+        n.to_string()
+    } else {
+        let at = at.ok_or_else(|| {
+            ApiError::bad_params("Give a `node`, or a `point` near the end of a road.")
+        })?;
+        let deg = net::degree(sc);
+        let f = move |n: &Node| deg.get(&n.id).copied().unwrap_or(0) > 0;
+        net::nearest_node(sc, at, max_m, Some(&f)).ok_or_else(|| {
+            ApiError::not_found(
+                "There is no road end near that point. Click on or near the end of a road.",
+            )
+        })?
     };
     let ls = net::links_at(sc, &nid);
-    if ls.is_empty() {
+    let Some(&first) = ls.first() else {
         return Err(ApiError::invalid_state(format!(
             "Junction {nid} has no roads, so a gateway cannot go there."
         )));
-    }
-    let mut l0 = ls[0];
+    };
+    let mut l0 = first;
     for l in &ls {
         if road_class(l.cls.as_str()).rank > road_class(l0.cls.as_str()).rank {
             l0 = l;
@@ -541,7 +588,14 @@ pub(super) fn zone_add_gateway(s: &mut Session, p: &Params) -> ApiResult {
             str::to_string
         )
     );
-    let at = at.unwrap_or_else(|| sc.nodes[nid.as_str()].ll());
+    let at = match at {
+        Some(at) => at,
+        None => sc
+            .nodes
+            .get(nid.as_str())
+            .ok_or_else(|| lost("junction", &nid))?
+            .ll(),
+    };
     let flow = |lanes: f64| math_round(lanes * per * 0.85 / 10.0) * 10.0;
     let (fin, fout) = (flow(in_l), flow(out_l));
     s.snap(&format!("new gateway {name}"));
@@ -558,7 +612,9 @@ pub(super) fn zone_add_gateway(s: &mut Session, p: &Params) -> ApiResult {
         json!({ "AMin": fin, "AMout": fout, "PMin": fin, "PMout": fout }),
     );
     let z = zone_from(m)?;
-    s.project.scenarios[i].zones.insert(id.clone(), z);
+    scenario_at_mut(&mut s.project.scenarios, idx)?
+        .zones
+        .insert(id.clone(), z);
     s.edited();
     Ok(json!({
         "id": id, "name": name, "node": nid, "gw": { "AMin": fin, "AMout": fout, "PMin": fin, "PMout": fout },
@@ -567,7 +623,7 @@ pub(super) fn zone_add_gateway(s: &mut Session, p: &Params) -> ApiResult {
 }
 
 /// `finishBus()` of ui.js.
-pub(super) fn route_add(s: &mut Session, p: &Params) -> ApiResult {
+pub(super) fn route_add(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let stops = p.opt_strings("stops")?.unwrap_or_default();
     if stops.len() < 2 {
@@ -575,28 +631,37 @@ pub(super) fn route_add(s: &mut Session, p: &Params) -> ApiResult {
             "A bus route needs at least two stops.",
         ));
     }
+    let sc = scenario_at(&s.project.scenarios, i)?;
+    let mut before: Option<&String> = None;
     for (k, n) in stops.iter().enumerate() {
-        if !s.project.scenarios[i].nodes.contains_key(n) {
+        if !sc.nodes.contains_key(n) {
             return Err(ApiError::not_found(format!(
                 "There is no junction {n} (stops[{k}])."
             )));
         }
-        if k > 0 && stops[k - 1] == *n {
+        if before == Some(n) {
             return Err(ApiError::bad_params(format!(
                 "`stops[{k}]` repeats the stop before it."
             )));
         }
+        before = Some(n);
     }
     let freq = p.opt_f64("freq")?.unwrap_or(6.0);
-    let count = s.project.scenarios[i].routes.len();
+    let count = scenario_at(&s.project.scenarios, i)?.routes.len();
     s.snap("new bus route");
     let id = s.ids.uid("r");
     let name = match p.opt_str("name")? {
         Some(x) if !x.trim().is_empty() => x.trim().to_string(),
-        _ => format!("Bus route {}", count + 1),
+        _ => format!("Bus route {}", count.saturating_add(1)),
     };
+    // the colours in turn
     let color = p.opt_str("color")?.map_or_else(
-        || ROUTE_COLOURS[count % ROUTE_COLOURS.len()].to_string(),
+        || {
+            count
+                .checked_rem(ROUTE_COLOURS.len())
+                .and_then(|k| ROUTE_COLOURS.get(k))
+                .map_or_else(String::new, |c| (*c).to_string())
+        },
         str::to_string,
     );
     let r = Route {
@@ -608,7 +673,9 @@ pub(super) fn route_add(s: &mut Session, p: &Params) -> ApiResult {
         wp: Maybe::Set(stops),
         extra: Map::new(),
     };
-    s.project.scenarios[i].routes.insert(id.clone(), r);
+    scenario_at_mut(&mut s.project.scenarios, i)?
+        .routes
+        .insert(id.clone(), r);
     s.edited();
     Ok(
         json!({ "id": id, "name": name, "color": color, "freq": freq, "message": "Bus route added at 6 buses an hour. Set the frequency with transport.route.set." }),

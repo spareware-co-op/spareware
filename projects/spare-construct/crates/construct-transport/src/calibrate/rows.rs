@@ -6,7 +6,7 @@ use super::roles::{Ctx, method_of};
 use super::stats::{GehBand, geh_bands};
 use crate::datahub::{Count, Match, jt_check, model_flow, period_vol, regression, JtCheck, geh};
 use crate::graph::js_sort_by;
-use crate::jsnum::{Maybe, value_to_js_string};
+use crate::jsnum::{Maybe, usize_to_f64, value_to_js_string};
 use crate::project::{Point, Scenario};
 use crate::results::{Res, plain, travel, Travel};
 use crate::util::{LatLng, fmt};
@@ -119,6 +119,7 @@ fn same(a: &Maybe<String>, b: &Maybe<String>) -> bool {
 }
 
 /// `inCore(core, ll)`: a point inside the area of influence (everywhere when there is none).
+#[must_use]
 pub fn in_core(core: &Core, ll: &LatLng) -> bool {
     match core.kind {
         "none" => true,
@@ -144,7 +145,7 @@ pub struct CountRow {
     pub how: String,
     /// GEH.
     pub geh: f64,
-    /// Observation method of the panel ("measured_hour", "weekday_factored", "adt_factored", "virtual").
+    /// Observation method of the panel ("`measured_hour`", "`weekday_factored`", "`adt_factored`", "virtual").
     pub method: &'static str,
     /// Role: "me", "valid", "gateway" or "off".
     pub role: &'static str,
@@ -160,7 +161,7 @@ pub struct CountRow {
 ///
 /// `raw` gives roles without the rules that turn a validation count seen by estimation into a calibration count.
 /// Note: unlike `DataHub.calibration` and `Calibrate.report`, this includes RAMM centreline estimates (as
-/// "adt_factored" sites): the prototype does not leave them out here.
+/// "`adt_factored`" sites): the prototype does not leave them out here.
 pub fn count_rows(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, raw: bool) -> Vec<CountRow> {
     let Some(res) = res else { return Vec::new() };
     let m = ctx.matches(sc);
@@ -172,7 +173,7 @@ pub fn count_rows(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, raw
         }
         let Some(mt) = m.get(&c.id) else { continue };
         let Some(pv) = period_vol(c, period, ctx.s()) else { continue };
-        if !(pv.v >= 0.0) {
+        if pv.v < 0.0 || pv.v.is_nan() {
             continue;
         }
         let Some(model) = model_flow(res, mt) else { continue };
@@ -199,6 +200,7 @@ pub fn count_rows(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, raw
 }
 
 /// `inSet(r, set)`: a site belongs to a set of counts ("valid", "calib" or all).
+#[must_use]
 pub fn in_set(r: &CountRow, set: &str) -> bool {
     r.scored
         && match set {
@@ -209,6 +211,7 @@ pub fn in_set(r: &CountRow, set: &str) -> bool {
 }
 
 /// `inArea(r, area)`: a site belongs to an area ("inside", "outside" or all).
+#[must_use]
 pub fn in_area(r: &CountRow, area: &str) -> bool {
     match area {
         "inside" => r.in_core,
@@ -218,6 +221,7 @@ pub fn in_area(r: &CountRow, area: &str) -> bool {
 }
 
 /// `SET_LABEL[set]`.
+#[must_use]
 pub fn set_label(set: &str) -> &'static str {
     match set {
         "valid" => "validation counts",
@@ -322,6 +326,7 @@ pub struct CalStats {
 
 impl CalStats {
     /// `cnt[key]` by name.
+    #[must_use]
     pub fn cnt_of(&self, key: &str) -> Option<usize> {
         let c = &self.cnt;
         Some(match key {
@@ -339,6 +344,7 @@ impl CalStats {
         })
     }
     /// The statistic with this name (a share, or b0, r2, r2Excel, r2Ols, rmse), as `ev.link[t.stat]` reads it.
+    #[must_use]
     pub fn stat(&self, key: &str) -> Option<f64> {
         match key {
             "geh5" => self.geh5,
@@ -362,48 +368,50 @@ impl CalStats {
 }
 
 /// `statsOf(rows)` for sites given as (counted, modelled, GEH): the shares under each criterion, %RMSE and the regressions.
+#[must_use]
 pub fn stats_of_rows(rows: &[(f64, f64, f64)]) -> CalStats {
     use super::criteria::{tag_band, tmdg_band};
     let n = rows.len();
     let mut cnt = CalCnt::default();
     let (mut so, mut sm) = (0.0f64, 0.0f64);
+    // Bound: the counts below count sites in memory, far below usize::MAX
     for &(obs, model, g) in rows {
         so += obs;
         sm += model;
         if g < 5.0 {
-            cnt.geh5 += 1;
+            cnt.geh5 = cnt.geh5.saturating_add(1);
         }
         if g < 7.5 {
-            cnt.geh75 += 1;
+            cnt.geh75 = cnt.geh75.saturating_add(1);
         }
         if g < 10.0 {
-            cnt.geh10 += 1;
+            cnt.geh10 = cnt.geh10.saturating_add(1);
         }
         if g < 12.0 {
-            cnt.geh12 += 1;
+            cnt.geh12 = cnt.geh12.saturating_add(1);
         }
         if g <= 5.0 {
-            cnt.geh5le += 1;
+            cnt.geh5le = cnt.geh5le.saturating_add(1);
         }
         if g <= 10.0 {
-            cnt.geh10le += 1;
+            cnt.geh10le = cnt.geh10le.saturating_add(1);
         }
         let b = tmdg_band(model, obs);
         let t = tag_band(model, obs);
         if b {
-            cnt.band += 1;
+            cnt.band = cnt.band.saturating_add(1);
         }
         if t {
-            cnt.tag += 1;
+            cnt.tag = cnt.tag.saturating_add(1);
         }
         if g < 5.0 || t {
-            cnt.either += 1;
+            cnt.either = cnt.either.saturating_add(1);
         }
         if (model - obs).abs() <= 0.2 * obs {
-            cnt.within20 += 1;
+            cnt.within20 = cnt.within20.saturating_add(1);
         }
     }
-    let share = |k: usize| if n > 0 { Some(k as f64 / n as f64) } else { None };
+    let share = |k: usize| if n > 0 { Some(usize_to_f64(k) / usize_to_f64(n)) } else { None };
     let xs: Vec<f64> = rows.iter().map(|r| r.0).collect();
     let ys: Vec<f64> = rows.iter().map(|r| r.1).collect();
     let gehs: Vec<f64> = rows.iter().map(|r| r.2).collect();
@@ -415,7 +423,7 @@ pub fn stats_of_rows(rows: &[(f64, f64, f64)]) -> CalStats {
         tot_obs: so,
         tot_mod: sm,
         rmse: if rows.len() > 1 && so > 0.0 {
-            Some(100.0 * (se / (rows.len() - 1) as f64).sqrt() / (so / rows.len() as f64))
+            Some(100.0 * (se / usize_to_f64(rows.len().saturating_sub(1))).sqrt() / (so / usize_to_f64(rows.len())))
         } else {
             None
         },
@@ -440,6 +448,7 @@ pub fn stats_of_rows(rows: &[(f64, f64, f64)]) -> CalStats {
 }
 
 /// `statsOf(rows)` for count rows.
+#[must_use]
 pub fn stats_of_count_rows(rows: &[&CountRow]) -> CalStats {
     let v: Vec<(f64, f64, f64)> = rows.iter().map(|r| (r.obs, r.model, r.geh)).collect();
     stats_of_rows(&v)
@@ -472,9 +481,9 @@ pub struct JourneyRow {
 
 fn obj_num(v: &Maybe<Value>, k: &str, sub: Option<&str>) -> f64 {
     match v.get() {
-        Some(Value::Object(m)) => match (m.get(k), sub) {
-            (Some(x), None) => crate::jsnum::value_to_number(x),
-            (Some(Value::Object(o)), Some(s)) => o.get(s).map_or(f64::NAN, crate::jsnum::value_to_number),
+        Some(Value::Object(map)) => match (map.get(k), sub) {
+            (Some(val), None) => crate::jsnum::value_to_number(val),
+            (Some(Value::Object(inner)), Some(s)) => inner.get(s).map_or(f64::NAN, crate::jsnum::value_to_number),
             _ => f64::NAN,
         },
         _ => f64::NAN,
@@ -558,6 +567,7 @@ pub struct JtStats {
 }
 
 /// `jtStats(rows)`: the routes with an observed time (else those with a predicted one) against the two tiers.
+#[must_use]
 pub fn jt_stats(rows: &[JourneyRow]) -> JtStats {
     let with_obs: Vec<&JourneyRow> = rows.iter().filter(|r| r.chk.is_some() && r.obs.is_some()).collect();
     let usable: Vec<&JourneyRow> = if with_obs.is_empty() {
@@ -572,11 +582,11 @@ pub fn jt_stats(rows: &[JourneyRow]) -> JtStats {
         n,
         jt1_n: t1,
         jt2_n: t2,
-        jt1: if n > 0 { Some(t1 as f64 / n as f64) } else { None },
-        jt2: if n > 0 { Some(t2 as f64 / n as f64) } else { None },
+        jt1: if n > 0 { Some(usize_to_f64(t1) / usize_to_f64(n)) } else { None },
+        jt2: if n > 0 { Some(usize_to_f64(t2) / usize_to_f64(n)) } else { None },
         predicted: with_obs.is_empty() && n > 0,
     }
 }
 
 #[allow(dead_code)]
-fn _unused(_: &Option<Count>) {}
+fn _unused(_: Option<&Count>) {}

@@ -2,6 +2,25 @@
 //! pair and period, difference, withWithout, extentTest and devDistribution, with the recorded
 //! results as inputs.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod recorded;
 mod support;
 
@@ -20,7 +39,7 @@ fn capital_as_recorded() {
         for sc in &p.scenarios {
             assert_close(
                 &json(&capital(sc, &p.settings)),
-                &rec.scenarios[&sc.id].capital,
+                &rec.scenarios.get(&sc.id).unwrap().capital,
                 &format!("{name}.{}.capital", sc.id),
             );
             n += 1;
@@ -75,7 +94,7 @@ fn dev_distribution_as_recorded() {
             let list: Vec<_> = ["AM", "PM"].iter().filter_map(|x| res.get(x)).collect();
             assert_close(
                 &json(&dev_distribution(Some(sc), &list)),
-                &rec.scenarios[&sc.id].dev_distribution,
+                &rec.scenarios.get(&sc.id).unwrap().dev_distribution,
                 &format!("{name}.{}.devDistribution", sc.id),
             );
             n += 1;

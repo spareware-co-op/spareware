@@ -1,6 +1,25 @@
 //! The Fast-track package (compliance-extra.js section 8, invitees to package files), its files, JSON bundle, export and report section against the
 //! prototype's recorded answers (expected/compliance-f2-ftaa.json from tools/transport-truth/gen-compliance-f2.mjs).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod compliance_support;
 mod support;
 
@@ -57,7 +76,7 @@ fn fill_records(p: &mut V) {
 }
 
 fn run(filter: &dyn Fn(&str) -> bool) -> usize {
-    set_clock(Some(1792540800000.0));
+    set_clock(Some(1_792_540_800_000.0));
     let all = expected("f2-ftaa");
     let cases = all["cases"].as_array().expect("cases");
     let ord = ordered("f2-ftaa");
@@ -73,9 +92,7 @@ fn run(filter: &dyn Fn(&str) -> bool) -> usize {
         for (k, v) in oc.g("sets").entries() {
             set_path(&mut p, k, v.clone());
         }
-        if case_error(case).is_some() {
-            panic!("{id}: the prototype refused this case: {}", case_error(case).unwrap());
-        }
+        assert!(case_error(case).is_none(), "{id}: the prototype refused this case: {}", case_error(case).unwrap());
         let want = case_ok(case);
         let model_name = "reviewer/model-inputs.json";
         let got: V = match call {
