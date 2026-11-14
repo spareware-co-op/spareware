@@ -288,11 +288,14 @@ fn windings(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<i64>, ExportError> {
     let counts = along(cdt, sites, outline, meter)?;
+    // `counts` holds each edge from its lower vertex, so an edge run the other way is the other
+    // key, and a key that is neither is an edge no side runs along.
     let raised = |x: u32, y: u32| -> i64 {
-        if x < y {
-            counts.get(&(x, y)).copied().unwrap_or(0)
-        } else {
-            counts.get(&(y, x)).copied().unwrap_or(0).saturating_neg()
+        match counts.get(&(x, y)) {
+            Some(&count) => count,
+            None => counts
+                .get(&(y, x))
+                .map_or(0, |count| count.saturating_neg()),
         }
     };
     let mut edges: BTreeMap<(u32, u32), Vec<usize>> = BTreeMap::new();
@@ -330,10 +333,11 @@ fn windings(
             }
         }
     }
-    winding
-        .into_iter()
-        .map(|w| w.ok_or_else(|| MeshFault::Shape.into()))
-        .collect()
+    let mut out = Vec::with_capacity(winding.len());
+    for w in winding {
+        out.push(w.ok_or(MeshFault::Shape)?);
+    }
+    Ok(out)
 }
 
 /// The triangles of a face of several corners, as vertices of the mesh.
