@@ -833,6 +833,51 @@ fn scenario_counts<'b>(bodies: impl IntoIterator<Item = &'b geom_topo::Body>) ->
     sum
 }
 
+/// The digest of a benchmark of the facade (piece G100), each name found by a linear scan of the
+/// facade's table, not the benchmark's binary search, and `make_box` called from `geom-make`.
+fn facade_digest(name: &str, class: Class) -> Option<Digest> {
+    use engine_geometry::operations::OPERATIONS;
+    use geom_bench::inputs::facade as inf;
+    let find = |wanted: &str| {
+        OPERATIONS
+            .iter()
+            .enumerate()
+            .find(|(_, op)| op.schema.name == wanted)
+    };
+    Some(match name {
+        "lookup" => fold(inf::names(class).iter().map(|wanted| {
+            let (at, op) = find(wanted)?;
+            let s = op.schema;
+            Some([
+                at as u32,
+                s.version,
+                s.inputs.len() as u32,
+                s.roles.len() as u32,
+                s.errors.len() as u32,
+                s.charges.len() as u32,
+            ])
+        })),
+        "dispatch" => {
+            let ctx = geom_op::OpContext::new(
+                geom_op::OpPath::new(geom_op::OpId::from_bytes([7; 16])),
+                geom_run::Budget::UNLIMITED,
+            );
+            fold(inf::calls(class).iter().map(|(wanted, input)| {
+                let (_, op) = find(wanted)?;
+                if op.schema.name != "make.box" {
+                    return None;
+                }
+                Some(geom_make::make_box(&ctx, input).map(|out| {
+                    let [f, e, v, rank] = make_counts(&out);
+                    let class = geom_op::Class::of(out.exactness);
+                    [f, e, v, rank, u32::from(op.schema.classes.contains(&class))]
+                }))
+            }))
+        }
+        _ => return None,
+    })
+}
+
 /// The digest of a benchmark of the encoder, names, history, resolution or `PruneHistory` (pieces
 /// G86 to G89 and G109), from each function called directly on its batch.
 fn naming_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
@@ -1758,6 +1803,19 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_intersect::selfcross::self_intersect(sheet, 1.0 / 16.0, 1.0 / 4.0, &mut meter)
             }))
         }
+        ("intersect", "fit_curve") => fold(inputs::intersect::crossings(class).iter().map(
+            |(sheet, branch)| {
+                let ground = geom_surface::SurfaceKind::Plane(geom_surface::Plane::new(
+                    [0.0; 3],
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    ((-4.0, 4.0), (-4.0, 4.0)),
+                )?);
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let refs = [geom_curve::SurfaceRef(1), geom_curve::SurfaceRef(2)];
+                geom_intersect::fit::fit((sheet, &ground), refs, branch, 1.0 / 256.0, &mut meter)
+            },
+        )),
         ("intersect", "analyse_rest") => {
             fold(inputs::intersect::rests(class).iter().map(|(plate, ball)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
@@ -2093,6 +2151,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("encoder" | "names" | "history" | "resolve" | "prune", _) => {
             naming_digest(group, name, class)?
         }
+        ("facade", _) => facade_digest(name, class)?,
         ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
             |scene| -> Result<u64, geom_name::AttrError> {
                 let (after, notes) = geom_name::apply(

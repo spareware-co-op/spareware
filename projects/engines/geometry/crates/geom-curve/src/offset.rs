@@ -59,17 +59,51 @@
 //!
 //! What the work costs: an offset is the one curve kind whose conversion decides, from its data,
 //! how many times it evaluates itself, so the meter is what bounds it, and each evaluation is
-//! charged what it costs. The basis charges its own bounds (a unit an extent, and more where an
-//! arctangent is dear, `crate::extent::FAR_CORNER`); the offset charges its jets' recurrences,
-//! [`TERM_WORK`] units a term ([`Offset::jet_work`]). Measured, in instructions of a release build
-//! (callgrind on issue #765's offset of an ellipse in 3D): the 54,440 evaluations of order 10 its
-//! conversion made, 660 terms each, spent 9,328 million outside the basis's bounds, about 260 a
-//! term, which is one interval product and one interval sum; and each asked the basis for 36
-//! closed-form bounds, about 5,700 each where no arctangent is dear, which the basis charges one
-//! unit. So a term stands for about 570 instructions of an evaluation, its own and as much
-//! again for the basis, and a unit for about 285. Before issue #765 the jets were free and a
-//! piece examined cost a unit, so a budget of 2,000,000 units ran out only after 77 thousand
-//! million instructions; now it runs out within about 600 million.
+//! charged what it costs, at about 285 instructions a unit. An evaluation has three parts, and
+//! each has its charge:
+//!
+//! - **Its jets' terms.** [`TERM_WORK`] a term of each of its 3·D + 1 recurrences: one interval
+//!   product and one interval sum, about 190 instructions.
+//! - **Its jets themselves.** [`JET_WORK`] a recurrence whatever the order: the jets it builds,
+//!   adds, scales and frees around the terms, about 1,300 to 1,400 instructions a recurrence at
+//!   order 0. The sums and scalings, linear in the order, ride on the terms' margin.
+//! - **What it asks of its basis.** Over a span, a closed-form bound of the basis and of each of
+//!   its derivatives one order higher, each an extent a coordinate: 4,500 to 7,700 instructions
+//!   an extent where no arctangent is dear, of which the basis charges one unit (and more where
+//!   one is dear, `crate::extent::FAR_CORNER`) and the offset [`BOUND_WORK`]. At a point, the
+//!   basis's enclosure to one order higher, about 1,100 to 1,250 instructions a coordinate an
+//!   order, of which the basis charges one unit an order and the offset [`POINT_WORK`] a
+//!   coordinate an order.
+//!
+//! [`Offset::jet_work`] and [`Offset::basis_work`] are the counts, fixed by the dimension, the
+//! order and whether the evaluation is at a point or over a span, whatever the numbers are.
+//!
+//! Measured, in instructions of a release build (callgrind, 100 evaluations at each order 0 to 10
+//! of the offset of an ellipse with no zero coefficient, issue #852). In 3D, an evaluation over a
+//! span costs 62,115 at order 0, 121,699 at order 2, 225,859 at order 5 and 443,855 at order 10,
+//! and is charged 180, 350, 680 and 1,430 units: 345, 348, 332 and 310 instructions a unit. At a
+//! point it costs 24,827, 46,733, 92,925 and 210,920, and is charged 86, 162, 351 and 866: 289,
+//! 288, 265 and 244 a unit. In 2D, 300 to 337 a unit over a span and 240 to 283 at a point.
+//!
+//! Before issue #765 the jets were free and a piece examined cost a unit, so a budget of
+//! 2,000,000 units ran out only after 77 thousand million instructions. Issue #765 charged two
+//! units a term and nothing else, which is right at the orders 9 and 10 of a conversion's pieces
+//! and far too little below them: an evaluation of order 0 over a span was charged 26 units in
+//! 3D, 2,389 instructions a unit, and the conversion's halving (`Offset::refined`'s first pass,
+//! 75,000 such evaluations on a budget of 2,000,000 units) ran for 3.5 to 11.9 thousand million
+//! instructions before the budget stopped it, the dearest past the 10 s a fuzzing campaign allows
+//! an input (issue #852). At the charges above, a conversion's piece of degree 9 costs what it
+//! did, within 2% (6,998 units in 3D against 7,006, 4,826 in 2D against 4,928), and the halving
+//! stops within 530 to 750 million instructions where the basis's arctangents are ordinary or
+//! charged.
+//!
+//! One cost stayed under its charge until issue #853: `crate::extent` left free the arctangents
+//! just short of 2⁴⁷ apart that take the 192-bit path, and an ellipse whose coefficients fall there
+//! asks them again in every evaluation. Two of issue #852's stored inputs do, three and seven an
+//! evaluation, and their halvings stopped after 1,246 and 1,744 million instructions, 623 and 872
+//! a unit. With every such corner charged from 2⁴⁴ apart they stop after 667 and 637 million, 333
+//! and 319 a unit. A dear corner below 2⁴⁴ apart is still free (`crate::extent`'s `dear` says how
+//! few there are).
 
 #![allow(
     clippy::many_single_char_names,
@@ -136,9 +170,23 @@ pub struct Offset<const D: usize> {
 const CACHE_DEGREE: usize = 9;
 
 /// The work units a term of a jet recurrence is charged (module documentation, "What the work
-/// costs"): two, one for the term's own interval product and sum and one for its share of the
-/// basis's closed-form bounds, so that a unit stands for about 285 instructions of an evaluation.
-pub const TERM_WORK: u64 = 2;
+/// costs"): one, for the term's interval product and sum, about 190 instructions.
+pub const TERM_WORK: u64 = 1;
+
+/// The work units each jet recurrence of an evaluation is charged whatever its order (module
+/// documentation, "What the work costs"): five, for the jets it builds, adds, scales and frees
+/// around its terms, about 1,300 to 1,400 instructions a recurrence.
+pub const JET_WORK: u64 = 5;
+
+/// The work units an evaluation over a span is charged for each coordinate of each bound it asks
+/// of its basis (module documentation, "What the work costs"): 19, which with the unit the basis
+/// charges for the extent itself is 20 for 4,500 to 7,700 instructions.
+pub const BOUND_WORK: u64 = 19;
+
+/// The work units an evaluation at a point is charged for each coordinate of each order of its
+/// basis's enclosure there (module documentation, "What the work costs"): four, about 1,100 to
+/// 1,250 instructions.
+pub const POINT_WORK: u64 = 4;
 
 /// Where an offset is evaluated: one parameter from one side, or every parameter of a span. A
 /// span lies in one station piece; where it is one station alone, the side says which of the two
@@ -365,8 +413,9 @@ impl<const D: usize> Offset<D> {
         ))
     }
 
-    /// The work units one evaluation of the offset's jets to `order` is charged: [`TERM_WORK`]
-    /// for each term of its recurrences (module documentation, "What the work costs").
+    /// The work units one evaluation of the offset's jets to `order` is charged: for each of its
+    /// recurrences, [`TERM_WORK`] a term and [`JET_WORK`] once (module documentation, "What the
+    /// work costs").
     ///
     /// The formula O = C + d·N/|N| takes 3·D + 1 products, quotients and roots of jets: D squares
     /// for |N|², its root, and for each coordinate a quotient by |N| and a product with the
@@ -379,7 +428,7 @@ impl<const D: usize> Offset<D> {
     /// [`CurveError::Defect`] for an order whose count passes `u64`, which no caller asks: the
     /// offset's jets of an order from 170 up are refused first (the basis's go one order higher,
     /// and past 170 their factorials pass the doubles), and the count passes `u64` only from
-    /// about 1.4·10⁹.
+    /// about 1.9·10⁹.
     pub fn jet_work(order: usize) -> Result<u64, CurveError> {
         let wide = |x: usize| u64::try_from(x).map_err(|_| CurveError::Defect);
         let n = wide(order)?.checked_add(1).ok_or(CurveError::Defect)?;
@@ -393,8 +442,29 @@ impl<const D: usize> Offset<D> {
             .and_then(|x| x.checked_add(1))
             .ok_or(CurveError::Defect)?;
         terms
-            .checked_mul(recurrences)
-            .and_then(|x| x.checked_mul(TERM_WORK))
+            .checked_mul(TERM_WORK)
+            .and_then(|x| x.checked_add(JET_WORK))
+            .and_then(|x| x.checked_mul(recurrences))
+            .ok_or(CurveError::Defect)
+    }
+
+    /// The work units one evaluation of the offset to `order` is charged for what it asks of its
+    /// basis, on top of what the basis charges itself (module documentation, "What the work
+    /// costs"): the basis's `order` + 2 bounds over a span (its own and its derivatives' to
+    /// `order` + 1), [`BOUND_WORK`] a coordinate each, or its enclosure of as many orders at a
+    /// point, [`POINT_WORK`] a coordinate an order.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] for an order whose count passes `u64`, which no caller asks
+    /// ([`Offset::jet_work`]).
+    pub fn basis_work(order: usize, over_span: bool) -> Result<u64, CurveError> {
+        let wide = |x: usize| u64::try_from(x).map_err(|_| CurveError::Defect);
+        let each = if over_span { BOUND_WORK } else { POINT_WORK };
+        wide(order)?
+            .checked_add(2)
+            .and_then(|orders| orders.checked_mul(each))
+            .and_then(|x| wide(D).ok().and_then(|d| x.checked_mul(d)))
             .ok_or(CurveError::Defect)
     }
 
@@ -411,8 +481,14 @@ impl<const D: usize> Offset<D> {
         if order >= MAX_ORDER {
             return Err(CurveError::NotFinite);
         }
-        // Charged before the work, so a budget stops an evaluation it cannot pay for.
-        meter.charge(Self::jet_work(order)?)?;
+        // Charged before the work, so a budget stops an evaluation it cannot pay for: the jets
+        // and what they ask of the basis, in one charge.
+        let basis = Self::basis_work(order, matches!(at, At::Span(..)))?;
+        meter.charge(
+            Self::jet_work(order)?
+                .checked_add(basis)
+                .ok_or(CurveError::Defect)?,
+        )?;
         let c = self.basis_jets(at, order, meter)?;
         let mut cp = Vec::with_capacity(D);
         let mut c0 = Vec::with_capacity(D);

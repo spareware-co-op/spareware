@@ -38,7 +38,7 @@ The first five were started ahead of the tooling pieces their board entries need
 - **"Needs" is the authority.** A piece may start when every piece it needs has merged or been recorded. Needs include gate pieces, owner actions and, in one place, pieces on Spare Construct's board (`CON-A18-F2-P1` and `CON-A18-F2-P2`), which must be done too.
 - **Phases end at gates.** Each phase's last piece is its gate (lane Gate): a review that runs the phase's gate condition and has a kernel owner record the result, with the CI runs that show it, in the decision log. The gate needs every piece of its phase except those marked not gating in 30.5. Every piece of a phase needs the gates its phase starts after (30.2): directly when it needs nothing else in its phase, otherwise through a piece it needs. So no piece can start before the layers beneath it are proven. The generator checks this for every piece.
 - **Lanes** (A, B, C, ...) are tracks inside a phase that run side by side. Pieces in different lanes can be worked on at the same time by different contributors; inside a lane, follow "Needs".
-- **Owner actions are pieces** (crate "owner action", lane Owner), because work waits on them. Each is a decision or check only an owner can make, recorded in G01 section 32, the decision log or, for a patent search, the patent register. An owner action needs nothing, except that a patent search needs the decision on who searches. So each can be settled at any time, and should be settled early: the table in 30.5 shows what waits on it.
+- **Owner actions are pieces** (crate "owner action", lane Owner), because work waits on them. Each is a decision or check only an owner can make, recorded in G01 section 32 or the decision log. An owner action needs nothing. The patent searches and the patent register were closed by the owner on 2026-11-13 (32.49), so no piece waits on a search. So each can be settled at any time, and should be settled early: the table in 30.5 shows what waits on it.
 - **Crates** follow chapter 27's proposed table and its thirteen layers, plus the additions in 30.5. Every need points to a piece in the same crate or in a crate below it in that graph; the generator checks this too. A need marked **(tests)** is one only the piece's tests use, so it may point upwards. If the owner refuses a crate amendment, the piece moves to the crate the owner names and nothing else on the board changes.
 
 **The standard bar.** Every piece that adds kernel code also meets these, so the "done when" of each piece lists only what is particular to it:
@@ -178,7 +178,7 @@ Lanes: A topology, contract, checker, facade, primitives and queries; B the cano
 | G71 | Time budgets (owner) | owner action | S | Owner | — |
 | G72 | Reference machine and kernel shares (owner) | owner action | S | Owner | — |
 | G73 | Who searches for patents (owner) | owner action | S | Owner | — |
-| G74 | Patent search: persistent naming and reference resolution (owner) | owner action | S | Owner | G73 |
+| G74 | Patent search: persistent naming and reference resolution (owner) | owner action | S | Owner | — |
 | G75 | Copyleft tools as CI oracles (owner) | owner action | S | Owner | — |
 | G76 | Arena indices in name order (owner) | owner action | S | Owner | — |
 | G77 | CBOR tag and file name (owner) | owner action | S | Owner | — |
@@ -191,7 +191,7 @@ Lanes: A topology, contract, checker, facade, primitives and queries; B the cano
 | G84 | Checker framework, groups 1 and 4 | geom-check | M | A | G81, G82 |
 | G85 | Checker groups 2 and 3 for primitives | geom-check | M | A | G84 |
 | G86 | Canonical encoder and safe hash | geom-op | M | B | G79, G70 |
-| G87 | Persistent names: NameId, TopoName and roles | geom-op, geom-name | M | B | G81, G86, G78, G74 |
+| G87 | Persistent names: NameId, TopoName and roles | geom-op, geom-name | M | B | G81, G86, G78 |
 | G88 | History records and their laws | geom-op, geom-test | M | B | G87 |
 | G89 | Reference resolution | geom-name | M | B | G88 |
 | G90 | Attribute definitions and classes | geom-topo, geom-name | M | B | G88 |
@@ -219,10 +219,10 @@ Lanes: A topology, contract, checker, facade, primitives and queries; B the cano
 | G112 | Kani harnesses: arenas, builder and native reader | geom-test, geom-topo, geom-format | M | B | G81, G41, G92 |
 | G113 | Oracle runner and triage tooling | geom-test, CI | L | C | G97, G10, G75 |
 | G114 | Corpus register and fetcher | geom-test | M | C | G97 |
-| G115 | Patent register | geometry/PATENTS.md | M | B | G15, G73, G70 |
+| G115 | Patent register | geometry/PATENTS.md | M | B | G15, G70 |
 | G116 | Adversarial generators and sequence fuzzing | geom-fuzz | L | B | G101, G97, G14, G110 |
 | G117 | Playbooks: add an operation or a query | geometry/AGENTS.md | S | A | G103, G17 |
-| G118 | Gate 3: topology, names, contract and format core proven | gate review | S | Gate | G99, G102, G104, G106, G107, G108, G109, G111, G112, G113, G114, G115, G116, G117 |
+| G118 | Gate 3: topology, names, contract and format core proven | gate review | S | Gate | G99, G102, G104, G106, G107, G108, G109, G111, G112, G113, G114, G116, G117 |
 
 ### Phase 4: Exact core: polyhedra, flat booleans and exact meshes (38 pieces)
 
@@ -230,10 +230,10 @@ Lanes: A the exact arrangement engine, flat and n-ary booleans, cells and batch 
 
 | ID | Piece | Crate | Size | Lane | Needs |
 | --- | --- | --- | --- | --- | --- |
-| G119 | Patent search: slicing and toolpaths (owner) | owner action | S | Owner | G73 |
+| G119 | Patent search: slicing and toolpaths (owner) | owner action | S | Owner | — |
 | G120 | Committed planes and how bounds add up (owner) | owner action | S | Owner | — |
 | G121 | Predicate step ladder (owner) | owner action | S | Owner | — |
-| G122 | Patent search: booleans, cellular models and batch cutting (owner) | owner action | S | Owner | G73 |
+| G122 | Patent search: booleans, cellular models and batch cutting (owner) | owner action | S | Owner | — |
 | G123 | Plane type, canonical planes and arrangement predicates | geom-poly | M | A | G29, G30, G81, G122, G118 |
 | G124 | Predicate step ladder | geom-num, geom-poly | M | A | G123, G42, G121 |
 | G125 | Plane-based faces into convex polygons | geom-poly | M | A | G123 |
@@ -307,8 +307,8 @@ Lanes: A exact 2D predicates, the arrangement, regions, booleans and offsets; B 
 
 | ID | Piece | Crate | Size | Lane | Needs |
 | --- | --- | --- | --- | --- | --- |
-| G182 | Patent search: clash, clearance and continuous collision detection (owner) | owner action | S | Owner | G73 |
-| G183 | Patent search: constraint solving and sketch diagnosis (owner) | owner action | S | Owner | G73 |
+| G182 | Patent search: clash, clearance and continuous collision detection (owner) | owner action | S | Owner | — |
+| G183 | Patent search: constraint solving and sketch diagnosis (owner) | owner action | S | Owner | — |
 | G184 | Pattern and linetype library process (owner) | owner action | S | Owner | — |
 | G185 | Ellipses in 2D (owner) | owner action | S | Owner | — |
 | G186 | Depth-one 2D numbers (owner) | owner action | S | Owner | — |
@@ -366,10 +366,10 @@ Lanes: A the curved boolean and B-rep queries; B sweeps, lofts, networks and the
 
 | ID | Piece | Crate | Size | Lane | Needs |
 | --- | --- | --- | --- | --- | --- |
-| G234 | Patent search: straight-skeleton roofs (owner) | owner action | S | Owner | G73 |
-| G235 | Patent search: shells, offsets and thickening (owner) | owner action | S | Owner | G73 |
-| G236 | Patent search: Class-A blends and variable fillets (owner) | owner action | S | Owner | G73 |
-| G237 | Patent search: direct face edits (owner) | owner action | S | Owner | G73 |
+| G234 | Patent search: straight-skeleton roofs (owner) | owner action | S | Owner | — |
+| G235 | Patent search: shells, offsets and thickening (owner) | owner action | S | Owner | — |
+| G236 | Patent search: Class-A blends and variable fillets (owner) | owner action | S | Owner | — |
+| G237 | Patent search: direct face edits (owner) | owner action | S | Owner | — |
 | G238 | Toolkit homes before a second program (owner) | owner action | S | Owner | — |
 | G239 | What the Sweep kind stores (owner) | owner action | S | Owner | — |
 | G240 | 576- and 768-bit predicates (owner) | owner action | S | Owner | — |
@@ -425,8 +425,8 @@ Lanes: A tessellation and display; B distance, clash and contact; C healing, rec
 | ID | Piece | Crate | Size | Lane | Needs |
 | --- | --- | --- | --- | --- | --- |
 | G285 | Contact benchmark licence (owner) | owner action | S | Owner | — |
-| G286 | Patent search: simplification, remeshing and subdivision to NURBS (owner) | owner action | S | Owner | G73 |
-| G287 | Patent review: edge-first tessellation (owner) | owner action | S | Owner | G73 |
+| G286 | Patent search: simplification, remeshing and subdivision to NURBS (owner) | owner action | S | Owner | — |
+| G287 | Patent review: edge-first tessellation (owner) | owner action | S | Owner | — |
 | G288 | Edge-first certified tessellation | geom-mesh | L | A | G146, G153, G68, G162, G177 (tests), G287, G156, G181 |
 | G289 | Thin-part check and incremental tessellation | geom-mesh | M | A | G288, G55 |
 | G290 | Display boundary and level-of-detail ladder | geom-mesh | S | A | G288 |
@@ -455,11 +455,11 @@ Lanes: A subdivision surfaces, their conversions and face splitting; B fields; C
 
 | ID | Piece | Crate | Size | Lane | Needs |
 | --- | --- | --- | --- | --- | --- |
-| G309 | Patent search and legal check: general swept volumes (owner) | owner action | S | Owner | G73 |
-| G310 | Patent search: point-cloud fitting and registration (owner) | owner action | S | Owner | G73 |
-| G311 | Patent search: panelisation (owner) | owner action | S | Owner | G73 |
+| G309 | Patent search and legal check: general swept volumes (owner) | owner action | S | Owner | — |
+| G310 | Patent search: point-cloud fitting and registration (owner) | owner action | S | Owner | — |
+| G311 | Patent search: panelisation (owner) | owner action | S | Owner | — |
 | G312 | USD exchange home (owner) | owner action | S | Owner | — |
-| G313 | Patent and licence clearance for chapter 16 methods (owner) | owner action | S | Owner | G73 |
+| G313 | Patent and licence clearance for chapter 16 methods (owner) | owner action | S | Owner | — |
 | G314 | OpenSubdiv oracle driver | geom-test | M | A | G113, G284, G308 |
 | G315 | SubD net, options and uniform refinement | geom-surface, geom-subd | M | A | G60, G87, G314 |
 | G316 | Creases, darts and local refinement | geom-surface, geom-subd | M | A | G315 |
@@ -509,7 +509,7 @@ Lanes: A COGO and TINs; B toposolids, grading and flow; C alignment curve kinds,
 
 | ID | Piece | Crate | Size | Lane | Needs |
 | --- | --- | --- | --- | --- | --- |
-| G356 | Patent search: terrain, corridors and alignments (owner) | owner action | S | Owner | G73 |
+| G356 | Patent search: terrain, corridors and alignments (owner) | owner action | S | Owner | — |
 | G357 | Alignment curve kinds (owner) | owner action | S | Owner | — |
 | G358 | TIN tie order (owner) | owner action | S | Owner | — |
 | G359 | Angle units and core COGO | geom-num, geom-2d | M | A | G48, G47, G284 |
@@ -543,7 +543,7 @@ Lanes: A sections, flat hidden lines, classes, checker, references, storage and 
 
 | ID | Piece | Crate | Size | Lane | Needs |
 | --- | --- | --- | --- | --- | --- |
-| G383 | Patent search: hidden lines, sections and drawings (owner) | owner action | S | Owner | G73 |
+| G383 | Patent search: hidden lines, sections and drawings (owner) | owner action | S | Owner | — |
 | G384 | Smooth-edge marking (owner) | owner action | S | Owner | — |
 | G385 | View predicates beyond 384 bits (owner) | owner action | S | Owner | — |
 | G386 | Drawing corpus and benchmark scenes | geom-test, geom-bench | M | A | G81, G114, G284, G308 |
@@ -619,8 +619,8 @@ Lanes: A Spare Construct scenarios, wall-clock gates, bindings, browser builds a
 
 | ID | Piece | Crate | Size | Lane | Needs |
 | --- | --- | --- | --- | --- | --- |
-| G445 | Patent search: circuit-board pours and clearance (owner) | owner action | S | Owner | G73 |
-| G446 | Patent search: sheet-metal bending and unfolding (owner) | owner action | S | Owner | G73 |
+| G445 | Patent search: circuit-board pours and clearance (owner) | owner action | S | Owner | — |
+| G446 | Patent search: sheet-metal bending and unfolding (owner) | owner action | S | Owner | — |
 | G447 | Gerber and IPC-2581 terms (owner) | owner action | S | Owner | — |
 | G448 | AutoCAD truth tests (owner) | owner action | S | Owner | — |
 | G449 | Wall-clock merge rule (owner) | owner action | S | Owner | — |
@@ -669,8 +669,8 @@ Lanes: A Spare Construct scenarios, wall-clock gates, bindings, browser builds a
 | G44 | Rotation representation | G46 |
 | G71 | Time budgets | G83 |
 | G72 | Reference machine and kernel shares | G107 |
-| G73 | Who searches for patents | G74, G115, G119, G122, G182, G183, G234, G235, G236, G237, G286, G287, G309, G310, G311, G313, G356, G383, G445, G446 |
-| G74 | Patent search: persistent naming and reference resolution | G87 |
+| G73 | Who searches for patents | Nothing: closed by the owner (32.49) |
+| G74 | Patent search: persistent naming and reference resolution | Nothing: closed by the owner (32.49) |
 | G75 | Copyleft tools as CI oracles | G113 |
 | G76 | Arena indices in name order | G81 |
 | G77 | CBOR tag and file name | G93 |
@@ -716,6 +716,8 @@ Lanes: A Spare Construct scenarios, wall-clock gates, bindings, browser builds a
 | G447 | Gerber and IPC-2581 terms | G474, G475 |
 | G448 | AutoCAD truth tests | G464 |
 | G449 | Wall-clock merge rule | G452 |
+
+**Patent pieces, closed by the owner on 2026-11-13 (32.49).** No patent searches are made. G73 (who searches), G74 (the search on persistent naming and reference resolution) and G115 (the patent register) are closed: they are in no piece's needs, and gate 3 (G118) no longer needs G115. The other search pieces (G119, G122, G182, G183, G234 to G237, G286, G287, G309 to G311, G313, G356, G383, G445 and G446) are recorded by the same decision as needing no search, so the pieces in the table above that need them are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust). Two keep work that is not a patent search, so what needs them still waits for it: G309 keeps chapter 13's legal check of Lifted Surfacing's dependencies (G340 waits for it), and G313 the OpenSubdiv licence review (G330 and G482 wait for it).
 
 **Not gating.** These pieces do not hold up their phase's gate, because they wait on something outside the layer's proof: G250 (Research spike: certified winding number for trimmed NURBS); G258 (geom-thread toolkit); G281 (geom-stair toolkit); G378 (geom-civil compositions), these three built in Spare Construct's crates first, until a second program needs them (32.27); G438 (Rhino .3dm); G439 (Decision notes for formats not yet owned); G466 (Certify mode: candidates and design note); G467 (Certify mode: implementation); G468 (Certify mode: local escalation and default policy); G469 (Research: certifying field meshes at sharp CSG features); G470 (Research: eigen-tables for dart and corner vertices); G471 (Research: curved-eave skeletons); G472 (geom-sheet toolkit); G473 (geom-board copper operations); G474 (Board exchange: Gerber X2 and X3); G475 (Board exchange: IPC-2581); G476 (STEP AP242 semantic PMI); G477 (Placement variables at D = 3 and D = 6); G478 (3D sketch entities); G479 (Assembly mates and mechanism stepping). They still need the gates before them, and any piece that needs one of them waits for it.
 

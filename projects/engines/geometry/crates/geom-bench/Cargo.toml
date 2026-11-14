@@ -79,6 +79,10 @@ geom-mesh = { path = "../geom-mesh" }
 # The checker's two queries, the exactness and validity reports (piece G102), for the same count
 # benchmarks as the other core queries in geom-topo and geom-name.
 geom-check = { path = "../geom-check" }
+# The facade (piece G100): its operation table, found by name, and an operation called through
+# its re-export, for the same count benchmarks. A development crate may depend on it (the crate
+# table in engine-geometry's tests/scaffold), as geom-fuzz does.
+engine-geometry = { path = "../../../crates/engine-geometry" }
 # The intersection results and canonical order of phase 4 (piece G158), for the same count benchmarks.
 geom-intersect = { path = "../geom-intersect" }
 # SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard

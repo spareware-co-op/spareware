@@ -1,5 +1,5 @@
 //! Every curve and surface kind a body's pools hold reads back as the value written, bit for bit
-//! (G94): built through each kind's constructor, and as the operations leave them (reversed,
+//! (G94; the intersection curve, G175): built through each kind's constructor, and as the operations leave them (reversed,
 //! split, moved, mirrored, scaled, fitted), each written, read back, compared and written again.
 
 #![allow(
@@ -19,12 +19,13 @@
 use geom_curve::geom_nurbs::{self, Direction};
 use geom_curve::{
     Axes, Basis, BulgePolyline, Circle, Composite, CurvatureLaw, CurveKind, Ellipse, Frame, Helix,
-    HelixAxes, Hyperbola, Involute, Line, Offset, OffsetLaw, OnSurface, Parabola, ParamCurve,
-    Polynomial, Station, SurfaceRef, Transition, Trimmed,
+    HelixAxes, Hyperbola, IntersectionCurve, Involute, Line, Marched, Offset, OffsetLaw, OnSurface,
+    Parabola, ParamCurve, Polynomial, Span, Station, SurfaceRef, Transition, Trimmed,
 };
 use geom_format::cbor::Decoder;
 use geom_format::kinds::{DEPTH, KindError, read_curve, read_surface, write_curve, write_surface};
 use geom_math::{Axis, GridTransform, Transform, TypedTransform};
+use geom_num::interval::Interval;
 use geom_op::cbor::Encoder;
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{
@@ -678,6 +679,117 @@ fn a_kind_from_another_form_is_refused() {
     ));
 }
 
+/// An intersection curve on `nurbs3`'s domain: two pcurves, three marched points, two spans.
+fn intersection3() -> IntersectionCurve<3> {
+    let line = |o: [f64; 2], d: [f64; 2]| {
+        Trimmed::new(
+            Basis::Line(Line::new(o, d, (0.0, 1.0)).unwrap()),
+            (0.0, 1.0),
+        )
+        .unwrap()
+    };
+    let at = |lo: f64, w: f64| {
+        [
+            Interval::new(lo, lo + w).unwrap(),
+            Interval::new(-lo - w, -lo).unwrap(),
+            Interval::new(0.25, 0.25).unwrap(),
+            Interval::new(lo / 3.0, lo / 3.0 + w).unwrap(),
+        ]
+    };
+    let chain = vec![
+        Marched {
+            at: at(0.0, 1.0e-12),
+            t: 0.0,
+        },
+        Marched {
+            at: at(0.5, 0.1),
+            t: 0.5,
+        },
+        Marched {
+            at: at(1.0, 2.0e-9),
+            t: 1.0,
+        },
+    ];
+    let spans = vec![
+        Span {
+            at: (0.0, 0.5),
+            curve: 1.0e-9,
+            pcurves: [2.0e-9, 0.0],
+        },
+        Span {
+            at: (0.5, 1.0),
+            curve: 3.0e-9,
+            pcurves: [1.0e-9, 4.5e-10],
+        },
+    ];
+    IntersectionCurve::new(
+        [SurfaceRef(3), SurfaceRef(8)],
+        chain,
+        nurbs3(),
+        [
+            line([0.0, 0.0], [1.0, 1.0]),
+            line([2.0, -1.0], [-0.5, 0.25]),
+        ],
+        spans,
+    )
+    .unwrap()
+}
+
+#[test]
+fn an_intersection_curve_reads_back_with_its_definition_and_caches() {
+    let x = CurveKind::Intersection(intersection3());
+    curve_trip("intersection", &x);
+    let reversed = x.reversed(&mut meter()).unwrap().value;
+    curve_trip("intersection, reversed", &reversed);
+    let (left, right) = x.split(0.25, &mut meter()).unwrap();
+    curve_trip("intersection, split, left", &left.value);
+    curve_trip("intersection, split, right", &right.value);
+    let scale = TypedTransform::from(Transform::scale(2.0, 0.5, 3.0).unwrap());
+    curve_trip(
+        "intersection, scaled",
+        &x.transformed(&scale, &mut meter()).unwrap().value,
+    );
+}
+
+#[test]
+fn an_intersection_curves_record_is_checked_as_it_is_read() {
+    // A chain column that is not nine doubles a point.
+    let mut e = Encoder::new();
+    e.array(6).unwrap();
+    e.uint(16).unwrap();
+    e.array(2).unwrap();
+    e.uint(3).unwrap();
+    e.uint(8).unwrap();
+    e.f64_column(&[0.0; 8]).unwrap();
+    for _ in 0..3 {
+        e.uint(0).unwrap();
+    }
+    let b = e.finish().unwrap().into_bytes();
+    assert!(matches!(
+        read_curve::<3>(&mut Decoder::new(&b, DEPTH), &mut meter()),
+        Err(KindError::Shape("nine doubles for each marched point"))
+    ));
+    // The record's last double is the last span's bound on the second pcurve: a negative bound
+    // is the constructor's to refuse.
+    let mut b = curve_bytes(&CurveKind::Intersection(intersection3()));
+    let n = b.len();
+    b[n - 8..].copy_from_slice(&(-1.0_f64).to_le_bytes());
+    assert!(matches!(
+        read_curve::<3>(&mut Decoder::new(&b, DEPTH), &mut meter()),
+        Err(KindError::Curve(geom_curve::CurveError::NotFinite))
+    ));
+    // A marched point whose interval is empty: the second double of the chain column made
+    // smaller than the first, found as the 1.0e-12 the first point's first interval ends at.
+    let mut b = curve_bytes(&CurveKind::Intersection(intersection3()));
+    let end = 1.0e-12_f64.to_le_bytes();
+    let k = b.windows(8).position(|w| w == end).unwrap();
+    b[k..k + 8].copy_from_slice(&(-1.0_f64).to_le_bytes());
+    assert!(matches!(
+        read_curve::<3>(&mut Decoder::new(&b, DEPTH), &mut meter()),
+        Err(KindError::Shape("an interval"))
+    ));
+}
+
 /// Writes every kind these tests build, and the operations' results, as DIR/N.curve.cbor or
 /// DIR/N.surface.cbor for the zcbor oracle (oracles/zcbor.sh, kernel-nightly.yml), DIR from
 /// `ZCBOR_DIR`.
@@ -719,6 +831,10 @@ fn write_the_kinds() {
     };
     let t = Transition::<2>::new([0.0, 0.0], [1.0, 0.0], 100.0, law, &mut meter()).unwrap();
     put("curve", curve_bytes(&CurveKind::Transition(t)));
+    put(
+        "curve",
+        curve_bytes(&CurveKind::Intersection(intersection3())),
+    );
     for (_, s) in surfaces() {
         put("surface", surface_bytes(&s));
         for dir in [Direction::U, Direction::V] {
