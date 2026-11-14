@@ -519,7 +519,9 @@ impl Surface {
         let third = |t: [u32; 3]| t.into_iter().find(|x| *x != u && *x != v);
         let (s, t) = (self.face(f)?, self.face(g)?);
         let (a, b) = (third(s)?, third(t)?);
-        if a == b || !self.edge_faces(a, b).is_empty() {
+        // Corners already joined, or one corner twice (it has triangles, so it is "joined" to
+        // itself): no flip.
+        if !self.edge_faces(a, b).is_empty() {
             return None;
         }
         // Turn `s` so it runs (p, q, a) with p → q its edge; `t` runs (q, p, b).
