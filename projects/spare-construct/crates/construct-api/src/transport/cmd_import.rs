@@ -1,4 +1,4 @@
-//! Import and export commands: roads from an Overpass answer, GeoJSON in and out, links CSV, existing land use, OD matrices and the study-area estimate.
+//! Import and export commands: roads from an Overpass answer, `GeoJSON` in and out, links CSV, existing land use, OD matrices and the study-area estimate.
 //!
 //! No HTTP happens here: the commands that need downloaded data hand out the query (`overpass_query`, `landuse.queries`)
 //! and take the answer as input, so the host (a browser, a script, an AI agent) does the fetching.
@@ -7,42 +7,37 @@ use super::Session;
 use super::helpers::{link_props, road_template};
 use super::registry::Registry;
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
+use crate::schema::{
+    Params, any, array, boolean, choice, free_object, integer, latlng_of, none, number, params,
+    string, strings,
+};
+use crate::transport::helpers::{scenario_at, scenario_at_mut};
 use construct_transport::edit::IdSource;
 use construct_transport::edit::sites::at_points;
 use construct_transport::importers::osm::{
     Bounds, OVERPASS, OsmOpts, OverpassOpts, auto_gateways, osm_to_scenario, overpass_query,
 };
 use construct_transport::importers::{export_geojson, import_geojson, links_csv};
-use construct_transport::jsnum::{Maybe, Num, json_number, string_to_number};
+use construct_transport::jsnum::{Maybe, Num, json_number, string_to_number, usize_to_f64};
 use construct_transport::landuse::{self, BuildOpts, StudyBox};
-use construct_transport::project::{OdMatrix, OrderedMap, Zone};
+use construct_transport::project::{OdMatrix, OrderedMap, Project, Zone};
 use construct_transport::util::{self, csv, dist};
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 
 pub(super) fn register(r: &mut Registry) {
+    register_1(r);
+    register_2(r);
+    register_3(r);
+}
+
+/// Part 1 of [`register`]: `transport.studyarea.estimate` to `transport.import.auto_gateways`.
+fn register_1(r: &mut Registry) {
     let sc = || string("Scenario id or name (default: the active scenario).");
     let bounds = || {
         any(
             "The map box: { south, west, north, east } in degrees, or two corners [[lat, lng], [lat, lng]].",
         )
-    };
-    let template = |v: &mut Vec<(&'static str, Value)>| {
-        v.push((
-            "cls",
-            string("Road class for the roads added (default arterial)."),
-        ));
-        v.push(("lanes", integer("Lanes each way (default 1).")));
-        v.push(("oneway", boolean("One way (default false).")));
-        v.push(("speed", number("Speed limit in km/h (default 50).")));
-        v.push((
-            "status",
-            choice(
-                &["existing", "proposed", "closed"],
-                "Status (default proposed).",
-            ),
-        ));
     };
     r.add(
         "transport.studyarea.estimate",
@@ -112,6 +107,34 @@ pub(super) fn register(r: &mut Registry) {
         ),
         import_auto_gateways,
     );
+}
+
+/// The road-template parameters of the import commands: the class, lanes, one way, speed and status of the roads added.
+fn template(v: &mut Vec<(&'static str, Value)>) {
+    v.push((
+        "cls",
+        string("Road class for the roads added (default arterial)."),
+    ));
+    v.push(("lanes", integer("Lanes each way (default 1).")));
+    v.push(("oneway", boolean("One way (default false).")));
+    v.push(("speed", number("Speed limit in km/h (default 50).")));
+    v.push((
+        "status",
+        choice(
+            &["existing", "proposed", "closed"],
+            "Status (default proposed).",
+        ),
+    ));
+}
+
+/// Part 2 of [`register`]: `transport.data.set` to `transport.demand.od_import`.
+fn register_2(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
+    let bounds = || {
+        any(
+            "The map box: { south, west, north, east } in degrees, or two corners [[lat, lng], [lat, lng]].",
+        )
+    };
     r.add(
         "transport.data.set",
         "Load downloaded data into the project: the AT controlled-intersection points (used to group junction sites) and the regional model's growth (for the growth check).",
@@ -197,6 +220,11 @@ pub(super) fn register(r: &mut Registry) {
         ),
         od_import,
     );
+}
+
+/// Part 3 of [`register`]: `transport.demand.od_clear` to `transport.export.od_csv`.
+fn register_3(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
     r.add(
         "transport.demand.od_clear",
         "Go back to the gravity model for a period by removing its manual OD matrix.",
@@ -234,7 +262,7 @@ pub(super) fn register(r: &mut Registry) {
 // ------------------------------------------------------------------ inputs
 
 /// A JSON input given as an object or as its text.
-fn json_input(p: &Params, key: &str) -> ApiResult<Value> {
+fn json_input(p: Params<'_>, key: &str) -> ApiResult<Value> {
     match p.get(key) {
         None => Err(ApiError::bad_params(format!("missing parameter `{key}`"))),
         Some(Value::String(t)) => serde_json::from_str(t).map_err(|e| {
@@ -263,8 +291,10 @@ fn parse_box(v: &Value) -> ApiResult<(f64, f64, f64, f64)> {
             num(o.get("east"))?,
         )),
         Value::Array(a) if a.len() == 2 => {
-            let c = |x: &Value| -> ApiResult<[f64; 2]> { latlng_of(x, "bounds") };
-            let (p, q) = (c(&a[0])?, c(&a[1])?);
+            let corner = |x: Option<&Value>| -> ApiResult<[f64; 2]> {
+                latlng_of(x.ok_or_else(bad)?, "bounds")
+            };
+            let (p, q) = (corner(a.first())?, corner(a.get(1))?);
             Ok((
                 p[0].min(q[0]),
                 p[1].min(q[1]),
@@ -282,7 +312,7 @@ fn parse_box(v: &Value) -> ApiResult<(f64, f64, f64, f64)> {
     }
 }
 
-fn bounds_param(p: &Params, key: &str) -> ApiResult<(f64, f64, f64, f64)> {
+fn bounds_param(p: Params<'_>, key: &str) -> ApiResult<(f64, f64, f64, f64)> {
     parse_box(
         p.get(key)
             .ok_or_else(|| ApiError::bad_params(format!("missing parameter `{key}`")))?,
@@ -292,34 +322,34 @@ fn bounds_param(p: &Params, key: &str) -> ApiResult<(f64, f64, f64, f64)> {
 // ------------------------------------------------------------------ study area and queries
 
 /// `StudyArea.estimate(bounds)`: area, warning and whether the area is within the limit.
-fn studyarea_estimate(_: &mut Session, p: &Params) -> ApiResult {
-    let (s, w, n, e) = bounds_param(p, "bounds")?;
-    let c_lat = (s + n) / 2.0;
-    let wm = dist(&[c_lat, w], &[c_lat, e]);
-    let c_lng = (w + e) / 2.0;
-    let hm = dist(&[s, c_lng], &[n, c_lng]);
-    let a = wm * hm / 1e6;
-    let km2 = if a < 1.0 {
-        (a * 100.0).round() / 100.0
+fn studyarea_estimate(_: &mut Session, p: Params<'_>) -> ApiResult {
+    let (south, west, north, east) = bounds_param(p, "bounds")?;
+    let c_lat = f64::midpoint(south, north);
+    let wm = dist(&[c_lat, west], &[c_lat, east]);
+    let c_lng = f64::midpoint(west, east);
+    let hm = dist(&[south, c_lng], &[north, c_lng]);
+    let area = wm * hm / 1e6;
+    let km2 = if area < 1.0 {
+        (area * 100.0).round() / 100.0
     } else {
-        (a * 10.0).round() / 10.0
+        (area * 10.0).round() / 10.0
     };
-    let mins = (a / 12.0).round().max(1.0);
+    let mins = (area / 12.0).round().max(1.0);
     let (warn_km2, max_km2) = (36.0, 120.0);
-    let warn = if a.is_nan() || a <= 0.0 {
+    let warn = if area.is_nan() || area <= 0.0 {
         Some(
             "The study area has no size. Draw a box around the area you want to model.".to_string(),
         )
-    } else if a > max_km2 {
+    } else if area > max_km2 {
         Some(format!(
             "That area is {} km\u{b2}, too large to set up in one go (the limit is {} km\u{b2}). Zoom in or draw a smaller study area.",
-            util::fmt::num(a, 0),
+            util::fmt::num(area, 0),
             max_km2
         ))
-    } else if a > warn_km2 {
+    } else if area > warn_km2 {
         Some(format!(
             "That is a large area ({} km\u{b2}). Setting it up may take about {} minute{}, and the free map servers may refuse it. Areas under {} km\u{b2} work best.",
-            util::fmt::num(a, 0),
+            util::fmt::num(area, 0),
             mins,
             if mins == 1.0 { "" } else { "s" },
             warn_km2
@@ -328,11 +358,11 @@ fn studyarea_estimate(_: &mut Session, p: &Params) -> ApiResult {
         None
     };
     Ok(
-        json!({ "km2": km2, "widthM": wm, "heightM": hm, "warn": warn, "ok": a > 0.0 && a <= max_km2, "minutes": mins }),
+        json!({ "km2": km2, "widthM": wm, "heightM": hm, "warn": warn, "ok": area > 0.0 && area <= max_km2, "minutes": mins }),
     )
 }
 
-fn import_overpass_query(_: &mut Session, p: &Params) -> ApiResult {
+fn import_overpass_query(_: &mut Session, p: Params<'_>) -> ApiResult {
     let (south, west, north, east) = bounds_param(p, "bounds")?;
     let opts = OverpassOpts {
         service: p.flag("service")?,
@@ -347,16 +377,25 @@ fn import_overpass_query(_: &mut Session, p: &Params) -> ApiResult {
         },
         &opts,
     );
-    let c_lat = (south + north) / 2.0;
+    let c_lat = f64::midpoint(south, north);
     let area_km2 = dist(&[c_lat, west], &[c_lat, east])
-        * dist(&[south, (west + east) / 2.0], &[north, (west + east) / 2.0])
+        * dist(
+            &[south, f64::midpoint(west, east)],
+            &[north, f64::midpoint(west, east)],
+        )
         / 1e6;
     Ok(json!({ "query": query, "servers": OVERPASS, "areaKm2": area_km2 }))
 }
 
-fn landuse_queries(_: &mut Session, p: &Params) -> ApiResult {
-    let (s, w, n, e) = bounds_param(p, "bounds")?;
-    let jobs = landuse::download_jobs(&StudyBox { s, w, n, e }).map_err(ApiError::bad_params)?;
+fn landuse_queries(_: &mut Session, p: Params<'_>) -> ApiResult {
+    let (south, west, north, east) = bounds_param(p, "bounds")?;
+    let jobs = landuse::download_jobs(&StudyBox {
+        s: south,
+        w: west,
+        n: north,
+        e: east,
+    })
+    .map_err(ApiError::bad_params)?;
     Ok(json!({
         "servers": OVERPASS,
         "jobs": jobs.iter().map(|j| json!({ "label": j.label, "query": j.query })).collect::<Vec<_>>(),
@@ -374,8 +413,8 @@ fn copy_new_to_others(
     s: &mut Session,
     i: usize,
     before: &(HashSet<String>, HashSet<String>, HashSet<String>),
-) -> usize {
-    let sc = &s.project.scenarios[i];
+) -> ApiResult<usize> {
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let nodes: Vec<_> = sc
         .nodes
         .iter()
@@ -394,12 +433,12 @@ fn copy_new_to_others(
         .filter(|(k, _)| !before.2.contains(*k))
         .map(|(k, v)| (k.to_string(), v.clone()))
         .collect();
-    let mut n = 0;
+    let mut n = 0usize;
     for j in 0..s.project.scenarios.len() {
         if j == i {
             continue;
         }
-        let other = &mut s.project.scenarios[j];
+        let other = scenario_at_mut(&mut s.project.scenarios, j)?;
         for (k, v) in &nodes {
             if !other.nodes.contains_key(k) {
                 other.nodes.insert(k.clone(), v.clone());
@@ -416,14 +455,14 @@ fn copy_new_to_others(
             }
         }
         s.mark_stale_at(j);
-        n += 1;
+        n = n.saturating_add(1);
     }
-    n
+    Ok(n)
 }
 
 /// `runImport` of ui-dialogs.js after the download: the roads, the gateways at this import's new road ends, and the other scenarios.
-fn import_osm_roads(s: &mut Session, p: &Params) -> ApiResult {
-    let i = s.target(p)?;
+fn import_osm_roads(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let idx = s.target(p)?;
     let data = json_input(p, "answer")?;
     let bounds = match p.get("bounds") {
         Some(b) => Some(parse_box(b)?),
@@ -441,10 +480,15 @@ fn import_osm_roads(s: &mut Session, p: &Params) -> ApiResult {
         points: at_points(&s.project),
     };
     s.snap("importing roads");
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, idx)?;
     let before = (keys_of(&sc.nodes), keys_of(&sc.links), keys_of(&sc.zones));
-    let n = osm_to_scenario(&mut s.project.scenarios[i], &mut s.ids, &data, &opts);
-    let sc = &s.project.scenarios[i];
+    let n = osm_to_scenario(
+        scenario_at_mut(&mut s.project.scenarios, idx)?,
+        &mut s.ids,
+        &data,
+        &opts,
+    );
+    let sc = scenario_at(&s.project.scenarios, idx)?;
     let fresh: HashSet<String> = sc
         .nodes
         .keys()
@@ -453,7 +497,7 @@ fn import_osm_roads(s: &mut Session, p: &Params) -> ApiResult {
         .collect();
     let g = match (want_gw, bounds) {
         (true, Some((south, west, north, east))) => auto_gateways(
-            &mut s.project.scenarios[i],
+            scenario_at_mut(&mut s.project.scenarios, idx)?,
             &mut s.ids,
             &Bounds {
                 south,
@@ -466,7 +510,7 @@ fn import_osm_roads(s: &mut Session, p: &Params) -> ApiResult {
         _ => 0,
     };
     let others = if all {
-        copy_new_to_others(s, i, &before)
+        copy_new_to_others(s, idx, &before)?
     } else {
         0
     };
@@ -474,7 +518,7 @@ fn import_osm_roads(s: &mut Session, p: &Params) -> ApiResult {
     let message = if n > 0 {
         format!(
             "Imported {} road segments{}.",
-            util::fmt::int(n as f64),
+            util::fmt::int(usize_to_f64(n)),
             if g > 0 {
                 format!(" and {g} gateways")
             } else {
@@ -487,13 +531,13 @@ fn import_osm_roads(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "segments": n, "gateways": g, "otherScenarios": others, "message": message }))
 }
 
-fn import_auto_gateways(s: &mut Session, p: &Params) -> ApiResult {
+fn import_auto_gateways(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let (south, west, north, east) = bounds_param(p, "bounds")?;
     let only: Option<HashSet<String>> = p.opt_strings("nodes")?.map(|v| v.into_iter().collect());
     s.snap("adding gateways");
     let n = auto_gateways(
-        &mut s.project.scenarios[i],
+        scenario_at_mut(&mut s.project.scenarios, i)?,
         &mut s.ids,
         &Bounds {
             south,
@@ -507,7 +551,7 @@ fn import_auto_gateways(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "gateways": n }))
 }
 
-fn data_set(s: &mut Session, p: &Params) -> ApiResult {
+fn data_set(s: &mut Session, p: Params<'_>) -> ApiResult {
     use construct_transport::project::ProjectData;
     if !p.has("controlled") && !p.has("msm") {
         return Err(ApiError::bad_params("Give `controlled` or `msm`."));
@@ -520,7 +564,11 @@ fn data_set(s: &mut Session, p: &Params) -> ApiResult {
             extra: Map::new(),
         });
     }
-    let d = s.project.data.get_mut().expect("just made");
+    let d = s
+        .project
+        .data
+        .get_mut()
+        .ok_or_else(|| ApiError::new("internal", "The project has no data store."))?;
     if let Some(c) = p.get("controlled") {
         d.controlled = Maybe::Set(c.clone());
     }
@@ -532,7 +580,7 @@ fn data_set(s: &mut Session, p: &Params) -> ApiResult {
     Ok(out)
 }
 
-fn import_geojson_cmd(s: &mut Session, p: &Params) -> ApiResult {
+fn import_geojson_cmd(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let gj = json_input(p, "geojson")?;
     let mut template = road_template(p)?;
@@ -548,7 +596,12 @@ fn import_geojson_cmd(s: &mut Session, p: &Params) -> ApiResult {
         template = link_props(Some(&m))?;
     }
     s.snap("");
-    let n = import_geojson(&mut s.project.scenarios[i], &mut s.ids, &gj, &template);
+    let n = import_geojson(
+        scenario_at_mut(&mut s.project.scenarios, i)?,
+        &mut s.ids,
+        &gj,
+        &template,
+    );
     s.edited();
     Ok(
         json!({ "roads": n, "message": format!("Imported {n} road{}.", if n == 1 { "" } else { "s" }) }),
@@ -557,19 +610,25 @@ fn import_geojson_cmd(s: &mut Session, p: &Params) -> ApiResult {
 
 // ------------------------------------------------------------------ exports
 
-fn export_geojson_cmd(s: &mut Session, p: &Params) -> ApiResult {
+fn export_geojson_cmd(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
     let period = s.period_of(p)?;
-    let sid = s.sid(i);
-    let text = export_geojson(&s.project.scenarios[i], s.result(&sid, &period));
+    let sid = s.sid(i)?;
+    let text = export_geojson(
+        scenario_at(&s.project.scenarios, i)?,
+        s.result(&sid, &period),
+    );
     Ok(json!({ "period": period, "withResults": s.result(&sid, &period).is_some(), "text": text }))
 }
 
-fn export_links_csv(s: &mut Session, p: &Params) -> ApiResult {
+fn export_links_csv(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
     let period = s.period_of(p)?;
-    let sid = s.sid(i);
-    let text = links_csv(&s.project.scenarios[i], s.result(&sid, &period));
+    let sid = s.sid(i)?;
+    let text = links_csv(
+        scenario_at(&s.project.scenarios, i)?,
+        s.result(&sid, &period),
+    );
     Ok(json!({ "period": period, "withResults": s.result(&sid, &period).is_some(), "text": text }))
 }
 
@@ -585,8 +644,8 @@ fn from_lu(z: &Zone) -> bool {
                 .is_some_and(|n| n.starts_with("Existing \u{b7} ")))
 }
 
-fn landuse_apply(s: &mut Session, p: &Params) -> ApiResult {
-    let i = s.target(p)?;
+fn landuse_apply(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let idx = s.target(p)?;
     let (south, west, north, east) = bounds_param(p, "bounds")?;
     let b = StudyBox {
         s: south,
@@ -594,27 +653,11 @@ fn landuse_apply(s: &mut Session, p: &Params) -> ApiResult {
         n: north,
         e: east,
     };
-    let answers = p.array("answers")?;
-    let mut batches: Vec<Vec<Value>> = Vec::new();
-    for (k, a) in answers.iter().enumerate() {
-        let v: Value = match a {
-            Value::String(t) => serde_json::from_str(t).map_err(|e| {
-                ApiError::bad_params(format!(
-                    "`answers[{k}]` is text that is not valid JSON: {e}"
-                ))
-            })?,
-            o => o.clone(),
-        };
-        batches.push(
-            landuse::overpass_elements(&v, &format!("answer {}", k + 1))
-                .map_err(ApiError::bad_params)?,
-        );
-    }
-    let elements = landuse::merge_elements(&batches);
+    let elements = landuse::merge_elements(&overpass_batches(p)?);
     let all = p.opt_bool("allScenarios")?.unwrap_or(true);
     let opts = BuildOpts {
         cell: p.opt_f64("cell")?,
-        links: landuse::road_lines(&s.project.scenarios[i]),
+        links: landuse::road_lines(scenario_at(&s.project.scenarios, idx)?),
     };
     let built = landuse::build(&Value::Array(elements), Some(&b), &mut s.ids, &opts);
     s.snap("existing land use");
@@ -626,31 +669,40 @@ fn landuse_apply(s: &mut Session, p: &Params) -> ApiResult {
             && z.lng.num() >= b.w
             && z.lng.num() <= b.e
     };
-    let removed: Vec<String> = s.project.scenarios[i]
+    let removed: Vec<String> = scenario_at(&s.project.scenarios, idx)?
         .zones
         .values()
         .filter(|z| from_lu(z) && inside(z))
         .map(|z| z.id.clone())
         .collect();
     for id in &removed {
-        s.project.scenarios[i].zones.remove(id);
+        scenario_at_mut(&mut s.project.scenarios, idx)?
+            .zones
+            .remove(id);
     }
-    let (mut added, mut dwellings) = (0usize, 0.0f64);
+    let mut dwellings = 0.0f64;
     let mut added_ids: Vec<String> = Vec::new();
     for z in built.zones {
         if !z.lat.num().is_finite() || !z.lng.num().is_finite() {
             continue;
         }
         let nm = z.name.as_str().unwrap_or("").trim().to_lowercase();
-        let dup = s.project.scenarios[i].zones.values().any(|y| {
-            !y.kind.is("gateway")
-                && y.name.as_str().unwrap_or("").trim().to_lowercase() == nm
-                && dist(&y.ll(), &z.ll()) < 150.0
-        });
+        let dup = scenario_at(&s.project.scenarios, idx)?
+            .zones
+            .values()
+            .any(|y| {
+                !y.kind.is("gateway")
+                    && y.name.as_str().unwrap_or("").trim().to_lowercase() == nm
+                    && dist(&y.ll(), &z.ll()) < 150.0
+            });
         if dup {
             continue;
         }
-        let id = if !z.id.is_empty() && !s.project.scenarios[i].zones.contains_key(&z.id) {
+        let id = if !z.id.is_empty()
+            && !scenario_at(&s.project.scenarios, idx)?
+                .zones
+                .contains_key(&z.id)
+        {
             z.id.clone()
         } else {
             s.ids.uid("z")
@@ -662,83 +714,117 @@ fn landuse_apply(s: &mut Session, p: &Params) -> ApiResult {
         if z.lu.is_missing() {
             z.lu = Maybe::Set(OrderedMap::new());
         }
-        z.id = id.clone();
+        z.id.clone_from(&id);
         z.kind = Maybe::Set("zone".to_string());
         z.existing = true.into();
         z.src = Maybe::Set(json!("existing-lu"));
         if let Some(lu) = z.lu.get() {
             dwellings += lu.num_at("residential").or(0.0) + lu.num_at("apartment").or(0.0);
         }
-        s.project.scenarios[i].zones.insert(id.clone(), z);
+        scenario_at_mut(&mut s.project.scenarios, idx)?
+            .zones
+            .insert(id.clone(), z);
         added_ids.push(id);
-        added += 1;
     }
     let dwellings = construct_transport::jsnum::math_round(dwellings);
     let mut warnings: Vec<String> = Vec::new();
-    let mut others = 0usize;
-    if all {
-        let new_zones: Vec<(String, Zone)> = added_ids
-            .iter()
-            .filter_map(|id| {
-                s.project.scenarios[i]
-                    .zones
-                    .get(id)
-                    .map(|z| (id.clone(), z.clone()))
-            })
-            .collect();
-        for j in 0..s.project.scenarios.len() {
-            if j == i {
-                continue;
-            }
-            let other = &mut s.project.scenarios[j];
-            for id in &removed {
-                if other.zones.get(id).is_some_and(from_lu) {
-                    other.zones.remove(id);
-                }
-            }
-            for (id, z) in &new_zones {
-                if !other.zones.contains_key(id) {
-                    other.zones.insert(id.clone(), z.clone());
-                }
-            }
-            s.mark_stale_at(j);
-            others += 1;
-        }
-    }
-    if !removed.is_empty()
-        && let Some(me) = s.project.me.get()
-    {
-        let hit = ["AM", "PM"].iter().any(|per| {
-            me.factors.get(per).and_then(Maybe::get).is_some_and(|f| {
-                f.keys()
-                    .any(|k| k.split('>').any(|x| removed.iter().any(|r| r == x)))
-            })
-        });
-        if hit {
-            warnings.push("Existing land use was replaced, so matrix estimation factors for the old zones no longer apply. Fit to counts again.".to_string());
-        }
+    let others = if all {
+        land_use_to_others(s, idx, &removed, &added_ids)?
+    } else {
+        0
+    };
+    if factors_name(&s.project, &removed) {
+        warnings.push("Existing land use was replaced, so matrix estimation factors for the old zones no longer apply. Fit to counts again.".to_string());
     }
     s.edited();
     Ok(json!({
-        "zones": added, "replaced": removed.len(), "dwellings": dwellings, "otherScenarios": others,
+        "zones": added_ids.len(), "replaced": removed.len(), "dwellings": dwellings, "otherScenarios": others,
         "warnings": warnings, "stats": built.stats.to_value(),
     }))
+}
+
+/// Whether the project's matrix estimation factors name any of these zones.
+fn factors_name(project: &Project, zones: &[String]) -> bool {
+    let Some(me) = project.me.get() else {
+        return false;
+    };
+    !zones.is_empty()
+        && ["AM", "PM"].iter().any(|per| {
+            me.factors.get(per).and_then(Maybe::get).is_some_and(|f| {
+                f.keys()
+                    .any(|k| k.split('>').any(|x| zones.iter().any(|r| r == x)))
+            })
+        })
+}
+
+/// The elements of each Overpass answer given to `transport.landuse.apply` (an object, or its text).
+fn overpass_batches(p: Params<'_>) -> ApiResult<Vec<Vec<Value>>> {
+    let mut batches: Vec<Vec<Value>> = Vec::new();
+    for (k, a) in p.array("answers")?.iter().enumerate() {
+        let v: Value = match a {
+            Value::String(t) => serde_json::from_str(t).map_err(|e| {
+                ApiError::bad_params(format!(
+                    "`answers[{k}]` is text that is not valid JSON: {e}"
+                ))
+            })?,
+            o => o.clone(),
+        };
+        batches.push(
+            landuse::overpass_elements(&v, &format!("answer {}", k.saturating_add(1)))
+                .map_err(ApiError::bad_params)?,
+        );
+    }
+    Ok(batches)
+}
+
+/// The land use one scenario was given, given to every other scenario too: the zones it replaced go, the new ones come
+/// where there is no zone of that id. Gives how many scenarios changed.
+fn land_use_to_others(
+    s: &mut Session,
+    idx: usize,
+    removed: &[String],
+    added_ids: &[String],
+) -> ApiResult<usize> {
+    let here = &scenario_at(&s.project.scenarios, idx)?.zones;
+    let new_zones: Vec<(String, Zone)> = added_ids
+        .iter()
+        .filter_map(|id| here.get(id).map(|z| (id.clone(), z.clone())))
+        .collect();
+    let mut others = 0usize;
+    for j in 0..s.project.scenarios.len() {
+        if j == idx {
+            continue;
+        }
+        let other = scenario_at_mut(&mut s.project.scenarios, j)?;
+        for id in removed {
+            if other.zones.get(id).is_some_and(from_lu) {
+                other.zones.remove(id);
+            }
+        }
+        for (id, z) in &new_zones {
+            if !other.zones.contains_key(id) {
+                other.zones.insert(id.clone(), z.clone());
+            }
+        }
+        s.mark_stale_at(j);
+        // one per scenario: far below usize::MAX
+        others = others.saturating_add(1);
+    }
+    Ok(others)
 }
 
 // ------------------------------------------------------------------ OD matrices
 
 /// `U.parseCSV(text)`: rows of cells, quotes and doubled quotes read, blank rows dropped.
 pub(super) fn parse_csv(text: &str) -> Vec<Vec<String>> {
-    let chars: Vec<char> = text.chars().collect();
+    let mut chars = text.chars().peekable();
     let mut rows: Vec<Vec<String>> = Vec::new();
     let (mut row, mut cur, mut q) = (Vec::<String>::new(), String::new(), false);
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
+    while let Some(c) = chars.next() {
         if q {
-            if c == '"' && chars.get(i + 1) == Some(&'"') {
+            if c == '"' && chars.peek() == Some(&'"') {
                 cur.push('"');
-                i += 1;
+                chars.next();
             } else if c == '"' {
                 q = false;
             } else {
@@ -749,15 +835,14 @@ pub(super) fn parse_csv(text: &str) -> Vec<Vec<String>> {
         } else if c == ',' {
             row.push(std::mem::take(&mut cur));
         } else if c == '\n' || c == '\r' {
-            if c == '\r' && chars.get(i + 1) == Some(&'\n') {
-                i += 1;
+            if c == '\r' && chars.peek() == Some(&'\n') {
+                chars.next();
             }
             row.push(std::mem::take(&mut cur));
             rows.push(std::mem::take(&mut row));
         } else {
             cur.push(c);
         }
-        i += 1;
     }
     if !cur.is_empty() || !row.is_empty() {
         row.push(cur);
@@ -772,25 +857,25 @@ pub(super) fn parse_csv(text: &str) -> Vec<Vec<String>> {
 }
 
 /// The OD import of ui-dialogs.js: zones matched by name, the matrix over the zones that appear.
-fn od_import(s: &mut Session, p: &Params) -> ApiResult {
-    let i = s.target(p)?;
+fn od_import(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let idx = s.target(p)?;
     let period = s.period_of(p)?;
     let rows = parse_csv(p.str("csv")?);
-    if rows.is_empty() {
+    let Some((head, body)) = rows.split_first() else {
         return Err(ApiError::bad_params("The CSV has no rows."));
-    }
+    };
     let key = |t: &str| construct_transport::jsnum::js_trim(t).to_lowercase();
     let mut by_name: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    for z in s.project.scenarios[i].zones.values() {
+    for z in scenario_at(&s.project.scenarios, idx)?.zones.values() {
         by_name.insert(key(z.name.as_str().unwrap_or("")), z.id.clone());
     }
-    let cols: Vec<Option<String>> = rows[0]
+    let cols: Vec<Option<String>> = head
         .iter()
         .skip(1)
-        .map(|n| by_name.get(&key(n)).cloned())
+        .map(|name| by_name.get(&key(name)).cloned())
         .collect();
     let mut ids: Vec<String> = Vec::new();
-    for r in rows.iter().skip(1) {
+    for r in body {
         if let Some(id) = by_name.get(&key(r.first().map_or("", String::as_str))) {
             ids.push(id.clone());
         }
@@ -806,17 +891,22 @@ fn od_import(s: &mut Session, p: &Params) -> ApiResult {
             "No zone names in the CSV match zones in this scenario.",
         ));
     }
-    let n = zones_all.len();
-    let pos = |id: &str| zones_all.iter().position(|z| z == id).expect("listed");
-    let mut m = vec![vec![0.0f64; n]; n];
-    for r in rows.iter().skip(1) {
+    let count = zones_all.len();
+    // every zone in the rows and columns is in zones_all, so both positions are found
+    let pos = |id: &str| zones_all.iter().position(|z| z == id);
+    let mut matrix = vec![vec![0.0f64; count]; count];
+    for r in body {
         let Some(o) = by_name.get(&key(r.first().map_or("", String::as_str))) else {
             continue;
         };
         for (j, v) in r.iter().skip(1).enumerate() {
-            if let Some(Some(d)) = cols.get(j) {
+            if let Some(Some(d)) = cols.get(j)
+                && let Some(cell) = pos(o)
+                    .zip(pos(d))
+                    .and_then(|(a, b)| matrix.get_mut(a).and_then(|row| row.get_mut(b)))
+            {
                 let x = string_to_number(v);
-                m[pos(o)][pos(d)] = if x.is_nan() || x == 0.0 { 0.0 } else { x };
+                *cell = if x.is_nan() || x == 0.0 { 0.0 } else { x };
             }
         }
     }
@@ -824,30 +914,31 @@ fn od_import(s: &mut Session, p: &Params) -> ApiResult {
     let od = OdMatrix {
         zones: Maybe::Set(zones_all.clone()),
         m: Maybe::Set(
-            m.into_iter()
+            matrix
+                .into_iter()
                 .map(|row| Maybe::Set(row.into_iter().map(Num::number).collect()))
                 .collect(),
         ),
         extra: Map::new(),
     };
-    let sc = &mut s.project.scenarios[i];
-    if !sc.od_manual.is_set() {
-        sc.od_manual = Maybe::Set(OrderedMap::new());
+    let sc = scenario_at_mut(&mut s.project.scenarios, idx)?;
+    if let Some(matrix) = sc.od_manual.get_mut() {
+        matrix.insert(period.clone(), Maybe::Set(od));
+    } else {
+        let mut matrix = OrderedMap::new();
+        matrix.insert(period.clone(), Maybe::Set(od));
+        sc.od_manual = Maybe::Set(matrix);
     }
-    sc.od_manual
-        .get_mut()
-        .expect("set")
-        .insert(period.clone(), Maybe::Set(od));
     s.edited();
     Ok(
-        json!({ "period": period, "zones": n, "message": format!("Manual {period} OD matrix loaded for {n} zones. Run the model to use it.") }),
+        json!({ "period": period, "zones": count, "message": format!("Manual {period} OD matrix loaded for {count} zones. Run the model to use it.") }),
     )
 }
 
-fn od_clear(s: &mut Session, p: &Params) -> ApiResult {
+fn od_clear(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let period = s.period_of(p)?;
-    if !s.project.scenarios[i]
+    if !scenario_at(&s.project.scenarios, i)?
         .od_manual
         .get()
         .is_some_and(|m| m.contains_key(&period))
@@ -857,24 +948,27 @@ fn od_clear(s: &mut Session, p: &Params) -> ApiResult {
         )));
     }
     s.snap("");
-    if let Some(m) = s.project.scenarios[i].od_manual.get_mut() {
+    if let Some(m) = scenario_at_mut(&mut s.project.scenarios, i)?
+        .od_manual
+        .get_mut()
+    {
         m.remove(&period);
     }
     s.edited();
     Ok(json!({ "period": period, "cleared": true }))
 }
 
-fn export_od_csv(s: &mut Session, p: &Params) -> ApiResult {
-    let i = s.pick_scenario(p, "scenario")?;
+fn export_od_csv(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let idx = s.pick_scenario(p, "scenario")?;
     let period = s.period_of(p)?;
-    let sid = s.sid(i);
+    let sid = s.sid(idx)?;
     let res = s
         .result(&sid, &period)
         .ok_or_else(|| ApiError::invalid_state("Run the model first."))?;
     let t = res.t.as_ref().ok_or_else(|| {
         ApiError::invalid_state("This result has no OD matrix (more than 150 zones).")
     })?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, idx)?;
     let nm = |id: &str| {
         sc.zones
             .get(id)
@@ -887,11 +981,10 @@ fn export_od_csv(s: &mut Session, p: &Params) -> ApiResult {
     let mut head: Vec<Value> = vec![json!("from \\ to")];
     head.extend(res.zone_ids.iter().map(|id| json!(nm(id))));
     rows.push(head);
-    for (a, id) in res.zone_ids.iter().enumerate() {
+    // t holds the matrix row by row, z numbers to a row
+    for (id, from) in res.zone_ids.iter().zip(t.chunks(z.max(1))) {
         let mut row: Vec<Value> = vec![json!(nm(id))];
-        for b in 0..z {
-            row.push(json_number(t[a * z + b]));
-        }
+        row.extend(from.iter().take(z).map(|x| json_number(*x)));
         rows.push(row);
     }
     Ok(json!({ "period": period, "zones": z, "text": csv(&rows) }))

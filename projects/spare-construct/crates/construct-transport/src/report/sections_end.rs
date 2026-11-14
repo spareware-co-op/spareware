@@ -6,11 +6,13 @@ use super::rfmt;
 use super::sections_env::control_label;
 use super::sections_front::int;
 use super::shared::{junction_groups, junction_rows, kit_junction_name};
+use super::{Rep, Sel};
 use crate::edit::json::JsonValue;
 use crate::graph::js_sort_by;
 use crate::jsnum::{Maybe, number_to_js_string};
-use crate::project::{Scenario, road_class_exact};
+use crate::project::{EconSettings, Scenario, road_class_exact};
 use crate::util::{esc, fmt};
+use std::fmt::Write as _;
 
 /// One change a scenario makes against another.
 #[derive(Clone, Debug, PartialEq)]
@@ -120,7 +122,7 @@ pub fn network_diff(a: Option<&Scenario>, b: Option<&Scenario>) -> Vec<Change> {
                     "{} at {}{}{}",
                     control_label(ctl),
                     kit_junction_name(b, &n.id),
-                    if o.control != n.control { format!(" (was {})", control_label(octl).to_lowercase()) } else { String::new() },
+                    if o.control == n.control { String::new() } else { format!(" (was {})", control_label(octl).to_lowercase()) },
                     if n.cycle.truthy() && n.control.is("signals") { format!(", cycle {} s", n.cycle.js_string()) } else { String::new() }
                 ),
             });
@@ -134,6 +136,91 @@ fn cell(o: &JsonValue, k: &str, d: &str) -> String {
     esc(&if t.is_empty() { d.to_string() } else { t })
 }
 
+/// The "Effect addressed" cell of a mitigation register row: for a junction, its worst period in the proposal, linked to its
+/// results; otherwise a dash.
+fn mitigation_effect(r: &Rep<'_>, chg: &Change, prop: Option<usize>, prop_id: &str, refs: &[(String, String)]) -> String {
+    if chg.kind == "node"
+        && let Some(pi) = prop
+    {
+        let mut hits: Vec<(&str, &crate::results::NodeRes)> = r
+            .rep_periods(pi)
+            .into_iter()
+            .filter_map(|per| {
+                r.results.get(pi).and_then(|res| res.get(per)).and_then(|res| res.nodes.get(&chg.id)).map(|nr| (per, nr))
+            })
+            .collect();
+        js_sort_by(&mut hits, |x, y| y.1.dos - x.1.dos);
+        if let Some((per, nr)) = hits.first() {
+            let jr = refs.iter().find(|(id, _)| *id == chg.id).map(|(_, jref)| jref.as_str()).filter(|jref| !jref.is_empty()).unwrap_or("J");
+            return format!(
+                "<a href=\"#j-{}-{}\">{} {} DoS {}, LoS {}</a>",
+                esc(prop_id),
+                esc(&chg.id),
+                esc(jr),
+                per,
+                rfmt::dos(nr.dos),
+                esc(if nr.los_text.is_empty() { &nr.los } else { &nr.los_text })
+            );
+        }
+    }
+    fmt::DASH.to_string()
+}
+
+/// The estimated cost of a mitigation register row: the junction control's rate for a node, the lane-km rate for a link the
+/// mitigation adds. `scs` is the (mitigation, proposal) pair of scenarios.
+fn mitigation_cost(r: &Rep<'_>, econ: Option<&EconSettings>, chg: &Change, scs: (Option<usize>, Option<usize>)) -> Option<f64> {
+    if chg.kind == "node" {
+        return econ.and_then(|ec| ec.node.get()).and_then(|rates| rates.get(chg.control.as_deref().unwrap_or(""))).and_then(|val| match val {
+            Maybe::Set(num) => Some(num.to_number()),
+            _ => None,
+        });
+    }
+    // The register has rows only when both the mitigation and the proposal are set, so this always finds them
+    let (Some(mi), Some(pi)) = scs else {
+        return None;
+    };
+    let msc = r.scenario(mi);
+    let pr = r.scenario(pi);
+    match msc.links.get(&chg.id) {
+        Some(l) if l.status.is("proposed") && !pr.links.contains_key(&chg.id) => {
+            let per_km = econ
+                .and_then(|ec| ec.lane_km.get())
+                .and_then(|rates| rates.get(l.cls.as_str().unwrap_or("")))
+                .and_then(|val| match val {
+                    Maybe::Set(num) => Some(num.to_number()),
+                    _ => None,
+                })
+                .unwrap_or(3.0);
+            Some(msc.link_len(l) / 1000.0 * (f64::from(l.lanes_ab.int32()) + f64::from(l.lanes_ba.int32())) * per_km)
+        }
+        _ => None,
+    }
+}
+
+/// What each assessed option (with, mitigation) changes against the base: one list item each, at most 12 changes named.
+fn mitigation_list(r: &Rep<'_>, sel: &Sel, base_w: Option<usize>) -> String {
+    let mut list = String::new();
+    for &si in [sel.with, sel.mitigation].iter().flatten() {
+        let changes = network_diff(base_w.map(|bi| r.scenario(bi)), Some(r.scenario(si)));
+        // Writing to a String cannot fail
+        let _ = write!(
+            list,
+            "<li><b>{}</b>: {}.</li>",
+            esc(r.sc(si).name()),
+            if changes.is_empty() {
+                "no network changes".to_string()
+            } else {
+                format!(
+                    "{}{}",
+                    changes.iter().take(12).map(|x| esc(&x.text)).collect::<Vec<_>>().join("; "),
+                    if changes.len() > 12 { format!("; and {} more", changes.len().saturating_sub(12)) } else { String::new() }
+                )
+            }
+        );
+    }
+    list
+}
+
 /// `report-mitigation`.
 pub(crate) fn mitigation(c: &mut Ctx) -> String {
     let r = c.r;
@@ -141,108 +228,46 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
     let (mit, prop) = (sel.mitigation, sel.with);
     let econ = r.st().econ.get();
     let diff = match (mit, prop) {
-        (Some(m), Some(p)) => network_diff(Some(r.scenario(p)), Some(r.scenario(m))),
+        (Some(mi), Some(pi)) => network_diff(Some(r.scenario(pi)), Some(r.scenario(mi))),
         _ => Vec::new(),
     };
-    let prop_id = prop.map(|p| r.scenario(p).id.clone()).unwrap_or_default();
-    let refs: Vec<(String, String)> = c.refs.iter().find(|(k, _)| *k == prop_id).map(|(_, v)| v.clone()).unwrap_or_default();
+    let prop_id = prop.map(|pi| r.scenario(pi).id.clone()).unwrap_or_default();
+    let refs: Vec<(String, String)> = c.refs.iter().find(|(key, _)| *key == prop_id).map(|(_, v)| v.clone()).unwrap_or_default();
     let blank = JsonValue::object();
     let rows: Vec<Row> = diff
         .iter()
         .enumerate()
-        .map(|(i, d)| {
-            let rf = format!("M{}", i + 1);
-            let a = r.rs.mitigation.get(&rf).filter(|v| v.truthy()).unwrap_or(&blank);
-            let mut eff = fmt::DASH.to_string();
-            if d.kind == "node"
-                && let Some(p) = prop
-            {
-                let mut hits: Vec<(&str, &crate::results::NodeRes)> = r
-                    .rep_periods(p)
-                    .into_iter()
-                    .filter_map(|per| r.results[p].get(per).and_then(|res| res.nodes.get(&d.id)).map(|nr| (per, nr)))
-                    .collect();
-                js_sort_by(&mut hits, |x, y| y.1.dos - x.1.dos);
-                if let Some((per, nr)) = hits.first() {
-                    let jr = refs.iter().find(|(k, _)| *k == d.id).map(|(_, v)| v.as_str()).filter(|v| !v.is_empty()).unwrap_or("J");
-                    eff = format!(
-                        "<a href=\"#j-{}-{}\">{} {} DoS {}, LoS {}</a>",
-                        esc(&prop_id),
-                        esc(&d.id),
-                        esc(jr),
-                        per,
-                        rfmt::dos(nr.dos),
-                        esc(if nr.los_text.is_empty() { &nr.los } else { &nr.los_text })
-                    );
-                }
-            }
-            let cost: Option<f64> = if d.kind == "node" {
-                econ.and_then(|e| e.node.get()).and_then(|m| m.get(d.control.as_deref().unwrap_or(""))).and_then(|v| match v {
-                    Maybe::Set(x) => Some(x.to_number()),
-                    _ => None,
-                })
-            } else {
-                let m = r.scenario(mit.expect("a mitigation scenario"));
-                let pr = r.scenario(prop.expect("a proposal scenario"));
-                match m.links.get(&d.id) {
-                    Some(l) if l.status.is("proposed") && !pr.links.contains_key(&d.id) => {
-                        let per_km = econ
-                            .and_then(|e| e.lane_km.get())
-                            .and_then(|m| m.get(l.cls.as_str().unwrap_or("")))
-                            .and_then(|v| match v {
-                                Maybe::Set(x) => Some(x.to_number()),
-                                _ => None,
-                            })
-                            .unwrap_or(3.0);
-                        Some(m.link_len(l) / 1000.0 * ((l.lanes_ab.int32() | 0) as f64 + (l.lanes_ba.int32() | 0) as f64) * per_km)
-                    }
-                    _ => None,
-                }
-            };
+        .map(|(idx, chg)| {
+            // Bound: a row count, far below usize::MAX
+            let rf = format!("M{}", idx.saturating_add(1));
+            let entry = r.rs.mitigation.get(&rf).filter(|v| v.truthy()).unwrap_or(&blank);
+            let eff = mitigation_effect(r, chg, prop, &prop_id, &refs);
+            let cost = mitigation_cost(r, econ, chg, (mit, prop));
             let trigger = {
-                let t = js::text_or_empty(a.get("trigger"));
-                if !t.is_empty() {
-                    t
+                let own = js::text_or_empty(entry.get("trigger"));
+                if own.is_empty() {
+                    let staged = js::text_or_empty(r.rs.staging.as_ref().and_then(|stg| stg.get("text")));
+                    if staged.is_empty() { fmt::DASH.to_string() } else { staged }
                 } else {
-                    let st = js::text_or_empty(r.rs.staging.as_ref().and_then(|s| s.get("text")));
-                    if st.is_empty() { fmt::DASH.to_string() } else { st }
+                    own
                 }
             };
             Row::new(vec![
                 rf,
-                esc(&d.text),
+                esc(&chg.text),
                 eff,
-                cell(a, "options", fmt::DASH),
+                cell(entry, "options", fmt::DASH),
                 esc(&trigger),
-                cell(a, "responsible", "Applicant"),
+                cell(entry, "responsible", "Applicant"),
                 cost.map_or(fmt::DASH.to_string(), fmt::money),
-                cell(a, "mechanism", "Condition"),
-                cell(a, "rltp", fmt::DASH),
-                cell(a, "land", fmt::DASH),
+                cell(entry, "mechanism", "Condition"),
+                cell(entry, "rltp", fmt::DASH),
+                cell(entry, "land", fmt::DASH),
             ])
         })
         .collect();
     let base_w = sel.without.or(sel.base);
-    let list: String = [sel.with, sel.mitigation]
-        .iter()
-        .flatten()
-        .map(|&s| {
-            let d = network_diff(base_w.map(|b| r.scenario(b)), Some(r.scenario(s)));
-            format!(
-                "<li><b>{}</b>: {}.</li>",
-                esc(r.sc(s).name()),
-                if d.is_empty() {
-                    "no network changes".to_string()
-                } else {
-                    format!(
-                        "{}{}",
-                        d.iter().take(12).map(|x| esc(&x.text)).collect::<Vec<_>>().join("; "),
-                        if d.len() > 12 { format!("; and {} more", d.len() - 12) } else { String::new() }
-                    )
-                }
-            )
-        })
-        .collect();
+    let list = mitigation_list(r, &sel, base_w);
     let head: Vec<Head> = vec![
         h("Ref"),
         h("Measure"),
@@ -272,72 +297,75 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
     )
 }
 
+/// A row of Table M2: one build-out increment of the staging run, with the measure it triggers.
+fn staging_row(st: &JsonValue, tr: Option<&JsonValue>, rw: &JsonValue) -> Row {
+    let field = |key: &str| rw.get(key);
+    let worst = field("worst").filter(|w| w.truthy());
+    let is_trigger = tr.is_some_and(|trg| js::num(trg.get("pct")) == js::num(rw.get("pct")));
+    Row::cls(
+        vec![
+            format!("{}%", int(field("pct"))),
+            rfmt::num(js::num(field("dwellings")), 0),
+            rfmt::num(js::num(field("gfa")), 0),
+            worst.map_or(esc(fmt::DASH), |w| esc(&js::text(w.get("name")))),
+            worst.map_or(fmt::DASH.to_string(), |w| rfmt::dos(js::num(w.get("dos")))),
+            worst.map_or(fmt::DASH.to_string(), |w| esc(&js::text(w.get("los")))),
+            if js::truthy(field("queue")) { "Yes" } else { "No" }.to_string(),
+            if is_trigger {
+                format!("<b>{}</b>", esc(&{
+                    let measure = js::text_or_empty(st.get("measure"));
+                    if measure.is_empty() { "Mitigation".to_string() } else { measure }
+                }))
+            } else {
+                fmt::DASH.to_string()
+            },
+            if is_trigger {
+                match st.get("resolved") {
+                    None | Some(JsonValue::Null) => "Not tested".to_string(),
+                    Some(v) if v.truthy() => "Yes".to_string(),
+                    _ => "<b class=\"bad\">No</b>".to_string(),
+                }
+            } else {
+                String::new()
+            },
+        ],
+        if is_trigger { "miss" } else { "" },
+    )
+}
+
+/// The sites that trigger the staging measure, with why and how, as a list (empty when none do).
+fn staging_triggers(tr: Option<&JsonValue>) -> String {
+    match tr {
+        Some(trg) if !js::items(trg.get("sites")).is_empty() => {
+            let mut items = String::new();
+            for (i, id) in js::items(trg.get("sites")).iter().enumerate() {
+                let name = js::text_or_empty(js::idx(trg.get("names"), i));
+                let why = js::text_or_empty(js::idx(trg.get("why"), i));
+                let how = js::idx(trg.get("how"), i).filter(|v| v.truthy());
+                // Writing to a String cannot fail
+                let _ = write!(
+                    items,
+                    "<li>{}: {}{}</li>",
+                    esc(&if name.is_empty() { js::text(Some(id)) } else { name }),
+                    esc(&why),
+                    how.map_or(String::new(), |hw| format!(" ({})", esc(&hw.js_string())))
+                );
+            }
+            format!("<ul class=\"bul\">{items}</ul>")
+        }
+        _ => String::new(),
+    }
+}
+
 /// `report-staging`.
 pub(crate) fn staging(c: &mut Ctx) -> String {
     let r = c.r;
     let Some(st) = r.rs.staging.as_ref() else {
         return note("Run the staging test in the Report tab: it runs the proposal at 10% build-out steps and finds the first increment where an assessed junction fails.", true);
     };
-    let tr = st.get("trigger").filter(|t| t.truthy());
-    let is_t = |row: &JsonValue| tr.is_some_and(|t| js::num(t.get("pct")) == js::num(row.get("pct")));
-    let rows: Vec<Row> = js::items(st.get("rows"))
-        .iter()
-        .map(|rw| {
-            let g = |k: &str| rw.get(k);
-            let worst = g("worst").filter(|w| w.truthy());
-            let t = is_t(rw);
-            Row::cls(
-                vec![
-                    format!("{}%", int(g("pct"))),
-                    rfmt::num(js::num(g("dwellings")), 0),
-                    rfmt::num(js::num(g("gfa")), 0),
-                    worst.map_or(esc(fmt::DASH), |w| esc(&js::text(w.get("name")))),
-                    worst.map_or(fmt::DASH.to_string(), |w| rfmt::dos(js::num(w.get("dos")))),
-                    worst.map_or(fmt::DASH.to_string(), |w| esc(&js::text(w.get("los")))),
-                    if js::truthy(g("queue")) { "Yes" } else { "No" }.to_string(),
-                    if t {
-                        format!("<b>{}</b>", esc(&{
-                            let m = js::text_or_empty(st.get("measure"));
-                            if m.is_empty() { "Mitigation".to_string() } else { m }
-                        }))
-                    } else {
-                        fmt::DASH.to_string()
-                    },
-                    if t {
-                        match st.get("resolved") {
-                            None | Some(JsonValue::Null) => "Not tested".to_string(),
-                            Some(v) if v.truthy() => "Yes".to_string(),
-                            _ => "<b class=\"bad\">No</b>".to_string(),
-                        }
-                    } else {
-                        String::new()
-                    },
-                ],
-                if t { "miss" } else { "" },
-            )
-        })
-        .collect();
-    let trig = match tr {
-        Some(t) if !js::items(t.get("sites")).is_empty() => {
-            let items: String = js::items(t.get("sites"))
-                .iter()
-                .enumerate()
-                .map(|(i, id)| {
-                    let name = js::text_or_empty(js::idx(t.get("names"), i));
-                    let why = js::text_or_empty(js::idx(t.get("why"), i));
-                    let how = js::idx(t.get("how"), i).filter(|v| v.truthy());
-                    format!(
-                        "<li>{}: {}{}</li>",
-                        esc(&if name.is_empty() { js::text(Some(id)) } else { name }),
-                        esc(&why),
-                        how.map_or(String::new(), |hw| format!(" ({})", esc(&hw.js_string())))
-                    )
-                })
-                .collect();
-            format!("<ul class=\"bul\">{items}</ul>")
-        }
-        _ => String::new(),
-    };
+    let tr = st.get("trigger").filter(|trg| trg.truthy());
+    let rows: Vec<Row> = js::items(st.get("rows")).iter().map(|rw| staging_row(st, tr, rw)).collect();
+    let trig = staging_triggers(tr);
     let exw = js::items(st.get("existingWhy"));
     let ex = if exw.is_empty() {
         String::new()
@@ -382,7 +410,7 @@ pub(crate) fn staging(c: &mut Ctx) -> String {
                 ..TableOpts::default()
             },
         ),
-        para(&if !text.is_empty() { format!("<b>{}</b>", esc(&text)) } else { "No assessed site fails at any increment.".to_string() }),
+        para(&if text.is_empty() { "No assessed site fails at any increment.".to_string() } else { format!("<b>{}</b>", esc(&text)) }),
         trig,
         ex
     )
@@ -425,13 +453,14 @@ pub fn conclusion_text(c: &Ctx) -> String {
     }
     let mut sorted: Vec<&super::shared::JRow> = rows.iter().collect();
     js_sort_by(&mut sorted, |a, b| b.s.as_ref().map_or(f64::NAN, |x| x.dos) - a.s.as_ref().map_or(f64::NAN, |x| x.dos));
-    let worst = sorted[0];
-    let ws = worst.s.as_ref().expect("a summary");
+    // rows is not empty and every row has a summary (the filter above), so the fallback never applies
+    let Some((worst, ws)) = sorted.first().and_then(|w| w.s.as_ref().map(|sm| (*w, sm))) else {
+        return format!("{} has no assessed junctions.", r.sc(s).name());
+    };
     let over: Vec<&str> = rows
         .iter()
         .filter(|x| {
-            let sm = x.s.as_ref().expect("a summary");
-            sm.dos > (if sm.xp == 0.0 || sm.xp.is_nan() { 1.0 } else { sm.xp })
+            x.s.as_ref().is_some_and(|sm| sm.dos > (if sm.xp == 0.0 || sm.xp.is_nan() { 1.0 } else { sm.xp }))
         })
         .map(|x| x.id.as_str())
         .collect();
@@ -442,13 +471,13 @@ pub fn conclusion_text(c: &Ctx) -> String {
     let gs = junction_groups(r, base, s, &ids);
     let n_over = gs.iter().filter(|g| g.ids.iter().any(|id| over.contains(&id.as_str()))).count();
     let year = r.year_of(s).map_or("null".to_string(), number_to_js_string);
-    if !over.is_empty() {
+    if over.is_empty() {
+        format!("{who}, all {} assessed junctions operate within practical DoS in the {year} {pers} peaks; {tail}.", gs.len())
+    } else {
         format!(
             "{who}, {n_over} of {} assessed junctions exceed their practical degree of saturation in the {year} {pers} peaks; {tail}. Further mitigation or a staging condition is needed at those junctions.",
             gs.len()
         )
-    } else {
-        format!("{who}, all {} assessed junctions operate within practical DoS in the {year} {pers} peaks; {tail}.", gs.len())
     }
 }
 

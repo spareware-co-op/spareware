@@ -5,7 +5,7 @@
 //! them everywhere at that penalty.
 
 use super::{Arc, Graph};
-use crate::jsnum::{JsNum, Maybe, Num, math_max, math_round, or_default};
+use crate::jsnum::{JsNum, Maybe, Num, f64_to_usize, math_max, math_round, or_default};
 use crate::project::{Node, Settings};
 use crate::util::turn;
 use engine_sim::{Network, Turns};
@@ -20,7 +20,7 @@ pub const TURN_DEF_RIGHT_SIGNALS: f64 = 4.0;
 /// Movement names by index (`MVC`): 1 L, 2 T, 3 R, 4 U.
 pub const MVC: [&str; 5] = ["", "L", "T", "R", "U"];
 
-/// Turn penalty settings (`turnSet(S)`): TURN_DEF with settings.turns over it, values as saved.
+/// Turn penalty settings (`turnSet(S)`): `TURN_DEF` with settings.turns over it, values as saved.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TurnSet {
     /// Left turn (s).
@@ -34,6 +34,7 @@ pub struct TurnSet {
 }
 
 /// `turnSet(S)`: `{ ...TURN_DEF, ...S.turns }`.
+#[must_use]
 pub fn turn_set(s: &Settings) -> TurnSet {
     let t = s.turns.get();
     let pick = |v: Option<&Num>, d: Num| match v {
@@ -55,6 +56,7 @@ pub fn turn_set(s: &Settings) -> TurnSet {
 }
 
 /// `uPen(T)`: the U-turn penalty (s) when U-turns are allowed, None when they are banned ("ban", "", null or not a number).
+#[must_use]
 pub fn u_pen(t: &TurnSet) -> Option<f64> {
     match &t.uturn {
         Maybe::Set(JsNum::Text(s)) if s == "ban" || s.is_empty() => None,
@@ -71,6 +73,7 @@ pub fn u_pen(t: &TurnSet) -> Option<f64> {
 }
 
 /// `turnType(inB, outB)`: movement from an arrival heading to a departure heading: "T" within 30 degrees, "U" over 150, else "R" or "L".
+#[must_use]
 pub fn turn_type(in_b: f64, out_b: f64) -> &'static str {
     let t = turn(in_b, out_b);
     let m = t.abs();
@@ -94,15 +97,23 @@ pub(crate) struct TurnCtx<'a> {
 }
 
 impl TurnCtx<'_> {
+    // Links meeting at node n (0 for a node the graph does not have)
+    fn deg_at(&self, n: usize) -> i32 {
+        self.deg.get(n).copied().unwrap_or(0)
+    }
+    // The saved node behind graph node n (None for a zone node)
+    fn node_at(&self, n: usize) -> Option<&Node> {
+        self.nodes.get(n).and_then(Option::as_ref)
+    }
     pub fn movement(&self, a: &Arc, b: &Arc) -> Option<&'static str> {
-        if a.conn || b.conn {
+        if a.conn() || b.conn() {
             return None;
         }
         if a.link == b.link {
             return Some("U");
         }
         let m = turn_type(a.in_b, b.out_b);
-        if m != "U" || self.deg[a.to] >= 3 {
+        if m != "U" || self.deg_at(a.to) >= 3 {
             Some(m)
         } else if turn(a.in_b, b.out_b) > 0.0 {
             Some("R")
@@ -112,14 +123,12 @@ impl TurnCtx<'_> {
     }
 
     pub fn penalty(&self, a: &Arc, b: &Arc) -> f64 {
-        if a.conn || b.conn {
+        if a.conn() || b.conn() {
             return 0.0;
         }
         let t = self.turn_s;
-        let deg = self.deg[a.to];
-        let ctl = self.nodes[a.to]
-            .as_ref()
-            .map_or("none", |n| n.control.str_or("none"));
+        let deg = self.deg_at(a.to);
+        let ctl = self.node_at(a.to).map_or("none", |n| n.control.str_or("none"));
         let right = if ctl == "signals" {
             &t.right_signals
         } else {
@@ -151,11 +160,11 @@ impl TurnCtx<'_> {
     }
 
     pub fn banned(&self, a: &Arc, b: &Arc) -> bool {
-        if a.conn || b.conn {
+        if a.conn() || b.conn() {
             return false;
         }
         let n = a.to;
-        let node = self.nodes[n].as_ref();
+        let node = self.node_at(n);
         if let Some(node) = node
             && let Maybe::Set(serde_json::Value::Array(bans)) = &node.bans
         {
@@ -164,7 +173,7 @@ impl TurnCtx<'_> {
                 return true;
             }
         }
-        if u_pen(self.turn_s).is_some() || self.deg[n] <= 1 || node.is_some_and(|n| n.allow_u.is_true()) {
+        if u_pen(self.turn_s).is_some() || self.deg_at(n) <= 1 || node.is_some_and(|n| n.allow_u.is_true()) {
             return false;
         }
         self.movement(a, b) == Some("U")
@@ -173,26 +182,33 @@ impl TurnCtx<'_> {
 
 /// `buildTurns(G)`: the turn table (penalty, or infinity when banned, for every arc pair) and each turn's movement.
 pub(crate) fn build_turns(net: &Network, cx: &TurnCtx) -> (Turns, Vec<u8>) {
-    let turns = Turns::new(net, |a, b| {
-        let (aa, bb) = (&cx.arcs[a], &cx.arcs[b]);
-        if cx.banned(aa, bb) {
-            f64::INFINITY
-        } else {
-            cx.penalty(aa, bb)
-        }
+    let turns = Turns::new(net, |a, b| match (cx.arcs.get(a), cx.arcs.get(b)) {
+        (Some(aa), Some(bb)) if !cx.banned(aa, bb) => cx.penalty(aa, bb),
+        // Banned, or an arc the graph does not have
+        _ => f64::INFINITY,
     });
     let mut tmv = vec![0u8; turns.len()];
-    for a in 0..net.m {
-        let aa = &cx.arcs[a];
+    for (a, aa) in cx.arcs.iter().enumerate().take(net.m) {
         for t in turns.of(a) {
-            let bb = &cx.arcs[turns.to[t] as usize];
-            let m = if aa.conn || bb.conn {
+            let Some(bb) = turns
+                .to
+                .get(t)
+                .and_then(|&b| usize::try_from(b).ok())
+                .and_then(|b| cx.arcs.get(b))
+            else {
+                continue;
+            };
+            let m = if aa.conn() || bb.conn() {
                 Some(turn_type(aa.in_b, bb.out_b))
             } else {
                 cx.movement(aa, bb)
             };
             let m = m.unwrap_or("T");
-            tmv[t] = MVC.iter().position(|&x| x == m).unwrap_or(0) as u8;
+            // MVC has five names, so the position fits u8
+            let code = MVC.iter().position(|&x| x == m).and_then(|p| u8::try_from(p).ok()).unwrap_or(0);
+            if let Some(slot) = tmv.get_mut(t) {
+                *slot = code;
+            }
         }
     }
     (turns, tmv)
@@ -211,35 +227,49 @@ impl Graph {
     ///
     /// Reversing onto the same link is a U-turn, and so is a hairpin onto another link at a
     /// junction of 3 or more links; at a 2-link node a hairpin is a bend.
+    #[must_use]
     pub fn movement(&self, a: usize, b: usize) -> Option<&'static str> {
-        self.turn_ctx().movement(&self.arcs[a], &self.arcs[b])
+        let (aa, bb) = self.arcs.get(a).zip(self.arcs.get(b))?;
+        self.turn_ctx().movement(aa, bb)
     }
-    /// `turnPenalty(G, a, b)`: seconds added going from arc a into arc b (bans are separate).
+    /// `turnPenalty(G, a, b)`: seconds added going from arc a into arc b (bans are separate); 0 for an arc the graph does not have.
+    #[must_use]
     pub fn turn_penalty(&self, a: usize, b: usize) -> f64 {
-        self.turn_ctx().penalty(&self.arcs[a], &self.arcs[b])
+        self.arcs
+            .get(a)
+            .zip(self.arcs.get(b))
+            .map_or(0.0, |(aa, bb)| self.turn_ctx().penalty(aa, bb))
     }
-    /// `banned(G, a, b)`: an explicit ban, or a U-turn while U-turns are banned (not at dead ends or where node.allowU).
+    /// `banned(G, a, b)`: an explicit ban, or a U-turn while U-turns are banned (not at dead ends or where node.allowU); false for an arc the graph does not have.
+    #[must_use]
     pub fn banned(&self, a: usize, b: usize) -> bool {
-        self.turn_ctx().banned(&self.arcs[a], &self.arcs[b])
+        self.arcs
+            .get(a)
+            .zip(self.arcs.get(b))
+            .is_some_and(|(aa, bb)| self.turn_ctx().banned(aa, bb))
     }
     /// `turnIdx(G, a, b)`: index of the turn from arc a into arc b, or -1.
+    #[must_use]
     pub fn turn_idx(&self, a: usize, b: usize) -> i32 {
         self.search.turns.index(&self.search.net, a, b)
     }
     /// `turnBanned(G, a, b)`: true when there is no such turn or it is banned.
+    #[must_use]
     pub fn turn_banned(&self, a: usize, b: usize) -> bool {
         self.search.turns.banned(&self.search.net, a, b)
     }
 }
 
 /// `approachName(inB, eight)`: compass side traffic arriving on heading inB comes from (heading north is the South approach).
+#[must_use]
 pub fn approach_name(in_b: f64, eight: bool) -> &'static str {
     let s = ((or_default(in_b, 0.0) + 180.0) % 360.0 + 360.0) % 360.0;
     let n = if eight { 8.0 } else { 4.0 };
-    let i = (math_round(s / (360.0 / n)) % n) as usize;
-    if eight {
-        ["North", "NE", "East", "SE", "South", "SW", "West", "NW"][i]
+    let i = f64_to_usize(math_round(s / (360.0 / n)) % n);
+    let names: &[&'static str] = if eight {
+        &["North", "NE", "East", "SE", "South", "SW", "West", "NW"]
     } else {
-        ["North", "East", "South", "West"][i]
-    }
+        &["North", "East", "South", "West"]
+    };
+    names.get(i).copied().unwrap_or("North")
 }

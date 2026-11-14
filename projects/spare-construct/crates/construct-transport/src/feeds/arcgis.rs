@@ -2,13 +2,14 @@
 //!
 //! The prototype fetches in its own code; this port builds each request (address, query, body) for the host to send and
 //! takes the answer as input. [`HttpRequest`] is one request, [`FetchFailure`] says what went wrong when the host could not
-//! get an answer, and [`ArcgisPager`] runs the paged ArcGIS feature service query of `DataHub.arcgis` (up to 25 pages of
+//! get an answer, and [`ArcgisPager`] runs the paged `ArcGIS` feature service query of `DataHub.arcgis` (up to 25 pages of
 //! the server's own page size, each asked for at the offset after the last). Messages for the user are the prototype's words.
 
 use crate::edit::json::JsonValue;
 use crate::jsnum::{math_round, to_fixed};
+use std::fmt::Write as _;
 
-/// The time limit of one ArcGIS request in the data hub (`ARCGIS_TIMEOUT`), in milliseconds.
+/// The time limit of one `ArcGIS` request in the data hub (`ARCGIS_TIMEOUT`), in milliseconds.
 pub const ARCGIS_TIMEOUT_MS: f64 = 30_000.0;
 
 /// What kind of answer the host should read back.
@@ -41,6 +42,7 @@ pub struct HttpRequest {
 
 impl HttpRequest {
     /// A GET of an address, answer read as JSON.
+    #[must_use]
     pub fn get_json(url: String, timeout_ms: f64) -> HttpRequest {
         HttpRequest { method: "GET".to_string(), url, body: None, headers: Vec::new(), timeout_ms, expect: Expect::Json }
     }
@@ -66,7 +68,7 @@ pub enum FetchFailure {
 /// Why a load stopped.
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoadError {
-    /// The user cancelled: the whole load stops (the prototype throws an AbortError).
+    /// The user cancelled: the whole load stops (the prototype throws an `AbortError`).
     Cancelled,
     /// The source failed; the message says why.
     Failed(String),
@@ -74,6 +76,7 @@ pub enum LoadError {
 
 impl LoadError {
     /// The message (for a cancel, "Cancelled").
+    #[must_use]
     pub fn message(&self) -> &str {
         match self {
             LoadError::Cancelled => "Cancelled",
@@ -83,36 +86,46 @@ impl LoadError {
 }
 
 /// `new URLSearchParams(...)` encoding of one piece: letters, digits and `*-._` as they are, a space as `+`, anything else as %XX bytes of its UTF-8.
+#[must_use]
 pub fn form_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
             b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' | b'*' | b'-' | b'.' | b'_' => out.push(b as char),
             b' ' => out.push('+'),
-            _ => out.push_str(&format!("%{b:02X}")),
+            _ => {
+                // Writing to a String cannot fail
+                let _ = write!(out, "%{b:02X}");
+            }
         }
     }
     out
 }
 
 /// `new URLSearchParams(pairs).toString()`: `key=value` pairs joined by `&`, each part encoded.
+#[must_use]
 pub fn query_string(pairs: &[(String, String)]) -> String {
     pairs.iter().map(|(k, v)| format!("{}={}", form_encode(k), form_encode(v))).collect::<Vec<_>>().join("&")
 }
 
 /// `encodeURIComponent(s)`: everything but letters, digits and `-_.!~*'()` as %XX bytes of its UTF-8.
+#[must_use]
 pub fn encode_uri_component(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
             b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => out.push(b as char),
-            _ => out.push_str(&format!("%{b:02X}")),
+            _ => {
+                // Writing to a String cannot fail
+                let _ = write!(out, "%{b:02X}");
+            }
         }
     }
     out
 }
 
 /// `new URL(url).host`: the host and any port that is not the default for the scheme, in lower case; None when the address is not absolute.
+#[must_use]
 pub fn host_of_url(url: &str) -> Option<String> {
     let t = url.trim();
     let (scheme, rest) = t.split_once("://")?;
@@ -131,12 +144,14 @@ pub fn host_of_url(url: &str) -> Option<String> {
         "http" | "ws" => ":80",
         _ => "",
     };
-    Some(if !default.is_empty() && lower.ends_with(default) { lower[..lower.len() - default.len()].to_string() } else { lower })
+    let stripped = if default.is_empty() { None } else { lower.strip_suffix(default).map(str::to_string) };
+    Some(stripped.unwrap_or(lower))
 }
 
 pub use crate::importers::Bounds;
 
 /// The box around a list of [lat, lng] points (`L.latLngBounds(pts)`); None for no points.
+#[must_use]
 pub fn bounds_of_points(pts: &[[f64; 2]]) -> Option<Bounds> {
     let first = pts.first()?;
     let mut b = Bounds { south: first[0], west: first[1], north: first[0], east: first[1] };
@@ -150,6 +165,7 @@ pub fn bounds_of_points(pts: &[[f64; 2]]) -> Option<Bounds> {
 }
 
 /// `bounds.pad(ratio)`: Leaflet's padding: each side moves out by `ratio` of the box's height or width.
+#[must_use]
 pub fn bounds_pad(b: &Bounds, ratio: f64) -> Bounds {
     let h = (b.south - b.north).abs() * ratio;
     let w = (b.west - b.east).abs() * ratio;
@@ -157,6 +173,7 @@ pub fn bounds_pad(b: &Bounds, ratio: f64) -> Bounds {
 }
 
 /// `[west, south, east, north]` to six decimals, joined by commas: the envelope the services take.
+#[must_use]
 pub fn bounds_envelope(b: &Bounds) -> String {
     [b.west, b.south, b.east, b.north].iter().map(|v| to_fixed(*v, 6)).collect::<Vec<_>>().join(",")
 }
@@ -182,6 +199,7 @@ pub struct ArcgisPager {
 
 impl ArcgisPager {
     /// A query of a layer (`url` ends in /FeatureServer/0) for the features meeting a where clause inside the bounds, with the named fields ("*" for all), ordered by OBJECTID.
+    #[must_use]
     pub fn new(url: &str, b: &Bounds, where_: &str, fields: &str, timeout_ms: f64) -> ArcgisPager {
         ArcgisPager {
             url: url.to_string(),
@@ -197,6 +215,7 @@ impl ArcgisPager {
         }
     }
     /// The request for the next page; None when the query is finished.
+    #[must_use]
     pub fn next_request(&self) -> Option<HttpRequest> {
         if self.done {
             return None;
@@ -218,11 +237,16 @@ impl ArcgisPager {
         Some(HttpRequest::get_json(format!("{}/query?{}", self.url, query_string(&q)), self.timeout_ms))
     }
     /// Takes the answer to the last request: adds its features and works out whether another page is needed. A failure ends the query with the prototype's message (or [`LoadError::Cancelled`]).
+    ///
+    /// # Errors
+    ///
+    /// [`LoadError::Cancelled`] for a cancelled request; otherwise [`LoadError::Failed`] with the prototype's message for a
+    /// failed request, an unreadable answer or an error the service reports.
     pub fn answer(&mut self, a: Result<JsonValue, FetchFailure>) -> Result<(), LoadError> {
         let host = &self.host;
         let j = match a {
             Err(FetchFailure::Cancelled) => return Err(LoadError::Cancelled),
-            Err(FetchFailure::TimedOut) | Err(FetchFailure::TimedOutReading) => {
+            Err(FetchFailure::TimedOut | FetchFailure::TimedOutReading) => {
                 return Err(LoadError::Failed(format!("{host} did not answer within {} s. Try again later", crate::jsnum::number_to_js_string(math_round(self.timeout_ms / 1000.0)))));
             }
             Err(FetchFailure::Unreachable(m)) => return Err(LoadError::Failed(format!("{host} could not be reached ({m})"))),
@@ -243,23 +267,28 @@ impl ArcgisPager {
         };
         let n = f.len();
         self.features.extend(f);
-        self.page += 1;
+        // Bound: at most 25 pages
+        self.page = self.page.saturating_add(1);
         if !j.get("exceededTransferLimit").is_some_and(JsonValue::truthy) || n == 0 || self.page >= 25 {
             self.done = true;
         } else {
-            self.offset += n;
+            // Bound: a count of features held in memory, far below usize::MAX
+            self.offset = self.offset.saturating_add(n);
         }
         Ok(())
     }
     /// True when no more pages are needed.
+    #[must_use]
     pub fn is_done(&self) -> bool {
         self.done
     }
     /// The features collected so far, in order.
+    #[must_use]
     pub fn features(&self) -> &[JsonValue] {
         &self.features
     }
     /// The features, when finished.
+    #[must_use]
     pub fn into_features(self) -> Vec<JsonValue> {
         self.features
     }

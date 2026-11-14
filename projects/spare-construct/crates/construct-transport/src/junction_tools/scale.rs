@@ -6,17 +6,18 @@ use super::{
     Entry, FLOW_SCALE, FLOW_SCALE_FACTOR, LABEL, Sc, Tools, entries, legs_of, moves_of,
     BALANCE_TOL, U_TURN_VPH,
 };
-use crate::graph::{apply_signal, build_graph, site_flows};
+use crate::graph::{Graph, apply_signal, build_graph, site_flows};
 use crate::jsnum::{math_max, math_round, number_to_js_string, plain_number, to_fixed};
-use crate::junction::{ArcFlow, PerfSet, arc_time, junction_result, update_node_caps};
-use crate::project::Scenario;
+use crate::junction::{ArcFlow, JunctionResult, PerfSet, arc_time, junction_result, update_node_caps};
+use crate::project::{Scenario, Settings};
 use crate::results::{Approach, Res};
-use crate::standards::{CapMethod, STANDARDS, junction_set, pcu_f};
+use crate::standards::{CapMethod, JunctionSet, STANDARDS, junction_set, pcu_f};
 use crate::util::{esc, r1, r3};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 
-/// `losFrom(d, dos, method, type)`: level of service from delay (and DoS) with the method's thresholds.
+/// `losFrom(d, dos, method, type)`: level of service from delay (and `DoS`) with the method's thresholds.
+#[must_use]
 pub fn los_from(d: f64, dos: f64, method: &str, kind: &str) -> &'static str {
     let l = los_method(method);
     let th = match kind {
@@ -27,10 +28,10 @@ pub fn los_from(d: f64, dos: f64, method: &str, kind: &str) -> &'static str {
     if l.over_capacity_f && dos > 1.0 {
         return "F";
     }
-    for (i, t) in th.iter().enumerate() {
+    for (t, grade) in th.iter().zip(["A", "B", "C", "D", "E"]) {
         let hit = if method == "rta" { d < *t } else { d <= *t };
         if hit {
-            return ["A", "B", "C", "D", "E"][i];
+            return grade;
         }
     }
     "F"
@@ -73,6 +74,7 @@ pub struct Checks {
 
 impl Checks {
     /// As JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({
             "balanced": self.balanced,
@@ -83,6 +85,7 @@ impl Checks {
 }
 
 /// `checks(sc, res, e)`: whether the turns balance the approach flows, and the U-turns over the flag.
+#[must_use]
 pub fn checks(sc: &Scenario, st: &crate::project::Settings, res: &Res, e: &Entry) -> Checks {
     let mvs = moves_of(sc, st, res, e);
     let legs = legs_of(sc, st, res, e);
@@ -128,7 +131,7 @@ pub fn checks(sc: &Scenario, st: &crate::project::Settings, res: &Res, e: &Entry
     }
 }
 
-/// A DoS at one approach (or movement) of a junction, before or after the flow rises.
+/// A `DoS` at one approach (or movement) of a junction, before or after the flow rises.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScaleHit {
     /// Degree of saturation.
@@ -139,7 +142,7 @@ pub struct ScaleHit {
     pub key: String,
     /// Movement ("" for the approach).
     pub mv: String,
-    /// DoS before the flows rise (the crossing only).
+    /// `DoS` before the flows rise (the crossing only).
     pub before: Option<f64>,
     /// Where: the leg and movement.
     pub where_: String,
@@ -171,13 +174,13 @@ pub struct FlowScaleRow {
     pub name: String,
     /// Control.
     pub kind: String,
-    /// Worst DoS as run.
+    /// Worst `DoS` as run.
     pub dos: f64,
-    /// Worst DoS at the raised flows.
+    /// Worst `DoS` at the raised flows.
     pub dos_f: f64,
-    /// Practical DoS.
+    /// Practical `DoS`.
     pub xp: Option<f64>,
-    /// The junction crosses its practical DoS.
+    /// The junction crosses its practical `DoS`.
     pub crosses: bool,
     /// Where it first crosses.
     pub first: Option<ScaleHit>,
@@ -215,7 +218,8 @@ pub struct FlowScale {
 }
 
 impl FlowScale {
-    /// The junctions that cross their practical DoS.
+    /// The junctions that cross their practical `DoS`.
+    #[must_use]
     pub fn crossing(&self) -> Vec<&FlowScaleRow> {
         self.rows.iter().filter(|r| r.crosses).collect()
     }
@@ -243,8 +247,8 @@ struct El {
 fn el_list(appr: &[Approach]) -> Vec<(String, El)> {
     let mut m: Vec<(String, El)> = Vec::new();
     let mut set = |k: String, v: El| {
-        if let Some(p) = m.iter().position(|(x, _)| *x == k) {
-            m[p].1 = v;
+        if let Some(slot) = m.iter_mut().find(|(x, _)| *x == k) {
+            slot.1 = v;
         } else {
             m.push((k, v));
         }
@@ -274,8 +278,8 @@ fn el_list(appr: &[Approach]) -> Vec<(String, El)> {
 fn el_list_after(appr: &[crate::junction::ApproachRow]) -> Vec<(String, El)> {
     let mut m: Vec<(String, El)> = Vec::new();
     let mut set = |k: String, v: El| {
-        if let Some(p) = m.iter().position(|(x, _)| *x == k) {
-            m[p].1 = v;
+        if let Some(slot) = m.iter_mut().find(|(x, _)| *x == k) {
+            slot.1 = v;
         } else {
             m.push((k, v));
         }
@@ -301,102 +305,245 @@ fn el_list_after(appr: &[crate::junction::ApproachRow]) -> Vec<(String, El)> {
     m
 }
 
-impl<'a> Tools<'a> {
-    /// `flowScale(sc, res, f)`: junctions only re-evaluated at the flows times f with the run's signal timings (no re-assignment).
-    pub fn flow_scale(&self, sc: &Scenario, res: &'a Res, f: f64) -> Option<FlowScale> {
-        let set = self.st();
-        let mut g = build_graph(sc, set, None);
-        let pf = pcu_f(set);
-        let j = junction_set(set);
-        let mut xt = vec![0.0f64; g.m];
-        for (i, a) in g.arcs.iter().enumerate() {
-            if let Some(r) = res.arcs.get(&a.key) {
-                xt[i] = r.pcu * f;
-            }
-        }
-        let mut x_t: Option<Vec<f64>> = None;
-        if g.cap_method == CapMethod::Movement {
-            let mut xs = vec![0.0f64; g.n_t];
-            for list in res.turns.values() {
-                for t in list {
-                    let (Some(&a), Some(&b)) = (g.key_idx.get(&t.from), g.key_idx.get(&t.to))
-                    else {
-                        continue;
-                    };
-                    let n = g.arcs[a].to;
-                    let (h0, h1) = (g.head()[n], g.head()[n + 1]);
-                    for k in h0..h1 {
-                        if g.out()[k as usize] == b as i32 {
-                            let ix = g.t_off()[a] + k - h0;
-                            xs[ix as usize] = t.pcu * f;
-                        }
+/// `xT` of `flowScale`: the run's turn flows times `factor`, in the graph's turn slots (movement capacity only).
+fn scaled_turns(graph: &Graph, res: &Res, factor: f64) -> Vec<f64> {
+    let mut xs = vec![0.0f64; graph.n_t];
+    let (head, out, off) = (graph.head(), graph.out(), graph.t_off());
+    for list in res.turns.values() {
+        for turn in list {
+            let (Some(&from), Some(&to)) = (graph.key_idx.get(&turn.from), graph.key_idx.get(&turn.to)) else {
+                continue;
+            };
+            // the arc, its end node's range of out-arcs and its turn offset all come from the graph the keys index
+            let Some(node) = graph.arcs.get(from).map(|x| x.to) else {
+                continue;
+            };
+            let (Some(&h0), Some(&h1), Some(&base)) =
+                (head.get(node), node.checked_add(1).and_then(|n1| head.get(n1)), off.get(from))
+            else {
+                continue;
+            };
+            for k in h0..h1 {
+                let Some(&o) = usize::try_from(k).ok().and_then(|ku| out.get(ku)) else {
+                    continue;
+                };
+                if usize::try_from(o).ok() == Some(to) {
+                    // t_off[a] + k - h0 (Bound: a turn slot index, within i32 as the graph stores it)
+                    let ix = base
+                        .checked_add(k)
+                        .and_then(|s| s.checked_sub(h0))
+                        .and_then(|i| usize::try_from(i).ok());
+                    if let Some(slot) = ix.and_then(|i| xs.get_mut(i)) {
+                        *slot = turn.pcu * factor;
                     }
                 }
             }
-            x_t = Some(xs);
         }
-        // keep the run's signal timings
-        for k in 0..g.ctl.len() {
-            if g.ctl[k].kind != "signals" {
-                continue;
-            }
-            let id = &g.ids[g.ctl[k].n];
-            let Some(nr) = res.nodes.get(id) else {
+    }
+    xs
+}
+
+/// Puts the run's cycle and green splits back on every signalised controller of the graph.
+fn keep_signal_timings(graph: &mut Graph, res: &Res) {
+    for ctl in &mut graph.ctl {
+        if ctl.kind != "signals" {
+            continue;
+        }
+        // a controller's node is in the graph it was built with
+        let Some(id) = graph.ids.get(ctl.n) else {
+            continue;
+        };
+        let Some(nr) = res.nodes.get(id) else {
+            continue;
+        };
+        let (Some(c), Some(split)) = (nr.c, nr.split.as_ref()) else {
+            continue;
+        };
+        if c == 0.0 || c.is_nan() {
+            continue;
+        }
+        if let Some(t) = ctl.signal.as_mut() {
+            t.c = c;
+            t.split.clone_from(split);
+        }
+        apply_signal(ctl, &mut graph.arcs);
+    }
+}
+
+/// Every controller of the graph re-evaluated at the flows `xt`, by node id.
+fn rescaled_nodes(
+    graph: &Graph,
+    xt: &[f64],
+    set: &Settings,
+    jset: &JunctionSet,
+    pf: f64,
+) -> HashMap<String, JunctionResult> {
+    let perf = PerfSet::new(set);
+    let mut nodes: HashMap<String, JunctionResult> = HashMap::new();
+    for ctl in &graph.ctl {
+        // a controller's node and entry arcs are in the graph it was built with
+        let Some(id) = graph.ids.get(ctl.n) else {
+            continue;
+        };
+        let mut arcs_res = vec![ArcFlow::default(); graph.m];
+        for &ai in &ctl.arcs {
+            let (Some(a), Some(&x)) = (graph.arcs.get(ai), xt.get(ai)) else {
                 continue;
             };
-            let (Some(c), Some(split)) = (nr.c, nr.split.as_ref()) else {
-                continue;
-            };
-            if c == 0.0 || c.is_nan() {
-                continue;
-            }
-            if let Some(t) = g.ctl[k].signal.as_mut() {
-                t.c = c;
-                t.split = split.clone();
-            }
-            apply_signal(&g.ctl[k], &mut g.arcs);
-        }
-        g.mv_detail = true;
-        // junction sites read the movements traced along the run's paths (res.siteTurns), scaled with the flows
-        if let Some(st) = &res.site_turns {
-            let v = serde_json::to_value(st).expect("site turns are JSON");
-            if let Some(sm) = site_flows(&g, Some(&v), f) {
-                g.sm_x = Some(sm);
-            }
-        }
-        update_node_caps(&mut g, &xt, 1.0, x_t.as_deref());
-        let perf = PerfSet::new(set);
-        let mut nodes: HashMap<String, crate::junction::JunctionResult> = HashMap::new();
-        for ctl in &g.ctl {
-            let mut arcs_res = vec![ArcFlow::default(); g.m];
-            for &ai in &ctl.arcs {
-                let a = &g.arcs[ai];
-                let x = xt[ai];
-                let run = a.ff
-                    * (1.0
-                        + set.bpr_alpha.num()
-                            * crate::jsmath::pow(x / a.cap_mid, set.bpr_beta.num()));
-                arcs_res[ai] = ArcFlow {
+            let run = a.ff
+                * (1.0
+                    + set.bpr_alpha.num()
+                        * crate::jsmath::pow(x / a.cap_mid, set.bpr_beta.num()));
+            if let Some(slot) = arcs_res.get_mut(ai) {
+                *slot = ArcFlow {
                     v: x / pf,
                     nd: arc_time(a, x, &perf) - run,
                 };
             }
-            nodes.insert(
-                g.ids[ctl.n].clone(),
-                junction_result(&g, ctl, &xt, &arcs_res, set, &j, pf),
-            );
         }
+        nodes.insert(
+            id.clone(),
+            junction_result(graph, ctl, xt, &arcs_res, set, jset, pf),
+        );
+    }
+    nodes
+}
+
+/// One junction's row of the flow-scale test, from its approaches before and after the flows rise.
+fn scale_row(
+    entry: &Entry,
+    before: &[(String, El)],
+    after: &HashMap<String, El>,
+    by_in: &HashMap<&str, &str>,
+) -> FlowScaleRow {
+    let name = |x: &El| {
+        let base = by_in.get(x.key.as_str()).map_or(x.key.clone(), std::string::ToString::to_string);
+        if x.mv.is_empty() {
+            base
+        } else {
+            format!("{} ({})", base, x.mv)
+        }
+    };
+    let (mut w0, mut w1) = (0.0f64, 0.0f64);
+    let mut first: Option<ScaleHit> = None;
+    let mut already: Option<ScaleHit> = None;
+    for (k, b) in before {
+        let a = after.get(k).unwrap_or(b);
+        w0 = math_max(w0, b.dos);
+        w1 = math_max(w1, a.dos);
+        if let Some(bxp) = b.xp
+            && b.dos > bxp
+        {
+            if already.as_ref().is_none_or(|x| b.dos > x.dos) {
+                already = Some(ScaleHit {
+                    dos: b.dos,
+                    xp: b.xp,
+                    key: b.key.clone(),
+                    mv: b.mv.clone(),
+                    before: None,
+                    where_: name(b),
+                });
+            }
+        } else if b.xp.is_some()
+            && a.dos > a.xp.unwrap_or(0.0)
+            && first.as_ref().is_none_or(|x| a.dos > x.dos)
+        {
+            first = Some(ScaleHit {
+                dos: a.dos,
+                xp: a.xp,
+                key: a.key.clone(),
+                mv: a.mv.clone(),
+                before: Some(b.dos),
+                where_: name(a),
+            });
+        }
+    }
+    let xp = entry.nr.and_then(|nr| nr.appr.iter().find(|a| a.xp.is_some()).and_then(|a| a.xp));
+    let text = scale_text(first.as_ref(), already.as_ref());
+    FlowScaleRow {
+        id: entry.id.clone(),
+        is_site: entry.is_site,
+        name: entry.name.clone(),
+        kind: entry.kind.clone(),
+        dos: r3(w0),
+        dos_f: r3(w1),
+        xp,
+        crosses: first.is_some(),
+        first,
+        already,
+        text,
+    }
+}
+
+/// The flow-scale result in words.
+fn scale_text(first: Option<&ScaleHit>, already: Option<&ScaleHit>) -> String {
+    match (first, already) {
+        (Some(fi), al) => format!(
+            "Crosses practical DoS at {}: {} \u{2192} {}{}",
+            fi.where_,
+            x2(fi.before),
+            x2(Some(fi.dos)),
+            match al {
+                Some(al) => format!(
+                    "; already above it at {} ({})",
+                    al.where_,
+                    x2(Some(al.dos))
+                ),
+                None => String::new(),
+            }
+        ),
+        (None, Some(al)) => format!(
+            "Already above practical DoS at {} ({})",
+            al.where_,
+            x2(Some(al.dos))
+        ),
+        (None, None) => "Stays at or below practical DoS".to_string(),
+    }
+}
+
+impl<'a> Tools<'a> {
+    /// `flowScale(sc, res, f)`: junctions only re-evaluated at the flows times f with the run's signal timings (no re-assignment).
+    #[must_use]
+    pub fn flow_scale(&self, sc: &Scenario, res: &'a Res, f: f64) -> Option<FlowScale> {
+        let set = self.st();
+        let mut graph = build_graph(sc, set, None);
+        let pf = pcu_f(set);
+        let jset = junction_set(set);
+        let mut xt = vec![0.0f64; graph.m];
+        for (slot, arc) in xt.iter_mut().zip(&graph.arcs) {
+            if let Some(r) = res.arcs.get(&arc.key) {
+                *slot = r.pcu * f;
+            }
+        }
+        let x_t: Option<Vec<f64>> = if graph.cap_method == CapMethod::Movement {
+            Some(scaled_turns(&graph, res, f))
+        } else {
+            None
+        };
+        // keep the run's signal timings
+        keep_signal_timings(&mut graph, res);
+        graph.mv_detail = true;
+        // junction sites read the movements traced along the run's paths (res.siteTurns), scaled with the flows
+        // (serialising the stored movements, plain data, to JSON cannot fail)
+        if let Some(st) = &res.site_turns
+            && let Ok(v) = serde_json::to_value(st)
+            && let Some(sm) = site_flows(&graph, Some(&v), f)
+        {
+            graph.sm_x = Some(sm);
+        }
+        update_node_caps(&mut graph, &xt, 1.0, x_t.as_deref());
+        let nodes = rescaled_nodes(&graph, &xt, set, &jset, pf);
         let mut rows: Vec<FlowScaleRow> = Vec::new();
-        for e in entries(sc, res, false) {
-            let before = e.nr.map_or(Vec::new(), |nr| el_list(nr.appr));
+        for entry in entries(sc, res, false) {
+            let before = entry.nr.map_or(Vec::new(), |nr| el_list(nr.appr));
             let mut after: HashMap<String, El> = HashMap::new();
-            let mut ids: Vec<&String> = e.nodes.iter().collect();
-            ids.push(&e.node);
+            let mut ids: Vec<&String> = entry.nodes.iter().collect();
+            ids.push(&entry.node);
             for id in ids {
                 if let Some(nr) = nodes.get(id) {
-                    for (k, v) in el_list_after(&nr.appr) {
-                        if before.iter().any(|(x, _)| *x == k) {
-                            after.insert(k, v);
+                    for (key, el) in el_list_after(&nr.appr) {
+                        if before.iter().any(|(x, _)| *x == key) {
+                            after.insert(key, el);
                         }
                     }
                 }
@@ -404,100 +551,23 @@ impl<'a> Tools<'a> {
             if before.is_empty() {
                 continue;
             }
-            let legs = legs_of(sc, set, res, &e);
+            let legs = legs_of(sc, set, res, &entry);
             let mut by_in: HashMap<&str, &str> = HashMap::new();
-            for a in &legs {
-                for k in &a.in_keys {
-                    by_in.insert(k.as_str(), a.arm.leg_label.as_str());
+            for leg in &legs {
+                for key in &leg.in_keys {
+                    by_in.insert(key.as_str(), leg.arm.leg_label.as_str());
                 }
             }
-            let name = |x: &El| {
-                let base = by_in.get(x.key.as_str()).map_or(x.key.clone(), |l| l.to_string());
-                if x.mv.is_empty() {
-                    base
-                } else {
-                    format!("{} ({})", base, x.mv)
-                }
-            };
-            let (mut w0, mut w1) = (0.0f64, 0.0f64);
-            let mut first: Option<ScaleHit> = None;
-            let mut already: Option<ScaleHit> = None;
-            for (k, b) in &before {
-                let a = after.get(k).unwrap_or(b);
-                w0 = math_max(w0, b.dos);
-                w1 = math_max(w1, a.dos);
-                if let Some(bxp) = b.xp
-                    && b.dos > bxp
-                {
-                    if already.as_ref().is_none_or(|x| b.dos > x.dos) {
-                        already = Some(ScaleHit {
-                            dos: b.dos,
-                            xp: b.xp,
-                            key: b.key.clone(),
-                            mv: b.mv.clone(),
-                            before: None,
-                            where_: name(b),
-                        });
-                    }
-                } else if b.xp.is_some()
-                    && a.dos > a.xp.unwrap_or(0.0)
-                    && first.as_ref().is_none_or(|x| a.dos > x.dos)
-                {
-                    first = Some(ScaleHit {
-                        dos: a.dos,
-                        xp: a.xp,
-                        key: a.key.clone(),
-                        mv: a.mv.clone(),
-                        before: Some(b.dos),
-                        where_: name(a),
-                    });
-                }
-            }
-            let xp = e.nr.and_then(|nr| nr.appr.iter().find(|a| a.xp.is_some()).and_then(|a| a.xp));
-            let text = match (&first, &already) {
-                (Some(fi), al) => format!(
-                    "Crosses practical DoS at {}: {} \u{2192} {}{}",
-                    fi.where_,
-                    x2(fi.before),
-                    x2(Some(fi.dos)),
-                    match al {
-                        Some(al) => format!(
-                            "; already above it at {} ({})",
-                            al.where_,
-                            x2(Some(al.dos))
-                        ),
-                        None => String::new(),
-                    }
-                ),
-                (None, Some(al)) => format!(
-                    "Already above practical DoS at {} ({})",
-                    al.where_,
-                    x2(Some(al.dos))
-                ),
-                (None, None) => "Stays at or below practical DoS".to_string(),
-            };
-            rows.push(FlowScaleRow {
-                id: e.id.clone(),
-                is_site: e.is_site,
-                name: e.name.clone(),
-                kind: e.kind.clone(),
-                dos: r3(w0),
-                dos_f: r3(w1),
-                xp,
-                crosses: first.is_some(),
-                first,
-                already,
-                text,
-            });
+            rows.push(scale_row(&entry, &before, &after, &by_in));
         }
         crate::graph::js_sort_by(&mut rows, |p, q| {
-            let c = (q.crosses as i32 - p.crosses as i32) as f64;
-            if c != 0.0 {
-                return c;
+            let by_cross = f64::from(u8::from(q.crosses)) - f64::from(u8::from(p.crosses));
+            if by_cross != 0.0 {
+                return by_cross;
             }
-            let a = (q.already.is_some() as i32 - p.already.is_some() as i32) as f64;
-            if a != 0.0 {
-                return a;
+            let by_already = f64::from(u8::from(q.already.is_some())) - f64::from(u8::from(p.already.is_some()));
+            if by_already != 0.0 {
+                return by_already;
             }
             q.dos_f - p.dos_f
         });
@@ -515,6 +585,7 @@ impl<'a> Tools<'a> {
     }
 
     /// `scaleHtml(sc, res, opts)`: the flow-scale test as a note and a table. None for no result.
+    #[must_use]
     pub fn scale_html(&self, sc: &Scenario, res: Option<&'a Res>) -> String {
         let Some(res) = res else {
             return "<p class=\"note\">Run the model to test junctions at higher flows.</p>".to_string();
@@ -578,6 +649,7 @@ impl<'a> Tools<'a> {
 }
 
 /// `losTable(method)`: the level of service definitions as a table with their source.
+#[must_use]
 pub fn los_table(method: &str) -> String {
     let l = los_method(method);
     let op = if method == "rta" { "<" } else { "\u{2264}" };
@@ -587,9 +659,13 @@ pub fn los_table(method: &str) -> String {
         let cell = |th: &[f64; 5]| {
             format!(
                 "{}{} {}",
-                if i > 0 { format!("> {} and ", n(th[i - 1])) } else { String::new() },
+                match i.checked_sub(1).and_then(|p| th.get(p)) {
+                    Some(prev) => format!("> {} and ", n(*prev)),
+                    None => String::new(),
+                },
                 op,
-                n(th[i])
+                // i runs over the five grades A to E, so th[i] is always there
+                th.get(i).map_or_else(String::new, |x| n(*x))
             )
         };
         rows.push(TableRow {
@@ -631,6 +707,7 @@ pub fn los_table(method: &str) -> String {
 /// Convenience: [`Sc`]'s flow-scale test for a period, as the report sections call it.
 impl<'a> Tools<'a> {
     /// `resOf(sc, p) ? flowScale(sc, resOf(sc, p)) : null` at the default factor.
+    #[must_use]
     pub fn flow_scale_of(&self, s: Sc<'a>, p: &str) -> Option<FlowScale> {
         s.res_of(p)
             .and_then(|r| self.flow_scale(s.sc, r, FLOW_SCALE_FACTOR))

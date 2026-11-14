@@ -2,8 +2,8 @@
 
 use super::movement::q95v;
 use crate::jsnum::{
-    math_max, math_max_of, math_min, or_default, plain_number, to_int32, value_to_js_string,
-    value_to_number, value_truthy,
+    math_max, math_max_of, math_min, or_default, plain_number, to_int32, usize_to_f64,
+    value_to_js_string, value_to_number, value_truthy,
 };
 use serde_json::{Map, Value, json};
 
@@ -20,6 +20,7 @@ pub struct Lmv {
 
 impl Lmv {
     /// The value for movement 'L', 'T' or 'R'.
+    #[must_use]
     pub fn get(&self, m: char) -> f64 {
         match m {
             'L' => self.l,
@@ -36,6 +37,7 @@ impl Lmv {
         }
     }
     /// As JSON { L, T, R } (non-finite numbers as text, as the truth files hold them).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({ "L": plain_number(self.l), "T": plain_number(self.t), "R": plain_number(self.r) })
     }
@@ -58,6 +60,7 @@ pub struct Lane {
 
 impl Lane {
     /// A lane with movements d and bay length len.
+    #[must_use]
     pub fn new(d: &str, len: f64) -> Lane {
         Lane {
             d: d.to_string(),
@@ -68,6 +71,7 @@ impl Lane {
         }
     }
     /// As the lane model writes it: { d, len } and slip: true on a slip lane.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("d".into(), self.d.clone().into());
@@ -108,14 +112,16 @@ fn field<'a>(v: &'a Value, k: &str) -> Option<&'a Value> {
 }
 
 /// `laneModel(raw, gl)`: the stored lane model (lanes of L T R U; "L+T" style accepted) or NZ default markings (one lane LTR; two or more LT, T..., TR).
+#[must_use]
 pub fn lane_model(raw: Option<&Value>, gl: f64) -> LaneModel {
     let raw = raw.filter(|r| value_truthy(r));
-    let gl = (to_int32(gl)).max(1) as usize;
+    // max(1) leaves a positive number, which usize holds
+    let gl = usize::try_from(to_int32(gl).max(1)).unwrap_or(1);
     let mut lanes: Vec<Lane> = if gl == 1 {
         vec![Lane::new("LTR", 0.0)]
     } else {
         let mut v = vec![Lane::new("LT", 0.0)];
-        for _ in 0..gl - 2 {
+        for _ in 0..gl.saturating_sub(2) {
             v.push(Lane::new("T", 0.0));
         }
         v.push(Lane::new("TR", 0.0));
@@ -135,8 +141,7 @@ pub fn lane_model(raw: Option<&Value>, gl: f64) -> LaneModel {
                         Some(d) if !d.is_null() => Some(d),
                         _ => m.get("mv"),
                     },
-                    Value::Array(_) => None,
-                    Value::Null => None,
+                    Value::Array(_) | Value::Null => None,
                     other => Some(other),
                 };
                 let text = match x {
@@ -221,77 +226,95 @@ impl Alloc {
 ///
 /// cap(lane, m) is the capacity of movement m in that lane. A movement the markings leave out
 /// uses the nearest lane (left turns the first, right turns the last, through any).
-pub fn alloc_lanes(lanes: &[Lane], v: &Lmv, cap: &dyn Fn(&Lane, char) -> f64) -> Alloc {
-    let n = lanes.len();
-    if n == 1 {
-        let l = &lanes[0];
-        let mut x = 0.0;
-        if v.l > 0.0 {
-            x += v.l / math_max(1e-6, cap(l, 'L'));
+pub fn alloc_lanes(lanes: &[Lane], flows: &Lmv, cap: &dyn Fn(&Lane, char) -> f64) -> Alloc {
+    let n_lanes = lanes.len();
+    if let [lane] = lanes {
+        let mut sat = 0.0;
+        if flows.l > 0.0 {
+            sat += flows.l / math_max(1e-6, cap(lane, 'L'));
         }
-        if v.t > 0.0 {
-            x += v.t / math_max(1e-6, cap(l, 'T'));
+        if flows.t > 0.0 {
+            sat += flows.t / math_max(1e-6, cap(lane, 'T'));
         }
-        if v.r > 0.0 {
-            x += v.r / math_max(1e-6, cap(l, 'R'));
+        if flows.r > 0.0 {
+            sat += flows.r / math_max(1e-6, cap(lane, 'R'));
         }
         return Alloc {
-            x: vec![x],
-            use_: vec![*v],
+            x: vec![sat],
+            use_: vec![*flows],
         };
     }
-    let mut x = vec![0.0f64; n];
-    let mut use_ = vec![Lmv::default(); n];
+    let mut sat = vec![0.0f64; n_lanes];
+    let mut use_ = vec![Lmv::default(); n_lanes];
     let mut mvs: Vec<(char, Vec<usize>)> = ['L', 'T', 'R']
         .into_iter()
-        .filter(|&m| v.get(m) > 0.0)
-        .map(|m| {
-            let mut ls: Vec<usize> = (0..n).filter(|&i| lanes[i].d.contains(m)).collect();
+        .filter(|&mv| flows.get(mv) > 0.0)
+        .map(|mv| {
+            let mut ls: Vec<usize> = lanes
+                .iter()
+                .enumerate()
+                .filter(|(_, lane)| lane.d.contains(mv))
+                .map(|(li, _)| li)
+                .collect();
             if ls.is_empty() {
-                ls = match m {
+                ls = match mv {
                     'L' => vec![0],
-                    'R' => vec![n - 1],
-                    _ => (0..n).collect(),
+                    'R' => vec![n_lanes.saturating_sub(1)],
+                    _ => (0..n_lanes).collect(),
                 };
             }
-            (m, ls)
+            (mv, ls)
         })
         .collect();
-    crate::graph::js_sort_by(&mut mvs, |a, b| a.1.len() as f64 - b.1.len() as f64);
-    for (m, ls) in &mvs {
-        let m = *m;
-        let vm = v.get(m);
-        if ls.len() == 1 {
-            let i = ls[0];
-            *use_[i].get_mut(m) += vm;
-            x[i] += vm / math_max(1e-6, cap(&lanes[i], m));
+    crate::graph::js_sort_by(&mut mvs, |a, b| usize_to_f64(a.1.len()) - usize_to_f64(b.1.len()));
+    // Every index in ls is a lane's, and sat and use_ have one entry per lane, so the lookups below always succeed
+    for (mv, ls) in &mvs {
+        let mv = *mv;
+        let vm = flows.get(mv);
+        if let [li] = ls.as_slice() {
+            let li = *li;
+            let Some(lane) = lanes.get(li) else {
+                continue;
+            };
+            if let Some(lu) = use_.get_mut(li) {
+                *lu.get_mut(mv) += vm;
+            }
+            if let Some(lx) = sat.get_mut(li) {
+                *lx += vm / math_max(1e-6, cap(lane, mv));
+            }
             continue;
         }
         // exact water-filling: raise the lowest lanes together to the level h where the sum of (h - X_i) c_i is v
-        let mut o: Vec<(usize, f64, f64)> = ls
+        let mut order: Vec<(usize, f64, f64)> = ls
             .iter()
-            .map(|&i| (i, x[i], math_max(1e-6, cap(&lanes[i], m))))
+            .filter_map(|&li| Some((li, *sat.get(li)?, math_max(1e-6, cap(lanes.get(li)?, mv)))))
             .collect();
-        crate::graph::js_sort_by(&mut o, |p, q| p.1 - q.1);
-        let (mut sc, mut sxc, mut h, mut k) = (0.0f64, 0.0f64, 0.0f64, 0usize);
-        while k < o.len() {
-            sc += o[k].2;
-            sxc += o[k].1 * o[k].2;
-            h = (vm + sxc) / sc;
-            if k + 1 >= o.len() || h <= o[k + 1].1 {
+        crate::graph::js_sort_by(&mut order, |pa, pb| pa.1 - pb.1);
+        let (mut sc, mut sxc, mut level, mut top) = (0.0f64, 0.0f64, 0.0f64, 0usize);
+        while let Some(&(_, xk, ck)) = order.get(top) {
+            sc += ck;
+            sxc += xk * ck;
+            level = (vm + sxc) / sc;
+            // Bound: top is below order.len(), so top + 1 cannot overflow
+            let Some(next) = order.get(top.saturating_add(1)) else {
+                break;
+            };
+            if level <= next.1 {
                 break;
             }
-            k += 1;
+            top = top.saturating_add(1);
         }
-        let mut j = 0;
-        while j <= k && j < o.len() {
-            let q = (h - o[j].1) * o[j].2;
-            *use_[o[j].0].get_mut(m) += q;
-            x[o[j].0] = h;
-            j += 1;
+        for &(li, xj, cj) in order.iter().take(top.saturating_add(1)) {
+            let add = (level - xj) * cj;
+            if let Some(lu) = use_.get_mut(li) {
+                *lu.get_mut(mv) += add;
+            }
+            if let Some(lx) = sat.get_mut(li) {
+                *lx = level;
+            }
         }
     }
-    Alloc { x, use_ }
+    Alloc { x: sat, use_ }
 }
 
 /// A lane row of the movement detail: movements, bay length, slip, flow, degree of saturation, capacity, flows by movement, blocked.
@@ -317,6 +340,7 @@ pub struct LaneRow {
 
 impl LaneRow {
     /// As JSON { d, len, slip?, v, X, c, use, blocked? }.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("d".into(), self.d.clone().into());
@@ -350,64 +374,96 @@ pub struct ApproachCap {
     pub lanes: Option<Vec<LaneRow>>,
 }
 
-/// `approachCap(lanes, v, cap, T, qs, detail)`: capacity (pcu/h) of a set of lanes; short lanes interpolate between separate and shared operation by min(1, N_s / Q95).
+// The lanes with each short lane's movements merged into the full lane beside it (the first full lane
+// for a short lane before them all, the last for one after)
+fn merge_short(lanes: &[Lane], short_i: &[usize], full: &[usize]) -> Vec<Lane> {
+    let mut merged: Vec<Lane> = full.iter().filter_map(|&li| lanes.get(li).cloned()).collect();
+    for &si in short_i {
+        // full is not empty here (some lanes are not short), and every index is a lane's
+        let (Some(short), Some(&first), Some(&last)) = (lanes.get(si), full.first(), full.last())
+        else {
+            continue;
+        };
+        let jj: usize = if si < first {
+            0
+        } else if si > last {
+            merged.len().saturating_sub(1)
+        } else {
+            full.iter().position(|&f| f > si).unwrap_or(0)
+        };
+        let Some(target) = merged.get_mut(jj) else {
+            continue;
+        };
+        let joined = format!("{}{}", target.d, short.d);
+        let mut u = String::new();
+        for c in joined.chars() {
+            if !u.contains(c) {
+                u.push(c);
+            }
+        }
+        target.d = u;
+    }
+    merged
+}
+
+/// `approachCap(lanes, v, cap, T, qs, detail)`: capacity (pcu/h) of a set of lanes; short lanes interpolate between separate and shared operation by min(1, `N_s` / Q95).
 ///
-/// N_s is floor(bay length / queue space qs). detail false leaves out the lane rows (the
+/// `N_s` is floor(bay length / queue space qs). detail false leaves out the lane rows (the
 /// assignment's iterations do not need them).
 pub fn approach_cap(
     lanes: &[Lane],
-    v: &Lmv,
+    flows: &Lmv,
     cap: &dyn Fn(&Lane, char) -> f64,
-    t: f64,
+    period: f64,
     qs: f64,
     detail: bool,
 ) -> ApproachCap {
-    let tot = v.l + v.t + v.r;
-    let sep = alloc_lanes(lanes, v, cap);
+    let tot = flows.l + flows.t + flows.r;
+    let sep = alloc_lanes(lanes, flows, cap);
     let mut xs = 0.0;
-    for &x in &sep.x {
-        if x > xs {
-            xs = x;
+    for &lx in &sep.x {
+        if lx > xs {
+            xs = lx;
         }
     }
-    let best = |l: &Lane| {
-        let mut c = 0.0;
-        for m in l.d.chars() {
-            c = math_max(c, cap(l, m));
+    let best = |lane: &Lane| {
+        let mut best_c = 0.0;
+        for mv in lane.d.chars() {
+            best_c = math_max(best_c, cap(lane, mv));
         }
-        c
+        best_c
     };
     let c_sep = if tot > 0.0 && xs > 0.0 {
         tot / xs
     } else {
-        lanes.iter().fold(0.0, |s, l| s + best(l))
+        lanes.iter().fold(0.0, |acc, lane| acc + best(lane))
     };
-    let lanes_out = |a: &Alloc, f: f64| -> Option<Vec<LaneRow>> {
+    let lanes_out = |al: &Alloc, scale: f64| -> Option<Vec<LaneRow>> {
         if !detail {
             return None;
         }
+        // alloc_lanes gives one entry of x and use_ per lane, so the zip walks every lane
         Some(
             lanes
                 .iter()
-                .enumerate()
-                .map(|(i, l)| {
-                    let u = a.use_[i];
-                    let lv = u.l + u.t + u.r;
+                .zip(al.use_.iter().zip(&al.x))
+                .map(|(lane, (&lu, &lx))| {
+                    let lv = lu.l + lu.t + lu.r;
                     LaneRow {
-                        d: l.d.clone(),
-                        len: or_default(l.len, 0.0),
-                        slip: Some(l.slip),
+                        d: lane.d.clone(),
+                        len: or_default(lane.len, 0.0),
+                        slip: Some(lane.slip),
                         v: lv,
-                        x: a.x[i] * f,
-                        c: if lv > 0.0 && a.x[i] > 0.0 { lv / a.x[i] } else { best(l) },
-                        use_: u,
+                        x: lx * scale,
+                        c: if lv > 0.0 && lx > 0.0 { lv / lx } else { best(lane) },
+                        use_: lu,
                         blocked: None,
                     }
                 })
                 .collect(),
         )
     };
-    let n_short = lanes.iter().filter(|l| l.len > 0.0).count();
+    let n_short = lanes.iter().filter(|lane| lane.len > 0.0).count();
     if n_short == 0 || n_short == lanes.len() || tot <= 0.0 {
         return ApproachCap {
             x: if tot > 0.0 { xs } else { 0.0 },
@@ -417,39 +473,36 @@ pub fn approach_cap(
             lanes: lanes_out(&sep, 1.0),
         };
     }
-    let short_i: Vec<usize> = (0..lanes.len()).filter(|&i| lanes[i].len > 0.0).collect();
-    let full: Vec<usize> = (0..lanes.len()).filter(|&i| !(lanes[i].len > 0.0)).collect();
-    let mut merged: Vec<Lane> = full.iter().map(|&i| lanes[i].clone()).collect();
-    for &i in &short_i {
-        let j: i64 = if i < full[0] {
-            0
-        } else if i > full[full.len() - 1] {
-            merged.len() as i64 - 1
-        } else {
-            full.iter().position(|&f| f > i).map_or(-1, |p| p as i64)
-        };
-        let jj = j.max(0) as usize;
-        let joined = format!("{}{}", merged[jj].d, lanes[i].d);
-        let mut u = String::new();
-        for c in joined.chars() {
-            if !u.contains(c) {
-                u.push(c);
-            }
-        }
-        merged[jj].d = u;
-    }
-    let sh = alloc_lanes(&merged, v, cap);
+    let short_i: Vec<usize> = lanes
+        .iter()
+        .enumerate()
+        .filter(|(_, lane)| lane.len > 0.0)
+        .map(|(li, _)| li)
+        .collect();
+    // !(len > 0): NaN lengths count as full lanes
+    let full: Vec<usize> = lanes
+        .iter()
+        .enumerate()
+        .filter(|(_, lane)| lane.len <= 0.0 || lane.len.is_nan())
+        .map(|(li, _)| li)
+        .collect();
+    let merged = merge_short(lanes, &short_i, &full);
+    let sh = alloc_lanes(&merged, flows, cap);
     let xh = math_max(0.0, math_max_of(&sh.x));
     let c_sh = if xh > 0.0 { tot / xh } else { c_sep };
     let (mut r, mut q95s) = (1.0f64, 0.0f64);
-    for &i in &short_i {
-        let u = sep.use_[i];
-        let lv = u.l + u.t + u.r;
-        let c = if lv > 0.0 && sep.x[i] > 0.0 { lv / sep.x[i] } else { 0.0 };
-        let q = q95v(lv, c, t);
-        let ns = (lanes[i].len / qs).floor();
-        q95s = math_max(q95s, q);
-        r = math_min(r, if q > 1e-9 { math_min(1.0, ns / q) } else { 1.0 });
+    for &si in &short_i {
+        // short_i holds lane indexes, and sep has one entry per lane
+        let (Some(&su), Some(&sx), Some(short)) = (sep.use_.get(si), sep.x.get(si), lanes.get(si))
+        else {
+            continue;
+        };
+        let lv = su.l + su.t + su.r;
+        let sc = if lv > 0.0 && sx > 0.0 { lv / sx } else { 0.0 };
+        let q95 = q95v(lv, sc, period);
+        let ns = (short.len / qs).floor();
+        q95s = math_max(q95s, q95);
+        r = math_min(r, if q95 > 1e-9 { math_min(1.0, ns / q95) } else { 1.0 });
     }
     let cap_a = c_sh + (c_sep - c_sh) * r;
     let x = tot / cap_a;
@@ -464,6 +517,7 @@ pub fn approach_cap(
 
 impl ApproachCap {
     /// As JSON { X, cap, r, q95short?, lanes }.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("X".into(), plain_number(self.x));
@@ -472,13 +526,13 @@ impl ApproachCap {
         if let Some(q) = self.q95short {
             m.insert("q95short".into(), plain_number(q));
         }
-        m.insert("lanes".into(), lane_rows_value(&self.lanes));
+        m.insert("lanes".into(), lane_rows_value(self.lanes.as_deref()));
         Value::Object(m)
     }
 }
 
 /// Lane rows as JSON, null when absent.
-pub(crate) fn lane_rows_value(l: &Option<Vec<LaneRow>>) -> Value {
+pub(crate) fn lane_rows_value(l: Option<&[LaneRow]>) -> Value {
     match l {
         Some(rows) => Value::Array(rows.iter().map(LaneRow::to_value).collect()),
         None => Value::Null,

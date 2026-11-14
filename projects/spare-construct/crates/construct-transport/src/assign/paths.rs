@@ -25,10 +25,8 @@ impl<K: Hash + Eq + Clone, V> OMap<K, V> {
 
     /// The value for a key.
     pub fn get_mut(&mut self, k: &K) -> Option<&mut V> {
-        match self.index.get(k) {
-            Some(&i) => self.slots[i].as_mut().map(|e| &mut e.1),
-            None => None,
-        }
+        let &i = self.index.get(k)?;
+        self.slots.get_mut(i)?.as_mut().map(|e| &mut e.1)
     }
 
     /// Adds a new key last (the key must not be in the map).
@@ -58,9 +56,10 @@ impl<K: Hash + Eq + Clone, V> OMap<K, V> {
                 self.index.remove(&e.0);
             }
         }
-        // Dropping the empty slots keeps the order and the walk short
-        if self.slots.iter().filter(|s| s.is_none()).count() * 2 > self.slots.len() {
-            self.slots.retain(|s| s.is_some());
+        // Dropping the empty slots keeps the order and the walk short.
+        // Bound: a count of slots in memory, so doubling it stays far below usize::MAX
+        if self.slots.iter().filter(|s| s.is_none()).count().saturating_mul(2) > self.slots.len() {
+            self.slots.retain(std::option::Option::is_some);
             for (i, s) in self.slots.iter().enumerate() {
                 if let Some(e) = s {
                     self.index.insert(e.0.clone(), i);
@@ -85,7 +84,10 @@ pub(super) fn add_paths(np: Vec<NewPath>, w: f64, into: &mut PathSet) {
         if into.get_mut(&od).is_none() {
             into.push(od, PairPaths::new());
         }
-        let m = into.get_mut(&od).expect("just added");
+        // The pair is in the set now (just added if it was not), so this always finds it
+        let Some(m) = into.get_mut(&od) else {
+            continue;
+        };
         let key: Rc<[usize]> = Rc::from(arcs);
         match m.get_mut(&key) {
             Some(p) => *p += w * q,
@@ -110,7 +112,10 @@ pub(super) fn merge_paths(to: &mut PathSet, from: &PathSet, lam: f64) {
         if to.get_mut(od).is_none() {
             to.push(*od, PairPaths::new());
         }
-        let pm = to.get_mut(od).expect("just added");
+        // The pair is in the set now (just added if it was not), so this always finds it
+        let Some(pm) = to.get_mut(od) else {
+            continue;
+        };
         for (k, w) in m.iter() {
             match pm.get_mut(k) {
                 Some(e) => *e += lam * *w,

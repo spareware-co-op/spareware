@@ -9,11 +9,12 @@ use crate::edit::json::JsonValue;
 use crate::jsnum::{number_to_js_string, to_fixed};
 use crate::project::{default_settings, land_use, road_class_exact};
 use crate::util::{esc, fmt};
+use std::fmt::Write as _;
 
 /// The settings of a new project as JSON, keys in the prototype's order (`defaultSettings()`).
 pub(crate) fn default_settings_json() -> JsonValue {
-    let text = serde_json::to_string(&default_settings()).expect("settings always serialise");
-    let mut v = JsonValue::parse(&text).expect("settings text is JSON");
+    // the settings always serialise and their text is always JSON; null is a fallback that never happens
+    let mut v = serde_json::to_string(&default_settings()).ok().and_then(|text| JsonValue::parse(&text).ok()).unwrap_or(JsonValue::Null);
     // the discount schedule is held as an unordered value: put its keys in the prototype's order, { to, r }
     if let Some(JsonValue::Array(rows)) = v.get_mut("econ").and_then(|e| e.get_mut("rates")) {
         for row in rows.iter_mut() {
@@ -76,7 +77,7 @@ fn setting_text(x: Option<&JsonValue>) -> String {
         None => fmt::DASH.to_string(),
         Some(JsonValue::Null) => "none".to_string(),
         Some(JsonValue::Array(a)) => {
-            if a.iter().all(|e| e.is_object_like()) {
+            if a.iter().all(crate::edit::json::JsonValue::is_object_like) {
                 a.iter().map(seg).collect::<Vec<_>>().join("; ")
             } else {
                 a.iter()
@@ -203,12 +204,12 @@ pub(crate) fn setting_label(k: &str) -> (String, String) {
         return (l.to_string(), u.to_string());
     }
     let parts: Vec<&str> = k.split('.').collect();
-    if parts.len() == 4 && parts[0] == "rates" && is_word(parts[1]) && (parts[2] == "AM" || parts[2] == "PM") && (parts[3] == "rate" || parts[3] == "inPct") {
-        let lu = land_use(parts[1]);
-        let label = lu.map_or(parts[1], |l| l.label);
-        return if parts[3] == "rate" {
+    if let &[p0, p1, p2, p3] = parts.as_slice() && p0 == "rates" && is_word(p1) && (p2 == "AM" || p2 == "PM") && (p3 == "rate" || p3 == "inPct") {
+        let lu = land_use(p1);
+        let label = lu.map_or(p1, |l| l.label);
+        return if p3 == "rate" {
             (
-                format!("Trip rate: {label}, {} peak", parts[2]),
+                format!("Trip rate: {label}, {p2} peak"),
                 format!(
                     "trips per {}",
                     match lu {
@@ -219,15 +220,15 @@ pub(crate) fn setting_label(k: &str) -> (String, String) {
                 ),
             )
         } else {
-            (format!("Trip rate: {label}, {} peak, share arriving", parts[2]), "%".to_string())
+            (format!("Trip rate: {label}, {p2} peak, share arriving"), "%".to_string())
         };
     }
-    if parts.len() == 3 && parts[0] == "econ" && parts[1] == "laneKm" && is_word(parts[2]) {
-        let label = road_class_exact(parts[2]).map_or(parts[2], |c| c.label);
+    if let &[p0, p1, p2] = parts.as_slice() && p0 == "econ" && p1 == "laneKm" && is_word(p2) {
+        let label = road_class_exact(p2).map_or(p2, |c| c.label);
         return (format!("Cost of new {} road", label.to_lowercase()), "$m per lane-km".to_string());
     }
-    if parts.len() == 3 && parts[0] == "econ" && parts[1] == "node" && is_word(parts[2]) {
-        return (format!("Cost of a new or upgraded {}", super::sections_env::control_label(parts[2]).to_lowercase()), "$m".to_string());
+    if let &[p0, p1, p2] = parts.as_slice() && p0 == "econ" && p1 == "node" && is_word(p2) {
+        return (format!("Cost of a new or upgraded {}", super::sections_env::control_label(p2).to_lowercase()), "$m".to_string());
     }
     (k.to_string(), String::new())
 }
@@ -266,18 +267,18 @@ pub(crate) struct NonDefault {
     pub def: Option<JsonValue>,
 }
 
-fn walk_defaults(d: &JsonValue, s: Option<&JsonValue>, pre: &str, out: &mut Vec<NonDefault>) {
-    let JsonValue::Object(dm) = d else {
+fn walk_defaults(defaults: &JsonValue, set: Option<&JsonValue>, pre: &str, out: &mut Vec<NonDefault>) {
+    let JsonValue::Object(dm) = defaults else {
         return;
     };
-    for (k, dv) in dm.iter() {
-        let key = if pre.is_empty() { k.to_string() } else { format!("{pre}.{k}") };
+    for (name, dv) in dm.iter() {
+        let key = if pre.is_empty() { name.to_string() } else { format!("{pre}.{name}") };
         if not_assumption(&key) {
             continue;
         }
-        let sv: Option<&JsonValue> = match s {
-            Some(JsonValue::Object(sm)) => sm.get(k),
-            Some(JsonValue::Array(a)) => k.parse::<usize>().ok().and_then(|i| a.get(i)),
+        let sv: Option<&JsonValue> = match set {
+            Some(JsonValue::Object(sm)) => sm.get(name),
+            Some(JsonValue::Array(arr)) => name.parse::<usize>().ok().and_then(|i| arr.get(i)),
             _ => None,
         };
         if let JsonValue::Object(_) = dv {
@@ -294,9 +295,9 @@ fn walk_defaults(d: &JsonValue, s: Option<&JsonValue>, pre: &str, out: &mut Vec<
             let strict = sv.is_some_and(|x| dv.strict_eq(x));
             let blank = matches!(dv, JsonValue::Null) && (sv.is_none() || matches!(sv, Some(JsonValue::Null)) || matches!(sv, Some(JsonValue::String(t)) if t.is_empty()));
             let numeric = match (dv, sv) {
-                (JsonValue::Number(n), Some(x)) => {
+                (JsonValue::Number(num), Some(x)) => {
                     let nonblank = !matches!(x, JsonValue::String(t) if t.is_empty()) && !matches!(x, JsonValue::Null);
-                    x.to_number() == *n && nonblank
+                    x.to_number() == *num && nonblank
                 }
                 _ => false,
             };
@@ -335,6 +336,7 @@ pub(crate) struct DataSource {
 
 /// `new Date(t).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })` in UTC.
 fn locale_date(at: Option<&JsonValue>) -> Option<String> {
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
     let at = at.filter(|v| v.truthy())?;
     let Some(iso) = crate::results::js_iso_day(&at.to_value()) else {
         return Some("Invalid Date".to_string());
@@ -342,8 +344,9 @@ fn locale_date(at: Option<&JsonValue>) -> Option<String> {
     let (y, rest) = iso.split_at(4);
     let m: usize = rest[1..3].parse().unwrap_or(1);
     let d: usize = rest[4..6].parse().unwrap_or(1);
-    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
-    Some(format!("{d} {} {y}", MONTHS[m - 1]))
+    // an ISO day always has a month 01 to 12; JavaScript reads a missing month as undefined
+    let month = m.checked_sub(1).and_then(|i| MONTHS.get(i)).copied().unwrap_or("undefined");
+    Some(format!("{d} {month} {y}"))
 }
 
 fn records(x: Option<&JsonValue>) -> String {
@@ -466,20 +469,23 @@ pub(crate) struct Series {
 pub(crate) fn kit_line(series: &[Series], x_max: f64, y_max: f64, y_label: &str, x_labels: [&str; 2]) -> String {
     let (w, h) = (560.0f64, 140.0f64);
     let px = |x: f64| 40.0 + (w - 50.0) * x / x_max;
-    let paths: String = series
-        .iter()
-        .map(|s| {
-            let ym = if s.y_max == 0.0 || s.y_max.is_nan() { y_max } else { s.y_max };
-            let py = |y: f64| h - 22.0 - (h - 34.0) * y / ym;
-            let d: String = s
-                .pts
-                .iter()
-                .enumerate()
-                .map(|(i, p)| format!("{}{},{}", if i > 0 { "L" } else { "M" }, to_fixed(px(p[0]), 1), to_fixed(py(p[1]), 1)))
-                .collect();
-            format!("<path d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"1.6\"/>", s.colour)
-        })
-        .collect();
+    let paths: String = series.iter().fold(String::new(), |mut acc, s| {
+        let ym = if s.y_max == 0.0 || s.y_max.is_nan() { y_max } else { s.y_max };
+        let py = |y: f64| h - 22.0 - (h - 34.0) * y / ym;
+        let d: String = s.pts.iter().enumerate().fold(String::new(), |mut d, (i, p)| {
+            // Writing to a String cannot fail
+            let _ = write!(d, "{}{},{}", if i > 0 { "L" } else { "M" }, to_fixed(px(p[0]), 1), to_fixed(py(p[1]), 1));
+            d
+        });
+        // Writing to a String cannot fail
+        let _ = write!(acc, "<path d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"1.6\"/>", s.colour);
+        acc
+    });
+    let legend = series.iter().filter(|s| !s.label.is_empty()).fold(String::new(), |mut acc, s| {
+        // Writing to a String cannot fail
+        let _ = write!(acc, "<span style=\"color:{}\">\u{2501} {}</span>", s.colour, s.label);
+        acc
+    });
     let n = number_to_js_string;
     format!(
         "<svg class=\"mini-chart\" viewBox=\"0 0 {w} {h}\" preserveAspectRatio=\"none\" style=\"height:150px\">\n        <line x1=\"40\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y1}\" stroke=\"var(--line)\"/><line x1=\"40\" y1=\"12\" x2=\"{x2}\" y2=\"12\" stroke=\"var(--line-2)\"/>\n        {paths}\n        <text x=\"36\" y=\"16\" text-anchor=\"end\">{yl}</text><text x=\"36\" y=\"{y3}\" text-anchor=\"end\">0</text>\n        <text x=\"40\" y=\"{y4}\">{xl0}</text><text x=\"{x2}\" y=\"{y4}\" text-anchor=\"end\">{xl1}</text></svg><div class=\"hud-row\" style=\"font-size:12px;gap:14px\">{legend}</div>",
@@ -493,11 +499,7 @@ pub(crate) fn kit_line(series: &[Series], x_max: f64, y_max: f64, y_label: &str,
         y4 = n(h - 6.0),
         xl0 = x_labels[0],
         xl1 = x_labels[1],
-        legend = series
-            .iter()
-            .filter(|s| !s.label.is_empty())
-            .map(|s| format!("<span style=\"color:{}\">\u{2501} {}</span>", s.colour, s.label))
-            .collect::<String>()
+        legend = legend
     )
 }
 

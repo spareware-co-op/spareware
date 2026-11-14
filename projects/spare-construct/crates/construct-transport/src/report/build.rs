@@ -8,6 +8,7 @@ use super::Sel;
 use crate::jsnum::{is_js_space, js_trim};
 use crate::util::esc;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 /// What `Report.html` and `Report.build` are given: the period the economics use and the maps already drawn.
 #[derive(Clone, Debug, Default)]
@@ -53,7 +54,8 @@ fn ws_end(s: &str, i: usize) -> usize {
     let mut j = i;
     for c in s[i..].chars() {
         if is_js_space(c) {
-            j += c.len_utf8();
+            // Bound: an offset within s, far below usize::MAX
+            j = j.saturating_add(c.len_utf8());
         } else {
             break;
         }
@@ -67,16 +69,17 @@ fn is_word(c: char) -> bool {
 
 /// `\bword\b` for an ASCII word: there is a word boundary on both sides.
 pub(crate) fn has_word(s: &str, w: &str) -> bool {
-    let mut from = 0;
+    let mut from = 0usize;
+    // Bound: offsets within s, far below usize::MAX
     while let Some(i) = s[from..].find(w) {
-        let a = from + i;
-        let b = a + w.len();
+        let a = from.saturating_add(i);
+        let b = a.saturating_add(w.len());
         let before = s[..a].chars().next_back().is_none_or(|c| !is_word(c));
         let after = s[b..].chars().next().is_none_or(|c| !is_word(c));
         if before && after {
             return true;
         }
-        from = a + s[a..].chars().next().map_or(1, char::len_utf8);
+        from = a.saturating_add(s[a..].chars().next().map_or(1, char::len_utf8));
     }
     false
 }
@@ -92,13 +95,14 @@ pub(crate) fn has_source_line(s: &str) -> bool {
         return true;
     }
     let low = s.to_ascii_lowercase();
-    let mut from = 0;
+    let mut from = 0usize;
+    // Bound: offsets within low, far below usize::MAX
     while let Some(i) = low[from..].find("source:") {
-        let a = from + i;
+        let a = from.saturating_add(i);
         if low[..a].chars().next_back().is_none_or(|c| !is_word(c)) {
             return true;
         }
-        from = a + 1;
+        from = a.saturating_add(1);
     }
     false
 }
@@ -110,46 +114,47 @@ pub fn chapter_of(name: &str, title: &str) -> String {
         return "4".to_string();
     }
     // an appendix title names its letter: /^appendix\s+([a-h])\b/i
-    let t = js_trim(title);
-    let appendix_letter = |x: &str, ci: bool| -> Option<char> {
-        let x = if ci { x.to_ascii_lowercase() } else { x.to_string() };
-        let rest = x.strip_prefix("appendix")?;
-        let e = ws_end(&rest, 0);
-        if e == 0 {
+    let title_t = js_trim(title);
+    let appendix_letter = |text: &str, ci: bool| -> Option<char> {
+        let text = if ci { text.to_ascii_lowercase() } else { text.to_string() };
+        let rest = text.strip_prefix("appendix")?;
+        let ws = ws_end(rest, 0);
+        if ws == 0 {
             return None;
         }
-        let c = rest[e..].chars().next()?;
-        if !('a'..='h').contains(&c) {
+        let letter = rest[ws..].chars().next()?;
+        if !('a'..='h').contains(&letter) {
             return None;
         }
-        let after = rest[e + c.len_utf8()..].chars().next();
+        // Bound: an offset within rest, far below usize::MAX
+        let after = rest[ws.saturating_add(letter.len_utf8())..].chars().next();
         if after.is_some_and(is_word) {
             return None;
         }
-        Some(c)
+        Some(letter)
     };
-    if let Some(l) = appendix_letter(t, true) {
-        let is_app = s.strip_prefix("appendi").is_some_and(|r| {
-            (r.starts_with('x') && !r[1..].chars().next().is_some_and(is_word)) || (r.starts_with("ces") && !r[3..].chars().next().is_some_and(is_word))
+    if let Some(letter) = appendix_letter(title_t, true) {
+        let is_app = s.strip_prefix("appendi").is_some_and(|tail| {
+            (tail.starts_with('x') && !tail[1..].chars().next().is_some_and(is_word)) || (tail.starts_with("ces") && !tail[3..].chars().next().is_some_and(is_word))
         });
         if is_app {
-            return l.to_ascii_uppercase().to_string();
+            return letter.to_ascii_uppercase().to_string();
         }
     }
     // /^(?:chapter\s+)?(\d)(?:[.\s]|$)/
     {
         let body = match s.strip_prefix("chapter") {
-            Some(r) if ws_end(r, 0) > 0 => &r[ws_end(r, 0)..],
+            Some(rest) if ws_end(rest, 0) > 0 => &rest[ws_end(rest, 0)..],
             _ => s.as_str(),
         };
         let mut it = body.chars();
-        if let Some(d) = it.next().filter(char::is_ascii_digit) {
+        if let Some(digit) = it.next().filter(char::is_ascii_digit) {
             let tail = it.next();
             if tail.is_none() || tail == Some('.') || tail.is_some_and(is_js_space) {
-                let n = d.to_digit(10).unwrap_or(0);
-                return if (1..=6).contains(&n) {
-                    d.to_string()
-                } else if n == 7 {
+                let num = digit.to_digit(10).unwrap_or(0);
+                return if (1..=6).contains(&num) {
+                    digit.to_string()
+                } else if num == 7 {
                     "6".to_string()
                 } else {
                     "4".to_string()
@@ -158,31 +163,33 @@ pub fn chapter_of(name: &str, title: &str) -> String {
         }
     }
     // /^appendix\s+([a-h])\b/ or /^([a-hp])(\d+)?$/
-    if let Some(l) = appendix_letter(&s, false) {
-        return l.to_ascii_uppercase().to_string();
+    if let Some(letter) = appendix_letter(&s, false) {
+        return letter.to_ascii_uppercase().to_string();
     }
     {
         let mut it = s.chars();
-        if let Some(l) = it.next().filter(|c| ('a'..='h').contains(c) || *c == 'p') {
+        if let Some(letter) = it.next().filter(|ch| ('a'..='h').contains(ch) || *ch == 'p') {
             let rest: String = it.collect();
-            if rest.chars().all(|c| c.is_ascii_digit()) {
-                return l.to_ascii_uppercase().to_string();
+            if rest.chars().all(|ch| ch.is_ascii_digit()) {
+                return letter.to_ascii_uppercase().to_string();
             }
         }
     }
     let all = chapters();
     let found: Option<&Chapter> = all
         .iter()
-        .find(|c| c.title.to_lowercase() == s || c.alias.contains(&s.as_str()))
+        .find(|ch| ch.title.to_lowercase() == s || ch.alias.contains(&s.as_str()))
         .copied()
-        .or_else(|| all.iter().find(|c| c.alias.iter().any(|a| s.contains(a) && a.len() > 4)).copied());
-    found.map_or("4".to_string(), |c| c.id.to_string())
+        .or_else(|| all.iter().find(|ch| ch.alias.iter().any(|alias| s.contains(alias) && alias.len() > 4)).copied());
+    found.map_or("4".to_string(), |ch| ch.id.to_string())
 }
 
 /// `fixTables(h)`: a table without a head gets a <thead> from its first row when that row has header cells, so headers
 /// repeat on every printed page.
+#[must_use]
 pub fn fix_tables(h: &str) -> String {
-    let mut out = String::with_capacity(h.len() + 64);
+    // Bound: lengths and offsets within h, far below usize::MAX
+    let mut out = String::with_capacity(h.len().saturating_add(64));
     let mut rest = h;
     loop {
         // the next `<table\b[^>]*>`
@@ -194,7 +201,7 @@ pub fn fix_tables(h: &str) -> String {
             out.push_str(rest);
             break;
         };
-        let end = start + end_rel + "</table>".len();
+        let end = start.saturating_add(end_rel).saturating_add("</table>".len());
         out.push_str(&rest[..start]);
         out.push_str(&fix_one_table(&rest[start..end]));
         rest = &rest[end..];
@@ -204,14 +211,16 @@ pub fn fix_tables(h: &str) -> String {
 
 /// The byte index of the next `<table` that is followed by a word boundary and a `>` somewhere after.
 fn find_table_open(s: &str) -> Option<usize> {
-    let mut from = 0;
+    let mut from = 0usize;
+    // Bound: offsets within s, far below usize::MAX
     while let Some(i) = s[from..].find("<table") {
-        let a = from + i;
-        let after = s[a + 6..].chars().next();
-        if !after.is_some_and(is_word) && s[a + 6..].contains('>') {
+        let a = from.saturating_add(i);
+        let tag_end = a.saturating_add(6);
+        let after = s[tag_end..].chars().next();
+        if !after.is_some_and(is_word) && s[tag_end..].contains('>') {
             return Some(a);
         }
-        from = a + 1;
+        from = a.saturating_add(1);
     }
     None
 }
@@ -225,7 +234,8 @@ fn fix_one_table(t: &str) -> String {
         return t.to_string();
     };
     let open = &t[..=gt];
-    let after = ws_end(t, gt + 1);
+    // Bound: offsets within t, far below usize::MAX
+    let after = ws_end(t, gt.saturating_add(1));
     let r = &t[after..];
     if !r.starts_with("<tr") || r[3..].chars().next().is_some_and(is_word) {
         return t.to_string();
@@ -233,26 +243,27 @@ fn fix_one_table(t: &str) -> String {
     let Some(trgt) = r.find('>') else {
         return t.to_string();
     };
-    let body_start = trgt + 1;
+    let body_start = trgt.saturating_add(1);
     let Some(row_end_rel) = r[body_start..].find("</tr>") else {
         return t.to_string();
     };
-    let row_body = &r[body_start..body_start + row_end_rel];
+    let row_body_end = body_start.saturating_add(row_end_rel);
+    let row_body = &r[body_start..row_body_end];
     // the row must hold a <th followed by a word boundary
     let mut has_th = false;
-    let mut from = 0;
+    let mut from = 0usize;
     while let Some(i) = row_body[from..].find("<th") {
-        let a = from + i;
-        if !row_body[a + 3..].chars().next().is_some_and(is_word) {
+        let a = from.saturating_add(i);
+        if !row_body[a.saturating_add(3)..].chars().next().is_some_and(is_word) {
             has_th = true;
             break;
         }
-        from = a + 1;
+        from = a.saturating_add(1);
     }
     if !has_th {
         return t.to_string();
     }
-    let row_end = body_start + row_end_rel + "</tr>".len();
+    let row_end = row_body_end.saturating_add("</tr>".len());
     let row = &r[..row_end];
     let rest = &r[row_end..];
     let Some(rest) = rest.strip_suffix("</table>") else {
@@ -263,57 +274,60 @@ fn fix_one_table(t: &str) -> String {
 
 /// The heading just above a table that `numberForeign` turns into its caption: (start index, tag, attributes, inner, tail).
 fn heading_before(out: &str) -> Option<(usize, String, String, String, String)> {
-    let b = out.as_bytes();
-    let mut from = 0;
+    let bytes = out.as_bytes();
+    let mut from = 0usize;
+    // Bound: every offset below is a byte offset within out (plus a few bytes), far below usize::MAX
     while let Some(i) = out[from..].find("<h") {
-        let a = from + i;
-        from = a + 1;
-        let (Some(&d), true) = (b.get(a + 2), a + 3 <= b.len()) else {
+        let a = from.saturating_add(i);
+        from = a.saturating_add(1);
+        let attrs_start = a.saturating_add(3);
+        let (Some(&digit), true) = (bytes.get(a.saturating_add(2)), attrs_start <= bytes.len()) else {
             continue;
         };
-        if !(b'2'..=b'5').contains(&d) {
+        if !(b'2'..=b'5').contains(&digit) {
             continue;
         }
-        let tag = &out[a + 1..a + 3];
+        let tag = &out[a.saturating_add(1)..attrs_start];
         // `<h2([^>]*)>`
-        let Some(gt_rel) = out[a + 3..].find('>') else {
+        let Some(gt_rel) = out[attrs_start..].find('>') else {
             continue;
         };
-        let attrs = &out[a + 3..a + 3 + gt_rel];
-        let inner_start = a + 3 + gt_rel + 1;
+        let attrs_end = attrs_start.saturating_add(gt_rel);
+        let attrs = &out[attrs_start..attrs_end];
+        let inner_start = attrs_end.saturating_add(1);
         // the content runs to the first heading tag, which must be the matching closing tag
-        let mut k = inner_start;
+        let mut scan = inner_start;
         let mut close = None;
-        while k < out.len() {
-            let Some(j) = out[k..].find('<') else {
+        while scan < out.len() {
+            let Some(rel) = out[scan..].find('<') else {
                 break;
             };
-            let p = k + j;
-            let rest = &out[p..];
-            let is_heading = |s: &str| -> bool {
-                let sb = s.as_bytes();
+            let lt_at = scan.saturating_add(rel);
+            let rest = &out[lt_at..];
+            let is_heading = |text: &str| -> bool {
+                let sb = text.as_bytes();
                 // `<\/?h[1-6][\s>]`
-                let mut q = 1;
-                if sb.get(q) == Some(&b'/') {
-                    q += 1;
+                let mut pos = 1usize;
+                if sb.get(pos) == Some(&b'/') {
+                    pos = pos.saturating_add(1);
                 }
-                sb.get(q) == Some(&b'h')
-                    && sb.get(q + 1).is_some_and(|c| (b'1'..=b'6').contains(c))
-                    && s[q + 2..].chars().next().is_some_and(|c| is_js_space(c) || c == '>')
+                sb.get(pos) == Some(&b'h')
+                    && sb.get(pos.saturating_add(1)).is_some_and(|c| (b'1'..=b'6').contains(c))
+                    && text[pos.saturating_add(2)..].chars().next().is_some_and(|c| is_js_space(c) || c == '>')
             };
             if is_heading(rest) {
                 if rest.starts_with(&format!("</{tag}>")) {
-                    close = Some(p);
+                    close = Some(lt_at);
                 }
                 break;
             }
-            k = p + 1;
+            scan = lt_at.saturating_add(1);
         }
         let Some(cp) = close else {
             continue;
         };
         let inner = &out[inner_start..cp];
-        let tail_start = cp + tag.len() + 3;
+        let tail_start = cp.saturating_add(tag.len()).saturating_add(3);
         if let Some(()) = tail_matches(&out[tail_start..]) {
             return Some((a, tag.to_string(), attrs.to_string(), inner.to_string(), out[tail_start..].to_string()));
         }
@@ -323,50 +337,55 @@ fn heading_before(out: &str) -> Option<(usize, String, String, String, String)> 
 
 /// `(?:\s|<div\b[^>]*>|<p class="note[^"]*">(?:(?!<\/?p[\s>])[\s\S])*?<\/p>)*$`: the tail reaches the end of the text.
 fn tail_matches(t: &str) -> Option<()> {
-    let mut i = 0;
+    let mut i = 0usize;
+    // Bound: every offset below is a byte offset within t, far below usize::MAX
     while i < t.len() {
         let rest = &t[i..];
         let c = rest.chars().next()?;
         if is_js_space(c) {
-            i += c.len_utf8();
+            i = i.saturating_add(c.len_utf8());
             continue;
         }
         if rest.starts_with("<div") && !rest[4..].chars().next().is_some_and(is_word) {
             let gt = rest.find('>')?;
-            i += gt + 1;
+            i = i.saturating_add(gt).saturating_add(1);
             continue;
         }
         if let Some(r) = rest.strip_prefix("<p class=\"note") {
             // `[^"]*">`
-            let q = r.find('"')?;
-            if !r[q..].starts_with("\">") {
+            let quote = r.find('"')?;
+            if !r[quote..].starts_with("\">") {
                 return None;
             }
-            let content_start = q + 2;
+            let content_start = quote.saturating_add(2);
             let body = &r[content_start..];
             // lazy content that holds no <p or </p followed by whitespace or '>', then </p>
-            let mut k = 0;
+            let mut scan = 0usize;
             let mut found = None;
-            while k < body.len() {
-                let j = body[k..].find('<')?;
-                let p = k + j;
-                let s = &body[p..];
-                if s.starts_with("</p>") {
-                    found = Some(p);
+            while scan < body.len() {
+                let rel = body[scan..].find('<')?;
+                let lt_at = scan.saturating_add(rel);
+                let tag = &body[lt_at..];
+                if tag.starts_with("</p>") {
+                    found = Some(lt_at);
                     break;
                 }
-                let sb = s.as_bytes();
-                let mut q2 = 1;
-                if sb.get(q2) == Some(&b'/') {
-                    q2 += 1;
+                let sb = tag.as_bytes();
+                let mut pos = 1usize;
+                if sb.get(pos) == Some(&b'/') {
+                    pos = pos.saturating_add(1);
                 }
-                if sb.get(q2) == Some(&b'p') && s[q2 + 1..].chars().next().is_some_and(|c| is_js_space(c) || c == '>') {
+                if sb.get(pos) == Some(&b'p') && tag[pos.saturating_add(1)..].chars().next().is_some_and(|c| is_js_space(c) || c == '>') {
                     return None;
                 }
-                k = p + 1;
+                scan = lt_at.saturating_add(1);
             }
-            let p = found?;
-            i += "<p class=\"note".len() + content_start + p + "</p>".len();
+            let close = found?;
+            i = i
+                .saturating_add("<p class=\"note".len())
+                .saturating_add(content_start)
+                .saturating_add(close)
+                .saturating_add("</p>".len());
             continue;
         }
         return None;
@@ -379,13 +398,14 @@ fn tail_matches(t: &str) -> Option<()> {
 pub fn number_foreign(body: &str, title: &str) -> String {
     // split on `<table\b[^>]*>`, `</table>` and `%%TNO(?::[^%]*)?%%`, keeping the separators
     let mut parts: Vec<&str> = Vec::new();
-    let mut last = 0;
-    let mut i = 0;
+    let mut last = 0usize;
+    let mut i = 0usize;
     let bytes = body.as_bytes();
+    // Bound: offsets and token lengths within body, far below usize::MAX
     while i < bytes.len() {
         let rest = &body[i..];
         let tok = if rest.starts_with("<table") && !rest[6..].chars().next().is_some_and(is_word) {
-            rest.find('>').map(|g| g + 1)
+            rest.find('>').map(|g| g.saturating_add(1))
         } else if rest.starts_with("</table>") {
             Some(8)
         } else if rest.starts_with("%%TNO") {
@@ -395,12 +415,13 @@ pub fn number_foreign(body: &str, title: &str) -> String {
         };
         match tok {
             Some(n) => {
+                let end = i.saturating_add(n);
                 parts.push(&body[last..i]);
-                parts.push(&body[i..i + n]);
-                last = i + n;
-                i += n;
+                parts.push(&body[i..end]);
+                last = end;
+                i = end;
             }
-            None => i += rest.chars().next().map_or(1, char::len_utf8),
+            None => i = i.saturating_add(rest.chars().next().map_or(1, char::len_utf8)),
         }
     }
     parts.push(&body[last..]);
@@ -415,21 +436,27 @@ pub fn number_foreign(body: &str, title: &str) -> String {
         }
         if p.starts_with("<table") && !p[6..].chars().next().is_some_and(is_word) {
             let was = depth;
-            depth += 1;
+            // Bound: a count of open tables in the text, far below usize::MAX
+            depth = depth.saturating_add(1);
             if was == 0 && !pending {
+                // Writing to a String cannot fail
                 match heading_before(&out) {
                     Some((idx, tag, attrs, inner, tail)) if !inner.contains("class=\"tno\"") => {
                         out.truncate(idx);
-                        out.push_str(&format!(
+                        let _ = write!(
+                            out,
                             "<{tag}{attrs}><span class=\"tno\">{}</span>{}</{tag}>{tail}",
                             super::ctx::tno_token(&inner),
                             super::ctx::tno_rest(&inner)
-                        ));
+                        );
                     }
-                    _ => out.push_str(&format!(
-                        "<p class=\"tcap\"><span class=\"tno\">%%TNO%%</span>{}</p>",
-                        esc(if title.is_empty() { "Table" } else { title })
-                    )),
+                    _ => {
+                        let _ = write!(
+                            out,
+                            "<p class=\"tcap\"><span class=\"tno\">%%TNO%%</span>{}</p>",
+                            esc(if title.is_empty() { "Table" } else { title })
+                        );
+                    }
                 }
             }
             pending = false;
@@ -454,35 +481,34 @@ fn tno_len(s: &str) -> Option<usize> {
     }
     let r2 = r.strip_prefix(':')?;
     let e = r2.find('%')?;
-    if r2[e..].starts_with("%%") { Some(5 + 1 + e + 2) } else { None }
+    // "%%TNO", ':', e bytes and "%%": 8 bytes besides e, which is an offset in s and far below usize::MAX
+    if r2[e..].starts_with("%%") { Some(e.saturating_add(8)) } else { None }
 }
 
 /// `body.replace(/<figcaption([^>]*)>(?!\s*<span class="tno">)/g, '<figcaption$1><span class="tno">%%FNO%%</span>')`.
 pub(crate) fn number_figcaptions(body: &str) -> String {
-    let mut out = String::with_capacity(body.len() + 32);
+    // Bound: lengths and offsets within body, far below usize::MAX
+    let mut out = String::with_capacity(body.len().saturating_add(32));
     let mut rest = body;
     while let Some(i) = rest.find("<figcaption") {
         out.push_str(&rest[..i]);
-        let after = &rest[i + "<figcaption".len()..];
-        match after.find('>') {
-            Some(g) => {
-                let attrs = &after[..g];
-                let tail = &after[g + 1..];
-                let w = ws_end(tail, 0);
-                let already = tail[w..].starts_with("<span class=\"tno\">");
-                out.push_str("<figcaption");
-                out.push_str(attrs);
-                out.push('>');
-                if !already {
-                    out.push_str("<span class=\"tno\">%%FNO%%</span>");
-                }
-                rest = tail;
+        let after = &rest[i.saturating_add("<figcaption".len())..];
+        if let Some(g) = after.find('>') {
+            let attrs = &after[..g];
+            let tail = &after[g.saturating_add(1)..];
+            let w = ws_end(tail, 0);
+            let already = tail[w..].starts_with("<span class=\"tno\">");
+            out.push_str("<figcaption");
+            out.push_str(attrs);
+            out.push('>');
+            if !already {
+                out.push_str("<span class=\"tno\">%%FNO%%</span>");
             }
-            None => {
-                out.push_str(&rest[i..]);
-                rest = "";
-                break;
-            }
+            rest = tail;
+        } else {
+            out.push_str(&rest[i..]);
+            rest = "";
+            break;
         }
     }
     out.push_str(rest);
@@ -494,10 +520,12 @@ pub(crate) fn number_figcaptions(body: &str) -> String {
 pub(crate) fn foreign_body(body: &str, id: &str, title: &str) -> String {
     let mut b = number_foreign(body, title);
     if b.contains("<table") && !has_source_line(&b) {
-        b.push_str(&format!(
+        // Writing to a String cannot fail
+        let _ = write!(
+            b,
             "<p class=\"src\">Source: Spare Construct's {} feature, from this project's inputs, loaded data and model runs (data vintage in the front matter; inputs in Appendix A).</p>",
             esc(id.split('-').next().unwrap_or(""))
-        ));
+        );
     }
     b
 }
@@ -521,24 +549,27 @@ pub(crate) fn lp_tables(html: &str, title: &str) -> String {
     // /<h4>(T\d+b?)\s+([^<]*)<\/h4>/g
     let mut out = String::with_capacity(html.len());
     let mut rest = html;
+    // Bound: offsets within html, far below usize::MAX
     while let Some(i) = rest.find("<h4>T") {
         out.push_str(&rest[..i]);
-        let after = &rest[i + 5..];
+        let after = &rest[i.saturating_add(5)..];
         let digits = after.chars().take_while(char::is_ascii_digit).count();
         let mut k = digits;
         let mut replaced = false;
         if digits > 0 {
             if after[k..].starts_with('b') {
-                k += 1;
+                k = k.saturating_add(1);
             }
             let id_end = k;
             let ws = ws_end(after, k);
             if ws > k
                 && let Some(lt) = after[ws..].find('<')
-                && after[ws + lt..].starts_with("</h4>")
+                && after[ws.saturating_add(lt)..].starts_with("</h4>")
             {
-                out.push_str(&format!("<h4>Table T{} \u{b7} {}</h4>", &after[..id_end], &after[ws..ws + lt]));
-                rest = &after[ws + lt + 5..];
+                let close = ws.saturating_add(lt);
+                // Writing to a String cannot fail
+                let _ = write!(out, "<h4>Table T{} \u{b7} {}</h4>", &after[..id_end], &after[ws..close]);
+                rest = &after[close.saturating_add(5)..];
                 replaced = true;
             }
         }

@@ -1,6 +1,23 @@
 //! The done checklist, run against the real stack: TiKV, RustFS, the real server program, and
-//! OpenID Connect sign-in through examples/mock_oidc.rs. It starts and kills servers itself.
-//! Run it with scripts/run-checklist.sh, which wipes the local test data first.
+//! OpenID Connect sign-in through `examples/mock_oidc.rs`. It starts and kills servers itself.
+//! Run it with `scripts/run-checklist.sh`, which wipes the local test data first.
+
+// The server denies these outside tests (Cargo.toml). Tests may use them, as the geometry kernel's
+// do: clippy.toml's allow-*-in-tests settings don't reach helpers outside `#[test]` functions, and
+// a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    reason = "tests; the rules are for the server's own code"
+)]
 
 use futures::{SinkExt, StreamExt};
 use reqwest::cookie::{CookieStore, Jar};
@@ -203,10 +220,12 @@ impl Live {
 
     fn edit(&mut self, document: &str, cmd: &str, args: Value) -> Value {
         self.counter += 1;
-        json!({
+        let mut message = json!({
             "t": "op", "counter": self.counter, "base": 0, "document": document, "cmd": cmd,
-            "args": args, "author_ms": now_ms(),
-        })
+            "author_ms": now_ms(),
+        });
+        message["args"] = args;
+        message
     }
 
     async fn op(&mut self, model: &str, cmd: &str, args: Value) -> u64 {
@@ -649,8 +668,8 @@ async fn busy_tab(browser: &Browser, base: &str, tab: &str, element: &str, edits
 
 /// The reason for TiKV: many people writing to one project at once, through two servers.
 async fn many_writers(first: &str, second: &str) {
-    println!("\n   Many writers at once");
     const EDITS: u64 = 200;
+    println!("\n   Many writers at once");
     let anna = Browser::sign_in(first, "anna").await;
     let ben = Browser::sign_in(second, "ben").await;
     let project = format!("{first}/api/projects/example-1");
@@ -937,12 +956,12 @@ async fn leaders_onto_the_node_that_dies() {
 }
 
 async fn five_kill_mid_edit(server: &mut Server) {
+    const EDITS: u64 = 400;
     println!("\n5. Killing and restarting the server mid-edit loses nothing");
     if std::env::var("STACK_NODES").as_deref() == Ok("3") {
         leaders_onto_the_node_that_dies().await;
     }
     let base = server.base();
-    const EDITS: u64 = 400;
     let model = "arch-model";
     let anna = Browser::sign_in(&base, "anna").await;
     let project = format!("{base}/api/projects/example-1");
@@ -1057,7 +1076,8 @@ async fn five_kill_mid_edit(server: &mut Server) {
         verified
             .lines()
             .map(|l| format!("      {l}\n"))
-            .collect::<String>()
+            .collect::<Vec<String>>()
+            .concat()
     );
     pass("replaying every project's log gives exactly the stored model");
     pass("and every stored shape is what its recipe builds");
@@ -1065,7 +1085,12 @@ async fn five_kill_mid_edit(server: &mut Server) {
     // running server tries again on its timer, so this does too.
     let mut collected = false;
     for _ in 0..120 {
-        collected = Command::new(BIN).arg("collect").output().unwrap().status.success();
+        collected = Command::new(BIN)
+            .arg("collect")
+            .output()
+            .unwrap()
+            .status
+            .success();
         if collected {
             break;
         }

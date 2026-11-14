@@ -63,7 +63,7 @@ ul.bul{margin:6px 0;padding-left:20px}ul.bul li{margin:3px 0}code{font-family:Co
 @media print{.noprint,.bar,.copy,.toast{display:none!important}main{max-width:none;padding:0}body{font-size:9.5pt}a{color:inherit;text-decoration:none}}"#;
 
 /// The script that runs inside the report window (print, save, copy a table).
-pub const DOC_SCRIPT: &str = r#"(function(){
+pub const DOC_SCRIPT: &str = r"(function(){
   function toast(t){var d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(function(){d.remove()},3200)}
   function rows(t){return Array.prototype.map.call(t.rows,function(r){return Array.prototype.map.call(r.cells,function(c){return (c.innerText||c.textContent||'').replace(/[\t\r\n]+/g,' ').trim()}).join('\t')}).join('\r\n')}
   document.addEventListener('click',function(e){
@@ -73,13 +73,13 @@ pub const DOC_SCRIPT: &str = r#"(function(){
     if(e.target.closest('[data-print]')){Promise.all(Array.prototype.map.call(document.images,function(i){return i.decode?i.decode().catch(function(){}):null})).then(function(){requestAnimationFrame(function(){window.print()})});return}
     if(e.target.closest('[data-save]')){var h='<!doctype html>\n'+document.documentElement.outerHTML,a=document.createElement('a');a.href=URL.createObjectURL(new Blob([h],{type:'text/html'}));a.download=document.body.getAttribute('data-file')||'ita-report.html';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000)}
   });
-})();"#;
+})();";
 
 /// The content security policy of the report document.
 pub const CSP: &str = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'sha256-PlIsln8wxWqGEn3AucRO7R1kNQXRifIwv7ua/46Olvw='; base-uri 'none'; form-action 'none'";
 
 /// The Python reader that goes in the data pack.
-pub const PY: &str = r#"# Load Spare Construct ITA data pack CSVs in Python (standard library only).
+pub const PY: &str = r"# Load Spare Construct ITA data pack CSVs in Python (standard library only).
 # Every CSV is UTF-8 with a BOM, and its first row is Disclaimer D1: skip it.
 # pandas: pd.read_csv(path, encoding='utf-8-sig', skiprows=1)
 import csv, sys
@@ -98,7 +98,7 @@ if __name__ == '__main__':
     print(f'{len(data)} rows from {path}')
     for row in data[:10]:
         print(row)
-"#;
+";
 
 /// The data pack's files and what each holds (`FILES`), in the prototype's order.
 pub const FILES: [(&str, &str); 18] = [

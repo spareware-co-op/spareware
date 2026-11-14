@@ -19,43 +19,51 @@ pub use ssa::ssa_pack;
 pub use tsdg::{run_design_life, tsdg_pack};
 
 /// `+x || 0`: the number a value reads as, 0 for NaN and 0.
+#[must_use]
 pub fn n0(v: &V) -> f64 {
     let x = v.n();
     if truthy_number(x) { x } else { 0.0 }
 }
 
 /// `+x || d`: the number a value reads as, d for NaN and 0.
+#[must_use]
 pub fn or_n(v: &V, d: f64) -> f64 {
     let x = v.n();
     if truthy_number(x) { x } else { d }
 }
 
 /// `v || ''` for a loose value.
+#[must_use]
 pub fn or_blank(v: &V) -> V {
     if v.t() { v.clone() } else { V::String(String::new()) }
 }
 
 /// `r1(v)`: a value rounded to 1 decimal, an empty cell when it is missing or not finite.
+#[must_use]
 pub fn r1(v: &V) -> V {
     if v.nullish() || !v.n().is_finite() { V::String(String::new()) } else { V::Number(math_round(v.n() * 10.0) / 10.0) }
 }
 
 /// `r3(v)`: a value rounded to 3 decimals, an empty cell when it is missing or not finite.
+#[must_use]
 pub fn r3(v: &V) -> V {
     if v.nullish() || !v.n().is_finite() { V::String(String::new()) } else { V::Number(math_round(v.n() * 1000.0) / 1000.0) }
 }
 
 /// `r1(x)` for a number.
+#[must_use]
 pub fn r1f(x: f64) -> V {
     r1(&V::Number(x))
 }
 
 /// `r3(x)` for a number.
+#[must_use]
 pub fn r3f(x: f64) -> V {
     r3(&V::Number(x))
 }
 
 /// A text cell.
+#[must_use]
 pub fn sv(x: &str) -> V {
     V::String(x.to_string())
 }
@@ -68,6 +76,7 @@ pub fn t_table(head: &[&str], rows: Vec<Vec<String>>, empty: &str) -> String {
 }
 
 /// `x.length` of a loose value the way JavaScript reads it: an array's length, a string's UTF-16 length, otherwise nothing (0).
+#[must_use]
 pub fn js_length(v: &V) -> usize {
     match v {
         V::Array(a) => a.len(),
@@ -77,6 +86,7 @@ pub fn js_length(v: &V) -> usize {
 }
 
 /// Distinct scenarios in order (`[a, b, c].filter((x, i, arr) => x && arr.indexOf(x) === i)`), by identity.
+#[must_use]
 pub fn distinct<'a>(list: &[Option<&'a V>]) -> Vec<&'a V> {
     let mut out: Vec<&'a V> = Vec::new();
     for x in list.iter().flatten() {
@@ -88,11 +98,13 @@ pub fn distinct<'a>(list: &[Option<&'a V>]) -> Vec<&'a V> {
 }
 
 /// `resOK(P)`: the option has results.
+#[must_use]
 pub fn res_ok(p: &V) -> bool {
     !periods_of(pair(p).opt).is_empty()
 }
 
 /// `signalNodes(sc)`: the ids of the signalised junctions.
+#[must_use]
 pub fn signal_nodes(sc: &V) -> Vec<String> {
     sc.g("nodes").vals().into_iter().filter(|n| n.g("control").eq_s("signals")).map(|n| n.g("id").s()).collect()
 }
@@ -114,11 +126,13 @@ pub struct Section {
 }
 
 /// A section of a pack.
+#[must_use]
 pub fn section(title: &str, note: Option<String>, head: &[&str], rows: Vec<Vec<V>>, empty: Option<&str>) -> Section {
-    Section { title: title.to_string(), note, head: head.iter().map(|h| h.to_string()).collect(), rows, empty: empty.map(|e| e.to_string()) }
+    Section { title: title.to_string(), note, head: head.iter().map(std::string::ToString::to_string).collect(), rows, empty: empty.map(std::string::ToString::to_string) }
 }
 
 /// `packCSV(P, title, tool, sections)`: a hand-over CSV: the manifest, project, date and version stamp, then each section, then the footer.
+#[must_use]
 pub fn pack_csv(p: &V, title: &str, tool: &str, sections: &[Section]) -> String {
     let mut rows: Vec<Vec<V>> = vec![
         vec![V::String(format!("# {title}"))],
@@ -130,11 +144,10 @@ pub fn pack_csv(p: &V, title: &str, tool: &str, sections: &[Section]) -> String 
     for sec in sections {
         rows.push(vec![]);
         rows.push(vec![V::String(format!("## {}", sec.title))]);
-        if let Some(n) = &sec.note {
-            if !n.is_empty() {
+        if let Some(n) = &sec.note
+            && !n.is_empty() {
                 rows.push(vec![V::String(format!("# {n}"))]);
             }
-        }
         rows.push(sec.head.iter().map(|h| V::String(h.clone())).collect());
         for r in &sec.rows {
             rows.push(r.clone());
@@ -149,11 +162,12 @@ pub fn pack_csv(p: &V, title: &str, tool: &str, sections: &[Section]) -> String 
 /* ---------- (3) ANOP tool inputs ---------- */
 
 /// `anopInputsCSV(P)`: speed as a percentage of the posted limit and the 85th/median ratio by mode, corridor and direction (CSV).
+#[must_use]
 pub fn anop_inputs_csv(p: &V) -> String {
     let pr = pair(p);
     let mut rows: Vec<Vec<V>> = Vec::new();
     for c in anop_corridors(p).items() {
-        let ids: Vec<String> = c.g("links").items().iter().map(|x| x.s()).collect();
+        let ids: Vec<String> = c.g("links").items().iter().map(crate::compliance::jv::Jx::s).collect();
         for per in periods_of(pr.opt) {
             // one row per direction (spec anop: speed per direction)
             let r = res_of(pr.opt, per).unwrap_or(&NULL);
@@ -218,6 +232,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-anop-inputs"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id != "compliance-extra-anop-inputs" {
         return None;
@@ -245,6 +260,7 @@ pub const EXPORT_IDS: &[&str] = &[
 ];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     Some(match id {
         "compliance-extra-anop-inputs" => anop_inputs_csv(p),
@@ -259,6 +275,7 @@ pub fn export_build(id: &str, p: &V) -> Option<String> {
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     Some(match id {
         "compliance-extra-anop-inputs" | "compliance-extra-tsdg" | "compliance-extra-ssa" | "compliance-extra-sh" | "compliance-extra-mbcm" => res_ok(p),

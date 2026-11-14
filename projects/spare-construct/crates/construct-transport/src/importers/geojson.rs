@@ -1,8 +1,8 @@
-//! GeoJSON and CSV in and out: model.js `Importers.importGeoJSON`, `geojson` and `linksCSV`.
+//! `GeoJSON` and CSV in and out: model.js `Importers.importGeoJSON`, `geojson` and `linksCSV`.
 //!
-//! [`import_geojson`] adds the line features of a GeoJSON file as roads, snapping their ends to a junction within 2 m
+//! [`import_geojson`] adds the line features of a `GeoJSON` file as roads, snapping their ends to a junction within 2 m
 //! or making one. [`geojson`] writes the network (roads with their results, controlled junctions, zones) as a
-//! FeatureCollection, and [`links_csv`] writes one row per road direction, both with the results of a run when given.
+//! `FeatureCollection`, and [`links_csv`] writes one row per road direction, both with the results of a run when given.
 
 use crate::edit::IdSource;
 use crate::edit::json::JsonValue;
@@ -14,7 +14,7 @@ use crate::results::Res;
 use crate::util::{self, LatLng};
 use serde_json::Value;
 
-/// `Importers.importGeoJSON(sc, gj, template)`: adds the LineString and MultiLineString features of a GeoJSON value as roads and
+/// `Importers.importGeoJSON(sc, gj, template)`: adds the `LineString` and `MultiLineString` features of a `GeoJSON` value as roads and
 /// returns how many. The template gives the class, lanes, speed and status a feature does not set itself (`cls`, `lanesAB`,
 /// `lanesBA`, `speed`, `status` of its props; any other key it has is copied onto each road). A feature's own `cls`, `name`,
 /// `speed`, `lanesAB`, `lanesBA` and `status` properties are read. Afterwards default junction control is applied everywhere.
@@ -37,20 +37,20 @@ pub fn import_geojson(
         }
     };
     let mut added = 0usize;
-    for f in feats {
-        let Some(g) = f.get("geometry").filter(|g| value_truthy(g)) else {
+    for feat in feats {
+        let Some(geom) = feat.get("geometry").filter(|g| value_truthy(g)) else {
             continue;
         };
-        let lines: Vec<&Value> = match g.get("type").and_then(Value::as_str) {
-            Some("LineString") => g.get("coordinates").into_iter().collect(),
-            Some("MultiLineString") => g
+        let lines: Vec<&Value> = match geom.get("type").and_then(Value::as_str) {
+            Some("LineString") => geom.get("coordinates").into_iter().collect(),
+            Some("MultiLineString") => geom
                 .get("coordinates")
                 .and_then(Value::as_array)
                 .map_or(Vec::new(), |a| a.iter().collect()),
             _ => Vec::new(),
         };
         let empty = serde_json::json!({});
-        let p = f
+        let fp = feat
             .get("properties")
             .filter(|p| value_truthy(p))
             .unwrap_or(&empty);
@@ -71,47 +71,54 @@ pub fn import_geojson(
                     ]
                 })
                 .collect();
-            let (a, b) = {
-                let first = snap(sc, ids, ll[0]);
-                let last = snap(sc, ids, ll[ll.len() - 1]);
+            // At least two points, so there are ends and a (possibly empty) middle
+            let Some((&first_ll, rest)) = ll.split_first() else {
+                continue;
+            };
+            let Some((&last_ll, middle)) = rest.split_last() else {
+                continue;
+            };
+            let (na, nb) = {
+                let first = snap(sc, ids, first_ll);
+                let last = snap(sc, ids, last_ll);
                 (first, last)
             };
-            if a == b {
+            if na == nb {
                 continue;
             }
-            let t = &template.0;
+            let tpl = &template.0;
             let mut props = template.clone();
             // const cls = CLASSES[p.cls] ? p.cls : template.cls
-            props.0.cls = match p.get("cls").and_then(Value::as_str) {
+            props.0.cls = match fp.get("cls").and_then(Value::as_str) {
                 Some(c) if road_class_exact(c).is_some() => Maybe::Set(c.to_string()),
-                _ => t.cls.clone(),
+                _ => tpl.cls.clone(),
             };
             // name: p.name || ''
-            props.0.name = Maybe::Set(match p.get("name") {
+            props.0.name = Maybe::Set(match fp.get("name") {
                 Some(n) if value_truthy(n) => crate::jsnum::value_to_js_string(n),
                 _ => String::new(),
             });
             // speed: +p.speed || template.speed
-            let sp = p.get("speed").map_or(f64::NAN, value_to_number);
+            let sp = fp.get("speed").map_or(f64::NAN, value_to_number);
             props.0.speed = if sp != 0.0 && !sp.is_nan() {
                 Num::number(sp)
             } else {
-                t.speed.clone()
+                tpl.speed.clone()
             };
-            props.0.lanes_ab = match p.get("lanesAB") {
+            props.0.lanes_ab = match fp.get("lanesAB") {
                 Some(v) if !v.is_null() => Num::number(value_to_number(v)),
-                _ => t.lanes_ab.clone(),
+                _ => tpl.lanes_ab.clone(),
             };
-            props.0.lanes_ba = match p.get("lanesBA") {
+            props.0.lanes_ba = match fp.get("lanesBA") {
                 Some(v) if !v.is_null() => Num::number(value_to_number(v)),
-                _ => t.lanes_ba.clone(),
+                _ => tpl.lanes_ba.clone(),
             };
-            props.0.status = match p.get("status").and_then(Value::as_str) {
+            props.0.status = match fp.get("status").and_then(Value::as_str) {
                 Some(s) if name_of(&STATUS, s).is_some() => Maybe::Set(s.to_string()),
-                _ => t.status.clone(),
+                _ => tpl.status.clone(),
             };
-            net::add_link(sc, ids, &a, &b, &ll[1..ll.len() - 1], &props);
-            added += 1;
+            net::add_link(sc, ids, &na, &nb, middle, &props);
+            added = added.saturating_add(1);
         }
     }
     let all: Vec<String> = sc.nodes.keys().map(str::to_string).collect();
@@ -153,9 +160,10 @@ fn opt_num(x: Option<f64>) -> JsonValue {
     x.map_or(JsonValue::Null, JsonValue::Number)
 }
 
-/// `Importers.geojson(sc, res)`: the network as GeoJSON text (`JSON.stringify(x, null, 1)`): every road as a LineString with its
+/// `Importers.geojson(sc, res)`: the network as `GeoJSON` text (`JSON.stringify(x, null, 1)`): every road as a `LineString` with its
 /// class, lanes, speed, length and, with results, volume, volume-to-capacity ratio and speed each way; every junction that has a
 /// control as a Point with its delay and level of service; every zone as a Point with its land use or gateway flows.
+#[must_use]
 pub fn geojson(sc: &Scenario, res: Option<&Res>) -> String {
     let mut features: Vec<JsonValue> = Vec::new();
     for l in sc.links.values() {
@@ -279,6 +287,7 @@ fn cell_num_field(n: &Num) -> String {
 /// `Importers.linksCSV(sc, res)`: one row per road direction that has lanes (link id, name, class, status, direction, lanes,
 /// speed limit, length, and with results volume in vehicles and in pcu, capacity, volume-to-capacity ratio, level of service,
 /// speed, travel time and junction delay), rows joined by CRLF.
+#[must_use]
 pub fn links_csv(sc: &Scenario, res: Option<&Res>) -> String {
     let head = [
         "link_id",

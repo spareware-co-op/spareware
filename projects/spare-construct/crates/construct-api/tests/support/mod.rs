@@ -1,9 +1,18 @@
 //! Truth-test support for the command layer: loads the prototype's recorded answers and compares JSON with the same tolerance rules as construct-transport's tests.
 //!
 //! tools/transport-truth holds inputs/<name>.json (saved projects after the prototype's
-//! migrate()), expected/<name>.json (everything the JavaScript engine returned for them, from
+//! `migrate()`), expected/<name>.json (everything the JavaScript engine returned for them, from
 //! gen-expected.mjs) and expected/util-cases.json (the helpers' answers, from
 //! gen-util-cases.mjs). Use [`assert_close`] to check a port's JSON output against them.
+
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::arithmetic_side_effects,
+    reason = "test code; the rules are for the crate's own code"
+)]
 #![allow(dead_code)] // each test file uses its own part of this module
 
 use serde_json::Value;
@@ -56,7 +65,7 @@ pub fn load_expected(name: &str) -> Value {
 /// One difference between actual and expected JSON.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Diff {
-    /// Where, as a JSON path ($.scenarios["s-dm"].periods.AM.res.arcs[...]).
+    /// Where, as a JSON path (`$.scenarios["s-dm"].periods.AM.res.arcs[...]`).
     pub path: String,
     /// What was expected.
     pub expected: String,

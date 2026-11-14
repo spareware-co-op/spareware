@@ -1,7 +1,7 @@
 //! The requests of packs/nz/feeds.js, one at a time, for a host to send.
 //!
 //! feeds.js fetches with its own `get` (a time limit, errors that say what to do), caches layer descriptions for the
-//! session (`layerMeta`) and pages ArcGIS queries (`arcQuery`). Here each of those is a small state machine: ask for
+//! session (`layerMeta`) and pages `ArcGIS` queries (`arcQuery`). Here each of those is a small state machine: ask for
 //! the next request, give back the answer. Every download of the feeds is a [`Flow`] of these.
 
 use super::arcgis::{form_encode, host_of_url, query_string, Bounds, Expect, FetchFailure, HttpRequest};
@@ -40,12 +40,20 @@ pub trait Flow {
     /// The next request, or None when the flow needs nothing more.
     fn next_request(&mut self) -> Option<HttpRequest>;
     /// Takes the answer to the last request; Err ends the flow.
+    ///
+    /// # Errors
+    ///
+    /// The message the prototype would show when the request failed or its answer reports an error.
     fn answer(&mut self, a: Result<Answer, FetchFailure>) -> Result<(), String>;
     /// True when the flow needs no more requests.
     fn is_done(&self) -> bool;
 }
 
 /// Runs a flow to the end with a function that does the fetching (for tests and simple hosts).
+///
+/// # Errors
+///
+/// The flow's own message from the first answer it refuses.
 pub fn run_flow<F: Flow>(flow: &mut F, mut fetch: impl FnMut(&HttpRequest) -> Result<Answer, FetchFailure>) -> Result<(), String> {
     while let Some(req) = flow.next_request() {
         let a = fetch(&req);
@@ -55,6 +63,7 @@ pub fn run_flow<F: Flow>(flow: &mut F, mut fetch: impl FnMut(&HttpRequest) -> Re
 }
 
 /// `hostOf(url)`: the host of an address; an empty address gives "", one that is not an address "this site".
+#[must_use]
 pub fn host_text(url: &str) -> String {
     if url.is_empty() {
         return String::new();
@@ -73,6 +82,7 @@ pub fn host_text(url: &str) -> String {
 }
 
 /// The text of the error `get(url)` throws when the host reports a failure; `ms` is the request's time limit.
+#[must_use]
 pub fn get_error(url: &str, ms: f64, f: &FetchFailure) -> String {
     let host = host_text(url);
     let secs = crate::jsnum::number_to_js_string(math_round(ms / 1000.0));
@@ -107,6 +117,7 @@ impl Default for FeedsConfig {
 
 impl FeedsConfig {
     /// `cfg()` for a project: the defaults, then whatever `settings.feeds` holds.
+    #[must_use]
     pub fn of(p: &Project) -> FeedsConfig {
         let mut c = FeedsConfig::default();
         if let Some(Value::Object(f)) = p.settings.extra.get("feeds") {
@@ -126,6 +137,7 @@ impl FeedsConfig {
         c
     }
     /// `limitMs()`: the time limit in ms; a cleared or zero box uses the default 30 s.
+    #[must_use]
     pub fn limit_ms(&self) -> f64 {
         let t = crate::jsnum::value_to_number(&self.timeout);
         (if t > 0.0 { t } else { 30.0 }) * 1000.0
@@ -138,10 +150,12 @@ pub struct MetaCache(Rc<RefCell<HashMap<String, JsonValue>>>);
 
 impl MetaCache {
     /// An empty cache.
+    #[must_use]
     pub fn new() -> MetaCache {
         MetaCache::default()
     }
     /// The description kept for a layer address.
+    #[must_use]
     pub fn get(&self, url: &str) -> Option<JsonValue> {
         self.0.borrow().get(url).cloned()
     }
@@ -163,11 +177,13 @@ pub struct LayerMeta {
 
 impl LayerMeta {
     /// Reads the description of a layer (its address, no query).
+    #[must_use]
     pub fn new(url: &str, cache: &MetaCache, timeout_ms: f64) -> LayerMeta {
         let meta = cache.get(url);
         LayerMeta { url: url.to_string(), cache: cache.clone(), timeout_ms, done: meta.is_some(), meta }
     }
     /// The description, once read.
+    #[must_use]
     pub fn meta(&self) -> Option<&JsonValue> {
         self.meta.as_ref()
     }
@@ -201,6 +217,7 @@ impl Flow for LayerMeta {
 }
 
 /// `fieldNames(meta)`: the names of the layer's fields.
+#[must_use]
 pub fn field_names(meta: Option<&JsonValue>) -> Vec<String> {
     match meta.and_then(|m| m.get("fields")) {
         Some(JsonValue::Array(a)) => a.iter().map(|f| f.get("name").map_or_else(|| "undefined".to_string(), JsonValue::js_string)).collect(),
@@ -209,15 +226,17 @@ pub fn field_names(meta: Option<&JsonValue>) -> Vec<String> {
 }
 
 /// `resolve(meta, want)`: the layer's own spelling of each wanted field (case-insensitive); fields it lacks are left out, and without a description the wanted names stand.
+#[must_use]
 pub fn resolve_fields(meta: Option<&JsonValue>, want: &[&str]) -> Vec<String> {
     let have = field_names(meta);
     if have.is_empty() {
-        return want.iter().map(|w| w.to_string()).collect();
+        return want.iter().map(std::string::ToString::to_string).collect();
     }
     want.iter().filter_map(|w| have.iter().find(|h| h.to_lowercase() == w.to_lowercase()).cloned()).collect()
 }
 
 /// `env(b)`: the query parameters that restrict a layer to an envelope.
+#[must_use]
 pub fn env_params(b: &Bounds) -> Vec<(String, String)> {
     [
         ("geometry", super::arcgis::bounds_envelope(b)),
@@ -231,7 +250,7 @@ pub fn env_params(b: &Bounds) -> Vec<(String, String)> {
     .collect()
 }
 
-/// `arcQuery(url, params, { maxPages, timeout })`: a paged ArcGIS query. Each page is asked for at the offset after the last (the
+/// `arcQuery(url, params, { maxPages, timeout })`: a paged `ArcGIS` query. Each page is asked for at the offset after the last (the
 /// server's own page size) while it says `exceededTransferLimit` and sent features, up to `max_pages`; `complete()` is false when the cap was reached.
 #[derive(Clone, Debug)]
 pub struct ArcQuery {
@@ -248,18 +267,22 @@ pub struct ArcQuery {
 
 impl ArcQuery {
     /// A query of a layer with these parameters (`f=json` is put in front and `resultOffset` after, as the prototype does).
+    #[must_use]
     pub fn new(url: &str, params: Vec<(String, String)>, max_pages: usize, timeout_ms: f64) -> ArcQuery {
         ArcQuery { url: url.to_string(), params, max_pages, timeout_ms, page: 0, offset: 0, features: Vec::new(), complete: false, done: false }
     }
     /// The features collected so far.
+    #[must_use]
     pub fn features(&self) -> &[JsonValue] {
         &self.features
     }
     /// The features, taken.
+    #[must_use]
     pub fn into_features(self) -> Vec<JsonValue> {
         self.features
     }
     /// False when the page cap was reached before the server had no more.
+    #[must_use]
     pub fn complete(&self) -> bool {
         self.complete
     }
@@ -308,8 +331,9 @@ impl Flow for ArcQuery {
             self.done = true;
             return Ok(());
         }
-        self.offset += n;
-        self.page += 1;
+        // Bound: counts of features and pages held in memory, far below usize::MAX
+        self.offset = self.offset.saturating_add(n);
+        self.page = self.page.saturating_add(1);
         if self.page >= self.max_pages {
             self.done = true;
         }
@@ -331,15 +355,18 @@ pub struct GetOnce {
 
 impl GetOnce {
     /// A request whose single answer is kept (use [`GetOnce::answer_value`] to read it).
+    #[must_use]
     pub fn new(req: HttpRequest) -> GetOnce {
         let expect = req.expect;
         GetOnce { req, expect, answer: None, done: false }
     }
     /// The answer, once given.
+    #[must_use]
     pub fn answer_value(&self) -> Option<&Answer> {
         self.answer.as_ref()
     }
     /// The answer, taken.
+    #[must_use]
     pub fn into_answer(self) -> Option<Answer> {
         self.answer
     }
@@ -366,6 +393,7 @@ impl Flow for GetOnce {
 }
 
 /// `encodeURIComponent` used inside a form body: `data=` plus the text.
+#[must_use]
 pub fn form_body(key: &str, value: &str) -> String {
     format!("{}={}", form_encode(key), super::arcgis::encode_uri_component(value))
 }

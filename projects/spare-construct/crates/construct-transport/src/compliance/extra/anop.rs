@@ -8,7 +8,7 @@ use crate::compliance::jv::{Jx, NULL, V, csv, jobj};
 use crate::compliance::rx::rx;
 use crate::compliance::net;
 use crate::graph::js_sort_by;
-use crate::jsnum::{math_max, math_min, math_round, number_to_js_string};
+use crate::jsnum::{f64_to_usize, math_max, math_min, math_round, number_to_js_string, usize_to_f64};
 use crate::util::{self, fmt};
 
 /// The modes ANOP assesses (`MODES`).
@@ -52,103 +52,114 @@ fn hier_label(h: &str) -> V {
 
 /// The link ids of a corridor (`c.links`).
 fn ids_of(c: &V) -> Vec<String> {
-    c.g("links").items().iter().map(|x| x.s()).collect()
+    c.g("links").items().iter().map(crate::compliance::jv::Jx::s).collect()
+}
+
+/// The hierarchy AT Future Connect gives a link for a mode (the `h` of `hierOf`), and whether general traffic fell back on the road class.
+fn fc_hier(mode: &str, fc: &V, link: &V) -> (Option<&'static str>, bool) {
+    let mut h: Option<&'static str> = None;
+    let mut filled = false;
+    let text = |k: &str| if fc.g(k).t() { fc.g(k).s() } else { String::new() };
+    if mode == "gt" {
+        let v = text("gt");
+        h = if rx("motorway", "i").test(&v) {
+            Some("motorway")
+        } else if rx("arterial", "i").test(&v) {
+            Some("arterial")
+        } else if rx("collector", "i").test(&v) {
+            Some("collector")
+        } else if !v.is_empty() {
+            Some("local")
+        } else {
+            None
+        };
+        if h.is_none() {
+            h = Some(road_h(link));
+            filled = true;
+        }
+    }
+    if mode == "freight" {
+        let v = text("freight");
+        h = if rx("rail", "i").test(&v) {
+            None
+        } else if rx("1A|1B", "i").test(&v) {
+            Some("l1")
+        } else {
+            Some("l2")
+        };
+    }
+    if mode == "pt" {
+        let v = text("pt");
+        h = Some(if rx("rapid", "i").test(&v) {
+            "rtn"
+        } else if rx("frequent|ftn|irtn|strategic", "i").test(&v) {
+            "ftn"
+        } else if rx("connector", "i").test(&v) {
+            "connector"
+        } else if rx("peak", "i").test(&v) {
+            "peak"
+        } else if rx("local", "i").test(&v) {
+            "local"
+        } else {
+            "none"
+        });
+    }
+    if mode == "cycle" {
+        let v = text("cycle");
+        h = Some(if rx("regional|major", "i").test(&v) {
+            "regional"
+        } else if rx("connector", "i").test(&v) {
+            "connector"
+        } else if rx("local|sports", "i").test(&v) {
+            "local"
+        } else {
+            "none"
+        });
+    }
+    (h, filled)
 }
 
 /// `hierOf(sc, c, mode)`: the hierarchy of a corridor for a mode, length-weighted over the links conflated with AT Future Connect (`L.fc`); links without
 /// Future Connect data are left out of the tally and the share is stated. With no Future Connect on the corridor, general traffic uses the road class and the
 /// other modes a stated default. Walking is entered by the author. `{ h, src, assumed? }`.
+#[must_use]
 pub fn hier_of(sc: &V, c: &V, mode: &str) -> V {
     if mode == "walk" {
-        let w = c.g("walk");
-        let known = xdata("PREF").g("walk").g(&w.s()).t();
-        return jobj! { "h" => if known { w.clone() } else { V::String("none".into()) }, "src" => "entered by the author (Future Connect has no walking layer)" };
+        let walk = c.g("walk");
+        let known = xdata("PREF").g("walk").g(&walk.s()).t();
+        return jobj! { "h" => if known { walk.clone() } else { V::String("none".into()) }, "src" => "entered by the author (Future Connect has no walking layer)" };
     }
     let ids = ids_of(c);
     let mut tally: Vec<(String, f64)> = Vec::new();
-    let add = |t: &mut Vec<(String, f64)>, h: &str, w: f64| match t.iter_mut().find(|x| x.0 == h) {
-        Some(x) => x.1 += w,
-        None => t.push((h.to_string(), w)),
+    let add = |tl: &mut Vec<(String, f64)>, hier: &str, len: f64| match tl.iter_mut().find(|entry| entry.0 == hier) {
+        Some(entry) => entry.1 += len,
+        None => tl.push((hier.to_string(), len)),
     };
     let (mut all, mut fc_len, mut road_fill) = (0.0, 0.0, 0.0);
     for id in &ids {
-        let l = sc.g("links").g(id);
-        if !l.t() {
+        let link = sc.g("links").g(id);
+        if !link.t() {
             continue;
         }
-        let w = net::len(sc, l);
-        all += w;
-        if !l.g("fc").t() {
+        let len = net::len(sc, link);
+        all += len;
+        if !link.g("fc").t() {
             continue;
         }
-        let fc = l.g("fc");
-        let mut h: Option<&str> = None;
-        fc_len += w;
-        let text = |k: &str| if fc.g(k).t() { fc.g(k).s() } else { String::new() };
-        if mode == "gt" {
-            let v = text("gt");
-            h = if rx("motorway", "i").test(&v) {
-                Some("motorway")
-            } else if rx("arterial", "i").test(&v) {
-                Some("arterial")
-            } else if rx("collector", "i").test(&v) {
-                Some("collector")
-            } else if !v.is_empty() {
-                Some("local")
-            } else {
-                None
-            };
-            if h.is_none() {
-                h = Some(road_h(l));
-                road_fill += w;
-            }
+        fc_len += len;
+        let (hier, filled) = fc_hier(mode, link.g("fc"), link);
+        if filled {
+            road_fill += len;
         }
-        if mode == "freight" {
-            let v = text("freight");
-            h = if rx("rail", "i").test(&v) {
-                None
-            } else if rx("1A|1B", "i").test(&v) {
-                Some("l1")
-            } else {
-                Some("l2")
-            };
-        }
-        if mode == "pt" {
-            let v = text("pt");
-            h = Some(if rx("rapid", "i").test(&v) {
-                "rtn"
-            } else if rx("frequent|ftn|irtn|strategic", "i").test(&v) {
-                "ftn"
-            } else if rx("connector", "i").test(&v) {
-                "connector"
-            } else if rx("peak", "i").test(&v) {
-                "peak"
-            } else if rx("local", "i").test(&v) {
-                "local"
-            } else {
-                "none"
-            });
-        }
-        if mode == "cycle" {
-            let v = text("cycle");
-            h = Some(if rx("regional|major", "i").test(&v) {
-                "regional"
-            } else if rx("connector", "i").test(&v) {
-                "connector"
-            } else if rx("local|sports", "i").test(&v) {
-                "local"
-            } else {
-                "none"
-            });
-        }
-        if let Some(h) = h {
-            add(&mut tally, h, w);
+        if let Some(hier) = hier {
+            add(&mut tally, hier, len);
         }
     }
     if fc_len > 0.0 && !tally.is_empty() {
         let mut sorted = tally.clone();
         js_sort_by(&mut sorted, |a, b| b.1 - a.1);
-        let best = sorted[0].0.clone();
+        // tally is not empty, so sorted has a first entry
+        let best = sorted.first().map_or_else(String::new, |top| top.0.clone());
         let share = if all > 0.0 { fc_len / all } else { 1.0 };
         let src = format!(
             "AT Future Connect{}{}",
@@ -176,6 +187,7 @@ pub fn hier_of(sc: &V, c: &V, mode: &str) -> V {
 
 /// `anopPref(mode, h, lu)`: the preferred and acceptable level of service for a hierarchy and land use (the tool's hidden sheet, with the land-use adjustment
 /// for freight and general traffic): `{ pref, acc, adj }`, or null when the tool has no row for them.
+#[must_use]
 pub fn anop_pref(mode: &str, h: &str, lu: &str) -> V {
     let row = xdata("PREF").g(mode).g(h);
     if !row.t() {
@@ -215,7 +227,7 @@ fn band_speed(p: Option<f64>) -> Option<String> {
 
 /// `bandRel(r)`: the level of service of an 85th percentile to median travel time ratio, null when none was entered.
 fn band_rel(r: &V) -> Option<String> {
-    if r.nullish() || !(r.n() > 0.0) {
+    if r.nullish() || r.n() <= 0.0 || r.n().is_nan() {
         return None;
     }
     for b in xdata("STD.anop.relBands").items() {
@@ -230,7 +242,7 @@ fn band_rel(r: &V) -> Option<String> {
 fn worse_of(ls: &[Option<String>]) -> Option<String> {
     let mut v: Vec<&String> = ls.iter().filter_map(|x| x.as_ref()).filter(|x| !x.is_empty()).collect();
     js_sort_by(&mut v, |a, b| score(a) - score(b));
-    v.first().map(|x| x.to_string())
+    v.first().map(|x| (*x).clone())
 }
 
 /// The posted limit of a link and where it comes from (`postedOf`): the legal limit, the NSLR limit, the modelled link speed or the road class default.
@@ -252,6 +264,7 @@ fn posted_of(l: &V) -> Posted {
 }
 
 /// `corridorAxis(sc, ids)`: the corridor's axis: the bearing between its two furthest-apart junctions (None when it has fewer than two or they are 1 m apart or less).
+#[must_use]
 pub fn corridor_axis(sc: &V, ids: &[String]) -> Option<f64> {
     let mut pts: Vec<util::LatLng> = Vec::new();
     for id in ids {
@@ -269,8 +282,9 @@ pub fn corridor_axis(sc: &V, ids: &[String]) -> Option<f64> {
     if pts.len() < 2 {
         return None;
     }
-    let far = |from: &util::LatLng| pts.iter().fold(pts[0], |b, p| if util::dist(from, p) > util::dist(from, &b) { *p } else { b });
-    let a = far(&pts[0]);
+    let first = *pts.first()?;
+    let far = |from: &util::LatLng| pts.iter().fold(first, |b, p| if util::dist(from, p) > util::dist(from, &b) { *p } else { b });
+    let a = far(&first);
     let b = far(&a);
     if util::dist(&a, &b) > 1.0 { Some(util::bearing(&a, &b)) } else { None }
 }
@@ -278,57 +292,61 @@ pub fn corridor_axis(sc: &V, ids: &[String]) -> Option<f64> {
 /// `bound(b)`: the compass name of a heading ("Northbound").
 fn bound(b: f64) -> String {
     let i = math_round((((b % 360.0) + 360.0) % 360.0) / 90.0) % 4.0;
-    ["Northbound", "Eastbound", "Southbound", "Westbound"].get(i as usize).map_or_else(|| "undefined".to_string(), |s| s.to_string())
+    ["Northbound", "Eastbound", "Southbound", "Westbound"].get(f64_to_usize(i)).map_or_else(|| "undefined".to_string(), std::string::ToString::to_string)
 }
 
 /// `corridorSpeed(sc, res, ids, pt)`: the speed as a share of the posted limit, per direction: `Σlength / Σ(link time incl. junction delay)` against the
 /// length-weighted limit (a bus lane at free-flow time when `pt`). `{ spd, limit, pct, dirs [{ name, spd, limit, len, pct }], worst, limitSrc, fallback }` for
 /// the worse direction, or null when there is no result; `fallback` is true when a posted limit had to come from the modelled link speed.
+#[must_use]
 pub fn corridor_speed(sc: &V, res: &V, ids: &[String], pt: bool) -> V {
     let axis = corridor_axis(sc, ids);
     let mut acc = [(0.0f64, 0.0f64, 0.0f64); 2];
     let mut srcs: Vec<String> = Vec::new();
     for id in ids {
-        let l = sc.g("links").g(id);
-        if !l.t() {
+        let link = sc.g("links").g(id);
+        if !link.t() {
             continue;
         }
-        let Some(g) = net::geom(sc, l) else { continue };
-        let b_ab = util::bearing(&g[0], &g[g.len() - 1]);
-        let ps = posted_of(l);
+        let Some(geo) = net::geom(sc, link) else { continue };
+        let (Some(start), Some(end)) = (geo.first(), geo.last()) else { continue };
+        let b_ab = util::bearing(start, end);
+        let ps = posted_of(link);
         for k in ["ab", "ba"] {
-            let x = res.g("arcs").g(&format!("{id}:{k}"));
-            if !x.t() || !(x.g("len").n() > 0.0) {
+            let arc = res.g("arcs").g(&format!("{id}:{k}"));
+            if !arc.t() || arc.g("len").n() <= 0.0 || arc.g("len").n().is_nan() {
                 continue;
             }
-            let b = if k == "ab" { b_ab } else { (b_ab + 180.0) % 360.0 };
-            let i = if axis.is_none_or(|a| util::ang_diff(b, a) <= 90.0) { 0 } else { 1 };
-            acc[i].0 += x.g("len").n();
-            acc[i].1 += if pt && l.g("busLane").t() { x.g("ff").n() } else { x.g("t").n() };
-            acc[i].2 += x.g("len").n() * ps.v;
-            if !srcs.iter().any(|s| s == ps.src) {
+            let brg = if k == "ab" { b_ab } else { (b_ab + 180.0) % 360.0 };
+            let dir = usize::from(!axis.is_none_or(|ax| util::ang_diff(brg, ax) <= 90.0));
+            // dir is 0 or 1, the two slots of acc
+            if let Some(slot) = acc.get_mut(dir) {
+                slot.0 += arc.g("len").n();
+                slot.1 += if pt && link.g("busLane").t() { arc.g("ff").n() } else { arc.g("t").n() };
+                slot.2 += arc.g("len").n() * ps.v;
+            }
+            if !srcs.iter().any(|src| src == ps.src) {
                 srcs.push(ps.src.to_string());
             }
         }
     }
     let mut dirs: Vec<V> = Vec::new();
-    for (i, a) in acc.iter().enumerate() {
-        if a.1 > 0.0 && a.0 > 0.0 {
+    for (dir, tot) in acc.iter().enumerate() {
+        if tot.1 > 0.0 && tot.0 > 0.0 {
             let name = match axis {
                 None => "Both directions".to_string(),
-                Some(ax) => bound(if i == 1 { (ax + 180.0) % 360.0 } else { ax }),
+                Some(ax) => bound(if dir == 1 { (ax + 180.0) % 360.0 } else { ax }),
             };
-            let (spd, limit) = (a.0 / a.1 * 3.6, a.2 / a.0);
-            dirs.push(jobj! { "name" => name, "spd" => spd, "limit" => limit, "len" => a.0, "pct" => spd / limit * 100.0 });
+            let (spd, limit) = (tot.0 / tot.1 * 3.6, tot.2 / tot.0);
+            dirs.push(jobj! { "name" => name, "spd" => spd, "limit" => limit, "len" => tot.0, "pct" => spd / limit * 100.0 });
         }
-    }
-    if dirs.is_empty() {
-        return V::Null;
     }
     let mut sorted: Vec<&V> = dirs.iter().collect();
     js_sort_by(&mut sorted, |a, b| a.g("pct").n() - b.g("pct").n());
-    let w = sorted[0].clone();
-    let fallback = srcs.iter().any(|x| rx("modelled|default", "").test(x));
+    let Some(w) = sorted.first().map(|worst| (*worst).clone()) else {
+        return V::Null;
+    };
+    let fallback = srcs.iter().any(|src| rx("modelled|default", "").test(src));
     jobj! {
         "spd" => w.g("spd"), "limit" => w.g("limit"), "pct" => w.g("pct"), "dirs" => V::Array(dirs.clone()), "worst" => w.g("name"), "limitSrc" => srcs.join(" and "), "fallback" => fallback,
     }
@@ -363,51 +381,52 @@ fn dir_text(g: &V, suffix: &str) -> String {
 /// `anopLoS(sc, res, c)`: the level of service of a corridor by mode (`{ gt, freight, pt, walk, cycle }`, each `{ los, metric, ... }`): speed as a share of the
 /// posted limit and the author's reliability ratio for general traffic, freight and public transport, crossing spacing and delay for walking, and the cycle
 /// facility for cycling.
+#[must_use]
 pub fn anop_los(sc: &V, res: &V, c: &V) -> V {
     let ids = ids_of(c);
-    let g = corridor_speed(sc, res, &ids, false);
-    let p = corridor_speed(sc, res, &ids, true);
+    let gs = corridor_speed(sc, res, &ids, false);
+    let ps = corridor_speed(sc, res, &ids, true);
     let rel = if c.g("rel").t() { c.g("rel").clone() } else { V::object() };
-    let gpct = if g.t() { Some(g.g("pct").n()) } else { None };
-    let ppct = if p.t() { Some(p.g("pct").n()) } else { None };
+    let gpct = if gs.t() { Some(gs.g("pct").n()) } else { None };
+    let ppct = if ps.t() { Some(ps.g("pct").n()) } else { None };
     let rel_text = |k: &str| if band_rel(rel.g(k)).is_some() { format!("85th/median {}", rel.g(k).s()) } else { "reliability N/A".to_string() };
-    let dirs_of = |x: &V| if x.t() { x.g("dirs").clone() } else { V::Array(vec![]) };
+    let dirs_of = |sp: &V| if sp.t() { sp.g("dirs").clone() } else { V::Array(vec![]) };
     let gt = jobj! {
-        "los" => worse_of(&[band_speed(gpct), band_rel(rel.g("gt"))]), "metric" => dir_text(&g, ""), "dirs" => dirs_of(&g), "rel" => rel_text("gt"),
+        "los" => worse_of(&[band_speed(gpct), band_rel(rel.g("gt"))]), "metric" => dir_text(&gs, ""), "dirs" => dirs_of(&gs), "rel" => rel_text("gt"),
     };
     let freight = jobj! {
         "los" => worse_of(&[band_speed(gpct), band_rel(rel.g("freight"))]),
-        "metric" => if g.t() { format!("{} (general traffic speed)", dir_text(&g, "")) } else { "no result".to_string() }, "dirs" => dirs_of(&g), "rel" => rel_text("freight"),
+        "metric" => if gs.t() { format!("{} (general traffic speed)", dir_text(&gs, "")) } else { "no result".to_string() }, "dirs" => dirs_of(&gs), "rel" => rel_text("freight"),
     };
     let pt = jobj! {
-        "los" => worse_of(&[band_speed(ppct), band_rel(rel.g("pt"))]), "metric" => dir_text(&p, &format!(" (bus lanes at free-flow; {})", assumption())), "dirs" => dirs_of(&p), "rel" => rel_text("pt"),
+        "los" => worse_of(&[band_speed(ppct), band_rel(rel.g("pt"))]), "metric" => dir_text(&ps, &format!(" (bus lanes at free-flow; {})", assumption())), "dirs" => dirs_of(&ps), "rel" => rel_text("pt"),
     };
     // walking: crossing opportunity spacing and crossing delay (bands halved in centres and outside schools)
     let mut len = 0.0;
     let mut sig: Vec<String> = Vec::new();
     for id in &ids {
-        let l = sc.g("links").g(id);
-        if !l.t() {
+        let link = sc.g("links").g(id);
+        if !link.t() {
             continue;
         }
-        len += net::len(sc, l);
-        for n in [l.g("a"), l.g("b")] {
-            if sc.g("nodes").g(&n.s()).g("control").eq_s("signals") {
-                sig.push(n.s());
+        len += net::len(sc, link);
+        for node in [link.g("a"), link.g("b")] {
+            if sc.g("nodes").g(&node.s()).g("control").eq_s("signals") {
+                sig.push(node.s());
             }
         }
     }
     let sig = unique(sig);
     let crossings = nn(c.g("crossings"));
-    let nx = crossings.map_or(sig.len() as f64, |_| c.g("crossings").n());
+    let nx = crossings.map_or(usize_to_f64(sig.len()), |_| c.g("crossings").n());
     let half = if c.g("centre").t() || c.g("school").t() { 0.5 } else { 1.0 };
     let spacing = len / math_max(1.0, nx + 1.0);
     let letters = xdata("LETTERS");
-    let sp = xdata("STD.anop.crossBands").items().iter().position(|b| spacing <= b.n() * half);
+    let sp = xdata("STD.anop.crossBands").items().iter().position(|band| spacing <= band.n() * half);
     let wl1 = letters.ix(sp.unwrap_or(5)).s();
-    let dl: Option<String> = nn(c.g("crossDelay")).map(|d| {
-        let i = xdata("STD.anop.crossDelay").items().iter().position(|b| d < b.n()).unwrap_or(5);
-        letters.ix(i).s()
+    let dl: Option<String> = nn(c.g("crossDelay")).map(|delay| {
+        let idx = xdata("STD.anop.crossDelay").items().iter().position(|band| delay < band.n()).unwrap_or(5);
+        letters.ix(idx).s()
     });
     let walk = jobj! {
         "los" => worse_of(&[Some(wl1), dl.clone()]),
@@ -418,28 +437,28 @@ pub fn anop_los(sc: &V, res: &V, c: &V) -> V {
     };
     // cycling: facility-based, length-weighted (Spare Construct mapping)
     let (mut cs, mut cl) = (0.0, 0.0);
-    let f = xdata("STD.anop.cycleFacility");
+    let facility = xdata("STD.anop.cycleFacility");
     for id in &ids {
-        let l = sc.g("links").g(id);
-        if !l.t() {
+        let link = sc.g("links").g(id);
+        if !link.t() {
             continue;
         }
-        let w = net::len(sc, l);
-        let lv = if l.g("cycle").eq_s("separated") {
-            f.g("separated").s()
-        } else if l.g("cycle").eq_s("painted") {
-            f.g("painted").s()
-        } else if l.g("cls").eq_s("arterial") {
-            f.g("none").g("arterial").s()
+        let wlen = net::len(sc, link);
+        let lv = if link.g("cycle").eq_s("separated") {
+            facility.g("separated").s()
+        } else if link.g("cycle").eq_s("painted") {
+            facility.g("painted").s()
+        } else if link.g("cls").eq_s("arterial") {
+            facility.g("none").g("arterial").s()
         } else {
-            f.g("none").g("other").s()
+            facility.g("none").g("other").s()
         };
-        cs += score(&lv) * w;
-        cl += w;
+        cs += score(&lv) * wlen;
+        cl += wlen;
     }
     let cycle = jobj! {
         "los" => if cl != 0.0 && !cl.is_nan() { Some(from_score(cs / cl)) } else { None },
-        "metric" => format!("facility-based ({})", f.g("basis").s()),
+        "metric" => format!("facility-based ({})", facility.g("basis").s()),
     };
     jobj! { "gt" => gt, "freight" => freight, "pt" => pt, "walk" => walk, "cycle" => cycle }
 }
@@ -447,6 +466,7 @@ pub fn anop_los(sc: &V, res: &V, c: &V) -> V {
 /// `anopFit(modes)`: the fit rule. `modes` are `[{ base, pref, proj }]` (letters; null = not assessed). "High" when the proposal improves a mode and worsens
 /// none, or lowers the total deficit against the preferred level without raising any mode's; "Moderate" when it does either of those; otherwise "Low".
 /// None when no mode could be assessed.
+#[must_use]
 pub fn anop_fit(modes: &[V]) -> Option<String> {
     let m: Vec<(f64, f64, f64)> =
         modes.iter().filter(|x| x.g("base").t() && x.g("pref").t() && x.g("proj").t()).map(|x| (score(&x.g("base").s()), score(&x.g("pref").s()), score(&x.g("proj").s()))).collect();
@@ -458,7 +478,7 @@ pub fn anop_fit(modes: &[V]) -> Option<String> {
     let improves = m.iter().any(|x| x.2 > x.0);
     let worsens = m.iter().any(|x| x.2 < x.0);
     let falls = dj.iter().fold(0.0, |s, v| s + v) < db.iter().fold(0.0, |s, v| s + v);
-    let no_rise = dj.iter().enumerate().all(|(i, v)| *v <= db[i]);
+    let no_rise = dj.iter().zip(&db).all(|(v, b)| *v <= *b);
     if (improves && !worsens) || (falls && no_rise) {
         return Some("High".into());
     }
@@ -469,6 +489,7 @@ pub fn anop_fit(modes: &[V]) -> Option<String> {
 }
 
 /// `anopCorridors(P)`: the corridors assessed: the author's list, or the named arterials and collectors at least 300 m long in the active scenario (the 12 longest).
+#[must_use]
 pub fn anop_corridors(p: &V) -> V {
     let cx = data(p);
     let cx = cx.g("anop");
@@ -551,6 +572,7 @@ pub fn anop(p: &V) -> V {
 }
 
 /// `anopCSV(P)`: the ANOP inputs in the order of the tool's v10.2 input sheet (no version stamp: see the export, which adds it).
+#[must_use]
 pub fn anop_csv(p: &V) -> String {
     let cxd = data(p);
     let cx = cxd.g("anop");
@@ -582,6 +604,7 @@ pub fn anop_csv(p: &V) -> String {
 }
 
 /// `anopTable(a)`: Table ANOP-1: the multimodal level of service and fit of each corridor.
+#[must_use]
 pub fn anop_table(a: &V) -> String {
     let head = [th("Spare Construct"), th("Period"), th("Mode"), th("Future Connect"), th("Baseline LoS"), th("Preferred"), th("Acceptable"), th("With proposal"), th("\u{394} deficit"), th("Fit")];
     let mut rows: Vec<Vec<String>> = Vec::new();
@@ -627,6 +650,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-anop"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id == "compliance-extra-anop" { Some(report_anop(p, ctx)) } else { None }
 }
@@ -636,11 +660,13 @@ pub const EXPORT_IDS: &[&str] = &["compliance-extra-anop"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's. The export is the ANOP inputs stamped as a hand-over
 /// file for the AT ANOP tool v10.2.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     if id == "compliance-extra-anop" { Some(stamped(&anop_csv(p), p, Some("the AT ANOP tool v10.2"))) } else { None }
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     if id == "compliance-extra-anop" { Some(anop(p).g("rows").jlen() > 0) } else { None }
 }
