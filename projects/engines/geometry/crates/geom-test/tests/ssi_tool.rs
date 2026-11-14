@@ -1,6 +1,9 @@
 //! The `ssi` and `ssi-runner` binaries (G160): the contract the corpus's scorer calls, the catalogue
 //! as files, and the gate's exit codes.
+//!
+//! Native only: WebAssembly has no file system and no processes.
 
+#![cfg(not(target_family = "wasm"))]
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,

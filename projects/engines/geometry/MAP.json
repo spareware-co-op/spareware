@@ -18688,9 +18688,12 @@
       "tier": "Preview since 2026-10-31"
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/compound.rs"
+        ]
+      },
       "missing": [
-        "contract",
         "file_tag",
         "intersection"
       ],

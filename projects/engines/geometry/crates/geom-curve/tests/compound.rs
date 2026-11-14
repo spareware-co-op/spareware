@@ -1,10 +1,12 @@
-//! The bulge polyline, trimmed, composite, offset and curve-on-surface kinds (piece G62) under the
-//! kind contract, and their own claims: a bulge arc lies on its circle and converts exactly; a
-//! trimmed NURBS curve keeps its knots; a composite's joints are exact and its NURBS form one
-//! curve; an offset of a circle is a circle; a curve on a surface carries its cache's error.
+//! The bulge polyline, trimmed, composite, offset and curve-on-surface kinds (piece G62) and the
+//! intersection curve (piece G175) under the kind contract, and their own claims: a bulge arc lies
+//! on its circle and converts exactly; a trimmed NURBS curve keeps its knots; a composite's joints
+//! are exact and its NURBS form one curve; an offset of a circle is a circle; a curve on a surface
+//! carries its cache's error; an intersection curve carries its caches' bounds through a split, a
+//! reversal and a transform.
 //!
 //! Covers: `CurveKind::Bulge`, `CurveKind::Trimmed`, `CurveKind::Composite`, `CurveKind::Offset`,
-//! `CurveKind::OnSurface`.
+//! `CurveKind::OnSurface`, `CurveKind::Intersection`.
 
 #![allow(
     clippy::arithmetic_side_effects,
