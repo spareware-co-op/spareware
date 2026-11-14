@@ -370,14 +370,7 @@ pub(crate) fn way<'a>(
     back: bool,
 ) -> Result<Way<'a>, ArrangeError> {
     Ok(match piece.on {
-        On::Line { dir: [dx, dy], .. } => {
-            if back {
-                let turned = |v: i128| v.checked_neg().ok_or(ArrangeError::Range);
-                Way::Line([turned(dx)?, turned(dy)?])
-            } else {
-                Way::Line([dx, dy])
-            }
-        }
+        On::Line { dir, .. } => line_way(dir, back)?,
         // Along the lower half from its left end the way runs counter-clockwise; along the upper,
         // clockwise; back, the other way.
         On::Arc { circle, upper } => Way::Arc {
@@ -391,6 +384,17 @@ pub(crate) fn way<'a>(
             ccw: upper == back,
         },
     })
+}
+
+/// The way along a line of direction `dir`, or back along it when `back`: it reads no circle or
+/// ellipse, so a piece on a line needs no list of shapes to find it.
+pub(crate) fn line_way<'a>([dx, dy]: [i128; 2], back: bool) -> Result<Way<'a>, ArrangeError> {
+    if back {
+        let turned = |v: i128| v.checked_neg().ok_or(ArrangeError::Range);
+        Ok(Way::Line([turned(dx)?, turned(dy)?]))
+    } else {
+        Ok(Way::Line([dx, dy]))
+    }
 }
 
 /// How `p`'s x (`across`) or y compares with the centre of `c`.

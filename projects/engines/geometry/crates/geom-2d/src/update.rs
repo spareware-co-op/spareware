@@ -80,8 +80,8 @@ use geom_num::wide::I256;
 use geom_run::WorkMeter;
 
 use crate::arrange::piece::{
-    self, Circle, On, Shapes, Way, circle_of, cmp_pt, cross_sign, cut, cut_whole, meetings,
-    order_at, same_circle, side, way,
+    self, Circle, On, Shapes, Way, circle_of, cmp_pt, cross_sign, cut, cut_whole, line_way,
+    meetings, order_at, same_circle, side, way,
 };
 use crate::arrange::{Along, ArrangeError, Arrangement, At, Curve, arrange_curves, as_circle};
 
@@ -181,12 +181,6 @@ impl Ring {
         circle_of(&self.shapes.circles, 0)
     }
 }
-
-/// No circle and no ellipse: the shapes a line's questions read.
-static NO_SHAPES: Shapes = Shapes {
-    circles: Vec::new(),
-    ovals: Vec::new(),
-};
 
 /// What a piece lies on.
 #[derive(Clone, Copy, Debug)]
@@ -383,9 +377,21 @@ impl Piece {
         }
     }
 
-    /// The shapes the piece's questions read: its own circle at place 0, or none for a line.
-    fn shapes(&self) -> &Shapes {
-        self.ring().map_or(&NO_SHAPES, |ring| &ring.shapes)
+    /// The shapes the piece's questions read: its own circle at place 0, or for a line `none`, the
+    /// caller's empty list (it allocates nothing), so no list is shared between calls.
+    fn shapes<'a>(&'a self, none: &'a Shapes) -> &'a Shapes {
+        self.ring().map_or(none, |ring| &ring.shapes)
+    }
+
+    /// The way the piece runs from its lower end, or from its higher end back when `back`, read
+    /// through its own circle; a line's way reads no shapes.
+    fn way(&self, run: &piece::Piece, back: bool) -> Result<Way<'_>, ArrangeError> {
+        match (self.ring(), run.on) {
+            (Some(ring), _) => way(run, &ring.shapes, back),
+            (None, On::Line { dir, .. }) => line_way(dir, back),
+            // A curve's piece without its circle: as the list without it answers.
+            (None, On::Arc { .. } | On::Ellipse { .. }) => Err(ArrangeError::TooMany),
+        }
     }
 
     /// The piece's box: its ends', and for an arc that may pass the top or the bottom of its circle,
@@ -425,9 +431,9 @@ impl Piece {
     fn leaving(&self, v: &At) -> Result<(Way<'_>, At), ArrangeError> {
         let run = self.run();
         if run.lo.same(v)? {
-            Ok((way(&run, self.shapes(), false)?, run.hi.clone()))
+            Ok((self.way(&run, false)?, run.hi.clone()))
         } else {
-            Ok((way(&run, self.shapes(), true)?, run.lo.clone()))
+            Ok((self.way(&run, true)?, run.lo.clone()))
         }
     }
 
@@ -577,11 +583,7 @@ fn cmp_key(p: &Piece, q: &Piece) -> Result<Ordering, ArrangeError> {
         Ordering::Equal => {}
         other => return Ok(other),
     }
-    order_at(
-        &r.lo,
-        &way(&r, p.shapes(), false)?,
-        &way(&t, q.shapes(), false)?,
-    )
+    order_at(&r.lo, &p.way(&r, false)?, &q.way(&t, false)?)
 }
 
 /// Where the key of `key` is among `chunks`: the chunk, the slot in it, and whether it is there.
@@ -765,7 +767,7 @@ fn holds(e: &Piece, t: &At) -> Result<bool, ArrangeError> {
     let run = e.run();
     Ok(cmp_pt(&run.lo, t)? != Ordering::Greater
         && cmp_pt(t, &run.hi)? != Ordering::Greater
-        && side(&run, e.shapes(), t)? == Sign::Zero)
+        && side(&run, e.shapes(&Shapes::default()), t)? == Sign::Zero)
 }
 
 /// Where two pieces cross after `after`, as the sweep finds it, each piece's circle placed in one
@@ -788,7 +790,7 @@ fn crossings(s: &Piece, e: &Piece, after: &At) -> Result<[Option<At>; 2], Arrang
         }
         (Some(a), None) => meetings(&r, &t, &a.shapes, after),
         (None, Some(b)) => meetings(&r, &t, &b.shapes, after),
-        (None, None) => meetings(&r, &t, &NO_SHAPES, after),
+        (None, None) => meetings(&r, &t, &Shapes::default(), after),
     }
 }
 
