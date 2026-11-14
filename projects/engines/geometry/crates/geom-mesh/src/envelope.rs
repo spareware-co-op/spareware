@@ -143,23 +143,26 @@ fn primitive(m: [i128; 3]) -> Option<[i128; 3]> {
     Some(m.map(|v| v.checked_div(by).unwrap_or(0)))
 }
 
-/// The plane of the facet with outward normal `m`: n · x + d = 0 with d = −(max m·v + h·|m|₁).
-/// A point is on or under it when its side is not `Positive`.
-fn facet(m: [i128; 3], t: [P3; 3], h: u64) -> Result<Plane, NumError> {
-    let reach = |v: P3| -> Option<i128> {
+/// The planes of the facets with outward normals `m` (when `forward`) and −m (when `backward`),
+/// pushed to `out`: n · x + d = 0 with d = −(max m·v + h·|m|₁) for m, and for −m, whose furthest
+/// reach is −min m·v, d = min m·v − h·|m|₁. A point is on or under one when its side is not
+/// `Positive`.
+fn facets(
+    m: [i128; 3],
+    t: [P3; 3],
+    h: u64,
+    (forward, backward): (bool, bool),
+    out: &mut Vec<Plane>,
+) -> Result<(), NumError> {
+    let reach = |v: P3| -> Result<i128, NumError> {
         let [a, b, c] = m;
-        let dot = a
-            .checked_mul(coordinate(v, 0))?
-            .checked_add(b.checked_mul(coordinate(v, 1))?)?
-            .checked_add(c.checked_mul(coordinate(v, 2))?)?;
-        Some(dot)
+        a.checked_mul(coordinate(v, 0))
+            .and_then(|x| x.checked_add(b.checked_mul(coordinate(v, 1))?))
+            .and_then(|x| x.checked_add(c.checked_mul(coordinate(v, 2))?))
+            .ok_or(NumError::BudgetExceeded)
     };
     let [p, q, r] = t;
-    let furthest = reach(p)
-        .zip(reach(q))
-        .zip(reach(r))
-        .map(|((x, y), z)| x.max(y).max(z))
-        .ok_or(NumError::BudgetExceeded)?;
+    let (x, y, z) = (reach(p)?, reach(q)?, reach(r)?);
     let [a, b, c] = m.map(i128::unsigned_abs);
     let width = a
         .checked_add(b)
@@ -167,11 +170,24 @@ fn facet(m: [i128; 3], t: [P3; 3], h: u64) -> Result<Plane, NumError> {
         .and_then(|s| i128::try_from(s).ok())
         .and_then(|s| s.checked_mul(i128::from(h)))
         .ok_or(NumError::BudgetExceeded)?;
-    let offset = furthest
-        .checked_add(width)
-        .and_then(i128::checked_neg)
-        .ok_or(NumError::BudgetExceeded)?;
-    Plane::new(m, offset)
+    if forward {
+        let offset = x
+            .max(y)
+            .max(z)
+            .checked_add(width)
+            .and_then(i128::checked_neg)
+            .ok_or(NumError::BudgetExceeded)?;
+        out.push(Plane::new(m, offset)?);
+    }
+    if backward {
+        let offset = x
+            .min(y)
+            .min(z)
+            .checked_sub(width)
+            .ok_or(NumError::BudgetExceeded)?;
+        out.push(Plane::new(m.map(i128::wrapping_neg), offset)?);
+    }
+    Ok(())
 }
 
 /// The low and high corners of the box around `t`, `pad` clear of it on every side.
@@ -301,15 +317,10 @@ impl TriangleEnvelope {
             .into_iter()
             .chain(core::iter::once((cross(run(a, b), run(a, c)), true, true)))
             .chain(edges);
-        let mut planes = Vec::with_capacity(17);
+        let mut planes: Vec<Plane> = Vec::with_capacity(17);
         for (n, forward, backward) in normals {
             if let Some(m) = primitive(n) {
-                if forward {
-                    planes.push(facet(m, t, h)?);
-                }
-                if backward {
-                    planes.push(facet(m.map(i128::wrapping_neg), t, h)?);
-                }
+                facets(m, t, h, (forward, backward), &mut planes)?;
             }
         }
         // A normal met twice (an edge crossed with an axis along the triangle's normal, say)
