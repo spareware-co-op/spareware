@@ -2,7 +2,8 @@
 //! column of the net that is one point is a pole only where the basis is clamped, so that the
 //! surface reaches that row at the domain's end; the first and last columns are one closing
 //! curve only for a clamped basis too. An unclamped basis ends inside its net: the same net proves
-//! nothing there.
+//! nothing there. And a cone whose apex is exactly at an end of its domain has that one pole,
+//! read once, not once as an end and again as a point inside.
 
 #![allow(
     clippy::unwrap_used,
@@ -12,9 +13,10 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+use geom_curve::Frame;
 use geom_intersect::charts;
 use geom_nurbs::{Basis, Surface};
-use geom_surface::SurfaceKind;
+use geom_surface::{Cone, SurfaceKind};
 
 /// Degree 1 on three control points: clamped on [0, 2], or unclamped on [1, 3].
 fn linear(clamped: bool) -> Basis {
@@ -95,4 +97,28 @@ fn equal_end_columns_close_only_for_a_clamped_basis() {
     assert_eq!(charts(&tube(false, true)).closes, [false, false]);
     // A spindle's tip rows are each one point but not the same row: it does not close.
     assert_eq!(charts(&spindle(true, false)).closes, [false, false]);
+}
+
+#[test]
+fn a_cone_apex_at_an_end_of_its_domain_is_one_pole() {
+    // Radius 1 + v/2: zero at v = −2, at the start of the first domain and the end of the second.
+    for (v, poles) in [
+        ((-2.0, 4.0), vec![-2.0]),
+        ((-4.0, -2.0), vec![-2.0]),
+        ((-4.0, 4.0), vec![-2.0]),
+    ] {
+        let cone = Cone::new(
+            [0.0; 3],
+            1.0,
+            0.5,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), v),
+        )
+        .unwrap();
+        assert_eq!(
+            charts(&SurfaceKind::Cone(cone)).poles,
+            (vec![], poles),
+            "{v:?}"
+        );
+    }
 }
