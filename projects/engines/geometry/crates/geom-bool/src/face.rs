@@ -1502,7 +1502,8 @@ fn apex_of(surface: &SurfaceKind) -> Option<[f64; 3]> {
         return None;
     }
     let height = cone.axial_sign() * (-radius / slope);
-    let ([c0, c1, c2], [a0, a1, a2]) = (cone.center(), cone.frame().normal());
+    let ([_, _, axis], _) = cone.frame().unit_vectors().ok()?;
+    let ([c0, c1, c2], [a0, a1, a2]) = (cone.center(), axis);
     Some([c0 + height * a0, c1 + height * a1, c2 + height * a2])
 }
 

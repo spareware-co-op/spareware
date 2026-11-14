@@ -1103,7 +1103,7 @@ fn seen_from_outside(
         .faces
         .get(f)
         .ok_or(BuildError::Missing(Entity::Face(f)))?;
-    let (cyclic, dropped) = match keep {
+    let (cyclic, dropped): (bool, usize) = match keep {
         [1, 2] => (true, 0),
         [0, 2] => (false, 1),
         _ => (true, 2),
@@ -1113,7 +1113,9 @@ fn seen_from_outside(
             .carriers
             .plane(ix)
             .ok_or(BuildError::Missing(Entity::Face(f)))?;
-        plane.n().get(dropped).is_some_and(|n| *n > 0)
+        // Named types, so the recursion check can read them.
+        let normal: [i128; 3] = plane.n();
+        normal.get(dropped).is_some_and(|n: &i128| *n > 0)
     } else {
         let Some((_, up, _)) = Graph::side(arr, f, meter)? else {
             return Err(BuildError::Missing(Entity::Face(f)));

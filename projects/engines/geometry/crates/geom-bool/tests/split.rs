@@ -589,3 +589,51 @@ fn circles_that_touch_are_ordered_by_curvature() {
     );
     assert_eq!(of_face(&splitting, small).len(), 1);
 }
+
+/// A square and, on the same plane, a disc of another operand inside it that touches its lower
+/// edge, the disc's circle starting at the point of touching, which splits that edge. There the
+/// circle leaves along the edge's right half and arrives along its left: the line and the circle
+/// are proven to touch exactly (the centre lies the radius from the edge's line), and the circle
+/// bends to the left of each, so it lies counter-clockwise of the right half and clockwise of the
+/// left. The square splits into the disc and the rest, whose loop runs the square's five pieces
+/// and the circle back.
+#[test]
+fn a_circle_that_touches_a_line_is_ordered_by_curvature() {
+    let mut b = Build::default();
+    let corners: Vec<usize> = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+        .collect();
+    let square = b.polygon(&corners, [0, 0, 1], 0, 0);
+    let k = S as f64;
+    let frame = Frame::new([0.0, -1.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let at = b.vertex(p(500, 0, 0), 1);
+    let circle = Circle::new([500.0 * k, 200.0 * k, 0.0], 200.0 * k, frame, (0.0, 2.0)).unwrap();
+    let rim = b.edge(CurveKind::Circle(circle), Some([at, at]), 1);
+    let forward = EdgeUse {
+        edge: rim,
+        forward: true,
+    };
+    let disc = b.flat(([0, 0, 1], 0), vec![vec![forward]], 1);
+    let (out, splitting) = b.run();
+    let circle = Piece::Split(out.splits.iter().position(|s| s.source == rim).unwrap());
+    let mut parts: Vec<Vec<Use>> = of_face(&splitting, square)
+        .iter()
+        .map(|s| s.outer.clone())
+        .collect();
+    parts.sort_by_key(Vec::len);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    assert_eq!(
+        parts[0],
+        vec![Use {
+            piece: circle,
+            forward: true
+        }]
+    );
+    assert_eq!(parts[1].len(), 6, "{parts:?}");
+    assert!(parts[1].contains(&Use {
+        piece: circle,
+        forward: false
+    }));
+    assert_eq!(of_face(&splitting, disc).len(), 1);
+}

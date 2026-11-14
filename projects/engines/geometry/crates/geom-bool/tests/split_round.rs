@@ -546,33 +546,82 @@ fn a_plane_across_a_cone_cuts_it_in_a_circle() {
     assert_eq!(of_face(&splitting, sheet).len(), 2);
 }
 
-/// A plane through a cone's apex and along its axis: the carriers cross in the two rulings
-/// x = 0, z = ±y (12.7's closed form), each from the apex to the rim. The apex lies inside both
-/// faces and is no vertex of either, so a vertex is made there, In both, and each ruling is one
-/// section from it to where the rim crosses the plane. The cone splits into its two halves, each
-/// two rulings and an arc of the rim; on the plane the two rulings are one cut of the one face.
-#[test]
-fn a_plane_through_a_cone_s_apex_cuts_it_in_two_rulings() {
-    let mut b = Build::default();
-    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
-    let rim = b.circle(p(0, 0, 100), 100, frame, 0);
-    let cone = Cone::new(
-        [0.0; 3],
-        0.0,
-        1.0,
+/// A cone about the axis through `centre` (in the tests' unit) along coordinate `k`, given by its
+/// radius `r0` at its centre and its slope, and its face between its rim, at the height `rim_at`,
+/// and its apex.
+fn apex_cone(
+    b: &mut Build,
+    (centre, k): ([i64; 3], usize),
+    (r0, slope, rim_at): (i64, f64, i64),
+    domain: (i64, i64),
+) -> usize {
+    let frame = Frame::new(unit((k + 1) % 3, 1.0), unit(k, 1.0)).unwrap();
+    let mut middle = centre;
+    middle[k] += rim_at;
+    let rim_radius = r0 as f64 + slope * rim_at as f64;
+    let rim = b.circle(
+        p(middle[0], middle[1], middle[2]),
+        rim_radius as i64,
         frame,
-        ((0.0, 2.0), (0.0, (100 * S) as f64)),
+        0,
+    );
+    let cone = Cone::new(
+        coords(p(centre[0], centre[1], centre[2])),
+        (r0 * S) as f64,
+        slope,
+        frame,
+        ((0.0, 2.0), ((domain.0 * S) as f64, (domain.1 * S) as f64)),
     );
     let ix = b.surface(SurfaceKind::Cone(cone.unwrap()));
-    let body = b.face_with(ix, vec![vec![back(rim)]], 0);
-    let sheet = b.sheet(0, 0, (-1000, 1000), 1);
+    // Seen from outside, a cone opening up the axis lies on its upper rim's right, and one
+    // narrowing up the axis on its lower rim's left.
+    let ring = if slope > 0.0 { back(rim) } else { ahead(rim) };
+    b.face_with(ix, vec![vec![ring]], 0)
+}
+
+/// A plane through a cone's apex and along its axis: the carriers cross in two rulings (12.7's
+/// closed form), each from the apex to the rim. The apex lies inside both faces and is no vertex
+/// of either, so a vertex is made there, In both, and each ruling is one section from it to where
+/// the rim crosses the plane. The cone splits into its two halves, each two rulings and an arc of
+/// the rim; on the plane the two rulings are one cut of the one face. So for a cone opening from
+/// its apex at the origin up the third coordinate (x = 0, z = ±y), and for one narrowing to its
+/// apex 50 from a rim of radius 100, about an axis through (30, 40, 10) along each coordinate.
+#[test]
+fn a_plane_through_a_cone_s_apex_cuts_it_in_two_rulings() {
+    let off = [30, 40, 10];
+    for (axis, shape, domain, tip) in [
+        (([0; 3], 2), (0, 1.0, 100), (0, 100), p(0, 0, 0)),
+        ((off, 2), (100, -2.0, 0), (0, 50), p(30, 40, 60)),
+        ((off, 0), (100, -2.0, 0), (0, 50), p(80, 40, 10)),
+        ((off, 1), (100, -2.0, 0), (0, 50), p(30, 90, 10)),
+    ] {
+        check_apex_cut(axis, shape, domain, tip);
+    }
+}
+
+/// [`a_plane_through_a_cone_s_apex_cuts_it_in_two_rulings`] for one cone, cut by the plane through
+/// its axis where the coordinate after the axis's is the centre's.
+fn check_apex_cut(
+    (centre, k): ([i64; 3], usize),
+    shape: (i64, f64, i64),
+    domain: (i64, i64),
+    tip: P3,
+) {
+    let mut b = Build::default();
+    let body = apex_cone(&mut b, (centre, k), shape, domain);
+    let across = (k + 1) % 3;
+    let sheet = b.sheet(across, centre[across], (-1000, 1000), 1);
     let (out, splitting) = b.run();
-    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
-    assert_eq!(out.sections.len(), 2, "{:?}", out.sections);
+    assert!(
+        splitting.waiting.is_empty(),
+        "{tip:?}: {:?}",
+        splitting.waiting
+    );
+    assert_eq!(out.sections.len(), 2, "{tip:?}: {:?}", out.sections);
     // The vertex made at the apex is In both faces and ends both sections.
     let apex = out.vertices.len() - 1;
     match &out.vertices[apex] {
-        PointGeom::Certified { at, .. } => assert_eq!(*at, p(0, 0, 0)),
+        PointGeom::Certified { at, .. } => assert_eq!(*at, tip),
         other => panic!("{other:?}"),
     }
     for f in [body, sheet] {
@@ -592,6 +641,49 @@ fn a_plane_through_a_cone_s_apex_cuts_it_in_two_rulings() {
     assert_eq!(parts.len(), 1, "{parts:?}");
     assert_eq!(parts[0].cuts.len(), 1, "{parts:?}");
     assert_eq!(parts[0].cuts[0].len(), 4, "{parts:?}");
+}
+
+/// The same plane through the apex of the same cone, whose face is now the band between heights
+/// 50 and 100: the apex lies outside the band, so no vertex is made there, and each ruling is one
+/// section between the two rims' crossings of the plane. The band splits into its two halves,
+/// each two rulings and an arc of each rim.
+#[test]
+fn a_plane_through_a_cone_s_apex_outside_its_face_cuts_it_between_its_rims() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let low = b.circle(p(0, 0, 50), 50, frame, 0);
+    let high = b.circle(p(0, 0, 100), 100, frame, 0);
+    let cone = Cone::new(
+        [0.0; 3],
+        0.0,
+        1.0,
+        frame,
+        ((0.0, 2.0), (0.0, (100 * S) as f64)),
+    );
+    let ix = b.surface(SurfaceKind::Cone(cone.unwrap()));
+    let band = b.face_with(ix, vec![vec![ahead(low)], vec![back(high)]], 0);
+    let sheet = b.sheet(0, 0, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(out.sections.len(), 2, "{:?}", out.sections);
+    let at = |v: usize| b.arr.carriers.commit(&out.vertices[v]).unwrap().0;
+    assert!((0..out.vertices.len()).all(|v| at(v) != p(0, 0, 0)));
+    for s in &out.sections {
+        let mut ends = [at(s.from.unwrap().vertex), at(s.to.unwrap().vertex)];
+        ends.sort_by_key(|q| q.z.get());
+        assert_eq!(
+            (ends[0].z.get(), ends[1].z.get()),
+            (50 * S, 100 * S),
+            "{ends:?}"
+        );
+    }
+    let parts = of_face(&splitting, band);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    for half in &parts {
+        assert_eq!(half.outer.len(), 4, "{parts:?}");
+        assert!(half.holes.is_empty(), "{parts:?}");
+    }
+    assert_eq!(of_face(&splitting, sheet).len(), 1);
 }
 
 /// A strip of the plane x = 50, from z = 20 to 80, tangent to a cylinder of radius 50 about the
@@ -1353,6 +1445,10 @@ fn a_torus_s_face_above_its_middle_plane_is_seen_along_its_axis() {
         .collect();
     b.vertex(p(50, 0, -25), 1);
     b.vertex(p(75, 0, 0), 1);
+    // On the torus below the band's height, outside the band's circles; and above the top, off
+    // the torus.
+    b.vertex(p(74, 0, 7), 1);
+    b.vertex(p(50, 0, 30), 1);
     let (out, splitting) = b.run();
     assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
     assert_eq!(out.faces[band].in_vertices, tops);
@@ -1369,6 +1465,92 @@ fn a_torus_s_face_above_its_middle_plane_is_seen_along_its_axis() {
     let (rest, _, _) = b.on_torus((15, [70, 30]), false, 0);
     let (_, splitting) = b.run();
     assert_eq!(splitting.waiting, vec![rest]);
+}
+
+/// A torus whose axis is tilted off every coordinate, and one whose tube reaches its axis, have
+/// no picture along the axis: a band of either waits.
+#[test]
+fn a_torus_on_a_tilted_axis_or_reaching_its_axis_waits() {
+    for (normal, minor) in [([0.0, 0.6, 0.8], 25.0), ([0.0, 0.0, 1.0], 50.0)] {
+        let mut b = Build::default();
+        let frame = Frame::new([1.0, 0.0, 0.0], normal).unwrap();
+        let rims: Vec<usize> = [70, 30]
+            .iter()
+            .map(|&r| b.circle(p(0, 0, 0), r, frame, 0))
+            .collect();
+        let torus = Torus::new(
+            [0.0; 3],
+            (50 * S) as f64,
+            minor * S as f64,
+            frame,
+            ((0.0, 2.0), (0.0, 2.0)),
+        )
+        .unwrap();
+        let ix = b.surface(SurfaceKind::Torus(torus));
+        let band = b.face_with(ix, vec![vec![ahead(rims[0])], vec![back(rims[1])]], 0);
+        let (_, splitting) = b.run();
+        assert_eq!(splitting.waiting, vec![band], "{normal:?} {minor}");
+    }
+}
+
+/// The band of the torus of radii 50 and 25 above height 15, and a band of another operand above
+/// height 20 between that torus's circles of radii 65 and 35 there, on a torus given again with
+/// the same centre and radii, its axis pointing either way: one carrier. The first band splits
+/// along the second's circles into the second and the two narrow bands either side of it. A band
+/// on a torus of another tube about the same centre is another carrier.
+#[test]
+fn faces_on_one_torus_split_each_other() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    for (axis, minor, height, radii) in [
+        (1.0, 25, 20, [65, 35]),
+        (-1.0, 25, 20, [65, 35]),
+        (1.0, 20, 12, [66, 34]),
+    ] {
+        let mut b = Build::default();
+        let (band, _, _) = b.on_torus((15, [70, 30]), true, 0);
+        let rims: Vec<usize> = radii
+            .iter()
+            .map(|&r| b.circle(p(0, 0, height), r, frame, 1))
+            .collect();
+        let along = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, axis]).unwrap();
+        let torus = Torus::new(
+            [0.0; 3],
+            (50 * S) as f64,
+            (minor * S) as f64,
+            along,
+            ((0.0, 2.0), (0.0, 2.0)),
+        )
+        .unwrap();
+        let ix = b.surface(SurfaceKind::Torus(torus));
+        let inner = b.face_with(ix, vec![vec![ahead(rims[0])], vec![back(rims[1])]], 1);
+        let (out, splitting) = b.run();
+        if minor != 25 {
+            assert!(out.faces[band].same_carrier.is_empty(), "{minor}");
+            continue;
+        }
+        assert_eq!(out.faces[band].same_carrier, vec![inner], "{axis}");
+        assert_eq!(out.faces[inner].same_carrier, vec![band], "{axis}");
+        assert!(
+            splitting.waiting.is_empty(),
+            "{axis}: {:?}",
+            splitting.waiting
+        );
+        assert_eq!(of_face(&splitting, band).len(), 3, "{axis}");
+        assert_eq!(of_face(&splitting, inner).len(), 1, "{axis}");
+    }
+}
+
+/// A plane resting on a torus's top, at height 25, touches it along the circle of radius 50
+/// there: the closed form for a plane and a torus gives that circle from its own search, not from
+/// an exact sign, so the touch is not proven exact, and the pair waits.
+#[test]
+fn a_plane_resting_on_a_torus_waits() {
+    let mut b = Build::default();
+    let (band, _, _) = b.on_torus((15, [70, 30]), true, 0);
+    let sheet = b.sheet(2, 25, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert!(out.sections.is_empty(), "{:?}", out.sections);
+    assert_eq!(splitting.waiting, vec![band, sheet]);
 }
 
 /// The band of a torus below height −15, seen along the axis from below, and the plane at height

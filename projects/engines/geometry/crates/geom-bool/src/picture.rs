@@ -493,10 +493,9 @@ impl Graph {
         let Some(bounds) = boundary_box(arr, f, meter)? else {
             return Ok(None);
         };
-        let (Some(part), Some(c)) = (bounds.get(tube.axis), tube.centre.get(tube.axis)) else {
-            return Err(IntersectError::Internal.into());
-        };
-        let h = part.sub(Interval::point(*c)?)?;
+        let part: Interval = *bounds.get(tube.axis).ok_or(IntersectError::Internal)?;
+        let c: f64 = *tube.centre.get(tube.axis).ok_or(IntersectError::Internal)?;
+        let h = part.sub(Interval::point(c)?)?;
         Ok(match h.certain_sign() {
             Some(Sign::Positive) => Some((tube, true, h.lo())),
             Some(Sign::Negative) => Some((tube, false, h.neg().lo())),
@@ -649,9 +648,9 @@ impl Central {
         let centre = exact3(ball.centre)?;
         let radius = Interval::point(ball.radius)?;
         for drop in 0..3 {
-            let (Some(part), Some(c)) = (bounds.get(drop), ball.centre.get(drop)) else {
-                return Err(IntersectError::Internal.into());
-            };
+            // Named types throughout, so the recursion check can read them.
+            let part: Interval = *bounds.get(drop).ok_or(IntersectError::Internal)?;
+            let c: f64 = *ball.centre.get(drop).ok_or(IntersectError::Internal)?;
             for below in [true, false] {
                 // Seen from below the upper pole, the face lies below C; from above the lower,
                 // above it.
