@@ -10,6 +10,9 @@
 // bounds the error by B * S at every scale (the method note).
 // FPTaylor bounds each error term on its own (opt-approx); HOL Light checks each term's
 // bound, and the job compares their sum with K below.
+// HOL Light checks the terms in 7 jobs (hol-light-shards below), all of
+// one certificate FPTaylor writes once: shard k proves the k-th term and every
+// 7th after it and assumes the others, so the 7 prove every term.
 // A rounded input's exact value e_v is at most its maximum times 1 + 2^-53 (a value
 // beyond m + ulp(m)/2 rounds above the f64 m), and its copy v = rnd64(e_v).
 // A sum whose operand's scale is not the sum's takes the operand's normalised value
@@ -25,6 +28,7 @@
 // ratio7 = x^2·y^2·z^2·slope^2 / max{y^2·z^4·slope^2, y^4·z^2·slope^2, x^2·z^4·slope^2, x^2·y^2·z^2·slope^2, x^2·y^4·slope^2, x^4·z^2·slope^2, x^4·y^2·slope^2}
 // hol-light-bound: &68453132412324544462384000925471 * &2 ipow (-- &148)
 // fptaylor-optimisation: approx
+// hol-light-shards: 7
 
 Variables
   float64 d_x in [-1, 1];
