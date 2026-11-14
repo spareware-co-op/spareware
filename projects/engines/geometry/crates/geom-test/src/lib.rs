@@ -112,6 +112,9 @@
 //!
 //! Gate 1 (piece G43) adds:
 //!
+//! - [`truth`]: the closed-form truth corpus (28.9; G179): boxes, Steinmetz solids, caps, tori,
+//!   Pappus revolves, capsules, Villarceau circles and Fresnel tables in arbitrary precision, and
+//!   the judge that holds each Certified result to its bound.
 //! - [`trip`]: one planted violation for each gate whose verdict is an outside tool's (rustfmt,
 //!   Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun, Wasmtime's fuel, Gappa with Rocq, and
 //!   HOL Light). The binary `trip` plants it, runs the gate's own command and requires the tool's
@@ -233,6 +236,10 @@
 //! - `geom-bool`, `geom-make`, `geom-topo`, `geom-check`, `geom-poly` and `geom-name` (Apache-2.0,
 //!   ours), development dependencies (G155): the booleans, primitives, transforms, queries, checker
 //!   and names the law catalogue checks.
+//! - `geom-curve` and `geom-surface` (Apache-2.0, ours), dependencies: the kinds and transforms the
+//!   law catalogue checks (G69), and what [`ssi`] builds a corpus case from (G160).
+//! - `geom-intersect` (Apache-2.0, ours), a dependency (G160): the result type [`ssi`] reads an answer
+//!   from.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -293,7 +300,9 @@ pub mod scan;
 pub mod second_check;
 pub mod second_mesh;
 pub mod seed;
+pub mod ssi;
 pub mod trip;
+pub mod truth;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};
 pub use seed::Seed;

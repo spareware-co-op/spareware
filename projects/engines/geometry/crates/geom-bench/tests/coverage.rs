@@ -58,8 +58,10 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 30] = [
+const GEOM_NUM: [(&str, &str); 33] = [
     ("distance", include_str!("../../geom-num/src/distance.rs")),
+    ("quadric", include_str!("../../geom-num/src/quadric.rs")),
+    ("sturm", include_str!("../../geom-num/src/sturm.rs")),
     ("ball", include_str!("../../geom-num/src/ball.rs")),
     ("brent", include_str!("../../geom-num/src/brent.rs")),
     ("dd", include_str!("../../geom-num/src/dd.rs")),
@@ -98,6 +100,7 @@ const GEOM_NUM: [(&str, &str); 30] = [
     ("step", include_str!("../../geom-num/src/step.rs")),
     ("wide", include_str!("../../geom-num/src/wide.rs")),
     ("wide32", include_str!("../../geom-num/src/wide32.rs")),
+    ("pencil", include_str!("../../geom-num/src/pencil.rs")),
 ];
 
 /// The files inside `geom-num`'s `math` module that hold public functions, by name: `unproven`, a
@@ -121,7 +124,31 @@ const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "sup
 
 /// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
 /// functions are `generated::<predicate>::<function>`.
-const GENERATED_PARTS: [(&str, &str); 13] = [
+const GENERATED_PARTS: [(&str, &str); 19] = [
+    (
+        "generated::line_sphere",
+        include_str!("../../geom-num/src/generated/line_sphere.rs"),
+    ),
+    (
+        "generated::line_cylinder",
+        include_str!("../../geom-num/src/generated/line_cylinder.rs"),
+    ),
+    (
+        "generated::line_cone",
+        include_str!("../../geom-num/src/generated/line_cone.rs"),
+    ),
+    (
+        "generated::line_cone_lead",
+        include_str!("../../geom-num/src/generated/line_cone_lead.rs"),
+    ),
+    (
+        "generated::cross_norm",
+        include_str!("../../geom-num/src/generated/cross_norm.rs"),
+    ),
+    (
+        "generated::axis_gap",
+        include_str!("../../geom-num/src/generated/axis_gap.rs"),
+    ),
     (
         "generated::orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -518,6 +545,46 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
             ),
             ("trust", include_str!("../../geom-format/src/trust.rs")),
             ("pruned", include_str!("../../geom-format/src/pruned.rs")),
+        ],
+    ),
+    (
+        "geom_intersect",
+        &[
+            (
+                "selfcross",
+                include_str!("../../geom-intersect/src/selfcross.rs"),
+            ),
+            ("fit", include_str!("../../geom-intersect/src/fit.rs")),
+            ("known", include_str!("../../geom-intersect/src/known.rs")),
+            (
+                "contact",
+                include_str!("../../geom-intersect/src/contact.rs"),
+            ),
+            ("curve", include_str!("../../geom-intersect/src/curve.rs")),
+            (
+                "curve_surface",
+                include_str!("../../geom-intersect/src/curve_surface.rs"),
+            ),
+            (
+                "general",
+                include_str!("../../geom-intersect/src/general.rs"),
+            ),
+            ("level", include_str!("../../geom-intersect/src/level.rs")),
+            ("march", include_str!("../../geom-intersect/src/march.rs")),
+            ("order", include_str!("../../geom-intersect/src/order.rs")),
+            (
+                "quadrics",
+                include_str!("../../geom-intersect/src/quadrics.rs"),
+            ),
+            (
+                "quartic",
+                include_str!("../../geom-intersect/src/quartic.rs"),
+            ),
+            (
+                "project",
+                include_str!("../../geom-intersect/src/project.rs"),
+            ),
+            ("result", include_str!("../../geom-intersect/src/result.rs")),
         ],
     ),
     (

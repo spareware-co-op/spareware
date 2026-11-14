@@ -23,8 +23,22 @@ each other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attri
 each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G104), `geom-op`'s
 batch driver gives each item its own result, and the many-point calls give the single calls' bits;
 `make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
-passes, keep their laws, and refuse with a typed error; and `sequence` (`src/sequence.rs`, G116),
-whole operation logs replay to the same hash and keep every law at every step. For Gate 3 (24.7:
+passes, keep their laws, and refuse with a typed error; `sequence` (`src/sequence.rs`, G116),
+whole operation logs replay to the same hash and keep every law at every step. For Phase 5's
+intersections: `intersect` (`src/intersect.rs`, G158), an intersection's items keep their
+invariants against an all-pairs oracle, and a pair asked either way round makes one call; `quadric`
+(`src/quadric.rs`, G159), every exact decision on a line and a quadric agrees with big integers,
+and a Sturm chain counts the roots a polynomial was built from; `project` (`src/project.rs`, G162),
+a nearest point is never beaten by a sample of the kind; `crossings` (`src/crossings.rs`, G163),
+every point of any two curves lies on both, and two cubic graphs that change sides have an item
+between them; `piercing` (`src/piercing.rs`, G164), every point of a curve and a surface lies on
+both; `natural` (`src/natural.rs`, G165), every curve two natural quadrics are said to share lies
+on each by its own equation; `pencils` (`src/pencils.rs`, G166), what a pencil says two curved
+quadrics share is so, in either order and wherever they stand; `reductions`
+(`src/reductions.rs`, G167), every curve a torus's special position gives lies on it by its own
+equation; `level` (`src/level.rs`, G168), a level curve misses nothing a dense grid can see; and
+`general` (`src/general.rs`, G169, G170), subdivision leaves no crossing outside its settled or
+flagged pairs, and marching stays on both surfaces. For Gate 3 (24.7:
 every reader is a fuzz target): `encoder` (`src/encoder.rs`, G86), `geom-op`'s canonical encoder
 refuses without a trace and writes only canonical items; `records` (`src/records.rs`, G92), the
 record layer reads the same twice and however its reads split, refuses inside its input and

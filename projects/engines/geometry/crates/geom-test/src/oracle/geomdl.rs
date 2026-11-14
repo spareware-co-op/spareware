@@ -60,6 +60,10 @@ pub enum Op {
     Basis,
     /// The curve with `at` inserted once: its knots and homogeneous points.
     Insert,
+    /// The curve with the knot `at` removed once: its knots and homogeneous points.
+    Remove,
+    /// The curve one degree higher: its knots and homogeneous points.
+    Elevate,
 }
 
 impl Op {
@@ -70,6 +74,8 @@ impl Op {
             Op::Point => "nurbs.point",
             Op::Basis => "nurbs.basis",
             Op::Insert => "nurbs.insert",
+            Op::Remove => "nurbs.remove",
+            Op::Elevate => "nurbs.elevate",
         }
     }
 }
@@ -153,6 +159,11 @@ fn fits(knots: &[f64], degree: usize) -> bool {
 /// The night's `count` jobs from `seed`.
 #[must_use]
 pub fn jobs(seed: Seed, count: u64) -> Vec<Job> {
+    drawn_jobs(seed, count, &[Op::Point, Op::Basis, Op::Insert])
+}
+
+/// `count` jobs from `seed`, each of an operation of `ops`, drawn evenly.
+pub(crate) fn drawn_jobs(seed: Seed, count: u64, ops: &[Op]) -> Vec<Job> {
     let mut rng = SplitMix64::new(seed);
     let mut out = Vec::new();
     for id in 0..count {
@@ -183,11 +194,8 @@ pub fn jobs(seed: Seed, count: u64) -> Vec<Job> {
                 .collect()
         });
         let at = 1.0 / 64.0 + fraction(&mut rng, 1, 6) * (62.0 / 64.0);
-        let op = match below(&mut rng, 3) {
-            0 => Op::Point,
-            1 => Op::Basis,
-            _ => Op::Insert,
-        };
+        let which = usize::try_from(below(&mut rng, ops.len() as u64)).unwrap_or(0);
+        let op = ops.get(which).copied().unwrap_or(Op::Point);
         let rational_name = if rational { "-rational" } else { "" };
         out.push(Job {
             id,
@@ -235,14 +243,25 @@ fn larger(a: f64, b: f64) -> f64 {
     if a < b { b } else { a }
 }
 
-/// The kernel's values for a job, flat, with the size each value is measured against; `None` if the
-/// kernel refused it.
-fn kernel<const D: usize>(job: &Job, input: &Parsed) -> Option<(Vec<f64>, f64)> {
+/// How far a removal may stray: the jobs' removable knots were inserted, so it needs only to cover
+/// the rounding of the job's own doubles.
+pub const REMOVAL: f64 = 1.0 / 1_073_741_824.0;
+
+/// A changed curve's knots and homogeneous points, flat.
+fn flat<const D: usize>(curve: &Curve<D>) -> Vec<f64> {
+    let mut out = curve.basis().knots().to_vec();
+    out.extend(curve.homogeneous().iter().flatten());
+    out
+}
+
+/// The kernel's values for a job, flat, with the size each value is measured against and what the
+/// kernel states it may be off by beyond its rounding; `None` if the kernel refused it.
+fn kernel<const D: usize>(job: &Job, input: &Parsed) -> Option<(Vec<f64>, f64, f64)> {
     let basis = Basis::new(job.degree, input.knots.clone()).ok()?;
     if job.op == Op::Basis {
         let mut out = vec![0.0; job.degree.saturating_add(1)];
         basis.eval(input.at, Limit::FromRight, &mut out).ok()?;
-        return Some((out, 1.0));
+        return Some((out, 1.0, 0.0));
     }
     let weights = input.weights.as_deref().unwrap_or(&[]);
     let mut homogeneous = Vec::with_capacity(input.points.len());
@@ -261,13 +280,62 @@ fn kernel<const D: usize>(job: &Job, input: &Parsed) -> Option<(Vec<f64>, f64)> 
         .flatten()
         .fold(1.0_f64, |most, x| larger(most, x.abs()));
     if job.op == Op::Point {
-        return Some((curve.point(input.at, Limit::FromRight).ok()?.to_vec(), size));
+        let point = curve.point(input.at, Limit::FromRight).ok()?.to_vec();
+        return Some((point, size, 0.0));
     }
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let new = match job.op {
+        Op::Remove => {
+            let (changed, times) = curve.remove_knot(input.at, 1, REMOVAL, &mut meter).ok()?;
+            (times == 1).then_some(changed)?
+        }
+        Op::Elevate => curve.elevate(1, &mut meter).ok()?,
+        _ => curve.insert_knot(input.at, 1, &mut meter).ok()?,
+    };
+    Some((flat(&new.value), size, new.deviation))
+}
+
+/// `job`, its curve refined by a knot at `at`, so that removing that knot is a job with an answer.
+pub(crate) fn refined(job: &Job) -> Option<Job> {
+    let input = parse(job).ok()?;
+    if job.points.first().map_or(0, Vec::len) == 2 {
+        refined_in::<2>(job, &input)
+    } else {
+        refined_in::<3>(job, &input)
+    }
+}
+
+fn refined_in<const D: usize>(job: &Job, input: &Parsed) -> Option<Job> {
+    let basis = Basis::new(job.degree, input.knots.clone()).ok()?;
+    let weights = input.weights.as_deref().unwrap_or(&[]);
+    let mut homogeneous = Vec::with_capacity(input.points.len());
+    for (i, point) in input.points.iter().enumerate() {
+        let w = weights.get(i).copied().unwrap_or(1.0);
+        let mut h = [0.0; D];
+        for (slot, x) in h.iter_mut().zip(point) {
+            *slot = x * w;
+        }
+        homogeneous.push(h);
+    }
+    let curve = Curve::from_homogeneous(basis, homogeneous, input.weights.clone()).ok()?;
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
     let new = curve.insert_knot(input.at, 1, &mut meter).ok()?.value;
-    let mut out = new.basis().knots().to_vec();
-    out.extend(new.homogeneous().iter().flatten());
-    Some((out, size))
+    let weights = new.weights();
+    let points = new
+        .homogeneous()
+        .iter()
+        .enumerate()
+        .map(|(i, h)| {
+            let w = weights.and_then(|list| list.get(i)).copied().unwrap_or(1.0);
+            h.iter().map(|x| write(x / w)).collect()
+        })
+        .collect();
+    let mut out = job.clone();
+    out.op = Op::Remove;
+    out.knots = new.basis().knots().iter().map(|k| write(*k)).collect();
+    out.points = points;
+    out.weights = weights.map(|list| list.iter().map(|w| write(*w)).collect());
+    Some(out)
 }
 
 /// `γ_n` as a double, rounded up: n·u / (1 − n·u), u = 2^−53.
@@ -322,7 +390,7 @@ pub fn operation(job: &Job) -> Result<Operation, String> {
 /// Runs an operation [`operation`] wrote; `None` for any other operation.
 #[must_use]
 pub fn replay(operation: &Operation) -> Option<Ran> {
-    if ![Op::Point, Op::Basis, Op::Insert]
+    if ![Op::Point, Op::Basis, Op::Insert, Op::Remove, Op::Elevate]
         .iter()
         .any(|op| op.name() == operation.name)
     {
@@ -348,7 +416,7 @@ fn replayed(operation: &Operation) -> Result<Ran, String> {
     } else {
         kernel::<3>(&job, &input)
     };
-    let (values, _) = values.ok_or_else(|| "the kernel refused the job".to_owned())?;
+    let (values, ..) = values.ok_or_else(|| "the kernel refused the job".to_owned())?;
     let mut sha = Sha256::new();
     for value in values {
         sha.write(&value.to_bits().to_be_bytes());
@@ -377,12 +445,12 @@ pub enum Compared {
     },
 }
 
-/// The difference `job` raised, of `kind`, with `settled`.
-fn difference(job: &Job, kind: &str, settled: String) -> Compared {
+/// The difference `job` raised with `oracle`, of `kind`, with `settled`.
+fn difference(oracle: &str, job: &Job, kind: &str, settled: String) -> Compared {
     Compared::Differ {
         signature: Signature {
             operation: job.op.name().to_owned(),
-            oracle: ID.to_owned(),
+            oracle: oracle.to_owned(),
             kind: kind.to_owned(),
             family: job.family.clone(),
         },
@@ -416,11 +484,32 @@ fn reference(job: &Job, input: &Parsed) -> Result<Spline, String> {
     }
 }
 
+/// The exact values of `job`, in the order the answers are written.
+fn truth_of(job: &Job, spline: &Spline, at: &RBig) -> Result<Vec<RBig>, String> {
+    let error = |e| format!("the reference: {e:?}");
+    let changed = match job.op {
+        Op::Insert => spline.insert(at, 1).map_err(error)?,
+        Op::Elevate => spline.elevate(1).map_err(error)?,
+        _ => return spline.point(at).map_err(error),
+    };
+    let dimension = job.points.first().map_or(0, Vec::len);
+    let mut out = changed.knots().to_vec();
+    for point in changed.homogeneous_points() {
+        out.extend(point.iter().take(dimension).cloned());
+    }
+    Ok(out)
+}
+
+/// Whether the exact reference can settle a difference on `op`.
+const fn settles(op: Op) -> bool {
+    matches!(op, Op::Point | Op::Insert | Op::Elevate)
+}
+
 #[allow(
     clippy::arithmetic_side_effects,
     reason = "exact rationals, which cannot overflow"
 )]
-/// Settles a point difference against the exact curve: which side is within `limit` of the truth.
+/// Settles a difference against the exact curve: which side is within `limit` of the truth.
 ///
 /// # Errors
 ///
@@ -428,9 +517,7 @@ fn reference(job: &Job, input: &Parsed) -> Result<Spline, String> {
 pub fn settle(job: &Job, ours: &[f64], theirs: &[f64], limit: f64) -> Result<String, String> {
     let input = parse(job)?;
     let spline = reference(job, &input)?;
-    let truth = spline
-        .point(&exact(input.at)?)
-        .map_err(|e| format!("the reference: {e:?}"))?;
+    let truth = truth_of(job, &spline, &exact(input.at)?)?;
     let limit = exact(limit)?;
     let far = |side: &[f64]| -> Result<bool, String> {
         for (x, t) in side.iter().zip(&truth) {
@@ -443,8 +530,10 @@ pub fn settle(job: &Job, ours: &[f64], theirs: &[f64], limit: f64) -> Result<Str
         Ok(false)
     };
     Ok(match (far(ours)?, far(theirs)?) {
-        (false, true) => "theirs: the kernel is within its bound of the truth, and geomdl is not",
-        (true, false) => "ours: geomdl is within the bound of the truth, and the kernel is not",
+        (false, true) => {
+            "theirs: the kernel is within its bound of the truth, and the oracle is not"
+        }
+        (true, false) => "ours: the oracle is within the bound of the truth, and the kernel is not",
         (true, true) => "ours: neither is within the bound of the truth",
         (false, false) => "both within the bound of the truth",
     }
@@ -457,6 +546,15 @@ pub fn settle(job: &Job, ours: &[f64], theirs: &[f64], limit: f64) -> Result<Str
 ///
 /// A job or answer that cannot be read: the harness is broken, not the kernel.
 pub fn judge(job: &Job, answer: &Answer) -> Result<Compared, String> {
+    judge_for(ID, job, answer)
+}
+
+/// Judges `oracle`'s answer to `job`.
+///
+/// # Errors
+///
+/// A job or answer that cannot be read: the harness is broken, not the kernel.
+pub fn judge_for(oracle: &str, job: &Job, answer: &Answer) -> Result<Compared, String> {
     if job.id != answer.id {
         return Err(format!("answer {} for job {}", answer.id, job.id));
     }
@@ -476,25 +574,27 @@ pub fn judge(job: &Job, answer: &Answer) -> Result<Compared, String> {
                 .collect::<Result<Vec<f64>, String>>()?,
         ),
     };
-    let (ours, size, theirs) = match (ours, theirs) {
+    let (ours, size, own, theirs) = match (ours, theirs) {
         (None, None) => return Ok(Compared::Agree),
         (None, Some(_)) | (Some(_), None) => {
             return Ok(difference(
+                oracle,
                 job,
                 "refused",
                 "one side refused the job".to_owned(),
             ));
         }
-        (Some((ours, size)), Some(theirs)) => (ours, size, theirs),
+        (Some((ours, size, own)), Some(theirs)) => (ours, size, own, theirs),
     };
     if ours.len() != theirs.len() {
         return Ok(difference(
+            oracle,
             job,
             "shape",
             format!("{} values and {}", ours.len(), theirs.len()),
         ));
     }
-    let stated = bound(job, size);
+    let stated = (bound(job, size) + own).next_up();
     let allowance = Allowance {
         ours: stated,
         theirs: stated,
@@ -508,10 +608,10 @@ pub fn judge(job: &Job, answer: &Answer) -> Result<Compared, String> {
     {
         return Ok(Compared::Agree);
     }
-    let settled = if job.op == Op::Point {
+    let settled = if settles(job.op) {
         settle(job, &ours, &theirs, stated)?
     } else {
-        "beyond the allowance; the exact reference settles a point only".to_owned()
+        "beyond the allowance; the exact reference does not settle this operation".to_owned()
     };
-    Ok(difference(job, "value", settled))
+    Ok(difference(oracle, job, "value", settled))
 }

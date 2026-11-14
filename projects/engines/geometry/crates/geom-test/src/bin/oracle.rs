@@ -47,7 +47,8 @@ use geom_test::fixture::{OpLog, Triage};
 use geom_test::golden::store::Store;
 use geom_test::map::repo::workspace_root;
 use geom_test::oracle::catalogue::{self, Catalogue, audit, linked};
-use geom_test::oracle::geomdl::{self, Answer, Compared, Job, judge};
+use geom_test::oracle::geomdl::{self, Answer, Compared, Job, judge_for};
+use geom_test::oracle::smlib;
 use geom_test::oracle::triage::{self, Record, Register, Signature, fixture as fixture_of, group};
 use geom_test::seed::Seed;
 
@@ -206,7 +207,7 @@ fn check(repository: Option<&Path>, root: &Root) -> Result<ExitCode, String> {
 }
 
 fn known(oracle: &str) -> Result<(), String> {
-    if oracle == geomdl::ID {
+    if oracle == geomdl::ID || oracle == smlib::ID {
         Ok(())
     } else {
         Err(format!("no jobs for {oracle}"))
@@ -217,7 +218,12 @@ fn jobs(oracle: &str, seed: &str, count: u64) -> Result<ExitCode, String> {
     known(oracle)?;
     let seed = u64::from_str_radix(seed, 16).map_err(|e| format!("the seed {seed:?}: {e}"))?;
     eprintln!("seed: {seed:016x}");
-    for job in geomdl::jobs(Seed(seed), count) {
+    let drawn = if oracle == smlib::ID {
+        smlib::jobs(Seed(seed), count)
+    } else {
+        geomdl::jobs(Seed(seed), count)
+    };
+    for job in drawn {
         println!(
             "{}",
             serde_json::to_string(&job).map_err(|e| e.to_string())?
@@ -246,7 +252,7 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String
     }
     let mut differences = Vec::new();
     for (job, answer) in jobs.iter().zip(&answers) {
-        if let Compared::Differ { signature, settled } = judge(job, answer)? {
+        if let Compared::Differ { signature, settled } = judge_for(oracle, job, answer)? {
             println!("job {}: {signature}: {settled}", job.id);
             differences.push(signature);
         }

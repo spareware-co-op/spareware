@@ -21,8 +21,20 @@
 //! surface kinds' many-point calls give the single calls' bits; [`make`] (G101), the primitives
 //! and transforms return only what the full checker passes, keep their laws, and refuse with a
 //! typed error, and the core queries on every body they make keep the Query family's laws
-//! (G102); and [`sequence`] (G116), whole operation logs replay to the same hash and keep
-//! every law at every step. [`adversarial`] holds the generators aimed at chapter 28.5's hard
+//! (G102); [`sequence`] (G116), whole operation logs replay to the same hash and keep
+//! every law at every step; [`intersect`] (G158), an intersection's items keep their invariants
+//! against an all-pairs oracle and a pair asked either way round makes one call; [`quadric`]
+//! (G159), every exact decision on a line and a quadric agrees with big integers, and a Sturm
+//! chain counts the roots a polynomial was built from; [`project`] (G162), a nearest point is
+//! never beaten by a sample of the kind; [`crossings`] (G163), every point of any two curves lies
+//! on both, and two cubic graphs that change sides have an item between them; [`piercing`] (G164),
+//! every point of a curve and a surface lies on both; [`natural`] (G165), every curve two
+//! natural quadrics are said to share lies on each by its own equation; [`pencils`] (G166), what
+//! a pencil says two curved quadrics share is so; [`reductions`] (G167), every curve of a torus's
+//! special position lies on it; [`level`] (G168), a level curve misses nothing a dense grid can
+//! see; and [`general`] (G169, G170), subdivision leaves no crossing outside its settled or
+//! flagged pairs, and marching stays on both surfaces.
+//! [`adversarial`] holds the generators aimed at chapter 28.5's hard
 //! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.46) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
@@ -169,6 +181,8 @@
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `geom-op`, `geom-curve`, `geom-surface`, `geom-nurbs` and `geom-run` (Apache-2.0, ours), the
 //!   code under test of the [`batch`] target.
+//! - `geom-intersect` (Apache-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
+//!   `geom-math`, `geom-run` and `geom-surface` (Apache-2.0, ours), what its cases are made of.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -228,6 +242,14 @@
 
 use core::fmt;
 
+pub mod crossings;
+
+pub mod intersect;
+
+pub mod level;
+
+pub mod natural;
+
 pub mod adversarial;
 pub mod arenas;
 pub mod attributes;
@@ -242,6 +264,7 @@ pub mod curves;
 pub mod encoder;
 pub mod euler;
 pub mod exact;
+pub mod general;
 pub mod linalg;
 pub mod make;
 pub mod maths;
@@ -252,10 +275,15 @@ pub mod open;
 pub mod operations;
 pub mod orient2d;
 pub mod p21;
+pub mod pencils;
+pub mod piercing;
 pub mod planes;
 pub mod predicates;
+pub mod project;
 pub mod prune;
+pub mod quadric;
 pub mod records;
+pub mod reductions;
 pub mod references;
 pub mod robustness;
 pub mod roots;

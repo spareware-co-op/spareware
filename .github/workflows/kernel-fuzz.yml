@@ -169,7 +169,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, contract_fuzz, curves_fuzz, encoder_fuzz, euler_fuzz, exact_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, naming_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, p21_fuzz, planes_fuzz, predicates_fuzz, prune_fuzz, records_fuzz, references_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, contract_fuzz, crossings_fuzz, curves_fuzz, encoder_fuzz, euler_fuzz, exact_fuzz, general_fuzz, intersect_fuzz, level_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, naming_fuzz, natural_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, p21_fuzz, pencils_fuzz, piercing_fuzz, planes_fuzz, predicates_fuzz, project_fuzz, prune_fuzz, quadric_fuzz, records_fuzz, reductions_fuzz, references_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -357,6 +357,7 @@ jobs:
           - math::proofs::round_ties_even_is_exact
           - math::sincospi::proofs::cospi_hard_case_answers_exactly_the_listed_pairs
           - math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs
+          - pencil::proofs::the_filter_s_definite_test_answers_only_what_its_signs_prove
           - perturb::proofs::bit_of_covers_exactly_a_mask_of_32
           - perturb::proofs::distinct_refuses_exactly_repeated_keys
           - perturb::proofs::the_lift_of_every_frame_point_fits
@@ -614,7 +615,10 @@ jobs:
     needs: cheap
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Code-change mode fuzzes each target the change reaches for about a minute, after a build of
+    # about 20. With Phase 5's targets a change to a crate they all use (geom-num, geom-curve)
+    # reaches about 47 targets, past an hour in all; the time per target is unchanged.
+    timeout-minutes: 90
     steps:
       - name: Build the fuzz targets
         id: build
