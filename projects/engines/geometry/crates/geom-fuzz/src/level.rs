@@ -56,7 +56,12 @@ const FLOOR: f64 = 1e-5;
 const CEILING: f64 = 1e-3;
 
 /// The work a trace may take. It is far above what most cases need, and bounds a broken trace.
-const WORK: u64 = 1 << 21;
+///
+/// Set by libFuzzer's ten seconds a case. A trace costs about 6,400 release instructions a unit,
+/// and the hosted fuzz build runs about a second for each thousand million of them, so the 2^21
+/// this was ran a stopped trace for 13 thousand million and timed out on an input of the
+/// 14 November campaign (`tests/__fuzz__/level/crashes`). 2^19 stops at about 3.4 thousand million.
+const WORK: u64 = 1 << 19;
 
 /// A half-turn is one parameter unit of the round kinds.
 const TURN: f64 = 2.0;

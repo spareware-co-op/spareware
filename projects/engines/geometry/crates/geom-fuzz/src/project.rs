@@ -48,8 +48,13 @@ pub const SURFACE_SAMPLES: u32 = 32;
 /// The floor of every search: a thousandth of a micrometre in a lattice of metres.
 const FLOOR: f64 = 1e-6;
 
-/// The work a search may take. It is far above what any case needs, and bounds a broken search.
-const WORK: u64 = 1 << 24;
+/// The work a search may take. It is far above what most cases need, and bounds a broken search.
+///
+/// Set by libFuzzer's ten seconds a case. A search costs about 5,200 release instructions a unit,
+/// and the hosted fuzz build runs about a second for each thousand million of them; an input of
+/// the 14 November campaign (`tests/__fuzz__/project/crashes`) searched for 19 thousand million
+/// under the 2^24 this was and timed out. 2^19 stops at about 2.7 thousand million.
+const WORK: u64 = 1 << 19;
 
 /// What rounding may add to a distance or a point worked out in doubles.
 const SLACK: f64 = 1e-9;
