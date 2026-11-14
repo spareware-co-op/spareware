@@ -97,3 +97,24 @@ jobs:
             BOLERO_LIBFUZZER_ARGS="-timeout=0 -rss_limit_mb=0${files}" \
             "$exe" "$TARGET" --exact --nocapture --quiet --test-threads 1 > "$out" 2>&1 || echo "exit $?"
           grep -E '^Executed|ERROR|panicked|deadly|SUMMARY' "$out"
+      - name: Replay every stored input as the first run did, in processes of 200
+        run: |
+          name="${TARGET%_fuzz}"
+          exe=$(find target -type f -executable -newer "$RUNNER_TEMP/stamp" -name "${name}-*" | head -1)
+          dir="measure/inputs/$name"
+          out="$RUNNER_TEMP/times.txt"
+          : > "$out"
+          ls "$dir" | split -l 200 - "$RUNNER_TEMP/chunk."
+          for c in "$RUNNER_TEMP"/chunk.*; do
+            files=$(sed "s|^|$dir/|" "$c" | paste -sd ' ')
+            BOLERO_TEST_NAME="$TARGET" BOLERO_LIBTEST_HARNESS=1 \
+              BOLERO_LIBFUZZER_ARGS="-timeout=0 -rss_limit_mb=0 $files" \
+              "$exe" "$TARGET" --exact --nocapture --quiet --test-threads 1 > "$RUNNER_TEMP/one.txt" 2>&1 || echo "exit $? in $c"
+            grep -E '^Executed|ERROR|panicked|deadly|SUMMARY' "$RUNNER_TEMP/one.txt" >> "$out" || true
+          done
+          echo "inputs: $(ls "$dir" | wc -l), executed: $(grep -c '^Executed' "$out")"
+          grep -vE '^Executed' "$out" > "$RUNNER_TEMP/other.txt" || true
+          cat "$RUNNER_TEMP/other.txt"
+          grep '^Executed' "$out" | sort -k4,4 -n -r > "$RUNNER_TEMP/sorted.txt"
+          echo "slowest 15 (ms):"
+          sed -n 1,15p "$RUNNER_TEMP/sorted.txt"
