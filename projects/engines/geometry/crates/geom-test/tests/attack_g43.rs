@@ -656,10 +656,19 @@ const CLUSTERFUZZLITE_IMAGES: [(&str, &str); 2] = [
     ),
 ];
 
+/// The inputs whose environment variable in the actions' `action.yml` (at
+/// `CLUSTERFUZZLITE_COMMIT`) is not the input's own name: the storage repository's.
+const CLUSTERFUZZLITE_RENAMED: [(&str, &str); 3] = [
+    ("storage-repo", "GIT_STORE_REPO"),
+    ("storage-repo-branch", "GIT_STORE_BRANCH"),
+    ("storage-repo-branch-coverage", "GIT_STORE_BRANCH_COVERAGE"),
+];
+
 /// What is wrong with a script that stands in for `job`'s `ClusterFuzzLite` actions: each action
 /// must be pinned to the commit the script was read against, and the script must run its image
 /// once, passing every input the job gives it (but the token) as its `action.yml` does, an
-/// environment variable of the input's name in capitals with `_` for `-`.
+/// environment variable of the input's name in capitals with `_` for `-`, or the one
+/// `CLUSTERFUZZLITE_RENAMED` names.
 fn action_seed_problems(script: &str, job: &Yaml) -> Vec<String> {
     let runs = commands(script);
     let mut found = Vec::new();
@@ -704,7 +713,11 @@ fn action_seed_problems(script: &str, job: &Yaml) -> Vec<String> {
                 Yaml::Boolean(b) => b.to_string(),
                 other => format!("{other:?}"),
             };
-            let pair = format!("{}={value}", key.to_uppercase().replace('-', "_"));
+            let variable = CLUSTERFUZZLITE_RENAMED
+                .iter()
+                .find(|r| r.0 == key)
+                .map_or_else(|| key.to_uppercase().replace('-', "_"), |r| r.1.to_owned());
+            let pair = format!("{variable}={value}");
             if !run.windows(2).any(|w| w[0] == "-e" && w[1] == pair) {
                 found.push(format!(
                     "{name}'s input {key}: {value} is not passed to {image} as `-e {pair}`"
@@ -922,6 +935,20 @@ fn every_planted_violation_runs_in_its_own_job() {
         trip_problems(&workflows, &batch)
             .iter()
             .any(|p| p.contains("input mode: code-change is not passed"))
+    );
+    // An input whose variable is renamed by its action.yml: storage-repo, as GIT_STORE_REPO.
+    let no_store = |path: &str| {
+        let text = tree(path)?;
+        Some(if path == ".clusterfuzzlite/seeded.sh" {
+            text.replace("-e GIT_STORE_REPO=", "-e STORE_REPO=")
+        } else {
+            text
+        })
+    };
+    assert!(
+        trip_problems(&workflows, &no_store)
+            .iter()
+            .any(|p| p.contains("input storage-repo:") && p.contains("-e GIT_STORE_REPO="))
     );
     let mut moved_action = workflows.clone();
     let fuzz = moved_action.get_mut("kernel-fuzz.yml").unwrap();

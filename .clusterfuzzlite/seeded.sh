@@ -18,6 +18,10 @@
 #  - FILESTORE=no_filestore: no corpus or earlier build is downloaded or uploaded, so a crash is
 #    never excused as one the base already had.
 #  - KEEP_UNAFFECTED_FUZZ_TARGETS=true: every target is fuzzed, whatever the change.
+#  - One run of every target: the job splits them across its shards after the build (its step
+#    "Keep this shard's targets"); together the shards fuzz what this run fuzzes.
+#  - GIT_STORE_REPO, the job's storage-repo, is passed as its action passes it, but only the
+#    GitHub platform reads it; FILESTORE above decides the store here.
 #
 # The containers reach the runner's Docker through its socket, as an action's container does, and
 # see this checkout and the workspace at the same paths, so the containers ClusterFuzzLite starts
@@ -54,12 +58,13 @@ docker run --rm "${shared[@]}" \
   -e KEEP_UNAFFECTED_FUZZ_TARGETS=true \
   gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1
 
-# run_fuzzers/action.yml's environment: the job gives fuzz-seconds, mode and sanitizer; the rest
-# are the action's defaults (its language is C++, as the job leaves it).
+# run_fuzzers/action.yml's environment: the job gives fuzz-seconds, mode, sanitizer and
+# storage-repo; the rest are the action's defaults (its language is C++, as the job leaves it).
 docker run --rm "${shared[@]}" \
   -e FUZZ_SECONDS=300 \
   -e MODE=code-change \
   -e SANITIZER=address \
+  -e GIT_STORE_REPO=https://github.com/spareware-co-op/spareware.git \
   -e LANGUAGE=c++ \
   -e DRY_RUN=false \
   -e LOW_DISK_SPACE=True \
