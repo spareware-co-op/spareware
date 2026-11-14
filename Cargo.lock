@@ -1324,6 +1324,7 @@ name = "geom-make"
 version = "0.0.0"
 dependencies = [
  "cap",
+ "geom-bool",
  "geom-check",
  "geom-curve",
  "geom-math",
