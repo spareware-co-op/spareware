@@ -44,10 +44,10 @@
       "what": "CGAL: Nef polyhedra on an exact kernel; 2D arrangements with circle-segment traits",
       "licence": "GPL-3.0-or-later OR LGPL-3.0-or-later",
       "run": "out-of-process",
-      "state": "planned",
+      "state": "live",
       "checks": "Flat booleans and line-and-arc arrangements, compared exactly",
       "source": "https://github.com/CGAL/cgal",
-      "pin": null,
+      "pin": "50cfbde3b84dbeae8338268db2d78fe4fcb522de",
       "never_linked": [
         "cgal",
         "cgal-sys"
@@ -131,10 +131,10 @@
       "what": "Manifold",
       "licence": "Apache-2.0",
       "run": "out-of-process",
-      "state": "planned",
+      "state": "live",
       "checks": "Mesh booleans",
       "source": "https://github.com/elalish/manifold",
-      "pin": null,
+      "pin": "d056b8fb70de8c8e6d6bee2e639b71c20aa08d01",
       "never_linked": [],
       "piece": "G154"
     },
