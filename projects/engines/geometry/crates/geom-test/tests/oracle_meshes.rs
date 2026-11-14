@@ -14,9 +14,9 @@ use std::collections::BTreeSet;
 
 use geom_test::oracle::exact::float;
 use geom_test::oracle::meshes::{
-    Answer, CGAL, CHERCHI, Compared, Job, MANIFOLD, MANIFOLD_RUST, Op, cuboid, hausdorff, holds,
-    jobs, judge, operation, own_answer, own_volume, prism, reference, replay, run, tetrahedron,
-    volume,
+    Answer, CGAL, CHERCHI, Compared, Job, MANIFOLD, MANIFOLD_RUST, Op, Solid, cuboid, hausdorff,
+    holds, jobs, judge, operation, own_answer, own_volume, prism, reference, replay, run,
+    tetrahedron, volume,
 };
 use geom_test::seed::Seed;
 
@@ -197,6 +197,43 @@ fn a_refusal_is_a_difference() {
         kind_and_settled(judge(CGAL, &far, &answered).unwrap()).0,
         "refused"
     );
+}
+
+/// A tetrahedron cut by a box whose result, rounded to the grid, crosses a face: the first night's
+/// job 742 (seed 0000000a235056b2).
+fn untriangulable() -> Job {
+    Job {
+        id: 742,
+        family: "tetrahedra".to_owned(),
+        op: Op::Intersection,
+        a: Solid {
+            vertices: vec![[4, 11, 7], [16, 9, 16], [14, 16, 3], [4, 10, 10]],
+            triangles: vec![[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2]],
+        },
+        b: cuboid([10, 10, 4], [14, 14, 8]),
+    }
+}
+
+#[test]
+fn a_result_that_will_not_triangulate_is_unmeasured_not_the_end_of_the_night() {
+    let job = untriangulable();
+    assert!(run(&job).is_ok());
+    assert!(own_answer(&job).is_err());
+    let answered = Answer {
+        id: job.id,
+        volume: Some("1.733".to_owned()),
+        ..Answer::default()
+    };
+    let (kind, settled) = kind_and_settled(judge(MANIFOLD, &job, &answered).unwrap());
+    assert_eq!(kind, "unmeasured");
+    assert!(settled.starts_with("theirs"), "{settled}");
+    // An exact oracle needs only the volume, so it still agrees with the right one.
+    let exact = Answer {
+        id: job.id,
+        volume: Some(own_volume(&job).unwrap()),
+        ..Answer::default()
+    };
+    assert_eq!(judge(CGAL, &job, &exact).unwrap(), Compared::Agree);
 }
 
 #[test]
