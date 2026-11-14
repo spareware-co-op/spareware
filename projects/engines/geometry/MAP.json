@@ -14172,6 +14172,7 @@
             "**Exact oracles are compared exactly**: a rational volume, equal or not.",
             "**The others can only refute**: volume and area are held to both sides' stated bounds, capped at ours plus the fit bound ([`Allowance`]), and the Hausdorff distance is measured by dense deterministic sampling, so it is a lower bound on the true distance.",
             "**Refusals are compared**: a job one side refuses and the other answers is a difference, of kind `refused`, never a pass.",
+            "**A result the kernel cannot measure is a difference**: a floating oracle is compared on the kernel's result in triangles, and a result that will not triangulate (its rounding to the grid crosses a face) is a difference of kind `unmeasured`, never a pass and never the end of the night. An exact oracle needs only the exact volume, so it is never unmeasured.",
             "**Truth settles it**: an oracle is never trusted; [`Compared::Differ`]'s `settled` says what the reference found."
           ],
           "job": "Mesh booleans against outside oracles (chapter 28.10; piece G154): CGAL's Nef polyhedra compared exactly; Manifold, manifold-rust's rational engine and Cherchi's exact booleans, whose results leave them as decimals, by volume, area and two-sided Hausdorff distance.",

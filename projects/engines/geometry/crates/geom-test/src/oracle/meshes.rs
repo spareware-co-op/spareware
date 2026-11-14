@@ -18,6 +18,10 @@
 //!   deterministic sampling, so it is a lower bound on the true distance.
 //! - **Refusals are compared**: a job one side refuses and the other answers is a difference, of
 //!   kind `refused`, never a pass.
+//! - **A result the kernel cannot measure is a difference**: a floating oracle is compared on the
+//!   kernel's result in triangles, and a result that will not triangulate (its rounding to the
+//!   grid crosses a face) is a difference of kind `unmeasured`, never a pass and never the end of
+//!   the night. An exact oracle needs only the exact volume, so it is never unmeasured.
 //! - **Truth settles it**: an oracle is never trusted; [`Compared::Differ`]'s `settled` says what
 //!   the reference found.
 //!
@@ -894,22 +898,28 @@ pub fn judge(oracle: &str, job: &Job, answer: &Answer) -> Result<Compared, Strin
         }
         (Ok(mesh), Some(theirs)) => (mesh, theirs),
     };
-    let made = made(mesh)?;
     if !is_exact(oracle) {
-        return floating(oracle, job, &made, answer);
+        return match made(mesh) {
+            Ok(made) => floating(oracle, job, &made, answer),
+            Err(why) => {
+                let settled = settle(job, &volume(mesh)?)?;
+                Ok(difference(
+                    oracle,
+                    job,
+                    "unmeasured",
+                    format!("{settled}; its result does not triangulate: {why}"),
+                ))
+            }
+        };
     }
+    let ours = volume(mesh)?;
     let theirs: RBig = theirs
         .parse()
         .map_err(|e| format!("job {}: the volume {theirs:?}: {e:?}", job.id))?;
-    if exact(&made.volume, &theirs) {
+    if exact(&ours, &theirs) {
         return Ok(Compared::Agree);
     }
-    Ok(difference(
-        oracle,
-        job,
-        "volume",
-        settle(job, &made.volume)?,
-    ))
+    Ok(difference(oracle, job, "volume", settle(job, &ours)?))
 }
 
 /// `job` as the one operation of a log: its operation's name, and its JSON as the parameters, so a
