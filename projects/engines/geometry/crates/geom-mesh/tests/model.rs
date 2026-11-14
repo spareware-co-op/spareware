@@ -562,6 +562,162 @@ fn decimation_takes_the_cheapest_collapse_at_its_best_point() {
     );
 }
 
+/// A quadric's best point is trusted only when the quadric is far enough from singular: its
+/// determinant above 10⁻¹² of the cube of its trace. A sheet tilted across both axes, whose bend
+/// grows fourfold from each row of cells to the next, has quadrics on both sides of that line, and
+/// where it falls is pinned by the result at two scales.
+#[test]
+fn a_best_point_is_trusted_only_away_from_a_flat_quadric() {
+    let run = |s: i64| {
+        let input = sheet(6, s, |i, j| {
+            (i + j) * s + ((i * i + 2 * j * j + i * j) << (2 * j)) / 64
+        });
+        let out = decimate(
+            &input.0,
+            &input.1,
+            Decimate {
+                epsilon: 20,
+                target: 36,
+            },
+            &Exec::serial(),
+            &mut meter(),
+        )
+        .unwrap();
+        assert_eq!(out.triangles().len(), 36);
+        assert_eq!(out.operations(), (22, 0));
+        coordinates(&out)
+    };
+    assert_eq!(
+        run(600),
+        [
+            (0, 0, 0),
+            (3599, 0, 3599),
+            (1, 1725, 1731),
+            (3600, 1128, 4739),
+            (972, 1800, 2797),
+            (2141, 1801, 3984),
+            (3599, 1782, 5452),
+            (0, 2400, 2528),
+            (957, 2399, 3519),
+            (1800, 2400, 4412),
+            (2400, 2400, 5056),
+            (3000, 2400, 5708),
+            (3600, 2400, 6368),
+            (0, 3000, 3800),
+            (600, 3000, 4496),
+            (1200, 3000, 5224),
+            (1800, 3000, 5984),
+            (2400, 3000, 6776),
+            (3000, 3000, 7600),
+            (3600, 3000, 8456),
+            (0, 3600, 8208),
+            (600, 3600, 9256),
+            (1200, 3600, 10432),
+            (1800, 3600, 11736),
+            (2400, 3600, 13168),
+            (3000, 3600, 14728),
+            (3600, 3600, 16416)
+        ]
+    );
+    assert_eq!(
+        run(6000),
+        [
+            (0, 0, 0),
+            (35999, 0, 35999),
+            (0, 17203, 17211),
+            (36000, 11559, 47571),
+            (17909, 18034, 35979),
+            (35999, 17858, 53928),
+            (0, 24000, 24128),
+            (6000, 24000, 30148),
+            (12000, 24000, 36176),
+            (18000, 24000, 42212),
+            (24000, 24000, 48256),
+            (30000, 24000, 54308),
+            (36000, 24000, 60368),
+            (0, 30000, 30800),
+            (6000, 30000, 36896),
+            (12000, 30000, 43024),
+            (18000, 30000, 49184),
+            (24000, 30000, 55376),
+            (30000, 30000, 61600),
+            (36000, 30000, 67856),
+            (0, 36000, 40608),
+            (6000, 36000, 47056),
+            (12000, 36000, 53632),
+            (18000, 36000, 60336),
+            (24000, 36000, 67168),
+            (30000, 36000, 74128),
+            (36000, 36000, 81216)
+        ]
+    );
+}
+
+/// The bent sheet sheared in plan, so no open side runs along an axis: each side's plane, across
+/// the side and square to its triangle, is then tilted in every part, and the result pins them.
+#[test]
+fn decimation_weighs_the_open_sides_of_a_skewed_sheet() {
+    let (mut points, triangles) = bent();
+    for (k, q) in points.iter_mut().enumerate() {
+        let (i, j) = ((k % 5) as i64, (k / 5) as i64);
+        *q = p(q.x.get() + 17 * j, q.y.get() - 11 * i, q.z.get());
+    }
+    let input = (points, triangles);
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon: 10,
+            target: 16,
+        },
+        &Exec::serial(),
+        &mut meter(),
+    )
+    .unwrap();
+    two_way(&input, &out, 10);
+    assert_eq!(out.operations(), (11, 0));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, -2),
+            (155, -28, 18),
+            (240, -44, 48),
+            (92, 93, 25),
+            (137, 68, 33),
+            (266, 46, 58),
+            (34, 120, 22),
+            (231, 126, 41),
+            (68, 240, 45),
+            (136, 154, 29),
+            (291, 136, 57),
+            (162, 223, 47),
+            (248, 207, 47),
+            (308, 196, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [7, 10, 13],
+            [7, 13, 12],
+            [7, 5, 10],
+            [6, 9, 8],
+            [9, 7, 12],
+            [6, 3, 9],
+            [9, 12, 11],
+            [8, 9, 11],
+            [4, 7, 9],
+            [3, 4, 9],
+            [0, 3, 6],
+            [0, 4, 3],
+            [1, 5, 7],
+            [1, 2, 5],
+            [4, 1, 7],
+            [0, 1, 4]
+        ]
+    );
+}
+
 #[test]
 fn a_coarse_sheet_remeshes_toward_the_target_length() {
     // A gently bent sheet of 2 × 2 cells of 400 steps, remeshed toward edges of 150.

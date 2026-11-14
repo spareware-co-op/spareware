@@ -300,18 +300,18 @@ impl Remesher {
             }
             let [a, b, c] = corners.map(to_f64);
             for k in 0..3 {
-                if let (Some(s), Some(&pa), Some(&pb), Some(&pc), Some(m), Some(&nv)) = (
-                    centroid.get_mut(k),
-                    a.get(k),
-                    b.get(k),
-                    c.get(k),
-                    n.get_mut(k),
-                    area_vector.get(k),
-                ) {
+                if let (Some(s), Some(&pa), Some(&pb), Some(&pc)) =
+                    (centroid.get_mut(k), a.get(k), b.get(k), c.get(k))
+                {
                     *s += w * (pa + pb + pc) / 3.0;
-                    *m += nv;
                 }
             }
+            // The vertex normal, the sum of the area vectors (only its line is used below).
+            n = [
+                n[0] + area_vector[0],
+                n[1] + area_vector[1],
+                n[2] + area_vector[2],
+            ];
             weights += w;
         }
         if weights.partial_cmp(&0.0) != Some(Ordering::Greater) {
