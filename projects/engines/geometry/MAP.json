@@ -177,7 +177,52 @@
         16
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a join could not be measured.",
+          "file": "projects/engines/geometry/crates/geom-analysis/src/continuity.rs",
+          "kinds": [
+            {
+              "doc": "A tightness that is not finite, or is negative.",
+              "name": "Tight",
+              "shape": "unit"
+            },
+            {
+              "doc": "The two pcurves run over different parameter ranges, so they do not share the join's parameter.",
+              "name": "Mismatch",
+              "shape": "unit"
+            },
+            {
+              "doc": "The edge has not exactly two fins (a boundary edge or a non-manifold one).",
+              "name": "NotAJoin",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A fin of the edge has no pcurve.",
+              "name": "NoPcurve",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A link into a row its arena does not have; a published body never holds one.",
+              "name": "NoSuchRow",
+              "shape": "unit"
+            },
+            {
+              "doc": "A surface or pcurve could not be evaluated (a pcurve outside its surface's domain, a value past the doubles).",
+              "name": "Geometry",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The budget ran out or the run was cancelled.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_analysis::continuity",
+          "name": "ContinuityError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "Query"
       ],
@@ -192,12 +237,51 @@
       "job": "Surface quality: continuity, curvature, light lines, draft, gap and flush, deviation.",
       "kind": "kernel",
       "layer": "10",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "each piece is one `class_a::at` and one `class_a::over` (O(1) each); a join of smooth surfaces whose measure is not constant needs O(log(1/tight)) rounds of a few pieces near the maximum, one whose measure is the same all along (an exact join) O(L/√tight) pieces, L the length of t's range, since the centred form's excess shrinks with the square of a piece's width; never more than [`Ask::pieces`]. Memory: the pieces kept. No recursion.",
+          "does": "[`join`] measures a join of two faces along their pcurves, which share the join's parameter t (`geom_surface::class_a`, which names and defines the measures); [`edge`] reads that join from a body's edge with exactly two fins, each fin's face giving its surface and sense and the fin its pcurve. The maximum is found by branch and bound on t: the range is cut at every break of either pcurve, and each piece is measured at its middle (a value that some t really has, the witness candidates) and over its whole span (an upper bound, the centred form about the middle). A piece whose upper bound is no more than the best witness cannot hold anything larger and is dropped; a piece whose bound is more than [`Ask::tight`] above it is halved; the rest are kept. It stops when no piece needs halving, when every piece that does is a single double wide, or when the next round would pass [`Ask::pieces`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-analysis/src/continuity.rs",
+          "guarantees": [
+            "**Certified.** The largest value of the measure over the join lies in [`Maximum::lower`], [`Maximum::upper`]: the lower end is the enclosure's lower end at the witness parameter, the upper end the largest upper bound of any piece kept (or the witness's, if larger), each from `class_a`'s enclosures, so never a sample of points (16.5).",
+            "**As tight as asked, or said not to be.** [`Maximum::as_asked`] says whether the two ends are within [`Ask::tight`]; a run that stopped at its cap of pieces still returns certified ends, only wider.",
+            "**Undefined spans are reported.** Where the measure is not defined (a normal or tangent that may vanish: a pole, a degenerate point) and halving down to single doubles never bounds it, the upper end is [`Upper::Unresolved`], naming the span, never a guess.",
+            "**Thresholds are inputs.** The tightness and the cap are the caller's; nothing is hard-coded but the default cap, [`Ask::PIECES`].",
+            "**Deterministic.** Pieces are measured in increasing order of t, round by round, and the witness changes only to a strictly larger lower end, so the same inputs give the same bits.",
+            "**Charged.** One unit of work for each piece measured, with the work `class_a`'s enclosures charge, and each piece's logical bytes as it is kept; a stop is [`ContinuityError::Stopped`]."
+          ],
+          "job": "Continuity across an edge (16.5; piece G346): a certified maximum of G0, G1, G2 or G3 along the whole edge, refined until it is as tight as asked, with the parameter where it is reached.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "https://doi.org/10.1201/9780203026922",
+              "projects/engines/geometry/architecture/16-free-form.md"
+            ],
+            "text": "interval branch and bound for a global maximum (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), chapter 9, <https://doi.org/10.1137/1.9780898717716>; E. Hansen and G. W. Walster, *Global Optimization Using Interval Analysis*, 2nd ed., Marcel Dekker (2004), <https://doi.org/10.1201/9780203026922>), the midpoint test giving the bound pieces are dropped against, on the measures of chapter 16.5 (`projects/engines/geometry/architecture/16-free-form.md`)."
+          },
+          "path": "geom_analysis::continuity",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/query/continuity.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for `continuity_along`, which measures an edge at even stations and keeps the stations that answer; replaced here by a certified bound over every piece. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-analysis",
       "provenance": [],
       "sections": "16.5 and 16.6; open question OQ-16.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G346, G347, G348, G349.",
+      "status": "continuity across edges built (G346); curvature extremes, light lines, and draft, gap, flush and deviation to come in G347, G348 and G349.",
       "summary": "Spare Kit geometry kernel: surface quality."
     },
     {
@@ -13819,6 +13903,44 @@
           "target": "lib"
         },
         {
+          "cost": "[`at`] is one enclosure of each pcurve to order 1 and one of each surface's partials to the measure's order (0 to 3) over a small box, then O(1) interval operations; [`over`] is one bound of each pcurve and its first two derivatives and one of each surface's partials to one order higher, then O(1) operations on dual numbers. No recursion.",
+          "does": "a join is two [`Side`]s, each a surface, a curve in its parameter space (a pcurve) and whether the face's normal is turned against `S_u` × `S_v`; the two pcurves share one parameter t, as an edge's two fins do. At t each side has its point r = S(p(t)), its unit normal N, its unit tangent e₁ along r′ = `S_u`·u′ + `S_v`·v′ and its across direction e₂ = N × e₁. [`Measure`] names what is compared, chapter 16.5's table:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/class_a.rs",
+          "guarantees": [
+            "**Certified.** Every enclosure holds the exact measure at every t it covers, for pcurves that lie in their surfaces' domains (a valid body's fins, chapter 8.3): the surfaces' partials and the pcurves' values and derivatives are the kinds' own enclosures, every formula is evaluated in outward-rounded interval arithmetic (inclusion isotonicity), the derivative of every smooth part is the derivative of the formula (`geom_num::dual`, chain rule through the pcurve), and a pcurve's box is cut to its surface's domain, never widened.",
+            "**Centred only where smooth.** The mean value form needs each part continuous over the span, so it is used only where no break of a pcurve lies strictly inside the span and no break of a surface lies in the pcurve's box; elsewhere the enclosure is the direct one. A pcurve that runs along a surface's break is read from both sides of it.",
+            "**Undefined is `Unbounded`.** Where a normal may vanish (a pole, an apex, a degenerate point), a tangent may vanish, or a part's derivative cannot be bounded, the result is [`CurveError::Unbounded`], never a guess; a caller splits further or reports the span.",
+            "**Deterministic.** A fixed sequence of operations on the kinds' enclosures."
+          ],
+          "job": "Class-A maths (16.5): how two surfaces meet along a join, measured from each surface's own partial derivatives at a parameter of the join or over a span of it.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "https://doi.org/10.1137/1.9780898717761"
+            ],
+            "text": "the normal curvature from the second fundamental form, and the shape operator's extreme normal curvatures (M. P. do Carmo, *Differential Geometry of Curves and Surfaces*, 2nd ed., Dover (2016), sections 3-2 and 3-3); the normal section's height solved order by order in the section's arc length, κ = 2·h₂ and κ′ = 6·h₃, from solidcore's `normal_section` (below); the mean value form and centred forms of interval analysis (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), section 6.4, <https://doi.org/10.1137/1.9780898717716>) with derivatives by forward-mode automatic differentiation (A. Griewank and A. Walther, *Evaluating Derivatives*, 2nd ed., SIAM (2008), chapter 3, <https://doi.org/10.1137/1.9780898717761>)."
+          },
+          "path": "geom_surface::class_a",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/eval/normal_section.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "<https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/query/continuity.rs>",
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "`normal_section`'s order-by-order series for the section's height is kept to its third order and written in closed form, κ′ = N · (S₃(p₂) − 3·S₂(p₂, q)), with p₂ the parameter direction of e₂, q the one whose image is S₂(p₂, p₂)'s tangential part, S₂ and S₃ the second and third parameter forms, each solve by the first fundamental form instead of solidcore's 2 × 2 system against the section's two directions; `continuity_at`'s measures at one parameter are kept (its gap, its normal angle, its cross-boundary curvature and change), but each point comes from the face's pcurve instead of a dropped foot, the curvature compares the whole second fundamental form over every direction rather than the cross-boundary section alone, and everything is generic over the number type so it runs in interval arithmetic, with derivatives in dual numbers for a centred form over a span, in place of solidcore's unbounded doubles. Its G4 and its knife-edge flip are not taken.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "for each parameter pair, a few enclosures and bounds (the partials to order 2 among them), a split, a reversal and a transform.",
           "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it, as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within 2^−30 of the largest value there (a wrong formula, not rounding).",
           "family": [],
@@ -14097,7 +14219,7 @@
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and normal-derivative bounds for every kind (G68); many points per call, every kind evaluating n parameter pairs into flat arrays through `ParamSurface::points` (G104); the frame rules and laws (G254); the other kinds to come in G253, G260, G264, G315, G316, G317, G318 and G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and normal-derivative bounds for every kind (G68); many points per call, every kind evaluating n parameter pairs into flat arrays through `ParamSurface::points` (G104); the frame rules and laws (G254); Class-A maths, the continuity measures G0 to G3 across a join of two surfaces along their pcurves, at a parameter and over a span ([`class_a`], piece G346); the other kinds to come in G253, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {
@@ -18193,6 +18315,17 @@
       ]
     },
     {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/eval/normal_section.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-surface/src/class_a.rs"
+      ]
+    },
+    {
       "licence": "MIT",
       "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c",
       "method_note": null,
@@ -18682,6 +18815,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-surface/src/frame_rule.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/query/continuity.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-analysis/src/continuity.rs"
       ]
     },
     {
