@@ -8525,19 +8525,19 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
-      "mutant": "replace > with == in Stretch::narrowed",
-      "line_text": "if s > COMPARE_DEPTH {",
+      "mutant": "replace > with == in Stretch<W>::narrowed",
+      "line_text": "if s > limit {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Two roots that differ are parted within the resultant bound, below COMPARE_DEPTH, and the module asserts it when it compiles, so s never reaches it."
+      "reason": "Two roots that differ are parted within the resultant bound, below the instance's depth of comparisons (COMPARE_DEPTH or SECOND_COMPARE_DEPTH, the limit passed in), and the module asserts it of both when it compiles, so s never reaches it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
-      "mutant": "replace > with >= in Stretch::narrowed",
-      "line_text": "if s > COMPARE_DEPTH {",
+      "mutant": "replace > with >= in Stretch<W>::narrowed",
+      "line_text": "if s > limit {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Two roots that differ are parted within the resultant bound, below COMPARE_DEPTH, and the module asserts it when it compiles, so s never reaches it."
+      "reason": "Two roots that differ are parted within the resultant bound, below the instance's depth of comparisons (COMPARE_DEPTH or SECOND_COMPARE_DEPTH, the limit passed in), and the module asserts it of both when it compiles, so s never reaches it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
