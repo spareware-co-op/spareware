@@ -734,31 +734,32 @@ fn flips_and_smoothing_work_on_a_flat_sheet() {
     two_way(&input, &out, 4);
 }
 
-/// Which edge remeshing collapses into which end, which edges it flips and where smoothing moves a
-/// vertex are PMP's rules on lengths, valences and area-weighted centroids. Each is pinned here by
-/// the whole result on the bent sheet. Toward edges of 90 within 6, the sheet's edges of 60 are
-/// too short but no collapse is kept, so the result is the flips and the smoothing's moves alone;
-/// toward edges of 120 within 10, collapses are kept too.
-#[test]
-fn remeshing_collapses_flips_and_smooths_as_pmp_does() {
+/// The bent sheet remeshed once toward edges of `length` within `epsilon`, checked both ways.
+fn remesh_bent(epsilon: u64, length: u64) -> Modelled {
     let input = bent();
-    let run = |epsilon: u64, length: u64| {
-        let out = remesh(
-            &input.0,
-            &input.1,
-            Remesh {
-                epsilon,
-                length,
-                iterations: 1,
-            },
-            &Exec::serial(),
-            &mut meter(),
-        )
-        .unwrap();
-        two_way(&input, &out, epsilon);
-        out
-    };
-    let out = run(6, 90);
+    let out = remesh(
+        &input.0,
+        &input.1,
+        Remesh {
+            epsilon,
+            length,
+            iterations: 1,
+        },
+        &Exec::serial(),
+        &mut meter(),
+    )
+    .unwrap();
+    two_way(&input, &out, epsilon);
+    out
+}
+
+/// Which edges remeshing flips and where smoothing moves a vertex are PMP's rules on valences and
+/// area-weighted centroids, pinned here by the whole result on the bent sheet. Toward edges of 90
+/// within 6, the sheet's edges of 60 are too short but no collapse is kept, so the result is the
+/// flips and the smoothing's moves alone.
+#[test]
+fn remeshing_flips_and_smooths_as_pmp_does() {
+    let out = remesh_bent(6, 90);
     assert_eq!(out.operations(), (11, 8));
     assert_eq!(
         coordinates(&out),
@@ -827,7 +828,14 @@ fn remeshing_collapses_flips_and_smooths_as_pmp_does() {
             [12, 18, 17]
         ]
     );
-    let out = run(10, 120);
+}
+
+/// Which short edge remeshing collapses into which end, as PMP's rules on boundaries and valences
+/// choose, pinned by the whole result: toward edges of 120 within 10, the bent sheet loses more
+/// than half its triangles.
+#[test]
+fn remeshing_collapses_as_pmp_does() {
+    let out = remesh_bent(10, 120);
     assert_eq!(out.operations(), (27, 22));
     assert_eq!(
         coordinates(&out),
@@ -868,6 +876,42 @@ fn remeshing_collapses_flips_and_smooths_as_pmp_does() {
             [9, 5, 6]
         ]
     );
+}
+
+/// An edge is too long only above 4/3 of the target and too short only below 4/5 of it. A flat
+/// sheet of 60 × 80 cells has sides of 60 and diagonals of 100, exactly 4/5 and 4/3 of 75, and
+/// every vertex's triangles are symmetric about it, so nothing is split, collapsed, flipped or
+/// moved: remeshing toward 75 gives the input back.
+#[test]
+fn edges_at_the_bounds_of_the_target_are_left_alone() {
+    let mut points = Vec::new();
+    for j in 0..4 {
+        for i in 0..4 {
+            points.push(p(60 * i, 80 * j, 0));
+        }
+    }
+    let at = |i: u32, j: u32| j * 4 + i;
+    let mut triangles = Vec::new();
+    for j in 0..3 {
+        for i in 0..3 {
+            triangles.push([at(i, j), at(i + 1, j), at(i + 1, j + 1)]);
+            triangles.push([at(i, j), at(i + 1, j + 1), at(i, j + 1)]);
+        }
+    }
+    let out = remesh(
+        &points,
+        &triangles,
+        Remesh {
+            epsilon: 4,
+            length: 75,
+            iterations: 1,
+        },
+        &Exec::serial(),
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(out.points(), points.as_slice());
+    assert_eq!(out.triangles(), triangles.as_slice());
 }
 
 #[test]
