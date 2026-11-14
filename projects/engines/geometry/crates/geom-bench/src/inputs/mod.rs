@@ -43,6 +43,7 @@ pub mod eft;
 pub mod encoder;
 pub mod exact_sum;
 pub mod exactness;
+pub mod facade;
 pub mod format;
 pub mod generated;
 pub mod grid;

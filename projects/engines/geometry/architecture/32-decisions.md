@@ -18,7 +18,7 @@ No agent acts on any of these, writes to anyone, or signs anything. The owner de
 | 32.4 | The same-answer guarantee: which computers, what it covers, who pays | Chapter 21's list, and Windows on Arm once its CI leg merges; valid results only; co-op-funded test machines. **Decided 2026-10-27: A, at no new cost (hosted runners; owner's machines)** | 21, 23, 26, 28 | G10, the CI matrix |
 | 32.5 | Who decides: kernel owners, and how spine changes are accepted | At least two named people; one member vote, then delegation | 23, 26, 27, 28, 29 | The first kernel merge (G02) |
 | 32.6 | Licence lines for code and tools | Run copyleft tools as separate programs; never compile Numerical Recipes code; keep CC0, take the Unlicense only beside another licence | 28, 29 | G113, the oracle runner |
-| 32.7 | Patent searches: who, when, and who pays | A funded patent lawyer, booleans first, with a named fallback | 11, 13, 16, 17, 19, 29 | G123, the first geom-poly piece |
+| 32.7 | Patent searches: who, when, and who pays | A funded patent lawyer, booleans first, with a named fallback. **Decided 2026-11-13: no searches (32.49)** | 11, 13, 16, 17, 19, 29 | G123, the first geom-poly piece |
 | 32.8 | How closely we follow NLib | Methods from the books; NLib for failure cases only. **Decided 2026-10-24: A, for all of the SMLib release:** ported, notices kept; Numerical Recipes routines and fixtures still excluded | 4, 12, 13, 16, 29 | G56, the first NURBS piece |
 | 32.9 | Who we write to | EMBER, Schmidt and McNeel now; the rest in a stated order | 11, 14, 16, 17, 24, 29 | Varies |
 | 32.10 | Revit truth data, and watching proprietary programs | Co-op models only; watching only checks our results against our own rules | 14, 28, 29 | G460, the Revit harness |
@@ -62,6 +62,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.42 | G449: the wall-clock merge rule | Accepted: a nightly miss confirmed by a same-night rerun blocks merges to `main` except the fix or a revert; deliberate rises recorded as 32.12 says; no run, no block | 23, 28 | G452, wall-clock and scaling gates |
 | 32.44 | SMLib's and solidcore's Numerical Recipes routines and fixtures | Accepted (owner, 2026-11-03): the licensing points raised about SMLib and solidcore are not a concern; their Numerical Recipes-derived routines may be ported and compiled like the rest of the release | 12, 29 | geom-test's source scan exemptions |
 | 32.45 | The project's licence is Apache-2.0 | Decided (owner, 2026-11-05): every file of the project is relicensed from MPL-2.0 to Apache-2.0, to match NVIDIA's USD BRep (SMLib) and solidcore, so code can move both ways; ported files keep their origin's licence as an `AND` operand | 29 | the licence fields, headers, NOTICE and checkers |
+| 32.49 | G73, G74 and G115: no patent searches | Decided (owner, 2026-11-13): no patent searches are made, no patent register is kept, and no known patent is avoided; G73, G74 and G115 are closed and leave gate 3 and every piece's needs; the other search pieces need no search, and their families are built existing code first | 11, 13, 16, 19, 29, 30, 31 | G87, G118 and every piece that waited on a search |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -220,6 +221,8 @@ The other four questions of this section stay as they are: reading GPL source st
 
 Why: one patent on the boolean core would touch every model ever saved, and a search costs little next to rebuilding the core.
 
+**Decided by the owner, 2026-11-13: no searches.** Neither B nor its fallback: no patent searches are made by anyone, and the CI gate in 29 is not built. The record, with the owner's words, is 32.49.
+
 **Changes:** chapter 29, the pieces of every family in chapters 11, 13, 16, 17 and 19, and K06.
 
 ## 32.8 NLib: how closely we may follow it
@@ -238,7 +241,7 @@ Why: one patent on the boolean core would touch every model ever saved, and a se
 - The decision covers all of NVIDIA's published SMLib release (USD BRep): the SMLib core, NLib and the IntegrityWare-lineage (`Iw*`) modules. The gates that waited for an owner to sign off their chain of title are lifted (29.5, 29.6).
 - This code may be ported, as 29.1's PORT class defines: translated into our Rust and rebuilt to section 3, with our types, exact predicates where topology is decided, certified bounds, deterministic maths, and typed errors in place of SMLib's silent fallbacks, tolerance globals and heuristics. Each ported file keeps its Apache-2.0 notice, NVIDIA's copyright lines included, says what we changed, and has an entry in `geometry/NOTICE` (29.20, rule 4).
 - Two exclusions stand, because they rest on where the code came from, not on who published it. The routines derived from Numerical Recipes, in SMLib's core and in NLib, as 29.6 and 12.17 name them (in NLib: `N_SingleValueDecomposeSolve`, `N_RealMatrixSingleValueDecompose`, `N_FuncFindMinima`, `N_RealMatrixEigenValuesVectors` and its pythag helper, `M_TridiagonalSystem` and `M_CorneredTridiagonalSystem`): Numerical Recipes' own licence forbids reuse whoever republished them, so they are written from the mathematics. And SMLib's fixtures, which are SMS-era customer files. **Both lifted by the owner on 2026-11-03 (32.44).**
-- Nothing else changes. The NURBS Book and the Piegl–Tiller papers stay the first reference. The critique of SMLib's intersector in 12.17 stands: its uncertified heuristics are not ported as behaviour. IntegrityWare's patent claim on shelling and offsetting still needs its search and an owner's review first (29.17, 32.7). The oracle builds still wait on 32.6 (rule 8). Every other source keeps its own gate.
+- Nothing else changes. The NURBS Book and the Piegl–Tiller papers stay the first reference. The critique of SMLib's intersector in 12.17 stands: its uncertified heuristics are not ported as behaviour. IntegrityWare's patent claim on shelling and offsetting still needs its search and an owner's review first (29.17, 32.7); **no search since 2026-11-13 (32.49).** The oracle builds still wait on 32.6 (rule 8). Every other source keeps its own gate.
 - The risk left: if a predecessor owner ever showed that NVIDIA lacked the right, the affected ports would be rewritten from the primary sources, which their Source and credit lines make findable (R17).
 
 **Changes:** section 4 (option D), and chapters 12, 13, 16 and 29.
@@ -1052,3 +1055,22 @@ So in a shipped build a transform of a six-faced body that is less than exact ab
 Reopen this if a measured operation on real models spends most of its time in groups 2 and 3 on bodies less than exact; C is then the option to weigh again, with the level as a recorded input.
 
 **Changes:** 8.3 and its as-built note, 28.4's and 28.13's as-built notes, 31.7; `geom-make` (`build.rs`, `Unpassed::level`), `geom-test` (the feature `full-checker`, `tests/shipped.rs`), `kernel.yml`'s two steps, AGENTS.md's gate table.
+
+## 32.49 No patent searches (owner actions G73 and G74, piece G115)
+
+**What it is.** 32.7 recommended a funded patent lawyer, and chapter 29 made every catalogue family wait for a recorded search before it entered the Build stage. The board turned that into owner action G73 (who searches), nineteen search pieces that needed it, among them G74 (persistent naming and reference resolution), and piece G115, the patent register (`geometry/PATENTS.md`), which also needed it, with a CI check that fails when a family has no recorded search. Gate 3 (G118) needed G115, and G87, persistent names, needed G74. The question put to the owner: "Your call on G73, G74 and G115, the patent pieces Gate 3 lists. Since we don't work on patents, the board needs amending to take them out of the gate."
+
+**Decided by the owner, 2026-11-13 (17:24 NZ): no patent searches.** The owner's words: "What patents? Just use them. Should have lots of free stuff to use like solid works or parts of things rewritten then it's not patents". In plain words: nobody searches for patents, and the kernel's methods are taken from the free sources it already uses, ported and rewritten, as for every other piece.
+
+What this changes:
+- G73 and G74 are closed, and so is G115: no patent register is kept and no CI check asks for a recorded search. All three leave every piece's needs: G87 no longer needs G74, and gate 3 (G118) no longer needs G115 (30.4, 30.5).
+- The other search pieces that needed G73 (G119, G122, G182, G183, G234 to G237, G286, G287, G309 to G311, G313, G356, G383, G445 and G446) no longer need it, and each is recorded by this decision as needing no search. The pieces that waited on them are ordinary pieces, built under the existing rule "existing code first": solidcore, SMLib and other permissive sources, ported to Rust (the kernel's AGENTS.md). G309 keeps chapter 13's legal check of Lifted Surfacing's dependencies, and G313 the OpenSubdiv licence review: neither is a patent search.
+- No family waits for a search before it enters the Build stage (29.17, rule 10 of 29.20): not the boolean core before the first geom-poly piece (OQ-11.5), and not the families of chapter 13, 16.6 or 19.13.
+- 32.7's recommendation and fallback are both set aside, and K06 needs no line for legal advice on patents.
+- No `geometry/PATENTS.md` exists, so none is removed; were one added, it would be a record only, never a gate.
+
+**Also decided by the owner, 2026-11-13 (about 19:00 NZ).** Asked whether "just use them" also lifts the rules for patents already known, the owner answered: "Yes, lift them". So 29.17's table is a record only, and none of its "avoid the claimed method" or "stop and ask" lines stands (Autodesk's trim-free T-spline and hollow-lattice patents, the watertightCAD family, nTop's filings, IntegrityWare's claim, any patent on the Viennese Bend). Rule 10 of 29.20 no longer stops work for a patent, rule 11 loses "a method might be patented", 13.11's IntegrityWare stop goes, and so does the root AGENTS.md's patent line. A trade mark is not a patent: the cant-coupled transition keeps its own name (32.33).
+
+The risk left: R16 (31). A method someone has patented may be used without anyone knowing, and the patents 29.17 lists may be used knowingly; the owner accepts both. A knowing use of an active patent can cost more if its holder sues (in the United States, up to three times the damages), so 29.17 keeps each patent's expiry date.
+
+**Changes:** this record; 32.7 and 32.8; 13.11's IntegrityWare paragraph; the root AGENTS.md's patent line; ARCHITECTURE.md's chapter list and Construct's A13 note (29.17's new title); chapters 11 (OQ-11.5 and its build piece), 13, 16, 19.13 and 29 (29.17, rules 10 and 29.20's file list); 30.1, 30.4 and 30.5, and `30-build-order.json` (G73, G74, G87, G115, G118 and the search pieces); 31 (R16 and its rows); 26.3's and 27's file lists; GLOSSARY.md.

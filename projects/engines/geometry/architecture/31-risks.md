@@ -348,14 +348,11 @@ Some may stay open for years, leaving gaps where the incumbents give an approxim
 **Likelihood:** Low for any one family; Medium over decades. **Impact:** Severe for a core method, which could be pulled after files depend on it; Medium for a niche one.
 
 **Mitigation built into the plan.**
-- The patent register. No family enters the Build stage without a recorded search and owner review, and CI enforces it (29.17; piece "Patent register").
-- The EMBER check is the first boolean piece.
 - Versioned operations let a method be replaced while old files still open from stored geometry (26.2).
-- Section 32.7 asks who searches, and who pays.
+- The patent register, the search before each family's Build stage and the EMBER check were planned here and in 32.7. **The owner closed them on 2026-11-13 (32.49): no patent searches are made and no register is kept,** so the owner accepts this risk as it stands.
 
 **Early warning.**
-- The register's count of unsearched families and methods on the build path.
-- Any hit in a search.
+- A patent holder's notice about a method we use.
 
 ### R17. Licences and terms awaiting confirmation
 
@@ -442,7 +439,7 @@ If such code entered Spare Kit, it would have to be torn out and rewritten clean
 
 ### R21. Legal work has no budget or counsel
 
-**What could go wrong.** The set leans on lawyers throughout: a patent search before the first geom-poly merge (32.7), a legal review of OpenSubdiv's TOST licence (32.9), a reading of Onshape's terms for the ABC dataset and of step-conformance's parts (32.11), the Revit and AutoCAD terms checks (32.10), any clearance of DWG (README), and counsel's view on AI-written code (R20). K06's cost model leaves legal advice out, because no public rates were found. If no lawyer is funded, all of these wait, and under 32.7's recommendation the boolean core cannot start.
+**What could go wrong.** The set leans on lawyers throughout: a patent search before the first geom-poly merge (32.7), a legal review of OpenSubdiv's TOST licence (32.9), a reading of Onshape's terms for the ABC dataset and of step-conformance's parts (32.11), the Revit and AutoCAD terms checks (32.10), any clearance of DWG (README), and counsel's view on AI-written code (R20). K06's cost model leaves legal advice out, because no public rates were found. If no lawyer is funded, all of these wait, and under 32.7's recommendation the boolean core cannot start. The patent search no longer waits: the owner decided on 2026-11-13 that none is made (32.49).
 
 **Likelihood:** High. **Impact:** High.
 
@@ -599,7 +596,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The edition guarantee and checker fixes: the guarantee covers valid results only | 28 | 32.4 |
 | Who approves as a kernel owner; who reviews proofs; who accepts spine amendments; who sets the kernel's share of Spare Construct's targets | 23, 26, 28, 29 | 32.5 |
 | GPL and LGPL tools as out-of-process oracles; reading GPL source; Numerical Recipes code in oracle builds; the method-only procedure as the standard; the Unlicense and CC0-1.0 on the code allow-list | 24, 28, 29 | 32.6; the out-of-process oracles decided yes by owner action G75 |
-| Patent searches, who does them and who pays: EMBER, Lifted Surfacing, Topological Offsets, transfinite patches, developable lofts, sheet-metal unfolding, the section 16 methods, Autodesk US 10,635,088, nTop's filings, IntegrityWare's claim, the sixteen unsearched families, and the trade mark and any patent on "Viennese Bend". The Google Patents status of the Pixar, Stam, T-spline and watertightCAD patents is an assumption until counsel confirms | 11, 13, 16, 17, 29 | 32.7, then piece "Patent register" |
+| Patent searches, who does them and who pays: EMBER, Lifted Surfacing, Topological Offsets, transfinite patches, developable lofts, sheet-metal unfolding, the section 16 methods, Autodesk US 10,635,088, nTop's filings, IntegrityWare's claim, the sixteen unsearched families, and the trade mark and any patent on "Viennese Bend". The Google Patents status of the Pixar, Stam, T-spline and watertightCAD patents is an assumption until counsel confirms. **Closed by the owner on 2026-11-13: no searches and no register** | 11, 13, 16, 17, 29 | 32.7 and 32.49 |
 | NLib's chain of title, the narrowing of option D, how "notices kept" is done, and an issue to NVIDIA | 12, 29 | 32.8, decided 2026-10-24: A, for all of the SMLib release |
 | Writing to EMBER's authors, the csgrs and Hyper author, CADCraft, tangency-labs, McNeel (openNURBS, and so Rhino subdivision exchange) and Pixar (OpenSubdiv's TOST licence); the order of contacts | 11, 14, 16, 24, 29 | 32.9 |
 | Revit exports in a public repository; anonymised real projects; an AutoCAD seat and terms check; the ruling on black-box observation of proprietary programs, and so CADCraft's test scenarios; checking our exports in proprietary programs | 14, 28, 29 | 32.10 |

@@ -25,7 +25,7 @@ mod gate;
 use gate::{
     attributes::attributes, ball::ball, batch::batch, body_record::body_record, brent::brent,
     bvh::bvh, cbor::cbor, crossing::crossing, curve::curve, dd::dd, dual::dual, eft::eft,
-    encoder::encoder, exact_sum::exact_sum, exactness::exactness, format::format,
+    encoder::encoder, exact_sum::exact_sum, exactness::exactness, facade::facade, format::format,
     generated::generated, grid::grid, growth::growth, helper::helper, history::history,
     intersect::intersect, interval::interval, isolate::isolate, linalg::linalg, make::make,
     math::math, math_types::math_types, mesh::mesh, name_record::name_record, names::names,
@@ -39,7 +39,8 @@ use gate::{
 gungraun::main!(
     config = gate::config();
     library_benchmark_groups = predicate, sign, wide, wide32, plane, crossing, eft, interval, grid, real, exactness,
-        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, attributes, topo, batch, mesh, nurbs, curve, surface, format, brent, quadrature, helper, scenario, growth, make, cbor, record, body_record, name_record, op_record, open, query, encoder, names, history, resolve, prune, intersect, quadric
+        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, attributes, topo, batch, mesh, nurbs, curve, surface, format, brent, quadrature, helper, scenario, growth, make, cbor, record, body_record, name_record, op_record, open, query, encoder, names, history, resolve, prune, intersect, quadric,
+        facade
 );
 
 /// Off Linux: explain where the gate runs, and succeed.

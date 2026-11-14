@@ -3756,3 +3756,27 @@ pub mod prune {
         benchmarks = steps, record_write, record_read
     );
 }
+
+/// The facade, `engine-geometry` (piece G100; decision 32.46).
+pub mod facade {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("facade/lookup/typical"))]
+    fn lookup(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("facade/dispatch/typical"))]
+    fn dispatch(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = facade;
+        benchmarks = lookup, dispatch
+    );
+}

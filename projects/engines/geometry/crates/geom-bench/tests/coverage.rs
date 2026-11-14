@@ -708,13 +708,77 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_run",
         &[("exec", include_str!("../../geom-run/src/exec.rs"))],
     ),
+    (
+        // The facade (piece G100) holds no function of its own: its operation table and the
+        // operations it re-exports are what a program calls, so they are what it measures.
+        "engine_geometry",
+        &[(
+            "operations",
+            include_str!("../../../../crates/engine-geometry/src/operations.rs"),
+        )],
+    ),
 ];
+
+/// The names a file's public `use` items re-export, as `module::name` (`pub use a::{b, c}` gives
+/// `module::b` and `module::c`; a renamed item gives its new name; a glob gives nothing), and its
+/// public constants and statics: what the facade offers a program.
+fn reexports_and_constants(module: &str, file: &syn::File) -> Vec<String> {
+    let mut out = Vec::new();
+    for item in &file.items {
+        match item {
+            syn::Item::Use(u) if is_pub(&u.vis) && !is_test(&u.attrs) => {
+                let mut work = vec![&u.tree];
+                while let Some(tree) = work.pop() {
+                    match tree {
+                        syn::UseTree::Path(p) => work.push(&p.tree),
+                        syn::UseTree::Name(n) => out.push(format!("{module}::{}", n.ident)),
+                        syn::UseTree::Rename(r) => out.push(format!("{module}::{}", r.rename)),
+                        syn::UseTree::Group(g) => work.extend(g.items.iter()),
+                        syn::UseTree::Glob(_) => {}
+                    }
+                }
+            }
+            syn::Item::Const(c) if is_pub(&c.vis) && !is_test(&c.attrs) => {
+                out.push(format!("{module}::{}", c.ident));
+            }
+            syn::Item::Static(s) if is_pub(&s.vis) && !is_test(&s.attrs) => {
+                out.push(format!("{module}::{}", s.ident));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+#[test]
+fn the_facade_reader_finds_every_reexport_and_constant() {
+    let source = "\
+        pub use a::{b, c as d, e::{f, *}};\n\
+        use g::h;\n\
+        pub(crate) use i::j;\n\
+        pub const K: u8 = 1;\n\
+        const L: u8 = 2;\n\
+        pub static M: u8 = 3;\n\
+        #[cfg(test)]\npub use n::o;\n";
+    let found: BTreeSet<String> = reexports_and_constants("m", &parse("m", source))
+        .into_iter()
+        .collect();
+    let want: BTreeSet<String> = ["m::b", "m::d", "m::f", "m::K", "m::M"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(found, want);
+}
 
 /// [`public_functions`], with the methods of every trait implementation in the file too: a kind's
 /// evaluation is its trait's (`impl ParamCurve<D> for CurveKind<D>`), and a trait's methods are as
-/// public as the trait.
-fn crate_functions(module: &str, source: &str) -> Vec<String> {
+/// public as the trait. For the facade, which defines no function, its re-exports and public
+/// constants too ([`reexports_and_constants`]).
+fn crate_functions(krate: &str, module: &str, source: &str) -> Vec<String> {
     let mut out = public_functions(module, source);
+    if krate == "engine_geometry" {
+        out.extend(reexports_and_constants(module, &parse(module, source)));
+    }
     for item in &parse(module, source).items {
         // A public trait's methods with a default body, which every implementing kind runs.
         if let syn::Item::Trait(tr) = item
@@ -773,7 +837,7 @@ fn every_function_measured_in_another_crate_is_public_there() {
         let (_, files) = OTHER_CRATES.iter().find(|(k, _)| *k == krate).unwrap();
         let public: BTreeSet<String> = files
             .iter()
-            .flat_map(|(m, src)| crate_functions(m, src))
+            .flat_map(|(m, src)| crate_functions(krate, m, src))
             .collect();
         assert!(
             public.contains(name),

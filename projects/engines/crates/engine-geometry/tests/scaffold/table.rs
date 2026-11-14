@@ -332,7 +332,7 @@ const ROWS: &[Row<'static>] = &[
         "base math curve surface topo poly name mesh subd field 2d cloud draw sketch"),
     kernel("geom-exchange", 12, Amended27, Here,
         "base math curve surface topo format p21 intersect check"),
-    kernel("geom-p21",      12, Amended27, Here, "base format"),
+    kernel("geom-p21",      12, Amended27, Elsewhere("G415"), "base format"),
     kernel("geom-heal",     12, Amended27, Here, "base topo check mesh exchange"),
     kernel("geom-ifc",      12, Accepted,   Here, concat!(
         "base format exchange heal p21 ",

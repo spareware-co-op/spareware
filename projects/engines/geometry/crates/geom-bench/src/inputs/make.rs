@@ -37,8 +37,8 @@ fn point(g: &mut SplitMix64) -> P3 {
     p3(within(g, REACH), within(g, REACH), within(g, REACH))
 }
 
-/// A box within the reach.
-fn a_box(g: &mut SplitMix64) -> BoxInput {
+/// A box within the reach (also the facade's dispatch inputs, [`super::facade`]).
+pub(crate) fn a_box(g: &mut SplitMix64) -> BoxInput {
     BoxInput {
         min: point(g),
         size: [size(g), size(g), size(g)],

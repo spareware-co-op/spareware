@@ -3556,3 +3556,78 @@ pub mod naming {
         });
     }
 }
+
+/// The facade, `engine-geometry` (piece G100; decision 32.46): an operation found by its name in
+/// the facade's table, as a program or an AI tool names it, and a call dispatched by name through
+/// the facade's re-export, under an unlimited budget. A name the table does not hold is stored as
+/// `None`; no typical input has one.
+pub mod facade {
+    use engine_geometry::operations::{OPERATIONS, make_box};
+    use engine_geometry::schema::{Class, Operation};
+    use engine_geometry::value::error::OpError;
+    use engine_geometry::value::op::{Budget, OpContext, OpId, OpPath};
+    use geom_make::BoxInput;
+    use geom_topo::Arena;
+
+    use super::run;
+
+    /// The operation named `name` and its place in the table, found by binary search: the table is
+    /// in name order (`engine-geometry`'s `tests/attack_g100.rs`).
+    fn find(name: &str) -> Option<(usize, &'static Operation)> {
+        let at = OPERATIONS
+            .binary_search_by(|op| op.schema.name.cmp(name))
+            .ok()?;
+        OPERATIONS.get(at).map(|op| (at, op))
+    }
+
+    /// A count as the digest holds it.
+    fn n(len: usize) -> u32 {
+        u32::try_from(len).unwrap_or(u32::MAX)
+    }
+
+    /// Each name's operation, read as a caller reads it before a call: its place in the table, its
+    /// schema's version, and how many inputs, roles, errors and charges the schema lists.
+    #[inline(never)]
+    pub fn lookup(batch: &[String], out: &mut Vec<Option<[u32; 6]>>) {
+        run(batch, out, |name| {
+            let (at, op) = find(name)?;
+            let s = op.schema;
+            Some([
+                n(at),
+                s.version,
+                n(s.inputs.len()),
+                n(s.roles.len()),
+                n(s.errors.len()),
+                n(s.charges.len()),
+            ])
+        });
+    }
+
+    /// Each call's operation found by name and run through the facade, its result read as a
+    /// program reads it: the body's faces, edges and vertices, its class's rank, and whether the
+    /// schema lists the class it came back with (1) or not (0).
+    #[inline(never)]
+    pub fn dispatch(
+        batch: &[(String, BoxInput)],
+        out: &mut Vec<Option<Result<[u32; 5], OpError>>>,
+    ) {
+        let ctx = OpContext::new(OpPath::new(OpId::from_bytes([7; 16])), Budget::UNLIMITED);
+        run(batch, out, |(name, input)| {
+            let (_, op) = find(name)?;
+            if op.schema.name != "make.box" {
+                return None;
+            }
+            Some(make_box(&ctx, input).map(|made| {
+                let a = made.result.body.arenas();
+                let class = Class::of(made.exactness);
+                [
+                    a.rows(Arena::Face),
+                    a.rows(Arena::Edge),
+                    a.rows(Arena::Vertex),
+                    u32::from(made.exactness.rank()),
+                    u32::from(op.schema.classes.contains(&class)),
+                ]
+            }))
+        });
+    }
+}

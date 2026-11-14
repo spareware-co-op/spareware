@@ -288,17 +288,23 @@
             {
               "sha256": "ddee718ce2bebe394e4cd1a975a27851b9d21b1ad9aace84539343ce83ac7e94",
               "kind": "corpus",
+              "piece": "G100",
+              "why": "2 new count benchmarks in a new group: facade (G100, Gate 3's record: a registered operation found by name in the facade's table and its schema read, and make.box dispatched by name through the facade's re-export with its class checked against its schema); no existing digest moved"
+            },
+            {
+              "sha256": "cc13b5939bfbf8c3cdb3806d9d25ab4f91b827e92aef476a4e2096d84370ac59",
+              "kind": "corpus",
               "piece": "Phase 4 train 1 (G123 to G155)",
               "why": "Phase 4's first train, one record for its pieces' 32 new count benchmarks: 14 on geom-num's plane functions (G138: plane::determinant_sign and its fellows), mesh/cdt (G153), mesh/exact_build (G146), 6 on the distance comparisons and triangle contact (G151), mesh/envelope (G152), mesh/locate (G147), mesh/boolean (G148) and 7 scenarios of the flat boolean (G140); and topo/publish's input digest, which moves because a vertex's point is now a PointKind (the G129 fix), while its output digest stays. No other existing digest moved"
             },
             {
-              "sha256": "aa19ec8ce434b30073d251822514785a5fe64ac3b765ece7a12b5285ea3b909b",
+              "sha256": "a6d98f2324eb80c3bbc844f1c588478ef70491e411358744a902b03bc8f5ac2e",
               "kind": "corpus",
               "piece": "Phase 5 train 1 (G158 to G180)",
               "why": "Phase 5's first train, one record for its pieces' 39 new count benchmarks (groups intersect, quadric: geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils). No existing digest moved"
             }
           ],
-          "sha256": "92ba0660401fb50bb12eb7079dceb6e4433322cfc93f51d23456e587c2cbfc5f"
+          "sha256": "c1dffe2ad0263d94cfc7aed3297bbcd23c46cad1a998a82402571a7a9c43fd34"
         },
         {
           "id": "geom-nurbs/operations",
