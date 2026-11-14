@@ -548,7 +548,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace <= with > in check",
+      "mutant": "replace <= with > in laws",
       "line_text": "let side = if t <= mid {",
       "occurrences": 1,
       "kind": "harmless",
@@ -785,14 +785,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant also tests the sign when M equals L, a resize to the same width. Then r has the very limbs of self, so its sign is self's and the test is false: resize returns the same Some(r) for every value."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
-      "mutant": "replace || with && in same_parameter",
-      "line_text": "let done = e <= target * 0.5 || n >= MOST;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "With && the refinement stops on reaching its target only at the densest sampling, so every cache whose certificate keeps falling is sampled four times over, up to 32 steps a cell, before it stops: up to sixty-four times the work for each offset's cache in the suite, which then runs past cargo-mutants' time limit. Where it finishes, the golden geom-surface/offset, whose caches stop at the first sampling that meets the target, changes."
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
