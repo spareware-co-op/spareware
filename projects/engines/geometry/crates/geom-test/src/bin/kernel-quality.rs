@@ -26,6 +26,11 @@
 //!   change can affect, and why, and writes the step outputs that workflow's jobs read
 //!   ([`geom_test::fuzz_scope`]); `.github/workflows/kernel-fuzz.yml`'s job `select` runs it.
 //!
+//! - `test-scope` prints which crates' tests a change can reach, and why, and writes the step
+//!   outputs `kernel.yml`'s suites read ([`geom_test::test_scope`]); with `--build-of <crate>` it
+//!   says instead whether the change reaches what that crate's tests and benchmarks build, for
+//!   `kernel-bench.yml`'s count gates.
+//!
 //! Guarantees:
 //!
 //! - **Exit status says what happened.** 0 when the gate passes, 1 when it fails, 2 when the input
@@ -49,6 +54,7 @@ use geom_test::coverage::{self, CrateReport};
 use geom_test::fuzz_scope;
 use geom_test::mutants::{self, Mode};
 use geom_test::quality_ledger::{LEDGER_PATH, Ledger};
+use geom_test::test_scope;
 use regex_lite::Regex;
 
 /// The geometry kernel's mutation and coverage gates (section 28.8 of the kernel architecture).
@@ -152,6 +158,26 @@ enum Command {
     },
     /// Prints the `-p` arguments of every kernel crate, for the Miri run.
     MiriPackages {
+        /// The repository root.
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+    },
+    /// Prints which crates' tests a change can reach, and why.
+    TestScope {
+        /// Every crate: a push to main, a release tag.
+        #[arg(long, conflicts_with = "changed", required_unless_present = "changed")]
+        all: bool,
+        /// The files the change touches, one path per line from the repository root.
+        #[arg(long, value_name = "FILES.txt")]
+        changed: Option<PathBuf>,
+        /// Whether the change reaches what this crate's tests and benchmarks build, as the output
+        /// `reached`, instead of the crates whose tests run.
+        #[arg(long, value_name = "CRATE")]
+        build_of: Option<String>,
+        /// Appends the step outputs to this file (GitHub's `$GITHUB_OUTPUT`) instead of printing
+        /// them.
+        #[arg(long, value_name = "FILE")]
+        github_output: Option<PathBuf>,
         /// The repository root.
         #[arg(long, default_value = ".")]
         repo: PathBuf,
@@ -310,9 +336,117 @@ fn fuzz_scope(
     Ok(true)
 }
 
+/// `test-scope`: the decision for every crate (or for one crate's build), printed, and its step
+/// outputs written.
+fn test_scope(
+    changed: Option<&Path>,
+    build_of: Option<&str>,
+    github_output: Option<&Path>,
+    repo: &Path,
+) -> Result<bool, String> {
+    let scope = test_scope::Scope::read(&metadata(&canonical(repo)?)?)?;
+    let files: Option<Vec<String>> = changed
+        .map(|file| {
+            std::fs::read_to_string(file)
+                .map(|text| text.lines().map(str::to_owned).collect())
+                .map_err(|e| format!("{}: {e}", file.display()))
+        })
+        .transpose()?;
+    let outputs = if let Some(krate) = build_of {
+        if !scope.folders().contains_key(krate) {
+            return Err(format!("{krate} is not a workspace crate"));
+        }
+        let reached = scope.build_reached(files.as_deref(), krate);
+        if let Some(why) = &reached {
+            println!("The change reaches what {krate} builds: {why}.");
+        } else {
+            println!("The change reaches nothing {krate} builds.");
+        }
+        vec![("reached".to_owned(), reached.is_some().to_string())]
+    } else {
+        let selection = scope.select(files.as_deref());
+        print!("{}", selection.report());
+        selection.outputs()
+    };
+    let mut lines = String::new();
+    for (key, value) in outputs {
+        lines.push_str(&key);
+        lines.push('=');
+        lines.push_str(&value);
+        lines.push('\n');
+    }
+    if let Some(path) = github_output {
+        use std::io::Write as _;
+        std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path)
+            .and_then(|mut f| f.write_all(lines.as_bytes()))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+    } else {
+        println!();
+        print!("{lines}");
+    }
+    Ok(true)
+}
+
 /// A `--files` regular expression, in the syntax cargo-mutants' `--re` takes.
 fn regex(files: &str) -> Result<Regex, String> {
     Regex::new(files).map_err(|e| format!("--files {files:?}: {e}"))
+}
+
+/// `mutants`: the runs judged against the ledger, and the verdict printed.
+fn judge_mutants(
+    mode: ModeArg,
+    expected: &Path,
+    base_ledger: Option<&Path>,
+    files: Option<&str>,
+    repo: &Repo,
+    outs: &[PathBuf],
+) -> Result<bool, String> {
+    let root = canonical(&repo.repo)?;
+    let ledger = read_ledger(&root, repo.ledger.as_deref())?;
+    let base = base_ledger
+        .map(|p| Ledger::read(p).map_err(|e| format!("base ledger: {e}")))
+        .transpose()?;
+    let expected = mutants::read_mutant_list(expected).map_err(|e| e.to_string())?;
+    let mut runs = Vec::new();
+    for dir in outs {
+        runs.push(mutants::read_run(dir).map_err(|e| e.to_string())?);
+    }
+    let mode = match mode {
+        ModeArg::Diff => Mode::Diff,
+        ModeArg::Full => Mode::Full,
+    };
+    let files = files.map(regex).transpose()?;
+    if let Some(re) = &files {
+        if mode == Mode::Diff {
+            return Err("--files narrows a full run; a diff is narrowed already".to_owned());
+        }
+        let outside = ledger
+            .survivors
+            .iter()
+            .filter(|s| !re.is_match(&s.file))
+            .count();
+        println!(
+            "narrowed to the files matching {:?}: {} mutant(s); {outside} ledger entr{} of \
+             other files not counted",
+            re.as_str(),
+            expected.len(),
+            if outside == 1 { "y" } else { "ies" }
+        );
+    }
+    let verdict = mutants::judge(
+        &runs,
+        &ledger,
+        &root,
+        mode,
+        Some(expected.as_slice()),
+        base.as_ref(),
+        files.as_ref(),
+    );
+    print!("{}", mutants::report(&verdict));
+    Ok(verdict.passes())
 }
 
 /// Runs the command: `Ok(true)` when the gate passes, `Ok(false)` when it fails.
@@ -342,51 +476,14 @@ fn run(cli: Cli) -> Result<bool, String> {
             files,
             repo,
             outs,
-        } => {
-            let root = canonical(&repo.repo)?;
-            let ledger = read_ledger(&root, repo.ledger.as_deref())?;
-            let base = base_ledger
-                .map(|p| Ledger::read(&p).map_err(|e| format!("base ledger: {e}")))
-                .transpose()?;
-            let expected = mutants::read_mutant_list(&expected).map_err(|e| e.to_string())?;
-            let mut runs = Vec::new();
-            for dir in &outs {
-                runs.push(mutants::read_run(dir).map_err(|e| e.to_string())?);
-            }
-            let mode = match mode {
-                ModeArg::Diff => Mode::Diff,
-                ModeArg::Full => Mode::Full,
-            };
-            let files = files.map(|f| regex(&f)).transpose()?;
-            if let Some(re) = &files {
-                if mode == Mode::Diff {
-                    return Err("--files narrows a full run; a diff is narrowed already".to_owned());
-                }
-                let outside = ledger
-                    .survivors
-                    .iter()
-                    .filter(|s| !re.is_match(&s.file))
-                    .count();
-                println!(
-                    "narrowed to the files matching {:?}: {} mutant(s); {outside} ledger entr{} of \
-                     other files not counted",
-                    re.as_str(),
-                    expected.len(),
-                    if outside == 1 { "y" } else { "ies" }
-                );
-            }
-            let verdict = mutants::judge(
-                &runs,
-                &ledger,
-                &root,
-                mode,
-                Some(expected.as_slice()),
-                base.as_ref(),
-                files.as_ref(),
-            );
-            print!("{}", mutants::report(&verdict));
-            Ok(verdict.passes())
-        }
+        } => judge_mutants(
+            mode,
+            &expected,
+            base_ledger.as_deref(),
+            files.as_deref(),
+            &repo,
+            &outs,
+        ),
         Command::Coverage {
             scope,
             lcov_dir,
@@ -403,6 +500,18 @@ fn run(cli: Cli) -> Result<bool, String> {
             println!("{}", geom_test::miri::cargo_args(&packages));
             Ok(true)
         }
+        Command::TestScope {
+            all,
+            changed,
+            build_of,
+            github_output,
+            repo,
+        } => test_scope(
+            changed.as_deref().filter(|_| !all),
+            build_of.as_deref(),
+            github_output.as_deref(),
+            &repo,
+        ),
         Command::FuzzScope {
             all,
             changed,

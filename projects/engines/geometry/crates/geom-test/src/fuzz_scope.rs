@@ -533,16 +533,16 @@ impl Selection {
     }
 }
 
-/// A workspace member, as the selection needs it.
-struct Package {
-    id: String,
-    name: String,
+/// A workspace member, as the selections need it.
+pub(crate) struct Package {
+    pub(crate) id: String,
+    pub(crate) name: String,
     /// Its manifest's path, as cargo gave it.
-    manifest: String,
+    pub(crate) manifest: String,
     /// Its folder from the workspace root, ending in `/`.
-    folder: String,
+    pub(crate) folder: String,
     /// The names its library is used by in code (`geom_num`).
-    libs: Vec<String>,
+    pub(crate) libs: Vec<String>,
 }
 
 /// The kinds of target whose name code uses a crate by.
@@ -554,7 +554,7 @@ fn forward(path: &str) -> String {
 }
 
 /// The workspace members of `metadata`.
-fn packages(metadata: &Value) -> Result<Vec<Package>, String> {
+pub(crate) fn packages(metadata: &Value) -> Result<Vec<Package>, String> {
     let root = metadata
         .get("workspace_root")
         .and_then(Value::as_str)

@@ -14731,6 +14731,29 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the size of the metadata and of the crates' sources, and in the changed files times the workspace's crates.",
+          "does": "[`Scope::read`] reads the workspace's crate graph from `cargo metadata` and finds the crates whose sources read files outside their own folder ([`reads_outside`]), and [`Scope::select`] takes the files a change touches (`git diff --name-only`, one path from the repository root each) and decides, for every workspace crate, whether its tests run, with the changed file that selected it and why. [`Selection::outputs`] writes the decision as the step outputs `kernel.yml`'s suites read, and [`Selection::report`] writes it for the job's log. [`Scope::build_reached`] says whether a change reaches what one crate's tests and benchmarks build, for `kernel-bench.yml`'s count gates. `kernel-quality test-scope` is the command line.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/test_scope.rs",
+          "guarantees": [
+            "**Over, never under.** A crate's tests are skipped only when no changed file is in what its test binaries link or read, by the rule above; whatever cannot be placed selects every crate. `tests/test_scope.rs` holds the selection to the crate graph, read there independently, with planted mistakes.",
+            "**Everything without a change.** [`Scope::select`] given no list runs every crate's tests.",
+            "**Every decision is written down.** The report names each crate, whether its tests run, and the changed file that selected it or that none did."
+          ],
+          "job": "Which crates' tests a pull request's change can reach, so that `kernel.yml`'s test suites run only those (chapter 28.17: \"nothing re-tests code that has not changed\"), while a push to main, a release tag and a run with no change list run every crate's tests.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
+              "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies"
+            ],
+            "text": "`cargo metadata`'s resolved graph (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>), read for normal, build and development edges, and cargo's rule that development dependencies build only for the package's own tests, examples and benchmarks (<https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies>)."
+          },
+          "path": "geom_test::test_scope",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the file's length and the run's output.",
           "does": "gate 1 (chapter 30.3) asks that every merge gate fail on a seeded violation, the pattern of the kernel's merge gate (G12) and of the toolchain guard (G20, [`crate::guard`]). Most gates already meet it in their own tests (gate 1's record in chapter 32 lists each). The gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani, Gungraun's Callgrind comparison, Wasmtime's fuel, Gappa with Rocq, and HOL Light. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line in it found exactly once ([`Violation::anchor`]), the line it becomes, and the text the tool prints when it catches it. The binary `trip` writes the changed line into the working tree, runs the gate's own command, restores the file byte for byte, and asks [`verdict`] whether the run failed for that reason. Each workflow job runs it with its real check, so a job that could no longer fail (a tool that stopped checking, a command that checks nothing) fails instead. The two count gates run it last, comparing the planted run with the pull request's own run measured just before; and HOL Light's runs on orient2d's leg of its matrix alone.",
           "family": [],

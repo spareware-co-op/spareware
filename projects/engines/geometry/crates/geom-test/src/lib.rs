@@ -103,6 +103,9 @@
 //! - [`fuzz_scope`]: which of `geom-fuzz`'s targets and `kernel-fuzz.yml`'s Kani proofs a pull
 //!   request's change can affect, by the crate graph, so the pull request proves only those
 //!   (`kernel-quality fuzz-scope`).
+//! - [`test_scope`]: which crates' tests a pull request's change can reach, by the crate graph
+//!   with development dependencies, so `kernel.yml`'s suites test only those
+//!   (`kernel-quality test-scope`).
 //!
 //! Gate 1 (piece G43) adds:
 //!
@@ -264,6 +267,7 @@ pub mod rng;
 pub mod rust_source;
 pub mod scan;
 pub mod seed;
+pub mod test_scope;
 pub mod trip;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};

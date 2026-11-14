@@ -784,6 +784,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 
 | Workflow | Job | Seeded violation |
 | --- | --- | --- |
+| `kernel.yml` | `scope` | Not a gate: it decides which crates' tests the suites (`suite`, `wasm-suite`) run on a pull request, by the crate graph with development dependencies, and names in its log each crate and why; every job still runs and reports under its own name. J: `geom-test/tests/test_scope.rs::a_change_runs_every_crate_whose_tests_build_it`, `geom-test/tests/test_scope.rs::a_file_outside_every_crate_runs_everything`, `geom-test/tests/test_scope.rs::the_suites_run_the_selection` |
 | `kernel.yml` | `test` | J: `geom-test/tests/attack_g19.rs::a_run_that_does_not_prove_its_goldens_is_refused`; R: the job `guard` |
 | `kernel.yml` | `suite` | The tests of `test`: every test of every kernel crate once per target and mode, in parts (`cargo nextest run --partition count:k/n`, doctests in part 1); a failing test fails its part (J: `geom-test/tests/attack_g19.rs::kernel_yml_runs_every_golden_in_every_native_build_mode`) |
 | `kernel.yml` | `guard` | R: the job itself (`libm`'s `sin` changed by one bit must fail a golden); J: `geom-test/tests/attack_g20.rs::a_trip_counts_only_for_the_right_reason` |

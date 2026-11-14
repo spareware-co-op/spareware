@@ -28,6 +28,18 @@ name: Kernel
 # of each leg runs them with `cargo test --doc`. The wasm32 legs split the same way: the job `wasm`
 # runs the goldens, the job `wasm-suite` the test vectors and the suite.
 #
+# What a pull request tests: only the crates its change can reach. The job `scope` runs
+# geom-test's `kernel-quality test-scope` on the files of the pull request's merge commit against
+# its base: a crate's tests run when a changed file is in what its test binaries link (the crate,
+# its normal and build dependencies' closure, and its development dependencies' closure), among its
+# own tests, or anywhere when its sources read files outside its folder; a changed file in no crate
+# (a workflow, Cargo.lock, .cargo, the toolchain file, an architecture chapter) runs every crate's.
+# geom-test's src/test_scope.rs gives the whole rule, its tests/test_scope.rs holds it to the crate
+# graph, and the job's summary names every crate and why it runs or not. The suites (`suite`,
+# `wasm-suite`) test only the crates it names; every job keeps its name and runs, so a required
+# check always reports, and a part left with nothing to test passes. A push to main and a release
+# tag test every crate. The goldens, the guard and the lints run whole on every change.
+#
 # Every action is pinned to a full commit, checked against its tag when it was pinned; update a
 # pin only after reviewing the new commit.
 #
@@ -189,9 +201,51 @@ jobs:
           cp "target/debug/golden$exe" "$RUNNER_TEMP/golden$exe"
           "$RUNNER_TEMP/golden$exe" run
 
+  # Which crates' tests the change can reach (the paragraph above): on a pull request, the files of
+  # its merge commit's diff against its base; on any other run, every crate. It runs beside
+  # `lint`, so it adds no wait.
+  scope:
+    name: Which crates' tests the change can reach
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      crates: ${{ steps.scope.outputs.crates }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # A pull request's checkout is its merge commit, whose first parent is the base: the diff
+      # between them is the change, renames as a removed and an added file.
+      - name: The files the change touches
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+            git diff --no-ext-diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: The crates whose tests it can reach, and why
+        id: scope
+        run: >-
+          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope $SCOPE
+          --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
   suite:
     name: Test suite (${{ matrix.target.name }}, ${{ matrix.part.mode }}, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
-    needs: lint
+    needs: [lint, scope]
     runs-on: ${{ matrix.target.os }}
     # Every test of every kernel crate, once per target and mode, split into parts that run side
     # by side: each part runs the tests `--partition count:k/n` gives it. The release legs took
@@ -226,6 +280,8 @@ jobs:
             os: macos-15-intel
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"
+      # A part the selection leaves without a test passes (nextest's `--no-tests`).
+      NEXTEST_NO_TESTS: pass
     defaults:
       run:
         shell: bash
@@ -251,26 +307,36 @@ jobs:
         uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
-      # Every crate in the kernel's folder is run here, so a new crate is covered the day it lands
-      # (chapter 27: one folder per crate, folder name = crate name).
-      - name: List the kernel's crates
-        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
+      # Every crate in the kernel's folder that the change can reach (the job `scope`) is run here,
+      # so a new crate is covered the day it lands (chapter 27: one folder per crate, folder name =
+      # crate name). With none, the steps below are skipped and the part passes.
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case " $SELECTED " in *" $c "*) list="$list -p $c" ;; esac
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none}"
       - name: Test suite in release, with overflow checks on (part ${{ matrix.part.k }} of ${{ matrix.part.n }})
-        if: ${{ !cancelled() && matrix.part.mode == 'release' }}
+        if: ${{ !cancelled() && matrix.part.mode == 'release' && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
       - name: Test suite in debug (part ${{ matrix.part.k }} of ${{ matrix.part.n }})
-        if: ${{ !cancelled() && matrix.part.mode == 'debug' }}
+        if: ${{ !cancelled() && matrix.part.mode == 'debug' && env.KERNEL_CRATES != '' }}
         run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
       # nextest does not run doctests, so part 1 of each mode runs them, every one.
       - name: Doctests in release, with overflow checks on
-        if: ${{ !cancelled() && matrix.part.mode == 'release' && matrix.part.k == 1 }}
+        if: ${{ !cancelled() && matrix.part.mode == 'release' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
       - name: Doctests in debug
-        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 }}
+        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast
 
   big-endian:
@@ -417,7 +483,7 @@ jobs:
 
   wasm-suite:
     name: Test suite (wasm32-wasip1 under ${{ matrix.runtime }})
-    needs: lint
+    needs: [lint, scope]
     runs-on: ubuntu-latest
     # geom-num's test vectors and the whole suite in release on wasm32, the other half of what the job
     # `wasm` used to run in one piece.
@@ -447,10 +513,21 @@ jobs:
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
           key: wasm-suite
-      # Every kernel crate in the kernel's folder; the development crates (chapter 27) need
-      # processes and files that WASI test runs do not have, and run natively above.
-      - name: List the kernel's crates
-        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do c="$(basename "$d")"; case "$c" in geom-test|geom-fuzz|geom-gen|geom-bench) ;; *) printf -- '-p %s ' "$c" ;; esac; done)" >> "$GITHUB_ENV"
+      # Every kernel crate in the kernel's folder that the change can reach (the job `scope`); the
+      # development crates (chapter 27) need processes and files that WASI test runs do not have,
+      # and run natively above. With none, the suite's step is skipped.
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case "$c" in geom-test|geom-fuzz|geom-gen|geom-bench) continue ;; esac
+            case " $SELECTED " in *" $c "*) list="$list -p $c" ;; esac
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none}"
       - name: Install wasmtime ${{ env.WASMTIME_VERSION }}
         if: matrix.runtime == 'wasmtime'
         uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1.1.3
@@ -485,14 +562,14 @@ jobs:
           EOF
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
       - name: geom-num's every test vector on wasm32 in release as shipped
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-num ') }}
         run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
       # The whole suite in release. In debug, wasm32-wasip1 runs every test on one thread with no
       # optimisation, which takes well over an hour, so the debug leg here is every golden of the
       # store above (chapter 21 asks for the corpus in debug and release); the native jobs run the
       # whole suite in debug.
       - name: Test suite in release, with overflow checks on
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast
