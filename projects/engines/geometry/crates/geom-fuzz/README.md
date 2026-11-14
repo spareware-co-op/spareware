@@ -267,7 +267,7 @@ On Windows only the first two run. libFuzzer and Kani need Linux or macOS; CI ru
 pull request that touches the code a target fuzzes.
 
 **A crash from CI.** Each job uploads the crashing input as an artifact
-(`libfuzzer-crashes-<target>` or `clusterfuzzlite-artifacts`). Save it in
+(`libfuzzer-crashes-<target>` or `clusterfuzzlite-artifacts-<shard>`). Save it in
 `tests/__fuzz__/<target>/crashes/`, and `cargo test` fails on it until the bug is fixed, then
 keeps it as a test.
 
