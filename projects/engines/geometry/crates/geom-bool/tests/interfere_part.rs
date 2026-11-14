@@ -31,7 +31,9 @@
 
 use geom_bool::carrier::{CarrierIx, PointGeom};
 use geom_bool::common::Proof;
-use geom_bool::interfere::{Arrangement, EdgeIn, FaceIn, Interference, VertexIn, interfere};
+use geom_bool::interfere::{
+    Arrangement, EdgeIn, EdgeUse, FaceIn, Interference, VertexIn, interfere,
+};
 use geom_bool::merge::default_remaining;
 use geom_bool::split::split;
 use geom_curve::{CurveKind, Line};
@@ -110,7 +112,17 @@ fn add_box(arr: &mut Arrangement, lo: [i64; 3], hi: [i64; 3], operand: u32) -> u
                 .iter()
                 .map(|&(sb, sc)| side << axis | sb << b | sc << c)
                 .collect();
-            let loop_edges = (0..4).map(|k| edge(ring[k], ring[(k + 1) % 4])).collect();
+            // Counter-clockwise seen from where the normal points; each edge runs from its lower
+            // corner to its higher.
+            let loop_edges = (0..4)
+                .map(|k| {
+                    let (u, v) = (ring[k], ring[(k + 1) % 4]);
+                    EdgeUse {
+                        edge: edge(u, v),
+                        forward: u < v,
+                    }
+                })
+                .collect();
             let mut n = [0_i128; 3];
             n[axis] = 1;
             let at = if side == 1 { hi[axis] } else { lo[axis] };

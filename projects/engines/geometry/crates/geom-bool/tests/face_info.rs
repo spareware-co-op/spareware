@@ -17,7 +17,7 @@
 use geom_bool::carrier::{Bound, CarrierIx, PointGeom};
 use geom_bool::inside::{FlatFace, Place};
 use geom_bool::interfere::{
-    Arrangement, BuildError, EdgeIn, FaceIn, Interfered, Interference, VertexIn, interfere,
+    Arrangement, BuildError, EdgeIn, EdgeUse, FaceIn, Interfered, Interference, VertexIn, interfere,
 };
 use geom_bool::merge::default_remaining;
 use geom_curve::{Circle, CurveKind, Frame, Line};
@@ -102,10 +102,31 @@ impl Build {
         )
     }
 
+    /// A face whose loops are each listed in order round it with the face on their left, seen
+    /// from outside its carrier: each edge run on from the end it shares with the edge before it
+    /// (the first towards the edge after it), a closed edge forward.
     fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+        let mut uses = Vec::new();
+        for ring in &loops {
+            let mut at = None;
+            let mut run = Vec::new();
+            for (i, &e) in ring.iter().enumerate() {
+                let ends = self.arr.edges[e].ends;
+                let forward = match (ends, at) {
+                    (None, _) => true,
+                    (Some([s, _]), Some(v)) => s == v,
+                    (Some([_, t]), None) => self.arr.edges[ring[(i + 1) % ring.len()]]
+                        .ends
+                        .is_none_or(|[a, b]| a == t || b == t),
+                };
+                at = ends.map(|[s, t]| if forward { t } else { s });
+                run.push(EdgeUse { edge: e, forward });
+            }
+            uses.push(run);
+        }
         self.arr.faces.push(FaceIn {
             surface,
-            loops,
+            loops: uses,
             operand,
         });
         self.arr.faces.len() - 1
@@ -458,39 +479,60 @@ fn points_are_placed_in_a_face_with_a_hole() {
     assert!(matches!(place(p(50, 0, 50), m), Place::On(_)));
 }
 
-/// A face whose carrier is curved is not placed in: what meets its box waits for face splitting.
+/// A face on a torus is not placed in: what meets its box waits for face splitting.
 #[test]
 fn a_curved_face_keeps_what_meets_it_pending() {
     let mut b = Build::default();
     let slab = b.cuboid([0, 0, 0], [1000, 1000, 200], 0);
     let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
     let k = S as f64;
-    let ring = Circle::new(
+    // The upper half of a torus of radii 60 and 30 about (500, 500, 180), between its inner
+    // and outer circles at that height: seen from outside, on the outer circle's left and the
+    // inner one's right.
+    let mut rims = Vec::new();
+    for radius in [90.0, 30.0] {
+        let ring = Circle::new(
+            [500.0 * k, 500.0 * k, 180.0 * k],
+            radius * k,
+            frame,
+            (0.0, 2.0),
+        )
+        .unwrap();
+        rims.push(b.edge(CurveKind::Circle(ring), None, 1));
+    }
+    let torus = geom_surface::Torus::new(
         [500.0 * k, 500.0 * k, 180.0 * k],
-        50.0 * k,
+        60.0 * k,
+        30.0 * k,
         frame,
-        (0.0, 2.0),
-    )
-    .unwrap();
-    let edge = b.edge(CurveKind::Circle(ring), None, 1);
-    let sphere = geom_surface::Sphere::new(
-        [500.0 * k, 500.0 * k, 180.0 * k],
-        50.0 * k,
-        frame,
-        ((0.0, 2.0), (0.0, 0.5)),
+        ((0.0, 2.0), (0.0, 1.0)),
     )
     .unwrap();
     let ix = b
         .arr
         .carriers
-        .add_surface(geom_topo::SurfaceKind::Sphere(sphere))
+        .add_surface(geom_topo::SurfaceKind::Torus(torus))
         .unwrap();
-    let ball = b.face(CarrierIx::Surface(ix), vec![vec![edge]], 1);
+    b.arr.faces.push(FaceIn {
+        surface: CarrierIx::Surface(ix),
+        loops: vec![
+            vec![EdgeUse {
+                edge: rims[0],
+                forward: true,
+            }],
+            vec![EdgeUse {
+                edge: rims[1],
+                forward: false,
+            }],
+        ],
+        operand: 1,
+    });
+    let ring = b.arr.faces.len() - 1;
     let out = b.run().unwrap();
-    let info = &out.faces[ball];
+    let info = &out.faces[ring];
     assert!(info.in_vertices.is_empty() && info.sections.is_empty());
-    // The dome rises through the slab's top: that pair waits; the bottom is far below it.
+    // The ring rises through the slab's top: that pair waits; the bottom is far below it.
     assert_eq!(info.pending.faces, vec![slab.faces[5]]);
-    assert_eq!(out.faces[slab.faces[5]].pending.faces, vec![ball]);
+    assert_eq!(out.faces[slab.faces[5]].pending.faces, vec![ring]);
     assert_eq!(out.faces[slab.faces[4]].pending.faces, Vec::<usize>::new());
 }

@@ -246,13 +246,55 @@ impl Round {
         let from_apex = Interval::norm(&[radial, h.sub(apex)?])?;
         Interval::new(from_line.lo(), greater(from_apex.hi(), from_line.hi()))
     }
+}
 
-    /// The carrier of face `f` of `arr`, if it is a cylinder or one nappe of a cone.
+/// A sphere: its centre and its radius.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Ball {
+    /// Its centre.
+    centre: [f64; 3],
+    /// Its radius.
+    radius: f64,
+}
+
+impl Ball {
+    /// How far the grid point `p` lies from the sphere, enclosed in closed form: the size of
+    /// |p − c| − r.
+    pub(crate) fn gap(&self, p: P3) -> Result<Interval, NumError> {
+        let from = minus(exact3(coordinates(p))?, exact3(self.centre)?)?;
+        magnitude(Interval::norm(&from)?.sub(Interval::point(self.radius)?)?)
+    }
+}
+
+/// A carrier that bounds a convex solid, which a face on it is seen from inside: a cylinder, one
+/// nappe of a cone, or a sphere.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Solid {
+    /// A cylinder, or one nappe of a cone.
+    Round(Round),
+    /// A sphere.
+    Ball(Ball),
+}
+
+impl Solid {
+    /// The carrier `surface` as one of these; `None` for any other kind, and for a cone whose
+    /// domain reaches both nappes.
+    pub(crate) fn of(surface: &SurfaceKind) -> Result<Option<Solid>, BuildError> {
+        if let SurfaceKind::Sphere(s) = surface {
+            return Ok(Some(Solid::Ball(Ball {
+                centre: s.center(),
+                radius: s.radius(),
+            })));
+        }
+        Ok(Round::of(surface)?.map(Solid::Round))
+    }
+
+    /// The carrier of face `f` of `arr`, if it is one of these.
     ///
     /// # Errors
     ///
     /// [`BuildError::Missing`] for a face or carrier that is not there.
-    pub(crate) fn of_face(arr: &Arrangement, f: usize) -> Result<Option<Round>, BuildError> {
+    pub(crate) fn of_face(arr: &Arrangement, f: usize) -> Result<Option<Solid>, BuildError> {
         let face = arr
             .faces
             .get(f)
@@ -264,13 +306,157 @@ impl Round {
             .carriers
             .surface(ix)
             .ok_or(BuildError::Missing(Entity::Face(f)))?;
-        Round::of(surface)
+        Solid::of(surface)
+    }
+
+    /// How far the grid point `p` lies from the carrier, enclosed in closed form.
+    ///
+    /// # Errors
+    ///
+    /// An enclosure's.
+    pub(crate) fn gap(&self, p: P3) -> Result<Interval, NumError> {
+        match self {
+            Solid::Round(round) => round.gap(p),
+            Solid::Ball(ball) => ball.gap(p),
+        }
+    }
+}
+
+/// The box of face `f`'s boundary, enclosed: the bounds of its edges' curves.
+fn boundary_box(
+    arr: &Arrangement,
+    f: usize,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<[Interval; 3]>, BuildError> {
+    let face = arr
+        .faces
+        .get(f)
+        .ok_or(BuildError::Missing(Entity::Face(f)))?;
+    let mut so_far: Option<[Interval; 3]> = None;
+    for e in face.loops.iter().flatten().map(|u| u.edge) {
+        let edge = arr
+            .edges
+            .get(e)
+            .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+        let curve = arr
+            .carriers
+            .curve(edge.curve)
+            .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+        let b = curve
+            .bound(curve.domain(), meter)
+            .map_err(IntersectError::from)?;
+        let here = boxed(b.lo, b.hi)?;
+        so_far = Some(match so_far {
+            Some([x, y, z]) => {
+                let [a, b, c] = here;
+                [join(x, a)?, join(y, b)?, join(z, c)?]
+            }
+            None => here,
+        });
+    }
+    Ok(so_far)
+}
+
+/// The picture's coordinates for a depth measured in coordinate `drop`: the other two in order,
+/// then `drop`.
+fn axes_for(drop: usize) -> [usize; 3] {
+    match drop {
+        0 => [1, 2, 0],
+        1 => [0, 2, 1],
+        _ => [0, 1, 2],
     }
 }
 
 impl Central {
-    /// The picture of face `f` of `arr`, if its carrier is a cylinder or one nappe of a cone and
-    /// the picture is proven one to one on the face; `None` for any other face.
+    /// The picture of face `f` of `arr`, if its carrier is a cylinder, one nappe of a cone or a
+    /// sphere and the picture is proven one to one on the face; `None` for any other face.
+    ///
+    /// # Errors
+    ///
+    /// [`BuildError::Missing`] for a face, edge or carrier that is not there; a boundary curve's
+    /// bound's errors.
+    pub(crate) fn of_face(
+        arr: &Arrangement,
+        f: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<Central>, BuildError> {
+        match Solid::of_face(arr, f)? {
+            Some(Solid::Round(round)) => Central::of_round(arr, (f, &round), meter),
+            Some(Solid::Ball(ball)) => Central::of_ball(arr, (f, &ball), meter),
+            None => Ok(None),
+        }
+    }
+
+    /// The picture of face `f` on the sphere `ball`, if one is proven one to one on it.
+    ///
+    /// A plane through a point C inside the sphere cuts it in two caps, and the picture from C
+    /// is one to one on the cap in front of the plane. The face's boundary lies in front when C
+    /// stands past its box towards a pole, halfway from the box to the pole; then the face is
+    /// that cap's part inside its loops, or holds the whole cap behind. Its loops say which: the
+    /// area they bound with the face on their left is positive in the picture for the first and
+    /// negative for the second ([`crate::split::face_area`]). C is tried towards each pole of the
+    /// three coordinates in turn, each coordinate's upper pole first, and the first picture
+    /// proven to hold the face is taken: one for every face that keeps clear of some cap round a
+    /// pole beyond its boundary's box. A face with no boundary, the whole sphere, has none.
+    ///
+    /// # Errors
+    ///
+    /// [`BuildError::Missing`] for a face, edge or carrier that is not there; a boundary curve's
+    /// bound's or area's errors but an area left undecided, which leaves that pole.
+    fn of_ball(
+        arr: &Arrangement,
+        (f, ball): (usize, &Ball),
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<Central>, BuildError> {
+        let Some(bounds) = boundary_box(arr, f, meter)? else {
+            return Ok(None);
+        };
+        let proven = |x: Interval| x.certain_sign() == Some(Sign::Positive);
+        let centre = exact3(ball.centre)?;
+        let radius = Interval::point(ball.radius)?;
+        for drop in 0..3 {
+            let (Some(part), Some(c)) = (bounds.get(drop), ball.centre.get(drop)) else {
+                return Err(IntersectError::Internal.into());
+            };
+            for below in [true, false] {
+                // Seen from below the upper pole, the face lies below C; from above the lower,
+                // above it.
+                let (edge, pole) = if below {
+                    (part.hi(), c + ball.radius)
+                } else {
+                    (part.lo(), c - ball.radius)
+                };
+                let mut at = ball.centre;
+                if let Some(slot) = at.get_mut(drop) {
+                    *slot = edge / 2.0 + pole / 2.0;
+                }
+                let Ok(stand) = nearest_point(at) else {
+                    continue;
+                };
+                let made = Central {
+                    centre: stand,
+                    axes: axes_for(drop),
+                    below,
+                    mirrored: below == (drop != 1),
+                };
+                let from = minus(exact3(coordinates(stand))?, centre)?;
+                let [_, _, depth] = made.lifted(bounds)?;
+                if !(proven(radius.square()?.sub(dot(from, from)?)?) && proven(depth)) {
+                    continue;
+                }
+                match crate::split::face_area(arr, f, &Picture::Central(made), meter) {
+                    Ok(Some(area)) if proven(area) => return Ok(Some(made)),
+                    Ok(None) => return Ok(None),
+                    Ok(Some(_)) | Err(BuildError::UndecidedArea { .. }) => {}
+                    Err(other) => return Err(other),
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// The picture of face `f` on the cylinder or cone `round`, if it is proven one to one on the
+    /// face.
     ///
     /// The centre stands on the axis, three of the carrier's radii at the face's far end and
     /// eight steps beyond that end: the end along the axis for a cylinder, the wide end for a
@@ -282,21 +468,18 @@ impl Central {
     ///
     /// [`BuildError::Missing`] for a face, edge or carrier that is not there; a boundary curve's
     /// bound's errors.
-    pub(crate) fn of_face(
+    fn of_round(
         arr: &Arrangement,
-        f: usize,
+        (f, round): (usize, &Round),
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<Central>, BuildError> {
-        let Some(round) = Round::of_face(arr, f)? else {
-            return Ok(None);
-        };
         let face = arr
             .faces
             .get(f)
             .ok_or(BuildError::Missing(Entity::Face(f)))?;
         // The heights of the face's boundary along the axis.
         let mut heights: Option<Interval> = None;
-        for &e in face.loops.iter().flatten() {
+        for e in face.loops.iter().flatten().map(|u| u.edge) {
             let edge = arr
                 .edges
                 .get(e)
@@ -339,11 +522,7 @@ impl Central {
                 drop = k;
             }
         }
-        let axes = match drop {
-            0 => [1, 2, 0],
-            1 => [0, 2, 1],
-            _ => [0, 1, 2],
-        };
+        let axes = axes_for(drop);
         let rising = !pointing
             .get(drop)
             .copied()
@@ -408,11 +587,11 @@ impl Central {
     /// An enclosure's.
     pub(crate) fn reach(
         &self,
-        round: &Round,
+        solid: &Solid,
         centre_gap: Interval,
         p: P3,
     ) -> Result<Option<f64>, NumError> {
-        let g = round.gap(p)?.hi();
+        let g = solid.gap(p)?.hi();
         let a = centre_gap.lo();
         if a <= g {
             return Ok(None);
@@ -728,13 +907,24 @@ impl Picture {
 )]
 mod tests {
     use super::*;
-    use crate::interfere::{EdgeIn, FaceIn};
+    use crate::interfere::{EdgeIn, EdgeUse, FaceIn};
     use geom_curve::{Circle, CurveKind, Frame};
     use geom_run::Budget;
-    use geom_surface::{Cone, Cylinder, Sphere};
+    use geom_surface::{Cone, Cylinder, Sphere, Torus};
 
-    /// A face on `surface` bounded by whole circles, each (centre, radius), about `frame`'s axis.
+    /// A face on `surface` bounded by whole circles, each (centre, radius), about `frame`'s axis,
+    /// each run forward: on a cylinder or a cone only the boundary's heights are read.
     fn seen(surface: SurfaceKind, frame: Frame<3>, rims: &[([f64; 3], f64)]) -> Option<Central> {
+        seen_run(surface, frame, rims, true)
+    }
+
+    /// As [`seen`], each circle run `forward` or back.
+    fn seen_run(
+        surface: SurfaceKind,
+        frame: Frame<3>,
+        rims: &[([f64; 3], f64)],
+        forward: bool,
+    ) -> Option<Central> {
         let mut arr = Arrangement::default();
         let mut loops = Vec::new();
         for &(centre, radius) in rims {
@@ -745,7 +935,10 @@ mod tests {
                 ends: None,
                 operand: 0,
             });
-            loops.push(vec![arr.edges.len() - 1]);
+            loops.push(vec![EdgeUse {
+                edge: arr.edges.len() - 1,
+                forward,
+            }]);
         }
         let ix = arr.carriers.add_surface(surface).unwrap();
         arr.faces.push(FaceIn {
@@ -824,10 +1017,59 @@ mod tests {
         let rims = [([0.5, 0.5, 0.0], 0.25), ([0.5, 0.5, 100.0], 0.25)];
         assert_eq!(seen(thin, frame, &rims), None);
         // Any other kind has no picture of this sort.
-        let sphere = SurfaceKind::Sphere(
-            Sphere::new([0.0; 3], 50.0, frame, ((0.0, 2.0), (0.0, 0.5))).unwrap(),
+        let torus = SurfaceKind::Torus(
+            Torus::new([0.0; 3], 50.0, 20.0, frame, ((0.0, 2.0), (0.0, 1.0))).unwrap(),
         );
-        assert_eq!(seen(sphere, frame, &[([0.0, 0.0, 0.0], 50.0)]), None);
+        let rims = [([0.0, 0.0, 0.0], 70.0), ([0.0, 0.0, 0.0], 30.0)];
+        assert_eq!(seen(torus, frame, &rims), None);
+    }
+
+    #[test]
+    fn a_sphere_s_face_is_seen_from_the_first_pole_whose_cap_it_keeps_clear_of() {
+        let grid = |x, y, z| P3::new(x, y, z).unwrap();
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let sphere = SurfaceKind::Sphere(
+            Sphere::new([0.0; 3], 50.0, frame, ((0.0, 2.0), (-0.5, 0.5))).unwrap(),
+        );
+        let seen_as = |rims: &[([f64; 3], f64)], forward: bool| {
+            seen_run(sphere.clone(), frame, rims, forward)
+        };
+        let at = |centre: P3, axes: [usize; 3], below: bool, mirrored: bool| {
+            Some(Central {
+                centre,
+                axes,
+                below,
+                mirrored,
+            })
+        };
+        // The upper half, on the left of its equator run counter-clockwise about the third
+        // coordinate: the equator reaches every pole of the first two coordinates, and the half
+        // holds the upper pole's cap, so it is seen from halfway to the lower pole.
+        let equator = [([0.0; 3], 50.0)];
+        assert_eq!(
+            seen_as(&equator, true),
+            at(grid(0, 0, -25), [0, 1, 2], false, false)
+        );
+        // The lower half, the equator run the other way: from halfway to the upper pole.
+        assert_eq!(
+            seen_as(&equator, false),
+            at(grid(0, 0, 25), [0, 1, 2], true, true)
+        );
+        // A cap round the upper pole, above the circle at height 40: from beside it, halfway from
+        // its box to the pole of the first coordinate.
+        let ring = [([0.0, 0.0, 40.0], 30.0)];
+        assert_eq!(
+            seen_as(&ring, true),
+            at(grid(40, 0, 0), [1, 2, 0], true, true)
+        );
+        // The rest of the sphere holds a cap round every pole but the upper one: from halfway
+        // between the circle and that pole.
+        assert_eq!(
+            seen_as(&ring, false),
+            at(grid(0, 0, 45), [0, 1, 2], true, true)
+        );
+        // The whole sphere has no boundary, and no picture.
+        assert_eq!(seen_as(&[], true), None);
     }
 
     #[test]
@@ -904,6 +1146,18 @@ mod tests {
         assert!(!round.up);
         assert!(near(round.gap(grid(30, 0, -20)).unwrap(), 0.0));
         assert!(near(round.gap(grid(0, 0, -50)).unwrap(), 0.0));
+    }
+
+    #[test]
+    fn a_point_s_gap_from_a_sphere() {
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let grid = |x, y, z| P3::new(x, y, z).unwrap();
+        let sphere = Sphere::new([10.0, 0.0, 0.0], 50.0, frame, ((0.0, 2.0), (-0.5, 0.5))).unwrap();
+        let solid = Solid::of(&SurfaceKind::Sphere(sphere)).unwrap().unwrap();
+        assert!(near(solid.gap(grid(40, 40, 0)).unwrap(), 0.0));
+        assert!(near(solid.gap(grid(10, 0, 0)).unwrap(), 50.0));
+        assert!(near(solid.gap(grid(10, 0, 80)).unwrap(), 30.0));
+        assert!(near(solid.gap(grid(10, -20, 0)).unwrap(), 30.0));
     }
 
     /// A centre at (0, 0, 100) looking down the third coordinate.

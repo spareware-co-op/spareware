@@ -101,13 +101,29 @@ pub struct EdgeIn {
     pub operand: u32,
 }
 
+/// An edge in a face's loop, and which way the loop runs it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EdgeUse {
+    /// The edge, by its index.
+    pub edge: usize,
+    /// Whether the loop runs it from its start to its end; for a closed edge, the way its
+    /// parameter grows.
+    pub forward: bool,
+}
+
 /// A face of an operand: a region of its carrier bounded by loops of the arrangement's edges.
+///
+/// Each loop runs with the face on its left, seen from outside the carrier: from the side a
+/// plane's normal points to, or from outside the solid a curved carrier bounds (away from a
+/// cylinder's or cone's axis, a sphere's centre, a torus's core circle). So the loops alone name
+/// the face on any carrier, as a body's fins do: on a sphere one circle leaves two caps, and the
+/// way it runs says which is the face.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FaceIn {
     /// Its carrier: a plane of the table for a flat face, a surface of the pool otherwise.
     pub surface: CarrierIx,
-    /// Its loops, each the indices of its edges in order round it, the outer loop first.
-    pub loops: Vec<Vec<usize>>,
+    /// Its loops, each its edges in order round it, run with the face on their left.
+    pub loops: Vec<Vec<EdgeUse>>,
     /// The operand it belongs to.
     pub operand: u32,
 }
@@ -199,6 +215,21 @@ pub enum BuildError {
         /// The face being split.
         face: usize,
     },
+    /// A loop of a face whose edges do not run end to end as its uses say: each must start where
+    /// the one before it ends (G244).
+    BrokenLoop {
+        /// The face.
+        face: usize,
+        /// The loop, by its index among the face's.
+        ring: usize,
+    },
+    /// A face whose loops have it on their right in its picture, round the outside of what they
+    /// close round: on a plane, a cylinder or a cone, a region with no end, which no face is
+    /// (G244).
+    Unbounded {
+        /// The face.
+        face: usize,
+    },
     /// Two paves of a section, along a line or a curve, whose order is not proven.
     SectionOrder {
         /// The two faces whose carriers meet in it.
@@ -247,6 +278,14 @@ impl fmt::Display for BuildError {
             BuildError::Unclassified { face, .. } => write!(
                 f,
                 "no ray qualified to place a point in face {face}: its picture lies on the boundary's"
+            ),
+            BuildError::BrokenLoop { face, ring } => write!(
+                f,
+                "loop {ring} of face {face} does not run end to end as its uses say"
+            ),
+            BuildError::Unbounded { face } => write!(
+                f,
+                "the loops of face {face} run with it on their right, round a region with no end"
             ),
             BuildError::SectionOrder {
                 faces: [a, b],

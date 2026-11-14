@@ -19,12 +19,18 @@
 //! **Curved faces.** A cylinder's or cone's picture has no seam and no pole: a cylinder's whole
 //! side is a ring between its two end circles, and a cone's apex is a point like any other, where
 //! the rulings that meet are ordered exactly. A split face's loops run counter-clockwise (its
-//! outer loop) and clockwise (its holes) seen from outside the carrier, away from its axis. The
-//! outer loop of a curved face is the outermost in its picture, found by the ray test, not the
-//! first given: a cylinder's side has its outer loop at the end its axis points to. A face is
-//! split only when the face stages have met everything with it: one that an edge or a face of
+//! outer loop) and clockwise (its holes) seen from outside the carrier, away from its axis. A face
+//! is split only when the face stages have met everything with it: one that an edge or a face of
 //! another operand may still cross (`FaceInfo::pending`) waits, a curved face or a flat one
 //! whose box meets a curved face's.
+//!
+//! **Which side is the face.** A face's loops say it themselves: each runs with the face on its
+//! left seen from outside the carrier ([`crate::interfere::FaceIn`]), as a body's fins do, so a
+//! stretch of the face's own boundary bounds the split faces on that side only, on any carrier.
+//! Nothing is derived from which loop comes first or which is outermost: on a sphere or a torus
+//! no loop is outer. A flat face's picture keeps two coordinates as they come, so it is the view
+//! from outside or its mirror, by the sign of the normal's dropped coordinate; the loops' sense
+//! is turned over where it is the mirror.
 //!
 //! Guarantees:
 //!
@@ -91,7 +97,7 @@ use geom_num::{NumError, P3, Sign};
 use geom_run::WorkMeter;
 use geom_topo::{Axes, CurveKind, DerivativeBound, Line, ParamCurve};
 
-use crate::carrier::CurveGeom;
+use crate::carrier::{CarrierIx, CurveGeom};
 use crate::crossing::{Enclosed, Hull};
 use crate::inside::{Crossable, DIRECTIONS, FlatFace, hull as hull_of, ray_parity};
 use crate::interfere::{Arrangement, BuildError, Entity, Interfered, committed, nearest_point};
@@ -831,155 +837,136 @@ fn middle_point(curve: &CurveKind<3>, meter: &mut WorkMeter<'_>) -> Result<P3, B
     Ok(nearest_point(middle.map(|c| c.lo() / 2.0 + c.hi() / 2.0))?)
 }
 
-/// Which of a curved face's loops is the outermost in its picture: the one that holds a point of
-/// another, its loops being apart and all but one of them holes. A face of one loop has it.
-fn outermost(
-    arr: &Arrangement,
-    out: &Interfered,
-    (f, picture): (usize, &Picture),
-    meter: &mut WorkMeter<'_>,
-) -> Result<usize, BuildError> {
+/// Whether counter-clockwise in `picture` is counter-clockwise seen from outside face `f`'s
+/// carrier ([`FaceIn`]): always for a curved face's picture, which is seen from outside; for a
+/// flat face's, when the coordinates kept run as the plane's normal turns them. Seen from the
+/// third coordinate, the kept two run counter-clockwise when the three are in cyclic order, and
+/// the normal points to the side it is seen from when its own part there is positive.
+fn seen_from_outside(arr: &Arrangement, f: usize, picture: &Picture) -> Result<bool, BuildError> {
+    let Picture::Flat { keep } = picture else {
+        return Ok(true);
+    };
     let face = arr
         .faces
         .get(f)
         .ok_or(BuildError::Missing(Entity::Face(f)))?;
-    if face.loops.len() < 2 {
-        return Ok(0);
-    }
-    // Each boundary edge whole, as a piece named by its own index.
-    let mut pieces = Vec::new();
-    let mut index: BTreeMap<Piece, usize> = BTreeMap::new();
-    let mut points = Vec::with_capacity(face.loops.len());
-    for ring in &face.loops {
-        for (i, &e) in ring.iter().enumerate() {
+    let CarrierIx::Plane(ix) = face.surface else {
+        return Err(BuildError::Missing(Entity::Face(f)));
+    };
+    let plane = arr
+        .carriers
+        .plane(ix)
+        .ok_or(BuildError::Missing(Entity::Face(f)))?;
+    let (cyclic, dropped) = match keep {
+        [1, 2] => (true, 0),
+        [0, 2] => (false, 1),
+        _ => (true, 2),
+    };
+    let up = plane.n().get(dropped).is_some_and(|n| *n > 0);
+    Ok(up == cyclic)
+}
+
+/// The area face `f`'s loops bound in `picture`, each loop run as its uses say and the whole
+/// turned over where the picture is the mirror of the view from outside, so that it is the area
+/// the face's loops have it on their left: positive when the face is the part of the picture its
+/// loops close round, negative when it is the rest of the picture. Summed level by level until
+/// its sign is proven; `None` for an edge kind this piece does not measure.
+///
+/// # Errors
+///
+/// [`BuildError::UndecidedArea`] for an area whose sign no level proves; an enclosure's.
+pub(crate) fn face_area(
+    arr: &Arrangement,
+    f: usize,
+    picture: &Picture,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Interval>, BuildError> {
+    let face = arr
+        .faces
+        .get(f)
+        .ok_or(BuildError::Missing(Entity::Face(f)))?;
+    let same = seen_from_outside(arr, f, picture)?;
+    proven((f, picture), |pieces| {
+        let mut total = Interval::point(0.0)?;
+        for one in face.loops.iter().flatten() {
             let edge = arr
                 .edges
-                .get(e)
-                .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+                .get(one.edge)
+                .ok_or(BuildError::Missing(Entity::Edge(one.edge)))?;
             let curve = arr
                 .carriers
                 .curve(edge.curve)
-                .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+                .ok_or(BuildError::Missing(Entity::Edge(one.edge)))?;
             let (a, b) = curve.domain();
-            if i == 0 {
-                points.push(middle_point(curve, meter)?);
-            }
-            index.insert(Piece::Split(e), pieces.len());
-            pieces.push(Bounding {
-                piece: Piece::Split(e),
-                ends: edge.ends,
+            let whole = Bounding {
+                piece: Piece::Split(one.edge),
+                ends: None,
                 shape: Shape::Curve {
                     curve,
                     span: Some((Interval::point(a)?, Interval::point(b)?)),
                     wraps: false,
                 },
                 left: None,
-            });
+            };
+            let Some(part) = curve_area(&whole, one.forward == same, (picture, pieces), meter)?
+            else {
+                return Ok(None);
+            };
+            total = total.add(part)?;
         }
-    }
-    for (k, edges) in face.loops.iter().enumerate() {
-        let uses: Vec<Use> = edges
-            .iter()
-            .map(|&e| Use {
-                piece: Piece::Split(e),
-                forward: true,
-            })
-            .collect();
-        let made = ring(arr, out, (pieces.as_slice(), &index), &uses, meter)?;
-        let next = k.checked_add(1).filter(|n| *n < points.len()).unwrap_or(0);
-        let other = *points.get(next).ok_or(IntersectError::Internal)?;
-        if holds(&made, &pieces, (f, picture), other, meter)? {
-            return Ok(k);
-        }
-    }
-    Err(IntersectError::Internal.into())
+        Ok(Some(total))
+    })
 }
 
 /// For each edge of face `f`'s loops, whether the face lies on its left in the picture when it
-/// is run forward: each loop is run edge after edge, its sense read from its certified area, the
-/// outer loop counter-clockwise round the face and the others clockwise round its holes. A flat
-/// face's outer loop is its first; a curved face's is the outermost in its picture
-/// ([`outermost`]). `None` for an edge kind this piece does not measure.
+/// is run forward: as its loop runs it, the face lying on each loop's left seen from outside the
+/// carrier ([`FaceIn`]), turned over where the picture is that view's mirror. Each loop is first
+/// checked to run end to end: every edge starting where the one before it ends, and a closed edge
+/// alone in its loop.
+///
+/// # Errors
+///
+/// [`BuildError::BrokenLoop`] for a loop that does not run end to end.
 fn senses(
     arr: &Arrangement,
-    out: &Interfered,
     (f, picture): (usize, &Picture),
-    meter: &mut WorkMeter<'_>,
-) -> Result<Option<BTreeMap<usize, bool>>, BuildError> {
+) -> Result<BTreeMap<usize, bool>, BuildError> {
     let face = arr
         .faces
         .get(f)
         .ok_or(BuildError::Missing(Entity::Face(f)))?;
-    let outer = match picture {
-        Picture::Flat { .. } => 0,
-        Picture::Central(_) => outermost(arr, out, (f, picture), meter)?,
-    };
+    let same = seen_from_outside(arr, f, picture)?;
     let mut left = BTreeMap::new();
     for (k, ring) in face.loops.iter().enumerate() {
-        // Which way the loop runs each edge: on from the end it shares with the edge before.
-        let mut runs: Vec<(usize, bool)> = Vec::with_capacity(ring.len());
-        let mut at: Option<usize> = None;
-        for (i, &e) in ring.iter().enumerate() {
+        let broken = BuildError::BrokenLoop { face: f, ring: k };
+        // Each use's first and last vertex, in the order the loop runs it.
+        let mut runs: Vec<Option<[usize; 2]>> = Vec::with_capacity(ring.len());
+        for one in ring {
             let edge = arr
                 .edges
-                .get(e)
-                .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-            let forward = match (edge.ends, at) {
-                (None, _) => true,
-                (Some([s, _]), Some(v)) => s == v,
-                (Some([_, t]), None) => {
-                    // The first edge: forward when its end is shared with the next edge.
-                    let next = ring
-                        .get(i.saturating_add(1))
-                        .or(ring.first())
-                        .and_then(|n| arr.edges.get(*n))
-                        .and_then(|n| n.ends);
-                    next.is_none_or(|[a, b]| a == t || b == t)
-                }
-            };
-            at = edge.ends.map(|[s, t]| if forward { t } else { s });
-            runs.push((e, forward));
+                .get(one.edge)
+                .ok_or(BuildError::Missing(Entity::Edge(one.edge)))?;
+            runs.push(
+                edge.ends
+                    .map(|[s, t]| if one.forward { [s, t] } else { [t, s] }),
+            );
         }
-        let Some(total) = proven((f, picture), |pieces| {
-            let mut total = Interval::point(0.0)?;
-            for &(e, forward) in &runs {
-                let edge = arr
-                    .edges
-                    .get(e)
-                    .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-                let curve = arr
-                    .carriers
-                    .curve(edge.curve)
-                    .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-                let (a, b) = curve.domain();
-                let whole = Bounding {
-                    piece: Piece::Split(0),
-                    ends: None,
-                    shape: Shape::Curve {
-                        curve,
-                        span: Some((Interval::point(a)?, Interval::point(b)?)),
-                        wraps: false,
-                    },
-                    left: None,
-                };
-                let Some(part) = curve_area(&whole, forward, (picture, pieces), meter)? else {
-                    return Ok(None);
-                };
-                total = total.add(part)?;
+        for (i, run) in runs.iter().enumerate() {
+            let next = runs
+                .get(i.saturating_add(1))
+                .or(runs.first())
+                .ok_or(broken)?;
+            match (run, next) {
+                (Some([_, end]), Some([start, _])) if end == start => {}
+                (None, None) if runs.len() == 1 => {}
+                _ => return Err(broken),
             }
-            Ok(Some(total))
-        })?
-        else {
-            return Ok(None);
-        };
-        // The outer loop runs counter-clockwise with the face on its left; a hole clockwise.
-        let left_turning = total.lo() > 0.0;
-        let wanted = k == outer;
-        for (e, forward) in runs {
-            left.insert(e, forward == (left_turning == wanted));
+        }
+        for one in ring {
+            left.insert(one.edge, one.forward == same);
         }
     }
-    Ok(Some(left))
+    Ok(left)
 }
 
 /// The pieces leaving each vertex, in turning order: half-edge 2i leaves piece i's first end, and
@@ -1400,9 +1387,15 @@ fn split_face(
         Picture::Central(central)
     };
     let picture = &picture;
-    let Some(senses) = senses(arr, out, (f, picture), meter)? else {
+    let senses = senses(arr, (f, picture))?;
+    // The face its loops name lies in the part of the picture they close round: on a plane, a
+    // cylinder or a cone the face is bounded, and a sphere's picture is chosen so.
+    let Some(area) = face_area(arr, f, picture, meter)? else {
         return Ok(None);
     };
+    if area.certain_sign() != Some(Sign::Positive) {
+        return Err(BuildError::Unbounded { face: f });
+    }
     let pieces = pieces_of(arr, out, f, &senses)?;
     let index: BTreeMap<Piece, usize> = pieces
         .iter()
@@ -1604,7 +1597,7 @@ pub fn split(
 mod tests {
     use super::*;
     use crate::carrier::CarrierIx;
-    use crate::interfere::{EdgeIn, FaceIn};
+    use crate::interfere::{EdgeIn, EdgeUse, FaceIn};
     use geom_curve::{Circle, Frame};
     use geom_run::Budget;
     use geom_surface::Cylinder;
@@ -1643,7 +1636,17 @@ mod tests {
             .unwrap();
         arr.faces.push(FaceIn {
             surface: CarrierIx::Surface(ix),
-            loops: vec![vec![0], vec![1]],
+            // The face lies above its bottom circle and below its top one.
+            loops: vec![
+                vec![EdgeUse {
+                    edge: 0,
+                    forward: true,
+                }],
+                vec![EdgeUse {
+                    edge: 1,
+                    forward: false,
+                }],
+            ],
             operand: 0,
         });
         let m = &mut WorkMeter::new(Budget::UNLIMITED);

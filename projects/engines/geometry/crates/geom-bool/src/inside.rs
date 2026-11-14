@@ -75,7 +75,7 @@ use crate::carrier::{Bound, CarrierIx};
 use crate::crossing::{Enclosed, Hull, crossings_over};
 use crate::distance::Carriers;
 use crate::interfere::{Arrangement, BuildError, Entity, FaceIn, widened};
-use crate::picture::{Central, Picture, Round};
+use crate::picture::{Central, Picture, Solid};
 use crate::rule::{Contact, ContactError, EPS_FIT, Verdict, decide, judge};
 
 /// The ray directions tried, in order, in the plane's own picture: whole and primitive, no two
@@ -231,7 +231,7 @@ fn boundary(
     let mut sides = Vec::new();
     let mut at_vertex: BTreeMap<usize, [Interval; 3]> = BTreeMap::new();
     let mut joins = Vec::new();
-    for &e in face.loops.iter().flatten() {
+    for e in face.loops.iter().flatten().map(|u| u.edge) {
         let edge = arr
             .edges
             .get(e)
@@ -460,15 +460,15 @@ impl FlatFace {
     }
 }
 
-/// A face on a cylinder or on one nappe of a cone, ready to place points in (G244): its boundary
-/// edges and joins as a flat face's, and its picture seen from inside the carrier
+/// A face on a cylinder, on one nappe of a cone or on a sphere, ready to place points in (G244):
+/// its boundary edges and joins as a flat face's, and its picture seen from inside the carrier
 /// (`crate::picture`).
 #[derive(Clone, Debug)]
 pub struct RoundFace {
     /// The face, by its index in the arrangement.
     face: usize,
     /// Its carrier.
-    round: Round,
+    round: Solid,
     /// Its picture.
     picture: Central,
     /// How far the picture's centre lies from the carrier.
@@ -481,7 +481,7 @@ pub struct RoundFace {
 
 impl RoundFace {
     /// The face `face` of `arr`, ready to place points in: `None` when its carrier is not a
-    /// cylinder or a cone, or its picture is not proven one to one.
+    /// cylinder, a cone or a sphere, or its picture is not proven one to one.
     ///
     /// # Errors
     ///
@@ -497,7 +497,7 @@ impl RoundFace {
             .get(face)
             .ok_or(BuildError::Missing(Entity::Face(face)))?;
         let (Some(round), Some(picture)) = (
-            Round::of_face(arr, face)?,
+            Solid::of_face(arr, face)?,
             Central::of_face(arr, face, meter)?,
         ) else {
             return Ok(None);
@@ -533,7 +533,7 @@ impl RoundFace {
     /// (`Central::reach`), and so does the point of the carrier `point` stands for, within
     /// `bound`. The carrier's points within a distance of a point form one patch: on a cylinder or
     /// cone the nearest point's ruling holds a stretch of them, and each circle about the axis an
-    /// arc round that ruling. So when every boundary edge is proven further from `point` than the
+    /// arc round that ruling; on a sphere they are a cap. So when every boundary edge is proven further from `point` than the
     /// reach and the bound, the patch's picture meets no boundary edge's, and all three points lie
     /// on one side of the boundary. A boundary edge not proven so far leaves the point
     /// [`BuildError::Unclassified`].

@@ -18,7 +18,7 @@
 )]
 
 use geom_bool::carrier::{CarrierIx, PointGeom};
-use geom_bool::interfere::{Arrangement, EdgeIn, FaceIn, Interfered, VertexIn, interfere};
+use geom_bool::interfere::{Arrangement, EdgeIn, EdgeUse, FaceIn, Interfered, VertexIn, interfere};
 use geom_bool::merge::default_remaining;
 use geom_bool::split::{Piece, SplitFace, Splitting, Use, split};
 use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Line};
@@ -93,7 +93,15 @@ impl Build {
         )
     }
 
+    /// A face whose loops are each listed in order round it with the face on their left, seen
+    /// from outside its carrier: for a flat one, from the side its plane's entry in the table
+    /// faces ([`Build::runs`]).
     fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+        let loops = loops.iter().map(|ring| self.runs(ring)).collect();
+        self.face_with(surface, loops, operand)
+    }
+
+    fn face_with(&mut self, surface: CarrierIx, loops: Vec<Vec<EdgeUse>>, operand: u32) -> usize {
         self.arr.faces.push(FaceIn {
             surface,
             loops,
@@ -102,16 +110,42 @@ impl Build {
         self.arr.faces.len() - 1
     }
 
+    /// A loop listed in order round its face as uses: each edge run on from the end it shares
+    /// with the edge before it (the first towards the edge after it), a closed edge forward.
+    fn runs(&self, ring: &[usize]) -> Vec<EdgeUse> {
+        let mut at = None;
+        let mut uses = Vec::new();
+        for (i, &e) in ring.iter().enumerate() {
+            let ends = self.arr.edges[e].ends;
+            let forward = match (ends, at) {
+                (None, _) => true,
+                (Some([s, _]), Some(v)) => s == v,
+                (Some([_, t]), None) => self.arr.edges[ring[(i + 1) % ring.len()]]
+                    .ends
+                    .is_none_or(|[a, b]| a == t || b == t),
+            };
+            at = ends.map(|[s, t]| if forward { t } else { s });
+            uses.push(EdgeUse { edge: e, forward });
+        }
+        uses
+    }
+
     fn ring(&mut self, corners: &[usize], operand: u32) -> Vec<usize> {
         (0..corners.len())
             .map(|k| self.line(corners[k], corners[(k + 1) % corners.len()], operand))
             .collect()
     }
 
+    /// A flat face on the plane (`n`, `d`), its corners counter-clockwise seen from where `n`
+    /// points: turned round where the plane's entry in the table faces the other way (its
+    /// normal's first part that is not zero is positive).
     fn polygon(&mut self, corners: &[usize], n: [i128; 3], d: i128, operand: u32) -> usize {
         let edges = self.ring(corners, operand);
         let plane = self.plane(n, d);
-        self.face(plane, vec![edges], operand)
+        let uses = self.runs(&edges);
+        let flipped = n.iter().find(|v| **v != 0).is_some_and(|v| *v < 0);
+        let uses = if flipped { reversed(&uses) } else { uses };
+        self.face_with(plane, vec![uses], operand)
     }
 
     /// A box from `lo` to `hi`, in the tests' unit.
@@ -223,6 +257,25 @@ fn twice_face_area(b: &Build, out: &Interfered, face: &SplitFace, keep: [usize; 
         total += h;
     }
     total
+}
+
+/// A closed edge run backward, as a loop of a face.
+fn back(edge: usize) -> EdgeUse {
+    EdgeUse {
+        edge,
+        forward: false,
+    }
+}
+
+/// A loop run the other way round.
+fn reversed(ring: &[EdgeUse]) -> Vec<EdgeUse> {
+    ring.iter()
+        .rev()
+        .map(|u| EdgeUse {
+            edge: u.edge,
+            forward: !u.forward,
+        })
+        .collect()
 }
 
 fn of_face(splitting: &Splitting, f: usize) -> Vec<&SplitFace> {
@@ -428,7 +481,9 @@ fn a_round_hole_far_from_the_origin_stays_the_face_s() {
     .unwrap();
     let hole = b.edge(CurveKind::Circle(circle), None, 0);
     let plane = b.plane([0, 0, 1], 0);
-    let face = b.face(plane, vec![outer, vec![hole]], 0);
+    // The circle runs counter-clockwise seen from +z: the face is on its right.
+    let outer = b.runs(&outer);
+    let face = b.face_with(plane, vec![outer, vec![back(hole)]], 0);
     let (_, splitting) = b.run();
     let parts = of_face(&splitting, face);
     assert_eq!(parts.len(), 1, "{parts:?}");
@@ -522,7 +577,13 @@ fn a_plate_through_a_round_hole_s_top_and_bottom_splits_the_face() {
             Circle::new([500.0 * k, 500.0 * k, 0.0], 200.0 * k, frame, (0.0, 2.0)).unwrap();
         let hole = b.edge(CurveKind::Circle(circle), None, 0);
         let plane = b.plane([0, 0, 1], 0);
-        let face = b.face(plane, vec![outer, vec![hole]], 0);
+        // Counter-clockwise about +z the circle has the face on its right; about −z on its left.
+        let outer = b.runs(&outer);
+        let hole = EdgeUse {
+            edge: hole,
+            forward: normal[2] < 0.0,
+        };
+        let face = b.face_with(plane, vec![outer, vec![hole]], 0);
         b.cuboid([500, -100, -100], [510, 1100, 100], 1);
         let (_, splitting) = b.run();
         let parts = of_face(&splitting, face);
@@ -555,7 +616,13 @@ fn a_hole_and_a_line_along_the_axes_are_ordered_from_the_diagonal() {
             Circle::new([500.0 * k, 400.0 * k, 0.0], 200.0 * k, frame, (0.0, 2.0)).unwrap();
         let hole = b.edge(CurveKind::Circle(circle), None, 0);
         let plane = b.plane([0, 0, 1], 0);
-        let face = b.face(plane, vec![outer, vec![hole]], 0);
+        // Counter-clockwise about +z the circle has the face on its right; about −z on its left.
+        let outer = b.runs(&outer);
+        let hole = EdgeUse {
+            edge: hole,
+            forward: normal[2] < 0.0,
+        };
+        let face = b.face_with(plane, vec![outer, vec![hole]], 0);
         let (start, end) = (b.vertex(p(500, 600, 0), 1), b.vertex(p(500, 1000, 0), 1));
         let line = Line::new(
             [500.0 * k, 600.0 * k, 0.0],
@@ -580,7 +647,12 @@ fn holes_beside_a_slanting_section_go_to_their_own_parts() {
     // The picture's second coordinate is y on the floor and z on the wall.
     for wall in [false, true] {
         let at = |u: i64, v: i64, w: i64| if wall { p(u, w, v) } else { p(u, v, w) };
-        let normal = |nu: i128, nv: i128, nw: i128| if wall { [nu, nw, nv] } else { [nu, nv, nw] };
+        // Swapping the second and third coordinates mirrors every loop: on the wall each normal
+        // is turned round with them, so that the loops still run counter-clockwise about it.
+        let normal = |nu: i128, nv: i128, nw: i128| {
+            if wall { [-nu, -nw, -nv] } else { [nu, nv, nw] }
+        };
+        let sense: i128 = if wall { -1 } else { 1 };
         let mut b = Build::default();
         let c: Vec<usize> = [(-3000, -1000), (-1000, -1000), (-3000, 1000)]
             .iter()
@@ -596,7 +668,7 @@ fn holes_beside_a_slanting_section_go_to_their_own_parts() {
         .iter()
         .map(|&(u, v, w)| b.vertex(at(u, v, w), 1))
         .collect();
-        b.polygon(&plate, normal(1, 1, 0), 2400 * i128::from(S), 1);
+        b.polygon(&plate, normal(1, 1, 0), sense * 2400 * i128::from(S), 1);
         // One column in the corner below the section, one in the strip above it.
         for (lo, hi, operand) in [
             ((-2800, -900), (-2700, -800), 2),

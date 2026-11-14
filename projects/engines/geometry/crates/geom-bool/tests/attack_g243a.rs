@@ -22,7 +22,8 @@ use geom_bool::crossing::{Enclosed, Hull, crossings};
 use geom_bool::distance::Carriers;
 use geom_bool::inside::{FlatFace, Place};
 use geom_bool::interfere::{
-    Arrangement, BuildError, EdgeIn, Entity, FaceIn, Interfered, Interference, VertexIn, interfere,
+    Arrangement, BuildError, EdgeIn, EdgeUse, Entity, FaceIn, Interfered, Interference, VertexIn,
+    interfere,
 };
 use geom_bool::merge::default_remaining;
 use geom_bool::rule::{ContactError, NearContact};
@@ -96,10 +97,31 @@ impl Build {
         )
     }
 
+    /// A face whose loops are each listed in order round it with the face on their left, seen
+    /// from outside its carrier: each edge run on from the end it shares with the edge before it
+    /// (the first towards the edge after it), a closed edge forward.
     fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+        let mut uses = Vec::new();
+        for ring in &loops {
+            let mut at = None;
+            let mut run = Vec::new();
+            for (i, &e) in ring.iter().enumerate() {
+                let ends = self.arr.edges[e].ends;
+                let forward = match (ends, at) {
+                    (None, _) => true,
+                    (Some([s, _]), Some(v)) => s == v,
+                    (Some([_, t]), None) => self.arr.edges[ring[(i + 1) % ring.len()]]
+                        .ends
+                        .is_none_or(|[a, b]| a == t || b == t),
+                };
+                at = ends.map(|[s, t]| if forward { t } else { s });
+                run.push(EdgeUse { edge: e, forward });
+            }
+            uses.push(run);
+        }
         self.arr.faces.push(FaceIn {
             surface,
-            loops,
+            loops: uses,
             operand,
         });
         self.arr.faces.len() - 1

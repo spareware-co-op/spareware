@@ -16,14 +16,14 @@
 )]
 
 use geom_bool::carrier::{CarrierIx, CurveGeom, PointGeom};
-use geom_bool::interfere::{Arrangement, EdgeIn, FaceIn, Interfered, VertexIn, interfere};
+use geom_bool::interfere::{Arrangement, EdgeIn, EdgeUse, FaceIn, Interfered, VertexIn, interfere};
 use geom_bool::merge::default_remaining;
 use geom_bool::split::{Piece, SplitFace, Splitting, Use, split};
 use geom_curve::{Circle, CurveKind, Frame, Line};
 use geom_num::P3;
 use geom_num::plane::Plane;
 use geom_run::{Budget, Exec, WorkMeter};
-use geom_surface::{Cone, Cylinder};
+use geom_surface::{Cone, Cylinder, Sphere};
 use geom_topo::SurfaceKind;
 
 /// The tests' unit, in steps: a millimetre on a grid of a micrometre.
@@ -96,13 +96,41 @@ impl Build {
         CarrierIx::Surface(self.arr.carriers.add_surface(surface).unwrap())
     }
 
+    /// A face whose loops are each listed in order round it with the face on their left, seen
+    /// from outside its carrier: for a flat one, from the side its plane's entry in the table
+    /// faces ([`Build::runs`]).
     fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+        let loops = loops.iter().map(|ring| self.runs(ring)).collect();
+        self.face_with(surface, loops, operand)
+    }
+
+    fn face_with(&mut self, surface: CarrierIx, loops: Vec<Vec<EdgeUse>>, operand: u32) -> usize {
         self.arr.faces.push(FaceIn {
             surface,
             loops,
             operand,
         });
         self.arr.faces.len() - 1
+    }
+
+    /// A loop listed in order round its face as uses: each edge run on from the end it shares
+    /// with the edge before it (the first towards the edge after it), a closed edge forward.
+    fn runs(&self, ring: &[usize]) -> Vec<EdgeUse> {
+        let mut at = None;
+        let mut uses = Vec::new();
+        for (i, &e) in ring.iter().enumerate() {
+            let ends = self.arr.edges[e].ends;
+            let forward = match (ends, at) {
+                (None, _) => true,
+                (Some([s, _]), Some(v)) => s == v,
+                (Some([_, t]), None) => self.arr.edges[ring[(i + 1) % ring.len()]]
+                    .ends
+                    .is_none_or(|[a, b]| a == t || b == t),
+            };
+            at = ends.map(|[s, t]| if forward { t } else { s });
+            uses.push(EdgeUse { edge: e, forward });
+        }
+        uses
     }
 
     /// A square on the plane z = 0, from (`lo`, `lo`) to (`hi`, `hi`).
@@ -146,12 +174,17 @@ impl Build {
             .iter()
             .map(|&c| self.vertex(at(c), operand))
             .collect();
-        let edges = (0..4)
+        let edges: Vec<usize> = (0..4)
             .map(|k| self.line(ids[k], ids[(k + 1) % 4], operand))
             .collect();
         let plane = Plane::through(at(corners[0]), at(corners[1]), at(corners[2])).unwrap();
+        // The corners run counter-clockwise about the plane's normal as made; its entry in the
+        // table faces the other way when that normal's first part that is not zero is negative.
+        let flipped = plane.n().iter().find(|v| **v != 0).is_some_and(|v| *v < 0);
         let plane = CarrierIx::Plane(self.arr.carriers.add_plane(&plane).unwrap());
-        self.face(plane, vec![edges], operand)
+        let uses = self.runs(&edges);
+        let uses = if flipped { reversed(&uses) } else { uses };
+        self.face_with(plane, vec![uses], operand)
     }
 
     /// The side of a cylinder of radius `r` about the axis through `base` along coordinate `k`
@@ -180,7 +213,8 @@ impl Build {
         )
         .unwrap();
         let ix = self.surface(SurfaceKind::Cylinder(cylinder));
-        let face = self.face(ix, vec![vec![first], vec![second]], operand);
+        // Seen from outside, the side lies above its first circle and below its second.
+        let face = self.face_with(ix, vec![vec![ahead(first)], vec![back(second)]], operand);
         (face, first, second)
     }
 
@@ -195,6 +229,33 @@ impl Build {
         let splitting = split(&self.arr, &out, &mut meter()).unwrap();
         (out, splitting)
     }
+}
+
+/// A closed edge run forward, as a loop of a face.
+fn ahead(edge: usize) -> EdgeUse {
+    EdgeUse {
+        edge,
+        forward: true,
+    }
+}
+
+/// A closed edge run backward, as a loop of a face.
+fn back(edge: usize) -> EdgeUse {
+    EdgeUse {
+        edge,
+        forward: false,
+    }
+}
+
+/// A loop run the other way round.
+fn reversed(ring: &[EdgeUse]) -> Vec<EdgeUse> {
+    ring.iter()
+        .rev()
+        .map(|u| EdgeUse {
+            edge: u.edge,
+            forward: !u.forward,
+        })
+        .collect()
 }
 
 fn of_face(splitting: &Splitting, f: usize) -> Vec<&SplitFace> {
@@ -459,7 +520,8 @@ fn a_plane_across_a_cone_cuts_it_in_a_circle() {
         ((0.0, 2.0), (0.0, (100 * S) as f64)),
     );
     let ix = b.surface(SurfaceKind::Cone(cone.unwrap()));
-    let body = b.face(ix, vec![vec![rim]], 0);
+    // The cone lies below its rim: seen from outside, on the rim's right.
+    let body = b.face_with(ix, vec![vec![back(rim)]], 0);
     let sheet = b.sheet(2, 25, (-1000, 1000), 1);
     let (out, splitting) = b.run();
     assert_eq!(out.sections.len(), 1, "{:?}", out.sections);
@@ -618,7 +680,8 @@ fn a_plane_along_a_cone_cuts_it_in_a_hyperbola() {
         ((0.0, 2.0), (0.0, (100 * S) as f64)),
     );
     let ix = b.surface(SurfaceKind::Cone(cone.unwrap()));
-    let body = b.face(ix, vec![vec![rim]], 0);
+    // The cone lies below its rim: seen from outside, on the rim's right.
+    let body = b.face_with(ix, vec![vec![back(rim)]], 0);
     let lid = CarrierIx::Plane(
         b.arr
             .carriers
@@ -680,7 +743,8 @@ fn a_plane_along_a_ruling_of_a_cone_cuts_it_in_a_parabola() {
         ((0.0, 2.0), (0.0, (100 * S) as f64)),
     );
     let ix = b.surface(SurfaceKind::Cone(cone.unwrap()));
-    let body = b.face(ix, vec![vec![rim]], 0);
+    // The cone lies below its rim: seen from outside, on the rim's right.
+    let body = b.face_with(ix, vec![vec![back(rim)]], 0);
     let lid = CarrierIx::Plane(
         b.arr
             .carriers
@@ -834,7 +898,7 @@ fn cones_about_different_centres_never_meet() {
         )
         .unwrap();
         let ix = b.surface(SurfaceKind::Cone(cone));
-        faces.push(b.face(ix, vec![vec![rim]], operand));
+        faces.push(b.face_with(ix, vec![vec![back(rim)]], operand));
     }
     let (out, splitting) = b.run();
     assert!(
@@ -926,7 +990,7 @@ fn a_cone_is_split_through_its_apex() {
     // The whole cone, to the circle at height 100.
     let rim = b.circle(p(0, 0, 100), 100, frame, 0);
     let whole = b.surface(cone(((0.0, 2.0), (0.0, (100 * S) as f64))));
-    let body = b.face(whole, vec![vec![rim]], 0);
+    let body = b.face_with(whole, vec![vec![back(rim)]], 0);
     // Two sectors to height 40: over the first quarter turn, and over the third.
     let mut sectors = Vec::new();
     for (operand, (ax, ay), (bx, by), turn) in
@@ -948,7 +1012,10 @@ fn a_cone_is_split_through_its_apex() {
         let arc = b.edge(CurveKind::Circle(arc), Some([first, second]), operand);
         let back_ruling = b.line(second, apex, operand);
         let patch = b.surface(cone(((turn, turn + 0.5), (0.0, (40 * S) as f64))));
-        sectors.push(b.face(patch, vec![vec![out_ruling, arc, back_ruling]], operand));
+        // Seen from outside the cone, out along a ruling, round the arc and back runs clockwise:
+        // the sector lies on the loop's left run the other way.
+        let ring = reversed(&b.runs(&[out_ruling, arc, back_ruling]));
+        sectors.push(b.face_with(patch, vec![ring], operand));
     }
     let (out, splitting) = b.run();
     assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
@@ -1028,4 +1095,118 @@ fn nested_loops_go_to_the_innermost_face() {
         assert_eq!(parts.len(), 1, "{inner_first}: {parts:?}");
         assert_eq!(parts[0].inside, vec![lone]);
     }
+}
+
+impl Build {
+    /// A face on the sphere of radius 50 about the origin, in the tests' unit, bounded by the
+    /// circle of radius `r` about the third coordinate at height `h`: run counter-clockwise about
+    /// that coordinate (`forward`), the face is the cap above the circle; run back, the rest.
+    /// The face, and the circle's edge.
+    fn on_ball(&mut self, (h, r): (i64, i64), forward: bool, operand: u32) -> (usize, usize) {
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let rim = self.circle(p(0, 0, h), r, frame, operand);
+        let ball =
+            Sphere::new([0.0; 3], (50 * S) as f64, frame, ((0.0, 2.0), (-0.5, 0.5))).unwrap();
+        let ix = self.surface(SurfaceKind::Sphere(ball));
+        let use_ = EdgeUse { edge: rim, forward };
+        (self.face_with(ix, vec![vec![use_]], operand), rim)
+    }
+}
+
+/// A sphere's face is named by which way its loop runs: one circle at height 40 bounds the cap
+/// above it, run counter-clockwise about the axis, and the rest of the sphere, run back. A vertex
+/// of another operand at each pole is In the face that holds it, and each face is one face, its
+/// outer loop the circle run with the face on its left.
+#[test]
+fn a_sphere_s_loop_says_which_side_is_the_face() {
+    for forward in [true, false] {
+        let mut b = Build::default();
+        let (face, rim) = b.on_ball((40, 30), forward, 0);
+        let north = b.vertex(p(0, 0, 50), 1);
+        let south = b.vertex(p(0, 0, -50), 1);
+        let (out, splitting) = b.run();
+        assert!(
+            splitting.waiting.is_empty(),
+            "{forward}: {:?}",
+            splitting.waiting
+        );
+        let held = if forward { north } else { south };
+        assert_eq!(out.faces[face].in_vertices, vec![held], "{forward}");
+        let parts = of_face(&splitting, face);
+        assert_eq!(parts.len(), 1, "{forward}: {parts:?}");
+        assert_eq!(parts[0].outer, vec![run(whole_piece(&out, rim), forward)]);
+        assert!(parts[0].holes.is_empty(), "{forward}: {parts:?}");
+        assert_eq!(parts[0].inside, vec![held], "{forward}");
+    }
+}
+
+/// The upper half of a sphere and the plane at height 30 across it: the carriers cross in the
+/// circle of radius 40 there (12.7's closed form), whole and inside both faces. The half splits
+/// into the cap above the circle and the band below it, and the plane into the disc inside the
+/// circle and the rest round it.
+#[test]
+fn a_plane_across_a_sphere_cuts_it_in_a_circle() {
+    let mut b = Build::default();
+    let (half, equator) = b.on_ball((0, 50), true, 0);
+    let sheet = b.sheet(2, 30, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(out.sections.len(), 1, "{:?}", out.sections);
+    match &out.curves[0] {
+        // The closed form's centre and radius, to within its rounding.
+        CurveKind::Circle(c) => {
+            let [x, y, z] = c.center();
+            assert!(x.abs() < 1e-6 && y.abs() < 1e-6, "{:?}", c.center());
+            assert!((z - (30 * S) as f64).abs() < 1e-6, "{:?}", c.center());
+            assert!(
+                (c.radius() - (40 * S) as f64).abs() < 1e-6,
+                "{}",
+                c.radius()
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+    let parts = of_face(&splitting, half);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    let circle = Piece::Section(0);
+    let cap: Vec<_> = parts.iter().filter(|s| s.holes.is_empty()).collect();
+    assert_eq!(cap.len(), 1, "{parts:?}");
+    assert_eq!(cap[0].outer.len(), 1, "{parts:?}");
+    assert_eq!(cap[0].outer[0].piece, circle);
+    let band: Vec<_> = parts.iter().filter(|s| s.holes.len() == 1).collect();
+    assert_eq!(band.len(), 1, "{parts:?}");
+    assert_eq!(band[0].outer, vec![run(whole_piece(&out, equator), true)]);
+    assert_eq!(band[0].holes[0].len(), 1, "{parts:?}");
+    assert_eq!(band[0].holes[0][0].piece, circle);
+    // The cap runs the circle one way, the band's hole the other.
+    assert_ne!(cap[0].outer[0].forward, band[0].holes[0][0].forward);
+    let parts = of_face(&splitting, sheet);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+}
+
+/// Faces of two operands on one sphere, given as two surfaces with the same centre and radius,
+/// are one carrier's: the cap above height 40 lies in the upper half, whose face splits along the
+/// cap's circle into the cap and the band below it; the cap stays whole.
+#[test]
+fn faces_on_one_sphere_split_each_other() {
+    let mut b = Build::default();
+    let (half, equator) = b.on_ball((0, 50), true, 0);
+    let (cap, rim) = b.on_ball((40, 30), true, 1);
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(out.faces[half].same_carrier, vec![cap]);
+    assert_eq!(out.faces[cap].same_carrier, vec![half]);
+    let parts = of_face(&splitting, half);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    let got: Vec<_> = parts
+        .iter()
+        .map(|s| (s.outer.clone(), s.holes.clone()))
+        .collect();
+    let (circle, bottom) = (whole_piece(&out, rim), whole_piece(&out, equator));
+    assert!(got.contains(&(vec![run(circle, true)], vec![])), "{got:?}");
+    assert!(
+        got.contains(&(vec![run(bottom, true)], vec![vec![run(circle, false)]])),
+        "{got:?}"
+    );
+    assert_eq!(of_face(&splitting, cap).len(), 1);
 }

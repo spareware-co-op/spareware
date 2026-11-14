@@ -240,7 +240,7 @@ fn face_entry(
             }
         }
     };
-    for &e in face.loops.iter().flatten() {
+    for e in face.loops.iter().flatten().map(|u| u.edge) {
         let b = edge_boxes
             .get(e)
             .ok_or(BuildError::Missing(Entity::Edge(e)))?;
@@ -385,7 +385,7 @@ pub(crate) fn prepare(
     }
     let mut faces_of_edge = alloc::vec![Vec::new(); arr.edges.len()];
     for (f, face) in arr.faces.iter().enumerate() {
-        for &e in face.loops.iter().flatten() {
+        for e in face.loops.iter().flatten().map(|u| u.edge) {
             faces_of_edge
                 .get_mut(e)
                 .ok_or(BuildError::Missing(Entity::Edge(e)))?
@@ -412,7 +412,7 @@ fn boundary_vertices(arr: &Arrangement, paves: &[Vec<Pave>], f: usize) -> Vec<us
         .get(f)
         .into_iter()
         .flat_map(|face| face.loops.iter().flatten())
-        .filter_map(|e| paves.get(*e))
+        .filter_map(|u| paves.get(u.edge))
         .flatten()
         .map(|p: &Pave| p.vertex)
         .collect();
@@ -498,8 +498,9 @@ fn whole_cylinder(centre: [f64; 3], normal: [f64; 3], radius: f64) -> Option<Cyl
 
 /// Whether faces `f1` and `f2` lie on one curved carrier: the same surface of the pool; two
 /// cylinders given by whole numbers that coincide, decided exactly
-/// ([`crate::decide::cylinders_coincide`]); or two cones with the same stored centre, frame,
-/// radius, slope and axial factor. Any other pair is not known to, and waits.
+/// ([`crate::decide::cylinders_coincide`]); two cones with the same stored centre, frame,
+/// radius, slope and axial factor; or two spheres with the same stored centre and radius. Any
+/// other pair is not known to, and waits.
 fn coincide(arr: &Arrangement, f1: usize, f2: usize) -> Result<bool, BuildError> {
     let surface_of = |f: usize| arr.faces.get(f).map(|x| x.surface);
     let (Some(CarrierIx::Surface(a)), Some(CarrierIx::Surface(b))) =
@@ -528,6 +529,10 @@ fn coincide(arr: &Arrangement, f1: usize, f2: usize) -> Result<bool, BuildError>
             && c1.frame() == c2.frame()
             && c1.radius_and_slope() == c2.radius_and_slope()
             && c1.axial_sign() == c2.axial_sign()),
+        // A sphere is its centre and radius, whatever frame its parameters are taken on.
+        (SurfaceKind::Sphere(s1), SurfaceKind::Sphere(s2)) => {
+            Ok(s1.center() == s2.center() && s1.radius() == s2.radius())
+        }
         _ => Ok(false),
     }
 }
@@ -1591,7 +1596,7 @@ pub(crate) fn settle(
             .loops
             .iter()
             .flatten()
-            .filter_map(|e| by_source.get(*e))
+            .filter_map(|u| by_source.get(u.edge))
             .flatten()
             .copied()
             .collect();

@@ -15,7 +15,9 @@
 )]
 
 use geom_bool::carrier::{CarrierIx, PointGeom};
-use geom_bool::interfere::{Arrangement, EdgeIn, FaceIn, Interfered, VertexIn, interfere};
+use geom_bool::interfere::{
+    Arrangement, BuildError, EdgeIn, EdgeUse, FaceIn, Interfered, VertexIn, interfere,
+};
 use geom_bool::merge::default_remaining;
 use geom_bool::split::{Piece, SplitFace, Splitting, Use, split};
 use geom_curve::{Circle, CurveKind, Frame, Line};
@@ -36,6 +38,17 @@ fn p(x: i64, y: i64, z: i64) -> P3 {
 
 fn coords(q: P3) -> [f64; 3] {
     [q.x.get() as f64, q.y.get() as f64, q.z.get() as f64]
+}
+
+/// A loop run the other way round.
+fn reversed(ring: &[EdgeUse]) -> Vec<EdgeUse> {
+    ring.iter()
+        .rev()
+        .map(|u| EdgeUse {
+            edge: u.edge,
+            forward: !u.forward,
+        })
+        .collect()
 }
 
 /// The faces of a box: x low, x high, y low, y high, z low, z high.
@@ -90,7 +103,30 @@ impl Build {
         )
     }
 
+    /// A face whose loops are each listed in order round it with the face on their left, seen
+    /// from outside its carrier: for a flat one, from the side its plane's entry in the table
+    /// faces ([`Build::runs`]).
     fn face(&mut self, surface: CarrierIx, loops: Vec<Vec<usize>>, operand: u32) -> usize {
+        let loops = loops.iter().map(|ring| self.runs(ring)).collect();
+        self.face_with(surface, loops, operand)
+    }
+
+    /// A flat face on the plane with normal `n` and offset `d`, its loops each listed in order
+    /// round it with the face on their left seen from where `n` points: turned round where the
+    /// plane's entry in the table faces the other way (its normal's first part that is not zero
+    /// is positive).
+    fn flat(&mut self, (n, d): ([i128; 3], i128), loops: Vec<Vec<EdgeUse>>, operand: u32) -> usize {
+        let plane = self.plane(n, d);
+        let flipped = n.iter().find(|v| **v != 0).is_some_and(|v| *v < 0);
+        let loops = if flipped {
+            loops.into_iter().map(|ring| reversed(&ring)).collect()
+        } else {
+            loops
+        };
+        self.face_with(plane, loops, operand)
+    }
+
+    fn face_with(&mut self, surface: CarrierIx, loops: Vec<Vec<EdgeUse>>, operand: u32) -> usize {
         self.arr.faces.push(FaceIn {
             surface,
             loops,
@@ -99,16 +135,38 @@ impl Build {
         self.arr.faces.len() - 1
     }
 
+    /// A loop listed in order round its face as uses: each edge run on from the end it shares
+    /// with the edge before it (the first towards the edge after it), a closed edge forward.
+    fn runs(&self, ring: &[usize]) -> Vec<EdgeUse> {
+        let mut at = None;
+        let mut uses = Vec::new();
+        for (i, &e) in ring.iter().enumerate() {
+            let ends = self.arr.edges[e].ends;
+            let forward = match (ends, at) {
+                (None, _) => true,
+                (Some([s, _]), Some(v)) => s == v,
+                (Some([_, t]), None) => self.arr.edges[ring[(i + 1) % ring.len()]]
+                    .ends
+                    .is_none_or(|[a, b]| a == t || b == t),
+            };
+            at = ends.map(|[s, t]| if forward { t } else { s });
+            uses.push(EdgeUse { edge: e, forward });
+        }
+        uses
+    }
+
     fn ring(&mut self, corners: &[usize], operand: u32) -> Vec<usize> {
         (0..corners.len())
             .map(|k| self.line(corners[k], corners[(k + 1) % corners.len()], operand))
             .collect()
     }
 
+    /// A flat face on the plane (`n`, `d`), its corners counter-clockwise seen from where `n`
+    /// points.
     fn polygon(&mut self, corners: &[usize], n: [i128; 3], d: i128, operand: u32) -> usize {
         let edges = self.ring(corners, operand);
-        let plane = self.plane(n, d);
-        self.face(plane, vec![edges], operand)
+        let uses = self.runs(&edges);
+        self.flat((n, d), vec![uses], operand)
     }
 
     /// A box from `lo` to `hi`, in the tests' unit.
@@ -302,10 +360,10 @@ fn a_section_through_corners_splits_a_face_in_two() {
         .collect();
     let s = i128::from(S);
     b.polygon(&[near[0], near[1], far[1], far[0]], [0, 1, -1], 0, 1);
-    b.polygon(&[near[1], near[2], far[2], far[1]], [0, 1, 0], -150 * s, 1);
+    b.polygon(&[near[1], near[2], far[2], far[1]], [0, -1, 0], 150 * s, 1);
     b.polygon(&[near[2], near[0], far[0], far[2]], [0, 0, 1], 50 * s, 1);
-    b.polygon(&[near[0], near[1], near[2]], [1, 0, 0], -50 * s, 1);
-    b.polygon(&[far[0], far[1], far[2]], [1, 0, 0], -150 * s, 1);
+    b.polygon(&[near[0], near[1], near[2]], [-1, 0, 0], 50 * s, 1);
+    b.polygon(&[far[0], far[1], far[2]], [-1, 0, 0], 150 * s, 1);
     let (out, splitting) = b.run();
     let parts = of_face(&splitting, cube.faces[1]);
     assert_eq!(parts.len(), 2, "{parts:?}");
@@ -334,7 +392,13 @@ fn a_face_with_a_round_hole_stays_whole() {
     let circle = Circle::new([500.0 * k, 500.0 * k, 0.0], 200.0 * k, frame, (0.0, 2.0)).unwrap();
     let hole = b.edge(CurveKind::Circle(circle), None, 0);
     let plane = b.plane([0, 0, 1], 0);
-    let face = b.face(plane, vec![outer, vec![hole]], 0);
+    // The hole's circle runs counter-clockwise seen from +z: the face is on its right.
+    let outer = b.runs(&outer);
+    let back = EdgeUse {
+        edge: hole,
+        forward: false,
+    };
+    let face = b.face_with(plane, vec![outer, vec![back]], 0);
     let (_, splitting) = b.run();
     let parts = of_face(&splitting, face);
     assert_eq!(parts.len(), 1, "{parts:?}");
@@ -359,7 +423,13 @@ fn a_plate_through_a_round_hole_splits_the_face_in_two() {
     let circle = Circle::new([500.0 * k, 500.0 * k, 0.0], 200.0 * k, frame, (0.0, 2.0)).unwrap();
     let hole = b.edge(CurveKind::Circle(circle), None, 0);
     let plane = b.plane([0, 0, 1], 0);
-    let face = b.face(plane, vec![outer, vec![hole]], 0);
+    // The hole's circle runs counter-clockwise seen from +z: the face is on its right.
+    let outer = b.runs(&outer);
+    let back = EdgeUse {
+        edge: hole,
+        forward: false,
+    };
+    let face = b.face_with(plane, vec![outer, vec![back]], 0);
     // A thin upright plate on x = 450, across the whole face.
     let slab = b.cuboid([450, -100, -100], [460, 1100, 100], 1);
     let (_, splitting) = b.run();
@@ -406,23 +476,70 @@ fn faces_on_one_plane_split_each_other() {
     }
 }
 
-/// A face on a curved carrier waits for its own splitting.
+/// A face on a torus waits for its own splitting.
 #[test]
 fn a_curved_face_waits() {
     let mut b = Build::default();
     let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
     let k = S as f64;
-    let ring = Circle::new([0.0, 0.0, 0.0], 50.0 * k, frame, (0.0, 2.0)).unwrap();
-    let edge = b.edge(CurveKind::Circle(ring), None, 0);
-    let sphere =
-        geom_surface::Sphere::new([0.0; 3], 50.0 * k, frame, ((0.0, 2.0), (0.0, 0.5))).unwrap();
+    // The upper half of the torus, on the left of its outer circle and the right of its inner.
+    let mut rims = Vec::new();
+    for radius in [70.0, 30.0] {
+        let ring = Circle::new([0.0, 0.0, 0.0], radius * k, frame, (0.0, 2.0)).unwrap();
+        rims.push(b.edge(CurveKind::Circle(ring), None, 0));
+    }
+    let torus = geom_surface::Torus::new(
+        [0.0; 3],
+        50.0 * k,
+        20.0 * k,
+        frame,
+        ((0.0, 2.0), (0.0, 1.0)),
+    )
+    .unwrap();
     let ix = b
         .arr
         .carriers
-        .add_surface(geom_topo::SurfaceKind::Sphere(sphere))
+        .add_surface(geom_topo::SurfaceKind::Torus(torus))
         .unwrap();
-    let dome = b.face(CarrierIx::Surface(ix), vec![vec![edge]], 0);
+    let outer = EdgeUse {
+        edge: rims[0],
+        forward: true,
+    };
+    let inner = EdgeUse {
+        edge: rims[1],
+        forward: false,
+    };
+    let ring = b.face_with(CarrierIx::Surface(ix), vec![vec![outer], vec![inner]], 0);
     let (_, splitting) = b.run();
-    assert_eq!(splitting.waiting, vec![dome]);
+    assert_eq!(splitting.waiting, vec![ring]);
     assert_eq!(splitting.faces.len(), 0);
+}
+
+/// A flat face whose loop runs with the face on its right, round the outside of a square: no
+/// face is that, and splitting refuses it. A loop whose edges do not run end to end is refused
+/// too.
+#[test]
+fn a_flat_face_with_its_loop_the_wrong_way_is_refused() {
+    let mut b = Build::default();
+    let corners: Vec<usize> = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+        .collect();
+    let edges = b.ring(&corners, 0);
+    let uses = reversed(&b.runs(&edges));
+    let face = b.flat(([0, 0, 1], 0), vec![uses], 0);
+    let out = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut meter()).unwrap();
+    assert_eq!(
+        split(&b.arr, &out, &mut meter()),
+        Err(BuildError::Unbounded { face })
+    );
+    // The same square with one edge run the wrong way: it no longer starts where the one before
+    // it ends.
+    let mut uses = b.runs(&edges);
+    uses[1].forward = false;
+    b.arr.faces[face].loops = vec![uses];
+    assert_eq!(
+        split(&b.arr, &out, &mut meter()),
+        Err(BuildError::BrokenLoop { face, ring: 0 })
+    );
 }

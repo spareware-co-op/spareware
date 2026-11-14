@@ -1718,6 +1718,16 @@
               "shape": "struct"
             },
             {
+              "doc": "A loop of a face whose edges do not run end to end as its uses say: each must start where the one before it ends (G244).",
+              "name": "BrokenLoop",
+              "shape": "struct"
+            },
+            {
+              "doc": "A face whose loops have it on their right in its picture, round the outside of what they close round: on a plane, a cylinder or a cone, a region with no end, which no face is (G244).",
+              "name": "Unbounded",
+              "shape": "struct"
+            },
+            {
               "doc": "Two paves of a section, along a line or a curve, whose order is not proven.",
               "name": "SectionOrder",
               "shape": "struct"
