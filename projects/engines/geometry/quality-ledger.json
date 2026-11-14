@@ -6956,19 +6956,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
-      "mutant": "replace == with != in Chain::roots",
-      "line_text": "if negative && p.degree % 2 == 1 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The sign of every element at minus infinity flips with this test, and a sign vector and its negation have the same changes, so the count of changes is the same for either parity."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
       "mutant": "replace == with != in filtered",
       "line_text": "*slot = if negative && d % 2 == 1 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "As in `Chain::roots`: flipping the sign of every element at minus infinity leaves the number of changes where it was."
+      "reason": "The sign of every element at minus infinity flips with this test, and a sign vector and its negation have the same changes, so the count of changes is the same for either parity."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
