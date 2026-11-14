@@ -26,7 +26,9 @@
 //!
 //! Tiers: the reference's rationals and the transforms take minutes in a debug build, so those
 //! tests run in every release leg; the golden runs everywhere. The models of more than `LARGE`
-//! faces run in the nightly tier (`kernel-nightly.yml`), with `--ignored`.
+//! faces run in the nightly tier (`kernel-nightly.yml`), with `--ignored`, each union within a
+//! work budget and its exact volume inside the kernel's own, but not against the reference, whose
+//! rationals take over an hour on the largest.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -663,6 +665,11 @@ enum Read {
 
 /// The model `grid`, built and united alone and with its copy moved by `by`, on `exec`.
 fn unions(grid: &Grid, by: [i64; 3], exec: &Exec<'_>) -> Read {
+    unions_within(grid, by, exec, u64::MAX)
+}
+
+/// [`unions`], each union stopped by its meter past `work` units.
+fn unions_within(grid: &Grid, by: [i64; 3], exec: &Exec<'_>, work: u64) -> Read {
     let mesh =
         |by: [i64; 3], name: u8| build(&mesh_polygons(grid, by, name).unwrap(), exec, &mut meter());
     let (a, b) = match (mesh([0; 3], 1), mesh(by, 2)) {
@@ -671,8 +678,9 @@ fn unions(grid: &Grid, by: [i64; 3], exec: &Exec<'_>) -> Read {
     };
     let step = OpPath::new(OpId::from_bytes([9; 16]));
     let tests = [WindingTest::unite()];
-    let alone = boolean(&[&a], &tests, &step, exec, &mut meter()).unwrap();
-    let pair = boolean(&[&a, &b], &tests, &step, exec, &mut meter()).unwrap();
+    let budget = || WorkMeter::new(Budget::new(work, u64::MAX));
+    let alone = boolean(&[&a], &tests, &step, exec, &mut budget()).unwrap();
+    let pair = boolean(&[&a, &b], &tests, &step, exec, &mut budget()).unwrap();
     Read::Built {
         alone: alone.into_iter().next().unwrap().mesh,
         pair: pair.into_iter().next().unwrap().mesh,
@@ -680,8 +688,14 @@ fn unions(grid: &Grid, by: [i64; 3], exec: &Exec<'_>) -> Read {
 }
 
 /// The most faces a model of the pull-request tier has: the seven larger ones (4,418 to 19,704
-/// faces) run in the nightly tier, `the_large_models_unite_to_the_reference`.
+/// faces) run in the nightly tier, `the_large_models_unite_within_their_work`.
 const LARGE: usize = 1_500;
+
+/// The most work a union of a large model may take: about twice the largest's, 1,519,346,215 units
+/// for `Generic_Twin_7081.1.t0_left` with its moved copy. Before a box of the arrangement had to
+/// pay for its split (geom-poly's `subdivide`), the fans of slivers in that model and its `_right`
+/// twin were clipped into millions of pieces and uniting either alone ran past 16 GB.
+const LARGE_WORK: u64 = 3_000_000_000;
 
 /// Every model of a tier, read onto the grid: those of at most [`LARGE`] faces, or the rest.
 fn models(large: bool) -> Vec<(&'static str, Grid)> {
@@ -702,11 +716,30 @@ fn manifold_s_models_unite_alone_and_with_a_moved_copy_to_the_reference() {
     assert_eq!(named(&refused), REFUSED);
 }
 
+/// The seven models of more than [`LARGE`] faces, each united alone and with its moved copy within
+/// [`LARGE_WORK`], each result's exact volume inside the kernel's own. They are not held to the
+/// flat reference: its rationals took over an hour on `Generic_Twin_7081.1.t0_left` and its copy,
+/// whose fans of up to 969 slivers each meet every other sliver's box, against minutes for the
+/// kernel. The pull-request tier holds every smaller model to it.
 #[test]
 #[ignore = "the nightly tier: the seven models of more than 1,500 faces, which take minutes; \
             kernel-nightly.yml runs it"]
-fn the_large_models_unite_to_the_reference() {
-    let refused = united_to_the_reference(true);
+fn the_large_models_unite_within_their_work() {
+    let mut refused = Vec::new();
+    for (name, grid) in models(true) {
+        let by = offset(&grid);
+        match unions_within(&grid, by, &Exec::serial(), LARGE_WORK) {
+            Read::Refused(why) => refused.push((name, why)),
+            Read::Built { alone, pair } => {
+                for (what, mesh) in [("alone", &alone), ("with a moved copy", &pair)] {
+                    assert!(
+                        holds(mesh.volume(&mut meter()).unwrap(), &exact_six(mesh)),
+                        "{name} {what}: the kernel's volume does not hold its exact one"
+                    );
+                }
+            }
+        }
+    }
     assert_eq!(named(&refused), REFUSED_LARGE);
 }
 
