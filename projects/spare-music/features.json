@@ -1131,7 +1131,7 @@
       {
        "id": "MUS-A4-F9-P1",
        "name": "Song recognition",
-       "what": "Matches a few seconds recorded on the phone against the catalogue's fingerprints (MUS-A11-F1-P2), using only a method the patent check cleared.",
+       "what": "Matches a few seconds recorded on the phone against the catalogue's fingerprints (MUS-A11-F1-P2), using the method MUS-A11-F1-P1 chose.",
        "kind": "library",
        "size": "large",
        "depends_on": [
@@ -2950,7 +2950,7 @@
       {
        "id": "MUS-A11-F1-P1",
        "name": "Fingerprint method study",
-       "what": "Compares open audio fingerprinting methods, such as Chromaprint (LGPL-2.1 as a whole) and landmark methods like audfprint (MIT), on accuracy with noise and edits, speed, licence and patents (the first landmark fingerprint patent, US 6,990,453, has expired; later patents need a search), before any code is chosen.",
+       "what": "Compares open audio fingerprinting methods, such as Chromaprint (LGPL-2.1 as a whole) and landmark methods like audfprint (MIT), on accuracy with noise and edits, speed and licence, before any code is chosen.",
        "kind": "research",
        "size": "medium",
        "depends_on": [],
@@ -3193,7 +3193,7 @@
       {
        "id": "MUS-A11-F7-P1",
        "name": "Watermark study",
-       "what": "Compares open audio watermarking methods, such as AudioSeal (MIT), on how well marks survive re-recording and compression, sound quality, licence and patents.",
+       "what": "Compares open audio watermarking methods, such as AudioSeal (MIT), on how well marks survive re-recording and compression, sound quality and licence.",
        "kind": "research",
        "size": "medium",
        "depends_on": [],
@@ -3202,7 +3202,7 @@
       {
        "id": "MUS-A11-F7-P2",
        "name": "Per-copy watermark",
-       "what": "A hidden mark in each copy, if the decision picks it, using an openly licensed method cleared for patents.",
+       "what": "A hidden mark in each copy, if the decision picks it, using an openly licensed method.",
        "kind": "library",
        "size": "large",
        "depends_on": [
@@ -5333,7 +5333,7 @@
   "Does a society member's own upload still need that society's licence in each launch country, what would those licences cost an at-cost service, and is the rule for who carries the cost fair (MUS-A8-F1-P2, MUS-A8-F3-P2)?",
   "Can Spare Music report plays and sales to each country's societies in their formats without a large staff, and which countries should come first?",
   "Are covers allowed at launch only where a licence covers them (MUS-A7-F4), and is asking for proof for every sample workable for independent artists?",
-  "Which fingerprinting method is accurate enough, licensed for the core (Chromaprint is LGPL-2.1 as a whole) and clear of patents, and how many held matches can people review each week (MUS-A11-F1)?",
+  "Which fingerprinting method is accurate enough, licensed for the core (Chromaprint is LGPL-2.1 as a whole), and how many held matches can people review each week (MUS-A11-F1)?",
   "Which copy protection, if any: a closed DRM lock, a watermark in each copy, or none, given that nothing stops someone recording the sound as it plays (MUS-A11-F6, MUS-A11-F7)?",
   "Does 'remove only what the law requires' hold up for music, where hate lyrics, impersonation and AI copies of real voices sit close to the line (MUS-A14-F3-P4, MUS-A5-F5)?",
   "Can the Human and AI sections be enforced fairly when AI is used for mastering, drums or backing vocals, and where should AI-assisted end (MUS-A5-F1-P3)?",
@@ -5342,7 +5342,7 @@
   "Who votes on what: artists on fees and rules, listeners on the pass, and members on major changes (MUS-A21-F1-P2)?",
   "What do lossless masters and delivery cost per artist and per listener each month, and who covers free listening (MUS-A16-F4-P4, MUS-A9-F6)?",
   "Which candidate kit parts should move down from Spare Music so other apps can use them: audio fingerprinting, rights packs, society reporting and split payouts?",
-  "Which parts carry legal risk under 'Built legally, or not at all': fingerprint and watermark patents, the DDEX licence terms, the OpenSubsonic site notice, MusicBrainz's non-commercial supplementary data and AcoustID's non-commercial service?",
+  "Which parts carry legal risk under 'Built legally, or not at all': the DDEX licence terms, the OpenSubsonic site notice, MusicBrainz's non-commercial supplementary data and AcoustID's non-commercial service?",
   "Is this map the right size for contributors with spare tokens, and what is the smallest slice worth building and demonstrating first?",
   "What numbers would prove the demo works, such as time to first sound on a slow phone connection, time from upload to live, and running cost per listener per month?"
  ]

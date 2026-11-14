@@ -328,7 +328,7 @@ From [09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), [10](..
 | IRIT | Free for non-commercial use only | REJECT | REJECT | Elber's papers instead |
 | SMLib fillet, blend and offset solvers | Apache-2.0. Their IntegrityWare lineage is accepted with the rest of the release (32.8, decided 2026-10-24) | PORT | STUDY, and PORT where section 13 takes a method (13) | Each method starts from its primary paper (Vida, Martin and Várady; Piegl and Tiller on offsets), and may be followed closely in this code and ported, rebuilt to section 3 with NVIDIA's notice kept. Its offset-surface defects, WR-160 to WR-165 in solidcore's catalogue (WR marks a wrong result), tell us what not to reproduce |
 | Papers on subdivision: Stam 1998; Lacewell and Burley 2007; Biermann, Levin and Zorin 2000 | Papers | PORT METHOD | PORT METHOD (16.1) | Section 16.1 takes their methods, not their code: any reference code the authors published is not used. Eigen-tables come from our own generator |
-| Papers: Pottmann et al., *Architectural Geometry*; ShapeUp; LSCM; ARAP; Vida, Martin and Várady; Maekawa; Plantinga and Vegter; Duff; Snyder; Pasko et al.; Ju et al. (dual contouring) | Papers | PORT METHOD | PORT METHOD (13, 16) | Check 29.17 first for T-splines, watertight trimming and lattices |
+| Papers: Pottmann et al., *Architectural Geometry*; ShapeUp; LSCM; ARAP; Vida, Martin and Várady; Maekawa; Plantinga and Vegter; Duff; Snyder; Pasko et al.; Ju et al. (dual contouring) | Papers | PORT METHOD | PORT METHOD (13, 16) | None |
 
 ## 29.12 Survey, terrain, alignments, roofs and point clouds (`geom-terrain`, `geom-align`, `geom-skeleton`, `geom-cloud`)
 
