@@ -516,24 +516,24 @@ fn merge(
     keyed.sort_unstable();
     let mut out = Vec::new();
     let mut rest = keyed.as_slice();
-    while let Some(((key, _), _)) = rest.split_first() {
-        let same = rest.iter().take_while(|(k, _)| k == key).count();
-        let (group, tail) = rest.split_at(same);
+    // Each turn takes the first triangle left and then those after it on its plane, so the loop
+    // moves on by at least one triangle whatever the count of the others says.
+    while let Some((&(key, first), others)) = rest.split_first() {
+        let more = others.iter().take_while(|(k, _)| *k == key).count();
+        let (group, tail) = others.split_at(more);
         rest = tail;
-        let mut corners = Vec::with_capacity(same.saturating_mul(3));
+        let mut corners = Vec::with_capacity(group.len().saturating_add(1).saturating_mul(3));
+        corners.extend_from_slice(&first);
         for (_, t) in group {
-            let [a, b, c] = *t;
-            corners.push(a);
-            corners.push(b);
-            corners.push(c);
+            corners.extend_from_slice(t);
         }
-        let ((n, _), flipped) = *key;
+        let ((n, _), flipped) = key;
         let outward = if flipped {
             n.map(i128::wrapping_neg)
         } else {
             n
         };
-        out.push((*key, ring(points, corners, outward)?));
+        out.push((key, ring(points, corners, outward)?));
     }
     Ok(out)
 }
