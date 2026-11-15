@@ -15,7 +15,7 @@ name: Kernel
 # unrun. geom-num's whole test suite, every one of its test vectors, also runs in every native
 # configuration and in both release modes on wasm32 (its debug suite there takes well over an
 # hour, so wasm32's debug leg runs the goldens). A target that disagrees is a bug, never a reason
-# to change a golden: a golden changes only by an approved edit of the store (kernel-golden.yml).
+# to change a golden: a golden changes only by a recorded edit of the store (kernel-golden.yml).
 #
 # The goldens run first, in every configuration, and every step runs even when an earlier one
 # failed (`if: !cancelled()`), so a failing suite never hides the digests of a target.
@@ -55,6 +55,14 @@ name: Kernel
 # crate and why it runs or not. The suites (`linux`, `suite`, `wasm-suite`) test only the crates
 # it names, and a part left with nothing to test passes. A release tag tests every crate. The
 # goldens, the guard and the lints run whole on every change that runs them.
+#
+# A failure on wasm32 tells its cause. wasm32-wasip1's standard library is built to abort on a
+# panic, so a panicking test ends the whole binary before libtest prints what it captured and
+# before proptest can shrink or save its case. Every wasm32 test run is therefore given
+# `--nocapture` (the golden runs pass it already), so a panic's message and place reach the log
+# before the abort, with whatever the test printed; under Node, the runner draws every random byte
+# from one seed and a failing run prints it, so the run replays with the same proptest cases
+# (`WASI_RUN_SEED`, in the runner below).
 #
 # Every action is pinned to a full commit, checked against its tag when it was pinned; update a
 # pin only after reviewing the new commit.
@@ -640,15 +648,42 @@ jobs:
           cat > "$RUNNER_TEMP/wasi-run.mjs" <<'EOF'
           // Runs a wasm32-wasip1 test binary under Node's WASI: cargo's runner for that target.
           // A failing test traps or exits non-zero, and either makes this process exit non-zero.
+          // A panic on wasm32 aborts the binary before proptest can shrink or save its case, so every random
+          // byte the binary draws (proptest's seeds, a hash map's keys) comes from one seed: SHA-256 of the
+          // seed and a block number, block after block. A failing run prints the seed, and the same binary
+          // run with the same arguments and WASI_RUN_SEED set to it draws the same bytes again.
+          import { createHash, randomBytes } from 'node:crypto';
           import { readFile } from 'node:fs/promises';
           import { WASI } from 'node:wasi';
-          import { argv, env, exit } from 'node:process';
+          import { argv, env, exit, stderr } from 'node:process';
 
           const [file, ...args] = argv.slice(2);
+          const seed = env.WASI_RUN_SEED || randomBytes(16).toString('hex');
           const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const imports = wasi.getImportObject();
+          let instance;
+          let block = 0;
+          imports.wasi_snapshot_preview1.random_get = (at, length) => {
+            const out = new Uint8Array(instance.exports.memory.buffer, at, length);
+            for (let done = 0; done < length; done += 32) {
+              const bytes = createHash('sha256').update(`${seed} ${block}`).digest();
+              block += 1;
+              out.set(bytes.subarray(0, length - done), done);
+            }
+            return 0;
+          };
+          const replay = () => stderr.write(`wasi-run: ${file} failed; WASI_RUN_SEED=${seed} replays its random bytes\n`);
           const module = await WebAssembly.compile(await readFile(file));
-          const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
-          exit(wasi.start(instance));
+          instance = await WebAssembly.instantiate(module, imports);
+          let code;
+          try {
+            code = wasi.start(instance);
+          } catch (error) {
+            replay();
+            throw error;
+          }
+          if (code !== 0) replay();
+          exit(code);
           EOF
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
       # Gate 1 (piece G43): the job `guard`'s proof, through this leg's own tool and runtime.
@@ -670,7 +705,7 @@ jobs:
       # The shipped-checker leg on wasm32, the build a browser runs (the job `test` says what it is).
       - name: The replay corpus and the transform sweep on wasm32 with the checker as shipped
         if: ${{ !cancelled() }}
-        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism --target wasm32-wasip1
+        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism --target wasm32-wasip1 -- --nocapture
       - name: Every golden on wasm32 in debug
         if: ${{ !cancelled() }}
         run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1
@@ -745,20 +780,47 @@ jobs:
           cat > "$RUNNER_TEMP/wasi-run.mjs" <<'EOF'
           // Runs a wasm32-wasip1 test binary under Node's WASI: cargo's runner for that target.
           // A failing test traps or exits non-zero, and either makes this process exit non-zero.
+          // A panic on wasm32 aborts the binary before proptest can shrink or save its case, so every random
+          // byte the binary draws (proptest's seeds, a hash map's keys) comes from one seed: SHA-256 of the
+          // seed and a block number, block after block. A failing run prints the seed, and the same binary
+          // run with the same arguments and WASI_RUN_SEED set to it draws the same bytes again.
+          import { createHash, randomBytes } from 'node:crypto';
           import { readFile } from 'node:fs/promises';
           import { WASI } from 'node:wasi';
-          import { argv, env, exit } from 'node:process';
+          import { argv, env, exit, stderr } from 'node:process';
 
           const [file, ...args] = argv.slice(2);
+          const seed = env.WASI_RUN_SEED || randomBytes(16).toString('hex');
           const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const imports = wasi.getImportObject();
+          let instance;
+          let block = 0;
+          imports.wasi_snapshot_preview1.random_get = (at, length) => {
+            const out = new Uint8Array(instance.exports.memory.buffer, at, length);
+            for (let done = 0; done < length; done += 32) {
+              const bytes = createHash('sha256').update(`${seed} ${block}`).digest();
+              block += 1;
+              out.set(bytes.subarray(0, length - done), done);
+            }
+            return 0;
+          };
+          const replay = () => stderr.write(`wasi-run: ${file} failed; WASI_RUN_SEED=${seed} replays its random bytes\n`);
           const module = await WebAssembly.compile(await readFile(file));
-          const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
-          exit(wasi.start(instance));
+          instance = await WebAssembly.instantiate(module, imports);
+          let code;
+          try {
+            code = wasi.start(instance);
+          } catch (error) {
+            replay();
+            throw error;
+          }
+          if (code !== 0) replay();
+          exit(code);
           EOF
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
       - name: geom-num's every test vector on wasm32 in release as shipped
         if: ${{ !cancelled() && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-num ') }}
-        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
+        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
       # The whole suite in release. In debug, wasm32-wasip1 runs every test on one thread with no
       # optimisation, which takes well over an hour, so the debug leg here is every golden of the
       # store above (chapter 21 asks for the corpus in debug and release); the native jobs run the
@@ -767,7 +829,7 @@ jobs:
         if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast
+        run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
 
   large-models:
     # Gate 4 (G156): Manifold's seven models of more than 1,500 faces, each united alone and with a

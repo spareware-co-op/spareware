@@ -14808,9 +14808,9 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/golden.rs",
           "guarantees": [
-            "`list`, `check`, `run` and `diff` never write a file. Exit codes: 0 when everything checked holds; 1 when a check fails (a problem, a failed or unproven golden, a refused or unapproved edit); 2 for a usage error or a file or command that cannot be read or run."
+            "`list`, `check`, `run` and `diff` never write a file. Exit codes: 0 when everything checked holds; 1 when a check fails (a problem, a failed or unproven golden, a refused edit); 2 for a usage error or a file or command that cannot be read or run."
           ],
-          "job": "`golden`: the golden store's tool: list it, check it against the repository, run every golden in one CI leg's configuration, and hold a pull request's edits to the owner-approval rule.",
+          "job": "`golden`: the golden store's tool: list it, check it against the repository, run every golden in one CI leg's configuration, and hold a pull request's edits to the record rule.",
           "method": {
             "none": "it parses its arguments and calls [`geom_test::golden`], whose module headers carry the methods."
           },
@@ -15213,14 +15213,14 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the two sets.",
-          "does": "[`diff`] compares the fixtures of a base commit with a pull request's and sorts every change into refused, needing a kernel owner's approval, or free. `.github/workflows/` `kernel-golden.yml` runs it through the `fixture diff` binary and holds the pull request to its answer, with the golden store's own approval rule (`golden::diff::approved`).",
+          "cost": "linear in the two sets, and in the new history records for each changed value.",
+          "does": "[`diff`] compares the fixtures of a base commit with a pull request's and sorts every change into refused, changed on its record, or free. `.github/workflows/` `kernel-golden.yml` runs it through the `fixture diff` binary and holds the pull request to its answer, which prints each changed expectation with its record, for the merge record to name.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/fixture/diff.rs",
           "guarantees": [
-            "every change to a stored fixture is sorted, so one that fits no rule is refused; the answer depends only on the two sets given; nothing reads a clock or the network."
+            "every change to a stored fixture is sorted, so one that fits no rule is refused; every changed value that stands is listed with its record ([`Diff::changed`]); the answer depends only on the two sets given; nothing reads a clock or the network."
           ],
-          "job": "What a pull request may do to the fixtures already stored (chapters 28.13 and 28.16; piece G97).",
+          "job": "What a pull request may do to the fixtures already stored, and the record every changed expectation carries (chapters 28.13 and 28.16; piece G97; decision 32.55).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -15452,7 +15452,7 @@
             "**One store, one hash.** Every golden digest of the kernel's crates is in the store; [`repo`] fails on a golden digest constant anywhere else, and every one is SHA-256 from [`sha256`].",
             "**Every golden on every leg.** `kernel.yml` runs the store's whole current edition through [`matrix`] on each of its targets and build modes, so a golden added to the store is checked everywhere the day it lands.",
             "**Perturbations change nothing, or the golden fails.** Every golden runs twice on two differently perturbed heaps; order-free cases also run in shuffled orders.",
-            "**Edits are visible and approved.** A changed digest without its history record, a removed golden, or any change to a frozen edition is refused; any other edit to an existing golden needs a kernel owner's approval on the pull request's head commit."
+            "**Edits are visible and recorded.** A changed digest without exactly one new history record holding the old digest, of a kind the golden allows, with its piece and a reason, a removed golden, a released edition or any change to a frozen edition is refused; every moved answer is printed with its record (decision 32.54)."
           ],
           "job": "The golden store and the determinism matrix: every golden digest of the kernel in one store keyed by edition, the one SHA-256 every golden is hashed with, the perturbations every golden must survive, and the runner that checks every golden on every target and build mode.",
           "method": {
@@ -15475,7 +15475,7 @@
           "file": "projects/engines/geometry/crates/geom-test/src/golden/check.rs",
           "guarantees": [
             "**Twice, on two heaps.** The case runs exactly [`REPEATS`] times, each run under a different seed's perturbation held for the whole run; a case whose output depends on an address, on leftover state from an earlier run, or on anything else that differs between two runs in one process fails with [`GoldenError::Repeat`], naming both digests. An address-dependent case is caught on every run with glibc's, Windows' and WebAssembly's allocators, and on most runs on macOS ([`super::perturb`] says why).",
-            "**The store decides.** The digest must equal the store's for the id in the current edition; otherwise [`GoldenError::Mismatch`] names the edition, the id, both digests and the two things a mismatch can mean (a bug on this target, or a deliberate change that must be recorded in the store and approved by a kernel owner). A golden the store does not hold is [`GoldenError::Store`]. Nothing is ever written to the store from here.",
+            "**The store decides.** The digest must equal the store's for the id in the current edition; otherwise [`GoldenError::Mismatch`] names the edition, the id, both digests and the two things a mismatch can mean (a bug on this target, or a deliberate change that must be recorded in the store's history of that golden). A golden the store does not hold is [`GoldenError::Store`]. Nothing is ever written to the store from here.",
             "**The repeat is checked before the store**, so a case that is not even repeatable is reported as such, not as a changed golden.",
             "**No panic**: the verdict is returned, and the test decides how to fail."
           ],
@@ -15493,24 +15493,22 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the two stores' sizes, with a logarithmic factor for the keyed maps; linear in the number of reviews.",
-          "does": "[`diff`] compares the store at a pull request's base with the store at its head and returns a [`Diff`]: the goldens added, the goldens changed (and how), and every [`Diff::refusals`] entry, a change no approval can make. [`Diff::needs_approval`] says whether a kernel owner's approval is required. [`approved`] decides, from a pull request's reviews, whether that approval has been given. The binary `golden` runs both in `.github/workflows/kernel-golden.yml` on every pull request and every review.",
+          "cost": "linear in the two stores' sizes, with a logarithmic factor for the keyed maps.",
+          "does": "[`diff`] compares the store at a pull request's base with the store at its head and returns a [`Diff`]: the goldens added, the answers that moved (each with the history record that says why), the other edits to existing goldens, and every [`Diff::refusals`] entry, a change that cannot merge. The binary `golden` runs it in `.github/workflows/kernel-golden.yml` on every pull request that edits the store, and prints each moved answer with its record, for the merge record to name (decision 32.54).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/diff.rs",
           "guarantees": [
             "**Every difference is seen.** Goldens are matched by edition, id and operation versions; every field is compared; a golden present on one side only is an addition or a removal.",
-            "**A refusal is final.** [`Diff::is_acceptable`] is false whenever a refusal exists, whatever the reviews say.",
-            "**Approval is per head commit.** A review of an earlier commit does not approve later changes, so an approved store cannot be changed again without a fresh approval.",
+            "**A refusal is final.** [`Diff::is_acceptable`] is false whenever a refusal exists.",
+            "**Every moved answer is named.** [`Diff::moved`] holds each moved digest with the record that explains it, and the report prints each one.",
             "**Deterministic.** Reports list editions in store order and goldens in key order."
           ],
-          "job": "The owner-approval rule for edits to the golden store: what a change to the store does, what it may never do, and when a kernel owner must approve it.",
+          "job": "The record rule for edits to the golden store: what a change to the store does, what it may never do, and the record every moved answer carries.",
           "method": {
             "links": [
-              "https://github.com/obi1kenobi/cargo-semver-checks",
-              "https://docs.github.com/en/rest/pulls/reviews",
-              "https://docs.github.com/en/graphql/reference/enums#commentauthorassociation"
+              "https://github.com/obi1kenobi/cargo-semver-checks"
             ],
-            "text": "a three-way rule check over the two parsed stores (base, head) in the manner of `cargo-semver-checks`' comparison of a crate's public API across two versions (<https://github.com/obi1kenobi/cargo-semver-checks>): every difference is classified against a written rule; the review rule follows GitHub's documentation of pull request reviews (<https://docs.github.com/en/rest/pulls/reviews>) and author associations (<https://docs.github.com/en/graphql/reference/enums#commentauthorassociation>)."
+            "text": "a three-way rule check over the two parsed stores (base, head) in the manner of `cargo-semver-checks`' comparison of a crate's public API across two versions (<https://github.com/obi1kenobi/cargo-semver-checks>): every difference is classified against a written rule."
           },
           "path": "geom_test::golden::diff",
           "provenance": [],
@@ -15677,7 +15675,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/store.rs",
           "guarantees": [
-            "**Nothing ambiguous parses.** Unknown fields, a missing field, a digest that is not 64 lowercase hexadecimal digits, a malformed id or edition label, a golden with both or neither of `check` and `file`, a `check` in another crate than its id names, two goldens with one key in an edition, two editions with one label, no open edition, an open edition that is not the last, a history record whose digest equals the value that replaced it, an unknown kind, an empty piece or reason: each is a [`StoreError`], never a silent choice.",
+            "**Nothing ambiguous parses.** Unknown fields, a missing field, a digest that is not 64 lowercase hexadecimal digits, a malformed id or edition label, a golden with both or neither of `check` and `file`, a `check` in another crate than its id names, two goldens with one key in an edition, two editions with one label, no open edition, an open edition that is not the last, a history record whose digest equals the value that replaced it, an unknown kind, a kind the golden does not allow, an empty piece or reason: each is a [`StoreError`], never a silent choice.",
             "**One answer per key.** [`Store::expected`] finds the golden by id and operation versions in the current edition, or says that it is not there.",
             "**Deterministic.** Records keep the file's order; maps are `BTreeMap`s; nothing reads a clock."
           ],
@@ -16274,7 +16272,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/museum.rs",
           "guarantees": [
-            "**Exhibits never change.** A byte changed in a stored file is [`MuseumError::Changed`], and nothing else about that exhibit is read. An exhibit taken out, or a recorded hash edited, changes the digest, which is a golden and so needs its record and a kernel owner's approval.",
+            "**Exhibits never change.** A byte changed in a stored file is [`MuseumError::Changed`], and nothing else about that exhibit is read. An exhibit taken out, or a recorded hash edited, changes the digest, which is a golden and so needs its record in the golden store.",
             "**A file reads whole, and writes back the same.** Every record is known to the reader, the count is the recorded one, and [`geom_format::file::write`] gives the same bytes.",
             "**A log replays to its hash.** A log that does not replay, whether the kernel refuses an operation or gives another hash, is [`MuseumError::Replay`]; the kernel must keep every version of every operation an exhibit names (26.2).",
             "**Nothing is left out.** Every `.skgf` file in the museum has an exhibit, every exhibit a file, and every file of `geom-format`'s archive is in the museum byte for byte ([`repo`]).",
