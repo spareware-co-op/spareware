@@ -346,11 +346,18 @@ fn solids_give_what_their_arrays_give() {
     assert!(pa != pb && pb != pc && a != c);
     assert_ne!(format!("{pa:?}"), format!("{pb:?}"));
     assert!(format!("{pa:?}").starts_with("ExactMesh { parts: Parts {"));
-    for test in [
+    for (i, test) in [
         WindingTest::unite(),
         WindingTest::intersect(2),
         WindingTest::subtract(0),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // Under Miri the union and the difference: the intersection reaches nothing they do not.
+        if !keeps(i, &[0, 2]) {
+            continue;
+        }
         on_each_exec(|exec| {
             let run = |operands: &[&ExactMesh]| {
                 boolean(
@@ -401,11 +408,18 @@ fn solids_of_many_faces_give_what_their_arrays_give() {
     assert!(sa.is_solid() && sb.is_solid());
     let plain = |m: &ExactMesh| ExactMesh::new(m.parts().clone(), &Exec::serial(), &mut meter());
     let (pa, pb) = (plain(&sa).unwrap(), plain(&sb).unwrap());
-    for test in [
+    for (i, test) in [
         WindingTest::unite(),
         WindingTest::intersect(2),
         WindingTest::subtract(0),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // Under Miri the union and the difference: the intersection reaches nothing they do not.
+        if !keeps(i, &[0, 2]) {
+            continue;
+        }
         on_each_exec(|exec| {
             let run = |operands: &[&ExactMesh]| {
                 boolean(
