@@ -33,7 +33,7 @@ use geom_test::{Seed, SplitMix64};
 mod miri;
 mod shapes;
 
-use miri::sized;
+use miri::{keeps, sized};
 
 use shapes::{cuboid, g, soup, source};
 
@@ -58,10 +58,13 @@ fn solid(low: [i64; 3], high: [i64; 3], name: u8) -> ExactMesh {
     build(&input, &Exec::serial(), &mut meter()).unwrap()
 }
 
-/// Runs `f` on one thread and, on a native target, on a pool of four threads too (`pool` says
-/// which). WebAssembly has no threads, so there it runs on one thread only.
+/// Runs `f` on one thread and, on a native target, on a pool of four threads too (`miri::pool`
+/// says which). WebAssembly has no threads, so there it runs on one thread only. Under Miri it
+/// runs on the pool only: the chunks run the same kernel code there as on one thread.
 fn on_each_exec(mut f: impl FnMut(&Exec<'_>)) {
-    f(&Exec::serial());
+    if !cfg!(miri) {
+        f(&Exec::serial());
+    }
     #[cfg(not(target_family = "wasm"))]
     f(&Exec::with_pool(&*miri::pool(4)));
 }
@@ -163,7 +166,7 @@ fn volumes_agree_with_counted_cells() {
     let seed = resolve("geom-mesh boolean cells", Seed(0x148)).unwrap();
     let mut rng = SplitMix64::new(seed);
     let side = NonZeroU64::new(6).unwrap();
-    for _ in 0..sized(40, 2) {
+    for round in 0..40 {
         let mut pick = || {
             let mut low = [0; 3];
             let mut high = [0; 3];
@@ -176,6 +179,10 @@ fn volumes_agree_with_counted_cells() {
             (low, high)
         };
         let boxes = [pick(), pick(), pick()];
+        // Under Miri, rounds 9 and 31.
+        if !keeps(round, &[9, 31]) {
+            continue;
+        }
         let meshes: Vec<ExactMesh> = boxes
             .iter()
             .zip(1..)
@@ -361,16 +368,15 @@ fn solids_give_what_their_arrays_give() {
     assert!(!wedge(0, [20, 31, 27, 29], 1).is_solid());
 }
 
-/// Two rough fields of `n` by `n` heights (120 faces each at 6, 48 at 4), the second moved along x
-/// by `x`: more faces than a leaf holds (`geom_poly::subdivide::LEAF_POLYGONS`, 32), so their boxes
-/// split.
-fn fields(n: usize, x: i64) -> [ExactMesh; 2] {
+/// Two rough fields of 120 faces each, the second moved along x by `x`: more faces than a leaf
+/// holds, so their boxes split.
+fn fields(x: i64) -> [ExactMesh; 2] {
     let seed = resolve("geom-mesh boolean fields", Seed(0x1481)).unwrap();
     let mut rng = SplitMix64::new(seed);
     let up = NonZeroU64::new(40).unwrap();
     [(0, 1), (x, 2)].map(|(moved, name)| {
-        let heights: Vec<Vec<i64>> = (0..n)
-            .map(|_| (0..n).map(|_| 20 + rng.below(up) as i64).collect())
+        let heights: Vec<Vec<i64>> = (0..6)
+            .map(|_| (0..6).map(|_| 20 + rng.below(up) as i64).collect())
             .collect();
         let (mut input, _) = shapes::prism(&heights, 16);
         for corner in &mut input.vertices {
@@ -387,10 +393,7 @@ fn fields(n: usize, x: i64) -> [ExactMesh; 2] {
 fn solids_of_many_faces_give_what_their_arrays_give() {
     // Overlapping in a strip a fifth of their width, as the benchmark's pair: most boxes hold one
     // solid's faces only, and stop there.
-    // Under Miri, fields of 4 by 4 heights, still over a leaf.
-    let n = sized(6, 4);
-    let width = (n as i64 - 1) * 16;
-    let [a, b] = fields(n, width * 4 / 5);
+    let [a, b] = fields(64);
     let (sa, sb) = (
         one(&[&a], WindingTest::unite()).mesh,
         one(&[&b], WindingTest::unite()).mesh,
@@ -434,11 +437,15 @@ fn ties_on_a_small_lattice_hold_up() {
     let mut rng = SplitMix64::new(seed);
     let height = NonZeroU64::new(16).unwrap();
     let shift = [8, 4, 3, 16];
-    // Under Miri, one round of each shift.
-    for round in 0..sized(120, 4) {
+    for round in 0..120 {
         let mut pick = || core::array::from_fn(|_| 16 + rng.below(height) as i64);
-        let a = wedge(0, pick(), 1);
-        let b = wedge(shift[round % 4], pick(), 2);
+        let (low, high) = (pick(), pick());
+        // Under Miri, round 74 alone.
+        if !keeps(round, &[74]) {
+            continue;
+        }
+        let a = wedge(0, low, 1);
+        let b = wedge(shift[round % 4], high, 2);
         holds_up(&a, &b);
     }
 }
@@ -446,7 +453,8 @@ fn ties_on_a_small_lattice_hold_up() {
 #[test]
 fn many_openings_are_one_call() {
     let plate = solid([0, 0, 0], [440, 440, 8], 1);
-    let openings = sized(40, 4);
+    // Under Miri 24: with 16 the arrangement's phase over its subdivided boxes is not reached.
+    let openings = sized(40, 24);
     let holes: Vec<ExactMesh> = (0..openings as i64)
         .map(|i| {
             let (x, y) = (4 + (i % 8) * 54, 4 + (i / 8) * 54);

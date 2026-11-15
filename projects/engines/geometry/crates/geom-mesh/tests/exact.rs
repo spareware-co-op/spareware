@@ -712,8 +712,10 @@ fn one_point_made_two_ways_is_refused() {
 #[cfg(not(target_family = "wasm"))]
 #[test]
 fn a_pool_changes_nothing() {
-    // Natively 48 by 48 heights at every thread count; under Miri 24 by 24, still more faces than
-    // one block of the builder's parallel phases, at one thread count.
+    // Natively 48 by 48 heights at every thread count. Under Miri 24 by 24 at one thread count:
+    // still more faces than one block of the builder's parallel phases, but its sorts take one
+    // chunk (4,096 items; 46 by 46 would give two, past Miri's budget), so the parallel merge of
+    // the sort is left to geom-run's own sort tests there.
     let side = sized(48, 24) as i64;
     let heights: Vec<Vec<i64>> = (0..side)
         .map(|y| (0..side).map(|x| 1 + (x * 7 + y * 13) % 101).collect())

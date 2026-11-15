@@ -24,8 +24,9 @@
 //! [`sized`]: Miri interprets each step thousands of times slower than it runs, and stops a test
 //! at ten minutes (`.config/nextest.toml`), so a test of thousands of cases or rounds runs fewer of
 //! them there: the same inputs, drawn the same way, only fewer, and never so few that a kernel
-//! function the whole test reaches is left out. A test keeps its counts' checks at the smaller
-//! size.
+//! function the whole test reaches is left out (measured natively, building the test with
+//! `--cfg miri` and listing the functions each run enters). The one exception says so where it
+//! is, `exact.rs`'s pool test. A test keeps its counts' checks at the smaller size.
 
 #![allow(
     dead_code,
@@ -37,7 +38,19 @@ pub const fn sized(native: usize, miri: usize) -> usize {
     if cfg!(miri) { miri } else { native }
 }
 
+/// Whether a seeded loop runs round `round`: every round natively, and under Miri only those of
+/// `chosen`, the fewest rounds that between them reach every kernel function the whole loop does
+/// (for the default seed, which is the one Miri runs: its isolation hides the environment). The
+/// loop still draws every round's input, so a chosen round is the same input as natively.
+pub fn keeps(round: usize, chosen: &[usize]) -> bool {
+    !cfg!(miri) || chosen.contains(&round)
+}
+
 #[cfg(not(target_family = "wasm"))]
+#[allow(
+    unused_imports,
+    reason = "the test files without a pool test include this module too"
+)]
 pub use threads::pool;
 
 #[cfg(not(target_family = "wasm"))]
