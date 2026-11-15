@@ -58,7 +58,7 @@ pub(crate) fn engine_view(p: &V) -> std::borrow::Cow<'_, V> {
     }
     let mut q = p.clone();
     if let Some(rs) = q.get_mut("settings").and_then(|s| s.get_mut("rates")) {
-        let keys: Vec<String> = rs.keys().iter().map(|k| k.to_string()).collect();
+        let keys: Vec<String> = rs.keys().iter().map(std::string::ToString::to_string).collect();
         for k in keys {
             let r = rs.g(&k).clone();
             if r.is_obj() {
@@ -81,26 +81,8 @@ pub(crate) fn rate_of(settings: &V, k: &str) -> V {
     if r.t() { r.clone() } else { V::object() }
 }
 
-/// `Compliance.lint(P)`: what to fix before lodging: `[{ id, text, fix }]` (counts without a date or source, an unmodelled observed peak, the default heavy vehicle share, altered junctions without pedestrian volumes, an uncalibrated base model, no sensitivity or cumulative scenario, trip rates without a source or year, unevidenced trip discounts, unfunded projects in an option).
-#[allow(clippy::neg_cmp_op_on_partial_ord)] // a number that is not a number fails `x > 0` and passes `!(x > 0)`, as in the prototype
-pub fn lint(p: &V) -> V {
-    let c = state(p);
-    let s = p.g("settings");
-    let sc = active_sc(p);
-    let mut out: Vec<V> = Vec::new();
-    let counts = p.g("data").g("counts").items();
-    let undated: Vec<&V> = counts.iter().filter(|c| !c.g("date").t() && !c.g("src").eq_s("nzta")).collect();
-    if !undated.is_empty() {
-        add(
-            &mut out,
-            "count-date",
-            format!("{} count{} without a date{} (count without date)", undated.len(), plural(undated.len()), if undated.iter().any(|c| !c.g("src").t()) { " or source" } else { "" }),
-            "Record the survey date and source for each count (AT ITA v2 s4.2).",
-        );
-    }
-    if counts.iter().any(|c| !c.g("src").t()) {
-        add(&mut out, "count-source", "Counts without a source".to_string(), "Record where each count came from.");
-    }
+/// The `peak` item of [`lint`]: the hour most counts peak in is not one of the modelled periods.
+fn lint_peak(p: &V, counts: &[V], out: &mut Vec<V>) {
     let re_hr = rx(r"^(\d{2}):", "");
     let hrs: Vec<i64> = counts
         .iter()
@@ -120,7 +102,8 @@ pub fn lint(p: &V) -> V {
             }
         }
         js_sort_by(&mut tally, |a, b| b.1 - a.1);
-        let mode = tally[0].0;
+        // three or more hours were tallied, so there is a first
+        let Some(&(mode, _)) = tally.first() else { return };
         let mut modelled: Vec<&str> = Vec::new();
         for sc in p.g("scenarios").items() {
             for per in periods_of(sc) {
@@ -129,11 +112,11 @@ pub fn lint(p: &V) -> V {
                 }
             }
         }
-        let in_am = (6..=9).contains(&mode);
-        let in_pm = (15..=18).contains(&mode);
-        if !((in_am && (modelled.contains(&"AM") || modelled.is_empty())) || (in_pm && (modelled.contains(&"PM") || modelled.is_empty()))) {
+        let morning = (6..=9).contains(&mode);
+        let evening = (15..=18).contains(&mode);
+        if !((morning && (modelled.contains(&"AM") || modelled.is_empty())) || (evening && (modelled.contains(&"PM") || modelled.is_empty()))) {
             add(
-                &mut out,
+                out,
                 "peak",
                 format!(
                     "The observed peak in the counts is around {}:00 ({} counts), which is not one of the modelled periods (AM 06\u{2013}09, PM 15\u{2013}18; {})",
@@ -145,6 +128,73 @@ pub fn lint(p: &V) -> V {
             );
         }
     }
+}
+
+/// The `rates` and `rates-old` items of [`lint`]: the trip rates the development zones use without a source or year, and older ones not reviewed.
+#[allow(clippy::neg_cmp_op_on_partial_ord)] // a number that is not a number fails `x > 0` and passes `!(x > 0)`, as in the prototype
+fn lint_rates(s: &V, sc: &V, out: &mut Vec<V>) {
+    let mut used: Vec<String> = Vec::new();
+    for z in net::dev_zones(sc) {
+        for (k, v) in z.g("lu").entries() {
+            if v.n() > 0.0 && !used.iter().any(|u| u == k) {
+                used.push(k.to_string());
+            }
+        }
+    }
+    let no_src: Vec<&String> = used
+        .iter()
+        .filter(|k| {
+            let r = rate_of(s, k);
+            !(r.g("src").t() || r.g("source").t()) || !(r.g("year").n() > 0.0)
+        })
+        .collect();
+    if !no_src.is_empty() {
+        add(
+            out,
+            "rates",
+            format!("Trip rates without a source or year: {}", no_src.iter().map(|k| landuse_label(k).unwrap_or_default()).collect::<Vec<_>>().join(", ")),
+            "Record the source and survey year of each rate used (AT ITA v2 Appendix 1).",
+        );
+    }
+    let old: Vec<&String> = used
+        .iter()
+        .filter(|k| {
+            let r = rate_of(s, k);
+            r.g("year").n() > 0.0 && r.g("year").n() <= 2022.0 && !r.g("reviewed").t()
+        })
+        .collect();
+    if !old.is_empty() {
+        add(
+            out,
+            "rates-old",
+            format!("Pre-2020 or 2020\u{2013}22 trip rates not reviewed: {}", old.iter().map(|k| landuse_label(k).unwrap_or_default()).collect::<Vec<_>>().join(", ")),
+            "Review older rates against post-2022 travel patterns (AT ITA v2 s3.6.1).",
+        );
+    }
+}
+
+/// `Compliance.lint(P)`: what to fix before lodging: `[{ id, text, fix }]` (counts without a date or source, an unmodelled observed peak, the default heavy vehicle share, altered junctions without pedestrian volumes, an uncalibrated base model, no sensitivity or cumulative scenario, trip rates without a source or year, unevidenced trip discounts, unfunded projects in an option).
+#[allow(clippy::neg_cmp_op_on_partial_ord)] // a number that is not a number fails `x > 0` and passes `!(x > 0)`, as in the prototype
+#[must_use]
+pub fn lint(p: &V) -> V {
+    let c = state(p);
+    let s = p.g("settings");
+    let sc = active_sc(p);
+    let mut out: Vec<V> = Vec::new();
+    let counts = p.g("data").g("counts").items();
+    let undated: Vec<&V> = counts.iter().filter(|c| !c.g("date").t() && !c.g("src").eq_s("nzta")).collect();
+    if !undated.is_empty() {
+        add(
+            &mut out,
+            "count-date",
+            format!("{} count{} without a date{} (count without date)", undated.len(), plural(undated.len()), if undated.iter().any(|c| !c.g("src").t()) { " or source" } else { "" }),
+            "Record the survey date and source for each count (AT ITA v2 s4.2).",
+        );
+    }
+    if counts.iter().any(|c| !c.g("src").t()) {
+        add(&mut out, "count-source", "Counts without a source".to_string(), "Record where each count came from.");
+    }
+    lint_peak(p, counts, &mut out);
     if s.g("hvPct").n() == default_settings().hv_pct.num() && !counts.iter().any(|c| c.g("hv").n() > 0.0) {
         add(&mut out, "hv", format!("Heavy vehicle share is the Spare Construct default ({}%) and no count gives one", s.g("hvPct").s()), "Use classified counts for the HV share.");
     }
@@ -189,54 +239,18 @@ pub fn lint(p: &V) -> V {
     if !scenarios.iter().any(|s| s.g("zones").vals().iter().any(|z| engine::zone_role(z) == "committed")) && p.g("register").jlen() == 0 {
         add(&mut out, "cumulative", "No cumulative (committed development) scenario".to_string(), "Add committed developments to the register and a future baseline (AT ITA v2 s3.6.1).");
     }
-    let mut used: Vec<String> = Vec::new();
-    for z in net::dev_zones(sc) {
-        for (k, v) in z.g("lu").entries() {
-            if v.n() > 0.0 && !used.iter().any(|u| u == k) {
-                used.push(k.to_string());
-            }
-        }
-    }
-    let no_src: Vec<&String> = used
-        .iter()
-        .filter(|k| {
-            let r = rate_of(s, k);
-            !(r.g("src").t() || r.g("source").t()) || !(r.g("year").n() > 0.0)
-        })
-        .collect();
-    if !no_src.is_empty() {
-        add(
-            &mut out,
-            "rates",
-            format!("Trip rates without a source or year: {}", no_src.iter().map(|k| landuse_label(k).unwrap_or_default()).collect::<Vec<_>>().join(", ")),
-            "Record the source and survey year of each rate used (AT ITA v2 Appendix 1).",
-        );
-    }
-    let old: Vec<&String> = used
-        .iter()
-        .filter(|k| {
-            let r = rate_of(s, k);
-            r.g("year").n() > 0.0 && r.g("year").n() <= 2022.0 && !r.g("reviewed").t()
-        })
-        .collect();
-    if !old.is_empty() {
-        add(
-            &mut out,
-            "rates-old",
-            format!("Pre-2020 or 2020\u{2013}22 trip rates not reviewed: {}", old.iter().map(|k| landuse_label(k).unwrap_or_default()).collect::<Vec<_>>().join(", ")),
-            "Review older rates against post-2022 travel patterns (AT ITA v2 s3.6.1).",
-        );
-    }
+    lint_rates(s, sc, &mut out);
     let tdm = net::dev_zones(sc).iter().filter(|z| z.g("reduction").n() > 0.0 && !z.g("reductionSrc").t()).count();
     if tdm > 0 {
         add(&mut out, "tdm", format!("{} zone{} with a WFH, TDM or mode-shift discount without evidence", tdm, plural(tdm)), "Give evidence for each trip discount (AT ITA v2 s3.6.1(iv)).");
     }
+    // Bound: a count of scenario checks, far below usize::MAX
     let mut blocks = 0usize;
     for s in scenarios.iter().filter(|s| !s.g("role").eq_s("sensitivity")) {
-        blocks += engine::scenario_check(&ev, s).items().iter().filter(|x| x.g("level").eq_s("block") && x.g("code").eq_s("unfunded")).count();
+        blocks = blocks.saturating_add(engine::scenario_check(&ev, s).items().iter().filter(|x| x.g("level").eq_s("block") && x.g("code").eq_s("unfunded")).count());
     }
     if blocks > 0 {
-        add(&mut out, "unfunded", format!("Unfunded projects in a do-minimum or option scenario ({})", ns(blocks as f64)), "Unfunded projects belong in sensitivity scenarios only (AT ITA s3.6.1).");
+        add(&mut out, "unfunded", format!("Unfunded projects in a do-minimum or option scenario ({})", ns(crate::jsnum::usize_to_f64(blocks))), "Unfunded projects belong in sensitivity scenarios only (AT ITA s3.6.1).");
     }
     V::Array(out)
 }

@@ -56,6 +56,10 @@ use crate::junction_tools::{Sc, Tools};
 use crate::project::{Project, Scenario, Settings};
 use crate::results::Results;
 use crate::standards::year_of;
+use std::sync::LazyLock;
+
+/// The scenario [`Rep::scenario`] gives for an index outside the project's list.
+static NO_SCENARIO: LazyLock<Scenario> = LazyLock::new(|| crate::project::new_scenario("", ""));
 
 /// The scenarios a report assesses (`Report.pick`): by position in the project's scenario list.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -74,6 +78,7 @@ pub struct Sel {
 
 /// `Report.pick(P)`: the scenarios the report assesses: the author's choice (`P.report.sel`), then the scenario roles, then the
 /// base and active scenarios. With and without are compared only in the same year.
+#[must_use]
 pub fn pick(t: &Tools) -> Sel {
     let scs = &t.project.scenarios;
     let st = &t.project.settings;
@@ -98,7 +103,8 @@ pub fn pick(t: &Tools) -> Sel {
             .map(|(i, _)| i)
             .collect()
     };
-    let yr = |i: usize| -> f64 { year_of(Some(&scs[i]), st) };
+    // i is always a position in scs, so the scenario is always there
+    let yr = |i: usize| -> f64 { year_of(scs.get(i), st) };
     let latest = |list: Vec<usize>| -> Option<usize> {
         let mut l = list;
         crate::graph::js_sort_by(&mut l, |a, b| yr(*b) - yr(*a));
@@ -108,10 +114,10 @@ pub fn pick(t: &Tools) -> Sel {
     let w = by_choice("with")
         .or_else(|| latest(role("proposal")))
         .or_else(|| {
-            if t.project.active.as_str() != t.project.base.as_str() {
-                by_id(t.project.active.as_str())
-            } else {
+            if t.project.active.as_str() == t.project.base.as_str() {
                 None
+            } else {
+                by_id(t.project.active.as_str())
             }
         })
         .or_else(|| (0..scs.len()).find(|i| Some(*i) != base))
@@ -177,51 +183,61 @@ impl<'a> Rep<'a> {
     }
 
     /// The junction tools over the same project, results and host.
+    #[must_use]
     pub fn tools(&self) -> Tools<'a> {
         Tools::new(self.project, self.results, self.host).with_raw(self.raw)
     }
 
     /// Scenario i with its results.
+    #[must_use]
     pub fn sc(&self, i: usize) -> Sc<'a> {
         self.tools().sc(i)
     }
 
     /// `P.settings` (`Store.S`).
+    #[must_use]
     pub fn st(&self) -> &'a Settings {
         &self.project.settings
     }
 
-    /// Scenario i.
+    /// Scenario i (an empty scenario when i is not a position in the project's list, which the report never asks for: every
+    /// index it passes comes from [`pick`] or from the list itself).
+    #[must_use]
     pub fn scenario(&self, i: usize) -> &'a Scenario {
-        &self.project.scenarios[i]
+        self.project.scenarios.get(i).unwrap_or_else(|| LazyLock::force(&NO_SCENARIO))
     }
 
     /// The report's `periodsOf(sc)`: AM, PM, IP that have results (not the junction tools' order).
+    #[must_use]
     pub fn rep_periods(&self, i: usize) -> Vec<&'static str> {
         PERIODS
             .iter()
             .copied()
-            .filter(|p| self.results[i].get(p).is_some())
+            .filter(|p| self.results.get(i).is_some_and(|r| r.get(p).is_some()))
             .collect()
     }
 
     /// `yearOf(sc)`: `+Engine.yearOf(sc) || null`.
+    #[must_use]
     pub fn year_of(&self, i: usize) -> Option<f64> {
         let y = year_of(Some(self.scenario(i)), self.st());
         if y == 0.0 || y.is_nan() { None } else { Some(y) }
     }
 
     /// `P.data`.
+    #[must_use]
     pub fn data(&self) -> Option<&'a JsonValue> {
         js::get(Some(self.raw), "data")
     }
 
     /// `P.data.loaded`.
+    #[must_use]
     pub fn loaded(&self) -> Option<&'a JsonValue> {
         js::get(self.data(), "loaded")
     }
 
     /// `P.name`.
+    #[must_use]
     pub fn name(&self) -> &'a str {
         self.project.name.as_str().unwrap_or("")
     }

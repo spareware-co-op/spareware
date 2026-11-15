@@ -4,15 +4,12 @@
 //! - `orient2d_fuzz` is the fuzz target: `bolero::check!` over raw bytes, each decoded by
 //!   `geom_fuzz::orient2d::harness`. Under `cargo test` it is bolero's test mode: it replays the
 //!   files in `tests/__fuzz__/orient2d/corpus` and `crashes`, then runs [`ITERATIONS`] random byte
-//!   strings (`BOLERO_RANDOM_SEED=<seed>`, printed with any failure, replays one). The same test is
-//!   the libFuzzer target of `cargo bolero test orient2d_fuzz --package geom-fuzz --engine
-//!   libfuzzer` and the target `ClusterFuzzLite` runs (`.clusterfuzzlite/build.sh`), so the three
-//!   share their corpus and crash files: raw bytes for one function.
+//!   strings (`BOLERO_RANDOM_SEED=<seed>`, printed with any failure, replays one). Under Kani the
+//!   same test is a proof over its bounded bytes, so the two share their corpus and crash files:
+//!   raw bytes for one function.
 //! - `orient2d_proof` is the bounded proof: `bolero::check!` over draws of the proof's domain
 //!   (`geom_fuzz::orient2d::proof_case` with `PROOF_BOUND`), each checked by `check`. Under
-//!   `cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact` (or
-//!   `cargo bolero test orient2d_proof --engine kani`, which runs that command) bolero's Kani
-//!   engine makes every draw symbolic, so Kani proves the claims for every case of the domain.
+//!   `cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact` bolero's Kani engine makes every draw symbolic, so Kani proves the claims for every case of the domain.
 //!   Under `cargo test` it is a property test over the same domain, so the proof's statement is
 //!   also tested on stable Rust on every operating system.
 //! - `orient2d_seeded` runs the harness on [`SEEDED_CASES`] byte strings from the printed seed
@@ -54,7 +51,11 @@ const ITERATIONS: usize = 10_000;
 const PROOF_ITERATIONS: usize = 10_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 20_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 20,000 cases in 0.014 s), about 0.7 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 1_000_000;
 
 /// The longest byte string the fuzz target and the seeded leg try. The harness reads at most
 /// [`MAX_INPUT_BYTES`] (73) bytes; the rest let some strings carry bytes nobody reads, which must

@@ -1,5 +1,5 @@
 //! The body records' fuzz target (piece G94), as tests: `bodies_fuzz` is bolero's test mode,
-//! which cargo-bolero and `ClusterFuzzLite` select by name, and `bodies_seeded` the seeded leg
+//! a property test on bytes bolero draws, and `bodies_seeded` the seeded leg
 //! that runs on every target, WebAssembly included (the crate README sets out the layout). Each
 //! hands the fuzzer's raw bytes to `geom_fuzz::bodies::harness`. The corpus starts from the bodies
 //! `geom-format`'s body tests store: a cube, a sheet, a wall and a body of many faces, each framed
@@ -19,7 +19,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 5_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 5_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 5,000 cases in 0.009 s), about 1.8 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 1_000_000;
 
 /// The longest byte string the seeded leg draws; the harness reads all of it.
 const MAX_LEN: u16 = 512;
@@ -42,7 +46,7 @@ fn bodies_fuzz() {
         .for_each(|data: &[u8]| holds(harness(data)));
 }
 
-/// The first finding (crash-3b985045191d43eb2bb86ed918c8fe2817ff930d, and the scheduled campaign's
+/// The first finding (crash-3b985045191d43eb2bb86ed918c8fe2817ff930d, and a later run's
 /// crash-ea1e9ccf374666057eff8d9be7e2fbe0da8949b5), cut to an index of one table that lists one
 /// chunk by the ID `[alg, h'']`: an algorithm other than SHA-256 with an empty digest, which the
 /// format allows (24.2). Relinking the chunk searched the index for that empty digest, and a search

@@ -119,7 +119,7 @@ How to read an entry:
 
 **Canonical output**: An operation's whole result in canonical bytes (bodies, names, history, exactness, diagnostics), or its error with its kind, entities and evidence; its SHA-256 is compared with a golden value (28.13; piece G96).
 
-**cargo-bolero**: The tool that runs bolero harnesses under a coverage-guided fuzzer such as libFuzzer (piece G14).
+**cargo-bolero**: The tool that runs bolero harnesses under other engines; the kernel uses only bolero's test mode and Kani (piece G14; decision 32.52).
 
 **cargo-deny**: A tool that checks a dependency graph's licences, security advisories, sources and banned crates; the merge gate runs it over every crate of the kernel's family (28.8).
 
@@ -157,7 +157,7 @@ How to read an entry:
 
 **Charge schedule**: What an operation charges in work units and when, fixed by the operation's version, so a count never changes without a new version (23.10; piece G83).
 
-**Check tiers**: When each check runs: on every pull request, nightly, weekly, on a toolchain or dependency change, and at each release (28.17; piece G10).
+**Check tiers**: When each check runs: on each push to a pull request, in the merge queue, on each push to main, on a toolchain or dependency change, at each release and by hand; never on a timer (28.17; piece G10).
 
 **Checked arithmetic**: Integer arithmetic through methods that report overflow (`checked_add`, `checked_mul`) instead of operators that wrap in release builds. Every fixed-width step in kernel code is checked, so no answer depends on overflow checks being on (27; 6.2).
 
@@ -182,8 +182,6 @@ How to read an entry:
 **Closed enum**: An enum whose variants are all known, matched exhaustively. Curve and surface kinds are stored in closed enums, one variant per kind (7).
 
 **Clothoid**: A spiral whose curvature changes linearly with length, used in road and rail alignments; a curve kind (7; piece G63).
-
-**ClusterFuzzLite**: A service that runs fuzz targets in CI on pull requests (piece G14; piece G116).
 
 **Coarsening**: Converting coordinates to a coarser grid step: it divides by a power of 25, rounds, never ties, and reports that it rounded (6.1; 6.3; piece G22). Compare refinement.
 
@@ -251,7 +249,7 @@ How to read an entry:
 
 **de Boor's algorithm**: The standard method for evaluating a B-spline from its control points and knots; the exact rational reference uses it (piece G57).
 
-**Decision log**: Where kernel owners record decisions and gate results, with the CI runs that show them (30.1; chapter 32).
+**Decision log**: Where the main session records decisions and gate results, each with its reason,, with the CI runs that show them (30.1; chapter 32).
 
 **Decision note**: A note that proposes or changes an architecture decision; nothing in `ARCHITECTURE.md` changes without one an owner has accepted (26.1).
 
@@ -415,7 +413,7 @@ How to read an entry:
 
 **Gappa**: A tool that proves bounds on floating-point computations, writing proofs the Rocq proof assistant checks (28.6; piece G35).
 
-**Gate** (also: gate review): The last piece of a phase: a review that runs the phase's gate condition and has a kernel owner record the result (30.1). Also any CI check that blocks a merge.
+**Gate** (also: gate review): The last piece of a phase: a review that runs the phase's gate condition and has the main session record the result, with its reason (30.1). Also any CI check that blocks a merge.
 
 **Gauss-Legendre quadrature** (also: Gauss-Kronrod): Methods of numerical integration from weighted sums at chosen nodes; Gauss-Kronrod nests a second rule to estimate the error (piece G51).
 
@@ -433,7 +431,7 @@ How to read an entry:
 
 **Golden hash** (also: golden digest, golden): The recorded SHA-256 of a canonical output, which every target must reproduce (28.13).
 
-**Golden store**: Where golden hashes are kept, keyed by edition and operation version, with an owner's approval needed to change one (piece G19).
+**Golden store**: Where golden hashes are kept, keyed by edition and operation version, with a history record (the old hash, the kind of change, the piece and why) needed to change one (piece G19; decision 32.54).
 
 **Golub-Kahan SVD**: A method for the singular value decomposition by bidiagonalisation (piece G50).
 
@@ -573,7 +571,7 @@ How to read an entry:
 
 **Lemon and apple**: The degenerate forms of a torus whose tube is wider than its centre circle; surface kinds (7).
 
-**libFuzzer**: LLVM's coverage-guided fuzzer, run through cargo-bolero (piece G14).
+**libFuzzer**: LLVM's coverage-guided fuzzer, which the kernel does not use: its fuzz harnesses are seeded tests of the suite (decision 32.52).
 
 **`libm`**: The pure-Rust maths library (MIT), the one published crate a kernel crate depends on today, for square roots, fused multiply-add, rounding and the unproven functions (6.4; 29.1).
 
@@ -619,7 +617,7 @@ How to read an entry:
 
 **Minimiser** (also: shrinking): A tool that reduces a failing input to a smaller one that still fails, before it becomes a fixture: a fuzzer's minimiser, a property tool's shrinking, or, for operation logs, `geom-test` removing operations and inputs one at a time while the failure persists (28.16; piece G97).
 
-**Miri**: The Rust interpreter that detects undefined behaviour; it runs the test suites weekly (28.8).
+**Miri**: The Rust interpreter that detects undefined behaviour; it runs the test suites of the crates each push to main reaches (28.8).
 
 **Model-based test**: A test that drives the real code and a simple model of it with the same long random sequence of operations and requires them to agree at every step (28.7; pieces G81 and G111).
 
@@ -633,7 +631,7 @@ How to read an entry:
 
 **Multiprecision oracle**: A test that computes a function in much higher precision to check the kernel's error bound (piece G47).
 
-**Mutation testing** (also: mutant, surviving mutant, survivor): Making small changes to the code and checking that a test fails; a change no test catches survives and marks a gap (28.8). Each pull request mutates its own diff; a weekly run mutates everything, split across machines (sharded).
+**Mutation testing** (also: mutant, surviving mutant, survivor): Making small changes to the code and checking that a test fails; a change no test catches survives and marks a gap (28.8). Each pull request mutates its own diff; a push to main mutates every mutant of the files it changed, split across machines (sharded).
 
 ## N
 
@@ -651,7 +649,7 @@ How to read an entry:
 
 **NFC** (also: NFC normalisation): Unicode Normalization Form C. Text hashed into a name must be in it (24.3; owner action G78).
 
-**Nightly**: What CI runs once a night: property tests with fresh seeds, long fuzzing, outside oracles, all proofs and wall-clock timings (28.17). A pinned nightly compiler measures branch coverage only (28.8).
+**Nightly**: The Rust compiler's nightly channel: a pinned, dated nightly compiler measures branch coverage and runs Miri (28.8). No check runs on a timer (28.17, decision 32.53).
 
 **NLib**: The NURBS layer of SMLib (Apache-2.0), followed as method with its notices kept (32.8; piece G56).
 
@@ -726,10 +724,6 @@ How to read an entry:
 **Outward rounding**: Rounding a computed interval's lower bound down and upper bound up, so it always contains the exact result (6.4).
 
 ## P
-
-**Patent register** (also: `PATENTS.md`): The planned record of every known patent and every family's patent search status (29.17; piece G115). Not kept: the owner closed it on 2026-11-13 (32.49).
-
-**Patent search**: A recorded search for patents that may cover a method, reviewed by an owner (29.17; owner actions G73 and G74). None is made: the owner decided on 2026-11-13 that no family waits for one (32.49).
 
 **Pave block**: In a boolean, the piece of an edge between two neighbouring paves, the points where something touches it (11.4).
 
@@ -833,7 +827,7 @@ How to read an entry:
 
 **Reference implementation**: An independent, simple implementation used as truth in tests, such as the exact rational NURBS reference (28.9; piece G57).
 
-**Reference machine** (also: reference runner): The dedicated machine on which benchmarks are timed nightly against the kernel's shares of Spare Construct's targets (23.1; owner action G72; piece G107).
+**Reference machine** (also: reference runner): The machine, the owner's home desktop, on which benchmarks are timed on a gate's commit against the kernel's shares of Spare Construct's targets (23.1; owner action G72; piece G107).
 
 **Reference memo store**: A cache the caller creates and owns, bounded by bytes, keyed by `CacheKey` (23.8; piece G105).
 
@@ -903,7 +897,7 @@ How to read an entry:
 
 **Sign** (also: `Sign`): A predicate's answer: `Negative`, `Zero` or `Positive`, never a number (6.2).
 
-**Signature**: In a reference, the stored description of what it pointed at, used only to suggest a repair in the interface, never to resolve the reference (20.4). In differential testing, the key a difference from an oracle is grouped by: operation, oracle, kind of difference and input family; the nightly run fails only on a new signature (28.10).
+**Signature**: In a reference, the stored description of what it pointed at, used only to suggest a repair in the interface, never to resolve the reference (20.4). In differential testing, the key a difference from an oracle is grouped by: operation, oracle, kind of difference and input family; an oracle run fails only on a new signature (28.10).
 
 **Simulation of Simplicity**: Edelsbrunner and Mücke's symbolic perturbation, which breaks ties as if inputs were moved by infinitesimals in a fixed order; the kernel orders by persistent keys, never addresses (6.2; piece G30).
 
@@ -1033,7 +1027,7 @@ How to read an entry:
 
 ## W
 
-**Wall clock**: Time measured by a clock. It varies between runs, so it never gates a pull request; nightly timings on the reference runner report against the kernel's shares (23.13).
+**Wall clock**: Time measured by a clock. It varies between runs, so it never gates a pull request; the reference runner's timings on a gate's commit report against the kernel's shares (23.13).
 
 **`wasm32`** (also: `wasm32-wasip1`, `wasm32-unknown-unknown`, `wasm32v1-none`, WebAssembly): 32-bit WebAssembly targets: with the WASI system interface (tests run under wasmtime and Node), for browsers, and with no `std` at all, which proves `no_std` (21; 28.8).
 

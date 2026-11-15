@@ -2,6 +2,25 @@
 //! (tools/transport-truth/gen-census.mjs): the requests, the progress messages, the report, the project afterwards (zones, results marked out of date
 //! and the saved summary), the Overpass server fallback, and the school rolls entered after the project is reopened.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod census_support;
 mod edit_support;
 mod support;
@@ -106,29 +125,26 @@ fn filling_a_project_downloads_and_places_everything_as_the_prototype_does() {
             for (k, step) in re["rolls"].as_array().expect("steps").iter().enumerate() {
                 let label = format!("{name}: rolls step {k} ({})", step["op"]);
                 let rolls = if step["rolls"].is_null() { None } else { Some(rolls_of(&step["rolls"])) };
-                match step["op"].as_str().unwrap() {
-                    "ready" => {
-                        let r = rolls_ready(&p2, &last2, rolls.as_deref());
-                        let mut v = json!({ "list": r.list.iter().map(school_json).collect::<Vec<_>>(), "B": r.bounds.as_ref().map_or(Value::Null, |b| { let mut v = b.to_value(); v.as_object_mut().unwrap().remove("basis"); v }) });
-                        if let Some(w) = &r.why {
-                            v["why"] = json!(w);
+                if step["op"].as_str().unwrap() == "ready" {
+                    let r = rolls_ready(&p2, &last2, rolls.as_deref());
+                    let mut v = json!({ "list": r.list.iter().map(school_json).collect::<Vec<_>>(), "B": r.bounds.as_ref().map_or(Value::Null, |b| { let mut v = b.to_value(); v.as_object_mut().unwrap().remove("basis"); v }) });
+                    if let Some(w) = &r.why {
+                        v["why"] = json!(w);
+                    }
+                    ck.check(&label, &v, &step["out"]);
+                } else {
+                    let r = apply_rolls(&mut p2, &last2, &mut ids2, &targets, &rolls.unwrap_or_default());
+                    let v = match &r {
+                        None => Value::Null,
+                        Some(rep) => {
+                            let mut v = rep.to_value();
+                            v["scenarios"] = json!(targets.len());
+                            v
                         }
-                        ck.check(&label, &v, &step["out"]);
-                    }
-                    _ => {
-                        let r = apply_rolls(&mut p2, &last2, &mut ids2, &targets, &rolls.unwrap_or_default());
-                        let v = match &r {
-                            None => Value::Null,
-                            Some(rep) => {
-                                let mut v = rep.to_value();
-                                v["scenarios"] = json!(targets.len());
-                                v
-                            }
-                        };
-                        ck.check(&format!("{label}: report"), &v, &step["out"]);
-                        ck.check(&format!("{label}: saved summary"), &landuse_of(&p2), &step["landuse"]);
-                        ck.check(&format!("{label}: scenarios"), &scenarios_of(&p2), &step["scenarios"]);
-                    }
+                    };
+                    ck.check(&format!("{label}: report"), &v, &step["out"]);
+                    ck.check(&format!("{label}: saved summary"), &landuse_of(&p2), &step["landuse"]);
+                    ck.check(&format!("{label}: scenarios"), &scenarios_of(&p2), &step["scenarios"]);
                 }
             }
             let _ = Map::new();

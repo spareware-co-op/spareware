@@ -1,5 +1,5 @@
 //! The fuzz target of the names, history, recipe and attributes records (piece G95), as tests:
-//! `names_fuzz` is bolero's test mode, which cargo-bolero and `ClusterFuzzLite` select by name,
+//! `names_fuzz` is bolero's test mode, a property test on bytes bolero draws,
 //! and `names_seeded` the seeded leg that runs on every target, WebAssembly included (the crate
 //! README sets out the layout). Each hands the fuzzer's raw bytes to
 //! `geom_fuzz::names::harness`. The corpus starts from the payloads of `geom-format`'s names and
@@ -19,7 +19,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 20_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 20_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 20,000 cases in 0.031 s), about 1.6 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 1_000_000;
 
 /// The longest byte string the seeded leg draws; the harness reads all of it.
 const MAX_LEN: u16 = 512;

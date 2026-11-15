@@ -10,7 +10,7 @@
 //!   file does not define, or a function that does not itself call the store's check with the
 //!   golden's id;
 //! - a golden whose `file` is missing, or whose text no longer has the store's digest (the file was
-//!   edited without the store, which would let it change unapproved);
+//!   edited without the store, which would let it change without its record);
 //! - a call of the store's check whose id the current edition does not hold, or whose id cannot be
 //!   read (it must be a string literal, or the name of a string `const` of the same file);
 //! - the store's `check` imported by itself (`use geom_test::golden::check`, a glob of
@@ -18,7 +18,7 @@
 //!   could not be told from any other function named `check`;
 //! - a `const` or `static` whose name holds `GOLDEN` or `DIGEST` and whose value is a string of 64
 //!   hexadecimal digits: a golden digest kept outside the store, where no edition, history or
-//!   approval rule reaches it;
+//!   record rule reaches it;
 //! - a source file that is not valid Rust, which this check cannot read and so never passes.
 //!
 //! A call of the store's check is written `golden::check(<id>, <case>)`, where `golden` is
@@ -723,7 +723,7 @@ fn store_side(
                                 "its text has digest {digest} but golden {} pins {}: this golden \
                                  file changed without the store. Record the change in {store_file} \
                                  (the old digest in the golden's history, with its kind, piece and \
-                                 why); a kernel owner approves it",
+                                 why)",
                                 golden.id, golden.sha256
                             ),
                         );
@@ -777,7 +777,7 @@ fn source_side(edition: &Edition, scanned: &[(&str, &Facts)], add: &mut impl FnM
                 path,
                 format!(
                     "line {line}: {name} holds a 64-digit digest; a golden digest lives in the \
-                     store ({store_file}), where its edition, history and approval rule reach it"
+                     store ({store_file}), where its edition, history and record rule reach it"
                 ),
             );
         }

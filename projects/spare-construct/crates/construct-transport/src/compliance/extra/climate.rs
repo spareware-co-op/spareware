@@ -9,17 +9,17 @@ use crate::util::fmt;
 
 /// `climate(P, sc)`: the roads in mapped hazard areas for a scenario (the active one when None): `{ rows, loaded, source, note }`; each row is the
 /// feed's row with `vest` (a proposed road that will be vested) and `assess` (what to do about it).
+#[must_use]
 pub fn climate(p: &V, sc: Option<&V>) -> V {
     let sc = sc.unwrap_or_else(|| active_sc(p));
-    let f = p.g("feeds").g("hazards").g(&sc.g("id").s());
-    let rows: Option<&V> = if f.t() && f.g("rows").is_arr() { Some(f.g("rows")) } else { None };
+    let feed = p.g("feeds").g("hazards").g(&sc.g("id").s());
+    let rows: Option<&V> = if feed.t() && feed.g("rows").is_arr() { Some(feed.g("rows")) } else { None };
     let out: Vec<V> = rows
-        .map(|r| r.items())
-        .unwrap_or(&[])
+        .map_or(&[][..], crate::compliance::jv::Jx::items)
         .iter()
         .map(|r| {
-            let l = sc.g("links").g(&r.g("link").s());
-            let vest = if l.t() { Some(l.g("status").eq_s("proposed")) } else { None };
+            let link = sc.g("links").g(&r.g("link").s());
+            let vest = if link.t() { Some(link.g("status").eq_s("proposed")) } else { None };
             let assess = if r.g("only").t() {
                 "Only access: confirm an alternative route in a flood event or raise the road above the design flood level"
             } else if vest == Some(true) {
@@ -27,15 +27,15 @@ pub fn climate(p: &V, sc: Option<&V>) -> V {
             } else {
                 "Relied-on road: note the hazard and the detour"
             };
-            let mut o = if r.is_obj() { r.clone() } else { V::object() };
+            let mut row = if r.is_obj() { r.clone() } else { V::object() };
             match vest {
-                Some(v) => o.set("vest", V::Bool(v)),
+                Some(v) => row.set("vest", V::Bool(v)),
                 None => {
-                    o.remove("vest");
+                    row.remove("vest");
                 }
             }
-            o.set("assess", st(assess));
-            o
+            row.set("assess", st(assess));
+            row
         })
         .collect();
     jobj! {
@@ -47,6 +47,7 @@ pub fn climate(p: &V, sc: Option<&V>) -> V {
 }
 
 /// `climateCSV(P)`: the hazard table as a stamped CSV.
+#[must_use]
 pub fn climate_csv(p: &V) -> String {
     let c = climate(p, None);
     let s = |x: &str| st(x);
@@ -65,6 +66,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-climate"];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     if id != "compliance-extra-climate" {
         return None;
@@ -96,11 +98,13 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-climate"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     (id == "compliance-extra-climate").then(|| climate_csv(p))
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     (id == "compliance-extra-climate").then(|| climate(p, None).g("loaded").t())
 }

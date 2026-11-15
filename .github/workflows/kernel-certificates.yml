@@ -29,13 +29,14 @@ name: Kernel certificates
 # the job's own command, with the line planted for that run only. Nothing here is a dependency: the tools run as separate
 # programs and never touch the kernel's code.
 #
-# On a pull request, a problem is proved again only if it differs from the pull request's base:
-# a problem byte for byte the base's, with the scripts in certificates/ and this workflow also the
-# base's, was proved there, and the nightly run proves it again. Its FPTaylor job still shows, says
-# so and skips the proof, and the Gappa job says so for each such problem and sets it aside, with
-# the planted run's file for it. The planted runs come first and always run: each needs orient2d's
-# problem. The nightly, dispatched and called runs (kernel-release.yml's, on a tag) prove every
-# problem.
+# A problem is proved again only when it, or what proves it, changed (the owner's testing
+# principle 2, decision 32.53): on a pull request, against the pull request's base; on a push to
+# main, against the commit main was at before it. A problem byte for byte the base's, with the
+# scripts in certificates/ and this workflow (which pins every tool's image) also the base's, was
+# proved there. Its FPTaylor job still shows, says so and skips the proof, and the Gappa job says so
+# for each such problem and sets it aside, with the planted run's file for it. The planted runs come
+# first and always run: each needs orient2d's problem. A run by hand and a release's run
+# (kernel-release.yml's, on a tag) prove every problem. Nothing runs on a timer.
 
 on:
   pull_request:
@@ -43,10 +44,14 @@ on:
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-num/src/generated/**"
       - ".github/workflows/kernel-certificates.yml"
-  # Every night on main, so a proof that stops checking (a tool's image, a dependency) is seen
-  # even when no pull request touches the filters (piece G40).
-  schedule:
-    - cron: "17 14 * * *"
+  # A push to main that changes a problem, a script or this workflow proves what it changed.
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-num/src/generated/**"
+      - ".github/workflows/kernel-certificates.yml"
+  # By hand: every problem.
   workflow_dispatch:
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
@@ -67,8 +72,9 @@ env:
   PROBLEMS: projects/engines/geometry/crates/geom-gen/generated
   # The Rust release rust-toolchain.toml pins, for the trip binary; nothing here builds the kernel.
   RUST_TOOLCHAIN: "1.99.0"
-  # A pull request's base, whose problems were proved there; empty on every other run.
-  BASE: ${{ github.event.pull_request.base.sha }}
+  # The base whose problems were proved there: a pull request's base, or the commit main was at
+  # before a push; empty (every problem) by hand and on a release tag.
+  BASE: ${{ github.event.pull_request.base.sha || (github.ref == 'refs/heads/main' && github.event.before) || '' }}
 
 jobs:
   gappa:
@@ -92,12 +98,12 @@ jobs:
       # planted run's file for it is removed, so no unchecked file is kept as a proof.
       - name: Set aside the problems the base proved
         id: base
-        if: github.event_name == 'pull_request'
+        if: env.BASE != '' && env.BASE != '0000000000000000000000000000000000000000'
         run: |
           git fetch -q --no-tags --depth 1 origin "$BASE"
           for problem in "$PROBLEMS"/gappa-*.g; do
             if git diff --quiet "$BASE" HEAD -- "$problem" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
-              echo "$(basename "$problem"): same problem as $BASE, proved there; the nightly run proves it again"
+              echo "$(basename "$problem"): same problem as $BASE, proved there"
               rm "$problem"
               rm -f "$RUNNER_TEMP/proofs/$(basename "$problem" .g | tr - _)_gappa.v"
             fi
@@ -218,13 +224,13 @@ jobs:
       # After the planted run, which runs whatever the base holds.
       - name: Set aside the problem if the base proved it
         id: base
-        if: github.event_name == 'pull_request'
+        if: env.BASE != '' && env.BASE != '0000000000000000000000000000000000000000'
         env:
           PROBLEM: ${{ matrix.problem }}
         run: |
           git fetch -q --no-tags --depth 1 origin "$BASE"
           if git diff --quiet "$BASE" HEAD -- "$PROBLEMS/$PROBLEM" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
-            echo "$PROBLEM: same problem as $BASE, proved there; the nightly run proves it again"
+            echo "$PROBLEM: same problem as $BASE, proved there"
             echo "same=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Bound the filter and check the certificate

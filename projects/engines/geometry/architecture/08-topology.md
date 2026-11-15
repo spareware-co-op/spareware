@@ -19,6 +19,8 @@ The kernel uses the boundary-representation structure that Parasolid documents p
 | Edge | A bounded piece of one curve, between two vertices (or closed) |
 | Vertex | A point |
 
+**When two bodies are the same shape (32.51).** Two bodies are the same shape when a rotation and a move, with no mirror and no scale, carry the stored boundary of one exactly onto the stored boundary of the other. Names, roles, history and attributes do not count, and neither does how the boundary is cut into faces: neighbouring faces on one surface count as one face, and an edge or vertex that only divides them is dropped. Holes, slots, copes and every other cut are faces, so they count. A mirror image is a different shape, reported apart, unless the body has a mirror plane of its own. 10.2's shape identity query decides it exactly, and it is not what a content hash says: two bodies with different names or built another way have different content hashes (23.8) and can still be the same shape.
+
 Geometry attaches by index into the body's geometry pools: a face to a surface, an edge to a 3D curve, and a fin on a curved face to a curve in that face's parameter space (a pcurve). Each edge has one primary geometry: its 3D curve, exact or certified. Pcurves are derived and checked against it. An imported Tolerant edge has its pcurves as primary and its 3D curve derived, as Parasolid and ACIS do. The two are never kept in loose agreement by a growing tolerance.
 
 ## 8.2 Storage

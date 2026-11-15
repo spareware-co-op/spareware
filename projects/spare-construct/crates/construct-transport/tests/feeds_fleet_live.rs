@@ -1,6 +1,25 @@
 //! The Motor Vehicle Register fleet (the download, results kept for 90 days, the CO2 factor made from it) and the live traffic
-//! services (TomTom speeds and map tiles, Google drive times, the next Tuesday to Thursday in New Zealand) against the JavaScript's
+//! services (`TomTom` speeds and map tiles, Google drive times, the next Tuesday to Thursday in New Zealand) against the JavaScript's
 //! recorded runs. Recorded by tools/transport-truth/gen-feeds.mjs (expected/feeds-fleet.json and feeds-live.json).
+
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
 
 mod feeds_support;
 mod support;
@@ -28,7 +47,7 @@ fn fleet_downloads_match() {
             Ok(d) => d,
             Err(m) => {
                 assert_eq!(m, rec["thrown"].as_str().unwrap(), "{label}: error");
-                assert!(rec["requests"].as_array().unwrap().is_empty());
+                assert_eq!(rec["requests"], json!([]), "no requests");
                 continue;
             }
         };
@@ -68,20 +87,19 @@ fn kept_results_are_used_for_90_days() {
         let now = NOW + days * 86_400_000.0;
         let label = format!("after {days} days");
         let before = used;
-        let (result, cached) = match kept.as_ref().and_then(|k| use_cached_fleet(&mut p, k, now)) {
-            Some(r) => (r, true),
-            None => {
-                let mut load = FleetLoad::new("AUCKLAND", now, 30_000.0, &cache);
-                let (u, res) = replay(&mut load, log, used, &label);
-                res.expect("the download");
-                used = u;
-                let fleet = load.finish().expect("a fleet");
-                // the vintage table is stamped with the clock of the run, not the date the register was asked for
-                apply_fleet(&mut p, &fleet, NOW);
-                let v = fleet.to_value();
-                kept = Some(v.clone());
-                (v, false)
-            }
+        let (result, cached) = if let Some(r) = kept.as_ref().and_then(|k| use_cached_fleet(&mut p, k, now)) {
+            (r, true)
+        } else {
+            let mut load = FleetLoad::new("AUCKLAND", now, 30_000.0, &cache);
+            let (u, res) = replay(&mut load, log, used, &label);
+            res.expect("the download");
+            used = u;
+            let fleet = load.finish().expect("a fleet");
+            // the vintage table is stamped with the clock of the run, not the date the register was asked for
+            apply_fleet(&mut p, &fleet, NOW);
+            let v = fleet.to_value();
+            kept = Some(v.clone());
+            (v, false)
         };
         assert_eq!(cached, step["cached"].as_bool().unwrap(), "{label}: from the kept result");
         assert_eq!((used - before) as u64, step["requests"].as_u64().unwrap(), "{label}: requests made");
@@ -113,7 +131,7 @@ fn co2_from_the_fleet_matches() {
         let (factor, text) = fleet_co2("AUCKLAND", "MVR_Oct26", &shares);
         apply_fleet_co2(&mut p, factor, &text);
         let want = rec.to_value();
-        assert_close(&p.settings.co2_factor.get().map_or(Value::Null, |v| v.to_value()), &want["co2Factor"], &format!("{label} factor"));
+        assert_close(&p.settings.co2_factor.get().map_or(Value::Null, construct_transport::jsnum::JsNum::to_value), &want["co2Factor"], &format!("{label} factor"));
         assert_close(&p.settings.extra.get("co2FactorSrc").cloned().unwrap_or(Value::Null), &want["co2FactorSrc"], &format!("{label} source text"));
         clear_fleet_co2(&mut p);
         assert!(p.settings.co2_factor.get().is_none() && !p.settings.extra.contains_key("co2FactorSrc"), "{label}: cleared");
@@ -140,7 +158,7 @@ fn map_tiles_and_current_speeds_match() {
         let req = match tomtom_speed_request(ll, key) {
             Err(m) => {
                 assert_eq!(m, rec["thrown"].as_str().unwrap(), "{label}: error");
-                assert!(rec["requests"].as_array().unwrap().is_empty());
+                assert_eq!(rec["requests"], json!([]), "no requests");
                 continue;
             }
             Ok(r) => r,
@@ -176,10 +194,10 @@ fn google_drive_times_match() {
         let now = rec["now"].as_f64().unwrap();
         let period = rec["period"].as_str().unwrap_or("undefined");
         let key = if rec["label"] == "no-key" { None } else { Some("gkey-123") };
-        let (req, when) = match google_request([-37.1, 174.95], [-37.2, 175.01234567], period, key, now) {
+        let (req, when) = match google_request([-37.1, 174.95], [-37.2, 175.012_345_67], period, key, now) {
             Err(m) => {
                 assert_eq!(m, rec["thrown"].as_str().unwrap(), "{label}: error");
-                assert!(rec["requests"].as_array().unwrap().is_empty());
+                assert_eq!(rec["requests"], json!([]), "no requests");
                 continue;
             }
             Ok(r) => r,
