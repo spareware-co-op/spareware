@@ -73,7 +73,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use geom_gen::files::{Outcome, Status};
 use geom_gen::predicates::{PREDICATES, Predicate, derivation};
+use geom_gen::registry::REGISTRY;
 
 // ---------------------------------------------------------------------------------------------
 // Big naturals, base 2^32.
@@ -2296,9 +2298,38 @@ impl Drop for Scratch {
     }
 }
 
+/// One file the binary's check is run on with hand edits: its output, its path in the scratch
+/// copy, the text `write` gave it, and each hand edit of it, as the edited text and what the edit
+/// pretends.
+struct Planted {
+    output: &'static str,
+    path: PathBuf,
+    original: String,
+    edits: Vec<(String, &'static str)>,
+}
+
+/// The line (from 1) of the first byte at which `edited` differs from `original`, counted here
+/// from the two texts: the line `check` must report.
+fn first_changed_line(original: &str, edited: &str) -> usize {
+    let same = original
+        .bytes()
+        .zip(edited.bytes())
+        .take_while(|(a, b)| a == b)
+        .count();
+    1 + original.bytes().take(same).filter(|&b| b == b'\n').count()
+}
+
 /// CI's `cargo run -p geom-gen -- check`, on a scratch copy of the workspace's outputs, fails
 /// with exit code 1 on each hand edit of a generated module or of the parent module, naming the
 /// file, and passes again once the file is restored.
+///
+/// `check` compares each output with its own file alone, so what it reports for one file does not
+/// depend on what the others hold. Each run of the binary plants the next edit of every file at
+/// once (the n-th edit of each module and of the parent module; a file with fewer edits holds its
+/// own text) and holds each edited file to exactly the outcome that edit alone gives: its own line
+/// in the report, `DIFFERS`, first on the line the edit changed, with both lengths, and no other
+/// file reported. So the binary runs once per edit of the file with the most edits, not once per
+/// edit, and every edit is still checked alone in its file.
 #[cfg_attr(
     target_family = "wasm",
     ignore = "uses the host's file system and runs the binary"
@@ -2306,43 +2337,107 @@ impl Drop for Scratch {
 #[test]
 fn check_fails_on_a_hand_edited_constant_or_certificate() {
     let s = Scratch::new("predicate-tamper");
-    let write = std::process::Command::new(env!("CARGO_BIN_EXE_geom-gen"))
-        .args(["write", "--root"])
-        .arg(&s.0)
-        .output()
-        .unwrap();
-    assert_eq!(write.status.code(), Some(0));
-    let check_fails_naming = |file: &str, what: &str| {
-        let out = std::process::Command::new(env!("CARGO_BIN_EXE_geom-gen"))
-            .args(["check", "--root"])
+    let run = |command: &str| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_geom-gen"))
+            .args([command, "--root"])
             .arg(&s.0)
             .output()
-            .unwrap();
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        assert_eq!(out.status.code(), Some(1), "{file}: {what}");
-        assert!(stderr.contains(file), "{stderr}");
-        assert!(stderr.contains("DIFFERS"), "{stderr}");
+            .unwrap()
     };
+    assert_eq!(run("write").status.code(), Some(0));
+    let mut planted = Vec::new();
     for p in &PREDICATES {
         let path = s.0.join(p.output);
         let original = std::fs::read_to_string(&path).unwrap();
-        for (from, to, what) in edits(&original) {
-            std::fs::write(&path, original.replacen(&from, &to, 1)).unwrap();
-            check_fails_naming(p.output, what);
+        let tampered = edits(&original)
+            .into_iter()
+            .map(|(from, to, what)| (original.replacen(&from, &to, 1), what))
+            .collect();
+        planted.push(Planted {
+            output: p.output,
+            path,
+            original,
+            edits: tampered,
+        });
+    }
+    let path = s.0.join(geom_gen::predicates::MODULE_OUTPUT);
+    let original = std::fs::read_to_string(&path).unwrap();
+    let tampered = parent_edits()
+        .into_iter()
+        .map(|(from, to, what)| (original.replacen(from, to, 1), what))
+        .collect();
+    planted.push(Planted {
+        output: geom_gen::predicates::MODULE_OUTPUT,
+        path,
+        original,
+        edits: tampered,
+    });
+    let rounds = planted.iter().map(|f| f.edits.len()).max().unwrap();
+    for round in 0..rounds {
+        // Each report line the binary must print, with the file and the edit it is for.
+        let mut expected = Vec::new();
+        for f in &planted {
+            let Some((edited, what)) = f.edits.get(round) else {
+                std::fs::write(&f.path, &f.original).unwrap();
+                continue;
+            };
+            assert_ne!(
+                edited, &f.original,
+                "{}: {what}: the edit changed nothing",
+                f.output
+            );
+            std::fs::write(&f.path, edited).unwrap();
+            let g = REGISTRY
+                .generators
+                .iter()
+                .find(|g| g.output == f.output)
+                .unwrap();
+            let alone = Outcome {
+                name: Some(g.name),
+                output: f.output.to_owned(),
+                seed: g.seed(),
+                status: Status::Differs {
+                    line: first_changed_line(&f.original, edited),
+                    committed: edited.len(),
+                    generated: f.original.len(),
+                },
+            };
+            expected.push((
+                format!("geom-gen check: {}", alone.describe()),
+                f.output,
+                *what,
+            ));
         }
-        std::fs::write(&path, &original).unwrap();
+        let out = run("check");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let planted_now: Vec<String> = expected
+            .iter()
+            .map(|(_, file, what)| format!("{file}: {what}"))
+            .collect();
+        assert_eq!(out.status.code(), Some(1), "{planted_now:#?}\n{stderr}");
+        // The edited files, and no other, are reported as not current.
+        let stale = format!(
+            "geom-gen check: {} file(s) differ from their generators",
+            expected.len()
+        );
+        assert!(stderr.contains(&stale), "{stale}\nis not in:\n{stderr}");
+        for (reported, file, what) in &expected {
+            let line = stderr
+                .lines()
+                .find(|l| *l == reported.as_str())
+                .unwrap_or_else(|| panic!("{file}: {what}: {reported}\nis not among:\n{stderr}"));
+            assert!(line.contains(file), "{line}");
+            assert!(line.contains("DIFFERS"), "{line}");
+        }
     }
-    let parent = s.0.join(geom_gen::predicates::MODULE_OUTPUT);
-    let original = std::fs::read_to_string(&parent).unwrap();
-    for (from, to, what) in parent_edits() {
-        std::fs::write(&parent, original.replacen(from, to, 1)).unwrap();
-        check_fails_naming(geom_gen::predicates::MODULE_OUTPUT, what);
+    for f in &planted {
+        std::fs::write(&f.path, &f.original).unwrap();
     }
-    std::fs::write(&parent, &original).unwrap();
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_geom-gen"))
-        .args(["check", "--root"])
-        .arg(&s.0)
-        .output()
-        .unwrap();
-    assert_eq!(out.status.code(), Some(0));
+    let out = run("check");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
