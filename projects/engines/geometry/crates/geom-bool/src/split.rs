@@ -47,9 +47,14 @@
 //!   given by whole numbers in a flat face's plane: such curves touch there, or cross again
 //!   within a fraction of a step, where the edge stage has made both crossings one vertex, a
 //!   touch of the arrangement (`bend_order` gives the reason in full). Their curvatures, each a
-//!   side and a whole radius, are compared exactly.
-//!   Any other pair whose cross product is not proven, and a vertex no direction serves, fail
-//!   with [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance compares two.
+//!   side and a whole radius, are compared exactly. Two such lines or circles whose meeting the
+//!   edge stage made the vertex ([`crate::interfere::Touch`]), leaving it along one way, go by
+//!   how they bend whatever their tangents say: they are held only where their closed form cannot
+//!   tell their two crossings apart, so their tangents describe crossings the contact rule made
+//!   the vertex, and the arrangement has the two touching there. Other curves so met go by their
+//!   tangents. Any other pair whose cross product is not proven, and a vertex no direction
+//!   serves, fail with [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance
+//!   compares two.
 //! - **Each loop's sense is proven.** A loop's area is enclosed piece by piece: a straight piece's
 //!   exactly from its ends, a conic's arc on a flat face in closed form (a circle's or ellipse's
 //!   with certified sines and cosines of half-turns, a hyperbola's with certified exponentials, a
@@ -61,6 +66,11 @@
 //!   counter-clockwise loop of another group by the certified ray test. Two that hold it are
 //!   nested, and the inner is the one whose own point the other holds, again by the ray test: no
 //!   two areas are compared. No direction qualifying fails with [`BuildError::Unclassified`].
+//! - **A face is covered or refused, never split into nothing.** The split faces' loops run each
+//!   stretch of the face's own boundary once, with the face on its left, and every piece inside
+//!   it once each way, so between them they cover the face, each part once. A walk that dropped
+//!   a loop it should have kept, as an order round a vertex that disagrees with the arrangement
+//!   makes it, fails with [`BuildError::Uncovered`] instead of returning too few faces, or none.
 //! - **What this piece does not split, it says.** A face with no picture (a whole sphere; a
 //!   torus's face across its middle plane, or on a torus whose axis is not along a coordinate; a
 //!   face on any other curved carrier), a curved face with something pending, and a face bounded
@@ -451,6 +461,14 @@ type Leaving<'d> = (&'d (usize, Dir), &'d (usize, Dir));
 /// either chord is at most about twice the arc the tangents were enclosed over. The edge stage
 /// has then made both crossings the one vertex by the contact rule, a touch of the arrangement,
 /// and beyond it the curvatures order the pieces.
+///
+/// The same holds where the tangents are told apart but the edge stage made the two edges'
+/// meeting the vertex ([`crate::interfere::Touch`]): whole lines and circles are held there only
+/// where their closed form cannot tell their two crossings apart. A line from a vertex on a
+/// circle's rim run a hair into the disc, at sin θ about 1 / (|D| R), crosses the rim again
+/// 2 / |D| along, within the meeting the contact rule made the vertex. Its tangent there points
+/// into the disc; past the second crossing, which is all the arrangement keeps, it runs outside,
+/// as a line touching the rim does, and the curvatures give that order.
 fn bend_order(
     arr: &Arrangement,
     pieces: &[Bounding<'_>],
@@ -1197,10 +1215,47 @@ fn senses(
     Ok(left)
 }
 
+/// Whether half-edges `a` and `b`, leaving `vertex`, are pieces of two edges whose meeting the edge
+/// stage made that vertex ([`crate::interfere::Touch`]) and leave it along one way, the dot
+/// product of their tangents proven positive.
+fn touch_here(
+    out: &Interfered,
+    vertex: usize,
+    pieces: &[Bounding<'_>],
+    (a, b): Leaving<'_>,
+) -> Result<bool, BuildError> {
+    let source = |h: usize| -> Result<Option<usize>, BuildError> {
+        let bounding = pieces.get(h / 2).ok_or(IntersectError::Internal)?;
+        Ok(match bounding.piece {
+            Piece::Split(k) => Some(
+                out.splits
+                    .get(k)
+                    .ok_or(BuildError::Missing(Entity::Edge(k)))?
+                    .source,
+            ),
+            Piece::Section(_) => None,
+        })
+    };
+    let (Some(s), Some(t)) = (source(a.0)?, source(b.0)?) else {
+        return Ok(false);
+    };
+    let edges = [s.min(t), s.max(t)];
+    if !out
+        .touches
+        .iter()
+        .any(|touch| touch.vertex == vertex && touch.edges == edges)
+    {
+        return Ok(false);
+    }
+    let ([ax, ay], [bx, by]) = (a.1.approx, b.1.approx);
+    Ok(ax.mul(bx)?.add(ay.mul(by)?)?.certain_sign() == Some(Sign::Positive))
+}
+
 /// The pieces leaving each vertex, in turning order: half-edge 2i leaves piece i's first end, and
 /// 2i + 1 its last. `None` when a tangent cannot be had.
 fn rotations(
     arr: &Arrangement,
+    out: &Interfered,
     pieces: &[Bounding<'_>],
     (f, picture): (usize, &Picture),
     meter: &mut WorkMeter<'_>,
@@ -1237,10 +1292,16 @@ fn rotations(
         for item in list.drain(..) {
             let mut place = sorted.len();
             for (k, other) in sorted.iter().enumerate() {
-                // Two along one tangent go by how they bend, where that is proven.
-                let order = match turning(&item.1, &other.1, reference) {
-                    Some(order) => Some(order),
-                    None => bend_order(arr, pieces, ((f, picture), (&item, other)), meter)?,
+                // Two along one tangent go by how they bend, where that is proven. So do two
+                // whole lines or circles whose meeting the edge stage made this vertex, leaving it
+                // along one way: their tangents describe the crossings it merged, and the
+                // arrangement has them touching here (11.4 step 2). Any other pair so met goes by
+                // its tangents.
+                let touch = touch_here(out, *vertex, pieces, (&item, other))?;
+                let turned = turning(&item.1, &other.1, reference);
+                let order = match turned {
+                    Some(order) if !touch => Some(order),
+                    _ => bend_order(arr, pieces, ((f, picture), (&item, other)), meter)?.or(turned),
                 };
                 match order {
                     Some(Ordering::Less) => {
@@ -1542,7 +1603,7 @@ fn loops_of(
     (pieces, index): (&[Bounding<'_>], &BTreeMap<Piece, usize>),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Loops>, BuildError> {
-    let Some(at) = rotations(arr, pieces, (f, picture), meter)? else {
+    let Some(at) = rotations(arr, out, pieces, (f, picture), meter)? else {
         return Ok(None);
     };
     let mut loops = trace(pieces, &at)?;
@@ -1657,15 +1718,50 @@ fn split_face(
         }
     }
     let (loops, areas) = kept;
-    assemble(
+    let faces = assemble(
         arr,
         out,
         (f, picture),
         (&pieces, &index),
         (loops, areas),
         meter,
-    )
-    .map(Some)
+    )?;
+    if !covers(&pieces, &index, &faces)? {
+        return Err(BuildError::Uncovered { face: f });
+    }
+    Ok(Some(faces))
+}
+
+/// Whether `faces` run the pieces as the faces a face splits into must: each stretch of the
+/// face's own boundary once, the way that has the face on its left, and every other piece once
+/// each way, in their outer loops, holes and cuts. Then between them they cover the face, each
+/// part of it once. The walk puts every half-edge in one loop, so a loop it dropped for running
+/// the boundary with the face on its right, or one no face took, leaves its pieces short.
+fn covers(
+    pieces: &[Bounding<'_>],
+    index: &BTreeMap<Piece, usize>,
+    faces: &[SplitFace],
+) -> Result<bool, BuildError> {
+    // How often each piece is run backward, and forward.
+    let mut runs = alloc::vec![[0_usize; 2]; pieces.len()];
+    for face in faces {
+        let loops = face.holes.iter().chain(&face.cuts);
+        for one in face.outer.iter().chain(loops.flatten()) {
+            let i = *index.get(&one.piece).ok_or(IntersectError::Internal)?;
+            let slot = runs
+                .get_mut(i)
+                .and_then(|run| run.get_mut(usize::from(one.forward)))
+                .ok_or(IntersectError::Internal)?;
+            *slot = slot.saturating_add(1);
+        }
+    }
+    Ok(pieces.iter().zip(&runs).all(|(bounding, run)| {
+        let wanted = match bounding.left {
+            Some(left) => [usize::from(!left), usize::from(left)],
+            None => [1, 1],
+        };
+        *run == wanted
+    }))
 }
 
 /// The innermost of `outer` (loops ready as `rings`, with a grid point on each) holding `point`,
@@ -1804,7 +1900,8 @@ fn assemble(
 ///
 /// [`BuildError::UndecidedOrder`] for two pieces at a vertex whose order is not proven;
 /// [`BuildError::UndecidedArea`] for a loop whose sense is not proven;
-/// [`BuildError::Unclassified`] for a hole no ray could place; a stopped meter.
+/// [`BuildError::Unclassified`] for a hole no ray could place; [`BuildError::Uncovered`] for a
+/// face whose split faces do not cover it; a stopped meter.
 pub fn split(
     arr: &Arrangement,
     out: &Interfered,

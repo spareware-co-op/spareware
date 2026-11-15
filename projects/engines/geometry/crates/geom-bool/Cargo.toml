@@ -31,6 +31,8 @@ proptest = { version = "1.12.0", default-features = false, features = ["std", "b
 geom-curve = { path = "../geom-curve" }
 # The big-integer oracle of the decision table's extreme-value tests (G242). MIT OR Apache-2.0.
 num-bigint = "0.4.8"
+# The kernel development crate: seeds and generators, a development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
 
 [lints.rust]
 unsafe_code = "forbid"

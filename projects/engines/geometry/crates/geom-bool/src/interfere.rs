@@ -18,7 +18,13 @@
 //! ([`crate::common::common_blocks`]). A region where two edges could not be told apart by their
 //! intersection, as along a circle and a NURBS close to it, is accepted only where a common block
 //! proven by the contact rule covers it on both edges, or where it touches a vertex both edges pass
-//! through; anywhere else it fails. Between the edges' meetings and their splitting, the faces meet
+//! through; anywhere else it fails. Accepted at such a vertex, the region is the two edges' meeting
+//! there, made one with the vertex by the contact rule, and it is recorded so ([`Touch`]): the
+//! face splitting then orders the two round the vertex as the arrangement has them, not as their
+//! tangents there say. A line run a hair into a disc from a vertex on its rim crosses the rim
+//! again within a fraction of a step, inside such a region, and its tangent at the vertex points
+//! into the disc while the arrangement has it touching the rim there from outside. Between the
+//! edges' meetings and their splitting, the faces meet
 //! the vertices and edges, and after it each other ([`crate::face`]): vertex with face, edge with
 //! face, face with face, and each face's On, In and section groups.
 //!
@@ -31,6 +37,9 @@
 //!   decide fails with [`crate::rule::NearContact`], a region an intersection could not decide fails
 //!   with [`BuildError::Unresolved`], and two paves whose order is not proven fail with
 //!   [`BuildError::Order`].
+//! - **A merge is handed on as made.** Two edges whose held meeting stands at a vertex they both
+//!   pass through are recorded as meeting there so ([`Interfered::touches`]), so that no later
+//!   stage reads in their tangents a crossing the contact rule has made that vertex.
 //! - **New vertices are certified against their carriers.** A vertex made where two edges cross
 //!   is the grid point nearest the meeting, proven within its bound of both curves, and refused
 //!   with [`crate::rule::CoincidenceChain`] when that bound passes the remaining one.
@@ -230,6 +239,14 @@ pub enum BuildError {
         /// The face.
         face: usize,
     },
+    /// The faces a face splits into do not cover it once over: their loops do not run each
+    /// stretch of its own boundary once, with the face on its left, and every piece inside it once
+    /// each way. The order round a vertex disagrees with the arrangement, and the face is refused
+    /// rather than split into too little, or into nothing (G244).
+    Uncovered {
+        /// The face.
+        face: usize,
+    },
     /// Two paves of a section, along a line or a curve, whose order is not proven.
     SectionOrder {
         /// The two faces whose carriers meet in it.
@@ -286,6 +303,10 @@ impl fmt::Display for BuildError {
             BuildError::Unbounded { face } => write!(
                 f,
                 "the loops of face {face} run with it on their right, round a region with no end"
+            ),
+            BuildError::Uncovered { face } => write!(
+                f,
+                "the faces face {face} splits into do not cover it: the order round a vertex disagrees with the arrangement"
             ),
             BuildError::SectionOrder {
                 faces: [a, b],
@@ -394,6 +415,21 @@ pub enum Interference {
     },
 }
 
+/// Two edges whose meeting near a vertex both pass through their intersection could not resolve,
+/// held and then accepted because it touches that vertex. The contact rule made the whole of it
+/// the vertex, so in the arrangement the two meet there and nowhere near it, and their tangents
+/// at the vertex describe the meeting before the merge, not after (11.4 step 2: the merged entity
+/// replaces its members in every later decision). Two whole lines or circles are held only where
+/// their closed form cannot tell their two crossings apart, or a tangency from them: made one
+/// vertex, they touch there and do not cross beyond it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Touch {
+    /// The vertex, by its index in [`Interfered::vertices`].
+    pub vertex: usize,
+    /// The two edges, the lower index first.
+    pub edges: [usize; 2],
+}
+
 /// The interferences of an arrangement.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Interfered {
@@ -407,6 +443,10 @@ pub struct Interfered {
     pub ends: Vec<Option<[usize; 2]>>,
     /// What met what, lowest dimension first.
     pub interferences: Vec<Interference>,
+    /// The pairs of edges whose meeting their intersection could not resolve the contact rule
+    /// made a vertex both pass through: in the order the meetings were found, the pairs in index
+    /// order.
+    pub touches: Vec<Touch>,
     /// Every edge cut at its paves, in edge order, each piece with the edge it comes from.
     pub splits: Vec<SplitEdge>,
     /// The pieces of different edges that are one stretch of curve, by index into `splits`.
@@ -985,7 +1025,9 @@ fn edge_edge(
 
 /// The paves put in order, the edges split, the common blocks found, and every held region
 /// checked: it stands only where a common block covers it, or where it touches a vertex both
-/// edges pass through, as two edges tangent at a shared corner.
+/// edges pass through, as two edges tangent at a shared corner. Standing at such a vertex, it is
+/// the two edges' meeting there, made one with the vertex by the contact rule, and the two are
+/// recorded as meeting there so ([`Touch`]).
 fn finish(
     arr: &Arrangement,
     st: Stages,
@@ -1001,6 +1043,7 @@ fn finish(
     }
     let pieces: Vec<PaveBlock> = splits.iter().map(|s: &SplitEdge| s.block).collect();
     let common = common_blocks(arr, &pieces, meter)?;
+    let mut touches = Vec::new();
     for region in &st.deferred {
         let (a, b) = region.edges;
         let shared: Vec<&Pave> = ordered
@@ -1013,12 +1056,17 @@ fn finish(
                     .is_some_and(|list| list.iter().any(|q: &Pave| q.vertex == p.vertex))
             })
             .collect();
-        let mut at_corner = false;
+        let mut corners = Vec::new();
         for pave in &shared {
             let (p, w) = committed(&arr.carriers, &st.vertices, pave.vertex)?;
-            at_corner |= judge(to_box(p, w, &region.xyz)?) == Verdict::Touch;
+            if judge(to_box(p, w, &region.xyz)?) == Verdict::Touch {
+                corners.push(Touch {
+                    vertex: pave.vertex,
+                    edges: [a, b],
+                });
+            }
         }
-        if !at_corner && !covered(region, &splits, &common) {
+        if corners.is_empty() && !covered(region, &splits, &common) {
             return Err(BuildError::Unresolved {
                 first: Entity::Edge(a),
                 second: Entity::Edge(b),
@@ -1026,6 +1074,7 @@ fn finish(
                 at: region.xyz,
             });
         }
+        touches.append(&mut corners);
     }
     Ok(Interfered {
         vertices: st.vertices,
@@ -1033,6 +1082,7 @@ fn finish(
         paves: ordered,
         ends: st.ends,
         interferences: st.interferences,
+        touches,
         splits,
         common,
         faces: Vec::new(),
