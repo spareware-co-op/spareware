@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Validates body records' payloads and geometry kinds against format/cddl/body.cddl with zcbor
 # 0.9.1 (Apache-2.0, https://github.com/NordicSemiconductor/zcbor), which reads CDDL's tags (#6.n)
-# as the test-only cddl-cat cannot. Run by kernel-nightly.yml's zcbor job in python:3.13-slim.
+# as the test-only cddl-cat cannot. Run by kernel-oracles.yml's zcbor job in python:3.13-slim.
 #
 # Usage: zcbor.sh SCHEMA DIR. Every DIR/*.RULE.cbor file is validated as CDDL rule RULE; the
 # script prints one line per file and fails if any does not validate.

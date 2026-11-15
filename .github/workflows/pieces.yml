@@ -7,6 +7,10 @@ name: Pieces
 on:
   pull_request:
     types: [opened, reopened, synchronize, edited, ready_for_review]
+  # Main's ruleset requires "Piece is checked out", and a required check must report in GitHub's
+  # merge queue too: there the job is skipped, which counts as passed, because it checked the pull
+  # request's author when the pull request was pushed.
+  merge_group:
   schedule:
     - cron: "17 15 * * *"
   workflow_dispatch:
@@ -49,7 +53,7 @@ jobs:
 
   release-idle:
     name: Release idle pieces
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Free pieces with no activity for 7 days

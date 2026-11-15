@@ -1,6 +1,18 @@
 //! Every command, run on the truth projects: a long scripted session that calls each command of the registry at least once with
 //! real parameters, checks what it gives back, and fails if a command is added that the script does not call.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    clippy::needless_pass_by_value,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_api::Session;
@@ -323,7 +335,7 @@ fn every_command_runs_on_the_truth_projects() {
     );
     t.ok(
         "transport.data.set",
-        json!({ "controlled": [{ "lat": -37.0648282, "lng": 174.9388742, "no": "AT-GSR1" }] }),
+        json!({ "controlled": [{ "lat": -37.064_828_2, "lng": 174.938_874_2, "no": "AT-GSR1" }] }),
     );
     t.ok("transport.import.geojson", json!({ "geojson": read_truth("fixtures/papakura-proposals.geojson"), "cls": "arterial", "lanes": 2 }));
     assert!(

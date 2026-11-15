@@ -5,6 +5,25 @@
 //! 300 zones and a settings object that is not the project's. Every case's whole result must equal the prototype's
 //! (only the time stamp and run time left out), and so must the calls it makes to its progress callback.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod recorded;
 mod support;
 
@@ -14,6 +33,7 @@ use construct_transport::results::AssignOpts;
 use construct_transport::jsnum::plain_number;
 use recorded::json;
 use serde_json::{Value, json};
+use std::fmt::Write as _;
 
 use support::{diff_json, load_json};
 
@@ -53,7 +73,8 @@ fn assignment_on_the_variants() {
         if total > 0 {
             let mut msg = format!("{total} difference(s) under {path}:");
             for d in diffs.iter().take(6) {
-                msg.push_str(&format!("\n  {}\n      expected {}\n      actual   {}", d.path, d.expected, d.actual));
+                // Writing to a String cannot fail.
+                let _ = write!(msg, "\n  {}\n      expected {}\n      actual   {}", d.path, d.expected, d.actual);
             }
             failures.push(msg);
         }

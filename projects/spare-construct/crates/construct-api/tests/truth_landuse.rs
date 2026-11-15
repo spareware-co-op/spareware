@@ -1,6 +1,16 @@
 //! `transport.landuse.queries` and `transport.landuse.apply` against the prototype's recorded land-use builds
 //! (tools/transport-truth gen-landuse.mjs): the zones and statistics made from Overpass answers, with the same seeded ids.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_api::Session;
@@ -40,10 +50,12 @@ fn answers_of(case: &Value) -> Option<Value> {
                         || e["tags"]["building"].as_bool() == Some(true)
                 }),
                 Some("areas") => {
-                    list.retain(|e| !(e["tags"]["building"].is_string()) || e["type"] == "node")
+                    list.retain(|e| !(e["tags"]["building"].is_string()) || e["type"] == "node");
                 }
                 Some("houses") => {
-                    list.retain(|e| matches!(e["tags"]["building"].as_str(), Some("yes" | "house")))
+                    list.retain(|e| {
+                        matches!(e["tags"]["building"].as_str(), Some("yes" | "house"))
+                    });
                 }
                 _ => {}
             }

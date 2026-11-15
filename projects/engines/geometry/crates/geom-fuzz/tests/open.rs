@@ -1,5 +1,5 @@
 //! The fuzz target of containers and trust on open (piece G108), as tests: `open_fuzz` is
-//! bolero's test mode, which cargo-bolero and `ClusterFuzzLite` select by name, and `open_seeded`
+//! bolero's test mode, a property test on bytes bolero draws, and `open_seeded`
 //! the seeded leg that runs on every target, WebAssembly included (the crate README sets out the
 //! layout). Each hands the fuzzer's raw bytes to `geom_fuzz::open::harness`. The corpus starts
 //! from the container of `geom-format`'s trust-on-open tests, a stamped cube and an unstamped
@@ -19,7 +19,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 2_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 2_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 2,000 cases in 0.007 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 570_000;
 
 /// The longest byte string the seeded leg draws; the harness reads all of it.
 const MAX_LEN: u16 = 512;

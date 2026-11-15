@@ -33,8 +33,8 @@
 //! on two differently perturbed heaps before comparing it with the store's. A changed hash is one
 //! of two things. Either it is a bug: some target, pool or chunk size gives other answers. Or the
 //! helper's answers or this corpus were changed on purpose, in a pull request that records the
-//! change in the store, says which answers changed and why, and is approved by a kernel owner.
-//! Never update the store to make one target pass. The test also checks that the
+//! change in the store, saying which answers changed and why, in the golden's history record
+//! (decision 32.54). Never update the store to make one target pass. The test also checks that the
 //! corpus still reaches every outcome it is built to reach, so a corpus that silently stopped
 //! testing the hard cases fails.
 

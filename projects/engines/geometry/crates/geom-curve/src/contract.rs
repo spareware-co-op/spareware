@@ -10,6 +10,10 @@
 //! a reversal or a transform that is wrong by more than its own stated error is caught wherever a
 //! sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30
 //! of the largest value at that parameter, which catches a wrong formula, not rounding.
+//! [`check_without_conversions`] runs the same laws less the two that need a conversion
+//! ([`Law::TransformMovesTheCurve`] and [`Law::NurbsWithinItsError`]), so a kind whose transform
+//! or NURBS form a budget cannot pay for is still held to the rest: the fuzz targets run it after
+//! [`check`] ends on a budget stop.
 //!
 //! Guarantees:
 //!
@@ -18,6 +22,10 @@
 //!   a refusal the law requires that did not come is a broken refusal.
 //! - **Deterministic.** The checks run in the order of the parameters given, each law in the order
 //!   of [`Law`]; the same kind and parameters give the same verdict.
+//! - **One body, two entries.** Both entries run one function, [`check`] with the conversions and
+//!   [`check_without_conversions`] without them, so the laws they share are the same code, run in
+//!   the same order, and cannot drift apart. Without the conversions it makes no call [`check`]
+//!   does not make, in the same order, and none more.
 //!
 //! Method: property checks of the trait's contract (chapter 28.2's contract laws, applied to the
 //! behaviour chapter 7 lists): consistency of certified enclosures, as interval methods check
@@ -26,7 +34,8 @@
 //!
 //! Cost: for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a
 //! transform: the kind's own costs, a few dozen times; and for each of at most sixteen of the
-//! kind's breaks, two enclosures and three bounds.
+//! kind's breaks, two enclosures and three bounds. Without the conversions, the same less one
+//! transform, one NURBS conversion and the two laws' evaluations at each parameter.
 
 #![allow(
     clippy::many_single_char_names,
@@ -147,14 +156,41 @@ fn near<const D: usize>(v: &[f64; D], a: &[Interval; D], largest: f64) -> bool {
 ///
 /// The first [`ContractError`] found: the law, the parameter, and the error of a call the law
 /// needed, if one failed.
-#[allow(
-    clippy::too_many_lines,
-    reason = "one law after another, in the order of Law, each a few lines"
-)]
 pub fn check<K: ParamCurve<D>, const D: usize>(
     kind: &K,
     params: &[f64],
     transform: &TypedTransform,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), ContractError> {
+    laws(kind, params, Some(transform), meter)
+}
+
+/// Runs `kind` through every law of the contract at the parameters `params` but the two that need
+/// a conversion: [`Law::TransformMovesTheCurve`] and [`Law::NurbsWithinItsError`]. It never calls
+/// [`ParamCurve::transformed`] or [`ParamCurve::to_nurbs`]; every other call is [`check`]'s, in
+/// [`check`]'s order, run by the same code.
+///
+/// # Errors
+///
+/// As [`check`], among the laws it runs.
+pub fn check_without_conversions<K: ParamCurve<D>, const D: usize>(
+    kind: &K,
+    params: &[f64],
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), ContractError> {
+    laws(kind, params, None, meter)
+}
+
+/// The laws, for both entries: with a transform, every law ([`check`]); without one, every law but
+/// the transform law and the NURBS law, whose conversions are then never made.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one law after another, in the order of Law, each a few lines"
+)]
+fn laws<K: ParamCurve<D>, const D: usize>(
+    kind: &K,
+    params: &[f64],
+    transform: Option<&TypedTransform>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(), ContractError> {
     let (a, b) = kind.domain();
@@ -192,7 +228,10 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
     let whole = kind
         .bound((lo, hi), meter)
         .map_err(call(Law::BoundHoldsPoints, lo))?;
-    let entries = Entries::of(transform).map_err(call(Law::TransformMovesTheCurve, lo))?;
+    let entries = match transform {
+        Some(t) => Some(Entries::of(t).map_err(call(Law::TransformMovesTheCurve, lo))?),
+        None => None,
+    };
     let mid = lo + (hi - lo) * 0.5;
     let (left, right) = kind
         .split(mid, meter)
@@ -200,14 +239,21 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
     let reversed = kind
         .reversed(meter)
         .map_err(call(Law::ReverseKeepsTheCurve, a))?;
-    let moved = kind
-        .transformed(transform, meter)
-        .map_err(call(Law::TransformMovesTheCurve, a))?;
+    // The two conversions, and the laws on them, only with a transform.
+    let moved = match (transform, entries) {
+        (Some(t), Some(entries)) => Some((
+            entries,
+            kind.transformed(t, meter)
+                .map_err(call(Law::TransformMovesTheCurve, a))?,
+        )),
+        _ => None,
+    };
     // A ray or infinite line has no NURBS form, and must say so.
-    let nurbs = match kind.to_nurbs(meter) {
-        Ok(n) => Some(n),
-        Err(CurveError::Unbounded) if !(a.is_finite() && b.is_finite()) => None,
-        Err(e) => return Err(broken(Law::NurbsWithinItsError, lo, Some(e))),
+    let nurbs = match transform.map(|_| kind.to_nurbs(meter)) {
+        None => None,
+        Some(Ok(n)) => Some(n),
+        Some(Err(CurveError::Unbounded)) if !(a.is_finite() && b.is_finite()) => None,
+        Some(Err(e)) => return Err(broken(Law::NurbsWithinItsError, lo, Some(e))),
     };
     for &t in params {
         let e = kind
@@ -290,16 +336,18 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
             return Err(broken(Law::ReverseKeepsTheCurve, t, None));
         }
         // The transformed curve against the image of the enclosure.
-        let image = image::<D>(&entries, &p).map_err(call(Law::TransformMovesTheCurve, t))?;
-        let m = moved
-            .value
-            .enclose(t, Limit::FromRight, 0, meter)
-            .map_err(call(Law::TransformMovesTheCurve, t))?;
-        if !m
-            .first()
-            .is_some_and(|x| overlap(x, &image, moved.deviation))
-        {
-            return Err(broken(Law::TransformMovesTheCurve, t, None));
+        if let Some((entries, moved)) = &moved {
+            let image = image::<D>(entries, &p).map_err(call(Law::TransformMovesTheCurve, t))?;
+            let m = moved
+                .value
+                .enclose(t, Limit::FromRight, 0, meter)
+                .map_err(call(Law::TransformMovesTheCurve, t))?;
+            if !m
+                .first()
+                .is_some_and(|x| overlap(x, &image, moved.deviation))
+            {
+                return Err(broken(Law::TransformMovesTheCurve, t, None));
+            }
         }
         // Determinism: the same call again, bit for bit.
         let again = kind

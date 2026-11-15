@@ -1,7 +1,7 @@
 //! Screenline suggestions from OpenStreetMap (`suggestScreenlines`, `joinWays`, `addSuggested`).
 //!
 //! Rivers, canals and main railways funnel traffic onto their crossings, so each makes a natural screenline. The
-//! features come from the Overpass API (OpenStreetMap contributors, ODbL) for the network's bounding box; fetching them
+//! features come from the Overpass API (OpenStreetMap contributors, `ODbL`) for the network's bounding box; fetching them
 //! is the caller's job ([`osm_bbox`] and [`osm_query`] say what to ask), and [`suggest_screenlines`] works on the reply.
 
 use super::common::hash;
@@ -10,7 +10,7 @@ use super::screen::sl_crossings;
 use super::store::{CalibStore, Screenline};
 use crate::edit::IdSource;
 use crate::graph::js_sort_by;
-use crate::jsnum::{JsNum, Maybe, js_trim, number_to_js_string, value_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{JsNum, Maybe, js_trim, number_to_js_string, usize_to_f64, value_to_js_string, value_to_number, value_truthy};
 use crate::project::{Point, Project, Scenario};
 use crate::util::{LatLng, r7};
 use serde_json::{Map, Value, json};
@@ -26,6 +26,7 @@ pub const OSM_LICENCE: &str = "ODbL 1.0";
 pub const OSM_TIMEOUT_MS: f64 = 30000.0;
 
 /// `OSM_SL.query(bb)`: the Overpass query for rivers, canals and main railways in a bounding box ("south,west,north,east" with six decimals).
+#[must_use]
 pub fn osm_query(bb: &str) -> String {
     format!(
         "[out:json][timeout:50];(way[\"waterway\"~\"^(river|canal)$\"]({bb});way[\"railway\"=\"rail\"][!\"service\"]({bb}););out geom;"
@@ -33,6 +34,7 @@ pub fn osm_query(bb: &str) -> String {
 }
 
 /// The network's bounding box as [south, west, north, east], or None with fewer than two nodes.
+#[must_use]
 pub fn osm_bbox(sc: &Scenario) -> Option<[f64; 4]> {
     if sc.nodes.len() < 2 {
         return None;
@@ -77,6 +79,7 @@ fn same(p: &LatLng, q: &LatLng) -> bool {
 /// `joinWays(ways)`: joins ways (Overpass elements with `id` and `geometry` as [{lat, lon}]) that share an end point into polylines, longest first.
 ///
 /// Ways with a point that is not a finite number are left out; a way with no points is left out too (the prototype stops with an error on one).
+#[must_use]
 pub fn join_ways(ways: &[&Value]) -> Vec<JoinedWay> {
     let mut left: Vec<(Value, Vec<LatLng>)> = ways
         .iter()
@@ -97,32 +100,36 @@ pub fn join_ways(ways: &[&Value]) -> Vec<JoinedWay> {
         let mut grew = true;
         while grew {
             grew = false;
-            for i in 0..left.len() {
-                let w = &left[i].1;
-                let (a, b) = (pts[0], pts[pts.len() - 1]);
-                let j: Option<Vec<LatLng>> = if same(&b, &w[0]) {
-                    Some(pts.iter().copied().chain(w[1..].iter().copied()).collect())
-                } else if same(&b, &w[w.len() - 1]) {
-                    Some(pts.iter().copied().chain(w[..w.len() - 1].iter().rev().copied()).collect())
-                } else if same(&a, &w[w.len() - 1]) {
-                    Some(w.iter().copied().chain(pts[1..].iter().copied()).collect())
-                } else if same(&a, &w[0]) {
-                    Some(w.iter().rev().copied().chain(pts[1..].iter().copied()).collect())
+            // Every polyline here has a point: ways without one were left out above
+            let (Some(&head), Some(&tail)) = (pts.first(), pts.last()) else { break };
+            let pts_rest = pts.get(1..).unwrap_or_default();
+            // The first way left that shares an end point, and the polyline joined with it
+            let found = left.iter().enumerate().find_map(|(i, (_, w))| {
+                let (Some(w_first), Some(w_last)) = (w.first(), w.last()) else { return None };
+                let joined: Option<Vec<LatLng>> = if same(&tail, w_first) {
+                    Some(pts.iter().copied().chain(w.get(1..).unwrap_or_default().iter().copied()).collect())
+                } else if same(&tail, w_last) {
+                    let but_last = w.split_last().map(|(_, rest)| rest).unwrap_or_default();
+                    Some(pts.iter().copied().chain(but_last.iter().rev().copied()).collect())
+                } else if same(&head, w_last) {
+                    Some(w.iter().copied().chain(pts_rest.iter().copied()).collect())
+                } else if same(&head, w_first) {
+                    Some(w.iter().rev().copied().chain(pts_rest.iter().copied()).collect())
                 } else {
                     None
                 };
-                if let Some(j) = j {
-                    pts = j;
-                    ids.push(left[i].0.clone());
-                    left.remove(i);
-                    grew = true;
-                    break;
-                }
+                joined.map(|joined| (i, joined))
+            });
+            if let Some((i, joined)) = found {
+                pts = joined;
+                let (id, _) = left.remove(i);
+                ids.push(id);
+                grew = true;
             }
         }
         out.push(JoinedWay { pts, ids });
     }
-    js_sort_by(&mut out, |p, q| q.pts.len() as f64 - p.pts.len() as f64);
+    js_sort_by(&mut out, |p, q| usize_to_f64(q.pts.len()) - usize_to_f64(p.pts.len()));
     out
 }
 
@@ -157,6 +164,7 @@ pub struct Suggestions {
 }
 
 /// The sentence for a failed fetch (`suggestScreenlines` when no server answered).
+#[must_use]
 pub fn osm_failure_note(message: &str) -> String {
     format!(
         "Could not get rivers and railways from OpenStreetMap: {message}. Draw screenlines with the Screenline tool (S) instead, or try again later."
@@ -181,10 +189,10 @@ pub fn suggest_screenlines(sc: &Scenario, store: &CalibStore, reply: &Value) -> 
         for e in elements {
             let geom_ok = matches!(e.get("geometry"), Some(Value::Array(g)) if g.len() >= 2);
             let tags = e.get("tags").filter(|t| value_truthy(t));
-            if e.get("type").and_then(Value::as_str) != Some("way") || !geom_ok || tags.is_none() {
+            if e.get("type").and_then(Value::as_str) != Some("way") || !geom_ok {
                 continue;
             }
-            let tags = tags.expect("checked");
+            let Some(tags) = tags else { continue };
             let waterway = text_of(tags.get("waterway"));
             let kind = if waterway == "river" || waterway == "canal" {
                 Some(waterway)
@@ -196,12 +204,10 @@ pub fn suggest_screenlines(sc: &Scenario, store: &CalibStore, reply: &Value) -> 
             let Some(kind) = kind else { continue };
             let name = js_trim(&text_of(tags.get("name"))).to_string();
             let k = format!("{kind}\u{0}{name}");
-            match keys.iter().position(|x| *x == k) {
-                Some(i) => groups[i].push(e),
-                None => {
-                    keys.push(k);
-                    groups.push(vec![e]);
-                }
+            // keys and groups are pushed together, so a key's position is its group's
+            if let Some(g) = keys.iter().position(|x| *x == k).and_then(|i| groups.get_mut(i)) { g.push(e) } else {
+                keys.push(k);
+                groups.push(vec![e]);
             }
         }
     }
@@ -249,13 +255,13 @@ pub fn suggest_screenlines(sc: &Scenario, store: &CalibStore, reply: &Value) -> 
                 kind: kind.to_string(),
                 pts: ch.pts.iter().map(|p| [r7(p[0]), r7(p[1])]).collect(),
                 crossings: links.len(),
-                few: (links.len() as f64) < tag::SCREEN_MIN_LINKS,
+                few: usize_to_f64(links.len()) < tag::SCREEN_MIN_LINKS,
                 added: have.contains(&join_ids(&osm)),
                 osm,
             });
         }
     }
-    js_sort_by(&mut list, |a, b| b.crossings as f64 - a.crossings as f64);
+    js_sort_by(&mut list, |a, b| usize_to_f64(b.crossings) - usize_to_f64(a.crossings));
     let note = if list.is_empty() { "No river, canal or railway crosses two or more roads in this network.".to_string() } else { String::new() };
     Suggestions { ok: true, list, note }
 }

@@ -26,9 +26,10 @@
 //!
 //! Tiers: the reference's rationals and the transforms take minutes in a debug build, so those
 //! tests run in every release leg; the golden runs everywhere. The models of more than `LARGE`
-//! faces run in the nightly tier (`kernel-nightly.yml`), with `--ignored`, each union within a
-//! work budget and its exact volume inside the kernel's own, but not against the reference, whose
-//! rationals take over an hour on the largest.
+//! faces run in the merge queue (`kernel.yml`'s job `large-models`), with `--ignored`, a few
+//! models to a job, chosen by `SPAREKIT_MODELS`, each union within a work budget and its exact
+//! volume inside the kernel's own, but not against the reference, whose rationals take over an
+//! hour on the largest.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -107,7 +108,7 @@ const REFUSED: [(&str, &str); 4] = [
     ),
 ];
 
-/// As [`REFUSED`], for the nightly tier.
+/// As [`REFUSED`], for the large tier.
 const REFUSED_LARGE: [(&str, &str); 1] = [("Offset1", "Fault(DegenerateFace { face: 1010 })")];
 
 fn ctx() -> OpContext<'static> {
@@ -688,7 +689,7 @@ fn unions_within(grid: &Grid, by: [i64; 3], exec: &Exec<'_>, work: u64) -> Read 
 }
 
 /// The most faces a model of the pull-request tier has: the seven larger ones (4,418 to 19,704
-/// faces) run in the nightly tier, `the_large_models_unite_within_their_work`.
+/// faces) run in the large tier, `the_large_models_unite_within_their_work`.
 const LARGE: usize = 1_500;
 
 /// The most work a union of a large model may take: about twice the largest's, 1,519,346,215 units
@@ -716,17 +717,45 @@ fn manifold_s_models_unite_alone_and_with_a_moved_copy_to_the_reference() {
     assert_eq!(named(&refused), REFUSED);
 }
 
+/// The large models this run unites: every one, or those `SPAREKIT_MODELS` names, separated by
+/// commas, so that the merge queue can split the tier into jobs of a few minutes (`kernel.yml`'s
+/// `large-models`). A name there that is not a large model stops the test, so a model renamed or
+/// moved to the other tier cannot leave a job testing nothing.
+fn chosen(large: Vec<(&'static str, Grid)>) -> Vec<(&'static str, Grid)> {
+    let Ok(names) = std::env::var("SPAREKIT_MODELS") else {
+        return large;
+    };
+    let names: BTreeSet<&str> = names.split(',').map(str::trim).collect();
+    let known: BTreeSet<&str> = large.iter().map(|(name, _)| *name).collect();
+    let unknown: Vec<&&str> = names.difference(&known).collect();
+    assert!(
+        unknown.is_empty(),
+        "SPAREKIT_MODELS names {unknown:?}, which are not models of more than {LARGE} faces: \
+         {known:?}"
+    );
+    large
+        .into_iter()
+        .filter(|(name, _)| names.contains(name))
+        .collect()
+}
+
 /// The seven models of more than [`LARGE`] faces, each united alone and with its moved copy within
 /// [`LARGE_WORK`], each result's exact volume inside the kernel's own. They are not held to the
 /// flat reference: its rationals took over an hour on `Generic_Twin_7081.1.t0_left` and its copy,
 /// whose fans of up to 969 slivers each meet every other sliver's box, against minutes for the
-/// kernel. The pull-request tier holds every smaller model to it.
+/// kernel. The pull-request tier holds every smaller model to it. With `SPAREKIT_MODELS` set, only
+/// the models it names ([`chosen`]), and only their refusals are expected.
 #[test]
-#[ignore = "the nightly tier: the seven models of more than 1,500 faces, which take minutes; \
-            kernel-nightly.yml runs it"]
+#[ignore = "the large tier: the seven models of more than 1,500 faces, which take minutes; \
+            kernel.yml's merge-queue job large-models runs it, a few models to a job"]
 fn the_large_models_unite_within_their_work() {
+    let models = chosen(models(true));
+    let expected: Vec<(&str, &str)> = REFUSED_LARGE
+        .into_iter()
+        .filter(|(name, _)| models.iter().any(|(m, _)| m == name))
+        .collect();
     let mut refused = Vec::new();
-    for (name, grid) in models(true) {
+    for (name, grid) in models {
         let by = offset(&grid);
         match unions_within(&grid, by, &Exec::serial(), LARGE_WORK) {
             Read::Refused(why) => refused.push((name, why)),
@@ -740,7 +769,62 @@ fn the_large_models_unite_within_their_work() {
             }
         }
     }
-    assert_eq!(named(&refused), REFUSED_LARGE);
+    assert_eq!(named(&refused), expected);
+}
+
+/// The groups of large models `kernel.yml`'s job `large-models` runs, one job each, as its matrix
+/// lists them.
+fn queue_groups(workflow: &str) -> Vec<Vec<String>> {
+    let docs = yaml_rust2::YamlLoader::load_from_str(workflow).unwrap();
+    let job = &docs[0]["jobs"]["large-models"];
+    assert!(!job.is_badvalue(), "kernel.yml has no job large-models");
+    let models = &job["strategy"]["matrix"]["models"];
+    assert!(
+        models.as_vec().is_some(),
+        "large-models has no matrix of models"
+    );
+    models
+        .as_vec()
+        .unwrap()
+        .iter()
+        .map(|group| {
+            group
+                .as_str()
+                .unwrap()
+                .split(',')
+                .map(|name| name.trim().to_owned())
+                .collect()
+        })
+        .collect()
+}
+
+/// The merge queue runs every large model exactly once: each is in one group of `large-models`'s
+/// matrix, and no group names anything else, so a model added to the tier cannot go unrun.
+#[test]
+#[cfg_attr(target_os = "wasi", ignore = "reads the workflow from the tree")]
+fn the_merge_queue_unites_every_large_model_once() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(5)
+        .unwrap()
+        .join(".github/workflows/kernel.yml");
+    let workflow = std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
+    let mut named: Vec<String> = queue_groups(&workflow).into_iter().flatten().collect();
+    named.sort();
+    let mut large: Vec<String> = models(true)
+        .into_iter()
+        .map(|(name, _)| name.to_owned())
+        .collect();
+    large.sort();
+    assert_eq!(named, large);
+    // A planted gap, the matrix without its last group, is told apart.
+    let planted = workflow.replace(
+        "          - Offset1,hull-body,hull-mask,self_intersectA,self_intersectB\n",
+        "",
+    );
+    let mut left: Vec<String> = queue_groups(&planted).into_iter().flatten().collect();
+    left.sort();
+    assert_ne!(left, large, "the planted gap was not seen");
 }
 
 /// Refusals as the tables write them.
