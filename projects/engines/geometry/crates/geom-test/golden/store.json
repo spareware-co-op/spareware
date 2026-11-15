@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "about": "The geometry kernel's golden store (chapter 28.13): every golden digest, SHA-256 in lowercase hexadecimal, keyed by kernel edition, golden id and operation versions. Read by geom_test::golden (store.rs explains every field and rule). Never edit a digest without appending a history record holding the old digest, its kind (bug, improvement or corpus), the piece and why; a kernel owner approves every edit to an existing golden (.github/workflows/kernel-golden.yml checks it), and nothing in a frozen edition ever changes. Run `cargo run -p geom-test --bin golden -- check` after any change.",
+  "about": "The geometry kernel's golden store (chapter 28.13): every golden digest, SHA-256 in lowercase hexadecimal, keyed by kernel edition, golden id and operation versions. Read by geom_test::golden (store.rs explains every field and rule). Never edit a digest without appending exactly one history record holding the old digest, its kind (bug, improvement or corpus; only corpus on a golden that covers operation versions), the piece and why: .github/workflows/kernel-golden.yml holds every pull request to that record (decision 32.54), and nothing in a frozen edition ever changes. Run `cargo run -p geom-test --bin golden -- check` after any change.",
   "editions": [
     {
       "edition": "pre-edition",

@@ -15,7 +15,7 @@ name: Kernel
 # unrun. geom-num's whole test suite, every one of its test vectors, also runs in every native
 # configuration and in both release modes on wasm32 (its debug suite there takes well over an
 # hour, so wasm32's debug leg runs the goldens). A target that disagrees is a bug, never a reason
-# to change a golden: a golden changes only by an approved edit of the store (kernel-golden.yml).
+# to change a golden: a golden changes only by a recorded edit of the store (kernel-golden.yml).
 #
 # The goldens run first, in every configuration, and every step runs even when an earlier one
 # failed (`if: !cancelled()`), so a failing suite never hides the digests of a target.
