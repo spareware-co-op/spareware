@@ -8620,6 +8620,14 @@
       "reason": "The two differ only when the upper end of the point's height from the torus's middle plane, widened by its bound, equals the floor, the least height of the face's boundary box, exactly. No point of the face lies lower than its boundary in its half, and one as low as the floor would lie on the boundary within the bound of the vertex, which the contact rule above has then already put On a boundary edge. So the mutant answers Out only for a point that stands for no point of the face, a right answer, where the original goes on to the reach and the ray test, which answer Out or refuse; the piece promises a proven answer or a refusal, never which of the two at such a tie."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with >= in RoundFace::place",
+      "line_text": "if wide.steps() > bound.steps() {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the reach in whole steps equals the vertex's bound. The mutant then decides each side's distance again, widened by that same bound, as the loop above it already did, where every side came out apart (one touching would have made the place On, one undecided an error): the same measures give the same decisions, so the loop changes nothing and the ray test runs as it would have. It costs the meter those decisions again and nothing else."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
       "mutant": "replace > with >= in seen_from_outside",
       "line_text": "normal.get(dropped).is_some_and(|n: &i128| *n > 0)",

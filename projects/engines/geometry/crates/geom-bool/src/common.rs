@@ -310,10 +310,20 @@ pub fn common_blocks(
     keyed.sort_unstable();
     let operand = |b: &PaveBlock| arr.edges.get(b.edge).map(|e| e.operand);
     let mut out: Vec<CommonBlock> = Vec::new();
-    // Each run of blocks with the same two ends is a group; the runs cover the sorted list once,
-    // so the walk ends with it however the runs are cut.
-    for run in keyed.chunk_by(|x, y| x.0 == y.0) {
-        let group: Vec<usize> = run.iter().map(|(_, _, i)| *i).collect();
+    // Each run of blocks with the same two ends is a group, begun where the ends change: one walk
+    // over the sorted list, which ends with it however the runs are cut.
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut last: Option<(usize, usize)> = None;
+    for &(ends, _, i) in &keyed {
+        if last != Some(ends) {
+            groups.push(Vec::new());
+            last = Some(ends);
+        }
+        if let Some(group) = groups.last_mut() {
+            group.push(i);
+        }
+    }
+    for group in groups {
         // Join the blocks proven one, each to the first of its group it is one with.
         let mut joined: Vec<Option<(usize, Proof)>> = alloc::vec![None; group.len()];
         for (j, &bj) in group.iter().enumerate() {

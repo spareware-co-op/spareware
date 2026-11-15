@@ -1770,3 +1770,58 @@ fn a_plane_across_a_torus_s_band_cuts_it_in_two_circles() {
     }
     assert_eq!(of_face(&splitting, sheet).len(), 3);
 }
+
+/// Coaxial cylinders of one radius about an axis along each coordinate, given about different
+/// points of an axis that passes off the origin: one carrier, found exactly, whichever
+/// coordinate the axis runs along. The exact test reads each cylinder as a grid point on its axis
+/// and the grid point one unit along it, so it holds only where both are whole.
+#[test]
+fn coaxial_cylinders_off_the_origin_are_one_carrier_along_any_axis() {
+    for k in 0..3 {
+        let mut b = Build::default();
+        let base = |shift: i64| {
+            let mut c = [7, 11, 13];
+            c[k] += shift;
+            p(c[0], c[1], c[2])
+        };
+        let (lower, ..) = b.tube((base(0), k, 1.0), 50, (0, 100), 0);
+        let (upper, ..) = b.tube((base(50), k, 1.0), 50, (0, 100), 1);
+        let out = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut meter()).unwrap();
+        assert_eq!(out.faces[lower].same_carrier, vec![upper], "axis {k}");
+        assert_eq!(out.faces[upper].same_carrier, vec![lower], "axis {k}");
+    }
+}
+
+/// A cylinder's side and a flat face across it that covers only the half of its circle at x > 0:
+/// the section circle is cut where the flat face's edge x = 0 crosses the side, at (0, ±50, 50),
+/// into the half inside the flat face and the half outside it, which is inside the side alone.
+/// Only the half inside both faces is a section edge.
+#[test]
+fn a_section_is_kept_only_where_it_is_inside_both_faces() {
+    let mut b = Build::default();
+    b.tube((p(0, 0, 0), 2, 1.0), 50, (0, 100), 0);
+    let s = S;
+    b.quad(
+        [
+            [0, -100 * s, 50 * s],
+            [100 * s, -100 * s, 50 * s],
+            [100 * s, 100 * s, 50 * s],
+            [0, 100 * s, 50 * s],
+        ],
+        1,
+    );
+    let out = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut meter()).unwrap();
+    assert_eq!(out.sections.len(), 1, "{:?}", out.sections);
+    let section = &out.sections[0];
+    assert!(
+        matches!(section.curve, CurveGeom::Section(_)),
+        "{section:?}"
+    );
+    let at = |v: usize| b.arr.carriers.commit(&out.vertices[v]).unwrap().0;
+    let mut ends = [
+        at(section.from.unwrap().vertex),
+        at(section.to.unwrap().vertex),
+    ];
+    ends.sort_unstable();
+    assert_eq!(ends, [p(0, -50, 50), p(0, 50, 50)]);
+}
