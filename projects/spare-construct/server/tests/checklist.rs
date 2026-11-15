@@ -24,6 +24,8 @@ use reqwest::cookie::{CookieStore, Jar};
 use reqwest::{Client, StatusCode, Url};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+use std::fs::{File, OpenOptions};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -53,6 +55,51 @@ fn check(ok: bool, label: &str) {
     pass(label);
 }
 
+/// How much of each server's log a failure prints.
+const LOG_TAIL: usize = 80;
+
+/// Where a server's own log goes: everything it prints, kept across its restarts.
+fn server_log(bind: &str) -> PathBuf {
+    let port = bind.rsplit(':').next().unwrap();
+    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("checklist-server-{port}.log"))
+}
+
+fn open_log(bind: &str) -> File {
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(server_log(bind))
+        .expect("opening the server's log")
+}
+
+/// Prints the end of each server's log, so a failure shows what the server saw (issue #762: the
+/// test failed with nothing from the server in the job's log).
+fn print_server_logs() {
+    for bind in [FIRST, SECOND] {
+        let path = server_log(bind);
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let lines: Vec<&str> = text.lines().collect();
+        let from = lines.len().saturating_sub(LOG_TAIL);
+        println!(
+            "\n      the last {} lines of {}:",
+            lines.len() - from,
+            path.display()
+        );
+        for line in &lines[from..] {
+            println!("      | {line}");
+        }
+    }
+}
+
+/// A project read's log number. When it isn't there, says what came back instead.
+fn head_of(status: StatusCode, project: &Value) -> u64 {
+    project["head"].as_u64().unwrap_or_else(|| {
+        panic!("FAILED: the project read came back {status} with no head: {project}")
+    })
+}
+
 /// One running copy of the server.
 struct Server {
     child: Child,
@@ -62,15 +109,19 @@ struct Server {
 impl Server {
     async fn start(bind: &'static str) -> Self {
         let port = bind.rsplit(':').next().unwrap();
-        let mut child = Starting(Some(
-            Command::new(BIN)
-                .arg("serve")
-                .env("STACK_BIND", bind)
-                .env("STACK_PUBLIC_URL", format!("http://localhost:{port}"))
-                .stdout(Stdio::null())
-                .spawn()
-                .expect("starting the server"),
-        ));
+        let log = open_log(bind);
+        let mut command = Command::new(BIN);
+        command
+            .arg("serve")
+            .env("STACK_BIND", bind)
+            .env("STACK_PUBLIC_URL", format!("http://localhost:{port}"))
+            .env("NO_COLOR", "1")
+            .stdout(log.try_clone().unwrap())
+            .stderr(log);
+        if std::env::var_os("RUST_LOG").is_none() {
+            command.env("RUST_LOG", "warn,spare_server=debug");
+        }
+        let mut child = Starting(Some(command.spawn().expect("starting the server")));
         let health = format!("http://{bind}/health");
         // A minute, because a server starting just after a TiKV died waits for new Raft leaders.
         for _ in 0..1200 {
@@ -142,14 +193,20 @@ impl Browser {
 
     async fn get(&self, url: String) -> (StatusCode, Value) {
         let response = self.http.get(url).send().await.unwrap();
-        let status = response.status();
-        (status, response.json().await.unwrap_or(Value::Null))
+        Self::reply(response).await
     }
 
     async fn post(&self, url: String, body: Value) -> (StatusCode, Value) {
         let response = self.http.post(url).json(&body).send().await.unwrap();
+        Self::reply(response).await
+    }
+
+    /// A reply's status and body. A body that isn't JSON is kept as text, so a failure can show it.
+    async fn reply(response: reqwest::Response) -> (StatusCode, Value) {
         let status = response.status();
-        (status, response.json().await.unwrap_or(Value::Null))
+        let text = response.text().await.unwrap_or_default();
+        let body = serde_json::from_str(&text).unwrap_or(Value::String(text));
+        (status, body)
     }
 
     fn cookie(&self, base: &str) -> String {
@@ -673,7 +730,8 @@ async fn many_writers(first: &str, second: &str) {
     let anna = Browser::sign_in(first, "anna").await;
     let ben = Browser::sign_in(second, "ben").await;
     let project = format!("{first}/api/projects/example-1");
-    let (_, before) = anna.get(project.clone()).await;
+    let (status, before) = anna.get(project.clone()).await;
+    let head_before = head_of(status, &before);
     let started = Instant::now();
     let results = futures::future::join_all([
         busy_tab(&anna, first, "busy-1", "W-102", EDITS),
@@ -689,7 +747,7 @@ async fn many_writers(first: &str, second: &str) {
     let seconds = started.elapsed().as_secs_f64();
     let mut times: Vec<u64> = results.into_iter().flatten().collect();
     times.sort_unstable();
-    let added = edits_since(&anna, first, "arch-model", before["head"].as_u64().unwrap()).await;
+    let added = edits_since(&anna, first, "arch-model", head_before).await;
     println!(
         "      8 tabs on 2 servers, one project: {} edits/s, confirmed in median {} ms, 95% {} ms, worst {} ms",
         (times.len() as f64 / seconds).round(),
@@ -965,8 +1023,8 @@ async fn five_kill_mid_edit(server: &mut Server) {
     let model = "arch-model";
     let anna = Browser::sign_in(&base, "anna").await;
     let project = format!("{base}/api/projects/example-1");
-    let (_, before) = anna.get(project.clone()).await;
-    let head_before = before["head"].as_u64().unwrap();
+    let (status, before) = anna.get(project.clone()).await;
+    let head_before = head_of(status, &before);
 
     let (mut live, _) = Live::open(&anna, &base, "example-1", "tab-kill", &[model], 0)
         .await
@@ -993,7 +1051,10 @@ async fn five_kill_mid_edit(server: &mut Server) {
                 let (fresh, welcome) = loop {
                     match Live::open(&anna, &base, "example-1", &client, &[model], 0).await {
                         Ok(open) => break open,
-                        Err(_) => sleep(Duration::from_millis(50)).await,
+                        Err(e) => {
+                            println!("      the restarted server's live channel didn't open: {e}");
+                            sleep(Duration::from_millis(50)).await;
+                        }
                     }
                 };
                 live = fresh;
@@ -1034,7 +1095,8 @@ async fn five_kill_mid_edit(server: &mut Server) {
         "      {EDITS} edits, {kills} hard kills, {:.1} s; the log had reached {replies:?} at each restart",
         started.elapsed().as_secs_f32()
     );
-    let (_, after) = anna.get(project).await;
+    let (status, after) = anna.get(project).await;
+    let head_after = head_of(status, &after);
     let added = edits_since(&anna, &base, model, head_before).await;
     check(
         added == EDITS,
@@ -1044,7 +1106,7 @@ async fn five_kill_mid_edit(server: &mut Server) {
     let area = format!(
         "{base}/api/projects/example-1/models/{model}/area?level=2&x0=0&y0=0&x1=9000&y1=9000"
     );
-    let view = settled_area(&anna, area, after["head"].as_u64().unwrap()).await;
+    let view = settled_area(&anna, area, head_after).await;
     let hash = view["pieces"]["D-201"].as_str().expect("the door is there");
     let (_, record) = anna
         .get(format!(
@@ -1145,6 +1207,14 @@ async fn six_backup_restores(server: &mut Server) {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs the running stack: use scripts/run-checklist.sh"]
 async fn checklist() {
+    for bind in [FIRST, SECOND] {
+        let _ = std::fs::remove_file(server_log(bind));
+    }
+    let report = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic| {
+        report(panic);
+        print_server_logs();
+    }));
     let mut first = Server::start(FIRST).await;
     let second = Server::start(SECOND).await;
     let (base, other) = (first.base(), second.base());
