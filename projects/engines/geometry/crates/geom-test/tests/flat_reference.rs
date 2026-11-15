@@ -28,7 +28,7 @@ use core::cmp::Ordering;
 use geom_test::flat_reference::{
     Cell, Op, Plane, Point, Polygon, Q, ReferenceError, Relation, Solid, Where, arrangement,
     boolean, clash, clashes, first_contact, imprint, int, labelled_cells, point, ratio, region,
-    section, twice_area,
+    section, six_volume_where, twice_area,
 };
 
 fn cuboid(low: [i64; 3], high: [i64; 3]) -> Solid {
@@ -835,5 +835,137 @@ fn a_moved_solid_is_the_same_solid_elsewhere() {
     assert_eq!(
         tilted.canonical(),
         Plane::new(point(2, 2, 2), int(6)).unwrap().canonical()
+    );
+}
+
+/// The volume `six_volume_where` gives for `op` of two solids.
+fn where_volume(a: &Solid, b: &Solid, op: Op) -> Q {
+    let keep = |w: &[i64]| {
+        let (x, y) = (w[0] > 0, w[1] > 0);
+        match op {
+            Op::Union => x || y,
+            Op::Intersection => x && y,
+            Op::Difference => x && !y,
+            Op::Exclusive => x != y,
+        }
+    };
+    six_volume_where(&[a, b], keep).unwrap() * ratio(1, 6)
+}
+
+#[test]
+fn the_boundary_volume_is_every_boolean_of_two_boxes() {
+    // Gate 4's reference for solids of many faces, against the same hand cases as the arrangement.
+    let mut cases = 0;
+    for (a, b) in pairs() {
+        let (sa, sb) = (cuboid(a.0, a.1), cuboid(b.0, b.1));
+        let (va, vb) = (size(a.0, a.1), size(b.0, b.1));
+        let i = common(a, b);
+        for (op, want) in [
+            (Op::Intersection, i),
+            (Op::Union, va + vb - i),
+            (Op::Difference, va - i),
+            (Op::Exclusive, va + vb - 2 * i),
+        ] {
+            assert_eq!(where_volume(&sa, &sb, op), int(want), "{a:?} {b:?} {op:?}");
+            cases += 1;
+        }
+    }
+    assert!(cases >= 50, "{cases}");
+}
+
+#[test]
+fn the_boundary_volume_agrees_with_the_arrangement_on_slanted_solids() {
+    // Corner tetrahedra, a non-convex prism and tilted prisms, each against boxes and each other:
+    // the arrangement's cell volumes and the boundary's, both exact, must be one number.
+    let tet = |k: i64, at: [i64; 3]| {
+        let [x, y, z] = at;
+        Solid::tetrahedron([
+            point(x, y, z),
+            point(x + k, y, z),
+            point(x, y + k, z),
+            point(x, y, z + k),
+        ])
+        .unwrap()
+    };
+    let l = [
+        (int(0), int(0)),
+        (int(3), int(0)),
+        (int(3), int(1)),
+        (int(1), int(1)),
+        (int(1), int(3)),
+        (int(0), int(3)),
+    ];
+    let shapes = vec![
+        cuboid([0, 0, 0], [3, 3, 3]),
+        cuboid([1, 1, 1], [4, 2, 2]),
+        tet(4, [0, 0, 0]),
+        tet(3, [1, 1, 0]),
+        Solid::prism(&l, &int(0), &int(2)).unwrap(),
+        Solid::prism(
+            &[(int(0), int(0)), (int(5), int(1)), (int(2), int(4))],
+            &int(1),
+            &int(3),
+        )
+        .unwrap(),
+    ];
+    let mut cases = 0;
+    for a in &shapes {
+        for b in &shapes {
+            for op in [Op::Union, Op::Intersection, Op::Difference, Op::Exclusive] {
+                assert_eq!(
+                    where_volume(a, b, op),
+                    boolean(a, b, op).unwrap().volume(),
+                    "{op:?}"
+                );
+                cases += 1;
+            }
+        }
+    }
+    assert!(cases >= 100, "{cases}");
+}
+
+#[test]
+fn a_surface_that_crosses_itself_counts_by_its_winding_number() {
+    // Two boxes as one solid whose faces cross: inside both the winding number is 2, and inside
+    // either at least 1, so the union keeps the whole and "inside exactly once" leaves the overlap.
+    let a = cuboid([0, 0, 0], [2, 2, 2]);
+    let b = cuboid([1, 1, 1], [3, 3, 3]);
+    let both = Solid::new(a.faces().iter().chain(b.faces()).cloned().collect()).unwrap();
+    assert_eq!(
+        both.winding(&[ratio(3, 2), ratio(3, 2), ratio(3, 2)]),
+        Some(2)
+    );
+    assert_eq!(
+        both.winding(&[ratio(1, 2), ratio(1, 2), ratio(1, 2)]),
+        Some(1)
+    );
+    assert_eq!(both.winding(&point(5, 5, 5)), Some(0));
+    assert_eq!(both.winding(&point(0, 1, 1)), None);
+    assert_eq!(
+        six_volume_where(&[&both], |w| w[0] > 0).unwrap(),
+        int(6 * 15)
+    );
+    assert_eq!(
+        six_volume_where(&[&both], |w| w[0] == 1).unwrap(),
+        int(6 * 14)
+    );
+    assert_eq!(six_volume_where(&[&both], |w| w[0] >= 2).unwrap(), int(6));
+    // Faces of one plane overlapping, either way round, count once or cancel.
+    let top = cuboid([0, 0, 2], [2, 2, 4]);
+    let union = six_volume_where(&[&a, &top], |w| w[0] > 0 || w[1] > 0).unwrap();
+    assert_eq!(union, int(6 * 16));
+    let twin = cuboid([0, 0, 0], [2, 2, 2]);
+    assert_eq!(
+        six_volume_where(&[&a, &twin], |w| w[0] > 0 && w[1] > 0).unwrap(),
+        int(48)
+    );
+    assert_eq!(
+        six_volume_where(&[&a, &twin], |w| w[0] > 0 && w[1] <= 0).unwrap(),
+        int(0)
+    );
+    // What holds outside every solid has no bounded volume.
+    assert_eq!(
+        six_volume_where(&[&a], |w| w[0] <= 0),
+        Err(ReferenceError::NoArea)
     );
 }

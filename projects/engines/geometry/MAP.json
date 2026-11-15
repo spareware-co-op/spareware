@@ -177,7 +177,52 @@
         16
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a join could not be measured.",
+          "file": "projects/engines/geometry/crates/geom-analysis/src/continuity.rs",
+          "kinds": [
+            {
+              "doc": "A tightness that is not finite, or is negative.",
+              "name": "Tight",
+              "shape": "unit"
+            },
+            {
+              "doc": "The two pcurves run over different parameter ranges, so they do not share the join's parameter.",
+              "name": "Mismatch",
+              "shape": "unit"
+            },
+            {
+              "doc": "The edge has not exactly two fins (a boundary edge or a non-manifold one).",
+              "name": "NotAJoin",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A fin of the edge has no pcurve.",
+              "name": "NoPcurve",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A link into a row its arena does not have; a published body never holds one.",
+              "name": "NoSuchRow",
+              "shape": "unit"
+            },
+            {
+              "doc": "A surface or pcurve could not be evaluated (a pcurve outside its surface's domain, a value past the doubles).",
+              "name": "Geometry",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The budget ran out or the run was cancelled.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_analysis::continuity",
+          "name": "ContinuityError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "Query"
       ],
@@ -192,12 +237,51 @@
       "job": "Surface quality: continuity, curvature, light lines, draft, gap and flush, deviation.",
       "kind": "kernel",
       "layer": "10",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "each piece is one `class_a::at` and one `class_a::over` (O(1) each), never more than [`Ask::pieces`] pieces. For the gap and the normal angle on a join of smooth surfaces, the centred form's excess shrinks with the square of a piece's width: a measure that is not constant needs O(log(1/tight)) rounds of a few pieces near the maximum, one that is the same all along (an exact join) O(L/√tight) pieces, L the length of t's range. For curvature the bound's excess shrinks only about as fast as a piece's width, so a tight ask can take thousands of pieces: 10,227 and 6,223 for two random Bezier joins at 1e-6 (and up to 911 for its change). Callers cap them with [`Ask::with_pieces`]; a capped run is still certified, only wider. Memory: the pieces kept. No recursion.",
+          "does": "[`join`] measures a join of two faces along their pcurves, which share the join's parameter t (`geom_surface::class_a`, which names and defines the measures); [`edge`] reads that join from a body's edge with exactly two fins, each fin's face giving its surface and sense and the fin its pcurve. The maximum is found by branch and bound on t: the range is cut at every break of either pcurve, and each piece is measured at its middle (a value that some t really has, the witness candidates) and over its whole span (an upper bound, the centred form about the middle). A piece whose upper bound is no more than the best witness cannot hold anything larger and is dropped; a piece whose bound is more than [`Ask::tight`] above it is halved; the rest are kept. It stops when no piece needs halving, when every piece that does is a single double wide, or when the next round would pass [`Ask::pieces`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-analysis/src/continuity.rs",
+          "guarantees": [
+            "**Certified.** The largest value of the measure over the join lies in [`Maximum::lower`], [`Maximum::upper`]: the lower end is the enclosure's lower end at the witness parameter, the upper end the largest upper bound of any piece kept (or the witness's, if larger), each from `class_a`'s enclosures, so never a sample of points (16.5).",
+            "**As tight as asked, or said not to be.** [`Maximum::as_asked`] says whether the two ends are within [`Ask::tight`]; a run that stopped at its cap of pieces still returns certified ends, only wider.",
+            "**Undefined spans are reported.** Where the measure is not defined (a normal or tangent that may vanish: a pole, a degenerate point) and halving down to single doubles never bounds it, the upper end is [`Upper::Unresolved`], naming the span, never a guess.",
+            "**Thresholds are inputs.** The tightness and the cap are the caller's; nothing is hard-coded but the default cap, [`Ask::PIECES`].",
+            "**Deterministic.** Pieces are measured in increasing order of t, round by round, and the witness changes only to a strictly larger lower end, so the same inputs give the same bits.",
+            "**Charged.** One unit of work for each piece measured, with the work `class_a`'s enclosures charge, and each piece's logical bytes as it is kept; a stop is [`ContinuityError::Stopped`]."
+          ],
+          "job": "Continuity across an edge (16.5; piece G346): a certified maximum of G0, G1, G2 or G3 along the whole edge, refined until it is as tight as asked, with the parameter where it is reached.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "https://doi.org/10.1201/9780203026922",
+              "projects/engines/geometry/architecture/16-free-form.md"
+            ],
+            "text": "interval branch and bound for a global maximum (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), chapter 9, <https://doi.org/10.1137/1.9780898717716>; E. Hansen and G. W. Walster, *Global Optimization Using Interval Analysis*, 2nd ed., Marcel Dekker (2004), <https://doi.org/10.1201/9780203026922>), the midpoint test giving the bound pieces are dropped against, on the measures of chapter 16.5 (`projects/engines/geometry/architecture/16-free-form.md`)."
+          },
+          "path": "geom_analysis::continuity",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/query/continuity.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for `continuity_along`, which measures an edge at even stations and keeps the stations that answer; replaced here by a certified bound over every piece. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-analysis",
       "provenance": [],
       "sections": "16.5 and 16.6; open question OQ-16.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G346, G347, G348, G349.",
+      "status": "continuity across edges built (G346); curvature extremes, light lines, and draft, gap, flush and deviation to come in G347, G348 and G349.",
       "summary": "Spare Kit geometry kernel: surface quality."
     },
     {
@@ -1981,16 +2065,13 @@
           "target": "lib"
         },
         {
-          "cost": "linear in what [`merge`] returns, after its cost.",
-          "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge`] make them faces, edges and shells, and writes those into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are.",
+          "cost": "[`merge_with`]'s, and [`publish`]'s, linear in what [`merge_with`] returns.",
+          "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge_with`] make them faces, edges and shells, and has [`publish`] write those into a body; [`wire`] writes a section's curves. The writing itself is `geom-poly`'s, shared with `geom-mesh`'s faceted B-rep: here its refusals, and the naming that only booleans do, become a [`RebuildError`].",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
           "guarantees": [
-            "**The same bytes however the boxes fell.** Every row comes in the order [`merge`] numbers the shape, which depends on the shape alone (11.3; tested).",
-            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' lines are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
-            "**Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a [`RebuildError`].",
-            "**Nothing is a valid body.** Pieces that make no face give a general body with no faces, which the checker passes: a solid body must hold a solid region (8.3; tested).",
-            "**Non-manifold is general (11.6).** A body is a solid only if every edge has two fins and every vertex's fins in each shell go round it in one fan. An edge of four fins, or a shell that pinches at a vertex, as three boxes do whose empty space around a corner is two opposite octants, gives a general body, which the checker passes; two shells may share a vertex, each whole around it (tested)."
+            "**The same bytes however the boxes fell.** Every row comes in the order [`merge_with`] numbers the shape, which depends on the shape alone (11.3; tested).",
+            "**Refused, never guessed.** What [`merge_with`] and [`publish`] refuse is a [`RebuildError`]."
           ],
           "job": "The canonical rebuild: merged pieces published as a body (11.3, step 5).",
           "method": {
@@ -1998,7 +2079,7 @@
               "projects/engines/geometry/architecture/11-booleans.md",
               "https://doi.org/10.1145/3528223.3530181"
             ],
-            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), into the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
           },
           "path": "geom_bool::rebuild",
           "provenance": [],
@@ -6197,6 +6278,29 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_BOXES`] boxes, one arrangement, and about a hundred more exact operations.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes on a lattice of [`SIDE`] cells a side, where shared faces, edges and corners are the rule, scaled by one of [`SCALES`]. [`check`] counts the cells the boxes cover, which is the truth here, and holds to it every operation that reaches: booleans (G148), point location (G147), slices, hulls and exports (G149), Minkowski sums (G150), contact (G151) and the envelope (G152). [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/solids.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**A panic or an error is a failure.** Every decoded case is valid, so an error is a [`Finding`].",
+            "**A broken law is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-mesh`'s operations on small solids agree with counted cells and with each other.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "chapter 19's laws (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`), by counting. Each box is a set of whole cells, so what covers a cell is a matter of three comparisons, written here without the code's help. A union, an intersection and a difference have the volumes their cells say; a cell's middle is inside what covers it; a slice has the area of the cells under it; a hull holds every corner; the sum of two boxes adds their sides; a text file carries the mesh with nothing rounded; a corner of a box is inside its envelope; and boxes with a cell between them are apart."
+          },
+          "path": "geom_fuzz::solids",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 and G65 to G68 (Gate 2, 32.46).",
           "family": [],
@@ -7807,7 +7911,8 @@
           "file": "projects/engines/geometry/crates/geom-make/src/transform.rs",
           "guarantees": [
             "**Exact where the transform is.** A move by whole steps, quarter turns, mirrors across grid planes and whole-number uniform scales map grid points to grid points and keep planes given by integers: an Exact body stays Exact.",
-            "**Rounded once, and said so.** Any other rotation or scale rounds each vertex to the grid once (at most √3/2 of a step), and moves curves and surfaces by their own typed transforms, each with a certified deviation. The result's bound is the input's, stretched by the most the transform can stretch a length, plus one step if any vertex rounded, plus the largest deviation, rounded up.",
+            "**Planes move with their meetings.** A vertex where three planes of the body's plane pool meet (6.3, as a boolean leaves one) moves with its planes: under a transform that maps the grid onto itself each plane moves exactly, by the transform's cofactors, and the vertex stays where the moved planes meet, or becomes the grid point that meeting is. Its edges' lines, only shadows of the edges (8.3), are drawn again between their ends' new places on the grid, as the rebuild draws them. Under any other transform no plane can stay exact, so the vertex is committed to the grid (6.3's half a step on each axis) and then moves as a grid point does; the bound counts the commit, stretched.",
+            "**Rounded once, and said so.** Any other rotation or scale rounds each vertex to the grid once (at most √3/2 of a step), and moves curves and surfaces by their own typed transforms, each with a certified deviation. The result's bound is the input's, stretched by the most the transform can stretch a length, plus one step if any vertex rounded, plus the steps a committed meeting can stray, plus the largest deviation, rounded up.",
             "**The class never rises.** The result keeps the input's class or a less exact one: an Approximate body stays Approximate whatever its bound does (principle 3).",
             "**Accepted, or refused.** A result less exact than the input is returned only when the caller accepts it ([`Moved::accept`]): a class at least as loose and a ceiling at least the result's bound; otherwise [`MakeDetail::NotAccepted`] names the class the result would have.",
             "**Kinds change only where the checker can follow.** A transform that does not keep circles turns them into ellipses and analytic surfaces into affine ones, which the checker cannot certify yet: on a body with curved geometry it is [`MakeDetail::KindNotCertified`] (G177).",
@@ -7820,7 +7925,7 @@
             "links": [
               "projects/engines/geometry/architecture/07-geometry-types.md"
             ],
-            "text": "chapter 7's typed transforms and their kind changes (`projects/engines/geometry/architecture/07-geometry-types.md`), applied as `geom-math`, `geom-curve` and `geom-surface` define them; chapter 20.2's naming rule for one-to-one changes."
+            "text": "chapter 7's typed transforms and their kind changes (`projects/engines/geometry/architecture/07-geometry-types.md`), applied as `geom-math`, `geom-curve` and `geom-surface` define them; a plane moved by the cofactor matrix of the transform's linear part (the inverse transpose, scaled to integers: the textbook rule for transforming plane equations); chapter 20.2's naming rule for one-to-one changes."
           },
           "path": "geom_make::transform",
           "provenance": [],
@@ -8581,6 +8686,11 @@
               "shape": "struct"
             },
             {
+              "doc": "Planes to slice by must be parallel and rise along their normal.",
+              "name": "SlicesOutOfOrder",
+              "shape": "unit"
+            },
+            {
               "doc": "The box tree refused.",
               "name": "Bvh",
               "shape": "tuple"
@@ -8613,6 +8723,79 @@
           ],
           "module": "geom_mesh::exact",
           "name": "MeshError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a mesh could not be written.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+          "kinds": [
+            {
+              "doc": "Rounding broke the mesh here. The remedies are a finer unit, splitting the faces, or accepting it, which is recorded with the file.",
+              "name": "RoundingFlip",
+              "shape": "struct"
+            },
+            {
+              "doc": "A face could not be split into triangles.",
+              "name": "Cdt",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The mesh does not fit together.",
+              "name": "Fault",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The box tree refused.",
+              "name": "Bvh",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "More triangles or vertices than the format's 32-bit indices can name.",
+              "name": "Full",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_mesh::export",
+          "name": "ExportError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a hull could not be found.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "More points than 32-bit indices can name.",
+              "name": "Full",
+              "shape": "unit"
+            },
+            {
+              "doc": "Two faces lost their link: a defect here, never the input's doing.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_mesh::hull",
+          "name": "HullError",
           "non_exhaustive": false
         }
       ],
@@ -8902,6 +9085,124 @@
             "text": "chapter 19.2's \"Raw meshes\", `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`."
           },
           "path": "geom_mesh::exact::raw",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) for n triangles: one triangulation per face that is not a triangle, with a box tree of its sides to count them along its edges, and a query of a box tree per triangle for the check, charged to the meter per test.",
+          "does": "[`triangles`] commits a mesh to the grid and splits its faces into triangles. [`export`] writes those as OBJ, ASCII STL or a 3MF model part, in exact decimals of millimetres, or as binary STL or binary glTF, in `f32` relative to a chunk origin. It then checks what it wrote with exact predicates, and says how far from the mesh the file can be.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+          "guarantees": [
+            "**Text carries grid points exactly.** A grid step is a whole number of quarter-nanometres, so a coordinate is a decimal of at most eight places in millimetres, written in full.",
+            "**`f32` is rounded once, on one lattice.** Every value of a chunk is rounded to the nearest multiple of the power of two that fits the chunk's largest value in 24 bits. Each such multiple is an `f32`, so the error is at most half a unit in the last place at the chunk's extent. That is what 19.5 asks, at every value and not only the largest, and it makes the written points small integers, which the kernel's own predicates can check.",
+            "**The bound is proven and stated.** [`Export::bound`] adds the lattice's half step to the commit of three-plane points to the grid, in quarter-nanometres.",
+            "**Rounding that breaks the mesh is refused.** A triangle that turned over or closed up, or two that came to touch, are [`Flaw`]s, with their faces. [`export`] returns [`ExportError::RoundingFlip`] unless told to accept them, and then lists them.",
+            "**The triangles of a face cover what its rounded outline encloses, or it is refused.** A face of more than three corners is triangulated on its corners rounded to the grid, and rounding can fold its outline back along or over itself. [`triangles`] keeps exactly the triangles that the rounded outline winds round once: the face as the rounding of its corners moved it, never a triangle outside that or a hole in it. A face whose rounded sides cross, or that its rounded outline winds round any other number of times than once or not at all, is refused with [`ExportError::RoundingFlip`] and the face, accepted or not.",
+            "**Deterministic.** The bytes depend on the mesh and the options alone, and no floating-point sum is done: an `f32` is built from its integer."
+          ],
+          "job": "Exact meshes written at each format's precision (19.5, 24.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html"
+            ],
+            "text": "19.5's export and 24.10's steps 3 to 5 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`, `24-file-format-exchange.md`), for OBJ (Wavefront's appendix to the Advanced Visualizer manual), STL (3D Systems, 1989), the 3MF Core Specification and glTF 2.0 (<https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html>). A face that is not a triangle goes through this crate's constrained Delaunay triangulation in the plan its normal leans on least. The zip a 3MF package needs is the exchange layer's, not this one's."
+          },
+          "path": "geom_mesh::export",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the merge's O(n log n) exact comparisons for n sides of pieces, then the publication.",
+          "does": "[`faceted`] makes a closed mesh a body: adjacent faces on one plane merge into one face, and what is left of their edges merges into maximal edges.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/faceted.rs",
+          "guarantees": [
+            "**Planes are matched exactly.** Faces are on one plane when their reduced coefficients are equal, found by sorting those keys, never by comparing pairs of faces, which is what stalls on large slabs (19.5).",
+            "**The body is the mesh.** Its vertices are the mesh's points, grid points or three planes, and nothing moves.",
+            "**Closed meshes only.** An open mesh bounds nothing: [`MeshError::NotClosed`]."
+          ],
+          "job": "Exact meshes as faceted B-reps (19.5): an edge of the conversion graph.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "19.5's \"Mesh to faceted B-rep\" (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`): each face's convex pieces go through `geom-poly`'s merge and publication, the same two steps a boolean's result takes. A surface's `f64` frame is drawn from the plane's integer coefficients; the body's corners and edges stand on the planes, so the frame only shows where the face is for evaluation."
+          },
+          "path": "geom_mesh::faceted",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "about O(n log n) orientation tests for points in general position, O(n²) at worst, charged to the meter one by one, then a sort of the triangles by plane.",
+          "does": "[`Hull::of`] finds the convex hull of a set of grid points: its corners, and the ring of corners round each of its faces, outward. [`Hull::mesh`] makes it a closed exact mesh.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+          "guarantees": [
+            "**Exact.** Every decision is an exact orientation test. No point is near a face: it is above, on or below it, and a hull is the same at every scale.",
+            "**Coplanar points are no special case.** Ties break by symbolic perturbation in the points' sorted order, so the search always sees a hull of triangles. Triangles on one plane then merge into one face, and points on an edge or inside a face drop out. A face's corners are always corners of the hull: no three in a ring are on one line.",
+            "**The order of the input does not show.** Points are sorted and repeats dropped first, so the same set of points gives the same hull, face for face.",
+            "**Flat sets are answers too.** Points on a plane give one face, on a line its two ends, and one point itself. Only a solid hull makes a mesh."
+          ],
+          "job": "Exact convex hulls of grid points (19.5).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/235815.235821",
+              "https://doi.org/10.1145/77635.77639",
+              "https://doi.org/10.1016/0020-0190(79"
+            ],
+            "text": "quickhull (Barber, Dobkin and Huhdanpaa, 1996, <https://doi.org/10.1145/235815.235821>), with Edelsbrunner and Mücke's Simulation of Simplicity (<https://doi.org/10.1145/77635.77639>) in place of its tolerances (19.5, 6.2). The farthest point is only a choice of which to take next, so a rough plane in coordinates cut to 21 bits serves; the exact tests decide everything else. A face's ring is Andrew's monotone chain (<https://doi.org/10.1016/0020-0190(79)90072-3>) in the two axes its normal leans on least."
+          },
+          "path": "geom_mesh::hull",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(t² log t) for t triangles a side for the hulls, then the union of up to t² hulls.",
+          "does": "[`minkowski`] gives the sum of two closed meshes as one closed mesh of one run. It is the volume a tool translating over a shape sweeps.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/minkowski.rs",
+          "guarantees": [
+            "**Exact on grid vertices.** Every sum of grid points is a grid point, every hull is exact, and the union is exact. A vertex off the grid is committed to it first, which makes the result [`Sum::class`] `Certified` by that half step, on each solid.",
+            "**The size is the product of the solids', and stays inside its budget.** One hull for each pair of triangles, and one n-ary union of them all, charged to the meter. Two convex solids take one hull of all their sums.",
+            "**Refused past the frame.** A sum outside the frame is [`NumError::OutOfRange`]."
+          ],
+          "job": "Minkowski sums of flat solids (19.6): every a + b for a in one solid and b in the other.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "19.6's table (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`). Both solids split into convex pieces, each pair's sum is the exact convex hull of the sums of their corners, and the sums are united in one boolean. The pieces here are the triangles of the boundary, whose corners are all on the grid, not solid cells: the boundary of a sum lies in the sums of the boundaries, and one copy of each solid, moved by a point of the other, fills what is inside. A pair of parallel triangles has a flat sum, which its neighbours' sums cover, so it is left out."
+          },
+          "path": "geom_mesh::minkowski",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(v log p) signs for v vertices and p planes, then a pass over the half-edges, then for each plane O(c log c) for its c crossings, plane by plane on the pool. The meter is charged one unit per vertex and one per crossing.",
+          "does": "[`slice`] cuts a mesh by parallel planes in rising order. Each plane gives closed contours, each a ring of [`Cut`]s: a vertex of the mesh on the plane, or a half-edge that crosses it. [`point`] gives a cut's exact point, and nothing is rounded before someone asks for a grid point with [`Point::to_grid`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+          "guarantees": [
+            "**Every contour closes.** A contour follows the mesh's own pairing of half-edges from face to face, so a closed mesh gives closed rings with no tolerance anywhere.",
+            "**A plane cuts just under itself.** A vertex on the plane counts as above it, the one rule every vertex takes, so an edge crosses or does not with no third case. A box from z = 0 to z = 1 has a contour at z = 1 and none at z = 0. A contour that closes up to under three points as the plane comes up to it, such as the tip of a cone, is left out.",
+            "**Which side is solid.** Seen from where the planes' normal points, a contour turns counter-clockwise round solid and clockwise round a cavity.",
+            "**The threads do not show.** Contours come in the order of their lowest half-edge, on any pool."
+          ],
+          "job": "Plane slices of closed exact meshes (19.5): layers for 3D printing, and plan cuts.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "each vertex finds its place among the planes by bisection with exact signs. An edge between places crosses each plane between them. In a face, the crossings on a plane run in pairs along the line where the plane meets the face: most faces have one pair, and the rest are sorted with 11.3's `along` (`projects/engines/geometry/architecture/11-booleans.md`). Pairs join across the mesh's half-edge pairs into rings. Crossing points are three-plane points, the face's, the edge's and the cut's, as 19.5 asks."
+          },
+          "path": "geom_mesh::slice",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -13724,6 +14025,30 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why merged pieces could not be made into a body.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/publish.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The topology refused.",
+              "name": "Topo",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A row past the end of a list: a defect, reported instead of a wrong body.",
+              "name": "Broken",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_poly::publish",
+          "name": "PublishError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a box could not be classified.",
           "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
           "kinds": [
@@ -13883,7 +14208,7 @@
             "**Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by their Plücker coordinates, in at most 576 bits, and nothing is rounded.",
             "**Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has no partner across it, mean the pieces are no closed boundary: [`MergeError`].",
             "**Each fin knows its piece.** [`Fin::piece`] is an index into the pieces given, whose [`Outward::polygon`] names where it came from, for a caller's history.",
-            "**Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut that ends inside a face leaves it whole, with no slit.",
+            "**Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut that ends inside a face leaves it whole, with no slit. A cut lying in a face's own plane holds a seam only along its outline: its pieces on both sides of a line, as the boxes and the convex split part it, cancel, so a result has no vertex where the boxes fell.",
             "**No recursion.** Disjoint sets and rings are walked in loops (principle 13)."
           ],
           "job": "The maximal-face merge: the pieces a selection keeps, as faces, edges, rings and shells (11.3, step 5), shared by `geom-bool` and `geom-mesh` (19.5, 27).",
@@ -13949,13 +14274,36 @@
           "target": "lib"
         },
         {
-          "cost": "O(n) clips per level for n polygons across the level's boxes, and at most 126 levels: a box of the frame halves at most 42 times along each axis (the recursion statement above). Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons, and a solid's leaf one copy of each. A polygon's corner points are made once and carried into every box it enters whole; only a split's two parts make theirs. Charges the meter one unit per polygon a split clips, and one per polygon of a solid's leaf.",
-          "does": "[`arrange`] takes the polygons of an arrangement and classifies every piece. A box is split in two along its longest axis until it holds few polygons; polygons across the split are clipped exactly, and the upper box's reference point is walked up from the lower's, adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then [`classify`]. A box whose every test is settled by its reference vector alone, whatever the polygons in it do, is dropped (step 4). [`arrange_with`] is also told which entries are solids: no two of their faces cross, and their winding is 1 just behind every face and 0 just in front, EMBER's no-self-intersection and no-nested-parts flags (its section 4.5.1, 11.3 step 4). A box whose polygons all bound one solid entry is a leaf at once, however many it holds, and is solved without cuts or tracing.",
+          "cost": "linear in what the merge returns.",
+          "does": "[`publish`] writes what [`merge`](crate::merge::merge) made into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are. [`publish_with`] also writes an open merge as a sheet and publishes in the order of names given, and [`wire`] writes a section's curves as edges with no fins.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/publish.rs",
+          "guarantees": [
+            "**The same bytes however the boxes fell.** Every row comes in the order the merge numbers the shape, which depends on the shape alone (11.3).",
+            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' lines are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
+            "**Refused, never guessed.** What the arenas refuse is a [`PublishError`]."
+          ],
+          "job": "Merged pieces published as a body (11.3, step 5), shared by `geom-bool`'s rebuild and `geom-mesh`'s faceted B-rep.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+          },
+          "path": "geom_poly::publish",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n) clips per level for n polygons across the level's boxes, and at most 126 levels: a box of the frame halves at most 42 times along each axis (the recursion statement above). Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons, and a solid's leaf one copy of each; as no split of a box of more than [`LEAF_POLYGONS`] adds pairs, with leaves of that size the leaves' local cuts together compare at most n² pairs of the n polygons given. A polygon's corner points are made once and carried into every box it enters whole; only a split's two parts make theirs. Charges the meter one unit per polygon a split clips, and one per polygon of a solid's leaf.",
+          "does": "[`arrange`] takes the polygons of an arrangement and classifies every piece. A box is split in two along its longest axis until it holds few polygons, as long as the split separates them and, for a box of more than [`LEAF_POLYGONS`], pays: its two halves must hold no more pairs of polygons than the box, the pairs a leaf's local cuts compare. Polygons across the split are clipped exactly, and the upper box's reference point is walked up from the lower's, adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then [`classify`]. A box whose every test is settled by its reference vector alone, whatever the polygons in it do, is dropped (step 4). [`arrange_with`] is also told which entries are solids: no two of their faces cross, and their winding is 1 just behind every face and 0 just in front, EMBER's no-self-intersection and no-nested-parts flags (its section 4.5.1, 11.3 step 4). A box whose polygons all bound one solid entry is a leaf at once, however many it holds, and is solved without cuts or tracing.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
           "guarantees": [
             "**The same pieces whatever the threads.** Each level of boxes holding many polygons is one phase of the parallel helper; a box holding few, a fixed number, is then one task of another, its whole subtree, as is each leaf found on the way, in tree order. So the output is the same bits on any number of threads, and a failure the one a walk of those units in tree order meets first (23.4). [`arrange_reusing`] keeps each box's division and each leaf's answer by itself, so there every level is a phase and every leaf a task; the boxes, the pieces and the work are the same either way, as both divide and solve a box by the same steps.",
             "**No recursion.** The top levels are walked level by level and each subtree on an explicit stack, so the tree's depth never threatens a WebAssembly stack (principle 13); the kept tree is printed, compared and dropped on explicit stacks too. A box holding polygons that a split no longer separates, such as many faces on one plane, stops as a leaf instead of dividing down to the grid.",
+            "**The boxes never hold more pairs than the polygons do.** A box of more than [`LEAF_POLYGONS`] is split only when its halves hold no more pairs than the box, so with leaves of that size, every caller's, the leaves together hold at most n² pairs of n polygons, what one leaf of them all would compare, and the pieces and work stay within that whatever the shape: a fan of a thousand slivers meeting at a point and running side by side, which the boxes could part only a few at a time, clipping each sliver into pieces in proportion to the fan's size, stays a few leaves (tested on a fan, at two sizes).",
             "**A reused box is the box solved again.** A leaf is keyed by SHA-256, under its own domain prefix, of everything its answer depends on, so a cache from any other inputs only misses: the pieces are the same bits as without it, and a reused leaf charges the work it cost, so the work count is the same too (tested across random edits).",
             "**Early outs are mechanical.** A box is dropped only when every test takes the same answer for every count of every entry with a polygon in it (11.3, step 4). A box with a cutter in it is kept, and with no tests nothing is dropped.",
             "**A solid's leaf is what tracing would give.** In a leaf whose polygons all bound one solid entry, no polygon crosses another, so each is one piece; the solid's count is 0 in front of each and 1 behind, and every other entry's is the reference's, as nothing of theirs is in the box. Each piece is the first of its plane, as no face of a solid overlaps another. Such a box is not split, so its pieces are fewer than tracing's leaves give, with the same vectors at every point (tested against the traced arrangement and the blocks' own counts). The caller vouches for the flag: a wrong one gives wrong pieces."
@@ -14861,6 +15209,44 @@
           "target": "lib"
         },
         {
+          "cost": "[`at`] is one enclosure of each pcurve to order 1 and one of each surface's partials to the measure's order (0 to 3) over a small box, then O(1) interval operations; [`over`] is one bound of each pcurve and its first two derivatives and one of each surface's partials to one order higher, then O(1) operations on dual numbers. No recursion.",
+          "does": "a join is two [`Side`]s, each a surface, a curve in its parameter space (a pcurve) and whether the face's normal is turned against `S_u` × `S_v`; the two pcurves share one parameter t, as an edge's two fins do. At t each side has its point r = S(p(t)), its unit normal N, its unit tangent e₁ along r′ = `S_u`·u′ + `S_v`·v′ and its across direction e₂ = N × e₁. [`Measure`] names what is compared, chapter 16.5's table:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/class_a.rs",
+          "guarantees": [
+            "**Certified.** Every enclosure holds the exact measure at every t it covers, for pcurves that lie in their surfaces' domains (a valid body's fins, chapter 8.3): the surfaces' partials and the pcurves' values and derivatives are the kinds' own enclosures, every formula is evaluated in outward-rounded interval arithmetic (inclusion isotonicity), the derivative of every smooth part is the derivative of the formula (`geom_num::dual`, chain rule through the pcurve), and a pcurve's box is cut to its surface's domain, never widened.",
+            "**Centred only where smooth.** The mean value form needs each part continuous over the span, so it is used only where no break of a pcurve lies strictly inside the span and no break of a surface lies in the pcurve's box; elsewhere the enclosure is the direct one. A pcurve that runs along a surface's break is read from both sides of it.",
+            "**Undefined is `Unbounded`.** Where a normal may vanish (a pole, an apex, a degenerate point), a tangent may vanish, or a part's derivative cannot be bounded, the result is [`CurveError::Unbounded`], never a guess; a caller splits further or reports the span.",
+            "**Deterministic.** A fixed sequence of operations on the kinds' enclosures."
+          ],
+          "job": "Class-A maths (16.5): how two surfaces meet along a join, measured from each surface's own partial derivatives at a parameter of the join or over a span of it.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "https://doi.org/10.1137/1.9780898717761"
+            ],
+            "text": "the normal curvature from the second fundamental form, and the shape operator's extreme normal curvatures (M. P. do Carmo, *Differential Geometry of Curves and Surfaces*, 2nd ed., Dover (2016), sections 3-2 and 3-3); the normal section's height solved order by order in the section's arc length, κ = 2·h₂ and κ′ = 6·h₃, from solidcore's `normal_section` (below); the mean value form and centred forms of interval analysis (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), section 6.4, <https://doi.org/10.1137/1.9780898717716>) with derivatives by forward-mode automatic differentiation (A. Griewank and A. Walther, *Evaluating Derivatives*, 2nd ed., SIAM (2008), chapter 3, <https://doi.org/10.1137/1.9780898717761>)."
+          },
+          "path": "geom_surface::class_a",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/eval/normal_section.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "<https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/query/continuity.rs>",
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "`normal_section`'s order-by-order series for the section's height is kept to its third order and written in closed form, κ′ = N · (S₃(p₂) − 3·S₂(p₂, q)), with p₂ the parameter direction of e₂, q the one whose image is S₂(p₂, p₂)'s tangential part, S₂ and S₃ the second and third parameter forms, each solve by the first fundamental form instead of solidcore's 2 × 2 system against the section's two directions; `continuity_at`'s measures at one parameter are kept (its gap, its normal angle, its cross-boundary curvature and change), but each point comes from the face's pcurve instead of a dropped foot, the curvature compares the whole second fundamental form over every direction rather than the cross-boundary section alone, and everything is generic over the number type so it runs in interval arithmetic, with derivatives in dual numbers for a centred form over a span, in place of solidcore's unbounded doubles. Its G4 and its knife-edge flip are not taken.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "for each parameter pair, a few enclosures and bounds (the partials to order 2 among them), a split, a reversal and a transform.",
           "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it, as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within 2^−30 of the largest value there (a wrong formula, not rounding).",
           "family": [],
@@ -15140,7 +15526,7 @@
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and normal-derivative bounds for every kind (G68); many points per call, every kind evaluating n parameter pairs into flat arrays through `ParamSurface::points` (G104); the frame rules and laws (G254); the other kinds to come in G253, G260, G264, G315, G316, G317, G318 and G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and normal-derivative bounds for every kind (G68); many points per call, every kind evaluating n parameter pairs into flat arrays through `ParamSurface::points` (G104); the frame rules and laws (G254); Class-A maths, the continuity measures G0 to G3 across a join of two surfaces along their pcurves, at a parameter and over a span ([`class_a`], piece G346); the other kinds to come in G253, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {
@@ -15230,6 +15616,28 @@
       "kind": "development",
       "layer": "Development",
       "modules": [
+        {
+          "cost": "both checkers' costs: the full check's, and the second checker's product of the faces' edges for each pair of faces.",
+          "does": "[`judge`] runs both on a body and sorts what each finds into one list of [`Rule`]s, the rules of chapter 8.3 both read: structure, three planes that do not meet, a corner off its plane or its line, a corner outside its face's box, crossing edges, crossing faces, a loop's sense, a shell's sense and a shell's nesting. Two checkers agree when they find the same rules broken: both pass, or both refuse with matching findings. What a checker says it cannot judge (`geom-check`'s `Unchecked` and `PairUnchecked`, the second checker's [`Finding::Unjudged`]) is counted beside the verdict, never read as a pass or a fault, so a corpus can state how much of it the second checker did not read.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/agree.rs",
+          "guarantees": [
+            "**One map.** Every fault kind of `geom-check` and every finding of the second checker has exactly one rule or is counted as not judged ([`rule_of_kind`], [`rule_of_finding`]); a test holds every kind to it.",
+            "**Nothing is dropped.** [`Verdict::agree`] compares the whole sets of rules, so a fault one checker finds and the other misses is a disagreement, whichever finds it."
+          ],
+          "job": "Both checkers on one body: `geom-check`'s full check and the second checker of chapter 28.4 ([`crate::second_check`]), and whether they agree (Gate 4, G156: \"the second checker agrees on the whole corpus\").",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 28.4's second checker standing behind the first (`projects/engines/geometry/architecture/28-testing.md`), with chapter 8.3's rules as the common ground (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_test::agree",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "`check` reads every vendored byte once; `fetch` costs its downloads.",
           "does": null,
@@ -15880,7 +16288,7 @@
           "target": "lib"
         },
         {
-          "cost": "`p` planes cut the box into up to O(p³) cells, each cut costing every face of every cell, and rationals grow with each cut. This reference accepts that, because it runs on small cases only. No recursion.",
+          "cost": "`p` planes cut the box into up to O(p³) cells, each cut costing every face of every cell, and rationals grow with each cut. This reference accepts that, because it runs on small cases only. [`six_volume_where`] costs each pair of faces whose boxes meet, found by a sweep, the pieces those cut each face into, and two rays a piece for each solid, each against the faces filed in the ray's bucket of a grid across it. No recursion.",
           "does": "a [`Solid`] is a closed, oriented set of planar polygons with rational corners. Everything else comes from one object, the arrangement of a set of planes: every plane cuts a large box and every cell already cut, so [`arrangement`] gives convex [`Cell`]s meeting face to face. Each cell lies wholly in or out of each solid whose face planes were among the cuts, and one point of it decides which, by [`Solid::locate`]: a ray from the point, counted against every face.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/flat_reference.rs",
@@ -15896,9 +16304,10 @@
               "https://doi.org/10.1145/360767.360802",
               "https://doi.org/10.1137/0215024",
               "https://doi.org/10.1016/0020-0190(79",
-              "https://doi.org/10.1109/TPAMI.1986.4767788"
+              "https://doi.org/10.1109/TPAMI.1986.4767788",
+              "https://doi.org/10.1109/PROC.1985.13108"
             ],
-            "text": "Sutherland and Hodgman's clip of a polygon by a plane, \"Reentrant polygon clipping\", CACM 17(1), 1974, <https://doi.org/10.1145/360767.360802>; ray parity for point location; Edelsbrunner, O'Rourke and Seidel, \"Constructing arrangements of lines and hyperplanes\", SIAM J. Computing 15(2), 1986, <https://doi.org/10.1137/0215024>, for the arrangement as a cell complex, whose faces meet exactly; Andrew's monotone chain, 1979, <https://doi.org/10.1016/0020-0190(79)90072-3>, for a cut's outline; the divergence theorem over a fan of tetrahedra for volume and centroid; Canny's vertex-face and edge-edge contact events for polyhedra under translation, <https://doi.org/10.1109/TPAMI.1986.4767788>."
+            "text": "Sutherland and Hodgman's clip of a polygon by a plane, \"Reentrant polygon clipping\", CACM 17(1), 1974, <https://doi.org/10.1145/360767.360802>; ray parity for point location; Edelsbrunner, O'Rourke and Seidel, \"Constructing arrangements of lines and hyperplanes\", SIAM J. Computing 15(2), 1986, <https://doi.org/10.1137/0215024>, for the arrangement as a cell complex, whose faces meet exactly; Andrew's monotone chain, 1979, <https://doi.org/10.1016/0020-0190(79)90072-3>, for a cut's outline; the divergence theorem over a fan of tetrahedra for volume and centroid; Canny's vertex-face and edge-edge contact events for polyhedra under translation, <https://doi.org/10.1109/TPAMI.1986.4767788>; boundary evaluation, a boolean's boundary as the pieces of its operands' faces with the result on one side only (Requicha and Voelcker, \"Boolean operations in solid modeling: boundary evaluation and merging algorithms\", Proceedings of the IEEE 73(1), 1985, <https://doi.org/10.1109/PROC.1985.13108>), with the winding number of a closed surface as a signed count of ray crossings."
           },
           "path": "geom_test::flat_reference",
           "provenance": [],
@@ -16861,6 +17270,29 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the file; each coordinate costs a big-integer parse and, at the scale, one division by a power of ten.",
+          "does": "[`read`] takes the `v` and `f` lines of an OBJ file and nothing else (texture coordinates, normals, groups and materials are skipped). Each coordinate is read as the exact decimal it is written as: its digits are one integer, parsed by `dashu`'s integer parser, and its point and exponent a power of ten, so `13009.6982000000007246854` is exactly that number. [`Read::to_grid`] then puts the mesh on the grid at one scale for the whole model:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/obj.rs",
+          "guarantees": [
+            "**Exact.** No coordinate passes through a double: the grid value is the written decimal rounded once, half to even, at the stated scale.",
+            "**Refused, never guessed.** A malformed number, a face of fewer than three corners, an index outside the vertex list and a file without vertices are [`ObjError`]s, with the line.",
+            "**The same on every target.** Integer arithmetic only."
+          ],
+          "job": "A test-only reader of Wavefront OBJ meshes onto the grid: the polyhedral corpus's way in for Manifold's regression models (chapter 11.17's item 15; Gate 4, G156), before the kernel's own readers (chapter 24) exist.",
+          "method": {
+            "links": [
+              "https://paulbourke.net/dataformats/obj/",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229"
+            ],
+            "text": "the OBJ format's `v` and `f` statements as Wavefront's specification gives them (Wavefront Technologies, \"Object Files (.obj)\", Advanced Visualizer manual, appendix B1, <https://paulbourke.net/dataformats/obj/>); rounding half to even, IEEE 754-2019's roundTiesToEven applied to an exact decimal (<https://doi.org/10.1109/IEEESTD.2019.8766229>)."
+          },
+          "path": "geom_test::obj",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "as each part's header states.",
           "does": "this crate holds the jobs and the comparison code; every oracle that is not a permissive Rust crate runs out of process, in its own container, from the oracle repository.",
           "family": [],
@@ -16972,6 +17404,31 @@
           "target": "lib"
         },
         {
+          "cost": "a job's boolean is the kernel's; sampling is the sample points times the triangles or faces of the other side, on solids of a few dozen; the exact reference runs only on a difference.",
+          "does": "[`jobs`] draws a night's seeded pairs of closed solids with integer corners and a boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra. Each job is one JSON line in whole grid steps, so an exact oracle reads what the kernel read and a floating-point one reads integers an `f64` holds exactly, with no conversion to round. The harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer with `geom-mesh`'s boolean, and settles a difference by the exact reference ([`crate::flat_reference`]): whether the kernel's volume is the reference's.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/meshes.rs",
+          "guarantees": [
+            "**Exact oracles are compared exactly**: a rational volume, equal or not.",
+            "**The others can only refute**: volume and area are held to both sides' stated bounds, capped at ours plus the fit bound ([`Allowance`]), and the Hausdorff distance is measured by dense deterministic sampling, so it is a lower bound on the true distance.",
+            "**The kernel's side is its exact result**: its volume and area are computed exactly from its corners, and the distance is measured from and to its exact faces, each corner the double nearest its place, never from the export's triangles, whose corners are rounded to the grid. So the oracle is held to the kernel's exact answer, and no rounding of ours is allowed for.",
+            "**Refusals are compared**: a job one side refuses and the other answers is a difference, of kind `refused`, never a pass.",
+            "**A result the kernel cannot measure is a difference**: a result whose corners cannot be placed, which only a defect can cause, is a difference of kind `unmeasured`, never a pass and never the end of the night.",
+            "**Truth settles it**: an oracle is never trusted; [`Compared::Differ`]'s `settled` says what the reference found."
+          ],
+          "job": "Mesh booleans against outside oracles (chapter 28.10; piece G154): CGAL's Nef polyhedra compared exactly; Manifold, manifold-rust's rational engine and Cherchi's exact booleans, whose results leave them as decimals, by volume, area and two-sided Hausdorff distance.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.10 (`projects/engines/geometry/architecture/28-testing.md`). A solid's volume is the divergence theorem over a fan of each loop; a point on a face or an edge is Ericson, \"Real-Time Collision Detection\", 2005, section 5.1.5, closest point on a triangle, and section 5.1.2 on a segment; whether a point of a face's plane is inside its loops is the crossing test (W. Randolph Franklin's PNPOLY, as in Haines, \"Point in Polygon Strategies\", Graphics Gems IV, 1994). An exact face is sampled along its sides and on a lattice over its box in the plan its normal leans on least, lifted to its plane where the lattice is inside it."
+          },
+          "path": "geom_test::oracle::meshes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the jobs; a removal job costs one knot insertion to draw.",
           "does": "[`jobs`] draws a night's seeded curves and what to do with each: evaluate a point, insert a knot, remove one, or raise the degree, the layers decision 32.23 allows. A job is the same line [`super::geomdl`] writes, and an answer is judged the same way ([`super::geomdl::judge_for`]). A knot removal needs a knot that can go, so its curve is drawn and then refined by that knot.",
           "family": [],
@@ -17035,6 +17492,39 @@
           },
           "path": "geom_test::plane_bodies",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the figures are a few dozen boxes; [`unit_cells`] visits every unit cell of the boxes' span once for each box; a model's polygons and solid are linear in its faces.",
+          "does": "",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/polyhedral.rs",
+          "guarantees": [
+            "**Exact.** Every corner is a grid point; the counts and the reference are exact.",
+            "**Unmodified data.** The models are the stored corpus's bytes, compiled in, so every target reads the same ones; the corpus register's check holds the folder to its digest."
+          ],
+          "job": "The polyhedral corpus of chapter 11.17's item 15 that random grid boxes do not cover (Gate 4, G156): EMBER's figures 24 and 25 as generated boxes, and Manifold's regression models, stored in this crate as the corpus `manifold-models`, each with its exact reference.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/3528223.3530181",
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "EMBER's figures 24 and 25 (<https://doi.org/10.1145/3528223.3530181>) and Manifold's regression models, chapter 11.17's polyhedral verification corpus (`projects/engines/geometry/architecture/11-booleans.md`); the unit-cell count is the exact-volume pattern of csgrs' hypermesh tests that G140's laws follow."
+          },
+          "path": "geom_test::polyhedral",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/elalish/manifold/tree/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/test/models",
+              "method_note": null,
+              "name": "Manifold",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its regression models, stored unmodified as the corpus `manifold-models`. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -19603,6 +20093,17 @@
       ]
     },
     {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/eval/normal_section.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-surface/src/class_a.rs"
+      ]
+    },
+    {
       "licence": "MIT",
       "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c",
       "method_note": null,
@@ -19880,6 +20381,17 @@
     },
     {
       "licence": "Apache-2.0",
+      "link": "https://github.com/elalish/manifold/tree/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/test/models",
+      "method_note": null,
+      "name": "Manifold",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/polyhedral.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
       "link": "https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs",
       "method_note": null,
       "name": "ciborium-ll",
@@ -20107,6 +20619,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-surface/src/frame_rule.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/db9f4ae1850b9bb9faabed46ca86390c242dedd3/crates/solidcore/src/query/continuity.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-analysis/src/continuity.rs"
       ]
     },
     {
