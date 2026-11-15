@@ -331,8 +331,10 @@ fn a_plane_cuts_a_moved_cylinder_or_cone_at_the_same_parameters() {
         &c,
         2,
     );
-    // One nappe 200 high and 10 wide, cut along its axis: one branch, whose ends cone_extent must
-    // reach. (far + |r₀|)·(1 + |k|) + 1 is 221 on the doubled cone, short of its 400 height.
+    // One nappe 200 high and 10 wide, cut along its axis: one branch, whose ends the hyperbola's
+    // span must reach. cone_extent reads no axial factor ((far + |r₀|)·(1 + |k|) + 1 is 221 on the
+    // doubled cone, 400 high), and this pins that it need not: the branch's span grows by the ratio
+    // of its axes, and reaches the doubled nappe's ends as it does the one built.
     let tall = SurfaceKind::Cone(cone(0.0, 0.05, (0.0, 200.0)));
     same_pair(
         &plane([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]),

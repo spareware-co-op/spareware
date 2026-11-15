@@ -595,10 +595,11 @@ fn branch_span(extent: f64, lead: Vector, side: Vector) -> Result<f64, Intersect
 fn cone_extent(cone: &Cone) -> f64 {
     let (r0, k) = cone.radius_and_slope();
     let (_, (v0, v1)) = ParamSurface::domain(cone);
-    // The point at v is |r₀ + k·v| from the axis and |s·v| along it, at most |r₀| + (|k| + |s|)·f
-    // from the centre for |v| ≤ f, and (f·max(|s|, 1) + |r₀|)·(1 + |k|) holds that: the axial
-    // factor s is ±1 as built, but a similarity multiplies it by its scale.
-    let far = tight::larger(v0.abs(), v1.abs()) * tight::larger(cone.axial_sign().abs(), 1.0);
+    // The axial factor s, which a similarity scales, does not enter: a parabola's parameter is its
+    // distance across, at most the radius |r₀ + k·v| this bounds, and a hyperbola's branches run
+    // past this by the ratio of its axes (`branch_span` divides by the shorter), which covers the
+    // height |s·v| (tests/axial_factor.rs: a nappe 400 high and 20 wide, cut along its axis).
+    let far = tight::larger(v0.abs(), v1.abs());
     (far + r0.abs()) * (1.0 + k.abs()) + 1.0
 }
 
