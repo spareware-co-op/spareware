@@ -38,7 +38,7 @@ pub const fn sized(native: usize, miri: usize) -> usize {
 }
 
 #[cfg(not(target_family = "wasm"))]
-pub use threads::{Threads, pool};
+pub use threads::pool;
 
 #[cfg(not(target_family = "wasm"))]
 mod threads {
