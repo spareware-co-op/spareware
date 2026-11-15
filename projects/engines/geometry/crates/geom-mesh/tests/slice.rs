@@ -24,8 +24,7 @@ use geom_num::grid::P3;
 use geom_num::plane::Plane;
 use geom_run::{Budget, Exec, WorkMeter};
 
-#[cfg(not(target_family = "wasm"))]
-mod pool;
+mod miri;
 mod shapes;
 
 use shapes::{cuboid, frustum, g, join, prism, soup};
@@ -335,7 +334,7 @@ fn the_threads_do_not_show() {
     let (input, _) = prism(&heights, 32);
     let m = mesh(&input);
     let planes: Vec<Plane> = (1..24).map(at_z).collect();
-    let pool = pool::pool(4);
+    let pool = miri::pool(4);
     let serial = slice(&m, &planes, &Exec::serial(), &mut meter()).unwrap();
     let threaded = slice(&m, &planes, &Exec::with_pool(&*pool), &mut meter()).unwrap();
     assert_eq!(serial, threaded);

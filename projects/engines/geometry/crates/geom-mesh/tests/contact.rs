@@ -23,6 +23,10 @@ use geom_num::{NumError, Sign};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
+mod miri;
+
+use miri::sized;
+
 fn p(x: i64, y: i64, z: i64) -> P3 {
     P3::new(x, y, z).unwrap()
 }
@@ -138,7 +142,8 @@ fn contact_agrees_with_the_edges_on_small_lattices() {
     let seed = resolve("geom-mesh contact lattices", Seed::DEFAULT).unwrap();
     let mut rng = SplitMix64::new(seed);
     let (mut apart, mut touch, mut cross_count) = (0, 0, 0);
-    for case in 0..60_000 {
+    let cases = sized(60_000, 600);
+    for case in 0..cases {
         let reach = [3, 4, 6, 9][case % 4];
         let (a, b) = (triangle(&mut rng, reach), triangle(&mut rng, reach));
         if no_area(a) || no_area(b) {
@@ -164,7 +169,8 @@ fn contact_agrees_with_the_edges_on_small_lattices() {
         assert_eq!(triangles(a, [w, u, v]), Ok(got), "turned");
     }
     println!("{apart} apart, {touch} touch, {cross_count} cross");
-    assert!(apart > 1000 && touch > 1000 && cross_count > 1000);
+    let each = cases / 60;
+    assert!(apart > each && touch > each && cross_count > each);
 }
 
 #[test]
@@ -248,8 +254,9 @@ fn the_closest_feature_is_as_close_as_any_part_of_the_triangle() {
     let seed = resolve("geom-mesh closest features", Seed::DEFAULT).unwrap();
     let mut rng = SplitMix64::new(seed);
     let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
-    let mut seen = [0_u32; 3];
-    for _ in 0..40_000 {
+    let mut seen = [0_usize; 3];
+    let cases = sized(40_000, 400);
+    for _ in 0..cases {
         let t = triangle(&mut rng, 16);
         if no_area(t) {
             continue;
@@ -305,7 +312,7 @@ fn the_closest_feature_is_as_close_as_any_part_of_the_triangle() {
             "{q:?} {t:?} {clearance}"
         );
     }
-    assert!(seen.iter().all(|&n| n > 100), "{seen:?}");
+    assert!(seen.iter().all(|&n| n > cases / 400), "{seen:?}");
 }
 
 #[test]
@@ -371,7 +378,7 @@ fn line_comparisons_agree_with_fractions() {
     let seed = resolve("geom-num distance comparisons", Seed::DEFAULT).unwrap();
     let mut rng = SplitMix64::new(seed);
     let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
-    for _ in 0..20_000 {
+    for _ in 0..sized(20_000, 200) {
         let mut point = || {
             let mut c = || below(&mut rng, 21) as i64 - 10;
             p(c(), c(), c())

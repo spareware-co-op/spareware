@@ -30,9 +30,10 @@ use geom_run::{Budget, BudgetKind, Exec, WorkMeter};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
-#[cfg(not(target_family = "wasm"))]
-mod pool;
+mod miri;
 mod shapes;
+
+use miri::sized;
 
 use shapes::{cuboid, frustum, g, join, prism, slab, soup, source};
 
@@ -604,7 +605,7 @@ fn closed_height_fields_have_the_volume_of_their_columns() {
     let seed = resolve("geom-mesh exact prisms", Seed::DEFAULT).unwrap();
     let mut rng = SplitMix64::new(seed);
     let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
-    for _ in 0..64 {
+    for _ in 0..sized(64, 4) {
         let n = 2 + below(&mut rng, 7) as usize;
         let step = 1 + below(&mut rng, 1000) as i64;
         let heights: Vec<Vec<i64>> = (0..n)
@@ -627,7 +628,7 @@ fn shuffled_input_gives_the_same_mesh() {
     let (input, _) = prism(&heights, 16);
     let want = mesh(&input);
     let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
-    for _ in 0..16 {
+    for _ in 0..sized(16, 2) {
         let n = input.vertices.len();
         let mut order: Vec<u32> = (0..n as u32).collect();
         for i in (1..n).rev() {
@@ -716,8 +717,10 @@ fn a_pool_changes_nothing() {
         .collect();
     let (input, _) = prism(&heights, 256);
     let want = mesh(&input);
-    for threads in [2, 3, 8] {
-        let pool = pool::pool(threads);
+    // Every thread count natively, one under Miri.
+    let counts: &[usize] = if cfg!(miri) { &[3] } else { &[2, 3, 8] };
+    for &threads in counts {
+        let pool = miri::pool(threads);
         let exec = Exec::with_pool(&*pool);
         assert_eq!(build(&input, &exec, &mut meter()).unwrap(), want);
         let mut broken = input.clone();
@@ -1007,13 +1010,15 @@ fn planes_of_any_size_sort_exactly() {
     let mut input = join(slab(1 << 39), &slab(17 << 34));
     let mut rng = SplitMix64::new(resolve("geom-mesh exact big planes", Seed(0x146)).unwrap());
     let reach = NonZeroU64::new(1 << 39).unwrap();
-    for _ in 0..24 {
+    let more = sized(24, 4);
+    for _ in 0..more {
         input = join(input, &slab(rng.below(reach) as i64 + (1 << 33)));
     }
     let m = mesh(&input);
-    assert_eq!(m.faces(), 26 * 6);
+    let slabs = more + 2;
+    assert_eq!(m.faces(), slabs * 6);
     // Each slab's two offsets, its sides, and the two planes every slab shares.
-    assert_eq!(m.parts().planes.len(), 26 * 4 + 2);
+    assert_eq!(m.parts().planes.len(), slabs * 4 + 2);
 }
 
 #[test]

@@ -30,9 +30,10 @@ use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
-#[cfg(not(target_family = "wasm"))]
-mod pool;
+mod miri;
 mod shapes;
+
+use miri::sized;
 
 use shapes::{cuboid, g, soup, source};
 
@@ -62,7 +63,7 @@ fn solid(low: [i64; 3], high: [i64; 3], name: u8) -> ExactMesh {
 fn on_each_exec(mut f: impl FnMut(&Exec<'_>)) {
     f(&Exec::serial());
     #[cfg(not(target_family = "wasm"))]
-    f(&Exec::with_pool(&*pool::pool(4)));
+    f(&Exec::with_pool(&*miri::pool(4)));
 }
 
 /// `mesh` with the class `class`, every face within its bound.
@@ -162,7 +163,7 @@ fn volumes_agree_with_counted_cells() {
     let seed = resolve("geom-mesh boolean cells", Seed(0x148)).unwrap();
     let mut rng = SplitMix64::new(seed);
     let side = NonZeroU64::new(6).unwrap();
-    for _ in 0..40 {
+    for _ in 0..sized(40, 2) {
         let mut pick = || {
             let mut low = [0; 3];
             let mut high = [0; 3];
@@ -429,7 +430,8 @@ fn ties_on_a_small_lattice_hold_up() {
     let mut rng = SplitMix64::new(seed);
     let height = NonZeroU64::new(16).unwrap();
     let shift = [8, 4, 3, 16];
-    for round in 0..120 {
+    // Under Miri, one round of each shift.
+    for round in 0..sized(120, 4) {
         let mut pick = || core::array::from_fn(|_| 16 + rng.below(height) as i64);
         let a = wedge(0, pick(), 1);
         let b = wedge(shift[round % 4], pick(), 2);
@@ -440,7 +442,8 @@ fn ties_on_a_small_lattice_hold_up() {
 #[test]
 fn many_openings_are_one_call() {
     let plate = solid([0, 0, 0], [440, 440, 8], 1);
-    let holes: Vec<ExactMesh> = (0..40)
+    let openings = sized(40, 4);
+    let holes: Vec<ExactMesh> = (0..openings as i64)
         .map(|i| {
             let (x, y) = (4 + (i % 8) * 54, 4 + (i / 8) * 54);
             solid([x, y, -1], [x + 40, y + 40, 9], 2 + i as u8)
@@ -449,7 +452,10 @@ fn many_openings_are_one_call() {
     let mut refs = vec![&plate];
     refs.extend(holes.iter());
     let cut = one(&refs, WindingTest::subtract(0));
-    assert_eq!(six_volume(&cut.mesh), six(440 * 440 * 8 - 40 * 40 * 40 * 8));
+    assert_eq!(
+        six_volume(&cut.mesh),
+        six(440 * 440 * 8 - openings as i128 * 40 * 40 * 8)
+    );
     assert_eq!(cut.mesh.kind(), MeshKind::Closed);
 }
 
@@ -653,7 +659,7 @@ fn the_threads_and_the_order_do_not_show() {
     let plain = one(&[&a, &b, &c], test.clone());
     #[cfg(not(target_family = "wasm"))]
     {
-        let pool = pool::pool(4);
+        let pool = miri::pool(4);
         let threaded = boolean(
             &[&a, &b, &c],
             std::slice::from_ref(&test),

@@ -26,8 +26,7 @@ use geom_op::{OpId, OpPath};
 use geom_poly::winding::WindingTest;
 use geom_run::{Budget, Exec, WorkMeter};
 
-#[cfg(not(target_family = "wasm"))]
-mod pool;
+mod miri;
 mod shapes;
 
 use shapes::{cuboid, frustum, g, join, soup, source};
@@ -552,7 +551,7 @@ fn a_face_whose_rounded_sides_cross_is_refused() {
 #[test]
 fn the_same_mesh_gives_the_same_bytes_on_any_pool() {
     let m = mesh(&frustum());
-    let pool = pool::pool(4);
+    let pool = miri::pool(4);
     for format in [
         Format::Obj,
         Format::AsciiStl,

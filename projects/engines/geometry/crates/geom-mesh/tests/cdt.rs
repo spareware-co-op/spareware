@@ -26,6 +26,10 @@ use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 use proptest::prelude::*;
 
+mod miri;
+
+use miri::sized;
+
 /// A budget far above what any case here needs, so a triangulation that stops advancing ends in a
 /// failed test, not a hang.
 fn meter() -> WorkMeter<'static> {
@@ -278,7 +282,7 @@ fn many_crossings_settle() {
     // Whatever the order they came in, the same bytes.
     let mut rng = SplitMix64::new(Seed(7));
     let s = sites(&points);
-    for _ in 0..8 {
+    for _ in 0..sized(8, 2) {
         let mut order: Vec<u32> = (0..s.len() as u32).collect();
         shuffle(&mut rng, &mut order);
         let mut place = vec![0_u32; s.len()];
@@ -297,18 +301,19 @@ fn many_crossings_settle() {
 
 #[test]
 fn a_cocircular_grid_is_one_answer_in_any_order() {
+    let side = sized(24, 8) as i64;
     let mut points = Vec::new();
-    for y in 0..24 {
-        for x in 0..24 {
+    for y in 0..side {
+        for x in 0..side {
             points.push((x * 16, y * 16));
         }
     }
     let s = sites(&points);
     let c = run(&s, &[]);
-    assert_eq!(c.triangles.len(), 2 * 23 * 23);
+    assert_eq!(c.triangles.len() as i64, 2 * (side - 1) * (side - 1));
     assert_valid(&c, &[]);
     let mut rng = SplitMix64::new(Seed(11));
-    for _ in 0..4 {
+    for _ in 0..sized(4, 1) {
         let mut shuffled = s.clone();
         shuffle(&mut rng, &mut shuffled);
         assert_eq!(run(&shuffled, &[]), c);
@@ -361,7 +366,7 @@ fn a_stopped_meter_stops_it() {
     ));
 }
 
-/// The properties' runner: 64 cases, and at most 32 steps of shrinking a failure. A triangulation
+/// The properties' runner: 64 cases (4 under Miri), and at most 32 steps of shrinking a failure. A triangulation
 /// that stops advancing runs to the meter's budget, a tenth of a second or so here, on every input
 /// shrinking tries: unbounded, the 150 to 200 tries a failure took ran past the mutation gate's
 /// timeout, so a change that made the flips go round for ever was reported as a hang rather than
@@ -369,7 +374,7 @@ fn a_stopped_meter_stops_it() {
 fn runner() -> ProptestConfig {
     ProptestConfig {
         max_shrink_iters: 32,
-        ..ProptestConfig::with_cases(64)
+        ..ProptestConfig::with_cases(sized(64, 4) as u32)
     }
 }
 
@@ -412,15 +417,17 @@ proptest! {
 fn seeded_large_scatter_is_valid() {
     let seed = resolve("geom-mesh cdt scatter", Seed::DEFAULT).unwrap();
     let mut rng = SplitMix64::new(seed);
+    let n = sized(4000, 400);
     let mut found = BTreeSet::new();
-    while found.len() < 4000 {
+    while found.len() < n {
         let x = rng.below(NonZeroU64::new(1 << 30).unwrap()) as i64;
         let y = rng.below(NonZeroU64::new(1 << 30).unwrap()) as i64;
         found.insert((x, y));
     }
     let points: Vec<(i64, i64)> = found.into_iter().collect();
-    let constraints: Vec<[u32; 2]> = (0..40)
-        .map(|i| [i * 7 % 4000, (i * 7 + 2000) % 4000])
+    let n = n as u32;
+    let constraints: Vec<[u32; 2]> = (0..n / 100)
+        .map(|i| [i * 7 % n, (i * 7 + n / 2) % n])
         .collect();
     let c = run(&sites(&points), &constraints);
     assert_valid(&c, &constraints);
@@ -585,7 +592,7 @@ fn small_lattices_hold_every_law() {
     let seed = resolve("geom-mesh cdt lattices", Seed::DEFAULT).unwrap();
     let mut rng = SplitMix64::new(seed);
     let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
-    for _ in 0..3000 {
+    for _ in 0..sized(3000, 30) {
         let mut taken = BTreeSet::new();
         for _ in 0..3 + below(&mut rng, 14) {
             let (x, y) = (below(&mut rng, 8) as i64, below(&mut rng, 8) as i64);
