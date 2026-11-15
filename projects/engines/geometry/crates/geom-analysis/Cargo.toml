@@ -18,6 +18,21 @@ geom-spatial = { path = "../geom-spatial" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
 
+[dev-dependencies]
+# Joins and bodies for the tests: curves for the pcurves, NURBS bases and patches for the faces.
+geom-curve = { path = "../geom-curve" }
+geom-math = { path = "../geom-math" }
+geom-nurbs = { path = "../geom-nurbs" }
+# Seeds and the test generator (piece G19): the kernel's development crate, a development
+# dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
+
+# The benchmark of piece G346: a certified G2 maximum on one NURBS edge, with the standard
+# library's clock only.
+[[bench]]
+name = "continuity"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

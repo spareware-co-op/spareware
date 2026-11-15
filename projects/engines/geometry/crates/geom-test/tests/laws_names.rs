@@ -25,7 +25,8 @@
 //!
 //! Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull
 //! requests run the fixed default seed and the nightly workflow a fresh one. The golden's corpus
-//! has a seed of its own, which never changes.
+//! has a seed of its own, which never changes. A chain a fresh seed found broken is kept as a
+//! named test of its own (seed 24a51bd2917cc57a: a cut prism with vertices off the grid, moved).
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -407,6 +408,69 @@ fn folded(steps: &[Relations]) -> Option<Relations> {
     Some(rest.iter().fold(first.clone(), |acc, next| acc.then(next)))
 }
 
+/// Runs `count` steps from `next` after the primitive `out` (described by `what`), holding each to
+/// the rules of 20.3 and the chain to its composition, into `f`; the last body.
+fn chain_of(
+    f: &mut Findings,
+    what: &str,
+    out: OpOutput<Made>,
+    count: i64,
+    mut next: impl FnMut() -> Step,
+) -> Body {
+    let mut body = out.result.body;
+    let mut exactness = out.exactness;
+    rules(f, what, &out.result.history, &[], &names(&body));
+    let mut steps: Vec<(History, NameSet)> = Vec::new();
+    let mut done = what.to_owned();
+    for k in 0..count {
+        let step = next();
+        let mut inputs = names(&body);
+        let made = match step.run(&ctx_at(2 + u8::try_from(k).unwrap()), &body, exactness) {
+            Ok((m, others)) => {
+                inputs.extend(others);
+                m
+            }
+            Err(why) => {
+                f.add("a step the kernel refused", || format!("{done} then {why}"));
+                break;
+            }
+        };
+        done = format!("{done} then {step:?}");
+        rules(
+            f,
+            &done,
+            &made.result.history,
+            &inputs,
+            &names(&made.result.body),
+        );
+        steps.push((made.result.history, NameSet::new(inputs).unwrap()));
+        body = made.result.body;
+        exactness = made.exactness;
+    }
+    if steps.is_empty() {
+        return body;
+    }
+    f.check(
+        check_chain(&steps).is_ok(),
+        "the kit's chain check passes",
+        || format!("{done}: {:?}", check_chain(&steps)),
+    );
+    let relations: Vec<Relations> = steps.iter().map(|(h, _)| h.relations()).collect();
+    let by_definition = Composed::of(&relations);
+    let by_fold = folded(&relations).map(|r| Composed::read(&r));
+    f.check(
+        by_fold.as_ref() == Some(&by_definition),
+        "a chain composes as its definition says",
+        || format!("{done}: {by_fold:?} against {by_definition:?}"),
+    );
+    f.check(
+        by_definition.outputs == names(&body).into_iter().collect(),
+        "a chain's outputs are its last body's names",
+        || done.clone(),
+    );
+    body
+}
+
 #[test]
 fn every_operation_keeps_the_rules_of_20_3_and_its_chain_composes() {
     let mut d = Draw::new("names: operations and chains", 0x9001);
@@ -418,59 +482,45 @@ fn every_operation_keeps_the_rules_of_20_3_and_its_chain_composes() {
             continue;
         };
         f.ran();
-        let mut body = out.result.body;
-        let mut exactness = out.exactness;
-        rules(&mut f, &what, &out.result.history, &[], &names(&body));
-        let mut steps: Vec<(History, NameSet)> = Vec::new();
-        let mut done = what.clone();
-        for k in 0..d.between(1, 4) {
-            let step = Step::draw(&mut d, flat);
-            let mut inputs = names(&body);
-            let made = match step.run(&ctx_at(2 + u8::try_from(k).unwrap()), &body, exactness) {
-                Ok((m, others)) => {
-                    inputs.extend(others);
-                    m
-                }
-                Err(why) => {
-                    f.add("a step the kernel refused", || format!("{done} then {why}"));
-                    break;
-                }
-            };
-            done = format!("{done} then {step:?}");
-            rules(
-                &mut f,
-                &done,
-                &made.result.history,
-                &inputs,
-                &names(&made.result.body),
-            );
-            steps.push((made.result.history, NameSet::new(inputs).unwrap()));
-            body = made.result.body;
-            exactness = made.exactness;
-        }
-        if steps.is_empty() {
-            continue;
-        }
-        f.check(
-            check_chain(&steps).is_ok(),
-            "the kit's chain check passes",
-            || format!("{done}: {:?}", check_chain(&steps)),
-        );
-        let relations: Vec<Relations> = steps.iter().map(|(h, _)| h.relations()).collect();
-        let by_definition = Composed::of(&relations);
-        let by_fold = folded(&relations).map(|r| Composed::read(&r));
-        f.check(
-            by_fold.as_ref() == Some(&by_definition),
-            "a chain composes as its definition says",
-            || format!("{done}: {by_fold:?} against {by_definition:?}"),
-        );
-        f.check(
-            by_definition.outputs == names(&body).into_iter().collect(),
-            "a chain's outputs are its last body's names",
-            || done.clone(),
-        );
+        let count = d.between(1, 4);
+        chain_of(&mut f, &what, out, count, || Step::draw(&mut d, flat));
     }
     f.assert_none("names: operations and chains", 30);
+}
+
+/// Seed 24a51bd2917cc57a's chain, kept: a prism with slanted sides cut by a box leaves vertices
+/// where three planes meet, and every transform, and a pattern's copy, must take it (the transform
+/// once refused any such vertex).
+#[test]
+fn a_cut_prism_with_vertices_off_the_grid_moves_turns_mirrors_and_copies() {
+    let mut f = Findings::default();
+    let input = PrismInput {
+        base: vec![p(-6, 1, 3), p(-8, -1, 3), p(-3, -3, 3)],
+        height: Steps(2),
+    };
+    let what = format!("{input:?}");
+    let cut = Step::Bool(Op::Intersection, [-9, 0, -17], [26, 14, 24]);
+    let mut met = 0;
+    for last in [
+        Step::Copy([99; 16], [-15, 22, 25]),
+        Step::Move([-15, 22, 25]),
+        Step::Turn(Axis::Z, 1, p(1, 2, 3)),
+        Step::Turn(Axis::X, 3, p(-4, 0, 5)),
+        Step::Mirror(Axis::Y, p(0, 2, 0)),
+    ] {
+        f.ran();
+        let out = prism(&ctx_at(1), &input).unwrap();
+        let mut steps = [cut, last].into_iter();
+        let body = chain_of(&mut f, &what, out, 2, || steps.next().unwrap());
+        let meets = body
+            .arenas()
+            .points
+            .iter()
+            .any(|point| matches!(point, geom_topo::PointKind::Meet(_)));
+        met += usize::from(meets);
+    }
+    assert_eq!(met, 5, "every moved cut keeps its vertices off the grid");
+    f.assert_none("names: a cut prism moved and copied", 5);
 }
 
 #[test]

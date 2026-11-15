@@ -13,7 +13,9 @@
 //!   meets the line is listed, with the midpoint between each two: a point in both faces that is
 //!   not on something they share is a crossing. On one plane the list is every corner, every point
 //!   where two edges meet and the midpoints along each edge, and a point inside each face, found on
-//!   a scan line.
+//!   a scan line. In a general body, two faces whose sides are the same edges between the same
+//!   vertices, each run the other way, are the two sides of one wall between two cells (11.7), and
+//!   are not a crossing.
 //! - **Loops and shells.** Each face has one loop turning counter-clockwise from outside and the
 //!   rest clockwise, and a positive area when they are added. A solid region has one shell of positive volume and the rest negative, and each
 //!   shell lies where its region allows, by the parity of a ray.
@@ -531,13 +533,17 @@ fn shared(r: &Read, f: &Plate, g: &Plate, x: &V3) -> bool {
     })
 }
 
-/// Whether any of `list` lies in both faces away from what they share.
+/// Whether any of `list`, points of both faces' planes, lies in both faces away from what they
+/// share. Each face is read in its own plane, dropping the coordinate its own normal is largest
+/// in: dropped along the other face's, a face square to it is a segment, which holds every point
+/// of its plane's line in that segment's shadow, in the face or not.
 fn any_crossing(r: &Read, f: &Plate, g: &Plate, list: &[V3]) -> Option<bool> {
-    let axis = largest(&f.n);
-    let (one, other) = (flats(&sides(r, f)?, axis), flats(&sides(r, g)?, axis));
+    let (fa, ga) = (largest(&f.n), largest(&g.n));
+    let (one, other) = (flats(&sides(r, f)?, fa), flats(&sides(r, g)?, ga));
     Some(list.iter().any(|x| {
-        let at = flat(x, axis);
-        locate(&one, &at) != Place::Out && locate(&other, &at) != Place::Out && !shared(r, f, g, x)
+        locate(&one, &flat(x, fa)) != Place::Out
+            && locate(&other, &flat(x, ga)) != Place::Out
+            && !shared(r, f, g, x)
     }))
 }
 
@@ -697,8 +703,31 @@ fn sides_cross(r: &Read, axis: usize, s: Side, t: Side) -> Option<bool> {
     Some(touching || (opposite(&ab_c, &ab_d) && opposite(&cd_a, &cd_b)))
 }
 
-/// Group 3 of chapter 8.3 on the read plates.
-fn crossings(r: &mut Read) {
+/// Whether `f` and `g` are the two sides of one wall: each side of one is a side of the other, the
+/// same edge between the same vertices run the other way.
+fn back_to_back(f: &Plate, g: &Plate) -> bool {
+    let of = |p: &Plate, turned: bool| -> Vec<(u32, u32, u32)> {
+        let mut list: Vec<(u32, u32, u32)> = p
+            .rings
+            .iter()
+            .flatten()
+            .map(|s| {
+                if turned {
+                    (s.edge, s.to, s.from)
+                } else {
+                    (s.edge, s.from, s.to)
+                }
+            })
+            .collect();
+        list.sort_unstable();
+        list
+    };
+    of(f, false) == of(g, true)
+}
+
+/// Group 3 of chapter 8.3 on the read plates; `cells` for a general body, whose walls are two faces
+/// back to back.
+fn crossings(r: &mut Read, cells: bool) {
     let mut found = Vec::new();
     for plate in &r.plates {
         let axis = largest(&plate.n);
@@ -719,6 +748,9 @@ fn crossings(r: &mut Read) {
     }
     for (i, f) in r.plates.iter().enumerate() {
         for g in r.plates.iter().skip(i + 1) {
+            if cells && back_to_back(f, g) {
+                continue;
+            }
             if faces_cross(r, f, g).unwrap_or(false) {
                 found.push(Finding::FacesCross(f.row, g.row));
             }
@@ -946,7 +978,7 @@ pub fn check(body: &Body, exactness: Exactness) -> Vec<Finding> {
     structure(&mut r, body.kind() == BodyKind::Solid);
     on_planes(&mut r, &bound, &meetings(body.arenas()));
     if r.findings.is_empty() {
-        crossings(&mut r);
+        crossings(&mut r, body.kind() == BodyKind::General);
     }
     if r.findings.is_empty() {
         loops(&mut r);

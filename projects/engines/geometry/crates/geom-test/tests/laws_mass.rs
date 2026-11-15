@@ -12,6 +12,9 @@
 //! - **Grid moves keep them.** A translation, a quarter turn or a mirror leaves six times the
 //!   volume and the total of the area vectors' absolute components unchanged, exactly.
 //!
+//! Every body a law measures, a prism, a boolean's result or a moved copy, also goes through both
+//! checkers, which must agree (Gate 4, G156; `catalogue::Findings::both`).
+//!
 //! Curved solids' mass properties, certified against closed forms, are piece G283's row, and the
 //! centroid and moments join with the kernel's mass-property query (piece G247), which this
 //! branch does not hold. Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`;
@@ -162,6 +165,7 @@ fn flat_volumes_are_exact_rationals_and_certified_where_a_vertex_is_implicit() {
             }
         };
         f.ran();
+        f.both(&body, || what.clone());
         let want = truth.volume() * int(6);
         if on_grid(&body) {
             exact += 1;
@@ -211,6 +215,7 @@ fn flat_areas_are_exact_plane_by_plane_and_close_up() {
                 continue;
             }
         };
+        f.both(&body, || what.clone());
         if !on_grid(&body) {
             continue;
         }
@@ -289,6 +294,8 @@ fn grid_moves_keep_volume_and_area() {
                 continue;
             }
         };
+        f.both(&body, || format!("{prism:?}"));
+        f.both(&out, || format!("{prism:?} {how}"));
         let (before, after) = (measure(&body), measure(&out));
         f.check(
             before.is_ok() && before == after,

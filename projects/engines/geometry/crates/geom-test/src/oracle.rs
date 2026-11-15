@@ -14,9 +14,10 @@
 //!   outcomes, each written as a fixture.
 //! - [`geomdl`]: the first oracle, geomdl, on NURBS: its jobs, and each answer compared, with any
 //!   difference settled in exact rationals by [`crate::nurbs_reference`].
-//!
 //! - [`smlib`]: the second, `SMLib`'s `NLib` layer, on the same lines: evaluation, knot insertion and
 //!   removal, and degree elevation.
+//! - [`meshes`]: mesh booleans against Manifold, manifold-rust, CGAL and Cherchi's exact booleans,
+//!   with any difference settled in exact rationals by [`crate::flat_reference`].
 //!
 //! The binary `oracle` lists the catalogue, checks it (`-- check`), writes a night's jobs
 //! (`-- jobs`), compares the answers (`-- compare`) and records a triage (`-- triage`).
@@ -41,5 +42,6 @@ pub mod catalogue;
 pub mod compare;
 pub mod exact;
 pub mod geomdl;
+pub mod meshes;
 pub mod smlib;
 pub mod triage;
