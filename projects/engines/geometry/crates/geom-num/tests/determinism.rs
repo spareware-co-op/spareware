@@ -52,7 +52,8 @@
 //! give different geometry on different machines. Or the kernel's results were changed on purpose,
 //! which is a deliberate kernel edition change (chapter 21, section 28.13): its pull request
 //! records the change in the store (the old digest in the golden's history, with its kind, piece
-//! and why), says which results changed, and a kernel owner approves it. A change to this corpus
+//! and why) and says which results changed, and the store's check holds it to that record
+//! (`kernel-golden.yml`, decision 32.54). A change to this corpus
 //! changes the digest too and is recorded the same way. Never update the store to make one target
 //! pass.
 //!
@@ -104,8 +105,8 @@ use geom_test::golden::{self, Sha256, hex};
 /// The same digest must hold on every target `.github/workflows/kernel.yml` runs (the module
 /// documentation lists them). A change is either a bug (a target computes different bits, so the
 /// same model would give different geometry on different machines) or a deliberate kernel edition
-/// change, recorded in the store in a pull request that says which and is approved by a kernel
-/// owner. See the module documentation.
+/// change, recorded in the store in a pull request that says which, in the golden's history
+/// record. See the module documentation.
 ///
 /// The digest's history is in the store: G02 set it, and it changed once, when the correctly
 /// rounded maths of piece G05 (issue #174) merged. The sections `predicates`, `planes`, `tpi`,

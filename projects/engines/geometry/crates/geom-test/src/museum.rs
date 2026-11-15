@@ -16,7 +16,7 @@
 //!
 //! - **Exhibits never change.** A byte changed in a stored file is [`MuseumError::Changed`], and
 //!   nothing else about that exhibit is read. An exhibit taken out, or a recorded hash edited,
-//!   changes the digest, which is a golden and so needs its record and a kernel owner's approval.
+//!   changes the digest, which is a golden and so needs its record in the golden store.
 //! - **A file reads whole, and writes back the same.** Every record is known to the reader, the
 //!   count is the recorded one, and [`geom_format::file::write`] gives the same bytes.
 //! - **A log replays to its hash.** A log that does not replay, whether the kernel refuses an

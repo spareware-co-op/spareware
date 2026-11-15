@@ -1,8 +1,7 @@
 //! The sequence fuzz target (G116), run as tests on stable Rust: bolero's test mode, the seeded
 //! leg, the input bound, every kind of operation reached, the extreme wall, and broken laws caught.
 //!
-//! - `sequence_fuzz` wraps `geom_fuzz::sequence::harness` in `bolero::check!`; under
-//!   `cargo bolero test sequence_fuzz --package geom-fuzz` it is a libFuzzer target.
+//! - `sequence_fuzz` wraps `geom_fuzz::sequence::harness` in `bolero::check!`, bolero's test mode.
 //! - `sequence_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 
@@ -41,7 +40,11 @@ use geom_topo::Builder;
 const ITERATIONS: usize = 200;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 300;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 300 cases in 0.949 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 630;
 
 /// The longest byte string the seeded leg draws.
 const MAX_LEN: u16 = 4_000;

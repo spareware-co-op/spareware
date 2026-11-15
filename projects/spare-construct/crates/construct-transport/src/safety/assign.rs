@@ -15,11 +15,11 @@ use crate::edit::json::JsonValue;
 use crate::edit::net::project;
 use crate::feeds::nztime::{date_of, nz_midnight_ms, nz_parts};
 use crate::graph::js_sort_by;
-use crate::jsnum::{math_hypot, math_max, math_min};
+use crate::jsnum::{f64_to_i64, f64_to_usize, i64_to_f64, math_hypot, math_max, math_min, usize_to_f64};
 use crate::project::{Link, Scenario, road_class};
-use crate::util::{self, ang_diff, bearing, flat, seg_dist};
+use crate::util::{self, Flat, LatLng, ang_diff, bearing, flat, seg_dist};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// `LINK_R`: a crash belongs to a link within this distance (m).
 pub const LINK_R: f64 = 25.0;
@@ -68,29 +68,30 @@ pub struct Tally {
 
 impl Tally {
     /// `addTo(t, c)`: counts one crash.
+    // Bound: these count crashes held in memory, far below usize::MAX
     pub fn add(&mut self, c: &Crash) {
-        self.crashes += 1;
+        self.crashes = self.crashes.saturating_add(1);
         match c.severity.as_str() {
-            "F" => self.f += 1,
-            "S" => self.s += 1,
-            "M" => self.m += 1,
-            "N" => self.n += 1,
+            "F" => self.f = self.f.saturating_add(1),
+            "S" => self.s = self.s.saturating_add(1),
+            "M" => self.m = self.m.saturating_add(1),
+            "N" => self.n = self.n.saturating_add(1),
             _ => {}
         }
         if c.severity == "F" || c.severity == "S" {
-            self.dsi += 1;
+            self.dsi = self.dsi.saturating_add(1);
         }
         if c.severity == "F" || c.severity == "S" || c.severity == "M" {
-            self.injury += 1;
+            self.injury = self.injury.saturating_add(1);
         }
         if c.flags.contains('p') {
-            self.p += 1;
+            self.p = self.p.saturating_add(1);
         }
         if c.flags.contains('c') {
-            self.c += 1;
+            self.c = self.c.saturating_add(1);
         }
         if c.flags.contains('m') {
-            self.mo += 1;
+            self.mo = self.mo.saturating_add(1);
         }
     }
 }
@@ -112,6 +113,7 @@ pub struct CasLoad {
 
 impl CasLoad {
     /// Reads `loaded.cas` as saved (an object, or anything else for none).
+    #[must_use]
     pub fn from_value(v: Option<&serde_json::Value>) -> CasLoad {
         let Some(serde_json::Value::Object(o)) = v else { return CasLoad { at: None, from: f64::NAN, to: f64::NAN, ytd: f64::NAN, lag_year: f64::NAN } };
         let num = |k: &str| o.get(k).map_or(f64::NAN, crate::jsnum::value_to_number);
@@ -152,6 +154,7 @@ pub struct Years {
 ///
 /// With a load time the window is `from` to the load year, the load year counted to the load date (at least one
 /// month of it); a project without one falls back to the years that have crashes. Years and dates are New Zealand time.
+#[must_use]
 pub fn crash_years(cr: &[Crash], cas: &CasLoad) -> Years {
     let (mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY);
     for c in cr {
@@ -161,7 +164,7 @@ pub fn crash_years(cr: &[Crash], cas: &CasLoad) -> Years {
         }
     }
     if let Some(at) = cas.at {
-        let year = nz_parts(at).year as f64;
+        let year = i64_to_f64(nz_parts(at).year);
         let from = if cas.from > 0.0 { cas.from } else { year - CAS_YEARS_DEFAULT };
         let start = nz_midnight_ms(year, 0.0, 1.0);
         let next = nz_midnight_ms(year + 1.0, 0.0, 1.0);
@@ -237,7 +240,7 @@ pub struct Assignment<'a> {
 }
 
 fn cell_key(cx: f64, cy: f64) -> i64 {
-    (cx * 1e6 + cy) as i64
+    f64_to_i64(cx * 1e6 + cy)
 }
 
 // put(grid, x0, y0, x1, y1, pad, v)
@@ -264,208 +267,273 @@ fn utf16_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     a.encode_utf16().cmp(b.encode_utf16())
 }
 
-/// `assignCrashes(sc)`: assigns every crash to its link and its junction and finds the junctions and paired carriageways.
-pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assignment<'a> {
-    let links: Vec<&Link> = sc
-        .links
-        .values()
-        .filter(|l| !l.status.is("proposed") && sc.nodes.contains_key(&l.a) && sc.nodes.contains_key(&l.b))
-        .collect();
-    let node_ids: Vec<&str> = sc.nodes.keys().collect();
-    let mut lat0 = 0.0;
-    for id in &node_ids {
-        lat0 += sc.nodes[*id].lat.num();
+// The root of a junction node's cluster (union-find with path halving).
+// Every entry of parent is a position in it: it starts as 0..len and only takes other entries' values.
+fn find(parent: &mut [usize], mut id: usize) -> usize {
+    while let Some(&up) = parent.get(id)
+        && up != id
+    {
+        let grand = parent.get(up).copied().unwrap_or(up);
+        if let Some(slot) = parent.get_mut(id) {
+            *slot = grand;
+        }
+        id = grand;
     }
-    lat0 = if !node_ids.is_empty() {
-        lat0 / node_ids.len() as f64
-    } else if !cr.is_empty() {
-        cr[0].lat
-    } else {
-        0.0
-    };
-    let f = flat(lat0);
-    // link segments in flat metres, gridded with the search radius as padding
-    let mut seg: Vec<[f64; 5]> = Vec::new();
-    let mut lgrid: HashMap<i64, Vec<usize>> = HashMap::new();
-    let mut lk: Vec<LinkTally> = links
-        .iter()
-        .map(|l| LinkTally { link: l, nm: norm(l.name.as_str().unwrap_or("")), km: util::poly_len(&sc.geom(l)) / 1000.0, t: Tally::default() })
-        .collect();
-    let geoms: Vec<Vec<util::LatLng>> = links.iter().map(|l| sc.geom(l)).collect();
-    for (li, g) in geoms.iter().enumerate() {
-        for i in 0..g.len().saturating_sub(1) {
-            let (ax, ay, bx, by) = (f.x(&g[i]), f.y(&g[i]), f.x(&g[i + 1]), f.y(&g[i + 1]));
-            let s = seg.len();
-            seg.push([ax, ay, bx, by, li as f64]);
-            put(&mut lgrid, math_min(ax, bx), math_min(ay, by), math_max(ax, bx), math_max(ay, by), LINK_R, s);
+    id
+}
+
+// Joins two clusters; the smaller id is the root (the ids are in order)
+fn join(parent: &mut [usize], a: usize, b: usize) {
+    let ra = find(parent, a);
+    let rb = find(parent, b);
+    if ra != rb {
+        let (root, child) = if ra < rb { (ra, rb) } else { (rb, ra) };
+        if let Some(slot) = parent.get_mut(child) {
+            *slot = root;
         }
     }
-    // Junction nodes: three or more existing links, and every node of a roundabout ring
-    let mut deg: HashMap<&str, usize> = HashMap::new();
-    let mut inc: HashMap<&str, Vec<usize>> = HashMap::new();
-    let mut on_ring: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    for (li, l) in links.iter().enumerate() {
-        for n in [l.a.as_str(), l.b.as_str()] {
-            *deg.entry(n).or_insert(0) += 1;
-            inc.entry(n).or_default().push(li);
-            if l.ring.truthy() {
-                on_ring.insert(n);
+}
+
+// A position in lk or jn as the -1-or-index arrays hold it.
+// Bound: links and junctions in memory number far below i32::MAX, so the fallback never applies.
+fn index_i32(i: usize) -> i32 {
+    i32::try_from(i).unwrap_or(-1)
+}
+
+// A road leaving a junction: its name, its bearing from the centre, and its link (a position in links)
+struct Leg {
+    nm: String,
+    b: f64,
+    li: usize,
+}
+
+// The junctions found: their tallies, each node's junction, and the junction nodes gridded with the junction radius
+struct Junctions {
+    jn: Vec<JunctionTally>,
+    j_of_node: HashMap<String, usize>,
+    ngrid: HashMap<i64, Vec<usize>>,
+    // flat position and junction of each junction node
+    pt_node: Vec<(f64, f64, usize)>,
+}
+
+// The existing links of a scenario as the crash assignment reads them
+struct Net<'a> {
+    sc: &'a Scenario,
+    // Existing links (not proposed, both ends present) in the scenario's order
+    links: Vec<&'a Link>,
+    // Their geometries, at the same positions
+    geoms: Vec<Vec<LatLng>>,
+    fl: Flat,
+    // Existing links at each node: how many, and which (positions in links)
+    deg: HashMap<&'a str, usize>,
+    inc: HashMap<&'a str, Vec<usize>>,
+    on_ring: HashSet<&'a str>,
+}
+
+impl<'a> Net<'a> {
+    fn new(sc: &'a Scenario, cr: &[Crash]) -> Self {
+        let links: Vec<&'a Link> = sc
+            .links
+            .values()
+            .filter(|l| !l.status.is("proposed") && sc.nodes.contains_key(&l.a) && sc.nodes.contains_key(&l.b))
+            .collect();
+        let mut lat0 = 0.0;
+        // Bound: a count of nodes in memory, far below usize::MAX
+        let mut node_count = 0usize;
+        for node in sc.nodes.values() {
+            lat0 += node.lat.num();
+            node_count = node_count.saturating_add(1);
+        }
+        lat0 = if node_count > 0 {
+            lat0 / usize_to_f64(node_count)
+        } else if let Some(first) = cr.first() {
+            first.lat
+        } else {
+            0.0
+        };
+        let geoms: Vec<Vec<LatLng>> = links.iter().map(|l| sc.geom(l)).collect();
+        // Junction nodes: three or more existing links, and every node of a roundabout ring
+        let mut deg: HashMap<&'a str, usize> = HashMap::new();
+        let mut inc: HashMap<&'a str, Vec<usize>> = HashMap::new();
+        let mut on_ring: HashSet<&'a str> = HashSet::new();
+        for (li, &road) in links.iter().enumerate() {
+            for end in [road.a.as_str(), road.b.as_str()] {
+                let count = deg.entry(end).or_insert(0);
+                // Bound: a count of links, far below usize::MAX
+                *count = count.saturating_add(1);
+                inc.entry(end).or_default().push(li);
+                if road.ring.truthy() {
+                    on_ring.insert(end);
+                }
             }
         }
+        Net { sc, links, geoms, fl: flat(lat0), deg, inc, on_ring }
     }
-    let mut jids: Vec<&str> = deg.keys().copied().filter(|id| deg[id] >= 3 || on_ring.contains(id)).collect();
-    jids.sort_by(|a, b| utf16_cmp(a, b));
-    let jidx: HashMap<&str, usize> = jids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
-    let mut par: Vec<usize> = (0..jids.len()).collect();
-    fn find(par: &mut [usize], mut id: usize) -> usize {
-        while par[id] != id {
-            par[id] = par[par[id]];
-            id = par[id];
-        }
-        id
+
+    // Existing links at a node (every id asked about is a key of deg)
+    fn deg_of(&self, id: &str) -> usize {
+        self.deg.get(id).copied().unwrap_or(0)
     }
-    let join = |par: &mut Vec<usize>, a: usize, b: usize| {
-        let x = find(par, a);
-        let y = find(par, b);
-        if x != y {
-            // the smaller id is the root (the ids are in order)
-            if x < y {
-                par[y] = x;
-            } else {
-                par[x] = y;
-            }
-        }
-    };
-    for l in &links {
-        if l.ring.truthy()
-            && let (Some(&a), Some(&b)) = (jidx.get(l.a.as_str()), jidx.get(l.b.as_str()))
-        {
-            join(&mut par, a, b);
-        }
+
+    fn xy(&self, id: &str) -> (f64, f64) {
+        let ll = self.sc.nodes.get(id).map_or([f64::NAN; 2], |n| [n.lat.num(), n.lng.num()]);
+        (self.fl.x(&ll), self.fl.y(&ll))
     }
-    let xy = |id: &str| -> (f64, f64) {
-        let n = &sc.nodes[id];
-        let ll = [n.lat.num(), n.lng.num()];
-        (f.x(&ll), f.y(&ll))
-    };
-    let name_set = |id: &str| -> std::collections::HashSet<String> {
-        inc.get(id)
-            .map(|v| v.iter().map(|&li| lk[li].nm.clone()).filter(|n| !n.is_empty()).collect())
+
+    // The road names (as norm reads them) of the links at a node
+    fn name_set(&self, lk: &[LinkTally], id: &str) -> HashSet<String> {
+        self.inc
+            .get(id)
+            .map(|v| v.iter().filter_map(|&li| lk.get(li)).map(|t| t.nm.clone()).filter(|n| !n.is_empty()).collect())
             .unwrap_or_default()
-    };
-    let mut pgrid: HashMap<i64, Vec<usize>> = HashMap::new();
-    for (i, id) in jids.iter().enumerate() {
-        if deg[id] >= 3 {
-            let (x, y) = xy(id);
-            put(&mut pgrid, x, y, x, y, 0.0, i);
-        }
     }
-    for (i, id) in jids.iter().enumerate() {
-        if deg[id] < 3 {
-            continue;
+
+    // link segments in flat metres, gridded with the search radius as padding
+    fn link_grid(&self) -> (Vec<[f64; 5]>, HashMap<i64, Vec<usize>>) {
+        let mut seg: Vec<[f64; 5]> = Vec::new();
+        let mut lgrid: HashMap<i64, Vec<usize>> = HashMap::new();
+        for (li, geom) in self.geoms.iter().enumerate() {
+            for pair in geom.windows(2) {
+                let [pa, pb] = pair else { continue };
+                let (ax, ay, bx, by) = (self.fl.x(pa), self.fl.y(pa), self.fl.x(pb), self.fl.y(pb));
+                let s = seg.len();
+                seg.push([ax, ay, bx, by, usize_to_f64(li)]);
+                put(&mut lgrid, math_min(ax, bx), math_min(ay, by), math_max(ax, bx), math_max(ay, by), LINK_R, s);
+            }
         }
-        let (x, y) = xy(id);
-        let mine = name_set(id);
-        let mut seen: std::collections::HashSet<usize> = std::collections::HashSet::new();
-        let mut cx = ((x - NODE_R) / CELL).floor();
-        while cx <= ((x + NODE_R) / CELL).floor() {
-            let mut cy = ((y - NODE_R) / CELL).floor();
-            while cy <= ((y + NODE_R) / CELL).floor() {
-                if let Some(cell) = pgrid.get(&cell_key(cx, cy)) {
-                    for &o in cell {
-                        if o <= i || seen.contains(&o) {
-                            continue;
-                        }
-                        seen.insert(o);
-                        let (ox, oy) = xy(jids[o]);
-                        if math_hypot(&[ox - x, oy - y]) <= NODE_R && name_set(jids[o]).iter().any(|n| mine.contains(n)) {
-                            join(&mut par, i, o);
+        (seg, lgrid)
+    }
+
+    // The junction node ids in UTF-16 order, and their clusters: a roundabout's ring nodes together, and nodes of three
+    // or more links within 30 m that share a road name. Clusters are in the order each root first appears among the ids.
+    fn junction_groups(&self, lk: &[LinkTally]) -> (Vec<&'a str>, Vec<Vec<usize>>) {
+        let mut jids: Vec<&'a str> = self.deg.keys().copied().filter(|id| self.deg_of(id) >= 3 || self.on_ring.contains(id)).collect();
+        jids.sort_by(|a, b| utf16_cmp(a, b));
+        let pos_of: HashMap<&str, usize> = jids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
+        let mut parent: Vec<usize> = (0..jids.len()).collect();
+        for link in &self.links {
+            if link.ring.truthy()
+                && let (Some(&a), Some(&b)) = (pos_of.get(link.a.as_str()), pos_of.get(link.b.as_str()))
+            {
+                join(&mut parent, a, b);
+            }
+        }
+        let mut pgrid: HashMap<i64, Vec<usize>> = HashMap::new();
+        for (ji, id) in jids.iter().enumerate() {
+            if self.deg_of(id) >= 3 {
+                let (nx, ny) = self.xy(id);
+                put(&mut pgrid, nx, ny, nx, ny, 0.0, ji);
+            }
+        }
+        for (ji, id) in jids.iter().enumerate() {
+            if self.deg_of(id) < 3 {
+                continue;
+            }
+            let (nx, ny) = self.xy(id);
+            let mine = self.name_set(lk, id);
+            let mut seen: HashSet<usize> = HashSet::new();
+            let mut cx = ((nx - NODE_R) / CELL).floor();
+            while cx <= ((nx + NODE_R) / CELL).floor() {
+                let mut cy = ((ny - NODE_R) / CELL).floor();
+                while cy <= ((ny + NODE_R) / CELL).floor() {
+                    if let Some(cell) = pgrid.get(&cell_key(cx, cy)) {
+                        for &oi in cell {
+                            if oi <= ji || seen.contains(&oi) {
+                                continue;
+                            }
+                            seen.insert(oi);
+                            // pgrid holds only positions in jids
+                            let Some(&other) = jids.get(oi) else { continue };
+                            let (ox, oy) = self.xy(other);
+                            if math_hypot(&[ox - nx, oy - ny]) <= NODE_R && self.name_set(lk, other).iter().any(|nm| mine.contains(nm)) {
+                                join(&mut parent, ji, oi);
+                            }
                         }
                     }
+                    cy += 1.0;
                 }
-                cy += 1.0;
-            }
-            cx += 1.0;
-        }
-    }
-    // groups in the order each root first appears among the sorted ids
-    let mut groups: Vec<Vec<usize>> = Vec::new();
-    let mut group_of_root: HashMap<usize, usize> = HashMap::new();
-    for i in 0..jids.len() {
-        let r = find(&mut par, i);
-        match group_of_root.get(&r) {
-            Some(&g) => groups[g].push(i),
-            None => {
-                group_of_root.insert(r, groups.len());
-                groups.push(vec![i]);
+                cx += 1.0;
             }
         }
+        let mut groups: Vec<Vec<usize>> = Vec::new();
+        let mut group_of_root: HashMap<usize, usize> = HashMap::new();
+        for ji in 0..jids.len() {
+            let root = find(&mut parent, ji);
+            if let Some(&gi) = group_of_root.get(&root) {
+                if let Some(group) = groups.get_mut(gi) {
+                    group.push(ji);
+                }
+            } else {
+                group_of_root.insert(root, groups.len());
+                groups.push(vec![ji]);
+            }
+        }
+        (jids, groups)
     }
-    let mut jn: Vec<JunctionTally> = Vec::new();
-    let mut j_of_node: HashMap<String, usize> = HashMap::new();
-    let mut ngrid: HashMap<i64, Vec<usize>> = HashMap::new();
-    let mut pt_node: Vec<(f64, f64, usize)> = Vec::new();
-    for members in &groups {
-        let inside: std::collections::HashSet<&str> = members.iter().map(|&i| jids[i]).collect();
-        // Legs: links leaving the cluster; the two carriageways of one road on one side are one leg
+
+    // One cluster as a junction: its legs (links leaving the cluster; the two carriageways of one road on one side are
+    // one leg), main node and name. None for a turning loop or a bend (under three legs).
+    fn junction_of_group(&self, jids: &[&str], members: &[usize]) -> Option<JunctionTally> {
+        // members are positions in jids (the clusters are built from them)
+        let node_ids: Vec<&str> = members.iter().filter_map(|&i| jids.get(i).copied()).collect();
+        let inside: HashSet<&str> = node_ids.iter().copied().collect();
         let mut sx = 0.0;
         let mut sy = 0.0;
-        for &i in members {
-            sx += xy(jids[i]).0;
+        for id in &node_ids {
+            sx += self.xy(id).0;
         }
-        for &i in members {
-            sy += xy(jids[i]).1;
+        for id in &node_ids {
+            sy += self.xy(id).1;
         }
-        let (cx, cy) = (sx / members.len() as f64, sy / members.len() as f64);
-        struct Leg {
-            nm: String,
-            b: f64,
-            li: usize,
-        }
+        let (cx, cy) = (sx / usize_to_f64(members.len()), sy / usize_to_f64(members.len()));
         let mut legs: Vec<Leg> = Vec::new();
         let mut ext: Vec<usize> = Vec::new();
-        for &i in members {
-            for &li in inc.get(jids[i]).map(Vec::as_slice).unwrap_or(&[]) {
-                let l = links[li];
-                if inside.contains(l.a.as_str()) && inside.contains(l.b.as_str()) {
+        for &id in &node_ids {
+            for &li in self.inc.get(id).into_iter().flatten() {
+                // inc holds positions in links, which geoms shares
+                let (Some(&link), Some(geom)) = (self.links.get(li), self.geoms.get(li)) else { continue };
+                if inside.contains(link.a.as_str()) && inside.contains(link.b.as_str()) {
                     continue;
                 }
                 if ext.contains(&li) {
                     continue;
                 }
                 ext.push(li);
-                let g = &geoms[li];
-                let far = if inside.contains(l.a.as_str()) { g[math_min(g.len() as f64 - 1.0, 1.0) as usize] } else { g[math_max(0.0, g.len() as f64 - 2.0) as usize] };
-                let b = (f.x(&far) - cx).atan2(f.y(&far) - cy) * 180.0 / std::f64::consts::PI;
-                let nm = norm(l.name.as_str().unwrap_or(""));
-                if !legs.iter().any(|lg| !nm.is_empty() && lg.nm == nm && ang_diff(lg.b, b) < 45.0) {
-                    legs.push(Leg { nm, b, li });
+                let len = usize_to_f64(geom.len());
+                let far_i = if inside.contains(link.a.as_str()) { f64_to_usize(math_min(len - 1.0, 1.0)) } else { f64_to_usize(math_max(0.0, len - 2.0)) };
+                // A link's geometry holds at least its two end nodes
+                let Some(far) = geom.get(far_i) else { continue };
+                let dir = (self.fl.x(far) - cx).atan2(self.fl.y(far) - cy) * 180.0 / std::f64::consts::PI;
+                let nm = norm(link.name.as_str().unwrap_or(""));
+                if !legs.iter().any(|lg| !nm.is_empty() && lg.nm == nm && ang_diff(lg.b, dir) < 45.0) {
+                    legs.push(Leg { nm, b: dir, li });
                 }
             }
         }
         if legs.len() < 3 {
-            continue; // a turning loop or a bend, not a junction
+            return None; // a turning loop or a bend, not a junction
         }
-        let mut sorted: Vec<usize> = members.clone();
-        js_sort_by(&mut sorted, |&a, &b| {
-            let d = deg[jids[b]] as f64 - deg[jids[a]] as f64;
-            if d != 0.0 { d } else if utf16_cmp(jids[a], jids[b]) == std::cmp::Ordering::Less { -1.0 } else { 1.0 }
+        let mut sorted: Vec<&str> = node_ids.clone();
+        js_sort_by(&mut sorted, |&pa, &pb| {
+            let d = usize_to_f64(self.deg_of(pb)) - usize_to_f64(self.deg_of(pa));
+            if d != 0.0 { d } else if utf16_cmp(pa, pb) == std::cmp::Ordering::Less { -1.0 } else { 1.0 }
         });
-        let rep = jids[sorted[0]];
-        let interchange = ext.iter().all(|&li| links[li].cls.is("motorway") || links[li].cls.is("ramp"));
-        let mut named: Vec<&Link> = legs.iter().map(|l| links[l.li]).filter(|l| l.name.as_str().is_some_and(|n| !n.is_empty())).collect();
+        // A cluster holds at least one node
+        let rep = sorted.first().copied().unwrap_or("");
+        let interchange = ext.iter().all(|&li| self.links.get(li).is_some_and(|l| l.cls.is("motorway") || l.cls.is("ramp")));
+        let mut named: Vec<&Link> = legs.iter().filter_map(|lg| self.links.get(lg.li).copied()).filter(|l| l.name.as_str().is_some_and(|n| !n.is_empty())).collect();
         js_sort_by(&mut named, |p, q| {
             let d = road_class(q.cls.as_str()).rank - road_class(p.cls.as_str()).rank;
             if d != 0.0 && !d.is_nan() { d } else { locale_compare_f64(p.name.as_str().unwrap_or(""), q.name.as_str().unwrap_or("")) }
         });
-        let mut names: Vec<&str> = Vec::new();
-        for l in &named {
-            let n = l.name.as_str().unwrap_or("");
-            if !names.contains(&n) {
-                names.push(n);
+        let mut distinct: Vec<&str> = Vec::new();
+        for link in &named {
+            let road = link.name.as_str().unwrap_or("");
+            if !distinct.contains(&road) {
+                distinct.push(road);
             }
         }
-        let joined = names.iter().take(3).copied().collect::<Vec<_>>().join(" / ");
+        let joined = distinct.iter().take(3).copied().collect::<Vec<_>>().join(" / ");
         let name = if !joined.is_empty() {
             joined
         } else if interchange {
@@ -473,120 +541,164 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
         } else {
             "Unnamed junction".to_string()
         };
-        let node_names: Vec<String> = members.iter().map(|&i| jids[i].to_string()).collect();
-        let j = JunctionTally { id: rep.to_string(), nodes: node_names, x: cx, y: cy, legs: legs.len(), interchange, name, t: Tally::default() };
-        for &i in members {
-            j_of_node.insert(jids[i].to_string(), jn.len());
-            let (x, y) = xy(jids[i]);
-            put(&mut ngrid, x, y, x, y, NODE_R, pt_node.len());
-            pt_node.push((x, y, jn.len()));
-        }
-        jn.push(j);
+        let node_names: Vec<String> = node_ids.iter().copied().map(str::to_string).collect();
+        Some(JunctionTally { id: rep.to_string(), nodes: node_names, x: cx, y: cy, legs: legs.len(), interchange, name, t: Tally::default() })
     }
-    let mut link_of = vec![-1i32; cr.len()];
-    let mut node_of = vec![-1i32; cr.len()];
-    for (ci, c) in cr.iter().enumerate() {
-        let ll = [c.lat, c.lng];
-        let (px, py) = (f.x(&ll), f.y(&ll));
-        let k = cell_key((px / CELL).floor(), (py / CELL).floor());
-        if let Some(cand) = lgrid.get(&k) {
-            // dl: link index to its nearest distance, in the order links first appear
-            let mut dl: Vec<(usize, f64)> = Vec::new();
-            for &s in cand {
-                let q = &seg[s];
-                let r = seg_dist(px, py, q[0], q[1], q[2], q[3]);
-                if r.d <= LINK_R {
-                    let li = q[4] as usize;
-                    match dl.iter_mut().find(|(l, _)| *l == li) {
-                        Some(e) => {
-                            // !(dl.get(li) <= r.d): a nearer piece replaces it
-                            if !(e.1 <= r.d) {
-                                e.1 = r.d;
-                            }
-                        }
-                        None => dl.push((li, r.d)),
-                    }
-                }
+
+    fn junctions(&self, jids: &[&str], groups: &[Vec<usize>]) -> Junctions {
+        let mut out = Junctions { jn: Vec::new(), j_of_node: HashMap::new(), ngrid: HashMap::new(), pt_node: Vec::new() };
+        for members in groups {
+            let Some(junction) = self.junction_of_group(jids, members) else { continue };
+            for id in members.iter().filter_map(|&i| jids.get(i).copied()) {
+                out.j_of_node.insert(id.to_string(), out.jn.len());
+                let (nx, ny) = self.xy(id);
+                put(&mut out.ngrid, nx, ny, nx, ny, NODE_R, out.pt_node.len());
+                out.pt_node.push((nx, ny, out.jn.len()));
             }
-            let mut best: i64 = -1;
-            let mut bd = f64::INFINITY;
-            for &(li, dd) in &dl {
-                if dd < bd {
-                    bd = dd;
-                    best = li as i64;
-                }
-            }
-            if best >= 0 {
-                let first = c.location.split(" / ").next().unwrap_or("");
-                let loc = norm(first);
-                if !loc.is_empty() && lk[best as usize].nm != loc {
-                    let mut nb: i64 = -1;
-                    let mut nd = f64::INFINITY;
-                    for &(li, dd) in &dl {
-                        let nm = &lk[li].nm;
-                        if dd <= bd + NAME_SLACK && dd < nd && !nm.is_empty() && (*nm == loc || nm.contains(&loc) || loc.contains(nm.as_str())) {
-                            nd = dd;
-                            nb = li as i64;
-                        }
-                    }
-                    if nb >= 0 {
-                        best = nb;
-                    }
-                }
-                link_of[ci] = best as i32;
-                lk[best as usize].t.add(c);
-            }
+            out.jn.push(junction);
         }
-        // to the junction of the nearest junction node within 30 m
-        if let Some(nc) = ngrid.get(&k) {
-            let mut best: i64 = -1;
-            let mut bd = NODE_R;
-            for &p in nc {
-                let dd = math_hypot(&[px - pt_node[p].0, py - pt_node[p].1]);
-                if dd <= bd {
-                    bd = dd;
-                    best = pt_node[p].2 as i64;
-                }
-            }
-            if best >= 0 {
-                node_of[ci] = best as i32;
-                jn[best as usize].t.add(c);
-            }
-        }
+        out
     }
+
     // One-way carriageways paired with the opposite carriageway of the same road (a divided road)
-    let mut pair: HashMap<String, String> = HashMap::new();
-    let mut by_name: Vec<(String, Vec<usize>)> = Vec::new();
-    for (li, it) in lk.iter().enumerate() {
-        if it.nm.is_empty() || (it.link.lanes_ab.int32() > 0 && it.link.lanes_ba.int32() > 0) {
-            continue;
+    fn pair_carriageways(&self, lk: &[LinkTally]) -> HashMap<String, String> {
+        let mut pair: HashMap<String, String> = HashMap::new();
+        let mut by_name: Vec<(String, Vec<usize>)> = Vec::new();
+        for (li, it) in lk.iter().enumerate() {
+            if it.nm.is_empty() || (it.link.lanes_ab.int32() > 0 && it.link.lanes_ba.int32() > 0) {
+                continue;
+            }
+            match by_name.iter_mut().find(|(nm, _)| *nm == it.nm) {
+                Some(entry) => entry.1.push(li),
+                None => by_name.push((it.nm.clone(), vec![li])),
+            }
         }
-        match by_name.iter_mut().find(|(n, _)| *n == it.nm) {
-            Some(e) => e.1.push(li),
-            None => by_name.push((it.nm.clone(), vec![li])),
-        }
-    }
-    let dir_b = |li: usize| -> f64 {
-        let g = &geoms[li];
-        let b = bearing(&g[0], &g[g.len() - 1]);
-        if lk[li].link.lanes_ab.int32() > 0 { b } else { (b + 180.0) % 360.0 }
-    };
-    for (_, ids) in &by_name {
-        for &li in ids {
-            let g = &geoms[li];
-            let mid = util::along(g, &util::cum_len(g), util::poly_len(g) / 2.0).p;
-            let b = dir_b(li);
-            for &lj in ids {
-                if lj == li {
-                    continue;
-                }
-                let o = lk[lj].link;
-                if ang_diff(b, dir_b(lj)) > 135.0 && project(sc, o, mid).d <= PAIR_M {
-                    pair.insert(lk[li].link.id.clone(), o.id.clone());
-                    break;
+        // li is a position in lk and geoms alike (both follow links); a geometry holds at least its two end nodes
+        let dir_b = |li: usize| -> f64 {
+            let Some((Some(first), Some(last))) = self.geoms.get(li).map(|g| (g.first(), g.last())) else { return f64::NAN };
+            let dir = bearing(first, last);
+            if lk.get(li).is_some_and(|t| t.link.lanes_ab.int32() > 0) { dir } else { (dir + 180.0) % 360.0 }
+        };
+        for (_, ids) in &by_name {
+            for &li in ids {
+                let (Some(geom), Some(own)) = (self.geoms.get(li), lk.get(li)) else { continue };
+                let mid = util::along(geom, &util::cum_len(geom), util::poly_len(geom) / 2.0).p;
+                let dir = dir_b(li);
+                for &lj in ids {
+                    if lj == li {
+                        continue;
+                    }
+                    let Some(other) = lk.get(lj).map(|t| t.link) else { continue };
+                    if ang_diff(dir, dir_b(lj)) > 135.0 && project(self.sc, other, mid).d <= PAIR_M {
+                        pair.insert(own.link.id.clone(), other.id.clone());
+                        break;
+                    }
                 }
             }
         }
+        pair
     }
-    Assignment { lk, jn, j_of_node, link_of, node_of, pair, years: crash_years(cr, cas) }
+}
+
+// The link a crash goes to: its nearest within 25 m, unless a link named in its first location is within 5 m more
+fn nearest_link(crash: &Crash, px: f64, py: f64, cand: &[usize], seg: &[[f64; 5]], lk: &[LinkTally]) -> Option<usize> {
+    // dl: link index to its nearest distance, in the order links first appear
+    let mut dl: Vec<(usize, f64)> = Vec::new();
+    for &si in cand {
+        // The grid holds only positions of segments already pushed
+        let Some(sq) = seg.get(si) else { continue };
+        let sd = seg_dist(px, py, sq[0], sq[1], sq[2], sq[3]);
+        if sd.d <= LINK_R {
+            let li = f64_to_usize(sq[4]);
+            match dl.iter_mut().find(|(seen, _)| *seen == li) {
+                Some(entry) => {
+                    // !(dl.get(li) <= r.d): a nearer piece replaces it, as does a NaN on either side
+                    if entry.1 > sd.d || entry.1.is_nan() || sd.d.is_nan() {
+                        entry.1 = sd.d;
+                    }
+                }
+                None => dl.push((li, sd.d)),
+            }
+        }
+    }
+    let mut best: Option<usize> = None;
+    let mut bd = f64::INFINITY;
+    for &(li, dd) in &dl {
+        if dd < bd {
+            bd = dd;
+            best = Some(li);
+        }
+    }
+    let mut best = best?;
+    let first = crash.location.split(" / ").next().unwrap_or("");
+    let loc = norm(first);
+    // Segments carry positions in lk (both follow links)
+    if !loc.is_empty() && lk.get(best).is_some_and(|t| t.nm != loc) {
+        let mut nb: Option<usize> = None;
+        let mut nd = f64::INFINITY;
+        for &(li, dd) in &dl {
+            let Some(nm) = lk.get(li).map(|t| &t.nm) else { continue };
+            if dd <= bd + NAME_SLACK && dd < nd && !nm.is_empty() && (*nm == loc || nm.contains(&loc) || loc.contains(nm.as_str())) {
+                nd = dd;
+                nb = Some(li);
+            }
+        }
+        if let Some(named) = nb {
+            best = named;
+        }
+    }
+    Some(best)
+}
+
+// The junction of the nearest junction node within 30 m
+fn nearest_junction(px: f64, py: f64, cand: &[usize], pt_node: &[(f64, f64, usize)]) -> Option<usize> {
+    let mut best: Option<usize> = None;
+    let mut bd = NODE_R;
+    for &pi in cand {
+        // The grid holds only positions of junction nodes already pushed
+        let Some(&(nx, ny, ji)) = pt_node.get(pi) else { continue };
+        let dd = math_hypot(&[px - nx, py - ny]);
+        if dd <= bd {
+            bd = dd;
+            best = Some(ji);
+        }
+    }
+    best
+}
+
+/// `assignCrashes(sc)`: assigns every crash to its link and its junction and finds the junctions and paired carriageways.
+pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assignment<'a> {
+    let net = Net::new(sc, cr);
+    let (seg, lgrid) = net.link_grid();
+    let mut lk: Vec<LinkTally<'a>> = net
+        .links
+        .iter()
+        .map(|&l| LinkTally { link: l, nm: norm(l.name.as_str().unwrap_or("")), km: util::poly_len(&sc.geom(l)) / 1000.0, t: Tally::default() })
+        .collect();
+    let (jids, groups) = net.junction_groups(&lk);
+    let mut js = net.junctions(&jids, &groups);
+    let mut link_of: Vec<i32> = Vec::with_capacity(cr.len());
+    let mut node_of: Vec<i32> = Vec::with_capacity(cr.len());
+    for c in cr {
+        let ll = [c.lat, c.lng];
+        let (px, py) = (net.fl.x(&ll), net.fl.y(&ll));
+        let k = cell_key((px / CELL).floor(), (py / CELL).floor());
+        let li = lgrid.get(&k).and_then(|cand| nearest_link(c, px, py, cand, &seg, &lk));
+        if let Some(li) = li
+            && let Some(it) = lk.get_mut(li)
+        {
+            it.t.add(c);
+        }
+        link_of.push(li.map_or(-1, index_i32));
+        // to the junction of the nearest junction node within 30 m
+        let ji = js.ngrid.get(&k).and_then(|cand| nearest_junction(px, py, cand, &js.pt_node));
+        if let Some(ji) = ji
+            && let Some(j) = js.jn.get_mut(ji)
+        {
+            j.t.add(c);
+        }
+        node_of.push(ji.map_or(-1, index_i32));
+    }
+    let pair = net.pair_carriageways(&lk);
+    Assignment { lk, jn: js.jn, j_of_node: js.j_of_node, link_of, node_of, pair, years: crash_years(cr, cas) }
 }

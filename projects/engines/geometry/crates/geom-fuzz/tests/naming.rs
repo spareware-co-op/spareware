@@ -1,5 +1,5 @@
 //! The persistent names fuzz target (piece G87), as tests: `naming_fuzz` is bolero's test mode,
-//! which cargo-bolero and `ClusterFuzzLite` select by name, and `naming_seeded` the seeded leg
+//! a property test on bytes bolero draws, and `naming_seeded` the seeded leg
 //! that runs on every target, WebAssembly included (the crate README sets out the layout). Each
 //! hands the fuzzer's raw bytes to `geom_fuzz::naming::harness`. The input bound is reached and
 //! never passed, and every kind of name, a stranger, an undecided entity and a tied pair are
@@ -24,7 +24,11 @@ use geom_test::{Seed, SplitMix64};
 const ITERATIONS: usize = 20_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 20_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 20,000 cases in 0.426 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 94_000;
 
 /// The longest byte string the seeded leg draws: past the bound, so the bound is met.
 const MAX_LEN: u16 = 96;

@@ -1,5 +1,4 @@
-//! The CBOR fuzz target (piece G91), as tests: `cbor_fuzz` is bolero's test mode, which
-//! cargo-bolero, `ClusterFuzzLite` and Kani select by name, and `cbor_seeded` the seeded leg that
+//! The CBOR fuzz target (piece G91), as tests: `cbor_fuzz` is bolero's test mode, which Kani also proves under its name, and `cbor_seeded` the seeded leg that
 //! runs on every target, WebAssembly included (the crate README sets out the layout). Each hands
 //! the fuzzer's raw bytes to `geom_fuzz::cbor::harness`, which reads them as `geom-format`'s
 //! deterministic CBOR and as its text form.
@@ -34,7 +33,11 @@ use geom_test::{Seed, SplitMix64};
 const ITERATIONS: usize = 20_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 20_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 20,000 cases in 0.012 s), about 0.6 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 1_000_000;
 
 /// The longest byte string the seeded leg draws; the harness reads all of it.
 const MAX_LEN: u16 = 512;

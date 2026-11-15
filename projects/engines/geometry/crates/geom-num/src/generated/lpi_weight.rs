@@ -20,7 +20,7 @@
 //! input (`gappa-lpi-weight-z-n.g`, `gappa-lpi-weight-y-n.g`, `gappa-lpi-weight-x-n.g`, in
 //! `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor`
 //! bounds it independently, and HOL Light checks its certificate (`fptaylor-lpi-weight.fpt`);
-//! `kernel-certificates.yml` runs them on every change and every night.
+//! `kernel-certificates.yml` runs them on every change to a problem or a pinned tool.
 //!
 //! Method: Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>),
 //! with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers.

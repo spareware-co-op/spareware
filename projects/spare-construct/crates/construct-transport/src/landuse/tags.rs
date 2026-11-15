@@ -2,7 +2,9 @@
 //! school rolls, and the tag sets that classify a building, an amenity or a shop.
 
 use crate::importers::jsparse::parse_float;
-use crate::jsnum::{js_trim, math_max, math_min, math_round, value_to_js_string, value_truthy};
+use crate::jsnum::{
+    js_trim, math_max, math_min, math_round, split_digits, value_to_js_string, value_truthy,
+};
 use serde_json::Value;
 
 /// A tag's value as text, `String(v ?? '')`: missing and null are "".
@@ -24,6 +26,7 @@ pub fn tag_str<'a>(t: &'a Value, k: &str) -> Option<&'a str> {
 }
 
 /// landuse.js `num(v)`: `parseFloat(String(v ?? '').replace(',', '.'))`, or None when it is not a finite number.
+#[must_use]
 pub fn num(v: &str) -> Option<f64> {
     let x = parse_float(&v.replacen(',', ".", 1));
     x.is_finite().then_some(x)
@@ -31,30 +34,27 @@ pub fn num(v: &str) -> Option<f64> {
 
 /// True for `/^\d{1,3}([, ]\d{3})+$/`: a count written with thousands separators ("1,200", "1 450").
 fn has_thousands_separators(s: &str) -> bool {
-    let b = s.as_bytes();
-    let mut i = 0;
-    while i < b.len() && b[i].is_ascii_digit() {
-        i += 1;
-    }
-    if !(1..=3).contains(&i) {
+    let (lead, mut rest) = split_digits(s.as_bytes());
+    if !(1..=3).contains(&lead.len()) {
         return false;
     }
-    let mut groups = 0;
-    while i < b.len() {
-        if i + 4 > b.len()
-            || !(b[i] == b',' || b[i] == b' ')
-            || !b[i + 1..i + 4].iter().all(u8::is_ascii_digit)
-        {
+    let mut any_group = false;
+    while !rest.is_empty() {
+        let Some((&[sep, d1, d2, d3], after)) = rest.split_first_chunk::<4>() else {
+            return false;
+        };
+        if !(sep == b',' || sep == b' ') || ![d1, d2, d3].iter().all(u8::is_ascii_digit) {
             return false;
         }
-        i += 4;
-        groups += 1;
+        rest = after;
+        any_group = true;
     }
-    groups >= 1
+    any_group
 }
 
 /// landuse.js `count(v)`: a count (rolls, capacities, rooms) that may carry thousands separators ("1,200" or "1 450"); None when it
 /// is not a finite number.
+#[must_use]
 pub fn count(v: &str) -> Option<f64> {
     let s = js_trim(v);
     if has_thousands_separators(s) {
@@ -70,6 +70,7 @@ pub fn count_tag(t: &Value, k: &str) -> Option<f64> {
 }
 
 /// landuse.js `levelsOf(t, apartments)`: floors from `building:levels`, else height divided by 3 m, else 1 (3 for buildings tagged apartments).
+#[must_use]
 pub fn levels_of(t: &Value, apartments: bool) -> f64 {
     if let Some(l) = num(&tag_text(t, "building:levels"))
         && l >= 1.0
@@ -95,13 +96,17 @@ fn has_word(s: &str, words: &[&str]) -> bool {
     }
     for w in words {
         let wc: Vec<char> = w.chars().collect();
-        if wc.len() > lower.len() {
+        let Some(last_start) = lower.len().checked_sub(wc.len()) else {
             continue;
-        }
-        for i in 0..=(lower.len() - wc.len()) {
-            if lower[i..i + wc.len()] == wc[..]
-                && (i == 0 || !is_w(chars[i - 1]))
-                && (i + wc.len() == chars.len() || !is_w(chars[i + wc.len()]))
+        };
+        for i in 0..=last_start {
+            // Bound: i + wc.len() is at most lower.len(), which chars.len() equals
+            let end = i.saturating_add(wc.len());
+            if lower.get(i..end) == Some(wc.as_slice())
+                && i.checked_sub(1)
+                    .and_then(|prev| chars.get(prev))
+                    .is_none_or(|&ch| !is_w(ch))
+                && chars.get(end).is_none_or(|&ch| !is_w(ch))
             {
                 return true;
             }
@@ -118,12 +123,13 @@ fn digit_runs(s: &str) -> Vec<f64> {
         if c.is_ascii_digit() {
             cur.push(c);
         } else if !cur.is_empty() {
-            out.push(cur.parse::<f64>().expect("digits"));
+            // A run of ASCII digits always parses; NaN is what Number gives text that does not
+            out.push(cur.parse::<f64>().unwrap_or(f64::NAN));
             cur.clear();
         }
     }
     if !cur.is_empty() {
-        out.push(cur.parse::<f64>().expect("digits"));
+        out.push(cur.parse::<f64>().unwrap_or(f64::NAN));
     }
     out
 }
@@ -205,7 +211,7 @@ pub const IGNORE: [&str; 25] = [
 ];
 /// More building values that are ignored (landuse.js IGNORE continued).
 pub const IGNORE2: [&str; 5] = ["container", "shelter", "toilets", "kiosk_atm", "no"];
-/// Buildings that generate trips but have no land use (churches, halls, clubrooms; landuse.js OTHER_B).
+/// Buildings that generate trips but have no land use (churches, halls, clubrooms; landuse.js `OTHER_B`).
 pub const OTHER_B: [&str; 22] = [
     "church",
     "chapel",
@@ -230,7 +236,7 @@ pub const OTHER_B: [&str; 22] = [
     "police",
     "museum",
 ];
-/// Amenities that are community or other uses (landuse.js OTHER_A).
+/// Amenities that are community or other uses (landuse.js `OTHER_A`).
 pub const OTHER_A: [&str; 16] = [
     "place_of_worship",
     "community_centre",
@@ -249,7 +255,7 @@ pub const OTHER_A: [&str; 16] = [
     "parking",
     "fuel",
 ];
-/// Residential building values (landuse.js RES_B).
+/// Residential building values (landuse.js `RES_B`).
 pub const RES_B: [&str; 5] = [
     "house",
     "detached",
@@ -257,13 +263,13 @@ pub const RES_B: [&str; 5] = [
     "bungalow",
     "static_caravan",
 ];
-/// Retail building values (landuse.js RETAIL_B).
+/// Retail building values (landuse.js `RETAIL_B`).
 pub const RETAIL_B: [&str; 3] = ["retail", "kiosk", "shop"];
-/// Industrial building values (landuse.js IND_B).
+/// Industrial building values (landuse.js `IND_B`).
 pub const IND_B: [&str; 4] = ["industrial", "factory", "manufacture", "workshop"];
-/// Shops that are workshops (landuse.js SHOP_IND).
+/// Shops that are workshops (landuse.js `SHOP_IND`).
 pub const SHOP_IND: [&str; 3] = ["car_repair", "tyres", "motorcycle_repair"];
-/// Trade and bulky-goods shops (landuse.js SHOP_BULKY).
+/// Trade and bulky-goods shops (landuse.js `SHOP_BULKY`).
 pub const SHOP_BULKY: [&str; 21] = [
     "car",
     "car_parts",
@@ -287,7 +293,7 @@ pub const SHOP_BULKY: [&str; 21] = [
     "bed",
     "lighting",
 ];
-/// Shops with a yard that adds no floor area (landuse.js SHOP_YARD).
+/// Shops with a yard that adds no floor area (landuse.js `SHOP_YARD`).
 pub const SHOP_YARD: [&str; 8] = [
     "car",
     "garden_centre",
@@ -300,6 +306,7 @@ pub const SHOP_YARD: [&str; 8] = [
 ];
 
 /// landuse.js `shopUse(s)`: workshops count as industrial, trade and bulky-goods shops as warehouse, others as retail.
+#[must_use]
 pub fn shop_use(s: Option<&str>) -> &'static str {
     match s {
         Some(s) if SHOP_IND.contains(&s) => "industrial",
@@ -308,7 +315,7 @@ pub fn shop_use(s: Option<&str>) -> &'static str {
     }
 }
 
-/// landuse.js LU_CLASS: the OpenStreetMap landuse values the build reads.
+/// landuse.js `LU_CLASS`: the OpenStreetMap landuse values the build reads.
 pub fn lu_class(v: Option<&str>) -> Option<&'static str> {
     match v? {
         "residential" => Some("residential"),
@@ -339,6 +346,7 @@ pub const WEIGHT: [(&str, f64); 13] = [
 ];
 
 /// The weight of a land-use key.
+#[must_use]
 pub fn weight(k: &str) -> f64 {
     WEIGHT
         .iter()
@@ -346,19 +354,19 @@ pub fn weight(k: &str) -> f64 {
         .map_or(f64::NAN, |(_, w)| *w)
 }
 
-/// Amenities that are schools (landuse.js EDU_A).
+/// Amenities that are schools (landuse.js `EDU_A`).
 pub const EDU_A: [&str; 1] = ["school"];
-/// Amenities that are tertiary campuses (landuse.js TERT_A).
+/// Amenities that are tertiary campuses (landuse.js `TERT_A`).
 pub const TERT_A: [&str; 2] = ["college", "university"];
-/// Amenities that are early childhood centres (landuse.js CHILD_A).
+/// Amenities that are early childhood centres (landuse.js `CHILD_A`).
 pub const CHILD_A: [&str; 2] = ["kindergarten", "childcare"];
-/// Amenities that are clinics (landuse.js MED_A).
+/// Amenities that are clinics (landuse.js `MED_A`).
 pub const MED_A: [&str; 3] = ["doctors", "clinic", "dentist"];
-/// Building values that are schools (landuse.js EDU_B).
+/// Building values that are schools (landuse.js `EDU_B`).
 pub const EDU_B: [&str; 1] = ["school"];
-/// Building values that are tertiary buildings (landuse.js TERT_B).
+/// Building values that are tertiary buildings (landuse.js `TERT_B`).
 pub const TERT_B: [&str; 2] = ["university", "college"];
-/// Building values that are early childhood buildings (landuse.js CHILD_B).
+/// Building values that are early childhood buildings (landuse.js `CHILD_B`).
 pub const CHILD_B: [&str; 2] = ["kindergarten", "childcare"];
 
 /// `Set.has(v)` for a tag that may be missing.

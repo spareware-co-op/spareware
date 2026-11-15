@@ -38,28 +38,39 @@ const TESTING_MD: &str = include_str!("../../../architecture/28-testing.md");
 /// The kernel's guide for agents.
 const AGENTS_MD: &str = include_str!("../../../AGENTS.md");
 
-/// The paths a trigger of `kernel.yml` (`pull_request` or `push`) lists, in order.
+/// The paths that make a run of `kernel.yml` on `trigger` (`pull_request` or `push`) test anything:
+/// the trigger takes every change (it has no path filter of its own, so the required check always
+/// reports), and the job `changes` tests only a change that touches one of the paths
+/// `KERNEL_PATHS` lists, in order. A trigger with a path filter of its own gives no paths, so every
+/// watched file is reported unwatched.
 fn trigger_paths(trigger: &str) -> Vec<String> {
-    let lines: Vec<&str> = KERNEL_YML.lines().collect();
+    trigger_paths_in(KERNEL_YML, trigger)
+}
+
+/// [`trigger_paths`] of the workflow text `yml`.
+fn trigger_paths_in(yml: &str, trigger: &str) -> Vec<String> {
+    let lines: Vec<&str> = yml.lines().collect();
     let start = lines
         .iter()
         .position(|l| *l == format!("  {trigger}:"))
         .unwrap_or_else(|| panic!("kernel.yml has no `{trigger}` trigger"));
-    let mut paths = Vec::new();
-    let mut in_paths = false;
-    for line in &lines[start + 1..] {
-        if !line.starts_with("    ") {
-            break;
-        }
-        if *line == "    paths:" {
-            in_paths = true;
-        } else if let Some(item) = line.strip_prefix("      - ").filter(|_| in_paths) {
-            paths.push(item.trim_matches('"').to_owned());
-        } else {
-            in_paths = false;
-        }
+    let filtered = lines[start + 1..]
+        .iter()
+        .take_while(|l| l.starts_with("    "))
+        .any(|l| l.trim_start().starts_with("paths"));
+    if filtered {
+        return Vec::new();
     }
-    paths
+    let at = lines
+        .iter()
+        .position(|l| *l == "  KERNEL_PATHS: |")
+        .unwrap_or_else(|| panic!("kernel.yml has no KERNEL_PATHS"));
+    lines[at + 1..]
+        .iter()
+        .map_while(|l| l.strip_prefix("    "))
+        .filter(|l| !l.starts_with(' ') && !l.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Whether a path filter of GitHub's syntax matches a repository path: exactly, or as a folder
@@ -90,7 +101,7 @@ fn job(id: &str) -> Vec<&'static str> {
 
 /// The guard: a change to the toolchain pin, the lock file, the workspace manifest, Cargo's
 /// configuration or anything under the kernel (where vendored numeric code lives) reruns
-/// `kernel.yml`, on pull requests and on main alike.
+/// `kernel.yml`'s tests, on pull requests and on main alike.
 #[test]
 fn both_triggers_watch_the_toolchain_the_lock_and_the_kernel() {
     for trigger in ["pull_request", "push"] {
@@ -141,9 +152,20 @@ fn the_guard_job_runs_the_proof() {
         text.contains("toolchain: ${{ env.RUST_TOOLCHAIN }}"),
         "{text}"
     );
-    // No condition on the job or its step, and no failure allowed.
-    assert!(
-        !lines.iter().any(|l| l.trim_start().starts_with("if:")),
+    // No condition on its steps, and on the job only the one every pull request's test job has
+    // (it runs on each push to a pull request that touches the kernel, decision 32.53), and no
+    // failure allowed.
+    let conditions: Vec<&str> = lines
+        .iter()
+        .filter(|l| l.trim_start().starts_with("if:"))
+        .copied()
+        .collect();
+    assert_eq!(
+        conditions,
+        [
+            "    if: github.event_name != 'merge_group' && needs.changes.outputs.kernel == 'true' && \
+          needs.changes.outputs.tested != 'true'"
+        ],
         "{text}"
     );
     assert!(!text.contains("continue-on-error"), "{text}");
@@ -349,4 +371,31 @@ mod native {
         let source = fs::read_to_string(folders[0].join(SIN_FILE)).unwrap();
         perturb_sin(&source).unwrap();
     }
+}
+
+/// The reader above sees a path filter put back on a trigger, and a path dropped from the list.
+#[test]
+fn a_filter_or_a_dropped_path_is_seen() {
+    assert!(
+        trigger_paths("pull_request")
+            .iter()
+            .any(|p| p == "Cargo.lock")
+    );
+    let filtered = KERNEL_YML.replacen(
+        "  pull_request:\n  merge_group:\n",
+        "  pull_request:\n    paths:\n      - \"projects/**\"\n  merge_group:\n",
+        1,
+    );
+    assert_ne!(filtered, KERNEL_YML);
+    assert_eq!(
+        trigger_paths_in(&filtered, "pull_request"),
+        Vec::<String>::new()
+    );
+    let dropped = KERNEL_YML.replacen("    Cargo.lock\n", "", 1);
+    assert_ne!(dropped, KERNEL_YML);
+    assert!(
+        !trigger_paths_in(&dropped, "push")
+            .iter()
+            .any(|p| p == "Cargo.lock")
+    );
 }

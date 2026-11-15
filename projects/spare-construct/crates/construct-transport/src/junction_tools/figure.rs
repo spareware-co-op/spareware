@@ -9,13 +9,14 @@ use super::text::r5;
 use crate::edit::sites;
 use crate::graph::{js_sort_by, turn_set, turn_type, u_pen};
 use crate::jsmath::{cos, sin};
-use crate::jsnum::{math_max, math_round, number_to_js_string, value_truthy};
+use crate::jsnum::{f64_to_usize, math_max, math_round, number_to_js_string, usize_to_f64, value_truthy};
 use crate::junction::{LaneModel, lane_model};
 use crate::project::Scenario;
 use crate::results::Res;
 use crate::turns::{Arm, LEG_CODES, movement_id, movements, turn_code};
 use crate::util::{self, esc};
 use serde_json::{Map, Value, json};
+use std::fmt::Write as _;
 
 const PI: f64 = std::f64::consts::PI;
 
@@ -55,21 +56,60 @@ struct Arrow {
 fn lane_of(mv: &str) -> f64 {
     match mv {
         "L" => 0.38,
-        "T" => 0.25,
         "R" => 0.13,
         "U" => 0.05,
+        // "T" and anything else
         _ => 0.25,
     }
 }
 
+/// The layout of a turning diagram: half its size (`h`), the approach width, the arrow radius (`R1`), the font size and
+/// the font style.
+struct Geo {
+    h: f64,
+    aw: f64,
+    r1: f64,
+    fs: f64,
+    font: String,
+}
+
+impl Geo {
+    /// The layout of a diagram `size` across: approaches `aw_k` of it wide, text `size / fs_div` but at least `fs_min`.
+    fn new(size: f64, aw_k: f64, fs_min: f64, fs_div: f64) -> Geo {
+        let h = size / 2.0;
+        let fs = math_max(fs_min, size / fs_div);
+        Geo {
+            h,
+            aw: size * aw_k,
+            r1: h * 0.42,
+            fs,
+            font: format!("font:600 {}px var(--f-cond, sans-serif)", s1(fs)),
+        }
+    }
+}
+
+/// An approach's line from the centre of a diagram, full width when it is two-way.
+fn leg_line(geo: &Geo, b: f64, two: bool) -> String {
+    let (h, aw) = (geo.h, geo.aw);
+    let u = vec(b);
+    format!(
+        "<line x1=\"{h}\" y1=\"{h}\" x2=\"{}\" y2=\"{}\" stroke-width=\"{}\"/>",
+        s1(h + u[0] * (h - 2.0)),
+        s1(h + u[1] * (h - 2.0)),
+        s1(if two { aw } else { aw * 0.6 }),
+        h = number_to_js_string(h)
+    )
+}
+
 /// `arrow(h, R1, aw, bIn, bOut, mv, inTwo, outTwo)`: the curve of one movement.
-fn arrow(h: f64, r1: f64, aw: f64, b_in: f64, b_out: f64, mv: &str, in_two: bool, out_two: bool) -> Arrow {
+fn arrow(geo: &Geo, b_in: f64, b_out: f64, mv: &str, in_two: bool, out_two: bool) -> Arrow {
+    let (half, r1, aw) = (geo.h, geo.r1, geo.aw);
     let ui = vec(b_in);
     let uo = vec(b_out);
     let n_in = [-ui[1], ui[0]];
     let n_out = [uo[1], -uo[0]];
     let lane = lane_of(mv);
-    let p = |r: f64, u: [f64; 2], n: [f64; 2], d: f64| [h + u[0] * r + n[0] * d, h + u[1] * r + n[1] * d];
+    let p = |r: f64, u: [f64; 2], n: [f64; 2], d: f64| [half + u[0] * r + n[0] * d, half + u[1] * r + n[1] * d];
     let s0 = p(
         r1,
         ui,
@@ -159,6 +199,7 @@ struct Mv {
 impl<'a> Tools<'a> {
     /// `figure(sc, resA, resB, id, opts)`: the junction's turning diagram for reports: peak-hour volumes by movement, 'AM (PM)'
     /// labels rounded to 5 veh/h, and its note.
+    #[must_use]
     pub fn figure(
         &self,
         sc: &Scenario,
@@ -171,11 +212,7 @@ impl<'a> Tools<'a> {
             Some(s) if s != 0.0 && !s.is_nan() => s,
             _ => 300.0,
         };
-        let h = size / 2.0;
-        let aw = size * 0.15;
-        let r1 = h * 0.42;
-        let fs = math_max(9.0, size / 27.0);
-        let font = format!("font:600 {}px var(--f-cond, sans-serif)", s1(fs));
+        let geo = Geo::new(size, 0.15, 9.0, 27.0);
         let layer = match opts.layer {
             Some("dev") => "dev",
             Some("base") => "base",
@@ -212,25 +249,7 @@ impl<'a> Tools<'a> {
             }
         }
         let leg_of = |o: usize| legs.iter().find(|(k, _)| *k == o).map(|(_, a)| *a);
-        let mut mv: Vec<Mv> = Vec::new();
-        for (side, p) in [(0usize, &pa), (1usize, &pb)] {
-            if let Some(p) = p {
-                for (r, v) in &p.rows {
-                    let i = match mv.iter().position(|m| m.r.id == r.id) {
-                        Some(i) => i,
-                        None => {
-                            mv.push(Mv { r: r.clone(), a: 0.0, b: 0.0 });
-                            mv.len() - 1
-                        }
-                    };
-                    if side == 0 {
-                        mv[i].a += v;
-                    } else {
-                        mv[i].b += v;
-                    }
-                }
-            }
-        }
+        let mv = merge_moves(pa.as_ref(), pb.as_ref());
         let name = base.e.name.clone();
         let two = |o: usize| leg_of(o).is_none_or(|a| a.is_in && a.is_out);
         let label = format!(
@@ -239,7 +258,7 @@ impl<'a> Tools<'a> {
             res_a.map_or("", |r| r.period.as_str()),
             res_b.map_or(String::new(), |r| format!(" ({})", r.period))
         );
-        let mut s: Vec<String> = vec![
+        let mut svg: Vec<String> = vec![
             format!(
                 "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {size} {size}\" width=\"{size}\" height=\"{size}\" role=\"img\" aria-label=\"{}\">",
                 esc(&label),
@@ -248,131 +267,21 @@ impl<'a> Tools<'a> {
             "<g style=\"stroke:var(--muted, #56635f);opacity:.2\">".to_string(),
         ];
         for (o, a) in &legs {
-            let u = vec(a.b);
-            s.push(format!(
-                "<line x1=\"{h}\" y1=\"{h}\" x2=\"{}\" y2=\"{}\" stroke-width=\"{}\"/>",
-                s1(h + u[0] * (h - 2.0)),
-                s1(h + u[1] * (h - 2.0)),
-                s1(if two(*o) { aw } else { aw * 0.6 }),
-                h = number_to_js_string(h)
-            ));
+            svg.push(leg_line(&geo, a.b, two(*o)));
         }
-        s.push(format!(
+        svg.push(format!(
             "<circle cx=\"{h}\" cy=\"{h}\" r=\"{}\" style=\"fill:var(--muted, #56635f)\"/></g>",
-            s1(aw * 0.5),
-            h = number_to_js_string(h)
+            s1(geo.aw * 0.5),
+            h = number_to_js_string(geo.h)
         ));
-        let vmax = mv.iter().fold(1.0, |m, x| math_max(m, math_max(x.a, x.b)));
-        for m in &mv {
-            let ai = LEG_CODES.iter().position(|c| *c == m.r.leg);
-            let xi = LEG_CODES.iter().position(|c| *c == m.r.to_leg);
-            let (Some(a), Some(x)) = (ai.and_then(leg_of), xi.and_then(leg_of)) else {
-                continue;
-            };
-            if math_max(m.a, m.b) < 0.5 {
-                continue;
-            }
-            let g = arrow(h, r1, aw, a.b, x.b, &m.r.mv, two(a.o), two(x.o));
-            let w = 1.2 + 4.5 * math_max(m.a, m.b) / vmax;
-            s.push(format!(
-                "<g style=\"stroke:var(--accent, #0d6a4d);fill:var(--accent, #0d6a4d)\"><path d=\"{}\" fill=\"none\" stroke-width=\"{}\" stroke-linecap=\"round\" opacity=\".85\"/><polygon points=\"{}\" stroke=\"none\"/></g>",
-                path_d(&g),
-                s1(w),
-                arrow_head(&g, w)
-            ));
-        }
+        svg.extend(movement_arrows(&geo, &legs, &mv));
         for (_, a) in &legs {
-            let u = vec(a.b);
-            let dep = [u[1], -u[0]];
-            let p = [
-                h + u[0] * h * 0.78 + dep[0] * (aw / 2.0 + fs * 0.5),
-                h + u[1] * h * 0.78 + dep[1] * (aw / 2.0 + fs * 0.5),
-            ];
-            let mut ang = a.b - 90.0;
-            if norm(ang) > 90.0 && norm(ang) < 270.0 {
-                ang += 180.0;
+            svg.push(figure_road_label(&geo, a));
+            if let Some(t) = turn_labels(&geo, a, &mv, pa.is_some(), pb.is_some()) {
+                svg.push(t);
             }
-            let lbl = if utf16_len(&a.road) > 22 {
-                format!("{}\u{2026}", slice16(&a.road, 21))
-            } else {
-                a.road.clone()
-            };
-            s.push(format!(
-                "<text x=\"{}\" y=\"{}\" transform=\"rotate({} {} {})\" text-anchor=\"middle\" dominant-baseline=\"middle\" style=\"fill:var(--muted, #56635f);{}\">{}</text>",
-                s1(p[0]),
-                s1(p[1]),
-                s1(norm(ang)),
-                s1(p[0]),
-                s1(p[1]),
-                font,
-                esc(&lbl)
-            ));
-            let mut sel: Vec<&Mv> = mv
-                .iter()
-                .filter(|m| m.r.leg == a.leg && math_max(m.a, m.b) >= 0.5)
-                .collect();
-            let ix = |t: &str| TURN_ORDER.iter().position(|x| *x == t).map_or(-1.0, |i| i as f64);
-            js_sort_by(&mut sel, |p2, q| ix(p2.r.turn) - ix(q.r.turn));
-            let lines: Vec<String> = sel
-                .iter()
-                .map(|m| {
-                    format!(
-                        "{} {}{}",
-                        m.r.turn,
-                        if pa.is_some() { r5(m.a) } else { String::new() },
-                        if pb.is_some() {
-                            if pa.is_some() {
-                                format!(" ({})", r5(m.b))
-                            } else {
-                                r5(m.b)
-                            }
-                        } else {
-                            String::new()
-                        }
-                    )
-                })
-                .collect();
-            if lines.is_empty() {
-                continue;
-            }
-            let n_in = [-u[1], u[0]];
-            let q = [
-                h + u[0] * h * 0.56 + n_in[0] * (aw / 2.0 + fs * 0.4),
-                h + u[1] * h * 0.56 + n_in[1] * (aw / 2.0 + fs * 0.4),
-            ];
-            let anchor = if n_in[0] > 0.35 {
-                "start"
-            } else if n_in[0] < -0.35 {
-                "end"
-            } else {
-                "middle"
-            };
-            let lh = fs * 1.15;
-            let bh = lines.len() as f64 * lh;
-            let top = if n_in[1] > 0.35 {
-                q[1]
-            } else if n_in[1] < -0.35 {
-                q[1] - bh
-            } else {
-                q[1] - bh / 2.0
-            };
-            s.push(format!(
-                "<text text-anchor=\"{}\" style=\"fill:var(--ink, #18201e);{}\">{}</text>",
-                anchor,
-                font,
-                lines
-                    .iter()
-                    .enumerate()
-                    .map(|(i, t)| format!(
-                        "<tspan x=\"{}\" y=\"{}\">{}</tspan>",
-                        s1(q[0]),
-                        s1(top + (i as f64 + 0.8) * lh),
-                        esc(t)
-                    ))
-                    .collect::<String>()
-            ));
         }
-        s.push(north(size, fs, &font, "var(--muted, #56635f)"));
+        svg.push(north(size, geo.fs, &geo.font, "var(--muted, #56635f)"));
         let lab = format!(
             "{}{}",
             if pa.is_some() { res_a.map_or("", |r| r.period.as_str()) } else { "" },
@@ -388,7 +297,7 @@ impl<'a> Tools<'a> {
         );
         format!(
             "{}<p class=\"note\">{}: {} peak-hour turning volumes{}, veh/h, rounded to the nearest {}.</p>",
-            s.join(""),
+            svg.join(""),
             esc(&name),
             esc(&lab),
             match layer {
@@ -403,6 +312,159 @@ impl<'a> Tools<'a> {
 
 fn or0(x: f64) -> f64 {
     if x.is_nan() || x == 0.0 { 0.0 } else { x }
+}
+
+// The figure's arrows: one per movement with flow, its width by the larger of the two periods' volumes
+fn movement_arrows(geo: &Geo, legs: &[(usize, &Arm)], mv: &[Mv]) -> Vec<String> {
+    let leg_of = |o: usize| legs.iter().find(|(k, _)| *k == o).map(|(_, a)| *a);
+    let two = |o: usize| leg_of(o).is_none_or(|a| a.is_in && a.is_out);
+    let mut out = Vec::new();
+    let vmax = mv.iter().fold(1.0, |m, x| math_max(m, math_max(x.a, x.b)));
+    for m in mv {
+        let ai = LEG_CODES.iter().position(|c| *c == m.r.leg);
+        let xi = LEG_CODES.iter().position(|c| *c == m.r.to_leg);
+        let (Some(a), Some(x)) = (ai.and_then(leg_of), xi.and_then(leg_of)) else {
+            continue;
+        };
+        if math_max(m.a, m.b) < 0.5 {
+            continue;
+        }
+        let curve = arrow(geo, a.b, x.b, &m.r.mv, two(a.o), two(x.o));
+        let width = 1.2 + 4.5 * math_max(m.a, m.b) / vmax;
+        out.push(format!(
+            "<g style=\"stroke:var(--accent, #0d6a4d);fill:var(--accent, #0d6a4d)\"><path d=\"{}\" fill=\"none\" stroke-width=\"{}\" stroke-linecap=\"round\" opacity=\".85\"/><polygon points=\"{}\" stroke=\"none\"/></g>",
+            path_d(&curve),
+            s1(width),
+            arrow_head(&curve, width)
+        ));
+    }
+    out
+}
+
+/// The movements of both periods by id, in the order first met: the first period's flow as `a`, the second's as `b`.
+fn merge_moves(pa: Option<&Pick<'_>>, pb: Option<&Pick<'_>>) -> Vec<Mv> {
+    let mut mv: Vec<Mv> = Vec::new();
+    for (side, pick) in [(0usize, pa), (1usize, pb)] {
+        let Some(pick) = pick else {
+            continue;
+        };
+        for (r, v) in &pick.rows {
+            let found = if let Some(i) = mv.iter().position(|m| m.r.id == r.id) { mv.get_mut(i) } else {
+                mv.push(Mv { r: r.clone(), a: 0.0, b: 0.0 });
+                mv.last_mut()
+            };
+            // the movement was found or just pushed
+            let Some(m) = found else {
+                continue;
+            };
+            if side == 0 {
+                m.a += v;
+            } else {
+                m.b += v;
+            }
+        }
+    }
+    mv
+}
+
+/// The road name along an approach of the report figure.
+fn figure_road_label(geo: &Geo, a: &Arm) -> String {
+    let (h, aw, fs) = (geo.h, geo.aw, geo.fs);
+    let u = vec(a.b);
+    let dep = [u[1], -u[0]];
+    let p = [
+        h + u[0] * h * 0.78 + dep[0] * (aw / 2.0 + fs * 0.5),
+        h + u[1] * h * 0.78 + dep[1] * (aw / 2.0 + fs * 0.5),
+    ];
+    let mut ang = a.b - 90.0;
+    if norm(ang) > 90.0 && norm(ang) < 270.0 {
+        ang += 180.0;
+    }
+    let lbl = if utf16_len(&a.road) > 22 {
+        format!("{}\u{2026}", slice16(&a.road, 21))
+    } else {
+        a.road.clone()
+    };
+    format!(
+        "<text x=\"{}\" y=\"{}\" transform=\"rotate({} {} {})\" text-anchor=\"middle\" dominant-baseline=\"middle\" style=\"fill:var(--muted, #56635f);{}\">{}</text>",
+        s1(p[0]),
+        s1(p[1]),
+        s1(norm(ang)),
+        s1(p[0]),
+        s1(p[1]),
+        geo.font,
+        esc(&lbl)
+    )
+}
+
+/// The 'AM (PM)' volume labels of the turns from an approach of the report figure, or None when it has none.
+fn turn_labels(geo: &Geo, a: &Arm, mv: &[Mv], has_a: bool, has_b: bool) -> Option<String> {
+    let (h, aw, fs) = (geo.h, geo.aw, geo.fs);
+    let u = vec(a.b);
+    let mut sel: Vec<&Mv> = mv
+        .iter()
+        .filter(|m| m.r.leg == a.leg && math_max(m.a, m.b) >= 0.5)
+        .collect();
+    let ix = |t: &str| TURN_ORDER.iter().position(|x| *x == t).map_or(-1.0, usize_to_f64);
+    js_sort_by(&mut sel, |p2, q| ix(p2.r.turn) - ix(q.r.turn));
+    let lines: Vec<String> = sel
+        .iter()
+        .map(|m| {
+            format!(
+                "{} {}{}",
+                m.r.turn,
+                if has_a { r5(m.a) } else { String::new() },
+                if has_b {
+                    if has_a {
+                        format!(" ({})", r5(m.b))
+                    } else {
+                        r5(m.b)
+                    }
+                } else {
+                    String::new()
+                }
+            )
+        })
+        .collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let n_in = [-u[1], u[0]];
+    let pos = [
+        h + u[0] * h * 0.56 + n_in[0] * (aw / 2.0 + fs * 0.4),
+        h + u[1] * h * 0.56 + n_in[1] * (aw / 2.0 + fs * 0.4),
+    ];
+    let anchor = if n_in[0] > 0.35 {
+        "start"
+    } else if n_in[0] < -0.35 {
+        "end"
+    } else {
+        "middle"
+    };
+    let lh = fs * 1.15;
+    let bh = usize_to_f64(lines.len()) * lh;
+    let top = if n_in[1] > 0.35 {
+        pos[1]
+    } else if n_in[1] < -0.35 {
+        pos[1] - bh
+    } else {
+        pos[1] - bh / 2.0
+    };
+    // Writing to a String cannot fail (the `let _ =` below)
+    let spans = lines.iter().enumerate().fold(String::new(), |mut out, (i, t)| {
+        let _ = write!(
+            out,
+            "<tspan x=\"{}\" y=\"{}\">{}</tspan>",
+            s1(pos[0]),
+            s1(top + (usize_to_f64(i) + 0.8) * lh),
+            esc(t)
+        );
+        out
+    });
+    Some(format!(
+        "<text text-anchor=\"{}\" style=\"fill:var(--ink, #18201e);{}\">{}</text>",
+        anchor, geo.font, spans
+    ))
 }
 
 /* ---------------- turn bans ---------------- */
@@ -440,6 +502,7 @@ pub struct MoveRow {
 
 impl MoveRow {
     /// As JSON (the arms by id).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         use crate::jsnum::plain_number;
         json!({
@@ -450,9 +513,10 @@ impl MoveRow {
     }
 }
 
-impl<'a> Tools<'a> {
+impl Tools<'_> {
     /// `moves(sc, res, nodeId, set)`: the turns a junction allows (every entry arm to every exit arm), with their flows and
     /// whether each is banned (by the node's list, or by the default no-U-turn rule). Empty below three roads.
+    #[must_use]
     pub fn moves(&self, sc: &Scenario, res: Option<&Res>, node_id: &str) -> Vec<MoveRow> {
         let Some(n) = sc.nodes.get(node_id) else {
             return Vec::new();
@@ -521,13 +585,13 @@ impl<'a> Tools<'a> {
                 });
             }
         }
-        let ix = |t: &str| TURN_ORDER.iter().position(|x| *x == t).map_or(-1.0, |i| i as f64);
+        let ix = |t: &str| TURN_ORDER.iter().position(|x| *x == t).map_or(-1.0, usize_to_f64);
         js_sort_by(&mut out, |p, q| {
-            let d = p.from.o as f64 - q.from.o as f64;
-            if d != 0.0 {
-                d
-            } else {
+            let d = usize_to_f64(p.from.o) - usize_to_f64(q.from.o);
+            if d == 0.0 {
                 ix(p.turn) - ix(q.turn)
+            } else {
+                d
             }
         });
         out
@@ -535,119 +599,125 @@ impl<'a> Tools<'a> {
 
     /// `banSvg(sc, nodeId, list, size)`: the turn ban editor's diagram: an arrow for each turn, dashed and crossed when banned
     /// (U-turns banned by the default rule are not drawn).
+    #[must_use]
     pub fn ban_svg(&self, node_id: &str, list: &[MoveRow], size: Option<f64>) -> String {
         let size = match size {
             Some(s) if s != 0.0 && !s.is_nan() => s,
             _ => 240.0,
         };
-        let h = size / 2.0;
-        let aw = size * 0.17;
-        let r1 = h * 0.42;
-        let fs = math_max(8.0, size / 26.0);
-        let font = format!("font:600 {}px var(--f-cond, sans-serif)", s1(fs));
+        let geo = Geo::new(size, 0.17, 8.0, 26.0);
         let mut arms: Vec<&Arm> = Vec::new();
         for m in list {
             for x in [&m.from, &m.to] {
-                match arms.iter().position(|a| a.id == x.id) {
-                    Some(i) => arms[i] = x,
-                    None => arms.push(x),
+                if let Some(slot) = arms.iter_mut().find(|a| a.id == x.id) {
+                    *slot = x;
+                } else {
+                    arms.push(x);
                 }
             }
         }
-        let mut s: Vec<String> = vec![format!(
+        let mut svg: Vec<String> = vec![format!(
             "<svg viewBox=\"0 0 {size} {size}\" width=\"{size}\" height=\"{size}\" role=\"group\" aria-label=\"Turns at this junction. Click an arrow to ban or allow that turn.\"><g style=\"stroke:var(--muted);opacity:.2\">",
             size = number_to_js_string(size)
         )];
         for a in &arms {
-            let u = vec(a.b);
-            s.push(format!(
-                "<line x1=\"{h}\" y1=\"{h}\" x2=\"{}\" y2=\"{}\" stroke-width=\"{}\"/>",
-                s1(h + u[0] * (h - 2.0)),
-                s1(h + u[1] * (h - 2.0)),
-                s1(if a.is_in && a.is_out { aw } else { aw * 0.6 }),
-                h = number_to_js_string(h)
-            ));
+            svg.push(leg_line(&geo, a.b, a.is_in && a.is_out));
         }
-        s.push(format!(
+        svg.push(format!(
             "<circle cx=\"{h}\" cy=\"{h}\" r=\"{}\" style=\"fill:var(--muted)\"/></g>",
-            s1(aw * 0.5),
-            h = number_to_js_string(h)
+            s1(geo.aw * 0.5),
+            h = number_to_js_string(geo.h)
         ));
         for a in &arms {
-            let u = vec(a.b);
-            let dep = [u[1], -u[0]];
-            let p = [
-                h + u[0] * h * 0.74 + dep[0] * (aw / 2.0 + fs * 0.45),
-                h + u[1] * h * 0.74 + dep[1] * (aw / 2.0 + fs * 0.45),
-            ];
-            let mut ang = a.b - 90.0;
-            if norm(ang) > 90.0 && norm(ang) < 270.0 {
-                ang += 180.0;
-            }
-            let road = if utf16_len(&a.road) > 16 {
-                format!("{}\u{2026}", slice16(&a.road, 15))
-            } else {
-                a.road.clone()
-            };
-            s.push(format!(
-                "<text x=\"{}\" y=\"{}\" transform=\"rotate({} {} {})\" text-anchor=\"middle\" dominant-baseline=\"middle\" style=\"fill:var(--muted);{}\">{}</text>",
-                s1(p[0]),
-                s1(p[1]),
-                s1(norm(ang)),
-                s1(p[0]),
-                s1(p[1]),
-                font,
-                esc(&format!("{} {}", a.leg, road))
-            ));
+            svg.push(ban_road_label(&geo, a));
         }
         for m in list {
             if m.rule {
                 continue; // U-turns banned by the default rule are not drawn; the switch beside the diagram allows them
             }
-            let g = arrow(h, r1, aw, m.from.b, m.to.b, m.mv, m.from.is_in && m.from.is_out, m.to.is_in && m.to.is_out);
-            let col = if m.banned { "var(--danger)" } else { "var(--accent)" };
-            let w = 2.2;
-            let tip = format!(
-                "{}: {} to {} \u{b7} {}",
-                m.id,
-                m.from.leg_label,
-                m.to.leg_label,
-                if m.banned { "banned. Click to allow" } else { "allowed. Click to ban" }
-            );
-            let mut e = format!(
-                "<g data-jban=\"{}\" data-node=\"{}\" style=\"cursor:pointer;stroke:{};fill:{}\"><title>{}</title>",
-                esc(&m.key),
-                esc(node_id),
-                col,
-                col,
-                esc(&tip)
-            );
-            e.push_str(&format!(
-                "<path d=\"{}\" fill=\"none\" stroke=\"transparent\" stroke-width=\"12\" style=\"pointer-events:stroke\"/>",
-                path_d(&g)
-            ));
-            e.push_str(&format!(
-                "<path d=\"{}\" fill=\"none\" stroke-width=\"{}\"{} stroke-linecap=\"round\"/><polygon points=\"{}\" stroke=\"none\"{}/>",
-                path_d(&g),
-                number_to_js_string(w),
-                if m.banned { " stroke-dasharray=\"4 3\" opacity=\".7\"" } else { " opacity=\".9\"" },
-                arrow_head(&g, w),
-                if m.banned { " opacity=\".7\"" } else { "" }
-            ));
-            if m.banned {
-                e.push_str(&format!(
-                    "<text x=\"{}\" y=\"{}\" text-anchor=\"middle\" dominant-baseline=\"middle\" style=\"fill:var(--danger);stroke:none;{}\">\u{2715}</text>",
-                    s1((g.s0[0] + g.e[0] * 2.0) / 3.0),
-                    s1((g.s0[1] + g.e[1] * 2.0) / 3.0),
-                    font
-                ));
-            }
-            e.push_str("</g>");
-            s.push(e);
+            svg.push(ban_arrow(&geo, node_id, m));
         }
-        s.push(north(size, fs, &font, "var(--muted)"));
-        s.join("")
+        svg.push(north(size, geo.fs, &geo.font, "var(--muted)"));
+        svg.join("")
     }
+}
+
+/// The leg code and road name along an approach of the turn ban diagram.
+fn ban_road_label(geo: &Geo, a: &Arm) -> String {
+    let (h, aw, fs) = (geo.h, geo.aw, geo.fs);
+    let u = vec(a.b);
+    let dep = [u[1], -u[0]];
+    let p = [
+        h + u[0] * h * 0.74 + dep[0] * (aw / 2.0 + fs * 0.45),
+        h + u[1] * h * 0.74 + dep[1] * (aw / 2.0 + fs * 0.45),
+    ];
+    let mut ang = a.b - 90.0;
+    if norm(ang) > 90.0 && norm(ang) < 270.0 {
+        ang += 180.0;
+    }
+    let road = if utf16_len(&a.road) > 16 {
+        format!("{}\u{2026}", slice16(&a.road, 15))
+    } else {
+        a.road.clone()
+    };
+    format!(
+        "<text x=\"{}\" y=\"{}\" transform=\"rotate({} {} {})\" text-anchor=\"middle\" dominant-baseline=\"middle\" style=\"fill:var(--muted);{}\">{}</text>",
+        s1(p[0]),
+        s1(p[1]),
+        s1(norm(ang)),
+        s1(p[0]),
+        s1(p[1]),
+        geo.font,
+        esc(&format!("{} {}", a.leg, road))
+    )
+}
+
+/// One turn of the turn ban diagram: a clickable arrow, dashed and crossed when banned.
+fn ban_arrow(geo: &Geo, node_id: &str, m: &MoveRow) -> String {
+    let curve = arrow(geo, m.from.b, m.to.b, m.mv, m.from.is_in && m.from.is_out, m.to.is_in && m.to.is_out);
+    let col = if m.banned { "var(--danger)" } else { "var(--accent)" };
+    let width = 2.2;
+    let tip = format!(
+        "{}: {} to {} \u{b7} {}",
+        m.id,
+        m.from.leg_label,
+        m.to.leg_label,
+        if m.banned { "banned. Click to allow" } else { "allowed. Click to ban" }
+    );
+    let mut el = format!(
+        "<g data-jban=\"{}\" data-node=\"{}\" style=\"cursor:pointer;stroke:{};fill:{}\"><title>{}</title>",
+        esc(&m.key),
+        esc(node_id),
+        col,
+        col,
+        esc(&tip)
+    );
+    // Writing to a String cannot fail (the `let _ =` below)
+    let _ = write!(
+        el,
+        "<path d=\"{}\" fill=\"none\" stroke=\"transparent\" stroke-width=\"12\" style=\"pointer-events:stroke\"/>",
+        path_d(&curve)
+    );
+    let _ = write!(
+        el,
+        "<path d=\"{}\" fill=\"none\" stroke-width=\"{}\"{} stroke-linecap=\"round\"/><polygon points=\"{}\" stroke=\"none\"{}/>",
+        path_d(&curve),
+        number_to_js_string(width),
+        if m.banned { " stroke-dasharray=\"4 3\" opacity=\".7\"" } else { " opacity=\".9\"" },
+        arrow_head(&curve, width),
+        if m.banned { " opacity=\".7\"" } else { "" }
+    );
+    if m.banned {
+        let _ = write!(
+            el,
+            "<text x=\"{}\" y=\"{}\" text-anchor=\"middle\" dominant-baseline=\"middle\" style=\"fill:var(--danger);stroke:none;{}\">\u{2715}</text>",
+            s1((curve.s0[0] + curve.e[0] * 2.0) / 3.0),
+            s1((curve.s0[1] + curve.e[1] * 2.0) / 3.0),
+            geo.font
+        );
+    }
+    el.push_str("</g>");
+    el
 }
 
 /* ---------------- lanes ---------------- */
@@ -688,6 +758,7 @@ pub struct ApproachInfo {
 
 impl ApproachInfo {
     /// As JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         use crate::jsnum::plain_number;
         let mut m = Map::new();
@@ -743,7 +814,7 @@ pub fn node_approaches(sc: &Scenario, node_id: &str) -> Vec<ApproachInfo> {
         let Some(l) = sc.links.get(link_id) else {
             continue;
         };
-        let lanes = if l.a == node_id { l.lanes_ba.int32() } else { l.lanes_ab.int32() } as f64;
+        let lanes = f64::from(if l.a == node_id { l.lanes_ba.int32() } else { l.lanes_ab.int32() });
         let gl = math_max(1.0, if l.bus_lane.truthy() && lanes >= 2.0 { lanes - 1.0 } else { lanes });
         let site_raw = site.and_then(|s| s.lanes.get()).and_then(|m| m.get(&l.id));
         let on_site = site_raw.is_some_and(value_truthy);
@@ -799,7 +870,7 @@ pub fn node_approaches(sc: &Scenario, node_id: &str) -> Vec<ApproachInfo> {
                     vec!["LTR".to_string()]
                 } else {
                     let mut v = vec!["LT".to_string()];
-                    for _ in 0..(gl as usize).saturating_sub(2) {
+                    for _ in 0..f64_to_usize(gl).saturating_sub(2) {
                         v.push("T".to_string());
                     }
                     v.push("TR".to_string());
@@ -827,8 +898,11 @@ pub fn node_approaches(sc: &Scenario, node_id: &str) -> Vec<ApproachInfo> {
     out
 }
 
+/// A text helper: name of a control or a period.
+type NameFn = fn(&str) -> String;
+
 /// `ctlName` re-exported for the figure's callers.
 #[allow(dead_code)]
-pub(crate) fn _names() -> (fn(&str) -> String, fn(&str) -> String) {
+pub(crate) fn _names() -> (NameFn, NameFn) {
     (ctl_name, per_name)
 }

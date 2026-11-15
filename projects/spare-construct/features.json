@@ -9899,6 +9899,435 @@
      ]
     }
    ]
+  },
+  {
+   "id": "CON-A27",
+   "name": "Workshop: parts, assemblies and drawings",
+   "summary": "Workshop is Spare Construct's discipline for things that are made rather than built: brackets, fixings, joinery, fabricated steel, furniture and products. Parts are drawn as sketches and built from features, with a history to roll back and edit and parameters to drive them; parts go together in assemblies whose joints move within limits; and both are drawn on sheets. It uses the same geometry kernel (through engine-geometry) and the same model as every other discipline. Much of what it needs is not in the kernel yet: each part that waits names the kernel pieces it waits for, and the interface says so too, so it lights up as they land.",
+   "features": [
+    {
+     "id": "CON-A27-F1",
+     "name": "Sketch a profile",
+     "does": "Draw a closed profile on a plane, size it with dimensions and parameters, and lock it with constraints.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "CON-A27-F1-P1",
+       "name": "Profile sketches",
+       "what": "Rectangles, circles, regular polygons and outlines point by point, on a sketch plane at a height, each dimension a number or a parameter. A profile the kernel can extrude today is convex; the sketch says so when it is not. In the first slice.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A27-F4-P1"
+       ],
+       "piece": "A17"
+      },
+      {
+       "id": "CON-A27-F1-P2",
+       "name": "Sketch constraints",
+       "what": "Coincident, parallel, perpendicular, tangent, equal, symmetric and fixed, with driving dimensions, solved by the kernel's sketch solver (kernel pieces G217 to G228, the same solver as CON-A3-F2-P1). Waits for the kernel.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A3-F2-P1",
+        "CON-A27-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F1-P3",
+       "name": "Sketch mode for parts",
+       "what": "Draw and edit a profile on screen with its dimensions shown, and see at once whether the kernel can build it.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F1-P1",
+        "CON-A3-F2-P2"
+       ],
+       "piece": "A16"
+      },
+      {
+       "id": "CON-A27-F1-P4",
+       "name": "Sketch on a face",
+       "what": "Start a sketch on a face of the part, held by the face's persistent name so it follows edits.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F1-P1",
+        "CON-A27-F3-P4"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A27-F2",
+     "name": "Build a part from features",
+     "does": "Extrude, revolve, fillet, chamfer, shell, drill holes, pattern and mirror to build a solid part.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "CON-A27-F2-P1",
+       "name": "Extrude",
+       "what": "A profile lifted into a solid by the kernel: a convex outline as make.prism, a circle as make.cylinder, each recorded Exact or Certified as the kernel says. Any other outline waits for the kernel's extrude (G255) or its flat booleans (G130, G131). In the first slice.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F1-P1"
+       ],
+       "piece": "A17"
+      },
+      {
+       "id": "CON-A27-F2-P2",
+       "name": "Join, cut and intersect",
+       "what": "Add a feature's solid to the part, cut it away or keep only the overlap, with the kernel's booleans: flat ones first (G130 to G133), then curved (G242 to G248). Until they land, a part keeps each feature's solid as a body of its own and says the join is waiting.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "CON-A3-F1-P2",
+        "CON-A27-F2-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F2-P3",
+       "name": "Revolve and sweep",
+       "what": "Turn a profile about an axis, or sweep it along a path, with the kernel's sweeps (G255 to G257). Waits for the kernel.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F1-P1",
+        "CON-A3-F1-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F2-P4",
+       "name": "Fillet and chamfer",
+       "what": "Round or bevel picked edges by a size, with the kernel's blends (G263 to G265). Waits for the kernel.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "CON-A27-F2-P2",
+        "CON-A27-F3-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F2-P5",
+       "name": "Shell",
+       "what": "Hollow a part to a wall thickness with chosen faces left open, with the kernel's offsets (G275, G277). Waits for the kernel.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F2-P2",
+        "CON-A27-F3-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F2-P6",
+       "name": "Holes",
+       "what": "Plain, counterbored, countersunk and tapped holes placed on a face from a table of standard sizes, cut with the booleans. Waits for the kernel.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F2-P2",
+        "CON-A27-F1-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F2-P7",
+       "name": "Pattern and mirror",
+       "what": "Copies of a feature's solid in a row or a grid, and mirror images across a plane, by the kernel's transform.pattern and transform.mirror. Patterns round an axis follow at quarter turns, and at other angles once a Certified result is accepted. In the first slice.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A27-F2-P1"
+       ],
+       "piece": "A17"
+      },
+      {
+       "id": "CON-A27-F2-P8",
+       "name": "Feature tools",
+       "what": "The Workshop ribbon: each feature's settings and preview, with the features that wait for the kernel shown, unavailable, saying which kernel pieces they wait for.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F2-P1"
+       ],
+       "piece": "A16"
+      }
+     ]
+    },
+    {
+     "id": "CON-A27-F3",
+     "name": "Edit through the feature history",
+     "does": "See every feature in the order it was made, roll the part back to any point, change a feature and have everything after it rebuild.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "CON-A27-F3-P1",
+       "name": "Feature history",
+       "what": "A part is an ordered list of feature recipes, and its solids are rebuilt from them: the recipes are the truth and the shapes are derived, as for every Spare Construct element. In the first slice.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A2-F6-P1"
+       ],
+       "piece": "A17"
+      },
+      {
+       "id": "CON-A27-F3-P2",
+       "name": "Roll back and suppress",
+       "what": "Move the history's end marker to build the part as it was at any feature, and suppress a feature without deleting it; new features go in at the marker. In the first slice.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A27-F3-P1"
+       ],
+       "piece": "A17"
+      },
+      {
+       "id": "CON-A27-F3-P3",
+       "name": "Rebuild report",
+       "what": "When an edit breaks a later feature, the history marks it and says why in the kernel's own structured error, with what would make it succeed.",
+       "kind": "interface",
+       "size": "small",
+       "depends_on": [
+        "CON-A27-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F3-P4",
+       "name": "Stable face references",
+       "what": "Features, sketches, joints and drawing dimensions point at faces and edges by the kernel's persistent names, so a reference survives edits or fails with a reason, never by guessing (kernel chapter 20).",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "CON-A27-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A27-F4",
+     "name": "Drive parts with parameters",
+     "does": "Name the sizes that matter, use them in any feature, and change one to resize the whole part.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "CON-A27-F4-P1",
+       "name": "Parameter table",
+       "what": "Named lengths and counts with comments, used by any feature's fields; changing one rebuilds every feature that uses it. In the first slice.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [],
+       "piece": "A17"
+      },
+      {
+       "id": "CON-A27-F4-P2",
+       "name": "Parameter formulas",
+       "what": "A parameter written as a formula of others, read by a well-known, permissively licensed expression library rather than our own parser, with units checked and circular formulas refused.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A27-F4-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F4-P3",
+       "name": "Part variants",
+       "what": "A table of parameter sets, so one part makes a family of sizes, each kept as a row of its own.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "CON-A27-F4-P1",
+        "CON-A7-F1-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A27-F5",
+     "name": "Assemble parts and move them",
+     "does": "Put parts together, join them with joints that move, set how far each may move, and drive them to check the mechanism.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "CON-A27-F5-P1",
+       "name": "Assembly structure",
+       "what": "Instances of parts and sub-assemblies, each placed by a transform, with large assemblies on the kernel's instance tree (G295).",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F3-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F5-P2",
+       "name": "Joints",
+       "what": "Fixed, hinge, slider, pin-in-slot, planar and ball joints between named faces and axes of two parts, solved by the kernel's assembly mates (G479). Waits for the kernel; the demo moves hinge and slider joints itself.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "CON-A27-F5-P1",
+        "CON-A27-F3-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F5-P3",
+       "name": "Motion limits and drive",
+       "what": "A least and a greatest value for each joint, a drive that moves it through its range, and optional stops where parts touch.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F5-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F5-P4",
+       "name": "Interference check",
+       "what": "Parts that overlap anywhere in the mechanism's range, found with the exact clash of CON-A13 and the kernel's booleans.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F5-P3",
+        "CON-A13-F1-P2"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F5-P5",
+       "name": "Assembly workspace",
+       "what": "Place parts, pick two faces or axes to join, and drag or drive a joint to watch the mechanism move within its limits.",
+       "kind": "interface",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F5-P1"
+       ],
+       "piece": "A16"
+      }
+     ]
+    },
+    {
+     "id": "CON-A27-F6",
+     "name": "Draw parts and assemblies",
+     "does": "Make drawings of a part or an assembly: views from each side, sections, dimensions, a parts list and numbered balloons, on sheets.",
+     "priority": "next",
+     "parts": [
+      {
+       "id": "CON-A27-F6-P1",
+       "name": "Part views",
+       "what": "Front, top, side, section and pictorial views projected from the part, with hidden lines from the kernel's drawing engine (G394, G396). The demo draws its own flat parts' views.",
+       "kind": "library",
+       "size": "large",
+       "depends_on": [
+        "CON-A8-F2-P2",
+        "CON-A27-F3-P1"
+       ],
+       "piece": "A16"
+      },
+      {
+       "id": "CON-A27-F6-P2",
+       "name": "Dimensions and notes",
+       "what": "Dimensions held to the model by persistent names (G401), so they follow edits, with tolerances and notes.",
+       "kind": "library",
+       "size": "medium",
+       "depends_on": [
+        "CON-A27-F6-P1",
+        "CON-A9-F1-P1",
+        "CON-A27-F3-P4"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F6-P3",
+       "name": "Parts list and balloons",
+       "what": "A parts list from the assembly's structure, and numbered balloons pointing to each part on the drawing.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A27-F5-P1",
+        "CON-A10-F1-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F6-P4",
+       "name": "Drawing sheets",
+       "what": "Workshop drawings on the same sheets, title blocks and PDF output as every other discipline.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "CON-A11-F1-P1",
+        "CON-A11-F2-P1"
+       ],
+       "piece": null
+      }
+     ]
+    },
+    {
+     "id": "CON-A27-F7",
+     "name": "Weigh a part and send it to be made",
+     "does": "Get a part's volume and mass from its material, and send it to be made as a STEP file, a mesh to print or a flat profile to cut.",
+     "priority": "later",
+     "parts": [
+      {
+       "id": "CON-A27-F7-P1",
+       "name": "Volume and mass",
+       "what": "Volume from the kernel's exact query.volume for flat-faced solids, and certified mass properties for curved ones once the kernel has them (G247); mass from the material's density. Volume is in the first slice.",
+       "kind": "library",
+       "size": "small",
+       "depends_on": [
+        "CON-A27-F2-P1"
+       ],
+       "piece": "A17"
+      },
+      {
+       "id": "CON-A27-F7-P2",
+       "name": "Materials for parts",
+       "what": "Steels, aluminium, timbers and plastics with their densities, kept as data a part refers to.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F7-P3",
+       "name": "STEP out and in",
+       "what": "Parts and assemblies exchanged as STEP files, with the kernel's STEP export and import (G427 to G429).",
+       "kind": "integration",
+       "size": "medium",
+       "depends_on": [
+        "CON-A18-F4-P5",
+        "CON-A27-F5-P1"
+       ],
+       "piece": null
+      },
+      {
+       "id": "CON-A27-F7-P4",
+       "name": "Files for making",
+       "what": "Meshes to 3D print from the kernel's tessellation (G288), and flat profiles to cut as DXF.",
+       "kind": "integration",
+       "size": "small",
+       "depends_on": [
+        "CON-A3-F1-P6",
+        "CON-A18-F3-P1"
+       ],
+       "piece": null
+      }
+     ]
+    }
+   ]
   }
  ],
  "assess": [
@@ -9918,6 +10347,7 @@
   "Do the parts lean on Spare Kit where they should, rather than building their own accounts, payments, messaging or PDF output?",
   "Has the kit made core the two parts Spare Construct's first release needs (its plugin host KIT-A16-F5-P2 and chunked storage KIT-A15-F6-P2), or should Spare Construct's first release wait for them?",
   "Does the house consent checklist (CON-A11-F5-P4) match what councils ask for, and are the items it marks as coming from outside acceptable at Gate D?",
-  "Do the decisions that gate the Design stage but have no work-board piece yet (storage layout CON-A2-F4-P8, kernel start CON-A3-F1-P7) now have pieces, and does every other decision part have one before its build part starts?"
+  "Do the decisions that gate the Design stage but have no work-board piece yet (storage layout CON-A2-F4-P8, kernel start CON-A3-F1-P7) now have pieces, and does every other decision part have one before its build part starts?",
+  "Does Workshop (CON-A27) cover what a fabricator or a product designer needs first, and does each of its parts that waits for the kernel name the right kernel pieces?"
  ]
 }
