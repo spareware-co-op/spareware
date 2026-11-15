@@ -201,17 +201,20 @@ jobs:
     needs: [cheap, select]
     if: needs.select.outputs.kani == 'true'
     runs-on: ubuntu-latest
-    # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
-    # path reaches, kissat proved it in 47 minutes (run 40291338626) and then in 75 (run
-    # 40308963161, which the old 75-minute limit then cut off) on the hosted runners; CaDiCaL ran
-    # past three hours. 120 minutes is about one and a half times the slower run.
-    timeout-minutes: 120
+    # The bounded proof of orient2d is three harnesses, one claim of its check each (geom-fuzz's
+    # tests/orient2d.rs): proved as one, kissat's single solve took 63 minutes on the hosted runner
+    # (run 43688165033); apart, on a development machine, the exact path's and the filter's took
+    # about 7 minutes and the predicate's 29. 60 minutes is about one and a half times the
+    # predicate's on a runner.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         harness:
           - orient2d_fuzz
-          - orient2d_proof
+          - orient2d_proof_predicate
+          - orient2d_proof_exact_path
+          - orient2d_proof_filter
     defaults:
       run:
         shell: bash
@@ -256,7 +259,7 @@ jobs:
   # tests/kani_harnesses.rs holds this list to the harnesses in the source. The budget, two hours:
   # in WSL on 2026-10-28, with up to thirteen proofs sharing twelve cores, the slowest took 57
   # minutes (exact_sum's cancellation in the subnormals), eft's full-width two_prod with the
-  # splitter 54 and dd's from_i128 46; 120 minutes is the margin orient2d_proof's job above keeps.
+  # splitter 54 and dd's from_i128 46; 120 minutes is the margin the orient2d proof's job kept before it was split by claim.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
