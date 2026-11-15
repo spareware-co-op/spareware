@@ -304,7 +304,7 @@ mod tests {
         move |_| {
             tried += 1;
             let draw = g.range(0, 1 << 20);
-            (tried % 3 != 0).then_some(draw.unsigned_abs())
+            (!tried.is_multiple_of(3)).then_some(draw.unsigned_abs())
         }
     }
 
