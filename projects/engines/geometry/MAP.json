@@ -5326,27 +5326,41 @@
           "target": "lib"
         },
         {
-          "cost": "`cases` runs of the harness, plus one `SplitMix64` word per eight bytes drawn and one or two words per length.",
-          "does": "[`run`] resolves a seed with `geom_test::seed::resolve` (the test's default, or `SPAREKIT_SEED`; printed as `seed: <hex>`), then for each case draws a length in `0..=max_len` and that many bytes from `geom-test`'s `SplitMix64`, and runs the harness on them.",
+          "cost": "`cases` runs of the harness, plus one `SplitMix64` word per eight bytes drawn and a few words per case.",
+          "does": "[`run`] resolves a seed with `geom_test::seed::resolve` (the test's default, or `SPAREKIT_SEED`; printed as `seed: <hex>`), then for each case draws a length in `0..=max_len` and that many bytes from `geom-test`'s `SplitMix64`, and runs the harness on them. Every second case is hostile instead ([`Hostile`], in turn): words at the ends of their domains ([`HOSTILE_WORDS`] and solidcore's [`HOSTILE_F64`]: NaN, infinities, zeros, subnormals, huge and tiny values), a run of bytes repeated (so a decoder reads the same value, point or record again: coincident points, zero lengths and areas), the same with one bit flipped in every second copy (near-coincident points, a sliver), evenly spaced words (collinear and coplanar points, a value at a domain's end after a step), and one byte throughout (all zero, all ones, the sign boundaries). Each starts with a few random bytes, so the words fall on every alignment of the harness's own fields, and is cut to the case's length, so every hostile kind also comes short. The test's count is sized for an optimised build (about two seconds, at most ten for the slowest harnesses); an unoptimised build runs the first tenth of the cases ([`DEBUG_SHARE`]), the same cases, so the debug legs take about as long.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/seeded.rs",
           "guarantees": [
             "**The same cases every run.** One seed gives the same byte strings on every target, so a pull request runs a fixed set of cases (28.17) and any failure replays exactly with the printed seed.",
+            "**Every hostile kind is drawn.** The kinds take the hostile cases in turn, so any run of ten cases or more holds every kind.",
             "**A failure says how to keep it.** [`Failure::Finding`] carries the case number, the seed, the bytes in hexadecimal and the broken law. Saved as a file in the target's `tests/__fuzz__/<target>/crashes` folder, the bytes become a case bolero's test mode replays on every run (28.16).",
             "**Panics are not caught.** A harness that panics fails the test, and the seed line printed before the first case shows which seed to replay.",
             "**Every seed is printed**, by [`run`] as `geom_test::seed::resolve` prints it and by [`run_with_seed`] as `geom_test::seed::fixed` does, before the first case."
           ],
-          "job": "The seeded leg: a harness run on byte strings drawn from a printed seed.",
+          "job": "The seeded leg: a harness run on byte strings drawn from a printed seed, half of them hostile.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md",
               "https://github.com/camshaft/bolero"
             ],
-            "text": "the fixed-seed property runs of section 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`: \"Unit and property tests with fixed seeds\" on every pull request, \"fresh, logged seeds\" nightly), over the byte strings a fuzzer would give, so the one harness function serves fuzzing and fixed-seed testing alike, the arrangement bolero's own test mode uses (<https://github.com/camshaft/bolero>)."
+            "text": "the fixed-seed property runs of section 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`: \"Unit and property tests with fixed seeds\" on every pull request), over the byte strings a fuzzer would give, so the one harness function serves fixed-seed testing and Kani alike, the arrangement bolero's own test mode uses (<https://github.com/camshaft/bolero>); the hostile share is solidcore's panic fuzz, seeded random cases mixed with a fixed list of hostile values, sized to seconds and run in the normal suite."
           },
           "path": "geom_fuzz::seeded",
-          "provenance": [],
-          "spdx": null,
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore/tests/support/panic_fuzz.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "its `HOSTILE` list of `f64` values as [`HOSTILE_F64`], and its way of mixing hostile values into seeded random cases, applied to a harness's bytes rather than to typed inputs; the integer words, the repeats, the progressions and the fills are ours.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -5501,26 +5515,6 @@
           "take": "port-method"
         },
         {
-          "licence": "MIT",
-          "link": "https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/project.rs",
-          "method_note": null,
-          "name": "cargo-bolero 0.13.5 `bin/cargo-bolero/src/project.rs`",
-          "notice": [],
-          "pinned": true,
-          "purpose": "for the options of `cargo bolero test` above: the sanitizer and its default, and the toolchain. No code copied.",
-          "take": "port-method"
-        },
-        {
-          "licence": "MIT",
-          "link": "https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs",
-          "method_note": null,
-          "name": "cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs`",
-          "notice": [],
-          "pinned": true,
-          "purpose": "for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.",
-          "take": "port-method"
-        },
-        {
           "licence": "MIT OR Apache-2.0",
           "link": "https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs",
           "method_note": null,
@@ -5531,7 +5525,7 @@
           "take": "port-method"
         }
       ],
-      "sections": "chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function, bolero's `check!`, libFuzzer under cargo-bolero, and `ClusterFuzzLite` on pull requests) and two targets, on the swap law and the exact oracle of 28.6; a bounded Kani proof of 28.7, on bolero's harness unchanged; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the short fuzz and fixed seeds of 28.17.",
+      "sections": "chapter 27's `geom-fuzz` row and its rules for the development crates, and 28.5 of the kernel architecture (`projects/engines/geometry/architecture/`), in part: its tooling (one plain harness function, bolero's `check!` and the seeded leg in the suite) and two targets, on the swap law and the exact oracle of 28.6; a bounded Kani proof of 28.7, on bolero's harness unchanged; the seeded leg 28.2 asks for; the replay of every stored crash, 28.16; and the fixed seeds of 28.17.",
       "spdx": null,
       "status": null,
       "summary": "Spare Kit geometry kernel, development only: the fuzz harnesses."
@@ -7786,7 +7780,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/incircle.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-incircle-x.g`, `gappa-incircle-y.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-incircle.fpt`); `kernel-certificates.yml` runs them on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-incircle-x.g`, `gappa-incircle-y.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-incircle.fpt`); `kernel-certificates.yml` runs them on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-incircle` (seed: none, it uses no randomness), from the description `INCIRCLE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -7806,7 +7800,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/insphere.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-insphere-x.g`, `gappa-insphere-y.g`, `gappa-insphere-z.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-insphere.fpt`); `kernel-certificates.yml` runs them on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-insphere-x.g`, `gappa-insphere-y.g`, `gappa-insphere-z.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-insphere.fpt`); `kernel-certificates.yml` runs them on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-insphere` (seed: none, it uses no randomness), from the description `INSPHERE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -7846,7 +7840,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/lpi_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-lpi-side.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-lpi-side.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-lpi-side` (seed: none, it uses no randomness), from the description `LPI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -7866,7 +7860,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/lpi_weight.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-lpi-weight-z-n.g`, `gappa-lpi-weight-y-n.g`, `gappa-lpi-weight-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-lpi-weight.fpt`); `kernel-certificates.yml` runs them on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-lpi-weight-z-n.g`, `gappa-lpi-weight-y-n.g`, `gappa-lpi-weight-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-lpi-weight.fpt`); `kernel-certificates.yml` runs them on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-lpi-weight` (seed: none, it uses no randomness), from the description `LPI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -7912,7 +7906,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/orient2d.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-orient2d.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-orient2d.fpt`); `kernel-certificates.yml` runs them on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-orient2d.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-orient2d.fpt`); `kernel-certificates.yml` runs them on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-orient2d` (seed: none, it uses no randomness), from the description `ORIENT2D` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -7932,7 +7926,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/orient3d.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-orient3d.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-orient3d.fpt`); `kernel-certificates.yml` runs them on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-orient3d.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-orient3d.fpt`); `kernel-certificates.yml` runs them on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-orient3d` (seed: none, it uses no randomness), from the description `ORIENT3D` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -7972,7 +7966,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/plane_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-plane-side-d.g`, `gappa-plane-side-z-n.g`, `gappa-plane-side-y-n.g`, `gappa-plane-side-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-plane-side.fpt`); `kernel-certificates.yml` runs them on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-plane-side-d.g`, `gappa-plane-side-z-n.g`, `gappa-plane-side-y-n.g`, `gappa-plane-side-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-plane-side.fpt`); `kernel-certificates.yml` runs them on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-plane-side` (seed: none, it uses no randomness), from the description `PLANE_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -7992,7 +7986,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/ssi_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-ssi-side.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-ssi-side.fpt`); `kernel-certificates.yml` runs them on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-ssi-side.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-ssi-side.fpt`); `kernel-certificates.yml` runs them on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-ssi-side` (seed: none, it uses no randomness), from the description `SSI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -8012,7 +8006,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/ssi_weight.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-ssi-weight.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-ssi-weight.fpt`); `kernel-certificates.yml` runs them on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-ssi-weight.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-ssi-weight.fpt`); `kernel-certificates.yml` runs them on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-ssi-weight` (seed: none, it uses no randomness), from the description `SSI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -8032,7 +8026,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/tpi_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-tpi-side.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-tpi-side.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-tpi-side` (seed: none, it uses no randomness), from the description `TPI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -8052,7 +8046,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/tpi_weight.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-tpi-weight.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-tpi-weight.fpt`); `kernel-certificates.yml` runs them on every change and every night."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-tpi-weight.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-tpi-weight.fpt`); `kernel-certificates.yml` runs them on every change to a problem or a pinned tool."
           ],
           "job": "Generated by geom-gen, generator `predicate-tpi-weight` (seed: none, it uses no randomness), from the description `TPI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -12545,7 +12539,7 @@
             "**Exit status says what happened.** 0 when the gate passes, 1 when it fails, 2 when the input cannot be used (a missing or malformed file, a bad argument, which clap reports with exit status 2). Every failure is printed, one per line.",
             "**Nothing judged twice by different rules.** The binary holds no rule of its own; the foundation set, the bars and the ledger's rules live in the library, where the tests reach them."
           ],
-          "job": "`kernel-quality`: the CI tool behind the geometry kernel's mutation and coverage gates and its weekly Miri run (section 28.8; `.github/workflows/kernel-quality.yml`).",
+          "job": "`kernel-quality`: the CI tool behind the geometry kernel's mutation and coverage gates and its Miri run (section 28.8; `.github/workflows/kernel-quality.yml`).",
           "method": {
             "none": "a command-line front end, parsed by clap's derive API (<https://docs.rs/clap/4.6.7/clap/_derive/index.html>), over the library's gates."
           },
@@ -13094,7 +13088,7 @@
         },
         {
           "cost": "linear in the size of the metadata and of `geom-fuzz`'s sources, and in the changed files times the workspace's crates.",
-          "does": "[`Scope::read`] reads the workspace's crate graph from `cargo metadata` and `geom-fuzz`'s sources, and [`Scope::select`] takes the files a change touches (`git diff --name-only`, one path from the repository root each) and decides, for each job of [`JOBS`], whether it runs and, for the fuzz jobs, which targets, each with the file that selected it and why. [`Selection::outputs`] writes the decision as the step outputs the workflow's jobs read: a job's `if` reads `<output>`, and a fuzz job's matrix excludes `<output>_exclude` (`fromJSON`), so the workflow's own matrix lists stay the catalogue of what exists. [`Selection::report`] writes it for the job's log: every target and proof, run or skipped, and why. `kernel-quality fuzz-scope` is the command line.",
+          "does": "[`Scope::read`] reads the workspace's crate graph from `cargo metadata` and `geom-fuzz`'s sources, and [`Scope::select`] takes the files a change touches (`git diff --name-only`, one path from the repository root each) and decides, for each target of `geom-fuzz`, whether the change reaches it, and for each job of [`JOBS`] whether it runs, each with the file that selected it and why. [`Selection::outputs`] writes the jobs' decisions as the step outputs the workflow's jobs read: a job's `if` reads `<output>`. [`Selection::report`] writes it for the job's log: every target and proof, reached or not, and why. `kernel-quality fuzz-scope` is the command line.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/fuzz_scope.rs",
           "guarantees": [
@@ -13103,14 +13097,13 @@
             "**An error, never a guess.** Metadata without the graph, a `geom-fuzz` source that does not lex as Rust, or a target without its tests file is an error, and the workflow's later jobs do not start.",
             "**Every decision is written down.** The report names each target and proof, whether it runs, and the changed file that selected it or that none did."
           ],
-          "job": "Which of `kernel-fuzz.yml`'s fuzz targets and Kani proofs a change can affect, so that a pull request fuzzes and proves only those (chapter 28.5: \"each pull request fuzzes the crates it changes briefly\"; 28.7 and 28.17: on a pull request, the proofs the change can reach), while a push to main, a release tag and the nightly campaign run every one.",
+          "job": "Which of `geom-fuzz`'s targets and `kernel-fuzz.yml`'s Kani proofs a change can affect, so that a pull request proves only those (28.7 and 28.17: on a pull request, the proofs the change can reach), while a push to main and a release tag run every one.",
           "method": {
             "links": [
               "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
-              "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies",
-              "https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idstrategymatrixexclude"
+              "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies"
             ],
-            "text": "`cargo metadata`'s resolved graph (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>), read for normal and build edges, and cargo's rule that development dependencies build only for the package's own tests (<https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies>); the sources are read with `proc-macro2`, Rust's lexer, so a word in a comment or a string is never a name. GitHub Actions' matrix `exclude` and `fromJSON` (<https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idstrategymatrixexclude>) apply the decision."
+            "text": "`cargo metadata`'s resolved graph (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>), read for normal and build edges, and cargo's rule that development dependencies build only for the package's own tests (<https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies>); the sources are read with `proc-macro2`, Rust's lexer, so a word in a comment or a string is never a name."
           },
           "path": "geom_test::fuzz_scope",
           "provenance": [],
@@ -13928,7 +13921,7 @@
             "**The development crates are left out** (`geom-test`, `geom-fuzz`, `geom-gen`, `geom-bench`): they never ship, and their tests start processes and read files, which Miri's isolation refuses.",
             "**A plan that runs nothing does not pass.** Metadata without any kernel crate, or with a package that has no name or manifest path, is an error."
           ],
-          "job": "The weekly Miri run's scope: every kernel crate, whose test suites Miri interprets.",
+          "job": "The Miri run's scope: every kernel crate, whose test suites Miri interprets.",
           "method": {
             "links": [
               "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
@@ -14034,7 +14027,7 @@
             "**Never trusted as truth, never linked, never shipped** (28.10): an oracle only ever raises a difference, ground truth settles it, and [`catalogue::linked`] fails a build that links one.",
             "**The oracle sees what the kernel saw**: [`exact`] writes each input so it reads back to the same bits.",
             "**The allowance never grows with the oracle's tolerance**: it is capped at our bound plus the fit bound ([`compare::Allowance::total`]).",
-            "**Each signature is judged once**: a nightly run fails only on a new one."
+            "**Each signature is judged once**: an oracle run fails only on a new one."
           ],
           "job": "Differential testing against outside oracles (chapter 28.10; piece G113): the same job through another system, and an investigation of every difference.",
           "method": {
@@ -14144,7 +14137,7 @@
           "guarantees": [
             "**One record per signature**, and every record names its fixture.",
             "**\"Theirs\" names its report**, and \"ours\" its fix: neither can be recorded empty.",
-            "**The nightly run fails only on a new signature**, so a known difference never hides a new one and is never argued twice."
+            "**An oracle run fails only on a new signature**, so a known difference never hides a new one and is never argued twice."
           ],
           "job": "Triage: every difference ends in one of four outcomes, each a fixture, and each signature is recorded once (chapter 28.10; piece G113).",
           "method": {
@@ -14720,7 +14713,7 @@
           "guarantees": [
             "**Every seed is printed.** [`resolve`] and [`fixed`] print one line that starts `seed: ` and is followed by exactly 16 lowercase hexadecimal digits, then the test's label, where the seed came from and how to replay it. Rust's test harness shows a passing test's output only with `--nocapture`, and always shows a failing test's, so every failure carries its seed (28.5: \"Every generator prints its seed, so any failure replays exactly\").",
             "**Any printed seed replays exactly.** Setting `SPAREKIT_SEED` to the digits [`resolve`] printed makes it return the same seed, and the generators in [`crate::rng`] then give the same inputs on every target. A seed [`fixed`] printed replays by itself: the test always uses it.",
-            "**A seed is never invented here.** It is the test's fixed default or the value of `SPAREKIT_SEED`; nothing reads a clock or the operating system's random source. Pull requests run with the fixed defaults; a nightly job sets `SPAREKIT_SEED` to a fresh value, and the printed line logs it (28.17).",
+            "**A seed is never invented here.** It is the test's fixed default or the value of `SPAREKIT_SEED`; nothing reads a clock or the operating system's random source. The suite runs with the fixed defaults; an oracle job of `kernel-oracles.yml` sets `SPAREKIT_SEED` to its run's number, and the printed line logs it (28.17).",
             "**A malformed override is an error, never ignored.** A run that asked for one seed and silently got another would replay the wrong case, so [`resolve`] returns [`SeedError`] instead."
           ],
           "job": "Seeds: where every random choice in a test comes from, and how a failure is replayed.",
@@ -14738,12 +14731,35 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the size of the metadata and of the crates' sources, and in the changed files times the workspace's crates.",
+          "does": "[`Scope::read`] reads the workspace's crate graph from `cargo metadata` and finds the crates whose sources read files outside their own folder ([`reads_outside`]), and [`Scope::select`] takes the files a change touches (`git diff --name-only`, one path from the repository root each) and decides, for every workspace crate, whether its tests run, with the changed file that selected it and why. [`Selection::outputs`] writes the decision as the step outputs `kernel.yml`'s suites read, and [`Selection::report`] writes it for the job's log. [`Scope::build_reached`] says whether a change reaches what one crate's tests and benchmarks build, for `kernel-bench.yml`'s count gates. `kernel-quality test-scope` is the command line.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/test_scope.rs",
+          "guarantees": [
+            "**Over, never under.** A crate's tests are skipped only when no changed file is in what its test binaries link or read, by the rule above; whatever cannot be placed selects every crate. `tests/test_scope.rs` holds the selection to the crate graph, read there independently, with planted mistakes.",
+            "**Everything without a change.** [`Scope::select`] given no list runs every crate's tests.",
+            "**Every decision is written down.** The report names each crate, whether its tests run, and the changed file that selected it or that none did."
+          ],
+          "job": "Which crates' tests a pull request's change can reach, so that `kernel.yml`'s test suites run only those (chapter 28.17: \"nothing re-tests code that has not changed\"), while a push to main, a release tag and a run with no change list run every crate's tests.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
+              "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies"
+            ],
+            "text": "`cargo metadata`'s resolved graph (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>), read for normal, build and development edges, and cargo's rule that development dependencies build only for the package's own tests, examples and benchmarks (<https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies>)."
+          },
+          "path": "geom_test::test_scope",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the file's length and the run's output.",
-          "does": "gate 1 (chapter 30.3) asks that every merge gate fail on a seeded violation, the pattern of the kernel's merge gate (G12) and of the toolchain guard (G20, [`crate::guard`]). Most gates already meet it in their own tests (gate 1's record in chapter 32 lists each). The gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun's Callgrind comparison, Wasmtime's fuel, Gappa with Rocq, and HOL Light. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line in it found exactly once ([`Violation::anchor`]), the line it becomes, and the text the tool prints when it catches it. The binary `trip` writes the changed line into the working tree, runs the gate's own command, restores the file byte for byte, and asks [`verdict`] whether the run failed for that reason. Each workflow job runs it with its real check, so a job that could no longer fail (a tool that stopped checking, a command that checks nothing) fails instead. The two count gates run it last, comparing the planted run with the pull request's own run measured just before; the `ClusterFuzzLite` gate runs it in a job of its own, `clusterfuzzlite-seeded`, because its actions build a fresh clone of the pull request, which a planted line never reaches; and HOL Light's runs on orient2d's leg of its matrix alone.",
+          "does": "gate 1 (chapter 30.3) asks that every merge gate fail on a seeded violation, the pattern of the kernel's merge gate (G12) and of the toolchain guard (G20, [`crate::guard`]). Most gates already meet it in their own tests (gate 1's record in chapter 32 lists each). The gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani, Gungraun's Callgrind comparison, Wasmtime's fuel, Gappa with Rocq, and HOL Light. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line in it found exactly once ([`Violation::anchor`]), the line it becomes, and the text the tool prints when it catches it. The binary `trip` writes the changed line into the working tree, runs the gate's own command, restores the file byte for byte, and asks [`verdict`] whether the run failed for that reason. Each workflow job runs it with its real check, so a job that could no longer fail (a tool that stopped checking, a command that checks nothing) fails instead. The two count gates run it last, comparing the planted run with the pull request's own run measured just before; and HOL Light's runs on orient2d's leg of its matrix alone.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/trip.rs",
           "guarantees": [
-            "**Each violation is real and small.** One line changes, and the change breaks exactly the property the gate checks: a line rustfmt would format differently; a sign the Kani harness for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs assert; a set bit the canonical encoder's narrowing proofs keep; the frame's edge the file reader's range proofs accept; a row the arena index proofs assert; orient2d's exact path answering `Positive` whatever its points, which breaks the antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own build and fuzzing must report through whichever target meets it first (each target's law names its own break, \"broken law: \"; its address sanitizer reports the abort that follows); `Sign::of_i128` reading its argument through an opaque copy (`core::hint::black_box`), the same answer for more work, which both count gates must report as a rise of more than 5% on its benchmark; the error bound orient2d's Gappa problem claims, halved, which Gappa must fail to prove, so that its Rocq output holds no theorem and Rocq refuses it; and the bounds of orient2d's `FPTaylor` certificate, every one halved as HOL Light's session loads it, which HOL Light must refuse to prove.",
+            "**Each violation is real and small.** One line changes, and the change breaks exactly the property the gate checks: a line rustfmt would format differently; a sign the Kani harness for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs assert; a set bit the canonical encoder's narrowing proofs keep; the frame's edge the file reader's range proofs accept; a row the arena index proofs assert; orient2d's exact path answering `Positive` whatever its points, which breaks the antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz target holds orient2d to its laws, not to an oracle); `Sign::of_i128` reading its argument through an opaque copy (`core::hint::black_box`), the same answer for more work, which both count gates must report as a rise of more than 5% on its benchmark; the error bound orient2d's Gappa problem claims, halved, which Gappa must fail to prove, so that its Rocq output holds no theorem and Rocq refuses it; and the bounds of orient2d's `FPTaylor` certificate, every one halved as HOL Light's session loads it, which HOL Light must refuse to prove.",
             "**An anchor found once, or no run.** [`apply`] refuses a file that holds the anchor line other than exactly once, so a refactor that moves it fails `tests/attack_g43.rs` (which checks every anchor in the repository) and the job, loudly, instead of planting nothing.",
             "**A trip counts only for the right reason.** [`verdict`] accepts a run only when the command failed and printed every line [`Violation::caught`] names: the tool's own words for a found violation. A build error, a missing tool or any other failure proves nothing and is refused.",
             "**Line ends kept.** The anchor is matched on a line with its line end set aside, so a Windows checkout's CRLF files work the same, and the line end is kept."
@@ -16315,6 +16331,17 @@
       ]
     },
     {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore/tests/support/panic_fuzz.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-fuzz/src/seeded.rs"
+      ]
+    },
+    {
       "licence": "MIT",
       "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c",
       "method_note": null,
@@ -16511,28 +16538,6 @@
       "used_by": [
         "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs",
         "projects/engines/geometry/crates/geom-bench/src/guest.rs"
-      ]
-    },
-    {
-      "licence": "MIT",
-      "link": "https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/project.rs",
-      "method_note": null,
-      "name": "cargo-bolero 0.13.5 `bin/cargo-bolero/src/project.rs`",
-      "pinned": true,
-      "take": "port-method",
-      "used_by": [
-        "projects/engines/geometry/crates/geom-fuzz/src/lib.rs"
-      ]
-    },
-    {
-      "licence": "MIT",
-      "link": "https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs",
-      "method_note": null,
-      "name": "cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs`",
-      "pinned": true,
-      "take": "port-method",
-      "used_by": [
-        "projects/engines/geometry/crates/geom-fuzz/src/lib.rs"
       ]
     },
     {

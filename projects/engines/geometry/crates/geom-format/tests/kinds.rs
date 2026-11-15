@@ -679,7 +679,7 @@ fn a_kind_from_another_form_is_refused() {
 }
 
 /// Writes every kind these tests build, and the operations' results, as DIR/N.curve.cbor or
-/// DIR/N.surface.cbor for the zcbor oracle (oracles/zcbor.sh, kernel-nightly.yml), DIR from
+/// DIR/N.surface.cbor for the zcbor oracle (oracles/zcbor.sh, kernel-oracles.yml), DIR from
 /// `ZCBOR_DIR`.
 #[test]
 #[ignore = "writes the kinds for the zcbor oracle"]

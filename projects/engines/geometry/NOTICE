@@ -430,6 +430,11 @@ Licence:   Apache-2.0
 Ported files, each with the origin files it ports and the origin's copyright lines as its header
 copies them:
 
+  projects/engines/geometry/crates/geom-fuzz/src/seeded.rs
+    SPDX-License-Identifier: Apache-2.0
+    https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore/tests/support/panic_fuzz.rs
+      Copyright (c) 2026 The solidcore contributors
+
   projects/engines/geometry/crates/geom-p21/src/exchange.rs
     SPDX-License-Identifier: Apache-2.0
     https://github.com/tangency-labs/solidcore/blob/a3a8244566081e0777284dc182f77a91bb1a456d/crates/solidcore-record/src/step/p21.rs
@@ -768,20 +773,6 @@ bolero 0.13.7 `lib/bolero/src/test/mod.rs`
   Consulted by:
     projects/engines/geometry/crates/geom-fuzz/src/lib.rs
       for how its test mode draws a seed per input, prints a failing input's seed and replays it, as described above. No code copied.
-
-cargo-bolero 0.13.5 `bin/cargo-bolero/src/project.rs`
-  Licence:      MIT
-  Link:         https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/project.rs
-  Consulted by:
-    projects/engines/geometry/crates/geom-fuzz/src/lib.rs
-      for the options of `cargo bolero test` above: the sanitizer and its default, and the toolchain. No code copied.
-
-cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs`
-  Licence:      MIT
-  Link:         https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs
-  Consulted by:
-    projects/engines/geometry/crates/geom-fuzz/src/lib.rs
-      for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied.
 
 cargo-mutants
   Licence:      MIT

@@ -1,5 +1,5 @@
 //! The operation contract's fuzz target (piece G82), as tests: `contract_fuzz` is bolero's test
-//! mode, which cargo-bolero and `ClusterFuzzLite` select by name, and `contract_seeded` the seeded
+//! mode, a property test on bytes bolero draws, and `contract_seeded` the seeded
 //! leg that runs on every target, WebAssembly included (the crate README sets out the layout).
 //! Each hands the fuzzer's raw bytes to `geom_fuzz::contract::harness`. The case's input bound is
 //! reached and never passed, and the seeded inputs reach errors, warnings and tool descriptions.
@@ -23,7 +23,11 @@ use geom_test::{Seed, SplitMix64};
 const ITERATIONS: usize = 1_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 1_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 1,000 cases in 2.354 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 850;
 
 /// The longest byte string the seeded leg draws: the case and a few bytes past it.
 const MAX_LEN: u16 = 400;

@@ -23,17 +23,18 @@
 //!   ran. A ledger entry those mutants match must not match more survivors than it counts, and if
 //!   every mutant it matches is now caught or unviable, it is stale: remove it. A survivor may be kept
 //!   as `known` only by an entry the base branch's ledger already holds (`base`): a `known` entry
-//!   is an old gap the weekly run found, so a pull request that adds one for a survivor it made
+//!   is an old gap a full run found, so a pull request that adds one for a survivor it made
 //!   would merge a new unexplained survivor, which 28.8 forbids. A ledger-only pull request may
-//!   still add `known` entries for the weekly run's survivors, because no mutant of its diff
-//!   matches them, and the weekly run then holds each entry to its count.
-//! - [`Mode::Full`], weekly, over shards (`cargo mutants --shard k/n`): `expected`, the list of
+//!   still add `known` entries for a full run's survivors, because no mutant of its diff matches
+//!   them, and the full runs then hold each entry to its count.
+//! - [`Mode::Full`], over shards (`cargo mutants --shard k/n`): `expected`, the list of
 //!   every mutant (`cargo mutants --list --json` with the same filters), must equal the union of
 //!   the shards' mutants exactly, with no mutant in two shards, so a lost or truncated shard
 //!   fails. Every ledger entry must match exactly as many surviving mutants as it counts; one that
 //!   matches none is stale and fails, so the ledger never keeps a reason for code that changed.
-//!   A full run may be narrowed, on demand, to the files a regular expression matches
-//!   (`cargo mutants --re`): [`check_narrowed`] proves the list holds every mutant of those files,
+//!   A full run may be narrowed to the files a regular expression matches (`cargo mutants
+//!   --re`), on demand or on a push to main, whose run mutates [`push_files`]:
+//!   [`check_narrowed`] proves the list holds every mutant of those files,
 //!   and of other files only the struct-field deletions cargo-mutants 27.1.0 does not filter, and
 //!   the judge then counts only those files' ledger entries, since no other file was mutated
 //!   whole.
@@ -488,7 +489,7 @@ pub fn read_run(dir: &Path) -> Result<Run, RunError> {
 pub enum Mode {
     /// A pull request's diff.
     Diff,
-    /// The weekly run over everything, in shards.
+    /// A full run over every mutant of the files it covers, in shards.
     Full,
 }
 
@@ -1101,6 +1102,98 @@ pub fn shard_matrix(count: u64) -> String {
     let second: Vec<u64> = (MATRIX_JOBS..MATRIX_JOBS.saturating_add(count_2.max(1))).collect();
     serde_json::json!({"count": count, "shards": first, "count_2": count_2, "shards_2": second})
         .to_string()
+}
+
+/// The function a ledger entry's mutant is in: the last path segment after the description's last
+/// ` in ` (`replace < with <= in Rotation::givens` is in `givens`), or `None` when it names none.
+#[must_use]
+pub fn mutant_function(description: &str) -> Option<&str> {
+    let (_, path) = description.rsplit_once(" in ")?;
+    let name = path.rsplit("::").next()?.trim();
+    let name = name.split(['<', '(', ' ']).next()?;
+    (!name.is_empty()).then_some(name)
+}
+
+/// The functions a unified diff's added and removed lines declare (`fn <name>`), by name.
+#[must_use]
+pub fn declared_functions(diff: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for line in diff.lines() {
+        if line.starts_with("+++") || line.starts_with("---") {
+            continue;
+        }
+        let Some(body) = line.strip_prefix(['+', '-']) else {
+            continue;
+        };
+        let mut words = body.split(|c: char| !(c.is_alphanumeric() || c == '_'));
+        while let Some(word) = words.next() {
+            if word == "fn" {
+                if let Some(name) = words.find(|w| !w.is_empty()) {
+                    out.insert(name.to_owned());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The folder of the kernel's crates, from the repository root.
+pub const KERNEL_FOLDER: &str = "projects/engines/geometry/crates/";
+
+/// The files a push to main's full mutation run mutates (the owner's testing principle 5, decision
+/// 32.53): every changed file that holds a kernel crate's sources (`<kernel>/src/**.rs`, deleted
+/// ones included, so their ledger entries are found stale), and every kernel source file one of
+/// whose ledger entries is in a function the push's diff declares, added or removed: a function
+/// that moved, was renamed or had its signature changed may leave its entries behind in a file the
+/// push did not touch. `kernel` names the kernel crates; `diff` is the push's unified diff of its
+/// Rust files. In path order, each once.
+#[must_use]
+pub fn push_files(
+    changed: &[String],
+    diff: &str,
+    ledger: &Ledger,
+    kernel: &[String],
+) -> Vec<String> {
+    let is_kernel_source = |file: &str| {
+        let Some(rest) = file.strip_prefix(KERNEL_FOLDER) else {
+            return false;
+        };
+        let Some((krate, inside)) = rest.split_once('/') else {
+            return false;
+        };
+        kernel.iter().any(|k| k == krate)
+            && inside.starts_with("src/")
+            && Path::new(inside)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("rs"))
+    };
+    let mut out: BTreeSet<String> = changed
+        .iter()
+        .map(|f| f.trim().to_owned())
+        .filter(|f| is_kernel_source(f))
+        .collect();
+    let moved = declared_functions(diff);
+    for s in &ledger.survivors {
+        if is_kernel_source(&s.file)
+            && mutant_function(&s.mutant).is_some_and(|f| moved.contains(f))
+        {
+            out.insert(s.file.clone());
+        }
+    }
+    out.into_iter().collect()
+}
+
+/// A regular expression for `cargo mutants --re` and the judge's `--files` that matches exactly
+/// `files`: a mutant's name (`<file>:<line>:...`) or a ledger entry's file, each path matched
+/// whole. Empty for no file; a caller must then run no mutation, since an empty `--files` means
+/// every mutant.
+#[must_use]
+pub fn files_pattern(files: &[String]) -> String {
+    if files.is_empty() {
+        return String::new();
+    }
+    let alternatives: Vec<String> = files.iter().map(|f| regex_lite::escape(f)).collect();
+    format!("(?:{})(?::|$)", alternatives.join("|"))
 }
 
 #[cfg(test)]
