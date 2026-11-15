@@ -7,15 +7,16 @@
 //! configuration files as TOML (toml), so a check sees the structure GitHub and the tools see, not
 //! a line that looks right:
 //!
-//! - **Triggers.** Pull requests that touch the kernel, the schedule (weekly), on demand, and when
-//!   kernel-release.yml calls it on a release tag, never an ordinary push; and the path filters
-//!   cover everything the gates read.
-//! - **Jobs and when they run.** The mutation plan, shards and judge on every event (the plan picks
-//!   the diff or the full run), each shard job only when the plan gives it shards, the judge even
-//!   when a shard failed; a full run narrowed to some files, on demand only, runs the mutation gate
-//!   alone, its plan checking the files cargo-mutants selected and its judge counting their ledger
-//!   entries; coverage and the seeded gates on every event; Miri weekly and on demand, and on
-//!   a pull request only when it changes how Miri runs.
+//! - **Triggers.** Every pull request (once it is ready for review), GitHub's merge queue, a push
+//!   to main, on demand, and when kernel-release.yml calls it on a release tag, never on a timer;
+//!   and the files the job `when` watches cover everything the gates read.
+//! - **Jobs and when they run.** The job `when` decides each gate; the mutation plan and judge run
+//!   when it chose mutation (the plan picks the diff or the full run by its mode), each shard job
+//!   only when the plan gives it shards, the judge even when a shard failed; a full run narrowed to
+//!   some files, on demand or on a push to main, has its plan check the files cargo-mutants
+//!   selected and its judge count their ledger entries; coverage and the seeded gates when it chose
+//!   coverage; Miri when it chose Miri, on a pull request only when it changes how Miri runs. A
+//!   draft runs none of them. The last job, `done`, fails unless every gate chosen ran and passed.
 //! - **Least privilege.** One permission, `contents: read`, and no credentials kept by checkout.
 //! - **Pins.** Every action pinned to a full commit, the same commit as `kernel.yml` where both use
 //!   an action; one `RUST_TOOLCHAIN`, equal to `rust-toolchain.toml`; the nightly pinned by its
@@ -137,43 +138,62 @@ fn runs(w: &Yaml, job: &str) -> String {
     ignore = "reads the repository's files, which a WebAssembly test run cannot"
 )]
 #[test]
-fn it_runs_on_kernel_pull_requests_weekly_and_on_demand() {
+fn it_runs_once_per_change_and_never_on_a_timer() {
     let w = workflow();
     let on = &w["on"];
     assert_eq!(
         keys(on),
         [
             "pull_request",
-            "schedule",
+            "merge_group",
+            "push",
             "workflow_dispatch",
             "workflow_call"
         ],
-        "pushes run kernel.yml, not the quality gates; kernel-release.yml calls them on a release"
+        "a change's gates run when it is ready, in the queue and on main; never on a timer"
     );
-    let cron = text(&on["schedule"][0]["cron"]);
-    let fields: Vec<&str> = cron.split_whitespace().collect();
-    assert_eq!(fields.len(), 5, "{cron}");
-    assert!(
-        fields[2] == "*" && fields[3] == "*" && fields[4] != "*",
-        "weekly: {cron}"
-    );
-    let paths: Vec<&str> = on["pull_request"]["paths"]
+    let types: Vec<&str> = on["pull_request"]["types"]
         .as_vec()
         .unwrap()
         .iter()
         .map(text)
         .collect();
+    assert!(types.contains(&"ready_for_review"), "{types:?}");
+    assert_eq!(
+        on["push"]["branches"]
+            .as_vec()
+            .unwrap()
+            .iter()
+            .map(text)
+            .collect::<Vec<_>>(),
+        ["main"]
+    );
+    // No path filter, so the required check `done` reports on every change; `when` reads the
+    // kernel's paths instead.
+    assert!(on["pull_request"]["paths"].is_badvalue());
+    let paths: Vec<&str> = text(&w["env"]["KERNEL_PATHS"]).lines().collect();
     for path in [
         "projects/engines/geometry/**",
         ".cargo/**",
-        ".config/nextest.toml",
+        ".config/**",
         "Cargo.toml",
         "Cargo.lock",
         "rust-toolchain.toml",
-        ".github/workflows/kernel-quality.yml",
+        ".github/**",
     ] {
-        assert!(paths.contains(&path), "no path filter {path}");
+        assert!(paths.contains(&path), "no path {path}");
     }
+    let decide = runs(&w, "when");
+    assert!(decide.contains("done <<< \"$KERNEL_PATHS\""), "{decide}");
+    // A draft runs no gate.
+    let draft = decide.find("if [ \"$DRAFT\" = true ]; then").unwrap();
+    assert!(
+        decide[draft..]
+            .lines()
+            .nth(1)
+            .is_some_and(|l| l.trim() == "mutants=false coverage=false miri=false"),
+        "{decide}"
+    );
     assert!(geom_test::quality_ledger::LEDGER_PATH.starts_with("projects/engines/geometry/"));
 }
 
@@ -188,6 +208,7 @@ fn each_job_runs_on_the_events_its_gate_names() {
     assert_eq!(
         keys(jobs),
         [
+            "when",
             "cheap",
             "mutants-plan",
             "mutants",
@@ -196,15 +217,22 @@ fn each_job_runs_on_the_events_its_gate_names() {
             "coverage",
             "gates-seeded",
             "miri",
+            "done",
         ]
     );
-    // Every job runs on every event, but each shard job only when the plan gives it shards, and
+    // Each gate runs when `when` chose it; each shard job only when the plan gives it shards, and
     // the judge even when a shard failed, so a lost shard is reported, not skipped.
-    assert!(jobs["mutants-plan"]["if"].is_badvalue());
-    // A narrowed mutation run (a dispatch with `files`) skips the other gates; every other run,
-    // a pull request's among them, runs them.
-    for job in ["coverage", "gates-seeded", "miri"] {
-        assert_eq!(text(&jobs[job]["if"]), "${{ !inputs.files }}", "{job}");
+    for (job, gate) in [
+        ("mutants-plan", "mutants"),
+        ("coverage", "coverage"),
+        ("gates-seeded", "coverage"),
+        ("miri", "miri"),
+    ] {
+        assert_eq!(
+            text(&jobs[job]["if"]),
+            format!("needs.when.outputs.{gate} == 'true'"),
+            "{job}"
+        );
     }
     assert_eq!(
         text(&jobs["mutants"]["if"]),
@@ -214,14 +242,17 @@ fn each_job_runs_on_the_events_its_gate_names() {
         text(&jobs["mutants-2"]["if"]),
         "needs.mutants-plan.outputs.count_2 != '0'"
     );
-    assert_eq!(text(&jobs["mutants-judge"]["if"]), "${{ !cancelled() }}");
+    assert_eq!(
+        text(&jobs["mutants-judge"]["if"]),
+        "${{ !cancelled() && needs.when.outputs.mutants == 'true' }}"
+    );
     let needs: Vec<&str> = jobs["mutants-judge"]["needs"]
         .as_vec()
         .unwrap()
         .iter()
         .map(text)
         .collect();
-    assert_eq!(needs, ["mutants-plan", "mutants", "mutants-2"]);
+    assert_eq!(needs, ["when", "mutants-plan", "mutants", "mutants-2"]);
     // The judge checks the jobs it reads before it judges: a shard job may be skipped only when
     // the plan gave it no shard.
     let first = text(&jobs["mutants-judge"]["steps"][0]["run"]);
@@ -235,23 +266,44 @@ fn each_job_runs_on_the_events_its_gate_names() {
             "{first}"
         );
     }
-    // The plan decides between the diff and the full run by the event.
+    // The plan decides between the diff and the full run by the mode `when` chose.
     let plan = runs(&w, "mutants-plan");
-    assert!(plan.contains("if [ \"$GITHUB_EVENT_NAME\" = pull_request ]; then"));
-    // Miri: every partition weekly and on demand; one partition on a pull request, and only when
-    // it changes the Miri run.
-    let miri = runs(&w, "miri");
+    assert!(plan.contains("if [ \"$MODE\" = diff ]; then"));
+    // Miri: one partition on a pull request, and only when it changes the Miri run; never in the
+    // merge queue.
+    let decide = runs(&w, "when");
     for watched in [
         ".github/workflows/kernel-quality",
         ".config/nextest",
         "geom-test/src/miri",
     ] {
-        assert!(miri.contains(watched), "{watched}");
+        assert!(decide.contains(watched), "{watched}");
     }
-    for step in jobs["miri"]["steps"].as_vec().unwrap().iter().skip(2) {
-        let condition = text(&step["if"]);
-        assert!(condition.contains("env.NEEDED == 'true'"), "{condition}");
-    }
+    assert!(decide.contains("miri=$miri_files"), "{decide}");
+    assert!(
+        decide.contains("if [ \"$EVENT\" = merge_group ]; then miri=false; fi"),
+        "{decide}"
+    );
+    // A push to main mutates the files it changed and those its ledger entries tie to a moved
+    // function, and Miri runs the crates its tests reach.
+    assert!(
+        decide.contains("kernel-quality -- mutants-files"),
+        "{decide}"
+    );
+    assert!(
+        decide.contains("kernel-quality -- miri-packages"),
+        "{decide}"
+    );
+    // The last job judges every other.
+    let done_needs: Vec<&str> = jobs["done"]["needs"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .map(text)
+        .collect();
+    let others: Vec<String> = keys(jobs).into_iter().filter(|j| j != "done").collect();
+    assert_eq!(done_needs, others);
+    assert_eq!(text(&jobs["done"]["if"]), "${{ always() }}");
 }
 
 #[cfg_attr(
@@ -284,10 +336,11 @@ fn permissions_are_read_only_and_credentials_are_not_kept() {
         }
     }
     // Every job that has steps (the job `cheap` only calls cheap-checks.yml, a workflow of this
-    // repository at the same commit, which runs no repository code).
+    // repository at the same commit, which runs no repository code; `done` reads only the other
+    // jobs' results).
     let with_steps = keys(&w["jobs"])
         .iter()
-        .filter(|job| !w["jobs"][job.as_str()]["steps"].is_badvalue())
+        .filter(|job| *job != "done" && !w["jobs"][job.as_str()]["steps"].is_badvalue())
         .count();
     assert_eq!(checkouts, with_steps, "one checkout per job");
 }
@@ -437,8 +490,22 @@ fn only_a_dispatch_narrows_the_full_run() {
         text(&w["concurrency"]["group"]),
         "kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}"
     );
-    // ... reaching the steps only through the environment, never pasted into a script.
-    assert_eq!(text(&w["env"]["FILES"]), "${{ inputs.files }}");
+    // ... reaching the steps only through the environment, never pasted into a script: `when`
+    // reads it, and every job that narrows reads `when`'s choice.
+    let decide = w["jobs"]["when"]["steps"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"].as_str() == Some("when"))
+        .unwrap();
+    assert_eq!(text(&decide["env"]["INPUT_FILES"]), "${{ inputs.files }}");
+    for job in ["mutants-plan", "mutants", "mutants-2", "mutants-judge"] {
+        assert_eq!(
+            text(&w["jobs"][job]["env"]["FILES"]),
+            "${{ needs.when.outputs.files }}",
+            "{job}"
+        );
+    }
     for (job, step) in steps(&w) {
         if let Some(run) = step["run"].as_str() {
             assert!(
@@ -447,10 +514,10 @@ fn only_a_dispatch_narrows_the_full_run() {
             );
         }
     }
-    // A pull request never narrows: the plan and the judge read FILES only after the diff branch.
+    // A change's diff never narrows: the plan and the judge read FILES only after the diff branch.
     for job in ["mutants-plan", "mutants-judge"] {
         let run = runs(&w, job);
-        let diff = run.find("= pull_request ]").unwrap();
+        let diff = run.find("= diff ]").unwrap();
         assert!(run.find("$FILES").unwrap() > diff, "{job}");
     }
 }
@@ -520,16 +587,16 @@ fn every_shard_and_partition_runs_once() {
             "{plan_run}"
         );
     }
-    // Miri: the weekly matrix lists partitions 1 to PARTITIONS, and each runs its own.
+    // Miri: the full matrix lists partitions 1 to PARTITIONS, and each runs its own.
     let miri = &w["jobs"]["miri"];
     let n = miri["env"]["PARTITIONS"].as_i64().unwrap();
     let matrix = text(&miri["strategy"]["matrix"]["partition"]);
-    let weekly = matrix
+    let full = matrix
         .split("|| '")
         .nth(1)
         .and_then(|rest| rest.split('\'').next())
         .unwrap();
-    let listed: Vec<i64> = serde_json::from_str(weekly).unwrap();
+    let listed: Vec<i64> = serde_json::from_str(full).unwrap();
     assert_eq!(listed, (1..=n).collect::<Vec<_>>());
     assert!(
         matrix.contains("github.event_name == 'pull_request' && '[1]'"),
@@ -555,7 +622,7 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
         "cargo mutants --in-diff \"$RUNNER_TEMP/plan/pr.diff\" --list --json > \"$RUNNER_TEMP/plan/list.json\"",
         "cargo mutants --list --json > \"$RUNNER_TEMP/plan/list.json\"",
         "kernel-quality -- mutants-plan",
-        "git show \"HEAD^1:projects/engines/geometry/quality-ledger.json\"",
+        "git show \"$BASE:projects/engines/geometry/quality-ledger.json\"",
     ] {
         assert!(plan.contains(needle), "the plan does not run {needle:?}");
     }
@@ -766,9 +833,9 @@ fn the_tools_are_configured_as_the_gates_need() {
         assert_eq!(p["fail-fast"].as_bool(), Some(false), "{profile}");
         assert_eq!(p["junit"]["path"].as_str(), Some("junit.xml"), "{profile}");
     }
-    // The weekly budget: two periods of five minutes, so a partition's worst case fits the job.
-    let weekly = &n["profile"]["default-miri"]["slow-timeout"];
-    assert_eq!(weekly["period"].as_str(), Some("300s"));
-    assert_eq!(weekly["terminate-after"].as_integer(), Some(2));
+    // The full run's budget: two periods of five minutes, so a partition's worst case fits the job.
+    let full = &n["profile"]["default-miri"]["slow-timeout"];
+    assert_eq!(full["period"].as_str(), Some("300s"));
+    assert_eq!(full["terminate-after"].as_integer(), Some(2));
     assert!(n["profile"].as_table().unwrap().get("default").is_none());
 }

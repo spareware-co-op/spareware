@@ -5,9 +5,7 @@
 //! - `curve_offsets_fuzz` wraps `geom_fuzz::curve_offsets::harness` in `bolero::check!`. Under
 //!   `cargo test` it replays the files in `tests/__fuzz__/curve_offsets/corpus` and `crashes`, if
 //!   any, then runs [`ITERATIONS`] random byte strings; bolero prints a failing one's seed as
-//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it. Under
-//!   `cargo bolero test curve_offsets_fuzz --package geom-fuzz` the same test is a libFuzzer
-//!   target.
+//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it.
 //! - `curve_offsets_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the
 //!   printed seed (`SPAREKIT_SEED` replays it), the same on every target.
 //! - `the_bytes_are_read_as_the_curves_target_reads_them`: every byte string decodes to the
@@ -55,7 +53,11 @@ use geom_test::{Seed, SplitMix64};
 const ITERATIONS: usize = 150;
 
 /// Byte strings in the seeded leg, for the same reason.
-const SEEDED_CASES: u32 = 150;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 150 cases in 1.104 s), about 3.7 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 500;
 
 /// The longest byte string the fuzz target and the seeded leg try: the curves target's, as the
 /// bytes are read the same way.
