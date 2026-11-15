@@ -85,9 +85,9 @@ jobs:
         run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora"
 
   large-models:
-    name: Manifold's large models against the reference
+    name: Manifold's large models within their work
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,7 +98,7 @@ jobs:
       - name: The seven models of more than 1,500 faces, united alone and with a moved copy
         run: >-
           cargo test --locked --release -p geom-test --test corpus_polyhedral --
-          --ignored --exact the_large_models_unite_to_the_reference
+          --ignored --exact the_large_models_unite_within_their_work
 
   predicates:
     name: Predicates with a fresh seed
