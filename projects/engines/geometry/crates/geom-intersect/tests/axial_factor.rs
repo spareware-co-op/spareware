@@ -396,6 +396,41 @@ fn a_moved_cylinder_meets_a_coaxial_torus_or_sweep_at_the_same_parameters() {
 }
 
 #[test]
+fn a_cylinder_of_any_factor_meets_a_coaxial_torus_over_both_ends_of_its_heights() {
+    // The meridian runs over s·v at both ends of v's domain. A cylinder whose v starts at 0 cannot
+    // tell s·v from v/s there, so these start past it: radius 5 from height 41 to 50 meets the
+    // tube of radius 2 about height 40 in the ring at 42, not at 38. Moved by the factors 2, −2
+    // and −3 the meridian starts at 82 (or 123) beside the tube about 80 (or 120), and v₀/s would
+    // start it at 20.5 (or 13.7), below the second ring too.
+    let torus =
+        SurfaceKind::Torus(Torus::new([0.0, 0.0, 40.0], 5.0, 2.0, up(), (ROUND, ROUND)).unwrap());
+    let tube =
+        SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 5.0, up(), (ROUND, (41.0, 50.0))).unwrap());
+    same_pair(&tube, &torus, 1);
+    // Built at factor 2 or −2, v over a quarter of 41 to 50 times 2 either way up: the one ring of
+    // radius 5 about height 42, exactly where the data are. With v₀/s the meridian ran from 10.25
+    // (two rings), or from 12.5 to 41 (the ring at 38).
+    for (factor, heights) in [(2.0, (20.5, 25.0)), (-2.0, (-25.0, -20.5))] {
+        let stretched = SurfaceKind::Cylinder(
+            Cylinder::new([0.0; 3], 5.0, up(), (ROUND, heights))
+                .unwrap()
+                .with_axial_sign(factor)
+                .unwrap(),
+        );
+        let r = natural(&stretched, &torus, &mut meter()).unwrap().unwrap();
+        let [Item::Curve { curve, .. }] = r.items() else {
+            panic!("{factor}: {:?}", r.items())
+        };
+        let CurveKind::Circle(ring) = curve.as_ref() else {
+            panic!("{factor}: {curve:?}")
+        };
+        assert_eq!(ring.radius(), 5.0, "{factor}: {ring:?}");
+        assert_eq!(ring.center(), [0.0, 0.0, 42.0], "{factor}: {ring:?}");
+        curves_hold(&r, &stretched, &torus, "stretched");
+    }
+}
+
+#[test]
 fn a_cone_meets_its_mirror_image_and_a_stretched_copy_in_circles() {
     // Stored data equal but for the axial factor are not one cone: c + (2 + v)·e(u) − v·n̂ is the
     // mirror image of c + (2 + v)·e(u) + v·n̂ in the plane z = 0, and they meet there, in the
