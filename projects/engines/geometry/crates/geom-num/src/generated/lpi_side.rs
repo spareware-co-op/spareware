@@ -153,20 +153,22 @@
 //! The filter computes the scale S at run time at least (1 − u)^3 times its exact value: 3
 //! rounding(s), each product counting its own and both its operands', each `larger` the larger of
 //! its operands'. It computes the bound as the constant times S, one more rounding: k = 3 + 1. The
-//! constant is E · (1 + 2u)^k, rounded up to an `f64`.
+//! constant is E · (1 + 2u)^k, rounded up to an `f64`. The scale at run time leaves out y·z·n1·n2,
+//! x·z·n1·n2, x·y·n1·n2, never the largest alone: a monomial left out is the average of other
+//! monomials of S, and the largest of the rest is S for every input (the proof in [`super`]).
 //!
 //! | Quantity | Value |
 //! | --- | --- |
 //! | Result | `s` |
 //! | Unit error E | 232u + 1314u^2 + 2398u^3 + 2652u^4 + 1984u^5 + 1042u^6 + 370u^7 + 80u^8 + 8u^9 |
 //! | Scale S | max{z·d1·n2, z·n1·d2, z^2·n1·n2, y·d1·n2, y·n1·d2, y·z·n1·n2, y^2·n1·n2, x·d1·n2, x·n1·d2, x·z·n1·n2, x·y·n1·n2, x^2·n1·n2} |
-//! | Scale at run time | `larger(larger(larger(larger(larger(larger(larger(larger(larger(larger(larger(m_z * m_d1 * m_n2, m_z * m_n1 * m_d2), m_z * m_z * m_n1 * m_n2), m_y * m_d1 * m_n2), m_y * m_n1 * m_d2), m_y * m_z * m_n1 * m_n2), m_y * m_y * m_n1 * m_n2), m_x * m_d1 * m_n2), m_x * m_n1 * m_d2), m_x * m_z * m_n1 * m_n2), m_x * m_y * m_n1 * m_n2), m_x * m_x * m_n1 * m_n2)` |
+//! | Scale at run time | `larger(larger(larger(larger(larger(larger(larger(larger(m_z * m_d1 * m_n2, m_z * m_n1 * m_d2), m_z * m_z * m_n1 * m_n2), m_y * m_d1 * m_n2), m_y * m_n1 * m_d2), m_y * m_y * m_n1 * m_n2), m_x * m_d1 * m_n2), m_x * m_n1 * m_d2), m_x * m_x * m_n1 * m_n2)` |
 //! | Roundings k | 4 |
 //! | Constant, exactly | 232u + 3170u^2 + 18478u^3 + 60796u^4 + 126512u^5 + 178322u^6 + 179554u^7 + 133968u^8 + 74616u^9 + 30496u^10 + 8672u^11 + 1536u^12 + 128u^13 |
 //! | Constant as an `f64` | `0x3d1d00000000000d` = 8162774324609037 · 2^-98 ≈ 2.5757174171303673e-14 |
 //!
 //! Cost: the filter is 28 `f64` operations, after 8 rounded input(s) converted to `f64`, then 14
-//! magnitudes and their maxima and the bound's 31 multiplication(s); the exact path, run only when
+//! magnitudes and their maxima and the bound's 22 multiplication(s); the exact path, run only when
 //! the filter cannot decide, is 28 checked integer operations.
 
 use crate::grid::P3;
@@ -253,12 +255,9 @@ pub fn filter(
     let scale = larger(scale, m_z * m_z * m_n1 * m_n2);
     let scale = larger(scale, m_y * m_d1 * m_n2);
     let scale = larger(scale, m_y * m_n1 * m_d2);
-    let scale = larger(scale, m_y * m_z * m_n1 * m_n2);
     let scale = larger(scale, m_y * m_y * m_n1 * m_n2);
     let scale = larger(scale, m_x * m_d1 * m_n2);
     let scale = larger(scale, m_x * m_n1 * m_d2);
-    let scale = larger(scale, m_x * m_z * m_n1 * m_n2);
-    let scale = larger(scale, m_x * m_y * m_n1 * m_n2);
     let scale = larger(scale, m_x * m_x * m_n1 * m_n2);
     decide(s, ERROR, scale)
 }

@@ -9844,7 +9844,7 @@
           "target": "lib"
         },
         {
-          "cost": "the filter is 41 `f64` operations, after 2 rounded input(s) converted to `f64`, then 11 magnitudes and their maxima and the bound's 38 multiplication(s); the exact path, run only when the filter cannot decide, is 41 checked integer operations.",
+          "cost": "the filter is 41 `f64` operations, after 2 rounded input(s) converted to `f64`, then 11 magnitudes and their maxima and the bound's 33 multiplication(s); the exact path, run only when the filter cannot decide, is 41 checked integer operations.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/line_cone.rs",
@@ -9864,7 +9864,7 @@
           "target": "lib"
         },
         {
-          "cost": "the filter is 31 `f64` operations, after 2 rounded input(s) converted to `f64`, then 8 magnitudes and their maxima and the bound's 21 multiplication(s); the exact path, run only when the filter cannot decide, is 31 checked integer operations.",
+          "cost": "the filter is 31 `f64` operations, after 2 rounded input(s) converted to `f64`, then 8 magnitudes and their maxima and the bound's 12 multiplication(s); the exact path, run only when the filter cannot decide, is 31 checked integer operations.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/line_cone_lead.rs",
@@ -9924,7 +9924,7 @@
           "target": "lib"
         },
         {
-          "cost": "the filter is 28 `f64` operations, after 8 rounded input(s) converted to `f64`, then 14 magnitudes and their maxima and the bound's 31 multiplication(s); the exact path, run only when the filter cannot decide, is 28 checked integer operations.",
+          "cost": "the filter is 28 `f64` operations, after 8 rounded input(s) converted to `f64`, then 14 magnitudes and their maxima and the bound's 22 multiplication(s); the exact path, run only when the filter cannot decide, is 28 checked integer operations.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/lpi_side.rs",

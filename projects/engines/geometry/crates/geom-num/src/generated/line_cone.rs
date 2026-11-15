@@ -164,20 +164,22 @@
 //! The filter computes the scale S at run time at least (1 − u)^7 times its exact value: 7
 //! rounding(s), each product counting its own and both its operands', each `larger` the larger of
 //! its operands'. It computes the bound as the constant times S, one more rounding: k = 7 + 1. The
-//! constant is E · (1 + 2u)^k, rounded up to an `f64`.
+//! constant is E · (1 + 2u)^k, rounded up to an `f64`. The scale at run time leaves out
+//! x^2·y^2·z^2·slope^2, never the largest alone: a monomial left out is the average of other
+//! monomials of S, and the largest of the rest is S for every input (the proof in [`super`]).
 //!
 //! | Quantity | Value |
 //! | --- | --- |
 //! | Result | `delta` |
 //! | Unit error E | 1728u + 23220u^2 + 126872u^3 + 377212u^4 + 719256u^5 + 964280u^6 + 958992u^7 + 729924u^8 + 432792u^9 + 201552u^10 + 73488u^11 + 20492u^12 + 4120u^13 + 528u^14 + 32u^15 |
 //! | Scale S | max{y^2·z^4·slope^2, y^4·z^2·slope^2, x^2·z^4·slope^2, x^2·y^2·z^2·slope^2, x^2·y^4·slope^2, x^4·z^2·slope^2, x^4·y^2·slope^2} |
-//! | Scale at run time | `m_slope * m_slope * larger(larger(larger(larger(larger(larger(m_y * m_y * m_z * m_z * m_z * m_z, m_y * m_y * m_y * m_y * m_z * m_z), m_x * m_x * m_z * m_z * m_z * m_z), m_x * m_x * m_y * m_y * m_z * m_z), m_x * m_x * m_y * m_y * m_y * m_y), m_x * m_x * m_x * m_x * m_z * m_z), m_x * m_x * m_x * m_x * m_y * m_y)` |
+//! | Scale at run time | `m_slope * m_slope * larger(larger(larger(larger(larger(m_y * m_y * m_z * m_z * m_z * m_z, m_y * m_y * m_y * m_y * m_z * m_z), m_x * m_x * m_z * m_z * m_z * m_z), m_x * m_x * m_y * m_y * m_y * m_y), m_x * m_x * m_x * m_x * m_z * m_z), m_x * m_x * m_x * m_x * m_y * m_y)` |
 //! | Roundings k | 8 |
 //! | Constant, exactly | 1728u + 50868u^2 + 691928u^3 + 5781948u^4 + 33302232u^5 + 140661752u^6 + 452738576u^7 + 1139511620u^8 + 2284621016u^9 + 3699231632u^10 + 4888488848u^11 + 5314763660u^12 + 4781674712u^13 + 3573472976u^14 + 2221645472u^15 + 1147767680u^16 + 490450688u^17 + 171559424u^18 + 48161792u^19 + 10468352u^20 + 1652736u^21 + 167936u^22 + 8192u^23 |
 //! | Constant as an `f64` | `0x3d4b000000000019` = 7599824371187737 · 2^-95 ≈ 1.9184653865522768e-13 |
 //!
 //! Cost: the filter is 41 `f64` operations, after 2 rounded input(s) converted to `f64`, then 11
-//! magnitudes and their maxima and the bound's 38 multiplication(s); the exact path, run only when
+//! magnitudes and their maxima and the bound's 33 multiplication(s); the exact path, run only when
 //! the filter cannot decide, is 41 checked integer operations.
 
 use crate::grid::P3;
@@ -254,7 +256,6 @@ pub fn filter(a: P3, b: P3, c: P3, f: P3, s: i128, t: i128) -> Option<Sign> {
     let scale = m_y * m_y * m_z * m_z * m_z * m_z;
     let scale = larger(scale, m_y * m_y * m_y * m_y * m_z * m_z);
     let scale = larger(scale, m_x * m_x * m_z * m_z * m_z * m_z);
-    let scale = larger(scale, m_x * m_x * m_y * m_y * m_z * m_z);
     let scale = larger(scale, m_x * m_x * m_y * m_y * m_y * m_y);
     let scale = larger(scale, m_x * m_x * m_x * m_x * m_z * m_z);
     let scale = larger(scale, m_x * m_x * m_x * m_x * m_y * m_y);

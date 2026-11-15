@@ -11,10 +11,11 @@
 //!   its bound is the constant times that scale, rounded once. The comparison of the exact value
 //!   with that bound is made here in `num-bigint`. The scale's monomials are read from each
 //!   committed module's header, its `ERROR` from its code.
-//! - **Unit maxima.** `line_cone` and `line_cone_lead` carry monomials that are never the largest
-//!   alone (x²·y² is at most the larger of x⁴ and y⁴). With every group maximum one, each monomial
-//!   is one, and an input whose exact value lies between the bound and twice the bound must be
-//!   decided: a scale that counted two monomials would leave it undecided.
+//! - **Unit maxima.** The scale sets of `line_cone` and `line_cone_lead` carry monomials that are
+//!   never the largest alone (x²·y² is at most the larger of x⁴ and y⁴), which the filters leave
+//!   out of the scale they compute. With every group maximum one, each monomial is one, and an
+//!   input whose exact value lies between the bound and twice the bound must be decided: a scale
+//!   that counted two monomials would leave it undecided.
 //! - **Everywhere else.** On random and near-tangent inputs, with differences confined to axes and
 //!   coordinate planes half the time: every sign a filter gives is the exact sign, a filter
 //!   decides every input whose exact value is beyond three times its bound (the bound and the
