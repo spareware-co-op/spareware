@@ -3,8 +3,7 @@
 //!
 //! - `piercing_fuzz` wraps `geom_fuzz::piercing::harness` in `bolero::check!`: the crate's corpus and
 //!   crash files, then [`ITERATIONS`] random byte strings; a failing one's seed is printed as
-//!   `BOLERO_RANDOM_SEED=<seed>`. Under `cargo bolero test piercing_fuzz --package geom-fuzz` it is a
-//!   libFuzzer target.
+//!   `BOLERO_RANDOM_SEED=<seed>`.
 //! - `piercing_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly, and the cases reach every kind of surface.

@@ -15,13 +15,24 @@ use crate::util::fmt;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
+/// The object a JSON value holds, the value first replaced by an empty object when it holds anything else.
+pub(crate) fn object_in(v: &mut Value) -> &mut Map<String, Value> {
+    match v {
+        Value::Object(m) => m,
+        other => {
+            *other = json!({});
+            // `other` holds an object now, so this call takes the first arm
+            object_in(other)
+        }
+    }
+}
+
 /// `F()`: the project's feeds record, made when it is missing, with its `vintage` table.
 pub fn feeds_of(p: &mut Project) -> &mut Map<String, Value> {
     let falsy = |v: Option<&Value>| v.is_none_or(|v| !value_truthy(v));
-    if falsy(p.extra.get("feeds")) {
-        p.extra.insert("feeds".to_string(), json!({}));
-    }
-    let f = p.extra.get_mut("feeds").and_then(Value::as_object_mut).expect("feeds is an object");
+    // A missing or falsy record becomes {} as `P.feeds || (P.feeds = {})` makes it (every object is truthy,
+    // so only a saved record that is neither, which no saved project holds, is replaced too)
+    let f = object_in(p.extra.entry("feeds").or_insert(Value::Null));
     if falsy(f.get("vintage")) {
         f.insert("vintage".to_string(), json!({}));
     }
@@ -68,7 +79,8 @@ pub fn stamp(p: &mut Project, id: &str, extra: &Map<String, Value>, now_ms: f64)
         None => id.to_string(),
     };
     let entry = Value::Object(v);
-    feeds_of(p).get_mut("vintage").and_then(Value::as_object_mut).expect("vintage").insert(key, entry.clone());
+    // feeds_of has made `vintage` an object when it was missing or falsy
+    object_in(feeds_of(p).entry("vintage").or_insert(Value::Null)).insert(key, entry.clone());
     entry
 }
 
@@ -81,6 +93,7 @@ pub fn fail_stamp(p: &mut Project, id: &str, error: &str, extra: &Map<String, Va
 }
 
 /// `safeHref(h)`: the text when it is a web address or a plain path on this site, else "" (a project file could carry `javascript:` in a URL field).
+#[must_use]
 pub fn safe_href(h: &str) -> String {
     let s = crate::jsnum::js_trim(h);
     let web = super::jsregex::Regex::lit(r#"^https?:\/\/[^\s"'<>]+$"#, "i");
@@ -110,6 +123,7 @@ pub struct VintageRow {
 }
 
 /// `vintageRows()`: the entries of `P.feeds.vintage` as table rows, sorted by the source's name.
+#[must_use]
 pub fn vintage_rows(p: &Project) -> Vec<VintageRow> {
     let Some(Value::Object(v)) = p.extra.get("feeds").and_then(|f| f.get("vintage")) else { return Vec::new() };
     let get = |e: &Value, k: &str| e.get(k).cloned();

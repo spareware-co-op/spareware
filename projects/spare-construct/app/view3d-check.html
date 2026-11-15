@@ -1,0 +1,203 @@
+<!doctype html>
+<!--
+  A check of the 3D view, not part of the app: it draws the same elements with the view as it was
+  before piece A20 (one mesh per element, written out below) and with view3d.js, and prints the
+  draw calls the GPU was asked for, the triangles, the time to build the meshes and how many pixels
+  differ. The shapes are real: built by app/pkg from the seed's recipes. Serve this folder with any
+  static server (for example `python -m http.server` in app/) and open view3d-check.html.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>View check</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 16px; background: #fff; color: #111; }
+  canvas { border: 1px solid #ccc; margin: 4px; }
+  pre { white-space: pre-wrap; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="views"></div>
+<pre id="out">running</pre>
+<script type="module">
+import * as THREE from 'three';
+import init, { build } from './pkg/construct_shapes.js';
+import { elementMeshes } from './view3d.js';
+
+await init();
+
+const recipe = (op, args) => ({ owner: 'construct', schema: 1, op, op_version: 1, args });
+const cache = new Map();
+function shapeOf(r) {
+  const text = JSON.stringify(r);
+  if (!cache.has(text)) {
+    const built = JSON.parse(build(text));
+    if (!built.shape) throw new Error(`no shape: ${text} ${JSON.stringify(built)}`);
+    cache.set(text, built.shape);
+  }
+  return cache.get(text);
+}
+// The seed's helpers (server/src/seed.rs), in JavaScript.
+function wall(id, level, x, y, w, d) {
+  const [length, thickness, axis] = w >= d ? [w, d, 'x'] : [d, w, 'y'];
+  return { el: { id, kind: 'wall', level, placement: { x, y, z: 0 } },
+           shape: shapeOf(recipe('wall.straight', { length, thickness, height: 3000, axis })) };
+}
+function door(id, level, x, y, w, d) {
+  const [width, thickness, axis] = w >= d ? [w, d, 'x'] : [d, w, 'y'];
+  return { el: { id, kind: 'door', level, placement: { x, y, z: 0 } },
+           shape: shapeOf(recipe('door.single', { width, thickness, height: 2100, axis })) };
+}
+function thing(id, kind, level, x, y, [width, depth, height]) {
+  return { el: { id, kind, level, placement: { x, y, z: 0 } },
+           shape: shapeOf(recipe('block', { width, depth, height })) };
+}
+function archFloor(level, dx = 0, dy = 0, tag = '') {
+  const t = (n) => `W-${tag}${level}0${n}`;
+  return [
+    wall(t(1), level, dx, dy, 12000, 200), wall(t(2), level, dx, dy + 7800, 12000, 200),
+    wall(t(3), level, dx, dy + 200, 200, 7600), wall(t(4), level, dx + 11800, dy + 200, 200, 7600),
+    wall(t(5), level, dx + 6000, dy + 200, 200, 7600),
+    door(`D-${tag}${level}01`, level, dx + 2500, dy - 50, 900, 300),
+    door(`D-${tag}${level}02`, level, dx + 5950, dy + 3000, 300, 900),
+    door(`D-${tag}${level}03`, level, dx + 9000, dy + 7750, 900, 300),
+  ];
+}
+function wholeExample() {
+  const all = [];
+  for (const level of [1, 2]) {
+    all.push(...archFloor(level));
+    all.push(thing(`B-${level}01`, 'joinery', level, 700, 700, [3000, 600, 900]));
+    all.push(thing(`B-${level}02`, 'joinery', level, 7000, 6500, [2400, 600, 900]));
+    for (const [n, x] of [['A', 100], ['B', 6100], ['C', 11900]]) all.push(thing(`GL-${n}${level}`, 'grid', level, x, -1500, [40, 11000, 10]));
+    for (const [n, y] of [['1', 100], ['2', 7900]]) all.push(thing(`GL-${n}${level}`, 'grid', level, -1500, y, [15000, 40, 10]));
+    [[0, 0], [11600, 0], [0, 7600], [11600, 7600], [5900, 3900]].forEach(([x, y], i) =>
+      all.push(thing(`C-${level}0${i}`, 'column', level, x, y, [400, 400, 3000])));
+  }
+  all.push(door('D-104', 2, 8800, -50, 900, 300));
+  return all;
+}
+function block(n) {
+  // n by n copies of the seed's floor, 14 m apart: 8 elements each.
+  const all = [];
+  for (let i = 0; i < n; i += 1) for (let j = 0; j < n; j += 1) all.push(...archFloor(1, i * 14000, j * 10000, `${i}.${j}.`));
+  return all;
+}
+
+// The view before piece A20, as connect.js had it: one mesh per element, placement baked in.
+function before(_three, paints) {
+  const group = new THREE.Group();
+  return { group, update(pieces) {
+    for (const child of group.children) child.geometry.dispose();
+    group.clear();
+    for (const piece of pieces) {
+      if (!piece.shape) continue;
+      const { positions, indices } = piece.shape.displays[0].mesh;
+      const { x, y, z } = piece.el.placement;
+      const points = new Float32Array(positions.length);
+      for (let i = 0; i < positions.length; i += 3) {
+        points[i] = positions[i] + x;
+        points[i + 1] = positions[i + 2] + z;
+        points[i + 2] = positions[i + 1] + y;
+      }
+      const shape = new THREE.BufferGeometry();
+      shape.setAttribute('position', new THREE.BufferAttribute(points, 3));
+      shape.setIndex(indices);
+      const faces = shape.toNonIndexed();
+      faces.computeVertexNormals();
+      shape.dispose();
+      group.add(new THREE.Mesh(faces, paints[piece.el.kind] || paints.other));
+    }
+  } };
+}
+
+const W = 480, H = 320;
+function stage(make, label, target) {
+  // connect.js's scene, camera and lights, with design-token colours written out.
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#f4f4f2');
+  scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+  sun.position.set(1, 3, 2);
+  scene.add(sun);
+  const camera = new THREE.PerspectiveCamera(45, W / H, 100, 500000);
+  camera.position.set(target.camera[0], target.camera[1], target.camera[2]);
+  camera.lookAt(target.look[0], target.look[1], target.look[2]);
+  const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1);
+  renderer.setSize(W, H);
+  renderer.domElement.title = label;
+  document.getElementById('views').append(renderer.domElement);
+  const paint = (c) => new THREE.MeshLambertMaterial({ color: new THREE.Color(c), side: THREE.DoubleSide });
+  const paints = { wall: paint('#6b6b66'), door: paint('#2f6fb3'), other: paint('#c9c6bd') };
+  const view = make(THREE, paints);
+  scene.add(view.group);
+  // Count every draw the GPU is asked for, below three.js.
+  const gl = renderer.getContext();
+  let draws = 0;
+  for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+    const real = gl[name].bind(gl);
+    gl[name] = (...args) => { draws += 1; return real(...args); };
+  }
+  const multi = renderer.extensions.get('WEBGL_multi_draw');
+  if (multi) {
+    for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(multi)).filter((n) => n.startsWith('multiDraw'))) {
+      const real = multi[name].bind(multi);
+      multi[name] = (...args) => { draws += 1; return real(...args); };
+    }
+  }
+  return { renderer, scene, camera, view, multi: !!multi,
+    frame(pieces) {
+      const t0 = performance.now();
+      view.update(pieces);
+      const t1 = performance.now();
+      draws = 0;
+      renderer.render(scene, camera);
+      const calls = renderer.info.render.calls;
+      const pixels = new Uint8Array(W * H * 4);
+      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      return { draws, calls, triangles: renderer.info.render.triangles, update_ms: +(t1 - t0).toFixed(2), pixels };
+    } };
+}
+function diff(a, b) {
+  let differ = 0, most = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    const d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]));
+    if (d > 0) differ += 1;
+    if (d > most) most = d;
+  }
+  return { differ, most };
+}
+
+const cases = [
+  ['Seeded arch model, level 1 (what the app opens)', archFloor(1), { camera: [-6000, 14000, 20000], look: [6000, 0, 4000] }],
+  ['All of Example model 1, both levels, four models', wholeExample(), { camera: [-6000, 14000, 20000], look: [6000, 0, 4000] }],
+  ['A block of 10 by 10 floors (800 elements)', block(10), { camera: [-40000, 120000, 200000], look: [70000, 0, 50000] }],
+];
+const lines = [];
+const results = [];
+for (const [label, pieces, target] of cases) {
+  const old = stage(before, `${label}: before`, target);
+  const now = stage(elementMeshes, `${label}: after`, target);
+  const a = old.frame(pieces);
+  const b = now.frame(pieces);
+  const d = diff(a.pixels, b.pixels);
+  const r = { label, elements: pieces.length, multi_draw: now.multi,
+    before: { draws: a.draws, calls: a.calls, triangles: a.triangles, update_ms: a.update_ms },
+    after: { draws: b.draws, calls: b.calls, triangles: b.triangles, update_ms: b.update_ms },
+    pixels_differing: d.differ, largest_difference: d.most, pixels: W * H };
+  results.push(r);
+  lines.push(JSON.stringify(r));
+}
+window.results = results;
+document.getElementById('out').textContent = lines.join('\n');
+</script>
+</body>
+</html>

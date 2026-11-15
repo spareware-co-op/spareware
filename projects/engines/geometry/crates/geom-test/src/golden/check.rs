@@ -26,7 +26,7 @@
 //! - **The store decides.** The digest must equal the store's for the id in the current edition;
 //!   otherwise [`GoldenError::Mismatch`] names the edition, the id, both digests and the two things
 //!   a mismatch can mean (a bug on this target, or a deliberate change that must be recorded in the
-//!   store and approved by a kernel owner). A golden the store does not hold is
+//!   store's history of that golden). A golden the store does not hold is
 //!   [`GoldenError::Store`]. Nothing is ever written to the store from here.
 //! - **The repeat is checked before the store**, so a case that is not even repeatable is reported
 //!   as such, not as a changed golden.
@@ -112,8 +112,8 @@ impl fmt::Display for GoldenError {
                  {want}. Either this target computes different bits, a bug (compare this run's \
                  diagnostics with another target's log), or the results were changed on purpose: \
                  then record the change in {} (the old digest in the golden's history, with its \
-                 kind, piece and why) and a kernel owner approves the pull request (chapter 28.13). \
-                 Never change a golden to make one target pass",
+                 kind, piece and why; chapter 28.13), and the pull request's golden store check \
+                 holds it to that record. Never change a golden to make one target pass",
                 super::store::STORE_PATH.join("/")
             ),
             GoldenError::Store(e) => write!(f, "{e}"),
@@ -282,7 +282,7 @@ mod tests {
         assert!(matches!(e, GoldenError::Mismatch { .. }));
         let text = e.to_string();
         assert!(text.contains(&hex(sha256(b"x"))) && text.contains(&hex(sha256(b"y"))));
-        assert!(text.contains("kernel owner"));
+        assert!(text.contains("the golden's history") && text.contains("golden store check"));
     }
 
     /// A case with state left over from its first run (a hidden cache) fails as a repeat, before

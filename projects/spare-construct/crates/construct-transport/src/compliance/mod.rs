@@ -60,6 +60,7 @@ pub use docs::{csv_footer, disclaimer, disclaimer_html, fingerprint, sign_state,
 pub use expert::{appendix_g, badge, clear_stale, data_sources, diff_params, jws_csv, missing_disclaimers, parse_other, run_diff, sign_off, supersession};
 
 /// `Compliance.supplementary(P)`: the label network level-of-service sections carry for an E27 tier 1 proposal, or empty when it is not tier 1.
+#[must_use]
 pub fn supplementary(p: &jv::V) -> String {
     use jv::Jx;
     if e27::e27(p).g("supplementary").t() { data::c("E27.supplementary").s() } else { String::new() }

@@ -2,6 +2,17 @@
 //! shapes, so nothing here can come to rely on what a shape is. `server/tests/swap.rs` does the same
 //! through the whole server, with Cedar.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 use construct_api::cloud::{Access, ProjectCommands};
 use construct_model::geometry::{
     Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Mesh, Recipe,
@@ -259,7 +270,7 @@ async fn moving_an_element_keeps_its_body_and_moves_its_cells() {
             before,
             "placement isn't part of the shape"
         );
-        assert!(stack.in_cell(0).await.is_empty());
+        assert_eq!(stack.in_cell(0).await, [] as [std::string::String; 0]);
         assert_eq!(stack.in_cell(18).await.len(), 1);
     }
 }
@@ -287,7 +298,7 @@ async fn changing_a_recipe_changes_the_body_and_deleting_clears_it() {
             .unwrap();
         stack.regen.catch_up(&i("p")).await.unwrap();
         assert!(stack.built("w").await.is_none());
-        assert!(stack.in_cell(0).await.is_empty());
+        assert_eq!(stack.in_cell(0).await, [] as [std::string::String; 0]);
     }
 }
 
@@ -459,5 +470,5 @@ async fn a_checkpoint_changes_nothing_and_must_make_sense() {
             .is_err()
     );
     let scan: Vec<_> = snapshot.scan(&Prefix::everything()).await.unwrap();
-    assert!(!scan.is_empty());
+    assert_ne!(scan, [] as [(kit_store::Key, std::vec::Vec<u8>); 0]);
 }

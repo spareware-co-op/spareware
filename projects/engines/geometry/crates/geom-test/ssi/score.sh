@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Scores the stand-ins with the ssi-corpus's own scorer (piece G160; chapter 12.17):
 #   score.sh <corpus> <runner>
-# Run in the container the nightly workflow pins by digest. <corpus> is a writable copy of the
+# Run in the container kernel-oracles.yml pins by digest. <corpus> is a writable copy of the
 # corpus, with the failure catalogue in its cases/data; <runner> is ssi-runner, linked statically.
 # Installs numpy and scipy from PyPI as the wheels pinned by SHA-256 below, then runs the corpus's
 # scoring/score.py in isolated mode, once per stand-in and mode. Nothing here is a dependency of the

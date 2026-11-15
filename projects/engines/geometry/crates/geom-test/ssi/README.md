@@ -7,10 +7,10 @@ Chapter 12.17's gate for surface/surface intersection, built by piece G160. The 
   have. A class 12.17 lets flag no region stands at zero, and the tool refuses anything else. The
   others stand at zero until the first method's run sets them, with its reason; after that they may
   only fall, or rise with a reason.
-- `score.sh`: runs the corpus's own scorer in the container the nightly workflow pins by digest.
+- `score.sh`: runs the corpus's own scorer in the container `kernel-oracles.yml` pins by digest.
 - `gates.sh`: holds what it scored to the gate.
 
-The kernel has no surface/surface method yet, so the nightly run answers with stand-ins: the corpus's
+The kernel has no surface/surface method yet, so the run answers with stand-ins: the corpus's
 truth, and the truth perturbed. That proves the harness, and says nothing about the kernel. When a
 method arrives, it answers through `Output::of_intersection`, and the truth's lines in `gates.sh`
 become the method's.

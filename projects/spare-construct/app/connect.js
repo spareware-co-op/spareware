@@ -1156,6 +1156,7 @@
   async function startThree() {
     const THREE = await import('three');
     const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+    const { elementMeshes } = await import('/view3d.js');
     const box = $('#iso-canvas');
     const tokens = getComputedStyle(document.documentElement);
     const colour = (name) => new THREE.Color(tokens.getPropertyValue(name).trim());
@@ -1176,30 +1177,11 @@
     const paint = (name) =>
       new THREE.MeshLambertMaterial({ color: colour(name), side: THREE.DoubleSide });
     const paints = { wall: paint('--ink-3'), door: paint('--app'), other: paint('--sink') };
-    const group = new THREE.Group();
-    scene.add(group);
+    const meshes = elementMeshes(THREE, paints);
+    scene.add(meshes.group);
     C.three = {
       update() {
-        for (const child of group.children) child.geometry.dispose();
-        group.clear();
-        for (const piece of C.elements.values()) {
-          if (!piece.shape) continue;
-          const { positions, indices } = piece.shape.displays[0].mesh;
-          const { x, y, z } = piece.el.placement;
-          const points = new Float32Array(positions.length);
-          for (let i = 0; i < positions.length; i += 3) {
-            points[i] = positions[i] + x;
-            points[i + 1] = positions[i + 2] + z;
-            points[i + 2] = positions[i + 1] + y;
-          }
-          const shape = new THREE.BufferGeometry();
-          shape.setAttribute('position', new THREE.BufferAttribute(points, 3));
-          shape.setIndex(indices);
-          const faces = shape.toNonIndexed();
-          faces.computeVertexNormals();
-          shape.dispose();
-          group.add(new THREE.Mesh(faces, paints[piece.el.kind] || paints.other));
-        }
+        meshes.update(C.elements.values());
       },
     };
     C.three.update();

@@ -1,6 +1,15 @@
 //! How the command layer behaves: structured errors that never panic, the envelope the browser and scripts use, undo of settings and
 //! scenarios, saving and reopening with results, progress events, repeatable ids, and a stability sweep over every command.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::needless_pass_by_value,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_api::Session;
@@ -355,7 +364,7 @@ fn the_same_seed_gives_the_same_ids() {
 fn detecting_sites_after_an_import_equals_detecting_while_importing() {
     let answer: Value =
         serde_json::from_str(&read_truth("fixtures/overpass-papakura.json")).unwrap();
-    let points = json!([{ "lat": -37.0648282, "lng": 174.9388742, "no": "AT-GSR1" }, { "lat": -37.0647649, "lng": 174.9416887, "id": "AT-GSR2" }]);
+    let points = json!([{ "lat": -37.064_828_2, "lng": 174.938_874_2, "no": "AT-GSR1" }, { "lat": -37.064_764_9, "lng": 174.941_688_7, "id": "AT-GSR2" }]);
     let make = |during: bool| {
         let mut s = Session::seeded(8, 1_790_000_000_000.0);
         ok(

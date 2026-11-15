@@ -7,7 +7,7 @@
 //! Latin-1 and Latin Extended-A letters (including the macron vowels of Maori place names), the common
 //! punctuation and symbols of Latin-1 and General Punctuation, and falls back on code point order after the
 //! letters for anything else (other scripts, emoji), which ICU orders by script. Accent order and punctuation
-//! order were read from Node 24 (ICU 78, CLDR 48) and are checked against it in tests/edit_truth.rs.
+//! order were read from Node 24 (ICU 78, CLDR 48) and are checked against it in `tests/edit_truth.rs`.
 
 use std::cmp::Ordering;
 
@@ -193,32 +193,39 @@ const LETTER_PRIMARY: u32 = 1000;
 const DIGIT_PRIMARY: u32 = 500;
 const FALLBACK_PRIMARY: u32 = 100_000;
 
+// Bound: positions in the short SYMBOLS and MARKS tables and code points (at most 0x10FFFF) are far
+// below u32::MAX, so the conversions and saturating steps below never saturate.
+fn table_pos(i: usize) -> u32 {
+    u32::try_from(i).unwrap_or(u32::MAX)
+}
+
 fn symbol_primary(c: char) -> Option<u32> {
-    SYMBOLS.chars().position(|s| s == c).map(|i| 10 + i as u32)
+    SYMBOLS.chars().position(|s| s == c).map(|i| table_pos(i).saturating_add(10))
 }
 
 fn mark_secondary(cp: u32) -> u32 {
     match MARKS.iter().position(|&m| m == cp) {
-        Some(i) => SEC_BASE + 1 + i as u32,
-        None => SEC_BASE + 100 + cp,
+        Some(i) => SEC_BASE.saturating_add(1).saturating_add(table_pos(i)),
+        None => SEC_BASE.saturating_add(100).saturating_add(cp),
     }
 }
 
+// Callers pass ASCII letters only, so lower is at least 'a'
 fn letter_ce(base: char) -> Ce {
     let lower = base.to_ascii_lowercase();
-    let p = LETTER_PRIMARY + (lower as u32 - 'a' as u32) * 4;
+    let p = LETTER_PRIMARY.saturating_add(u32::from(lower).saturating_sub(u32::from('a')).saturating_mul(4));
     (p, SEC_BASE, if base.is_ascii_uppercase() { 8 } else { 2 })
 }
 
 /// The collation elements of a string.
 fn elements(s: &str) -> Vec<Ce> {
-    let mut out: Vec<Ce> = Vec::with_capacity(s.len() + 2);
+    let mut out: Vec<Ce> = Vec::with_capacity(s.len().saturating_add(2));
     for c in s.chars() {
         let cp = c as u32;
         if c.is_ascii_alphabetic() {
             out.push(letter_ce(c));
         } else if c.is_ascii_digit() {
-            out.push((DIGIT_PRIMARY + (cp - '0' as u32), SEC_BASE, 2));
+            out.push((DIGIT_PRIMARY.saturating_add(cp.saturating_sub(u32::from('0'))), SEC_BASE, 2));
         } else if let Some(p) = symbol_primary(c) {
             out.push((p, SEC_BASE, 2));
         } else if (0x300..=0x36f).contains(&cp) {
@@ -263,7 +270,8 @@ fn elements(s: &str) -> Vec<Ce> {
                     || (0x200b..=0x200f).contains(&cp)
                     || cp == 0xfeff => {}
                 // Anything else: after the letters, in code point order
-                _ => out.push((FALLBACK_PRIMARY + cp, SEC_BASE, 2)),
+                // Bound: a code point is at most 0x10FFFF, so this never saturates
+                _ => out.push((FALLBACK_PRIMARY.saturating_add(cp), SEC_BASE, 2)),
             }
         }
     }
@@ -276,6 +284,7 @@ fn level(ces: &[Ce], pick: impl Fn(&Ce) -> u32) -> Vec<u32> {
 
 /// `a.localeCompare(b)` as an ordering: primary weights first (letters without case or accent), then
 /// accents, then case; equal strings (including a letter with its accent written as two characters) are Equal.
+#[must_use]
 pub fn locale_compare(a: &str, b: &str) -> Ordering {
     if a == b {
         return Ordering::Equal;
@@ -291,6 +300,7 @@ pub fn locale_compare(a: &str, b: &str) -> Ordering {
 }
 
 /// `a.localeCompare(b)` as the number the JavaScript returns (below 0, 0 or above 0), for sort comparators.
+#[must_use]
 pub fn locale_compare_f64(a: &str, b: &str) -> f64 {
     match locale_compare(a, b) {
         Ordering::Less => -1.0,

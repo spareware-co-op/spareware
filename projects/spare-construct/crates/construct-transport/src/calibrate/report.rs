@@ -2,9 +2,9 @@
 
 use super::estimate::{MatrixChange, stats};
 use super::sites::{SiteOpts, sites_for};
-use super::stats::{GehBand, MIN_SITES, Rule, TMDG, rule_of};
+use super::stats::{GehBand, MIN_SITES, Rule, Stats, TMDG, rule_of};
 use crate::datahub::Data;
-use crate::jsnum::{number_to_js_string, plain_number, to_fixed};
+use crate::jsnum::{number_to_js_string, plain_number, to_fixed, usize_to_f64};
 use crate::project::{Project, Scenario};
 use crate::results::{Res, plain};
 use crate::util::fmt;
@@ -37,7 +37,8 @@ impl Check {
     pub fn to_value(&self) -> Value {
         let mut m = Map::new();
         m.insert("id".to_string(), Value::String(self.id.to_string()));
-        if let Value::Object(r) = serde_json::to_value(self.rule).expect("a rule serialises") {
+        // A rule is plain data, so serialising it cannot fail
+        if let Ok(Value::Object(r)) = serde_json::to_value(self.rule) {
             for (k, v) in r {
                 m.insert(k, v);
             }
@@ -156,21 +157,9 @@ fn strict_year(year: f64, base: &crate::jsnum::Num) -> bool {
     matches!(base, crate::jsnum::Maybe::Set(crate::jsnum::JsNum::Number(b)) if *b == year)
 }
 
-/// `Calibrate.report(sc, period)`: the validation summary of a scenario's result against TMDG 2019 Category E, TAG M3.1 alongside.
-///
-/// `res` is the scenario's result for the period (`Store.res(sc, period)`, None when it has not been run).
-/// Fewer than 10 counted sites give "indicative", never pass or fail; a result for another year than the base year is
-/// "not base year". The counts used to estimate the matrix and to validate it are the same, which the notes say.
-pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Report {
-    let s = &p.settings;
-    let info = p
-        .me
-        .get()
-        .and_then(|m| m.info.get())
-        .and_then(|i| i.get(period))
-        .and_then(|i| i.get());
-    let matrix = info.map(|i| serde_json::to_value(i).expect("a record serialises"));
-    let mut out = Report {
+// A report with no statistics yet
+fn empty_report(period: &str, res: Option<&Res>, matrix: Option<Value>) -> Report {
+    Report {
         period: period.to_string(),
         standard: format!("{TMDG}, Category E (small area / corridor)"),
         n: 0,
@@ -197,14 +186,10 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         warnings: Vec::new(),
         notes: Vec::new(),
         fit: None,
-    };
-    let Some(res) = res else {
-        out.notes.push(format!("Run the model for the {period} peak first."));
-        return out;
-    };
-    let data = Data::read(p);
-    let rows = sites_for(sc, res, period, &SiteOpts::default(), s, &data);
-    let st = stats(&rows);
+    }
+}
+
+fn fill_stats(out: &mut Report, st: &Stats) {
     out.n = st.n;
     out.geh5 = st.pass;
     out.geh75 = st.pass75;
@@ -224,83 +209,86 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         ols_intercept: st.ols_intercept,
         geh_bands: st.geh_bands.clone(),
     });
-    if st.n == 0 {
-        out.notes.push(format!("No counts match the network for the {period} peak. Load counts for this area first."));
-        return out;
+}
+
+fn chk(
+    out: &mut Report,
+    few: bool,
+    id: &'static str,
+    value: Option<f64>,
+    ok: bool,
+    extra: Vec<(&'static str, Value)>,
+) {
+    let r = rule_of(id);
+    let judged = r.use_ != "info" && !(few && r.use_ == "required");
+    let status = if value.is_none() {
+        "N/A"
+    } else if r.use_ == "info" {
+        "Info"
+    } else if few && r.use_ == "required" {
+        "Indicative"
+    } else if ok {
+        "Pass"
+    } else {
+        "Fail"
+    };
+    out.checks.push(Check {
+        id,
+        rule: r,
+        value,
+        ok: value.map(|_| ok),
+        required: r.use_ == "required",
+        judged,
+        status: status.to_string(),
+        extra,
+    });
+}
+
+// Shares also say how many sites were needed, e.g. 'Fail (41 of 52; 45 needed)'
+fn share(out: &mut Report, few: bool, st_n: usize, id: &'static str, v: Option<f64>) {
+    let nf = usize_to_f64(st_n);
+    let need = (rule_of(id).min.unwrap_or(f64::NAN) * nf - 1e-9).ceil();
+    let got = crate::jsnum::math_round(v.unwrap_or(0.0) * nf);
+    chk(
+        out,
+        few,
+        id,
+        v,
+        got >= need,
+        vec![
+            ("got", plain_number(got)),
+            ("need", plain_number(need)),
+            ("of", Value::from(st_n as u64)),
+        ],
+    );
+    // chk has just pushed this check
+    if let Some(c) = out.checks.last_mut()
+        && c.status == "Fail"
+    {
+        c.status = format!("Fail ({} of {}; {} needed)", number_to_js_string(got), st_n, number_to_js_string(need));
     }
-    let few = st.n < MIN_SITES;
-    fn chk(
-        out: &mut Report,
-        few: bool,
-        id: &'static str,
-        value: Option<f64>,
-        ok: bool,
-        extra: Vec<(&'static str, Value)>,
-    ) {
-        let r = rule_of(id);
-        let judged = r.use_ != "info" && !(few && r.use_ == "required");
-        let status = if value.is_none() {
-            "N/A"
-        } else if r.use_ == "info" {
-            "Info"
-        } else if few && r.use_ == "required" {
-            "Indicative"
-        } else if ok {
-            "Pass"
-        } else {
-            "Fail"
-        };
-        out.checks.push(Check {
-            id,
-            rule: r,
-            value,
-            ok: value.map(|_| ok),
-            required: r.use_ == "required",
-            judged,
-            status: status.to_string(),
-            extra,
-        });
-    }
-    // Shares also say how many sites were needed, e.g. 'Fail (41 of 52; 45 needed)'
-    fn share(out: &mut Report, few: bool, st_n: usize, id: &'static str, v: Option<f64>) {
-        let nf = st_n as f64;
-        let need = (rule_of(id).min.unwrap_or(f64::NAN) * nf - 1e-9).ceil();
-        let got = crate::jsnum::math_round(v.unwrap_or(0.0) * nf);
-        chk(
-            out,
-            few,
-            id,
-            v,
-            got >= need,
-            vec![
-                ("got", plain_number(got)),
-                ("need", plain_number(need)),
-                ("of", Value::from(st_n as u64)),
-            ],
-        );
-        let c = out.checks.last_mut().expect("just pushed");
-        if c.status == "Fail" {
-            c.status = format!("Fail ({} of {}; {} needed)", number_to_js_string(got), st_n, number_to_js_string(need));
-        }
-    }
-    share(&mut out, few, st.n, "geh5", st.pass);
-    share(&mut out, few, st.n, "geh75", st.pass75);
-    share(&mut out, few, st.n, "geh10", st.pass10);
-    chk(&mut out, few, "r2", st.r2, st.r2.is_some_and(|x| x > rule_of("r2").min.unwrap_or(f64::NAN)), vec![]);
+}
+
+// The tests of the counted sites against the model
+fn site_checks(out: &mut Report, few: bool, st: &Stats) {
+    share(out, few, st.n, "geh5", st.pass);
+    share(out, few, st.n, "geh75", st.pass75);
+    share(out, few, st.n, "geh10", st.pass10);
+    chk(out, few, "r2", st.r2, st.r2.is_some_and(|x| x > rule_of("r2").min.unwrap_or(f64::NAN)), vec![]);
     let sl = rule_of("slope");
     chk(
-        &mut out,
+        out,
         few,
         "slope",
         st.slope,
         st.slope.is_some_and(|x| x >= sl.min.unwrap_or(f64::NAN) && x <= sl.max.unwrap_or(f64::NAN)),
         vec![],
     );
-    share(&mut out, few, st.n, "band", st.band);
-    share(&mut out, few, st.n, "flow", st.flow);
+    share(out, few, st.n, "band", st.band);
+    share(out, few, st.n, "flow", st.flow);
     let rm = rule_of("rmse");
     chk(
-        &mut out,
+        out,
         few,
         "rmse",
         st.rmse,
@@ -313,63 +301,146 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
             ),
         )],
     );
+}
+
+// The tests of how far matrix estimation moved the matrix, when the period has a fit record
+fn matrix_checks(out: &mut Report, few: bool, info: Option<&crate::project::MeInfo>) {
     let mc: Option<MatrixChange> = info
         .and_then(|i| i.extra.get("matrixChange"))
         .filter(|v| !v.is_null())
         .and_then(|v| serde_json::from_value(v.clone()).ok());
-    if let Some(mc) = mc {
-        let mt = rule_of("matrixTotal");
-        chk(&mut out, few, "matrixTotal", Some(mc.total_pct), mc.total_pct.abs() <= mt.max.unwrap_or(f64::NAN), vec![]);
-        let ce = rule_of("cells");
-        let cs = ce.slope.expect("cells slope");
-        let cells_ok = match mc.cell_r2 {
-            None => true,
-            Some(r2) => {
-                r2 > ce.min.unwrap_or(f64::NAN)
-                    && match mc.cell_slope {
-                        None => true,
-                        Some(x) => x >= cs[0] && x <= cs[1],
-                    }
-            }
-        };
-        chk(
-            &mut out,
-            few,
-            "cells",
-            mc.cell_r2,
-            cells_ok,
-            vec![("slopeValue", mc.cell_slope.map_or(Value::Null, plain_number))],
-        );
-        let te = rule_of("tripEnds");
-        chk(
-            &mut out,
-            few,
-            "tripEnds",
-            mc.trip_end_r2,
-            mc.trip_end_r2.is_none_or(|x| x > te.min.unwrap_or(f64::NAN)),
-            vec![("slopeValue", mc.row_slope.map_or(Value::Null, plain_number))],
-        );
-        if mc.total_pct.abs() > mt.max.unwrap_or(f64::NAN) {
-            out.warnings.push(format!(
-                "Matrix estimation changed the matrix total by {}, more than {}%. Check the trip rates and gateway counts before relying on the factors.",
-                fmt::signed_pct(mc.total_pct / 100.0, 1),
-                number_to_js_string(mt.max.unwrap_or(f64::NAN))
-            ));
+    let Some(mc) = mc else { return };
+    let mt = rule_of("matrixTotal");
+    chk(out, few, "matrixTotal", Some(mc.total_pct), mc.total_pct.abs() <= mt.max.unwrap_or(f64::NAN), vec![]);
+    let ce = rule_of("cells");
+    // The cells rule always has a slope band (NaN, which no slope meets, if it ever had none)
+    let cs = ce.slope.unwrap_or([f64::NAN; 2]);
+    let cells_ok = match mc.cell_r2 {
+        None => true,
+        Some(r2) => {
+            r2 > ce.min.unwrap_or(f64::NAN)
+                && match mc.cell_slope {
+                    None => true,
+                    Some(x) => x >= cs[0] && x <= cs[1],
+                }
         }
-        if let Some(t) = mc.trip_end_r2
-            && t <= te.min.unwrap_or(f64::NAN)
-        {
-            out.warnings.push(format!(
-                "Matrix estimation changed the trip ends a lot (R\u{b2} {}, TAG M3.1 Table 5 asks for more than {}). The prior matrix is probably wrong in places; fix it rather than let the counts force it.",
-                to_fixed(t, 3),
-                number_to_js_string(te.min.unwrap_or(f64::NAN))
-            ));
-        }
-        out.notes.push("The same counts were used to estimate the matrix and to validate it. TMDG and TAG M3.1 expect validation against independent counts, so hold some counts back for an independent check.".to_string());
-        out.notes.push("On NZTA projects matrix estimation needs the peer reviewer's agreement (TMDG).".to_string());
+    };
+    chk(
+        out,
+        few,
+        "cells",
+        mc.cell_r2,
+        cells_ok,
+        vec![("slopeValue", mc.cell_slope.map_or(Value::Null, plain_number))],
+    );
+    let te = rule_of("tripEnds");
+    chk(
+        out,
+        few,
+        "tripEnds",
+        mc.trip_end_r2,
+        mc.trip_end_r2.is_none_or(|x| x > te.min.unwrap_or(f64::NAN)),
+        vec![("slopeValue", mc.row_slope.map_or(Value::Null, plain_number))],
+    );
+    if mc.total_pct.abs() > mt.max.unwrap_or(f64::NAN) {
+        out.warnings.push(format!(
+            "Matrix estimation changed the matrix total by {}, more than {}%. Check the trip rates and gateway counts before relying on the factors.",
+            fmt::signed_pct(mc.total_pct / 100.0, 1),
+            number_to_js_string(mt.max.unwrap_or(f64::NAN))
+        ));
     }
-    // Counts are base-year traffic: comparing them with a forecast is not validation
-    let base_year = !(res.year > 0.0) || strict_year(res.year, &s.base_year);
+    if let Some(t) = mc.trip_end_r2
+        && t <= te.min.unwrap_or(f64::NAN)
+    {
+        out.warnings.push(format!(
+            "Matrix estimation changed the trip ends a lot (R\u{b2} {}, TAG M3.1 Table 5 asks for more than {}). The prior matrix is probably wrong in places; fix it rather than let the counts force it.",
+            to_fixed(t, 3),
+            number_to_js_string(te.min.unwrap_or(f64::NAN))
+        ));
+    }
+    out.notes.push("The same counts were used to estimate the matrix and to validate it. TMDG and TAG M3.1 expect validation against independent counts, so hold some counts back for an independent check.".to_string());
+    out.notes.push("On NZTA projects matrix estimation needs the peer reviewer's agreement (TMDG).".to_string());
+}
+
+// The overall status, pass and the summary sentence
+fn verdict(out: &mut Report, few: bool, base_year: bool, st: &Stats, period: &str, year: f64) {
+    let req: Vec<&Check> = out.checks.iter().filter(|c| c.required).collect();
+    let status = if few {
+        "indicative"
+    } else if !base_year {
+        "not base year"
+    } else if req.iter().all(|c| c.ok == Some(true)) {
+        "pass"
+    } else {
+        "fail"
+    };
+    let pass = match status {
+        "pass" => Some(true),
+        "fail" => Some(false),
+        _ => None,
+    };
+    let failed: Vec<&str> = req.iter().filter(|c| c.ok == Some(false)).map(|c| c.rule.label).collect();
+    let pc = |x: Option<f64>| fmt::pct(x.unwrap_or(f64::NAN), 1);
+    let summary = if status == "indicative" {
+        format!("Indicative only: {} count sites ({} peak, {} with GEH < 5).", st.n, period, pc(st.pass))
+    } else if status == "not base year" {
+        format!(
+            "Not assessed: the {} results are compared with base-year counts ({} peak, {} with GEH < 5).",
+            number_to_js_string(year),
+            period,
+            pc(st.pass)
+        )
+    } else {
+        format!(
+            "Assessed against TMDG 2019 Category E, {} peak, {} count sites: {}.",
+            period,
+            st.n,
+            if pass == Some(true) {
+                "all expected tests pass".to_string()
+            } else {
+                format!("fails {}", failed.join(", "))
+            }
+        )
+    };
+    out.status = status.to_string();
+    out.pass = pass;
+    out.summary = summary;
+}
+
+/// `Calibrate.report(sc, period)`: the validation summary of a scenario's result against TMDG 2019 Category E, TAG M3.1 alongside.
+///
+/// `res` is the scenario's result for the period (`Store.res(sc, period)`, None when it has not been run).
+/// Fewer than 10 counted sites give "indicative", never pass or fail; a result for another year than the base year is
+/// "not base year". The counts used to estimate the matrix and to validate it are the same, which the notes say.
+#[must_use]
+pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Report {
+    let s = &p.settings;
+    let info = p
+        .me
+        .get()
+        .and_then(|m| m.info.get())
+        .and_then(|i| i.get(period))
+        .and_then(|i| i.get());
+    // A fit record is plain data with text keys, so serialising it cannot fail
+    let matrix = info.and_then(|i| serde_json::to_value(i).ok());
+    let mut out = empty_report(period, res, matrix);
+    let Some(res) = res else {
+        out.notes.push(format!("Run the model for the {period} peak first."));
+        return out;
+    };
+    let data = Data::read(p);
+    let rows = sites_for(sc, res, period, &SiteOpts::default(), s, &data);
+    let st = stats(&rows);
+    fill_stats(&mut out, &st);
+    if st.n == 0 {
+        out.notes.push(format!("No counts match the network for the {period} peak. Load counts for this area first."));
+        return out;
+    }
+    let few = st.n < MIN_SITES;
+    site_checks(&mut out, few, &st);
+    matrix_checks(&mut out, few, info);
+    // Counts are base-year traffic: comparing them with a forecast is not validation (!(year > 0) lets NaN through)
+    let base_year = res.year <= 0.0 || res.year.is_nan() || strict_year(res.year, &s.base_year);
     if !base_year {
         out.warnings.push(format!(
             "These results are for {}, but the counts are base-year ({}) traffic. Validate a base-year scenario; this comparison is for information only.",
@@ -398,44 +469,6 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         ));
     }
     out.notes.push("Meeting the criteria does not by itself show the model is fit for purpose (TAG M3.1 3.2.2). The model specification agreed with the peer reviewer takes precedence over these defaults.".to_string());
-    let req: Vec<&Check> = out.checks.iter().filter(|c| c.required).collect();
-    out.status = if few {
-        "indicative"
-    } else if !base_year {
-        "not base year"
-    } else if req.iter().all(|c| c.ok == Some(true)) {
-        "pass"
-    } else {
-        "fail"
-    }
-    .to_string();
-    out.pass = match out.status.as_str() {
-        "pass" => Some(true),
-        "fail" => Some(false),
-        _ => None,
-    };
-    let failed: Vec<&str> = req.iter().filter(|c| c.ok == Some(false)).map(|c| c.rule.label).collect();
-    let pc = |x: Option<f64>| fmt::pct(x.unwrap_or(f64::NAN), 1);
-    out.summary = if out.status == "indicative" {
-        format!("Indicative only: {} count sites ({} peak, {} with GEH < 5).", st.n, period, pc(st.pass))
-    } else if out.status == "not base year" {
-        format!(
-            "Not assessed: the {} results are compared with base-year counts ({} peak, {} with GEH < 5).",
-            number_to_js_string(res.year),
-            period,
-            pc(st.pass)
-        )
-    } else {
-        format!(
-            "Assessed against TMDG 2019 Category E, {} peak, {} count sites: {}.",
-            period,
-            st.n,
-            if out.pass == Some(true) {
-                "all expected tests pass".to_string()
-            } else {
-                format!("fails {}", failed.join(", "))
-            }
-        )
-    };
+    verdict(&mut out, few, base_year, &st, period, res.year);
     out
 }
