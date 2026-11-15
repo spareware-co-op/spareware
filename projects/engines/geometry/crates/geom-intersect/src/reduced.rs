@@ -52,7 +52,6 @@
     reason = "the names are the chapter's: n a plane's normal, e an axis, d a direction, r a radius"
 )]
 
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
@@ -285,13 +284,13 @@ fn profile_moved(
 /// An extrusion where it stands. Its placement c + L·x moves P(u) + v·d to (c + L·P(u)) + v·L·d,
 /// the extrusion of the moved profile along L·d on the same parameters, for any L; `None` where
 /// those are not doubles exactly. As built (c = 0, L the identity) it is itself.
-fn extrusion_in_place<'x>(
-    x: &'x Extrusion,
+fn extrusion_in_place(
+    x: &Extrusion,
     meter: &mut WorkMeter<'_>,
-) -> Result<Option<Cow<'x, Extrusion>>, IntersectError> {
+) -> Result<Option<Extrusion>, IntersectError> {
     let (c, l) = x.placement();
     if c == [0.0; 3] && l == IDENTITY {
-        return Ok(Some(Cow::Borrowed(x)));
+        return Ok(Some(x.clone()));
     }
     let (profile, d) = x.shape()?;
     let (Some(profile), Some(d)) = (
@@ -301,7 +300,7 @@ fn extrusion_in_place<'x>(
         return Ok(None);
     };
     let (_, along) = ParamSurface::domain(x);
-    Ok(Some(Cow::Owned(Extrusion::new(profile, d, along)?)))
+    Ok(Some(Extrusion::new(profile, d, along)?))
 }
 
 /// Whether L is exactly a similarity, λ times an orthogonal matrix: its rows square to one another
@@ -333,7 +332,8 @@ fn mirrors(l: [[f64; 3]; 3]) -> bool {
     let Some((sign, x)) = cross.into_iter().zip(p).find(|(_, x)| *x != 0.0) else {
         return false;
     };
-    (sign == Sign::Positive) != (x > 0.0)
+    // Neither sign is zero here: x is not, and that entry of ρ₁ × ρ₂ is λ·det Q·x.
+    sign != sign_of(&[(x, 1.0)])
 }
 
 /// A surface of revolution where it stands. Its placement c + L·x is a surface of revolution only
@@ -342,14 +342,14 @@ fn mirrors(l: [[f64; 3]; 3]) -> bool {
 /// (L·(n̂ × w) = m̂ × L·w), so it is the revolution of the profile c + L·(P − a) about (c, m̂) on
 /// the same parameters. `None` for any other L, or where those data are not doubles exactly. As
 /// built (c = a, L the identity) it is itself.
-fn revolution_in_place<'r>(
-    r: &'r Revolution,
+fn revolution_in_place(
+    r: &Revolution,
     meter: &mut WorkMeter<'_>,
-) -> Result<Option<Cow<'r, Revolution>>, IntersectError> {
+) -> Result<Option<Revolution>, IntersectError> {
     let (c, l) = r.placement();
     let (profile, a, frame) = r.shape()?;
     if c == a && l == IDENTITY {
-        return Ok(Some(Cow::Borrowed(r)));
+        return Ok(Some(r.clone()));
     }
     if !similarity(l) {
         return Ok(None);
@@ -371,26 +371,30 @@ fn revolution_in_place<'r>(
     };
     let (angles, _) = ParamSurface::domain(r);
     let placed = Revolution::new(profile, c, Frame::new(x, normal)?, angles)?;
-    Ok(Some(Cow::Owned(placed)))
+    Ok(Some(placed))
 }
 
 /// `s` where it stands: an extrusion or surface of revolution with its placement carried into its
 /// shape, any other kind as it is; `None` where that cannot be done exactly.
-fn in_place<'s>(
-    s: &'s SurfaceKind,
+fn in_place(
+    s: &SurfaceKind,
     meter: &mut WorkMeter<'_>,
-) -> Result<Option<Cow<'s, SurfaceKind>>, IntersectError> {
-    Ok(match s {
-        SurfaceKind::Extrusion(x) => extrusion_in_place(x, meter)?.map(|placed| match placed {
-            Cow::Borrowed(_) => Cow::Borrowed(s),
-            Cow::Owned(x) => Cow::Owned(SurfaceKind::Extrusion(x)),
-        }),
-        SurfaceKind::Revolution(x) => revolution_in_place(x, meter)?.map(|placed| match placed {
-            Cow::Borrowed(_) => Cow::Borrowed(s),
-            Cow::Owned(x) => Cow::Owned(SurfaceKind::Revolution(x)),
-        }),
-        _ => Some(Cow::Borrowed(s)),
-    })
+) -> Result<Option<SurfaceKind>, IntersectError> {
+    Ok(Some(match s {
+        SurfaceKind::Extrusion(x) => {
+            let Some(placed) = extrusion_in_place(x, meter)? else {
+                return Ok(None);
+            };
+            SurfaceKind::Extrusion(placed)
+        }
+        SurfaceKind::Revolution(x) => {
+            let Some(placed) = revolution_in_place(x, meter)? else {
+                return Ok(None);
+            };
+            SurfaceKind::Revolution(placed)
+        }
+        _ => s.clone(),
+    }))
 }
 
 /// A surface of revolution's axis, of one [`revolution_in_place`] gave: the shape is as built.
@@ -672,7 +676,7 @@ pub(crate) fn plane_revolution(
     let Some(b) = revolution_in_place(b, meter)? else {
         return Ok(None);
     };
-    let surface = SurfaceKind::Revolution(b.as_ref().clone());
+    let surface = SurfaceKind::Revolution(b.clone());
     if !whole_turn(&surface) {
         return Ok(None);
     }
@@ -731,7 +735,7 @@ pub(crate) fn about_revolution(
     let (Some(a), Some(b)) = (in_place(a, meter)?, revolution_in_place(b, meter)?) else {
         return Ok(None);
     };
-    let surface = SurfaceKind::Revolution(b.as_ref().clone());
+    let surface = SurfaceKind::Revolution(b.clone());
     if !whole_turn(&surface) {
         return Ok(None);
     }
@@ -871,7 +875,7 @@ pub(crate) fn plane_extrusion(
         return Ok(None);
     };
     let (profile, d) = b.shape()?;
-    let (_, span) = ParamSurface::domain(b.as_ref());
+    let (_, span) = ParamSurface::domain(&b);
     let Some(kind) = untrimmed(profile)? else {
         return Ok(None);
     };
@@ -1036,7 +1040,7 @@ pub(crate) fn sweeps(
     let (Some(a), Some(b)) = (in_place(a, meter)?, in_place(b, meter)?) else {
         return Ok(None);
     };
-    let (a, b) = (a.as_ref(), b.as_ref());
+    let (a, b) = (&a, &b);
     let direction = match (a, b) {
         (_, SurfaceKind::Extrusion(x)) | (SurfaceKind::Extrusion(x), _) => x.shape()?.1,
         _ => return Ok(None),
