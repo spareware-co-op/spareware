@@ -1584,7 +1584,16 @@ fn splits_boxes(plane: &Plane) -> bool {
 /// cuts run (a face that only touches a corner of another solid is cut there in one box and not
 /// in a smaller one). A point off the grid takes the first three planes through its corners, in
 /// plane order and leaving out the boxes' own, that meet in one point; one with no such three,
-/// which only a seam has, keeps its first corner's.
+/// which only a seam has, keeps its first corner's. Each plane is read in canonical form: one
+/// plane reaches a point written either way, as a face and as a bound of the face beside it, and
+/// which of its writings reach the point's corners depends on the boxes too (a split through the
+/// point gives a face crossing it a corner there of its own), so how a plane is written must not
+/// decide its place in the order. Turning each to face up would not be enough: a plane also
+/// reaches a point at more than one scale. Pieces come with their planes as the caller made them,
+/// and nothing here reduces them: `geom-bool` makes a face's plane through three points of its
+/// surface and a side stood on an edge's two ends, each as long as those points make it, two
+/// operands' faces on one plane are one sheet, and a local cut or a carve puts another polygon's
+/// planes, as written, among a piece's bounds.
 fn named(points: &Points<'_>, id: usize, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
     let place = points.places.get(id).ok_or(MergeError::Open)?;
     if let Some(at) = grid_point(place.corner)? {
@@ -1595,8 +1604,9 @@ fn named(points: &Points<'_>, id: usize, meter: &mut WorkMeter<'_>) -> Result<Tp
     let mut list: Vec<Plane> = Vec::with_capacity(run.len().saturating_mul(3));
     for at in run {
         let corner = points.corners.get(*at).ok_or(MergeError::Open)?;
-        let planes = corner.point.planes().iter();
-        list.extend(planes.filter(|plane| !splits_boxes(plane)));
+        for plane in corner.point.planes().iter().filter(|p| !splits_boxes(p)) {
+            list.push(canonical(plane)?.plane);
+        }
     }
     list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
     list.dedup();

@@ -20,6 +20,7 @@ use geom_poly::merge::{
     Memo, Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge, merge_with,
     merge_with_reusing, section, select,
 };
+use geom_poly::plane::canonical;
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::{Classified, Polygon, TraceError};
 use geom_poly::winding::{Term, Winding, WindingTest};
@@ -994,6 +995,84 @@ fn a_point_on_a_split_is_not_named_by_it() {
     }
 }
 
+#[test]
+fn a_point_where_four_planes_meet_is_named_the_same_whichever_way_they_reach_it() {
+    // The cases `every_tilted_union_closes_and_the_boxes_do_not_show` met on wasm32, shrunk. In
+    // the first, an edge of one solid crosses an edge of the other at (3, 37/2, 31/2), where four
+    // planes meet, and the splits at y = 37/2 and z = 31/2 run through it. In one box the second
+    // solid's face on one of the planes has no corner there, and the plane reaches the point only
+    // as a bound of the face beside it, facing the other way; in the smallest boxes the face has
+    // corners there too. The second meets four planes at (-1/2, 27, -6), on the split x = -1/2.
+    let found = [
+        vec![
+            [[0, -24, 0], [24, 37, 9], [8, 8, 31], [-18, 0, 22]],
+            [[27, 23, 29], [0, 0, -34], [-5, 17, 11], [-17, 39, 0]],
+        ],
+        vec![
+            [[-9, 25, 3], [25, 33, -33], [0, 0, 0], [19, 35, -30]],
+            [[0, 0, 0], [0, 0, -1], [0, 1, 0], [-20, 0, 0]],
+            [[0, 0, 0], [-15, 25, -6], [0, -4, 0], [14, 29, -6]],
+        ],
+    ];
+    let test = WindingTest::unite();
+    for (at, solids) in found.iter().enumerate() {
+        let whole = tilted(solids, &test, 1000).unwrap();
+        for leaf in 1..10 {
+            let m = tilted(solids, &test, leaf).unwrap();
+            assert_eq!(m.vertices, whole.vertices, "case {at}, leaf {leaf}");
+            assert_eq!(m.edges, whole.edges, "case {at}, leaf {leaf}");
+        }
+    }
+}
+
+#[test]
+fn a_point_is_named_the_same_whatever_scale_its_planes_reach_it_at() {
+    // A plane reaches a point at more than one scale where the faces beside a face write its
+    // plane longer or shorter than the face does, as an operand's sides stood on its edges, or
+    // another operand's face on the same plane, write it. Here the first case above, with the
+    // second solid's bounds written three times longer than its faces: the plane that reaches
+    // (3, 37/2, 31/2) as a face in the smallest boxes and only as a bound in one box reaches it
+    // at one scale there and at another here. Facing up alone would name the point by the plane
+    // three times longer in one box and not in another; read in canonical form, it is named the
+    // same in every box, and the same as when every plane is written once.
+    let solids = [
+        [[0, -24, 0], [24, 37, 9], [8, 8, 31], [-18, 0, 22]],
+        [[27, 23, 29], [0, 0, -34], [-5, 17, 11], [-17, 39, 0]],
+    ];
+    let mut polygons = Vec::new();
+    for (entry, corners) in solids.iter().enumerate() {
+        tetrahedron(*corners, entry as u32, &mut polygons).unwrap();
+    }
+    let longer = |p: &Plane| Plane::new(p.n().map(|v| v * 3), p.d() * 3).unwrap();
+    let mixed: Vec<Polygon> = polygons
+        .iter()
+        .map(|polygon| Polygon {
+            piece: Piece {
+                face: polygon.piece.face,
+                bounds: if polygon.entry == Some(1) {
+                    polygon.piece.bounds.iter().map(longer).collect()
+                } else {
+                    polygon.piece.bounds.clone()
+                },
+            },
+            entry: polygon.entry,
+        })
+        .collect();
+    let test = WindingTest::unite();
+    let merged = |polygons: &[Polygon], leaf: usize| {
+        let pieces = kept(polygons, &test, leaf);
+        let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+        closed(&m, &pieces);
+        m
+    };
+    let whole = merged(&polygons, 1000);
+    for leaf in (1..10).chain([1000]) {
+        let m = merged(&mixed, leaf);
+        assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+        assert_eq!(m.edges, whole.edges, "leaf {leaf}");
+    }
+}
+
 /// `polygons` with every plane's coefficients multiplied by `k`: the same planes, written longer.
 fn scaled(polygons: &[Polygon], k: i128) -> Vec<Polygon> {
     let times = |p: &Plane| Plane::new(p.n().map(|v| v * k), p.d() * k).unwrap();
@@ -1011,7 +1090,7 @@ fn scaled(polygons: &[Polygon], k: i128) -> Vec<Polygon> {
 
 /// The name the merge gives the point `at` among `pieces`: a grid point's three axis planes; for a
 /// point off the grid, of the planes of every corner there (a piece's face and two bounds in turn),
-/// the first three in plane order that meet in one point.
+/// each in canonical form, the first three in plane order that meet in one point.
 fn first_three(pieces: &[Outward], at: &Tpi) -> Tpi {
     let near = at.to_grid().unwrap();
     if near.is_exact() {
@@ -1040,6 +1119,10 @@ fn first_three(pieces: &[Outward], at: &Tpi) -> Tpi {
             && p.d() % 2 != 0
     };
     assert!(!through.iter().any(split), "a split through {at:?}");
+    let mut through: Vec<Plane> = through
+        .iter()
+        .map(|plane| canonical(plane).unwrap().plane)
+        .collect();
     through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
     through.dedup();
     for (i, a) in through.iter().enumerate() {
@@ -1417,7 +1500,8 @@ fn a_memo_starts_the_sorts_but_the_budget_stops_them_where_it_would() {
 
 /// The name the merge gives a point off the grid: the first three planes through it, among the
 /// planes of the corners of `pieces` there, in plane order and leaving out the boxes' splits (one
-/// normal component of two and an odd offset: 2x = odd), that meet in one point.
+/// normal component of two and an odd offset: 2x = odd), each in canonical form, that meet in one
+/// point.
 fn named_off_the_grid(pieces: &[Outward], at: &Tpi) -> Tpi {
     let split = |p: &Plane| {
         let n = p.n();
@@ -1440,6 +1524,10 @@ fn named_off_the_grid(pieces: &[Outward], at: &Tpi) -> Tpi {
         }
     }
     through.retain(|plane| !split(plane));
+    let mut through: Vec<Plane> = through
+        .iter()
+        .map(|plane| canonical(plane).unwrap().plane)
+        .collect();
     through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
     through.dedup();
     for (i, a) in through.iter().enumerate() {
@@ -1618,21 +1706,23 @@ fn mirrored_x(t: [[i64; 3]; 4]) -> [[i64; 3]; 4] {
 #[test]
 fn points_in_wide_cells_keep_their_order_and_meet_points_in_words() {
     // Tilted solids with edges of a few thousand steps: three of their faces meet where w, near
-    // 2^74, is past `i64` and X still fits `i128`, so their corners' cells come from 128-bit
-    // division. A box touches one solid at its corner (0, 0, 0), which the box's faces name with
+    // 2^73, is past `i64` and X still fits `i128`, so their corners' cells come from 128-bit
+    // division. A vertex is named by its planes in canonical form, so the corners are chosen to
+    // leave each face's plane a common factor of 2 at most: w stays that wide once they are
+    // reduced. A box touches one solid at its corner (0, 0, 0), which the box's faces name with
     // w = 1, in machine words: both must be one vertex. The same mirrored in x puts the points at
     // negative x, where a division rounds the other way.
     let a = [
         [0, 0, 0],
-        [4999, 701, 3],
-        [607, 4801, 903],
-        [1301, 599, 4703],
+        [5000, 701, 3],
+        [607, 4802, 903],
+        [1301, 599, 4705],
     ];
     let b = [
-        [701, 803, 599],
+        [702, 803, 599],
         [5303, 2101, 1409],
-        [2003, 5897, 2609],
-        [2707, 1301, 5801],
+        [2003, 5897, 2610],
+        [2708, 1301, 5801],
     ];
     for mirror in [false, true] {
         let way = |t: [[i64; 3]; 4]| if mirror { mirrored_x(t) } else { t };
@@ -1720,10 +1810,22 @@ fn points_whose_first_coordinates_agree_to_32_binary_places_are_ordered_by_them(
 fn points_whose_fractions_need_more_than_96_bits_keep_their_order() {
     // Two tilted solids a thousand times larger: their faces' normals near 2^33, and where three
     // faces of the two meet, w is past 2^96 and X still fits `i128`, so a corner's fraction is
-    // read a binary place at a time.
-    let big = |t: [[i64; 3]; 4]| t.map(|p| p.map(|v| v * 1024 + 1));
-    let a = big([[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]]);
-    let b = big([[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]]);
+    // read a binary place at a time. A vertex is named by its planes in canonical form, so each
+    // corner is 1024 times a small solid's, moved a few steps off that grid: a solid scaled whole
+    // would have planes that reduce to the small solid's, with a narrow w, while these keep a
+    // common factor of 3 at most.
+    let a = [
+        [0, 5, 3],
+        [92163, 10241, 6],
+        [10246, 81924, 10242],
+        [20482, 10240, 71685],
+    ];
+    let b = [
+        [10240, 10243, 10246],
+        [81931, 30721, 20484],
+        [30729, 92172, 40962],
+        [40967, 20490, 92160],
+    ];
     for (a, b) in [(a, b), (mirrored_x(a), mirrored_x(b))] {
         let mut polygons = Vec::new();
         for (entry, t) in [a, b].into_iter().enumerate() {
