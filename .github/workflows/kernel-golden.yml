@@ -29,7 +29,7 @@ name: Kernel goldens
 # The second job holds the fixtures (chapter 28.16; piece G97) to their rules, on the same terms:
 #
 # - `fixture check`: every fixture holds its rules and sits where its id says.
-# - `fixture run`: the fast fixtures pass; slow ones run in kernel-nightly.yml.
+# - `fixture run`: the fast fixtures pass; slow ones run in kernel-oracles.yml, after a push to main that reaches them.
 # - `fixture diff`, on every pull request that edits the fixtures: the fixtures at the pull
 #   request's base against those it would merge, held to their own records (decision 32.55;
 #   geom-test's src/fixture/diff.rs). A removed fixture, a changed log or source, Pass become

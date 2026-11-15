@@ -151,8 +151,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # On a pull request, the count gates measure only when the change reaches what geom-bench's
+      # benchmarks build (geom-test's `kernel-quality test-scope --build-of geom-bench`: a file in no
+      # crate, or in a crate geom-bench's benchmarks link, or among geom-bench's own); a push to main
+      # and a release tag measure whenever a kernel file changed, as below.
+      # The runner's rustup installs the workspace's pinned compiler from rust-toolchain.toml.
+      - name: Whether the change reaches what geom-bench builds
+        id: reach
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          git diff --no-ext-diff --no-renames --name-only "$(git merge-base "$BASE_SHA" "$HEAD_SHA")" "$HEAD_SHA" > "$RUNNER_TEMP/changed.txt"
+          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope --changed "$RUNNER_TEMP/changed.txt" --build-of geom-bench --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Decide what to measure
         id: scope
+        env:
+          REACHED: ${{ steps.reach.outputs.reached || 'true' }}
         run: |
           set -euo pipefail
           base=$BASE_SHA
@@ -172,7 +187,7 @@ jobs:
           relevant=$(printf '%s\n' "$changed" \
             | grep -E '^(projects/engines/geometry/|Cargo\.lock$|Cargo\.toml$|rust-toolchain(\.toml)?$|\.cargo/|\.github/workflows/kernel-bench\.yml$)' \
             || true)
-          if [ -z "$relevant" ]; then
+          if [ -z "$relevant" ] || [ "$REACHED" != true ]; then
             echo "measure=false" >> "$GITHUB_OUTPUT"
             echo "Nothing that can change a count changed, so the count gates have nothing to measure."
             exit 0

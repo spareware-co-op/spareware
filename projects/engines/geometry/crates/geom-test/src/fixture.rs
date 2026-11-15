@@ -24,7 +24,7 @@
 //!   result is usually its measures, and it is judged on what it states.
 //! - A fix is recorded in `fixed_by`, beside the source, because any source can lead to one.
 //! - [`Speed`] says which tier a fixture runs in, since 28.17 runs fast fixtures on every pull
-//!   request and slow ones nightly.
+//!   request and slow ones on each push to main that reaches them.
 //! - Golden counts sit beside each hash (G98): work units and logical bytes. A change of either with
 //!   no change of operation version fails, though the results are the same, because budgets decide
 //!   replayable outcomes.
@@ -407,7 +407,7 @@ pub enum Source {
 pub enum Speed {
     /// Every pull request.
     Fast,
-    /// Nightly.
+    /// Each push to main that reaches it (`kernel-oracles.yml`).
     Slow,
 }
 

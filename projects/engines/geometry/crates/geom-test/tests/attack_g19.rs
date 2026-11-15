@@ -259,14 +259,14 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
           RUSTFLAGS: -C overflow-checks=on
         run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
 ",
-        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' }}
+        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' && env.KERNEL_CRATES != '' }}
         run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
 ",
         "        env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
 ",
-        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 }}
+        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast
 ",
     ];
@@ -308,7 +308,7 @@ fn kernel_yml_runs_every_golden_on_wasm32_in_every_build_mode() {
         run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1
 ",
         "      - name: geom-num's every test vector on wasm32 in release as shipped
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-num ') }}
         run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
 ",
         "        env:

@@ -155,12 +155,14 @@ fn kernel_yml_runs_the_shipped_checker_leg_natively_and_on_wasm32() {
                 step["env"].is_badvalue() && body["env"]["RUSTFLAGS"].is_badvalue(),
                 "{job}: the shipped-checker leg builds as shipped, with no environment of its own"
             );
-            // It runs on every leg of its job's matrix that builds in release.
+            // It runs on every leg of its job's matrix that builds in release, and once in the
+            // pull request's Linux job (its part 1).
             let when = step["if"].as_str().unwrap_or_default();
             assert!(
                 when.is_empty()
                     || when == "${{ !cancelled() }}"
-                    || when == "${{ !cancelled() && matrix.mode == 'release' }}",
+                    || when == "${{ !cancelled() && matrix.mode == 'release' }}"
+                    || (job == "linux" && when == "${{ !cancelled() && matrix.k == 1 }}"),
                 "{job}: {when}"
             );
             legs.push((job.to_owned(), run.trim().to_owned()));
@@ -170,9 +172,10 @@ fn kernel_yml_runs_the_shipped_checker_leg_natively_and_on_wasm32() {
         legs,
         [
             ("test".to_owned(), LEG.to_owned()),
+            ("linux".to_owned(), LEG.to_owned()),
             ("wasm".to_owned(), format!("{LEG} --target wasm32-wasip1")),
         ],
-        "kernel.yml must run the shipped-checker leg in its jobs `test` and `wasm`"
+        "kernel.yml must run the shipped-checker leg in its jobs `test`, `linux` and `wasm`"
     );
 }
 
