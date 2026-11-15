@@ -22,6 +22,8 @@
 //!   naming on standard error) any without a function to measure ([`geom_test::coverage::has_code`]).
 //! - `miri-packages` prints the `-p` arguments of every kernel crate for the Miri run
 //!   ([`geom_test::miri`]); with `--changed`, of those whose tests the change reaches.
+//! - `miri-filter` prints the nextest filterset of one Miri partition, the tests the plan
+//!   balanced by their recorded times gives it ([`geom_test::miri::plan`]).
 //! - `mutants-files` prints the regular expression of the files a push to main's full mutation
 //!   run mutates ([`geom_test::mutants::push_files`]).
 //! - `fuzz-scope` prints which of `geom-fuzz`'s targets and `kernel-fuzz.yml`'s Kani proofs a
@@ -167,6 +169,16 @@ enum Command {
         /// The repository root.
         #[arg(long, default_value = ".")]
         repo: PathBuf,
+    },
+    /// Prints the nextest filterset of one Miri partition: its tests in the plan the recorded
+    /// times balance (`geom_test::miri::plan`).
+    MiriFilter {
+        /// The partition, from 1.
+        #[arg(long)]
+        partition: usize,
+        /// How many partitions the run has.
+        #[arg(long)]
+        of: usize,
     },
     /// Prints the regular expression of the files a push to main's full mutation run mutates
     /// (empty: none), for `cargo mutants --re` and the judge's `--files`.
@@ -530,6 +542,14 @@ fn run(cli: Cli) -> Result<bool, String> {
                 packages.retain(|p| running.contains(&p.as_str()));
             }
             println!("{}", geom_test::miri::cargo_args(&packages));
+            Ok(true)
+        }
+        Command::MiriFilter { partition, of } => {
+            let times = geom_test::miri::parse_times(geom_test::miri::TIMES)?;
+            println!(
+                "{}",
+                geom_test::miri::plan(&times, of)?.filterset(partition)?
+            );
             Ok(true)
         }
         Command::MutantsFiles {

@@ -1279,8 +1279,13 @@ fn sqrt_ratio_in_range(a: &BigRational, n: u64) -> bool {
 }
 
 fn check_to_frame(f: &FrameRecord, m: MapPoint) -> Result<(), String> {
+    check_to_frame_with(f, m, &horizontal(f, m.easting, m.northing))
+}
+
+/// [`check_to_frame`] with `h`, the exact horizontal coordinates `horizontal` gives for `m`, for a
+/// caller that reads them too and so computes them once.
+fn check_to_frame_with(f: &FrameRecord, m: MapPoint, h: &Horizontal) -> Result<(), String> {
     let got = f.to_frame(m);
-    let h = horizontal(f, m.easting, m.northing);
     let s = int(s_int(f.step()));
     let zx = exact(m.height) * &s - int(f.origin()[2].into());
     let ez = round_half_even(&zx);
@@ -2102,7 +2107,7 @@ fn frame_to_frame_settles_values_beside_midpoints() {
                                         }
                                     }
                                 }
-                                f.record(check_to_frame(&fr, m));
+                                f.record(check_to_frame_with(&fr, m, &h));
                             }
                         }
                     }
