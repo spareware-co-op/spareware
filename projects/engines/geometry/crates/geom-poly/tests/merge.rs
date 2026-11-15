@@ -937,6 +937,7 @@ fn tilted(solids: &[[[i64; 3]; 4]], test: &WindingTest, leaf: usize) -> Option<M
     let pieces = kept(&polygons, test, leaf);
     let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
     closed(&m, &pieces);
+    named_by_its_faces(&m);
     Some(m)
 }
 
@@ -1088,53 +1089,73 @@ fn scaled(polygons: &[Polygon], k: i128) -> Vec<Polygon> {
         .collect()
 }
 
-/// The name the merge gives the point `at` among `pieces`: a grid point's three axis planes; for a
-/// point off the grid, of the planes of every corner there (a piece's face and two bounds in turn),
-/// each in canonical form, the first three in plane order that meet in one point.
-fn first_three(pieces: &[Outward], at: &Tpi) -> Tpi {
-    let near = at.to_grid().unwrap();
-    if near.is_exact() {
-        let p = near.value();
-        return Tpi::meeting(up(0, p.x.get()), up(1, p.y.get()), up(2, p.z.get())).unwrap();
-    }
-    let mut through = Vec::new();
-    for outward in pieces {
-        let Piece { face, bounds } = &outward.piece;
-        let after = bounds.iter().cycle().skip(1);
-        for (bound, next) in bounds.iter().zip(after) {
-            let corner = [*face, *bound, *next];
-            if corner
-                .iter()
-                .all(|plane| plane.side_of_tpi(at).unwrap() == Sign::Zero)
-            {
-                through.extend(corner);
-            }
-        }
-    }
-    // The scene keeps every split of the boxes, 2x = odd on one axis, away from these points.
-    let split = |p: &Plane| {
-        let n = p.n();
-        n.iter().filter(|v| **v != 0).count() == 1
-            && n.iter().any(|v| v.abs() == 2)
-            && p.d() % 2 != 0
-    };
-    assert!(!through.iter().any(split), "a split through {at:?}");
-    let mut through: Vec<Plane> = through
-        .iter()
-        .map(|plane| canonical(plane).unwrap().plane)
-        .collect();
-    through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
-    through.dedup();
-    for (i, a) in through.iter().enumerate() {
-        for (j, b) in through.iter().enumerate().skip(i + 1) {
-            for c in through.iter().skip(j + 1) {
+/// `plane` in canonical form.
+fn reduced(plane: &Plane) -> Plane {
+    canonical(plane).unwrap().plane
+}
+
+/// `planes` in plane order, each once.
+fn in_plane_order(mut planes: Vec<Plane>) -> Vec<Plane> {
+    planes.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    planes.dedup();
+    planes
+}
+
+/// The first three of `planes`, in their order, that meet in one point.
+fn first_meeting(planes: &[Plane]) -> Option<Tpi> {
+    for (i, a) in planes.iter().enumerate() {
+        for (j, b) in planes.iter().enumerate().skip(i + 1) {
+            for c in planes.iter().skip(j + 1) {
                 if normals_sign(a, b, c).unwrap() != Sign::Zero {
-                    return Tpi::meeting(*a, *b, *c).unwrap();
+                    return Some(Tpi::meeting(*a, *b, *c).unwrap());
                 }
             }
         }
     }
-    panic!("no three planes meet at {at:?}")
+    None
+}
+
+/// The fins of `m` with an end at vertex `at`.
+fn fins_at(m: &Merged, at: usize) -> impl Iterator<Item = &geom_poly::merge::Fin> {
+    m.fins
+        .iter()
+        .filter(move |fin| fin.from == at || fin.to == at)
+}
+
+/// The planes of the faces of `m` that meet at vertex `at`, those with an edge ending there, in
+/// canonical form and plane order.
+fn faces_at(m: &Merged, at: usize) -> Vec<Plane> {
+    let face = |fin: &geom_poly::merge::Fin| reduced(&m.sheets[m.faces[fin.face].sheet].face);
+    in_plane_order(fins_at(m, at).map(face).collect())
+}
+
+/// The bounds the fins of `m` that end at vertex `at` stand on, in canonical form and plane order,
+/// leaving out the planes of the faces there.
+fn bounds_at(m: &Merged, at: usize) -> Vec<Plane> {
+    let faces = faces_at(m, at);
+    let bounds = fins_at(m, at).map(|fin| reduced(&fin.bound));
+    in_plane_order(bounds.filter(|bound| !faces.contains(bound)).collect())
+}
+
+/// Whether `point` is on the grid.
+fn on_grid(point: &Tpi) -> bool {
+    point.to_grid().unwrap().is_exact()
+}
+
+/// Holds every vertex of `m`, a closed body, to its name: a grid point's three axis planes, and
+/// for a point off the grid the lowest three planes of the faces that meet there, in plane order,
+/// that meet in one point.
+fn named_by_its_faces(m: &Merged) {
+    for (at, point) in m.vertices.iter().enumerate() {
+        let name = if on_grid(point) {
+            let p = point.to_grid().unwrap().value();
+            Tpi::meeting(up(0, p.x.get()), up(1, p.y.get()), up(2, p.z.get())).unwrap()
+        } else {
+            let faces = faces_at(m, at);
+            first_meeting(&faces).unwrap_or_else(|| panic!("vertex {at}: no three of {faces:?}"))
+        };
+        assert_eq!(*point, name, "vertex {at}");
+    }
 }
 
 #[test]
@@ -1143,8 +1164,8 @@ fn a_point_is_named_the_same_however_its_planes_are_written() {
     // with normals two long and even offsets. Neither is a split of the boxes, 2x = odd, though the
     // one shares its odd offset with them and the other its normal. A grid point is named by its
     // axis planes. A spike's three edges up from (4, 4, 4) cross the block's top, z = 9, off the
-    // grid at thirds and seventeenths, never on a half step, so no split passes there, and the
-    // first three planes through each such point name it.
+    // grid at thirds and seventeenths, and the lowest three planes of the faces at each such point
+    // name it, read in canonical form.
     let mut polygons = scene(&[block([1, 1, 1], [9, 9, 9])]);
     let spike = [[4, 4, 4], [6, 5, 19], [5, 7, 19], [3, 6, 21]];
     tetrahedron(spike, 1, &mut polygons).unwrap();
@@ -1154,21 +1175,216 @@ fn a_point_is_named_the_same_however_its_planes_are_written() {
             let pieces = kept(&polygons, &WindingTest::unite(), leaf);
             let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
             closed(&m, &pieces);
-            let off = m
-                .vertices
-                .iter()
-                .filter(|v| !v.to_grid().unwrap().is_exact());
+            let off = m.vertices.iter().filter(|v| !on_grid(v));
             assert_eq!(
                 off.count(),
                 3,
                 "k {k}, leaf {leaf}: the spike's edges through the top"
             );
-            for (at, point) in m.vertices.iter().enumerate() {
-                let name = first_three(&pieces, point);
-                assert_eq!(*point, name, "k {k}, leaf {leaf}, vertex {at}");
-            }
+            named_by_its_faces(&m);
         }
     }
+}
+
+/// `polygons` with each bound leant over: the face's plane added to it `k` times, which is another
+/// plane through the same line of the face, positive on the same side of it.
+fn leant(polygons: &[Polygon], k: i128) -> Vec<Polygon> {
+    polygons
+        .iter()
+        .map(|polygon| {
+            let face = polygon.piece.face;
+            let lean = |b: &Plane| {
+                let n: Vec<i128> = b.n().iter().zip(face.n()).map(|(v, f)| v + k * f).collect();
+                Plane::new([n[0], n[1], n[2]], b.d() + k * face.d()).unwrap()
+            };
+            Polygon {
+                piece: Piece {
+                    face,
+                    bounds: polygon.piece.bounds.iter().map(lean).collect(),
+                },
+                entry: polygon.entry,
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn a_closed_body_s_points_are_named_by_its_faces_however_its_bounds_are_written() {
+    // Two tilted solids, each face's bounds the planes of the faces beside it, and the same solids
+    // with every bound leant over about its edge: planes no face lies on, as a caller's sides
+    // stood on a face's edges are. Some of them come before the faces in plane order, and they
+    // pass through the corners of the pieces at every point of an edge. The points where the two
+    // solids cross are named by their faces all the same, so both ways of writing the bounds give
+    // one name, at every leaf size.
+    let a = [[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]];
+    let b = [[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]];
+    let test = WindingTest::unite();
+    let whole = tilted(&[a, b], &test, 1000).unwrap();
+    assert!(whole.vertices.iter().any(|v| !on_grid(v)));
+    let mut polygons = Vec::new();
+    tetrahedron(a, 0, &mut polygons).unwrap();
+    tetrahedron(b, 1, &mut polygons).unwrap();
+    for k in [-3, 1, 5] {
+        let leant = leant(&polygons, k);
+        for leaf in [1, 2, 4, 1000] {
+            let pieces = kept(&leant, &test, leaf);
+            let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+            closed(&m, &pieces);
+            assert_eq!(m.vertices, whole.vertices, "k {k}, leaf {leaf}");
+            assert_eq!(m.edges, whole.edges, "k {k}, leaf {leaf}");
+        }
+    }
+}
+
+#[test]
+fn a_point_is_not_named_by_a_plane_whose_face_stops_short_of_it() {
+    // The case a seeded sweep of `every_tilted_union_closes_and_the_boxes_do_not_show` met (#908).
+    // The first solid's edge from (-26, 0, 0) to (-26, 1, 9) lies in the plane x = -26 of the
+    // third solid's face, and a face of the second solid crosses that edge off the grid, outside
+    // the third solid's triangle. In one box the third solid's face is beside the second's and its
+    // plane cuts the second's piece right across, through the point, so x = -26 is among the
+    // planes of the corners there; in smaller boxes the two are apart and it is not. The point's
+    // faces are the first solid's two on the edge and the second's that crosses it, in every box.
+    let solids = [
+        [[0, 0, 0], [0, 0, 1], [-26, 0, 0], [-26, 1, 9]],
+        [[-25, 23, 0], [-38, -4, 8], [40, 0, 0], [0, 0, 0]],
+        [[0, 0, 0], [-26, 0, 5], [-26, 19, 0], [-26, 5, 4]],
+    ];
+    let test = WindingTest::unite();
+    let whole = tilted(&solids, &test, 1000).unwrap();
+    // The edge is where x = -26 and z = 9y, the second a face of the first solid, and the face
+    // of the second solid that crosses it outside the triangle is 92x + 100y + 487z = 0.
+    let stray = Plane::new([1, 0, 0], 26).unwrap();
+    let beside = Plane::new([0, 9, -1], 0).unwrap();
+    let across = Plane::new([92, 100, 487], 0).unwrap();
+    let on = |plane: &Plane, v: &Tpi| plane.side_of_tpi(v) == Ok(Sign::Zero);
+    let on_the_edge = |v: &&Tpi| on(&stray, v) && on(&beside, v) && on(&across, v);
+    let crossed: Vec<&Tpi> = whole.vertices.iter().filter(on_the_edge).collect();
+    assert_eq!(crossed.len(), 1, "where the second solid crosses the edge");
+    assert!(!on_grid(crossed[0]) && !crossed[0].planes().contains(&stray));
+    assert!(crossed[0].planes().contains(&beside) && crossed[0].planes().contains(&across));
+    for leaf in 1..10 {
+        let m = tilted(&solids, &test, leaf).unwrap();
+        assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+        assert_eq!(m.edges, whole.edges, "leaf {leaf}");
+    }
+}
+
+#[test]
+fn a_sheet_s_rim_is_named_by_its_face_and_then_the_bounds_of_its_fins() {
+    // What a union keeps of one face of a tilted solid, merged as a sheet: its rim runs along the
+    // face's own edges and along the other solid's faces, and turns off the grid where the other
+    // solid's edges pierce the face and where its faces cross the face's edges. One face lies at
+    // such a point, so no three planes of its faces meet there: the name is the face's plane and
+    // then the lowest two bounds of the fins that end there, the same in every box.
+    let a = [[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]];
+    let b = [[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]];
+    let mut polygons = Vec::new();
+    tetrahedron(a, 0, &mut polygons).unwrap();
+    tetrahedron(b, 1, &mut polygons).unwrap();
+    let rules = Rules {
+        cuts: &[],
+        open: true,
+    };
+    let sheet = |polygon: usize, leaf: usize| {
+        let mut pieces = kept(&polygons, &WindingTest::unite(), leaf);
+        pieces.retain(|piece| piece.polygon == polygon);
+        merge_with(&pieces, Merge::RemoveRedundant, rules, &mut meter()).unwrap()
+    };
+    let mut turns = 0;
+    for (polygon, own) in polygons.iter().enumerate() {
+        let whole = sheet(polygon, 1000);
+        let face = reduced(&own.piece.face);
+        for (at, point) in whole.vertices.iter().enumerate() {
+            if on_grid(point) {
+                continue;
+            }
+            turns += 1;
+            assert_eq!(
+                faces_at(&whole, at),
+                [face],
+                "polygon {polygon}, vertex {at}"
+            );
+            let mut planes = vec![face];
+            planes.extend(bounds_at(&whole, at));
+            let name = first_meeting(&planes).unwrap();
+            assert_eq!(*point, name, "polygon {polygon}, vertex {at}");
+        }
+        for leaf in [1, 2, 4] {
+            let m = sheet(polygon, leaf);
+            assert_eq!(m.vertices, whole.vertices, "polygon {polygon}, leaf {leaf}");
+            assert_eq!(m.edges, whole.edges, "polygon {polygon}, leaf {leaf}");
+        }
+    }
+    assert!(turns > 0, "no rim turns off the grid");
+}
+
+#[test]
+fn the_end_of_a_section_s_curve_is_named_by_its_two_faces_and_then_a_plane_of_its_corners() {
+    // Each face of two tilted solids against the whole of the other: the curve where they meet stops
+    // where the face does, off the grid on the face's edge. One edge of the curve ends there, on
+    // two faces, and each fin's bound is the other's face, so neither the faces nor the bounds
+    // name the point: the third plane is the lowest other plane through its corners, the face's
+    // own bound along the edge. Where the curve turns, at an edge of the other solid, three faces
+    // meet and name the point.
+    let a = [[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]];
+    let b = [[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]];
+    let mut polygons = Vec::new();
+    tetrahedron(a, 0, &mut polygons).unwrap();
+    tetrahedron(b, 1, &mut polygons).unwrap();
+    let cut = |face: usize, leaf: usize| {
+        let found = classified(&polygons, leaf);
+        // The face, and every face of the solid it is no face of.
+        let other = |c: &Classified| (c.polygon >= 4) != (face >= 4);
+        let pieces: Vec<(Piece, usize)> = found
+            .iter()
+            .filter(|c| c.polygon == face || other(c))
+            .map(|c| (c.piece.clone(), usize::from(other(c))))
+            .collect();
+        (section(&pieces, &mut meter()).unwrap(), pieces)
+    };
+    let (mut ends, mut turns) = (0, 0);
+    for (face, own) in polygons.iter().enumerate() {
+        let (whole, pieces) = cut(face, 1000);
+        for (at, point) in whole.vertices.iter().enumerate() {
+            if on_grid(point) {
+                continue;
+            }
+            let here = |(low, high): &&(usize, usize)| *low == at || *high == at;
+            let edges: Vec<usize> = (0..whole.edges.len())
+                .filter(|e| here(&&whole.edges[*e]))
+                .collect();
+            let faces = in_plane_order(
+                edges
+                    .iter()
+                    .flat_map(|e| &whole.meets[*e])
+                    .map(|piece| reduced(&pieces[*piece].0.face))
+                    .collect(),
+            );
+            let [p, q, r] = *point.planes();
+            if edges.len() == 1 {
+                ends += 1;
+                assert_eq!(faces, [p, q], "face {face}, vertex {at}");
+                assert!(!faces.contains(&r) && r == reduced(&r));
+                assert_eq!(r.side_of_tpi(point), Ok(Sign::Zero));
+                let sides: Vec<Plane> = own.piece.bounds.iter().map(reduced).collect();
+                assert!(sides.contains(&r), "face {face}, vertex {at}: {r:?}");
+            } else {
+                turns += 1;
+                assert_eq!(
+                    first_meeting(&faces),
+                    Some(*point),
+                    "face {face}, vertex {at}"
+                );
+            }
+        }
+        for leaf in [1, 2, 4] {
+            let (curves, _) = cut(face, leaf);
+            assert_eq!(curves.vertices, whole.vertices, "face {face}, leaf {leaf}");
+            assert_eq!(curves.edges, whole.edges, "face {face}, leaf {leaf}");
+        }
+    }
+    assert!(ends > 0 && turns > 0, "{ends} ends, {turns} turns");
 }
 
 #[test]
@@ -1291,9 +1507,10 @@ fn two_tilted_solids_moved_to_the_frame_s_far_corner_merge_the_same() {
 }
 
 #[test]
-fn a_point_off_the_grid_is_named_by_the_first_three_planes_through_it() {
+fn a_point_off_the_grid_is_named_by_the_lowest_three_planes_of_its_faces() {
     // A box on odd steps crossed by a tilted solid: points off the grid on the box's faces and
-    // the solid's. Each is named by three planes in plane order, never a corner's own three.
+    // the solid's. Each is named by three planes of the faces that meet there, in plane order,
+    // never a corner's own three.
     let mut polygons = scene(&[block([1, 1, 1], [5, 5, 5])]);
     tetrahedron(
         [[-2, 0, 2], [7, 1, 3], [2, 8, 2], [3, 2, 9]],
@@ -1317,6 +1534,7 @@ fn a_point_off_the_grid_is_named_by_the_first_three_planes_through_it() {
             assert!(key(p) < key(q) && key(q) < key(r), "leaf {leaf}: {v:?}");
         }
         assert!(seen, "leaf {leaf}: no point off the grid");
+        named_by_its_faces(&m);
     }
 }
 
@@ -1498,56 +1716,12 @@ fn a_memo_starts_the_sorts_but_the_budget_stops_them_where_it_would() {
     assert!(stops > 0);
 }
 
-/// The name the merge gives a point off the grid: the first three planes through it, among the
-/// planes of the corners of `pieces` there, in plane order and leaving out the boxes' splits (one
-/// normal component of two and an odd offset: 2x = odd), each in canonical form, that meet in one
-/// point.
-fn named_off_the_grid(pieces: &[Outward], at: &Tpi) -> Tpi {
-    let split = |p: &Plane| {
-        let n = p.n();
-        n.iter().filter(|v| **v != 0).count() == 1
-            && n.iter().any(|v| v.unsigned_abs() == 2)
-            && p.d() % 2 != 0
-    };
-    let mut through = Vec::new();
-    for outward in pieces {
-        let Piece { face, bounds } = &outward.piece;
-        let after = bounds.iter().cycle().skip(1);
-        for (bound, next) in bounds.iter().zip(after) {
-            let three = [*face, *bound, *next];
-            if three
-                .iter()
-                .all(|plane| plane.side_of_tpi(at).unwrap() == Sign::Zero)
-            {
-                through.extend(three);
-            }
-        }
-    }
-    through.retain(|plane| !split(plane));
-    let mut through: Vec<Plane> = through
-        .iter()
-        .map(|plane| canonical(plane).unwrap().plane)
-        .collect();
-    through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
-    through.dedup();
-    for (i, a) in through.iter().enumerate() {
-        for (j, b) in through.iter().enumerate().skip(i + 1) {
-            for c in through.iter().skip(j + 1) {
-                if let Ok(point) = Tpi::new(*a, *b, *c) {
-                    return point;
-                }
-            }
-        }
-    }
-    panic!("no three planes meet there")
-}
-
 #[test]
 fn faces_that_look_like_splits_name_the_points_on_them() {
     // A block whose faces lie on odd whole steps, its planes written with normals one long, then
     // two long with even offsets, and a tilted solid whose edges cross those faces off the grid.
-    // The boxes split on half steps, 2x = odd; neither way of writing a face on x = 1 is one, so
-    // the face is among the planes a point on it may be named by.
+    // The boxes split on half steps, 2x = odd; neither way of writing a face on x = 1 is one, and
+    // a face is among the planes a point on it is named by however it is written.
     let turned_out = |t: [[i64; 3]; 4]| {
         let fits = tetrahedron(t, 0, &mut Vec::new()).is_some();
         if fits { t } else { [t[1], t[0], t[2], t[3]] }
@@ -1560,16 +1734,13 @@ fn faces_that_look_like_splits_name_the_points_on_them() {
             let pieces = kept(&polygons, &WindingTest::unite(), leaf);
             let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
             closed(&m, &pieces);
-            let mut off = 0;
-            for (at, point) in m.vertices.iter().enumerate() {
-                if point.to_grid().unwrap().is_exact() {
-                    continue;
-                }
-                off += 1;
-                let name = named_off_the_grid(&pieces, point);
-                assert_eq!(*point, name, "k {k}, leaf {leaf}, vertex {at}");
-            }
-            assert!(off > 0, "no point off the grid");
+            let block_s = |plane: &Plane| plane.n().iter().filter(|v| **v != 0).count() == 1;
+            let on_the_block = m
+                .vertices
+                .iter()
+                .filter(|v| !on_grid(v) && v.planes().iter().any(block_s));
+            assert!(on_the_block.count() > 0, "k {k}, leaf {leaf}");
+            named_by_its_faces(&m);
         }
     }
 }
