@@ -1614,10 +1614,12 @@ fn runs_at(runs: &[Run], used: &[usize], points: &Points<'_>) -> Vec<Vec<usize>>
             if on_grid(id) {
                 continue;
             }
-            let place = used.binary_search(&id).ok();
-            if let Some(list) = place.and_then(|k| at.get_mut(k)) {
-                list.push(e);
-            }
+            // `used` is the runs' ends, so each has its place there; one past the end has no list.
+            let place = used.binary_search(&id).unwrap_or(used.len());
+            at.iter_mut()
+                .skip(place)
+                .take(1)
+                .for_each(|list| list.push(e));
         }
     }
     at
