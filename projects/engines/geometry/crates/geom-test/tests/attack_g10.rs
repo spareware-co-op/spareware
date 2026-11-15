@@ -606,8 +606,8 @@ fn the_release_runs_every_kernel_workflow_whole() {
     assert!(
         seeded(
             RELEASE,
-            "  pull-requests: read\n",
-            "  pull-requests: write\n"
+            "\npermissions:\n  contents: read\n",
+            "\npermissions:\n  contents: write\n"
         )
         .iter()
         .any(|v| v.contains("lets every job write"))
