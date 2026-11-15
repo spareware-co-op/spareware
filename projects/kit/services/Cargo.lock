@@ -1603,6 +1603,7 @@ name = "kit-store-tikv"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "fail",
  "futures",
  "kit-core",
  "kit-ops",
