@@ -8,6 +8,7 @@ use crate::jsnum::{is_js_space, math_max_of, number_to_js_string};
 use crate::results::iso_day_of_ms;
 use crate::util::esc;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 /// A column heading of a report table.
 #[derive(Clone, Debug, Default)]
@@ -21,6 +22,7 @@ pub struct Head {
 }
 
 /// A text heading.
+#[must_use]
 pub fn h(label: &str) -> Head {
     Head {
         label: label.to_string(),
@@ -30,6 +32,7 @@ pub fn h(label: &str) -> Head {
 }
 
 /// A numeric heading.
+#[must_use]
 pub fn hn(label: &str) -> Head {
     Head {
         label: label.to_string(),
@@ -53,6 +56,7 @@ pub struct Row {
 
 impl Row {
     /// A plain row.
+    #[must_use]
     pub fn new(cells: Vec<String>) -> Row {
         Row {
             cells,
@@ -60,6 +64,7 @@ impl Row {
         }
     }
     /// A row with a class (empty for none).
+    #[must_use]
     pub fn cls(cells: Vec<String>, cls: &str) -> Row {
         Row {
             cells,
@@ -68,6 +73,7 @@ impl Row {
         }
     }
     /// A row with an element id.
+    #[must_use]
     pub fn id(cells: Vec<String>, id: &str) -> Row {
         Row {
             cells,
@@ -76,6 +82,7 @@ impl Row {
         }
     }
     /// A row whose one cell spans the table.
+    #[must_use]
     pub fn span(cell: String, span: usize) -> Row {
         Row {
             cells: vec![cell],
@@ -105,6 +112,7 @@ pub struct Tbl {
 
 impl Tbl {
     /// A table of headings and rows.
+    #[must_use]
     pub fn new(head: Vec<Head>, rows: Vec<Row>) -> Tbl {
         Tbl {
             head,
@@ -114,6 +122,7 @@ impl Tbl {
         }
     }
     /// The same table with the text it prints for no rows.
+    #[must_use]
     pub fn empty(mut self, text: &str) -> Tbl {
         self.empty = Some(text.to_string());
         self
@@ -121,25 +130,26 @@ impl Tbl {
 }
 
 /// `tbl(o)`: a table with a <thead> (it repeats on every printed page).
+#[must_use]
 pub fn tbl(o: &Tbl) -> String {
     let th = if o.head.is_empty() {
         String::new()
     } else {
-        format!(
-            "<thead><tr>{}</tr></thead>",
-            o.head
-                .iter()
-                .map(|h| format!(
-                    "<th{}{}>{}</th>",
-                    if h.n { " class=\"n\"" } else { "" },
-                    match &h.title {
-                        Some(t) if !t.is_empty() => format!(" title=\"{}\"", esc(t)),
-                        _ => String::new(),
-                    },
-                    h.label
-                ))
-                .collect::<String>()
-        )
+        let heads = o.head.iter().fold(String::new(), |mut acc, h| {
+            // Writing to a String cannot fail
+            let _ = write!(
+                acc,
+                "<th{}{}>{}</th>",
+                if h.n { " class=\"n\"" } else { "" },
+                match &h.title {
+                    Some(t) if !t.is_empty() => format!(" title=\"{}\"", esc(t)),
+                    _ => String::new(),
+                },
+                h.label
+            );
+            acc
+        });
+        format!("<thead><tr>{heads}</tr></thead>")
     };
     let body = if o.rows.is_empty() {
         format!(
@@ -148,35 +158,38 @@ pub fn tbl(o: &Tbl) -> String {
             o.empty.as_deref().unwrap_or("None.")
         )
     } else {
-        o.rows
-            .iter()
-            .map(|r| {
-                format!(
-                    "<tr{}{}>{}</tr>",
-                    match &r.id {
-                        Some(i) if !i.is_empty() => format!(" id=\"{}\"", esc(i)),
+        o.rows.iter().fold(String::new(), |mut acc, r| {
+            let tds = r.cells.iter().enumerate().fold(String::new(), |mut tds, (i, c)| {
+                // Writing to a String cannot fail
+                let _ = write!(
+                    tds,
+                    "<td{}{}>{}</td>",
+                    if o.head.get(i).is_some_and(|h| h.n) { " class=\"n\"" } else { "" },
+                    match r.span {
+                        // Bound: i is below the cell count, so i + 1 never saturates
+                        Some(s) if s != 0 && i.saturating_add(1) == r.cells.len() => format!(" colspan=\"{s}\""),
                         _ => String::new(),
                     },
-                    match &r.cls {
-                        Some(c) if !c.is_empty() => format!(" class=\"{}\"", esc(c)),
-                        _ => String::new(),
-                    },
-                    r.cells
-                        .iter()
-                        .enumerate()
-                        .map(|(i, c)| format!(
-                            "<td{}{}>{}</td>",
-                            if o.head.get(i).is_some_and(|h| h.n) { " class=\"n\"" } else { "" },
-                            match r.span {
-                                Some(s) if s != 0 && i + 1 == r.cells.len() => format!(" colspan=\"{s}\""),
-                                _ => String::new(),
-                            },
-                            c
-                        ))
-                        .collect::<String>()
-                )
-            })
-            .collect::<String>()
+                    c
+                );
+                tds
+            });
+            // Writing to a String cannot fail
+            let _ = write!(
+                acc,
+                "<tr{}{}>{}</tr>",
+                match &r.id {
+                    Some(i) if !i.is_empty() => format!(" id=\"{}\"", esc(i)),
+                    _ => String::new(),
+                },
+                match &r.cls {
+                    Some(c) if !c.is_empty() => format!(" class=\"{}\"", esc(c)),
+                    _ => String::new(),
+                },
+                tds
+            );
+            acc
+        })
     };
     format!(
         "<table class=\"rt{}\">{}<tbody>{}</tbody></table>",
@@ -187,11 +200,13 @@ pub fn tbl(o: &Tbl) -> String {
 }
 
 /// `disc(id, fill)`: a standing disclaimer.
+#[must_use]
 pub fn disc(id: &str) -> String {
     disc_with(id, None, None)
 }
 
 /// `disc(id, { version, tools })`: a standing disclaimer with its fill-ins.
+#[must_use]
 pub fn disc_with(id: &str, version: Option<&str>, tools: Option<&str>) -> String {
     format!(
         "<div class=\"disc\" data-d=\"{}\"><b>{} {}.</b> {}</div>",
@@ -203,11 +218,13 @@ pub fn disc_with(id: &str, version: Option<&str>, tools: Option<&str>) -> String
 }
 
 /// `note(t, warn)`: a small grey (or amber) note; `t` is HTML.
+#[must_use]
 pub fn note(t: &str, warn: bool) -> String {
     format!("<p class=\"note{}\">{}</p>", if warn { " warn" } else { "" }, t)
 }
 
 /// `para(t)`: a paragraph; `t` is HTML.
+#[must_use]
 pub fn para(t: &str) -> String {
     format!("<p>{t}</p>")
 }
@@ -217,7 +234,8 @@ fn ws_end(s: &str, i: usize) -> usize {
     let mut j = i;
     for c in s[i..].chars() {
         if is_js_space(c) {
-            j += c.len_utf8();
+            // Bound: a byte offset into a string in memory, far below usize::MAX
+            j = j.saturating_add(c.len_utf8());
         } else {
             break;
         }
@@ -231,19 +249,21 @@ fn split_blank_lines(t: &str) -> Vec<&str> {
     let mut start = 0usize;
     let mut i = 0usize;
     let b = t.as_bytes();
-    while i < b.len() {
-        if b[i] == b'\n' {
-            let k = ws_end(t, i + 1);
+    // Bound (every addition below): byte offsets into a text in memory, far below usize::MAX
+    while let Some(&byte) = b.get(i) {
+        if byte == b'\n' {
+            let next = i.saturating_add(1);
+            let k = ws_end(t, next);
             // the last newline inside the whitespace run that follows
-            if let Some(rel) = t[i + 1..k].rfind('\n') {
-                let last = i + 1 + rel;
+            if let Some(rel) = t[next..k].rfind('\n') {
+                let last = next.saturating_add(rel);
                 out.push(&t[start..i]);
-                start = last + 1;
+                start = last.saturating_add(1);
                 i = start;
                 continue;
             }
         }
-        i += t[i..].chars().next().map_or(1, char::len_utf8);
+        i = i.saturating_add(t[i..].chars().next().map_or(1, char::len_utf8));
     }
     out.push(&t[start..]);
     out
@@ -251,17 +271,19 @@ fn split_blank_lines(t: &str) -> Vec<&str> {
 
 /// `/^\s*[-•]\s+/.test(l)` and its match length.
 fn bullet_len(l: &str) -> Option<usize> {
-    let a = ws_end(l, 0);
-    let c = l[a..].chars().next()?;
+    let lead = ws_end(l, 0);
+    let c = l[lead..].chars().next()?;
     if c != '-' && c != '\u{2022}' {
         return None;
     }
-    let b = a + c.len_utf8();
-    let e = ws_end(l, b);
-    if e > b { Some(e) } else { None }
+    // Bound: a byte offset into a line in memory, far below usize::MAX
+    let mark_end = lead.saturating_add(c.len_utf8());
+    let gap_end = ws_end(l, mark_end);
+    if gap_end > mark_end { Some(gap_end) } else { None }
 }
 
 /// `authorHtml(text)`: the author's text: blank lines make paragraphs, lines starting '- ' make bullets (everything escaped).
+#[must_use]
 pub fn author_html(text: &str) -> String {
     let t = crate::jsnum::js_trim(text);
     split_blank_lines(t)
@@ -269,13 +291,12 @@ pub fn author_html(text: &str) -> String {
         .map(|block| {
             let lines: Vec<&str> = block.split('\n').collect();
             if lines.iter().all(|l| bullet_len(l).is_some()) {
-                format!(
-                    "<ul>{}</ul>",
-                    lines
-                        .iter()
-                        .map(|l| format!("<li>{}</li>", esc(&l[bullet_len(l).unwrap_or(0)..])))
-                        .collect::<String>()
-                )
+                let items = lines.iter().fold(String::new(), |mut acc, l| {
+                    // Writing to a String cannot fail
+                    let _ = write!(acc, "<li>{}</li>", esc(&l[bullet_len(l).unwrap_or(0)..]));
+                    acc
+                });
+                format!("<ul>{items}</ul>")
             } else {
                 format!("<p>{}</p>", lines.iter().map(|l| esc(l)).collect::<Vec<_>>().join("<br>"))
             }
@@ -324,6 +345,7 @@ pub struct FigRequest {
 
 impl FigRequest {
     /// As JSON, with the keys the prototype's request has (left out when unset).
+    #[must_use]
     pub fn to_value(&self) -> serde_json::Value {
         use serde_json::{Map, Value, json};
         let mut m = Map::new();
@@ -353,6 +375,7 @@ impl FigRequest {
 }
 
 /// `figHtml(f, img, tno)`: one figure: the drawn map, or a placeholder until it is drawn.
+#[must_use]
 pub fn fig_html(f: &FigRequest, img: Option<&MapImage>, tno: &str) -> String {
     let src = match img {
         Some(MapImage::Url(u)) => Some(u.as_str()),
@@ -399,13 +422,16 @@ pub fn fig_html(f: &FigRequest, img: Option<&MapImage>, tno: &str) -> String {
 }
 
 /// `fillFigures(body, requests, images)`: puts drawn maps into a built report body (figures keep their numbers).
-pub fn fill_figures(body: &str, requests: &[FigRequest], images: &HashMap<String, MapImage>) -> String {
+#[must_use]
+pub fn fill_figures<S: std::hash::BuildHasher>(body: &str, requests: &[FigRequest], images: &HashMap<String, MapImage, S>) -> String {
+    const TNO: &str = "<span class=\"tno\">";
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
     let open = "<figure class=\"fig\" id=\"";
     while let Some(i) = rest.find(open) {
         out.push_str(&rest[..i]);
-        let after = &rest[i + open.len()..];
+        // Bound (every addition below): byte offsets into a report body in memory, far below usize::MAX
+        let after = &rest[i.saturating_add(open.len())..];
         let (Some(q), Some(end)) = (after.find('"'), after.find("</figure>")) else {
             out.push_str(&rest[i..]);
             rest = "";
@@ -413,14 +439,15 @@ pub fn fill_figures(body: &str, requests: &[FigRequest], images: &HashMap<String
         };
         // the figure element runs to the first </figure> after the id attribute, as the prototype's lazy pattern reads it
         let fid = &after[..q];
-        let whole = &rest[i..i + open.len() + end + "</figure>".len()];
+        let stop = i.saturating_add(open.len()).saturating_add(end).saturating_add("</figure>".len());
+        let whole = &rest[i..stop];
         let req = requests.iter().find(|f| esc(&format!("f-{}", f.id)) == fid);
         match req.and_then(|f| images.get(&f.id).map(|im| (f, im))) {
             Some((f, im)) => {
                 let tno = whole
-                    .find("<span class=\"tno\">")
+                    .find(TNO)
                     .and_then(|a| {
-                        let s = &whole[a + "<span class=\"tno\">".len()..];
+                        let s = &whole[a.saturating_add(TNO.len())..];
                         s.find('<').map(|b| s[..b].to_string())
                     })
                     .unwrap_or_default();
@@ -428,7 +455,7 @@ pub fn fill_figures(body: &str, requests: &[FigRequest], images: &HashMap<String
             }
             None => out.push_str(whole),
         }
-        rest = &rest[i + open.len() + end + "</figure>".len()..];
+        rest = &rest[stop..];
     }
     out.push_str(rest);
     out
@@ -436,41 +463,44 @@ pub fn fill_figures(body: &str, requests: &[FigRequest], images: &HashMap<String
 
 /// The table token a title carries: `Table E1 · Road network` has id E1 and the rest 'Road network'.
 fn table_id(title: &str) -> Option<(String, usize)> {
+    // Bound (every addition below): byte offsets into a title in memory, far below usize::MAX
     let t = title;
-    let mut i = ws_end(t, 0);
-    if !t[i..].starts_with("Table") {
+    let mut pos = ws_end(t, 0);
+    if !t[pos..].starts_with("Table") {
         return None;
     }
-    i += 5;
-    let j = ws_end(t, i);
-    if j == i {
+    pos = pos.saturating_add(5);
+    let after_ws = ws_end(t, pos);
+    if after_ws == pos {
         return None;
     }
-    i = j;
-    let mut chars = t[i..].char_indices();
+    pos = after_ws;
+    let mut chars = t[pos..].char_indices();
     let (_, first) = chars.next()?;
     if !first.is_ascii_uppercase() {
         return None;
     }
-    let mut k = i + 1;
-    for (off, c) in t[i + 1..].char_indices() {
+    let id_start = pos.saturating_add(1);
+    let mut id_end = id_start;
+    for (off, c) in t[id_start..].char_indices() {
         if c.is_ascii_alphanumeric() || c == '-' {
-            k = i + 1 + off + 1;
+            id_end = id_start.saturating_add(off).saturating_add(1);
         } else {
             break;
         }
     }
-    let id = t[i..k].to_string();
-    let mut m = ws_end(t, k);
-    if !t[m..].starts_with('\u{b7}') {
+    let id = t[pos..id_end].to_string();
+    let mut rest_at = ws_end(t, id_end);
+    if !t[rest_at..].starts_with('\u{b7}') {
         return None;
     }
-    m += '\u{b7}'.len_utf8();
-    m = ws_end(t, m);
-    Some((id, m))
+    rest_at = rest_at.saturating_add('\u{b7}'.len_utf8());
+    rest_at = ws_end(t, rest_at);
+    Some((id, rest_at))
 }
 
 /// `tnoToken(title)`: the placeholder for a table's number.
+#[must_use]
 pub fn tno_token(title: &str) -> String {
     match table_id(title) {
         Some((id, _)) => format!("%%TNO:{id}%%"),
@@ -479,6 +509,7 @@ pub fn tno_token(title: &str) -> String {
 }
 
 /// `tnoRest(title)`: the title without its 'Table X · ' lead.
+#[must_use]
 pub fn tno_rest(title: &str) -> String {
     match table_id(title) {
         Some((_, end)) => title[end..].to_string(),
@@ -527,6 +558,7 @@ pub struct TableOpts {
 
 impl TableOpts {
     /// Options with a note.
+    #[must_use]
     pub fn note(n: &str) -> TableOpts {
         TableOpts {
             note: Some(n.to_string()),
@@ -534,6 +566,7 @@ impl TableOpts {
         }
     }
     /// Options with a source and a note.
+    #[must_use]
     pub fn src_note(src: &str, n: &str) -> TableOpts {
         TableOpts {
             source: Some(src.to_string()),
@@ -589,7 +622,7 @@ pub struct Ctx<'a, 'r> {
     pub(super) crash_cache: Option<Vec<super::sections_env::CrashSite>>,
 }
 
-impl<'a, 'r> Ctx<'a, 'r> {
+impl Ctx<'_, '_> {
     /// `ctx.table(title, body, opts)`: a numbered, sourced table.
     pub fn table(&self, title: &str, body: impl Into<TableBody>, o: &TableOpts) -> String {
         let t = match body.into() {
@@ -647,6 +680,7 @@ impl<'a, 'r> Ctx<'a, 'r> {
     }
 
     /// `ctx.author(id, prompt)`: the author's own text for a box; an empty box prints the prompt as 'to be completed'.
+    #[must_use]
     pub fn author(&self, id: &str, prompt: &str) -> String {
         match self.r.rs.text_of(id) {
             Some(t) if t.truthy() && !crate::jsnum::js_trim(&t.js_string()).is_empty() => {
@@ -657,6 +691,7 @@ impl<'a, 'r> Ctx<'a, 'r> {
     }
 
     /// `runText(...scs)`: the scenarios with their year and run date, as escaped HTML.
+    #[must_use]
     pub fn run_text(&self, scs: &[Option<usize>]) -> String {
         scs.iter()
             .flatten()
@@ -686,6 +721,7 @@ impl<'a, 'r> Ctx<'a, 'r> {
     }
 
     /// `sourceOf(c)`: the provenance of a table that names no source: the section's own, with the scenarios and run dates it reads.
+    #[must_use]
     pub fn source_of(&self) -> String {
         let s = &self.sel;
         let id = self.section.id.as_str();

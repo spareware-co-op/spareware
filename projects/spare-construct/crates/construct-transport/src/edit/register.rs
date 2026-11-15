@@ -16,6 +16,7 @@ fn text(t: &str) -> Num {
 }
 
 /// A saved scalar as JSON: None when the key is missing (JSON.stringify leaves it out), null when null.
+#[must_use]
 pub fn num_json(n: &Num) -> Option<Value> {
     match n {
         Maybe::Missing => None,
@@ -26,6 +27,7 @@ pub fn num_json(n: &Num) -> Option<Value> {
 
 /// `Register.presets(asAt)`: the South Auckland rows of Spare Construct's regulatory spec, each tagged "verify" with its
 /// as-at date (default 2026-10-08). They have not been checked against primary sources.
+#[must_use]
 pub fn presets(as_at: &str) -> Vec<RegisterRow> {
     let src =
         "Spare Construct regulatory spec (reg-receiving-env), not checked against primary sources";
@@ -94,6 +96,7 @@ pub const PRESET_AS_AT: &str = "2026-10-08";
 
 /// `Register.table(P)`: report section 2.8, every row with "Included in S1" and the reason. Each row is
 /// { id, name, type, status, funding, likely, source, asAt, verify, included, reason }.
+#[must_use]
 pub fn table(p: &Project) -> Vec<Value> {
     let Some(rows) = p.register.get() else {
         return Vec::new();

@@ -5,11 +5,12 @@ use super::cmd_sim::SimState;
 use super::registry::{Handler, Sink, registry};
 use crate::error::{ApiError, ApiResult};
 use crate::schema::{Params, validate};
+use crate::transport::helpers::{scenario_at, scenario_at_mut};
 use construct_transport::edit;
 use construct_transport::edit::history::{History, MAX_STEPS, mark_stale};
 use construct_transport::edit::ids::Ids;
 use construct_transport::jsnum::Maybe;
-use construct_transport::project::{Project, Settings};
+use construct_transport::project::{Project, Scenario, Settings};
 use construct_transport::results::{Res, Results};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
@@ -23,13 +24,27 @@ fn whole_numbers(v: &mut Value) {
                 && x.fract() == 0.0
                 && x.abs() < 9_007_199_254_740_992.0
             {
-                *v = Value::from(x as i64);
+                // Bound: x is whole and below 2^53 in size (checked just above), so it is exact as an i64.
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "x is whole and below 2^53 in size"
+                )]
+                let whole = x as i64;
+                *v = Value::from(whole);
             }
         }
         Value::Array(a) => a.iter_mut().for_each(whole_numbers),
         Value::Object(m) => m.values_mut().for_each(whole_numbers),
         _ => {}
     }
+}
+
+/// The top 53 bits of `z` as a number in [0, 1).
+#[cfg(not(target_arch = "wasm32"))]
+// Bound: z >> 11 is below 2^53 and the divisor is 2^53, both exact as f64.
+#[allow(clippy::cast_precision_loss, reason = "both are at most 2^53")]
+fn unit_interval(z: u64) -> f64 {
+    (z >> 11) as f64 / (1u64 << 53) as f64
 }
 
 /// A function that receives progress events while long commands run.
@@ -103,16 +118,25 @@ impl Session {
 
     /// A session whose ids come from the operating system's clock and a time-seeded generator (not in the browser build).
     #[cfg(not(target_arch = "wasm32"))]
+    #[must_use]
     pub fn system() -> Session {
         use std::time::{SystemTime, UNIX_EPOCH};
+        // Bound: milliseconds since 1970 stay below 2^53, where f64 is exact, for the next 285,000 years.
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "milliseconds since 1970 stay below 2^53"
+        )]
         let now_ms = || {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_or(0.0, |d| d.as_millis() as f64)
         };
+        // the low 64 bits of the nanoseconds, as `as u64` would take them
         let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_or(1, |d| d.as_nanos() as u64)
+            .ok()
+            .and_then(|d| u64::try_from(d.as_nanos() & u128::from(u64::MAX)).ok())
+            .unwrap_or(1)
             ^ (u64::from(std::process::id()) << 32);
         let mut s = seed;
         let rng = move || {
@@ -122,12 +146,13 @@ impl Session {
             z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
             z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
             z ^= z >> 31;
-            (z >> 11) as f64 / (1u64 << 53) as f64
+            unit_interval(z)
         };
         Session::new(rng, now_ms)
     }
 
     /// A session with the truth-test generator at this seed and a clock that stays at `now_ms`: the same ids as the prototype's harness.
+    #[must_use]
     pub fn seeded(seed: u32, now_ms: f64) -> Session {
         let mut r = engine_sim::Mulberry32::new(seed);
         Session::new(move || engine_sim::Rng::next_f64(&mut r), move || now_ms)
@@ -135,6 +160,7 @@ impl Session {
 
     /// A session whose ids and clock replay the truth-test harness (tools/transport-truth): `rng_skip` numbers of the seeded generator
     /// are used up first and the id counter starts at `seq0`, as they stand in the prototype after it has loaded.
+    #[must_use]
     pub fn harness(seed: u32, now_ms: f64, rng_skip: usize, seq0: u64) -> Session {
         let mut s = Session::new(|| 0.5, move || now_ms);
         let mut r = engine_sim::Mulberry32::new(seed);
@@ -160,22 +186,29 @@ impl Session {
     }
 
     /// A number that goes up each time the project changes (an edit, an undo, a run, opening a project).
+    #[must_use]
     pub fn revision(&self) -> u64 {
         self.revision
     }
 
     /// The open project.
+    #[must_use]
     pub fn project(&self) -> &Project {
         &self.project
     }
 
     /// The results held for a scenario and period (a run, or a result read from a project file).
+    #[must_use]
     pub fn result(&self, scenario_id: &str, period: &str) -> Option<&Res> {
         self.results.get(scenario_id).and_then(|r| r.get(period))
     }
 
     /// Runs one command by name with JSON parameters and gives its JSON result, or a structured error. Progress events go to the
     /// listener set with [`Session::set_progress`].
+    ///
+    /// # Errors
+    ///
+    /// The command's own error, or `unknown_command`, `bad_params` (the parameters do not fit its schema) or `internal`.
     pub fn run(&mut self, name: &str, params: &Value) -> ApiResult {
         let mut listener = self.progress.take();
         let out = {
@@ -191,6 +224,10 @@ impl Session {
     }
 
     /// Like [`Session::run`], with the progress events sent to this sink instead.
+    ///
+    /// # Errors
+    ///
+    /// As [`Session::run`].
     pub fn run_with(&mut self, name: &str, params: &Value, sink: Sink<'_>) -> ApiResult {
         let reg = registry();
         let cmd = reg
@@ -208,8 +245,8 @@ impl Session {
         let handler = cmd.handler;
         let call = |s: &mut Session, sink: Sink<'_>| {
             let mut r = match handler {
-                Handler::Plain(h) => h(s, &p),
-                Handler::Streaming(h) => h(s, &p, sink),
+                Handler::Plain(h) => h(s, p),
+                Handler::Streaming(h) => h(s, p, sink),
             };
             if let Ok(v) = &mut r {
                 whole_numbers(v);
@@ -224,7 +261,7 @@ impl Session {
                 Err(e) => {
                     let msg = e
                         .downcast_ref::<&str>()
-                        .map(|s| s.to_string())
+                        .map(std::string::ToString::to_string)
                         .or_else(|| e.downcast_ref::<String>().cloned())
                         .unwrap_or_else(|| "unknown failure".to_string());
                     Err(ApiError::new(
@@ -261,6 +298,7 @@ impl Session {
     }
 
     /// Every command as JSON text: name, description, whether it changes the project and its parameter schema.
+    #[must_use]
     pub fn commands_json() -> String {
         registry().describe().to_string()
     }
@@ -299,9 +337,9 @@ impl Session {
             })
             .map(|(i, _)| i)
             .collect();
-        match hits.len() {
-            1 => Ok(hits[0]),
-            0 => Err(ApiError::not_found(format!(
+        match hits.as_slice() {
+            [one] => Ok(*one),
+            [] => Err(ApiError::not_found(format!(
                 "There is no scenario with the id or name \"{key}\"."
             ))
             .with_details(json!({ "scenarios": self.scenario_names() }))),
@@ -320,7 +358,7 @@ impl Session {
     }
 
     /// The scenario a read-only command asks about: the `scenario` parameter (id or name), otherwise the active one.
-    pub(crate) fn pick_scenario(&self, p: &Params, key: &str) -> ApiResult<usize> {
+    pub(crate) fn pick_scenario(&self, p: Params<'_>, key: &str) -> ApiResult<usize> {
         match p.opt_str(key)? {
             Some(k) => self.scenario_index(k),
             None => self.active_index(),
@@ -328,18 +366,18 @@ impl Session {
     }
 
     /// The scenario an editing command works on: the `scenario` parameter (id or name) is made the active one first, as picking it in the top bar does.
-    pub(crate) fn target(&mut self, p: &Params) -> ApiResult<usize> {
+    pub(crate) fn target(&mut self, p: Params<'_>) -> ApiResult<usize> {
         let i = self.pick_scenario(p, "scenario")?;
-        let id = self.project.scenarios[i].id.clone();
+        let id = scenario_at(&self.project.scenarios, i)?.id.clone();
         if self.active_index()? != i || !self.project.active.is(&id) {
             self.project.active = Maybe::Set(id);
-            self.revision += 1;
+            self.touch();
         }
         Ok(i)
     }
 
     /// The period a command asks about: the `period` parameter, otherwise the project's current period.
-    pub(crate) fn period_of(&self, p: &Params) -> ApiResult<String> {
+    pub(crate) fn period_of(&self, p: Params<'_>) -> ApiResult<String> {
         match p.opt_str("period")? {
             Some(x) => {
                 if x == "AM" || x == "PM" {
@@ -361,8 +399,8 @@ impl Session {
     }
 
     /// Id of a scenario by index.
-    pub(crate) fn sid(&self, i: usize) -> String {
-        self.project.scenarios[i].id.clone()
+    pub(crate) fn sid(&self, i: usize) -> ApiResult<String> {
+        Ok(scenario_at(&self.project.scenarios, i)?.id.clone())
     }
 
     // ---------------------------------------------------------------- undo
@@ -370,7 +408,9 @@ impl Session {
     /// `Kit.snap(label)`: takes an undo step for the active scenario before an edit, named so undo can say what it undid.
     pub(crate) fn snap(&mut self, label: &str) {
         let Ok(i) = self.active_index() else { return };
-        let sid = self.project.scenarios[i].id.clone();
+        let Some(sid) = self.project.scenarios.get(i).map(|sc| sc.id.clone()) else {
+            return;
+        };
         self.histories
             .entry(sid.clone())
             .or_default()
@@ -424,6 +464,7 @@ impl Session {
     }
 
     /// The labels of the steps that can be undone (oldest first) and redone (next to redo last).
+    #[must_use]
     pub fn step_labels(&self) -> (Vec<String>, Vec<String>) {
         (
             self.log.undo.iter().map(|s| s.label.clone()).collect(),
@@ -444,7 +485,7 @@ impl Session {
     }
 
     /// `undo(redo)` of ui.js: undoes or redoes the latest step and says what it was.
-    pub(crate) fn step_back(&mut self, redo: bool) -> ApiResult {
+    pub(crate) fn step_back(&mut self, redo: bool) -> Value {
         let what = if redo { "redo" } else { "undo" };
         let top = if redo {
             self.log.redo.pop()
@@ -452,9 +493,7 @@ impl Session {
             self.log.undo.pop()
         };
         let Some(step) = top else {
-            return Ok(
-                json!({ "done": false, "action": what, "message": format!("Nothing to {what}.") }),
-            );
+            return json!({ "done": false, "action": what, "message": format!("Nothing to {what}.") });
         };
         let before = self.project.active.as_str().map(str::to_string);
         let ok = match &step.kind {
@@ -469,9 +508,9 @@ impl Session {
                     kind: StepKind::Settings(Box::new(cur)),
                 };
                 if redo {
-                    self.log.undo.push(back)
+                    self.log.undo.push(back);
                 } else {
-                    self.log.redo.push(back)
+                    self.log.redo.push(back);
                 }
                 true
             }
@@ -489,21 +528,21 @@ impl Session {
                         kind: StepKind::Scenario,
                     };
                     if redo {
-                        self.log.undo.push(back)
+                        self.log.undo.push(back);
                     } else {
-                        self.log.redo.push(back)
+                        self.log.redo.push(back);
                     }
                 }
                 done
             }
         };
         if !ok {
-            return Ok(json!({
+            return json!({
                 "done": false, "action": what,
                 "message": "That step can no longer be undone."
-            }));
+            });
         }
-        self.revision += 1;
+        self.touch();
         let sc = self.project.scenarios.iter().find(|s| s.id == step.sid);
         let sc_name = sc.map(|s| s.name.as_str().unwrap_or("").to_string());
         let switched = sc.is_some() && before.as_deref() != Some(step.sid.as_str());
@@ -516,18 +555,18 @@ impl Session {
         } else {
             step.label.clone()
         };
-        let mut msg = format!("{}: {}", if redo { "Redid" } else { "Undid" }, label);
-        if let Some(n) = &sc_name {
-            msg.push_str(&format!(" ({n})"));
-        }
-        msg.push('.');
+        let done = if redo { "Redid" } else { "Undid" };
+        let mut msg = match &sc_name {
+            Some(n) => format!("{done}: {label} ({n})."),
+            None => format!("{done}: {label}."),
+        };
         if switched && let Some(n) = &sc_name {
-            msg.push_str(&format!(" Switched to {n}."));
+            msg = format!("{msg} Switched to {n}.");
         }
-        Ok(json!({
+        json!({
             "done": true, "action": what, "label": label, "scenario": sc_name, "switched": switched, "message": msg,
             "undo": self.log.undo.len(), "redo": self.log.redo.len(),
-        }))
+        })
     }
 
     // ---------------------------------------------------------------- results and staleness
@@ -537,15 +576,18 @@ impl Session {
         if let Ok(i) = self.active_index() {
             self.mark_stale_at(i);
         }
-        self.revision += 1;
+        self.touch();
     }
 
     /// Marks the results of one scenario (by index) out of date, in the project and in the held results.
     pub(crate) fn mark_stale_at(&mut self, i: usize) {
-        mark_stale(&mut self.project.scenarios[i]);
-        let sid = self.project.scenarios[i].id.clone();
+        let Some(sc) = self.project.scenarios.get_mut(i) else {
+            return;
+        };
+        mark_stale(sc);
+        let sid = sc.id.clone();
         self.mark_cache_stale(&sid);
-        self.revision += 1;
+        self.touch();
     }
 
     fn mark_cache_stale(&mut self, sid: &str) {
@@ -565,15 +607,16 @@ impl Session {
 
     /// Counts a change to the project that is not an edit to a scenario (a name, a setting, the period).
     pub(crate) fn touch(&mut self) {
-        self.revision += 1;
+        // one step per change: u64 does not run out
+        self.revision = self.revision.saturating_add(1);
     }
 
     /// Keeps a result for a scenario and period, in the held results and in the project's `res`.
     pub(crate) fn store_res(&mut self, i: usize, period: &str, res: Res) -> ApiResult<()> {
         // the project's copy keeps the paths too (saving strips them), as the prototype's `sc.res` does
         let v = serde_json::to_value(&res).map_err(|e| ApiError::new("internal", e.to_string()))?;
-        let sid = self.project.scenarios[i].id.clone();
-        let sc = &mut self.project.scenarios[i];
+        let sid = scenario_at(&self.project.scenarios, i)?.id.clone();
+        let sc = scenario_at_mut(&mut self.project.scenarios, i)?;
         match &mut sc.res {
             Maybe::Set(Value::Object(m)) => {
                 m.insert(period.to_string(), v);
@@ -588,16 +631,19 @@ impl Session {
             .entry(sid)
             .or_default()
             .insert(period.to_string(), res);
-        self.revision += 1;
+        self.touch();
         Ok(())
     }
 
     /// Forgets the results of a scenario (`sc.res = {}`).
     pub(crate) fn clear_res(&mut self, i: usize) {
-        self.project.scenarios[i].res = Maybe::Set(Value::Object(Map::new()));
-        let sid = self.sid(i);
+        let Some(sc) = self.project.scenarios.get_mut(i) else {
+            return;
+        };
+        sc.res = Maybe::Set(Value::Object(Map::new()));
+        let sid = sc.id.clone();
         self.results.remove(&sid);
-        self.revision += 1;
+        self.touch();
     }
 
     /// Reads every result stored in the project's scenarios into the held results; gives the ones that could not be read.
@@ -635,13 +681,12 @@ impl Session {
         self.clear_history();
         self.sim = None;
         self.calib = CalibState::default();
-        self.revision += 1;
+        self.touch();
         self.load_results()
     }
 
     /// A short description of a scenario for lists.
-    pub(crate) fn scenario_brief(&self, i: usize) -> Value {
-        let sc = &self.project.scenarios[i];
+    pub(crate) fn scenario_brief(&self, sc: &Scenario) -> Value {
         let mut results = Map::new();
         if let Some(r) = self.results.get(&sc.id) {
             for (period, res) in r.iter() {
@@ -674,7 +719,7 @@ impl Session {
             "active": p.active.as_str(),
             "base": p.base.as_str(),
             "period": self.current_period(),
-            "scenarios": (0..p.scenarios.len()).map(|i| self.scenario_brief(i)).collect::<Vec<_>>(),
+            "scenarios": p.scenarios.iter().map(|sc| self.scenario_brief(sc)).collect::<Vec<_>>(),
             "undo": u, "redo": r,
             "settingsNotice": edit::migrate::settings_notice(p).cloned(),
         })

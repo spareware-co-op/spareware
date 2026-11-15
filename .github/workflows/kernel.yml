@@ -20,49 +20,50 @@ name: Kernel
 # The goldens run first, in every configuration, and every step runs even when an earlier one
 # failed (`if: !cancelled()`), so a failing suite never hides the digests of a target.
 #
-# Time to a result: the cheap job `lint` (format and lints, a minute or two) goes first and every
-# other job waits for it, so a push that fails it stops there. The whole suite is the job `suite`,
-# in parts that run side by side (cargo-nextest's `--partition count:k/n`, the way kernel-quality.yml
-# partitions Miri), release in two parts and debug in four, so no leg runs for hours; the debug
-# parts hold every test the single `cargo test` run held. nextest does not run doctests, so part 1
-# of each leg runs them with `cargo test --doc`. The wasm32 legs split the same way: the job `wasm`
-# runs the goldens, the job `wasm-suite` the test vectors and the suite.
+# When each part runs (chapter 28.17; the owner's testing principles 2 and 3, decision 32.53):
+#
+# - On each push to a pull request: format and lints (`lint`), then the tests the change can reach,
+#   once, optimised with overflow checks and debug assertions on, on Linux x86-64 (`linux`, in two
+#   parts), with the goldens there, and the toolchain guard's proof (`guard`).
+# - In GitHub's merge queue for main (`merge_group`), once per change just before it lands: the
+#   same tests on the other platforms (the job `suite` on Linux arm64, Windows on both chips and
+#   macOS on both chips; `wasm-suite` on wasm32; `big-endian` on s390x), the other legs of the
+#   determinism matrix (`test`, `wasm`), one plain debug run of the reachable tests on Linux
+#   x86-64 (the `suite` parts in debug), and Manifold's large models, a test the suite leaves out
+#   for its minutes (`large-models`).
+# - On a push to main: nothing the merge queue already tested on the identical tree. The queue's
+#   last job leaves a mark named for the tree it passed (an artifact, `kernel-tested-<tree>`), and
+#   the job `changes` looks for it; a push that did not come through the queue runs both sets.
+# - On a release tag (kernel-release.yml calls this workflow): both sets, every crate.
+#
+# The job `changes` decides first, in seconds: which files the change touches (a pull request's
+# merge commit against its first parent, the queue's commit against the queue's base, a push
+# against the commit main was at before it), and whether any is one the kernel's tests can read
+# (`KERNEL_PATHS` below); a change that touches none runs nothing here and passes. Every pull
+# request and every queued change runs this workflow, so its last job, `done` ("Kernel checks
+# pass"), always reports: it is the check main's ruleset requires, and it fails unless every job
+# that ran passed and every job this event must run did run (.github/rulesets/protect-main.json;
+# geom-test's tests/queue_wiring.rs holds the two lists together with planted mistakes).
+#
+# What a change tests: only the crates it can reach. The job `scope` runs geom-test's
+# `kernel-quality test-scope` on the changed files: a crate's tests run when a changed file is in
+# what its test binaries link (the crate, its normal and build dependencies' closure, and its
+# development dependencies' closure), among its own tests, or anywhere when its sources read files
+# outside its folder; a changed file in no crate (a workflow, Cargo.lock, .cargo, the toolchain
+# file, an architecture chapter) runs every crate's. geom-test's src/test_scope.rs gives the whole
+# rule, its tests/test_scope.rs holds it to the crate graph, and the job's summary names every
+# crate and why it runs or not. The suites (`linux`, `suite`, `wasm-suite`) test only the crates
+# it names, and a part left with nothing to test passes. A release tag tests every crate. The
+# goldens, the guard and the lints run whole on every change that runs them.
 #
 # Every action is pinned to a full commit, checked against its tag when it was pinned; update a
 # pin only after reviewing the new commit.
-#
-# If this workflow becomes a required check, note that a pull request outside the paths below
-# never runs it, so it would never report: then drop the pull_request path filter and skip inside
-# the jobs, or require a small summary job that always runs.
 
 on:
   pull_request:
-    paths:
-      - "projects/engines/geometry/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".cargo/**"
-      - "rust-toolchain.toml"
-      - "rust-toolchain"
-      - "clippy.toml"
-      - ".clippy.toml"
-      - "rustfmt.toml"
-      - ".rustfmt.toml"
-      - ".github/workflows/kernel.yml"
+  merge_group:
   push:
     branches: [main]
-    paths:
-      - "projects/engines/geometry/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".cargo/**"
-      - "rust-toolchain.toml"
-      - "rust-toolchain"
-      - "clippy.toml"
-      - ".clippy.toml"
-      - "rustfmt.toml"
-      - ".rustfmt.toml"
-      - ".github/workflows/kernel.yml"
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
 
@@ -71,7 +72,8 @@ permissions:
 
 # A newer push to the same pull request cancels the runs it supersedes. A newer push to main
 # does not cancel a run in progress, but at most one run waits behind it (GitHub's default
-# `queue: single`), so a run on main that is still waiting is cancelled by a newer push.
+# `queue: single`), so a run on main that is still waiting is cancelled by a newer push. Each
+# merge queue entry has a ref of its own.
 concurrency:
   group: kernel-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -80,14 +82,114 @@ env:
   # One pinned compiler for every job, so a golden digest never moves because the compiler did
   # (chapter 28.13, the toolchain guard). Change it only in a pull request that reruns every
   # golden. Chapter 28.13 asks for the pin in a committed rust-toolchain.toml at the repository
-  # root; until an owner adds one, it is held here, and the path filters above already watch it.
+  # root; until an owner adds one, it is held here, and the paths below already watch it.
   RUST_TOOLCHAIN: "1.99.0"
+  # The files a change must touch for this workflow to test anything: the kernel, the workspace's
+  # manifest and lock file, Cargo's and nextest's configuration, the toolchain and the lint and
+  # format settings, and every workflow and ruleset (geom-test's tests read them). A pattern is a
+  # path, or a folder followed by `/**` for everything below it.
+  KERNEL_PATHS: |
+    projects/engines/geometry/**
+    Cargo.toml
+    Cargo.lock
+    .cargo/**
+    .config/**
+    rust-toolchain.toml
+    rust-toolchain
+    clippy.toml
+    .clippy.toml
+    rustfmt.toml
+    .rustfmt.toml
+    .github/**
 
 jobs:
+  # What this run must check: `kernel`, whether the change touches a file of KERNEL_PATHS; `base`,
+  # the commit the change is measured against (empty: every file); `tested`, on a push to main,
+  # whether the merge queue passed this very tree; `tree`, the tree's hash.
+  changes:
+    name: What the change touches
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      kernel: ${{ steps.changes.outputs.kernel }}
+      base: ${{ steps.changes.outputs.base }}
+      tested: ${{ steps.changes.outputs.tested }}
+      tree: ${{ steps.changes.outputs.tree }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: The kernel files the change touches, and whether the merge queue tested this tree
+        id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # The change's base: a pull request's merge commit's first parent, the merge queue's
+          # base, or the commit main was at before a push. None (every file counts) for a release
+          # tag, a first push, or a base that cannot be fetched.
+          base=""
+          case "$EVENT" in
+            pull_request)
+              test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+              base=$(git rev-parse HEAD^1)
+              ;;
+            merge_group) base="$QUEUE_BASE" ;;
+            push) if [ "$GITHUB_REF" = refs/heads/main ]; then base="$BEFORE"; fi ;;
+          esac
+          case "$base" in 0000000000000000000000000000000000000000) base="" ;; esac
+          if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null \
+            && ! git fetch -q --no-tags --depth 1 origin "$base"; then
+            echo "The base $base cannot be fetched, so every file counts as changed."
+            base=""
+          fi
+          kernel=true
+          if [ -n "$base" ]; then
+            kernel=false
+            while IFS= read -r file; do
+              while IFS= read -r pattern; do
+                [ -n "$pattern" ] || continue
+                case "$pattern" in
+                  */\*\*) if [[ "$file" == "${pattern%\*\*}"* ]]; then kernel=true; fi ;;
+                  *) if [ "$file" = "$pattern" ]; then kernel=true; fi ;;
+                esac
+              done <<< "$KERNEL_PATHS"
+            done < <(git diff --no-ext-diff --no-renames --name-only "$base" HEAD)
+          fi
+          tree=$(git rev-parse "HEAD^{tree}")
+          # A push to main the merge queue passed on this very tree: the queue's mark is there. A
+          # call that fails counts as no mark, so the push then tests everything it reaches.
+          tested=false
+          if [ "$EVENT" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            if marks=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=kernel-tested-$tree" \
+              --jq '[.artifacts[] | select(.expired | not)] | length') && [ "$marks" -gt 0 ]; then
+              tested=true
+            fi
+          fi
+          {
+            echo "kernel=$kernel"
+            echo "base=$base"
+            echo "tested=$tested"
+            echo "tree=$tree"
+          } | tee -a "$GITHUB_OUTPUT"
+          {
+            echo "Event: $EVENT; base: ${base:-none, so every file counts}."
+            echo "Touches the kernel's files: $kernel. The merge queue passed this tree: $tested."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   test:
     name: Test (${{ matrix.target.name }}, ${{ matrix.mode }})
     # The cheap job goes first: when format or lints fail, no runner starts on the matrix.
-    needs: lint
+    needs: [changes, lint]
+    # The merge queue's legs of the determinism matrix (and a release's, and a push that skipped
+    # the queue); Linux x86-64 in release runs on every push to a pull request, in `linux`.
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ matrix.target.os }}
     # The goldens of every target and mode, and geom-num's test vectors in release. The whole
     # suite, which took up to two hours a leg, is the job `suite` below, in parts; this job holds
@@ -120,6 +222,12 @@ jobs:
             # lists both, so when Intel images end is not settled. When they end, this leg needs a
             # self-hosted runner or an owner's decision to drop the target (chapter 32.4).
             os: macos-15-intel
+        exclude:
+          # The job `linux` runs these steps for Linux x86-64 in release.
+          - mode: release
+            target:
+              name: Linux x86-64
+              os: ubuntu-latest
     defaults:
       run:
         # bash with -eo pipefail on every runner, Windows included.
@@ -189,15 +297,145 @@ jobs:
           cp "target/debug/golden$exe" "$RUNNER_TEMP/golden$exe"
           "$RUNNER_TEMP/golden$exe" run
 
+  # Which crates' tests the change can reach (the paragraph above): the files of the change against
+  # the base `changes` found, or every crate when it found none. It runs beside `lint`, so it adds
+  # no wait.
+  scope:
+    name: Which crates' tests the change can reach
+    needs: changes
+    if: needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      crates: ${{ steps.scope.outputs.crates }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The diff between the base and this commit is the change, renames as a removed and an added
+      # file.
+      - name: The files the change touches
+        env:
+          BASE: ${{ needs.changes.outputs.base }}
+        run: |
+          if [ -n "$BASE" ]; then
+            git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch -q --no-tags --depth 1 origin "$BASE"
+            git diff --no-ext-diff --no-renames --name-only "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: The crates whose tests it can reach, and why
+        id: scope
+        run: >-
+          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope $SCOPE
+          --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # On each push to a pull request: the goldens of Linux x86-64 in release and the tests the change
+  # can reach, once, optimised with overflow checks and debug assertions on (principle 3), in two
+  # parts side by side; part 1 also runs the goldens and the doctests, which nextest does not.
+  linux:
+    name: Tests (Linux x86-64, optimised with checks on, part ${{ matrix.k }} of 2)
+    needs: [changes, lint, scope]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        k: [1, 2]
+    env:
+      CARGO_NEXTEST_VERSION: "0.9.146"
+      # A part the selection leaves without a test passes (nextest's `--no-tests`).
+      NEXTEST_NO_TESTS: pass
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's. One part saves it.
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.k == 1 }}
+          key: linux
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case " $SELECTED " in *" $c "*) list="$list -p $c" ;; esac
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none}"
+      # The same build as the suite below, so the two share it.
+      - name: Every golden in release, with overflow checks and debug assertions on
+        if: ${{ !cancelled() && matrix.k == 1 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: Every golden in release as shipped, without overflow checks
+        if: ${{ !cancelled() && matrix.k == 1 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: The replay corpus and the transform sweep with the checker as shipped
+        if: ${{ !cancelled() && matrix.k == 1 }}
+        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
+      - name: geom-num's every test vector in release as shipped
+        if: ${{ !cancelled() && matrix.k == 1 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast
+      - name: Every golden in release for this machine's own CPU
+        if: ${{ !cancelled() && matrix.k == 1 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: The tests the change can reach, optimised with overflow checks and debug assertions on (part ${{ matrix.k }} of 2)
+        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.k }}/2
+      - name: Doctests, optimised with overflow checks and debug assertions on
+        if: ${{ !cancelled() && matrix.k == 1 && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+        run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
+
   suite:
     name: Test suite (${{ matrix.target.name }}, ${{ matrix.part.mode }}, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
-    needs: lint
+    needs: [changes, lint, scope]
+    # The merge queue's: the tests the change can reach on the other platforms, optimised with
+    # overflow checks and debug assertions on, and one plain debug run on Linux x86-64.
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ matrix.target.os }}
-    # Every test of every kernel crate, once per target and mode, split into parts that run side
-    # by side: each part runs the tests `--partition count:k/n` gives it. The release legs took
-    # 20 to 35 minutes in one piece and the debug legs 80 to 125, so release is two parts and debug
-    # four, each about a quarter of a leg's tests (part 1 also runs the doctests, which nextest does
-    # not). Every part builds what it runs from the same cache.
+    # The tests the change reaches, once per target and mode, split into parts that run side by
+    # side: each part runs the tests `--partition count:k/n` gives it. Release is two parts and
+    # debug four, each about a quarter of a leg's tests (part 1 also runs the doctests, which
+    # nextest does not). Every part builds what it runs from the same cache.
     timeout-minutes: 120
     strategy:
       # Every part reports, so a failing test shows on which target and mode it fails.
@@ -206,14 +444,8 @@ jobs:
         part:
           - { mode: release, k: 1, n: 2 }
           - { mode: release, k: 2, n: 2 }
-          - { mode: debug, k: 1, n: 4 }
-          - { mode: debug, k: 2, n: 4 }
-          - { mode: debug, k: 3, n: 4 }
-          - { mode: debug, k: 4, n: 4 }
-        # The targets of the job `test`, in the same order; the note on the Intel leg is there.
+        # The targets of the job `test` but Linux x86-64, whose optimised run is `linux`'s.
         target:
-          - name: Linux x86-64
-            os: ubuntu-latest
           - name: Linux arm64
             os: ubuntu-24.04-arm
           - name: Windows x86-64
@@ -224,8 +456,22 @@ jobs:
             os: macos-latest
           - name: macOS x86-64
             os: macos-15-intel
+        # The one plain debug run, on Linux x86-64.
+        include:
+          - part: { mode: debug, k: 1, n: 4 }
+            target: { name: Linux x86-64, os: ubuntu-latest }
+          - part: { mode: debug, k: 2, n: 4 }
+            target: { name: Linux x86-64, os: ubuntu-latest }
+          - part: { mode: debug, k: 3, n: 4 }
+            target: { name: Linux x86-64, os: ubuntu-latest }
+          - part: { mode: debug, k: 4, n: 4 }
+            target: { name: Linux x86-64, os: ubuntu-latest }
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"
+      # A part the selection leaves without a test passes (nextest's `--no-tests`).
+      NEXTEST_NO_TESTS: pass
+      # Debug assertions on in the release legs too (the release steps add overflow checks).
+      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
     defaults:
       run:
         shell: bash
@@ -251,33 +497,45 @@ jobs:
         uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
-      # Every crate in the kernel's folder is run here, so a new crate is covered the day it lands
-      # (chapter 27: one folder per crate, folder name = crate name).
-      - name: List the kernel's crates
-        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
+      # Every crate in the kernel's folder that the change can reach (the job `scope`) is run here,
+      # so a new crate is covered the day it lands (chapter 27: one folder per crate, folder name =
+      # crate name). With none, the steps below are skipped and the part passes.
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case " $SELECTED " in *" $c "*) list="$list -p $c" ;; esac
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none}"
       - name: Test suite in release, with overflow checks on (part ${{ matrix.part.k }} of ${{ matrix.part.n }})
-        if: ${{ !cancelled() && matrix.part.mode == 'release' }}
+        if: ${{ !cancelled() && matrix.part.mode == 'release' && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
       - name: Test suite in debug (part ${{ matrix.part.k }} of ${{ matrix.part.n }})
-        if: ${{ !cancelled() && matrix.part.mode == 'debug' }}
+        if: ${{ !cancelled() && matrix.part.mode == 'debug' && env.KERNEL_CRATES != '' }}
         run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
       # nextest does not run doctests, so part 1 of each mode runs them, every one.
       - name: Doctests in release, with overflow checks on
-        if: ${{ !cancelled() && matrix.part.mode == 'release' && matrix.part.k == 1 }}
+        if: ${{ !cancelled() && matrix.part.mode == 'release' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
       - name: Doctests in debug
-        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 }}
+        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast
 
   big-endian:
     # The file format must not depend on byte order (chapter 28.13): geom-format's own tests and
     # the format museum, on s390x under QEMU's user mode. Pinned by the runner image's packages;
-    # the toolchain is the workspace's.
+    # the toolchain is the workspace's. Another platform, so the merge queue's.
     name: Format round trips on big-endian (s390x under QEMU)
+    needs: changes
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-24.04
     env:
       CARGO_TARGET_S390X_UNKNOWN_LINUX_GNU_LINKER: s390x-linux-gnu-gcc
@@ -297,16 +555,17 @@ jobs:
 
   guard:
     name: The toolchain guard trips
-    needs: lint
+    needs: [changes, lint]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # The proof of the toolchain and dependency guard (chapter 28.13; piece G20). This workflow
     # reruns every golden on every target whenever the toolchain pin, Cargo.lock, the workspace
-    # manifest or anything under the kernel changes (the path filters above), so a change there
-    # that moves a result fails the test job. This job shows that it would: `guard prove` patches
-    # in a copy of libm whose sin flips the last bit of every result, one ulp, and requires
-    # geom-num's determinism golden to report a digest that differs from the store's. A run that
-    # passes, builds the real libm, or fails for another reason fails this job.
+    # manifest or anything under the kernel changes (KERNEL_PATHS above), so a change there that
+    # moves a result fails the goldens. This job shows that it would: `guard prove` patches in a
+    # copy of libm whose sin flips the last bit of every result, one ulp, and requires geom-num's
+    # determinism golden to report a digest that differs from the store's. A run that passes,
+    # builds the real libm, or fails for another reason fails this job.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -325,7 +584,8 @@ jobs:
 
   wasm:
     name: Test (wasm32-wasip1 under ${{ matrix.runtime }})
-    needs: lint
+    needs: [changes, lint]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
     # The goldens on wasm32 and the proof of the guard through them; the test vectors and the whole
     # suite are the job `wasm-suite`, side by side with this one.
@@ -417,7 +677,8 @@ jobs:
 
   wasm-suite:
     name: Test suite (wasm32-wasip1 under ${{ matrix.runtime }})
-    needs: lint
+    needs: [changes, lint, scope]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
     # geom-num's test vectors and the whole suite in release on wasm32, the other half of what the job
     # `wasm` used to run in one piece.
@@ -447,10 +708,21 @@ jobs:
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
           key: wasm-suite
-      # Every kernel crate in the kernel's folder; the development crates (chapter 27) need
-      # processes and files that WASI test runs do not have, and run natively above.
-      - name: List the kernel's crates
-        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do c="$(basename "$d")"; case "$c" in geom-test|geom-fuzz|geom-gen|geom-bench) ;; *) printf -- '-p %s ' "$c" ;; esac; done)" >> "$GITHUB_ENV"
+      # Every kernel crate in the kernel's folder that the change can reach (the job `scope`); the
+      # development crates (chapter 27) need processes and files that WASI test runs do not have,
+      # and run natively above. With none, the suite's step is skipped.
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case "$c" in geom-test|geom-fuzz|geom-gen|geom-bench) continue ;; esac
+            case " $SELECTED " in *" $c "*) list="$list -p $c" ;; esac
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none}"
       - name: Install wasmtime ${{ env.WASMTIME_VERSION }}
         if: matrix.runtime == 'wasmtime'
         uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1.1.3
@@ -485,20 +757,69 @@ jobs:
           EOF
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
       - name: geom-num's every test vector on wasm32 in release as shipped
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-num ') }}
         run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
       # The whole suite in release. In debug, wasm32-wasip1 runs every test on one thread with no
       # optimisation, which takes well over an hour, so the debug leg here is every golden of the
       # store above (chapter 21 asks for the corpus in debug and release); the native jobs run the
       # whole suite in debug.
       - name: Test suite in release, with overflow checks on
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast
 
+  large-models:
+    # Gate 4 (G156): Manifold's seven models of more than 1,500 faces, each united alone and with a
+    # moved copy within its work budget, its exact volume inside the kernel's own (geom-test's
+    # tests/corpus_polyhedral.rs, `the_large_models_unite_within_their_work`, ignored in the
+    # suite). The merge queue's, when the change reaches a crate the unions run on (geom-poly,
+    # geom-bool or geom-mesh, as the job `scope` names them); otherwise its step is skipped and the
+    # job passes. The models are split over a few jobs by the test's own filter (SPAREKIT_MODELS),
+    # so each takes minutes: measured on the reference machine (15 Nov 2026), the two
+    # Generic_Twin_7081 models took 177 s and 107 s and the other five 2 to 15 s each, about
+    # five minutes in all, after a build.
+    name: Manifold's large models within their work (${{ matrix.models }})
+    needs: [changes, lint, scope]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every model of more than 1,500 faces, once; the test stops on a name that is not one.
+        models:
+          - Generic_Twin_7081.1.t0_left
+          - Generic_Twin_7081.1.t0_right
+          - Offset1,hull-body,hull-mask,self_intersectA,self_intersectB
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: large-models
+      - name: The models of more than 1,500 faces named here, united alone and with a moved copy
+        if: ${{ contains(format(' {0} ', needs.scope.outputs.crates), ' geom-poly ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-bool ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-mesh ') }}
+        env:
+          SPAREKIT_MODELS: ${{ matrix.models }}
+        run: >-
+          cargo test --locked --release -p geom-test --test corpus_polyhedral --
+          --ignored --exact the_large_models_unite_within_their_work
+
   lint:
     name: Format and lints
+    needs: changes
+    if: needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -533,3 +854,60 @@ jobs:
       - name: Clippy with the kernel lints
         if: ${{ !cancelled() }}
         run: cargo clippy $KERNEL_CRATES --all-targets --locked -- -D warnings
+
+  # The one check main's ruleset requires of this workflow (.github/rulesets/protect-main.json): it
+  # fails if any job failed or was cancelled, or if a job this event must run did not run, and in
+  # the merge queue it leaves the mark that lets the push to main skip the same tree.
+  done:
+    name: Kernel checks pass
+    needs: [changes, lint, scope, linux, guard, test, suite, wasm, wasm-suite, big-endian, large-models]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Every job that ran passed, and every job this event must run ran
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+          KERNEL: ${{ needs.changes.outputs.kernel }}
+          TESTED: ${{ needs.changes.outputs.tested }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          bad=$(jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key' <<< "$NEEDS")
+          if [ -n "$bad" ]; then
+            echo "::error::These jobs did not pass: $(echo $bad)"
+            exit 1
+          fi
+          test "$(jq -r '.changes.result' <<< "$NEEDS")" = success
+          if [ "$KERNEL" = true ] && [ "$TESTED" != true ]; then
+            # What each event runs (the paragraph at the top; tests/queue_wiring.rs holds these
+            # lists to each job's condition).
+            case "$EVENT" in
+              pull_request) must="lint scope linux guard" ;;
+              merge_group) must="lint scope test suite wasm wasm-suite big-endian large-models" ;;
+              *) must="lint scope linux guard test suite wasm wasm-suite big-endian large-models" ;;
+            esac
+            for job in $must; do
+              result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")
+              if [ "$result" != success ]; then
+                echo "::error::$job must run on this $EVENT and its result is $result."
+                exit 1
+              fi
+            done
+          fi
+          echo "Every kernel check this $EVENT needs has passed."
+      - name: The merge queue's mark for this tree
+        if: github.event_name == 'merge_group' && needs.changes.outputs.kernel == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/mark"
+          echo "$GITHUB_SHA" > "$RUNNER_TEMP/mark/commit.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name == 'merge_group' && needs.changes.outputs.kernel == 'true'
+        with:
+          name: kernel-tested-${{ needs.changes.outputs.tree }}
+          path: ${{ runner.temp }}/mark
+          retention-days: 30
+          if-no-files-found: error

@@ -5,16 +5,15 @@
 //!
 //! - `every_tier_names_workflows_that_run_on_its_trigger`: the as-built table has 28.17's tiers in
 //!   28.17's order; each workflow a row names exists and runs on that tier's trigger (a pull
-//!   request; a daily schedule; a weekly schedule; a pull request that changes
-//!   `rust-toolchain.toml` or `Cargo.lock`; a `geom-v` tag); and every kernel workflow is named.
+//!   request; GitHub's merge queue; a push to main; a pull request that changes
+//!   `rust-toolchain.toml` or `Cargo.lock`; a `geom-v` tag; a run by hand); and every kernel
+//!   workflow is named.
+//! - `no_workflow_runs_on_a_timer`: no workflow has a `schedule:` trigger but the housekeeping
+//!   that tests nothing ([`HOUSEKEEPING`]), and no kernel workflow ever does (the owner's testing
+//!   principle 2, decision 32.53: nothing reruns on code that has not changed).
 //! - `the_release_runs_every_kernel_workflow_whole`: `kernel-release.yml` runs on `geom-v` tags
 //!   and nothing else, calls every other kernel workflow once (each takes `workflow_call`),
 //!   records the golden store only after every call has passed, and only that job may write.
-//! - `the_nightly_campaign_fuzzes_every_target`: `kernel-fuzz-campaign.yml` runs every night, and
-//!   its nightly list of targets is `kernel-fuzz.yml`'s libFuzzer matrix, which geom-fuzz's
-//!   `tests/attack_g14.rs` holds to the fuzz targets themselves. A run started by hand gets that
-//!   list too when it asks for `all` targets, and `wide_fuzz` for five hours when it asks for
-//!   nothing; it never shares a concurrency group with the night's run, and no run is cancelled.
 //! - `the_matrix_has_every_runner_in_both_modes`: `kernel.yml` tests on the six native runners
 //!   G10's done-when names (x86-64 and arm64 Linux, Windows and macOS) in debug and release, with
 //!   a `target-cpu=native` leg in release, and on wasm32 under wasmtime and Node.
@@ -46,6 +45,10 @@ use yaml_rust2::{Yaml, YamlLoader};
 const WORKFLOWS: &str = ".github/workflows";
 const RELEASE: &str = "kernel-release.yml";
 const CHAPTER: &str = "projects/engines/geometry/architecture/28-testing.md";
+
+/// The only workflows that may run on a timer: housekeeping that tests nothing (the pieces bot,
+/// which releases idle pieces, and the build cache's pruning).
+const HOUSEKEEPING: [&str; 2] = ["pieces.yml", "cache-prune.yml"];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -203,32 +206,26 @@ fn tiers(chapter: &str) -> (Vec<String>, Vec<(String, Vec<String>)>) {
     (tiers, built)
 }
 
-/// The cron schedules of a workflow, each as its five fields.
-fn crons(w: &Yaml) -> Vec<Vec<String>> {
-    w["on"]["schedule"]
-        .as_vec()
-        .map(|v| {
-            v.iter()
-                .filter_map(|s| s["cron"].as_str())
-                .map(|c| c.split_whitespace().map(str::to_owned).collect())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// Whether a workflow runs on a tier's trigger; `None` for a tier this check does not know.
 fn runs_on_tier(tier: &str, w: &Yaml) -> Option<bool> {
-    let day_fields = |c: &Vec<String>| c.len() == 5 && c[2] == "*" && c[3] == "*";
+    let on = keys(&w["on"]);
     Some(match tier {
-        "Every pull request" => !w["on"]["pull_request"].is_badvalue(),
-        "Nightly" => crons(w).iter().any(|c| day_fields(c) && c[4] == "*"),
-        "Weekly" => crons(w).iter().any(|c| day_fields(c) && c[4] != "*"),
+        "Every push to a pull request" => on.iter().any(|k| k == "pull_request"),
+        "The merge queue" => on.iter().any(|k| k == "merge_group"),
+        "Each push to main" => strings(&w["on"]["push"]["branches"])
+            .iter()
+            .any(|b| b == "main"),
+        // A pull request with no path filter runs on every change, these files' among them.
         "Toolchain or dependency change" => {
-            let paths = strings(&w["on"]["pull_request"]["paths"]);
-            ["rust-toolchain.toml", "Cargo.lock"]
-                .iter()
-                .all(|p| paths.iter().any(|q| q == p))
+            let pr = &w["on"]["pull_request"];
+            let paths = strings(&pr["paths"]);
+            on.iter().any(|k| k == "pull_request")
+                && (pr["paths"].is_badvalue()
+                    || ["rust-toolchain.toml", "Cargo.lock"]
+                        .iter()
+                        .all(|p| paths.iter().any(|q| q == p)))
         }
+        "By hand" => on.iter().any(|k| k == "workflow_dispatch"),
         "Each release and edition" => strings(&w["on"]["push"]["tags"])
             .iter()
             .any(|t| t == "geom-v*"),
@@ -349,121 +346,6 @@ fn release_violations(workflows: &BTreeMap<String, String>) -> Vec<String> {
         if !runs.contains(needle) {
             found.push(format!("the freeze job does not run {needle:?}"));
         }
-    }
-    found
-}
-
-/// The JSON list a `fromJSON(... && '<list>' || ...)` expression gives when its condition holds.
-fn first_json_list(expression: &str) -> Vec<String> {
-    let start = expression.find("'[").expect("a quoted JSON list");
-    let rest = &expression[start + 1..];
-    let end = rest.find("]'").expect("the list's end");
-    serde_json::from_str(&rest[..=end]).unwrap()
-}
-
-/// What is wrong with the nightly campaign against kernel-fuzz.yml's libFuzzer matrix.
-fn campaign_violations(campaign: &str, fuzz: &str) -> Vec<String> {
-    let mut found = Vec::new();
-    let c = parse(campaign);
-    if !crons(&c)
-        .iter()
-        .any(|f| f.len() == 5 && f[2] == "*" && f[3] == "*" && f[4] == "*")
-    {
-        found.push("the campaign does not run every night".to_owned());
-    }
-    let job = &c["jobs"]["campaign"];
-    let condition = job["if"].as_str().unwrap_or_default();
-    if !condition.contains("github.event_name == 'schedule'") {
-        found.push(format!("the campaign skips the nightly run: {condition}"));
-    }
-    let target = job["strategy"]["matrix"]["target"]
-        .as_str()
-        .unwrap_or_default();
-    if !target.contains("github.event_name == 'schedule'") {
-        found.push(format!(
-            "the nightly list is not chosen by the schedule: {target}"
-        ));
-    }
-    let nightly: BTreeSet<String> = first_json_list(target).into_iter().collect();
-    let f = parse(fuzz);
-    let all: BTreeSet<String> = strings(&f["jobs"]["libfuzzer"]["strategy"]["matrix"]["target"])
-        .into_iter()
-        .collect();
-    if all.is_empty() || nightly != all {
-        found.push(format!(
-            "the nightly campaign fuzzes {nightly:?}, not kernel-fuzz.yml's targets {all:?}"
-        ));
-    }
-
-    // By hand (workflow_dispatch): `all` is the nightly list, and the default is today's.
-    if !target.contains("inputs.targets == 'all'") {
-        found.push(format!(
-            "a dispatch that asks for all targets does not get the nightly list: {target}"
-        ));
-    }
-    let shard = job["strategy"]["matrix"]["shard"]
-        .as_str()
-        .unwrap_or_default();
-    let chooser = |e: &str| e.split(" && '[").next().unwrap_or_default().to_owned();
-    if chooser(shard) != chooser(target) {
-        found.push(format!(
-            "the shards are not chosen by the condition that chooses the targets: {shard}"
-        ));
-    }
-    let inputs = &c["on"]["workflow_dispatch"]["inputs"];
-    if inputs["targets"]["default"].as_str() != Some("wide")
-        || strings(&inputs["targets"]["options"]) != ["wide", "all"]
-    {
-        found.push("a dispatch does not choose between wide, the default, and all".to_owned());
-    }
-    let hours = strings(&inputs["hours"]["options"]);
-    if inputs["hours"]["default"].as_str() != Some("5")
-        || hours.is_empty()
-        || !hours
-            .iter()
-            .all(|h| h.parse::<u32>().is_ok_and(|h| (1..=5).contains(&h)))
-    {
-        found.push(format!(
-            "a dispatch's hours are not five by default and one to five by choice: {hours:?}"
-        ));
-    }
-    let group = c["concurrency"]["group"].as_str().unwrap_or_default();
-    if !group
-        .contains("github.event_name == 'workflow_dispatch' && github.run_id || github.event_name")
-    {
-        found.push(format!(
-            "a run started by hand shares a concurrency group with the night's run: {group}"
-        ));
-    }
-    if c["concurrency"]["cancel-in-progress"].as_bool() != Some(false) {
-        found.push("a campaign that has started can be cancelled by a newer one".to_owned());
-    }
-
-    // Time limits: five hours of fuzzing and the build before it inside the fuzz step's limit,
-    // and that limit plus the uploads after it inside the job's, which GitHub caps at six hours
-    // on a hosted runner. A job that ends close to its limit can be cancelled although every
-    // step passed (run 43221765733, 2026-11-12).
-    let job_limit = job["timeout-minutes"].as_i64().unwrap_or_default();
-    let step_limit = job["steps"]
-        .as_vec()
-        .into_iter()
-        .flatten()
-        .find(|s| {
-            s["run"]
-                .as_str()
-                .is_some_and(|r| r.contains("cargo bolero test"))
-        })
-        .and_then(|s| s["timeout-minutes"].as_i64())
-        .unwrap_or_default();
-    if step_limit < 300 + 20 {
-        found.push(format!(
-            "the fuzz step's limit of {step_limit} minutes leaves under 20 to build before five hours of fuzzing"
-        ));
-    }
-    if job_limit > 360 || job_limit < step_limit + 20 {
-        found.push(format!(
-            "the job's limit of {job_limit} minutes is over six hours or leaves under 20 for the uploads"
-        ));
     }
     found
 }
@@ -634,16 +516,18 @@ fn every_tier_names_workflows_that_run_on_its_trigger() {
     assert_eq!(tier_violations(&chapter, &workflows), Vec::<String>::new());
 
     // Seeded violations: each must be reported.
-    let mut no_nightly = workflows.clone();
-    let text = no_nightly.get_mut("kernel-nightly.yml").unwrap();
-    assert!(text.contains("  schedule:\n"));
-    *text = text.replacen("  schedule:\n", "  schedulx:\n", 1);
+    let mut no_queue = workflows.clone();
+    let text = no_queue.get_mut("kernel.yml").unwrap();
+    assert!(text.contains("  merge_group:\n"));
+    *text = text.replacen("  merge_group:\n", "  merge_grouq:\n", 1);
     assert!(
-        tier_violations(&chapter, &no_nightly)
+        tier_violations(&chapter, &no_queue)
             .iter()
-            .any(|v| v.contains("kernel-nightly.yml does not run on the tier \"Nightly\""))
+            .any(|v| v.contains("kernel.yml does not run on the tier \"The merge queue\""))
     );
-    let unnamed = chapter.replacen("`kernel-gate.yml`, ", "", 1);
+    let unnamed = chapter
+        .replace("`kernel-gate.yml`, ", "")
+        .replace(", `kernel-gate.yml`", "");
     assert_ne!(unnamed, chapter);
     assert!(
         tier_violations(&unnamed, &workflows)
@@ -651,15 +535,15 @@ fn every_tier_names_workflows_that_run_on_its_trigger() {
             .any(|v| v.contains("kernel-gate.yml is in no tier"))
     );
     let wrong_tier = chapter.replacen(
-        "| Weekly | `kernel-quality.yml` |",
-        "| Weekly | `kernel.yml` |",
+        "| The merge queue | `kernel.yml`, ",
+        "| The merge queue | `kernel-dev.yml`, `kernel.yml`, ",
         1,
     );
     assert_ne!(wrong_tier, chapter);
     assert!(
         tier_violations(&wrong_tier, &workflows)
             .iter()
-            .any(|v| v.contains("kernel.yml does not run on the tier \"Weekly\""))
+            .any(|v| v.contains("kernel-dev.yml does not run on the tier \"The merge queue\""))
     );
     let missing = chapter.replacen(
         "`kernel-release.yml` | The format",
@@ -694,7 +578,7 @@ fn the_release_runs_every_kernel_workflow_whole() {
     assert!(
         seeded(
             RELEASE,
-            "  nightly:\n    uses: ./.github/workflows/kernel-nightly.yml\n",
+            "  oracles:\n    uses: ./.github/workflows/kernel-oracles.yml\n",
             ""
         )
         .iter()
@@ -715,13 +599,9 @@ fn the_release_runs_every_kernel_workflow_whole() {
         .any(|v| v.contains("must run on a geom-v tag"))
     );
     assert!(
-        seeded(
-            RELEASE,
-            " fuzz-campaign, quality, nightly]",
-            " fuzz-campaign, quality]"
-        )
-        .iter()
-        .any(|v| v.contains("the freeze job needs"))
+        seeded(RELEASE, " fuzz, quality, oracles]", " fuzz, quality]")
+            .iter()
+            .any(|v| v.contains("the freeze job needs"))
     );
     assert!(
         seeded(
@@ -737,103 +617,6 @@ fn the_release_runs_every_kernel_workflow_whole() {
             .iter()
             .any(|v| v.contains("cmp -s"))
     );
-}
-
-#[cfg_attr(
-    target_family = "wasm",
-    ignore = "reads the repository's files, which a WebAssembly test run cannot"
-)]
-#[test]
-fn the_nightly_campaign_fuzzes_every_target() {
-    let campaign = read(".github/workflows/kernel-fuzz-campaign.yml");
-    let fuzz = read(".github/workflows/kernel-fuzz.yml");
-    assert_eq!(campaign_violations(&campaign, &fuzz), Vec::<String>::new());
-
-    // Seeded violations: each must be reported.
-    let dropped = campaign.replacen("'[\"arenas_fuzz\", ", "'[", 1);
-    assert_ne!(dropped, campaign);
-    assert!(
-        campaign_violations(&dropped, &fuzz)
-            .iter()
-            .any(|v| v.contains("not kernel-fuzz.yml's targets"))
-    );
-    let added = fuzz.replacen("[arenas_fuzz, ", "[arenas_fuzz, extra_fuzz, ", 1);
-    assert_ne!(added, fuzz);
-    assert!(
-        campaign_violations(&campaign, &added)
-            .iter()
-            .any(|v| v.contains("not kernel-fuzz.yml's targets"))
-    );
-    let weekly = campaign.replacen("\"47 12 * * *\"", "\"47 12 * * 6\"", 1);
-    assert_ne!(weekly, campaign);
-    assert!(
-        campaign_violations(&weekly, &fuzz)
-            .iter()
-            .any(|v| v.contains("every night"))
-    );
-    // The run started by hand: each edit below breaks one thing a dispatch is promised.
-    for (from, to, said) in [
-        (
-            " || inputs.targets == 'all') && '[\"arenas_fuzz\"",
-            ") && '[\"arenas_fuzz\"",
-            "does not get the nightly list",
-        ),
-        (
-            " || inputs.targets == 'all') && '[1]'",
-            ") && '[1]'",
-            "not chosen by the condition",
-        ),
-        (
-            "        default: wide\n",
-            "        default: all\n",
-            "wide, the default",
-        ),
-        (
-            "        default: \"5\"\n",
-            "        default: \"1\"\n",
-            "not five by default",
-        ),
-        (
-            "          - \"5\"\n",
-            "          - \"6\"\n          - \"5\"\n",
-            "one to five by choice",
-        ),
-        (
-            "-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event_name }}\n",
-            "\n",
-            "shares a concurrency group",
-        ),
-        (
-            "  cancel-in-progress: false\n",
-            "  cancel-in-progress: true\n",
-            "can be cancelled",
-        ),
-        (
-            "        timeout-minutes: 330\n",
-            "        timeout-minutes: 300\n",
-            "under 20 to build",
-        ),
-        ("        timeout-minutes: 330\n", "", "under 20 to build"),
-        (
-            "    timeout-minutes: 360\n",
-            "    timeout-minutes: 330\n",
-            "under 20 for the uploads",
-        ),
-        (
-            "    timeout-minutes: 360\n",
-            "    timeout-minutes: 400\n",
-            "over six hours",
-        ),
-    ] {
-        let seeded = campaign.replacen(from, to, 1);
-        assert_ne!(seeded, campaign, "{from}");
-        assert!(
-            campaign_violations(&seeded, &fuzz)
-                .iter()
-                .any(|v| v.contains(said)),
-            "{said}"
-        );
-    }
 }
 
 #[cfg_attr(
@@ -867,4 +650,75 @@ fn the_matrix_has_every_runner_in_both_modes() {
             .iter()
             .any(|v| v.contains("own CPU"))
     );
+}
+
+/// Every workflow of the repository, by file name, as text.
+fn all_workflows() -> BTreeMap<String, String> {
+    std::fs::read_dir(root().join(WORKFLOWS))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| is_workflow(n))
+        .map(|n| {
+            let text = read(&format!("{WORKFLOWS}/{n}"));
+            (n, text)
+        })
+        .collect()
+}
+
+/// The workflows that run on a timer and may not: any with a `schedule:` trigger but
+/// [`HOUSEKEEPING`], and any kernel workflow with one whatever its name.
+fn timed_runs(workflows: &BTreeMap<String, String>) -> Vec<String> {
+    workflows
+        .iter()
+        .filter(|(name, text)| {
+            let timed = keys(&parse(text)["on"]).iter().any(|k| k == "schedule");
+            timed && (name.starts_with("kernel") || !HOUSEKEEPING.contains(&name.as_str()))
+        })
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn no_workflow_runs_on_a_timer() {
+    let workflows = all_workflows();
+    assert_eq!(timed_runs(&workflows), Vec::<String>::new());
+    // The housekeeping really is timed, so the check reads the trigger where it is.
+    for name in HOUSEKEEPING {
+        assert!(
+            keys(&parse(&workflows[name])["on"])
+                .iter()
+                .any(|k| k == "schedule"),
+            "{name}"
+        );
+    }
+
+    // Seeded violations: a kernel workflow and any other gaining a timer are each reported.
+    for file in [
+        "kernel.yml",
+        "kernel-quality.yml",
+        "kernel-certificates.yml",
+        "kernel-oracles.yml",
+        "kit.yml",
+    ] {
+        let mut w = workflows.clone();
+        let text = w.get_mut(file).unwrap();
+        assert!(text.contains("\non:\n"), "{file}");
+        *text = text.replacen(
+            "\non:\n",
+            "\non:\n  schedule:\n    - cron: \"17 13 * * *\"\n",
+            1,
+        );
+        assert_eq!(timed_runs(&w), [file.to_owned()], "{file}");
+    }
+    // A kernel workflow named like housekeeping is still a kernel workflow.
+    let mut w = workflows.clone();
+    w.insert(
+        "kernel-pieces.yml".to_owned(),
+        "on:\n  schedule:\n    - cron: \"17 13 * * *\"\njobs: {}\n".to_owned(),
+    );
+    assert_eq!(timed_runs(&w), ["kernel-pieces.yml".to_owned()]);
 }

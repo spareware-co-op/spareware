@@ -1,5 +1,22 @@
 //! What the in-process tests share: a whole server on the test store.
 
+// The server denies these outside tests (Cargo.toml). Tests may use them, as the geometry kernel's
+// do: clippy.toml's allow-*-in-tests settings don't reach helpers outside `#[test]` functions, and
+// a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    reason = "tests; the rules are for the server's own code"
+)]
+
 use construct_api::cloud::{POLICY, ProjectCommands, SCHEMA};
 use construct_model::geometry::Geometry;
 use kit_accounts::{Accounts, Cedar, SignInSettings};

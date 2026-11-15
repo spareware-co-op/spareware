@@ -1,5 +1,5 @@
 //! The canonical encoder's fuzz target (piece G86), as tests: `encoder_fuzz` is bolero's test
-//! mode, which cargo-bolero and `ClusterFuzzLite` select by name, and `encoder_seeded` the seeded
+//! mode, a property test on bytes bolero draws, and `encoder_seeded` the seeded
 //! leg that runs on every target, WebAssembly included (the crate README sets out the layout).
 //! Each hands the fuzzer's raw bytes to `geom_fuzz::encoder::harness`.
 //!
@@ -25,7 +25,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 5_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 5_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 5,000 cases in 0.203 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 49_000;
 
 /// The longest byte string the seeded leg draws; the harness reads all of it.
 const MAX_LEN: u16 = 1_500;

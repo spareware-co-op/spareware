@@ -18,6 +18,7 @@ use std::sync::Arc;
 const VERSION: u32 = 1;
 const NO_ACCESS: &str = "You don't have access to this.";
 
+/// The commands the orderer calls for a project's documents and folders, with the access checks before them.
 pub struct ProjectCommands<K: Kv, D: Decider> {
     kv: K,
     access: Arc<Access<K, D>>,
@@ -27,6 +28,7 @@ pub struct ProjectCommands<K: Kv, D: Decider> {
 }
 
 impl<K: Kv, D: Decider> ProjectCommands<K, D> {
+    /// The commands over this store and access, with claims that last `claim_ms` and new documents on `edition`.
     pub fn new(kv: K, access: Arc<Access<K, D>>, claim_ms: u64, edition: Edition) -> Self {
         Self {
             kv,

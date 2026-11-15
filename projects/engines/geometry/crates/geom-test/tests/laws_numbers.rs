@@ -22,8 +22,8 @@
 //!   irrational). So a round trip moves a map point by at most a commit, and gives a grid point
 //!   back unchanged wherever the doubles are finer than half a step.
 //!
-//! Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull requests run the
-//! fixed default seed and the nightly workflow a fresh one.
+//! Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; every run uses the
+//! fixed default seed, on every change the law reaches.
 
 #![allow(
     clippy::arithmetic_side_effects,
