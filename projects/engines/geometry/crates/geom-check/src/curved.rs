@@ -105,8 +105,8 @@ pub(crate) struct Cone {
     axis: V3,
     /// The radius at height 0.
     radius: f64,
-    /// The change of radius per unit of height: 0 for a cylinder.
-    slope: f64,
+    /// The change of radius per unit of height, enclosed: 0 for a cylinder.
+    slope: Interval,
 }
 
 /// A ring torus's data.
@@ -132,20 +132,25 @@ pub(crate) fn carrier(surface: &SurfaceKind) -> Option<Carrier> {
                 normal: cross(lift(a)?, lift(b)?)?,
             })
         }
+        // A cylinder's height is read from the point, h = w · n̂, never from its parameter v, so
+        // its axial factor s (which a similarity scales) does not enter.
         SurfaceKind::Cylinder(s) => Some(Carrier::Round(Cone {
             center: lift(s.center())?,
             axis: axis(&s.frame())?,
             radius: s.radius(),
-            slope: 0.0,
+            slope: at(0.0)?,
         })),
         SurfaceKind::Cone(s) => {
-            // S(u, v) = c + (r₀ + k·v)·e(u) + s·v·n̂: at height h = s·v the radius is r₀ + k·s·h.
+            // S(u, v) = c + (r₀ + k·v)·e(u) + s·v·n̂: the point at v is at height h = s·v, so its
+            // radius r₀ + k·v is r₀ + (k/s)·h. The factor s is ±1 as built, where k/s is k·s, but a
+            // similarity multiplies it by its scale (and k with it), and then only k/s is the
+            // slope. Enclosed: exact wherever the quotient is a double, as it is for s = ±1.
             let (radius, slope) = s.radius_and_slope();
             Some(Carrier::Round(Cone {
                 center: lift(s.center())?,
                 axis: axis(&s.frame())?,
                 radius,
-                slope: slope * s.axial_sign(),
+                slope: divide(at(slope)?, at(s.axial_sign())?)?,
             }))
         }
         SurfaceKind::Sphere(s) => Some(Carrier::Ball {
@@ -262,7 +267,7 @@ struct End {
 impl Cone {
     /// The radius at height `h`; `None` where it may be negative.
     fn radius_at(&self, h: Interval) -> Option<Interval> {
-        let r = plus(at(self.radius)?, times(at(self.slope)?, h)?)?;
+        let r = plus(at(self.radius)?, times(self.slope, h)?)?;
         if r.lo() < 0.0 {
             return None;
         }
@@ -482,8 +487,8 @@ fn polar(center: V3, axis: V3, q: V3) -> Option<(Interval, Interval)> {
 }
 
 /// √(1 + k²).
-fn slant(slope: f64) -> Option<Interval> {
-    tight::sqrt(plus(at(1.0)?, square(at(slope)?)?)?).ok()
+fn slant(slope: Interval) -> Option<Interval> {
+    tight::sqrt(plus(at(1.0)?, square(slope)?)?).ok()
 }
 
 /// The upper bound of a sum of enclosures.
