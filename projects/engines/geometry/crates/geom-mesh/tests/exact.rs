@@ -712,12 +712,14 @@ fn one_point_made_two_ways_is_refused() {
 #[cfg(not(target_family = "wasm"))]
 #[test]
 fn a_pool_changes_nothing() {
-    let heights: Vec<Vec<i64>> = (0..48)
-        .map(|y| (0..48).map(|x| 1 + (x * 7 + y * 13) % 101).collect())
+    // Natively 48 by 48 heights at every thread count; under Miri 24 by 24, still more faces than
+    // one block of the builder's parallel phases, at one thread count.
+    let side = sized(48, 24) as i64;
+    let heights: Vec<Vec<i64>> = (0..side)
+        .map(|y| (0..side).map(|x| 1 + (x * 7 + y * 13) % 101).collect())
         .collect();
     let (input, _) = prism(&heights, 256);
     let want = mesh(&input);
-    // Every thread count natively, one under Miri.
     let counts: &[usize] = if cfg!(miri) { &[3] } else { &[2, 3, 8] };
     for &threads in counts {
         let pool = miri::pool(threads);
