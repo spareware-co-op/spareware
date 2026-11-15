@@ -23,7 +23,7 @@ No agent acts on any of these, writes to anyone, or signs anything. The owner de
 | 32.9 | Who we write to | EMBER, Schmidt and McNeel now; the rest in a stated order | 11, 14, 16, 17, 24, 29 | Varies |
 | 32.10 | Revit truth data, and watching proprietary programs | Co-op models only; watching only checks our results against our own rules | 14, 28, 29 | G460, the Revit harness |
 | 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise Apache-2.0 (32.45); strict rules for outside data | 28, 29 | G97, the fixture format |
-| 32.12 | Pieces built ahead of the board: merge order, cost rises for correctness, goldens before the first edition | Merge in the board's order; accept a recorded rise; kernel owners approve goldens until the first Stable release | 23, 28, 30 | The next merge after G02 |
+| 32.12 | Pieces built ahead of the board: merge order, cost rises for correctness, goldens before the first edition | Merge in the board's order; accept a recorded rise; kernel owners approve goldens until the first Stable release (since 32.54, the golden store check reads each change's record in their place) | 23, 28, 30 | The next merge after G02 |
 
 The board (30.5) also turns into a piece every narrower question that chapters 6 to 29 leave to an owner. Each is decided in its own section below, under the owner's standing rule of 2026-10-27: "Research and choose the best options or use the research we have". The stored research comes first (`projects/kit/notes/G01-evidence/`, chapter 29), then the chapters the piece names, and fresh reading only where those are not enough; each section says which.
 
@@ -64,6 +64,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.45 | The project's licence is Apache-2.0 | Decided (owner, 2026-11-05): every file of the project is relicensed from MPL-2.0 to Apache-2.0, to match NVIDIA's USD BRep (SMLib) and solidcore, so code can move both ways; ported files keep their origin's licence as an `AND` operand | 29 | the licence fields, headers, NOTICE and checkers |
 | 32.49 | No patent searches | Decided (owner, 2026-11-13): no patent searches, and no work stops or waits for a patent, known or not; the board's patent pieces are removed | 11, 13, 16, 19, 29, 30, 31 | Nothing |
 | 32.51 | G484: shape identity | Decided 2026-11-14: the same shape is equal under a rotation and a move only, exact, names and the cutting of faces ignored, holes and cuts counted, mirror images reported apart (`MirrorOnly`, `mirror_id`); `ShapeScheme v1` hashed with SHA-256; about 1,120-bit integers and a `Wide<N>` greatest common divisor for three-plane corners, accepted into 6.2 on 32.29's conditions | 6, 8, 10, 30 | G483, shape identity |
+| 32.54 | The golden store check reads the store's record, not a review | Decided by the main session, 2026-11-15: a stored answer that moves passes only with exactly one new history record holding the old digest, a kind the golden allows (only `corpus` on a golden that covers operation versions), its piece and why; no review is read; releasing an edition is refused until G482 writes its rule; the main session's merge record names each moved answer | 28, 32 | Nothing |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -804,7 +805,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-dev.yml` | `native` | J: `geom-test/tests/dependency_rule.rs::seeded_violations_are_caught`; R: `geom-fuzz/tests/predicates.rs::bolero_fails_on_a_finding`, `geom-gen/tests/write_check.rs::a_hand_edited_output_fails_check`, `geom-test/tests/map_files.rs::the_binary_exits_0_1_and_2`, `geom-test/tests/scan_seeded.rs::a_seeded_file_is_found_with_its_file_and_line`, `geom-test/tests/ledger_seeded.rs::the_binary_exits_0_1_and_2` |
 | `kernel-dev.yml` | `wasm` | The tests of `native` on wasm32: a failing test fails it, and the checks they test are seeded under `native` |
 | `kernel-dev.yml` | `verus` | `trip verus` |
-| `kernel-golden.yml` | `store` | J: `geom-test/tests/attack_g19.rs::seeded_violations_of_the_real_tree_are_found`; R: `geom-test/tests/attack_g19.rs::golden_diff_holds_a_change_to_the_owner_rule_end_to_end` |
+| `kernel-golden.yml` | `store` | J: `geom-test/tests/attack_g19.rs::seeded_violations_of_the_real_tree_are_found`; R: `geom-test/tests/attack_g19.rs::golden_diff_holds_a_moved_answer_to_its_record_end_to_end` (renamed by decision 32.54, after the gate, when the record replaced the review) |
 | `kernel-golden.yml` | `fixtures` | J: `geom-test/tests/fixture_tool.rs::a_tree_that_breaks_a_rule_fails_its_check`; R: `geom-test/tests/fixture_tool.rs::diff_holds_a_pull_request_to_the_rules` |
 | `kernel-bench.yml` | `scope` | Not a gate: it decides which count jobs run, from the same paths as the workflow's trigger |
 | `kernel-bench.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
@@ -1066,3 +1067,25 @@ The price falls on Spare Construct, not the kernel. A copy rotated so that its c
 Why: one mark for two shapes cuts a wrong part, while two marks for one shape cost only a spare drawing. An exact comparison that answers `NotCompared` for whatever it cannot settle only ever errs the safe way, and the kernel's exact corners are what make it possible.
 
 **Changes:** this record; 6.2's list; 8.1 and 10.2; 30.4, 30.5 and 30.7, and `30-build-order.json` (G483, G484 and G485).
+
+## 32.54 The golden store check reads the store's record, not a review
+
+**Decided by the main session, 2026-11-15**, under the rule that every decision is the main session's, recorded with its reason.
+
+**What it is.** The job "Golden store" (`kernel-golden.yml`; `geom-test`'s `golden::diff`) asked for an approving review from someone other than the pull request's author whenever a stored answer moved, and for every other edit to an existing golden and every release of an edition. One account opens every pull request and no kernel owner reviews them, so that review never came: the check was red on every change that moved a stored answer, and the red carried no signal. What a reviewer would have read is the change's history record in the store, so the check now reads that record, all of it.
+
+**What the check requires now.**
+- Every stored answer that moves carries exactly one new history record in the store: the old digest (`sha256`), its `kind`, its `piece` and `why`, as #885's record on the replay corpus does.
+- The kind is one the store's rules allow for that golden (`Golden::allows`). A golden that covers operation versions records only `corpus` (its inputs or their encoding changed, no result did), because fixing a bug or improving a result makes a new operation version, a new golden beside the old (26.2, 28.13). A golden with no operation versions, which every golden is until the first Stable release, may record `bug`, `improvement` or `corpus`. The store's reader refuses a kind the golden does not allow anywhere in its history.
+- A move with no record, with two, with a record whose `sha256` is not the old digest, with a kind the golden does not allow, or with an empty piece or reason fails the check.
+- Everything else the check refused it still refuses: any change to a frozen edition; an edition removed, renamed or moved; a golden removed or its key changed; a record added without a move; history rewritten or removed; two open editions.
+- Releasing an edition, which also waited on a review, is refused in a pull request until the first Stable release (G482) writes the rule a release is held to: nothing a machine can check says yet what a release must hold, and a frozen edition never changes again.
+- An edit that moves no answer (where a golden is checked, the file it pins, what it covers), which also waited on a review, passes: `golden check`, in the same job, proves each golden is checked where the store says and each pinned file has the store's digest.
+- The job prints each moved answer with its record. The main session's merge record names each one; that part is the main session's, not the code's.
+- Every step of the job runs on a review as on the pull request itself, so a review's run gives the same answer. Before, a review's run skipped `golden check` and could show green beside the pull request's own result.
+
+The fixtures' job (`fixture diff`, 28.16) still asks for a kernel owner's review of a changed expectation; this decision does not change it.
+
+Why: the record is what a reviewer would have read, and the check now holds every part of it on every pull request, the same way each time. Nothing the old rule refused outright is accepted, two things it let through with a review (a release, and a record of a kind the golden's operation versions rule out) are now refused, and a red now means a record is missing or wrong.
+
+**Changes:** this record; 32.12's row in the first table; 28.13; 32.43's row for the job `store` (its end-to-end test renamed); the glossary's golden store; `kernel-golden.yml`'s job `store`; `geom-test`'s `golden::diff`, `golden::store` (`Golden::allows`, and each kind's name), the `golden` binary (no review options), the store's `about` text and `tests/attack_g19.rs`.

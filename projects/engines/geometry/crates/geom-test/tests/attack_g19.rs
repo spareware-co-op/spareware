@@ -428,7 +428,8 @@ fn a_run_that_does_not_prove_its_goldens_is_refused() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 2. A golden store keyed by edition, with the owner-approval rule for edits.
+// 2. A golden store keyed by edition, with the rule for edits: since decision 32.54, the record
+//    every moved answer carries, in place of a kernel owner's approval.
 // ---------------------------------------------------------------------------------------------
 
 /// Nothing ambiguous parses: every way to make the real store ambiguous or malformed is refused,
@@ -566,7 +567,9 @@ fn lookups_are_keyed_by_the_current_edition_and_operation_versions() {
 /// An edit to the store as JSON.
 type Edit = Box<dyn Fn(&mut Value)>;
 
-/// Every edit to the real store that the rule refuses is refused, whatever approval it has.
+/// Every edit to the real store that the rule refuses is refused: a planted move with no record,
+/// one whose record holds another digest than the old one, one whose record gives no reason, and
+/// every other refusal.
 #[test]
 fn the_refusals_hold_on_the_real_store() {
     let base_v = store_json();
@@ -619,19 +622,56 @@ fn the_refusals_hold_on_the_real_store() {
             "edition renamed",
             Box::new(|v| v["editions"][0]["edition"] = Value::from("first")),
         ),
+        (
+            "digest changed with a record that gives no reason",
+            Box::new(|v| {
+                let old = goldens(v)[1]["sha256"].clone();
+                goldens(v)[1]["history"] = serde_json::json!([{
+                    "sha256": old, "kind": "bug", "piece": "G1", "why": " "}]);
+                goldens(v)[1]["sha256"] = Value::from(fake('b'));
+            }),
+        ),
+        (
+            "edition released",
+            Box::new(|v| {
+                let editions = v["editions"].as_array_mut().unwrap();
+                let mut next = editions.last().unwrap().clone();
+                editions.last_mut().unwrap()["state"] = Value::from("frozen");
+                next["edition"] = Value::from("2027");
+                editions.push(next);
+            }),
+        ),
     ];
     for (name, f) in &refused {
-        // An edit that is not even a valid store is refused before any approval.
+        // An edit that is not even a valid store is refused before any diff: `golden diff` fails
+        // on a head store that does not parse.
         if let Ok(d) = classify(f.as_ref()) {
             assert!(!d.is_acceptable(), "{name} was acceptable:\n{d}");
+            assert!(d.moved.is_empty(), "{name} moved an answer:\n{d}");
         }
     }
+    // The planted moves name what is wrong.
+    let says = |f: &dyn Fn(&mut Value), what: &str| {
+        let d = classify(f).unwrap();
+        assert!(d.to_string().contains(what), "{d}");
+    };
+    says(
+        refused[0].1.as_ref(),
+        "without exactly one new history record",
+    );
+    says(refused[1].1.as_ref(), "not the old digest");
+    says(refused[9].1.as_ref(), "was released");
+    assert!(
+        classify(refused[8].1.as_ref()).is_err(),
+        "an empty reason parsed"
+    );
 }
 
-/// The edits to the real store that a kernel owner must approve say so and are not refused; a
-/// golden added needs ordinary review only; and once an edition is released, nothing in it changes.
+/// The planted move with a proper record passes, named with its record; an edit that moves no
+/// answer passes and is listed; a golden added passes; and once an edition is released, nothing
+/// in it changes.
 #[test]
-fn the_owner_rule_holds_on_the_real_store() {
+fn the_record_rule_holds_on_the_real_store() {
     let base_v = store_json();
     let base = parse(&base_v);
     let classify = |f: &dyn Fn(&mut Value)| -> Result<_, StoreError> {
@@ -639,16 +679,35 @@ fn the_owner_rule_holds_on_the_real_store() {
         f(&mut v);
         Ok(diff(Some(&base), &Store::parse(&v.to_string())?))
     };
-    let owner: Vec<(&str, Edit)> = vec![
+    // A move with its record: the old digest, a kind the golden allows, its piece and why.
+    let d = classify(&|v| {
+        let old = goldens(v)[1]["sha256"].clone();
+        goldens(v)[1]["history"] = serde_json::json!([{
+            "sha256": old, "kind": "improvement", "piece": "G999", "why": "w"}]);
+        goldens(v)[1]["sha256"] = Value::from(fake('b'));
+    })
+    .unwrap();
+    assert!(d.is_acceptable(), "{d}");
+    assert_eq!(d.moved.len(), 1, "{d}");
+    let m = &d.moved[0];
+    assert_eq!(m.key.1, base.current().unwrap().goldens[1].id);
+    assert_eq!(m.was, base.current().unwrap().goldens[1].sha256);
+    assert_eq!(m.now, fake('b'));
+    assert_eq!(
         (
-            "digest changed with its record",
-            Box::new(|v| {
-                let old = goldens(v)[1]["sha256"].clone();
-                goldens(v)[1]["history"] = serde_json::json!([{
-                    "sha256": old, "kind": "improvement", "piece": "G999", "why": "w"}]);
-                goldens(v)[1]["sha256"] = Value::from(fake('b'));
-            }),
+            m.record.kind,
+            m.record.piece.as_str(),
+            m.record.why.as_str()
         ),
+        (ChangeKind::Improvement, "G999", "w")
+    );
+    assert!(d.changed.is_empty() && d.added.is_empty(), "{d}");
+    assert!(
+        d.to_string().contains("recorded as improvement by G999: w"),
+        "{d}"
+    );
+    // Edits that move no answer.
+    let moves_nothing: Vec<(&str, Edit)> = vec![
         (
             "check moved",
             Box::new(|v| goldens(v)[1]["check"]["function"] = Value::from("another_test")),
@@ -667,23 +726,18 @@ fn the_owner_rule_holds_on_the_real_store() {
                 g["file"] = Value::from("projects/elsewhere/golden.txt");
             }),
         ),
-        (
-            "edition released",
-            Box::new(|v| {
-                let editions = v["editions"].as_array_mut().unwrap();
-                let mut next = editions.last().unwrap().clone();
-                editions.last_mut().unwrap()["state"] = Value::from("frozen");
-                next["edition"] = Value::from("2027");
-                editions.push(next);
-            }),
-        ),
     ];
-    for (name, f) in &owner {
+    for (name, f) in &moves_nothing {
         let d = classify(f.as_ref()).unwrap();
         assert!(d.is_acceptable(), "{name} was refused:\n{d}");
-        assert!(d.needs_approval(), "{name} needs no approval:\n{d}");
+        assert!(d.moved.is_empty(), "{name} moved an answer:\n{d}");
+        assert_eq!(d.changed.len(), 1, "{name}:\n{d}");
+        assert!(
+            d.to_string().contains("no stored answer moved"),
+            "{name}:\n{d}"
+        );
     }
-    // Ordinary review: a golden added.
+    // A golden added.
     let d = classify(&|v| {
         let mut g = goldens(v)[1].clone();
         g["id"] = Value::from("geom-num/new-corpus");
@@ -691,7 +745,10 @@ fn the_owner_rule_holds_on_the_real_store() {
         goldens(v).push(g);
     })
     .unwrap();
-    assert!(d.is_acceptable() && !d.needs_approval(), "{d}");
+    assert!(
+        d.is_acceptable() && d.moved.is_empty() && d.changed.is_empty(),
+        "{d}"
+    );
     assert_eq!(d.added.len(), 1);
     // And a frozen edition, once released, never changes.
     let mut released_v = base_v.clone();
@@ -804,28 +861,45 @@ fn approvals_that_must_not_count_do_not() {
     );
 }
 
-/// The store's workflow holds pull requests to the rule: it runs on every review as well as every
-/// pull request, reads the reviews with a read-only token, runs `golden check` and `golden diff`
-/// with the reviews, the head commit and the author, and pins the same toolchain.
+/// The store's workflow holds pull requests to the record rule: its job `store` runs `golden
+/// check` and `golden diff` against the merge's base, reads no review (decision 32.54), and skips
+/// no step on a review, so a review's run of the job gives the pull request's own answer; the
+/// workflow's token only reads, and the fixtures' job keeps its review rule.
 #[test]
-fn kernel_golden_yml_runs_the_check_and_the_approval_rule() {
+fn kernel_golden_yml_runs_the_check_and_the_record_rule() {
     let yml = GOLDEN_YML.replace("\r\n", "\n");
+    let store = yml
+        .split_once("\n  store:\n")
+        .and_then(|(_, rest)| rest.split_once("\n  fixtures:\n"))
+        .map(|(store, _)| store)
+        .expect("kernel-golden.yml has the jobs store and fixtures, in that order");
+    for needle in [
+        "run: cargo run --locked -p geom-test --bin golden -- check\n",
+        "run: cargo run --locked -p geom-test --bin golden -- diff --base \"$BASE\"\n",
+        "if: github.event_name != 'push' && steps.edits.outputs.store == 'edited'\n",
+        "BASE: ${{ steps.edits.outputs.base }}\n",
+        "BASE=$(git rev-parse HEAD^1)\n",
+        "fetch-depth: 0\n",
+        "persist-credentials: false\n",
+        "toolchain: ${{ env.RUST_TOOLCHAIN }}\n",
+    ] {
+        assert!(store.contains(needle), "the job store lacks {needle:?}");
+    }
+    for gone in [
+        "pull_request_review",
+        "reviews",
+        "--permissions",
+        "--head",
+        "--author",
+        "GH_TOKEN",
+    ] {
+        assert!(!store.contains(gone), "the job store still has {gone:?}");
+    }
+    // The fixtures' own review rule, and the trigger it needs.
     for needle in [
         "  pull_request_review:\n    types: [submitted, edited, dismissed]\n",
         "permissions:\n  contents: read\n  pull-requests: read\n",
-        "run: cargo run --locked -p geom-test --bin golden -- check\n",
-        "cargo run --locked -p geom-test --bin golden -- diff\n",
-        "--base \"$BASE\"\n",
-        "BASE: ${{ steps.edits.outputs.base }}\n",
-        "BASE=$(git rev-parse HEAD^1)\n",
         "--reviews \"$RUNNER_TEMP/reviews.json\"\n",
-        "--permissions \"$RUNNER_TEMP/permissions.json\"\n",
-        "--head \"$HEAD_SHA\"\n",
-        "--author \"$AUTHOR\"\n",
-        "HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n",
-        "AUTHOR: ${{ github.event.pull_request.user.login }}\n",
-        "fetch-depth: 0\n",
-        "persist-credentials: false\n",
     ] {
         assert!(yml.contains(needle), "kernel-golden.yml lacks {needle:?}");
     }
@@ -1144,17 +1218,20 @@ mod native {
             vec![],
             vec!["check", "--rooot", "x"],
             vec!["diff"],
+            // The review options are gone with the review rule (decision 32.54).
+            vec!["diff", "--base", "HEAD", "--reviews", "reviews.json"],
+            vec!["diff", "--base", "HEAD", "--head", "h", "--author", "a"],
         ] {
             let out = golden_bin().args(&bad).output().unwrap();
             assert_eq!(out.status.code(), Some(2), "{bad:?}");
         }
     }
 
-    /// `golden diff` end to end in a scratch repository: an unchanged store passes, an added golden
-    /// passes, a recorded change fails without an owner's approval and passes with one on the head
-    /// commit, and an unrecorded change fails whatever the reviews say.
+    /// `golden diff` end to end in a scratch repository: an unchanged store passes; a planted move
+    /// with a proper record passes, with no review, and prints the moved answer with its record; a
+    /// planted move with no record fails, and so does one whose record holds a wrong old digest.
     #[test]
-    fn golden_diff_holds_a_change_to_the_owner_rule_end_to_end() {
+    fn golden_diff_holds_a_moved_answer_to_its_record_end_to_end() {
         let dir = std::env::temp_dir().join(format!("geom-test-attack-g19-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store_path = STORE_PATH.iter().fold(dir.clone(), |p, c| p.join(c));
@@ -1179,60 +1256,55 @@ mod native {
         git(&["add", "-A"]);
         git(&["commit", "-q", "-m", "base"]);
         let base = git(&["rev-parse", "HEAD"]).trim().to_owned();
-        let diff_cmd = |extra: &[&str]| {
-            let mut c = Command::new(env!("CARGO_BIN_EXE_golden"));
-            c.args(["diff", "--base", &base, "--root"])
+        let diff_cmd = || {
+            Command::new(env!("CARGO_BIN_EXE_golden"))
+                .args(["diff", "--base", &base, "--root"])
                 .arg(&dir)
-                .args(extra);
-            c.output().unwrap()
+                .output()
+                .unwrap()
         };
-        assert!(diff_cmd(&[]).status.success(), "unchanged store");
-        // A recorded change to the first golden.
+        let unchanged = diff_cmd();
+        assert!(unchanged.status.success(), "unchanged store");
+        assert!(String::from_utf8_lossy(&unchanged.stdout).contains("no stored answer moved"));
+        // The second golden moved, with the record `history` gives it.
+        let plant = |history: serde_json::Value| {
+            let mut v: serde_json::Value = serde_json::from_str(&base_text).unwrap();
+            let g = &mut super::goldens(&mut v)[1];
+            g["history"] = history;
+            g["sha256"] = serde_json::Value::from(super::fake('b'));
+            std::fs::write(&store_path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+        };
         let mut v: serde_json::Value = serde_json::from_str(&base_text).unwrap();
-        let first = &mut super::goldens(&mut v)[1];
-        let old = first["sha256"].clone();
-        first["history"] = serde_json::json!([{
-            "sha256": old, "kind": "improvement", "piece": "G999", "why": "attack"}]);
-        first["sha256"] = serde_json::Value::from(super::fake('b'));
-        std::fs::write(&store_path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
-        let out = diff_cmd(&[]);
+        let old = super::goldens(&mut v)[1]["sha256"].clone();
+        // A proper record: passes with no review, and names the moved answer and its record.
+        plant(serde_json::json!([{
+            "sha256": old, "kind": "improvement", "piece": "G999", "why": "attack"}]));
+        let out = diff_cmd();
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        assert!(out.status.success(), "a recorded move failed:\n{text}");
+        assert!(
+            text.contains(&format!(
+                "-> {}; recorded as improvement by G999: attack",
+                super::fake('b')
+            )),
+            "{text}"
+        );
+        assert!(text.contains("carries its record"), "{text}");
+        // No record.
+        plant(serde_json::json!([]));
+        let out = diff_cmd();
+        assert_eq!(out.status.code(), Some(1), "a move with no record passed");
+        assert!(String::from_utf8_lossy(&out.stdout).contains("refused"));
+        // A record whose digest is not the old one.
+        plant(serde_json::json!([{
+            "sha256": super::fake('c'), "kind": "bug", "piece": "G999", "why": "attack"}]));
+        let out = diff_cmd();
         assert_eq!(
             out.status.code(),
             Some(1),
-            "a change without reviews passed"
+            "a record of a wrong old digest passed"
         );
-        let reviews = dir.join("reviews.json");
-        let write_reviews = |login: &str, commit: &str, association: &str| {
-            let r = serde_json::json!([{"user": {"login": login}, "state": "APPROVED",
-                "commit_id": commit, "author_association": association}]);
-            std::fs::write(&reviews, r.to_string()).unwrap();
-        };
-        let with_reviews = |head: &str| {
-            let r = reviews.to_str().unwrap().to_owned();
-            diff_cmd(&["--reviews", &r, "--head", head, "--author", "author"])
-        };
-        write_reviews("owner", "headsha", "MEMBER");
-        assert!(
-            with_reviews("headsha").status.success(),
-            "an owner's approval did not pass"
-        );
-        assert_eq!(
-            with_reviews("newersha").status.code(),
-            Some(1),
-            "a stale approval passed"
-        );
-        write_reviews("author", "headsha", "OWNER");
-        assert_eq!(
-            with_reviews("headsha").status.code(),
-            Some(1),
-            "self-approval passed"
-        );
-        // An unrecorded change is refused whatever the reviews say.
-        let mut v: serde_json::Value = serde_json::from_str(&base_text).unwrap();
-        super::goldens(&mut v)[1]["sha256"] = serde_json::Value::from(super::fake('b'));
-        std::fs::write(&store_path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
-        write_reviews("owner", "headsha", "MEMBER");
-        assert_eq!(with_reviews("headsha").status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&out.stdout).contains("not the old digest"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

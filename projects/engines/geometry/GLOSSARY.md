@@ -433,7 +433,7 @@ How to read an entry:
 
 **Golden hash** (also: golden digest, golden): The recorded SHA-256 of a canonical output, which every target must reproduce (28.13).
 
-**Golden store**: Where golden hashes are kept, keyed by edition and operation version, with an owner's approval needed to change one (piece G19).
+**Golden store**: Where golden hashes are kept, keyed by edition and operation version, with a history record (the old hash, the kind of change, the piece and why) needed to change one (piece G19; decision 32.54).
 
 **Golub-Kahan SVD**: A method for the singular value decomposition by bidiagonalisation (piece G50).
 

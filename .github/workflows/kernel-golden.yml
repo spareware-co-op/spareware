@@ -6,27 +6,30 @@ name: Kernel goldens
 # kernel.yml runs every golden of the store on every target and build mode (`golden run`); this
 # workflow holds the store to its rules:
 #
-# - `golden check`, on every pull request and push that touches the kernel: every golden is checked
-#   where the store says (its test function exists and calls golden::check with the golden's id),
-#   every golden check in the kernel's code is in the store, no golden digest is kept outside it,
-#   and every pinned golden file (geom-bench's src/golden.txt) still has the store's digest.
-# - `golden diff`, on every pull request and on every review of one: the store at the pull
-#   request's base against the store it would merge. A change no approval can make fails outright:
-#   any change to a frozen edition, a removed or renamed edition, a removed golden, a changed digest
-#   without exactly one new history record holding the old digest, its kind (bug, improvement or
-#   corpus), its piece and why, or rewritten history. Any other edit to an existing golden, and
-#   releasing an edition, fails until a kernel owner approves the pull request's current head
-#   commit: an approving review on that commit from a reviewer GitHub reports as an owner or member
-#   of the organisation, or with write, maintain or admin permission on the repository, who is not
-#   the author, with no such reviewer's latest review asking for changes (geom-test's
-#   src/golden/diff.rs). A review re-runs this job, so the approval turns it green; a later push
-#   needs a fresh approval. Adding goldens needs only ordinary review. .github/CODEOWNERS asks
-#   @spareware-co-op/owners to review everything under projects/engines/, and branch protection's
-#   "Require review from Code Owners" (an owner's setting on GitHub) makes that team the only one
-#   whose approval counts.
+# - `golden check`, on every pull request, review and push that touches the kernel: every golden is
+#   checked where the store says (its test function exists and calls golden::check with the
+#   golden's id), every golden check in the kernel's code is in the store, no golden digest is kept
+#   outside it, and every pinned golden file (geom-bench's src/golden.txt) still has the store's
+#   digest.
+# - `golden diff`, on every pull request that edits the store, and on every review of one: the
+#   store at the pull request's base against the store it would merge, held to the store's own
+#   record (decision 32.54; geom-test's src/golden/diff.rs). Every stored answer that moves carries
+#   exactly one new history record in the store: the old digest (`sha256`), its `kind`, one the
+#   golden allows (bug, improvement or corpus; only corpus on a golden that covers operation
+#   versions), its `piece` and `why`. A move with no record, a record whose digest is not the old
+#   one, a kind the golden does not allow or an empty reason fails, and so do any change to a
+#   frozen edition, a removed or renamed edition, a removed golden, rewritten history and releasing
+#   an edition, until the first Stable release (G482) writes the rule a release is held to. The
+#   step prints each moved answer with its record, and the main session's merge record names each
+#   one. Adding goldens, and an edit that moves no answer (where a golden is checked, the file it
+#   pins, what it covers), pass: `golden check` holds those to the repository. No review is read:
+#   one account opens every pull request and no kernel owner reviews them, so the approval this
+#   step used to wait for never came. A review re-runs the job (the trigger is the fixtures job's)
+#   and gets the same answer as the pull request's own run.
 #
-# Before the first kernel edition the store holds one open edition, "pre-edition", and every edit
-# to a golden is approved by a kernel owner in its pull request (chapter 32.12, recommendation A).
+# Before the first kernel edition the store holds one open edition, "pre-edition", and every change
+# to a golden is recorded in its pull request (chapter 32.12, recommendation A; decision 32.54).
+# The fixtures' job below still asks for a kernel owner's approval of a changed expectation.
 #
 # The second job holds the fixtures (chapter 28.16; piece G97) to their rules, on the same terms:
 #
@@ -96,7 +99,6 @@ jobs:
           persist-credentials: false
           # The base commit's store is read with `git show`, so the history is fetched.
           fetch-depth: 0
-      # A review of a pull request that does not touch the store has nothing to approve here.
       # The base compared with is the one the merge would land on: for a pull request (and a
       # review of one) the checkout is GitHub's test merge commit, refs/pull/<n>/merge, whose
       # first parent is the base branch's tip it was made on, so the diff is exactly what merging
@@ -126,8 +128,9 @@ jobs:
             git diff --stat "$BASE" HEAD -- "$store"
             echo "store=edited" >> "$GITHUB_OUTPUT"
           fi
+      # Every step runs on a review as on the pull request itself, so a review's run of this job
+      # gives the same answer and can never turn it green by skipping a step.
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        if: github.event_name != 'pull_request_review' || steps.edits.outputs.store == 'edited'
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -135,38 +138,13 @@ jobs:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-        if: github.event_name != 'pull_request_review' || steps.edits.outputs.store == 'edited'
       - name: The store against the repository
-        if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin golden -- check
-      - name: The pull request's reviews and its reviewers' permissions
-        if: github.event_name != 'push' && steps.edits.outputs.store == 'edited'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" | jq -s 'add // []' > "$RUNNER_TEMP/reviews.json"
-          echo '{}' > "$RUNNER_TEMP/permissions.json"
-          for login in $(jq -r '.[] | select(.user != null) | .user.login' "$RUNNER_TEMP/reviews.json" | sort -u); do
-            permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" --jq .permission 2>/dev/null || echo none)
-            jq --arg login "$login" --arg permission "$permission" '. + {($login): $permission}' "$RUNNER_TEMP/permissions.json" > "$RUNNER_TEMP/permissions.next"
-            mv "$RUNNER_TEMP/permissions.next" "$RUNNER_TEMP/permissions.json"
-          done
-          jq -c '[.[] | {user: .user.login, state, commit_id, author_association}]' "$RUNNER_TEMP/reviews.json"
-          cat "$RUNNER_TEMP/permissions.json"
-      - name: Edits to the store, and a kernel owner's approval where one is needed
+      - name: Every moved answer carries its record in the store
         if: github.event_name != 'push' && steps.edits.outputs.store == 'edited'
         env:
           BASE: ${{ steps.edits.outputs.base }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
-        run: >-
-          cargo run --locked -p geom-test --bin golden -- diff
-          --base "$BASE"
-          --reviews "$RUNNER_TEMP/reviews.json"
-          --permissions "$RUNNER_TEMP/permissions.json"
-          --head "$HEAD_SHA"
-          --author "$AUTHOR"
+        run: cargo run --locked -p geom-test --bin golden -- diff --base "$BASE"
 
   fixtures:
     name: Fixtures
