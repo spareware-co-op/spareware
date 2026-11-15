@@ -156,8 +156,9 @@ fn solids_off_the_grid_agree_with_their_planes() {
         }
     };
     let (mut inside, mut on) = (0, 0);
-    // Every point natively; every third along each axis under Miri.
-    let stride = sized(1, 3);
+    // Every point natively; under Miri a quarter of them, those whose coordinates sum to a
+    // multiple of 4, which keeps points on every face (a stride along each axis would miss them).
+    let keep = sized(1, 4) as i64;
     for (a, b) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
         for by in 0..3 {
             let planes = leaning(a, b, by);
@@ -174,9 +175,9 @@ fn solids_off_the_grid_agree_with_their_planes() {
             ];
             let m = mesh(&hexahedron(corners, &planes));
             let c = classifier(&m);
-            for &x in span(by, 0).iter().step_by(stride) {
-                for &y in span(by, 1).iter().step_by(stride) {
-                    for &z in span(by, 2).iter().step_by(stride) {
+            for &x in &span(by, 0) {
+                for &y in &span(by, 1) {
+                    for &z in span(by, 2).iter().filter(|&&z| (x + y + z) % keep == 0) {
                         let q = p(x, y, z);
                         let want = against_planes(&planes, q);
                         assert_eq!(locate(&c, q), want, "{a} {b} {by} {q:?}");
@@ -190,7 +191,8 @@ fn solids_off_the_grid_agree_with_their_planes() {
             }
         }
     }
-    let each = 1000 / stride.pow(3);
+    // Natively over 1,000 of each; under Miri over an eighth of that.
+    let each = if keep == 1 { 1000 } else { 1000 / (2 * keep) };
     assert!(inside > each && on > each, "{inside} {on}");
 }
 
