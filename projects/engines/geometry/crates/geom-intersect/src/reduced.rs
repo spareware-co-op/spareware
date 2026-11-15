@@ -21,6 +21,13 @@
 //! - **The kind is kept.** Lines stay lines, a circle maps to a circle where the map is a turn and to
 //!   an ellipse otherwise, conics stay conics and NURBS stay NURBS.
 //! - **Whole turns.** A torus or revolution of a part of a turn is `None`, for the general paths.
+//! - **Where the surface stands.** An extrusion or revolution keeps its shape as built and a
+//!   placement c + L·x that a transform moves (`geom-surface`'s swept kinds), so each case reads it
+//!   rebuilt in place first, the same surface on the same parameters: an extrusion's profile and
+//!   direction moved by any L, a revolution's profile and axis by an L that is exactly a
+//!   similarity, each moved datum exact (a transform stating no rounding). Any other placement is
+//!   `None`, never read as if unmoved (issue 917: a wall moved by x ↦ (3x, 3y, −3z) met a cylinder
+//!   moved with it in no lines).
 //!
 //! Method: the rows of chapter 12.7
 //! (`projects/engines/geometry/architecture/12-intersections.md`). Villarceau's circles: a plane
@@ -45,11 +52,13 @@
     reason = "the names are the chapter's: n a plane's normal, e an axis, d a direction, r a radius"
 )]
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use geom_curve::{Axes, Basis, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola};
-use geom_curve::{ParamCurve, Trimmed, tight};
+use geom_curve::{CurveError, ParamCurve, Trimmed, tight};
+use geom_math::{Transform, TypedTransform};
 use geom_num::grid::Steps;
 use geom_num::interval::Interval;
 use geom_num::{Sign, quadric};
@@ -202,37 +211,210 @@ fn to_half_plane(on: &Axis, at: Vector) -> Result<Option<Affine<2>>, IntersectEr
     Ok(Some(Affine::onto(on.at, [out, on.along])?))
 }
 
-/// A surface of revolution's axis.
+/// The map to the half-plane of `on` that holds the profile `kind`, read at its middle, if its
+/// ends lie in that plane too: how far each stands from it along the plane's normal holds zero.
+fn half_plane_of(on: &Axis, kind: &CurveKind<3>) -> Result<Option<Affine<2>>, IntersectError> {
+    let (lo, hi) = finite(kind)?;
+    let middle_of = lift(kind.point(lo * 0.5 + hi * 0.5, geom_nurbs::Limit::FromRight)?)?;
+    let Some(map) = to_half_plane(on, middle_of)? else {
+        return Ok(None);
+    };
+    for t in [lo, hi] {
+        let at = lift(kind.point(t, geom_nurbs::Limit::FromRight)?)?;
+        if !map.leaves(at, on.at)?.contains(0.0) {
+            return Ok(None);
+        }
+    }
+    Ok(Some(map))
+}
+
+/// The linear part of a swept surface's placement as built.
+const IDENTITY: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+/// L·v + t, each entry exactly, or `None` where one is not a double.
+fn exact_image(
+    l: [[f64; 3]; 3],
+    v: [f64; 3],
+    t: [f64; 3],
+) -> Result<Option<[f64; 3]>, IntersectError> {
+    let [x, y, z] = v;
+    let mut out = [0.0; 3];
+    for ((slot, [a, b, c]), shift) in out.iter_mut().zip(l).zip(t) {
+        let first = tight::mul(point(a)?, point(x)?)?;
+        let second = tight::mul(point(b)?, point(y)?)?;
+        let third = tight::mul(point(c)?, point(z)?)?;
+        let sum = tight::add(
+            tight::add(tight::add(first, second)?, third)?,
+            point(shift)?,
+        )?;
+        if sum.lo() != sum.hi() {
+            return Ok(None);
+        }
+        *slot = sum.lo();
+    }
+    Ok(Some(out))
+}
+
+/// `profile` under x ↦ L·x + t, exactly: `None` where its transform states a rounding, or cannot
+/// take L.
+fn profile_moved(
+    profile: &Trimmed<3>,
+    l: [[f64; 3]; 3],
+    t: [f64; 3],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Trimmed<3>>, IntersectError> {
+    let [[a, b, c], [d, e, f], [g, h, i]] = l;
+    let [x, y, z] = t;
+    let rows = [[a, b, c, x], [d, e, f, y], [g, h, i, z]];
+    let transform = TypedTransform::from(Transform::from_rows(rows)?);
+    let moved = match ParamCurve::transformed(profile, &transform, meter) {
+        Ok(moved) => moved,
+        Err(CurveError::Degenerate | CurveError::Unbounded) => return Ok(None),
+        Err(other) => return Err(other.into()),
+    };
+    if moved.deviation != 0.0 {
+        return Ok(None);
+    }
+    // A trimmed curve's image is a trimmed curve, on the same interval.
+    let CurveKind::Trimmed(image) = moved.value else {
+        return Err(IntersectError::Internal);
+    };
+    Ok(Some(image))
+}
+
+/// An extrusion where it stands. Its placement c + L·x moves P(u) + v·d to (c + L·P(u)) + v·L·d,
+/// the extrusion of the moved profile along L·d on the same parameters, for any L; `None` where
+/// those are not doubles exactly. As built (c = 0, L the identity) it is itself.
+fn extrusion_in_place<'x>(
+    x: &'x Extrusion,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Cow<'x, Extrusion>>, IntersectError> {
+    let (c, l) = x.placement();
+    if c == [0.0; 3] && l == IDENTITY {
+        return Ok(Some(Cow::Borrowed(x)));
+    }
+    let (profile, d) = x.shape()?;
+    let (Some(profile), Some(d)) = (
+        profile_moved(profile, l, c, meter)?,
+        exact_image(l, d, [0.0; 3])?,
+    ) else {
+        return Ok(None);
+    };
+    let (_, along) = ParamSurface::domain(x);
+    Ok(Some(Cow::Owned(Extrusion::new(profile, d, along)?)))
+}
+
+/// Whether L is exactly a similarity, λ times an orthogonal matrix: its rows square to one another
+/// and of one length, not zero.
+fn similarity(l: [[f64; 3]; 3]) -> bool {
+    let [p, q, r] = l;
+    let as_long = |a: [f64; 3], b: [f64; 3]| {
+        let ([x, y, z], [e, f, g]) = (a, b);
+        sign_of(&[(x, x), (y, y), (z, z), (-e, e), (-f, f), (-g, g)]) == Sign::Zero
+    };
+    sign_along(p, p) == Sign::Positive
+        && sign_along(p, q) == Sign::Zero
+        && sign_along(p, r) == Sign::Zero
+        && sign_along(q, r) == Sign::Zero
+        && as_long(p, q)
+        && as_long(p, r)
+}
+
+/// Whether the similarity L mirrors. Its rows ρ₀, ρ₁, ρ₂ are λ times those of an orthogonal Q, so
+/// ρ₁ × ρ₂ = λ·det Q·ρ₀: det Q has the sign of an entry of ρ₁ × ρ₂ over that of ρ₀ where that is
+/// not zero, each entry of the cross product the exact sign of a difference of two products.
+fn mirrors(l: [[f64; 3]; 3]) -> bool {
+    let [p, [a, b, c], [e, f, g]] = l;
+    let cross = [
+        sign_of(&[(b, g), (-c, f)]),
+        sign_of(&[(c, e), (-a, g)]),
+        sign_of(&[(a, f), (-b, e)]),
+    ];
+    let Some((sign, x)) = cross.into_iter().zip(p).find(|(_, x)| *x != 0.0) else {
+        return false;
+    };
+    (sign == Sign::Positive) != (x > 0.0)
+}
+
+/// A surface of revolution where it stands. Its placement c + L·x is a surface of revolution only
+/// for L a similarity, about the axis through c along L·n̂: with w = P − a turned about n̂, L
+/// turns L·w about m̂ = ±L·n̂/|L·n̂|, + where L keeps the sense and − where it mirrors
+/// (L·(n̂ × w) = m̂ × L·w), so it is the revolution of the profile c + L·(P − a) about (c, m̂) on
+/// the same parameters. `None` for any other L, or where those data are not doubles exactly. As
+/// built (c = a, L the identity) it is itself.
+fn revolution_in_place<'r>(
+    r: &'r Revolution,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Cow<'r, Revolution>>, IntersectError> {
+    let (c, l) = r.placement();
+    let (profile, a, frame) = r.shape()?;
+    if c == a && l == IDENTITY {
+        return Ok(Some(Cow::Borrowed(r)));
+    }
+    if !similarity(l) {
+        return Ok(None);
+    }
+    let (Some(shift), Some(normal), Some(x)) = (
+        exact_image(l, a.map(|v| -v), c)?,
+        exact_image(l, frame.normal(), [0.0; 3])?,
+        exact_image(l, frame.x(), [0.0; 3])?,
+    ) else {
+        return Ok(None);
+    };
+    let Some(profile) = profile_moved(profile, l, shift, meter)? else {
+        return Ok(None);
+    };
+    let normal = if mirrors(l) {
+        normal.map(|v| -v)
+    } else {
+        normal
+    };
+    let (angles, _) = ParamSurface::domain(r);
+    let placed = Revolution::new(profile, c, Frame::new(x, normal)?, angles)?;
+    Ok(Some(Cow::Owned(placed)))
+}
+
+/// `s` where it stands: an extrusion or surface of revolution with its placement carried into its
+/// shape, any other kind as it is; `None` where that cannot be done exactly.
+fn in_place<'s>(
+    s: &'s SurfaceKind,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Cow<'s, SurfaceKind>>, IntersectError> {
+    Ok(match s {
+        SurfaceKind::Extrusion(x) => extrusion_in_place(x, meter)?.map(|placed| match placed {
+            Cow::Borrowed(_) => Cow::Borrowed(s),
+            Cow::Owned(x) => Cow::Owned(SurfaceKind::Extrusion(x)),
+        }),
+        SurfaceKind::Revolution(x) => revolution_in_place(x, meter)?.map(|placed| match placed {
+            Cow::Borrowed(_) => Cow::Borrowed(s),
+            Cow::Owned(x) => Cow::Owned(SurfaceKind::Revolution(x)),
+        }),
+        _ => Some(Cow::Borrowed(s)),
+    })
+}
+
+/// A surface of revolution's axis, of one [`revolution_in_place`] gave: the shape is as built.
 fn revolution_axis(r: &Revolution) -> Result<Axis, IntersectError> {
     let (_, a, frame) = r.shape()?;
     axis(a, &frame, 1.0)
 }
 
-/// The profile of `r` in the half-plane of its axis, if it lies in one.
+/// The profile of `r` in the half-plane of its axis, if it lies in one: of a revolution
+/// [`revolution_in_place`] gave.
 fn profile_meridian(r: &Revolution) -> Result<Option<Meridians>, IntersectError> {
     let (profile, ..) = r.shape()?;
     let on = revolution_axis(r)?;
     let Some(kind) = untrimmed(profile)? else {
         return Ok(None);
     };
-    let (lo, hi) = finite(&kind)?;
-    let middle_of = lift(kind.point(lo * 0.5 + hi * 0.5, geom_nurbs::Limit::FromRight)?)?;
-    let Some(map) = to_half_plane(&on, middle_of)? else {
+    let Some(map) = half_plane_of(&on, &kind)? else {
         return Ok(None);
     };
-    // Every point of the profile must stay on the half-plane: its ends and middle are read, and
-    // the kind's own data by the map's image, whose reach counts what leaves the plane.
-    for t in [lo, hi] {
-        let at = lift(kind.point(t, geom_nurbs::Limit::FromRight)?)?;
-        let [_, _, off] = map.leaves(at)?;
-        if !off.contains(0.0) {
-            return Ok(None);
-        }
-    }
     Ok(map.image(&kind)?.map(|(curve, _)| alloc::vec![curve]))
 }
 
-/// `s`'s meridian curves about `on`, if it stands square to the axis or about it.
+/// `s`'s meridian curves about `on`, if it stands square to the axis or about it: of a surface
+/// [`in_place`] gave.
 fn meridians(
     s: &SurfaceKind,
     on: &Axis,
@@ -487,11 +669,14 @@ pub(crate) fn plane_revolution(
     b: &Revolution,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Vec<Piece>>, IntersectError> {
-    let surface = SurfaceKind::Revolution(b.clone());
+    let Some(b) = revolution_in_place(b, meter)? else {
+        return Ok(None);
+    };
+    let surface = SurfaceKind::Revolution(b.as_ref().clone());
     if !whole_turn(&surface) {
         return Ok(None);
     }
-    let on = revolution_axis(b)?;
+    let on = revolution_axis(&b)?;
     let (profile, at, frame) = b.shape()?;
     let e = frame.normal();
     if square_to(a, e) {
@@ -515,9 +700,8 @@ pub(crate) fn plane_revolution(
     let Some(kind) = untrimmed(profile)? else {
         return Ok(None);
     };
-    let (lo, hi) = finite(&kind)?;
-    let middle_of = lift(kind.point(lo * 0.5 + hi * 0.5, geom_nurbs::Limit::FromRight)?)?;
-    let Some(flat) = to_half_plane(&on, middle_of)? else {
+    // A profile off a half-plane of the axis sweeps no copies of itself.
+    let Some(flat) = half_plane_of(&on, &kind)? else {
         return Ok(None);
     };
     // Turn the half-plane of the profile onto each half of the plane.
@@ -544,13 +728,16 @@ pub(crate) fn about_revolution(
     b: &Revolution,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Vec<Piece>>, IntersectError> {
-    let surface = SurfaceKind::Revolution(b.clone());
+    let (Some(a), Some(b)) = (in_place(a, meter)?, revolution_in_place(b, meter)?) else {
+        return Ok(None);
+    };
+    let surface = SurfaceKind::Revolution(b.as_ref().clone());
     if !whole_turn(&surface) {
         return Ok(None);
     }
-    let on = revolution_axis(b)?;
+    let on = revolution_axis(&b)?;
     let (_, at, frame) = b.shape()?;
-    about_one_axis(a, &surface, &on, frame.normal(), at, meter)
+    about_one_axis(&a, &surface, &on, frame.normal(), at, meter)
 }
 
 /// The plane through `at` of `p`'s directions, far past any surface.
@@ -680,8 +867,11 @@ pub(crate) fn plane_extrusion(
     b: &Extrusion,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Vec<Piece>>, IntersectError> {
+    let Some(b) = extrusion_in_place(b, meter)? else {
+        return Ok(None);
+    };
     let (profile, d) = b.shape()?;
-    let (_, span) = ParamSurface::domain(b);
+    let (_, span) = ParamSurface::domain(b.as_ref());
     let Some(kind) = untrimmed(profile)? else {
         return Ok(None);
     };
@@ -774,7 +964,8 @@ impl Sweep {
     }
 }
 
-/// The cross-section of `s` on `map`, if it sweeps along `direction`.
+/// The cross-section of `s` on `map`, if it sweeps along `direction`: of a surface [`in_place`]
+/// gave.
 fn sweep(
     s: &SurfaceKind,
     direction: [f64; 3],
@@ -842,6 +1033,10 @@ pub(crate) fn sweeps(
     b: &SurfaceKind,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Vec<Piece>>, IntersectError> {
+    let (Some(a), Some(b)) = (in_place(a, meter)?, in_place(b, meter)?) else {
+        return Ok(None);
+    };
+    let (a, b) = (a.as_ref(), b.as_ref());
     let direction = match (a, b) {
         (_, SurfaceKind::Extrusion(x)) | (SurfaceKind::Extrusion(x), _) => x.shape()?.1,
         _ => return Ok(None),
@@ -917,18 +1112,13 @@ impl Affine<2> {
         self.point(x)
     }
 
-    /// How far `x` stands from the half-plane this map reads, as the third coordinate.
-    fn leaves(&self, x: Vector) -> Result<[Interval; 3], IntersectError> {
-        let [r, z] = self.point(x)?;
+    /// How far `x` stands from the plane this map reads, through `origin`, along the normal of its
+    /// two axes. (It read x less its part along the axes, which holds the origin's part off the
+    /// plane, and summed that rest's entries, which cancel along a normal such as (1, −1, 0).)
+    fn leaves(&self, x: Vector, origin: Vector) -> Result<Interval, IntersectError> {
         let [[a, e], [b, f], [c, g]] = self.columns;
-        let [s, t] = self.at;
-        let back = [
-            a.mul(r.sub(s)?)?.add(e.mul(z.sub(t)?)?)?,
-            b.mul(r.sub(s)?)?.add(f.mul(z.sub(t)?)?)?,
-            c.mul(r.sub(s)?)?.add(g.mul(z.sub(t)?)?)?,
-        ];
-        let [u, v, w] = minus(x, back)?;
-        Ok([r, z, u.add(v)?.add(w)?])
+        let normal = cross([a, b, c], [e, f, g])?;
+        dot(minus(x, origin)?, normal)
     }
 
     /// This map, then (ρ, z) ↦ `to` + ρ·`out` + z·`up`: a turn about the axis.
