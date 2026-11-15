@@ -35,13 +35,13 @@
 //!   kernel crate's error kinds. The binary `map` writes it (`cargo run -p geom-test --bin map --
 //!   write`) and checks it in CI (`-- check`): every header complete, the map current.
 //! - [`golden`]: the golden store of 28.13 (`golden/store.json`), keyed by kernel edition, golden
-//!   id and operation versions, with the record of every change and the owner-approval rule for
-//!   edits; the one SHA-256 every golden is hashed with (the `sha2` crate of the `RustCrypto`
-//!   project); the perturbing allocator, the in-process repeat and the input-shuffle hook every
-//!   golden runs under; and the runner that checks every golden on every target and build mode.
-//!   The binary `golden` lists the
-//!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
-//!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//!   id and operation versions, with the record of every change and the rule that every moved
+//!   answer carries its record; the one SHA-256 every golden is hashed with (the `sha2` crate of
+//!   the `RustCrypto` project); the perturbing allocator, the in-process repeat and the
+//!   input-shuffle hook every golden runs under; and the runner that checks every golden on every
+//!   target and build mode. The binary `golden` lists the store, checks it against the repository
+//!   (`-- check`), runs every golden in one CI leg's configuration (`-- run`) and holds a pull
+//!   request's edits to the record rule (`-- diff`).
 //! - [`faults`]: checker fault injection (chapter 28.4; G110): valid bodies broken one fault at a
 //!   time, each caught with the right kind, and every valid body passed.
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
