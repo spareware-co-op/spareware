@@ -100,6 +100,45 @@ pub const UNPROVEN: [(&str, u32); 2] = [("tpi_side", 292), ("lpi_side", 292)];
 /// the filter needs.
 pub const EXACT_OPTIMISATION: [&str; 2] = ["insphere", "tpi_side"];
 
+/// The filters whose `FPTaylor` problem HOL Light checks in shards, by predicate name, with the
+/// terms each shard proves. `FPTaylor` writes the problem's certificate once, and shard k is a job
+/// of its own that checks it, proving the terms its list names and assuming the others, and fails
+/// unless the certificate has [`Shards::terms`] terms and it proved exactly its own, so the shards
+/// together prove every term of the one certificate (`certificates/fptaylor.sh`,
+/// `kernel-certificates.yml`; `tests/certificate_problems.rs` holds each term to exactly one
+/// shard). The bound HOL Light proves is still `FPTaylor`'s own, term by term (`opt-approx`).
+pub const SHARDED: [(&str, Shards); 1] = [("lpi_side", LPI_SIDE_SHARDS)];
+
+/// The shards of one problem's terms: how many terms HOL Light's check of its certificate has,
+/// and the terms of each shard, by their place in that check's list (1 to `terms`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shards {
+    /// The terms of the certificate: HOL Light's `Bounds:` count.
+    pub terms: u32,
+    /// Each shard's terms, in increasing order.
+    pub shards: &'static [&'static [u32]],
+}
+
+/// `lpi_side`'s 68 terms, shared out by what each took to check on a hosted runner (run
+/// 43604320155, 157 minutes whole: 94 of them the 68 terms, 0.2 to 9.8 minutes each, after 4
+/// minutes of setup, 5 of `FPTaylor`, 27 of loading HOL Light and 22 of its Taylor tables for 24
+/// variables). Longest first, each to the shard with the least so far: four shards of about 23
+/// minutes of terms each. Every shard still pays the 53 minutes of setup, loading and tables,
+/// which sharding cannot cut.
+pub const LPI_SIDE_SHARDS: Shards = Shards {
+    terms: 68,
+    shards: &[
+        &[1, 8, 12, 13, 15, 24, 25, 27, 32, 34, 38, 39, 40, 42, 58, 64],
+        &[
+            2, 3, 6, 14, 18, 23, 26, 29, 35, 44, 47, 48, 52, 55, 60, 61, 65, 66, 68,
+        ],
+        &[
+            4, 5, 10, 17, 21, 22, 30, 33, 37, 43, 45, 46, 50, 51, 53, 56, 63, 67,
+        ],
+        &[7, 9, 11, 16, 19, 20, 28, 31, 36, 41, 49, 54, 57, 59, 62],
+    ],
+};
+
 fn fail<T>(message: impl Into<String>) -> Result<T, EmitError> {
     Err(EmitError(message.into()))
 }
@@ -1066,6 +1105,20 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
     } else {
         line(&mut out, "// fptaylor-optimisation: approx");
     }
+    if let Some(shards) = shards(d) {
+        line(
+            &mut out,
+            &format!("// hol-light-shards: {}", shards.shards.len()),
+        );
+        line(&mut out, &format!("// hol-light-terms: {}", shards.terms));
+        for (k, terms) in (1..).zip(shards.shards) {
+            let terms: Vec<String> = terms.iter().map(u32::to_string).collect();
+            line(
+                &mut out,
+                &format!("// hol-light-shard {k}: {}", terms.join(" ")),
+            );
+        }
+    }
     line(&mut out, "");
     line(&mut out, "Variables");
     for (step, g) in d.steps.iter().zip(&group_of) {
@@ -1160,6 +1213,20 @@ fn fptaylor_about(d: &Derivation, ratios: &[Ratio]) -> Vec<String> {
             "bound, and the job compares their sum with K below.".to_owned(),
         ]);
     }
+    if let Some(shards) = shards(d) {
+        about.extend([
+            format!(
+                "HOL Light checks the {} terms in {} jobs (hol-light-shards below), all of one",
+                shards.terms,
+                shards.shards.len()
+            ),
+            "certificate FPTaylor writes once: shard k proves the terms its hol-light-shard line"
+                .to_owned(),
+            "names and assumes the others, and each term is in one shard, so together they"
+                .to_owned(),
+            "prove every term.".to_owned(),
+        ]);
+    }
     if rounded_inputs(d) {
         about.extend([
             "A rounded input's exact value e_v is at most its maximum times 1 + 2^-53 (a value"
@@ -1199,6 +1266,18 @@ fn fptaylor_about(d: &Derivation, ratios: &[Ratio]) -> Vec<String> {
 /// ([`EXACT_OPTIMISATION`]).
 fn exact_optimisation(d: &Derivation) -> bool {
     EXACT_OPTIMISATION.contains(&d.description.name.as_str())
+}
+
+/// The shards HOL Light checks `d`'s `FPTaylor` problem in ([`SHARDED`]), if it names the filter.
+/// `tests/certificate_problems.rs` holds each to more than one shard, every term in exactly one,
+/// and each filter to the term-by-term problem, since the exact one is a single inequality with
+/// no terms to share out.
+fn shards(d: &Derivation) -> Option<Shards> {
+    let name = d.description.name.as_str();
+    SHARDED
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, shards)| *shards)
 }
 
 /// The bits of the largest `f64` at most the positive dyadic `numerator · 2^−exponent`: its top
