@@ -302,9 +302,15 @@
               "kind": "corpus",
               "piece": "G149",
               "why": "2 new count benchmarks on exact hulls and plane slices (decision 32.44): mesh/hull and mesh/slice; no existing digest moved"
+            },
+            {
+              "sha256": "ef2e7744a975d6279d2566bbcca4d6499e149b51751de6c21f97ed54769f02f7",
+              "kind": "corpus",
+              "piece": "G300",
+              "why": "2 new count benchmarks on decimation and remeshing inside the two-way envelope: mesh/decimate and mesh/remesh; no existing digest moved; merged after G149's mesh/hull and mesh/slice, whose rows are kept unchanged"
             }
           ],
-          "sha256": "ef2e7744a975d6279d2566bbcca4d6499e149b51751de6c21f97ed54769f02f7"
+          "sha256": "cbdddc09e354202cec78137cd106d62efe9f2ae2f7559980011a15514b5b0823"
         },
         {
           "id": "geom-nurbs/operations",
