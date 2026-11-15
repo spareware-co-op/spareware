@@ -3,6 +3,25 @@
 //! existing-land-use zones and applying it, and the growth beyond each gateway, in several states of the scenarios' years.
 //! Recorded by tools/transport-truth/gen-feeds.mjs (expected/feeds-ags.json, fixtures/data/ags-*.json).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod feeds_support;
 mod support;
 
@@ -118,7 +137,7 @@ fn proposals_applying_and_gateways_match() {
         assert_close(&Value::Object(kept), &rec["gatewayZones"], &format!("{label} growth kept on the zones"));
         for g in rec["gateway"].as_array().unwrap() {
             let sc = p3.scenarios.iter().find(|s| s.id == g["scenario"].as_str().unwrap()).unwrap();
-            let z = &sc.zones[g["zone"].as_str().unwrap()];
+            let z = &sc.zones.get(g["zone"].as_str().unwrap()).unwrap();
             let base: construct_transport::jsnum::Num = if g["base"].get("undefined").is_some() { Maybe::Missing } else { Maybe::Set(JsNum::from(g["base"].clone())) };
             let got = ags_gateway(sc, z, &base, number_arg(&g["year"]), Some(&data));
             assert_close(&serde_json::to_value(got).unwrap(), &g["g"], &format!("{label} gateway {} {} base {} year {}", g["scenario"], g["zone"], g["base"], g["year"]));

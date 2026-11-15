@@ -23,8 +23,8 @@
 //!   its canonical encoding, has one digest, kept in the golden store
 //!   (`geom-test/names-on-every-target`) and checked on every target CI builds.
 //!
-//! Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull
-//! requests run the fixed default seed and the nightly workflow a fresh one. The golden's corpus
+//! Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; every
+//! run uses the fixed default seed, on every change the law reaches. The golden's corpus
 //! has a seed of its own, which never changes. A chain a fresh seed found broken is kept as a
 //! named test of its own (seed 24a51bd2917cc57a: a cut prism with vertices off the grid, moved).
 

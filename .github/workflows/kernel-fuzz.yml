@@ -1,53 +1,49 @@
 name: Kernel fuzzing and proofs
 
-# The legs of the geometry kernel's fuzz targets that need Linux (kernel architecture, chapter
-# 28.5 and 28.7; the layout is in projects/engines/geometry/crates/geom-fuzz/README.md). Every
-# target is one law and its oracle, `check`, in a module of geom-fuzz, with a `harness` that
-# decodes a fuzzer's bytes and calls it. kernel.yml and kernel-dev.yml already run each target's
-# tests on every operating system: bolero's test mode (`<target>_fuzz`), the seeded leg
-# (`<target>_seeded`) and the property test of each proof's domain (`<target>_proof`). This
-# workflow adds:
+# The Kani proofs of the geometry kernel (kernel architecture, chapter 28.7; the layout of the fuzz
+# harnesses they prove is in projects/engines/geometry/crates/geom-fuzz/README.md). Every harness
+# is one law and its oracle, `check`, in a module of geom-fuzz, with a `harness` that decodes bytes
+# and calls it. kernel.yml and kernel-dev.yml run each harness's tests on every operating system:
+# the seeded leg (`<target>_seeded`, a fixed set of seeded random and hostile cases sized to
+# seconds), every saved input of its corpus and crash folders (tests/saved.rs), and the property
+# test of each proof's domain (`<target>_proof`). There is no libFuzzer, ClusterFuzzLite or long
+# fuzzing campaign: a harness is a test in the suite (28.5). This workflow adds:
 #
-# - libFuzzer: each `<target>_fuzz` test rebuilt by cargo-bolero with libFuzzer, coverage
-#   instrumentation and the address sanitizer, and fuzzed for a minute, on the pinned nightly
-#   compiler those flags need. A crash fails the job and its input is uploaded; put the file in
-#   tests/__fuzz__/<target>/crashes and `cargo test` replays it forever (28.16).
 # - Kani: each `<target>_proof` test, bolero's harness unchanged, proven by Kani for every case of
 #   its domain (the target module's header says which).
 # - Kani for geom-num: each `#[kani::proof]` harness beside geom-num's code (piece G41), proven
 #   on its own; and the same for geom-op's (piece G86), in the job kani-op, and geom-format's
 #   (piece G92), in the job kani-format.
-# - kernel-fuzz-campaign.yml runs a target for hours instead, on demand: the wide integers' 25-hour
-#   campaign (G26).
-# - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
-#   with cargo-bolero's build-clusterfuzz command, and ClusterFuzzLite fuzzes them in turn
-#   (code-change mode, address sanitizer). OSS-Fuzz's build check cannot read the start-up
-#   scripts cargo-bolero packs, so it is turned off here and build.sh makes the same checks on the
-#   binaries they start. A second job, clusterfuzzlite-seeded, runs ClusterFuzzLite's own images on
-#   the checkout with a crash planted (gate 1, G43; .clusterfuzzlite/seeded.sh), and must see it
-#   found.
 #
-# Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-bench, geom-bool, geom-bvh, geom-check, geom-curve,
-# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-mesh, geom-name, geom-num,
-# geom-nurbs, geom-op, geom-poly, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with
-# engine-geometry and kit-core through geom-gen's facade generators;
+# What a pull request runs (28.7 and 28.17): only the proofs its change can affect. The job
+# `select` runs geom-test's `kernel-quality fuzz-scope` on the files of the pull request's merge
+# commit against its base: the proofs of geom-fuzz's tests run when a changed file is in a crate
+# their targets' code builds (by the workspace's crate graph, through normal and build
+# dependencies, transitively) or among those targets' own files in geom-fuzz; a crate's Kani
+# proofs run when a changed file is in a crate that crate builds; a changed file in no crate (a
+# workflow, Cargo.lock, .cargo, the toolchain file, an architecture chapter) runs everything.
+# geom-test's src/fuzz_scope.rs gives the whole rule. Each job's `if` reads its output, and its log
+# and the run's summary name every proof job, whether it runs and why: a skipped job was not
+# affected, not failed. A push to main and a release tag run everything. geom-test's
+# tests/fuzz_scope.rs holds the selection to the crate graph and each job to the selection.
+#
+# Path filters: the workflow runs when the code a proof reaches changes: geom-fuzz and every crate
+# of the workspace it depends on (geom-bench, geom-bool, geom-bvh, geom-check, geom-curve,
+# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-mesh, geom-name,
+# geom-num, geom-nurbs, geom-op, geom-poly, geom-pool, geom-run, geom-surface, geom-test and
+# geom-topo today, with engine-geometry and kit-core through geom-gen's facade generators;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
-# its job kani-op, geom-format for kani-format, the workspace
-# files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
-# ClusterFuzzLite files and this workflow.
+# its job kani-op, geom-format for kani-format, the workspace files that change any build
+# (Cargo.toml, Cargo.lock, .cargo/, the toolchain file) and this workflow.
 #
 # Pins: the compiler in RUST_TOOLCHAIN is the workspace's (the scaffold test checks every
-# workflow that names it); FUZZ_NIGHTLY is the nightly compiler for libFuzzer's flags, a dated
-# nightly so a run never changes because nightly did; cargo-bolero and Kani are exact versions,
-# installed from their published lockfiles (--locked). Every action is pinned to a full commit,
-# checked against its tag when it was pinned, as in kernel.yml. ClusterFuzzLite's actions run
-# OSS-Fuzz's images tagged v1, which the action pins and we cannot; the image the targets are
-# built in is pinned by digest in .clusterfuzzlite/Dockerfile.
+# workflow that names it); Kani is an exact version, installed from its published lockfile
+# (--locked). Every action is pinned to a full commit, checked against its tag when it was pinned,
+# as in kernel.yml.
 #
 # --locked: every cargo command that resolves dependencies runs with --locked, or after a
-# `cargo metadata --locked`, which fails if Cargo.lock is not the reviewed one, for the tools
-# (cargo-bolero, cargo kani) that take no such flag.
+# `cargo metadata --locked`, which fails if Cargo.lock is not the reviewed one, for the tool
+# (cargo kani) that takes no such flag.
 
 on:
   pull_request:
@@ -90,7 +86,6 @@ on:
       - ".cargo/**"
       - "rust-toolchain.toml"
       - "rust-toolchain"
-      - ".clusterfuzzlite/**"
       - ".github/workflows/kernel-fuzz.yml"
   push:
     branches: [main]
@@ -133,7 +128,6 @@ on:
       - ".cargo/**"
       - "rust-toolchain.toml"
       - "rust-toolchain"
-      - ".clusterfuzzlite/**"
       - ".github/workflows/kernel-fuzz.yml"
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
@@ -148,10 +142,6 @@ concurrency:
 env:
   # The workspace's pinned compiler (rust-toolchain.toml), for building the tools.
   RUST_TOOLCHAIN: "1.99.0"
-  # The nightly compiler cargo-bolero builds libFuzzer targets with (sanitizer flags are
-  # nightly-only).
-  FUZZ_NIGHTLY: nightly-2026-10-01
-  CARGO_BOLERO_VERSION: 0.13.5
   KANI_VERSION: 0.68.0
 
 jobs:
@@ -161,15 +151,20 @@ jobs:
     # fails one of them stops here; every heavy job below lists this job under `needs`.
     uses: ./.github/workflows/cheap-checks.yml
 
-  libfuzzer:
-    name: libFuzzer under cargo-bolero (${{ matrix.target }})
-    needs: cheap
+  # Which proofs the change can affect (the paragraph above): on a pull request, the files of its
+  # merge commit's diff against its base; on any other run, everything. Its outputs are each job's
+  # `if`. It runs beside `cheap`, so it adds no wait.
+  select:
+    name: Which proofs the change can affect
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, contract_fuzz, curves_fuzz, encoder_fuzz, euler_fuzz, exact_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, naming_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, p21_fuzz, planes_fuzz, predicates_fuzz, prune_fuzz, records_fuzz, references_fuzz, roots_fuzz, sequence_fuzz, solids_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+    timeout-minutes: 30
+    outputs:
+      kani: ${{ steps.scope.outputs.kani }}
+      kani_num: ${{ steps.scope.outputs.kani_num }}
+      kani_topo: ${{ steps.scope.outputs.kani_topo }}
+      kani_limbs: ${{ steps.scope.outputs.kani_limbs }}
+      kani_op: ${{ steps.scope.outputs.kani_op }}
+      kani_format: ${{ steps.scope.outputs.kani_format }}
     defaults:
       run:
         shell: bash
@@ -177,51 +172,36 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Install the pinned nightly compiler
-        run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
-        run: >-
-          cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
-          --no-default-features --features libfuzzer
-      - name: Cargo.lock is the reviewed one
-        run: cargo metadata --locked --format-version 1 > /dev/null
-      # Gate 1 (G43): on the first leg, libFuzzer must first find a planted violation, a carry
-      # dropped from geom-num's wide integers, which wide_fuzz compares with big integers
-      # (geom-test's trip module and binary). The corpus and crash that run leaves are removed,
-      # so a later failure uploads only its own. It runs with the next step's options, the input
-      # time limit too, so the planted run is the real one.
-      - name: libFuzzer finds a planted violation
-        if: strategy.job-index == 0
+      # A pull request's checkout is its merge commit, whose first parent is the base: the diff
+      # between them is the change, renames as a removed and an added file.
+      - name: The files the change touches
         run: |
-          cargo run --locked -q -p geom-test --bin trip -- libfuzzer -- cargo bolero test wide_fuzz --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s --timeout 10s
-          rm -rf projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/wide
-      # --timeout: an input that runs for ten seconds fails the job, and libFuzzer saves it as
-      # timeout-<sha1> beside the crash files, which the next step uploads (a slow or hung input,
-      # not a broken law). geom-fuzz's tests make the limit work under the test harness
-      # (tests/common/mod.rs, issue #764), as kernel-fuzz-campaign.yml says.
-      - name: Fuzz ${{ matrix.target }} with libFuzzer for a minute
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+            git diff --no-ext-diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: The proofs it can affect, and why
+        id: scope
         run: >-
-          cargo bolero test "${{ matrix.target }}" --package geom-fuzz
-          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s --timeout 10s
-      - name: Upload the crashing input
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: libfuzzer-crashes-${{ matrix.target }}
-          path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/crashes/
-          if-no-files-found: ignore
+          cargo run --locked -q -p geom-test --bin kernel-quality -- fuzz-scope $SCOPE
+          --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
   kani:
     name: Kani (${{ matrix.harness }})
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.kani == 'true'
     runs-on: ubuntu-latest
     # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
     # path reaches, kissat proved it in 47 minutes (run 40291338626) and then in 75 (run
@@ -281,7 +261,8 @@ jobs:
   # splitter 54 and dd's from_i128 46; 120 minutes is the margin orient2d_proof's job above keeps.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.kani_num == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -422,6 +403,8 @@ jobs:
   # for every assertion, which ran a runner out of memory.
   kani-topo:
     name: Kani, geom-topo (${{ matrix.proof }})
+    needs: select
+    if: needs.select.outputs.kani_topo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -474,7 +457,8 @@ jobs:
 
   kani-limbs:
     name: Kani, geom-num limb steps
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.kani_limbs == 'true'
     runs-on: ubuntu-latest
     # Piece G42: one bounded proof for every kind of step the generated limb variant performs
     # (chapter 23.3), all in one run so they share one build; the generator writes them beside the
@@ -519,6 +503,8 @@ jobs:
 
   kani-op:
     name: Kani, geom-op (${{ matrix.proof }})
+    needs: select
+    if: needs.select.outputs.kani_op == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -567,6 +553,8 @@ jobs:
   # tests/kani_harnesses.rs holds this list to the harnesses in the source.
   kani-format:
     name: Kani, geom-format (${{ matrix.proof }})
+    needs: select
+    if: needs.select.outputs.kani_format == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -608,59 +596,3 @@ jobs:
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
-
-  clusterfuzzlite:
-    name: ClusterFuzzLite (address sanitizer)
-    needs: cheap
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - name: Build the fuzz targets
-        id: build
-        uses: google/clusterfuzzlite/actions/build_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c # main, 2026-02-12 (v1 and two documentation changes)
-        with:
-          language: rust
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          sanitizer: address
-          bad-build-check: false
-      - name: Fuzz the targets
-        id: run
-        uses: google/clusterfuzzlite/actions/run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c # main, 2026-02-12 (v1 and two documentation changes)
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 300
-          mode: code-change
-          sanitizer: address
-      - name: Upload the crashing input
-        if: failure() && steps.build.outcome == 'success'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: clusterfuzzlite-artifacts
-          path: ./out/artifacts
-          if-no-files-found: ignore
-
-  # Gate 1 (G43): the job above must fail on a planted crash. Its actions build a fresh clone of
-  # the pull request, which a planted line never reaches, so this job runs the images those actions
-  # run, with the inputs given above, on this checkout with the libFuzzer leg's planted violation
-  # (.clusterfuzzlite/seeded.sh says what differs and why). run_fuzzers must report the crash.
-  clusterfuzzlite-seeded:
-    name: ClusterFuzzLite finds a planted violation
-    needs: cheap
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      # The trip binary builds outside the checkout, which ClusterFuzzLite copies into its image.
-      - name: ClusterFuzzLite's build and run fail on a planted violation
-        env:
-          CARGO_TARGET_DIR: ${{ runner.temp }}/target
-        run: >-
-          cargo run --locked -q -p geom-test --bin trip -- clusterfuzzlite --
-          bash .clusterfuzzlite/seeded.sh

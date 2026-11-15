@@ -3,8 +3,8 @@ name: Construct server
 # Spare Construct's cloud server on real TiKV, on fresh ARM Ubuntu machines like the free server it
 # is meant for: the store's promises, the load test, the acceptance checklist on one node and on
 # three, real browsers, and the install script as deploy.sh runs it on a server. Construct's crates
-# and the kit's services are tested here too. The kit's own crates, which need no database, are
-# tested in kit.yml.
+# (Transport's core in a job of its own) and the kit's services are tested here too. The kit's own
+# crates, which need no database, are tested in kit.yml.
 
 on:
   pull_request:
@@ -13,6 +13,8 @@ on:
       - "projects/spare-construct/app/**"
       - "projects/spare-construct/crates/**"
       - "projects/spare-construct/demo/index.html"
+      - "projects/spare-construct/clippy.toml"
+      - "tools/transport-truth/**"
       - "projects/kit/crates/kit-core/**"
       - "projects/kit/crates/kit-ops/**"
       - "projects/kit/crates/kit-store/**"
@@ -44,10 +46,13 @@ jobs:
           targets: wasm32-unknown-unknown
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Every crate linted here carries the geometry kernel's lint tables (piece A19).
       - name: Clippy
         run: >-
           cargo clippy --locked --no-deps -p construct-model -p construct-regen -p construct-shapes
-          -p construct-api --all-features --all-targets -- -D warnings
+          -p construct-api -p construct-transport -p construct-wasm -p construct-cli -p construct-clash
+          -p construct-elements -p construct-families -p construct-interop -p construct-solver
+          -p construct-versions -p construct-views --all-features --all-targets -- -D warnings
       - name: Tests, with the shapes run on two generators
         run: >-
           cargo test --locked -p construct-model -p construct-regen -p construct-shapes
@@ -55,6 +60,23 @@ jobs:
       - name: The browser's builds stay free of the store
         run: >-
           cargo check --locked --target wasm32-unknown-unknown -p construct-shapes -p construct-wasm
+
+  transport:
+    name: Transport's core against the prototype's answers
+    runs-on: ubuntu-latest
+    # Its truth tests take about 40 minutes of test time in a debug build on a 3-thread machine;
+    # they run in their own job so the crates job keeps its limit.
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Tests, against the answers tools/transport-truth recorded from the prototype
+        run: cargo test --locked -p construct-transport
 
   checklist:
     name: The checklist on ARM Linux

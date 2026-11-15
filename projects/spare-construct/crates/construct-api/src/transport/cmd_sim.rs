@@ -3,8 +3,9 @@
 use super::Session;
 use super::registry::{Registry, Sink};
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
-use construct_transport::jsnum::{Maybe, json_number};
+use crate::schema::{Params, choice, integer, none, number, params, string};
+use crate::transport::helpers::scenario_at;
+use construct_transport::jsnum::{Maybe, f64_to_usize, json_number};
 use construct_transport::sim::{Hud, Sim, SimOptions, SimResults};
 use construct_transport::util::{along, fmt};
 use engine_sim::Mulberry32;
@@ -142,7 +143,7 @@ fn build(
     })?;
     let sr = SimResults::from_res(res);
     let sim = Sim::new(
-        &s.project.scenarios[i],
+        scenario_at(&s.project.scenarios, i)?,
         &s.project.settings,
         Some(&sr),
         SimOptions { scale },
@@ -157,10 +158,10 @@ fn build(
 }
 
 /// `toggleSim()` of ui.js: runs the model when the result is missing, out of date or has no paths, then starts the run.
-fn sim_create(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
+fn sim_create(s: &mut Session, p: Params<'_>, sink: Sink<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
     let period = s.period_of(p)?;
-    let sid = s.sid(i);
+    let sid = s.sid(i)?;
     let need_run = match s.result(&sid, &period) {
         None => true,
         Some(r) => r.stale || r.paths.is_missing(),
@@ -186,9 +187,11 @@ fn sim_create(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
         _ => {}
     }
     let scale = p.opt_f64("scale")?;
+    // as `x as u32` reads it: truncated, NaN and below 0 give 0, above u32::MAX gives u32::MAX
+    let to_u32 = |x: f64| u32::try_from(f64_to_usize(x)).unwrap_or(u32::MAX);
     let seed = match p.opt_f64("seed")? {
-        Some(x) => x as u32,
-        None => (engine_sim::Rng::next_f64(s.ids.rng_mut()) * 4294967296.0) as u32,
+        Some(x) => to_u32(x),
+        None => to_u32(engine_sim::Rng::next_f64(s.ids.rng_mut()) * 4_294_967_296.0),
     };
     let sim = build(s, &sid, &period, scale, seed)?;
     let routes = sim.routes().len();
@@ -206,7 +209,7 @@ fn sim_create(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
     )
 }
 
-fn sim_restart(s: &mut Session, _: &Params) -> ApiResult {
+fn sim_restart(s: &mut Session, _: Params<'_>) -> ApiResult {
     let (sid, period, seed, scale) = {
         let st = state(s)?;
         (st.scenario.clone(), st.period.clone(), st.seed, st.scale)
@@ -222,13 +225,12 @@ fn sim_restart(s: &mut Session, _: &Params) -> ApiResult {
     Ok(hud_json(&state(s)?.sim))
 }
 
-fn sim_step(s: &mut Session, p: &Params) -> ApiResult {
-    let steps = match p.opt_f64("steps")? {
-        Some(n) => n.max(0.0) as u64,
-        None => {
-            let secs = p.opt_f64("seconds")?.unwrap_or(60.0).clamp(0.0, 7200.0);
-            (secs / 0.5).ceil() as u64
-        }
+fn sim_step(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let steps = if let Some(n) = p.opt_f64("steps")? {
+        f64_to_usize(n.max(0.0))
+    } else {
+        let secs = p.opt_f64("seconds")?.unwrap_or(60.0).clamp(0.0, 7200.0);
+        f64_to_usize((secs / 0.5).ceil())
     };
     if steps > 144_000 {
         return Err(ApiError::bad_params(
@@ -246,21 +248,22 @@ fn sim_step(s: &mut Session, p: &Params) -> ApiResult {
     Ok(hud_json(&st.sim))
 }
 
-fn sim_series(s: &mut Session, p: &Params) -> ApiResult {
+fn sim_series(s: &mut Session, p: Params<'_>) -> ApiResult {
     let st = state(s)?;
-    let last = p.opt_f64("last")?.map_or(120, |x| x.max(0.0) as usize);
+    let last = p.opt_f64("last")?.map_or(120, |x| f64_to_usize(x.max(0.0)));
     let series = &st.sim.stats().series;
     let from = series.len().saturating_sub(last);
-    let rows: Vec<Value> = series[from..]
+    let rows: Vec<Value> = series
         .iter()
+        .skip(from)
         .map(|x| json!({ "t": json_number(x.t), "onRoad": x.n, "queued": x.q, "speedKmh": json_number(x.speed), "done": x.done, "waiting": x.waiting }))
         .collect();
     Ok(json!({ "total": series.len(), "samples": rows }))
 }
 
-fn sim_validation(s: &mut Session, p: &Params) -> ApiResult {
+fn sim_validation(s: &mut Session, p: Params<'_>) -> ApiResult {
     let st = state(s)?;
-    let limit = p.opt_f64("limit")?.map_or(50, |x| x.max(0.0) as usize);
+    let limit = p.opt_f64("limit")?.map_or(50, |x| f64_to_usize(x.max(0.0)));
     match st.sim.validation() {
         None => Ok(
             json!({ "available": false, "message": "Run the simulation for at least 7 minutes to compare it with the model." }),
@@ -275,10 +278,12 @@ fn sim_validation(s: &mut Session, p: &Params) -> ApiResult {
     }
 }
 
-fn sim_vehicles(s: &mut Session, p: &Params) -> ApiResult {
+fn sim_vehicles(s: &mut Session, p: Params<'_>) -> ApiResult {
     let st = state(s)?;
-    let limit = p.opt_f64("limit")?.map_or(500, |x| x.max(0.0) as usize);
-    let offset = p.opt_f64("offset")?.map_or(0, |x| x.max(0.0) as usize);
+    let limit = p
+        .opt_f64("limit")?
+        .map_or(500, |x| f64_to_usize(x.max(0.0)));
+    let offset = p.opt_f64("offset")?.map_or(0, |x| f64_to_usize(x.max(0.0)));
     let mut out: Vec<Value> = Vec::new();
     let mut total = 0usize;
     st.sim.for_each_vehicle(|v, arc, lane, lanes| {
@@ -290,7 +295,8 @@ fn sim_vehicles(s: &mut Session, p: &Params) -> ApiResult {
                 "lat": json_number(at[0]), "lng": json_number(at[1]), "stopped": v.stopped, "stuck": v.stuck,
             }));
         }
-        total += 1;
+        // one per vehicle: far below usize::MAX
+        total = total.saturating_add(1);
     });
     Ok(json!({ "total": total, "offset": offset, "count": out.len(), "vehicles": out }))
 }

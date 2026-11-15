@@ -10,25 +10,30 @@
 //! The store, as chapter 28.13 asks: "Golden hashes are stored per kernel edition and per operation
 //! version. Within an edition, a Stable operation's golden hash never changes. A changed hash is a
 //! bug, or an improvement that ships as a new operation version with new goldens beside the old. A
-//! pull request that edits a golden says which, and a kernel owner approves it." So:
+//! pull request that edits a golden says which, in the record it appends to the golden's
+//! history." So:
 //!
-//! - An [`Edition`] is `open` (results may still change, with approval) or `frozen` (released:
-//!   nothing in it ever changes). The last edition is the one open edition, the current one; every
-//!   earlier one is frozen. Before the first kernel edition there is one open edition,
-//!   `pre-edition`: chapter 32.12, recommendation A, has each change approved by a kernel owner in
-//!   its pull request, and editions and operation versions start with the first Stable release
-//!   (board piece G482). Nothing here decides that recommendation; the store only records which
-//!   state each edition is in.
+//! - An [`Edition`] is `open` (results may still change, each change recorded) or `frozen`
+//!   (released: nothing in it ever changes). The last edition is the one open edition, the current
+//!   one; every earlier one is frozen. Before the first kernel edition there is one open edition,
+//!   `pre-edition`, whose goldens change in pull requests, each change recorded (chapter 32.12,
+//!   recommendation A, with decision 32.54 putting the store's record where a kernel owner's
+//!   approval was), and editions and operation versions start with the first Stable release
+//!   (board piece G482). Nothing here decides when an edition is released; the store only records
+//!   which state each edition is in.
 //! - A [`Golden`] is keyed by its `id` and the operation versions it covers (`operations`, empty for
 //!   the numbers-layer corpora, which call functions rather than versioned operations; the
 //!   operation-log replay corpus of phase 3 fills it). An improvement to a Stable operation in a
 //!   released edition is a new key, the new operation version, beside the old one.
 //! - Every change to a golden's digest is recorded in its `history`, oldest first: the digest it
 //!   replaced, the kind (`bug`, `improvement`, or `corpus` when the inputs or their encoding
-//!   changed and no result did), the piece and why. [`super::diff`] refuses a change without its
-//!   record, a rewritten history, a removed golden and any change to a frozen edition, and says
-//!   when a kernel owner's approval is required; `.github/workflows/kernel-golden.yml` holds the
-//!   pull request to that approval.
+//!   changed and no result did), the piece and why. The kind is one the golden allows
+//!   ([`Golden::allows`]): a golden that covers operation versions records only `corpus`, because
+//!   fixing a bug or improving a result makes a new operation version, a new golden beside the old
+//!   (26.2, 28.13); a golden with no operation versions may record any of the three.
+//!   [`super::diff`] refuses a moved digest without its record, a rewritten history, a removed
+//!   golden and any change to a frozen edition, and `.github/workflows/kernel-golden.yml` runs it
+//!   on every pull request that edits the store.
 //! - A golden is checked in one of two ways. A `check` names the test function that computes it
 //!   (crate, test target, function), which calls [`super::check`] with the golden's id. A `file`
 //!   names a committed golden file that its own harness checks line by line (`geom-bench`'s
@@ -45,8 +50,9 @@
 //!   lowercase hexadecimal digits, a malformed id or edition label, a golden with both or neither
 //!   of `check` and `file`, a `check` in another crate than its id names, two goldens with one key
 //!   in an edition, two editions with one label, no open edition, an open edition that is not the
-//!   last, a history record whose digest equals the value that replaced it, an unknown kind, an
-//!   empty piece or reason: each is a [`StoreError`], never a silent choice.
+//!   last, a history record whose digest equals the value that replaced it, an unknown kind, a kind
+//!   the golden does not allow, an empty piece or reason: each is a [`StoreError`], never a silent
+//!   choice.
 //! - **One answer per key.** [`Store::expected`] finds the golden by id and operation versions in
 //!   the current edition, or says that it is not there.
 //! - **Deterministic.** Records keep the file's order; maps are `BTreeMap`s; nothing reads a clock.
@@ -114,7 +120,7 @@ pub struct Edition {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum State {
-    /// Not released: a golden may change, with its change recorded and a kernel owner's approval.
+    /// Not released: a golden may change, with its change recorded in its history.
     Open,
     /// Released: nothing in it ever changes.
     Frozen,
@@ -185,6 +191,17 @@ pub enum ChangeKind {
     Improvement,
     /// The inputs or their canonical encoding changed; no result did.
     Corpus,
+}
+
+impl fmt::Display for ChangeKind {
+    /// The kind as the store writes it: `bug`, `improvement` or `corpus`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            ChangeKind::Bug => "bug",
+            ChangeKind::Improvement => "improvement",
+            ChangeKind::Corpus => "corpus",
+        })
+    }
 }
 
 /// Why a store cannot be read, or which rule it breaks.
@@ -436,6 +453,16 @@ impl Golden {
         self.id.split_once('/').map_or("", |(krate, _)| krate)
     }
 
+    /// Whether a history record of `kind` may stand on this golden. A golden that covers operation
+    /// versions moves only for `corpus` (its inputs or their encoding changed, no result did):
+    /// fixing a bug or improving a result makes a new operation version, whose golden is a new key
+    /// beside the old (26.2, 28.13). A golden with no operation versions, a corpus of functions or
+    /// any golden before the first Stable release, may record any kind.
+    #[must_use]
+    pub fn allows(&self, kind: ChangeKind) -> bool {
+        self.operations.is_empty() || kind == ChangeKind::Corpus
+    }
+
     /// Checks one golden.
     fn validate(&self, at: &str) -> Result<(), StoreError> {
         let fail = |what: &str| {
@@ -493,6 +520,13 @@ impl Golden {
             }
             if change.piece.trim().is_empty() || change.why.trim().is_empty() {
                 return fail("a history record names its piece and says why");
+            }
+            if !self.allows(change.kind) {
+                return fail(
+                    "a golden that covers operation versions records only `corpus` changes: \
+                     fixing a bug or improving a result is a new operation version, a new golden \
+                     beside the old (26.2, 28.13)",
+                );
             }
             next = change.sha256.as_str();
         }
@@ -607,6 +641,20 @@ mod tests {
                 "bad function path",
                 store(&golden("geom-x/one", A)).replace("\"function\": \"f\"", "\"function\": \"a b\""),
             ),
+            (
+                "an improvement on a golden of operation versions",
+                store(&golden("geom-x/one", A)).replace(
+                    "\"sha256\": \"aaaa",
+                    &format!("\"operations\": {{\"extrude\": 1}}, \"history\": [{{\"sha256\": \"{B}\", \"kind\": \"improvement\", \"piece\": \"G1\", \"why\": \"x\"}}], \"sha256\": \"aaaa"),
+                ),
+            ),
+            (
+                "a bug fix on a golden of operation versions",
+                store(&golden("geom-x/one", A)).replace(
+                    "\"sha256\": \"aaaa",
+                    &format!("\"operations\": {{\"extrude\": 1}}, \"history\": [{{\"sha256\": \"{B}\", \"kind\": \"bug\", \"piece\": \"G1\", \"why\": \"x\"}}], \"sha256\": \"aaaa"),
+                ),
+            ),
         ];
         for (name, text) in bad {
             assert!(Store::parse(&text).is_err(), "{name} passed:\n{text}");
@@ -638,6 +686,36 @@ mod tests {
         let g = &s.current().unwrap().goldens[0];
         assert_eq!(g.history[0].kind, ChangeKind::Improvement);
         assert_eq!(g.krate(), "geom-x");
+        // A golden of operation versions may record a corpus change, and only that.
+        let versioned = store(&golden("geom-x/one", A)).replace(
+            "\"sha256\": \"aaaa",
+            &format!(
+                "\"operations\": {{\"extrude\": 1}}, \"history\": [{{\"sha256\": \"{B}\", \
+                 \"kind\": \"corpus\", \"piece\": \"G5\", \"why\": \"two more cases\"}}], \
+                 \"sha256\": \"aaaa"
+            ),
+        );
+        let s = Store::parse(&versioned).unwrap();
+        let g = &s.current().unwrap().goldens[0];
+        assert!(g.allows(ChangeKind::Corpus));
+        assert!(!g.allows(ChangeKind::Bug) && !g.allows(ChangeKind::Improvement));
+        let plain_store = Store::parse(&text).unwrap();
+        let plain = &plain_store.current().unwrap().goldens[0];
+        for kind in [ChangeKind::Bug, ChangeKind::Improvement, ChangeKind::Corpus] {
+            assert!(plain.allows(kind), "{kind}");
+        }
+    }
+
+    #[test]
+    fn a_kind_is_written_as_the_store_writes_it() {
+        for (kind, name) in [
+            (ChangeKind::Bug, "bug"),
+            (ChangeKind::Improvement, "improvement"),
+            (ChangeKind::Corpus, "corpus"),
+        ] {
+            assert_eq!(kind.to_string(), name);
+            assert_eq!(serde_json::to_string(&kind).unwrap(), format!("\"{name}\""));
+        }
     }
 
     #[test]

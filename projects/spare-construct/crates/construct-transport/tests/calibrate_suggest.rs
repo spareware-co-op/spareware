@@ -4,6 +4,25 @@
 //! out), counting the roads each line crosses, adding a suggestion to the project, and the answers when there is
 //! nothing to suggest. The network fetch is replaced by a made-up Overpass answer in both.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod calibrate_support;
 mod support;
 
@@ -99,7 +118,7 @@ fn adding_suggestions() {
             added: false,
         };
         let one_point = Suggestion { name: "short".to_string(), kind: "canal".to_string(), pts: vec![[-37.0, 174.0]], osm: Vec::new(), crossings: 0, few: false, added: false };
-        let mut items = vec![first.list[0].clone(), first.list[first.list.len() - 1].clone(), long, one_point];
+        let mut items = [first.list[0].clone(), first.list[first.list.len() - 1].clone(), long, one_point];
         let rec = step(&all, "added");
         let mut ids = Queue(all["ids"].as_array().expect("ids").iter().map(|x| x.as_str().expect("id").to_string()).collect());
         for (k, item) in items.iter_mut().enumerate() {

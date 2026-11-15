@@ -6,8 +6,8 @@
 //! MBCM discounting and update factors, IPM efficiency bands, bus PCU, gap acceptance,
 //! roundabout lane capacities, the extent test, difference plots, TMDG, MSM and design
 //! years. The truth tests compare it with expected/<name>.json "standards".
-//! Port of engine.js, Engine.STANDARDS, with the constants derived from it (LOS_SIG,
-//! LOS_UNSIG, LOS_VC, losOf, losLt) and the settings readers that fall back on it
+//! Port of engine.js, Engine.STANDARDS, with the constants derived from it (`LOS_SIG`,
+//! `LOS_UNSIG`, `LOS_VC`, losOf, losLt) and the settings readers that fall back on it
 //! (junctionSet, capMethodOf, convSet), together with the other small settings readers of
 //! engine.js's opening section (pcuF, yearOf, growth, growthBasis, ef).
 //! verified: true means checked against the cited document; false means taken from Spare
@@ -46,7 +46,7 @@ pub struct LosMethod {
     pub roundabout: [f64; 5],
     /// Give-way and stop: A to E upper limits (s).
     pub sign: [f64; 5],
-    /// An approach over capacity (DoS > 1) is F.
+    /// An approach over capacity (`DoS` > 1) is F.
     pub over_capacity_f: bool,
     /// Text shown with the results.
     pub label: &'static str,
@@ -65,6 +65,7 @@ pub struct LosTable {
 
 impl LosTable {
     /// `STANDARDS.los[id]`: the method with this id, if any.
+    #[must_use]
     pub fn get(&self, id: &str) -> Option<&LosMethod> {
         match id {
             "hcm6" => Some(&self.hcm6),
@@ -301,6 +302,7 @@ pub struct Gaps {
 
 impl Gaps {
     /// The gap pair by key ("majorR", "minorL", "minorT", "minorR").
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<Gap> {
         match key {
             "majorR" => Some(self.major_r),
@@ -732,20 +734,22 @@ pub const LOS_VC: [f64; 5] = STANDARDS.link_vc.cuts;
 const LETTERS5: [&str; 5] = ["A", "B", "C", "D", "E"];
 
 /// `losOf(x, th)`: the first band A to E whose limit x does not exceed, otherwise F (NaN is F).
+#[must_use]
 pub fn los_of(x: f64, th: &[f64; 5]) -> &'static str {
-    for i in 0..5 {
-        if x <= th[i] {
-            return LETTERS5[i];
+    for (limit, letter) in th.iter().zip(LETTERS5) {
+        if x <= *limit {
+            return letter;
         }
     }
     "F"
 }
 
 /// `losLt(x, th)`: "less than" bands (RTA): the first band whose limit x is below, otherwise F.
+#[must_use]
 pub fn los_lt(x: f64, th: &[f64; 5]) -> &'static str {
-    for i in 0..5 {
-        if x < th[i] {
-            return LETTERS5[i];
+    for (limit, letter) in th.iter().zip(LETTERS5) {
+        if x < *limit {
+            return letter;
         }
     }
     "F"
@@ -794,6 +798,7 @@ impl Standards {
     /// That is `JSON.stringify(Engine.STANDARDS)` except for the one non-finite number: the top
     /// IPM bands' `below: Infinity` is written "Infinity" (JSON.stringify writes null). The extent
     /// test's regular expressions are written `{}`, as JSON.stringify writes them.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let n = json_number;
         let p = &self.mbcm;
@@ -807,8 +812,10 @@ impl Standards {
                     .map(|b| json!({ "band": b.band, "label": b.label, "below": plain_number(b.below) }))
                     .collect();
                 let mut rest = json!({ "draft": e.draft, "bands": bands });
-                if let Some(note) = e.note {
-                    rest["note"] = note.into();
+                if let Some(note) = e.note
+                    && let Some(m) = rest.as_object_mut()
+                {
+                    m.insert("note".to_string(), note.into());
                 }
                 obj(&e.src, rest)
             })
@@ -873,6 +880,7 @@ pub enum CapMethod {
 
 impl CapMethod {
     /// "arc" or "movement".
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             CapMethod::Arc => "arc",
@@ -882,6 +890,7 @@ impl CapMethod {
 }
 
 /// `capMethodOf(S)`: movement only when `settings.junction.capMethod` is exactly "movement".
+#[must_use]
 pub fn cap_method_of(s: &Settings) -> CapMethod {
     match s.junction.get() {
         Some(j) if j.cap_method.is("movement") => CapMethod::Movement,
@@ -907,6 +916,7 @@ pub struct JunctionSet {
 }
 
 /// `junctionSet(S)`: the junction block with fallbacks (a settings object without it runs as before v2).
+#[must_use]
 pub fn junction_set(s: &Settings) -> JunctionSet {
     let j = s.junction.get();
     let num = |f: fn(&crate::project::JunctionSettings) -> f64| j.map_or(f64::NAN, f);
@@ -931,6 +941,7 @@ pub fn junction_set(s: &Settings) -> JunctionSet {
 
 impl JunctionSet {
     /// The level-of-service method's table entry.
+    #[must_use]
     pub fn los(&self) -> &'static LosMethod {
         match self.method {
             "sidra" => &STANDARDS.los.sidra,
@@ -969,6 +980,7 @@ pub struct ConvSet {
 }
 
 /// `convSet(S, opts)`.
+#[must_use]
 pub fn conv_set(s: &Settings, opts: &ConvOpts) -> ConvSet {
     let d = &STANDARDS.conv;
     let c = s.conv.get();
@@ -1010,11 +1022,13 @@ pub fn conv_set(s: &Settings, opts: &ConvOpts) -> ConvSet {
 }
 
 /// `pcuF(S)`: passenger car units per vehicle, 1 + hvPct / 100 x (pcuHV - 1).
+#[must_use]
 pub fn pcu_f(s: &Settings) -> f64 {
     1.0 + s.hv_pct.num() / 100.0 * (s.pcu_hv.num() - 1.0)
 }
 
 /// `yearOf(sc, S)`: the scenario's year where set (and positive), otherwise the project year.
+#[must_use]
 pub fn year_of(sc: Option<&Scenario>, s: &Settings) -> f64 {
     match sc {
         Some(sc) if sc.year.num() > 0.0 => sc.year.num(),
@@ -1025,6 +1039,7 @@ pub fn year_of(sc: Option<&Scenario>, s: &Settings) -> f64 {
 /// `growth(S, sc)`: background growth factor from the base year to the scenario year (linear unless growthMode is "compound").
 ///
 /// Compound growth uses [`crate::jsmath::pow`].
+#[must_use]
 pub fn growth(s: &Settings, sc: Option<&Scenario>) -> f64 {
     let dy = year_of(sc, s) - s.base_year.num();
     let g = s.growth.or(0.0) / 100.0;
@@ -1036,6 +1051,7 @@ pub fn growth(s: &Settings, sc: Option<&Scenario>) -> f64 {
 }
 
 /// `growthBasis(S)`: the basis the report prints ("linear, 1.5% of 2026 volume per year").
+#[must_use]
 pub fn growth_basis(s: &Settings) -> String {
     let g = to_fixed(s.growth.or(0.0), 1);
     let by = s.base_year.js_string();
@@ -1047,6 +1063,7 @@ pub fn growth_basis(s: &Settings) -> String {
 }
 
 /// `ef(v, S)`: CO2 grams per vehicle-km at average speed v (km/h), heavy vehicles 3.5 times a car, light part times settings.co2Factor.
+#[must_use]
 pub fn ef(v: f64, s: &Settings) -> f64 {
     let v = clamp(v, 5.0, 130.0);
     let car = 3300.0 / v + 95.0 + 0.011 * v * v;

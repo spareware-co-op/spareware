@@ -2,6 +2,13 @@
 //! is run, a simulation is created with the harness's seeded generator, stepped to each checkpoint, and the HUD numbers and the
 //! comparison with the model are read.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_api::Session;
@@ -57,20 +64,17 @@ fn simulation_commands_match_the_recorded_runs() {
                 });
                 assert_close(&got, want, &format!("{path}.hud"));
                 let v = s
-                    .run("transport.sim.validation", &json!({ "limit": 100000 }))
+                    .run("transport.sim.validation", &json!({ "limit": 100_000 }))
                     .unwrap();
-                match cp["validation"] {
-                    Value::Null => {
-                        assert_eq!(v["available"], json!(false), "{path}: no comparison yet")
-                    }
-                    _ => {
-                        let rows: Vec<Value> = v["rows"].as_array().unwrap().iter().map(|r| json!({ "key": r["key"], "link": r["link"], "name": r["name"], "model": r["model"], "sim": r["sim"], "geh": r["geh"] })).collect();
-                        assert_close(
-                            &json!({ "rows": rows, "pass": v["pass"] }),
-                            &cp["validation"],
-                            &format!("{path}.validation"),
-                        );
-                    }
+                if cp["validation"] == Value::Null {
+                    assert_eq!(v["available"], json!(false), "{path}: no comparison yet");
+                } else {
+                    let rows: Vec<Value> = v["rows"].as_array().unwrap().iter().map(|r| json!({ "key": r["key"], "link": r["link"], "name": r["name"], "model": r["model"], "sim": r["sim"], "geh": r["geh"] })).collect();
+                    assert_close(
+                        &json!({ "rows": rows, "pass": v["pass"] }),
+                        &cp["validation"],
+                        &format!("{path}.validation"),
+                    );
                 }
                 checks += 2;
             }

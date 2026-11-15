@@ -3,6 +3,25 @@
 //! fail (HTTP errors, no connection, unreadable or error answers, a time limit, the user cancelling, records that cannot be read).
 //! Recorded by tools/transport-truth/gen-feeds.mjs (expected/feeds-loaders.json, fixtures/data/nzta-sites.json, at-counts.json, at-controlled.json).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod feeds_support;
 mod support;
 
@@ -81,7 +100,7 @@ fn recorded_loads_match() {
 
 #[test]
 fn arcgis_requests_are_built_as_the_prototype_builds_them() {
-    let b = Bounds { south: -37.123456789, west: 174.5, north: -37.0, east: 174.999999999 };
+    let b = Bounds { south: -37.123_456_789, west: 174.5, north: -37.0, east: 174.999_999_999 };
     let pager = ArcgisPager::new(NZTA_SITES, &b, "1=1", "*", ARCGIS_TIMEOUT_MS);
     let r = pager.next_request().unwrap();
     assert_eq!(

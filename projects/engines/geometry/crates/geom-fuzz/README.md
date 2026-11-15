@@ -5,7 +5,10 @@ fuzz targets of chapter 28.5 and the bounded Kani proofs of chapter 28.7 that ru
 harnesses. Nothing here ships, and no kernel crate depends on it.
 
 This page is the layout every target follows, chosen by piece G14 (the fuzz toolchain spike), and
-how each engine runs a target, on your machine and in CI. The first target built to it is
+how each leg runs a target, on your machine and in CI. Every leg is an ordinary test in the suite,
+run on every pull request the target's code can be reached by: a harness is fuzzed by seeded random
+and hostile cases sized to seconds, and every input a run ever found is saved and replayed, the way
+solidcore tests (decision 32.52). There is no libFuzzer, no campaign and no run measured in hours. The first target built to it is
 `orient2d` (`src/orient2d.rs`): `geom-num`'s orient2d, its exact path and its `f64` filter must
 agree with the exact determinant of orient2d's definition, computed from scratch. The others:
 `predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
@@ -17,7 +20,12 @@ its bound, forgets the entry used longest ago first and answers only where the c
 covers the stored run; and, for Gate 2 (decision 32.46:
 a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
 every curve and surface kind built from any bytes keeps the kind contract kit
-(`geom_curve::contract`, `geom_surface::contract`) under any typed transform; `arenas` (`src/arenas.rs`,
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform, and after a budget
+stop still keeps the laws that need no conversion (`check_without_conversions`, under a meter of
+its own); `curve_offsets` (`src/curve_offsets.rs`) and `surface_offsets`
+(`src/surface_offsets.rs`), the same for the offset kinds alone, which read the same bytes with
+the kind made an offset: offsets cost nearly all of what the two kinds' targets spend, so
+`curves` and `surfaces` pass them unbuilt and the other kinds get the time; `arenas` (`src/arenas.rs`,
 G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see
 each other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives
 each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G104), `geom-op`'s
@@ -51,20 +59,18 @@ the contract has, whose MCP tool descriptions parse and round-trip. `src/adversa
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
-## One law, four engines
+## One law, three legs
 
-A target is one law and its oracle, written once as a plain function, and run by every engine:
+A target is one law and its oracle, written once as a plain function, and run by every leg:
 
-| Engine | What it does | Where it runs | Test it runs |
+| Leg | What it does | Where it runs | Test it runs |
 | --- | --- | --- | --- |
-| bolero's test mode | Replays the target's stored corpus and crash files, then tries 10,000 random inputs | `cargo test`, every operating system (kernel.yml, kernel-dev.yml) | `<target>_fuzz` |
-| The seeded leg | Runs the harness on 20,000 byte strings from a printed seed, the same on every target | `cargo test`, every target, WebAssembly included | `<target>_seeded` |
-| libFuzzer, under cargo-bolero | Coverage-guided fuzzing with the address sanitizer, on a nightly compiler | Linux and macOS; a minute per target on every pull request (kernel-fuzz.yml) | `<target>_fuzz` |
-| ClusterFuzzLite | OSS-Fuzz's fuzzing service for pull requests, on the same libFuzzer binary | Pull requests (kernel-fuzz.yml), in OSS-Fuzz's container | `<target>_fuzz` |
-| Kani | Proves the law for every case of a bounded domain | Linux and macOS; every pull request (kernel-fuzz.yml) | `<target>_proof` |
+| bolero's test mode | Replays the target's stored corpus and crash files, then tries a few thousand random inputs | `cargo test`, every operating system (kernel.yml, kernel-dev.yml) | `<target>_fuzz` |
+| The seeded leg | Runs the harness on a fixed set of byte strings from a printed seed, half of them hostile (extreme words, repeats and near-repeats, progressions, fills), sized for about two seconds of an optimised build (at most ten for the slowest targets) and a tenth of that with debug assertions | `cargo test`, every target, WebAssembly included | `<target>_seeded` |
+| Kani | Proves the law for every case of a bounded domain | Linux and macOS; every pull request that can affect it (kernel-fuzz.yml) | `<target>_proof` |
 
-The three fuzzing engines drive the same function on the same bytes, so a corpus or crash file
-from any of them replays in the others and in `cargo test`.
+The legs drive the same function on the same bytes, so a saved file replays in each, and
+`tests/attack_g14.rs` replays every saved corpus and crash file of every target on every run.
 
 ## The layout of a target
 
@@ -75,14 +81,14 @@ The module holds, with a header in the grammar of `projects/engines/geometry/HEA
 - `Case`: what one input decodes to.
 - `check(&Case) -> Result<(), Finding>`: the law and its oracle. It never panics by itself; a
   broken law is a `Finding` that names the law, the input and the values. Only the kernel code
-  under test can panic, and a panic fails every engine.
+  under test can panic, and a panic fails every leg.
 - `check_with(...)`: `check` on functions handed in, so unit tests can feed it broken versions
   and show it catches each one (28.4, fault injection: a check that cannot fail proves nothing).
 - `decode(&[u8]) -> (Case, usize)`: any bytes to a valid case, aimed at the hard cases with
   `geom-test`'s grid sampler, reading at most `MAX_INPUT_BYTES`, a bound derived on the constant
   and reached by a unit test.
 - `harness(&[u8]) -> Result<(), Finding>`: `decode`, then `check`. This is the function every
-  fuzzing engine drives (the crate's `Harness` type).
+  leg drives (the crate's `Harness` type).
 - For a target with a proof: `ProofDraw`, `proof_case(bound, &ProofDraw) -> Option<Case>` and
   `PROOF_BOUND`, the bounded domain the proof covers. The module header says exactly what is
   proven and what is only tested (28.7).
@@ -116,21 +122,17 @@ fn <target>_seeded() -> Result<(), seeded::Failure> {
 
 Rules:
 
-- A bolero test is a fuzz target exactly when its name ends in `_fuzz`. ClusterFuzzLite's build
-  keeps those and drops every other bolero test, such as a proof's property test or a test that
-  shows a failure is reported.
+- A bolero test is a target's fuzz test exactly when its name ends in `_fuzz`.
 - The fuzz test takes raw bytes and hands them to `harness`, never a typed generator, so every
-  engine's corpus and crash files are the harness's own input.
+  saved corpus and crash file is the harness's own input.
 - `check!` is written in the `#[test]` function itself, never in a helper it calls. bolero names
-  a target after the function `check!` is written in (`bolero-engine`'s `TargetLocation`), and
-  cargo-bolero builds a target by running the test of that name, so a target in a helper cannot
-  be built for libFuzzer or ClusterFuzzLite ("no targets matched"). `tests/attack_g14.rs` refuses
-  one.
-- No bolero test is `#[should_panic]`. cargo-bolero's `build-clusterfuzz` builds each test
-  binary by running one of its bolero tests, the first it listed (in no fixed order), with
-  `CARGO_BOLERO_SELECT` set, and there `check!` returns without running its body
-  (`bolero-engine`'s `TargetLocation::should_run`). A `#[should_panic]` test fails in that mode,
-  so ClusterFuzzLite's build fails on the runs that happen to pick it. A test that shows bolero
+  a target after the function `check!` is written in (`bolero-engine`'s `TargetLocation`), and a
+  tool that selects a target (Kani's `--harness`) finds it by the test of that name, so a target
+  in a helper cannot be selected ("no targets matched"). `tests/attack_g14.rs` refuses one.
+- No bolero test is `#[should_panic]`. A tool that selects bolero tests by name runs one of a
+  binary's bolero tests, the first it listed (in no fixed order), with `CARGO_BOLERO_SELECT` set,
+  and there `check!` returns without running its body (`bolero-engine`'s
+  `TargetLocation::should_run`). A `#[should_panic]` test fails in that mode. A test that shows bolero
   fails catches the panic itself and accepts a body that never ran only in that mode
   (`tests/predicates.rs`, `bolero_fails_on_a_finding`). `tests/attack_g14.rs` refuses one.
 - The proof test drives `check` itself, with a typed bolero generator of the proof's domain.
@@ -142,7 +144,7 @@ Rules:
   constructor may capture a backtrace (`bolero-engine`'s `panic.rs`), and Kani would have to
   explore that capture; a panic is a failed property and nothing more, and Kani's `panic!`
   formats nothing. Under `cargo test` bolero catches the panic and prints the finding with the
-  failing draw. The fuzz test still returns the `Finding`, which the fuzzers report.
+  failing draw.
 - A finding is made with `Finding::new(law, || detail)`, so its detail is written only when it is
   reported, and never under Kani, which traces every value itself; formatting symbolic values
   would only enlarge the problem Kani solves.
@@ -162,11 +164,15 @@ Rules:
   the bound hides nothing.
 - Corpus and crash files live in `tests/__fuzz__/<target>/corpus` and `tests/__fuzz__/<target>/crashes`
   (bolero names the folder after the test, without `_fuzz`). `cargo test` replays both on every
-  run, so a crash found by any engine and saved there stays a test forever (28.16). Corpora only
-  grow.
-- A new target is registered in `.github/workflows/kernel-fuzz.yml`: its `_fuzz` test in the
-  libFuzzer matrix, its `_proof` test in the Kani matrix, and every crate it fuzzes in the path
-  filters. `tests/attack_g14.rs` fails until it is.
+  run, so a case found by any leg and saved there stays a test forever (28.16). A seeded failure
+  prints its bytes in hexadecimal; save them as a file of the target's `crashes` folder (by custom
+  named after their SHA-1). Corpora only grow.
+- A new target is registered in `.github/workflows/kernel-fuzz.yml`: its `_proof` test in the
+  Kani matrix, and every crate it reaches in the path filters. `tests/attack_g14.rs` fails until
+  it is. On a pull request the job `select` runs a target's proofs only when the change can affect
+  it: when a crate its code names (or a crate that one builds) changed, or its own module, tests,
+  corpus or crashes did (`geom_test::fuzz_scope`, which reads the crates a target uses from its
+  `use` lines and paths, so nothing more is registered).
 
 ## Running a target
 
@@ -181,43 +187,6 @@ cargo test -p geom-fuzz --test orient2d
 A failure in test mode prints `BOLERO_RANDOM_SEED=<seed>`; set that variable to replay it. The
 seeded leg prints `seed: <hex>`; set `SPAREKIT_SEED=<hex>` to replay it.
 
-**libFuzzer**, on Linux or macOS. The sanitizer and coverage flags need a nightly compiler; CI
-pins the one below. cargo-bolero builds under the workspace's `fuzz` profile (root `Cargo.toml`:
-release optimisation with debug assertions and overflow checks on):
-
-```text
-cargo install cargo-bolero --version 0.13.5 --locked --no-default-features --features libfuzzer
-rustup toolchain install nightly-2026-10-01 --profile minimal
-cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-01 --engine libfuzzer -T 10min
-```
-
-`-T` bounds the run; `--runs`, `--jobs` and `--max-input-length` are the other limits. A crash is
-written to `tests/__fuzz__/orient2d/crashes`, where `cargo test` replays it.
-
-`--timeout` (10 seconds unless given; both workflows give it) bounds one input: an input that runs
-that long stops the run, which fails, and libFuzzer writes it to the same folder as
-`timeout-<sha1>`. That is a slow or hung input, not a broken law, so find why it is slow rather
-than leave it with the crash files, where `cargo test` would replay it every time. libFuzzer
-enforces the limit only on the thread that runs the fuzzer, and cargo-bolero starts the fuzzer
-inside the test harness, on a thread of its own, while the timer's signal goes to the main thread;
-so on Linux each target's test makes it work itself: the first `holds` under libFuzzer starts a
-thread that sends that signal to the fuzzing thread once a second, and libFuzzer's own handler
-decides (`tests/common/mod.rs`, issue #764). Before that the limit never fired. On macOS it still
-does not.
-
-**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs every target under libFuzzer for
-five hours each night, one shard each. On demand it runs `wide_fuzz` in five shards of five hours,
-25 CPU hours, for G26's "24 hours clean": when the label `fuzz-campaign` is added to a pull
-request, or by hand from the Actions tab. By hand it can also run every target as a night does, on
-the head of the branch or tag it is started on:
-
-```text
-gh workflow run kernel-fuzz-campaign.yml --ref main -f targets=all
-```
-
-`-f hours=1` (one to five, five by default) shortens every shard for a trial. Each shard uploads
-any crash and the corpus it grew.
-
 **Kani**, on Linux or macOS:
 
 ```text
@@ -225,10 +194,6 @@ cargo install kani-verifier --version 0.68.0 --locked
 cargo kani setup
 cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact
 ```
-
-`cargo bolero test orient2d_proof --engine kani`, from `projects/engines/geometry/crates/geom-fuzz`
-with cargo-bolero's `kani` feature, runs `cargo kani --tests --harness orient2d_proof`, the same
-proof.
 
 `cfg(kani)`, which marks the proof tests, is declared to the compiler by `build.rs`
 (`cargo::rustc-check-cfg`), not in the manifest's `[lints]` table, which repeats `geom-num`'s
@@ -250,61 +215,8 @@ them, were still in CBMC's symbolic execution when the job's hour ran out, in bo
 path (its backtrace capture) and in the formatting of the finding's detail. Hence `holds` and
 `Finding::new`, above.
 
-**ClusterFuzzLite**, with Docker, through OSS-Fuzz's helper (as ClusterFuzzLite's build
-integration guide describes):
-
-```text
-git clone https://github.com/google/oss-fuzz
-python oss-fuzz/infra/helper.py build_fuzzers --external --engine libfuzzer --sanitizer address <path to this repository>
-```
-
-On Windows only the first two run. libFuzzer and Kani need Linux or macOS; CI runs them on every
-pull request that touches the code a target fuzzes.
-
-**A crash from CI.** Each job uploads the crashing input as an artifact
-(`libfuzzer-crashes-<target>` or `clusterfuzzlite-artifacts`). Save it in
-`tests/__fuzz__/<target>/crashes/`, and `cargo test` fails on it until the bug is fixed, then
-keeps it as a test.
-
-## Why there is no cargo-fuzz wrapper
-
-Chapter 28.5 asks for a thin cargo-fuzz target per harness, because ClusterFuzzLite's Rust guide
-expects the cargo-fuzz layout, unless cargo-bolero's `build-clusterfuzz` command makes the wrappers
-unnecessary, which it left to this spike. The spike's answer: it does, so there are no wrappers.
-
-- **It works.** `build-clusterfuzz` (bin/cargo-bolero/src/build_clusterfuzz.rs) builds the tests
-  with libFuzzer exactly as `cargo bolero test --engine libfuzzer` does and packs each test binary
-  with one start-up script per bolero test, named `<test>_fuzzer`. ClusterFuzzLite finds targets
-  by walking `$OUT` and takes an executable whose name ends in `_fuzzer`, the scripts included
-  (infra/utils.py, `get_fuzz_targets` and `is_fuzz_target_local`), and passes libFuzzer's
-  arguments, which the script hands to the test. The binary itself is named `<binary>.cargo`, an
-  extension ClusterFuzzLite does not take for a target.
-- **One check had to be replaced.** OSS-Fuzz's build check (infra/base-images/base-runner/
-  bad_build_check) runs `file` and `objdump` on each target to see that it is an x86-64 binary
-  with the address sanitizer compiled in, and a script is neither. kernel-fuzz.yml turns that
-  check off (`bad-build-check: false`), and `.clusterfuzzlite/build.sh` makes the same checks on
-  the binary each script starts: an x86-64 ELF executable, at least 1,000 calls into the address
-  sanitizer, at least 100 instrumented edges, and a clean run of 64 inputs. The build fails if
-  any does not hold.
-- **The wrappers would need a licence the kernel has not allowed.** A cargo-fuzz target links
-  `libfuzzer-sys`, whose manifest's licence is `(MIT OR Apache-2.0) AND NCSA`. NCSA is not on
-  chapter 29.2's allow-list, so the crate cannot enter the kernel workspace's `Cargo.lock` without
-  a row in 29.2 and a kernel owner's yes. cargo-bolero's libFuzzer engine is already in it, under
-  MIT.
-- **One binary for every fuzzing engine.** ClusterFuzzLite fuzzes the very binary cargo-bolero
-  fuzzes, from the same test, so there is no second copy of a target to fall out of step.
-
-Limits, written down so nobody trips on them:
-
-- ClusterFuzzLite's `parallel-fuzzing` stays off. libFuzzer's `-jobs` and `-fork` modes start
-  the binary again without the start-up script's arguments, which has not been tried here.
-- The build installs `g++` in OSS-Fuzz's image, because bolero's libFuzzer engine compiles its
-  own copy of libFuzzer with the system's C++ compiler, and turns off OSS-Fuzz's C and C++ flags
-  for that compile, which would make libFuzzer instrument itself.
-- ClusterFuzzLite runs in code-change mode on pull requests, with no storage repository, so each
-  run starts from the corpus files committed here and fuzzes every target. Batch fuzzing, a
-  corpus kept between runs and hours per target are the nightly fuzzing of 28.5, which G07 (where
-  it runs) and G10 (the nightly workflows and machines) set up.
+On Windows only the first runs. Kani needs Linux or macOS; CI runs it on every pull request that
+touches the code a proof reaches.
 
 ## What the orient2d proof covers
 
@@ -321,29 +233,19 @@ numbers layer are piece G41's.
 
 Read for this layout, every one under a licence chapter 29.2 lets us read; no code was copied:
 
-- bolero and cargo-bolero 0.13 (MIT), at commit `7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8` of
-  <https://github.com/camshaft/bolero>: `bin/cargo-bolero/src/build_clusterfuzz.rs`,
-  `kani.rs`, `libfuzzer.rs`, `project.rs`, `selection.rs`, `test_target.rs`; the book's
-  `library-installation.md` (the `fuzz` profile); and, from the published crates,
-  `bolero-kani` 0.13.2 and `bolero-generator` 0.13.6's `kani.rs` (how a generator becomes
-  symbolic) and `bolero-engine` 0.13.6's `target_location.rs` (test names and corpus folders).
-- ClusterFuzzLite (Apache-2.0), at commit `52ecc61cb587ee99c26825a112a21abf19c7448c` of
-  <https://github.com/google/clusterfuzzlite>: `docs/build-integration/rust_lang.md`,
-  `docs/build_integration.md`, `docs/running-clusterfuzzlite/github_actions.md` and both
-  actions' `action.yml`.
-- OSS-Fuzz (Apache-2.0), at commit `ac54c4f21555fabcf24e19bad3213ac194ee9f85` of
-  <https://github.com/google/oss-fuzz>: `infra/base-images/base-runner/bad_build_check` and
-  `test_all.py`, `infra/utils.py`, `infra/cifuzz/build_fuzzers.py`, `run_fuzzers.py` and
-  `fuzz_target.py`, and `infra/base-images/base-builder-rust/Dockerfile` and
-  `base-builder/compile`.
-- cargo-fuzz 0.13.2 (MIT OR Apache-2.0), `src/templates.rs` and `src/project.rs`, for the layout
-  and flags of the wrappers not built; `libfuzzer-sys` 0.4.13's licence from crates.io.
+- bolero 0.13 (MIT), at commit `7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8` of
+  <https://github.com/camshaft/bolero>; from the published crates, `bolero-kani` 0.13.2 and
+  `bolero-generator` 0.13.6's `kani.rs` (how a generator becomes symbolic) and `bolero-engine`
+  0.13.6's `target_location.rs` (test names and corpus folders).
+- solidcore (Apache-2.0), at commit `a3a8244566081e0777284dc182f77a91bb1a456d` of
+  <https://github.com/tangency-labs/solidcore>: `crates/solidcore/tests/support/panic_fuzz.rs`,
+  whose seeded cases mixed with a fixed list of hostile values the seeded leg follows, and whose
+  `HOSTILE` list it ports (`src/seeded.rs`).
 - Kani 0.68.0 (MIT OR Apache-2.0), `kani-driver/src/call_cargo.rs`, for how `cargo kani --tests`
   builds a test target, `kani-compiler/src/codegen_cprover_gotoc/codegen/rvalue.rs` and
   `statement.rs` at tag `kani-0.68.0`, for the niche trap above, and the kani-github-action's
   `src/install-kani.sh` at commit `f838096619a707b0f6b2118cf435eaccfa33e51f`, for how CI installs
   it.
-- cargo-bolero 0.13.5's `build_clusterfuzz.rs`, `list.rs`, `selection.rs` and `test_target.rs`
-  from the published crate, and `bolero-engine` 0.13.6's `target_location.rs`, for how a target is
-  named and selected (the rule that `check!` sits in the test itself).
+- `bolero-engine` 0.13.6's `target_location.rs`, for how a target is named and selected (the rule
+  that `check!` sits in the test itself).
 - The Cargo book's "Build Scripts" chapter, `cargo::rustc-check-cfg`, for `build.rs`.

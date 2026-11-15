@@ -540,7 +540,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace <= with > in check",
+      "mutant": "replace <= with > in laws",
       "line_text": "let side = if t <= mid {",
       "occurrences": 1,
       "kind": "harmless",
@@ -780,14 +780,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
-      "mutant": "replace || with && in same_parameter",
-      "line_text": "let done = e <= target * 0.5 || n >= MOST;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "With && the refinement stops on reaching its target only at the densest sampling, so every cache whose certificate keeps falling is sampled four times over, up to 32 steps a cell, before it stops: up to sixty-four times the work for each offset's cache in the suite, which then runs past cargo-mutants' time limit. Where it finishes, the golden geom-surface/offset, whose caches stop at the first sampling that meets the target, changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
       "mutant": "replace > with >= in same_parameter",
       "line_text": "if error > target {",
       "occurrences": 1,
@@ -833,14 +825,6 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "Differs only where the enclosure of det(I - d II) over a piece ends exactly at 0.0 from below, so the fold factor is at most 0 and may reach 0. The mutant then turns the base's normals over instead of taking the cross product of the enclosed partials. Where the factor is negative the offset's normal is a positive multiple of the turned-over base normal; where it is 0 the normal vanishes and its limit from the rest of the piece points the same way, which the trait allows."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
-      "mutant": "replace || with && in same_parameter",
-      "line_text": "if done || stuck {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "With && the refinement stops only where the target is met (or the densest sampling reached) and the certificate also stops falling. A smooth kind's certificate keeps falling, so its cache is sampled twice as densely without end, each try four times the last's work: the suite never finishes, and cargo-mutants stops it at its time limit."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",

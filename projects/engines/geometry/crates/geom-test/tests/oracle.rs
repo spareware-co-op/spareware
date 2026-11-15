@@ -125,7 +125,7 @@ fn the_catalogue_keeps_its_rules() {
     assert!(parsed(vec![oracle("a", "MIT", Run::DevDependency)]).is_ok());
     assert!(parsed(vec![oracle("a", "BSL-1.0", Run::DevDependency)]).is_ok());
     assert!(rule(oracle("a", "GPL-3.0-only", Run::DevDependency)).contains("not permissive"));
-    assert!(rule(oracle("a", "LGPL-2.1-only", Run::KernelNightly)).contains("not permissive"));
+    assert!(rule(oracle("a", "LGPL-2.1-only", Run::KernelOracles)).contains("not permissive"));
     assert!(rule(oracle("Not Ok", "MIT", Run::OutOfProcess)).contains("id"));
     let mut live = oracle("a", "MIT", Run::OutOfProcess);
     live.state = State::Live;

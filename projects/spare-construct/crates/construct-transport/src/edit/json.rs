@@ -7,11 +7,14 @@
 //! (`!!x`, `+x`, `String(x)`). Objects list whole-number keys (array indices) first in
 //! ascending order, as a JavaScript object does. The project upgrade ([`super::migrate`]) works on it.
 
-use crate::jsnum::{number_to_js_string, value_to_js_string, value_to_number};
+use crate::jsnum::{
+    i64_to_f64, json_u64_to_f64, number_to_js_string, value_to_js_string, value_to_number,
+};
 use crate::project::OrderedMap;
 use serde::de::{Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::Value;
 use std::fmt;
+use std::fmt::Write as _;
 
 /// A JSON value with ordered objects.
 #[derive(Clone, Debug, PartialEq)]
@@ -43,6 +46,7 @@ fn is_array_index(k: &str) -> bool {
 
 impl JsonValue {
     /// An empty object.
+    #[must_use]
     pub fn object() -> JsonValue {
         JsonValue::Object(OrderedMap::new())
     }
@@ -57,26 +61,35 @@ impl JsonValue {
         o
     }
     /// Reads JSON text (`JSON.parse`).
+    ///
+    /// # Errors
+    ///
+    /// The parser's message when the text is not valid JSON.
     pub fn parse(text: &str) -> Result<JsonValue, String> {
         serde_json::from_str(text).map_err(|e| e.to_string())
     }
     /// True for an object.
+    #[must_use]
     pub fn is_object(&self) -> bool {
         matches!(self, JsonValue::Object(_))
     }
     /// True for an array.
+    #[must_use]
     pub fn is_array(&self) -> bool {
         matches!(self, JsonValue::Array(_))
     }
     /// True for null.
+    #[must_use]
     pub fn is_null(&self) -> bool {
         matches!(self, JsonValue::Null)
     }
     /// `typeof x === 'object' && x !== null` (arrays count).
+    #[must_use]
     pub fn is_object_like(&self) -> bool {
         matches!(self, JsonValue::Object(_) | JsonValue::Array(_))
     }
     /// The object's map, if an object.
+    #[must_use]
     pub fn as_object(&self) -> Option<&OrderedMap<JsonValue>> {
         match self {
             JsonValue::Object(m) => Some(m),
@@ -91,6 +104,7 @@ impl JsonValue {
         }
     }
     /// The array, if an array.
+    #[must_use]
     pub fn as_array(&self) -> Option<&Vec<JsonValue>> {
         match self {
             JsonValue::Array(a) => Some(a),
@@ -105,6 +119,7 @@ impl JsonValue {
         }
     }
     /// The text, if text.
+    #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
             JsonValue::String(s) => Some(s),
@@ -112,6 +127,7 @@ impl JsonValue {
         }
     }
     /// The number, if a number.
+    #[must_use]
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             JsonValue::Number(x) => Some(*x),
@@ -119,6 +135,7 @@ impl JsonValue {
         }
     }
     /// `obj[key]` of an object (None for a missing key or another type).
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&JsonValue> {
         self.as_object().and_then(|m| m.get(key))
     }
@@ -137,20 +154,26 @@ impl JsonValue {
             m.insert(key, value);
             return;
         }
-        // A new array-index key: rebuild with it in sorted place among the leading index keys
-        let n: u64 = key.parse().expect("array index");
+        // A new array-index key: rebuild with it in sorted place among the leading index keys.
+        // is_array_index checked the key is at most ten digits, so it always parses as a u64.
+        let Ok(n) = key.parse::<u64>() else {
+            m.insert(key, value);
+            return;
+        };
         let old = std::mem::take(m);
-        let mut placed = false;
+        // Some until the new key is placed
         let mut value = Some(value);
         for (k, v) in old {
-            if !placed && (!is_array_index(&k) || k.parse::<u64>().expect("array index") > n) {
-                m.insert(key.clone(), value.take().expect("value"));
-                placed = true;
+            if value.is_some()
+                && (!is_array_index(&k) || k.parse::<u64>().is_ok_and(|kn| kn > n))
+                && let Some(val) = value.take()
+            {
+                m.insert(key.clone(), val);
             }
             m.insert(k, v);
         }
-        if !placed {
-            m.insert(key, value.take().expect("value"));
+        if let Some(val) = value {
+            m.insert(key, val);
         }
     }
     /// `delete obj[key]`: returns the value.
@@ -158,6 +181,7 @@ impl JsonValue {
         self.as_object_mut().and_then(|m| m.remove(key))
     }
     /// `!!x`.
+    #[must_use]
     pub fn truthy(&self) -> bool {
         match self {
             JsonValue::Null => false,
@@ -168,6 +192,7 @@ impl JsonValue {
         }
     }
     /// `+x`.
+    #[must_use]
     pub fn to_number(&self) -> f64 {
         match self {
             JsonValue::Number(x) => *x,
@@ -175,6 +200,7 @@ impl JsonValue {
         }
     }
     /// `String(x)`.
+    #[must_use]
     pub fn js_string(&self) -> String {
         match self {
             JsonValue::Number(x) => number_to_js_string(*x),
@@ -183,6 +209,7 @@ impl JsonValue {
         }
     }
     /// `x === y` for two values (objects and arrays are never identical).
+    #[must_use]
     pub fn strict_eq(&self, other: &JsonValue) -> bool {
         match (self, other) {
             (JsonValue::Null, JsonValue::Null) => true,
@@ -221,12 +248,14 @@ impl JsonValue {
         }
     }
     /// `JSON.stringify(x)`.
+    #[must_use]
     pub fn stringify(&self) -> String {
         let mut s = String::new();
         self.write(&mut s, None, 0);
         s
     }
     /// `JSON.stringify(x, null, indent)` with an indent of that many spaces (1 to 10).
+    #[must_use]
     pub fn stringify_pretty(&self, indent: usize) -> String {
         let mut s = String::new();
         self.write(&mut s, Some(indent.min(10)), 0);
@@ -254,8 +283,8 @@ impl JsonValue {
                     if i > 0 {
                         out.push(',');
                     }
-                    newline(out, indent, depth + 1);
-                    v.write(out, indent, depth + 1);
+                    newline(out, indent, depth.saturating_add(1));
+                    v.write(out, indent, depth.saturating_add(1));
                 }
                 newline(out, indent, depth);
                 out.push(']');
@@ -270,13 +299,13 @@ impl JsonValue {
                     if i > 0 {
                         out.push(',');
                     }
-                    newline(out, indent, depth + 1);
+                    newline(out, indent, depth.saturating_add(1));
                     quote(out, k);
                     out.push(':');
                     if indent.is_some() {
                         out.push(' ');
                     }
-                    v.write(out, indent, depth + 1);
+                    v.write(out, indent, depth.saturating_add(1));
                 }
                 newline(out, indent, depth);
                 out.push('}');
@@ -288,7 +317,8 @@ impl JsonValue {
 fn newline(out: &mut String, indent: Option<usize>, depth: usize) {
     if let Some(n) = indent {
         out.push('\n');
-        for _ in 0..n * depth {
+        // Bound: an indent of at most 10 times the nesting depth of a value in memory
+        for _ in 0..n.saturating_mul(depth) {
             out.push(' ');
         }
     }
@@ -306,7 +336,10 @@ fn quote(out: &mut String, s: &str) {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c if (c as u32) < 0x20 => {
+                // Writing to a String cannot fail
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
             c => out.push(c),
         }
     }
@@ -346,10 +379,10 @@ impl<'de> Deserialize<'de> for JsonValue {
                 Ok(JsonValue::Bool(b))
             }
             fn visit_i64<E>(self, x: i64) -> Result<JsonValue, E> {
-                Ok(JsonValue::Number(x as f64))
+                Ok(JsonValue::Number(i64_to_f64(x)))
             }
             fn visit_u64<E>(self, x: u64) -> Result<JsonValue, E> {
-                Ok(JsonValue::Number(x as f64))
+                Ok(JsonValue::Number(json_u64_to_f64(x)))
             }
             fn visit_f64<E>(self, x: f64) -> Result<JsonValue, E> {
                 Ok(JsonValue::Number(x))
@@ -387,6 +420,7 @@ impl<'de> Deserialize<'de> for JsonValue {
 
 /// `U.deepMerge(base, over)`: objects merge key by key (the base's keys first, in its order, then new keys in the
 /// over object's order); anything else in `over` replaces the base (arrays are replaced, not merged).
+#[must_use]
 pub fn deep_merge(base: &JsonValue, over: &JsonValue) -> JsonValue {
     let JsonValue::Object(om) = over else {
         return over.clone();

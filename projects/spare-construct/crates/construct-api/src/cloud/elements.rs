@@ -99,7 +99,37 @@ async fn create<T: Txn>(
     }))
 }
 
+/// The element after an `element.move` or `element.set`, or why the edit cannot be made.
+fn edited(mut after: Element, cmd: &str, args: Args) -> Result<Element, String> {
+    match cmd {
+        "element.move" => {
+            let Some(placement) = args.placement else {
+                return Err("A move needs a placement.".to_owned());
+            };
+            after.placement = placement;
+        }
+        "element.set" => {
+            if let Some(name) = args.name {
+                after.name = name;
+            }
+            if let Some(recipe) = args.recipe {
+                after.recipe = recipe;
+            }
+            if let Some(references) = args.references {
+                after.references = references;
+            }
+            after.props.extend(args.props.unwrap_or_default());
+        }
+        other => return Err(format!("Unknown command {other}.")),
+    }
+    Ok(after)
+}
+
 /// Runs an `element.*` command.
+///
+/// # Errors
+///
+/// A store error; a command that cannot be made is the outcome's error instead.
 pub async fn apply<T: Txn>(
     txn: &mut T,
     project: &Id,
@@ -139,7 +169,8 @@ pub async fn apply<T: Txn>(
     let mine = Claim {
         person: edit.person.clone(),
         name,
-        until_ms: context.now_ms + claim_ms,
+        // milliseconds since 1970 plus a claim's length: far below u64::MAX
+        until_ms: context.now_ms.saturating_add(claim_ms),
     };
 
     match edit.cmd.as_str() {
@@ -181,28 +212,10 @@ pub async fn apply<T: Txn>(
     let before: Element = read_row(txn, &place.key())
         .await?
         .ok_or_else(|| StoreError::Damaged("record missing".into()))?;
-    let mut after = before;
-    match edit.cmd.as_str() {
-        "element.move" => {
-            let Some(placement) = args.placement else {
-                return Ok(Err("A move needs a placement.".to_owned()));
-            };
-            after.placement = placement;
-        }
-        "element.set" => {
-            if let Some(name) = args.name {
-                after.name = name;
-            }
-            if let Some(recipe) = args.recipe {
-                after.recipe = recipe;
-            }
-            if let Some(references) = args.references {
-                after.references = references;
-            }
-            after.props.extend(args.props.unwrap_or_default());
-        }
-        other => return Ok(Err(format!("Unknown command {other}."))),
-    }
+    let after = match edited(before, edit.cmd.as_str(), args) {
+        Ok(after) => after,
+        Err(why) => return Ok(Err(why)),
+    };
 
     let new_hash = write_record(txn, project, &after).await?;
     txn.put(pointer.key(), to_row(&new_hash.as_str())?).await?;
@@ -221,6 +234,10 @@ pub async fn apply<T: Txn>(
 
 /// Records what regeneration built. It changes nothing: it is in the log so that every browser
 /// watching the document, on any server, gets it in order with the edits it covers.
+///
+/// # Errors
+///
+/// The edit's arguments do not read as a checkpoint.
 pub fn checkpoint(edit: &Edit) -> Outcome {
     match serde_json::from_value::<Checkpoint>(edit.args.clone()) {
         Ok(_) => Ok(Applied::default()),

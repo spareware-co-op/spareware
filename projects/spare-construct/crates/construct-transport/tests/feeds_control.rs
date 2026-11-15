@@ -2,6 +2,25 @@
 //! propose, against the JavaScript's recorded runs (every layer failure, both test projects, several states of the network).
 //! Recorded by tools/transport-truth/gen-feeds.mjs (expected/feeds-control.json, fixtures/data/control-*.json, bans-*.json).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod feeds_support;
 mod support;
 
@@ -162,12 +181,12 @@ fn turn_bans_and_applying_match() {
         let (name, variant, scid) = (rec["project"].as_str().unwrap(), rec["variant"].as_str().unwrap(), rec["scenario"].as_str().unwrap());
         let at = format!("{name} {variant} {scid}");
         let load = e["banLoads"].as_array().unwrap().iter().find(|l| l["project"] == name && l["label"] == "first-server").unwrap();
-        let rels: Vec<JsonValue> = load["data"]["rels"].as_array().unwrap().iter().map(ordered).collect();
+        let relations: Vec<JsonValue> = load["data"]["rels"].as_array().unwrap().iter().map(ordered).collect();
         let text = fixture_text(rec["startFile"].as_str().unwrap());
         let mut p = project_of_text(&text);
         let sc = scenario_at(&mut p, scid);
         assert_close(&nodes_of(sc), &rec["startNodes"], &format!("{at} start nodes"));
-        let prop = ban_proposals(sc, Some(&rels));
+        let prop = ban_proposals(sc, Some(&relations));
         assert_close(&serde_json::to_value(&prop.rows).unwrap(), &rec["rows"], &format!("{at} rows"));
         assert_close(&serde_json::to_value(&prop.skipped).unwrap(), &rec["skipped"], &format!("{at} skipped"));
         assert_close(&serde_json::to_value(ban_proposals(sc, None)).unwrap(), &rec["noData"], &format!("{at} without data"));
@@ -175,7 +194,7 @@ fn turn_bans_and_applying_match() {
             let a = &rec[format!("apply_{pick}")];
             let mut p2 = project_of_text(&text);
             let sc2 = scenario_at(&mut p2, scid);
-            let rows = ban_proposals(sc2, Some(&rels)).rows;
+            let rows = ban_proposals(sc2, Some(&relations)).rows;
             let n = apply_bans(sc2, &rows, &strings(&a["ids"]), "2026-10-21");
             let label = format!("{at} apply {pick}");
             assert_eq!(n as u64, a["n"].as_u64().unwrap(), "{label}: applied");

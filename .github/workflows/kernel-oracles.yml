@@ -1,0 +1,252 @@
+name: Kernel oracles
+
+# The geometry kernel's checks that need something outside the repository's test suite: a
+# container with an outside oracle, a download, or minutes of slow fixtures (chapters 28.10, 28.12,
+# 28.16 and 28.17). They run after a change lands, on a push to main, and only for what that push
+# can reach (the owner's testing principle 2, decision 32.53): the job `scope` runs geom-test's
+# `kernel-quality test-scope` on the files the push changed, and each job runs only when the crate
+# whose tests it runs is among the crates named. By hand (`workflow_dispatch`) and on a release tag
+# (kernel-release.yml calls this workflow) every job runs. Nothing runs on a timer.
+#
+# - Slow fixtures (piece G97, 28.16): geom-test's `fixture run --tier slow`.
+# - Fetched corpora (piece G114, 28.12): geom-test's `corpus fetch` downloads each at its pinned
+#   source and checks it against the register's digest.
+# - Bertolazzi and Frego's Clothoids library (piece G63, 28.10 and 17.8), built from source at a
+#   pinned commit in a container pinned by digest, evaluates the run's seeded clothoids, and
+#   geom-curve's tests/clothoids_oracle.rs compares every point with the kernel's certified
+#   enclosure, settling any difference by a fixed-point truth.
+# - Python's cbor2 (piece G86): geom-op's tests/cbor2_oracle.rs writes the run's seeded values of
+#   SKG's subset with the kernel's canonical CBOR, cbor2 6.1.5 (pinned by hash) encodes each value
+#   in its canonical mode in a container pinned by digest and reads the kernel's bytes back, and
+#   the test fails on any byte that differs.
+# - zcbor: geom-format's archived body records and every kind, validated against their CDDL.
+#
+# Each seeded job's seed is the run's number in hexadecimal, printed first, so a failure replays
+# exactly: rerun the job, or set SPAREKIT_SEED to the printed value. The predicates' verification
+# suite and attack tests, the kinds' and NURBS laws and the proven maths functions against the
+# big-integer reference are quick seeded tests of the normal suite (kernel.yml).
+#
+# --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
+# guard).
+#
+# Supply chain: every action is pinned to the same full commit as in kernel.yml, checked against
+# its tag when it was pinned there (the tag beside each); update a pin in all the kernel workflows
+# together, and only after reviewing the new commit. The workflow can only read the repository.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - ".github/workflows/kernel-oracles.yml"
+  # By hand, from the Actions tab: every job.
+  workflow_dispatch:
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # The same pinned compiler as kernel.yml (chapter 28.13, the toolchain guard).
+  RUST_TOOLCHAIN: "1.99.0"
+
+jobs:
+  # The crates whose tests the push reaches: every crate by hand and on a release tag.
+  scope:
+    name: Which crates' tests the push reaches
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      crates: ${{ steps.scope.outputs.crates }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The files the push touches
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base=""
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then base="$BEFORE"; fi
+          case "$base" in 0000000000000000000000000000000000000000) base="" ;; esac
+          if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null             && ! git fetch -q --no-tags --depth 1 origin "$base"; then
+            base=""
+          fi
+          if [ -n "$base" ]; then
+            git diff --no-ext-diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: The crates whose tests it can reach, and why
+        id: scope
+        run: >-
+          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope $SCOPE
+          --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  slow-fixtures:
+    name: Slow fixtures
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Every slow fixture
+        run: cargo run --locked --release -p geom-test --bin fixture -- run --tier slow
+
+  corpora:
+    name: Fetched corpora, by their digests
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Every fetched corpus, unmodified
+        run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora"
+
+  clothoids:
+    name: Clothoids, out of process
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-curve ')
+    runs-on: ubuntu-latest
+    # Measured (G63): the oracle builds in about a minute on twenty cores, so a few on a hosted
+    # runner's four; the comparison takes seconds.
+    timeout-minutes: 60
+    env:
+      # Bertolazzi and Frego's Clothoids (BSD-2-Clause), at the commit chapter 17.8 cites; its
+      # submodules come at the commits it records.
+      CLOTHOIDS_COMMIT: dafdc29acee5c4f25e777c6cffe56ecb39b0ec11
+      # gcc:13.3.0, pinned by digest.
+      GCC_IMAGE: gcc:13.3.0@sha256:1d71f0f3450214bef38fe09e6f610fb6cca90cf97b43f4ce845bfc32a4168818
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: This run's seed, printed, and the files
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
+          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
+          mkdir -p "$RUNNER_TEMP/clothoids"
+          echo "CLOTHOIDS_CASES=$RUNNER_TEMP/clothoids/cases.txt" >> "$GITHUB_ENV"
+          echo "CLOTHOIDS_ANSWERS=$RUNNER_TEMP/clothoids/answers.txt" >> "$GITHUB_ENV"
+      - name: This run's cases
+        run: >-
+          cargo test --locked --release -p geom-curve --test clothoids_oracle
+          -- --ignored --exact write_the_cases --nocapture
+      - name: Clothoids at the pinned commit, built and run in the container
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/clothoids"
+          git clone --quiet https://github.com/ebertolazzi/Clothoids.git "$dir/src"
+          git -C "$dir/src" checkout --quiet "$CLOTHOIDS_COMMIT"
+          git -C "$dir/src" submodule --quiet update --init --recursive
+          docker run --rm -i -v "$PWD:/work:ro" -v "$dir:/oracle" -w /work "$GCC_IMAGE" \
+            bash projects/engines/geometry/crates/geom-curve/oracles/clothoids.sh \
+            /oracle/src /oracle/build < "$CLOTHOIDS_CASES" > "$CLOTHOIDS_ANSWERS"
+      - name: The kernel against Clothoids' points
+        run: >-
+          cargo test --locked --release -p geom-curve --test clothoids_oracle
+          -- --ignored --exact compare_with_the_answers --nocapture
+
+  cbor2:
+    name: Canonical CBOR against cbor2, out of process
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-op ')
+    runs-on: ubuntu-latest
+    # The kernel's cases build and run in a few minutes; cbor2 installs from one wheel and encodes
+    # them in seconds.
+    timeout-minutes: 30
+    env:
+      # python:3.13-slim, pinned by digest; oracles/cbor2.sh pins cbor2 6.1.5's wheel by SHA-256.
+      PYTHON_IMAGE: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: This run's seed, printed, and the files
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
+          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
+          mkdir -p "$RUNNER_TEMP/cbor2"
+          echo "CBOR2_CASES=$RUNNER_TEMP/cbor2/cases.txt" >> "$GITHUB_ENV"
+          echo "CBOR2_ANSWERS=$RUNNER_TEMP/cbor2/answers.txt" >> "$GITHUB_ENV"
+      - name: This run's cases
+        run: >-
+          cargo test --locked --release -p geom-op --test cbor2_oracle
+          -- --ignored --exact write_the_cases --nocapture
+      - name: cbor2 6.1.5, in the container
+        run: |
+          set -euo pipefail
+          docker run --rm -i -v "$PWD:/work:ro" -w /work "$PYTHON_IMAGE" \
+            bash projects/engines/geometry/crates/geom-op/oracles/cbor2.sh \
+            < "$CBOR2_CASES" > "$CBOR2_ANSWERS"
+      - name: The kernel against cbor2's encodings
+        run: >-
+          cargo test --locked --release -p geom-op --test cbor2_oracle
+          -- --ignored --exact compare_with_the_answers --nocapture
+
+  zcbor:
+    name: Body records and kinds against their CDDL, with zcbor
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-format ')
+    runs-on: ubuntu-latest
+    # The writers build and run in a few minutes; zcbor validates each file in well under a second.
+    timeout-minutes: 30
+    env:
+      # python:3.13-slim, pinned by digest, as the cbor2 job; oracles/zcbor.sh pins zcbor 0.9.1 and
+      # its three dependencies' wheels by SHA-256.
+      PYTHON_IMAGE: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The archived body records and every kind, one file each
+        run: |
+          set -euo pipefail
+          echo "ZCBOR_DIR=$RUNNER_TEMP/zcbor" >> "$GITHUB_ENV"
+          export ZCBOR_DIR="$RUNNER_TEMP/zcbor"
+          cargo test --locked --release -p geom-format --test registry --test kinds \
+            -- --ignored --exact write_the_body_payloads write_the_kinds --nocapture
+      - name: zcbor 0.9.1, in the container
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/work:ro" -v "$ZCBOR_DIR:/cases:ro" -w /work "$PYTHON_IMAGE" \
+            bash projects/engines/geometry/crates/geom-format/oracles/zcbor.sh \
+            projects/engines/geometry/format/cddl/body.cddl /cases

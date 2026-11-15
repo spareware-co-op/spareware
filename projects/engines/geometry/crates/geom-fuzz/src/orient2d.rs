@@ -20,7 +20,7 @@
 //! [`decode`] turns a fuzzer's bytes into three points with `geom-test`'s [`GridSampler`], aimed at
 //! the hard cases: repeated points, collinear points, points one step off a line, and the edges of
 //! the frame. [`harness`] is `decode` then `check`: the one function every fuzzing engine drives
-//! (bolero's test mode, cargo-bolero's libFuzzer, `ClusterFuzzLite` and the seeded leg; the crate
+//! (bolero's test mode and the seeded leg; the crate
 //! README sets out the layout). [`proof_case`] maps a draw onto the bounded domain of the Kani
 //! proof, which drives `check` itself.
 //!

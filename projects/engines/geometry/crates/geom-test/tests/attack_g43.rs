@@ -10,15 +10,14 @@
 //!   kernel workflow that runs on a pull request, once. Each row cites a test that exists (a
 //!   `<file>.rs::<name>` code span whose file defines `name`), a file that exists, a planted
 //!   violation (`trip <name>`), the row of another job of its workflow ("The tests of `<job>`"),
-//!   or says why it is not a gate ("Not a gate:") or that it is open, with its issue.
+//!   or says why it is not a gate ("Not a gate:") or that it is open, with its issue. A job removed
+//!   after the gate keeps its row, which then begins "Removed by decision 32.52, after the gate:",
+//!   and only such a row may name a job that no longer runs.
 //! - `every_planted_violation_runs_in_its_own_job`: each of `geom_test::trip`'s violations is found
 //!   once in the tree, and the job it names runs it with the command of one of its own steps,
 //!   compared as shell commands (continued lines joined, redirections and pipes set aside; a
 //!   script's last command when it runs one): the same words, a matrix value where the step has
 //!   the matrix's variable, a harness filter narrowed, and the step's `--save-…` options left out.
-//!   `ClusterFuzzLite`'s violation runs through `.clusterfuzzlite/seeded.sh` instead, which must run
-//!   the image of each of the `clusterfuzzlite` job's actions, at the commit it was read against,
-//!   with every input the job gives it.
 //! - `the_wasm_legs_prove_the_guard_through_golden_run`: `kernel.yml`'s `wasm` job runs `guard
 //!   prove --golden-run` with the arguments of one of its own `golden run` steps.
 //! - `a_passed_gate_has_nothing_open`: while the result is not "passed" anything may be pending;
@@ -338,10 +337,17 @@ fn gate_problems(
         }
     }
     for ((file, job), cell) in &rows {
-        if !jobs.contains(&(file.clone(), job.clone())) {
-            found.push(format!(
+        let removed = cell.text.trim().starts_with(REMOVED);
+        match (jobs.contains(&(file.clone(), job.clone())), removed) {
+            // A job removed since the gate keeps its row, as the gate ran it, marked removed.
+            (false, true) => continue,
+            (false, false) => found.push(format!(
                 "{file} {job} has a row but no such job runs on a pull request"
-            ));
+            )),
+            (true, true) => found.push(format!(
+                "{file} {job} runs on a pull request but its row says it was removed"
+            )),
+            (true, false) => {}
         }
         let mut cited = false;
         for span in &cell.code {
@@ -366,6 +372,9 @@ fn gate_problems(
     }
     found
 }
+
+/// How a row of a job removed since the gate begins: the row stays as the gate ran it.
+const REMOVED: &str = "Removed by decision 32.52, after the gate:";
 
 /// The words of a command, quotes set aside.
 fn words(command: &str) -> Vec<String> {
@@ -515,24 +524,6 @@ fn trip_problems(
             ));
             continue;
         };
-        if let Some(&(_, script, proved)) = ACTION_SEEDS.iter().find(|s| s.0 == v.name) {
-            let run = words(planted.lines().next().unwrap_or_default());
-            if run != ["bash", script] {
-                found.push(format!(
-                    "{}: {file} {job} plants it under {run:?}, not `bash {script}`",
-                    v.name
-                ));
-            }
-            match files(script) {
-                None => found.push(format!("{}: {script} does not exist", v.name)),
-                Some(text) => found.extend(
-                    action_seed_problems(&text, &w["jobs"][proved])
-                        .into_iter()
-                        .map(|p| format!("{}: {script}: {p}", v.name)),
-                ),
-            }
-            continue;
-        }
         let planted = planted_command(planted);
         let own = runs
             .iter()
@@ -624,92 +615,6 @@ fn thread_problems(
         found.push(format!(
             "the determinism row cites {cited} thread-count tests, not the four"
         ));
-    }
-    found
-}
-
-/// The violations a job runs through a script that stands in for another job's actions, because
-/// those actions build a fresh clone, which a planted line never reaches: the violation, the
-/// script, and the job (of the same workflow) whose actions it stands in for.
-const ACTION_SEEDS: [(&str, &str, &str); 1] = [(
-    "clusterfuzzlite",
-    ".clusterfuzzlite/seeded.sh",
-    "clusterfuzzlite",
-)];
-
-/// `ClusterFuzzLite`'s actions, the commit whose `action.yml` files the script was read against,
-/// and the image each runs there (`runs.image`, `docker://` set aside).
-const CLUSTERFUZZLITE: &str = "google/clusterfuzzlite/actions/";
-const CLUSTERFUZZLITE_COMMIT: &str = "52ecc61cb587ee99c26825a112a21abf19c7448c";
-const CLUSTERFUZZLITE_IMAGES: [(&str, &str); 2] = [
-    (
-        "build_fuzzers",
-        "gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1",
-    ),
-    (
-        "run_fuzzers",
-        "gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1",
-    ),
-];
-
-/// What is wrong with a script that stands in for `job`'s `ClusterFuzzLite` actions: each action
-/// must be pinned to the commit the script was read against, and the script must run its image
-/// once, passing every input the job gives it (but the token) as its `action.yml` does, an
-/// environment variable of the input's name in capitals with `_` for `-`.
-fn action_seed_problems(script: &str, job: &Yaml) -> Vec<String> {
-    let runs = commands(script);
-    let mut found = Vec::new();
-    let mut actions = 0;
-    for step in job["steps"].as_vec().into_iter().flatten() {
-        let Some(action) = step["uses"]
-            .as_str()
-            .and_then(|u| u.strip_prefix(CLUSTERFUZZLITE))
-        else {
-            continue;
-        };
-        actions += 1;
-        let (name, commit) = action.split_once('@').unwrap_or((action, ""));
-        if commit != CLUSTERFUZZLITE_COMMIT {
-            found.push(format!(
-                "{name} is pinned to {commit:?}, not {CLUSTERFUZZLITE_COMMIT}, whose image the \
-                 script runs: read the new action.yml and update both"
-            ));
-            continue;
-        }
-        let Some(&(_, image)) = CLUSTERFUZZLITE_IMAGES.iter().find(|i| i.0 == name) else {
-            found.push(format!("no image is known for the action {name}"));
-            continue;
-        };
-        let docker: Vec<&Vec<String>> = runs
-            .iter()
-            .filter(|c| c.starts_with(&["docker".to_owned(), "run".to_owned()]))
-            .filter(|c| c.last().is_some_and(|last| last == image))
-            .collect();
-        let [run] = docker.as_slice() else {
-            found.push(format!("it runs {image} {} times, not once", docker.len()));
-            continue;
-        };
-        for (key, value) in step["with"].as_hash().into_iter().flatten() {
-            let Some(key) = key.as_str() else { continue };
-            if key == "github-token" {
-                continue;
-            }
-            let value = match value {
-                Yaml::String(s) => s.clone(),
-                Yaml::Integer(i) => i.to_string(),
-                Yaml::Boolean(b) => b.to_string(),
-                other => format!("{other:?}"),
-            };
-            let pair = format!("{}={value}", key.to_uppercase().replace('-', "_"));
-            if !run.windows(2).any(|w| w[0] == "-e" && w[1] == pair) {
-                found.push(format!(
-                    "{name}'s input {key}: {value} is not passed to {image} as `-e {pair}`"
-                ));
-            }
-        }
-    }
-    if actions == 0 {
-        found.push("the job it stands in for runs no ClusterFuzzLite action".to_owned());
     }
     found
 }
@@ -902,34 +807,6 @@ fn every_planted_violation_runs_in_its_own_job() {
         trip_problems(&other, &tree)
             .iter()
             .any(|p| p.starts_with("fuel:") && p.contains("none of its own steps' commands"))
-    );
-
-    // Seeded: `ClusterFuzzLite`'s script fuzzing in another mode than the job's, and the job's
-    // action moved to a commit the script was not read against.
-    let batch = |path: &str| {
-        let text = tree(path)?;
-        Some(if path == ".clusterfuzzlite/seeded.sh" {
-            text.replace("-e MODE=code-change", "-e MODE=batch")
-        } else {
-            text
-        })
-    };
-    assert!(
-        trip_problems(&workflows, &batch)
-            .iter()
-            .any(|p| p.contains("input mode: code-change is not passed"))
-    );
-    let mut moved_action = workflows.clone();
-    let fuzz = moved_action.get_mut("kernel-fuzz.yml").unwrap();
-    *fuzz = fuzz.replacen(
-        "run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c",
-        "run_fuzzers@0000000000000000000000000000000000000000",
-        1,
-    );
-    assert!(
-        trip_problems(&moved_action, &tree)
-            .iter()
-            .any(|p| p.contains("run_fuzzers is pinned to"))
     );
 }
 

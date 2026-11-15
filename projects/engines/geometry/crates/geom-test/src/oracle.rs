@@ -28,7 +28,7 @@
 //!   same bits.
 //! - **The allowance never grows with the oracle's tolerance**: it is capped at our bound plus the
 //!   fit bound ([`compare::Allowance::total`]).
-//! - **Each signature is judged once**: a nightly run fails only on a new one.
+//! - **Each signature is judged once**: an oracle run fails only on a new one.
 //!
 //! Method: chapter 28.10 and decision 32.6
 //! (`projects/engines/geometry/architecture/28-testing.md`,

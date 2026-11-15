@@ -4,18 +4,18 @@ name: Kernel release
 # release and edition: everything; the format museum; the edition's goldens frozen"; piece G10).
 #
 # A tag `geom-v<version>` pushed to a commit runs every other kernel workflow on that commit, each
-# called whole (workflow_call) and each in the configuration its main-branch or scheduled runs use:
+# called whole (workflow_call) and each in its whole configuration, as a run by hand uses it:
 # every test on every target and build mode with the golden digests (kernel.yml); the builds, the
 # merge gate and the development crates with the Verus twins (kernel-build.yml, kernel-gate.yml,
 # kernel-dev.yml); the golden store (kernel-golden.yml); the count gates against the commit's first
-# parent (kernel-bench.yml); fuzzing and the bounded proofs (kernel-fuzz.yml), and five hours of
-# libFuzzer on every target (kernel-fuzz-campaign.yml); the full mutation run, coverage and Miri
+# parent (kernel-bench.yml); the bounded proofs (kernel-fuzz.yml); the full mutation run, coverage
+# and Miri
 # over every partition (kernel-quality.yml, which runs its full scope on any event but a pull
-# request); the predicates' verification suite with a fresh seed (kernel-nightly.yml); and the
+# request); the slow fixtures, the fetched corpora and the outside oracles (kernel-oracles.yml); and the
 # filters' error bounds, proved by Gappa and Rocq and checked by FPTaylor and HOL Light
 # (kernel-certificates.yml); and the exact-path variants' timings on every engine, recorded, never
-# a gate (kernel-variants.yml). The tag's run takes as long as its longest workflow, the five-hour
-# campaign or the mutation run.
+# a gate (kernel-variants.yml). The tag's run takes as long as its longest workflow, the mutation
+# run.
 #
 # When all of them pass, `freeze` checks the golden store once more and attaches it, with its
 # SHA-256, to a draft GitHub release for the tag: the record of every digest the release was
@@ -69,12 +69,10 @@ jobs:
     uses: ./.github/workflows/kernel-variants.yml
   fuzz:
     uses: ./.github/workflows/kernel-fuzz.yml
-  fuzz-campaign:
-    uses: ./.github/workflows/kernel-fuzz-campaign.yml
   quality:
     uses: ./.github/workflows/kernel-quality.yml
-  nightly:
-    uses: ./.github/workflows/kernel-nightly.yml
+  oracles:
+    uses: ./.github/workflows/kernel-oracles.yml
 
   # The facade's public interface against the release before this one (chapter 25; piece G100):
   # cargo-semver-checks reads engine-geometry's public items at both commits and fails on a breaking
@@ -126,7 +124,7 @@ jobs:
 
   freeze:
     name: The golden store, recorded with the release
-    needs: [kernel, build, gate, dev, certificates, golden, bench, variants, fuzz, fuzz-campaign, quality, nightly]
+    needs: [kernel, build, gate, dev, certificates, golden, bench, variants, fuzz, quality, oracles]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

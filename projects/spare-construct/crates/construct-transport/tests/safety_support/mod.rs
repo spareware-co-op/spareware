@@ -13,7 +13,7 @@ pub fn data_text(file: &str) -> String {
     std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("cannot read {}: {e}", p.display()))
 }
 
-/// The features of a saved ArcGIS answer (fixtures/data/<file>), in order.
+/// The features of a saved `ArcGIS` answer (fixtures/data/<file>), in order.
 pub fn features_of(file: &str) -> Vec<JsonValue> {
     let v = JsonValue::parse(&data_text(file)).expect("fixture is JSON");
     match v.get("features") {
