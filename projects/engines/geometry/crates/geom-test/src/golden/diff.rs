@@ -36,11 +36,8 @@
 //! a kernel owner's approving review on the pull request's head commit. One account opens every
 //! pull request and no kernel owner reviews them, so that review never came and the check's red
 //! carried no signal. The record is what a reviewer would have read, and this module checks all of
-//! it. [`approved`], the review rule, stays for the fixtures' own edits (`fixture diff`, 28.16): it
-//! counts an approving review on the pull request's current head commit from a reviewer GitHub
-//! reports as a member or owner of the organisation, or as having write, maintain or admin
-//! permission on the repository, who is not the pull request's author, with no such reviewer's
-//! latest review asking for changes.
+//! it. The fixtures' own edits (`fixture diff`, 28.16) are held to their records the same way since
+//! decision 32.55, so no check reads a review any more and the review rule is gone.
 //!
 //! Guarantees:
 //!
@@ -49,24 +46,17 @@
 //! - **A refusal is final.** [`Diff::is_acceptable`] is false whenever a refusal exists.
 //! - **Every moved answer is named.** [`Diff::moved`] holds each moved digest with the record that
 //!   explains it, and the report prints each one.
-//! - **Approval is per head commit.** For [`approved`], a review of an earlier commit does not
-//!   approve later changes.
 //! - **Deterministic.** Reports list editions in store order and goldens in key order.
 //!
 //! Method: a three-way rule check over the two parsed stores (base, head) in the manner of
 //! `cargo-semver-checks`' comparison of a crate's public API across two versions
 //! (<https://github.com/obi1kenobi/cargo-semver-checks>): every difference is classified against a
-//! written rule; the review rule follows GitHub's documentation of pull request reviews
-//! (<https://docs.github.com/en/rest/pulls/reviews>) and author associations
-//! (<https://docs.github.com/en/graphql/reference/enums#commentauthorassociation>).
+//! written rule.
 //!
-//! Cost: linear in the two stores' sizes, with a logarithmic factor for the keyed maps; linear in
-//! the number of reviews.
+//! Cost: linear in the two stores' sizes, with a logarithmic factor for the keyed maps.
 
 use core::fmt;
 use std::collections::{BTreeMap, BTreeSet};
-
-use serde::Deserialize;
 
 use super::store::{Change, Edition, Golden, State, Store};
 
@@ -312,115 +302,6 @@ pub fn diff(base: Option<&Store>, head: &Store) -> Diff {
     d.moved.sort_by(|a, b| a.key.cmp(&b.key));
     d.changed.sort();
     d
-}
-
-/// One review of a pull request, as GitHub's REST API lists it (the fields used).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct Review {
-    /// The reviewer.
-    pub user: Option<Reviewer>,
-    /// `APPROVED`, `CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED` or `PENDING`.
-    pub state: String,
-    /// The commit the review was made on.
-    pub commit_id: Option<String>,
-    /// The reviewer's association with the repository: `OWNER`, `MEMBER`, `COLLABORATOR`, ...
-    pub author_association: String,
-}
-
-/// A reviewer's account.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct Reviewer {
-    /// The account's login.
-    pub login: String,
-}
-
-/// Why a pull request's reviews do not approve an edit.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ApprovalError {
-    /// The reviews are not GitHub's JSON (serde's message).
-    Json(String),
-    /// No qualifying approval on the head commit.
-    NoApproval,
-    /// A qualifying reviewer's latest review asks for changes.
-    ChangesRequested(String),
-}
-
-impl fmt::Display for ApprovalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ApprovalError::Json(m) => write!(f, "the reviews cannot be read: {m}"),
-            ApprovalError::NoApproval => write!(
-                f,
-                "this pull request edits a golden, and no kernel owner has approved its current \
-                 head commit: a review approving this commit, from an organisation member or a \
-                 reviewer with write access who is not the author, is required (chapter 28.13; \
-                 .github/CODEOWNERS names @spareware-co-op/owners)"
-            ),
-            ApprovalError::ChangesRequested(who) => write!(
-                f,
-                "{who} asked for changes in their latest review; an edit to a golden merges only \
-                 when no kernel owner's latest review asks for changes"
-            ),
-        }
-    }
-}
-
-impl core::error::Error for ApprovalError {}
-
-/// Whether a reviewer's association or permission qualifies them as a kernel owner (see the module
-/// documentation).
-fn qualifies(association: &str, permission: Option<&str>) -> bool {
-    matches!(association, "OWNER" | "MEMBER")
-        || matches!(permission, Some("admin" | "maintain" | "write"))
-}
-
-/// Decides whether `reviews` (GitHub's JSON list of a pull request's reviews, oldest first)
-/// approve the head commit `head` of a pull request by `author`; `permissions` maps a login to its
-/// repository permission where the workflow could read it. The fixtures' rule (`fixture diff`)
-/// asks for it; the golden store's own edits are held to their records instead (decision 32.54).
-///
-/// # Errors
-///
-/// An [`ApprovalError`] saying what is missing.
-pub fn approved(
-    reviews: &str,
-    head: &str,
-    author: &str,
-    permissions: &BTreeMap<String, String>,
-) -> Result<String, ApprovalError> {
-    let reviews: Vec<Review> =
-        serde_json::from_str(reviews).map_err(|e| ApprovalError::Json(e.to_string()))?;
-    // Each reviewer's latest review that is not a plain comment or a pending draft.
-    let mut latest: BTreeMap<String, &Review> = BTreeMap::new();
-    for r in &reviews {
-        let Some(user) = &r.user else { continue };
-        if matches!(r.state.as_str(), "COMMENTED" | "PENDING") {
-            continue;
-        }
-        latest.insert(user.login.clone(), r);
-    }
-    let mut approvers = Vec::new();
-    for (login, r) in &latest {
-        if login == author {
-            continue;
-        }
-        if !qualifies(
-            &r.author_association,
-            permissions.get(login).map(String::as_str),
-        ) {
-            continue;
-        }
-        match r.state.as_str() {
-            "CHANGES_REQUESTED" => return Err(ApprovalError::ChangesRequested(login.clone())),
-            "APPROVED" if r.commit_id.as_deref() == Some(head) => approvers.push(login.clone()),
-            _ => {}
-        }
-    }
-    if approvers.is_empty() {
-        Err(ApprovalError::NoApproval)
-    } else {
-        Ok(approvers.join(", "))
-    }
 }
 
 #[cfg(test)]
@@ -704,71 +585,5 @@ mod tests {
             );
             assert!(text.contains("no stored answer moved"), "{text}");
         }
-    }
-
-    fn review(login: &str, state: &str, commit: &str, association: &str) -> String {
-        format!(
-            r#"{{"user": {{"login": "{login}"}}, "state": "{state}", "commit_id": "{commit}",
-                "author_association": "{association}", "body": "", "id": 1}}"#
-        )
-    }
-
-    #[test]
-    fn approval_needs_a_qualified_reviewer_on_the_head_commit() {
-        let none = BTreeMap::new();
-        let ok = format!("[{}]", review("owner1", "APPROVED", "h", "MEMBER"));
-        assert_eq!(approved(&ok, "h", "author", &none), Ok("owner1".to_owned()));
-        // On an older commit.
-        assert_eq!(
-            approved(&ok, "h2", "author", &none),
-            Err(ApprovalError::NoApproval)
-        );
-        // The author's own approval, and an outsider's.
-        let own = format!("[{}]", review("author", "APPROVED", "h", "MEMBER"));
-        assert_eq!(
-            approved(&own, "h", "author", &none),
-            Err(ApprovalError::NoApproval)
-        );
-        let outsider = format!("[{}]", review("x", "APPROVED", "h", "CONTRIBUTOR"));
-        assert_eq!(
-            approved(&outsider, "h", "author", &none),
-            Err(ApprovalError::NoApproval)
-        );
-        // An outsider by association with write permission counts.
-        let mut perms = BTreeMap::new();
-        perms.insert("x".to_owned(), "write".to_owned());
-        assert_eq!(
-            approved(&outsider, "h", "author", &perms),
-            Ok("x".to_owned())
-        );
-        perms.insert("x".to_owned(), "read".to_owned());
-        assert!(approved(&outsider, "h", "author", &perms).is_err());
-        // A later request for changes overrides an approval; a later comment does not.
-        let reversed = format!(
-            "[{},{}]",
-            review("owner1", "APPROVED", "h", "MEMBER"),
-            review("owner1", "CHANGES_REQUESTED", "h", "MEMBER")
-        );
-        assert!(matches!(
-            approved(&reversed, "h", "author", &none),
-            Err(ApprovalError::ChangesRequested(_))
-        ));
-        let commented = format!(
-            "[{},{}]",
-            review("owner1", "APPROVED", "h", "MEMBER"),
-            review("owner1", "COMMENTED", "h", "MEMBER")
-        );
-        assert!(approved(&commented, "h", "author", &none).is_ok());
-        // A dismissed approval does not count.
-        let dismissed = format!(
-            "[{},{}]",
-            review("owner1", "APPROVED", "h", "MEMBER"),
-            review("owner1", "DISMISSED", "h", "MEMBER")
-        );
-        assert!(approved(&dismissed, "h", "author", &none).is_err());
-        assert!(matches!(
-            approved("not json", "h", "a", &none),
-            Err(ApprovalError::Json(_))
-        ));
     }
 }

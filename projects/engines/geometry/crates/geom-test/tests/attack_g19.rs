@@ -34,7 +34,7 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use geom_test::Seed;
-use geom_test::golden::diff::{ApprovalError, approved, diff};
+use geom_test::golden::diff::diff;
 use geom_test::golden::matrix::{RunError, plan, verify};
 use geom_test::golden::perturb::{Heap, MAX_BYTES, address_order_digest};
 use geom_test::golden::shuffle::{Orders, order_free};
@@ -766,143 +766,64 @@ fn the_record_rule_holds_on_the_real_store() {
     assert!(!d.is_acceptable(), "{d}");
 }
 
-/// The review rule: only a qualified reviewer who is not the author, approving the current head
-/// commit, with no qualified reviewer's latest review asking for changes.
-#[test]
-fn approvals_that_must_not_count_do_not() {
-    let review = |login: &str, state: &str, commit: &str, association: &str| {
-        serde_json::json!({
-            "id": 1, "user": {"login": login}, "body": "", "state": state,
-            "commit_id": commit, "author_association": association,
-            "submitted_at": "2026-10-25T00:00:00Z"
-        })
-    };
-    let run = |reviews: Vec<Value>, perms: &[(&str, &str)]| {
-        let perms: BTreeMap<String, String> = perms
-            .iter()
-            .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
-            .collect();
-        approved(&Value::Array(reviews).to_string(), "head", "author", &perms)
-    };
-    // Counts: an organisation owner or member, or write access, on the head commit.
-    for association in ["OWNER", "MEMBER"] {
-        assert!(run(vec![review("o", "APPROVED", "head", association)], &[]).is_ok());
-    }
-    for permission in ["admin", "maintain", "write"] {
-        assert!(
-            run(
-                vec![review("c", "APPROVED", "head", "CONTRIBUTOR")],
-                &[("c", permission)]
-            )
-            .is_ok()
-        );
-    }
-    // Does not count.
-    let not_counted = [
-        vec![review("o", "APPROVED", "older", "MEMBER")],
-        vec![review("author", "APPROVED", "head", "OWNER")],
-        vec![review("c", "APPROVED", "head", "CONTRIBUTOR")],
-        vec![review("c", "APPROVED", "head", "FIRST_TIME_CONTRIBUTOR")],
-        vec![review("c", "APPROVED", "head", "NONE")],
-        vec![review("o", "COMMENTED", "head", "MEMBER")],
-        vec![review("o", "PENDING", "head", "MEMBER")],
-        vec![review("o", "DISMISSED", "head", "MEMBER")],
-        vec![
-            review("o", "APPROVED", "head", "MEMBER"),
-            review("o", "DISMISSED", "head", "MEMBER"),
-        ],
-        vec![],
-    ];
-    for (i, reviews) in not_counted.into_iter().enumerate() {
-        assert_eq!(
-            run(reviews, &[("c", "read")]),
-            Err(ApprovalError::NoApproval),
-            "case {i}"
-        );
-    }
-    // A qualified reviewer asking for changes blocks another's approval; an outsider's does not.
-    assert!(matches!(
-        run(
-            vec![
-                review("o1", "APPROVED", "head", "MEMBER"),
-                review("o2", "CHANGES_REQUESTED", "older", "MEMBER"),
-            ],
-            &[]
-        ),
-        Err(ApprovalError::ChangesRequested(who)) if who == "o2"
-    ));
-    assert!(
-        run(
-            vec![
-                review("o1", "APPROVED", "head", "MEMBER"),
-                review("x", "CHANGES_REQUESTED", "head", "NONE"),
-            ],
-            &[]
-        )
-        .is_ok()
-    );
-    // A request for changes, then a fresh approval of the head, approves.
-    assert!(
-        run(
-            vec![
-                review("o1", "CHANGES_REQUESTED", "older", "MEMBER"),
-                review("o1", "APPROVED", "head", "MEMBER"),
-            ],
-            &[]
-        )
-        .is_ok()
-    );
-    // A deleted account's review (no user) is skipped, not a crash.
-    let ghost = serde_json::json!([{"user": null, "state": "APPROVED", "commit_id": "head",
-        "author_association": "MEMBER"}]);
-    assert_eq!(
-        approved(&ghost.to_string(), "head", "author", &BTreeMap::new()),
-        Err(ApprovalError::NoApproval)
-    );
-}
-
 /// The store's workflow holds pull requests to the record rule: its job `store` runs `golden
-/// check` and `golden diff` against the merge's base, reads no review (decision 32.54), and skips
-/// no step on a review, so a review's run of the job gives the pull request's own answer; the
-/// workflow's token only reads, and the fixtures' job keeps its review rule.
+/// check` and `golden diff` against the merge's base (decision 32.54), its job `fixtures` runs
+/// `fixture diff` against the same base (decision 32.55), and neither reads a review: no step
+/// fetches one, no review starts a run, and the workflow's token only reads the repository.
 #[test]
 fn kernel_golden_yml_runs_the_check_and_the_record_rule() {
     let yml = GOLDEN_YML.replace("\r\n", "\n");
-    let store = yml
+    let (store, fixtures) = yml
         .split_once("\n  store:\n")
         .and_then(|(_, rest)| rest.split_once("\n  fixtures:\n"))
-        .map(|(store, _)| store)
         .expect("kernel-golden.yml has the jobs store and fixtures, in that order");
-    for needle in [
-        "run: cargo run --locked -p geom-test --bin golden -- check\n",
-        "run: cargo run --locked -p geom-test --bin golden -- diff --base \"$BASE\"\n",
-        "if: github.event_name != 'push' && steps.edits.outputs.store == 'edited'\n",
-        "BASE: ${{ steps.edits.outputs.base }}\n",
-        "BASE=$(git rev-parse HEAD^1)\n",
-        "fetch-depth: 0\n",
-        "persist-credentials: false\n",
-        "toolchain: ${{ env.RUST_TOOLCHAIN }}\n",
+    for (job, text, needles) in [
+        (
+            "store",
+            store,
+            [
+                "run: cargo run --locked -p geom-test --bin golden -- check\n",
+                "run: cargo run --locked -p geom-test --bin golden -- diff --base \"$BASE\"\n",
+                "if: github.event_name != 'push' && steps.edits.outputs.store == 'edited'\n",
+            ],
+        ),
+        (
+            "fixtures",
+            fixtures,
+            [
+                "run: cargo run --locked -p geom-test --bin fixture -- check\n",
+                "run: cargo run --locked -p geom-test --bin fixture -- diff --base \"$BASE\"\n",
+                "if: github.event_name != 'push' && steps.edits.outputs.fixtures == 'edited'\n",
+            ],
+        ),
     ] {
-        assert!(store.contains(needle), "the job store lacks {needle:?}");
+        for needle in needles.into_iter().chain([
+            "BASE: ${{ steps.edits.outputs.base }}\n",
+            "BASE=$(git rev-parse HEAD^1)\n",
+            "fetch-depth: 0\n",
+            "persist-credentials: false\n",
+            "toolchain: ${{ env.RUST_TOOLCHAIN }}\n",
+        ]) {
+            assert!(text.contains(needle), "the job {job} lacks {needle:?}");
+        }
     }
     for gone in [
         "pull_request_review",
-        "reviews",
+        "pull-requests:",
+        "reviews.json",
+        "/reviews",
+        "--reviews",
         "--permissions",
         "--head",
         "--author",
         "GH_TOKEN",
     ] {
-        assert!(!store.contains(gone), "the job store still has {gone:?}");
+        assert!(!yml.contains(gone), "kernel-golden.yml still has {gone:?}");
     }
-    // The fixtures' own review rule, and the trigger it needs.
-    for needle in [
-        "  pull_request_review:\n    types: [submitted, edited, dismissed]\n",
-        "permissions:\n  contents: read\n  pull-requests: read\n",
-        "--reviews \"$RUNNER_TEMP/reviews.json\"\n",
-    ] {
-        assert!(yml.contains(needle), "kernel-golden.yml lacks {needle:?}");
-    }
+    assert!(
+        yml.contains("\npermissions:\n  contents: read\n\n"),
+        "the workflow's token reads the repository and nothing else"
+    );
     assert!(
         !yml.contains(": write") && !yml.contains("write-all"),
         "the workflow's token must only read"

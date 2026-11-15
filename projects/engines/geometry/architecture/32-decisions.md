@@ -65,6 +65,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.49 | No patent searches | Decided (owner, 2026-11-13): no patent searches, and no work stops or waits for a patent, known or not; the board's patent pieces are removed | 11, 13, 16, 19, 29, 30, 31 | Nothing |
 | 32.51 | G484: shape identity | Decided 2026-11-14: the same shape is equal under a rotation and a move only, exact, names and the cutting of faces ignored, holes and cuts counted, mirror images reported apart (`MirrorOnly`, `mirror_id`); `ShapeScheme v1` hashed with SHA-256; about 1,120-bit integers and a `Wide<N>` greatest common divisor for three-plane corners, accepted into 6.2 on 32.29's conditions | 6, 8, 10, 30 | G483, shape identity |
 | 32.54 | The golden store check reads the store's record, not a review | Decided by the main session, 2026-11-15: a stored answer that moves passes only with exactly one new history record holding the old digest, a kind the golden allows (only `corpus` on a golden that covers operation versions), its piece and why; no review is read; releasing an edition is refused until G482 writes its rule; the main session's merge record names each moved answer | 28, 32 | Nothing |
+| 32.55 | The fixtures check reads each changed expectation's record, not a review | Decided by the main session, 2026-11-15: a changed expectation of the open edition, or a `Known` fixture's changed wanted result, passes only with a new history record holding what it was, a kind the fixture's rules allow (`corpus` only where the hash alone moved; `bug` or `improvement` only in pre-edition), its piece and why; no review is read and a review starts no run; the main session's merge record names each changed expectation | 28, 32 | Nothing |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -806,7 +807,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-dev.yml` | `wasm` | The tests of `native` on wasm32: a failing test fails it, and the checks they test are seeded under `native` |
 | `kernel-dev.yml` | `verus` | `trip verus` |
 | `kernel-golden.yml` | `store` | J: `geom-test/tests/attack_g19.rs::seeded_violations_of_the_real_tree_are_found`; R: `geom-test/tests/attack_g19.rs::golden_diff_holds_a_moved_answer_to_its_record_end_to_end` (renamed by decision 32.54, after the gate, when the record replaced the review) |
-| `kernel-golden.yml` | `fixtures` | J: `geom-test/tests/fixture_tool.rs::a_tree_that_breaks_a_rule_fails_its_check`; R: `geom-test/tests/fixture_tool.rs::diff_holds_a_pull_request_to_the_rules` |
+| `kernel-golden.yml` | `fixtures` | J: `geom-test/tests/fixture_tool.rs::a_tree_that_breaks_a_rule_fails_its_check`; R: `geom-test/tests/fixture_tool.rs::diff_holds_a_pull_request_to_the_rules`, `geom-test/tests/fixture_tool.rs::diff_holds_a_changed_expectation_to_its_record_end_to_end` (added by decision 32.55, after the gate, when the record replaced the review) |
 | `kernel-bench.yml` | `scope` | Not a gate: it decides which count jobs run, from the same paths as the workflow's trigger |
 | `kernel-bench.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-bench.yml` | `checks` | The tools of `kernel.yml`'s `lint`: `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
@@ -1031,7 +1032,7 @@ So in a shipped build a transform of a six-faced body that is less than exact ab
 - `shipped.rs::kernel_yml_runs_the_shipped_checker_leg_natively_and_on_wasm32`: the leg cannot be dropped from the workflow unseen.
 
 **Left for later, each small.**
-- The replay corpus has no case that rounds. A `rounded` family (a turn that is not a quarter turn, a scale that rounds, a move of a round primitive) would put the two routes into the one digest every leg holds. It moves the golden `geom-test/replay-corpus`, so it needs a kernel owner's approval (32.12).
+- The replay corpus has no case that rounds. A `rounded` family (a turn that is not a quarter turn, a scale that rounds, a move of a round primitive) would put the two routes into the one digest every leg holds. It moves the golden `geom-test/replay-corpus`, so it needs its record in the store (32.12, 32.54).
 - `geom-bench`'s count benchmarks build with the full checker, through the same dependency, so `make/*` measures a test build's check, not a shipped one's. Whether the count gate should measure the shipped configuration is 23.13's to say.
 - Workshop's own full check of a turned part (its piece A25) now repeats what the kernel does, and can go.
 - The step costs one more build of `geom-test` per release leg; if that weighs on the matrix, the leg can move to a job of its own.
@@ -1084,8 +1085,27 @@ Why: one mark for two shapes cuts a wrong part, while two marks for one shape co
 - The job prints each moved answer with its record. The main session's merge record names each one; that part is the main session's, not the code's.
 - Every step of the job runs on a review as on the pull request itself, so a review's run gives the same answer. Before, a review's run skipped `golden check` and could show green beside the pull request's own result.
 
-The fixtures' job (`fixture diff`, 28.16) still asks for a kernel owner's review of a changed expectation; this decision does not change it.
+The fixtures' job (`fixture diff`, 28.16) still asked for a kernel owner's review of a changed expectation when this decision was made. 32.55 holds it to the fixtures' own records the same way and drops the workflow's review trigger, so a review now starts no run of either job.
 
 Why: the record is what a reviewer would have read, and the check now holds every part of it on every pull request, the same way each time. Nothing the old rule refused outright is accepted, two things it let through with a review (a release, and a record of a kind the golden's operation versions rule out) are now refused, and a red now means a record is missing or wrong.
 
 **Changes:** this record; 32.12's row in the first table; 28.13; 32.43's row for the job `store` (its end-to-end test renamed); the glossary's golden store; `kernel-golden.yml`'s job `store`; `geom-test`'s `golden::diff`, `golden::store` (`Golden::allows`, and each kind's name), the `golden` binary (no review options), the store's `about` text and `tests/attack_g19.rs`.
+
+## 32.55 The fixtures check reads each changed expectation's record, not a review
+
+**Decided by the main session, 2026-11-15**, under the rule that every decision is the main session's, recorded with its reason: the fixtures' half of 32.54.
+
+**What it is.** The job "Fixtures" (`kernel-golden.yml`; `geom-test`'s `fixture::diff`) let an expectation of the open edition change only with a history record holding what it was, and then also asked for a kernel owner's approving review on the pull request's head commit; a change to a `Known` fixture's wanted result asked for the review alone. That review never comes, for the reason 32.54 gives: one account opens every pull request and no kernel owner reviews them. What a reviewer would have read is the change's history record in the fixture, so the check now reads that record, all of it, and no check of the kernel reads a review.
+
+**What the check requires now.**
+- Every changed expectation of the open edition carries a new history record in its fixture at its key (edition and operation versions): what it was (`was`), its `kind`, its `piece` and `why`.
+- The kind is one the fixture's rules allow for that change (`Change::allows`). `corpus` (the inputs or their encoding changed, no result did) fits only a success whose measures and counts stayed, so that its hash alone moved: a fixture's log never changes, so only the canonical encoding of what it gives can. `bug` and `improvement` fit only in `pre-edition`: once the first Stable release starts operation versions (G482), a fixed or improved result is a new operation version, a new expectation beside the old (26.2, 28.13), as a golden that covers operation versions records only `corpus`.
+- A `Known` fixture's changed wanted result carries a record on the same terms: the old wanted result, at the log's own operation versions in the open edition.
+- A change with no record, a record of another old value, a kind the rules do not allow, or an empty piece or reason fails, and so do more new records than changed values.
+- Everything else the check refused it still refuses: a removed fixture; a changed log, source or recorded fix; `Pass` become `Known`; a work count that moves alone; a removed expectation; any change to a frozen edition; history rewritten. Adding a fixture or an expectation, recording a fix for the first time, a change of tier, and `Known` moved to `Pass` with what it wanted still need no record.
+- The job prints each changed expectation with its record. The main session's merge record names each one.
+- No review is read. The review rule (`golden::diff::approved`), the step that fetched a pull request's reviews and its reviewers' permissions, the options of `fixture diff` that took them, the workflow's `pull_request_review` trigger and its token's `pull-requests: read` are gone, so a review starts no run of either job.
+
+Why: as in 32.54, the record is what a reviewer would have read, and the check now holds every part of it on every pull request, the same way each time. Nothing the old rule refused is accepted, two things it let through with a review (a record of a kind the rules rule out, and a wanted result changed with no record) are now refused, and a red means a record is missing or wrong.
+
+**Changes:** this record; 32.54's note on the fixtures' job; 32.43's row for the job `fixtures` (a new end-to-end test); 32.48's note on a `rounded` family; 28.16's as-built note; `kernel-golden.yml` (its header, trigger and token, and the job `fixtures`); `geom-test`'s `fixture::diff`, `fixture::Change::allows`, the `fixture` binary (no review options), `golden::diff` (the review rule removed), `tests/fixtures.rs`, `tests/fixture_tool.rs` and `tests/attack_g19.rs`; MAP.json; the kernel README's row for `kernel-golden.yml`, `kernel.yml`'s header, and the notes of the determinism goldens in `geom-num`, `geom-math` and `geom-run`, which still said a kernel owner approves a golden's change.

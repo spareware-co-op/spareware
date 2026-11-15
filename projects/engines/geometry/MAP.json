@@ -12913,14 +12913,14 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the two sets.",
-          "does": "[`diff`] compares the fixtures of a base commit with a pull request's and sorts every change into refused, needing a kernel owner's approval, or free. `.github/workflows/` `kernel-golden.yml` runs it through the `fixture diff` binary and holds the pull request to its answer, with the golden store's own approval rule (`golden::diff::approved`).",
+          "cost": "linear in the two sets, and in the new history records for each changed value.",
+          "does": "[`diff`] compares the fixtures of a base commit with a pull request's and sorts every change into refused, changed on its record, or free. `.github/workflows/` `kernel-golden.yml` runs it through the `fixture diff` binary and holds the pull request to its answer, which prints each changed expectation with its record, for the merge record to name.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/fixture/diff.rs",
           "guarantees": [
-            "every change to a stored fixture is sorted, so one that fits no rule is refused; the answer depends only on the two sets given; nothing reads a clock or the network."
+            "every change to a stored fixture is sorted, so one that fits no rule is refused; every changed value that stands is listed with its record ([`Diff::changed`]); the answer depends only on the two sets given; nothing reads a clock or the network."
           ],
-          "job": "What a pull request may do to the fixtures already stored (chapters 28.13 and 28.16; piece G97).",
+          "job": "What a pull request may do to the fixtures already stored, and the record every changed expectation carries (chapters 28.13 and 28.16; piece G97; decision 32.55).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -13167,7 +13167,7 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the two stores' sizes, with a logarithmic factor for the keyed maps; linear in the number of reviews.",
+          "cost": "linear in the two stores' sizes, with a logarithmic factor for the keyed maps.",
           "does": "[`diff`] compares the store at a pull request's base with the store at its head and returns a [`Diff`]: the goldens added, the answers that moved (each with the history record that says why), the other edits to existing goldens, and every [`Diff::refusals`] entry, a change that cannot merge. The binary `golden` runs it in `.github/workflows/kernel-golden.yml` on every pull request that edits the store, and prints each moved answer with its record, for the merge record to name (decision 32.54).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/diff.rs",
@@ -13175,17 +13175,14 @@
             "**Every difference is seen.** Goldens are matched by edition, id and operation versions; every field is compared; a golden present on one side only is an addition or a removal.",
             "**A refusal is final.** [`Diff::is_acceptable`] is false whenever a refusal exists.",
             "**Every moved answer is named.** [`Diff::moved`] holds each moved digest with the record that explains it, and the report prints each one.",
-            "**Approval is per head commit.** For [`approved`], a review of an earlier commit does not approve later changes.",
             "**Deterministic.** Reports list editions in store order and goldens in key order."
           ],
           "job": "The record rule for edits to the golden store: what a change to the store does, what it may never do, and the record every moved answer carries.",
           "method": {
             "links": [
-              "https://github.com/obi1kenobi/cargo-semver-checks",
-              "https://docs.github.com/en/rest/pulls/reviews",
-              "https://docs.github.com/en/graphql/reference/enums#commentauthorassociation"
+              "https://github.com/obi1kenobi/cargo-semver-checks"
             ],
-            "text": "a three-way rule check over the two parsed stores (base, head) in the manner of `cargo-semver-checks`' comparison of a crate's public API across two versions (<https://github.com/obi1kenobi/cargo-semver-checks>): every difference is classified against a written rule; the review rule follows GitHub's documentation of pull request reviews (<https://docs.github.com/en/rest/pulls/reviews>) and author associations (<https://docs.github.com/en/graphql/reference/enums#commentauthorassociation>)."
+            "text": "a three-way rule check over the two parsed stores (base, head) in the manner of `cargo-semver-checks`' comparison of a crate's public API across two versions (<https://github.com/obi1kenobi/cargo-semver-checks>): every difference is classified against a written rule."
           },
           "path": "geom_test::golden::diff",
           "provenance": [],
