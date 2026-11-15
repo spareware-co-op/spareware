@@ -321,6 +321,13 @@ jobs:
       # saved runs in one home, where the second run finds the first.
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
       GUNGRAUN_HOME: ${{ github.workspace }}/gungraun
+      # Every run of the benchmarks runs those of one group side by side, one per processor
+      # (Gungraun's --parallel; a group's benchmarks run together, and the next group starts when
+      # they have all ended). Each benchmark is still its own Valgrind process, and Callgrind's
+      # counts and caches and DHAT's heap are simulated inside that process, so no count depends on
+      # what runs beside it: the counts are those of one benchmark at a time, to the instruction.
+      # One at a time, the merge base's run alone took 69 to 92 minutes of this job's 150.
+      GUNGRAUN_PARALLEL: auto
       # Every function on its own cache line, so the code the measured pass runs only once sits on
       # lines it already fetched (geom_bench::harness).
       RUSTFLAGS: "-C llvm-args=-align-all-functions=6"
@@ -680,6 +687,30 @@ jobs:
               echo '```'
               echo "</details>"
             fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      # How long each benchmark of the pull request took to measure: its Callgrind and DHAT
+      # processes together, from the summaries the gate saved, the longest first, in the log and the
+      # job summary. The log's timestamps cannot tell it: Gungraun prints a benchmark's counts only
+      # after both its runs, and runs a group's benchmarks side by side. A benchmark that takes
+      # minutes is cut to a size that does not (geom-bench's inputs::SHORT_BATCHES). It only
+      # reports, so it never fails the job.
+      - name: List the benchmarks that took longest
+        if: always() && steps.gate.outcome != 'skipped'
+        run: |
+          set +e
+          set -uo pipefail
+          find "$GUNGRAUN_HOME/geom-bench/instructions" -name summary.json -exec jq -r \
+              '"\([.profiles[].process_ns] | add / 1e8 | floor / 10) s \(.group)/\(.function_name)/\(.id)"' {} + \
+            | sort -rn | head -n 15 > "$RUNNER_TEMP/longest.txt"
+          cat "$RUNNER_TEMP/longest.txt"
+          {
+            echo "### The benchmarks that took longest to measure on $TARGET"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/longest.txt"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
