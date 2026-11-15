@@ -361,15 +361,16 @@ fn solids_give_what_their_arrays_give() {
     assert!(!wedge(0, [20, 31, 27, 29], 1).is_solid());
 }
 
-/// Two rough fields of 120 faces each, the second moved along x by `x`: more faces than a leaf
-/// holds, so their boxes split.
-fn fields(x: i64) -> [ExactMesh; 2] {
+/// Two rough fields of `n` by `n` heights (120 faces each at 6, 48 at 4), the second moved along x
+/// by `x`: more faces than a leaf holds (`geom_poly::subdivide::LEAF_POLYGONS`, 32), so their boxes
+/// split.
+fn fields(n: usize, x: i64) -> [ExactMesh; 2] {
     let seed = resolve("geom-mesh boolean fields", Seed(0x1481)).unwrap();
     let mut rng = SplitMix64::new(seed);
     let up = NonZeroU64::new(40).unwrap();
     [(0, 1), (x, 2)].map(|(moved, name)| {
-        let heights: Vec<Vec<i64>> = (0..6)
-            .map(|_| (0..6).map(|_| 20 + rng.below(up) as i64).collect())
+        let heights: Vec<Vec<i64>> = (0..n)
+            .map(|_| (0..n).map(|_| 20 + rng.below(up) as i64).collect())
             .collect();
         let (mut input, _) = shapes::prism(&heights, 16);
         for corner in &mut input.vertices {
@@ -386,7 +387,10 @@ fn fields(x: i64) -> [ExactMesh; 2] {
 fn solids_of_many_faces_give_what_their_arrays_give() {
     // Overlapping in a strip a fifth of their width, as the benchmark's pair: most boxes hold one
     // solid's faces only, and stop there.
-    let [a, b] = fields(64);
+    // Under Miri, fields of 4 by 4 heights, still over a leaf.
+    let n = sized(6, 4);
+    let width = (n as i64 - 1) * 16;
+    let [a, b] = fields(n, width * 4 / 5);
     let (sa, sb) = (
         one(&[&a], WindingTest::unite()).mesh,
         one(&[&b], WindingTest::unite()).mesh,
