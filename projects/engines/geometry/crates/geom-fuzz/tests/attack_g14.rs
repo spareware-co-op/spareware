@@ -42,7 +42,7 @@ use geom_fuzz::{
     Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, crossings,
     curves, encoder, euler, exact, general, intersect, level, linalg, make, maths, names, naming,
     natural, nurbs, open, operations, orient2d, p21, pencils, piercing, planes, predicates,
-    project, prune, quadric, records, reductions, references, roots, sequence, surfaces,
+    project, prune, quadric, records, reductions, references, roots, sequence, solids, surfaces,
     transforms, variants, wide,
 };
 
@@ -56,7 +56,7 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 44] = [
+const TARGETS: [(&str, Harness); 45] = [
     ("arenas", arenas::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
@@ -94,6 +94,7 @@ const TARGETS: [(&str, Harness); 44] = [
     ("references", references::harness),
     ("roots", roots::harness),
     ("sequence", sequence::harness),
+    ("solids", solids::harness),
     ("surfaces", surfaces::harness),
     ("transforms", transforms::harness),
     ("quadric", quadric::harness),

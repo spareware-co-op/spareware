@@ -418,6 +418,8 @@ pub enum MeshError {
         /// The test, by its place in the list given.
         test: u32,
     },
+    /// Planes to slice by must be parallel and rise along their normal.
+    SlicesOutOfOrder,
     /// The box tree refused.
     Bvh(BvhError),
     /// The numbers layer refused: a plane over budget, or a fault of its own.
@@ -449,6 +451,9 @@ impl fmt::Display for MeshError {
                 f,
                 "test {test} passes outside everything, so its result has no boundary: intersect it with a box first"
             ),
+            MeshError::SlicesOutOfOrder => {
+                f.write_str("planes to slice by must be parallel and rise along their normal")
+            }
             MeshError::Bvh(e) => write!(f, "{e}"),
             MeshError::Num(e) => write!(f, "{e}"),
             MeshError::Stopped(e) => write!(f, "the mesh stopped: {e}"),
