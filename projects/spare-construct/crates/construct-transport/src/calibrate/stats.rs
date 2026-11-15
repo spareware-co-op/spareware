@@ -1,6 +1,7 @@
 //! The statistics of calibrate.js: the validation criteria with their sources (`Calibrate.RULES`), the through-origin
 //! and OLS fits, the GEH bands and the statistics of a set of counted sites.
 
+use crate::jsnum::usize_to_f64;
 use crate::results::plain;
 use serde::Serialize;
 
@@ -212,19 +213,28 @@ pub const RULES: [(&str, Rule); 11] = [
     ),
 ];
 
-/// `Calibrate.RULES[id]`; panics for an id that is not a rule.
+// A rule with no limits, for an id that is not in RULES: every limit test against it fails
+static NO_RULE: Rule = rule("");
+
+/// `Calibrate.RULES[id]`; a rule with no limits (and an empty kind) for an id that is not a rule.
+#[must_use]
 pub fn rule_of(id: &str) -> &'static Rule {
+    // Every caller passes one of RULES' ids, so the fallback is never reached
     RULES
         .iter()
-        .find(|(k, _)| *k == id)
-        .map(|(_, r)| r)
-        .unwrap_or_else(|| panic!("no calibration rule {id:?}"))
+        .find(|(k, _)| *k == id).map_or(&NO_RULE, |(_, r)| r)
+}
+
+// `y[i]` in the JavaScript: NaN past the end (callers pass x and y of the same length)
+fn at(v: &[f64], i: usize) -> f64 {
+    v.get(i).copied().unwrap_or(f64::NAN)
 }
 
 /// `Calibrate.MIN_SITES`: fewer sites than this are "Indicative", never pass or fail (Spare Construct convention).
 pub const MIN_SITES: usize = 10;
 
 /// `flowOK(m, o)`: within the TAG M3.1 Table 2 flow band (100 veh/h below 700, 15% to 2,700, 400 veh/h above).
+#[must_use]
 pub fn flow_ok(m: f64, o: f64) -> bool {
     if o < 700.0 {
         (m - o).abs() <= 100.0
@@ -236,6 +246,7 @@ pub fn flow_ok(m: f64, o: f64) -> bool {
 }
 
 /// `bandOK(m, o)`: within the TMDG count band (50 veh/h below 400, 12.5% to 2,000, 250 veh/h above).
+#[must_use]
 pub fn band_ok(m: f64, o: f64) -> bool {
     if o < 400.0 {
         (m - o).abs() <= 50.0
@@ -247,25 +258,26 @@ pub fn band_ok(m: f64, o: f64) -> bool {
 }
 
 /// `pearson2(x, y)`: the square of Pearson's r, None for fewer than two pairs or no spread.
+#[must_use]
 pub fn pearson2(x: &[f64], y: &[f64]) -> Option<f64> {
     let n = x.len();
     if n < 2 {
         return None;
     }
     let (mut mx, mut my) = (0.0f64, 0.0f64);
-    for i in 0..n {
-        mx += x[i];
-        my += y[i];
+    for (i, &xi) in x.iter().enumerate() {
+        mx += xi;
+        my += at(y, i);
     }
-    mx /= n as f64;
-    my /= n as f64;
+    mx /= usize_to_f64(n);
+    my /= usize_to_f64(n);
     let (mut sxy, mut sxx, mut syy) = (0.0f64, 0.0f64, 0.0f64);
-    for i in 0..n {
-        let a = x[i] - mx;
-        let b = y[i] - my;
-        sxy += a * b;
-        sxx += a * a;
-        syy += b * b;
+    for (i, &xi) in x.iter().enumerate() {
+        let dx = xi - mx;
+        let dy = at(y, i) - my;
+        sxy += dx * dy;
+        sxx += dx * dx;
+        syy += dy * dy;
     }
     if sxx > 0.0 && syy > 0.0 {
         Some(sxy * sxy / (sxx * syy))
@@ -289,6 +301,7 @@ pub struct OriginFit {
 }
 
 /// `Calibrate.origin(x, y)`: fits y = b0 x through the origin.
+#[must_use]
 pub fn origin(x: &[f64], y: &[f64]) -> OriginFit {
     let none = OriginFit {
         b0: None,
@@ -300,23 +313,25 @@ pub fn origin(x: &[f64], y: &[f64]) -> OriginFit {
         return none;
     }
     let (mut sxy, mut sxx, mut sy, mut syy) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
-    for i in 0..n {
-        sxy += x[i] * y[i];
-        sxx += x[i] * x[i];
-        sy += y[i];
-        syy += y[i] * y[i];
+    for (i, &xi) in x.iter().enumerate() {
+        let yi = at(y, i);
+        sxy += xi * yi;
+        sxx += xi * xi;
+        sy += yi;
+        syy += yi * yi;
     }
-    if !(sxx > 0.0) {
+    if sxx <= 0.0 || sxx.is_nan() {
         return none;
     }
     let b0 = sxy / sxx;
-    let my = sy / n as f64;
+    let my = sy / usize_to_f64(n);
     let (mut se, mut st) = (0.0f64, 0.0f64);
-    for i in 0..n {
-        let e = y[i] - b0 * x[i];
-        let t = y[i] - my;
-        se += e * e;
-        st += t * t;
+    for (i, &xi) in x.iter().enumerate() {
+        let yi = at(y, i);
+        let res = yi - b0 * xi;
+        let dev = yi - my;
+        se += res * res;
+        st += dev * dev;
     }
     OriginFit {
         b0: Some(b0),
@@ -337,22 +352,23 @@ pub struct OlsFit {
 }
 
 /// `Calibrate.ols(x, y)`: ordinary least squares, reported beside the through-origin fit (never the pass or fail test).
+#[must_use]
 pub fn ols(x: &[f64], y: &[f64]) -> OlsFit {
     let n = x.len();
     if n < 2 {
         return OlsFit { a: None, b: None };
     }
     let (mut mx, mut my) = (0.0f64, 0.0f64);
-    for i in 0..n {
-        mx += x[i];
-        my += y[i];
+    for (i, &xi) in x.iter().enumerate() {
+        mx += xi;
+        my += at(y, i);
     }
-    mx /= n as f64;
-    my /= n as f64;
+    mx /= usize_to_f64(n);
+    my /= usize_to_f64(n);
     let (mut sxy, mut sxx) = (0.0f64, 0.0f64);
-    for i in 0..n {
-        let a = x[i] - mx;
-        sxy += a * (y[i] - my);
+    for (i, &xi) in x.iter().enumerate() {
+        let a = xi - mx;
+        sxy += a * (at(y, i) - my);
         sxx += a * a;
     }
     if sxx > 0.0 {
@@ -390,6 +406,7 @@ pub struct GehBand {
 pub const GEH_BANDS: [(f64, f64); 5] = [(0.0, 5.0), (5.0, 7.5), (7.5, 10.0), (10.0, 12.0), (12.0, f64::INFINITY)];
 
 /// `Calibrate.gehBands(rows)`: count and cumulative share of sites per GEH band.
+#[must_use]
 pub fn geh_bands(gehs: &[f64]) -> Vec<GehBand> {
     use crate::jsnum::number_to_js_string as t;
     let n = gehs.len();
@@ -398,7 +415,8 @@ pub fn geh_bands(gehs: &[f64]) -> Vec<GehBand> {
         .iter()
         .map(|&(lo, hi)| {
             let k = gehs.iter().filter(|&&g| g >= lo && g < hi).count();
-            cum += k;
+            // Bound: the bands do not overlap, so cum never exceeds the number of sites
+            cum = cum.saturating_add(k);
             GehBand {
                 lo,
                 hi,
@@ -410,8 +428,8 @@ pub fn geh_bands(gehs: &[f64]) -> Vec<GehBand> {
                     format!("{}\u{2013}{}", t(lo), t(hi))
                 },
                 n: k,
-                share: if n > 0 { Some(k as f64 / n as f64) } else { None },
-                cum: if n > 0 { Some(cum as f64 / n as f64) } else { None },
+                share: if n > 0 { Some(usize_to_f64(k) / usize_to_f64(n)) } else { None },
+                cum: if n > 0 { Some(usize_to_f64(cum) / usize_to_f64(n)) } else { None },
             }
         })
         .collect()
@@ -473,6 +491,7 @@ pub struct Stats {
 }
 
 /// `Calibrate.stats(rows)` for sites given as (counted, modelled, GEH): shares under each GEH limit, within the bands, mean GEH, the fits and %RMSE.
+#[must_use]
 pub fn stats_of(obs_model_geh: &[(f64, f64, f64)]) -> Stats {
     let n = obs_model_geh.len();
     if n == 0 {
@@ -496,53 +515,54 @@ pub fn stats_of(obs_model_geh: &[(f64, f64, f64)]) -> Stats {
             tot_mod: 0.0,
         };
     }
-    let (mut so, mut sm, mut g, mut se) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+    let (mut so, mut sm, mut geh_sum, mut se) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+    // Bound: each count is at most the number of sites, far below usize::MAX
     let (mut p5, mut p75, mut p10, mut fl, mut bd) = (0usize, 0usize, 0usize, 0usize, 0usize);
     for &(obs, model, geh) in obs_model_geh {
         so += obs;
         sm += model;
-        g += geh;
-        let d = model - obs;
-        se += d * d;
+        geh_sum += geh;
+        let diff = model - obs;
+        se += diff * diff;
         if geh < 5.0 {
-            p5 += 1;
+            p5 = p5.saturating_add(1);
         }
         if geh < 7.5 {
-            p75 += 1;
+            p75 = p75.saturating_add(1);
         }
         if geh < 10.0 {
-            p10 += 1;
+            p10 = p10.saturating_add(1);
         }
         if geh < 5.0 || flow_ok(model, obs) {
-            fl += 1;
+            fl = fl.saturating_add(1);
         }
         if band_ok(model, obs) {
-            bd += 1;
+            bd = bd.saturating_add(1);
         }
     }
     let x: Vec<f64> = obs_model_geh.iter().map(|r| r.0).collect();
     let y: Vec<f64> = obs_model_geh.iter().map(|r| r.1).collect();
     let gehs: Vec<f64> = obs_model_geh.iter().map(|r| r.2).collect();
-    let o = origin(&x, &y);
-    let l = ols(&x, &y);
-    let nf = n as f64;
+    let fit = origin(&x, &y);
+    let line = ols(&x, &y);
+    let nf = usize_to_f64(n);
     Stats {
         n,
-        pass: Some(p5 as f64 / nf),
-        pass75: Some(p75 as f64 / nf),
-        pass10: Some(p10 as f64 / nf),
-        band: Some(bd as f64 / nf),
-        flow: Some(fl as f64 / nf),
-        geh: Some(g / nf),
-        r2: o.r2c,
-        r2_excel: o.r2e,
+        pass: Some(usize_to_f64(p5) / nf),
+        pass75: Some(usize_to_f64(p75) / nf),
+        pass10: Some(usize_to_f64(p10) / nf),
+        band: Some(usize_to_f64(bd) / nf),
+        flow: Some(usize_to_f64(fl) / nf),
+        geh: Some(geh_sum / nf),
+        r2: fit.r2c,
+        r2_excel: fit.r2e,
         r2_ols: pearson2(&x, &y),
-        slope: o.b0,
-        ols_slope: l.b,
-        ols_intercept: l.a,
+        slope: fit.b0,
+        ols_slope: line.b,
+        ols_intercept: line.a,
         geh_bands: geh_bands(&gehs),
         rmse: if n > 1 && so > 0.0 {
-            Some(100.0 * (se / (n - 1) as f64).sqrt() / (so / nf))
+            Some(100.0 * (se / usize_to_f64(n.saturating_sub(1))).sqrt() / (so / nf))
         } else {
             None
         },

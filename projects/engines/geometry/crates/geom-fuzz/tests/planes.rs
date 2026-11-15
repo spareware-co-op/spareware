@@ -1,8 +1,7 @@
 //! The planes fuzz target (G123), run as tests on stable Rust: bolero's test mode, the seeded leg
 //! and the input bound.
 //!
-//! - `planes_fuzz` wraps `geom_fuzz::planes::harness` in `bolero::check!`; under
-//!   `cargo bolero test planes_fuzz --package geom-fuzz` it is a libFuzzer target.
+//! - `planes_fuzz` wraps `geom_fuzz::planes::harness` in `bolero::check!`, bolero's test mode.
 //! - `planes_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 

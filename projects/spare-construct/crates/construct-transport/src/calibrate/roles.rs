@@ -39,6 +39,7 @@ pub struct Ctx<'a> {
 
 impl<'a> Ctx<'a> {
     /// Reads the project's counts, roles and calibration settings.
+    #[must_use]
     pub fn new(p: &'a Project) -> Ctx<'a> {
         Ctx {
             p,
@@ -84,13 +85,10 @@ impl<'a> Ctx<'a> {
     }
     /// `baseRole(c)`: the role the user (or the hold-out action) gave; "me" when none was given.
     pub fn base_role(&self, c: &Count) -> &'static str {
+        // "gateway", any other text and no role at all are "me"
         match self.store.role(&c.id).as_text() {
-            Some(r) if r != "gateway" => match r {
-                "me" => "me",
-                "valid" => "valid",
-                "off" => "off",
-                _ => "me",
-            },
+            Some("valid") => "valid",
+            Some("off") => "off",
             _ => "me",
         }
     }
@@ -186,6 +184,7 @@ pub fn count_label(c: &Count) -> String {
 }
 
 /// `methodOf(c, period)`: the observation method of a count in a period, from the panel's four methods (an importer's own `obs_method` wins; a user count is a measured hour when it has that period's hour; an AT count when its counted peak falls in the period's window).
+#[must_use]
 pub fn method_of(c: &Count, period: &str) -> &'static str {
     if let Some(m) = c.obs_method.as_text()
         && let Some(pm) = panel_method(m)
@@ -207,11 +206,12 @@ pub fn method_of(c: &Count, period: &str) -> &'static str {
             if a >= end {
                 0.0
             } else {
-                string_to_number(&String::from_utf16_lossy(&u[a..end]))
+                // a < end <= u.len(), so the range is always there
+                u.get(a..end).map_or(0.0, |s| string_to_number(&String::from_utf16_lossy(s)))
             }
         };
         let h = part(0, Some(2)) + part(3, None) / 60.0;
-        if (period == "AM" && h >= 6.0 && h < 10.0) || (period == "PM" && h >= 14.5 && h < 19.0) {
+        if (period == "AM" && (6.0..10.0).contains(&h)) || (period == "PM" && (14.5..19.0).contains(&h)) {
             return "measured_hour";
         }
     }
@@ -219,6 +219,7 @@ pub fn method_of(c: &Count, period: &str) -> &'static str {
 }
 
 /// `METHODS[method].weight` for a count in a period, as the panel gives matrix estimation (0.4 for a method it does not list).
+#[must_use]
 pub fn method_weight(c: &Count, period: &str) -> f64 {
     panel_method(method_of(c, period)).map_or(0.4, |m| m.weight)
 }
@@ -265,57 +266,62 @@ pub fn set_role(p: &mut Project, id: &str, role: &str) {
 ///
 /// Eligible counts (in use, not virtual, matched, not gateway counts, not switched off) are sorted by road-class rank,
 /// then by a hash of the id, and every `every`th becomes "valid" (deterministic; Spare Construct convention). The rest
-/// become calibration counts; every role except "not used" is cleared first. Returns (validation, calibration) counts.
+/// become calibration counts; every role except "not used" is cleared first. Returns (validation, calibration) counts;
+/// (0, 0), with nothing changed, when the scenario is not in the project.
 pub fn hold_out(p: &mut Project, sc_id: &str, every: usize) -> (usize, usize) {
+    struct E {
+        c: Rc<Count>,
+        rank: f64,
+        h: u32,
+    }
     let (ids, mut st) = {
         let ctx = Ctx::new(p);
-        let sc = p.scenario(sc_id).expect("scenario");
+        let Some(sc) = p.scenario(sc_id) else {
+            return (0, 0);
+        };
         let m = ctx.matches(sc);
         let gw = ctx.gateway_ids();
-        struct E {
-            c: Rc<Count>,
-            rank: f64,
-            h: u32,
-        }
         let mut el: Vec<E> = ctx
             .data
             .counts
             .iter()
             .filter(|c| ctx.data.in_use(c) && !c.virtual_.truthy() && m.get(&c.id).is_some() && !gw.contains(&c.id) && ctx.base_role(c) != "off")
-            .map(|c| {
-                let l = sc.links.get(&m.get(&c.id).expect("matched").link);
-                E {
+            .filter_map(|c| {
+                let l = sc.links.get(&m.get(&c.id)?.link);
+                Some(E {
                     c: c.clone(),
                     rank: l.map_or(0.0, |l| road_class(l.cls.as_str()).rank),
                     h: hash(&c.id),
-                }
+                })
             })
             .collect();
         js_sort_by(&mut el, |a, b| {
             let d = b.rank - a.rank;
-            if d != 0.0 && !d.is_nan() { d } else { a.h as f64 - b.h as f64 }
+            if d != 0.0 && !d.is_nan() { d } else { f64::from(a.h) - f64::from(b.h) }
         });
         (el.into_iter().map(|e| e.c.id.clone()).collect::<Vec<String>>(), ctx.store.clone())
     };
     // a fresh hold-out: every role except 'not used' is cleared first, so the result depends only on the counts
     let keys: Vec<String> = st.roles.keys().map(String::from).collect();
     for id in keys {
-        if !st.roles.num_at(&id).as_text().is_some_and(|t| t == "off") {
+        if st.roles.num_at(&id).as_text().is_none_or(|t| t != "off") {
             st.roles.remove(&id);
         }
     }
-    let mut k = 0;
+    // Bound: k counts ids, so it stays at most ids.len()
+    let mut k = 0usize;
     for (i, id) in ids.iter().enumerate() {
-        if i % every == every - 1 {
+        // i % every == every - 1; with every 0 that is NaN == -1 in the prototype, never true
+        if i.checked_rem(every).is_some_and(|r| Some(r) == every.checked_sub(1)) {
             st.roles.insert(id.clone(), Maybe::Set(crate::jsnum::JsNum::Text("valid".to_string())));
-            k += 1;
+            k = k.saturating_add(1);
         } else {
             st.roles.remove(id);
         }
     }
     st.write(p);
     sync_counts(p);
-    (k, ids.len() - k)
+    (k, ids.len().saturating_sub(k))
 }
 
 /// `holdOut` with the default of one in four (`CORRIDOR.holdEvery`).
@@ -328,7 +334,7 @@ pub fn reset_roles(p: &mut Project) {
     let mut st = CalibStore::read(p);
     let keys: Vec<String> = st.roles.keys().map(String::from).collect();
     for id in keys {
-        if !st.roles.num_at(&id).as_text().is_some_and(|t| t == "off") {
+        if st.roles.num_at(&id).as_text().is_none_or(|t| t != "off") {
             st.roles.remove(&id);
         }
     }

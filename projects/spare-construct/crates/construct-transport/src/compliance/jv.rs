@@ -3,7 +3,7 @@
 //! their key order) and use these helpers for the JavaScript readings of a value.
 
 use crate::edit::json::JsonValue;
-use crate::jsnum::{is_js_space, number_to_js_string};
+use crate::jsnum::{i64_to_f64, is_js_space, number_to_js_string, usize_to_f64};
 
 /// A loose JSON value (objects keep the order the file lists them in).
 pub type V = JsonValue;
@@ -69,7 +69,7 @@ impl Jx for V {
         self.as_array().map_or(&[], |a| a.as_slice())
     }
     fn jlen(&self) -> usize {
-        self.as_array().map_or(0, |a| a.len())
+        self.as_array().map_or(0, std::vec::Vec::len)
     }
     fn entries(&self) -> Vec<(&str, &V)> {
         self.as_object().map_or_else(Vec::new, |m| m.iter().collect())
@@ -140,22 +140,22 @@ impl ToV for f64 {
 }
 impl ToV for i32 {
     fn to_v(self) -> V {
-        V::Number(self as f64)
+        V::Number(f64::from(self))
     }
 }
 impl ToV for i64 {
     fn to_v(self) -> V {
-        V::Number(self as f64)
+        V::Number(i64_to_f64(self))
     }
 }
 impl ToV for u32 {
     fn to_v(self) -> V {
-        V::Number(self as f64)
+        V::Number(f64::from(self))
     }
 }
 impl ToV for usize {
     fn to_v(self) -> V {
-        V::Number(self as f64)
+        V::Number(usize_to_f64(self))
     }
 }
 impl ToV for bool {
@@ -209,6 +209,7 @@ macro_rules! jarr {
 pub(crate) use jarr;
 
 /// A number value.
+#[must_use]
 pub fn f(x: f64) -> V {
     V::Number(x)
 }
@@ -229,6 +230,7 @@ pub fn strs<S: AsRef<str>>(items: impl IntoIterator<Item = S>) -> V {
 }
 
 /// `{ ...a, ...b }`: the fields of a, then those of b (a field in both keeps a's place and takes b's value).
+#[must_use]
 pub fn merge(a: &V, b: &V) -> V {
     let mut o = if a.is_object() { a.clone() } else { V::object() };
     for (k, v) in b.entries() {
@@ -243,24 +245,29 @@ pub fn set(o: &mut V, k: &str, v: impl ToV) {
 }
 
 /// The field of an object for changing, made an empty object first when missing or not an object-like value.
-pub fn obj_at<'a>(o: &'a mut V, k: &str) -> &'a mut V {
-    let ok = o.get(k).is_some_and(|x| x.is_object());
+///
+/// Always Some when `o` is an object; None when it is not (a field cannot be set on it).
+pub fn obj_at<'a>(o: &'a mut V, k: &str) -> Option<&'a mut V> {
+    let ok = o.get(k).is_some_and(crate::edit::json::JsonValue::is_object);
     if !ok {
         o.set(k, V::object());
     }
-    o.get_mut(k).expect("field set above")
+    o.get_mut(k)
 }
 
 /// The field of an object for changing, made an empty array first when missing or not an array.
-pub fn arr_at<'a>(o: &'a mut V, k: &str) -> &'a mut Vec<V> {
-    let ok = o.get(k).is_some_and(|x| x.is_array());
+///
+/// Always Some when `o` is an object; None when it is not (a field cannot be set on it).
+pub fn arr_at<'a>(o: &'a mut V, k: &str) -> Option<&'a mut Vec<V>> {
+    let ok = o.get(k).is_some_and(crate::edit::json::JsonValue::is_array);
     if !ok {
         o.set(k, V::Array(Vec::new()));
     }
-    o.get_mut(k).expect("field set above").as_array_mut().expect("array set above")
+    o.get_mut(k).and_then(V::as_array_mut)
 }
 
 /// A dotted path read from a value (`getPath`): null when any step is missing.
+#[must_use]
 pub fn path<'a>(v: &'a V, p: &str) -> &'a V {
     let mut cur = v;
     for k in p.split('.') {
@@ -278,50 +285,61 @@ pub fn trim(s: &str) -> &str {
 }
 
 /// `n.toString()` for a number (JavaScript's formatting).
+#[must_use]
 pub fn ns(x: f64) -> String {
     number_to_js_string(x)
 }
 
 /// `s.slice(a, b)` by character (negative bounds count from the end); b None is the end.
+#[must_use]
 pub fn slice(s: &str, a: i64, b: Option<i64>) -> String {
-    let c: Vec<char> = s.chars().collect();
-    let n = c.len() as i64;
-    let fix = |x: i64| if x < 0 { (n + x).max(0) } else { x.min(n) };
-    let (lo, hi) = (fix(a), fix(b.unwrap_or(n)));
+    let chars: Vec<char> = s.chars().collect();
+    // Bound: a text's length in characters is far below i64::MAX
+    let len = i64::try_from(chars.len()).unwrap_or(i64::MAX);
+    // at < 0 and len >= 0 here, so the sum cannot overflow
+    let fix = |at: i64| if at < 0 { len.saturating_add(at).max(0) } else { at.min(len) };
+    let (lo, hi) = (fix(a), fix(b.unwrap_or(len)));
     if lo >= hi {
         String::new()
     } else {
-        c[lo as usize..hi as usize].iter().collect()
+        // Both bounds are in 0..=len, so they convert exactly and the range is inside the text
+        let (lo, hi) = (usize::try_from(lo).unwrap_or(0), usize::try_from(hi).unwrap_or(0));
+        chars.get(lo..hi).unwrap_or_default().iter().collect()
     }
 }
 
 /// `s.padStart(n, '0')`.
+#[must_use]
 pub fn pad_start(s: &str, n: usize, with: char) -> String {
     let len = s.chars().count();
     if len >= n {
         s.to_string()
     } else {
-        std::iter::repeat_n(with, n - len).collect::<String>() + s
+        std::iter::repeat_n(with, n.saturating_sub(len)).collect::<String>() + s
     }
 }
 
 /// `s.toLowerCase()`.
+#[must_use]
 pub fn lower(s: &str) -> String {
     s.to_lowercase()
 }
 
 /// `s.toUpperCase()`.
+#[must_use]
 pub fn upper(s: &str) -> String {
     s.to_uppercase()
 }
 
 /// `arr.includes(x)` for text.
+#[must_use]
 pub fn has_str(a: &[&str], x: &str) -> bool {
     a.contains(&x)
 }
 
 /// `U.csvCell(v)`: one RFC 4180 cell. Text that a spreadsheet would read as a formula gets a leading apostrophe; null is an empty
 /// cell; numbers (a number that is not finite prints as NaN or Infinity), booleans, arrays and objects are written as `String(v)`.
+#[must_use]
 pub fn csv_cell(v: &V) -> String {
     let mut s = if v.is_null() { String::new() } else { v.js_string() };
     if let V::String(_) = v {
@@ -334,22 +352,24 @@ pub fn csv_cell(v: &V) -> String {
 }
 
 /// `U.csv(rows)`: cells joined with commas, rows with CRLF.
+#[must_use]
 pub fn csv(rows: &[Vec<V>]) -> String {
     rows.iter().map(|r| r.iter().map(csv_cell).collect::<Vec<_>>().join(",")).collect::<Vec<_>>().join("\r\n")
 }
 
 /// `U.parseCSV(text)`: rows of cells, quotes and doubled quotes read, rows that are blank left out.
+#[must_use]
 pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
     let t: Vec<char> = text.chars().collect();
     let mut rows: Vec<Vec<String>> = Vec::new();
     let (mut row, mut cur, mut q) = (Vec::<String>::new(), String::new(), false);
-    let mut i = 0;
-    while i < t.len() {
-        let c = t[i];
+    // Bound: i is at most the text's length, far below usize::MAX
+    let mut i = 0usize;
+    while let Some(&c) = t.get(i) {
         if q {
-            if c == '"' && t.get(i + 1) == Some(&'"') {
+            if c == '"' && t.get(i.saturating_add(1)) == Some(&'"') {
                 cur.push('"');
-                i += 1;
+                i = i.saturating_add(1);
             } else if c == '"' {
                 q = false;
             } else {
@@ -360,15 +380,15 @@ pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
         } else if c == ',' {
             row.push(std::mem::take(&mut cur));
         } else if c == '\n' || c == '\r' {
-            if c == '\r' && t.get(i + 1) == Some(&'\n') {
-                i += 1;
+            if c == '\r' && t.get(i.saturating_add(1)) == Some(&'\n') {
+                i = i.saturating_add(1);
             }
             row.push(std::mem::take(&mut cur));
             rows.push(std::mem::take(&mut row));
         } else {
             cur.push(c);
         }
-        i += 1;
+        i = i.saturating_add(1);
     }
     if !cur.is_empty() || !row.is_empty() {
         row.push(cur);

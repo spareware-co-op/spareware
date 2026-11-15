@@ -1,7 +1,7 @@
 //! Piece G86's out-of-process cross-check with Python's cbor2 (MIT; chapter 28.10's oracles). The
-//! nightly workflow's `cbor2` job runs three steps:
+//! `cbor2` job of `kernel-oracles.yml` runs three steps:
 //!
-//! 1. `write_the_cases` (ignored) draws the night's values of SKG's subset from `SPAREKIT_SEED`
+//! 1. `write_the_cases` (ignored) draws the run's values of SKG's subset from `SPAREKIT_SEED`
 //!    and writes each to the file named by `CBOR2_CASES`, one line each: the kernel's encoding in
 //!    hexadecimal, a tab, and the value in the JSON form of `common` (`common::to_json`).
 //! 2. `oracles/cbor2.sh` installs cbor2 6.1.5, pinned by hash, in a container pinned by digest,
@@ -86,14 +86,14 @@ fn seed() -> Seed {
 }
 
 #[test]
-#[ignore = "the nightly cbor2 job's first step"]
+#[ignore = "kernel-oracles.yml's cbor2 job's first step"]
 fn write_the_cases() {
     let path = std::env::var("CBOR2_CASES").expect("CBOR2_CASES names the cases file");
     std::fs::write(path, cases(&values(seed()))).unwrap();
 }
 
 #[test]
-#[ignore = "the nightly cbor2 job's last step"]
+#[ignore = "kernel-oracles.yml's cbor2 job's last step"]
 fn compare_with_the_answers() {
     let path = std::env::var("CBOR2_ANSWERS").expect("CBOR2_ANSWERS names the answers file");
     let answers = std::fs::read_to_string(path).unwrap();

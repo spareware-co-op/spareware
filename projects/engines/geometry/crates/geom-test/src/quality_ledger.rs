@@ -81,8 +81,8 @@ pub enum Kind {
     /// the contract is and that the harness was shown to fail with the mutant's change applied.
     /// Allowed everywhere, for a missed mutant.
     Proved,
-    /// A survivor recorded but not yet explained, outside the foundation set only: an old gap the
-    /// weekly run found, so that pull requests fail only on new survivors (28.8, "Elsewhere, no new
+    /// A survivor recorded but not yet explained, outside the foundation set only: an old gap a
+    /// full run found, so that pull requests fail only on new survivors (28.8, "Elsewhere, no new
     /// unexplained survivor may merge").
     Known,
 }

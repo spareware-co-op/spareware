@@ -1,12 +1,11 @@
 //! `golden`: the golden store's tool: list it, check it against the repository, run every golden in
-//! one CI leg's configuration, and hold a pull request's edits to the owner-approval rule.
+//! one CI leg's configuration, and hold a pull request's edits to the record rule.
 //!
 //! ```text
 //! cargo run -p geom-test --bin golden -- list
 //! cargo run -p geom-test --bin golden -- check [--root <dir>]
 //! cargo run -p geom-test --bin golden -- run [<cargo test arguments>...]
 //! cargo run -p geom-test --bin golden -- diff --base <commit> [--root <dir>]
-//!     [--reviews <file> --head <commit> --author <login> [--permissions <file>]]
 //! ```
 //!
 //! - `list` prints every edition and golden of the store.
@@ -21,14 +20,15 @@
 //!   run's output, and requires that each ran exactly its goldens and that each agreed with the
 //!   store ([`geom_test::golden::matrix`]).
 //! - `diff` compares the store at `<commit>` (read with `git show`; none there is an empty base)
-//!   with the working tree's and prints what changed ([`geom_test::golden::diff`]). A change no
-//!   approval can make fails. A change that needs a kernel owner's approval fails unless the
-//!   reviews given (GitHub's JSON list of the pull request's reviews, and optionally a JSON object
-//!   of reviewers' repository permissions) approve the head commit.
+//!   with the working tree's and prints what changed ([`geom_test::golden::diff`]): each moved
+//!   answer with the history record that says why, for the merge record to name. A refused change
+//!   fails: a moved digest without exactly one new record holding the old digest, of a kind the
+//!   golden allows, with its piece and a reason, and every other change the rule refuses. No
+//!   review is read (decision 32.54).
 //!
 //! Guarantees: `list`, `check`, `run` and `diff` never write a file. Exit codes: 0 when everything
-//! checked holds; 1 when a check fails (a problem, a failed or unproven golden, a refused or
-//! unapproved edit); 2 for a usage error or a file or command that cannot be read or run.
+//! checked holds; 1 when a check fails (a problem, a failed or unproven golden, a refused edit); 2
+//! for a usage error or a file or command that cannot be read or run.
 //!
 //! Method: none; it parses its arguments and calls [`geom_test::golden`], whose module headers
 //! carry the methods.
@@ -44,15 +44,14 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
-use geom_test::golden::diff::{approved, diff};
+use geom_test::golden::diff::diff;
 use geom_test::golden::matrix::{plan, verify};
 use geom_test::golden::repo;
 use geom_test::golden::store::{EMBEDDED, STORE_PATH, Store};
 use geom_test::map::repo::workspace_root;
 
 const USAGE: &str = "usage: golden list | check [--root <dir>] | run [<cargo test args>...] | \
-                     diff --base <commit> [--root <dir>] [--reviews <file> --head <commit> \
-                     --author <login> [--permissions <file>]]";
+                     diff --base <commit> [--root <dir>]";
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
@@ -69,17 +68,7 @@ fn main() -> ExitCode {
             Err(m) => usage(&m),
         },
         Some("run") => run(&rest),
-        Some("diff") => match options(
-            &rest,
-            &[
-                "--base",
-                "--root",
-                "--reviews",
-                "--head",
-                "--author",
-                "--permissions",
-            ],
-        ) {
+        Some("diff") => match options(&rest, &["--base", "--root"]) {
             Ok(o) => with_root(&o, |root| diff_command(root, &o)),
             Err(m) => usage(&m),
         },
@@ -315,43 +304,9 @@ fn diff_command(root: &Path, o: &BTreeMap<String, String>) -> ExitCode {
     };
     let d = diff(base_store.as_ref(), &head);
     println!("{d}");
-    if !d.is_acceptable() {
-        return ExitCode::from(1);
-    }
-    if !d.needs_approval() {
-        return ExitCode::SUCCESS;
-    }
-    let (Some(reviews), Some(head_commit), Some(author)) =
-        (o.get("--reviews"), o.get("--head"), o.get("--author"))
-    else {
-        eprintln!(
-            "golden diff: this change needs a kernel owner's approval; pass --reviews, --head and \
-             --author to check the pull request's reviews"
-        );
-        return ExitCode::from(1);
-    };
-    let reviews = match std::fs::read_to_string(reviews) {
-        Ok(t) => t,
-        Err(e) => return fail(&format!("{reviews}: {e}")),
-    };
-    let permissions: BTreeMap<String, String> = match o.get("--permissions") {
-        None => BTreeMap::new(),
-        Some(file) => match std::fs::read_to_string(file)
-            .map_err(|e| e.to_string())
-            .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))
-        {
-            Ok(p) => p,
-            Err(e) => return fail(&format!("{file}: {e}")),
-        },
-    };
-    match approved(&reviews, head_commit, author, &permissions) {
-        Ok(who) => {
-            println!("golden diff: approved on {head_commit} by {who}");
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("golden diff: {e}");
-            ExitCode::from(1)
-        }
+    if d.is_acceptable() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     }
 }

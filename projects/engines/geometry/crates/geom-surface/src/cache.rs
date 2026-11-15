@@ -86,8 +86,9 @@ const DEGREE: usize = 3;
 /// Samples per cell and direction on the first try.
 const FIRST: usize = 4;
 
-/// Samples per cell and direction on the last try.
-const MOST: usize = 32;
+/// Samples per cell and direction on the tries after the first, each twice the last's. The
+/// refinement walks this list once, so its length bounds the tries whatever the stop test says.
+const DENSER: [usize; 3] = [8, 16, 32];
 
 /// The sides every sample and certificate evaluates from: the spans never straddle a break, so a
 /// side matters only at the domain's end, where it is the only one.
@@ -126,25 +127,31 @@ pub(crate) fn same_parameter<K: ParamSurface>(
         f64::from(u32::try_from(ladder::FIT.0).map_err(|_| CurveError::Defect)?)
     };
     let (bu, bv) = kind.breaks();
-    let mut n = FIRST;
-    let mut last = f64::INFINITY;
-    let (surface, error) = loop {
+    // One try: the surface through the n × n samples of each cell, and its certified error.
+    let sample = |n: usize, meter: &mut WorkMeter<'_>| -> Result<(Surface<3>, f64), CurveError> {
         let (u, basis_u) = grid((a, b), &bu, n)?;
         let (v, basis_v) = grid((c, d), &bv, n)?;
         let s = interpolate(kind, (&u, &v), (basis_u, basis_v), meter)?;
         let e = certify(kind, &s, (&u, &v), meter)?;
-        let done = e <= target * 0.5 || n >= MOST;
+        Ok((s, e))
+    };
+    let (mut surface, mut error) = sample(FIRST, meter)?;
+    let mut last = f64::INFINITY;
+    // A denser try only while the last one asks for it, and at most one per entry of `DENSER`:
+    // the densest try's result stands as it is.
+    for n in DENSER {
+        let done = error <= target * 0.5;
         // Twice the samples cut a smooth kind's bicubic error about sixteen times, and its
         // certificate at least a few times (on coarse grids the enclosures' own widths, which
         // fall with the boxes', dominate it); where the certificate does not fall by a quarter,
         // it has met rounding or a jump of the kind, and more samples would not help.
-        let stuck = e > last * 0.75;
+        let stuck = error > last * 0.75;
         if done || stuck {
-            break (s, e);
+            break;
         }
-        last = e;
-        n = n.checked_mul(2).ok_or(CurveError::Defect)?;
-    };
+        last = error;
+        (surface, error) = sample(n, meter)?;
+    }
     if !error.is_finite() {
         return Err(CurveError::Unbounded);
     }

@@ -30,3 +30,19 @@ inherits = "dev"
 opt-level = 3
 incremental = false
 codegen-units = 1
+
+# The exact big integers and rationals (dashu, MIT OR Apache-2.0) are compiled with optimisation in
+# the dev profile too, which tests build with: a profile override for those packages alone, as the
+# Cargo book's chapter on profiles describes. Only how dashu's own code is compiled changes, never
+# what it computes: its debug assertions and overflow checks stay on, and every crate of ours stays
+# unoptimised. Unoptimised, dashu made one run of geom-gen's generators take 11 s instead of 1.9 s
+# (the quadrature-rules generator's exact enclosures are almost all of it), and the exact oracles of
+# the kernel's tests run on it too.
+[profile.dev.package.dashu-base]
+opt-level = 3
+
+[profile.dev.package.dashu-int]
+opt-level = 3
+
+[profile.dev.package.dashu-ratio]
+opt-level = 3

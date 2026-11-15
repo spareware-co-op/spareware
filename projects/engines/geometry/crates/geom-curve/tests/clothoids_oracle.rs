@@ -1,5 +1,5 @@
 //! Piece G63's out-of-process comparison with the Clothoids library (chapter 28.10's oracles; 17.8:
-//! "the Clothoids library is only an out-of-process test oracle"). The nightly workflow's
+//! "the Clothoids library is only an out-of-process test oracle"). `kernel-oracles.yml`'s
 //! `clothoids` job runs three steps:
 //!
 //! 1. `write_the_cases` (ignored) writes seeded clothoids and stations to the file named by
@@ -213,14 +213,14 @@ fn path(var: &str) -> String {
 }
 
 #[test]
-#[ignore = "the nightly workflow's first step: writes the cases for the Clothoids harness"]
+#[ignore = "kernel-oracles.yml's first step: writes the cases for the Clothoids harness"]
 fn write_the_cases() {
     let seed = resolve("clothoids oracle", Seed::DEFAULT).unwrap();
     std::fs::write(path("CLOTHOIDS_CASES"), written(&cases(seed))).unwrap();
 }
 
 #[test]
-#[ignore = "the nightly workflow's last step: compares the harness's answers with the kernel"]
+#[ignore = "kernel-oracles.yml's last step: compares the harness's answers with the kernel"]
 fn compare_with_the_answers() {
     let seed = resolve("clothoids oracle", Seed::DEFAULT).unwrap();
     let cases = cases(seed);

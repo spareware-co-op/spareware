@@ -14,6 +14,10 @@
 //!   good while the two machines left had already elected new leaders. tikv/client-rust#562 tries
 //!   the other copies, and Spare Construct's checklist now kills the node holding every leader.
 //! - PD and TiKV stop on a hang-up signal even under `nohup`: run them under a service manager.
+//! - `tikv-client` gives a read up after ten tries over 1.5 s. TiKV takes longer than that to get
+//!   past a process or a machine that died, so a read in that time failed and the server passed
+//!   the failure on to a person: a page answered "Something went wrong.", and a live channel
+//!   closed (issue #762). A snapshot now waits until TiKV is past it: see [`READ_WAIT`].
 
 use futures::TryStreamExt;
 use kit_store::{FileStore, Key, Kv, Pair, Prefix, Reader, StoreError, Txn};
@@ -22,12 +26,36 @@ use object_store::prefix::PrefixStore;
 use object_store::{ObjectStore, ObjectStoreExt};
 use std::sync::Arc;
 use tikv_client::{
-    CheckLevel, Error, Snapshot, Timestamp, TimestampExt, Transaction, TransactionClient,
-    TransactionOptions,
+    Backoff, CheckLevel, Error, RetryOptions, Snapshot, Timestamp, TimestampExt, Transaction,
+    TransactionClient, TransactionOptions,
 };
 use url::Url;
 
 const PAGE: u32 = 2048;
+
+/// How long a snapshot's read waits for TiKV to answer, for a region with no leader and for a
+/// lock alike: 2 ms doubling to 0.5 s, then every 0.5 s, 67 tries and 30 s in all. Each try asks
+/// again, so a read goes on as soon as TiKV can answer it.
+///
+/// What it waits out:
+/// - A writer that died between the two phases of its commit leaves its locks until their time
+///   to live runs out: 3 s for a small transaction, 20 s at most (`DEFAULT_LOCK_TTL` and
+///   `MAX_TTL` in `tikv-client`).
+/// - The regions a dead machine led have no leader until the machines left elect one. A
+///   follower calls an election after 10 to 20 s without word from its leader (TiKV's
+///   `raft-election-timeout-ticks` of 10 one-second ticks, randomised up to twice that), and the
+///   reads came back 15 and 18 s after a kill on three nodes on a development machine.
+///
+/// client-go, the client TiDB uses, gives a get or a scan 20 s, which an election near its
+/// longest can outlast. 30 s covers the longest election with room for the client to learn the
+/// new leader.
+///
+/// Only snapshots: writes go through the orderer, which tries again for itself and then hands
+/// the edit back to its client to send again.
+const READ_WAIT: RetryOptions = RetryOptions {
+    region_backoff: Backoff::no_jitter_backoff(2, 500, 67),
+    lock_backoff: Backoff::no_jitter_backoff(2, 500, 67),
+};
 
 /// A connection to TiKV. Cheap to clone.
 #[derive(Clone)]
@@ -109,8 +137,15 @@ macro_rules! reader {
         }
 
         impl Reader for $name {
+            /// One key, read as a batch of one: `tikv-client`'s `get` keeps its own 1.5 s for a
+            /// region with no leader whatever the options say, and `batch_get` follows them.
             async fn get(&mut self, key: &Key) -> Result<Option<Vec<u8>>, StoreError> {
-                self.0.get(key.as_bytes().to_vec()).await.map_err(classify)
+                let mut found = self
+                    .0
+                    .batch_get([key.as_bytes().to_vec()])
+                    .await
+                    .map_err(classify)?;
+                Ok(found.next().map(|pair| pair.1))
             }
 
             async fn scan(&mut self, prefix: &Prefix) -> Result<Vec<Pair>, StoreError> {
@@ -163,7 +198,9 @@ impl Kv for Tikv {
 
     async fn snapshot(&self) -> Result<TikvSnapshot, StoreError> {
         let at = self.client.current_timestamp().await.map_err(classify)?;
-        let options = TransactionOptions::new_optimistic().read_only();
+        let options = TransactionOptions::new_optimistic()
+            .read_only()
+            .retry_options(READ_WAIT);
         Ok(TikvSnapshot(self.client.snapshot(at, options)))
     }
 

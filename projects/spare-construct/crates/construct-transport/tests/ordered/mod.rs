@@ -1,5 +1,5 @@
 //! JSON read with its key order kept, for checking that typed results write keys in the
-//! JavaScript's order (serde_json's Value sorts keys in this workspace).
+//! JavaScript's order (`serde_json`'s Value sorts keys in this workspace).
 #![allow(dead_code)] // each test file uses its own part of this module
 
 use construct_transport::project::OrderedMap;
@@ -76,7 +76,7 @@ impl<'de> Deserialize<'de> for OJ {
 }
 
 impl OJ {
-    /// The same value as a serde_json Value (keys sorted), for the tolerance comparator.
+    /// The same value as a `serde_json` Value (keys sorted), for the tolerance comparator.
     pub fn to_value(&self) -> Value {
         match self {
             OJ::Null => Value::Null,
@@ -93,7 +93,7 @@ impl OJ {
     }
 }
 
-/// Text of a value serialized by serde_json, read back with key order kept.
+/// Text of a value serialized by `serde_json`, read back with key order kept.
 pub fn ordered_of<T: serde::Serialize>(v: &T) -> OJ {
     let text = serde_json::to_string(v).expect("serializes");
     serde_json::from_str(&text).expect("reads back")
@@ -109,7 +109,7 @@ pub fn first_difference(a: &OJ, e: &OJ, path: &str) -> Option<String> {
                 return Some(format!("{path}: keys {ak:?}, expected {ek:?}"));
             }
             for (k, ev) in em.iter() {
-                if let Some(d) = first_difference(&am[k], ev, &format!("{path}.{k}")) {
+                if let Some(d) = first_difference(am.get(k).unwrap(), ev, &format!("{path}.{k}")) {
                     return Some(d);
                 }
             }

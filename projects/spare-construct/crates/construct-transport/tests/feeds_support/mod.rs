@@ -28,7 +28,7 @@ pub fn fixture_json(file: &str) -> JsonValue {
     JsonValue::parse(&fixture_text(file)).unwrap_or_else(|e| panic!("{file} is not JSON: {e}"))
 }
 
-/// The features of a saved ArcGIS answer, in order.
+/// The features of a saved `ArcGIS` answer, in order.
 pub fn fixture_features(file: &str) -> Vec<JsonValue> {
     match fixture_json(file).get("features") {
         Some(JsonValue::Array(a)) => a.clone(),
