@@ -15,8 +15,6 @@
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::num::NonZeroU64;
-#[cfg(not(target_family = "wasm"))]
-use std::num::NonZeroUsize;
 
 use geom_mesh::boolean::{Outcome, boolean, soup as kept_pieces};
 use geom_mesh::exact::build::{Corner, Polygons, build};
@@ -28,12 +26,12 @@ use geom_num::wide::I256;
 use geom_op::{NameId, NameSet, OpId, OpPath, Origin, PieceKey, Side, TopoName};
 use geom_poly::merge::{Merge, Rules, merge_on};
 use geom_poly::winding::{Term, WindingTest};
-#[cfg(not(target_family = "wasm"))]
-use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
+#[cfg(not(target_family = "wasm"))]
+mod pool;
 mod shapes;
 
 use shapes::{cuboid, g, soup, source};
@@ -59,14 +57,12 @@ fn solid(low: [i64; 3], high: [i64; 3], name: u8) -> ExactMesh {
     build(&input, &Exec::serial(), &mut meter()).unwrap()
 }
 
-/// Runs `f` on one thread and, on a native target, on a pool of four threads too. WebAssembly has
-/// no threads, so there it runs on one thread only.
+/// Runs `f` on one thread and, on a native target, on a pool of four threads too (`pool` says
+/// which). WebAssembly has no threads, so there it runs on one thread only.
 fn on_each_exec(mut f: impl FnMut(&Exec<'_>)) {
     f(&Exec::serial());
     #[cfg(not(target_family = "wasm"))]
-    f(&Exec::with_pool(
-        &Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap(),
-    ));
+    f(&Exec::with_pool(&*pool::pool(4)));
 }
 
 /// `mesh` with the class `class`, every face within its bound.
@@ -657,12 +653,12 @@ fn the_threads_and_the_order_do_not_show() {
     let plain = one(&[&a, &b, &c], test.clone());
     #[cfg(not(target_family = "wasm"))]
     {
-        let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
+        let pool = pool::pool(4);
         let threaded = boolean(
             &[&a, &b, &c],
             std::slice::from_ref(&test),
             &step(),
-            &Exec::with_pool(&pool),
+            &Exec::with_pool(&*pool),
             &mut meter(),
         )
         .unwrap();

@@ -15,9 +15,6 @@
 )]
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
-#[cfg(not(target_family = "wasm"))]
-use std::num::NonZeroUsize;
-
 use geom_mesh::classify::{Classifier, Located};
 use geom_mesh::exact::build::{Corner, Polygons, build};
 use geom_mesh::exact::{ExactMesh, MeshError};
@@ -25,10 +22,10 @@ use geom_mesh::slice::{Contour, Cut, Point, point, slice};
 use geom_num::Sign;
 use geom_num::grid::P3;
 use geom_num::plane::Plane;
-#[cfg(not(target_family = "wasm"))]
-use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
 
+#[cfg(not(target_family = "wasm"))]
+mod pool;
 mod shapes;
 
 use shapes::{cuboid, frustum, g, join, prism, soup};
@@ -338,9 +335,9 @@ fn the_threads_do_not_show() {
     let (input, _) = prism(&heights, 32);
     let m = mesh(&input);
     let planes: Vec<Plane> = (1..24).map(at_z).collect();
-    let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
+    let pool = pool::pool(4);
     let serial = slice(&m, &planes, &Exec::serial(), &mut meter()).unwrap();
-    let threaded = slice(&m, &planes, &Exec::with_pool(&pool), &mut meter()).unwrap();
+    let threaded = slice(&m, &planes, &Exec::with_pool(&*pool), &mut meter()).unwrap();
     assert_eq!(serial, threaded);
 }
 

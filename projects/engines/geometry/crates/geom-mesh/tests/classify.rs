@@ -23,6 +23,8 @@ use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
+#[cfg(not(target_family = "wasm"))]
+mod pool;
 mod shapes;
 
 use shapes::{cuboid, frustum, g, hexahedron, prism, soup};
@@ -405,8 +407,6 @@ fn an_open_mesh_is_refused() {
 #[cfg(not(target_family = "wasm"))]
 #[test]
 fn the_points_come_back_in_order_on_any_pool() {
-    use geom_pool::native::Rayon;
-
     let m = mesh(&cuboid(40, 40, 40));
     let c = classifier(&m);
     let points: Vec<P3> = (0..3000)
@@ -415,9 +415,9 @@ fn the_points_come_back_in_order_on_any_pool() {
     let serial = c
         .locate_all(&points, &Exec::serial(), &mut meter())
         .unwrap();
-    let rayon = Rayon::new(std::num::NonZeroUsize::new(3).unwrap()).unwrap();
+    let threads = pool::pool(3);
     let pooled = c
-        .locate_all(&points, &Exec::with_pool(&rayon), &mut meter())
+        .locate_all(&points, &Exec::with_pool(&*threads), &mut meter())
         .unwrap();
     assert_eq!(serial, pooled);
     for (q, got) in points.iter().zip(&serial) {

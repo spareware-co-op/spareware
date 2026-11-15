@@ -30,6 +30,8 @@ use geom_run::{Budget, BudgetKind, Exec, WorkMeter};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
+#[cfg(not(target_family = "wasm"))]
+mod pool;
 mod shapes;
 
 use shapes::{cuboid, frustum, g, join, prism, slab, soup, source};
@@ -709,16 +711,14 @@ fn one_point_made_two_ways_is_refused() {
 #[cfg(not(target_family = "wasm"))]
 #[test]
 fn a_pool_changes_nothing() {
-    use geom_pool::native::Rayon;
-
     let heights: Vec<Vec<i64>> = (0..48)
         .map(|y| (0..48).map(|x| 1 + (x * 7 + y * 13) % 101).collect())
         .collect();
     let (input, _) = prism(&heights, 256);
     let want = mesh(&input);
     for threads in [2, 3, 8] {
-        let rayon = Rayon::new(std::num::NonZeroUsize::new(threads).unwrap()).unwrap();
-        let exec = Exec::with_pool(&rayon);
+        let pool = pool::pool(threads);
+        let exec = Exec::with_pool(&*pool);
         assert_eq!(build(&input, &exec, &mut meter()).unwrap(), want);
         let mut broken = input.clone();
         broken.corners.swap(0, 1);
