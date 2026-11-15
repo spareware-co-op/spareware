@@ -6,10 +6,9 @@
 //! hardest near-degenerate input the frame holds, that the proof's domain reaches the filter's
 //! rounding and both of its answers, and that every stored corpus and crash file is a case.
 //!
-//! The layout attacks read the repository: every target has its fuzz and seeded tests, the CI
-//! matrices list exactly the targets' fuzz and proof tests, the workflow's path filters cover every
-//! crate a target builds, the tool versions agree wherever they are written, the build check the
-//! workflow turns off is made by `.clusterfuzzlite/build.sh` instead, and the workspace has the
+//! The layout attacks read the repository: every target has its fuzz and seeded tests, the Kani
+//! matrix lists exactly the targets' proof tests, the workflow's path filters cover every crate a
+//! target builds, the Kani version agrees wherever it is written, and the workspace has the
 //! profile cargo-bolero builds with. Each of those checks is a function of the files' text, and
 //! each is shown to fail on a seeded violation, so none can pass by reading nothing.
 
@@ -383,8 +382,8 @@ fn proof_tests(text: &str) -> Vec<String> {
 /// The functions of a test file's `text` that call bolero's `check!` without being `#[test]`
 /// functions themselves. bolero names a target after the function `check!` is written in
 /// (`bolero-engine`'s `TargetLocation::item_path`), and cargo-bolero selects a target by running
-/// the test of that name, so a target written in a helper cannot be built for libFuzzer or for
-/// `ClusterFuzzLite` ("no targets matched"). Comment lines are skipped.
+/// the test of that name, so a target written in a helper cannot be found by its test's name, as
+/// Kani finds a proof ("no targets matched"). Comment lines are skipped.
 fn checks_outside_tests(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut marked_test = false;
@@ -417,10 +416,10 @@ fn checks_outside_tests(text: &str) -> Vec<String> {
 }
 
 /// The `#[should_panic]` test functions of a test file's `text` that call bolero's `check!`.
-/// cargo-bolero's `build-clusterfuzz` builds each test binary by running one of its bolero tests,
+/// A tool that finds a bolero test by its name runs one of the binary's bolero tests,
 /// the first it listed (in no fixed order), with `CARGO_BOLERO_SELECT` set, where `check!` returns
 /// without running its body (`bolero-engine`'s `TargetLocation::should_run`). A `#[should_panic]`
-/// test fails there, and `ClusterFuzzLite`'s build fails with it, on some runs and not others.
+/// test fails there, on some runs and not others.
 /// Comment lines are skipped.
 fn should_panic_checks(text: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -514,8 +513,7 @@ fn layout_violations(
         for function in should_panic_checks(text) {
             found.push(format!(
                 "tests/{file}.rs calls bolero's check! in {function}, a #[should_panic] test, \
-                 which fails when cargo-bolero selects targets, and ClusterFuzzLite's build \
-                 with it"
+                 which fails when a tool selects the test by its name"
             ));
         }
     }
@@ -527,17 +525,10 @@ fn layout_violations(
             .filter_map(|rest| rest.split('(').next());
         for name in names.filter(|n| n.ends_with("_fuzz") && !fuzz_tests.contains(*n)) {
             found.push(format!(
-                "test {name} ends in _fuzz, so ClusterFuzzLite fuzzes it, but no target module \
+                "test {name} ends in _fuzz, so it reads as a target's, but no target module \
                  has it"
             ));
         }
-    }
-    let libfuzzer: BTreeSet<String> = workflow_list(workflow, "target").into_iter().collect();
-    if libfuzzer != fuzz_tests {
-        found.push(format!(
-            "kernel-fuzz.yml's libFuzzer matrix {libfuzzer:?} is not the targets' fuzz tests \
-             {fuzz_tests:?}"
-        ));
     }
     let proofs: BTreeSet<String> = tests.values().flat_map(|t| proof_tests(t)).collect();
     let kani: BTreeSet<String> = workflow_list(workflow, "harness").into_iter().collect();
@@ -564,7 +555,7 @@ fn attack_every_target_is_listed_here() {
     ignore = "reads the repository's files, which WASI cannot without a preopened folder"
 )]
 #[test]
-fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
+fn attack_every_target_has_its_tests_and_its_proofs_in_the_kani_matrix() {
     let workflow = read(".github/workflows/kernel-fuzz.yml");
     let targets = target_modules();
     let tests = test_files();
@@ -574,14 +565,6 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
     );
 
     // Seeded violations: each must be reported.
-    // orient2d_fuzz dropped from the libFuzzer matrix, the one list that names it inline.
-    let drop_fuzz = workflow.replacen(" orient2d_fuzz,", "", 1);
-    assert_ne!(drop_fuzz, workflow);
-    assert!(
-        layout_violations(&targets, &tests, &drop_fuzz)
-            .iter()
-            .any(|v| v.contains("libFuzzer matrix"))
-    );
     let drop_proof = workflow.replace("- orient2d_proof\n", "");
     assert_ne!(drop_proof, workflow);
     assert!(
@@ -618,8 +601,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
             .iter()
             .any(|v| v.contains("extra_fuzz"))
     );
-    // A target written in a helper, as the first Kani trial harnesses were: ClusterFuzzLite's
-    // build failed on it with "no targets matched".
+    // A target written in a helper, as the first Kani trial harnesses were: a tool that selects
+    // a test by its name fails on it with "no targets matched".
     // The call is assembled, so this file's own text, which the layout check reads, has none.
     let call = ["check", "!()"].concat();
     let mut helper = tests.clone();
@@ -664,8 +647,8 @@ fn attack_a_should_panic_bolero_test_is_refused() {
     let tests = test_files();
     // The call is assembled, so this file's own text, which the layout check reads, has none.
     let call = ["check", "!()"].concat();
-    // A #[should_panic] bolero test, as G11's bolero_fails_on_a_finding was: ClusterFuzzLite's
-    // build failed whenever cargo-bolero happened to list it first in its binary.
+    // A #[should_panic] bolero test, as G11's bolero_fails_on_a_finding was: a build that selects
+    // tests by name failed whenever it happened to list that one first in its binary.
     let mut panicking = tests.clone();
     panicking.insert(
         "panicking".to_owned(),
@@ -773,8 +756,6 @@ fn path_filter_violations(workflow: &str, folders: &BTreeSet<String>) -> Vec<Str
             "Cargo.lock",
             ".cargo/config.toml",
             "rust-toolchain.toml",
-            ".clusterfuzzlite/build.sh",
-            ".clusterfuzzlite/Dockerfile",
             ".github/workflows/kernel-fuzz.yml",
         ]
         .map(str::to_owned),
@@ -902,7 +883,7 @@ fn env_value(yaml: &str, key: &str) -> Option<String> {
 }
 
 /// Every token in `text` that follows `marker` (up to the next space), e.g. the version after
-/// `cargo-bolero --version `.
+/// `kani-verifier --version `.
 fn after(text: &str, marker: &str) -> Vec<String> {
     text.match_indices(marker)
         .map(|(i, _)| {
@@ -915,40 +896,13 @@ fn after(text: &str, marker: &str) -> Vec<String> {
         .collect()
 }
 
-/// Every dated nightly toolchain named in `text`: `nightly-` and a date.
-fn nightlies(text: &str) -> Vec<String> {
-    after(text, "nightly-")
-        .into_iter()
-        .filter(|d| d.len() >= 10 && d[..10].chars().filter(char::is_ascii_digit).count() == 8)
-        .map(|d| format!("nightly-{}", &d[..10]))
-        .collect()
-}
-
-/// Where the pins disagree: the nightly compiler, cargo-bolero and Kani, between the workflow and
-/// every file that names them.
+/// Where the Kani pin disagrees between the workflow and every file that names it.
 fn pin_violations(workflow: &str, files: &[(&str, &str)]) -> Vec<String> {
     let mut found = Vec::new();
-    let Some(nightly) = env_value(workflow, "FUZZ_NIGHTLY") else {
-        return vec!["kernel-fuzz.yml pins no FUZZ_NIGHTLY".to_owned()];
-    };
-    let Some(bolero) = env_value(workflow, "CARGO_BOLERO_VERSION") else {
-        return vec!["kernel-fuzz.yml pins no CARGO_BOLERO_VERSION".to_owned()];
-    };
     let Some(kani) = env_value(workflow, "KANI_VERSION") else {
         return vec!["kernel-fuzz.yml pins no KANI_VERSION".to_owned()];
     };
     for (name, text) in files {
-        for n in nightlies(text).into_iter().filter(|n| *n != nightly) {
-            found.push(format!("{name} names {n}; kernel-fuzz.yml pins {nightly}"));
-        }
-        for v in after(text, "cargo-bolero --version ")
-            .into_iter()
-            .filter(|v| *v != bolero)
-        {
-            found.push(format!(
-                "{name} installs cargo-bolero {v}; kernel-fuzz.yml pins {bolero}"
-            ));
-        }
         for v in after(text, "kani-verifier --version ")
             .into_iter()
             .filter(|v| *v != kani)
@@ -968,44 +922,16 @@ fn pin_violations(workflow: &str, files: &[(&str, &str)]) -> Vec<String> {
 #[test]
 fn attack_the_tool_pins_agree_everywhere_they_are_written() {
     let workflow = read(".github/workflows/kernel-fuzz.yml");
-    let dockerfile = read(".clusterfuzzlite/Dockerfile");
     let readme = read("projects/engines/geometry/crates/geom-fuzz/README.md");
-    let lib = read("projects/engines/geometry/crates/geom-fuzz/src/lib.rs");
-    let files = [
-        ("Dockerfile", dockerfile.as_str()),
-        ("README.md", readme.as_str()),
-        ("src/lib.rs", lib.as_str()),
-    ];
+    let files = [("README.md", readme.as_str())];
     assert_eq!(pin_violations(&workflow, &files), Vec::<String>::new());
-    // Each file names each pin it should, so the agreement is not vacuous.
-    assert_ne!(
-        after(&dockerfile, "cargo-bolero --version "),
-        Vec::<String>::new()
-    );
-    assert_ne!(
-        after(&readme, "cargo-bolero --version "),
-        Vec::<String>::new()
-    );
+    // The README names the pin, so the agreement is not vacuous.
     assert_ne!(
         after(&readme, "kani-verifier --version "),
         Vec::<String>::new()
     );
-    assert_ne!(nightlies(&readme), Vec::<String>::new());
-    assert_ne!(nightlies(&lib), Vec::<String>::new());
 
-    // Seeded violations.
-    let old = readme.replace("nightly-2026-10-01", "nightly-2026-09-01");
-    assert!(
-        pin_violations(&workflow, &[("README.md", &old)])
-            .iter()
-            .any(|v| v.contains("nightly-2026-09-01"))
-    );
-    let docker = dockerfile.replace("--version 0.13.5", "--version 0.13.4");
-    assert!(
-        pin_violations(&workflow, &[("Dockerfile", &docker)])
-            .iter()
-            .any(|v| v.contains("0.13.4"))
-    );
+    // Seeded violation.
     let kani = readme.replace(
         "kani-verifier --version 0.68.0",
         "kani-verifier --version 0.67.0",
@@ -1014,78 +940,6 @@ fn attack_the_tool_pins_agree_everywhere_they_are_written() {
         pin_violations(&workflow, &[("README.md", &kani)])
             .iter()
             .any(|v| v.contains("0.67.0"))
-    );
-}
-
-/// What goes wrong if the workflow turns OSS-Fuzz's build check off: build.sh must then make the
-/// same checks, keep only the fuzz tests' scripts, and parallel fuzzing must stay off.
-fn build_check_violations(workflow: &str, build_sh: &str) -> Vec<String> {
-    let mut found = Vec::new();
-    if workflow.contains("parallel-fuzzing: true") {
-        found.push(
-            "parallel fuzzing is on; libFuzzer's -jobs and -fork relaunch the binary without \
-             the start-up script's arguments"
-                .to_owned(),
-        );
-    }
-    if !workflow.contains("bad-build-check: false") {
-        return found;
-    }
-    for (needle, what) in [
-        ("readelf -h", "that each binary is an x86-64 ELF executable"),
-        (
-            "objdump -dC",
-            "the count of calls into the address sanitizer",
-        ),
-        ("-lt 1000", "the threshold of 1000 address-sanitizer calls"),
-        ("Done 64 runs", "a clean run of 64 inputs"),
-        ("-lt 100 ", "the threshold of 100 instrumented edges"),
-        (
-            "*_fuzz_fuzzer",
-            "keeping only the <target>_fuzz tests' scripts",
-        ),
-        ("exit 1", "failing the build"),
-    ] {
-        if !build_sh.contains(needle) {
-            found.push(format!(
-                "kernel-fuzz.yml turns OSS-Fuzz's build check off, but build.sh does not check \
-                 {what} (`{needle}`)"
-            ));
-        }
-    }
-    found
-}
-
-#[cfg_attr(
-    target_family = "wasm",
-    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
-)]
-#[test]
-fn attack_the_build_check_turned_off_is_made_by_build_sh() {
-    let workflow = read(".github/workflows/kernel-fuzz.yml");
-    let build_sh = read(".clusterfuzzlite/build.sh");
-    assert!(workflow.contains("bad-build-check: false"));
-    assert_eq!(
-        build_check_violations(&workflow, &build_sh),
-        Vec::<String>::new()
-    );
-    for needle in ["readelf -h", "objdump -dC", "Done 64 runs", "*_fuzz_fuzzer"] {
-        let weakened = build_sh.replace(needle, "true");
-        assert!(
-            build_check_violations(&workflow, &weakened)
-                .iter()
-                .any(|v| v.contains(needle)),
-            "{needle}"
-        );
-    }
-    let parallel = workflow.replace(
-        "mode: code-change",
-        "mode: code-change\n          parallel-fuzzing: true",
-    );
-    assert!(
-        build_check_violations(&parallel, &build_sh)
-            .iter()
-            .any(|v| v.contains("parallel"))
     );
 }
 

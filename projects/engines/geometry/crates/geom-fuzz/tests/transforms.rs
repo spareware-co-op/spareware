@@ -4,8 +4,7 @@
 //! - `transforms_fuzz` wraps `geom_fuzz::transforms::harness` in `bolero::check!`. Under
 //!   `cargo test` it replays the files in `tests/__fuzz__/transforms/corpus` and `crashes`, if
 //!   any, then runs [`ITERATIONS`] random byte strings; bolero prints a failing one's seed as
-//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it. Under
-//!   `cargo bolero test transforms_fuzz --package geom-fuzz` the same test is a libFuzzer target.
+//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it.
 //! - `transforms_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed
 //!   seed (`SPAREKIT_SEED` replays it), the same on every target.
 //! - `the_laws_hold_at_the_frames_limits` and `a_wrong_case_is_a_finding`: the laws on chosen
@@ -39,7 +38,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 10_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 10_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 10,000 cases in 0.103 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 190_000;
 
 /// The longest byte string the fuzz target and the seeded leg try. The harness reads at most
 /// [`MAX_INPUT_BYTES`] (97) bytes; the rest let some strings carry bytes nobody reads.

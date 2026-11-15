@@ -1,31 +1,30 @@
-name: Kernel nightly
+name: Kernel oracles
 
-# The geometry kernel's nightly checks (chapter 28.17 of the kernel architecture, "Nightly"):
-# what pull requests run with fixed seeds, run again every night with fresh ones. Piece G34 starts
-# it with the exact predicates (28.6): geom-num's predicate verification suite
-# (tests/verification.rs) and the predicates' attack tests (tests/attack_g28.rs, attack_g29.rs and
-# attack_g30.rs), with SPAREKIT_SEED set to the run's number in hexadecimal and printed first, so
-# each night draws new cases and a failure replays exactly: rerun the job, or set SPAREKIT_SEED to
-# the printed value. A failed property prints its shrunk input as a fixture line (`fixture[...]`),
-# to add to geom-num's tests/verification/fixtures.txt once the bug is fixed (28.16). Piece G47
-# adds the proven maths functions (sinpi, cospi, exp, ln and atan2): every input of CORE-MATH's
-# worst-case lists, fetched at the commit the ports come from and checked by SHA-256, and ten
-# million inputs per function from the night's seed, each against geom-num's big-number reference
-# (tests/math_full_worst_cases.rs and tests/math_oracle.rs). Piece G63 adds the first outside
-# oracle run out of process (28.10's differential testing; 17.8): Bertolazzi and Frego's Clothoids
-# library, built from source at a pinned commit in a container pinned by digest, evaluates the
-# night's seeded clothoids, and geom-curve's tests/clothoids_oracle.rs compares every point with
-# the kernel's certified enclosure, settling any difference by a fixed-point truth. Piece G69 adds
-# the law catalogue of 28.3 for the curve and surface kinds and NURBS (geom-test's tests/laws_nurbs.rs,
-# laws_curves.rs and laws_surfaces.rs), each law's dense refutation sampler drawing from the night's
-# seed. Piece G86 adds Python's cbor2, run the same way: geom-op's tests/cbor2_oracle.rs writes the
-# night's seeded values of SKG's subset with the kernel's canonical CBOR, cbor2 6.1.5 (pinned by hash)
-# encodes each value in its canonical mode in a container pinned by digest and reads the kernel's
-# bytes back, and the test fails on any byte that differs. Piece G97 adds the slow fixtures (28.16):
-# geom-test's `fixture run --tier slow`. Piece G114 adds the fetched corpora (28.12): geom-test's
-# `corpus fetch` downloads each at its pinned source and checks it against the register's digest, so
-# a source that moves or disappears shows up the night it happens. Later pieces add the rest of
-# 28.17's nightly list (hours of fuzzing, the other outside oracles).
+# The geometry kernel's checks that need something outside the repository's test suite: a
+# container with an outside oracle, a download, or minutes of slow fixtures (chapters 28.10, 28.12,
+# 28.16 and 28.17). They run after a change lands, on a push to main, and only for what that push
+# can reach (the owner's testing principle 2, decision 32.53): the job `scope` runs geom-test's
+# `kernel-quality test-scope` on the files the push changed, and each job runs only when the crate
+# whose tests it runs is among the crates named. By hand (`workflow_dispatch`) and on a release tag
+# (kernel-release.yml calls this workflow) every job runs. Nothing runs on a timer.
+#
+# - Slow fixtures (piece G97, 28.16): geom-test's `fixture run --tier slow`.
+# - Fetched corpora (piece G114, 28.12): geom-test's `corpus fetch` downloads each at its pinned
+#   source and checks it against the register's digest.
+# - Bertolazzi and Frego's Clothoids library (piece G63, 28.10 and 17.8), built from source at a
+#   pinned commit in a container pinned by digest, evaluates the run's seeded clothoids, and
+#   geom-curve's tests/clothoids_oracle.rs compares every point with the kernel's certified
+#   enclosure, settling any difference by a fixed-point truth.
+# - Python's cbor2 (piece G86): geom-op's tests/cbor2_oracle.rs writes the run's seeded values of
+#   SKG's subset with the kernel's canonical CBOR, cbor2 6.1.5 (pinned by hash) encodes each value
+#   in its canonical mode in a container pinned by digest and reads the kernel's bytes back, and
+#   the test fails on any byte that differs.
+# - zcbor: geom-format's archived body records and every kind, validated against their CDDL.
+#
+# Each seeded job's seed is the run's number in hexadecimal, printed first, so a failure replays
+# exactly: rerun the job, or set SPAREKIT_SEED to the printed value. The predicates' verification
+# suite and attack tests, the kinds' and NURBS laws and the proven maths functions against the
+# big-integer reference are quick seeded tests of the normal suite (kernel.yml).
 #
 # --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
 # guard).
@@ -35,10 +34,16 @@ name: Kernel nightly
 # together, and only after reviewing the new commit. The workflow can only read the repository.
 
 on:
-  schedule:
-    # 13:17 UTC every day: early morning in New Zealand, outside the busiest hours elsewhere.
-    - cron: "17 13 * * *"
-  # By hand, from the Actions tab, to test a change to this workflow or rerun a night.
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - ".github/workflows/kernel-oracles.yml"
+  # By hand, from the Actions tab: every job.
   workflow_dispatch:
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
@@ -51,8 +56,50 @@ env:
   RUST_TOOLCHAIN: "1.99.0"
 
 jobs:
+  # The crates whose tests the push reaches: every crate by hand and on a release tag.
+  scope:
+    name: Which crates' tests the push reaches
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      crates: ${{ steps.scope.outputs.crates }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The files the push touches
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base=""
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then base="$BEFORE"; fi
+          case "$base" in 0000000000000000000000000000000000000000) base="" ;; esac
+          if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null             && ! git fetch -q --no-tags --depth 1 origin "$base"; then
+            base=""
+          fi
+          if [ -n "$base" ]; then
+            git diff --no-ext-diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: The crates whose tests it can reach, and why
+        id: scope
+        run: >-
+          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope $SCOPE
+          --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
   slow-fixtures:
     name: Slow fixtures
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
@@ -67,6 +114,8 @@ jobs:
 
   corpora:
     name: Fetched corpora, by their digests
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -79,101 +128,10 @@ jobs:
       - name: Every fetched corpus, unmodified
         run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora"
 
-  predicates:
-    name: Predicates with a fresh seed
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Tonight's seed, printed
-        run: |
-          set -euo pipefail
-          seed=$(printf '%016x' "$GITHUB_RUN_ID")
-          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
-          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
-      - name: The predicate verification suite and the predicates' attack tests
-        run: >-
-          cargo test --locked --release -p geom-num
-          --test verification --test attack_g28 --test attack_g29 --test attack_g30
-
-  laws:
-    name: Kind and NURBS laws with a fresh seed
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Tonight's seed, printed
-        run: |
-          set -euo pipefail
-          seed=$(printf '%016x' "$GITHUB_RUN_ID")
-          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
-          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
-      - name: The law catalogue for NURBS and the curve and surface kinds (28.3)
-        run: >-
-          cargo test --locked --release -p geom-test
-          --test laws_nurbs --test laws_curves --test laws_surfaces
-
-  maths:
-    name: Proven maths against the oracle
-    runs-on: ubuntu-latest
-    # Measured (G47): about 6.5 hours of one core's work for the ten million inputs per function,
-    # and 7 minutes on five cores for the lists, so about two hours on a hosted runner's four.
-    timeout-minutes: 300
-    env:
-      # The CORE-MATH commit the five functions are ported from (geom-num's src/math/).
-      CORE_MATH_COMMIT: 0ce0cbc15935e24c656280e5a46c34e89f301b7a
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Tonight's seed, printed
-        run: |
-          set -euo pipefail
-          seed=$(printf '%016x' "$GITHUB_RUN_ID")
-          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
-          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
-      - name: CORE-MATH's worst-case lists at the ported commit, checked by SHA-256
-        run: |
-          set -euo pipefail
-          dir="$RUNNER_TEMP/core-math/src/binary64"
-          for f in sinpi cospi exp log atan2; do
-            mkdir -p "$dir/$f"
-            curl --fail --silent --show-error --location --retry 3 --output "$dir/$f/$f.wc" \
-              "https://gitlab.inria.fr/core-math/core-math/-/raw/$CORE_MATH_COMMIT/src/binary64/$f/$f.wc"
-          done
-          cd "$dir"
-          sha256sum --check --strict <<'SUMS'
-          476d2c6bad1332cc2257a9b73dd95fcc86aa8ec2288d31db30695ed105955c37  sinpi/sinpi.wc
-          ae02bccca8ea664673cf5b1035acb66d8bd3d74ad14d1e6f321ea73a2ae7e34f  cospi/cospi.wc
-          8c62a01572eb5c66d0303f287ca528fffbb69f3d3935ca29f852f656553b128b  exp/exp.wc
-          2d213b6758e257a1dc68dee717af2fc04b2907db19639b80bf196dfbf04ed9fb  log/log.wc
-          9e4fb81a3c4a789ea739203d2db3ef9689c48208d94196726fa7a22886e573db  atan2/atan2.wc
-          SUMS
-          echo "CORE_MATH_DIR=$dir" >> "$GITHUB_ENV"
-      - name: Every input of the worst-case lists
-        run: >-
-          cargo test --locked --release -p geom-num --test math_full_worst_cases
-          -- --ignored --nocapture
-      - name: Ten million inputs per function from tonight's seed
-        run: >-
-          cargo test --locked --release -p geom-num --test math_oracle
-          -- --ignored --nocapture
-
   clothoids:
     name: Clothoids, out of process
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-curve ')
     runs-on: ubuntu-latest
     # Measured (G63): the oracle builds in about a minute on twenty cores, so a few on a hosted
     # runner's four; the comparison takes seconds.
@@ -191,7 +149,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Tonight's seed, printed, and the files
+      - name: This run's seed, printed, and the files
         run: |
           set -euo pipefail
           seed=$(printf '%016x' "$GITHUB_RUN_ID")
@@ -200,7 +158,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/clothoids"
           echo "CLOTHOIDS_CASES=$RUNNER_TEMP/clothoids/cases.txt" >> "$GITHUB_ENV"
           echo "CLOTHOIDS_ANSWERS=$RUNNER_TEMP/clothoids/answers.txt" >> "$GITHUB_ENV"
-      - name: Tonight's cases
+      - name: This run's cases
         run: >-
           cargo test --locked --release -p geom-curve --test clothoids_oracle
           -- --ignored --exact write_the_cases --nocapture
@@ -221,6 +179,8 @@ jobs:
 
   cbor2:
     name: Canonical CBOR against cbor2, out of process
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-op ')
     runs-on: ubuntu-latest
     # The kernel's cases build and run in a few minutes; cbor2 installs from one wheel and encodes
     # them in seconds.
@@ -235,7 +195,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Tonight's seed, printed, and the files
+      - name: This run's seed, printed, and the files
         run: |
           set -euo pipefail
           seed=$(printf '%016x' "$GITHUB_RUN_ID")
@@ -244,7 +204,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/cbor2"
           echo "CBOR2_CASES=$RUNNER_TEMP/cbor2/cases.txt" >> "$GITHUB_ENV"
           echo "CBOR2_ANSWERS=$RUNNER_TEMP/cbor2/answers.txt" >> "$GITHUB_ENV"
-      - name: Tonight's cases
+      - name: This run's cases
         run: >-
           cargo test --locked --release -p geom-op --test cbor2_oracle
           -- --ignored --exact write_the_cases --nocapture
@@ -261,6 +221,8 @@ jobs:
 
   zcbor:
     name: Body records and kinds against their CDDL, with zcbor
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-format ')
     runs-on: ubuntu-latest
     # The writers build and run in a few minutes; zcbor validates each file in well under a second.
     timeout-minutes: 30

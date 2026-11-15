@@ -4,8 +4,7 @@
 //! - `linalg_fuzz` wraps `geom_fuzz::linalg::harness` in `bolero::check!`. Under `cargo test` it
 //!   replays the files in `tests/__fuzz__/linalg/corpus` and `crashes`, if any, then runs
 //!   [`ITERATIONS`] random byte strings; bolero prints a failing one's seed as
-//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it. Under
-//!   `cargo bolero test linalg_fuzz --package geom-fuzz` the same test is a libFuzzer target.
+//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it.
 //! - `linalg_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 //! - `chosen_matrices_keep_every_law`: singular, symmetric, graded and rectangular matrices.
@@ -30,7 +29,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 2_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 2_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 2,000 cases in 0.538 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 7_400;
 
 /// The longest byte string the fuzz target and the seeded leg try. The harness reads at most
 /// [`MAX_INPUT_BYTES`] (227) bytes; the rest let some strings carry bytes nobody reads.

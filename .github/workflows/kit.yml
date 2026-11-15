@@ -24,7 +24,7 @@ permissions:
 env:
   # The workspace's pinned compiler (rust-toolchain.toml).
   RUST_TOOLCHAIN: "1.99.0"
-  # The nightly compiler and cargo-bolero the kernel's fuzzing uses (kernel-fuzz-campaign.yml).
+  # The nightly compiler and cargo-bolero the kit's libFuzzer job uses.
   FUZZ_NIGHTLY: nightly-2026-10-01
   CARGO_BOLERO_VERSION: 0.13.5
   KIT_CRATES: -p kit-core -p kit-ops -p kit-store -p kit-sync

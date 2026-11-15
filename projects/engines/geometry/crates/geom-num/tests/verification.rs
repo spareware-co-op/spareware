@@ -3,8 +3,8 @@
 //!
 //! The done-when: "Every predicate compared with a big-integer oracle (num-bigint and
 //! num-rational, or dashu, 28.6) on random, ±1-step-degenerate and filter-boundary inputs on every
-//! pull request; corner sets as above; perturbation laws; failures minimised into fixtures;
-//! nightly fresh seeds."
+//! pull request; corner sets as above; perturbation laws; failures minimised into fixtures; the
+//! seeded tests run in the suite on every change they reach."
 //!
 //! Most of it already runs in the predicates' own attack tests (G28, G29, G30 and the plane tests
 //! before them). This suite holds them together and adds what was missing:
@@ -38,9 +38,9 @@
 //!   is fixed (28.16). `a_failure_shrinks_into_a_fixture_that_catches_it` proves the route on a
 //!   predicate broken on purpose: the shrunk fixture fails the broken predicate and passes the
 //!   real one.
-//! - **Nightly fresh seeds**: `.github/workflows/kernel-nightly.yml` runs this suite and the
-//!   predicates' attack tests every night with `SPAREKIT_SEED` taken from the run, printed; on
-//!   pull requests every seed is the fixed default (28.17).
+//! - **Seeds**: this suite and the predicates' attack tests run from the fixed default seeds on
+//!   every change they reach; `SPAREKIT_SEED` replays another (28.17; decision 32.53 removed the
+//!   timed run that drew fresh ones).
 //!
 //! Seeds: each randomised test prints `seed: <hex>` and runs from a fixed default;
 //! `SPAREKIT_SEED=<hex>` replays another. Case counts are a twentieth in debug builds.
