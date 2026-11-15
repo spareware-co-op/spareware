@@ -46,3 +46,25 @@ opt-level = 3
 
 [profile.dev.package.dashu-ratio]
 opt-level = 3
+
+# dashu-int's own modular arithmetic, which its multiplication and division call.
+[profile.dev.package.num-modular]
+opt-level = 3
+
+# The other exact oracles of the kernel's tests, num-bigint and num-rational with the num-integer
+# and num-traits they rest on (all MIT OR Apache-2.0; development dependencies only, never linked
+# into a kernel crate), compiled the same way and for the same reason. Unoptimised, the rationals'
+# greatest common divisors were almost all of the time of the slowest tests in the plain debug
+# run: geom-math's decimal-text and float-length tests took 59 s and 45 s on a development machine,
+# nearly every sample of their stacks inside num-bigint's gcd.
+[profile.dev.package.num-bigint]
+opt-level = 3
+
+[profile.dev.package.num-rational]
+opt-level = 3
+
+[profile.dev.package.num-integer]
+opt-level = 3
+
+[profile.dev.package.num-traits]
+opt-level = 3
