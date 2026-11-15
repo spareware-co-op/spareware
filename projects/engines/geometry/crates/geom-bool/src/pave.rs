@@ -39,6 +39,8 @@ use core::fmt;
 use geom_num::NumError;
 use geom_num::interval::Interval;
 
+use crate::rule::{greater, lesser};
+
 /// A vertex of the arrangement on an edge.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Pave {
@@ -78,16 +80,6 @@ fn along(a: &Pave, b: &Pave) -> Ordering {
         .total_cmp(&b.t.lo())
         .then_with(|| a.t.hi().total_cmp(&b.t.hi()))
         .then_with(|| a.vertex.cmp(&b.vertex))
-}
-
-/// The larger of two doubles that are not NaN.
-fn larger(a: f64, b: f64) -> f64 {
-    if a > b { a } else { b }
-}
-
-/// The smaller of two doubles that are not NaN.
-fn smaller(a: f64, b: f64) -> f64 {
-    if a < b { a } else { b }
 }
 
 /// Why an edge's paves could not be put in order.
@@ -131,8 +123,8 @@ pub fn order(edge: usize, mut paves: Vec<Pave>) -> Result<Vec<Pave>, OrderError>
             }));
         }
         // One vertex met once: the meet of its two enclosures, which is not empty since they meet.
-        let lo = larger(last.t.lo(), pave.t.lo());
-        let hi = smaller(last.t.hi(), pave.t.hi());
+        let lo = greater(last.t.lo(), pave.t.lo());
+        let hi = lesser(last.t.hi(), pave.t.hi());
         last.t = Interval::new(lo, hi)?;
     }
     Ok(out)

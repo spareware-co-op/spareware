@@ -41,16 +41,16 @@ use alloc::vec::Vec;
 
 use geom_intersect::IntersectError;
 use geom_intersect::project::{Projection, project_curve};
-use geom_num::NumError;
 use geom_num::interval::Interval;
 use geom_num::math::round_ties_even;
+use geom_num::{NumError, Sign};
 use geom_run::WorkMeter;
 use geom_topo::{CurveKind, ParamCurve};
 
-use crate::distance::FIRST_FLOOR;
+use crate::distance::floor_at;
 use crate::interfere::{Arrangement, BuildError, Entity};
 use crate::pave::PaveBlock;
-use crate::rule::{ContactError, EPS_FIT, NearContact, REFINEMENTS};
+use crate::rule::{ContactError, NearContact, REFINEMENTS, Verdict, greater, judge, lesser};
 
 /// The deepest a block is cut, in halvings, before a piece that is neither apart nor touching
 /// fails.
@@ -157,15 +157,14 @@ fn span_of<'a>(
         return Ok(None);
     }
     let (a, b) = curve.domain();
-    let (lo, hi) = if inner {
+    // Either span runs forward: an edge's paves are in proven order, each enclosure ending before
+    // the next begins (`crate::pave::order`), and a block runs between two neighbours.
+    let span = if inner {
         (from.t.hi(), to.t.lo())
     } else {
-        (
-            if from.t.lo() > a { from.t.lo() } else { a },
-            if to.t.hi() < b { to.t.hi() } else { b },
-        )
+        (greater(from.t.lo(), a), lesser(to.t.hi(), b))
     };
-    Ok((lo < hi).then_some((curve, (lo, hi))))
+    Ok(Some((curve, span)))
 }
 
 /// The grid-aligned centre of a box and the radius of a ball about it holding the box.
@@ -175,7 +174,7 @@ fn ball(lo: [f64; 3], hi: [f64; 3]) -> Result<([f64; 3], f64), NumError> {
     for ((c, &a), &b) in centre.iter_mut().zip(&lo).zip(&hi) {
         *c = round_ties_even(a / 2.0 + b / 2.0)?.get();
         // Each difference and product rounded up, so the sum is at least the true one.
-        let reach = (if (b - *c) > (*c - a) { b - *c } else { *c - a }).next_up();
+        let reach = greater(b - *c, *c - a).next_up();
         sum = ((reach * reach).next_up() + sum).next_up();
     }
     let radius = Interval::point(sum)?.sqrt()?.hi();
@@ -191,11 +190,6 @@ fn one_side(
 ) -> Result<Side, BuildError> {
     let (curve_a, (a0, a1)) = near_side;
     let (curve_b, (b0, b1)) = far_side;
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "`ε_fit` is a count of 64 steps, which a double holds exactly"
-    )]
-    let radius = EPS_FIT.0 as f64;
     let mut widest: Option<Interval> = None;
     let mut stack: Vec<(f64, f64, u32)> = alloc::vec![(a0, a1, 0)];
     while let Some((lo, hi, depth)) = stack.pop() {
@@ -204,44 +198,41 @@ fn one_side(
             .bound((lo, hi), meter)
             .map_err(IntersectError::from)?;
         let (centre, reach) = ball(bounds.lo, bounds.hi)?;
-        let level = depth.min(REFINEMENTS);
-        let scale = (0..level).fold(1.0_f64, |s, _| s * 2.0);
-        let (near, inside) = match project_curve(curve_b, &centre, FIRST_FLOOR / scale, meter)? {
+        let floor = floor_at(depth.min(REFINEMENTS));
+        let (near, inside) = match project_curve(curve_b, &centre, floor, meter)? {
             Projection::Points(found) => {
-                let mut best: Option<(Interval, bool)> = None;
-                for nearest in &found {
-                    let param = nearest
-                        .at
-                        .first()
-                        .copied()
-                        .ok_or(IntersectError::Internal)?;
-                    let within = param.lo() >= b0 && param.hi() <= b1;
-                    best = match best {
-                        Some((dist, held)) if dist.lo() <= nearest.distance.lo() => {
-                            Some((dist, held))
-                        }
-                        _ => Some((nearest.distance, within)),
-                    };
-                }
-                best.ok_or(IntersectError::Internal)?
+                // The nearest point found: of those whose distance starts lowest, the first.
+                let nearest = found
+                    .iter()
+                    .min_by(|x, y| x.distance.lo().total_cmp(&y.distance.lo()))
+                    .ok_or(IntersectError::Internal)?;
+                let param = nearest
+                    .at
+                    .first()
+                    .copied()
+                    .ok_or(IntersectError::Internal)?;
+                (nearest.distance, param.lo() >= b0 && param.hi() <= b1)
             }
             Projection::Set { distance, .. } => (distance, true),
             Projection::NonIsolated { .. } => (Interval::new(0.0, f64::MAX)?, false),
         };
         // The distance of every point of the piece from the other block: at least the centre's
         // distance from the whole curve less the radius, and at most its distance from a point of
-        // the block plus the radius.
+        // the block plus the radius. It is read by the contact rule: above zero is apart, and at
+        // the finest refinement, holding zero within `ε_fit` touches (the enclosure's upper end is
+        // then its largest size, since the lower is above minus the radius).
         let floor = near.lo() - reach;
-        if floor > 0.0 {
-            return Ok(Side::Apart);
-        }
         let ceiling = if inside {
             near.hi() + reach
         } else {
             f64::INFINITY
         };
         let enclosure = Interval::new(floor, ceiling)?;
-        if depth >= REFINEMENTS && ceiling < radius {
+        let verdict = judge(enclosure);
+        if verdict == Verdict::Decided(Sign::Positive) {
+            return Ok(Side::Apart);
+        }
+        if depth >= REFINEMENTS && verdict == Verdict::Touch {
             widest = Some(match widest {
                 Some(w) if w.hi() >= ceiling => w,
                 _ => enclosure,
@@ -319,20 +310,10 @@ pub fn common_blocks(
     keyed.sort_unstable();
     let operand = |b: &PaveBlock| arr.edges.get(b.edge).map(|e| e.operand);
     let mut out: Vec<CommonBlock> = Vec::new();
-    let mut start = 0_usize;
-    while let Some(&(ends, _, _)) = keyed.get(start) {
-        let len = keyed
-            .iter()
-            .skip(start)
-            .take_while(|(k, _, _)| *k == ends)
-            .count();
-        let group: Vec<usize> = keyed
-            .iter()
-            .skip(start)
-            .take(len)
-            .map(|(_, _, i)| *i)
-            .collect();
-        start = start.saturating_add(len);
+    // Each run of blocks with the same two ends is a group; the runs cover the sorted list once,
+    // so the walk ends with it however the runs are cut.
+    for run in keyed.chunk_by(|x, y| x.0 == y.0) {
+        let group: Vec<usize> = run.iter().map(|(_, _, i)| *i).collect();
         // Join the blocks proven one, each to the first of its group it is one with.
         let mut joined: Vec<Option<(usize, Proof)>> = alloc::vec![None; group.len()];
         for (j, &bj) in group.iter().enumerate() {

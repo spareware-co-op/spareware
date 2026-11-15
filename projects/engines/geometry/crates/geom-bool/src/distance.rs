@@ -55,6 +55,12 @@ use crate::rule::{ContactError, greater, lesser};
 /// The floor of a projection at refinement 0, in steps; refinement k halves it k times.
 pub const FIRST_FLOOR: f64 = 4.0;
 
+/// The floor of a projection at refinement `level`: [`FIRST_FLOOR`] over 2^`level` steps, the
+/// level held at 30. Every projection of the builder takes its floor from here.
+pub(crate) fn floor_at(level: u32) -> f64 {
+    FIRST_FLOOR / f64::from(1_u32 << level.min(30))
+}
+
 /// The builder's carriers.
 #[derive(Debug, Default)]
 pub struct Carriers {
@@ -191,7 +197,9 @@ impl Carriers {
         })?;
         let target = times(&wide(value), &wide(value))?;
         // The smallest b in 0..=2^62 with b² |n|² >= target, by bisection; none is a distance past
-        // what a count of steps holds.
+        // what a count of steps holds. Each halving keeps hi covering and lo at most the answer,
+        // and 63 halve 2^62 down to one point, where further steps leave both ends there: a fixed
+        // count, so no step of the search can make it run on.
         let covers = |b: u64| -> Result<bool, NumError> {
             let b = I256::from_i128(i128::from(b));
             Ok(times(&times(&b, &b)?, &norm_sq)? >= target)
@@ -200,7 +208,7 @@ impl Carriers {
         if !covers(hi)? {
             return Err(NumError::BudgetExceeded);
         }
-        while lo < hi {
+        for _ in 0..63 {
             let mid = lo.saturating_add(hi.saturating_sub(lo) / 2);
             if covers(mid)? {
                 hi = mid;
@@ -250,8 +258,7 @@ impl Carriers {
         refinement: u32,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Interval, ContactError> {
-        let scale = (0..refinement.min(30)).fold(1.0_f64, |s, _| s * 2.0);
-        let floor = FIRST_FLOOR / scale;
+        let floor = floor_at(refinement);
         let at = coordinates(p);
         let widest = || Interval::new(0.0, f64::MAX).map_err(ContactError::from);
         match c {

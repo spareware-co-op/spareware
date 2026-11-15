@@ -72,13 +72,13 @@ use geom_topo::{Box3, CurveIx, CurveKind, ParamCurve};
 use crate::broad::{candidate_pairs, point_entries};
 use crate::carrier::{Bound, CarrierIx, PointGeom, SortedVec};
 use crate::common::{CommonBlock, common_blocks};
-use crate::distance::{Carriers, FIRST_FLOOR};
+use crate::distance::{Carriers, floor_at};
 use crate::face::{self, FaceInfo, SectionEdge};
 use crate::merge::merge_clusters;
 use crate::pave::{OrderError, Pave, PaveBlock, PaveError, SplitEdge, order, split};
 use crate::rule::{
     CoincidenceChain, Contact, ContactError, EPS_FIT, NearContact, REFINEMENTS, Verdict, decide,
-    judge,
+    greater, judge,
 };
 
 /// A vertex of an operand.
@@ -428,12 +428,12 @@ struct Deferred {
     why: Unresolved,
 }
 
-/// Whether a parameter enclosure lies within a split edge's span.
+/// Whether a parameter enclosure lies within a split edge's span. Only a common block's members
+/// are asked, and no member runs round a seam ([`crate::common`] leaves such a block to the face
+/// splitting), so the span runs forward from its first pave to its last.
 fn within_block(t: Interval, split: &SplitEdge) -> bool {
     match (split.block.from, split.block.to) {
-        (Some(from), Some(to)) if !split.block.wraps => {
-            t.lo() >= from.t.lo() && t.hi() <= to.t.hi()
-        }
+        (Some(from), Some(to)) => t.lo() >= from.t.lo() && t.hi() <= to.t.hi(),
         _ => false,
     }
 }
@@ -545,8 +545,7 @@ pub(crate) fn widened(d: Interval, by: Bound) -> Result<Interval, NumError> {
         reason = "bounds are counts of steps far below 2^53"
     )]
     let w = by.steps() as f64;
-    let lo = d.lo() - w;
-    Interval::new(if lo > 0.0 { lo } else { 0.0 }, d.hi() + w)
+    Interval::new(greater(d.lo() - w, 0.0), d.hi() + w)
 }
 
 /// The enclosure of the distance from a grid point, within `w` of where its vertex is, to a box of
@@ -561,14 +560,12 @@ pub(crate) fn to_box(p: P3, w: Bound, region: &Box3) -> Result<Interval, NumErro
         (p.z.get(), lo.z.get(), hi.z.get()),
     ];
     for ((n, f), (c, a, b)) in near.iter_mut().zip(far.iter_mut()).zip(axes) {
-        let gap = if c < a {
-            a.checked_sub(c)
-        } else if c > b {
-            c.checked_sub(b)
-        } else {
-            Some(0)
-        }
-        .ok_or(NumError::BudgetExceeded)?;
+        // How far c lies below a or above b, nothing between them.
+        let gap = a
+            .checked_sub(c)
+            .zip(c.checked_sub(b))
+            .map(|(below, above)| below.max(above).max(0))
+            .ok_or(NumError::BudgetExceeded)?;
         let reach = c
             .checked_sub(a)
             .map(i64::unsigned_abs)
@@ -622,8 +619,7 @@ pub(crate) fn parameter(
         .carriers
         .curve(ix)
         .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-    let scale = (0..REFINEMENTS).fold(1.0_f64, |s, _| s * 2.0);
-    match project_curve(curve, &coordinates(p), FIRST_FLOOR / scale, meter)? {
+    match project_curve(curve, &coordinates(p), floor_at(REFINEMENTS), meter)? {
         Projection::Points(found) => found
             .first()
             .and_then(|n| n.at.first().copied())
@@ -668,7 +664,8 @@ fn candidates(
             // Two vertices: the merge stage has decided them.
             (None, None) => {}
             (None, Some(e)) | (Some(e), None) => {
-                let v = if a < nv { a } else { b };
+                // The vertex's key is below every edge's.
+                let v = a.min(b);
                 let edge = arr
                     .edges
                     .get(e)
@@ -788,9 +785,7 @@ pub(crate) fn certify(
             })
             .into());
         }
-        if bound > within {
-            within = bound;
-        }
+        within = within.max(bound);
     }
     Ok(PointGeom::Certified { at, on, within })
 }

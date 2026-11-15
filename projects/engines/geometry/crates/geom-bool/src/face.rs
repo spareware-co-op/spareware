@@ -102,7 +102,7 @@ use crate::broad::{candidate_pairs, point_entries};
 use crate::carrier::{Bound, CarrierIx, CurveGeom, SortedVec};
 use crate::crossing::{Enclosed, Hull, crossings};
 use crate::decide::cylinders_coincide;
-use crate::distance::{Carriers, FIRST_FLOOR};
+use crate::distance::{Carriers, floor_at};
 use crate::inside::{FlatFace, Place, RoundFace};
 use crate::interfere::{
     Arrangement, BuildError, Entity, Interfered, Interference, Stages, certify, committed,
@@ -1463,10 +1463,9 @@ fn curve_pave(
     meter: &mut WorkMeter<'_>,
 ) -> Result<(usize, Pave), BuildError> {
     let refused = BuildError::SectionVertex { faces, vertex };
-    let scale = (0..REFINEMENTS).fold(1.0_f64, |s, _| s * 2.0);
     let mut near: Vec<(usize, Interval, Interval)> = Vec::with_capacity(curves.len());
     for (i, curve) in curves.iter().enumerate() {
-        match project_curve(curve, &coordinates(at), FIRST_FLOOR / scale, meter)? {
+        match project_curve(curve, &coordinates(at), floor_at(REFINEMENTS), meter)? {
             Projection::Points(found) => {
                 let first = found.first().ok_or(refused)?;
                 let t = *first.at.first().ok_or(refused)?;
@@ -1475,13 +1474,12 @@ fn curve_pave(
             Projection::Set { .. } | Projection::NonIsolated { .. } => return Err(refused),
         }
     }
-    let mut best: Option<(usize, Interval, Interval)> = None;
-    for &(i, t, d) in &near {
-        if best.is_none_or(|(_, _, b)| d.hi() < b.hi()) {
-            best = Some((i, t, d));
-        }
-    }
-    let (nearest, t, gap) = best.ok_or(refused)?;
+    // The curve whose distance ends lowest, the first of those that tie: a tie is refused below.
+    let (nearest, t, gap) = near
+        .iter()
+        .copied()
+        .min_by(|x, y| x.2.hi().total_cmp(&y.2.hi()))
+        .ok_or(refused)?;
     if near
         .iter()
         .any(|&(other, _, far)| other != nearest && far.lo() <= gap.hi())

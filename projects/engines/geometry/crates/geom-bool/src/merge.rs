@@ -54,24 +54,22 @@ impl Clusters {
         }
     }
 
-    /// The lowest member of the set holding `i`.
+    /// The lowest member of the set holding `i`, with `i` then pointed at it directly. A walk up
+    /// the parents passes each point at most once, so it is counted out to the number of points:
+    /// no step of it can make it run on for ever.
     fn find(&mut self, i: usize) -> usize {
         let mut root = i;
-        while let Some(&up) = self.parent.get(root) {
+        for _ in 0..self.parent.len() {
+            let Some(&up) = self.parent.get(root) else {
+                break;
+            };
             if up == root {
                 break;
             }
             root = up;
         }
-        let mut at = i;
-        while let Some(&up) = self.parent.get(at) {
-            if up == root {
-                break;
-            }
-            if let Some(slot) = self.parent.get_mut(at) {
-                *slot = root;
-            }
-            at = up;
+        if let Some(slot) = self.parent.get_mut(i) {
+            *slot = root;
         }
         root
     }

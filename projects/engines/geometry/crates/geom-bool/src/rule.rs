@@ -39,14 +39,18 @@ use geom_num::{NumError, Steps, ladder};
 
 use crate::carrier::{Bound, CarrierIx};
 
-/// The lesser of two numbers that are not NaN.
+/// The lesser of two numbers that are not NaN, in IEEE 754's total order (`f64::total_cmp`): −0.0
+/// lies below +0.0, so of two zeros the lesser is −0.0 whichever comes first, and any other pair is
+/// ordered as `<` orders it. A comparison with `<` would give whichever zero came second.
 pub(crate) fn lesser(a: f64, b: f64) -> f64 {
-    if a < b { a } else { b }
+    core::cmp::min_by(a, b, f64::total_cmp)
 }
 
-/// The greater of two numbers that are not NaN.
+/// The greater of two numbers that are not NaN, in IEEE 754's total order (`f64::total_cmp`): of
+/// two zeros the greater is +0.0 whichever comes first, and any other pair is ordered as `>`
+/// orders it.
 pub(crate) fn greater(a: f64, b: f64) -> f64 {
-    if a > b { a } else { b }
+    core::cmp::max_by(a, b, f64::total_cmp)
 }
 
 /// The contact radius, in steps: the ladder's fit tolerance.
