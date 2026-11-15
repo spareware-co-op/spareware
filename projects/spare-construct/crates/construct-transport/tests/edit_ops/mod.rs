@@ -17,6 +17,9 @@ use engine_sim::{Mulberry32, Rng};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
+/// A filter over links or zones, as the edit operations take one.
+type Pred<T> = Box<dyn Fn(&T) -> bool>;
+
 /// The model being edited, its id generator and the names bound so far.
 pub struct Ctx {
     /// The project.
@@ -196,7 +199,7 @@ fn link_props(v: Option<&Value>) -> LinkProps {
     LinkProps(serde_json::from_value::<Link>(j).expect("link props"))
 }
 
-fn link_pred(name: Option<&str>) -> Option<Box<dyn Fn(&Link) -> bool>> {
+fn link_pred(name: Option<&str>) -> Option<Pred<Link>> {
     Some(match name? {
         "none" => return None,
         "arterial" => Box::new(|l: &Link| l.class().rank >= 4.0),
@@ -209,14 +212,14 @@ fn link_pred(name: Option<&str>) -> Option<Box<dyn Fn(&Link) -> bool>> {
     })
 }
 
-fn zone_pred(name: Option<&str>) -> Option<Box<dyn Fn(&Zone) -> bool>> {
+fn zone_pred(name: Option<&str>) -> Option<Pred<Zone>> {
     Some(match name? {
         "none" => return None,
         "noGateways" => Box::new(|z: &Zone| !z.kind.is("gateway")),
         "residential" => Box::new(|z: &Zone| {
             z.lu.get()
                 .and_then(|lu| lu.get("residential"))
-                .is_some_and(|v| v.truthy())
+                .is_some_and(construct_transport::jsnum::Maybe::truthy)
         }),
         other => panic!("unknown zone filter {other}"),
     })
@@ -402,28 +405,28 @@ fn run_op(ctx: &mut Ctx, name: &str, a: &Value) -> Value {
         "setNode" => {
             let sc = &mut ctx.p.scenarios[i];
             let id = a["id"].as_str().expect("id");
-            let n = patch(&sc.nodes[id], a);
+            let n = patch(sc.nodes.get(id).unwrap(), a);
             sc.nodes.insert(id, n);
             Value::Null
         }
         "setLink" => {
             let sc = &mut ctx.p.scenarios[i];
             let id = a["id"].as_str().expect("id");
-            let l = patch(&sc.links[id], a);
+            let l = patch(sc.links.get(id).unwrap(), a);
             sc.links.insert(id, l);
             Value::Null
         }
         "setZone" => {
             let sc = &mut ctx.p.scenarios[i];
             let id = a["id"].as_str().expect("id");
-            let z = patch(&sc.zones[id], a);
+            let z = patch(sc.zones.get(id).unwrap(), a);
             sc.zones.insert(id, z);
             Value::Null
         }
         "setRoute" => {
             let sc = &mut ctx.p.scenarios[i];
             let id = a["id"].as_str().expect("id");
-            let r = patch(&sc.routes[id], a);
+            let r = patch(sc.routes.get(id).unwrap(), a);
             sc.routes.insert(id, r);
             Value::Null
         }
@@ -475,7 +478,7 @@ fn run_op(ctx: &mut Ctx, name: &str, a: &Value) -> Value {
         }
         "project" => {
             let sc = &ctx.p.scenarios[i];
-            let l = &sc.links[a["id"].as_str().expect("id")];
+            let l = &sc.links.get(a["id"].as_str().expect("id")).unwrap();
             let r = net::project(sc, l, ll(&a["ll"]));
             let mut o = serde_json::Map::new();
             o.insert("d".into(), nv(r.d));
@@ -504,7 +507,7 @@ fn run_op(ctx: &mut Ctx, name: &str, a: &Value) -> Value {
         }
         "geomLen" => {
             let sc = &ctx.p.scenarios[i];
-            let l = &sc.links[a["id"].as_str().expect("id")];
+            let l = &sc.links.get(a["id"].as_str().expect("id")).unwrap();
             json!({ "geom": net::geom(sc, l).iter().map(|p| pt(*p)).collect::<Vec<_>>(), "len": nv(net::len(sc, l)) })
         }
         "detect" => {
@@ -665,10 +668,10 @@ fn run_op(ctx: &mut Ctx, name: &str, a: &Value) -> Value {
             json!({ "included": included, "reason": reason })
         }
         "zoneRole" => json!(scenarios::zone_role(
-            &ctx.p.scenarios[i].zones[a["id"].as_str().expect("id")]
+            ctx.p.scenarios[i].zones.get(a["id"].as_str().expect("id")).unwrap()
         )),
         "linkStage" => json!(scenarios::stage_of(
-            &ctx.p.scenarios[i].links[a["id"].as_str().expect("id")]
+            ctx.p.scenarios[i].links.get(a["id"].as_str().expect("id")).unwrap()
         )),
         "designYear" => json!(scenarios::design_year(
             a["type"].as_str().expect("type"),

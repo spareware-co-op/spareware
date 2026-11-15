@@ -3,7 +3,7 @@ name = "geom-mesh"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-license.workspace = true
+license = "Apache-2.0 AND MIT"
 description = "Spare Kit geometry kernel: exact meshes and watertight tessellation."
 
 [dependencies]

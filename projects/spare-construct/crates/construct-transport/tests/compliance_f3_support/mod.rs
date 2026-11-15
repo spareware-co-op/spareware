@@ -1,4 +1,4 @@
-//! Support for the f3 truth tests (tests/compliance_f3_*.rs): the recorded cases with their objects in the order the file lists them, the
+//! Support for the f3 truth tests (`tests/compliance_f3_*.rs`): the recorded cases with their objects in the order the file lists them, the
 //! project a case ran on, the report block the generator's mock report context writes, random-id normalisation and the comparison of an answer
 //! with the recorded one. A case whose answer needs a part that is still a stub (`todo!()`) is counted as skipped, not failed.
 #![allow(dead_code)] // each test file uses its own part of this module
@@ -50,7 +50,7 @@ pub fn project(case: &V) -> V {
 
 /// The clock the prototype's harness fixed: 21 October 2026, UTC midnight.
 pub fn set_clock() {
-    construct_transport::compliance::dates::set_clock(Some(1792540800000.0));
+    construct_transport::compliance::dates::set_clock(Some(1_792_540_800_000.0));
 }
 
 /// Whether text is a random id of the prototype (`pk` and at least three of 0-9 a-z).
@@ -100,7 +100,7 @@ pub fn guard<T>(f: impl FnOnce() -> T) -> Option<T> {
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(v) => Some(v),
         Err(e) => {
-            let msg = e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
+            let msg = e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(std::string::ToString::to_string)).unwrap_or_default();
             if msg.starts_with("not yet implemented") {
                 None
             } else {

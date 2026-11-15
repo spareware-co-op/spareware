@@ -3,8 +3,8 @@
 //! (chapter 28.3; piece G155): a seeded draw, a report of what a law found, and flat solids drawn
 //! as the kernel's bodies and the flat reference's solids ([`flat`]).
 //!
-//! Every law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull requests run the fixed
-//! default seed given to [`seed`], and the nightly workflow a fresh one (`kernel-nightly.yml`).
+//! Every law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; every run uses the fixed
+//! default seed given to [`seed`], on every change the law reaches.
 //!
 //! Every body a flat law gets back goes through both checkers ([`Findings::both`]; Gate 4, G156:
 //! the second checker agrees on the whole corpus).

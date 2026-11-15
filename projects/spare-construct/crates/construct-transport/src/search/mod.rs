@@ -50,9 +50,10 @@ fn abs(x: f64) -> f64 {
 }
 
 /// `boxAround(lat, lng, m)`: a box about 2 m metres across around a point (m is the half side; 250 by default).
+#[must_use]
 pub fn box_around(lat: f64, lng: f64, m: f64) -> PlaceBounds {
-    let d_lat = m / 110574.0;
-    let d_lng = m / (111320.0 * math_max(0.05, jsmath::cos(lat * std::f64::consts::PI / 180.0)));
+    let d_lat = m / 110_574.0;
+    let d_lng = m / (111_320.0 * math_max(0.05, jsmath::cos(lat * std::f64::consts::PI / 180.0)));
     [[r7(lat - d_lat), r7(lng - d_lng)], [r7(lat + d_lat), r7(lng + d_lng)]]
 }
 
@@ -60,24 +61,25 @@ pub fn box_around(lat: f64, lng: f64, m: f64) -> PlaceBounds {
 ///
 /// Without hemisphere letters the pair is read as latitude, longitude, swapped when only that makes sense (the first value
 /// beyond 90 either way, or a New Zealand longitude first and a southern latitude second).
+#[must_use]
 pub fn parse_coords(q: &str) -> Option<Place> {
     let re = Regex::lit("^\\s*([-+]?\\d{1,3}(?:\\.\\d+)?)\\s*\u{b0}?\\s*([NSEW])?\\s*[,;\\s]\\s*([-+]?\\d{1,3}(?:\\.\\d+)?)\\s*\u{b0}?\\s*([NSEW])?\\s*$", "i");
-    let u: Vec<u16> = q.encode_utf16().collect();
-    let m = re.exec_units(&u, 0)?;
-    let g = |i: usize| m.text(&u, i);
+    let units: Vec<u16> = q.encode_utf16().collect();
+    let m = re.exec_units(&units, 0)?;
+    let group = |i: usize| m.text(&units, i);
     let hemi = Regex::lit("[SW]", "i");
-    let val = |n: Option<String>, h: &Option<String>| {
-        let v = parse_float(&n.unwrap_or_default());
+    let val = |text: Option<String>, h: &Option<String>| {
+        let v = parse_float(&text.unwrap_or_default());
         if h.as_deref().is_some_and(|h| !h.is_empty() && hemi.test(h)) { -abs(v) } else { v }
     };
-    let (h1, h2) = (g(2), g(4));
-    let (mut a, mut b) = (val(g(1), &h1), val(g(3), &h2));
+    let (h1, h2) = (group(2), group(4));
+    let (mut a, mut b) = (val(group(1), &h1), val(group(3), &h2));
     let ha = h1.clone().unwrap_or_default().to_uppercase();
     let hb = h2.clone().unwrap_or_default().to_uppercase();
     let swap = if !ha.is_empty() || !hb.is_empty() {
         Regex::lit("[EW]", "").test(&ha) || Regex::lit("[NS]", "").test(&hb)
     } else {
-        (abs(a) > 90.0 && abs(b) <= 90.0) || (a >= 160.0 && b < 0.0 && b >= -90.0)
+        (abs(a) > 90.0 && abs(b) <= 90.0) || (a >= 160.0 && (-90.0..0.0).contains(&b))
     };
     if swap {
         std::mem::swap(&mut a, &mut b);
@@ -109,6 +111,7 @@ const ABBR_END: [(&str, &str); 6] = [("st", "Street"), ("dr", "Drive"), ("ct", "
 ///
 /// They are always after another word, so 'St Heliers' and 'Rd 2' style names keep their first word; St, Dr, Ct, Cl, Cr and Sq
 /// expand only at the end of a part (before a comma or the end).
+#[must_use]
 pub fn expand(q: &str) -> String {
     let mut s = q.to_string();
     for (a, full) in ABBR {
@@ -123,6 +126,7 @@ pub fn expand(q: &str) -> String {
 }
 
 /// `shorten(display)`: "12, St Marks Road, Remuera, Auckland, 1050, New Zealand / Aotearoa" as "12 St Marks Road, Remuera, Auckland".
+#[must_use]
 pub fn shorten(display: &str) -> String {
     let nz = Regex::lit("^new zealand(\\s*\\/\\s*aotearoa)?$", "i");
     let ao = Regex::lit("^aotearoa(\\s*\\/\\s*new zealand)?$", "i");
@@ -131,11 +135,13 @@ pub fn shorten(display: &str) -> String {
         .split(',')
         .map(|s| js_trim(s).to_string())
         .enumerate()
-        .filter(|(i, s)| !s.is_empty() && !nz.test(s) && !ao.test(s) && !(*i > 0 && post.test(s)))
+        .filter(|(i, s)| !s.is_empty() && !nz.test(s) && !ao.test(s) && (*i == 0 || !post.test(s)))
         .map(|(_, s)| s)
         .collect();
-    if parts.len() > 1 && Regex::lit("^\\d+[a-z]?(?:[-/]\\d+[a-z]?)?$", "i").test(&parts[0]) {
-        let joined = format!("{} {}", parts[0], parts[1]);
+    if let [number, street, ..] = parts.as_slice()
+        && Regex::lit("^\\d+[a-z]?(?:[-/]\\d+[a-z]?)?$", "i").test(number)
+    {
+        let joined = format!("{number} {street}");
         parts.splice(0..2, [joined]);
     }
     let out = parts.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
@@ -155,6 +161,10 @@ fn first_truthy(vs: &[Option<&JsonValue>]) -> Option<String> {
 /// The area is the result's bounding box, or a box about 500 m across around the point when the result is smaller than that
 /// (an address is a few metres across: it gets a study-sized box instead). A result that is null, or whose bounding box
 /// is something other than a list, stops the prototype with an error, and so it does here.
+///
+/// # Errors
+///
+/// The prototype's error message for a null result or a bounding box that is not a list.
 pub fn to_result(r: &JsonValue) -> Result<Option<Place>, String> {
     if r.is_null() {
         return Err("Cannot read properties of null (reading 'lat')".to_string());
@@ -169,8 +179,11 @@ pub fn to_result(r: &JsonValue) -> Result<Option<Place>, String> {
         Some(v) if v.truthy() => return Err("(r.boundingbox || []).map is not a function".to_string()),
         _ => Vec::new(),
     };
-    let mut bounds = if bb.len() == 4 && bb.iter().all(|v| v.is_finite()) { [[bb[0], bb[2]], [bb[1], bb[3]]] } else { box_around(lat, lng, MIN_BOX) };
-    let small = (bounds[1][0] - bounds[0][0]) * 110574.0 < 2.0 * MIN_BOX && (bounds[1][1] - bounds[0][1]) * 111320.0 * jsmath::cos(lat * std::f64::consts::PI / 180.0) < 2.0 * MIN_BOX;
+    let mut bounds = match bb.as_slice() {
+        [south, north, west, east] if bb.iter().all(|v| v.is_finite()) => [[*south, *west], [*north, *east]],
+        _ => box_around(lat, lng, MIN_BOX),
+    };
+    let small = (bounds[1][0] - bounds[0][0]) * 110_574.0 < 2.0 * MIN_BOX && (bounds[1][1] - bounds[0][1]) * 111_320.0 * jsmath::cos(lat * std::f64::consts::PI / 180.0) < 2.0 * MIN_BOX;
     if small {
         bounds = box_around(lat, lng, MIN_BOX);
     }
@@ -201,11 +214,13 @@ pub enum Plan {
 }
 
 /// The key the prototype caches answers under: the expanded query in lower case with runs of white space made one space.
+#[must_use]
 pub fn cache_key(expanded: &str) -> String {
     Regex::lit("\\s+", "g").replace(&expanded.to_lowercase(), |_, _| " ".to_string())
 }
 
 /// `geocode(q)` before the request: nothing for an empty query, a place for coordinates, else the request for the expanded text.
+#[must_use]
 pub fn plan(q: &str) -> Plan {
     let s = js_trim(q);
     if s.is_empty() {
@@ -225,13 +240,17 @@ pub fn plan(q: &str) -> Plan {
 }
 
 /// Turns Nominatim's answer into places (those with a position, in order); or the message the prototype shows when the search failed (HTTP 429 means busy).
+///
+/// # Errors
+///
+/// The message the prototype shows when the search failed or its answer could not be read.
 pub fn read_answer(a: Result<&JsonValue, FetchFailure>) -> Result<Vec<Place>, String> {
     match a {
         Err(FetchFailure::Unreachable(m)) => Err(format!("The place search could not be reached ({m}). Check your internet connection and try again.")),
         Err(FetchFailure::Http(429)) => Err("The place search is busy (HTTP 429). Wait a few seconds and try again.".to_string()),
         Err(FetchFailure::Http(s)) => Err(format!("The place search answered HTTP {s}. Try again shortly.")),
         Err(FetchFailure::Cancelled) => Err("The search was replaced by a newer one.".to_string()),
-        Err(FetchFailure::TimedOut) | Err(FetchFailure::TimedOutReading) => Err("The place search could not be reached (timed out). Check your internet connection and try again.".to_string()),
+        Err(FetchFailure::TimedOut | FetchFailure::TimedOutReading) => Err("The place search could not be reached (timed out). Check your internet connection and try again.".to_string()),
         Err(FetchFailure::Unreadable(m)) => Err(m),
         Ok(j) => match j {
             JsonValue::Array(list) => {

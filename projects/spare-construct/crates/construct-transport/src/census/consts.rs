@@ -2,7 +2,7 @@
 
 use serde_json::{Value, json};
 
-/// The Stats NZ ArcGIS services root.
+/// The Stats NZ `ArcGIS` services root.
 pub const STATS: &str = "https://services2.arcgis.com/vKb0s8tBIA3bdocZ/arcgis/rest/services";
 /// The data.govt.nz CKAN SQL search address (Ministry of Education directory).
 pub const CKAN: &str = "https://catalogue.data.govt.nz/api/3/action/datastore_search_sql";
@@ -95,6 +95,7 @@ pub const OSM: Source = Source {
 };
 
 /// The four Census layers (key, address): ind0 and ind2 individuals, dw dwellings, hh households.
+#[must_use]
 pub fn census_layer(k: &str) -> String {
     let (name, n) = match k {
         "ind0" => ("2023_Census_totals_by_topic_for_individuals_by_SA1", 0),
@@ -240,15 +241,16 @@ pub const YIELDS: [YieldRow; 18] = [
 ];
 
 /// The default yield row of a zone code (`YIELDS[code]`).
+#[must_use]
 pub fn yield_row(code: f64) -> Option<&'static YieldRow> {
     YIELDS.iter().find(|r| f64::from(r.code) == code)
 }
 
-/// NO_YIELD: zoned land that takes no yield (roads, water, transport corridors, open space, cemeteries and coastal zones).
+/// `NO_YIELD`: zoned land that takes no yield (roads, water, transport corridors, open space, cemeteries and coastal zones).
 pub const NO_YIELD: [u32; 17] = [25, 26, 27, 30, 31, 32, 33, 34, 37, 39, 40, 41, 45, 53, 59, 61, 62];
-/// GFA_USES: the land uses a GFA ratio can give.
+/// `GFA_USES`: the land uses a GFA ratio can give.
 pub const GFA_USES: [&str; 5] = ["retail", "office", "industrial", "warehouse", "medical"];
-/// AUP_NAMES: the zone names the feature knows, by code.
+/// `AUP_NAMES`: the zone names the feature knows, by code.
 pub const AUP_NAMES: [(u32, &str); 18] = [
     (19, "Residential - Single House"),
     (18, "Residential - Mixed Housing Suburban"),
@@ -271,6 +273,7 @@ pub const AUP_NAMES: [(u32, &str); 18] = [
 ];
 
 /// `AUP_NAMES[code]`.
+#[must_use]
 pub fn aup_name(code: f64) -> Option<&'static str> {
     AUP_NAMES.iter().find(|(c, _)| f64::from(*c) == code).map(|(_, n)| *n)
 }
@@ -279,7 +282,8 @@ pub fn aup_name(code: f64) -> Option<&'static str> {
 pub const PERIODS: [&str; 2] = ["AM", "PM"];
 /// MODES: the five travel modes, in order.
 pub const MODES: [&str; 5] = ["driver", "passenger", "pt", "walk", "cycle"];
-/// MODE_LABEL: the display name of a travel mode.
+/// `MODE_LABEL`: the display name of a travel mode.
+#[must_use]
 pub fn mode_label(m: &str) -> &'static str {
     match m {
         "driver" => "Car driver",
@@ -290,7 +294,8 @@ pub fn mode_label(m: &str) -> &'static str {
         _ => "",
     }
 }
-/// GROUP_OF: the Census travel topic a land use uses (r usual residence, w workplace, e education).
+/// `GROUP_OF`: the Census travel topic a land use uses (r usual residence, w workplace, e education).
+#[must_use]
 pub fn group_of(k: &str) -> &'static str {
     match k {
         "residential" | "apartment" | "retirement" => "r",
@@ -298,7 +303,8 @@ pub fn group_of(k: &str) -> &'static str {
         _ => "w",
     }
 }
-/// MODE_SRC: the Census table a travel topic comes from.
+/// `MODE_SRC`: the Census table a travel topic comes from.
+#[must_use]
 pub fn mode_src(g: &str) -> &'static str {
     match g {
         "r" => "Census 2023 main means of travel to work, by usual residence",
@@ -306,9 +312,9 @@ pub fn mode_src(g: &str) -> &'static str {
         _ => "Census 2023 main means of travel to education, by education address",
     }
 }
-/// JOB_KEYS: the land uses employees are placed by.
+/// `JOB_KEYS`: the land uses employees are placed by.
 pub const JOB_KEYS: [&str; 7] = ["office", "retail", "industrial", "warehouse", "supermarket", "fastfood", "medical"];
-/// NO_YIELD_GROUPS: land groups that take no yield, matched ignoring case.
+/// `NO_YIELD_GROUPS`: land groups that take no yield, matched ignoring case.
 pub const NO_YIELD_GROUPS: [&str; 2] = ["public open space", "coastal"];
 /// Zone codes that are not land (road, water, strategic transport, coastal marine).
 pub const NOT_LAND: [u32; 4] = [25, 26, 27, 30];
@@ -370,7 +376,8 @@ pub struct VarSpec {
 
 fn cats(pfx: &str, topic: &str, base: i32, list: &[(&str, i32, &str)]) -> Vec<VarSpec> {
     list.iter()
-        .map(|(k, o, c)| VarSpec { key: format!("{pfx}.{k}"), code: format!("VAR_2_{}", base + o), alias: format!("{topic} ({c})") })
+        // Bound: the VAR numbers are a few hundred, far inside i32
+        .map(|(k, o, c)| VarSpec { key: format!("{pfx}.{k}"), code: format!("VAR_2_{}", base.saturating_add(*o)), alias: format!("{topic} ({c})") })
         .collect()
 }
 
@@ -378,7 +385,8 @@ fn var(key: &str, code: &str, alias: &str) -> VarSpec {
     VarSpec { key: key.into(), code: code.into(), alias: alias.into() }
 }
 
-/// CENSUS_VARS: the items of each Census layer (ind0, ind2, dw, hh), in the order the feature reads them.
+/// `CENSUS_VARS`: the items of each Census layer (ind0, ind2, dw, hh), in the order the feature reads them.
+#[must_use]
 pub fn census_vars() -> Vec<(&'static str, Vec<VarSpec>)> {
     let mut ind2 = vec![var("empWork", "VAR_2_677", "Industry, by workplace address (Total)")];
     ind2.extend(cats("r", "Main means of travel to work, by usual residence address", 773, &WORK_CATS));
@@ -386,7 +394,7 @@ pub fn census_vars() -> Vec<(&'static str, Vec<VarSpec>)> {
     ind2.extend(cats("e", "Main means of travel to education, by education address", 195, &EDU_CATS));
     let mut hh = vec![var("hh", "VAR_4_3", "Count of households in occupied private dwellings (Total)")];
     for (i, c) in ["No motor vehicle", "One motor vehicle", "Two motor vehicles", "Three motor vehicles", "Four motor vehicles", "Five or more motor vehicles"].iter().enumerate() {
-        hh.push(VarSpec { key: format!("veh.{i}"), code: format!("VAR_4_{}", 136 + i), alias: format!("Number of motor vehicles ({c})") });
+        hh.push(VarSpec { key: format!("veh.{i}"), code: format!("VAR_4_{}", i.saturating_add(136)), alias: format!("Number of motor vehicles ({c})") });
     }
     hh.push(var("veh.stated", "VAR_4_144", "Number of motor vehicles (Total stated)"));
     vec![
@@ -404,6 +412,7 @@ pub fn census_vars() -> Vec<(&'static str, Vec<VarSpec>)> {
 }
 
 /// The specs of one Census layer (`CENSUS_VARS[lk]`).
+#[must_use]
 pub fn census_vars_of(lk: &str) -> Vec<VarSpec> {
     census_vars().into_iter().find(|(k, _)| *k == lk).map(|(_, v)| v).unwrap_or_default()
 }
@@ -420,14 +429,18 @@ fn source_json(s: &Source) -> Value {
     Value::Object(o)
 }
 
-/// The constants as JSON in the prototype's shape (SRC, STD, YIELDS, CHOICES, CENSUS_VARS, MODES and CSV_HEAD), for checking against its own source.
+/// The constants as JSON in the prototype's shape (SRC, STD, YIELDS, CHOICES, `CENSUS_VARS`, MODES and `CSV_HEAD`), for checking against its own source.
+#[must_use]
 pub fn constants() -> Value {
     let mut layers = serde_json::Map::new();
     for k in ["ind0", "ind2", "dw", "hh"] {
         layers.insert(k.into(), json!(census_layer(k)));
     }
     let mut census = source_json(&CENSUS);
-    census["layers"] = Value::Object(layers);
+    // source_json always gives an object
+    if let Some(obj) = census.as_object_mut() {
+        obj.insert("layers".into(), Value::Object(layers));
+    }
     let yields: serde_json::Map<String, Value> = YIELDS
         .iter()
         .map(|r| {
@@ -483,5 +496,5 @@ pub fn constants() -> Value {
     })
 }
 
-/// CARD_USES: the land uses the zone card offers first.
+/// `CARD_USES`: the land uses the zone card offers first.
 pub const LANDUSES_CARD_USES: [&str; 6] = ["residential", "apartment", "retail", "office", "industrial", "school"];

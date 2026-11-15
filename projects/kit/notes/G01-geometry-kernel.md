@@ -304,7 +304,7 @@ The full chapter: [28-testing.md](../../engines/geometry/architecture/28-testing
 
 ## 29. What we may take from each source
 
-The ledger behind principle 11: for every project, paper, document and dataset the evidence examined, its exact licence, how far that licence lets us go, what the kernel plans to take (depend, port, port the method only, run as an oracle, study or reject) and on what conditions. It also keeps GPL, AGPL and LGPL code out of the kernel, lists the patents to avoid and the areas no report has vetted, and sets the rules every contributor follows when taking anything.
+The ledger behind principle 11: for every project, paper, document and dataset the evidence examined, its exact licence, how far that licence lets us go, what the kernel plans to take (depend, port, port the method only, run as an oracle, study or reject) and on what conditions. It also keeps GPL, AGPL and LGPL code out of the kernel, records the patents known and the areas no report has vetted, and sets the rules every contributor follows when taking anything.
 
 The full chapter: [29-sources-licences.md](../../engines/geometry/architecture/29-sources-licences.md).
 
@@ -332,7 +332,7 @@ Twelve choices need the owner, because each fixes a promise to users, spends mon
 | 32.4 | The same-answer guarantee: which computers, what it covers, who pays | Chapter 21's list, and Windows on Arm once its CI leg merges; valid results only; co-op-funded test machines | 21, 23, 26, 28 | G10, the CI matrix |
 | 32.5 | Who decides: kernel owners, and how spine changes are accepted | At least two named people; one member vote, then delegation | 23, 26, 27, 28, 29 | The first kernel merge (G02) |
 | 32.6 | Licence lines for code and tools | Run copyleft tools as separate programs; never compile Numerical Recipes code; keep CC0, take the Unlicense only beside another licence | 28, 29 | G113, the oracle runner |
-| 32.7 | Patent searches: who, when, and who pays | A funded patent lawyer, booleans first, with a named fallback | 11, 13, 16, 17, 19, 29 | G123, the first geom-poly piece |
+| 32.7 | Patents | Replaced by 32.49 | 29 | Nothing |
 | 32.8 | How closely we follow NLib | Methods from the books; NLib for failure cases only | 4, 12, 13, 16, 29 | G56, the first NURBS piece |
 | 32.9 | Who we write to | EMBER, Schmidt and McNeel now; the rest in a stated order | 11, 14, 16, 17, 24, 29 | Varies |
 | 32.10 | Revit truth data, and watching proprietary programs | Co-op models only; watching only checks our results against our own rules | 14, 28, 29 | G460, the Revit harness |

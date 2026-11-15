@@ -16,7 +16,7 @@ use super::texts::{COLS, FILES};
 use crate::edit::json::JsonValue;
 use crate::edit::net::links_at;
 use crate::graph::{js_sort_by, zone_class};
-use crate::jsnum::{Maybe, math_max_of, number_to_js_string};
+use crate::jsnum::{Maybe, math_max_of, number_to_js_string, usize_to_f64};
 use crate::project::{LANDUSES, land_use};
 use crate::standards::{STANDARDS, growth_basis};
 use crate::util::{esc, fmt};
@@ -30,6 +30,12 @@ fn loose(n: &crate::jsnum::Num) -> f64 {
 
 /// `report-app-data`.
 pub(crate) fn app_data(c: &mut Ctx) -> String {
+    // each feature's own rows from Settings > About the data: the junction tools', this report's and the host's
+    struct Entry {
+        title: String,
+        order: f64,
+        rows: Vec<[String; 3]>,
+    }
     let r = c.r;
     let rows: Vec<Row> = data_sources(r)
         .iter()
@@ -44,12 +50,6 @@ pub(crate) fn app_data(c: &mut Ctx) -> String {
             ])
         })
         .collect();
-    // each feature's own rows from Settings > About the data: the junction tools', this report's and the host's
-    struct Entry {
-        title: String,
-        order: f64,
-        rows: Vec<[String; 3]>,
-    }
     let mut entries: Vec<Entry> = vec![
         Entry { title: "Junction analysis".to_string(), order: 30.0, rows: crate::junction_tools::about_rows() },
         Entry {
@@ -77,14 +77,11 @@ pub(crate) fn app_data(c: &mut Ctx) -> String {
     for a in r.host.about_entries() {
         entries.push(Entry { title: a.title, order: a.order, rows: a.rows });
     }
-    let mut idx: Vec<usize> = (0..entries.len()).collect();
-    idx.sort_by(|a, b| entries[*a].order.partial_cmp(&entries[*b].order).unwrap_or(std::cmp::Ordering::Equal));
-    let feat: Vec<Row> = idx
+    // a stable sort of the entries themselves, the same order as the stable sort of their positions it replaces
+    entries.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap_or(std::cmp::Ordering::Equal));
+    let feat: Vec<Row> = entries
         .iter()
-        .flat_map(|&i| {
-            let a = &entries[i];
-            a.rows.iter().map(|x| Row::new(vec![esc(&a.title), x[0].clone(), x[1].clone(), x[2].clone()])).collect::<Vec<_>>()
-        })
+        .flat_map(|a| a.rows.iter().map(|x| Row::new(vec![esc(&a.title), x[0].clone(), x[1].clone(), x[2].clone()])).collect::<Vec<_>>())
         .collect();
     format!(
         "{}\n      {}",
@@ -194,7 +191,7 @@ fn maybe_text(v: &Maybe<serde_json::Value>, d: &str) -> String {
 fn year_cell(n: &crate::jsnum::Num) -> String {
     let t = match n {
         Maybe::Missing | Maybe::Null => String::new(),
-        other => other.js_string(),
+        set @ Maybe::Set(_) => set.js_string(),
     };
     year_txt(&t)
 }
@@ -231,7 +228,7 @@ pub(crate) fn app_zones(c: &mut Ctx) -> String {
                 esc(&if lu.is_empty() { fmt::DASH.to_string() } else { lu.join(", ") }),
                 year_cell(&z.year),
                 if z.reduction.truthy() { rfmt::pct(z.reduction.num()) } else { fmt::DASH.to_string() },
-                if !matches!(z.buildout, Maybe::Missing | Maybe::Null) { rfmt::pct(z.buildout.num()) } else { fmt::DASH.to_string() },
+                if matches!(z.buildout, Maybe::Missing | Maybe::Null) { fmt::DASH.to_string() } else { rfmt::pct(z.buildout.num()) },
                 esc(&maybe_text(&z.src, "user")),
             ])
         })
@@ -314,7 +311,7 @@ pub(crate) fn app_network(c: &mut Ctx) -> String {
                     fmt::DASH.to_string()
                 },
                 match n.bans.get() {
-                    Some(serde_json::Value::Array(a)) if !a.is_empty() => format!("{} banned", int_f(a.len() as f64)),
+                    Some(serde_json::Value::Array(a)) if !a.is_empty() => format!("{} banned", int_f(usize_to_f64(a.len()))),
                     _ => fmt::DASH.to_string(),
                 },
                 if n.upgrade.truthy() { "Yes" } else { "" }.to_string(),
@@ -329,7 +326,7 @@ pub(crate) fn app_network(c: &mut Ctx) -> String {
             let t = format!(
                 "{}{}",
                 d.iter().take(8).map(|x| x.text.clone()).collect::<Vec<_>>().join("; "),
-                if d.len() > 8 { format!("; and {} more", d.len() - 8) } else { String::new() }
+                if d.len() > 8 { format!("; and {} more", d.len().saturating_sub(8)) } else { String::new() }
             );
             Row::new(vec![esc(r.sc(i).name()), d.len().to_string(), esc(&if t.is_empty() { "None".to_string() } else { t })])
         })
@@ -355,8 +352,7 @@ pub(crate) fn app_network(c: &mut Ctx) -> String {
 
 fn to_json(n: &crate::jsnum::Num) -> JsonValue {
     match n {
-        Maybe::Missing => JsonValue::Null,
-        Maybe::Null => JsonValue::Null,
+        Maybe::Missing | Maybe::Null => JsonValue::Null,
         Maybe::Set(v) => JsonValue::from_value(&v.to_value()),
     }
 }
@@ -399,45 +395,45 @@ pub(crate) fn app_calibration(c: &mut Ctx) -> String {
     let sc = c.sel.existing.or(c.sel.base).unwrap_or(0);
     let scn = r.scenario(sc);
     let mut parts: Vec<String> = Vec::new();
-    for p in ["AM", "PM"] {
-        let Some(res) = r.results[sc].get(p) else {
+    for per in ["AM", "PM"] {
+        let Some(res) = r.results.get(sc).and_then(|m| m.get(per)) else {
             continue;
         };
-        let rep = crate::calibrate::report(r.project, scn, p, Some(res));
+        let rep = crate::calibrate::report(r.project, scn, per, Some(res));
         let rows: Vec<Row> = rep
             .checks
             .iter()
-            .map(|k| {
-                let k = k.to_value();
-                let or_dash = |s: String| if s.is_empty() { fmt::DASH.to_string() } else { s };
+            .map(|chk| {
+                let chk = chk.to_value();
+                let or_dash = |text: String| if text.is_empty() { fmt::DASH.to_string() } else { text };
                 Row::new(vec![
-                    esc(&vtext(&k, "label")),
-                    esc(&or_dash(vtext(&k, "target"))),
-                    match k.get("value") {
+                    esc(&vtext(&chk, "label")),
+                    esc(&or_dash(vtext(&chk, "target"))),
+                    match chk.get("value") {
                         None | Some(serde_json::Value::Null) => fmt::DASH.to_string(),
-                        Some(serde_json::Value::Number(n)) => {
-                            let v = n.as_f64().unwrap_or(f64::NAN);
-                            if k.get("kind").and_then(serde_json::Value::as_str) == Some("share") { rfmt::pct(v * 100.0) } else { rfmt::num(v, 3) }
+                        Some(serde_json::Value::Number(num)) => {
+                            let val = num.as_f64().unwrap_or(f64::NAN);
+                            if chk.get("kind").and_then(serde_json::Value::as_str) == Some("share") { rfmt::pct(val * 100.0) } else { rfmt::num(val, 3) }
                         }
                         Some(serde_json::Value::String(s)) if matches!(s.as_str(), "NaN" | "Infinity" | "-Infinity") => {
-                            let v = match s.as_str() {
+                            let val = match s.as_str() {
                                 "NaN" => f64::NAN,
                                 "Infinity" => f64::INFINITY,
                                 _ => f64::NEG_INFINITY,
                             };
-                            if k.get("kind").and_then(serde_json::Value::as_str) == Some("share") { rfmt::pct(v * 100.0) } else { rfmt::num(v, 3) }
+                            if chk.get("kind").and_then(serde_json::Value::as_str) == Some("share") { rfmt::pct(val * 100.0) } else { rfmt::num(val, 3) }
                         }
-                        Some(v) => esc(&crate::jsnum::value_to_js_string(v)),
+                        Some(val) => esc(&crate::jsnum::value_to_js_string(val)),
                     },
-                    esc(&or_dash(vtext(&k, "status"))),
-                    esc(&vtext(&k, "source")),
-                    esc(&vtext(&k, "table")),
-                    if k.get("verified").is_some_and(crate::jsnum::value_truthy) { "Yes" } else { "No" }.to_string(),
+                    esc(&or_dash(vtext(&chk, "status"))),
+                    esc(&vtext(&chk, "source")),
+                    esc(&vtext(&chk, "table")),
+                    if chk.get("verified").is_some_and(crate::jsnum::value_truthy) { "Yes" } else { "No" }.to_string(),
                 ])
             })
             .collect();
         parts.push(c.table(
-            &format!("Calibration checks \u{b7} {} \u{b7} {} peak", esc(r.sc(sc).name()), p),
+            &format!("Calibration checks \u{b7} {} \u{b7} {} peak", esc(r.sc(sc).name()), per),
             Tbl::new(vec![h("Criterion"), h("Target"), h("Value"), h("Status"), h("Source"), h("Table"), h("Verified")], rows),
             &TableOpts::note(&format!(
                 "{} {} {}",
@@ -446,14 +442,14 @@ pub(crate) fn app_calibration(c: &mut Ctx) -> String {
                 rep.notes.iter().map(|x| esc(x)).collect::<Vec<_>>().join(" ")
             )),
         ));
-        let info = js::path(Some(r.raw), &["me", "info", p]).filter(|v| v.truthy());
+        let info = js::path(Some(r.raw), &["me", "info", per]).filter(|v| v.truthy());
         if let Some(info) = info {
             let mc = js::get(Some(info), "matrixChange").filter(|v| v.truthy());
             let mct = mc.and_then(|m| m.get("total")).filter(|t| !t.is_null());
             let r2 = info.get("tripEndR2").filter(|t| !t.is_null());
             let stopped = js::text_or_empty(info.get("stopped"));
             parts.push(c.table(
-                &format!("Matrix estimation \u{b7} {p} peak"),
+                &format!("Matrix estimation \u{b7} {per} peak"),
                 Tbl::new(
                     vec![h("Item"), h("Value")],
                     vec![
@@ -483,7 +479,10 @@ pub(crate) fn app_convergence(c: &mut Ctx) -> String {
     let mut series: Vec<Series> = Vec::new();
     for i in 0..r.project.scenarios.len() {
         for p in r.rep_periods(i) {
-            let res = r.results[i].get(p).expect("a period with results");
+            // rep_periods lists only the periods that have results, so this never skips
+            let Some(res) = r.results.get(i).and_then(|m| m.get(p)) else {
+                continue;
+            };
             let last: Vec<f64> = res.conv.iter().rev().take(4).rev().map(|x| x.p.unwrap_or(f64::NAN)).collect();
             let pm = if last.is_empty() { None } else { Some(crate::jsnum::math_min_of(&last)) };
             rows.push(Row::new(vec![
@@ -492,7 +491,7 @@ pub(crate) fn app_convergence(c: &mut Ctx) -> String {
                 int(Some(&JsonValue::Number(res.it))),
                 format!("{}%", fmt::num(res.gap * 100.0, 4)),
                 pm.map_or(fmt::DASH.to_string(), |v| rfmt::pct(v * 100.0)),
-                if !res.converged { "<b class=\"bad\">No</b>" } else { "Yes" }.to_string(),
+                if res.converged { "Yes" } else { "<b class=\"bad\">No</b>" }.to_string(),
                 esc(&res.conv_note),
             ]));
             if Some(i) == c.sel.with && res.conv.len() > 1 {
@@ -536,92 +535,39 @@ pub(crate) fn app_counts(c: &mut Ctx) -> String {
     let r = c.r;
     let counts = js::items(js::get(r.data(), "counts"));
     let mut by: Vec<(String, usize)> = Vec::new();
-    for k in counts {
-        let src = js::get(Some(k), "src");
-        let role = js::text_or_empty(js::get(Some(k), "role"));
+    for cnt in counts {
+        let src = js::get(Some(cnt), "src");
+        let role = js::text_or_empty(js::get(Some(cnt), "role"));
         let key = format!(
             "{}|{}|{}",
             match src {
                 None => "undefined".to_string(),
                 Some(v) => v.js_string(),
             },
-            if js::truthy(js::get(Some(k), "virtual")) { "estimate" } else { "count" },
+            if js::truthy(js::get(Some(cnt), "virtual")) { "estimate" } else { "count" },
             if role.is_empty() { "calibration".to_string() } else { role }
         );
         match by.iter_mut().find(|(x, _)| *x == key) {
-            Some(e) => e.1 += 1,
+            // Bound: a count of count sites in memory, far below usize::MAX
+            Some(entry) => entry.1 = entry.1.saturating_add(1),
             None => by.push((key, 1)),
         }
     }
     let rows: Vec<Row> = by
         .iter()
-        .map(|(k, n)| {
-            let mut it = k.split('|');
-            let (s, m, rl) = (it.next().unwrap_or(""), it.next().unwrap_or(""), it.next().unwrap_or(""));
+        .map(|(key, n)| {
+            let mut it = key.split('|');
+            let (src, method, rl) = (it.next().unwrap_or(""), it.next().unwrap_or(""), it.next().unwrap_or(""));
             Row::new(vec![
-                esc(crate::datahub::source(s).map_or(s, |x| x.label)),
-                esc(m),
+                esc(crate::datahub::source(src).map_or(src, |x| x.label)),
+                esc(method),
                 esc(rl),
                 n.to_string(),
             ])
         })
         .collect();
     let sc = c.sel.existing.or(c.sel.base).unwrap_or(0);
-    let scn = r.scenario(sc);
-    let mut jt: Vec<Row> = Vec::new();
-    for j in js::items(js::get(r.data(), "jt")) {
-        for p in ["AM", "PM"] {
-            let Some(res) = r.results[sc].get(p) else {
-                continue;
-            };
-            let obs_t = js::get(Some(j), "obs").filter(|v| v.truthy()).map(|o| js::num(o.get(p))).filter(|t| *t > 0.0);
-            let ob: Option<(f64, String)> = obs_t.map(|t| {
-                let src = js::text_or_empty(js::path(Some(j), &["obs", "src"]));
-                (t, if src.is_empty() { "Observed".to_string() } else { src })
-            });
-            let g = js::path(Some(j), &["g", p]).filter(|v| v.truthy() && js::num(v.get("t")) > 0.0);
-            if ob.is_none() && g.is_none() {
-                continue;
-            }
-            let from = js::text(js::get(Some(j), "from"));
-            let to = js::text(js::get(Some(j), "to"));
-            let mut mt: Option<f64> = None;
-            let mut ml: Option<f64> = None;
-            if scn.nodes.contains_key(&from) && scn.nodes.contains_key(&to)
-                && let Some(crate::results::Travel::Route(t)) = crate::results::travel(scn, r.st(), Some(res), &from, &to)
-            {
-                mt = Some(t.time);
-                ml = Some(t.len);
-            }
-            let reference = ob.as_ref().map_or_else(|| js::num(g.and_then(|x| x.get("t"))), |o| o.0);
-            let k = mt.and_then(|m| crate::datahub::jt_check(m, reference));
-            let glen = g.and_then(|x| x.get("len")).filter(|v| v.truthy()).map(JsonValue::to_number);
-            let len = glen.or(ml);
-            jt.push(Row::new(vec![
-                esc(&js::text(js::get(Some(j), "name"))),
-                p.to_string(),
-                match len {
-                    Some(l) if l != 0.0 && !l.is_nan() => rfmt::num(l / 1000.0, 2),
-                    _ => fmt::DASH.to_string(),
-                },
-                rfmt::num(reference, 0),
-                match &ob {
-                    Some(o) => format!("{} (observed)", esc(&o.1)),
-                    None => {
-                        let when = js::text_or_empty(g.and_then(|x| x.get("when")));
-                        format!(
-                            "Google Routes typical time (predicted, not observed{})",
-                            if when.is_empty() { String::new() } else { format!(", {}", esc(&when)) }
-                        )
-                    }
-                },
-                mt.map_or(fmt::DASH.to_string(), |m| rfmt::num(m, 0)),
-                k.as_ref().map_or(fmt::DASH.to_string(), |k| rfmt::pct(k.pct * 100.0)),
-                k.as_ref().map_or(fmt::DASH.to_string(), |k| if k.tier1 { "Pass" } else { "Fail" }.to_string()),
-                k.as_ref().map_or(fmt::DASH.to_string(), |k| if k.tier2 { "Pass" } else { "Fail" }.to_string()),
-            ]));
-        }
-    }
+    let jt = journey_time_rows(r, sc);
     format!(
         "{}\n      {}",
         c.table(
@@ -642,6 +588,63 @@ pub(crate) fn app_counts(c: &mut Ctx) -> String {
             ))
         )
     )
+}
+
+/// Table J1's rows: each journey-time route and period with an observed or Google reference time.
+fn journey_time_rows(r: &super::Rep, sc: usize) -> Vec<Row> {
+    let scn = r.scenario(sc);
+    let mut jt: Vec<Row> = Vec::new();
+    for route in js::items(js::get(r.data(), "jt")) {
+        for per in ["AM", "PM"] {
+            let Some(res) = r.results.get(sc).and_then(|m| m.get(per)) else {
+                continue;
+            };
+            let obs_t = js::get(Some(route), "obs").filter(|v| v.truthy()).map(|o| js::num(o.get(per))).filter(|t| *t > 0.0);
+            let ob: Option<(f64, String)> = obs_t.map(|t| {
+                let src = js::text_or_empty(js::path(Some(route), &["obs", "src"]));
+                (t, if src.is_empty() { "Observed".to_string() } else { src })
+            });
+            let goog = js::path(Some(route), &["g", per]).filter(|v| v.truthy() && js::num(v.get("t")) > 0.0);
+            if ob.is_none() && goog.is_none() {
+                continue;
+            }
+            let from = js::text(js::get(Some(route), "from"));
+            let to = js::text(js::get(Some(route), "to"));
+            let mut mt: Option<f64> = None;
+            let mut ml: Option<f64> = None;
+            if scn.nodes.contains_key(&from) && scn.nodes.contains_key(&to)
+                && let Some(crate::results::Travel::Route(t)) = crate::results::travel(scn, r.st(), Some(res), &from, &to)
+            {
+                mt = Some(t.time);
+                ml = Some(t.len);
+            }
+            let reference = ob.as_ref().map_or_else(|| js::num(goog.and_then(|x| x.get("t"))), |o| o.0);
+            let check = mt.and_then(|m| crate::datahub::jt_check(m, reference));
+            let glen = goog.and_then(|x| x.get("len")).filter(|v| v.truthy()).map(JsonValue::to_number);
+            let len = glen.or(ml);
+            jt.push(Row::new(vec![
+                esc(&js::text(js::get(Some(route), "name"))),
+                per.to_string(),
+                match len {
+                    Some(l) if l != 0.0 && !l.is_nan() => rfmt::num(l / 1000.0, 2),
+                    _ => fmt::DASH.to_string(),
+                },
+                rfmt::num(reference, 0),
+                if let Some(o) = &ob { format!("{} (observed)", esc(&o.1)) } else {
+                    let when = js::text_or_empty(goog.and_then(|x| x.get("when")));
+                    format!(
+                        "Google Routes typical time (predicted, not observed{})",
+                        if when.is_empty() { String::new() } else { format!(", {}", esc(&when)) }
+                    )
+                },
+                mt.map_or(fmt::DASH.to_string(), |m| rfmt::num(m, 0)),
+                check.as_ref().map_or(fmt::DASH.to_string(), |k| rfmt::pct(k.pct * 100.0)),
+                check.as_ref().map_or(fmt::DASH.to_string(), |k| if k.tier1 { "Pass" } else { "Fail" }.to_string()),
+                check.as_ref().map_or(fmt::DASH.to_string(), |k| if k.tier2 { "Pass" } else { "Fail" }.to_string()),
+            ]));
+        }
+    }
+    jt
 }
 
 /// `report-app-movements`.
@@ -736,7 +739,7 @@ pub(crate) fn app_crashes(c: &mut Ctx) -> String {
                 None => "undefined".to_string(),
                 Some(v) => v.js_string(),
             };
-            "FSMN".find(s.as_str()).map_or(-1.0, |i| i as f64)
+            "FSMN".find(s.as_str()).map_or(-1.0, usize_to_f64)
         };
         pos(a) - pos(b)
     });
@@ -776,7 +779,7 @@ pub(crate) fn app_crashes(c: &mut Ctx) -> String {
         })
         .collect();
     c.table(
-        &format!("Reported crashes ({})", plural(cr.len() as f64, "crash", "crashes")),
+        &format!("Reported crashes ({})", plural(usize_to_f64(cr.len()), "crash", "crashes")),
         Tbl::new(vec![h("Year"), h("Severity"), h("Location"), hn("Speed limit"), h("Vulnerable users"), h("Lat, lng")], rows).empty("No crashes loaded."),
         &TableOpts { source: Some(esc(attrib::CAS)), d: vec!["D8"], ..TableOpts::default() },
     )

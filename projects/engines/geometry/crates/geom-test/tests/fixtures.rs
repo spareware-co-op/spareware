@@ -42,7 +42,7 @@ use geom_test::fixture::minimise::{MinimiseError, minimise, same_failure};
 use geom_test::fixture::repo::{File, embedded, must_fail_on_base, parse_all};
 use geom_test::fixture::run::{Engine, Failure, PREFIX, Ran, Replayed, Step, Verdict, replay, run};
 use geom_test::fixture::{
-    Class, Counts, Expect, Fixture, FixtureError, Hash, Key, Kind, Measures, Name, OpLog,
+    Change, Class, Counts, Expect, Fixture, FixtureError, Hash, Key, Kind, Measures, Name, OpLog,
     OpVersions, Quantity, Source, Speed, Spend, Status, Triage, is_id,
 };
 use geom_test::golden::store::{ChangeKind, State};
@@ -928,9 +928,36 @@ fn failures_say_what_failed() {
 
 fn state(edition: &str) -> Option<State> {
     match edition {
-        EDITION => Some(State::Open),
+        // "next" is an open edition after the first release, where operation versions are real:
+        // only a test can have two open editions, and this one shows which kinds a record may
+        // take there.
+        EDITION | "next" => Some(State::Open),
         "first" => Some(State::Frozen),
         _ => None,
+    }
+}
+
+/// A history record of `was` at `key`, of `kind`.
+fn record(key: &Key, was: &Expect, kind: ChangeKind) -> Change {
+    Change {
+        edition: key.0.clone(),
+        operations: key.1.clone(),
+        was: was.clone(),
+        kind,
+        piece: "G1".to_owned(),
+        why: "w".to_owned(),
+    }
+}
+
+/// `expect` with its hash replaced by `byte`s: what a change of the output's encoding gives.
+fn rehashed(expect: &Expect, byte: u8) -> Expect {
+    let Expect::Ok { work, measures, .. } = expect.clone() else {
+        panic!("a success")
+    };
+    Expect::Ok {
+        hash: Some(Hash([byte; 32])),
+        work,
+        measures,
     }
 }
 
@@ -938,16 +965,27 @@ fn state(edition: &str) -> Option<State> {
 fn a_pull_request_may_only_add_or_improve() {
     let base = fixture(vec![op("good", 1)]);
     let same = diff(&[base.clone()], &[base.clone()], state);
-    assert!(same.is_clean());
-    assert!(same.free.is_empty() && same.added.is_empty());
+    assert!(same.is_acceptable());
+    assert!(same.free.is_empty() && same.added.is_empty() && same.changed.is_empty());
+    assert!(
+        same.to_string()
+            .contains("verdict: no stored expectation changed")
+    );
     // A new fixture is free.
     let mut new = fixture(vec![op("good", 2)]);
     new.id = "bool/0002-b".to_owned();
     let d = diff(&[base.clone()], &[base.clone(), new.clone()], state);
-    assert!(d.is_clean());
+    assert!(d.is_acceptable());
     assert_eq!(d.added, ["bool/0002-b"]);
+    assert!(d.to_string().contains("added: bool/0002-b\n"), "{d}");
     // Removing one never stands.
-    assert!(diff(&[base.clone()], &[], state).refused[0].contains("never deleted"));
+    let d = diff(&[base.clone()], &[], state);
+    assert!(d.refused[0].contains("never deleted"));
+    assert!(!d.is_acceptable());
+    assert!(
+        d.to_string()
+            .ends_with("verdict: refused; these changes cannot merge")
+    );
     // The log and the source are the case itself.
     let mut f = base.clone();
     f.log.operations.push(op("good", 2));
@@ -959,8 +997,9 @@ fn a_pull_request_may_only_add_or_improve() {
     let mut f = base.clone();
     f.fixed_by = Some("#1".to_owned());
     let d = diff(&[base.clone()], &[f.clone()], state);
-    assert!(d.is_clean());
+    assert!(d.is_acceptable());
     assert!(d.free[0].contains("#1"));
+    assert!(d.to_string().contains("records the fix #1\n"), "{d}");
     let mut g = f.clone();
     g.fixed_by = Some("#2".to_owned());
     assert!(diff(&[f.clone()], &[g], state).refused[0].contains("fix"));
@@ -971,7 +1010,7 @@ fn a_pull_request_may_only_add_or_improve() {
     let mut f = base.clone();
     f.speed = Speed::Slow;
     let d = diff(&[base.clone()], &[f], state);
-    assert!(d.is_clean() && d.free.len() == 1);
+    assert!(d.is_acceptable() && d.free.len() == 1);
 }
 
 #[test]
@@ -986,24 +1025,55 @@ fn an_expectation_moves_only_on_the_record() {
     };
     let mut f = base.clone();
     f.expect.insert(k.clone(), now.clone());
-    // Without a record it is refused; with one it needs an owner.
-    assert!(diff(&[base.clone()], &[f.clone()], state).refused[0].contains("without a record"));
-    f.history.push(geom_test::fixture::Change {
-        edition: EDITION.to_owned(),
-        operations: k.1.clone(),
-        was: was.clone(),
-        kind: ChangeKind::Bug,
-        piece: "G1".to_owned(),
-        why: "w".to_owned(),
-    });
+    // Without a record it is refused; with one it stands, and is named with its record.
+    let d = diff(&[base.clone()], &[f.clone()], state);
+    assert!(d.refused[0].contains("without a record"), "{d:?}");
+    assert!(d.changed.is_empty() && !d.is_acceptable());
+    f.history.push(record(&k, &was, ChangeKind::Bug));
     let d = diff(&[base.clone()], &[f.clone()], state);
     assert!(d.refused.is_empty(), "{d:?}");
-    assert_eq!(d.approval.len(), 1);
-    assert!(!d.is_clean());
-    // A record of something else is no record.
+    assert!(d.is_acceptable());
+    assert_eq!(d.changed.len(), 1);
+    assert_eq!(d.changed[0].record, f.history[0]);
+    assert_eq!(d.changed[0].id, base.id);
+    let text = d.to_string();
+    assert!(
+        text.contains(&format!(
+            "changed: {}: the expectation of {EDITION} at {:?}; recorded as bug by G1: w\n",
+            base.id, k.1
+        )),
+        "{text}"
+    );
+    assert!(
+        text.ends_with(
+            "verdict: every changed expectation carries its record; the merge record names each \
+             one"
+        ),
+        "{text}"
+    );
+    // A record of something else is no record of this change.
     let mut wrong = f.clone();
     wrong.history[0].was = now.clone();
-    assert!(diff(&[base.clone()], &[wrong], state).refused[0].contains("without a record"));
+    let d = diff(&[base.clone()], &[wrong], state);
+    assert!(d.refused[0].contains("another old value"), "{d:?}");
+    assert!(d.changed.is_empty() && !d.is_acceptable(), "{d:?}");
+    // A record at another key is no record either.
+    let mut elsewhere = f.clone();
+    elsewhere.history[0].edition = "first".to_owned();
+    assert!(diff(&[base.clone()], &[elsewhere], state).refused[0].contains("without a record"));
+    let mut elsewhere = f.clone();
+    elsewhere.history[0].operations = OpVersions::new();
+    assert!(diff(&[base.clone()], &[elsewhere], state).refused[0].contains("without a record"));
+    // Two records for one change are one too many.
+    let mut twice = f.clone();
+    twice.history.push(twice.history[0].clone());
+    let d = diff(&[base.clone()], &[twice], state);
+    assert!(
+        d.refused
+            .iter()
+            .any(|r| r.contains("2 new history records for 1")),
+        "{d:?}"
+    );
     // A record with no change is refused, and history is only added to.
     let mut idle = base.clone();
     idle.history = f.history.clone();
@@ -1025,7 +1095,7 @@ fn an_expectation_moves_only_on_the_record() {
     more.expect
         .insert(("later".to_owned(), k.1.clone()), now.clone());
     let d = diff(&[base.clone()], &[more], state);
-    assert!(d.is_clean() && d.free[0].contains("new expectation"));
+    assert!(d.is_acceptable() && d.free[0].contains("new expectation"));
     // Frozen and unknown editions never move, on the record or not.
     for edition in ["first", "unknown"] {
         let mut frozen = base.clone();
@@ -1037,16 +1107,156 @@ fn an_expectation_moves_only_on_the_record() {
         moved
             .expect
             .insert((edition.to_owned(), k.1.clone()), now.clone());
-        moved.history.push(geom_test::fixture::Change {
-            edition: edition.to_owned(),
-            operations: k.1.clone(),
-            was: was.clone(),
-            kind: ChangeKind::Improvement,
-            piece: "G1".to_owned(),
-            why: "w".to_owned(),
-        });
+        moved.history.push(record(
+            &(edition.to_owned(), k.1.clone()),
+            &was,
+            ChangeKind::Improvement,
+        ));
         let d = diff(&[frozen], &[moved], state);
         assert!(d.refused[0].contains("frozen"), "{d:?}");
+    }
+}
+
+/// Every part of a changed expectation's record is held: an empty piece or reason, and a kind the
+/// fixture's rules do not allow for that change, are refused; the kinds that fit stand.
+#[test]
+fn every_part_of_the_record_is_held() {
+    let base = fixture(vec![op("good", 1)]);
+    let k = key(&base.log);
+    let was = base.expect[&k].clone();
+    let moved = |now: Expect, change: Change| {
+        let mut f = base.clone();
+        f.expect.insert(change_key(&change), now);
+        f.history.push(change);
+        diff(&[base.clone()], &[f], state)
+    };
+    let mut other = measures();
+    other.counts.faces = 7;
+    let measured = Expect::Ok {
+        hash: Some(Hash([9; 32])),
+        work: Some(ONE),
+        measures: other,
+    };
+    // An empty or blank piece or reason.
+    for blank in ["", "  "] {
+        let mut no_piece = record(&k, &was, ChangeKind::Bug);
+        no_piece.piece = blank.to_owned();
+        let mut no_reason = record(&k, &was, ChangeKind::Bug);
+        no_reason.why = blank.to_owned();
+        for change in [no_piece, no_reason] {
+            let d = moved(measured.clone(), change);
+            assert!(!d.is_acceptable() && d.changed.is_empty(), "{d:?}");
+            assert!(
+                d.refused[0].contains("names no piece or gives no reason"),
+                "{d:?}"
+            );
+        }
+    }
+    // `corpus` fits only a hash that moved alone; `bug` and `improvement` fit anything in
+    // pre-edition.
+    let d = moved(rehashed(&was, 9), record(&k, &was, ChangeKind::Corpus));
+    assert!(d.is_acceptable(), "{d:?}");
+    assert_eq!(d.changed.len(), 1);
+    let d = moved(measured.clone(), record(&k, &was, ChangeKind::Corpus));
+    assert!(!d.is_acceptable(), "{d:?}");
+    assert!(
+        d.refused[0].contains("on a record of kind corpus, which the fixture's rules do not allow"),
+        "{d:?}"
+    );
+    for kind in [ChangeKind::Bug, ChangeKind::Improvement] {
+        let d = moved(measured.clone(), record(&k, &was, kind));
+        assert!(d.is_acceptable(), "{kind}: {d:?}");
+    }
+    // In an open edition after pre-edition, a fixed or improved result is a new operation version:
+    // only `corpus` fits there.
+    let next = ("next".to_owned(), k.1.clone());
+    let mut base = base.clone();
+    base.expect.insert(next.clone(), was.clone());
+    let moved = |now: Expect, change: Change| {
+        let mut f = base.clone();
+        f.expect.insert(change_key(&change), now);
+        f.history.push(change);
+        diff(&[base.clone()], &[f], state)
+    };
+    for kind in [ChangeKind::Bug, ChangeKind::Improvement] {
+        let d = moved(measured.clone(), record(&next, &was, kind));
+        assert!(!d.is_acceptable(), "{kind}: {d:?}");
+        assert!(
+            d.refused[0].contains(&format!("on a record of kind {kind}, which")),
+            "{d:?}"
+        );
+    }
+    let d = moved(rehashed(&was, 9), record(&next, &was, ChangeKind::Corpus));
+    assert!(d.is_acceptable(), "{d:?}");
+}
+
+/// The key a record names.
+fn change_key(change: &Change) -> Key {
+    (change.edition.clone(), change.operations.clone())
+}
+
+/// `Change::allows`, the kinds the fixture's rules allow, for every shape of change.
+#[test]
+fn a_records_kind_fits_what_moved() {
+    let ok = Expect::Ok {
+        hash: Some(Hash([1; 32])),
+        work: Some(ONE),
+        measures: measures(),
+    };
+    let err = Expect::Err {
+        kind: Kind(ErrorKind::Degenerate),
+        entities: Vec::new(),
+        work: Some(ERRED),
+    };
+    let mut faces = measures();
+    faces.counts.faces = 7;
+    let other_measures = Expect::Ok {
+        hash: Some(Hash([2; 32])),
+        work: Some(ONE),
+        measures: faces,
+    };
+    let other_work = Expect::Ok {
+        hash: Some(Hash([2; 32])),
+        work: Some(DONE),
+        measures: measures(),
+    };
+    let other_error = Expect::Err {
+        kind: Kind(ErrorKind::BudgetExceeded),
+        entities: Vec::new(),
+        work: Some(ERRED),
+    };
+    let at = |edition: &str, was: &Expect, kind: ChangeKind| Change {
+        edition: edition.to_owned(),
+        operations: OpVersions::new(),
+        was: was.clone(),
+        kind,
+        piece: "G1".to_owned(),
+        why: "w".to_owned(),
+    };
+    // (was, now, whether corpus fits)
+    let cases = [
+        (&ok, rehashed(&ok, 2), true),
+        (&ok, other_measures, false),
+        (&ok, other_work, false),
+        (&ok, err.clone(), false),
+        (&err, ok.clone(), false),
+        (&err, other_error, false),
+    ];
+    for (i, (was, now, corpus)) in cases.iter().enumerate() {
+        for edition in [EDITION, "next"] {
+            assert_eq!(
+                at(edition, was, ChangeKind::Corpus).allows(now),
+                *corpus,
+                "case {i} in {edition}"
+            );
+            for kind in [ChangeKind::Bug, ChangeKind::Improvement] {
+                assert_eq!(
+                    at(edition, was, kind).allows(now),
+                    edition == EDITION,
+                    "case {i}: {kind} in {edition}"
+                );
+            }
+        }
     }
 }
 
@@ -1064,7 +1274,7 @@ fn status_moves_one_way() {
     p.status = Status::Pass;
     p.expect.insert(key.clone(), stored.clone());
     let d = diff(&[k.clone()], &[p.clone()], state);
-    assert!(d.is_clean(), "{d:?}");
+    assert!(d.is_acceptable() && d.changed.is_empty(), "{d:?}");
     assert!(d.free[0].contains("Known moved to Pass"));
     // Known to Pass with something else is an ordinary change, and is refused unrecorded.
     let mut m = measures();
@@ -1072,7 +1282,7 @@ fn status_moves_one_way() {
     let mut q = k.clone();
     q.status = Status::Pass;
     q.expect.insert(
-        key,
+        key.clone(),
         Expect::Ok {
             hash: Some(Hash([3; 32])),
             work: Some(ONE),
@@ -1084,17 +1294,60 @@ fn status_moves_one_way() {
     let mut r = p.clone();
     r.status = k.status.clone();
     assert!(diff(&[p], &[r], state).refused[0].contains("regression"));
-    // A new wanted result needs an owner.
+    // A new wanted result carries its record too: the old wanted result, at the log's own
+    // versions in the open edition.
+    let Status::Known { wanted } = k.status.clone() else {
+        panic!()
+    };
+    let new_wanted = Expect::Ok {
+        hash: Some(Hash([4; 32])),
+        work: Some(ONE),
+        measures: measures(),
+    };
     let mut w = k.clone();
     w.status = Status::Known {
-        wanted: Expect::Ok {
-            hash: Some(Hash([4; 32])),
-            work: Some(ONE),
-            measures: measures(),
-        },
+        wanted: new_wanted.clone(),
     };
-    let d = diff(&[k], &[w], state);
-    assert!(d.refused.is_empty() && d.approval[0].contains("wanted"));
+    let d = diff(&[k.clone()], &[w.clone()], state);
+    assert!(
+        d.refused[0].contains("its wanted result changed without a record"),
+        "{d:?}"
+    );
+    let mut recorded = w.clone();
+    recorded
+        .history
+        .push(record(&key, &wanted, ChangeKind::Improvement));
+    let d = diff(&[k.clone()], &[recorded.clone()], state);
+    assert!(d.is_acceptable(), "{d:?}");
+    assert_eq!(d.changed.len(), 1);
+    assert_eq!(d.changed[0].what, "its wanted result");
+    assert!(
+        d.to_string()
+            .contains("its wanted result; recorded as improvement by G1: w"),
+        "{d}"
+    );
+    // The record must hold the old wanted result, sit at the log's own versions and name an open
+    // edition.
+    let mut wrong = recorded.clone();
+    wrong.history[0].was = new_wanted.clone();
+    assert!(diff(&[k.clone()], &[wrong], state).refused[0].contains("another old value"));
+    let mut elsewhere = recorded.clone();
+    elsewhere.history[0].operations = OpVersions::new();
+    assert!(diff(&[k.clone()], &[elsewhere], state).refused[0].contains("without a record"));
+    let mut frozen = recorded.clone();
+    frozen.history[0].edition = "first".to_owned();
+    assert!(diff(&[k.clone()], &[frozen], state).refused[0].contains("without a record"));
+    let mut no_reason = recorded.clone();
+    no_reason.history[0].why = String::new();
+    assert!(diff(&[k.clone()], &[no_reason], state).refused[0].contains("gives no reason"));
+    // A wanted result's record is held to the same kinds: a corpus record fits only a hash that
+    // moved alone.
+    let mut corpus = recorded.clone();
+    corpus.history[0].kind = ChangeKind::Corpus;
+    assert!(diff(&[k.clone()], &[corpus], state).refused[0].contains("of kind corpus"));
+    // The same wanted result is no change, and needs no record.
+    let d = diff(&[k.clone()], &[k.clone()], state);
+    assert!(d.is_acceptable() && d.changed.is_empty(), "{d:?}");
 }
 
 #[test]

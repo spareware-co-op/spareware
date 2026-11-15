@@ -4,9 +4,7 @@
 //! - `wide_fuzz` wraps `geom_fuzz::wide::harness` in `bolero::check!`. Under `cargo test` it
 //!   replays the files in `tests/__fuzz__/wide/corpus` and `crashes`, if any, then runs
 //!   [`ITERATIONS`] random byte strings; bolero prints a failing one's seed as
-//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it. Under
-//!   `cargo bolero test wide_fuzz --package geom-fuzz` the same test is a libFuzzer target (the
-//!   crate header has the command), and `kernel-fuzz.yml`'s campaign runs it for 25 hours.
+//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it.
 //! - `wide_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), so every pull request also runs a fixed set of cases, the same
 //!   on every target.
@@ -47,7 +45,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 10_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 20_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 20,000 cases in 0.032 s), about 1.6 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 1_000_000;
 
 /// The longest byte string the seeded leg draws: the harness reads at most [`MAX_INPUT_BYTES`]
 /// (219); the rest must change nothing.

@@ -34,8 +34,8 @@
 //!   second checker (`geom_test::second_check`), and the two find the same rules broken, which for
 //!   a valid result is none (`catalogue::Findings::both`).
 //!
-//! Seeds: each law prints `seed: <hex>`, replays with `SPAREKIT_SEED`; pull requests run the fixed
-//! default seed and the nightly workflow a fresh one.
+//! Seeds: each law prints `seed: <hex>`, replays with `SPAREKIT_SEED`; every run uses the fixed
+//! default seed, on every change the law reaches.
 
 #![allow(
     clippy::arithmetic_side_effects,

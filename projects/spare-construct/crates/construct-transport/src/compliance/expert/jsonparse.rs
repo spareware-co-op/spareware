@@ -56,7 +56,7 @@ fn tok_of(c: Option<u16>) -> Tok {
     match c {
         None => Tok::Eos,
         Some(0x22) => Tok::Str,
-        Some(0x2d) | Some(0x30..=0x39) => Tok::Num,
+        Some(0x2d | 0x30..=0x39) => Tok::Num,
         Some(0x7b) => Tok::LBrace,
         Some(0x7d) => Tok::RBrace,
         Some(0x5b) => Tok::LBrack,
@@ -75,12 +75,9 @@ fn is_digit(c: Option<u16>) -> bool {
 }
 
 fn hex_value(c: Option<u16>) -> Option<u16> {
-    match c? {
-        d @ 0x30..=0x39 => Some(d - 0x30),
-        d @ 0x61..=0x66 => Some(d - 0x61 + 10),
-        d @ 0x41..=0x46 => Some(d - 0x41 + 10),
-        _ => None,
-    }
+    // to_digit(16) takes 0-9, a-f and A-F, as V8's hex reader does
+    let d = char::from_u32(u32::from(c?))?.to_digit(16)?;
+    u16::try_from(d).ok()
 }
 
 /// A run of UTF-16 units as text (a lone surrogate reads as U+FFFD).
@@ -97,9 +94,19 @@ impl Parser {
         tok_of(self.cur())
     }
 
+    /// Moves the cursor on one unit. Bound: the cursor stays at or below the text's length, far below `usize::MAX`.
+    fn bump(&mut self) {
+        self.pos = self.pos.saturating_add(1);
+    }
+
+    /// The units from `from` up to `to` as text (empty if the range falls outside the text, which the callers never ask for).
+    fn units(&self, from: usize, to: usize) -> String {
+        text_of(self.src.get(from..to).unwrap_or_default())
+    }
+
     fn skip_ws(&mut self) {
-        while matches!(self.cur(), Some(0x20) | Some(0x09) | Some(0x0a) | Some(0x0d)) {
-            self.pos += 1;
+        while matches!(self.cur(), Some(0x20 | 0x09 | 0x0a | 0x0d)) {
+            self.bump();
         }
     }
 
@@ -107,17 +114,19 @@ impl Parser {
     fn line_col(&self) -> (usize, usize) {
         let end = self.pos;
         let (mut line, mut last_break, mut i) = (1usize, 0usize, 0usize);
+        // Bound: the cursor is at most the text's length, so i and the counts stay far below usize::MAX
         while i < end {
-            if self.src[i] == 0x0d && i + 1 < end && self.src[i + 1] == 0x0a {
-                i += 1;
+            let next = i.saturating_add(1);
+            if self.src.get(i).copied() == Some(0x0d) && next < end && self.src.get(next).copied() == Some(0x0a) {
+                i = next;
             }
-            if self.src[i] == 0x0d || self.src[i] == 0x0a {
-                line += 1;
-                last_break = i + 1;
+            if matches!(self.src.get(i).copied(), Some(0x0d | 0x0a)) {
+                line = line.saturating_add(1);
+                last_break = i.saturating_add(1);
             }
-            i += 1;
+            i = i.saturating_add(1);
         }
-        (line, 1 + (i - last_break))
+        (line, i.saturating_sub(last_break).saturating_add(1))
     }
 
     /// `<what> in JSON at position P (line L column C)`.
@@ -144,15 +153,16 @@ impl Parser {
                     return format!("\"{whole}\" is not valid JSON");
                 }
                 let n = self.src.len();
-                let ch = text_of(&self.src[self.pos..self.pos + 1]);
+                // The cursor is on the offending unit, so pos < n; n is at least MIN_FOR_CONTEXT in the branches with context
+                let ch = self.units(self.pos, self.pos.saturating_add(1));
                 if n < MIN_FOR_CONTEXT {
                     format!("Unexpected token '{ch}', \"{whole}\" is not valid JSON")
                 } else if self.pos < CONTEXT {
-                    format!("Unexpected token '{ch}', \"{}\"... is not valid JSON", text_of(&self.src[..self.pos + CONTEXT]))
-                } else if self.pos < n - CONTEXT {
-                    format!("Unexpected token '{ch}', ...\"{}\"... is not valid JSON", text_of(&self.src[self.pos - CONTEXT..self.pos + CONTEXT]))
+                    format!("Unexpected token '{ch}', \"{}\"... is not valid JSON", self.units(0, self.pos.saturating_add(CONTEXT)))
+                } else if self.pos < n.saturating_sub(CONTEXT) {
+                    format!("Unexpected token '{ch}', ...\"{}\"... is not valid JSON", self.units(self.pos.saturating_sub(CONTEXT), self.pos.saturating_add(CONTEXT)))
                 } else {
-                    format!("Unexpected token '{ch}', ...\"{}\" is not valid JSON", text_of(&self.src[self.pos - CONTEXT..]))
+                    format!("Unexpected token '{ch}', ...\"{}\" is not valid JSON", self.units(self.pos.saturating_sub(CONTEXT), n))
                 }
             }
         }
@@ -162,7 +172,7 @@ impl Parser {
     fn check(&mut self, tok: Tok) -> bool {
         self.skip_ws();
         if self.peek() == tok {
-            self.pos += 1;
+            self.bump();
             true
         } else {
             false
@@ -180,7 +190,7 @@ impl Parser {
         if self.peek() != Tok::Str {
             return Err(self.at(what));
         }
-        self.pos += 1;
+        self.bump();
         let k = self.string()?;
         self.expect(Tok::Colon, "Expected ':' after property name")?;
         Ok(k)
@@ -193,11 +203,11 @@ impl Parser {
             let Some(c) = self.cur() else { return Err(self.at("Unterminated string")) };
             match c {
                 0x22 => {
-                    self.pos += 1;
+                    self.bump();
                     return Ok(text_of(&buf));
                 }
                 0x5c => {
-                    self.pos += 1;
+                    self.bump();
                     let Some(e) = self.cur() else { return Err(self.unexpected(Tok::Eos)) };
                     if e > 0xff {
                         return Err(self.unexpected(Tok::Illegal));
@@ -211,21 +221,22 @@ impl Parser {
                         0x74 => buf.push(9),
                         0x75 => {
                             let mut v: u16 = 0;
+                            // Bound: four hex digits make at most 0xffff, which u16 holds; the saturating steps never saturate
                             for _ in 0..4 {
-                                self.pos += 1;
+                                self.bump();
                                 let Some(h) = hex_value(self.cur()) else { return Err(self.at("Bad Unicode escape")) };
-                                v = v * 16 + h;
+                                v = v.saturating_mul(16).saturating_add(h);
                             }
                             buf.push(v);
                         }
                         _ => return Err(self.at("Bad escaped character")),
                     }
-                    self.pos += 1;
+                    self.bump();
                 }
                 c if c < 0x20 => return Err(self.at("Bad control character in string literal")),
                 c => {
                     buf.push(c);
-                    self.pos += 1;
+                    self.bump();
                 }
             }
         }
@@ -235,10 +246,10 @@ impl Parser {
     fn number(&mut self) -> Result<V, String> {
         let start = self.pos;
         if self.cur() == Some(0x2d) {
-            self.pos += 1;
+            self.bump();
         }
         if self.cur() == Some(0x30) {
-            self.pos += 1;
+            self.bump();
             if is_digit(self.cur()) {
                 return Err(self.unexpected(Tok::Num));
             }
@@ -247,48 +258,50 @@ impl Parser {
                 return Err(self.at("No number after minus sign"));
             }
             while is_digit(self.cur()) {
-                self.pos += 1;
+                self.bump();
             }
         }
         if self.cur() == Some(0x2e) {
-            self.pos += 1;
+            self.bump();
             if !is_digit(self.cur()) {
                 return Err(self.at("Unterminated fractional number"));
             }
             while is_digit(self.cur()) {
-                self.pos += 1;
+                self.bump();
             }
         }
-        if matches!(self.cur(), Some(0x65) | Some(0x45)) {
-            self.pos += 1;
-            if matches!(self.cur(), Some(0x2b) | Some(0x2d)) {
-                self.pos += 1;
+        if matches!(self.cur(), Some(0x65 | 0x45)) {
+            self.bump();
+            if matches!(self.cur(), Some(0x2b | 0x2d)) {
+                self.bump();
             }
             if !is_digit(self.cur()) {
                 return Err(self.at("Exponent part is missing a number"));
             }
             while is_digit(self.cur()) {
-                self.pos += 1;
+                self.bump();
             }
         }
-        let text = text_of(&self.src[start..self.pos]);
+        let text = self.units(start, self.pos);
         Ok(V::Number(text.parse::<f64>().unwrap_or(f64::NAN)))
     }
 
     /// `true`, `false` or `null`, the cursor on its first letter.
     fn literal(&mut self, word: &str) -> Result<(), String> {
         let w: Vec<u16> = word.encode_utf16().collect();
-        let remaining = self.src.len() - self.pos;
-        if remaining >= w.len() && self.src[self.pos + 1..self.pos + w.len()] == w[1..] {
-            self.pos += w.len();
+        // The cursor is on the word's first letter, so remaining is at least 1
+        let remaining = self.src.len().saturating_sub(self.pos);
+        let rest = w.get(1..).unwrap_or_default();
+        if remaining >= w.len() && self.src.get(self.pos.saturating_add(1)..self.pos.saturating_add(w.len())) == Some(rest) {
+            self.pos = self.pos.saturating_add(w.len());
             return Ok(());
         }
-        self.pos += 1;
-        for i in 0..(w.len() - 1).min(remaining - 1) {
-            if w[1 + i] != self.src[self.pos] {
+        self.bump();
+        for &want in rest.iter().take(remaining.saturating_sub(1)) {
+            if self.cur() != Some(want) {
                 return Err(self.unexpected(self.peek()));
             }
-            self.pos += 1;
+            self.bump();
         }
         Err(self.unexpected(Tok::Eos))
     }
@@ -302,12 +315,12 @@ impl Parser {
             let tok = self.peek();
             let mut value = match tok {
                 Tok::Str => {
-                    self.pos += 1;
+                    self.bump();
                     V::String(self.string()?)
                 }
                 Tok::Num => self.number()?,
                 Tok::LBrace => {
-                    self.pos += 1;
+                    self.bump();
                     if self.check(Tok::RBrace) {
                         V::object()
                     } else {
@@ -317,7 +330,7 @@ impl Parser {
                     }
                 }
                 Tok::LBrack => {
-                    self.pos += 1;
+                    self.bump();
                     if self.check(Tok::RBrack) {
                         V::Array(Vec::new())
                     } else {
