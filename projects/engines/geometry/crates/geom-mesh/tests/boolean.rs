@@ -1,6 +1,7 @@
 //! Mesh booleans through the public interface (piece G148), against what 19.5 says of them: exact
 //! volumes against counted cells, conforming closed meshes, the refusals and their remedies, one
-//! arrangement for many results, and run-level history.
+//! arrangement for many results, and run-level history. Every result passes both mesh checkers,
+//! `geom-mesh`'s own and the second of 28.4 (`geom_test::agree::judge_mesh`, Gate 4).
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -31,6 +32,7 @@ use geom_poly::winding::{Term, WindingTest};
 #[cfg(not(target_family = "wasm"))]
 use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
+use geom_test::agree::judge_mesh;
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
@@ -106,9 +108,18 @@ fn a_result_is_as_exact_as_its_least_exact_operand_with_the_bounds_added() {
     );
 }
 
+/// Both mesh checkers on every result: both pass, so they agree, and `geom-mesh`'s volume holds
+/// the second checker's exact one.
+fn checked(outcomes: Vec<Outcome>) -> Vec<Outcome> {
+    for (k, o) in outcomes.iter().enumerate() {
+        let v = judge_mesh(&o.mesh);
+        assert!(v.agree() && v.passed(), "result {k}: {v:?}");
+    }
+    outcomes
+}
+
 fn one(operands: &[&ExactMesh], test: WindingTest) -> Outcome {
-    boolean(operands, &[test], &step(), &Exec::serial(), &mut meter())
-        .unwrap()
+    checked(boolean(operands, &[test], &step(), &Exec::serial(), &mut meter()).unwrap())
         .pop()
         .unwrap()
 }
@@ -191,7 +202,7 @@ fn volumes_agree_with_counted_cells() {
             WindingTest::intersect(3),
             WindingTest::subtract(1),
         ];
-        let got = boolean(&refs, &tests, &step(), &Exec::serial(), &mut meter()).unwrap();
+        let got = checked(boolean(&refs, &tests, &step(), &Exec::serial(), &mut meter()).unwrap());
         let mut cells = [0_i128; 4];
         for x in 0..8 {
             for y in 0..8 {
@@ -255,7 +266,7 @@ fn holds_up(a: &ExactMesh, b: &ExactMesh) {
         WindingTest::subtract(0),
         WindingTest::subtract(1),
     ];
-    let done = boolean(&[a, b], &tests, &step(), &Exec::serial(), &mut meter()).unwrap();
+    let done = checked(boolean(&[a, b], &tests, &step(), &Exec::serial(), &mut meter()).unwrap());
     for outcome in &done {
         assert_ne!(outcome.mesh.kind(), MeshKind::Open);
     }
@@ -299,7 +310,8 @@ fn the_soup_is_what_the_merge_takes() {
     ];
     let operands = [&a, &b, &c];
     let soups = kept_pieces(&operands, &tests, &Exec::serial(), &mut meter()).unwrap();
-    let whole = boolean(&operands, &tests, &step(), &Exec::serial(), &mut meter()).unwrap();
+    let whole =
+        checked(boolean(&operands, &tests, &step(), &Exec::serial(), &mut meter()).unwrap());
     assert_eq!(soups.len(), tests.len());
     for (kept, outcome) in soups.iter().zip(&whole) {
         let merged = merge_on(
@@ -349,14 +361,16 @@ fn solids_give_what_their_arrays_give() {
     ] {
         on_each_exec(|exec| {
             let run = |operands: &[&ExactMesh]| {
-                boolean(
-                    operands,
-                    std::slice::from_ref(&test),
-                    &step(),
-                    exec,
-                    &mut meter(),
+                checked(
+                    boolean(
+                        operands,
+                        std::slice::from_ref(&test),
+                        &step(),
+                        exec,
+                        &mut meter(),
+                    )
+                    .unwrap(),
                 )
-                .unwrap()
             };
             assert_eq!(run(&[&a, &b, &c]), run(&[&pa, &pb, &pc]));
         });
@@ -404,14 +418,16 @@ fn solids_of_many_faces_give_what_their_arrays_give() {
     ] {
         on_each_exec(|exec| {
             let run = |operands: &[&ExactMesh]| {
-                boolean(
-                    operands,
-                    std::slice::from_ref(&test),
-                    &step(),
-                    exec,
-                    &mut meter(),
+                checked(
+                    boolean(
+                        operands,
+                        std::slice::from_ref(&test),
+                        &step(),
+                        exec,
+                        &mut meter(),
+                    )
+                    .unwrap(),
                 )
-                .unwrap()
             };
             assert_eq!(run(&[&sa, &sb]), run(&[&pa, &pb]));
         });
@@ -462,7 +478,7 @@ fn several_tests_share_one_arrangement() {
     let a = solid([0, 0, 0], [4, 4, 4], 1);
     let b = solid([2, 0, 0], [6, 4, 4], 2);
     let tests = [WindingTest::unite(), WindingTest::subtract(1)];
-    let both = boolean(&[&a, &b], &tests, &step(), &Exec::serial(), &mut meter()).unwrap();
+    let both = checked(boolean(&[&a, &b], &tests, &step(), &Exec::serial(), &mut meter()).unwrap());
     assert_eq!(both[0], one(&[&a, &b], WindingTest::unite()));
     assert_eq!(both[1], one(&[&a, &b], WindingTest::subtract(1)));
 }
@@ -658,14 +674,16 @@ fn the_threads_and_the_order_do_not_show() {
     #[cfg(not(target_family = "wasm"))]
     {
         let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
-        let threaded = boolean(
-            &[&a, &b, &c],
-            std::slice::from_ref(&test),
-            &step(),
-            &Exec::with_pool(&pool),
-            &mut meter(),
-        )
-        .unwrap();
+        let threaded = checked(
+            boolean(
+                &[&a, &b, &c],
+                std::slice::from_ref(&test),
+                &step(),
+                &Exec::with_pool(&pool),
+                &mut meter(),
+            )
+            .unwrap(),
+        );
         assert_eq!(threaded[0], plain);
     }
     let turned = one(&[&c, &a, &b], test);
