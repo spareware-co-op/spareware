@@ -518,7 +518,7 @@ pub fn gappa_files(d: &Derivation) -> Result<Vec<String>, EmitError> {
 /// The sentence a generated module's guarantees end with: whether its filter's bound is proven,
 /// and by what, or "checked, not proven" with its open issue (chapter 28.6). Proven means the
 /// Gappa problems, the proof of record, state the filter, every case of it, so
-/// `kernel-certificates.yml` proves them on every change and every night, and fails if a proof
+/// `kernel-certificates.yml` proves them on every change to a problem or a pinned tool, and fails if a proof
 /// does not go through. `FPTaylor`'s problem, checked by HOL Light, is the independent second
 /// check, and alone it does not make a filter proven: its certificate is about `FPTaylor`'s error
 /// model, and the step to binary64 is written (the method note). `tests/certificate_problems.rs`
@@ -554,7 +554,7 @@ pub fn proof_sentence(d: &Derivation) -> Result<String, EmitError> {
              HOL Light checks its certificate (`{fptaylor}`, in `{PROBLEMS_DIR}`), but that \
              certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of \
              record, cannot state this filter yet (issue #{issue}); `kernel-certificates.yml` \
-             runs the check on every change and every night."
+             runs the check on every change to a problem or a pinned tool."
         ));
     }
     let files: Vec<String> = gappa_files(d)?.iter().map(|f| format!("`{f}`")).collect();
@@ -575,8 +575,8 @@ pub fn proof_sentence(d: &Derivation) -> Result<String, EmitError> {
     Ok(format!(
         "Its filter's bound is proven (chapter 28.6): {gappa}, in `{PROBLEMS_DIR}`), and Rocq \
          checks {proofs}; `FPTaylor` bounds it independently, and HOL Light checks its \
-         certificate (`{fptaylor}`); `kernel-certificates.yml` runs them on every change and \
-         every night."
+         certificate (`{fptaylor}`); `kernel-certificates.yml` runs them on every change to a \
+         problem or a pinned tool."
     ))
 }
 

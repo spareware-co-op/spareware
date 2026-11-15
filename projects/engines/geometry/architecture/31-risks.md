@@ -539,7 +539,7 @@ A future person or AI who reads one chapter could build the wrong thing, against
 **Likelihood:** Medium to High. **Impact:** High.
 
 **Mitigation built into the plan.**
-- Deterministic count gates are cheap and run on every pull request; wall clock runs nightly.
+- Deterministic count gates are cheap and run on every pull request; wall clock runs once on a gate's commit (decision 32.53).
 - Each check runs at a stated tier (28.17).
 - Costs are recorded in K06.
 - OSS-Fuzz is an option (28).

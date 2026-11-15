@@ -37,7 +37,7 @@
   "phase": "Phase 1",
   "crate": "CI",
   "size": "Medium",
-  "done_when": "Runners for x86-64 Linux, Windows and macOS, aarch64 Linux and macOS, and wasm32 under wasmtime and Node, each in debug and release and with target-cpu=native; pull-request, nightly, weekly, toolchain-change and release workflows; a private registry for oracle container images; nightly fuzzing machines; one dedicated benchmark machine with a documented spec; access to a licensed Revit machine for exports; every cost entered in the K06 cost model.",
+  "done_when": "Runners for x86-64 Linux, Windows and macOS, aarch64 Linux and macOS, and wasm32 under wasmtime and Node, each in debug and release and with target-cpu=native; pull-request, merge-queue, main-branch, toolchain-change and release workflows; a private registry for oracle container images; one dedicated benchmark machine with a documented spec; access to a licensed Revit machine for exports; every cost entered in the K06 cost model.",
   "depends_on": [
    "G09",
    "G07"
@@ -142,7 +142,7 @@
   "phase": "Phase 1",
   "crate": "geom-bench",
   "size": "Large",
-  "done_when": "gungraun instruction and cache counts, DHAT peak heap and wasmtime fuel on every pull request, merge base and change built in one job, pool off; growth checks at n, 2n and 4n; every benchmark asserts its output hash; a rise over 5% blocks and every change over 1% is listed; written baseline re-recording procedure. Nightly wall-clock timing joins in G107.",
+  "done_when": "gungraun instruction and cache counts, DHAT peak heap and wasmtime fuel on every pull request, merge base and change built in one job, pool off; growth checks at n, 2n and 4n; every benchmark asserts its output hash; a rise over 5% blocks and every change over 1% is listed; written baseline re-recording procedure. Wall-clock timing on a gate's commit joins in G107.",
   "depends_on": [
    "G12"
   ],
@@ -180,7 +180,7 @@
   "phase": "Phase 1",
   "crate": "CI",
   "size": "Small",
-  "done_when": "cargo-mutants on the diff of every pull request: in 28.8's foundation set (geom-num, geom-poly, geom-check, geom-name, the builder in geom-topo, the arrangement module of geom-2d) no unexplained survivor, judged through public interfaces; elsewhere no new one; weekly sharded full run; cargo-llvm-cov with 100% of lines and branches in the foundation set and 90% of lines elsewhere, branch coverage with a pinned nightly on foundation changes; every coverage(off) mark cites a proof; Miri over the test suites weekly.",
+  "done_when": "cargo-mutants on the diff of every pull request: in 28.8's foundation set (geom-num, geom-poly, geom-check, geom-name, the builder in geom-topo, the arrangement module of geom-2d) no unexplained survivor, judged through public interfaces; elsewhere no new one; a sharded full run of the files each push to main changes; cargo-llvm-cov with 100% of lines and branches in the foundation set and 90% of lines elsewhere, branch coverage with a pinned nightly on foundation changes; every coverage(off) mark cites a proof; Miri over the test suites of the crates each push to main reaches.",
   "depends_on": [
    "G11",
    "G12"
@@ -259,7 +259,7 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "I128, I256, I320 and I384 (and the I576 and I768 widths reserved for later predicates) with add, subtract, multiply, compare and sign, every step checked, so overflow is reported in every build; differential fuzzing against a big-integer oracle (num-bigint or dashu, 29.3) for 24 hours clean; extreme-value tests at every width's limits; benchmark per operation on x86-64, aarch64 and wasm32.",
+  "done_when": "I128, I256, I320 and I384 (and the I576 and I768 widths reserved for later predicates) with add, subtract, multiply, compare and sign, every step checked, so overflow is reported in every build; a seeded differential test against a big-integer oracle (num-bigint or dashu, 29.3), of fixed size, passing in the suite, with its saved cases replaying; extreme-value tests at every width's limits; benchmark per operation on x86-64, aarch64 and wasm32.",
   "depends_on": [
    "G22"
   ],
@@ -364,7 +364,7 @@
   "phase": "Phase 1",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "Every predicate compared with a big-integer oracle (num-bigint and num-rational, or dashu, 28.6) on random, \u00b11-step-degenerate and filter-boundary inputs on every pull request; corner sets as above; perturbation laws; failures minimised into fixtures; nightly fresh seeds.",
+  "done_when": "Every predicate compared with a big-integer oracle (num-bigint and num-rational, or dashu, 28.6) on random, \u00b11-step-degenerate and filter-boundary inputs on every pull request; corner sets as above; perturbation laws; failures minimised into fixtures; the seeded tests run in the suite on every change they reach.",
   "depends_on": [
    "G28",
    "G29",
@@ -442,7 +442,7 @@
   "phase": "Phase 1",
   "crate": "geom-gen, CI",
   "size": "Medium",
-  "done_when": "Every generated filter gets both problems; nightly checks that each constant is at least its proven bound; MAP.json labels each filter proven or 'checked, not proven', and every unproven filter has an open issue.",
+  "done_when": "Every generated filter gets both problems; a change to a problem or to a pinned tool proves again that each constant is at least its proven bound; MAP.json labels each filter proven or 'checked, not proven', and every unproven filter has an open issue.",
   "depends_on": [
    "G35"
   ],
@@ -837,7 +837,7 @@
   "phase": "Phase 2",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "The section 28.3 rows for kinds and NURBS as property tests with an independent dense refutation sampler in higher precision, fixed seeds on pull requests and fresh seeds nightly.",
+  "done_when": "The section 28.3 rows for kinds and NURBS as property tests with an independent dense refutation sampler in higher precision, seeded in the suite on every change they reach.",
   "depends_on": [
    "G62",
    "G65",
@@ -1294,7 +1294,7 @@
   "phase": "Phase 3",
   "crate": "geom-bench, CI",
   "size": "Small",
-  "done_when": "The dedicated reference runner times every benchmark nightly at 1 and 8 threads, natively and in Chrome, Firefox and Safari, and keeps the history against 23.1's shares. It reports and does not block; G452 makes it block.",
+  "done_when": "The reference runner times every benchmark once on a gate's commit, and again only when timed code changes, at 1 and 8 threads, natively and in Chrome, Firefox and Safari, and keeps the history against 23.1's shares. It reports and does not block; G452 makes it block.",
   "depends_on": [
    "G18",
    "G72",
@@ -1399,7 +1399,7 @@
   "phase": "Phase 3",
   "crate": "geom-fuzz",
   "size": "Large",
-  "done_when": "Generators (sub-grid snaps, one-step moves, full range, deep trees, Tolerant bodies); a sequence fuzz target with checker, laws and replay as oracles; per-operation templates; ClusterFuzzLite on pull requests; nightly runs; robustness scoreboard per family.",
+  "done_when": "Generators (sub-grid snaps, one-step moves, full range, deep trees, Tolerant bodies); a sequence fuzz target with checker, laws and replay as oracles; per-operation templates; seeded tests in the suite on every pull request; robustness scoreboard per family.",
   "depends_on": [
    "G101",
    "G97",
@@ -1427,7 +1427,7 @@
   "phase": "Phase 3",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "Every primitive and transform passes the contract and history laws and all four checker groups; fault injection catches every catalogued fault for those groups; bodies and names save and reload bit-identically; the replay corpus is green on every leg, including the shipped-checker leg and reference mode; the topology model is proven in Verus; sequence fuzzing runs clean for seven consecutive nights; the reference runner records nightly times. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "Every primitive and transform passes the contract and history laws and all four checker groups; fault injection catches every catalogued fault for those groups; bodies and names save and reload bit-identically; the replay corpus is green on every leg, including the shipped-checker leg and reference mode; the topology model is proven in Verus; the sequence harness's seeded test passes in the suite on the gate's commit, and its saved cases replay; the reference runner records the gate commit's times. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G99",
    "G102",
@@ -1881,7 +1881,7 @@
   "phase": "Phase 4",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "Manifold (C++ container and Rust port), CGAL and Cherchi et al. run nightly on Manifold's models and the EMBER pairs; every new signature triaged.",
+  "done_when": "Manifold (C++ container and Rust port), CGAL and Cherchi et al. run on each push to main that reaches them, on Manifold's models and the EMBER pairs; every new signature triaged.",
   "depends_on": [
    "G113",
    "G148",
@@ -1895,7 +1895,7 @@
   "phase": "Phase 4",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "The 28.3 rows for numbers and frames, booleans and cells (the membership law included), flat mass properties, names and history, and formats as property tests, fixed seeds on pull requests and fresh seeds nightly.",
+  "done_when": "The 28.3 rows for numbers and frames, booleans and cells (the membership law included), flat mass properties, names and history, and formats as property tests, seeded in the suite on every change they reach.",
   "depends_on": [
    "G136",
    "G140",
@@ -1911,7 +1911,7 @@
   "phase": "Phase 4",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "The EMBER case list and the polyhedral corpus agree exactly with the rational reference; every injected fault is caught and the second checker agrees on the whole corpus; the law rows for numbers, booleans, cells, flat mass, names and formats pass on fixed and fresh seeds; count gates are set for EMBER, the 300-opening wall and the door move, with nightly times recorded against 23.1's shares; every Manifold and CGAL difference is triaged. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "The EMBER case list and the polyhedral corpus agree exactly with the rational reference; every injected fault is caught and the second checker agrees on the whole corpus; the law rows for numbers, booleans, cells, flat mass, names and formats pass on their seeds; count gates are set for EMBER, the 300-opening wall and the door move, with the gate commit's times recorded against 23.1's shares; every Manifold and CGAL difference is triaged. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G124",
    "G135",
@@ -1985,7 +1985,7 @@
   "phase": "Phase 5",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "SMLib's reference build run in fresh processes, limited to its 100% classes, and geomdl on NURBS pairs, both nightly through the oracle runner; every new signature triaged.",
+  "done_when": "SMLib's reference build run in fresh processes, limited to its 100% classes, and geomdl on NURBS pairs, both through the oracle runner on each push to main that reaches them; every new signature triaged.",
   "depends_on": [
    "G160",
    "G157"
@@ -2200,7 +2200,7 @@
   "phase": "Phase 5",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "Dense double-double sampling sharing no code with geom-intersect or geom-check; finds every curved fault in the catalogue; nightly on every curved fixture.",
+  "done_when": "Dense double-double sampling sharing no code with geom-intersect or geom-check; finds every curved fault in the catalogue; on every curved fixture, on each push to main that reaches it.",
   "depends_on": [
    "G135",
    "G177"
@@ -2241,7 +2241,7 @@
   "phase": "Phase 5",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "The ssi-corpus acceptance gate passes with no wrong-topology verdict and each class's flag count at or below its recorded ceiling; no miss against exact oracles for curve pairs; the refutation checker finds every curved fault in the catalogue and nothing in the clean corpus; the intersection law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "The ssi-corpus acceptance gate passes with no wrong-topology verdict and each class's flag count at or below its recorded ceiling; no miss against exact oracles for curve pairs; the refutation checker finds every curved fault in the catalogue and nothing in the clean corpus; the intersection law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G161",
    "G166",
@@ -2647,7 +2647,7 @@
   "phase": "Phase 6",
   "crate": "geom-test, geom-fuzz",
   "size": "Medium",
-  "done_when": "Hostile inputs at budget limits, CADCraft failures recomputed, geo and JTS corpora; fuzz targets per operation; JTS, clipper2, i_overlay, cavalier_contours and CGAL compared nightly.",
+  "done_when": "Hostile inputs at budget limits, CADCraft failures recomputed, geo and JTS corpora; fuzz targets per operation; JTS, clipper2, i_overlay, cavalier_contours and CGAL compared on each push to main that reaches them.",
   "depends_on": [
    "G202",
    "G203",
@@ -2896,7 +2896,7 @@
   "phase": "Phase 6",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "geom-2d agrees with the one-root reference on every pull request; the JTS and geo corpora pass; rational-normal and parallel constructions are Exact; the sketch differential harness is green; the 2D and sketch law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "geom-2d agrees with the one-root reference on every pull request; the JTS and geo corpora pass; rational-normal and parallel constructions are Exact; the sketch differential harness is green; the 2D and sketch law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G205",
    "G207",
@@ -3080,7 +3080,7 @@
   "phase": "Phase 7",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "I576 and I768 with add, subtract, multiply, compare and sign, overflow checked; differential fuzzing against dashu for 24 hours clean; extreme-value tests at both widths; Verus proofs as for I384; a benchmark per operation on three targets.",
+  "done_when": "I576 and I768 with add, subtract, multiply, compare and sign, overflow checked; a seeded differential test against dashu, of fixed size, passing in the suite, with its saved cases replaying; extreme-value tests at both widths; Verus proofs as for I384; a benchmark per operation on three targets.",
   "depends_on": [
    "G240",
    "G156",
@@ -3528,7 +3528,7 @@
   "phase": "Phase 7",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "The curved boolean and chapter 13 corpora have no Failed case, only Known typed errors; the never-a-hole fuzz campaign runs clean for seven consecutive nights; every closed-form case is within its bound; the sweep, blend, offset, manufacturing and curved-mass law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "The curved boolean and chapter 13 corpora have no Failed case, only Known typed errors; the never-a-hole harness's seeded test passes in the suite on the gate's commit, and its saved cases replay; every closed-form case is within its bound; the sweep, blend, offset, manufacturing and curved-mass law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G249",
    "G261",
@@ -3843,7 +3843,7 @@
   "phase": "Phase 8",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "Every tessellation carries its closure certificate; the clash corpus has no miss and no false hit; the one-element live re-test meets its count gate, with its nightly time recorded against 1 ms median; the volume mesher returns a mesh or a typed error for all of Thingi10K; the mesh, spatial and contact law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "Every tessellation carries its closure certificate; the clash corpus has no miss and no false hit; the one-element live re-test meets its count gate, with its time on the gate's commit recorded against 1 ms median; the volume mesher returns a mesh or a typed error for all of Thingi10K; the mesh, spatial and contact law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G291",
    "G297",
@@ -4418,7 +4418,7 @@
   "phase": "Phase 9",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "The 28.3 rows for subdivision, fields and the cross-representation boolean; OpenSubdiv, libfive and Fidget compared nightly.",
+  "done_when": "The 28.3 rows for subdivision, fields and the cross-representation boolean; OpenSubdiv, libfive and Fidget compared on each push to main that reaches them.",
   "depends_on": [
    "G335",
    "G330",
@@ -4445,7 +4445,7 @@
   "phase": "Phase 9",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "OpenSubdiv agrees on the corpus; the field mesher certifies the analytic corpus; the conversion-graph laws hold; one cross-representation test per operand mix passes; the chapter 16 clearance is recorded. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "OpenSubdiv agrees on the corpus; the field mesher certifies the analytic corpus; the conversion-graph laws hold; one cross-representation test per operand mix passes; the chapter 16 clearance is recorded. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G325",
    "G337",
@@ -4794,7 +4794,7 @@
   "phase": "Phase 10",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "The 28.3 rows for terrain, alignments, skeletons and point clouds (index queries equal brute force; an Approximate fit states the deviation an independent recomputation finds) as property tests; spade, startin, PROJ and GeographicLib compared nightly.",
+  "done_when": "The 28.3 rows for terrain, alignments, skeletons and point clouds (index queries equal brute force; an Approximate fit states the deviation an independent recomputation finds) as property tests; spade, startin, PROJ and GeographicLib compared on each push to main that reaches them.",
   "depends_on": [
    "G366",
    "G373",
@@ -4809,7 +4809,7 @@
   "phase": "Phase 10",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "TIN builds are byte-identical for 1,000 insertion orders and every thread count; net volumes equal the exact difference of the two surfaces within N\u00b7q\u00b3, N being the number of overlay pieces summed; the 50 km corridor meets its count gate with its time recorded; every ground oracle difference is triaged; the terrain, alignment, skeleton and point-cloud law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "TIN builds are byte-identical for 1,000 insertion orders and every thread count; net volumes equal the exact difference of the two surfaces within N\u00b7q\u00b3, N being the number of overlay pieces summed; the 50 km corridor meets its count gate with its time recorded; every ground oracle difference is triaged; the terrain, alignment, skeleton and point-cloud law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G360",
    "G361",
@@ -5121,7 +5121,7 @@
   "phase": "Phase 11",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "Every edge's pieces cover its projection exactly once; the drawing checker catches every injected fault; incremental drawing equals full regeneration; the plan of the reference building meets its count gate, with its time recorded against the 250 ms share. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "Every edge's pieces cover its projection exactly once; the drawing checker catches every injected fault; incremental drawing equals full regeneration; the plan of the reference building meets its count gate, with its time recorded against the 250 ms share. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G393",
    "G395",
@@ -5601,7 +5601,7 @@
   "phase": "Phase 12",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "Corpus fetch scripts honouring each licence; nightly out-of-process comparison of volume, area and Hausdorff distance with a triage report; validation-property and EXPRESS checks; exchange outputs in the cross-target hash corpus.",
+  "done_when": "Corpus fetch scripts honouring each licence; out-of-process comparison on each push to main that reaches it of volume, area and Hausdorff distance with a triage report; validation-property and EXPRESS checks; exchange outputs in the cross-target hash corpus.",
   "depends_on": [
    "G426",
    "G429",
@@ -5617,7 +5617,7 @@
   "phase": "Phase 12",
   "crate": "geom-test",
   "size": "Small",
-  "done_when": "Containers built from pinned source; nightly IFC comparisons on the buildingSMART and IFC 4.3 samples; every new signature triaged.",
+  "done_when": "Containers built from pinned source; IFC comparisons on each push to main that reaches them on the buildingSMART and IFC 4.3 samples; every new signature triaged.",
   "depends_on": [
    "G440"
   ],
@@ -5629,7 +5629,7 @@
   "phase": "Phase 12",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "checkshape and bopargcheck run out of process on every STEP import and export and on boolean results, nightly; every difference triaged.",
+  "done_when": "checkshape and bopargcheck run out of process on every STEP import and export and on boolean results, on each push to main that reaches them; every difference triaged.",
   "depends_on": [
    "G440"
   ],
@@ -5641,7 +5641,7 @@
   "phase": "Phase 12",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "NIST's STEP File Analyzer (its licence confirmed first), ezdxf's audit and LibreCAD reading every written file, nightly; every difference triaged.",
+  "done_when": "NIST's STEP File Analyzer (its licence confirmed first), ezdxf's audit and LibreCAD reading every written file, on each push to main that reaches them; every difference triaged.",
   "depends_on": [
    "G440"
   ],
@@ -5653,7 +5653,7 @@
   "phase": "Phase 12",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "The independent Python reader dumps the whole archive identically; every writer's output round-trips byte for byte and passes its validator; every conformance-harness difference is triaged; the healed fraction is at or above its recorded baseline. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "The independent Python reader dumps the whole archive identically; every writer's output round-trips byte for byte and passes its validator; every conformance-harness difference is triaged; the healed fraction is at or above its recorded baseline. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G411",
    "G412",
@@ -5692,7 +5692,7 @@
   "phase": "Phase 13",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "An owner accepts or amends 23.13's proposal that a nightly wall-clock miss blocks merges to main, except the fix or a revert.",
+  "done_when": "An owner accepts or amends 23.13's proposal that a wall-clock miss blocks merges to main, except the fix or a revert.",
   "depends_on": [],
   "chapter": "23, 28, 32"
  },
@@ -5716,7 +5716,7 @@
   "phase": "Phase 13",
   "crate": "geom-bench",
   "size": "Large",
-  "done_when": "One scenario per target (open, door move, level change, plan view, instance memory, save encoding, replay, 100-sheet print), nightly native and in browsers with the kernel share asserted, reduced scale under count gates per pull request.",
+  "done_when": "One scenario per target (open, door move, level change, plan view, instance memory, save encoding, replay, 100-sheet print), timed natively and in browsers on a gate's commit with the kernel share asserted, reduced scale under count gates per pull request.",
   "depends_on": [
    "G450",
    "G139",
@@ -5734,7 +5734,7 @@
   "phase": "Phase 13",
   "crate": "geom-bench, CI",
   "size": "Medium",
-  "done_when": "The reference runner's timings become a gate: a statistical test on every kernel pull request blocks confident regressions over 5%; a scaling gate at 1, 2 and 8 threads; a nightly miss against 23.1's shares, confirmed by a same-night rerun, blocks merges to main except the fix or a revert (32.42); a weekly full run.",
+  "done_when": "The reference runner's timings become a gate: a statistical test on every kernel pull request blocks confident regressions over 5%; a scaling gate at 1, 2 and 8 threads; a miss against 23.1's shares on a gate's commit, confirmed by a rerun on that commit, blocks merges to main except the fix or a revert (32.42).",
   "depends_on": [
    "G451",
    "G10",

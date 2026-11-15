@@ -6,7 +6,7 @@
 //! ports' accurate paths, rounding filters, hard-case tables and scaling branches are reached only
 //! by hard-to-round or extreme inputs, which the other `math_*` tests sample but did not hit. Each
 //! input below was found by running every surviving mutant over CORE-MATH's worst-case lists (the
-//! five `.wc` files `kernel-nightly.yml` fetches, commit `0ce0cbc1`, SHA-256 checked), sinpi's
+//! five `.wc` files `math_full_worst_cases.rs` reads, commit `0ce0cbc1`, SHA-256 checked), sinpi's
 //! set-(b) images, atan2's worst cases scaled exactly by powers of two (atan2 is scale-invariant,
 //! so a scaled worst case reaches the subnormal and near-overflow branches), every table index of
 //! the reductions, and edge and random inputs, and taking the first input whose result changed.
