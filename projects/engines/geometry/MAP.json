@@ -951,7 +951,7 @@
           "target": "lib"
         },
         {
-          "cost": "a few draws of [`SplitMix64`] per input, outside every measured run.",
+          "cost": "a few draws of [`SplitMix64`] per input, outside every measured run; [`crossings`] also marches each of its six sheets once.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/inputs/intersect.rs",
@@ -1116,7 +1116,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/inputs/mod.rs",
           "guarantees": [
-            "every batch is a pure function of its operation and class, the same on every target and in every build profile; every catalogued batch is full ([`BATCH`] inputs; the tests check it) and is what its class claims; a class an operation lacks gives an empty batch; and no builder panics."
+            "every batch is a pure function of its operation and class, the same on every target and in every build profile; every catalogued batch is full ([`BATCH`] inputs, or the size [`SHORT_BATCHES`] gives the few heaviest, or one scenario; the tests check it) and is what its class claims; a class an operation lacks gives an empty batch; and no builder panics."
           ],
           "job": "The inputs every benchmark runs on: fixed batches, built the same way on every target.",
           "method": {
@@ -1517,7 +1517,7 @@
           "target": "lib"
         },
         {
-          "cost": "a benchmark is one pass of its operation over [`inputs::BATCH`] inputs (two passes under the instruction-count gate, whose first pass warms the caches; one and two runs under the fuel gate, whose difference is one pass). Building a batch takes O([`inputs::BATCH`]) generator draws and hashing it O([`inputs::BATCH`]) SHA-256 blocks, once per benchmark, outside every measured region.",
+          "cost": "a benchmark is one pass of its operation over [`inputs::BATCH`] inputs (fewer for the heaviest few, [`inputs::SHORT_BATCHES`]; two passes under the instruction-count gate, whose first pass warms the caches; one and two runs under the fuel gate, whose difference is one pass). Building a batch takes O([`inputs::BATCH`]) generator draws and hashing it O([`inputs::BATCH`]) SHA-256 blocks, once per benchmark, outside every measured region.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/lib.rs",

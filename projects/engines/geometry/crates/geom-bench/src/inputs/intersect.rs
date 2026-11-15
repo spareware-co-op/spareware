@@ -13,7 +13,9 @@
 //! 64 runs inside the count gates' jobs, each still on the path it measures: the spheres projected
 //! on are the others divided by 2^8, the torus seen in silhouette is a band of it each view crosses
 //! once, the swept loops reach an eighth of a unit each way, the known line is cut in four, and
-//! the kernels take a band of a sphere and coarse floors (`kernels::intersect`).
+//! the kernels take a band of a sphere and coarse floors (`kernels::intersect`). Three calls still
+//! take hundreds of millions of instructions each, so their batches hold only the first inputs a
+//! batch of 64 would draw ([`SWEEPS`], [`APEXES`] and [`POLES`]; `inputs::SHORT_BATCHES`).
 //!
 //! Guarantees: every batch is full and the same on every target, and every result of a typical
 //! batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly
@@ -23,7 +25,8 @@
 //! unlimited budget. Each is measured as chapter 28.14 sets benchmarks out,
 //! `projects/engines/geometry/architecture/28-testing.md`.
 //!
-//! Cost: a few draws of [`SplitMix64`] per input, outside every measured run.
+//! Cost: a few draws of [`SplitMix64`] per input, outside every measured run; [`crossings`] also
+//! marches each of its six sheets once.
 
 use geom_curve::{Circle, CurveKind, Frame, Line};
 use geom_intersect::general::subdivide;
@@ -37,7 +40,7 @@ use geom_nurbs::{Basis, Curve, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Extrusion, Plane, Sphere, SurfaceKind, Torus};
 
-use super::{Class, batch_of, p3, rng, within};
+use super::{Class, batch_of, batch_of_size, p3, rng, within};
 use crate::rng::SplitMix64;
 
 /// The reach of an input's coordinates, in grid steps.
@@ -237,15 +240,19 @@ pub fn plates(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
     })
 }
 
+/// How many inputs [`poles`] holds: each march through both poles takes about 2.6e8 instructions,
+/// so a batch of [`BATCH`](super::BATCH) kept a count gate's job on it for 8 to 11 minutes.
+pub const POLES: usize = 8;
+
 /// A plane patch holding the axis of a whole sphere about each centre, so it passes through both
-/// of the sphere's poles, for `march` across them (piece G173).
+/// of the sphere's poles, for `march` across them (piece G173). [`POLES`] of them.
 #[must_use]
 pub fn poles(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
     if class != Class::Typical {
         return Vec::new();
     }
     let mut g = rng("intersect::poles", class);
-    batch_of(|_| {
+    batch_of_size(POLES, |_| {
         let at = point(&mut g);
         let patch = Plane::new(
             at,
@@ -295,50 +302,72 @@ pub fn tangents(class: Class) -> Vec<(SurfaceKind, Known)> {
 
 /// A sheet z = v − k·u² for a dyadic k, crossing the ground along a parabola, with that crossing
 /// marched (outside every measured run), for `fit` (piece G175).
+///
+/// k is one of six eighths, so the batch holds six sheets, each many times: each is marched once,
+/// the first time it is drawn, and copied to every later input that draws it. The march is
+/// deterministic, so the batch is the one a march of every input gives, built with six marches in
+/// place of [`BATCH`](super::BATCH); the count gates build it inside the measured process, under
+/// Valgrind, where 64 marches took about a minute of each job.
 #[must_use]
 pub fn crossings(class: Class) -> Vec<(SurfaceKind, Branch)> {
     if class != Class::Typical {
         return Vec::new();
     }
     let mut g = rng("intersect::crossings", class);
+    let mut marched: Vec<(i64, (SurfaceKind, Branch))> = Vec::new();
     batch_of(|_| {
-        let ground = SurfaceKind::Plane(
-            Plane::new(
-                [0.0; 3],
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                ((-4.0, 4.0), (-4.0, 4.0)),
-            )
-            .ok()?,
-        );
-        let k = f64::from(i32::try_from(g.range(1, 7)).ok()?) / 8.0;
-        let along = Basis::new(2, vec![-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]).ok()?;
-        let across = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).ok()?;
-        let mut net = Vec::new();
-        for (x, square) in [(-1.0, 1.0), (0.0, -1.0), (1.0, 1.0)] {
-            for y in [-1.0, 1.0] {
-                net.push([x, y, y - k * square]);
-            }
+        let eighths = g.range(1, 7);
+        if let Some((_, input)) = marched.iter().find(|(drawn, _)| *drawn == eighths) {
+            return Some(input.clone());
         }
-        let sheet = SurfaceKind::Nurbs(Surface::new(along, across, &net).ok()?);
-        let mut meter = WorkMeter::new(Budget::UNLIMITED);
-        let found = subdivide(&sheet, &ground, 1.0 / 128.0, &mut meter).ok()?;
-        let traced = march(&sheet, &ground, &found, 1.0 / 128.0, 1.0 / 16.0, &mut meter).ok()?;
-        let branch = traced.branches.into_iter().next()?;
-        Some((sheet, branch))
+        let input = crossing(eighths)?;
+        marched.push((eighths, input.clone()));
+        Some(input)
     })
 }
 
+/// The sheet z = v − k·u² for k = `eighths`/8 and its crossing of the ground, marched.
+fn crossing(eighths: i64) -> Option<(SurfaceKind, Branch)> {
+    let ground = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-4.0, 4.0), (-4.0, 4.0)),
+        )
+        .ok()?,
+    );
+    let k = f64::from(i32::try_from(eighths).ok()?) / 8.0;
+    let along = Basis::new(2, vec![-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]).ok()?;
+    let across = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).ok()?;
+    let mut net = Vec::new();
+    for (x, square) in [(-1.0, 1.0), (0.0, -1.0), (1.0, 1.0)] {
+        for y in [-1.0, 1.0] {
+            net.push([x, y, y - k * square]);
+        }
+    }
+    let sheet = SurfaceKind::Nurbs(Surface::new(along, across, &net).ok()?);
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let found = subdivide(&sheet, &ground, 1.0 / 128.0, &mut meter).ok()?;
+    let traced = march(&sheet, &ground, &found, 1.0 / 128.0, 1.0 / 16.0, &mut meter).ok()?;
+    let branch = traced.branches.into_iter().next()?;
+    Some((sheet, branch))
+}
+
+/// How many inputs [`sweeps`] holds: each self-intersection takes about 6.2e8 instructions, so a
+/// batch of [`BATCH`](super::BATCH) kept a count gate's job on it for 21 to 28 minutes.
+pub const SWEEPS: usize = 4;
+
 /// A sheet whose section at y = v is a cubic arch that loops, crossing itself along a line: the
 /// arch with control points (−a, 0), (b, h), (−b, h), (a, 0) in x and z, a, b and h dyadic and
-/// b > a in both end rows, for `self_intersect` (piece G176).
+/// b > a in both end rows, for `self_intersect` (piece G176). [`SWEEPS`] of them.
 #[must_use]
 pub fn sweeps(class: Class) -> Vec<SurfaceKind> {
     if class != Class::Typical {
         return Vec::new();
     }
     let mut g = rng("intersect::sweeps", class);
-    batch_of(|_| {
+    batch_of_size(SWEEPS, |_| {
         let mut eighths = |lo: i64, hi: i64| -> Option<f64> {
             Some(f64::from(i32::try_from(g.range(lo, hi)).ok()?) / 8.0)
         };
@@ -640,11 +669,19 @@ pub fn tees(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
 /// gates' jobs.
 const NAPPE: (f64, f64) = (-1024.0, 1024.0);
 
-/// Two cones through one apex, on crossing axes, which meet in rulings.
+/// How many inputs [`apexes`] holds: each pair of cones takes about 4.6e8 instructions, so a batch
+/// of [`BATCH`](super::BATCH) kept a count gate's job on it for 15 to 21 minutes.
+pub const APEXES: usize = 4;
+
+/// Two cones through one apex, on crossing axes, which meet in rulings. [`APEXES`] of them.
 #[must_use]
 pub fn apexes(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
-    typical(class, "intersect::apexes", |g| {
-        let at = point(g);
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::apexes", class);
+    batch_of_size(APEXES, |_| {
+        let at = point(&mut g);
         let across = Frame::new([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]).ok()?;
         let first = Cone::new(at, 0.0, 2.0, Frame::standard().ok()?, (TURN, NAPPE)).ok()?;
         let second = Cone::new(at, 0.0, 2.0, across, (TURN, NAPPE)).ok()?;

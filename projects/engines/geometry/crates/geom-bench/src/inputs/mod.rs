@@ -19,9 +19,9 @@
 //! area or volume is the smallest nonzero one the grid allows.
 //!
 //! Guarantees: every batch is a pure function of its operation and class, the same on every
-//! target and in every build profile; every catalogued batch is full ([`BATCH`] inputs; the tests
-//! check it) and is what its class claims; a class an operation lacks gives an empty batch; and no
-//! builder panics.
+//! target and in every build profile; every catalogued batch is full ([`BATCH`] inputs, or the
+//! size [`SHORT_BATCHES`] gives the few heaviest, or one scenario; the tests check it) and is what
+//! its class claims; a class an operation lacks gives an empty batch; and no builder panics.
 //!
 //! Cost: building a batch takes O([`BATCH`]) generator draws (at most `ATTEMPTS` = 64 · [`BATCH`]
 //! candidates, so it always ends), once per benchmark, outside every measured run.
@@ -80,6 +80,18 @@ pub mod wide32;
 /// each count, small enough that every batch and its results fit the simulated 32 KiB first-level
 /// data cache.
 pub const BATCH: usize = 64;
+
+/// The benchmarks whose batch holds fewer than [`BATCH`] inputs, and how many each holds: the
+/// first inputs of the batch of [`BATCH`] their builder would draw, so every call measured is one a
+/// full batch makes. Each call of these takes hundreds of millions of instructions, so a full batch
+/// kept a count gate's job running one benchmark for 8 to 28 minutes; a shorter batch measures the
+/// same calls on the same path in about a minute. A scenario's batch is one whole job
+/// ([`scenario`]), and is not listed here.
+pub const SHORT_BATCHES: [(&str, usize); 3] = [
+    ("intersect/natural_apex/typical", intersect::APEXES),
+    ("intersect/march_poles/typical", intersect::POLES),
+    ("intersect/selfcross_sweep/typical", intersect::SWEEPS),
+];
 
 /// How many candidates a builder may try before giving up on filling its batch. Builders reject a
 /// candidate only in rare cases (for example three random points that happen to be collinear), so
@@ -172,10 +184,18 @@ pub(crate) fn rng(op: &str, class: Class) -> SplitMix64 {
 
 /// Up to [`BATCH`] items from `make`, which is told how many items are already accepted and returns
 /// `None` to reject a candidate. Tries at most [`ATTEMPTS`] times, so it always ends.
-pub(crate) fn batch_of<T>(mut make: impl FnMut(usize) -> Option<T>) -> Vec<T> {
-    let mut out = Vec::with_capacity(BATCH);
+pub(crate) fn batch_of<T>(make: impl FnMut(usize) -> Option<T>) -> Vec<T> {
+    batch_of_size(BATCH, make)
+}
+
+/// Up to `size` items from `make`, as [`batch_of`] builds [`BATCH`]: the first `size` items that
+/// [`batch_of`] would accept from the same generator, for the few operations a batch of [`BATCH`]
+/// calls would keep inside a count gate's job for many minutes ([`SHORT_BATCHES`]). Tries at most
+/// [`ATTEMPTS`] times, so it always ends.
+pub(crate) fn batch_of_size<T>(size: usize, mut make: impl FnMut(usize) -> Option<T>) -> Vec<T> {
+    let mut out = Vec::with_capacity(size);
     for _ in 0..ATTEMPTS {
-        if out.len() == BATCH {
+        if out.len() == size {
             break;
         }
         if let Some(item) = make(out.len()) {
@@ -270,5 +290,30 @@ pub(crate) fn extended_gcd(a: i64, b: i64) -> (i64, i64, i64) {
         (-r0, -u0, -v0)
     } else {
         (r0, u0, v0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A builder that rejects every third candidate, as a real one rejects a degenerate draw.
+    fn builder() -> impl FnMut(usize) -> Option<u64> {
+        let mut g = SplitMix64::new(7);
+        let mut tried = 0_u32;
+        move |_| {
+            tried += 1;
+            let draw = g.range(0, 1 << 20);
+            (tried % 3 != 0).then_some(draw.unsigned_abs())
+        }
+    }
+
+    #[test]
+    fn a_short_batch_is_the_start_of_the_full_batch() {
+        let full = batch_of(builder());
+        assert_eq!(full.len(), BATCH);
+        for size in [1, 4, 8, BATCH - 1, BATCH] {
+            assert_eq!(batch_of_size(size, builder()), full[..size], "{size}");
+        }
     }
 }
