@@ -170,7 +170,10 @@ fn kernel_yml_runs_the_shipped_checker_leg_natively_and_on_wasm32() {
         legs,
         [
             ("test".to_owned(), LEG.to_owned()),
-            ("wasm".to_owned(), format!("{LEG} --target wasm32-wasip1")),
+            (
+                "wasm".to_owned(),
+                format!("{LEG} --target wasm32-wasip1 -- --nocapture")
+            ),
         ],
         "kernel.yml must run the shipped-checker leg in its jobs `test` and `wasm`"
     );
