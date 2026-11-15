@@ -309,17 +309,47 @@ fn kernel_yml_runs_every_golden_on_wasm32_in_every_build_mode() {
 ",
         "      - name: geom-num's every test vector on wasm32 in release as shipped
         if: ${{ !cancelled() && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-num ') }}
-        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
+        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
 ",
         "        env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast
+        run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
 ",
     ] {
         assert!(yml.contains(step), "kernel.yml lacks the step:\n{step}");
     }
     // The single-golden steps G02 started with are gone: the store is the one list.
     assert!(!yml.contains("--test determinism -- --nocapture"));
+}
+
+/// A test that fails on wasm32 tells why. wasm32-wasip1 aborts on a panic, so libtest never prints
+/// what it captured: every `cargo test` for wasm32 passes `--nocapture` (the golden runner passes
+/// it too, `golden::matrix`), and both of Node's runners print the seed of every random byte a
+/// failing binary drew, which `WASI_RUN_SEED` replays.
+#[test]
+fn a_wasm32_failure_reaches_the_log_with_its_message_and_its_seed() {
+    let yml = KERNEL_YML.replace("\r\n", "\n");
+    let mut runs = 0;
+    for line in yml.lines() {
+        let run = line.trim_start().trim_start_matches("run: ");
+        if run.starts_with("cargo test ") && run.contains("--target wasm32-wasip1") {
+            assert!(run.ends_with(" -- --nocapture"), "{run}");
+            runs += 1;
+        }
+    }
+    assert_eq!(runs, 3, "the shipped leg, geom-num's vectors and the suite");
+    let draws = "imports.wasi_snapshot_preview1.random_get = ";
+    let replays = "failed; WASI_RUN_SEED=${seed} replays its random bytes";
+    assert_eq!(
+        yml.matches(draws).count(),
+        2,
+        "both of Node's runners draw from a seed"
+    );
+    assert_eq!(
+        yml.matches(replays).count(),
+        2,
+        "and print it when a run fails"
+    );
 }
 
 /// The matrix runs exactly the store's test-checked goldens, each once, with libtest's exact
