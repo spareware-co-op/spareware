@@ -259,8 +259,13 @@ fn meridians(
         SurfaceKind::Cylinder(x) if about(x.center(), x.frame().normal()) && whole_turn(s) => {
             let z = tight::middle(level(lift(x.center())?, on)?);
             let (_, (v0, v1)) = ParamSurface::domain(x);
+            // The point at v stands s·v along n̂, so s·v times ±1 (n̂ along `on` or against it)
+            // past z: the axial factor s is ±1 as built, but a similarity scales it.
             let sense = tight::middle(dot(lift(x.frame().normal())?, on.along)?);
-            let (lo, hi) = if sense > 0.0 { (v0, v1) } else { (-v1, -v0) };
+            let s = x.axial_sign();
+            let rate = if sense > 0.0 { s } else { -s };
+            let (a, b) = (v0 * rate, v1 * rate);
+            let (lo, hi) = (tight::smaller(a, b), tight::larger(a, b));
             alloc::vec![straight([x.radius(), z], [0.0, 1.0], (lo, hi))?]
         }
         SurfaceKind::Cone(x) if about(x.center(), x.frame().normal()) && whole_turn(s) => {
@@ -814,8 +819,12 @@ fn sweep(
             )?;
             let (_, (v0, v1)) = ParamSurface::domain(x);
             let from = tight::middle(dot(c, unit_d)?);
-            let sense = tight::middle(dot(lift(e)?, unit_d)?);
-            let (a, b) = (v0 * sense, v1 * sense);
+            // The point at v stands s·v along the unit axis n̂: s·v·(n̂ · d̂) along d̂. The axial
+            // factor s is ±1 as built, but a similarity scales it, and the stored normal need not
+            // be of unit length.
+            let (_, [_, _, n]) = x.frame().unit_vectors()?;
+            let rate = tight::middle(tight::mul(dot(n, unit_d)?, tight::point(x.axial_sign())?)?);
+            let (a, b) = (v0 * rate, v1 * rate);
             Ok(Some(Sweep {
                 section: CurveKind::Circle(circle),
                 profile: None,
