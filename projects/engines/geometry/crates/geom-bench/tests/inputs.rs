@@ -92,7 +92,7 @@ fn every_benchmark_has_a_full_batch() {
 #[test]
 fn every_short_batch_is_a_catalogued_benchmark() {
     // Every short batch names a catalogued benchmark, once, and is shorter than a full one, but
-    // never empty (that it is the start of the full batch is checked in inputs/mod.rs).
+    // never empty (that its inputs are the full batch's is checked in inputs/mod.rs).
     let all = names();
     for (i, (name, size)) in inputs::SHORT_BATCHES.iter().enumerate() {
         assert!(all.iter().any(|n| n == name), "{name}");

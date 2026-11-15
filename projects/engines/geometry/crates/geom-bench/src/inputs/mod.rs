@@ -81,16 +81,22 @@ pub mod wide32;
 /// data cache.
 pub const BATCH: usize = 64;
 
-/// The benchmarks whose batch holds fewer than [`BATCH`] inputs, and how many each holds: the
-/// first inputs of the batch of [`BATCH`] their builder would draw, so every call measured is one a
-/// full batch makes. Each call of these takes hundreds of millions of instructions, so a full batch
-/// kept a count gate's job running one benchmark for 8 to 28 minutes; a shorter batch measures the
-/// same calls on the same path in about a minute. A scenario's batch is one whole job
-/// ([`scenario`]), and is not listed here.
+/// The benchmarks whose batch holds fewer than [`BATCH`] inputs, and how many each holds: a few
+/// inputs of the batch of [`BATCH`] their builder draws, so every call measured is one a full
+/// batch makes. Each call of these takes hundreds of millions of instructions, so a full batch
+/// kept a count gate's job running one benchmark for 8 to 28 minutes; the kept inputs take a
+/// minute or two.
+///
+/// The inputs kept ([`intersect::APEXES`], [`intersect::POLES`] and [`intersect::SWEEPS`]) are
+/// chosen so that the measured pass over them runs every function and every source line that the
+/// pass over all [`BATCH`] runs: Callgrind's counts of both passes were compared when the batches
+/// were cut (x86-64, the gate's build with line tables). No test keeps that true, so compare again
+/// when what these calls do changes. A scenario's batch is one whole job ([`scenario`]), and is
+/// not listed here.
 pub const SHORT_BATCHES: [(&str, usize); 3] = [
-    ("intersect/natural_apex/typical", intersect::APEXES),
-    ("intersect/march_poles/typical", intersect::POLES),
-    ("intersect/selfcross_sweep/typical", intersect::SWEEPS),
+    ("intersect/natural_apex/typical", intersect::APEXES.len()),
+    ("intersect/march_poles/typical", intersect::POLES.len()),
+    ("intersect/selfcross_sweep/typical", intersect::SWEEPS.len()),
 ];
 
 /// How many candidates a builder may try before giving up on filling its batch. Builders reject a
@@ -184,18 +190,10 @@ pub(crate) fn rng(op: &str, class: Class) -> SplitMix64 {
 
 /// Up to [`BATCH`] items from `make`, which is told how many items are already accepted and returns
 /// `None` to reject a candidate. Tries at most [`ATTEMPTS`] times, so it always ends.
-pub(crate) fn batch_of<T>(make: impl FnMut(usize) -> Option<T>) -> Vec<T> {
-    batch_of_size(BATCH, make)
-}
-
-/// Up to `size` items from `make`, as [`batch_of`] builds [`BATCH`]: the first `size` items that
-/// [`batch_of`] would accept from the same generator, for the few operations a batch of [`BATCH`]
-/// calls would keep inside a count gate's job for many minutes ([`SHORT_BATCHES`]). Tries at most
-/// [`ATTEMPTS`] times, so it always ends.
-pub(crate) fn batch_of_size<T>(size: usize, mut make: impl FnMut(usize) -> Option<T>) -> Vec<T> {
-    let mut out = Vec::with_capacity(size);
+pub(crate) fn batch_of<T>(mut make: impl FnMut(usize) -> Option<T>) -> Vec<T> {
+    let mut out = Vec::with_capacity(BATCH);
     for _ in 0..ATTEMPTS {
-        if out.len() == size {
+        if out.len() == BATCH {
             break;
         }
         if let Some(item) = make(out.len()) {
@@ -203,6 +201,17 @@ pub(crate) fn batch_of_size<T>(size: usize, mut make: impl FnMut(usize) -> Optio
         }
     }
     out
+}
+
+/// The inputs of `full` at the places `kept` names (0 is the first), in the batch's order, for the
+/// few operations a batch of [`BATCH`] calls would keep inside a count gate's job for many minutes
+/// ([`SHORT_BATCHES`]). A place past the end of `full` keeps nothing.
+pub(crate) fn keep<T>(kept: &[usize], full: Vec<T>) -> Vec<T> {
+    full.into_iter()
+        .enumerate()
+        .filter(|(place, _)| kept.contains(place))
+        .map(|(_, input)| input)
+        .collect()
 }
 
 /// A coordinate of `v` grid steps, saturated into the frame. Every builder computes coordinates
@@ -309,11 +318,20 @@ mod tests {
     }
 
     #[test]
-    fn a_short_batch_is_the_start_of_the_full_batch() {
+    fn the_inputs_kept_are_the_full_batch_s_at_those_places() {
         let full = batch_of(builder());
         assert_eq!(full.len(), BATCH);
-        for size in [1, 4, 8, BATCH - 1, BATCH] {
-            assert_eq!(batch_of_size(size, builder()), full[..size], "{size}");
-        }
+        assert_eq!(keep(&[4, 45], full.clone()), [full[4], full[45]]);
+        // In the batch's order, whatever order the places are named in.
+        assert_eq!(
+            keep(&[8, 0, 2, 1], full.clone()),
+            [full[0], full[1], full[2], full[8]]
+        );
+        let all: Vec<usize> = (0..BATCH).collect();
+        assert_eq!(keep(&all, full.clone()), full);
+        assert_eq!(keep(&all[..8], full.clone()), full[..8]);
+        // A place past the end keeps nothing, and no place keeps nothing.
+        assert_eq!(keep(&[BATCH - 1, BATCH], full.clone()), full[BATCH - 1..]);
+        assert!(keep(&[], full).is_empty());
     }
 }
