@@ -28,8 +28,11 @@
 //! - Golden counts sit beside each hash (G98): work units and logical bytes. A change of either with
 //!   no change of operation version fails, though the results are the same, because budgets decide
 //!   replayable outcomes.
-//! - `history` records every change to a stored expectation in an open edition, as the golden
-//!   store's does, with the expectation it replaced.
+//! - `history` records every change to a stored expectation in an open edition, and to a `Known`
+//!   fixture's wanted result, as the golden store's does, with the value it replaced, its kind,
+//!   its piece and why. [`Change::allows`] says which kinds the fixture's rules allow: `corpus`
+//!   only where no result moved (a success whose hash alone moved), and `bug` or `improvement`
+//!   only in the edition before the first kernel edition, `pre-edition`.
 //!
 //! Guarantees:
 //!
@@ -59,7 +62,7 @@ use geom_op::{ErrorKind, Exactness, NameId};
 use serde::{Deserialize, Serialize};
 
 use crate::golden::Digest;
-use crate::golden::store::ChangeKind;
+use crate::golden::store::{ChangeKind, PRE_EDITION};
 
 pub mod calls;
 pub mod diff;
@@ -408,13 +411,13 @@ pub enum Speed {
     Slow,
 }
 
-/// One change to a stored expectation in an open edition.
+/// One change to a stored expectation in an open edition, or to a `Known` fixture's wanted result.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Change {
-    /// The edition of the expectation changed.
+    /// The edition of the expectation changed; for a wanted result, the open edition.
     pub edition: String,
-    /// Its operation versions.
+    /// Its operation versions; for a wanted result, the log's own.
     pub operations: OpVersions,
     /// What it was.
     pub was: Expect,
@@ -424,6 +427,34 @@ pub struct Change {
     pub piece: String,
     /// Why, and what moved.
     pub why: String,
+}
+
+impl Change {
+    /// Whether the fixture's rules allow this record's kind for the change it records, from its
+    /// `was` to `now`. `corpus` (the inputs or their encoding changed, no result did) fits only a
+    /// success whose measures and counts stayed, so that its hash alone moved: a fixture's log
+    /// never changes, so only the canonical encoding of what it gives can. `bug` and `improvement`
+    /// fit only in [`PRE_EDITION`], before operation versions start (the first Stable release,
+    /// G482): after it, a fixed or improved result is a new operation version, a new expectation
+    /// beside the old (26.2, 28.13), as a golden that covers operation versions records only
+    /// `corpus` (`Golden::allows`).
+    #[must_use]
+    pub fn allows(&self, now: &Expect) -> bool {
+        match self.kind {
+            ChangeKind::Corpus => matches!(
+                (&self.was, now),
+                (
+                    Expect::Ok { work, measures, .. },
+                    Expect::Ok {
+                        work: new_work,
+                        measures: new_measures,
+                        ..
+                    },
+                ) if work == new_work && measures == new_measures
+            ),
+            ChangeKind::Bug | ChangeKind::Improvement => self.edition == PRE_EDITION,
+        }
+    }
 }
 
 /// One stored test case (28.16).
