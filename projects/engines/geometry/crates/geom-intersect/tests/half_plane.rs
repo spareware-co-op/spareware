@@ -345,6 +345,30 @@ fn a_nurbs_profile_about_a_slanted_axis_is_read_in_the_plane_its_control_points_
 }
 
 #[test]
+fn a_meridian_whose_plane_is_exact_only_with_the_errors_of_its_products_is_one() {
+    // About the slanted axis e = (1, 1, 1), the control points α·e + β·w for one point w of
+    // 48-bit coordinates, each sum exact: all four are in the plane of e and w. Each product of
+    // two coordinates in the test that they are rounds, and the rounded products alone sum to
+    // about 6e−16, 3e−16 and −6e−16 for the last three points, not zero: only with the error of
+    // each product kept is the sum exactly zero. ρ runs from |w⊥| = 3.64 to 1.1875 times that,
+    // 4.32, and back, so the coaxial cylinder ρ = 4 meets it in two rings.
+    let slant = Frame::new([1.0, -1.0, 0.0], [1.0, 1.0, 1.0]).unwrap();
+    let w = [
+        2.345_678_900_000_003,
+        -2.718_281_799_999_999_7,
+        0.618_033_900_000_000_4,
+    ];
+    let at = |alpha: f64, beta: f64| w.map(|x| alpha + beta * x);
+    let profile = bezier(&[at(0.0, 1.0), at(1.0, 1.25), at(2.0, 1.25), at(3.0, 1.0)]);
+    let span = profile.domain();
+    let profile = Trimmed::new(Basis::try_from(profile).unwrap(), span).unwrap();
+    let turned = SurfaceKind::Revolution(Revolution::new(profile, [0.0; 3], slant, ROUND).unwrap());
+    let tube = SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 4.0, slant, (ROUND, WIDE)).unwrap());
+    let r = natural(&tube, &turned, &mut meter()).unwrap().unwrap();
+    assert_eq!(r.items().len(), 2, "{r:?}");
+}
+
+#[test]
 fn a_circle_through_the_plane_at_its_ends_and_middle_is_no_meridian() {
     // About (5, 0, 0) of radius 1, tilted about x̂: its ends (6, 0, 0) and middle (4, 0, 0) are in
     // the plane y = 0, and the rest of it is not.
