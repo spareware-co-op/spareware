@@ -7057,7 +7057,7 @@
           "target": "lib"
         },
         {
-          "cost": "a piece takes a handful of reads of both surfaces; a straight edge takes one piece. All of it is charged to the meter. Recursion: none.",
+          "cost": "a piece takes a handful of reads of both surfaces; a straight edge takes one piece where the piece's box stays inside the other surface's domain and the room past its ends, and is halved until it does where it does not. All of it is charged to the meter. Recursion: none.",
           "does": "[`lies_in`] takes an edge of one surface, the curve `S₁(t)` with one parameter held at an end of its domain, and the other surface it may lie in, and proves it so over a stretch of `t`, piece by piece. Where it does, the edge is the branch: its system against the other surface has a zero for every `t`, so the interior engine of [`crate::solve`] can never prove one and flags boxes the whole length of it, and the march ([`crate::march`]) walks the edge itself, since a box around a point of it cannot stand in the domain.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-intersect/src/boundary.rs",
@@ -7072,7 +7072,7 @@
             "links": [
               "https://doi.org/10.1137/0731048"
             ],
-            "text": "the parametric Krawczyk test is Kearfott and Xing's (<https://doi.org/10.1137/0731048>), the one [`crate::march`] steps with; the least-squares start for the middle of a piece is Gauss-Newton on the three residuals."
+            "text": "the parametric Krawczyk test is Kearfott and Xing's (<https://doi.org/10.1137/0731048>), the one [`crate::march`] steps with; the least-squares start for the middle of a piece is Gauss-Newton on the three residuals. The box of a piece is one length on the other surface, a little more than the edge's travel over the piece, and each of `(s, r)` takes it in its own unit, by the surface's speed along that parameter, as the march's step box does: a turn and a height, or a plane's two vectors of different lengths, are not one unit."
           },
           "path": "geom_intersect::boundary",
           "provenance": [],

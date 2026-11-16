@@ -7284,14 +7284,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace <= with > in circle_circle",
-      "line_text": "let small_first = r <= q;",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "small_first only says which circle Crossing::of measures the crossings from. Swapped, its height is the same: Kahan's Heron area (d + l + s)(l + s - d)(d - (l - s))(d + (l - s)) has the same factors with l - s negated, multiplied in another order. So the tangent, merged and two-crossing decisions and the count are the same, and the points, reached from the other centre by the foot, are the same up to the rounding of their enclosures. That rounding is all the smaller circle's side improves, which the crate does not promise."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
       "mutant": "replace > with >= in line_line",
       "line_text": "if start > end {",
       "occurrences": 1,
@@ -7692,14 +7684,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace * with + in trimmed",
-      "line_text": "let inside = on_both(curve, lo * 0.5 + hi * 0.5, a, b, meter)?;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "With no cut a piece lies wholly on or wholly off each domain, so any of its points decides. The mutant reads the point at lo + 0.5 + hi/2: on a loop of G165's, on (0, 2), its point at 1.5; on an open piece without cuts, only a line on two planes without edges, a point of that line, which lies on both planes however far out. The answer is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
       "mutant": "replace * with / in trimmed",
       "line_text": "let room = 1e-9 * (1.0 + t.abs());",
       "occurrences": 1,
@@ -7725,14 +7709,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
       "mutant": "replace + with * in trimmed",
-      "line_text": "let inside = on_both(curve, lo * 0.5 + hi * 0.5, a, b, meter)?;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "With no cut a piece lies wholly on or wholly off each domain, so any of its points decides. The mutant reads the point at lo·hi/4: on a loop of G165's, on (0, 2), its point at 0; on an open piece without cuts, only a line on two planes without edges, a point of that line, which lies on both planes however far out. The answer is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace + with * in trimmed",
       "line_text": "let room = 1e-9 * (1.0 + t.abs());",
       "occurrences": 1,
       "kind": "harmless",
@@ -7745,22 +7721,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "A branch need only pass the cone's largest radius on its domain, |r0| + |k|·far, which cone_extent's e exceeds by at least 1; trimming then cuts it at the same edges. A branch point at t stands at least sinh t·|side| from the axis (side is square to it) and |side| ≥ smaller, and with t = ln((2e − 2)/smaller + 2), smaller·sinh t ≥ e − 1 + smaller/2, still past that radius; capped at HYPERBOLA_REACH, the original is no shorter."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace += with *= in cut_at",
-      "line_text": "t += period;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "while t < lo { t *= period } never ends for a turn read below a loop's start at 0: a negative t times 2 stays negative, below lo."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace += with -= in cut_at",
-      "line_text": "t += period;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "while t < lo { t -= period } never ends for a turn read below the loop's start (turn_of reads from −½): taking periods away keeps t < lo."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
@@ -7777,14 +7737,6 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "stop / room is far past the stop (stop > 0 here: a loop's runs past its first cut, an open piece's span reaches past 0), so the mutant also keeps cuts within room before the stop; cuts lie in the domain, none past it. The last stretch, a billionth of the parameter, is dropped as no stretch: the piece before ends room short of the stop at most."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace < with <= in cut_at",
-      "line_text": "while t < lo {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "t == lo only where a cut lies exactly at the loop's start: the mutant turns it once round and back, which returns lo exactly where lo + period rounds to hi, as for every loop that turns from 0, and a value within a rounding step of lo otherwise: the same point of the loop, to rounding."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
@@ -7868,14 +7820,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace < with > in cut_at",
-      "line_text": "while t < lo {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "while t > lo { t += period } never ends for a cut past the loop's start: adding a period keeps t > lo, so every pair with a cut on a loop, beyond its first point, hangs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
       "mutant": "replace > with == in cut_at",
       "line_text": "if t < lo || t > hi {",
       "occurrences": 1,
@@ -7953,22 +7897,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "middle_of == hi turns to hi − period = lo, the same point of a loop: on_both reads the same point, to rounding, and the stretch is kept or dropped alike."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace >= with < in cut_at",
-      "line_text": "while t >= hi {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "while t < hi { t -= period } never ends: after the first loop t lies below hi, and taking periods away keeps it there."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace || with && in cut_at",
-      "line_text": "if t < lo || t > hi {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The test never holds. On a loop the wraps just before put t in [lo, hi). On an open piece t is the parameter of a point of an edge: on the curve it lies inside the piece's span (a line runs over all of the grid, a conic past the cone's largest radius), and off it the gap test after refuses it, the curve's points past its span standing past that radius, farther than a step from any edge point."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
@@ -8228,60 +8156,12 @@
       "reason": "A reach is read only by class_of, which counts whole steps: ceil(reach) + 1. geom-num widens every map's bounds outward, so each width wide_of takes is positive, and for data inside the frame's ±2^40 steps it is a few steps of 2^-12 at most, so ceil gives 1, as for 1.0: the class is Steps(2) either way. Only data past the frame's range could tell them apart, a bound the kernel does not promise there (attack_g167 pins a line image there refused FrameRange)."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace -= with += in cut_at",
-      "line_text": "t -= period;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "while t >= hi { t += period } never ends once a cut's turn reads past the loop's end: turn_of reads up to 3/2, and a loop turning from −1, as a whole circle profile on (−1, 1) pushed and cut across makes (attack_g167), ends at 1."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/level.rs",
       "mutant": "replace && with || in ending",
       "line_text": "overlap(x, u) && overlap(y, v)",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "A crossing with nothing across it and off the domain stands beside a flagged box, or the trace is broken: an interior crossing always has a box across its side, and that box is settled or flagged. With || the test also accepts a flagged box level with the crossing in one parameter only, which differs only on that broken trace, where the answer is Internal rather than an ended branch."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
-      "mutant": "replace * with + in <impl Field<1> for Quartic>::reach",
-      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With + in place of the product it no longer shrinks with the box, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori then run past cargo-mutants' timeout, which is how the tests catch it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
-      "mutant": "replace - with + in <impl Field<1> for Quartic>::reach",
-      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With the sum of t's ends in place of their difference it stays near twice the root's own t however small the box, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori run past cargo-mutants' timeout."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
-      "mutant": "replace - with / in <impl Field<1> for Quartic>::reach",
-      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With the ratio of t's ends in place of their difference it tends to one, not zero, as the box shrinks, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori run past cargo-mutants' timeout."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
-      "mutant": "replace closed_form -> Result<Option<Intersection>, IntersectError> with Ok(None)",
-      "line_text": "let seams = seams_of(surface);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "With no closed form every line, circle and helix against a plane, sphere, cylinder, cone or torus goes to the subdivision engine instead of its exact or one-dimensional solve, and on attack_g164's long lines, wide surfaces and tangencies that engine splits boxes far past the budgeted meets' work: the tests run past cargo-mutants' timeout, which is how they catch it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace && with || in strip",
-      "line_text": "if dx == 0.0 && dy == 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",

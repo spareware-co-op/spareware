@@ -294,3 +294,30 @@ fn a_budget_stops_it_and_a_floor_must_be_positive() {
     let again = subdivide_known(&sheet, &wall, &known, FLOOR, &mut meter()).unwrap();
     assert_eq!(once, again);
 }
+
+#[test]
+fn a_second_crossing_near_a_known_one_is_still_found() {
+    // Roots along v = 0, the known curve, and v = 2r − 1, an eighth and a quarter away: the tube
+    // about the known one is proven only short of the other, which the search must still trace.
+    for r in [9.0 / 16.0, 5.0 / 8.0] {
+        let (sheet, wall) = (crossing_sheet(r), ground());
+        let known = subdivide_known(
+            &sheet,
+            &wall,
+            &[line(KnownContact::Crossing)],
+            FLOOR,
+            &mut meter(),
+        )
+        .unwrap();
+        assert!(known.flagged.is_empty(), "{r}: {:?}", known.flagged);
+        let traced = march(&sheet, &wall, &known, FLOOR, CEILING, &mut meter()).unwrap();
+        assert_eq!(traced.branches.len(), 1, "{r}: {traced:?}");
+        let other = 2.0 * r - 1.0;
+        for x in &traced.branches[0].vertices {
+            assert!(
+                x[1].lo() - FLOOR <= other && other <= x[1].hi() + FLOOR,
+                "{r}: {x:?}"
+            );
+        }
+    }
+}

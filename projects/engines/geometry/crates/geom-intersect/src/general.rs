@@ -877,9 +877,15 @@ fn wraps(a: (f64, f64), b: (f64, f64)) -> Option<(usize, Option<(f64, f64)>)> {
     }
     let mut count = 0_usize;
     let mut here = None;
-    let mut k = math::ceil(lo).ok()?.get();
-    let last = math::floor(hi).ok()?.get();
-    while k <= last {
+    // The shifts as integers, so the loop's count is fixed before it starts: under 10⁹ in size,
+    // each is exact as an i32 and back as a double.
+    let whole = |x: f64| i32::try_from(crate::curve::whole(x)?).ok();
+    let (first, last) = (
+        whole(math::ceil(lo).ok()?.get())?,
+        whole(math::floor(hi).ok()?.get())?,
+    );
+    for k in first..=last {
+        let k = f64::from(k);
         let shifted = (b.0 + 2.0 * k, b.1 + 2.0 * k);
         if let Some(part) = common(a, shifted) {
             count = count.saturating_add(1);
@@ -887,7 +893,6 @@ fn wraps(a: (f64, f64), b: (f64, f64)) -> Option<(usize, Option<(f64, f64)>)> {
                 here = Some(part);
             }
         }
-        k += 1.0;
     }
     Some((count, here))
 }
