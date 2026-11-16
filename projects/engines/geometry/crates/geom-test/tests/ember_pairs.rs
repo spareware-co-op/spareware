@@ -156,14 +156,18 @@ const CLEARED: [(usize, u64, u64); 92] = [
     (998, 237737, 1458703),
 ];
 
-/// The cleared pairs whose meshes `geom-mesh`'s builder refuses once on the grid, with the
-/// refusal: a mesh that is not closed and manifold there, whose remedy is healing (19.2), not a
-/// fault.
-const REFUSED: [(usize, &str); 0] = [];
+/// The cleared pairs refused before any boolean, with the refusal: a file `stl_io` cannot read, or
+/// meshes `geom-mesh`'s builder refuses once on the grid (not closed and manifold there, whose
+/// remedy is healing, 19.2). Measured: model 123787 of pair 799 is an ASCII STL (its first line
+/// `solid`, its facets' normals `0 0 0`) that `stl_io` 0.11.0 stops reading partway.
+const REFUSED: [(usize, &str); 1] = [(799, "123787.stl: Read(\"failed to fill whole buffer\")")];
 
 /// The cleared pairs held to both checkers and the kernel's own exact volume but not to the
 /// reference, each with why.
-const NAMED_OUT: [(usize, &str); 0] = [];
+const NAMED_OUT: [(usize, &str); 1] = [(
+    930,
+    "the reference refuses the pair's meshes on the grid as not closed (NotClosed) where      geom-mesh's builder and both mesh checkers accept them; Thingi10K's own flags say a model      of this pair is not closed, so it is not a solid the reference's winding numbers can read",
+)];
 
 /// What EMBER's operation and the two beside it keep of the pair's winding numbers: the first
 /// less the second, their union and their intersection.
@@ -251,25 +255,30 @@ fn both_meshes(what: &str, mesh: &ExactMesh) -> dashu_ratio::RBig {
     v.six_volume.unwrap()
 }
 
-/// One pair's two models moved by their transforms and put on one grid.
-fn grids(dir: &std::path::Path, case: &Case) -> [Grid; 2] {
+/// One pair's two models moved by their transforms and put on one grid, or the file `stl_io`
+/// refuses, with its refusal.
+fn grids(dir: &std::path::Path, case: &Case) -> Result<[Grid; 2], String> {
     let model = |id: u64, by| {
         let bytes = std::fs::read(dir.join(format!("{id}.stl"))).unwrap();
-        stl::placed(&stl::read(&bytes).unwrap(), by).unwrap()
+        let read = stl::read(&bytes).map_err(|e| format!("{id}.stl: {e:?}"))?;
+        Ok::<_, String>(stl::placed(&read, by).unwrap())
     };
     let read = [
-        model(case.id_a, &case.transform_a),
-        model(case.id_b, &case.transform_b),
+        model(case.id_a, &case.transform_a)?,
+        model(case.id_b, &case.transform_b)?,
     ];
     let grids: [Grid; 2] = stl::on_one_grid(&read).unwrap().try_into().unwrap();
-    grids
+    Ok(grids)
 }
 
-/// A pair run as EMBER runs it, held to both checkers and the reference: its builder's refusal,
-/// or nothing.
+/// A pair run as EMBER runs it, held to both checkers and the reference: its reader's or its
+/// builder's refusal, or nothing.
 fn run(pair: usize, case: &Case, dir: &std::path::Path) -> Option<String> {
     let started = Instant::now();
-    let [a, b] = grids(dir, case);
+    let [a, b] = match grids(dir, case) {
+        Ok(grids) => grids,
+        Err(why) => return Some(why),
+    };
     let exec = Exec::serial();
     let mesh = |grid: &Grid, name: u8| {
         build(
