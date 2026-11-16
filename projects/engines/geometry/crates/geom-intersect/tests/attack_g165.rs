@@ -29,6 +29,13 @@ use geom_test::{Seed, SplitMix64};
 const ROUND: (f64, f64) = (0.0, 2.0);
 const TALL: (f64, f64) = (-500.0, 500.0);
 
+/// 2^e exactly, for |e| up to 63. Not `f64::powi`: its last digit is not the same everywhere (Miri
+/// varies it), so data meant to be whole numbers or exact scales would not be.
+fn two_to(e: i32) -> f64 {
+    let p = (1u64 << e.unsigned_abs()) as f64;
+    if e < 0 { 1.0 / p } else { p }
+}
+
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
@@ -840,7 +847,7 @@ fn trims(whole: &Intersection, part: &Intersection, a: &SurfaceKind, b: &Surface
 }
 
 fn span(rng: &mut SplitMix64, lo: f64, hi: f64) -> f64 {
-    lo + (hi - lo) * ((rng.next_u64() >> 11) as f64 / 2.0_f64.powi(53))
+    lo + (hi - lo) * ((rng.next_u64() >> 11) as f64 / two_to(53))
 }
 
 /// Part of a turn, within [0, 2], and a range of heights from `height`.
