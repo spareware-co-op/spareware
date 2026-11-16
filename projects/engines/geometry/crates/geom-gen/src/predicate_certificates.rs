@@ -114,18 +114,58 @@ pub const EXACT_OPTIMISATION: [&str; 2] = ["insphere", "tpi_side"];
 /// of its own that checks it, proving the terms its list names and assuming the others, and fails
 /// unless the certificate has [`Shards::terms`] terms and it proved exactly its own, so the shards
 /// together prove every term of the one certificate (`certificates/fptaylor.sh`,
-/// `kernel-certificates.yml`; `tests/certificate_problems.rs` holds each term to exactly one
-/// shard). The bound HOL Light proves is still `FPTaylor`'s own, term by term (`opt-approx`).
+/// `kernel-certificates.yml`; `tests/certificate_problems.rs` holds each term, or each piece of a
+/// term [`Shards::cuts`] cuts, to exactly one shard). The bound HOL Light proves is still
+/// `FPTaylor`'s own, term by term (`opt-approx`): a cut term's pieces are its inequality on the
+/// parts of its box, and the shard that has some of them proves the inequality on the whole box
+/// from them.
 pub const SHARDED: [(&str, Shards); 1] = [("line_cone", LINE_CONE_SHARDS)];
 
 /// The shards of one problem's terms: how many terms HOL Light's check of its certificate has,
-/// and the terms of each shard, by their place in that check's list (1 to `terms`).
+/// the terms cut into pieces, and what each shard proves, terms by their place in that check's
+/// list (1 to `terms`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Shards {
     /// The terms of the certificate: HOL Light's `Bounds:` count.
     pub terms: u32,
-    /// Each shard's terms, in increasing order.
-    pub shards: &'static [&'static [u32]],
+    /// The terms too costly for one job, each with its depth d: HOL Light checks the term as
+    /// 2^d pieces, its box halved d times where its own search would first halve it (the widest
+    /// variable, at its midpoint), and a shard with pieces of the term proves the term from them,
+    /// assuming the pieces other shards prove (`certificates/fptaylor_cut.hl`). In increasing
+    /// order of term.
+    pub cuts: &'static [(u32, u32)],
+    /// Each shard's parts, in increasing order of term and piece.
+    pub shards: &'static [&'static [Part]],
+}
+
+/// What a shard proves: a term whole, or one piece of a term [`Shards::cuts`] cuts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Part {
+    /// A term, by its place in the check's list.
+    Term(u32),
+    /// A term and one of its pieces, 1 to 2^depth.
+    Piece(u32, u32),
+}
+
+impl Part {
+    /// The term and the piece (0 for a whole term): the order a shard lists its parts in.
+    #[must_use]
+    pub fn key(self) -> (u32, u32) {
+        match self {
+            Self::Term(t) => (t, 0),
+            Self::Piece(t, p) => (t, p),
+        }
+    }
+}
+
+impl std::fmt::Display for Part {
+    /// `t` for a term, `t.p` for a piece, as the problem's shard lines name them.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Term(t) => write!(f, "{t}"),
+            Self::Piece(t, p) => write!(f, "{t}.{p}"),
+        }
+    }
 }
 
 /// `line_cone`'s 70 terms (35 error terms, each bounded above and below), shared out by what each
@@ -137,21 +177,168 @@ pub struct Shards {
 /// ran past the job's limit (run 43610612443). The other 69, longest first, each to the shard
 /// with the least so far: about 111 minutes of terms a shard, beside about 41 minutes of setup
 /// and loading.
-pub const LINE_CONE_SHARDS: Shards = Shards {
-    terms: 70,
-    shards: &[
-        &[38],
-        &[1, 2, 18, 19, 26, 52, 60],
-        &[3, 6, 16, 27, 41, 63],
-        &[4, 32, 47, 55, 56, 58, 65],
-        &[5, 7, 8, 21, 22, 33],
-        &[9, 10, 11, 13, 24, 35, 36, 49, 53],
-        &[12, 34, 42, 51, 57, 59, 66],
-        &[14, 23, 30, 31, 37, 39, 50, 62],
-        &[15, 17, 43, 44, 48, 61, 64],
-        &[20, 29, 40, 69, 70],
-        &[25, 28, 45, 46, 54, 67, 68],
-    ],
+pub const LINE_CONE_SHARDS: Shards = {
+    use Part::{Piece as P, Term as T};
+    Shards {
+        terms: 70,
+        cuts: &[(38, 6)],
+        shards: &[
+            &[
+                T(1),
+                P(38, 9),
+                P(38, 23),
+                P(38, 37),
+                P(38, 51),
+                T(39),
+                T(40),
+                T(46),
+                T(47),
+                T(51),
+                T(62),
+            ],
+            &[
+                T(2),
+                T(11),
+                P(38, 16),
+                P(38, 30),
+                P(38, 44),
+                P(38, 58),
+                T(44),
+                T(50),
+                T(52),
+                T(60),
+            ],
+            &[
+                T(3),
+                T(26),
+                T(32),
+                T(34),
+                T(37),
+                P(38, 1),
+                P(38, 11),
+                P(38, 25),
+                P(38, 39),
+                P(38, 53),
+            ],
+            &[
+                T(4),
+                T(5),
+                T(29),
+                P(38, 2),
+                P(38, 12),
+                P(38, 26),
+                P(38, 40),
+                P(38, 54),
+                T(55),
+            ],
+            &[
+                T(6),
+                T(28),
+                P(38, 8),
+                P(38, 22),
+                P(38, 36),
+                P(38, 50),
+                P(38, 64),
+                T(67),
+            ],
+            &[T(7), P(38, 14), P(38, 28), P(38, 42), P(38, 56), T(70)],
+            &[
+                T(8),
+                T(14),
+                T(15),
+                T(35),
+                T(36),
+                P(38, 3),
+                P(38, 17),
+                P(38, 31),
+                P(38, 45),
+                P(38, 59),
+                T(48),
+                T(59),
+            ],
+            &[
+                T(9),
+                T(12),
+                T(22),
+                P(38, 13),
+                P(38, 27),
+                P(38, 41),
+                P(38, 55),
+                T(64),
+            ],
+            &[
+                T(10),
+                T(21),
+                P(38, 4),
+                P(38, 18),
+                P(38, 32),
+                P(38, 46),
+                P(38, 60),
+                T(43),
+                T(54),
+                T(58),
+            ],
+            &[
+                T(13),
+                T(16),
+                P(38, 7),
+                P(38, 21),
+                P(38, 35),
+                P(38, 49),
+                P(38, 63),
+                T(41),
+                T(53),
+                T(63),
+            ],
+            &[
+                T(17),
+                T(25),
+                T(30),
+                P(38, 10),
+                P(38, 24),
+                P(38, 38),
+                P(38, 52),
+                T(56),
+                T(61),
+                T(68),
+            ],
+            &[
+                T(18),
+                T(20),
+                P(38, 15),
+                P(38, 29),
+                P(38, 43),
+                P(38, 57),
+                T(57),
+                T(66),
+                T(69),
+            ],
+            &[
+                T(19),
+                T(23),
+                T(24),
+                P(38, 6),
+                P(38, 20),
+                P(38, 34),
+                P(38, 48),
+                P(38, 62),
+                T(45),
+                T(49),
+            ],
+            &[
+                T(27),
+                T(31),
+                T(33),
+                P(38, 5),
+                P(38, 19),
+                P(38, 33),
+                P(38, 47),
+                P(38, 61),
+                T(42),
+                T(65),
+            ],
+        ],
+    }
 };
 
 fn fail<T>(message: impl Into<String>) -> Result<T, EmitError> {
@@ -1126,8 +1313,11 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
             &format!("// hol-light-shards: {}", shards.shards.len()),
         );
         line(&mut out, &format!("// hol-light-terms: {}", shards.terms));
+        for (term, depth) in shards.cuts {
+            line(&mut out, &format!("// hol-light-cut {term}: {depth}"));
+        }
         for (k, terms) in (1..).zip(shards.shards) {
-            let terms: Vec<String> = terms.iter().map(u32::to_string).collect();
+            let terms: Vec<String> = terms.iter().map(Part::to_string).collect();
             line(
                 &mut out,
                 &format!("// hol-light-shard {k}: {}", terms.join(" ")),
@@ -1241,6 +1431,17 @@ fn fptaylor_about(d: &Derivation, ratios: &[Ratio]) -> Vec<String> {
                 .to_owned(),
             "prove every term.".to_owned(),
         ]);
+        for (term, depth) in shards.cuts {
+            about.extend([
+                format!(
+                    "Term {term} is cut into {} pieces (hol-light-cut below), its box halved {depth}",
+                    1u32 << depth
+                ),
+                "times where HOL Light's search would first halve it; a shard with pieces of it"
+                    .to_owned(),
+                format!("proves them, assumes the rest, and proves term {term} from them."),
+            ]);
+        }
     }
     if rounded_inputs(d) {
         about.extend([

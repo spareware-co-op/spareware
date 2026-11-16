@@ -1,0 +1,108 @@
+(* Inserted by fptaylor.sh into FPTaylor's checker (formal/build_tform2.hl), after
+   prove_bound_cond: what each term of prove_opt_approx's loop does in a shard (geom-gen's
+   SHARDED). The session defines shard_whole (no shard: every term proved), shard_terms (the
+   terms this shard proves whole) and shard_cuts (each term cut into pieces of which this shard
+   proves some: the term, its depth, the pieces). Any other term is assumed.
+
+   A term HOL Light cannot check inside one job is cut into 2^depth pieces: its box is halved
+   depth times, each time along the variable the verifier's own search would split first (the
+   widest, the first of the widest in the order the verifier takes its variables,
+   Informal_search.construct_certificate0), at its midpoint, so each piece is a part of the
+   search's own tree. A piece is the term's inequality on its sub-box, proved by
+   prove_bound_cond as a whole term is, or assumed when another shard proves it; the halves of
+   each box give the box by x <= t \/ t <= x (REAL_LE_TOTAL), so the term is proved from its
+   pieces. The theorem is the term's, under the pieces assumed. *)
+
+let cut_le = `(<=):real->real->bool`;;
+
+(* x's lower and upper bounds among the atoms of a domain condition. *)
+let cut_bounds cond x =
+  let atoms = striplist dest_conj cond in
+  let one f =
+    match filter f atoms with
+      | [a] -> a
+      | _ -> failwith ("cut: not one bound each side of " ^ fst (dest_var x)) in
+  let lo = one (fun a -> is_binop cut_le a && rand a = x && frees (lhand a) = []) and
+      hi = one (fun a -> is_binop cut_le a && lhand a = x && frees (rand a) = []) in
+    lhand lo, rand hi;;
+
+(* The condition with x's bounds lo and hi; every other atom as it was. *)
+let rec cut_replace x lo hi cond =
+  if is_conj cond then
+    let a, b = dest_conj cond in
+      mk_conj (cut_replace x lo hi a, cut_replace x lo hi b)
+  else if is_binop cut_le cond && rand cond = x && frees (lhand cond) = [] then
+    mk_binop cut_le lo x
+  else if is_binop cut_le cond && lhand cond = x && frees (rand cond) = [] then
+    mk_binop cut_le x hi
+  else
+    cond;;
+
+(* Where the search splits the box first: the first widest of the inequality's variables, in
+   the order the verifier takes them (List.sort compare of the free variables), at its
+   midpoint. Its bounds and the midpoint, as terms. *)
+let cut_split fvars cond =
+  let width x =
+    let lo, hi = cut_bounds cond x in
+      x, lo, hi, rat_of_term hi -/ rat_of_term lo in
+  let rec widest best rest =
+    match rest with
+      | [] -> best
+      | c :: t ->
+	  let _, _, _, w = c and _, _, _, bw = best in
+	    widest (if w >/ bw then c else best) t in
+  let ws = map width fvars in
+  let x, lo, hi, _ = widest (hd ws) (tl ws) in
+  let t = term_of_rat ((rat_of_term lo +/ rat_of_term hi) // Int 2) in
+    x, lo, t, hi;;
+
+(* The box from its halves: x <= t on the one, t <= x on the other. TAC_PROOF, not prove: the
+   halves may hold under assumed pieces, and the theorem keeps them. *)
+let cut_join x t th_lo th_hi goal =
+  let side th = MP_TAC (SPEC_ALL th) THEN ASM_REWRITE_TAC[] in
+  let th = TAC_PROOF (([], goal),
+		      REPEAT GEN_TAC THEN DISCH_THEN STRIP_ASSUME_TAC THEN
+			DISJ_CASES_TAC (SPECL [x; t] REAL_LE_TOTAL) THENL [side th_lo; side th_hi]) in
+    if aconv (concl th) goal then th else failwith "cut: the halves do not give the box";;
+
+(* Term `term` of `total`, cut into 2^depth pieces, proving the pieces this shard names and
+   assuming the others. Pieces are numbered 1 to 2^depth, the lower half's first. *)
+let cut_prove pp term total depth pieces tm =
+  let vars, body = strip_forall tm in
+  let cond, f = dest_imp body in
+  let fvars = List.sort compare (frees f) in
+  let count = 1 lsl depth in
+  let rec node level first cond1 =
+    let goal = if level = 0 then tm else list_mk_forall (vars, mk_imp (cond1, f)) in
+      if level = depth then
+	if mem first pieces then
+	  let start = Unix.gettimeofday () in
+	  let th = prove_bound_cond pp goal in
+	  let _ = if hyp th <> [] || not (aconv (concl th) goal) then
+	    failwith (sprintf "cut: piece %d of term %d is not its inequality" first term) in
+	  let _ = report (sprintf "Proved: %d/%d piece %d/%d in %.0f s"
+			    term total first count (Unix.gettimeofday () -. start)) in
+	    th
+	else
+	  ASSUME goal
+      else
+	let x, lo, t, hi = cut_split fvars cond1 in
+	let half = 1 lsl (depth - level - 1) in
+	let th_lo = node (level + 1) first (cut_replace x lo t cond1) in
+	let th_hi = node (level + 1) (first + half) (cut_replace x t hi cond1) in
+	  cut_join x t th_lo th_hi goal in
+  let th = node 0 1 cond in
+  let _ = report (sprintf "Joined: %d/%d from %d pieces, %d of them proved here"
+		    term total count (length pieces)) in
+    th;;
+
+(* One term of the loop: proved whole, proved from its pieces, or assumed. *)
+let shard_prove pp counter total tm =
+  if shard_whole || mem counter shard_terms then
+    let th = prove_bound_cond pp tm in
+    let _ = report (sprintf "Proved: %d/%d" counter total) in
+      th
+  else
+    match filter (fun (t, _, _) -> t = counter) shard_cuts with
+      | [(_, depth, pieces)] -> cut_prove pp counter total depth pieces tm
+      | _ -> ASSUME tm;;

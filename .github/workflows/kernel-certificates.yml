@@ -18,7 +18,9 @@ name: Kernel certificates
 #   (`// hol-light-shards: n`, geom-gen's SHARDED): FPTaylor runs once on it, and n jobs each check
 #   the terms of that certificate its `// hol-light-shard k:` line names, shared out by what each
 #   took to check, assuming the others; every term is in one shard, so the n together prove every
-#   term of the one certificate.
+#   term of the one certificate. A term too costly for one job is cut into pieces
+#   (`// hol-light-cut t: d`, 2^d sub-boxes of its box) shared out the same way; a shard with
+#   pieces of it proves the term from its own pieces and the others assumed.
 #
 # The method note, projects/kit/notes/G35-filter-certificates.md, says what each proof covers and
 # what the written argument covers.
