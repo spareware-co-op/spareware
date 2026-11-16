@@ -14,10 +14,11 @@ use std::collections::BTreeSet;
 
 use geom_test::oracle::exact::float;
 use geom_test::oracle::meshes::{
-    Answer, CGAL, CHERCHI, Compared, Job, MANIFOLD, MANIFOLD_RUST, Op, cuboid, hausdorff, holds,
-    jobs, judge, operation, own_answer, own_volume, prism, reference, replay, run, tetrahedron,
-    volume,
+    Answer, CASE_SETS, CGAL, CHERCHI, Compared, Job, MANIFOLD, MANIFOLD_MODELS, MANIFOLD_RUST,
+    MODEL_FACES, Op, SEEDED, case_jobs, cuboid, hausdorff, holds, jobs, judge, model_jobs,
+    operation, own_answer, own_volume, prism, reference, replay, run, tetrahedron, volume,
 };
+use geom_test::polyhedral::MODELS;
 use geom_test::seed::Seed;
 
 fn night() -> Vec<Job> {
@@ -51,6 +52,58 @@ fn a_seed_gives_one_night() {
     assert_eq!(families, all.map(str::to_owned).into_iter().collect());
     let ops: BTreeSet<Op> = night().into_iter().map(|j| j.op).collect();
     assert_eq!(ops.len(), 3);
+}
+
+#[test]
+fn manifold_s_smaller_models_are_a_case_set() {
+    let jobs = model_jobs().unwrap();
+    // The smaller tier, counted from the files' own face lines.
+    let smaller: Vec<&str> = MODELS
+        .iter()
+        .filter(|(_, text)| text.lines().filter(|l| l.starts_with("f ")).count() <= MODEL_FACES)
+        .map(|(name, _)| *name)
+        .collect();
+    assert_eq!(smaller.len(), 23);
+    assert_eq!(jobs.len(), 3 * smaller.len());
+    for (k, job) in jobs.iter().enumerate() {
+        assert_eq!(job.id, k as u64);
+        assert_eq!(job.family, format!("{MANIFOLD_MODELS}/{}", smaller[k / 3]));
+        assert_eq!(
+            job.op,
+            [Op::Union, Op::Intersection, Op::Difference][k % 3]
+        );
+        // The copy is the model moved by one vector, forward on every axis.
+        assert_eq!(job.a.triangles, job.b.triangles);
+        let by: BTreeSet<[i64; 3]> = job
+            .a
+            .vertices
+            .iter()
+            .zip(&job.b.vertices)
+            .map(|(a, b)| [0, 1, 2].map(|i| b[i] - a[i]))
+            .collect();
+        assert_eq!(by.len(), 1, "{}", job.family);
+        assert!(by.iter().all(|d| d.iter().all(|x| *x > 0)), "{by:?}");
+        for t in &job.a.triangles {
+            assert!(t.iter().all(|&v| (v as usize) < job.a.vertices.len()));
+        }
+    }
+    assert_eq!(model_jobs().unwrap(), jobs, "the same every run");
+}
+
+#[test]
+fn a_case_set_is_named_and_given_what_it_needs() {
+    assert_eq!(CASE_SETS, [SEEDED, MANIFOLD_MODELS]);
+    let seed = Some((Seed(0x6d65_7368), 150));
+    assert_eq!(case_jobs(SEEDED, seed).unwrap(), night());
+    assert_eq!(case_jobs(MANIFOLD_MODELS, None).unwrap(), model_jobs().unwrap());
+    for (cases, given, why) in [
+        (SEEDED, None, "needs --seed and --count"),
+        (MANIFOLD_MODELS, seed, "takes no --seed or --count"),
+        ("ember-pairs", None, "no case set ember-pairs"),
+    ] {
+        let e = case_jobs(cases, given).unwrap_err();
+        assert!(e.contains(why), "{e}");
+    }
 }
 
 #[test]

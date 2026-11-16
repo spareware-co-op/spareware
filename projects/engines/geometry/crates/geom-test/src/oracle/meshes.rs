@@ -5,8 +5,11 @@
 //! What it does: [`jobs`] draws a night's seeded pairs of closed solids with integer corners and a
 //! boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra.
 //! Each job is one JSON line in whole grid steps, so an exact oracle reads what the kernel read and
-//! a floating-point one reads integers an `f64` holds exactly, with no conversion to round. The
-//! harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer
+//! a floating-point one reads integers an `f64` holds exactly, with no conversion to round. Those
+//! are the case set `seeded`; the set `manifold-models` ([`model_jobs`]) is Manifold's stored
+//! models of the polyhedral corpus's smaller tier, each with a moved copy of itself, under each
+//! boolean ([`CASE_SETS`] names every set, and [`case_jobs`] writes one). The harness in the
+//! oracle repository answers one JSON line per job. [`judge`] compares an answer
 //! with `geom-mesh`'s boolean, and settles a difference by the exact reference
 //! ([`crate::flat_reference`]): whether the kernel's volume is the reference's.
 //!
@@ -37,8 +40,8 @@
 //! normal leans on least, lifted to its plane where the lattice is inside it.
 //!
 //! Cost: a job's boolean is the kernel's; sampling is the sample points times the triangles or
-//! faces of the other side, on solids of a few dozen; the exact reference runs only on a
-//! difference.
+//! faces of the other side, on seeded solids of a few dozen and stored models of up to
+//! [`MODEL_FACES`] each; the exact reference runs only on a difference.
 
 use core::num::NonZeroU64;
 
@@ -66,6 +69,8 @@ use crate::fixture::Spend;
 use crate::fixture::run::{Ran, Step};
 use crate::flat_reference::{self, Point, Polygon, Q};
 use crate::golden::Sha256;
+use crate::obj::{self, Grid};
+use crate::polyhedral::MODELS;
 use crate::rng::SplitMix64;
 use crate::seed::Seed;
 
@@ -400,6 +405,117 @@ pub fn jobs(seed: Seed, count: u64) -> Vec<Job> {
         });
     }
     out
+}
+
+/// The case set of seeded solids: [`jobs`], from a seed and a count.
+pub const SEEDED: &str = "seeded";
+/// The case set of Manifold's stored models: [`model_jobs`], the same every run.
+pub const MANIFOLD_MODELS: &str = "manifold-models";
+/// Every case set `oracle jobs` writes for a mesh oracle, by name: `kernel-oracles.yml`'s job
+/// `meshes` runs each of them, and a set it names that is not here stops the run.
+pub const CASE_SETS: [&str; 2] = [SEEDED, MANIFOLD_MODELS];
+
+/// The models [`model_jobs`] takes: those of at most this many faces, the tier of the polyhedral
+/// corpus that is held to the exact reference. The seven larger ones are `kernel.yml`'s job
+/// `large-models`: the kernel takes minutes on each, and the reference, which settles a
+/// difference, over an hour.
+pub const MODEL_FACES: usize = 1_500;
+
+/// A model on the grid moved by `by`, as a job's solid.
+fn model_solid(grid: &Grid, by: [i64; 3]) -> Result<Solid, String> {
+    let vertices = grid
+        .points
+        .iter()
+        .map(|p| {
+            let mut moved = [0; 3];
+            for ((m, x), d) in moved.iter_mut().zip(p).zip(by) {
+                *m = x.checked_add(d).ok_or("a coordinate past i64")?;
+            }
+            Ok(moved)
+        })
+        .collect::<Result<Vec<[i64; 3]>, String>>()?;
+    let triangles = grid
+        .faces
+        .iter()
+        .map(|face| match face.as_slice() {
+            &[a, b, c] => Ok([a, b, c]),
+            _ => Err(format!("a face of {} corners, not a triangle", face.len())),
+        })
+        .collect::<Result<Vec<[u32; 3]>, String>>()?;
+    Ok(Solid {
+        vertices,
+        triangles,
+    })
+}
+
+/// Where a model's copy goes: a third of its extent and a step along each axis, as the polyhedral
+/// corpus's tests move it, so that the copy overlaps the model on every axis.
+fn copy_offset(grid: &Grid) -> [i64; 3] {
+    let mut by = [0; 3];
+    for (k, d) in by.iter_mut().enumerate() {
+        let along = grid.points.iter().filter_map(|p| p.get(k).copied());
+        let (low, high) = (along.clone().min(), along.max());
+        *d = high
+            .zip(low)
+            .map_or(0, |(h, l)| h.saturating_sub(l) / 3)
+            .saturating_add(1);
+    }
+    by
+}
+
+/// Manifold's stored models (the corpus `manifold-models`, [`crate::polyhedral::MODELS`]) of at
+/// most [`MODEL_FACES`] faces, each with its copy moved by [`copy_offset`], under each boolean in
+/// turn: union, intersection and difference. A job's family is the set's name and the model's.
+///
+/// # Errors
+///
+/// A model that cannot be read onto the grid or is not made of triangles, which only a change to
+/// the stored corpus can cause.
+pub fn model_jobs() -> Result<Vec<Job>, String> {
+    let mut out = Vec::new();
+    for (name, text) in MODELS {
+        let grid = obj::read(text)
+            .map_err(|e| format!("{name}: {e}"))?
+            .to_grid()
+            .ok_or_else(|| format!("{name}: no scale puts it on the grid"))?;
+        if grid.faces.len() > MODEL_FACES {
+            continue;
+        }
+        let a = model_solid(&grid, [0; 3]).map_err(|e| format!("{name}: {e}"))?;
+        let b = model_solid(&grid, copy_offset(&grid)).map_err(|e| format!("{name}: {e}"))?;
+        for op in [Op::Union, Op::Intersection, Op::Difference] {
+            out.push(Job {
+                id: u64::try_from(out.len()).map_err(|e| e.to_string())?,
+                family: format!("{MANIFOLD_MODELS}/{name}"),
+                op,
+                a: a.clone(),
+                b: b.clone(),
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// The jobs of the case set `cases`: [`SEEDED`]'s from `seeded`, its seed and count, which it
+/// needs; a stored set's from nothing else, and it refuses a seed or a count.
+///
+/// # Errors
+///
+/// A set not in [`CASE_SETS`], the seeded set without its seed and count, a stored set given one,
+/// or a stored set that cannot be read.
+pub fn case_jobs(cases: &str, seeded: Option<(Seed, u64)>) -> Result<Vec<Job>, String> {
+    match (cases, seeded) {
+        (SEEDED, Some((seed, count))) => Ok(jobs(seed, count)),
+        (SEEDED, None) => Err(format!("the case set {SEEDED} needs --seed and --count")),
+        (MANIFOLD_MODELS, None) => model_jobs(),
+        (MANIFOLD_MODELS, Some(_)) => Err(format!(
+            "the case set {MANIFOLD_MODELS} is stored: it takes no --seed or --count"
+        )),
+        _ => Err(format!(
+            "no case set {cases}; the sets are {}",
+            CASE_SETS.join(", ")
+        )),
+    }
 }
 
 /// A job's solid as polygons of one run named by `name`.

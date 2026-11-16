@@ -77,6 +77,31 @@ fn answers(dir: &Path, jobs: &[Job]) -> PathBuf {
     path
 }
 
+/// The case sets as `kernel-oracles.yml`'s job `meshes` asks for them: the seeded set with its
+/// seed and count, a stored set with neither, and anything else refused as a usage error.
+#[test]
+fn a_mesh_oracle_s_jobs_come_from_its_case_set() {
+    let seeded = tool(&["jobs", "manifold", "--seed", "ab", "--count", "5"]);
+    assert!(seeded.status.success(), "{}", text(&seeded));
+    let named = tool(&[
+        "jobs", "manifold", "--cases", "seeded", "--seed", "ab", "--count", "5",
+    ]);
+    assert_eq!(named.stdout, seeded.stdout, "seeded is the default");
+    let models = tool(&["jobs", "cgal", "--cases", "manifold-models"]);
+    assert!(models.status.success(), "{}", text(&models));
+    assert_eq!(String::from_utf8_lossy(&models.stdout).lines().count(), 69);
+    assert!(text(&models).contains("cases: manifold-models, 69 jobs"));
+    for refused in [
+        &["jobs", "manifold", "--cases", "seeded"][..],
+        &["jobs", "manifold", "--cases", "manifold-models", "--seed", "ab", "--count", "5"],
+        &["jobs", "manifold", "--cases", "ember-pairs"],
+        &["jobs", "geomdl", "--cases", "manifold-models"],
+        &["jobs", "manifold", "--seed", "ab"],
+    ] {
+        assert_eq!(tool(refused).status.code(), Some(2), "{refused:?}");
+    }
+}
+
 #[test]
 fn the_real_tree_is_checked() {
     let out = tool(&["check"]);

@@ -1,10 +1,11 @@
-//! `oracle`: the outside oracles' tool: list the catalogue, check it, write a night's jobs, compare
+//! `oracle`: the outside oracles' tool: list the catalogue, check it, write a run's jobs, compare
 //! the answers, and record a triage.
 //!
 //! ```text
 //! cargo run -p geom-test --bin oracle -- list
 //! cargo run -p geom-test --bin oracle -- check [--root <dir>] [--repository <oracle checkout>]
 //! cargo run -p geom-test --bin oracle -- jobs <oracle> --seed <hex> --count <n>
+//! cargo run -p geom-test --bin oracle -- jobs <mesh oracle> --cases <set> [--seed <hex> --count <n>]
 //! cargo run -p geom-test --bin oracle -- compare <oracle> --jobs <file> --answers <file>
 //! cargo run -p geom-test --bin oracle -- triage <oracle> --jobs <file> --id <n> --kind <kind>
 //!     --outcome <ours|theirs|within-bounds|undecided> --fixture <id> --why <words>
@@ -16,8 +17,10 @@
 //!   be the ones this binary was built with, fails if `Cargo.lock` holds a package an oracle says
 //!   must never be linked, and with `--repository` audits the oracle repository's checkout:
 //!   nothing can publish an image, and every base image is pinned by digest.
-//! - `jobs` writes a night's jobs, one JSON line each, to standard output, seed printed to standard
-//!   error, for the harness in the oracle repository.
+//! - `jobs` writes a run's jobs, one JSON line each, to standard output, seed printed to standard
+//!   error, for the harness in the oracle repository. A mesh oracle's come from one case set
+//!   (`--cases`, `seeded` by default; `geom_test::oracle::meshes::CASE_SETS`): the seeded set from
+//!   the seed and count, a stored set from nothing else.
 //! - `compare` judges each answer and prints the differences by signature. It fails only on a
 //!   signature the triage register does not hold: each is judged once (28.10).
 //! - `triage` records one signature's outcome in the register and writes its fixture from what the
@@ -80,16 +83,19 @@ enum Tool {
         #[command(flatten)]
         root: Root,
     },
-    /// Write a night's jobs to standard output.
+    /// Write a run's jobs to standard output.
     Jobs {
         /// The oracle.
         oracle: String,
-        /// The seed, in hexadecimal.
-        #[arg(long)]
-        seed: String,
-        /// How many.
-        #[arg(long)]
-        count: u64,
+        /// A mesh oracle's case set.
+        #[arg(long, default_value = meshes::SEEDED)]
+        cases: String,
+        /// The seed, in hexadecimal: the seeded set's.
+        #[arg(long, requires = "count")]
+        seed: Option<String>,
+        /// How many: the seeded set's.
+        #[arg(long, requires = "seed")]
+        count: Option<u64>,
     },
     /// Judge the answers.
     Compare {
@@ -215,14 +221,31 @@ fn known(oracle: &str) -> Result<(), String> {
     }
 }
 
-fn jobs(oracle: &str, seed: &str, count: u64) -> Result<ExitCode, String> {
+fn jobs(
+    oracle: &str,
+    cases: &str,
+    seed: Option<&str>,
+    count: Option<u64>,
+) -> Result<ExitCode, String> {
     known(oracle)?;
-    let seed = u64::from_str_radix(seed, 16).map_err(|e| format!("the seed {seed:?}: {e}"))?;
-    eprintln!("seed: {seed:016x}");
+    let seeded = match (seed, count) {
+        (Some(seed), Some(count)) => {
+            let seed =
+                u64::from_str_radix(seed, 16).map_err(|e| format!("the seed {seed:?}: {e}"))?;
+            eprintln!("seed: {seed:016x}");
+            Some((Seed(seed), count))
+        }
+        _ => None,
+    };
     if meshes::holds(oracle) {
-        printed(&meshes::jobs(Seed(seed), count))?;
+        let jobs = meshes::case_jobs(cases, seeded)?;
+        eprintln!("cases: {cases}, {} jobs", jobs.len());
+        printed(&jobs)?;
+    } else if cases != meshes::SEEDED {
+        return Err(format!("{oracle} has only seeded jobs, not {cases}"));
     } else {
-        printed(&geomdl::jobs(Seed(seed), count))?;
+        let (seed, count) = seeded.ok_or("geomdl's jobs need --seed and --count")?;
+        printed(&geomdl::jobs(seed, count))?;
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -373,9 +396,10 @@ fn command(tool: Tool) -> Result<ExitCode, String> {
         Tool::Check { repository, root } => check(repository.as_deref(), &root),
         Tool::Jobs {
             oracle,
+            cases,
             seed,
             count,
-        } => jobs(&oracle, &seed, count),
+        } => jobs(&oracle, &cases, seed.as_deref(), count),
         Tool::Compare {
             oracle,
             jobs,
