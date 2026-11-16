@@ -36,6 +36,12 @@
 //!   the merge base is measured and kept in parts that never run the change's own code; and the
 //!   parts are geom-bench/parts.tsv's, the change's wait for the merge base's, and each leg's judge
 //!   waits for both, judges when a part failed and checks every part of both sides.
+//! - `the_ember_part_fetches_its_pair_alone_and_the_judge_counts_it`: the instruction gate's last
+//!   part measures geom-bench's benchmark of EMBER's pair 827 (`mesh/ember`, Gate 4, G156); in
+//!   both part jobs only that part fetches anything, exactly the pair's two models
+//!   (`geom_test::ember::MODELS`), each held to the SHA-256 the corpus register holds for it before
+//!   any benchmark runs; every part lists the ember benchmark with the catalogue's, so the judge,
+//!   which reads both bench targets' summaries, refuses a run in which no part measured it.
 //!
 //! Each check is also shown to fail on a seeded violation.
 
@@ -52,6 +58,7 @@
 )]
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -1107,7 +1114,7 @@ fn bench_part_problems(w: &Yaml) -> Vec<String> {
     let scope = runs("scope");
     for needle in [
         "plan=\"$BENCH/parts.tsv\"",
-        "range(1; $of + 1) | $leg + {part: ., of: $of, trip: (. == $trip)}",
+        "range(1; $of + 1) | $leg + {part: ., of: $of, trip: (. == $trip), ember: (. == $of)}",
         "if ($1 == \"sign\") s = $2",
     ] {
         if !scope.contains(needle) {
@@ -1233,6 +1240,183 @@ fn the_count_gate_parts_measure_everything_once_and_a_lost_part_fails() {
         let planted = bench.replacen(from, to, 1);
         assert_ne!(planted, bench, "the planted edit {from:?} applies");
         let found = bench_part_problems(&parse(&planted));
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// Each file of `ember-cleared-pairs` and its SHA-256 in the corpus register, in hexadecimal.
+fn ember_register() -> BTreeMap<String, String> {
+    let manifest = geom_test::corpus::Manifest::embedded().unwrap();
+    let corpus = manifest.get(geom_test::ember::CORPUS).unwrap();
+    let Some(geom_test::corpus::Fetch::Files(files)) = &corpus.fetch else {
+        panic!("{} is not fetched file by file", geom_test::ember::CORPUS)
+    };
+    files
+        .iter()
+        .map(|f| {
+            let hex = f.sha256.0.iter().fold(String::new(), |mut hex, b| {
+                let _ = write!(hex, "{b:02x}");
+                hex
+            });
+            (f.name.clone(), hex)
+        })
+        .collect()
+}
+
+/// What is wrong with the instruction gate's ember part (the module documentation): the scope
+/// makes the last part of each leg the ember part; in each part job a step of that part alone
+/// fetches the pair's two models by the register's URLs, before the benchmarks, and checks each
+/// against the register's SHA-256; the measuring steps list the ember target with the catalogue
+/// and measure it in the ember part; the judge reads both targets' summaries.
+fn ember_problems(w: &Yaml, register: &BTreeMap<String, String>) -> Vec<String> {
+    let mut found = Vec::new();
+    let jobs = &w["jobs"];
+    let scope = runs(w, "scope");
+    if !scope.contains("of=$((planned + 1))") || !scope.contains("ember: (. == $of)}") {
+        found.push("the scope makes no ember part, the last of each leg".to_owned());
+    }
+    // Nothing else fetches: no other step downloads a file or names the corpus.
+    for job in keys(jobs) {
+        for s in jobs[job.as_str()]["steps"].as_vec().into_iter().flatten() {
+            let run = text(&s["run"]);
+            let fetches = run.contains("curl ") || run.contains("ember-cleared-pairs");
+            if fetches && !text(&s["if"]).starts_with("matrix.ember") {
+                found.push(format!(
+                    "{job}'s step {:?} fetches outside the ember part",
+                    text(&s["name"])
+                ));
+            }
+        }
+    }
+    let models = geom_test::ember::MODELS;
+    for job in ["instructions-base", "instructions-parts"] {
+        if text(&jobs[job]["env"]["EMBER"]) != "${{ matrix.ember }}" {
+            found.push(format!("{job} does not know its ember part"));
+        }
+        let steps: Vec<&Yaml> = jobs[job]["steps"].as_vec().into_iter().flatten().collect();
+        let fetch = steps.iter().position(|s| {
+            text(&s["if"]).starts_with("matrix.ember")
+                && text(&s["run"]).contains("sha256sum --check --strict")
+        });
+        // The measuring step: `base` in the merge base's parts, `gate` in the change's.
+        let measure = steps
+            .iter()
+            .position(|s| matches!(s["id"].as_str(), Some("base" | "gate")));
+        let (Some(fetch), Some(measure)) = (fetch, measure) else {
+            found.push(format!(
+                "{job}'s ember part fetches no models, or measures nothing"
+            ));
+            continue;
+        };
+        if fetch > measure {
+            found.push(format!("{job} fetches the models after it measures"));
+        }
+        let run = text(&steps[fetch]["run"]);
+        if !run.contains(&format!("for model in {}; do", models.join(" ")))
+            || !run.contains("select(.id == \"ember-cleared-pairs\")")
+        {
+            found.push(format!(
+                "{job} does not fetch exactly {models:?} by the register's URLs"
+            ));
+        }
+        // Every SHA-256 the step checks, by the model it names.
+        let mut checked = BTreeMap::new();
+        for line in run.lines() {
+            let words: Vec<&str> = line.split_whitespace().collect();
+            for pair in words.windows(2) {
+                let hex = pair[0].len() == 64 && pair[0].chars().all(|c| c.is_ascii_hexdigit());
+                let model = Path::new(pair[1]).extension().is_some_and(|e| e == "stl");
+                if hex && model {
+                    checked.insert(pair[1].to_owned(), pair[0].to_owned());
+                }
+            }
+        }
+        let wanted: BTreeMap<String, String> = models
+            .iter()
+            .map(|m| {
+                (
+                    (*m).to_owned(),
+                    register.get(*m).cloned().unwrap_or_default(),
+                )
+            })
+            .collect();
+        if checked != wanted {
+            found.push(format!(
+                "{job} checks the models against digests that are not the register's: {checked:?}"
+            ));
+        }
+        let measuring = text(&steps[measure]["run"]);
+        for needle in [
+            "names ember > \"$RUNNER_TEMP/ember.names\"",
+            "sort -u \"$RUNNER_TEMP/instructions.names\" \"$RUNNER_TEMP/ember.names\"",
+            "if [ \"$EMBER\" = true ]; then\n  bench=ember\n  export SPAREKIT_EMBER=$MODELS",
+        ] {
+            if !measuring.contains(needle) {
+                found.push(format!(
+                    "{job} does not list or measure the ember benchmark: {needle}"
+                ));
+            }
+        }
+    }
+    if !runs(w, "instructions")
+        .contains("\"$GUNGRAUN_HOME/geom-bench\" \"$RUNNER_TEMP/judged.names\"")
+    {
+        found.push("the judge does not read the ember benchmark's summary".to_owned());
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_ember_part_fetches_its_pair_alone_and_the_judge_counts_it() {
+    let bench = read(&format!("{WORKFLOWS}/kernel-bench.yml"));
+    let register = ember_register();
+    let found = ember_problems(&parse(&bench), &register);
+    assert!(found.is_empty(), "{found:#?}");
+    let first = register[geom_test::ember::MODELS[0]].as_str();
+    let wrong = format!(
+        "{}{}",
+        if first.starts_with('0') { "1" } else { "0" },
+        &first[1..]
+    );
+    for (from, to, said) in [
+        // The part dropped.
+        (
+            "ember: (. == $of)}",
+            "ember: false}",
+            "the scope makes no ember part",
+        ),
+        (
+            "        if: matrix.ember && steps.kept.outputs.kept == 'false'\n",
+            "        if: false\n",
+            "instructions-base's ember part fetches no models",
+        ),
+        // The models fetched in every part.
+        (
+            "        if: matrix.ember\n        run: |\n          set -euo pipefail\n          register=",
+            "        run: |\n          set -euo pipefail\n          register=",
+            "fetches outside the ember part",
+        ),
+        // A digest wrong.
+        (first, wrong.as_str(), "not the register's"),
+        // The benchmark missing from the judge: not listed, or its summary not read.
+        (
+            "  names ember > \"$RUNNER_TEMP/ember.names\"\n",
+            "  : > \"$RUNNER_TEMP/ember.names\"\n",
+            "does not list or measure the ember benchmark",
+        ),
+        (
+            "\"$GUNGRAUN_HOME/geom-bench\" \"$RUNNER_TEMP/judged.names\"",
+            "\"$GUNGRAUN_HOME/geom-bench/instructions\" \"$RUNNER_TEMP/judged.names\"",
+            "the judge does not read the ember benchmark's summary",
+        ),
+    ] {
+        let planted = bench.replacen(from, to, 1);
+        assert_ne!(planted, bench, "the planted edit {from:?} applies");
+        let found = ember_problems(&parse(&planted), &register);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }

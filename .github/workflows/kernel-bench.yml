@@ -35,7 +35,9 @@ name: Kernel benchmarks
 # Two gates measure the base and the change with pinned toolchains, and compare them:
 #  - instructions: every benchmark under Valgrind, through Gungraun, in parts so no job runs over
 #    15 minutes (the comment above the job `instructions-base`): parts of the merge base, parts of
-#    the change, and one judge per target that judges the whole catalogue from every part's counts. Callgrind counts instructions,
+#    the change, and one judge per target that judges the whole catalogue from every part's counts;
+#    the last part measures EMBER's pair 827 (`mesh/ember/pair_827`, geom-bench's benches/ember),
+#    the only part that fetches anything: that pair's two models. Callgrind counts instructions,
 #    L1 and last-level cache misses and estimated cycles; DHAT counts the heap the measured function
 #    uses. A rise over 5% in instructions, estimated cycles or heap fails. Code layout alone moves
 #    miss counts, at every size, so every miss count's changes are listed and judged through
@@ -285,18 +287,20 @@ jobs:
           echo "legs=$legs" | tee -a "$GITHUB_OUTPUT"
           # The instruction gate's parts on each leg (geom-bench/parts.tsv, the job
           # `instructions-base`'s comment): part 1 to n, and which part runs the planted slowdown,
-          # the one that measures the group `sign`.
+          # the one that measures the group `sign`; and one part more, the last, which measures
+          # EMBER's pair 827 alone (`ember`).
           plan="$BENCH/parts.tsv"
-          of=$(awk -F'\t' '!/^#/ && NF == 3 && $2 + 0 > n { n = $2 + 0 } END { print n + 0 }' "$plan")
+          planned=$(awk -F'\t' '!/^#/ && NF == 3 && $2 + 0 > n { n = $2 + 0 } END { print n + 0 }' "$plan")
           trip=$(awk -F'\t' '!/^#/ && NF == 3 { if ($1 == "sign") s = $2; if ($1 == "*") r = $2 }
             END { print (s != "" ? s : r) + 0 }' "$plan")
-          if [ "$of" -lt 1 ] || [ "$trip" -lt 1 ]; then
+          if [ "$planned" -lt 1 ] || [ "$trip" -lt 1 ]; then
             echo "::error::$plan names no parts."
             exit 1
           fi
+          of=$((planned + 1))
           echo "of=$of" >> "$GITHUB_OUTPUT"
           parts=$(jq -c --argjson of "$of" --argjson trip "$trip" \
-            '[.[] as $leg | range(1; $of + 1) | $leg + {part: ., of: $of, trip: (. == $trip)}]' <<<"$legs")
+            '[.[] as $leg | range(1; $of + 1) | $leg + {part: ., of: $of, trip: (. == $trip), ember: (. == $of)}]' <<<"$legs")
           echo "parts=$parts" | tee -a "$GITHUB_OUTPUT"
 
   # geom-bench's own checks, as kernel.yml makes them for geom-num, with the pinned toolchain. The
@@ -373,6 +377,16 @@ jobs:
   # of the whole catalogue did; base and change are measured on runners of one image, which give
   # the same counts (708 of 708 benchmarks alike on both targets, runs 43768287593 and
   # 43774825883, the evidence the kept counts already rest on).
+  #
+  # The last part (`matrix.ember`) measures geom-bench's second count benchmark, `benches/ember`:
+  # the boolean EMBER benchmarks, on EMBER's pair 827 (Gate 4, G156), under the same tools, limits
+  # and judge. Its two models are files of the fetched corpus `ember-cleared-pairs`; this part
+  # alone fetches them, by the register's URLs, and holds each to the SHA-256 written below, which
+  # geom-test's `tests/queue_wiring.rs` keeps equal to the register's, so no other bench or test
+  # job fetches anything. Every part lists the ember benchmark with the catalogue's, so the judge
+  # refuses the run if no part measured it. A merge base without `benches/ember` lists and
+  # measures none of it, and the change's run records it as new, not compared, as it records any
+  # new benchmark; from the first merge base that holds it, it is compared like every other.
   instructions-base:
     name: Instructions on ${{ matrix.target }}, the merge base, part ${{ matrix.part }} of ${{ matrix.of }}
     needs: scope
@@ -387,6 +401,8 @@ jobs:
     env:
       TARGET: ${{ matrix.target }}
       PART: ${{ matrix.part }}
+      EMBER: ${{ matrix.ember }}
+      MODELS: ${{ github.workspace }}/ember
       GUNGRAUN_HOME: ${{ github.workspace }}/gungraun
       RUSTFLAGS: "-C llvm-args=-align-all-functions=6"
       CARGO_PROFILE_BENCH_CODEGEN_UNITS: "1"
@@ -489,8 +505,30 @@ jobs:
           fi
           echo "kept=$kept" >> "$GITHUB_OUTPUT"
 
+      # The ember part's two models (the comment above this job): each fetched by the register's
+      # URL with curl's own retries, and held to its SHA-256 before anything reads it.
+      - name: Fetch EMBER's pair 827's two models, each held to its SHA-256
+        if: matrix.ember && steps.kept.outputs.kept == 'false'
+        run: |
+          set -euo pipefail
+          register=head/projects/engines/geometry/crates/geom-test/corpora/manifest.json
+          mkdir -p "$MODELS"
+          for model in 375267.stl 251402.stl; do
+            url=$(jq -er --arg name "$model" '.corpora[] | select(.id == "ember-cleared-pairs")
+              | .fetch.files[] | select(.name == $name) | .url' "$register")
+            curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 10 \
+              --output "$MODELS/$model" "$url"
+          done
+          printf '%s  %s\n' \
+            d6b7c98c518fd73601f44ef3a8726180c641ac92265b510d4e9d36d9a4e50298 375267.stl \
+            6eceb3087934115667bec1ed4b245549b67baed65a05371fd38ce8bd03f1724b 251402.stl \
+            > "$RUNNER_TEMP/models.sha256"
+          (cd "$MODELS" && sha256sum --check --strict "$RUNNER_TEMP/models.sha256")
+
       # This part's groups (geom-bench/parts.tsv; a group the file does not list is measured by the
-      # part its `*` line names), each measured into the saved run `base`, one Gungraun run a group.
+      # part its `*` line names), each measured into the saved run `base`, one Gungraun run a group;
+      # the ember part measures benches/ember's groups instead. The run's list is every benchmark
+      # of both bench targets the merge base has.
       - name: Benchmark the merge base
         id: base
         if: needs.scope.outputs.base_gate == 'true' && steps.kept.outputs.kept != 'true'
@@ -503,18 +541,33 @@ jobs:
           set -euo pipefail
           rm -rf "${GUNGRAUN_HOME:?}" "$RUNNER_TEMP/keep"
           mkdir -p "$RUNNER_TEMP/keep"
-          cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
-            | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
-            | sort > "$RUNNER_TEMP/keep/base.names"
-          groups=$(awk -F'\t' -v k="$PART" '
-            FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
-            { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
-              if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
-          ' "$GITHUB_WORKSPACE/head/$BENCH/parts.tsv" "$RUNNER_TEMP/keep/base.names")
+          # The benchmarks a bench target lists, as group/op/class.
+          names() {
+            cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench "$1" -- --list \
+              | sed -nE "s/^$1::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark\$/\1\/\2\/\3/p" | sort
+          }
+          names instructions > "$RUNNER_TEMP/instructions.names"
+          : > "$RUNNER_TEMP/ember.names"
+          if [ -f "$BENCH/benches/ember/main.rs" ]; then
+            names ember > "$RUNNER_TEMP/ember.names"
+          fi
+          sort -u "$RUNNER_TEMP/instructions.names" "$RUNNER_TEMP/ember.names" > "$RUNNER_TEMP/keep/base.names"
+          if [ "$EMBER" = true ]; then
+            bench=ember
+            export SPAREKIT_EMBER=$MODELS
+            groups=$(cut -d/ -f1 "$RUNNER_TEMP/ember.names" | uniq)
+          else
+            bench=instructions
+            groups=$(awk -F'\t' -v k="$PART" '
+              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
+              { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
+                if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
+            ' "$GITHUB_WORKSPACE/head/$BENCH/parts.tsv" "$RUNNER_TEMP/instructions.names")
+          fi
           echo "Part $PART measures: $(echo $groups)"
           for group in $groups; do
-            cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
-              --save-baseline=base "instructions::$group::*" 2>&1 | tee -a "$RUNNER_TEMP/base.log"
+            cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench "$bench" -- \
+              --save-baseline=base "$bench::$group::*" 2>&1 | tee -a "$RUNNER_TEMP/base.log"
           done
 
       # This part's counts of the merge base, kept for the next run with the same merge base, and
@@ -555,6 +608,8 @@ jobs:
     env:
       TARGET: ${{ matrix.target }}
       PART: ${{ matrix.part }}
+      EMBER: ${{ matrix.ember }}
+      MODELS: ${{ github.workspace }}/ember
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
       GUNGRAUN_HOME: ${{ github.workspace }}/gungraun
       RUSTFLAGS: "-C llvm-args=-align-all-functions=6"
@@ -606,15 +661,28 @@ jobs:
           echo "HEAD_RUNNER=$HOME/.gungraun-runner/$version/bin/gungraun-runner" >> "$GITHUB_ENV"
 
       # This part's counts of the merge base, from this run's part of the merge base with the same
-      # number: the saved run `base` of the same groups.
+      # number: the saved run `base` of the same groups. GitHub's storage can refuse a download for
+      # a while (HTTP 503 on #950's first run), so gh tries three times, a minute apart, before
+      # the step fails.
       - name: This part's counts of the merge base
         if: env.HAS_BASE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-            --name "count-base-$TARGET-$PART" --dir "$RUNNER_TEMP/kept"
+          for try in 1 2 3; do
+            rm -rf "$RUNNER_TEMP/kept"
+            if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+              --name "count-base-$TARGET-$PART" --dir "$RUNNER_TEMP/kept"; then
+              break
+            fi
+            if [ "$try" = 3 ]; then
+              echo "::error::count-base-$TARGET-$PART could not be downloaded in three tries."
+              exit 1
+            fi
+            echo "::warning::count-base-$TARGET-$PART: download $try of 3 failed; trying again in 60 s."
+            sleep 60
+          done
           (cd "$RUNNER_TEMP/kept" && sha256sum --check --strict manifest.sha256)
           rm -rf "${GUNGRAUN_HOME:?}"
           mkdir -p "$GUNGRAUN_HOME"
@@ -633,6 +701,25 @@ jobs:
       # fails the run if they differ. A benchmark with no saved run is recorded, not compared. Every
       # benchmark's counts, from both runs, are saved as JSON (summary.json in its output folder)
       # for the judge. Every group runs, and the step fails after the last if any failed.
+      # The ember part's two models, as the merge base's part fetched them.
+      - name: Fetch EMBER's pair 827's two models, each held to its SHA-256
+        if: matrix.ember
+        run: |
+          set -euo pipefail
+          register=head/projects/engines/geometry/crates/geom-test/corpora/manifest.json
+          mkdir -p "$MODELS"
+          for model in 375267.stl 251402.stl; do
+            url=$(jq -er --arg name "$model" '.corpora[] | select(.id == "ember-cleared-pairs")
+              | .fetch.files[] | select(.name == $name) | .url' "$register")
+            curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 10 \
+              --output "$MODELS/$model" "$url"
+          done
+          printf '%s  %s\n' \
+            d6b7c98c518fd73601f44ef3a8726180c641ac92265b510d4e9d36d9a4e50298 375267.stl \
+            6eceb3087934115667bec1ed4b245549b67baed65a05371fd38ce8bd03f1724b 251402.stl \
+            > "$RUNNER_TEMP/models.sha256"
+          (cd "$MODELS" && sha256sum --check --strict "$RUNNER_TEMP/models.sha256")
+
       - name: Benchmark the pull request against the merge base
         id: gate
         working-directory: head
@@ -644,27 +731,47 @@ jobs:
             rm -rf "${GUNGRAUN_HOME:?}"
           fi
           mkdir -p "$RUNNER_TEMP/part"
-          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
-            | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
-            | sort > "$RUNNER_TEMP/part/head.names"
-          groups=$(awk -F'\t' -v k="$PART" '
-            FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
-            { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
-              if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
-          ' "$BENCH/parts.tsv" "$RUNNER_TEMP/part/head.names")
+          # The benchmarks a bench target lists, as group/op/class: the run's list is both targets'.
+          names() {
+            cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench "$1" -- --list \
+              | sed -nE "s/^$1::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark\$/\1\/\2\/\3/p" | sort
+          }
+          names instructions > "$RUNNER_TEMP/instructions.names"
+          names ember > "$RUNNER_TEMP/ember.names"
+          sort -u "$RUNNER_TEMP/instructions.names" "$RUNNER_TEMP/ember.names" > "$RUNNER_TEMP/part/head.names"
+          if [ "$EMBER" = true ]; then
+            bench=ember
+            export SPAREKIT_EMBER=$MODELS
+            groups=$(cut -d/ -f1 "$RUNNER_TEMP/ember.names" | uniq)
+          else
+            bench=instructions
+            groups=$(awk -F'\t' -v k="$PART" '
+              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
+              { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
+                if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
+            ' "$BENCH/parts.tsv" "$RUNNER_TEMP/instructions.names")
+          fi
           echo "Part $PART measures: $(echo $groups)"
           echo "$groups" > "$RUNNER_TEMP/part/groups"
           status=0
           for group in $groups; do
             if [ "$HAS_BASE" = true ]; then
-              compare=(--baseline=base "instructions::$group::*")
+              compare=(--baseline=base "$bench::$group::*")
             else
-              compare=("instructions::$group::*")
+              compare=("$bench::$group::*")
             fi
-            cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
-              "${compare[@]}" --save-baseline=head --save-summary=json \
-              --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS" \
-              2>&1 | tee -a "$RUNNER_TEMP/part/head.log" || status=$?
+            # The catalogue's command is written out apart, as gate 1's planted slowdown runs it.
+            if [ "$bench" = ember ]; then
+              cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench ember -- \
+                "${compare[@]}" --save-baseline=head --save-summary=json \
+                --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS" \
+                2>&1 | tee -a "$RUNNER_TEMP/part/head.log" || status=$?
+            else
+              cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
+                "${compare[@]}" --save-baseline=head --save-summary=json \
+                --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS" \
+                2>&1 | tee -a "$RUNNER_TEMP/part/head.log" || status=$?
+            fi
           done
           echo "$status" > "$RUNNER_TEMP/part/gate.status"
           exit "$status"
@@ -682,14 +789,19 @@ jobs:
         run: |
           set -euo pipefail
           incomplete=0
+          bench=instructions
+          if [ "$EMBER" = true ]; then
+            bench=ember
+            export SPAREKIT_EMBER=$MODELS
+          fi
           for group in $(cat "$RUNNER_TEMP/part/groups"); do
             for way in rises:1 falls:-1; do
               limit=${way#*:}
               log="$RUNNER_TEMP/${way%%:*}-$group.log"
               # Its failing exit status only means something was listed; whether the run completed
               # is checked next.
-              cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
-                --load-baseline=head --baseline=base "instructions::$group::*" \
+              cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench "$bench" -- \
+                --load-baseline=head --baseline=base "$bench::$group::*" \
                 --callgrind-limits="ir=${limit}%,estimatedcycles=${limit}%,i1mr=${limit}%,d1mr=${limit}%,d1mw=${limit}%,ilmr=${limit}%,dlmr=${limit}%,dlmw=${limit}%" \
                 --dhat-limits="totalbytes=${limit}%,totalblocks=${limit}%,attgmaxbytes=${limit}%,maximumbytes=${limit}%" \
                 > "$log" 2>&1 || true
@@ -879,7 +991,8 @@ jobs:
       # 23.13): a rise over 5% fails on instructions and on estimated cycles. Code layout alone
       # moves miss counts, so every miss count's changes are listed and judged through estimated
       # cycles, which price every miss. Every benchmark the run lists must have exactly one summary
-      # with every count, or the judgement fails. It runs after a failed gate too, to report
+      # with every count, or the judgement fails: the summaries of both benchmark targets,
+      # `instructions` and `ember`, are read. It runs after a failed gate too, to report
       # everything.
       - name: Judge instructions, cycles and cache misses from the summaries
         id: judge
@@ -890,7 +1003,7 @@ jobs:
           # Exit status 1: a rise over the limit; 2: the judgement could not be made.
           status=0
           "$CARGO_TARGET_DIR/release/geom-bench-counts" callgrind \
-            "$GUNGRAUN_HOME/geom-bench/instructions" "$RUNNER_TEMP/judged.names" \
+            "$GUNGRAUN_HOME/geom-bench" "$RUNNER_TEMP/judged.names" \
             "$GATE_PERCENT" "Instructions, estimated cycles and cache misses on $TARGET" \
             > "$RUNNER_TEMP/callgrind.md" || status=$?
           case "$status" in
