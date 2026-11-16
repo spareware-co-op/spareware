@@ -178,6 +178,16 @@ enum Command {
         #[command(flatten)]
         repo: Repo,
     },
+    /// Prints the parts of a coverage run as a GitHub Actions matrix: `{"include": [{"part": k,
+    /// "of": n, "crates": "a b"}, ...]}`, the crates `affected` names balanced by their measured
+    /// times.
+    CoverageParts {
+        #[command(flatten)]
+        scope: Scope,
+        /// The repository root.
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+    },
     /// Prints the kernel crates a coverage run measures, one per line.
     Affected {
         #[command(flatten)]
@@ -338,26 +348,22 @@ fn judge_coverage(scope: &Scope, dir: &Path, repo: &Repo) -> Result<bool, String
     let ledger = read_ledger(&root, repo.ledger.as_deref())?;
     let crates = measured(scope, &root)?;
     let mut reports: Vec<CrateReport> = Vec::new();
-    let mut failures = Vec::new();
+    // Every crate this judge lists itself must have its files here, whichever part measured it.
+    let mut failures = coverage::missing_outputs(&crates, dir);
     for krate in &crates {
         let log = dir.join(format!("{krate}.log"));
         match std::fs::read_to_string(&log) {
             Ok(text) => failures.extend(coverage::check_log(krate, &text)),
-            Err(e) => failures.push(format!(
-                "{krate}: no log of the measuring run ({}: {e})",
-                log.display()
-            )),
+            Err(e) if log.is_file() => failures.push(format!("{}: {e}", log.display())),
+            Err(_) => {}
         }
         let file = dir.join(format!("{krate}.lcov"));
         match std::fs::read_to_string(&file) {
             Ok(text) => {
                 reports.push(coverage::measure(&root, krate, &text).map_err(|e| e.to_string())?);
             }
-            Err(e) => failures.push(format!(
-                "{krate}: no coverage data ({}: {e}): every crate the change reaches must be \
-                 measured",
-                file.display()
-            )),
+            Err(e) if file.is_file() => failures.push(format!("{}: {e}", file.display())),
+            Err(_) => {}
         }
     }
     failures.extend(
@@ -668,6 +674,28 @@ fn run(cli: Cli) -> Result<bool, String> {
             lcov_dir,
             repo,
         } => judge_coverage(&scope, &lcov_dir, &repo),
+        Command::CoverageParts { scope, repo } => {
+            let crates = measured(&scope, &canonical(&repo)?)?;
+            let times = coverage::parse_times(coverage::TIMES)?;
+            let parts = coverage::plan_parts(&crates, &times);
+            let problems = coverage::plan_problems(&crates, &parts);
+            if !problems.is_empty() {
+                return Err(format!(
+                    "the coverage plan is wrong: {}",
+                    problems.join("; ")
+                ));
+            }
+            let n = parts.len();
+            let include: Vec<serde_json::Value> = parts
+                .iter()
+                .enumerate()
+                .map(|(k, p)| {
+                    serde_json::json!({"part": k.saturating_add(1), "of": n, "crates": p.join(" ")})
+                })
+                .collect();
+            println!("{}", serde_json::json!({ "include": include }));
+            Ok(true)
+        }
         Command::Affected { scope, repo } => {
             for krate in measured(&scope, &canonical(&repo)?)? {
                 println!("{krate}");
