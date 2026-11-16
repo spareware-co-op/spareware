@@ -11,6 +11,7 @@
     reason = "tests: a failure stops the test"
 )]
 
+use dashu_ratio::RBig;
 use geom_curve::tight;
 use geom_curve::{Basis, Circle, CurveError, CurveKind, DerivativeBound, Frame, Line, Trimmed};
 use geom_math::{Axis, Transform, TypedTransform};
@@ -318,4 +319,66 @@ fn a_ceiling_past_the_doubles_is_refused() {
         Err(CurveError::NotFinite)
     );
     assert!(just_above(ceiling(&w, Direction::U), 1.0));
+}
+
+/// The exact value of a double.
+fn q(x: f64) -> RBig {
+    RBig::try_from(x).unwrap()
+}
+
+#[test]
+fn each_sum_and_product_is_rounded_up_only_where_it_fell_short() {
+    // Sums and products the doubles hold exactly stay exact: not a step above.
+    let plane = SurfaceKind::Plane(
+        Plane::new(
+            [1.0, 2.0, 3.0],
+            [1.0, -2.0, 0.5],
+            [0.0, 1.0, 1.0],
+            ((-3.0, 5.0), (0.0, 4.0)),
+        )
+        .unwrap(),
+    );
+    assert_eq!(ceiling(&plane, Direction::U).to_bits(), 3.5_f64.to_bits());
+    assert_eq!(ceiling(&plane, Direction::V).to_bits(), 2.0_f64.to_bits());
+    let straight = wall([1.0, 2.0, 0.0], [4.0, -2.0, 1.0], [0.0, -2.0, 1.0]);
+    assert_eq!(
+        ceiling(&straight, Direction::U).to_bits(),
+        8.0_f64.to_bits()
+    );
+    assert_eq!(
+        ceiling(&straight, Direction::V).to_bits(),
+        3.0_f64.to_bits()
+    );
+    // A sum whose nearest double falls below it: 1 + 2⁻⁶⁰ is nearest 1, so the ceiling steps
+    // above 1, as the partial's length √(1 + 2⁻¹²⁰) does.
+    // 2⁻⁶⁰, built from its bits.
+    let tiny = f64::from_bits(0x3C30_0000_0000_0000);
+    let plane = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, tiny, 0.0],
+            [0.0, 0.0, 1.0],
+            ((0.0, 1.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    let c = ceiling(&plane, Direction::U);
+    assert!(q(c) >= q(1.0) + q(tiny), "{c}");
+    assert_eq!(c.to_bits(), 1.0_f64.next_up().to_bits());
+    // A product whose nearest double falls below it: a cylinder of radius 5 sums π·5 twice, π the
+    // double above it, and 5π's nearest double is below 5 times that double.
+    let pi_hi = PI.next_up();
+    assert!(q(pi_hi * 5.0) < q(pi_hi) * q(5.0));
+    let tube = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [0.0; 3],
+            5.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    let c = ceiling(&tube, Direction::U);
+    assert!(q(c) >= q(pi_hi) * q(10.0), "{c}");
+    assert_eq!(c.to_bits(), (2.0 * (pi_hi * 5.0).next_up()).to_bits());
 }
