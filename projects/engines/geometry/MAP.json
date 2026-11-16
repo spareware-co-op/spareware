@@ -5365,6 +5365,29 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_BOXES`] boxes and four more operands, in about twelve arrangements of at most seven operands each, every result judged by both checkers.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: two to [`MAX_BOXES`] boxes on a lattice of [`SIDE`] cells a side, where shared faces, edges and corners are the rule, scaled by one of [`SCALES`], with a level for a half-space, a row for a rod, a move for one tool and two cells for seeds. [`check`] counts the cells the boxes cover, which is the truth here, and holds to it each stage of the pipeline: the operands, selections and schema, half-spaces and wires (G130), the n-ary entry (G131), the names and history (G132), the arrangement certificate (G133), the canonical rebuild (G129's `rebuild.rs`), cells, rooms and the narrowest passage (G137), batch cutting (G138), the arrangement cache and the re-cut after a move (G139), and the arrangement step of local operations (G144). [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/booleans.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**Valid by construction.** Every operand is a box `geom-make` builds, a half-space through three grid points not on a line, or a wire of two grid points; every seed is the middle of a cell of the room, on no face. So every refusal is a [`Finding`], except the one the fast path states (`InvalidInput` for operands its proof does not cover), which is held to its law.",
+            "**A broken law is a [`Finding`]** naming the law and the case. A panic fails every leg."
+          ],
+          "job": "Fuzz target: `geom-bool`'s boolean pipeline on small solids agrees with counted cells, and every result passes both checkers.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11's laws (`projects/engines/geometry/architecture/11-booleans.md`) and 13.1's fast path (`13-sweeps-blends-offsets.md`), by counting, the exact-volume pattern of `geom-bool`'s own `tests/laws.rs`. Each box is a set of whole cells, so what covers a cell is a matter of three comparisons, written here without the kernel's help. A selection has the volume of the cells it keeps; a half-space keeps the cells below its level; a rod keeps the length of the covered cells it runs through; a room's cells are the uncovered cells of the envelope, and two seeds share a cell exactly when a walk through faces of uncovered cells joins them; a batch cut has the cells of its host and no tool, each tool cuts exactly when it shares a cell with the host, many hosts cut as each alone, and a re-cut from the last cut's cache is the fresh cut bit for bit; a local step has its selection's cells, and its fast path is the full path or its stated refusal. Every body any of them returns passes `geom-check`'s full check and the second checker of 28.4 (`geom_test::agree::judge`), which agree and leave nothing unjudged, and every solid passes the arrangement certificate."
+          },
+          "path": "geom_fuzz::booleans",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
           "family": [],

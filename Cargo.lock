@@ -1252,6 +1252,7 @@ dependencies = [
  "dashu-ratio 0.6.1",
  "engine-geometry",
  "geom-bench",
+ "geom-bool",
  "geom-bvh",
  "geom-check",
  "geom-curve",
