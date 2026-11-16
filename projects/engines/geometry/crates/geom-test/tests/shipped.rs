@@ -157,13 +157,16 @@ fn kernel_yml_runs_the_shipped_checker_leg_natively_and_on_wasm32() {
                 "{job}: the shipped-checker leg builds as shipped, with no environment of its own"
             );
             // It runs on every leg of its job's matrix that builds in release, and once in the
-            // pull request's Linux job (its part 4).
+            // pull request's Linux job (its part 4), and in part 4 of each release leg of `test`.
             let when = step["if"].as_str().unwrap_or_default();
             assert!(
                 when.is_empty()
                     || when == "${{ !cancelled() }}"
                     || when == "${{ !cancelled() && matrix.mode == 'release' }}"
-                    || (job == "linux" && when == "${{ !cancelled() && matrix.k == 4 }}"),
+                    || (job == "linux" && when == "${{ !cancelled() && matrix.k == 4 }}")
+                    || (job == "test"
+                        && when
+                            == "${{ !cancelled() && matrix.mode == 'release' && matrix.k == 4 }}"),
                 "{job}: {when}"
             );
             legs.push((job.to_owned(), run.trim().to_owned()));

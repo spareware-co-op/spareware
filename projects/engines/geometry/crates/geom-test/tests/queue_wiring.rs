@@ -19,7 +19,9 @@
 //!   pull request's Linux job (`linux`) together cover every native runner in release and debug,
 //!   once each; the suites run optimised with overflow checks and debug assertions on, on Linux
 //!   x86-64 for a pull request and on every other native runner in the queue, with one plain debug
-//!   run on Linux x86-64.
+//!   run on Linux x86-64; and each release leg of `test` shares its work among its parts with every
+//!   golden and test step on exactly one part, each golden build's `--part j/m` shares whole, and
+//!   geom-num's library, binaries, doctests and every test target once in each build.
 //! - `each_change_is_measured_against_its_base_and_marked_once`: `changes` measures a pull request
 //!   against its merge commit's first parent, the queue against the queue's base and a push against
 //!   the commit main was at; only the merge queue's last job marks a tree as tested, under the name
@@ -383,6 +385,7 @@ fn leg_problems(kernel: &str) -> Vec<String> {
         ));
     }
     found.extend(linux_part_problems(&w));
+    found.extend(test_part_problems(&w, &geom_num_tests()));
     found
 }
 
@@ -465,6 +468,164 @@ fn linux_part_problems(w: &Yaml) -> Vec<String> {
         }
     }
     found
+}
+
+/// The first letters a test-target share `[x-y]*` takes, or `None` for any other form, so a new
+/// form is looked at, not passed.
+fn letters(share: &str) -> Option<core::ops::RangeInclusive<char>> {
+    let inner = share.strip_prefix("'[")?.strip_suffix("]*'")?;
+    let mut chars = inner.chars();
+    let (from, dash, to) = (chars.next()?, chars.next()?, chars.next()?);
+    (chars.next().is_none() && dash == '-' && from.is_ascii_lowercase() && to.is_ascii_lowercase())
+        .then_some(from..=to)
+}
+
+/// What is wrong with how `test` shares a release leg among its parts: parts not 1 to n or a name
+/// that does not count them, a debug leg on more than one part, a heavy step on no part or on more
+/// than one, a golden step's `--part j/m` shares not exactly 1 to m in each build (one dropped from
+/// every part), and geom-num's every test vector, in each build, not its library, binaries,
+/// doctests and every test target of `crates/geom-num/tests` exactly once (`tests` names them).
+fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    let test = &w["jobs"]["test"];
+    let parts: Vec<i64> = test["strategy"]["matrix"]["k"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter_map(Yaml::as_i64)
+        .collect();
+    let n = i64::try_from(parts.len()).unwrap();
+    if parts != (1..=n).collect::<Vec<_>>() {
+        found.push(format!("test's parts are {parts:?}, not 1 to {n}"));
+    }
+    if !text(&test["name"]).contains(&format!("part {{0}} of {n}', matrix.k)")) {
+        found.push(format!("test's name does not count its {n} parts"));
+    }
+    let excluded: BTreeSet<i64> = test["strategy"]["matrix"]["exclude"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter(|x| text(&x["mode"]) == "debug" && x["target"].is_badvalue())
+        .filter_map(|x| x["k"].as_i64())
+        .collect();
+    if excluded != (2..=n).collect::<BTreeSet<_>>() {
+        found.push(format!(
+            "a debug leg runs on more than part 1: parts {excluded:?} excluded"
+        ));
+    }
+    // A golden step's build (its flags and folder) and command without `--part`, to its shares.
+    let mut goldens: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    // geom-num's builds, to what each step of it runs.
+    let mut vectors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for step in test["steps"].as_vec().into_iter().flatten() {
+        let run = text(&step["run"]);
+        let name = text(&step["name"]);
+        let golden = run.starts_with("cargo run --locked -p geom-test --bin golden");
+        if !(golden || run.starts_with("cargo test") || run.starts_with("cargo nextest")) {
+            continue;
+        }
+        match parts_of(&text(&step["if"]), &parts) {
+            Some(on) if on.len() == 1 => {}
+            Some(on) => found.push(format!("{name}: runs on parts {on:?}, not exactly one")),
+            None => found.push(format!("{name}: its condition on the part is not read")),
+        }
+        let build = format!(
+            "{} {} {}",
+            text(&step["env"]["RUSTFLAGS"]),
+            text(&step["env"]["CARGO_TARGET_DIR"]),
+            text(&step["if"]).contains("'debug'")
+        );
+        let words: Vec<&str> = run.split_whitespace().collect();
+        if golden {
+            let share = words
+                .iter()
+                .position(|w| *w == "--part")
+                .and_then(|at| words.get(at + 1))
+                .map_or_else(|| "1/1".to_owned(), |s| (*s).to_owned());
+            let whole = run.replacen(&format!("--part {share} "), "", 1);
+            goldens
+                .entry(format!("{build} {whole}"))
+                .or_default()
+                .push(share);
+        } else if let Some(rest) =
+            run.strip_prefix("cargo test -p geom-num --release --locked --no-fail-fast ")
+        {
+            vectors.entry(build).or_default().extend(
+                rest.split(" --")
+                    .map(|s| s.trim_start_matches("--").to_owned()),
+            );
+        }
+    }
+    for (build, shares) in &goldens {
+        let m = shares.len();
+        let wanted: BTreeSet<String> = (1..=m).map(|j| format!("{j}/{m}")).collect();
+        let got: BTreeSet<String> = shares.iter().cloned().collect();
+        if got != wanted || shares.len() != got.len() {
+            found.push(format!(
+                "the goldens of `{build}` run shares {shares:?}, not each of {wanted:?} once"
+            ));
+        }
+    }
+    if vectors.len() != 2 {
+        found.push(format!(
+            "geom-num's every test vector runs in {} builds, not as shipped and for the runner's \
+             own CPU",
+            vectors.len()
+        ));
+    }
+    for (build, runs) in &vectors {
+        found.extend(vector_problems(build, runs, tests));
+    }
+    found
+}
+
+/// What is wrong with what one build of geom-num's every test vector runs (`runs`, each step's
+/// target selections): its library, binaries and doctests not once, a share not of the form
+/// `[x-y]*`, or a file of its `tests` folder (`tests`) in no share or in two.
+fn vector_problems(build: &str, runs: &[String], tests: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    for whole in ["lib", "bins", "doc"] {
+        let times = runs.iter().filter(|r| *r == whole).count();
+        if times != 1 {
+            found.push(format!(
+                "geom-num's --{whole} runs {times} times in `{build}`"
+            ));
+        }
+    }
+    let mut shares = Vec::new();
+    for r in runs
+        .iter()
+        .filter(|r| !["lib", "bins", "doc"].contains(&r.as_str()))
+    {
+        match r.strip_prefix("test ").and_then(letters) {
+            Some(l) => shares.push(l),
+            None => found.push(format!("geom-num's share --{r} in `{build}` is not read")),
+        }
+    }
+    for t in tests {
+        let first = t.chars().next().unwrap_or(' ');
+        let times = shares.iter().filter(|l| l.contains(&first)).count();
+        if times != 1 {
+            found.push(format!(
+                "geom-num's tests/{t}.rs runs {times} times in `{build}`"
+            ));
+        }
+    }
+    found
+}
+
+/// geom-num's test targets: the files of its `tests` folder.
+fn geom_num_tests() -> Vec<String> {
+    let dir = root().join("projects/engines/geometry/crates/geom-num/tests");
+    let mut out: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|e| {
+            let name = e.unwrap().file_name().into_string().unwrap();
+            name.strip_suffix(".rs").map(str::to_owned)
+        })
+        .collect();
+    out.sort();
+    out
 }
 
 /// What is wrong with how a change finds its base and how a tree is marked.
@@ -716,6 +877,42 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
             "      # Debug assertions on in the release legs too (the release steps add overflow checks).\n      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n",
             "",
             "without debug assertions",
+        ),
+        // A release part dropped from `test`: its step runs nowhere.
+        (
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9]",
+            "geom-num's every test vector in release for this machine's own CPU (part 2 of 2): runs on parts [], not exactly one",
+        ),
+        // A golden step on two parts.
+        (
+            "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}",
+            "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k <= 2 }}",
+            "(part 1 of 2): runs on parts [1, 2], not exactly one",
+        ),
+        // A golden share dropped from every part: the second share run as the first again.
+        (
+            "run --part 2/2 --release",
+            "run --part 1/2 --release",
+            "run shares [\"1/2\", \"1/2\"]",
+        ),
+        // A debug leg on a second part.
+        (
+            "          - { mode: debug, k: 10 }\n",
+            "",
+            "a debug leg runs on more than part 1",
+        ),
+        // geom-num's test targets of one first letter in no share.
+        (
+            "--test '[a-d]*'",
+            "--test '[a-c]*'",
+            "geom-num's tests/dd.rs runs 0 times",
+        ),
+        // geom-num's doctests dropped.
+        (
+            "--no-fail-fast --doc",
+            "--no-fail-fast --lib",
+            "geom-num's --doc runs 0 times",
         ),
         // A platform left out of the queue.
         (
