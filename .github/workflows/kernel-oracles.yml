@@ -32,7 +32,10 @@ name: Kernel oracles
 #   CASE_SETS`: the seeded solids and Manifold's stored models), each writing its jobs with
 #   `oracle jobs`, running the image on them without a network, and judging the answers with
 #   `oracle compare`, which fails on any signature `geom-test/oracles/triaged.json` does not hold.
-#   A case set is one line of the matrix.
+#   The comparison names the leg's case set: a model the set records as refused is not sent to the
+#   oracle, and the kernel must refuse it exactly as recorded; a job on a model that crosses itself,
+#   which the oracle's documentation says it does not take, is judged by the exact reference alone
+#   (decision 32.58). A case set is one line of the matrix.
 #
 # Each seeded job's seed is the run's number in hexadecimal, printed first, so a failure replays
 # exactly: rerun the job, or set SPAREKIT_SEED to the printed value. The predicates' verification
@@ -82,8 +85,9 @@ concurrency:
 env:
   # The same pinned compiler as kernel.yml (chapter 28.13, the toolchain guard).
   RUST_TOOLCHAIN: "1.99.0"
-  # The oracle repository's commit whose Manifold and CGAL harnesses the mesh jobs run.
-  ORACLES_COMMIT: b2c4fa71436f46e49b59c333c4613bc4adc24c1f
+  # The oracle repository's commit whose Manifold and CGAL harnesses the mesh jobs run: CGAL's
+  # harness reading a solid shell by shell (spareware-co-op/oracles#4).
+  ORACLES_COMMIT: d9817fe4ecf67da5926b253f34f1f85101c9ecf5
   # How many seeded mesh jobs a leg writes.
   MESH_JOBS: "2000"
 
@@ -419,7 +423,7 @@ jobs:
           fi
           cargo run --locked --release -p geom-test --bin oracle -- jobs "$ORACLE" --cases "$CASES" "${given[@]}" > "$out/jobs.jsonl"
           time docker run --rm -i --network none "oracle-$ORACLE:local" < "$out/jobs.jsonl" > "$out/answers.jsonl"
-          time cargo run --locked --release -p geom-test --bin oracle -- compare "$ORACLE" --jobs "$out/jobs.jsonl" --answers "$out/answers.jsonl" | tee "$out/compare.txt"
+          time cargo run --locked --release -p geom-test --bin oracle -- compare "$ORACLE" --cases "$CASES" --jobs "$out/jobs.jsonl" --answers "$out/answers.jsonl" | tee "$out/compare.txt"
       - name: The run's jobs, answers and differences, kept for triage
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

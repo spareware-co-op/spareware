@@ -13,8 +13,9 @@
 //!   full commit, by every step that checks it out; an image's cache key is its oracle's folder's
 //!   tree at that commit, and `meshes` fails when the cache does not hold it rather than build.
 //! - **Judged, not swallowed.** `meshes` audits the oracle checkout, runs the container with no
-//!   network, and runs `oracle compare` under `set -euo pipefail` with nothing that hides its exit;
-//!   nothing in the workflow can publish an image.
+//!   network, and runs `oracle compare` under `set -euo pipefail` with nothing that hides its exit,
+//!   naming the leg's case set, so the refusals it records are held; nothing in the workflow can
+//!   publish an image.
 //!
 //! Each rule is also shown to fail on a planted violation.
 
@@ -126,6 +127,9 @@ fn leg_problems(j: &Yaml, steps: &[Yaml], runs: &str) -> Vec<String> {
     });
     if !judged {
         found.push("meshes does not fail on what oracle compare finds".to_owned());
+    }
+    if !runs.contains(r#"-- compare "$ORACLE" --cases "$CASES" "#) {
+        found.push("meshes compares without naming its case set".to_owned());
     }
     found
 }
@@ -275,7 +279,7 @@ fn the_mesh_jobs_run_what_reaches_them_on_every_case_set() {
         "not the live mesh oracles",
     );
     finds(
-        &planted(&text, "ORACLES_COMMIT: b", "ORACLES_COMMIT: main # b"),
+        &planted(&text, "ORACLES_COMMIT: ", "ORACLES_COMMIT: main # "),
         "not a full commit",
     );
     finds(
@@ -302,6 +306,10 @@ fn the_mesh_jobs_run_what_reaches_them_on_every_case_set() {
             "| tee \"$out/compare.txt\" || true",
         ),
         "what oracle compare finds",
+    );
+    finds(
+        &planted(&text, r#"--cases "$CASES" --jobs"#, "--jobs"),
+        "without naming its case set",
     );
     finds(
         &planted(
