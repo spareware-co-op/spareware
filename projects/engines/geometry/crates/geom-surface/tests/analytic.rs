@@ -312,6 +312,40 @@ fn spheres_keep_their_normals_at_the_poles_and_tori_their_forms() {
     check(&lemon, &params(lemon.domain()), &transforms()[3], m).unwrap();
 }
 
+/// A sphere's and a torus's routines read them as round, so their axial factor is 1 or −1 only:
+/// 2 would be a spheroid or a stretched torus, and -3 one turned over too. A cylinder and a cone
+/// honour any finite nonzero factor (their axial term is a length), so they take both.
+#[test]
+fn a_sphere_or_torus_takes_an_axial_factor_of_one_or_minus_one_only() {
+    let f = Frame::standard().unwrap();
+    let sphere = Sphere::new([1.0, 0.0, 0.0], 3.0, f, ((0.0, 2.0), (-0.5, 0.5))).unwrap();
+    let torus = Torus::new([0.0; 3], 3.0, 1.0, f, ((0.0, 2.0), (0.0, 2.0))).unwrap();
+    for bad in [2.0, -3.0] {
+        assert_eq!(
+            sphere.with_axial_sign(bad).map(|_| ()),
+            Err(CurveError::AxialFactorNotUnit),
+            "{bad}"
+        );
+        assert_eq!(
+            torus.with_axial_sign(bad).map(|_| ()),
+            Err(CurveError::AxialFactorNotUnit),
+            "{bad}"
+        );
+    }
+    for good in [1.0, -1.0] {
+        assert_eq!(sphere.with_axial_sign(good).unwrap().axial_sign(), good);
+        assert_eq!(torus.with_axial_sign(good).unwrap().axial_sign(), good);
+    }
+    let cylinder = Cylinder::new([0.0; 3], 2.0, f, ((0.0, 2.0), (-1.0, 1.0))).unwrap();
+    let cone = Cone::new([0.0; 3], 2.0, 0.5, f, ((0.0, 2.0), (-1.0, 1.0))).unwrap();
+    for factor in [2.0, -3.0] {
+        assert_eq!(cylinder.with_axial_sign(factor).unwrap().axial_sign(), factor);
+        assert_eq!(cone.with_axial_sign(factor).unwrap().axial_sign(), factor);
+    }
+    let why = CurveError::AxialFactorNotUnit.to_string();
+    assert!(why.contains("1 or -1") && why.contains("round"), "{why}");
+}
+
 #[test]
 fn split_and_reverse_are_exact_and_refusals_typed() {
     let m = &mut meter();
