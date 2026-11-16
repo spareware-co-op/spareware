@@ -7,13 +7,13 @@
 # 0.9.115 (https://nexte.st/docs/features/slow-tests/), so older versions are refused.
 nextest-version = { required = "0.9.115" }
 
-# `cargo miri nextest run` picks this profile by itself. Every kernel test runs under Miri, each in
-# its own process, four at once on a GitHub-hosted runner. Miri interprets a test thousands of times
-# slower than it runs, and some of the kernel's exhaustive tests would take weeks, so each test has
-# a budget of 10 minutes (two periods of five): a test still running then is stopped and counted as
-# passing (TMPASS), because every operation Miri interpreted up to that point was free of undefined
-# behaviour, and the run's report and its JUnit file name each one. Any undefined behaviour, panic
-# or failed assertion fails the test, and every test runs (no fail-fast), so one run finds them all.
+# `cargo miri nextest run` picks this profile by itself. Every kernel test Miri finishes runs under
+# it (32.58: Miri's table in geom-test's src/miri-times.tsv says which), each in its own process,
+# four at once on a GitHub-hosted runner. Each test has a budget of 10 minutes (two periods of
+# five): a test still running then is stopped and counted as passing (TMPASS), and the run's report
+# and its JUnit file name each one; a test the table lists as finishing should never reach it. Any
+# undefined behaviour, panic or failed assertion fails the test, and every test runs (no
+# fail-fast), so one run finds them all.
 [profile.default-miri]
 slow-timeout = { period = "300s", terminate-after = 2, on-timeout = "pass" }
 fail-fast = false
@@ -28,4 +28,14 @@ slow-timeout = { period = "30s", terminate-after = 2, on-timeout = "pass" }
 fail-fast = false
 
 [profile.miri-smoke.junit]
+path = "junit.xml"
+
+# A measuring run for Miri's table (32.58), never run by CI: each test is stopped at two periods of
+# one minute and counted as timed out, not passed, so its JUnit report tells a test Miri finishes
+# from one it does not; `kernel-quality miri-times` writes the table from that report.
+[profile.miri-measure]
+slow-timeout = { period = "60s", terminate-after = 2 }
+fail-fast = false
+
+[profile.miri-measure.junit]
 path = "junit.xml"

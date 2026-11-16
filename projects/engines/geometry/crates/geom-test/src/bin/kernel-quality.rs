@@ -22,8 +22,12 @@
 //!   naming on standard error) any without a function to measure ([`geom_test::coverage::has_code`]).
 //! - `miri-packages` prints the `-p` arguments of every kernel crate for the Miri run
 //!   ([`geom_test::miri`]); with `--changed`, of those whose tests the change reaches.
-//! - `miri-filter` prints the nextest filterset of one Miri partition, the tests the plan
-//!   balanced by their recorded times gives it ([`geom_test::miri::plan`]).
+//! - `miri-filter` prints the nextest filterset of one Miri partition, the finishing tests the
+//!   plan balanced by their recorded times gives it ([`geom_test::miri::plan`]), and fails on any
+//!   test of the run's nextest listing that Miri's table has no row for
+//!   ([`geom_test::miri::unlisted`]).
+//! - `miri-times` writes Miri's table from a measuring run's nextest reports (`junit.xml`)
+//!   ([`geom_test::miri::write_table`]), the only way its rows change (32.58).
 //! - `mutants-files` prints the regular expression of the files a push to main's full mutation
 //!   run mutates ([`geom_test::mutants::push_files`]).
 //! - `mutants-increment` and `coverage-increment` print what a later push to a pull request must
@@ -215,6 +219,34 @@ enum Command {
         /// How many partitions the run has.
         #[arg(long)]
         of: usize,
+        /// The run's tests, `cargo miri nextest list --message-format json`: every one must have
+        /// a row in the table.
+        #[arg(long, value_name = "LIST.json")]
+        list: PathBuf,
+    },
+    /// Writes Miri's table (geom-test's `src/miri-times.tsv`) from a measuring run's nextest
+    /// reports (`junit.xml`): each test they name gets the state they measured; a failure
+    /// writes nothing.
+    MiriTimes {
+        /// The reports (`target/nextest/<profile>/junit.xml`).
+        #[arg(long, value_name = "JUNIT.xml", required = true)]
+        report: Vec<PathBuf>,
+        /// CI seconds for one of the run's seconds, as a decimal: 1 for a CI run's own reports.
+        #[arg(long)]
+        scale: String,
+        /// The run's stop for one test, in its own seconds (its profile's slow timeout).
+        #[arg(long)]
+        stop: u64,
+        /// A comment line to add to the table's header, saying where the run was.
+        #[arg(long)]
+        note: Option<String>,
+        /// The kernel's whole nextest listing (`--message-format json`): a row naming a test it
+        /// lacks, renamed or removed, is dropped.
+        #[arg(long, value_name = "LIST.json")]
+        list: Option<PathBuf>,
+        /// The repository root.
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
     },
     /// Prints the regular expression of the files a push to main's full mutation run mutates
     /// (empty: none), for `cargo mutants --re` and the judge's `--files`.
@@ -714,12 +746,92 @@ fn run(cli: Cli) -> Result<bool, String> {
             println!("{}", geom_test::miri::cargo_args(&packages));
             Ok(true)
         }
-        Command::MiriFilter { partition, of } => {
-            let times = geom_test::miri::parse_times(geom_test::miri::TIMES)?;
+        Command::MiriFilter {
+            partition,
+            of,
+            list,
+        } => {
+            let rows = geom_test::miri::parse_table(geom_test::miri::TIMES)?;
+            let text =
+                std::fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?;
+            let listing: serde_json::Value =
+                serde_json::from_str(&text).map_err(|e| format!("{}: {e}", list.display()))?;
+            let missing =
+                geom_test::miri::unlisted(&rows, &geom_test::miri::listed_tests(&listing)?);
+            if !missing.is_empty() {
+                eprintln!(
+                    "{} tests have no row in Miri's table; measure them under Miri and write \
+                     the table with `kernel-quality miri-times`:",
+                    missing.len()
+                );
+                for m in &missing {
+                    eprintln!("{m}");
+                }
+                return Ok(false);
+            }
+            let tests = geom_test::miri::finishing(&rows);
             println!(
                 "{}",
-                geom_test::miri::plan(&times, of)?.filterset(partition)?
+                geom_test::miri::plan(&tests, of)?.filterset(partition)?
             );
+            Ok(true)
+        }
+        Command::MiriTimes {
+            report,
+            scale,
+            stop,
+            note,
+            list,
+            repo,
+        } => {
+            let path = canonical(&repo)?.join(geom_test::miri::TABLE_PATH);
+            let old =
+                std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let listed = match &list {
+                Some(file) => {
+                    let text = std::fs::read_to_string(file)
+                        .map_err(|e| format!("{}: {e}", file.display()))?;
+                    let listing: serde_json::Value = serde_json::from_str(&text)
+                        .map_err(|e| format!("{}: {e}", file.display()))?;
+                    Some(geom_test::miri::listed_tests(&listing)?)
+                }
+                None => None,
+            };
+            let mut reported = Vec::new();
+            for file in &report {
+                let xml = std::fs::read_to_string(file)
+                    .map_err(|e| format!("{}: {e}", file.display()))?;
+                reported.extend(
+                    geom_test::miri::read_junit(&xml)
+                        .map_err(|e| format!("{}: {e}", file.display()))?,
+                );
+            }
+            let scale = geom_test::miri::parse_scale(&scale)?;
+            let text = geom_test::miri::write_table(
+                &old,
+                &reported,
+                scale,
+                stop,
+                listed.as_deref(),
+                note.as_deref(),
+            )?;
+            std::fs::write(&path, &text).map_err(|e| format!("{}: {e}", path.display()))?;
+            let rows = geom_test::miri::parse_table(&text)?;
+            let tests = geom_test::miri::finishing(&rows);
+            let finish = tests.len();
+            println!(
+                "{} rows from {} reported tests: {finish} finish under Miri, {} native-only",
+                rows.len(),
+                reported.len(),
+                rows.len().saturating_sub(finish)
+            );
+            match geom_test::miri::fewest(&tests) {
+                Some(n) => println!(
+                    "the fewest partitions within {} s: {n} (the workflow's PARTITIONS)",
+                    geom_test::miri::PART_SECONDS
+                ),
+                None => println!("a test alone takes longer than a partition may"),
+            }
             Ok(true)
         }
         Command::MutantsFiles {
