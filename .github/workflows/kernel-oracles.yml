@@ -128,6 +128,45 @@ jobs:
       - name: Every fetched corpus, unmodified
         run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora"
 
+  ember-pairs:
+    # Gate 4 (G156): EMBER's pairs whose models' own licences rule (i) of 32.11 admits, each run as
+    # EMBER runs it through geom-mesh's boolean, both mesh checkers and the flat reference
+    # (geom-test's tests/ember_pairs.rs, `every_cleared_pair_is_the_reference`, ignored in the
+    # suite because it reads a download). The corpus `ember-cleared-pairs` is fetched first and
+    # checked against the register's digest. The pairs are split over jobs by the test's own
+    # filter (SPAREKIT_PAIRS), so each takes minutes; `every_cleared_pair_runs_in_one_job` holds
+    # every cleared pair to exactly one group here.
+    name: EMBER's cleared pairs to the reference (${{ matrix.pairs }})
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every cleared pair, once, by its number in EMBER's list.
+        pairs:
+          - "1,79,164,208,224,277,304,324,356,387,427,447,530,589,618,659,688,720,774,804,837,915,934"
+          - "11,98,169,213,238,291,310,337,360,389,432,459,543,594,640,667,689,726,777,815,839,929,947"
+          - "68,111,173,216,248,295,317,349,377,395,437,461,553,608,644,675,698,727,788,827,848,930,951"
+          - "73,134,189,221,269,303,321,350,379,399,438,523,562,615,654,676,703,738,799,836,852,933,998"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The corpus, unmodified
+        run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora" ember-cleared-pairs
+      - name: The pairs named here, to the reference
+        env:
+          SPAREKIT_CORPORA: ${{ runner.temp }}/corpora
+          SPAREKIT_PAIRS: ${{ matrix.pairs }}
+        run: >-
+          cargo test --locked --release -p geom-test --test ember_pairs --
+          --ignored --exact every_cleared_pair_is_the_reference --nocapture
+
   clothoids:
     name: Clothoids, out of process
     needs: scope

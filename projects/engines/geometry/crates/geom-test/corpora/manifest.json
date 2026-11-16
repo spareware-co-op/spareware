@@ -58,6 +58,1226 @@
       "decision": null
     },
     {
+      "id": "ember-cleared-pairs",
+      "what": "EMBER's 92 pairs whose two models' own licences rule (i) of 32.11 admits: their 171 Thingi10K models, file by file with each one's licence and credit, and EMBER's case list",
+      "used_for": "Mesh booleans held to the rational reference, and their benchmark (Gate 4, G156)",
+      "source": "https://huggingface.co/datasets/Thingi10K/Thingi10K (raw_meshes) and https://github.com/elalish/manifold/tree/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests",
+      "version": "Thingi10K's dataset at commit 2d5d3b2f3cd3711028ad75b12788c13b25559ec6 (its tag v1.5.0); Manifold at d056b8fb70de8c8e6d6bee2e639b71c20aa08d01",
+      "licence": "Apache-2.0 AND LicenseRef-Thingi10K-CC-BY AND LicenseRef-Thingi10K-CC-Public-Domain-Dedication AND LicenseRef-Thingi10K-Public-Domain",
+      "storage": "fetched",
+      "sha256": "8df3bdb61d013c74fc933d7c3565f7e02ac598814f0968cab311f7f9bbd09605",
+      "credit": "Thingi10K, Qingnan Zhou and Alec Jacobson (2016), each model credited to its author with its file; EMBER's case list, Manifold's benchmark harness, Apache-2.0",
+      "fetch": {
+        "files": [
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/100815.stl",
+            "name": "100815.stl",
+            "sha256": "b0b08d5d6ef5bd154d754c4a75027e758066c0cc8f23d3c9352f88ac0eaa38b3",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Lightsaber with internal components mega project!\" by sirmakesalot, Thingiverse thing 35120 (https://www.thingiverse.com/thing:35120), Thingi10K file 100815, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/100887.stl",
+            "name": "100887.stl",
+            "sha256": "f296131b7e8dbf0fa78f12c27997d9e25a1cefa607bb05809109a2cc6f8e5f55",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis with drawers\" by MakeALot, Thingiverse thing 35167 (https://www.thingiverse.com/thing:35167), Thingi10K file 100887, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/101864.stl",
+            "name": "101864.stl",
+            "sha256": "5a0a5e15cb6149e0337c60f6128d860d23e7826b96fec56c27c4420ca2220bcb",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis with drawers\" by MakeALot, Thingiverse thing 35167 (https://www.thingiverse.com/thing:35167), Thingi10K file 101864, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/104301.stl",
+            "name": "104301.stl",
+            "sha256": "d5ddf5225452a5bf1d45b0baba4a942a684c78bc92143ae692638300321433d5",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Butterfly Comb (Fun; Functional; Aggressive)\" by idolcrasher, Thingiverse thing 36510 (https://www.thingiverse.com/thing:36510), Thingi10K file 104301, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/104640.stl",
+            "name": "104640.stl",
+            "sha256": "48aad4779a17db64f196692a44e083f7e4061805613f8b4223bce5772b4f2fa6",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 104640, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/104738.stl",
+            "name": "104738.stl",
+            "sha256": "3e315b3909832c5f56e2a1e251730dca9e08ee06cb5a6aa931eea5c70e8db7cb",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 104738, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/104968.stl",
+            "name": "104968.stl",
+            "sha256": "1a4611d2ff01fe77f4e8570269fad907ce3cce8e6dc84b867c1478ba2f9ce32c",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 104968, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/105171.stl",
+            "name": "105171.stl",
+            "sha256": "bbec987ba1ab6aa9661765af242233e8e9262dc816436ceb92dc9ebf9f701b36",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 105171, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/106681.stl",
+            "name": "106681.stl",
+            "sha256": "19860db4c34fd1b00750ff246d3cde08c6b842f8a082bd92d3386b9490f9e704",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 106681, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/107586.stl",
+            "name": "107586.stl",
+            "sha256": "01d9f8b544b545bea33f8714df2c1c4280c816bf88d69cec5d065b6fa16fe096",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 107586, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/107587.stl",
+            "name": "107587.stl",
+            "sha256": "e5c28fef2ee2172b6da0eddf1781f172f0e055f555b0ca04bbd60af9bbe22fc7",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 107587, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/107910.stl",
+            "name": "107910.stl",
+            "sha256": "42577cd21a24cbceca1b52b155ae2c448c7f5d598387b120ee145c6513d9005f",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 107910, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/108619.stl",
+            "name": "108619.stl",
+            "sha256": "1b19cc328e1517fbc42a3648e0a847f57dd7bfeff36b32075a52c975c3d2dc33",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Mini Quadruped - optimized for 9G servos\" by TheCase, Thingiverse thing 38159 (https://www.thingiverse.com/thing:38159), Thingi10K file 108619, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/1087135.stl",
+            "name": "1087135.stl",
+            "sha256": "a7cbd57734ebd973166da8222c360a141421f62d44500f45fe2e5c519ed836db",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"&quot;I Love You&quot; Box\" by MakeALot, Thingiverse thing 676630 (https://www.thingiverse.com/thing:676630), Thingi10K file 1087135, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/109459.stl",
+            "name": "109459.stl",
+            "sha256": "ba9efe5fb40bbe99e8eeef6e963bb5c0f6ab23105ce24fcf65beda0e4c2767c1",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 109459, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/109772.stl",
+            "name": "109772.stl",
+            "sha256": "83db545813e9fafb54045e7bf099d2eee8d6bd49470fb8dede3e958629851771",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Advent Calendar\" by pleppik, Thingiverse thing 36554 (https://www.thingiverse.com/thing:36554), Thingi10K file 109772, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/110699.stl",
+            "name": "110699.stl",
+            "sha256": "f0e8078552b9cd7ca5e245823e1dbf70e0a5180dee69b4ffd1b45e60e21c669b",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Mumble the Abominable Snow Monster\" by ProtoParadigm, Thingiverse thing 38863 (https://www.thingiverse.com/thing:38863), Thingi10K file 110699, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/111011.stl",
+            "name": "111011.stl",
+            "sha256": "7b1807f13522458df852a7a800d9bb645337243f61c96cf8ac17236163a51026",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"USB Christmas star - No Glue + LED holes\" by MakeALot, Thingiverse thing 39085 (https://www.thingiverse.com/thing:39085), Thingi10K file 111011, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/123787.stl",
+            "name": "123787.stl",
+            "sha256": "c4154f931328fa33edb6b0b1a4e0f92fdae5c46a04519b68b4e0849b020e36d1",
+            "licence": "LicenseRef-Thingi10K-CC-Public-Domain-Dedication",
+            "credit": "\"[OLD VERSION] Sopranino folk whistle\" by pfh, Thingiverse thing 45142 (https://www.thingiverse.com/thing:45142), Thingi10K file 123787, Creative Commons - Public Domain Dedication"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/124034.stl",
+            "name": "124034.stl",
+            "sha256": "4e4cb676cb28d37030c07ad98b3a271c135cc8a22037313388751cfc01081553",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Sweetheart Flowers\" by MakerBot, Thingiverse thing 42877 (https://www.thingiverse.com/thing:42877), Thingi10K file 124034, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/124036.stl",
+            "name": "124036.stl",
+            "sha256": "e94946d89355491575355ae217df1944c7659786bf779632c6314c01edcad339",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Sweetheart Flowers\" by MakerBot, Thingiverse thing 42877 (https://www.thingiverse.com/thing:42877), Thingi10K file 124036, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/124373.stl",
+            "name": "124373.stl",
+            "sha256": "17e03e71e3c53c8d92e666a3895c82618cda984e4fecd922f468fed0bcd037af",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"VEND - the totally printed candy dispenser\" by Mr_MegaTronic, Thingiverse thing 45347 (https://www.thingiverse.com/thing:45347), Thingi10K file 124373, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/1273629.stl",
+            "name": "1273629.stl",
+            "sha256": "d1b285dea1c55e7fc6bfad40364fee7ebfbc81709f7258fd8caf862da72e3e9b",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Universal stand-alone filament spool holder (Fully 3D-printable)\" by CreativeTools, Thingiverse thing 508896 (https://www.thingiverse.com/thing:508896), Thingi10K file 1273629, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/129891.stl",
+            "name": "129891.stl",
+            "sha256": "7dc978c116a11a25a2d249a47d881e1f9f07253a78c465cac70235d778eaba3f",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tamiya M-series Mini Cooper\" by apdesigns, Thingiverse thing 48377 (https://www.thingiverse.com/thing:48377), Thingi10K file 129891, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/129908.stl",
+            "name": "129908.stl",
+            "sha256": "923af13dd41a6d5af683b0cdb561445802fc3609c5819a30b9666f501a78de41",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tamiya M-series Mini Cooper\" by apdesigns, Thingiverse thing 48377 (https://www.thingiverse.com/thing:48377), Thingi10K file 129908, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/129915.stl",
+            "name": "129915.stl",
+            "sha256": "6f1d15f82c9d4588c81523cdd81173d73ee8aba67510f35ee555fa54302f60d8",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tamiya M-series Mini Cooper\" by apdesigns, Thingiverse thing 48377 (https://www.thingiverse.com/thing:48377), Thingi10K file 129915, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/132434.stl",
+            "name": "132434.stl",
+            "sha256": "261429aa0447caa909636334be08dbb6f47af52bcb8011b2b7e8e940f4ee5780",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Lancia Stratos\" by MakerBot, Thingiverse thing 49865 (https://www.thingiverse.com/thing:49865), Thingi10K file 132434, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/132440.stl",
+            "name": "132440.stl",
+            "sha256": "8a8271ec88bbc8f02ef649cc367cb4148b53c4475166258e142de8324d8bafd5",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Lancia Stratos\" by MakerBot, Thingiverse thing 49865 (https://www.thingiverse.com/thing:49865), Thingi10K file 132440, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/1356640.stl",
+            "name": "1356640.stl",
+            "sha256": "4141cffe46dd3185187ab7e9457e02d5c52c3edf66438704586bc83cfb2c9bb5",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Gowanus Monster - Margo Series\" by boldmachines, Thingiverse thing 854906 (https://www.thingiverse.com/thing:854906), Thingi10K file 1356640, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/136639.stl",
+            "name": "136639.stl",
+            "sha256": "5959e62cc8ef6f85da9bf0e84f6053ea073ac72609f3adb278214d1580457778",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Decorative Cat Bowls\" by pmoews, Thingiverse thing 52075 (https://www.thingiverse.com/thing:52075), Thingi10K file 136639, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/1458674.stl",
+            "name": "1458674.stl",
+            "sha256": "b3cab3ad7c71f45d735574a6dc805cf6af3578f56af7c62c55dc40ff5bcc37a3",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"OpenRC 1:10 4WD Touring Concept RC Car\" by barspin, Thingiverse thing 83024 (https://www.thingiverse.com/thing:83024), Thingi10K file 1458674, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/1458682.stl",
+            "name": "1458682.stl",
+            "sha256": "f1db3b4303aca5fae7349de4840a170c8e5397a5d1b6cba98611226be385c150",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"OpenRC 1:10 4WD Touring Concept RC Car\" by barspin, Thingiverse thing 83024 (https://www.thingiverse.com/thing:83024), Thingi10K file 1458682, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/1458692.stl",
+            "name": "1458692.stl",
+            "sha256": "8b3253e950a83f29876c6b14a55e138455569c868ca55c7962775baf3e475dc9",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"OpenRC 1:10 4WD Touring Concept RC Car\" by barspin, Thingiverse thing 83024 (https://www.thingiverse.com/thing:83024), Thingi10K file 1458692, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/1458694.stl",
+            "name": "1458694.stl",
+            "sha256": "6a4ad15759ae76603b36bee6b06f4a2cb721e0c502c5636cbfd875bf4e77948a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"OpenRC 1:10 4WD Touring Concept RC Car\" by barspin, Thingiverse thing 83024 (https://www.thingiverse.com/thing:83024), Thingi10K file 1458694, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/1458703.stl",
+            "name": "1458703.stl",
+            "sha256": "2bf23a4a3d07c01a5fe682cbbee195b3b52987ce030186bd76689fac4513935d",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"OpenRC 1:10 4WD Touring Concept RC Car\" by barspin, Thingiverse thing 83024 (https://www.thingiverse.com/thing:83024), Thingi10K file 1458703, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/167110.stl",
+            "name": "167110.stl",
+            "sha256": "848f0c8154ac2dffa0a3bf5508b4182ae0486093305db55b4008d36b8a68ba4e",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Vertex2\" by barney, Thingiverse thing 69329 (https://www.thingiverse.com/thing:69329), Thingi10K file 167110, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/178192.stl",
+            "name": "178192.stl",
+            "sha256": "21204b56927e81b88a5b232f76c5cd3c9b1230a36fb0cbb82e366ac6fe80a3e8",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Turbine Rotary Tool 60000 rpm\" by RichMac, Thingiverse thing 76369 (https://www.thingiverse.com/thing:76369), Thingi10K file 178192, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/178193.stl",
+            "name": "178193.stl",
+            "sha256": "45269ccd9c0467d7ff7975bc16c4fa859296a06554551a7d15f5f22a18f13813",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Turbine Rotary Tool 60000 rpm\" by RichMac, Thingiverse thing 76369 (https://www.thingiverse.com/thing:76369), Thingi10K file 178193, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/196187.stl",
+            "name": "196187.stl",
+            "sha256": "9ed2346832f9827e92b2b3350f87eac72622950ebd4d23e2013867c4f348d1cf",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"First Take Off of a fully printed (FDM) sailplane.\" by wersy, Thingiverse thing 86982 (https://www.thingiverse.com/thing:86982), Thingi10K file 196187, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/206494.stl",
+            "name": "206494.stl",
+            "sha256": "9a744329249a8553611928cf1e6e33a33e00699134137d79397d188e383c206f",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"First Take Off of a fully printed (FDM) sailplane.\" by wersy, Thingiverse thing 86982 (https://www.thingiverse.com/thing:86982), Thingi10K file 206494, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/206495.stl",
+            "name": "206495.stl",
+            "sha256": "70b64f3b57098d3a672d9c2d740cc337978c01d729bd28e87a729924949f6564",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"First Take Off of a fully printed (FDM) sailplane.\" by wersy, Thingiverse thing 86982 (https://www.thingiverse.com/thing:86982), Thingi10K file 206495, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/213384.stl",
+            "name": "213384.stl",
+            "sha256": "acee910e81e12fbb806aab84db1fdbc3a6385c72902918c23399554b64fdcf07",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Motorised Marble Machine\" by Alzibiff, Thingiverse thing 98669 (https://www.thingiverse.com/thing:98669), Thingi10K file 213384, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/213388.stl",
+            "name": "213388.stl",
+            "sha256": "ddeaa105838694a2149403df48876f17d1770a25d60323b20638c3cd934636b0",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Motorised Marble Machine\" by Alzibiff, Thingiverse thing 98669 (https://www.thingiverse.com/thing:98669), Thingi10K file 213388, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/217030.stl",
+            "name": "217030.stl",
+            "sha256": "4d96efb6e12326c65f78cf4fff80795c85271610fe91a9d92edfb0f8d5f92924",
+            "licence": "LicenseRef-Thingi10K-CC-Public-Domain-Dedication",
+            "credit": "\"The Turbo Entabulator - a 3D-printable  fully mechanical computer\" by chris, Thingiverse thing 101105 (https://www.thingiverse.com/thing:101105), Thingi10K file 217030, Creative Commons - Public Domain Dedication"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/224504.stl",
+            "name": "224504.stl",
+            "sha256": "ed08f11c81a4b16f24e215bc84dbf44306ce7f08df501d9036f1789f0d332cfc",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Glasses replace\" by michelefaini, Thingiverse thing 21294 (https://www.thingiverse.com/thing:21294), Thingi10K file 224504, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/225957.stl",
+            "name": "225957.stl",
+            "sha256": "badfa1d56f7ab884ee792a9289f9bbfd1399059ac4b3de1081fe9b60d2c1e23d",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis Transformer toy\" by Ellindsey, Thingiverse thing 106595 (https://www.thingiverse.com/thing:106595), Thingi10K file 225957, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/225958.stl",
+            "name": "225958.stl",
+            "sha256": "812c41baec24369c622f220d1f74620995cbb64692b19c6453a45d47dc39cd72",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis Transformer toy\" by Ellindsey, Thingiverse thing 106595 (https://www.thingiverse.com/thing:106595), Thingi10K file 225958, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/225966.stl",
+            "name": "225966.stl",
+            "sha256": "fc74d62825baea0bbde3ecd6682de5f52283c21e78f61a081be63c0fc1bb5109",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis Transformer toy\" by Ellindsey, Thingiverse thing 106595 (https://www.thingiverse.com/thing:106595), Thingi10K file 225966, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/226160.stl",
+            "name": "226160.stl",
+            "sha256": "24a42c542e450704dbbfadb13503f6fdf2e0a846dfde4916b401522c9630458f",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis Transformer toy\" by Ellindsey, Thingiverse thing 106595 (https://www.thingiverse.com/thing:106595), Thingi10K file 226160, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/232909.stl",
+            "name": "232909.stl",
+            "sha256": "a6a69912e9c547e562ebdb2daa865ef4cc3090b51fab72b8361a26838161d37c",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"1st Printed ESRA Talking Robot\" by pattonsrobots, Thingiverse thing 111008 (https://www.thingiverse.com/thing:111008), Thingi10K file 232909, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/232912.stl",
+            "name": "232912.stl",
+            "sha256": "7e82adcc109d9bbf6b6932775ab9c504ab4d8bc683e8d0b1fb3488a2861254fb",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"1st Printed ESRA Talking Robot\" by pattonsrobots, Thingiverse thing 111008 (https://www.thingiverse.com/thing:111008), Thingi10K file 232912, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/235726.stl",
+            "name": "235726.stl",
+            "sha256": "5ce8a401ad90f647dc43888609a8ae3a75b58f1b4c8a95b880f141fc89234124",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Threadless Ball Screw. No More Backlash\" by MSollack, Thingiverse thing 112718 (https://www.thingiverse.com/thing:112718), Thingi10K file 235726, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/237737.stl",
+            "name": "237737.stl",
+            "sha256": "dd270ee0d5ddbb769a000ef3ca1208c0a1a42b9a73f07f962fbc21776bdeb124",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Banjo Ukulele (Banjolele)\" by AndreasBastian, Thingiverse thing 113908 (https://www.thingiverse.com/thing:113908), Thingi10K file 237737, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/251402.stl",
+            "name": "251402.stl",
+            "sha256": "6eceb3087934115667bec1ed4b245549b67baed65a05371fd38ce8bd03f1724b",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Threadless Ball Screw. No More Backlash\" by MSollack, Thingiverse thing 112718 (https://www.thingiverse.com/thing:112718), Thingi10K file 251402, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/267664.stl",
+            "name": "267664.stl",
+            "sha256": "c56ee340fbacd1408594fdffb96018adecd17d7b89cc2408c7922253b4572cd5",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Window Ornaments\" by pmoews, Thingiverse thing 133093 (https://www.thingiverse.com/thing:133093), Thingi10K file 267664, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/278458.stl",
+            "name": "278458.stl",
+            "sha256": "a7ec5d3cbb35712c69665e7a7f59f0aaf4094f1ff7b4b902c9b0aea49ec4070c",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Crystals\" by MakerBot, Thingiverse thing 140965 (https://www.thingiverse.com/thing:140965), Thingi10K file 278458, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/375245.stl",
+            "name": "375245.stl",
+            "sha256": "c82c40c82e2085def1c99e2afbf8bdfe4ec9de87f1a66fdde8a522ccc06ee595",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis Transformer V2\" by Ellindsey, Thingiverse thing 113117 (https://www.thingiverse.com/thing:113117), Thingi10K file 375245, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/375267.stl",
+            "name": "375267.stl",
+            "sha256": "d6b7c98c518fd73601f44ef3a8726180c641ac92265b510d4e9d36d9a4e50298",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis Transformer V2\" by Ellindsey, Thingiverse thing 113117 (https://www.thingiverse.com/thing:113117), Thingi10K file 375267, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/375278.stl",
+            "name": "375278.stl",
+            "sha256": "61adcee9be3366e4105861eaa76c4405c0849852ff468973c164a4e7c16ba40b",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis Transformer V2\" by Ellindsey, Thingiverse thing 113117 (https://www.thingiverse.com/thing:113117), Thingi10K file 375278, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/375281.stl",
+            "name": "375281.stl",
+            "sha256": "eb51cbc50c4217f6fc99d30957a7cbf7f5fa3d4745cabf463995e49ad673e0f3",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tardis Transformer V2\" by Ellindsey, Thingiverse thing 113117 (https://www.thingiverse.com/thing:113117), Thingi10K file 375281, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/38741.stl",
+            "name": "38741.stl",
+            "sha256": "99bec4c808df9a2d51c8e254a76a9904837913e6c5c817d1a1e5c47170c3deeb",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Snowflake\" by JonMonaghan, Thingiverse thing 12034 (https://www.thingiverse.com/thing:12034), Thingi10K file 38741, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/387871.stl",
+            "name": "387871.stl",
+            "sha256": "c9e903717e7a64db07daadd7624615a5970c07309ad3a2abc4d38f22c2a737c8",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Eames Lounge Chair\" by PrettySmallThings, Thingiverse thing 208296 (https://www.thingiverse.com/thing:208296), Thingi10K file 387871, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/39498.stl",
+            "name": "39498.stl",
+            "sha256": "417d523732a2a14900e83a7674a564ead13def7704ed8ef6469ccaa97e9eff51",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"basic receptacles\" by MakeALot, Thingiverse thing 12120 (https://www.thingiverse.com/thing:12120), Thingi10K file 39498, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/43850.stl",
+            "name": "43850.stl",
+            "sha256": "b4666dd86e58434928c4feb2f3eaf3656e995be9c5a11313325c300ee7423502",
+            "licence": "LicenseRef-Thingi10K-Public-Domain",
+            "credit": "\"Wankel Rotary Engine Model\" by jag, Thingiverse thing 13406 (https://www.thingiverse.com/thing:13406), Thingi10K file 43850, Public Domain"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/44948.stl",
+            "name": "44948.stl",
+            "sha256": "8e65e95129ba61b2ac83fcf709f9f74ebd5dd6bb0df6a98c23231c223dddd067",
+            "licence": "LicenseRef-Thingi10K-Public-Domain",
+            "credit": "\"mk7 ball bearing extruder drive\" by jag, Thingiverse thing 13727 (https://www.thingiverse.com/thing:13727), Thingi10K file 44948, Public Domain"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/44950.stl",
+            "name": "44950.stl",
+            "sha256": "7cfc8f73f29a61da358c15268971fd8026e0680a2aa6edb4d2a60bb023ad24ce",
+            "licence": "LicenseRef-Thingi10K-Public-Domain",
+            "credit": "\"mk7 ball bearing extruder drive\" by jag, Thingiverse thing 13727 (https://www.thingiverse.com/thing:13727), Thingi10K file 44950, Public Domain"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/45513.stl",
+            "name": "45513.stl",
+            "sha256": "137d85edf0c54dd0bfc9468a84cc4c37fa7604083f6f2b53e40dce39c3b4129a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Printable Wool Winder\" by MatthewLaBerge, Thingiverse thing 13816 (https://www.thingiverse.com/thing:13816), Thingi10K file 45513, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/45515.stl",
+            "name": "45515.stl",
+            "sha256": "89b4dfdd2ba20d33e19a1a85d9cbd4edc9f2b9e4488f58549e7353d729a03c8b",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Printable Wool Winder\" by MatthewLaBerge, Thingiverse thing 13816 (https://www.thingiverse.com/thing:13816), Thingi10K file 45515, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/45517.stl",
+            "name": "45517.stl",
+            "sha256": "e4563955196297c17d7b75ef8b0a1fb9560ed1befa4919602a76c2858931cf11",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Printable Wool Winder\" by MatthewLaBerge, Thingiverse thing 13816 (https://www.thingiverse.com/thing:13816), Thingi10K file 45517, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/46780.stl",
+            "name": "46780.stl",
+            "sha256": "153ee0ea1b2df33bee93aa087fa7cc521cc7ae83b875d57292787a915fb2e7c4",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"MetaBalls are Among Us!!\" by WilliamAAdams, Thingiverse thing 14246 (https://www.thingiverse.com/thing:14246), Thingi10K file 46780, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472000.stl",
+            "name": "472000.stl",
+            "sha256": "883abcb08689f4d1359fc6f5670b249ca301c8e0c08e35503c168062f4b230a9",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472000, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472011.stl",
+            "name": "472011.stl",
+            "sha256": "105943ae2fc7ffe36bb7b0cb9f1687a4c829ba146033f442b3d5f412ec458163",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472011, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472037.stl",
+            "name": "472037.stl",
+            "sha256": "ca2f0a998f367a7ba8ec679880e37b089a790ae3418eff4bedf7598987c1c41d",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472037, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472038.stl",
+            "name": "472038.stl",
+            "sha256": "088999571f1ed3ae1683a5c05244a7a386caab34e0e1859641410280759c79a2",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472038, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472039.stl",
+            "name": "472039.stl",
+            "sha256": "bce0ba91003522d69b2d199b87f4da6e5e5558cb9d46dcbd2c2f52b308c32260",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472039, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472041.stl",
+            "name": "472041.stl",
+            "sha256": "e96c6eac8cc6c4f89809ef148c2a21a706a494ae72a00653148d225cfcc33858",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472041, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472042.stl",
+            "name": "472042.stl",
+            "sha256": "a75ab6a7833e678032b92995263df6ad1048d98e0bccb7e6d3796602ef72e6fb",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472042, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472047.stl",
+            "name": "472047.stl",
+            "sha256": "604a35d64b104d3007a79438227a56ad8b81055b5d51b3f07c970c149c009138",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472047, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472050.stl",
+            "name": "472050.stl",
+            "sha256": "048b86e0064952b408cea5957385bc67df7aaf4877f93b8832389d8f88a6dc2a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472050, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472056.stl",
+            "name": "472056.stl",
+            "sha256": "3bc1b172f1ab146dfd30bf87f06e5cfce345ecdb6e9a2ebc7c6f1fac167b3025",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472056, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472059.stl",
+            "name": "472059.stl",
+            "sha256": "b1f0dfe82dace796f64d56970848c13dcdb13f2ca25fd6d1795286092c95b390",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472059, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472061.stl",
+            "name": "472061.stl",
+            "sha256": "3949dd4770ebe8645916c424c1be83662e18022e6ee7931c3a3df51050b79c8e",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472061, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472078.stl",
+            "name": "472078.stl",
+            "sha256": "8cd73047ec9bbc257e07caefab92641601b6de02ce85a06170bbbc901313fb8f",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472078, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472080.stl",
+            "name": "472080.stl",
+            "sha256": "6716ce8c164a073ea6b1581b539d6f037f49eb163104b515b2c8594af0a23ce4",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472080, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472103.stl",
+            "name": "472103.stl",
+            "sha256": "97430be73a74b7e6a8dcdf7cdabf5301bfa3b154d7eab1d45070180a1d64f28e",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472103, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472117.stl",
+            "name": "472117.stl",
+            "sha256": "0e1eee53f9ac612a549f092035b3f3fd02d73ea84742ff7576ff840910f548d8",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472117, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472133.stl",
+            "name": "472133.stl",
+            "sha256": "0bd53bc8a52cd3aed21bffc49ebfa758add0557c9f737c3d3f28ef76563bed6a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472133, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472137.stl",
+            "name": "472137.stl",
+            "sha256": "02114f5e81f22ea329df38e2beb9679828607001d34489e113f8d351fc311c6c",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472137, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472147.stl",
+            "name": "472147.stl",
+            "sha256": "5118fb6f193c6a3cbc94451deee36709a0cc9e23c6efd4401b3a9e9cd7bef35b",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472147, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472152.stl",
+            "name": "472152.stl",
+            "sha256": "788d1c7e874cb05d3c39af41c99001e57876629838d66169282449532813cad0",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472152, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472155.stl",
+            "name": "472155.stl",
+            "sha256": "93719d5664f6a3aa65af4b6f57063481e243b06fba83162f80917898c649266a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472155, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472179.stl",
+            "name": "472179.stl",
+            "sha256": "b9c2527fd9315fb577f2ecce56ea91c7714a02b3d8141141b97fcfc01b954a15",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472179, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/472201.stl",
+            "name": "472201.stl",
+            "sha256": "89a238517d5ec2d7a2ac3892f70b244e1c940012f0327d2d2edf39d00cbe0954",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"4-8-8-4 Big Boy Locomotive\" by MakerBot, Thingiverse thing 259005 (https://www.thingiverse.com/thing:259005), Thingi10K file 472201, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/48940.stl",
+            "name": "48940.stl",
+            "sha256": "8eb55b6b942e4da19836b8fca8aafa45bb40de3c1308cfc0e41aee8ce54f9068",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Dreidel\" by Zydac, Thingiverse thing 14826 (https://www.thingiverse.com/thing:14826), Thingi10K file 48940, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/495000.stl",
+            "name": "495000.stl",
+            "sha256": "540dd06004379cd588934fe22bb025f1b45cbef886bdc25dacad12978d75bd6f",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Shamrock - Clip On\" by MacGyver, Thingiverse thing 273615 (https://www.thingiverse.com/thing:273615), Thingi10K file 495000, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/500100.stl",
+            "name": "500100.stl",
+            "sha256": "152786ef3919fa27ed6df7379acf6caab0545436ce61d27c35e9a8044617562a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Heatwave 3d Printable Typeface\" by LorenIPSVM, Thingiverse thing 276836 (https://www.thingiverse.com/thing:276836), Thingi10K file 500100, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/500107.stl",
+            "name": "500107.stl",
+            "sha256": "5a8acd8ffa6aa1923aaca193630d99702bd88648a818f15c2281b00ced263623",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Heatwave 3d Printable Typeface\" by LorenIPSVM, Thingiverse thing 276836 (https://www.thingiverse.com/thing:276836), Thingi10K file 500107, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/500110.stl",
+            "name": "500110.stl",
+            "sha256": "507c5da143d1c954fda56f6bdae0f81f67bda718a8ca3c61566bfc22c1214226",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Heatwave 3d Printable Typeface\" by LorenIPSVM, Thingiverse thing 276836 (https://www.thingiverse.com/thing:276836), Thingi10K file 500110, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/500120.stl",
+            "name": "500120.stl",
+            "sha256": "f1d185082e849f121b8203687a434786f9c09eb16a46a4e080a68705d578edfa",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Heatwave 3d Printable Typeface\" by LorenIPSVM, Thingiverse thing 276836 (https://www.thingiverse.com/thing:276836), Thingi10K file 500120, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/50881.stl",
+            "name": "50881.stl",
+            "sha256": "8d45a33b1b2df0c4625bb54b8b9bf27f48fea90b46d975cb1fbee4093f59a3a9",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Inverted Bracelet\" by kylemcdonald, Thingiverse thing 15446 (https://www.thingiverse.com/thing:15446), Thingi10K file 50881, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/520647.stl",
+            "name": "520647.stl",
+            "sha256": "c49f44e1af07e02d6cc4b34dcef683e3faf941b648c041298989060ddd404870",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Heatwave 3d Printable Typeface\" by LorenIPSVM, Thingiverse thing 276836 (https://www.thingiverse.com/thing:276836), Thingi10K file 520647, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/53048.stl",
+            "name": "53048.stl",
+            "sha256": "88b9e0536943589454d3f2d4f1922ba64ee367f1dffb3f12edc010c957a0f68c",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Printable Wool Winder\" by MatthewLaBerge, Thingiverse thing 13816 (https://www.thingiverse.com/thing:13816), Thingi10K file 53048, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/548859.stl",
+            "name": "548859.stl",
+            "sha256": "020444f2c35dd68e50d752c3108c460c4b4571fdbb59b4b1a25f6c4a1ef75984",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"RAPIRO - The Humanoid Robot for your Raspberry Pi\" by ShotaIshiwatari, Thingiverse thing 309466 (https://www.thingiverse.com/thing:309466), Thingi10K file 548859, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/548864.stl",
+            "name": "548864.stl",
+            "sha256": "864004c4fc62c17b890cc1f94d68ff19649b7b333d166eeeeb5a487f92858a4e",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"RAPIRO - The Humanoid Robot for your Raspberry Pi\" by ShotaIshiwatari, Thingiverse thing 309466 (https://www.thingiverse.com/thing:309466), Thingi10K file 548864, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/548867.stl",
+            "name": "548867.stl",
+            "sha256": "f7a6ead5742b17ce7a9166e028a7e8c5e27958631cc36e03d96abd84115c16cf",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"RAPIRO - The Humanoid Robot for your Raspberry Pi\" by ShotaIshiwatari, Thingiverse thing 309466 (https://www.thingiverse.com/thing:309466), Thingi10K file 548867, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/55963.stl",
+            "name": "55963.stl",
+            "sha256": "af0394cfcc984ca258d9c22733abde19b71efa7f1d64e1973c326c78428db64a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Balloon Car ( Lego Racer Light)\" by 2ROBOTGUY, Thingiverse thing 17108 (https://www.thingiverse.com/thing:17108), Thingi10K file 55963, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/57942.stl",
+            "name": "57942.stl",
+            "sha256": "f820b4e6a7bd9bc6b3b9f71b920176e10c17ce43917090d6e1a4b479dbcc906a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Stephen Colbert Chocolate Mold\" by 2ROBOTGUY, Thingiverse thing 17570 (https://www.thingiverse.com/thing:17570), Thingi10K file 57942, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/58933.stl",
+            "name": "58933.stl",
+            "sha256": "20b3ce51aab64b9bc91c10ee72d1d5cd17c0684c17127e260eaec73f50d35f27",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"MakerBot Wizard\" by wes, Thingiverse thing 18132 (https://www.thingiverse.com/thing:18132), Thingi10K file 58933, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/59230.stl",
+            "name": "59230.stl",
+            "sha256": "67ef93b799cf57c037869a1a505dd7b0baad714689f9c0c2c83bfbddbca49050",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Exploded Planetary Gear Set\" by Thing-O-Fun, Thingiverse thing 18291 (https://www.thingiverse.com/thing:18291), Thingi10K file 59230, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/59757.stl",
+            "name": "59757.stl",
+            "sha256": "25de7a5a168b86e89524d771844795ccb5b0cea14e987bab68fbd56eaca58adf",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Truchet Tiles\" by DigitalBytes, Thingiverse thing 18471 (https://www.thingiverse.com/thing:18471), Thingi10K file 59757, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/60880.stl",
+            "name": "60880.stl",
+            "sha256": "8d656cf7520a7f9f45f179cc0e021adb6334a23a4ddd1393a9146cb4ae2c5e83",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Chocolate pump\" by Ioan, Thingiverse thing 18933 (https://www.thingiverse.com/thing:18933), Thingi10K file 60880, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/60916.stl",
+            "name": "60916.stl",
+            "sha256": "9358f03a7f9a0adce322a58d21e97454af07c49ddf3dc4a842760b7f115c98e6",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Gear O&#039;Clock - number plates and couple of changes\" by Alzibiff, Thingiverse thing 18959 (https://www.thingiverse.com/thing:18959), Thingi10K file 60916, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/60927.stl",
+            "name": "60927.stl",
+            "sha256": "40c91bdde9535085fcd299f1db0864e129b195ae08c865cefbc8253d387be9c1",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Gear O&#039;Clock - number plates and couple of changes\" by Alzibiff, Thingiverse thing 18959 (https://www.thingiverse.com/thing:18959), Thingi10K file 60927, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/64957.stl",
+            "name": "64957.stl",
+            "sha256": "e4a1a92a3e69617f375ef10f248cf40250aeeb062b4f0dc0a5b8ded445b50627",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Two Headed Bunny\" by OpenBuilds, Thingiverse thing 20719 (https://www.thingiverse.com/thing:20719), Thingi10K file 64957, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/65004.stl",
+            "name": "65004.stl",
+            "sha256": "6b0982bb9d0f765eefb70e7d45f919e77d6d2a98ca190b52ac15ec2931017927",
+            "licence": "LicenseRef-Thingi10K-CC-Public-Domain-Dedication",
+            "credit": "\"Arduino Cases\" by variador, Thingiverse thing 20739 (https://www.thingiverse.com/thing:20739), Thingi10K file 65004, Creative Commons - Public Domain Dedication"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/65282.stl",
+            "name": "65282.stl",
+            "sha256": "fba9ae6f9ccf953ebc8aa1dc1f77cabb04ae8c7dba8c803f62a28d0b9482e4ba",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tin can Bird house by Samuel Bernier; Project RE_\" by samuel, Thingiverse thing 20851 (https://www.thingiverse.com/thing:20851), Thingi10K file 65282, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/669963.stl",
+            "name": "669963.stl",
+            "sha256": "4f3e070a8b298800101050a01e05adbd449044c4241ca7c0c123df6877945f85",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Build Your Own Jet Engine\" by GE, Thingiverse thing 392115 (https://www.thingiverse.com/thing:392115), Thingi10K file 669963, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/669979.stl",
+            "name": "669979.stl",
+            "sha256": "a31ff7644c14a96a0b675881c13da77b7897dfc5da297f1d0c6d7a5c6a294310",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Build Your Own Jet Engine\" by GE, Thingiverse thing 392115 (https://www.thingiverse.com/thing:392115), Thingi10K file 669979, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/67501.stl",
+            "name": "67501.stl",
+            "sha256": "83534004166f148ed71db4b509a3d6b663dc3074d4405286620dc8efc8bd8e42",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Dice with coloured dots (Dual Extrusion)\" by PolygonPusher, Thingiverse thing 21842 (https://www.thingiverse.com/thing:21842), Thingi10K file 67501, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/69883.stl",
+            "name": "69883.stl",
+            "sha256": "edeed68bb8ac5344396570c6f20b62d172286afdce8a07481dc7254e983de7da",
+            "licence": "LicenseRef-Thingi10K-CC-Public-Domain-Dedication",
+            "credit": "\"The FIBIAC - a simple electromechanical computer\" by chris, Thingiverse thing 22803 (https://www.thingiverse.com/thing:22803), Thingi10K file 69883, Creative Commons - Public Domain Dedication"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/69930.stl",
+            "name": "69930.stl",
+            "sha256": "a4e6090b3522c3952221670d4b8ba4a83c6e2567974d1e8d5e8776c4574f72e1",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Classy Octopus\" by IWorkInPixels, Thingiverse thing 22818 (https://www.thingiverse.com/thing:22818), Thingi10K file 69930, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/70066.stl",
+            "name": "70066.stl",
+            "sha256": "c6fcc4b29ae4f7120a68146dcee54907a19354f6043dc09363ac4a534ee5deef",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Lightcycle Model Kit\" by cbabbage, Thingiverse thing 22858 (https://www.thingiverse.com/thing:22858), Thingi10K file 70066, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/70830.stl",
+            "name": "70830.stl",
+            "sha256": "ff241ecadc83639791ad9134ef54aff195a63245943905f3bddc9a5f72d45298",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Campfire\" by MakerBot, Thingiverse thing 23173 (https://www.thingiverse.com/thing:23173), Thingi10K file 70830, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/70831.stl",
+            "name": "70831.stl",
+            "sha256": "5c8cfa5d93530dc9f061525d641d3aa61ef1d96fa2be4cb2d8a5b7ca5b550a66",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Campfire\" by MakerBot, Thingiverse thing 23173 (https://www.thingiverse.com/thing:23173), Thingi10K file 70831, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/70834.stl",
+            "name": "70834.stl",
+            "sha256": "28969f9d2999b2a2f846ffc943e4703bd162b7b1c78962c2f8a4df547f20d896",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Campfire\" by MakerBot, Thingiverse thing 23173 (https://www.thingiverse.com/thing:23173), Thingi10K file 70834, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/72100.stl",
+            "name": "72100.stl",
+            "sha256": "a93b6bbd0df94f104bb34a4eaf4bd3a471497aa195454a30f484a364ad50c675",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Button Bot\" by MakerBot, Thingiverse thing 23696 (https://www.thingiverse.com/thing:23696), Thingi10K file 72100, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/74126.stl",
+            "name": "74126.stl",
+            "sha256": "2f1c64ed2de45519705e2352d7949194248df4d0dd665b7d74cc4eb4847ddecb",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"MiniSky-Ball\" by MAF, Thingiverse thing 24555 (https://www.thingiverse.com/thing:24555), Thingi10K file 74126, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/75359.stl",
+            "name": "75359.stl",
+            "sha256": "f56c0d4c8940e92c1f0bc5363af5786caf9cb6fcf03df924cd2e8d9bc8dac17d",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Baby Brownie Piggy Bank\" by pmoews, Thingiverse thing 25033 (https://www.thingiverse.com/thing:25033), Thingi10K file 75359, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/75976.stl",
+            "name": "75976.stl",
+            "sha256": "5f93597062315bd4f32db593a1db755100544a0dcca5d2f4305fbcce07ab6ab2",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Sea Creatures!\" by MakerBot, Thingiverse thing 25276 (https://www.thingiverse.com/thing:25276), Thingi10K file 75976, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/75986.stl",
+            "name": "75986.stl",
+            "sha256": "8339a4f807536402dc2f1f64f0be332e86ca6f00c7adc00f56dd1dbf52112a91",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Sea Creatures!\" by MakerBot, Thingiverse thing 25276 (https://www.thingiverse.com/thing:25276), Thingi10K file 75986, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/75988.stl",
+            "name": "75988.stl",
+            "sha256": "a68aa8849409eb38213ecaefca888fde0b3e72af908a282cd66fa2e86f8462c7",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Sea Creatures!\" by MakerBot, Thingiverse thing 25276 (https://www.thingiverse.com/thing:25276), Thingi10K file 75988, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/76907.stl",
+            "name": "76907.stl",
+            "sha256": "712520c4906b147f913f5029a12839aea544125e808a7eea709c9e1710487e90",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Working Oscillating Steam Engine MKI\" by cbabbage, Thingiverse thing 25624 (https://www.thingiverse.com/thing:25624), Thingi10K file 76907, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/77017.stl",
+            "name": "77017.stl",
+            "sha256": "77dc56cab8ef84630eb0c815f3844d91b631f60d02c051a56fa472d2b27c8ecf",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Lynx Building Toy\" by OSTycoon, Thingiverse thing 25680 (https://www.thingiverse.com/thing:25680), Thingi10K file 77017, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/77185.stl",
+            "name": "77185.stl",
+            "sha256": "e9236dd2181aaac11c8921c71bb917be3516aa6b4b0f7808517081a91b7e031a",
+            "licence": "LicenseRef-Thingi10K-Public-Domain",
+            "credit": "\"mk7 ball bearing extruder drive\" by jag, Thingiverse thing 13727 (https://www.thingiverse.com/thing:13727), Thingi10K file 77185, Public Domain"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/78733.stl",
+            "name": "78733.stl",
+            "sha256": "e93af53274f495e46f36f7c9fb397ada31a9ff3fb3564ea5c106729c3303676a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Almost Impossible Heart\" by GregFrost, Thingiverse thing 26334 (https://www.thingiverse.com/thing:26334), Thingi10K file 78733, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/78738.stl",
+            "name": "78738.stl",
+            "sha256": "5758d88e8ab781c60f62f0425dcf8d9c498e194a3f5602c5b05ea762f2aed8fa",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Almost Impossible Heart\" by GregFrost, Thingiverse thing 26334 (https://www.thingiverse.com/thing:26334), Thingi10K file 78738, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/80604.stl",
+            "name": "80604.stl",
+            "sha256": "59a54a2f777c3121bf647a4c1d38b0fb3d8f53af228b5c002276953297425927",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Escape From Leviathan\" by MakerBot, Thingiverse thing 27065 (https://www.thingiverse.com/thing:27065), Thingi10K file 80604, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/80760.stl",
+            "name": "80760.stl",
+            "sha256": "7117ffe9ac9a8dd977fd7efad20fff77737cdd5ce92bfe04ed8413f8180a5495",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Automaton Dragon!\" by MakerBot, Thingiverse thing 27118 (https://www.thingiverse.com/thing:27118), Thingi10K file 80760, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/80942.stl",
+            "name": "80942.stl",
+            "sha256": "f80a0aea12b4384a547d241b0ae7cf3c6abd2b9136aaed8fd3d0a1175e5faa69",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Fully Printable Padlock\" by ttsalo, Thingiverse thing 27205 (https://www.thingiverse.com/thing:27205), Thingi10K file 80942, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/81366.stl",
+            "name": "81366.stl",
+            "sha256": "5bbf9d36c2148aeb7031620c10334295aad2b6043fd6e7d2ab90c54a336f40a5",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Nautilus Gears\" by MishaT, Thingiverse thing 27233 (https://www.thingiverse.com/thing:27233), Thingi10K file 81366, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/84032.stl",
+            "name": "84032.stl",
+            "sha256": "8b18cec06d87b6341ffae6b3ec7376e04e5cd495b86c3416a5e10f3da607e6be",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Original design 7segment LED\" by rerofumi, Thingiverse thing 28393 (https://www.thingiverse.com/thing:28393), Thingi10K file 84032, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/84736.stl",
+            "name": "84736.stl",
+            "sha256": "4de846fb7c6ae5259655d89f2cf9c8ef021c234da02efd81df47efa0744a0da4",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Steak\" by MakerBot, Thingiverse thing 28675 (https://www.thingiverse.com/thing:28675), Thingi10K file 84736, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/84737.stl",
+            "name": "84737.stl",
+            "sha256": "a0efa5fbc5a2466bac7c1e95f11f7a198ccf4a2fdab6929101d76c2cdf593da8",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Steak\" by MakerBot, Thingiverse thing 28675 (https://www.thingiverse.com/thing:28675), Thingi10K file 84737, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/84918.stl",
+            "name": "84918.stl",
+            "sha256": "0f610702ecf7eaecc59716cada2b777104118c7724fc3778fb9fb7c4735db850",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"PolargraphSD Case\" by euphy, Thingiverse thing 28516 (https://www.thingiverse.com/thing:28516), Thingi10K file 84918, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/85495.stl",
+            "name": "85495.stl",
+            "sha256": "3630f4f648f587fb44b7ad9ed424bb592c74326071d47fbc23037936c8c5ba60",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Snake\" by johnbradley, Thingiverse thing 28860 (https://www.thingiverse.com/thing:28860), Thingi10K file 85495, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/85886.stl",
+            "name": "85886.stl",
+            "sha256": "c7a1d1028af4d1c443af22e7652bdc5bc1ef996b5896bf19847ac612d535f8aa",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Piano Neck-Tie\" by MakerBot, Thingiverse thing 29126 (https://www.thingiverse.com/thing:29126), Thingi10K file 85886, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/88147.stl",
+            "name": "88147.stl",
+            "sha256": "8800a9f707c9b6e30d808137fa94d9291f3483d565c15d0f0b7d049b9e437d65",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Battle Kitten Ayumi\" by AminimalStudio, Thingiverse thing 30065 (https://www.thingiverse.com/thing:30065), Thingi10K file 88147, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/89420.stl",
+            "name": "89420.stl",
+            "sha256": "99fc76c6291518d7b9f058a0c2135d60c890d9d14491688a8f0fbcc75972a054",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"High Reduction Ratio Planetary Drive\" by mkeveney, Thingiverse thing 30615 (https://www.thingiverse.com/thing:30615), Thingi10K file 89420, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/90358.stl",
+            "name": "90358.stl",
+            "sha256": "ac0e81084a91c61c25627be6624d593ed5f5a02c70995e851e846b705eb7fa9e",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Sam&#039;s Gears\" by pleppik, Thingiverse thing 30981 (https://www.thingiverse.com/thing:30981), Thingi10K file 90358, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/90359.stl",
+            "name": "90359.stl",
+            "sha256": "106c10d2295c120f20b75a320e015fe6e86d1d61ed60d27168cbfaf8b8feeeea",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Sam&#039;s Gears\" by pleppik, Thingiverse thing 30981 (https://www.thingiverse.com/thing:30981), Thingi10K file 90359, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/908460.stl",
+            "name": "908460.stl",
+            "sha256": "3ecbd6b31e01feb9c3bf05aa343d1c4f27fc02250964096346ae9aa3619b2f21",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Universal stand-alone filament spool holder (Fully 3D-printable)\" by CreativeTools, Thingiverse thing 508896 (https://www.thingiverse.com/thing:508896), Thingi10K file 908460, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/91013.stl",
+            "name": "91013.stl",
+            "sha256": "4e3076d4060d574357005ac60e353dd2424d9b081ab60d58d7c8c2acf48cc9f3",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"MakerBelt\" by MakerBot, Thingiverse thing 31243 (https://www.thingiverse.com/thing:31243), Thingi10K file 91013, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/92119.stl",
+            "name": "92119.stl",
+            "sha256": "4346fa86049474dfe9a489f32aceb6d439bdf858e3a2afaa8786ccb0d3547c4d",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Tractor\" by MakerBot, Thingiverse thing 31702 (https://www.thingiverse.com/thing:31702), Thingi10K file 92119, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/939893.stl",
+            "name": "939893.stl",
+            "sha256": "d01815688c441eef92292bcbe29ea1d052db92d3f01bf8322a1deeea9a9e77e9",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Ball-joint articulated octopus\" by Ellindsey, Thingiverse thing 584405 (https://www.thingiverse.com/thing:584405), Thingi10K file 939893, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/94140.stl",
+            "name": "94140.stl",
+            "sha256": "8e8bc1ac5c0ae513f8418b052641fee5a1a6cadf6ebd30c04df301623b9d84e4",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Shack Bot\" by MakerBot, Thingiverse thing 32510 (https://www.thingiverse.com/thing:32510), Thingi10K file 94140, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/94146.stl",
+            "name": "94146.stl",
+            "sha256": "5b9e94371aab62db26193a12cae403c494a98965a42845051ad4694f388c78da",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Shack Bot\" by MakerBot, Thingiverse thing 32510 (https://www.thingiverse.com/thing:32510), Thingi10K file 94146, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/94149.stl",
+            "name": "94149.stl",
+            "sha256": "0a51c0725ba85f6365c07164453e6ddba45b4be2bcfbbf2ccc1b071d7b15b66f",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Shack Bot\" by MakerBot, Thingiverse thing 32510 (https://www.thingiverse.com/thing:32510), Thingi10K file 94149, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/94152.stl",
+            "name": "94152.stl",
+            "sha256": "69306ceb914da8b4f9a29d65804af5cfc5bcff3617cf9d0bfb7864700f98f9fe",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Shack Bot\" by MakerBot, Thingiverse thing 32510 (https://www.thingiverse.com/thing:32510), Thingi10K file 94152, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/94492.stl",
+            "name": "94492.stl",
+            "sha256": "a09ff9e9f287be96dae678e9b4e9f771aed4bde95113a5317485df9d85ca59c0",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"My version of the LYMAN FILAMENT EXTRUDER\" by bottleworks, Thingiverse thing 32667 (https://www.thingiverse.com/thing:32667), Thingi10K file 94492, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/94990.stl",
+            "name": "94990.stl",
+            "sha256": "c074ee56d1c6d5ea6c5601ae11057b4c43684e63d605d3216ce96366aafa7f4b",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Alien Antennae\" by MakerBot, Thingiverse thing 32884 (https://www.thingiverse.com/thing:32884), Thingi10K file 94990, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/95487.stl",
+            "name": "95487.stl",
+            "sha256": "7237817254970deb39eee00f205b09a0a4217c12f3a909321f18d662fd7c463a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"MakerBot - the Lunchbox!\" by Mr_MegaTronic, Thingiverse thing 33093 (https://www.thingiverse.com/thing:33093), Thingi10K file 95487, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/95500.stl",
+            "name": "95500.stl",
+            "sha256": "90ccd4c8bc8c081a36a0e427fb8dc9cfaf3b2fc3a6dbf33c4543151b4f8f7e18",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Maths cookie cutter set\" by mrbenbritton, Thingiverse thing 33096 (https://www.thingiverse.com/thing:33096), Thingi10K file 95500, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/95503.stl",
+            "name": "95503.stl",
+            "sha256": "01bcdaab7ef3e66fdac3cc695cbbcf2890eded320a174d0022c10a23353f9e49",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Maths cookie cutter set\" by mrbenbritton, Thingiverse thing 33096 (https://www.thingiverse.com/thing:33096), Thingi10K file 95503, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/95663.stl",
+            "name": "95663.stl",
+            "sha256": "9a9739678cfc37df592356b469589c009773bc31d690544902eb09d59eda739d",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Caddyrack\" by Mr_MegaTronic, Thingiverse thing 33163 (https://www.thingiverse.com/thing:33163), Thingi10K file 95663, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/96772.stl",
+            "name": "96772.stl",
+            "sha256": "86e7ea9e5c550502db48f6c868b8d9ca6924f69b9235b0379ea5c21ae3c6637a",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Rocket Engine Power !\" by naveod, Thingiverse thing 33509 (https://www.thingiverse.com/thing:33509), Thingi10K file 96772, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/96776.stl",
+            "name": "96776.stl",
+            "sha256": "bc885afd6c83b0792c80d3a19effd1121427c9fc921c9a6bca091cb28f54002d",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Rocket Engine Power !\" by naveod, Thingiverse thing 33509 (https://www.thingiverse.com/thing:33509), Thingi10K file 96776, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/96777.stl",
+            "name": "96777.stl",
+            "sha256": "15f5ce0858ad745e02682dea93adae4bae0c2b4493bba5647f188441cb7505a0",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Rocket Engine Power !\" by naveod, Thingiverse thing 33509 (https://www.thingiverse.com/thing:33509), Thingi10K file 96777, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/98625.stl",
+            "name": "98625.stl",
+            "sha256": "7ce0028529c17ea1038acdc1d06fb142bb1453873de19b28d9b5e1f363f8fc67",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Interlocking 3D Carcassonne Tiles\" by ravix, Thingiverse thing 34295 (https://www.thingiverse.com/thing:34295), Thingi10K file 98625, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/98660.stl",
+            "name": "98660.stl",
+            "sha256": "bb33867ac777efaf675b74884b0e0b7d3b479e86315f1ff19ee498f9d9abc8ae",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Interlocking 3D Carcassonne Tiles\" by ravix, Thingiverse thing 34295 (https://www.thingiverse.com/thing:34295), Thingi10K file 98660, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/99776.stl",
+            "name": "99776.stl",
+            "sha256": "56463948966088db99da3ec308b8ba5aac515e5f2848e004af12ba357f3365cb",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Car\" by MakerBot, Thingiverse thing 34725 (https://www.thingiverse.com/thing:34725), Thingi10K file 99776, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/2d5d3b2f3cd3711028ad75b12788c13b25559ec6/raw_meshes/99865.stl",
+            "name": "99865.stl",
+            "sha256": "5a56369847a74470e33f3612169f8fd997f069c955eb64e29b1c27169e8174a0",
+            "licence": "LicenseRef-Thingi10K-CC-BY",
+            "credit": "\"Car\" by MakerBot, Thingiverse thing 34725 (https://www.thingiverse.com/thing:34725), Thingi10K file 99865, Creative Commons - Attribution"
+          },
+          {
+            "url": "https://raw.githubusercontent.com/elalish/manifold/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/testfiles/ember-benchmark-cases.json",
+            "name": "ember-benchmark-cases.json",
+            "sha256": "73e67fa510187fbaebc15936825cb79e8b09459b6edfcd1cd216dc841408cfb2",
+            "licence": "Apache-2.0",
+            "credit": "EMBER's benchmark cases, Manifold's benchmark harness (extras/ember_tests), Emmett Lalish and contributors, Apache-2.0"
+          }
+        ]
+      },
+      "decision": null
+    },
+    {
       "id": "ssi-corpus",
       "what": "119 surface-intersection cases with exact truth",
       "used_for": "Section 12's acceptance gate",

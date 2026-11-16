@@ -18,6 +18,10 @@
 //!   own. Copyleft data is fetched and never stored (32.6). `CC-BY-ND-4.0` is stored or fetched only
 //!   unmodified, which a digest pins.
 //! - **Credits.** Every stored corpus carries its credit, unless its licence asks for none (CC0).
+//! - **Files of their own licence.** A downloaded file may carry its own licence and credit (each
+//!   model of Thingi10K has its own): then it is held to the same rules as a corpus (nothing
+//!   non-commercial, a credit unless its licence asks for none), and the corpus's licence names
+//!   every file's. A file's name is a plain name, never a path, and no two files share one.
 //! - **Vendored files match.** Every file under the corpora folder belongs to a stored corpus, sits
 //!   in its folder, and the folder's digest is the register's. A file nothing lists fails, so an
 //!   unlicensed file cannot slip in beside a licensed one.
@@ -117,10 +121,56 @@ pub enum Fetch {
 pub struct FetchFile {
     /// Its URL.
     pub url: String,
-    /// The name it is kept under.
+    /// The name it is kept under: letters, digits, `.`, `-` and `_`, never a path.
     pub name: String,
     /// Its SHA-256.
     pub sha256: Hash,
+    /// Its own licence, for a corpus whose files each carry one (a model of Thingi10K): an SPDX
+    /// expression, or `LicenseRef-<name>`, which the corpus's licence names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub licence: Option<String>,
+    /// The credit its own licence asks for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credit: Option<String>,
+}
+
+impl FetchFile {
+    /// The rules a file of its own licence keeps, inside `corpus`: a plain name, nothing
+    /// non-commercial, a credit unless the licence asks for none, and a licence the corpus's own
+    /// names.
+    fn rules(&self, corpus: &str) -> Result<(), String> {
+        let plain = |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_');
+        if self.name.is_empty() || self.name.starts_with('.') || !self.name.bytes().all(plain) {
+            return Err(format!("{}: a file's name is a plain name", self.name));
+        }
+        let Some(licence) = &self.licence else {
+            return if self.credit.is_some() {
+                Err(format!("{}: a credit without its licence", self.name))
+            } else {
+                Ok(())
+            };
+        };
+        if is_non_commercial(licence) {
+            return Err(format!(
+                "{}: {licence} is non-commercial, which cannot sit in a public CI (32.11)",
+                self.name
+            ));
+        }
+        if self.credit.as_deref().is_none_or(|c| c.trim().is_empty()) && !asks_no_credit(licence) {
+            return Err(format!(
+                "{}: {licence} asks for a credit, and none is given",
+                self.name
+            ));
+        }
+        let named = identifiers(corpus);
+        if !identifiers(licence).iter().all(|one| named.contains(one)) {
+            return Err(format!(
+                "{}: its licence {licence} is not named by the corpus's",
+                self.name
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// One corpus.
@@ -284,8 +334,17 @@ impl Corpus {
                 return Err("a Git source names its paths".to_owned());
             }
         }
-        if matches!(&self.fetch, Some(Fetch::Files(files)) if files.is_empty()) {
-            return Err("a list of files names at least one".to_owned());
+        if let Some(Fetch::Files(files)) = &self.fetch {
+            if files.is_empty() {
+                return Err("a list of files names at least one".to_owned());
+            }
+            let mut names = BTreeSet::new();
+            for file in files {
+                file.rules(&self.licence)?;
+                if !names.insert(file.name.as_str()) {
+                    return Err(format!("{}: two files with one name", file.name));
+                }
+            }
         }
         Ok(())
     }
