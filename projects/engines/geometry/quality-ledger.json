@@ -8180,14 +8180,6 @@
       "reason": "The first of the three, (A || B) && C && D: it accepts a K that leaves X on one side in s while lying inside it in r. On a plane K does not depend on X beyond its rounding, and in every case built it left X on both sides or neither. On a curved surface a one-sided K needs a first radius short of the edge's travel, a piece long against the curvature, and there the third equation, enclosed over t and the box independently, is as wide as that travel and refuses the piece (the cause written up as F2 in the pull request that adds this entry): no input yet gets a one-sided K past it. When F2 is fixed this needs a test, such as a circle edge of a sphere's equator against a cylinder, a long piece whose K pokes out above its middle only."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
-      "mutant": "replace * with / in <impl ImplicitBound for Cone>::enclose_box",
-      "line_text": "let slope = Interval::point(k * self.round.sign)?;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The axial sign is exactly 1 or -1, so k / sign and k * sign are the same double."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
       "mutant": "replace > with >= in BernsteinCurve<D>::clip",
       "line_text": "if t0 > t1 {",
