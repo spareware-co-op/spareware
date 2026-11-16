@@ -14747,7 +14747,7 @@
       "layer": "Development",
       "modules": [
         {
-          "cost": "both checkers' costs: the full check's, and the second checker's product of the faces' edges for each pair of faces.",
+          "cost": "both checkers' costs: the full check's, and the second checker's product of the faces' edges for each pair of faces; for a mesh, `geom-mesh`'s check and volume and the second mesh checker's sort of its half-edges in rationals.",
           "does": "[`judge`] runs both on a body and sorts what each finds into one list of [`Rule`]s, the rules of chapter 8.3 both read: structure, three planes that do not meet, a corner off its plane or its line, a corner outside its face's box, crossing edges, crossing faces, a loop's sense, a shell's sense and a shell's nesting. Two checkers agree when they find the same rules broken: both pass, or both refuse with matching findings. What a checker says it cannot judge (`geom-check`'s `Unchecked` and `PairUnchecked`, the second checker's [`Finding::Unjudged`]) is counted beside the verdict, never read as a pass or a fault, so a corpus can state how much of it the second checker did not read.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/agree.rs",
@@ -14759,9 +14759,10 @@
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md",
-              "projects/engines/geometry/architecture/08-topology.md"
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
             ],
-            "text": "chapter 28.4's second checker standing behind the first (`projects/engines/geometry/architecture/28-testing.md`), with chapter 8.3's rules as the common ground (`projects/engines/geometry/architecture/08-topology.md`)."
+            "text": "chapter 28.4's second checker standing behind the first (`projects/engines/geometry/architecture/28-testing.md`), with chapter 8.3's rules as the common ground (`projects/engines/geometry/architecture/08-topology.md`), and 19.2's for meshes (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`)."
           },
           "path": "geom_test::agree",
           "provenance": [],
@@ -16682,7 +16683,7 @@
         },
         {
           "cost": "linear in the size of the attributes; no recursion beyond the nesting of `all`, `any`, `not` and `cfg_attr` as written.",
-          "does": "[`effective`] expands every `#[cfg_attr(predicate, attributes...)]` whose predicate is not known to be false into the attributes it adds, and [`ships`] says whether an item, statement or expression with those attributes is compiled into the crates that ship. A predicate is read in three values: `test`, `doc`, `doctest`, `kani` and `miri` are false (test, documentation, proof and interpreter builds are not what ships); every other option (`feature = \"...\"`, `target_arch = \"...\"`, `debug_assertions`, ...) is unknown, because some build that ships may set it. `all`, `any` and `not` combine them as Kleene's strong three-valued logic.",
+          "does": "[`effective`] expands every `#[cfg_attr(predicate, attributes...)]` whose predicate is not known to be false into the attributes it adds, and [`ships`] says whether an item, statement or expression with those attributes is compiled into the crates that ship. A predicate is read in three values: `test`, `doc`, `doctest`, `kani` and `miri` are false (test, documentation, proof and interpreter builds are not what ships); every other option (`feature = \"...\"`, `target_arch = \"...\"`, `debug_assertions`, ...) is unknown, because some build that ships may set it. `all`, `any` and `not` combine them as Kleene's strong three-valued logic. [`predicate_under`] and [`effective_under`] read the same way in any other set of builds, given each option's value there.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/recursion/cfg.rs",
           "guarantees": [
@@ -17164,7 +17165,7 @@
           "target": "lib"
         },
         {
-          "cost": "rationals grow with the depth of the sums, and each pair of faces costs the product of their edges. This checker accepts that, because it runs on tests only. No recursion.",
+          "cost": "rationals grow with the depth of the sums. The pairs of faces tested for crossing are those whose boxes meet along x, found by sorting the faces' boxes and sweeping, and each costs the product of their edges. This checker accepts that, because it runs on tests only. No recursion.",
           "does": "[`check`] reads a body's rows into rationals: each vertex a point, each face its rings of corners and the plane its surface gives. Then it tests the rules one by one, in the most direct way there is, and lists a [`Finding`] for each one broken.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/second_check.rs",
@@ -17180,7 +17181,7 @@
               "doi:10.1016/B978-0-12-336156-1.50013-6",
               "doi:10.1016/B978-0-08-050754-5.50043-8"
             ],
-            "text": "chapter 8.3's rules (`projects/engines/geometry/architecture/08-topology.md`); the crossing number for a point in a polygon (Haines, \"Point in polygon strategies\", Graphics Gems IV, 1994, doi:10.1016/B978-0-12-336156-1.50013-6); Cramer's rule for three planes; the divergence theorem for a polyhedron's volume (Goldman, Graphics Gems II, 1991, doi:10.1016/B978-0-08-050754-5.50043-8)."
+            "text": "chapter 8.3's rules (`projects/engines/geometry/architecture/08-topology.md`); the crossing number for a point in a polygon (Haines, \"Point in polygon strategies\", Graphics Gems IV, 1994, doi:10.1016/B978-0-12-336156-1.50013-6); Cramer's rule for three planes; the divergence theorem for a polyhedron's volume (Goldman, Graphics Gems II, 1991, doi:10.1016/B978-0-08-050754-5.50043-8); sort and sweep along one axis for the pairs of faces whose boxes meet (Baraff, \"Dynamic Simulation of Non-Penetrating Rigid Bodies\", doctoral thesis, Cornell University, 1992)."
           },
           "path": "geom_test::second_check",
           "provenance": [],

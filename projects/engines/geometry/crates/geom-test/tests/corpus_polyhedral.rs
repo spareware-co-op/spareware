@@ -14,7 +14,9 @@
 //!   a copy moved a third of its size along each axis by `geom-mesh`'s boolean, its result's exact
 //!   volume (computed here from its planes and corners, in rationals) the reference's, and inside
 //!   the kernel's own exact or certified volume. A model the mesh builder refuses is named with its
-//!   refusal in [`REFUSED`].
+//!   refusal in [`REFUSED`]. Every mesh built or united, moved or not, passes both mesh checkers of
+//!   28.4, `geom-mesh`'s own and the second (`geom_test::agree::judge_mesh`), which agree, and the
+//!   second's exact volume is the one computed here.
 //! - **Exact transforms commute** with every boolean on both: a grid translation, a quarter turn
 //!   and a mirror give the same volume and the same corners, moved.
 //! - **The same bytes everywhere**: every result's records in one digest, the golden
@@ -24,8 +26,12 @@
 //! The second checker of 28.4 says how many faces and edges it cannot judge: on this corpus none,
 //! every face being flat and every edge straight (`UNJUDGED`).
 //!
-//! Tiers: the reference's rationals and the transforms take minutes in a debug build, so those
-//! tests run in every release leg; the golden runs everywhere. The models of more than `LARGE`
+//! Tiers: the reference's rationals and the transforms take minutes unoptimised, so those tests
+//! are ignored only at `opt-level` 0 (`cfg(unoptimised)`, which geom-test's `build.rs` sets), and
+//! run in every optimised leg of the suite, the pull request's and the merge queue's, which build
+//! with debug assertions on; `tests/corpus_runs.rs` fails if one is compiled out or ignored there
+//! (from #887 to this change, gated on `debug_assertions`, they ran nowhere). The golden runs
+//! everywhere. The models of more than `LARGE`
 //! faces run in the merge queue (`kernel.yml`'s job `large-models`), with `--ignored`, a few
 //! models to a job, chosen by `SPAREKIT_MODELS`, each union within a work budget and its exact
 //! volume inside the kernel's own, but not against the reference, whose rationals take over an
@@ -65,7 +71,7 @@ use geom_op::{OpContext, OpId, OpPath};
 use geom_poly::merge::Merge;
 use geom_poly::winding::WindingTest;
 use geom_run::{Budget, Exec, Pool, WorkMeter};
-use geom_test::agree::judge;
+use geom_test::agree::{judge, judge_mesh};
 use geom_test::flat_reference::{Q, Solid, int, six_volume_where, six_volumes_where};
 use geom_test::golden::{self, Sha256, hex};
 use geom_test::obj::{self, Grid};
@@ -369,47 +375,69 @@ fn figures() -> [(&'static str, Vec<Block>); 2] {
     [("figure 24", figure_24()), ("figure 25", figure_25())]
 }
 
-#[test]
-#[cfg_attr(
-    debug_assertions,
-    ignore = "the reference over 40 beams takes minutes in a debug build; every release leg runs it"
-)]
-fn every_selection_of_ember_s_figures_is_the_unit_cells_and_the_reference() {
+/// The place of the selection `cells` in [`picks`].
+const CELLS: usize = 8;
+
+/// The parts the figures' test of every selection runs in: each a figure, by its place in
+/// [`figures`], and the selections it holds, by their places in [`picks`]. One test of every
+/// selection of both figures took 115 s on GitHub's runner, nearly all of it the two checkers on
+/// figure 24's largest bodies (general fuse 5,760 faces, inside exactly one 3,360). The second
+/// checker's part of that is cut (`geom_test::second_check` reads the faces' boxes before their
+/// polygons), and the test runs in these parts, a test each, the two largest bodies alone.
+/// Together they run exactly the cases the one test ran: every selection of both figures is in
+/// exactly one part (`the_figure_parts_hold_every_selection_once`); each part makes the same
+/// arrangement of the same boxes on one thread, whose results are the same bytes every time (the
+/// golden `geom-test/polyhedral-corpus`); and each selection's checks read only its own bodies and
+/// its own reference volume, which `six_volumes_where` sums for each test apart. The part holding
+/// `cells` also holds each cell to the unit cells of its own boxes, as the one test did.
+const PARTS: [(usize, &[usize]); 4] = [
+    (1, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+    (0, &[0, 1, 2, 3, 5, 6, 8, 9]),
+    (0, &[4]),
+    (0, &[7]),
+];
+
+/// Part `part` of [`PARTS`]: each of its selections of its figure through both checkers, its
+/// volume exactly the unit cells it keeps and the flat reference's; a section is a wire.
+fn figure_part(part: usize) {
+    let (place, chosen) = PARTS[part];
+    let (figure, blocks) = &figures()[place];
     let mut unjudged = 0;
-    for (figure, blocks) in figures() {
-        let results = select_all(&blocks, &Exec::serial());
-        let keeps: Vec<fn(&[bool]) -> bool> = picks().iter().filter_map(|p| p.keep).collect();
-        let mut references = reference_six(&blocks, &keeps).into_iter();
-        for (pick, bodies) in picks().iter().zip(&results) {
-            let what = format!("{figure}, {}", pick.name);
-            both_pass(&what, bodies, &mut unjudged);
-            let Some(keep) = pick.keep else {
-                // A section is the curves where the boxes' faces meet, as a wire.
-                assert!(
-                    bodies.iter().any(|b| !b.body.arenas().edges.is_empty()),
-                    "{what}"
-                );
-                continue;
-            };
-            let got: i128 = bodies.iter().map(|b| six(&b.body)).sum();
-            let cells = unit_cells(&blocks, keep);
-            assert_eq!(got, 6 * cells, "{what}: kernel against the unit cells");
-            assert_eq!(
-                Some(Q::from(IBig::from(got))),
-                references.next(),
-                "{what}: kernel against the reference"
+    let results = select_all(blocks, &Exec::serial());
+    let all = picks();
+    let keeps: Vec<fn(&[bool]) -> bool> = chosen.iter().filter_map(|k| all[*k].keep).collect();
+    let mut references = reference_six(blocks, &keeps).into_iter();
+    for &k in chosen {
+        let (pick, bodies) = (&all[k], &results[k]);
+        let what = format!("{figure}, {}", pick.name);
+        both_pass(&what, bodies, &mut unjudged);
+        let Some(keep) = pick.keep else {
+            // A section is the curves where the boxes' faces meet, as a wire.
+            assert!(
+                bodies.iter().any(|b| !b.body.arenas().edges.is_empty()),
+                "{what}"
             );
-        }
+            continue;
+        };
+        let got: i128 = bodies.iter().map(|b| six(&b.body)).sum();
+        let cells = unit_cells(blocks, keep);
+        assert_eq!(got, 6 * cells, "{what}: kernel against the unit cells");
+        assert_eq!(
+            Some(Q::from(IBig::from(got))),
+            references.next(),
+            "{what}: kernel against the reference"
+        );
+    }
+    if chosen.contains(&CELLS) {
         // Each cell holds exactly the unit cells of the boxes it says it lies in.
-        let cells = &results[8];
         let mut by_boxes: BTreeMap<Vec<OperandKey>, i128> = BTreeMap::new();
-        for cell in cells {
+        for cell in &results[CELLS] {
             let mut around = cell.cell.as_ref().unwrap().elements.clone();
             around.sort_unstable();
             *by_boxes.entry(around).or_insert(0) += six(&cell.body);
         }
         for (around, got) in &by_boxes {
-            let want = unit_cells(&blocks, |held| {
+            let want = unit_cells(blocks, |held| {
                 held.iter()
                     .enumerate()
                     .all(|(i, h)| *h == around.contains(&key(i)))
@@ -419,11 +447,65 @@ fn every_selection_of_ember_s_figures_is_the_unit_cells_and_the_reference() {
         let covered: i128 = by_boxes.values().sum();
         assert_eq!(
             covered,
-            6 * unit_cells(&blocks, |h| count(h) > 0),
+            6 * unit_cells(blocks, |h| count(h) > 0),
             "{figure}"
         );
     }
     assert_eq!(unjudged, UNJUDGED);
+}
+
+#[test]
+fn the_figure_parts_hold_every_selection_once() {
+    let mut held: Vec<(usize, usize)> = PARTS
+        .iter()
+        .flat_map(|(figure, chosen)| chosen.iter().map(move |k| (*figure, *k)))
+        .collect();
+    held.sort_unstable();
+    let every: Vec<(usize, usize)> = (0..figures().len())
+        .flat_map(|figure| (0..picks().len()).map(move |k| (figure, k)))
+        .collect();
+    assert_eq!(held, every);
+    assert_eq!(picks()[CELLS].name, "cells");
+}
+
+#[test]
+#[cfg_attr(
+    unoptimised,
+    ignore = "the reference and both checkers take minutes unoptimised; kernel.yml's optimised \
+              suite legs (linux, suite) run it"
+)]
+fn every_selection_of_ember_s_figure_25_is_the_unit_cells_and_the_reference() {
+    figure_part(0);
+}
+
+#[test]
+#[cfg_attr(
+    unoptimised,
+    ignore = "the reference and both checkers take minutes unoptimised; kernel.yml's optimised \
+              suite legs (linux, suite) run it"
+)]
+fn every_other_selection_of_ember_s_figure_24_is_the_unit_cells_and_the_reference() {
+    figure_part(1);
+}
+
+#[test]
+#[cfg_attr(
+    unoptimised,
+    ignore = "the reference and both checkers take minutes unoptimised; kernel.yml's optimised \
+              suite legs (linux, suite) run it"
+)]
+fn ember_s_figure_24_inside_exactly_one_is_the_unit_cells_and_the_reference() {
+    figure_part(2);
+}
+
+#[test]
+#[cfg_attr(
+    unoptimised,
+    ignore = "the reference and both checkers take minutes unoptimised; kernel.yml's optimised \
+              suite legs (linux, suite) run it"
+)]
+fn ember_s_figure_24_general_fuse_is_the_unit_cells_and_the_reference() {
+    figure_part(3);
 }
 
 #[test]
@@ -510,8 +592,9 @@ const MOVES: [Move; 3] = [Move::Shift([7, -5, 3]), Move::Turn, Move::Mirror];
 
 #[test]
 #[cfg_attr(
-    debug_assertions,
-    ignore = "three transforms of every selection take minutes in a debug build; every release leg runs it"
+    unoptimised,
+    ignore = "three transforms of every selection take minutes unoptimised; kernel.yml's optimised \
+              suite legs (linux, suite) run it"
 )]
 fn ember_s_figures_commute_with_exact_transforms() {
     for (figure, blocks) in figures() {
@@ -657,11 +740,50 @@ fn offset(grid: &Grid) -> [i64; 3] {
     })
 }
 
-/// What a model gives: refused by the builder with its error, or the union of it alone and of it
-/// with its moved copy.
+/// What a model gives: refused by the builder with its error, or the meshes built of it and of its
+/// moved copy, the union of it alone and of it with its moved copy.
 enum Read {
     Refused(String),
-    Built { alone: ExactMesh, pair: ExactMesh },
+    Built {
+        inputs: [ExactMesh; 2],
+        alone: ExactMesh,
+        pair: ExactMesh,
+    },
+}
+
+impl Read {
+    /// Every mesh it holds: the two built and the two unions.
+    fn meshes(&self) -> Vec<(&'static str, &ExactMesh)> {
+        match self {
+            Read::Refused(_) => Vec::new(),
+            Read::Built {
+                inputs: [a, b],
+                alone,
+                pair,
+            } => vec![
+                ("built", a),
+                ("its copy built", b),
+                ("alone", alone),
+                ("with a moved copy", pair),
+            ],
+        }
+    }
+}
+
+/// Both mesh checkers on `mesh` (`geom_test::agree::judge_mesh`): both pass, so they agree, and
+/// the second checker's exact volume is this file's and inside `geom-mesh`'s own; counted in
+/// `checked`.
+fn both_meshes(what: &str, mesh: &ExactMesh, checked: &mut usize) {
+    let v = judge_mesh(mesh);
+    assert!(
+        v.agree() && v.passed(),
+        "{what}: the mesh checkers {:?} and {:?}, volumes held {:?}",
+        v.first,
+        v.second,
+        v.volume_held
+    );
+    assert_eq!(v.six_volume, Some(exact_six(mesh)), "{what}: the volumes");
+    *checked += 1;
 }
 
 /// The model `grid`, built and united alone and with its copy moved by `by`, on `exec`.
@@ -685,6 +807,7 @@ fn unions_within(grid: &Grid, by: [i64; 3], exec: &Exec<'_>, work: u64) -> Read 
     Read::Built {
         alone: alone.into_iter().next().unwrap().mesh,
         pair: pair.into_iter().next().unwrap().mesh,
+        inputs: [a, b],
     }
 }
 
@@ -709,12 +832,14 @@ fn models(large: bool) -> Vec<(&'static str, Grid)> {
 
 #[test]
 #[cfg_attr(
-    debug_assertions,
-    ignore = "the reference's rationals take minutes in a debug build; every release leg runs it"
+    unoptimised,
+    ignore = "the reference's rationals take minutes unoptimised; kernel.yml's optimised suite legs \
+              (linux, suite) run it"
 )]
 fn manifold_s_models_unite_alone_and_with_a_moved_copy_to_the_reference() {
-    let refused = united_to_the_reference(false);
+    let (refused, checked) = united_to_the_reference(false);
     assert_eq!(named(&refused), REFUSED);
+    println!("{checked} meshes passed both mesh checkers");
 }
 
 /// The large models this run unites: every one, or those `SPAREKIT_MODELS` names, separated by
@@ -755,21 +880,24 @@ fn the_large_models_unite_within_their_work() {
         .filter(|(name, _)| models.iter().any(|(m, _)| m == name))
         .collect();
     let mut refused = Vec::new();
+    let mut checked = 0;
     for (name, grid) in models {
         let by = offset(&grid);
-        match unions_within(&grid, by, &Exec::serial(), LARGE_WORK) {
-            Read::Refused(why) => refused.push((name, why)),
-            Read::Built { alone, pair } => {
-                for (what, mesh) in [("alone", &alone), ("with a moved copy", &pair)] {
-                    assert!(
-                        holds(mesh.volume(&mut meter()).unwrap(), &exact_six(mesh)),
-                        "{name} {what}: the kernel's volume does not hold its exact one"
-                    );
-                }
-            }
+        let read = unions_within(&grid, by, &Exec::serial(), LARGE_WORK);
+        if let Read::Refused(why) = read {
+            refused.push((name, why));
+            continue;
+        }
+        for (what, mesh) in read.meshes() {
+            assert!(
+                holds(mesh.volume(&mut meter()).unwrap(), &exact_six(mesh)),
+                "{name} {what}: the kernel's volume does not hold its exact one"
+            );
+            both_meshes(&format!("{name} {what}"), mesh, &mut checked);
         }
     }
     assert_eq!(named(&refused), expected);
+    println!("{checked} meshes passed both mesh checkers");
 }
 
 /// The groups of large models `kernel.yml`'s job `large-models` runs, one job each, as its matrix
@@ -836,17 +964,23 @@ fn named<'r>(refused: &'r [(&'static str, String)]) -> Vec<(&'static str, &'r st
 }
 
 /// Every model of a tier united alone and with its moved copy, each result's exact volume the
-/// reference's and inside the kernel's own; the models the builder refused, with why.
-fn united_to_the_reference(large: bool) -> Vec<(&'static str, String)> {
+/// reference's and inside the kernel's own, and every mesh built or united through both mesh
+/// checkers; the models the builder refused, with why, and how many meshes passed both checkers.
+fn united_to_the_reference(large: bool) -> (Vec<(&'static str, String)>, usize) {
     let mut refused = Vec::new();
+    let mut checked = 0;
     for (name, grid) in models(large) {
         let by = offset(&grid);
-        let (alone, pair) = match unions(&grid, by, &Exec::serial()) {
+        let read = unions(&grid, by, &Exec::serial());
+        for (what, mesh) in read.meshes() {
+            both_meshes(&format!("{name} {what}"), mesh, &mut checked);
+        }
+        let (alone, pair) = match read {
             Read::Refused(why) => {
                 refused.push((name, why));
                 continue;
             }
-            Read::Built { alone, pair } => (alone, pair),
+            Read::Built { alone, pair, .. } => (alone, pair),
         };
         let a = mesh_solid(&grid, [0; 3]).unwrap();
         let b = mesh_solid(&grid, by).unwrap();
@@ -870,16 +1004,19 @@ fn united_to_the_reference(large: bool) -> Vec<(&'static str, String)> {
             );
         }
     }
-    refused
+    (refused, checked)
 }
 
 #[test]
 #[cfg_attr(
-    debug_assertions,
-    ignore = "three transforms of every model take minutes in a debug build; every release leg \
-              runs it"
+    unoptimised,
+    ignore = "three transforms of every model take minutes unoptimised; kernel.yml's optimised \
+              suite legs (linux, suite) run it"
 )]
 fn manifold_s_models_commute_with_exact_transforms() {
+    // The meshes of the models unmoved are the reference test's, which puts them through both mesh
+    // checkers; here the moved ones go through.
+    let mut checked = 0;
     for (name, grid) in models(false) {
         let by = offset(&grid);
         let Read::Built { pair, .. } = unions(&grid, by, &Exec::serial()) else {
@@ -891,7 +1028,11 @@ fn manifold_s_models_commute_with_exact_transforms() {
             let at = m.point(by);
             let origin = m.point([0; 3]);
             let copy = [0, 1, 2].map(|k| at[k] - origin[k]);
-            let Read::Built { pair: there, .. } = unions(&moved, copy, &Exec::serial()) else {
+            let read = unions(&moved, copy, &Exec::serial());
+            for (what, mesh) in read.meshes() {
+                both_meshes(&format!("{name} {m:?} {what}"), mesh, &mut checked);
+            }
+            let Read::Built { pair: there, .. } = read else {
                 panic!("{name}: {m:?} refused");
             };
             assert_eq!(exact_six(&there), exact_six(&pair), "{name} {m:?}: volume");
@@ -899,6 +1040,7 @@ fn manifold_s_models_commute_with_exact_transforms() {
             assert_eq!(places(&there), want, "{name} {m:?}: corners");
         }
     }
+    println!("{checked} meshes passed both mesh checkers");
 }
 
 fn put(total: &mut Sha256, bytes: &[u8]) {
@@ -982,7 +1124,7 @@ fn corpus(exec: &Exec<'_>) -> (Sha256, usize) {
         put(&mut total, name.as_bytes());
         match unions(&grid, offset(&grid), exec) {
             Read::Refused(why) => put(&mut total, why.as_bytes()),
-            Read::Built { alone, pair } => {
+            Read::Built { alone, pair, .. } => {
                 write_mesh(&mut total, &alone);
                 write_mesh(&mut total, &pair);
                 results += 2;
@@ -1016,8 +1158,9 @@ fn the_polyhedral_corpus_is_the_same_on_every_target() {
 /// Chapter 21's thread-count test: the same digest on every pool of the matrix's thread counts.
 #[test]
 #[cfg_attr(
-    debug_assertions,
-    ignore = "five runs of the corpus; every release leg runs it"
+    unoptimised,
+    ignore = "five runs of the corpus take minutes unoptimised; kernel.yml's optimised suite legs \
+              (linux, suite) run it"
 )]
 #[cfg_attr(
     all(target_family = "wasm", not(target_feature = "atomics")),
