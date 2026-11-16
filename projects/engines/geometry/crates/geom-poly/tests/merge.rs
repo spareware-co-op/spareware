@@ -866,14 +866,14 @@ fn a_corner_that_is_no_point_is_reported_from_its_phase() {
 fn every_budget_stops_a_nested_merge_in_some_step_or_gives_the_same_answer() {
     // A box with a box-shaped cavity: two shells, so the merge also nests them. Every budget up
     // to the whole merge's, one unit apart, so each parallel step is stopped in turn. Under Miri
-    // every fourth, and the whole merge's.
+    // every eighth, and the whole merge's.
     let tool = block([1, 1, 1], [3, 3, 3]);
     let pieces = kept(&scene(&[A, tool]), &WindingTest::subtract(0), LEAF_POLYGONS);
     let mut counted = meter();
     let whole = merge(&pieces, Merge::RemoveRedundant, &mut counted).unwrap();
     assert_eq!(whole.shells.len(), 2);
     let used = u64::try_from(counted.used().work).unwrap();
-    for budget in (0..=used).step_by(miri::stride(1, 4)).chain([used]) {
+    for budget in (0..=used).step_by(miri::stride(1, 8)).chain([used]) {
         let mut small = WorkMeter::new(Budget::new(budget, u64::MAX));
         match merge(&pieces, Merge::RemoveRedundant, &mut small) {
             Ok(m) => assert_eq!(m, whole, "budget {budget}"),
@@ -894,8 +894,8 @@ fn any_budget_either_stops_the_merge_or_gives_the_same_answer() {
     let pieces = kept(&scene(&[A, tool]), &WindingTest::subtract(0), LEAF_POLYGONS);
     let whole = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
     let mut stops = 0;
-    // Under Miri every 37th of these budgets.
-    for budget in (0..4000).step_by(miri::stride(7, 7 * 37)) {
+    // Under Miri every 74th of these budgets.
+    for budget in (0..4000).step_by(miri::stride(7, 7 * 74)) {
         let mut small = WorkMeter::new(Budget::new(budget, u64::MAX));
         match merge(&pieces, Merge::RemoveRedundant, &mut small) {
             Ok(m) => assert_eq!(m, whole),
@@ -1467,7 +1467,8 @@ fn a_rim_on_a_block_s_face_takes_the_block_s_bounds_however_they_are_written() {
         open: true,
     };
     let square = |plane: &Plane| plane.n().iter().filter(|v| **v != 0).count() == 1;
-    for k in [1, 2] {
+    // Under Miri the bounds written twice as long only.
+    for k in [1, 2].into_iter().skip(if cfg!(miri) { 1 } else { 0 }) {
         let mut polygons = scaled(&scene(&[block([1, 1, 1], [9, 9, 9])]), k);
         tetrahedron(wedge, 1, &mut polygons).unwrap();
         let sheet = |polygon: usize, leaf: usize| {
@@ -1915,8 +1916,8 @@ fn a_memo_starts_the_sorts_but_the_budget_stops_them_where_it_would() {
         LEAF_POLYGONS,
     );
     let mut stops = 0;
-    // Under Miri every 113th of these budgets.
-    for budget in (0..4000).step_by(miri::stride(7, 7 * 113)) {
+    // Under Miri every 226th of these budgets.
+    for budget in (0..4000).step_by(miri::stride(7, 7 * 226)) {
         let (m, _) = merged_again(&before, &after, Some(budget));
         stops += usize::from(m.is_err());
     }

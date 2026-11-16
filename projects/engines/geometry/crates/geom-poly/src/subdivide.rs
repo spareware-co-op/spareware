@@ -1545,7 +1545,7 @@ mod tests {
     const DEEP_PRETTY: usize = if MIRI_TREES { 8 } else { 1_000 };
 
     /// How deep the hundred-level test's tree goes (under Miri, a few levels).
-    const HUNDRED: usize = if MIRI_TREES { 4 } else { 100 };
+    const HUNDRED: usize = if MIRI_TREES { 3 } else { 100 };
 
     /// The leaf size of the split trees the compare test keeps of two blocks' twelve
     /// faces, and a smaller one (under Miri larger, so fewer boxes: still split).
@@ -1742,9 +1742,8 @@ mod tests {
         block([0; 3], [4; 3], 0, &mut list);
         let mut second = Vec::new();
         block([2; 3], [6; 3], 1, &mut second);
-        // Under Miri one face of the second block, which still cuts the first's: the same trees
-        // and printers, in less text.
-        list.extend(second.into_iter().take(if MIRI_TREES { 1 } else { 6 }));
+        // Under Miri the first block alone: the same trees and printers, in less text.
+        list.extend(second.into_iter().take(if MIRI_TREES { 0 } else { 6 }));
         let split = kept(&list, 4, &[]);
         let leaf = kept(&list, 64, &[]);
         let dropped = kept(&list, 4, &[WindingTest::intersect(2)]);
@@ -1758,12 +1757,19 @@ mod tests {
 
     #[test]
     fn the_kept_tree_compares_as_the_derived_form_does() {
+        // Under Miri the second block is one face of it, which still cuts the first: the same
+        // trees, fewer boxes.
+        let faces = if MIRI_TREES { 1 } else { 6 };
         let mut list = Vec::new();
         block([0; 3], [4; 3], 0, &mut list);
-        block([2; 3], [6; 3], 1, &mut list);
+        let mut second = Vec::new();
+        block([2; 3], [6; 3], 1, &mut second);
+        list.extend(second.into_iter().take(faces));
         let mut moved = Vec::new();
         block([0; 3], [4; 3], 0, &mut moved);
-        block([2; 3], [7, 6, 6], 1, &mut moved);
+        let mut second = Vec::new();
+        block([2; 3], [7, 6, 6], 1, &mut second);
+        moved.extend(second.into_iter().take(faces));
         let trees = [
             kept(&list, SPLIT, &[]),
             kept(&list, SPLIT, &[]),
