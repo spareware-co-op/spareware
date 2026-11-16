@@ -57,7 +57,7 @@ fn answer(job: &Job) -> Answer {
 }
 
 #[test]
-fn a_nights_differences_are_all_triaged() {
+fn a_runs_differences_are_all_triaged() {
     let mut differences = Vec::new();
     for job in jobs(Seed(0x6d61_6e69), 300) {
         if let Compared::Differ { signature, settled } =
