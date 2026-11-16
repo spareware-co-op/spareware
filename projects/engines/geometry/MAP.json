@@ -14810,7 +14810,7 @@
           "target": "bin"
         },
         {
-          "cost": "`run` costs one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
+          "cost": "`run` costs one `cargo test --no-run` that builds, then one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/golden.rs",
@@ -15524,12 +15524,13 @@
         },
         {
           "cost": "linear in the store and in the output read.",
-          "does": "[`plan`] groups the current edition's test-checked goldens by crate and test target; [`Group::cargo_args`] gives the `cargo test` arguments that run exactly those test functions (libtest's `--exact` filters) with the leg's own arguments (`--release`, `--target wasm32-wasip1`, ...) and its environment (`RUSTFLAGS` with `-C target-cpu=native` or overflow checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and requires that libtest ran exactly the planned functions, all passed, and that every planned golden printed its `golden <id> ... agrees with the store` line ([`super::check`]). The binary `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build mode: debug, release with overflow checks on and as shipped, natively with `-C target-cpu=native`, and on wasm32-wasip1 under wasmtime and Node in debug and release.",
+          "does": "[`plan`] groups the current edition's test-checked goldens by crate and test target; [`Group::cargo_args`] gives the `cargo test` arguments that run exactly those test functions (libtest's `--exact` filters) with the leg's own arguments (`--release`, `--target wasm32-wasip1`, ...) and its environment (`RUSTFLAGS` with `-C target-cpu=native` or overflow checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and requires that libtest ran exactly the planned functions, all passed, and that every planned golden printed its `golden <id> ... agrees with the store` line ([`super::check`]); [`build_args`] gives the one `cargo test --no-run` that builds every group's binary side by side before the groups run, and [`part`] shares the groups out among CI jobs, whole crates to each part, balanced by measured seconds, each group in exactly one part. The binary `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build mode: debug, release with overflow checks on and as shipped, natively with `-C target-cpu=native`, and on wasm32-wasip1 under wasmtime and Node in debug and release.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/matrix.rs",
           "guarantees": [
             "**Exactly the store's goldens.** One group per crate and test target, in store order, each naming its functions exactly; a golden checked by a file has no test and is checked by `golden check` instead.",
-            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line: `golden <id> (edition <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's own first line follows it on the same output line; with several threads it starts its own."
+            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line: `golden <id> (edition <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's own first line follows it on the same output line; with several threads it starts its own.",
+            "**Every group in exactly one part.** [`part`] places every crate of the plan in one part of `n`, so the parts of a leg run every group once between them, a golden added to the store included."
           ],
           "job": "The determinism matrix's runner: every golden of the current edition, run by cargo in whatever configuration a CI leg sets, with proof that each one really ran and agreed.",
           "method": {
