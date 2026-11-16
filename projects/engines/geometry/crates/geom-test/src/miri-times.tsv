@@ -5,6 +5,7 @@
 # 43571515426, the geom-mesh tests whose Miri sizes #924 cut from a development machine's
 # times x 2.3 (at most 600), and the tests no run has timed yet read 600, their budget, until
 # a full run's reports replace them. geom-pool has no row: Miri runs it under Tree Borrows.
+# geom-mesh's boolean tests read 600: #923 judges every result they make, after their timing.
 600	geom-analysis::attack_g346	a_capped_run_is_still_certified
 600	geom-analysis::attack_g346	a_run_past_its_budget_stops
 600	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1074,31 +1075,31 @@
 600	geom-math::vectors	sums_are_checked
 600	geom-mesh	model::tests::a_refused_operation_leaves_the_surface_as_it_was
 600	geom-mesh	model::tests::kept_operations_keep_the_surface_whole
-51	geom-mesh::boolean	a_cut_through_splits_a_run_into_named_pieces
+600	geom-mesh::boolean	a_cut_through_splits_a_run_into_named_pieces
 600	geom-mesh::boolean	a_face_whose_lowest_corner_is_in_a_hole_sorts_into_canonical_order
-65	geom-mesh::boolean	a_merged_face_does_not_join_the_pieces_of_a_run
-167	geom-mesh::boolean	a_result_is_as_exact_as_its_least_exact_operand_with_the_bounds_added
-4	geom-mesh::boolean	a_result_with_no_outside_is_refused
-35	geom-mesh::boolean	a_run_kept_whole_but_turned_over_is_modified
-44	geom-mesh::boolean	a_small_box_on_a_big_one_leaves_no_t_junction
-69	geom-mesh::boolean	a_trimmed_run_is_modified_and_a_lost_one_deleted
-5	geom-mesh::boolean	an_open_operand_is_refused
-32	geom-mesh::boolean	boxes_on_one_face_merge_into_one_box
-21	geom-mesh::boolean	coplanar_runs_merge
+600	geom-mesh::boolean	a_merged_face_does_not_join_the_pieces_of_a_run
+600	geom-mesh::boolean	a_result_is_as_exact_as_its_least_exact_operand_with_the_bounds_added
+600	geom-mesh::boolean	a_result_with_no_outside_is_refused
+600	geom-mesh::boolean	a_run_kept_whole_but_turned_over_is_modified
+600	geom-mesh::boolean	a_small_box_on_a_big_one_leaves_no_t_junction
+600	geom-mesh::boolean	a_trimmed_run_is_modified_and_a_lost_one_deleted
+600	geom-mesh::boolean	an_open_operand_is_refused
+600	geom-mesh::boolean	boxes_on_one_face_merge_into_one_box
+600	geom-mesh::boolean	coplanar_runs_merge
 600	geom-mesh::boolean	faces_that_start_with_the_same_three_vertices_are_refused_by_pairing
 600	geom-mesh::boolean	many_openings_are_one_call
-127	geom-mesh::boolean	pieces_told_apart_by_their_tools_need_no_ordinal
-172	geom-mesh::boolean	several_tests_share_one_arrangement
+600	geom-mesh::boolean	pieces_told_apart_by_their_tools_need_no_ordinal
+600	geom-mesh::boolean	several_tests_share_one_arrangement
 600	geom-mesh::boolean	solids_give_what_their_arrays_give
 600	geom-mesh::boolean	solids_of_many_faces_give_what_their_arrays_give
-5	geom-mesh::boolean	the_meter_stops_a_boolean
-187	geom-mesh::boolean	the_soup_is_what_the_merge_takes
-329	geom-mesh::boolean	the_threads_and_the_order_do_not_show
-288	geom-mesh::boolean	ties_on_a_small_lattice_hold_up
-146	geom-mesh::boolean	two_faces_of_one_sheet_meet_at_a_point_on_an_edge
-78	geom-mesh::boolean	two_overlapping_boxes
-37	geom-mesh::boolean	untouched_runs_are_unchanged
-216	geom-mesh::boolean	volumes_agree_with_counted_cells
+600	geom-mesh::boolean	the_meter_stops_a_boolean
+600	geom-mesh::boolean	the_soup_is_what_the_merge_takes
+600	geom-mesh::boolean	the_threads_and_the_order_do_not_show
+600	geom-mesh::boolean	ties_on_a_small_lattice_hold_up
+600	geom-mesh::boolean	two_faces_of_one_sheet_meet_at_a_point_on_an_edge
+600	geom-mesh::boolean	two_overlapping_boxes
+600	geom-mesh::boolean	untouched_runs_are_unchanged
+600	geom-mesh::boolean	volumes_agree_with_counted_cells
 600	geom-mesh::boolean_determinism	boolean_golden_hash_is_the_same_on_every_target
 34	geom-mesh::cdt	a_cocircular_grid_is_one_answer_in_any_order
 1	geom-mesh::cdt	a_constraint_along_a_line_of_points_stays_on_its_stretch
