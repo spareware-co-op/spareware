@@ -16,54 +16,68 @@
 //!   misses a meeting point). A segment and a circle, and two circles, are separated by certified
 //!   closed forms (`crate::curved`); a pair none of these separates is reported unchecked.
 //! - **Two faces meet only along shared edges and at shared vertices.** Every pair of faces is
-//!   tested. Two integer planes are compared exactly, in 320-bit integers, and other planes by
-//!   certified intervals. Parallel planes certainly apart cannot meet. Two crossing planes whose faces are
-//!   strictly convex, exactly planar polygons of one loop are tested exactly: each edge of one face that is not an edge of
-//!   the other either stays strictly on one side of the other's plane, touches it at a vertex of
-//!   the other face or outside it, or pierces it outside the polygon (`orient3d` of the segment
-//!   with each polygon side keeps no one sign). A plane perpendicular to a cylinder's or cone's
-//!   axis, or a plane and a sphere, meet in one circle at most, so faces on them that share a full
-//!   circle edge meet only along it. Any other pair is reported unchecked.
+//!   tested. Two faces exactly on integer planes, or on planes their grid corners fix, are tested
+//!   exactly by `crate::planar`, whatever their shape. Two integer planes are compared exactly, in
+//!   320-bit integers, and other planes by certified intervals. Faces on parallel planes cannot
+//!   meet when the planes are certainly farther apart than the two faces may stray from them:
+//!   nothing for a face whose corners and edges lie on its plane exactly, and the body's bound
+//!   for any other, since group 2 held it no nearer. Nearer planes say nothing of where their
+//!   faces lie, and such a pair is unchecked. A plane perpendicular to a cylinder's or cone's
+//!   axis, or a plane and a sphere, meet in one circle at most, so faces on them that share a
+//!   full circle edge meet only along it. Any other pair is reported unchecked.
+//! - **Edges with a vertex where three planes meet** are tested by `crate::planar` too.
+//! - **A wall between two cells is two faces.** In a general body, two faces with the same edges,
+//!   each run the opposite way, are the two sides of one wall, each in its own cell's shell
+//!   (11.7), and do not cross. No other pair of coincident faces has that excuse.
 //!
 //! Guarantees:
 //!
-//! - **Exact on segments and polygons.** Their tests are integer predicates on the grid vertices
-//!   (`geom_num::predicate::orient3d`, and 2D orientations in `i128`, checked).
+//! - **Exact on segments and polygons.** Their tests are integer predicates on the vertices
+//!   (`geom_num::predicate::orient3d`, 2D orientations in `i128`, checked, and `crate::planar`'s
+//!   signs of planes).
 //! - **Certified elsewhere, and fails closed.** A pair no exact or certified test separates is a
 //!   [`FaultKind::PairUnchecked`] fault, never a pass (8.3: "certified with bounds, not sampled").
 //! - **A segment is its vertices.** A line edge is tested as the segment between its vertices,
 //!   which group 2 has certified within the body's bound of the line's ends.
-//! - **Nothing allocated.** Every list is walked again where it is needed.
+//! - **Each flat face read once.** Every list is walked again where it is needed. A flat face's
+//!   outline is read once, and charged, before any pair is tested; what the reading finds settles
+//!   most pairs (`crate::planar::look`). The outlines are kept, and reserved on the meter, only
+//!   when a test needs them, read again then without a second charge, so a box or a prism keeps
+//!   none and allocates nothing here.
 //!
 //! Method: chapter 8.3's group 3 (`projects/engines/geometry/architecture/08-topology.md`), on
 //! J. R. Shewchuk's exact orientation predicates ("Adaptive precision floating-point arithmetic and
 //! fast robust geometric predicates", Discrete & Computational Geometry 18 (1997),
-//! <https://doi.org/10.1007/PL00009321>) and the segment and convex-polygon tests built on them
-//! (J. O'Rourke, *Computational Geometry in C*, 2nd ed., Cambridge University Press 1998,
+//! <https://doi.org/10.1007/PL00009321>) and the segment tests built on them (J. O'Rourke,
+//! *Computational Geometry in C*, 2nd ed., Cambridge University Press 1998,
 //! <https://doi.org/10.1017/CBO9780511804120>).
 //!
-//! Cost: one meter unit per face, per pair of a face's edges, per pair of faces and per edge tested
-//! against a face; quadratic in a face's edges and in the faces, as primitives have few. Nothing
-//! allocated. Recursion: none.
+//! Cost: one meter unit per face, per pair of a face's edges and per pair of faces, and
+//! `crate::planar`'s; quadratic in a face's edges and in the faces. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
     reason = "the names are the predicates': p, q, r and s segment ends, v a shared vertex, a to d 2D points"
 )]
 
+use alloc::vec::Vec;
+
 use geom_curve::{Circle, ParamCurve};
 use geom_num::predicate::orient3d;
 use geom_num::{Coord, Exactness, P3, Sign};
+use geom_op::run::reserve;
 use geom_run::Stopped;
+use geom_topo::BodyKind;
+use geom_topo::Sense;
 use geom_topo::entity::{Edge, Face, Vertex};
 use geom_topo::ix::Arena;
+use geom_topo::mass::Corner;
 use geom_topo::{Arenas, Body, Ix};
 
-use crate::combinatorial::{
-    edge_fins, face_fins, face_loops, fin_edge, fin_ends, fin_face, loop_fins, next, rows,
-};
+use crate::combinatorial::{edge_fins, face_fins, fin_edge, fin_face, rows};
 use crate::curved::{self, Pair};
-use crate::geometric::{Ends, point, surface};
+use crate::geometric::{Ends, Surface, corner, limit, surface};
+use crate::planar::{self, Look, Outline, Read, Slot};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
 
@@ -75,47 +89,174 @@ pub(crate) fn check(
 ) -> Result<(), Stopped> {
     let a = body.arenas();
     let exact = matches!(exactness, Exactness::Exact);
-    for f in rows::<Face>(a.rows(Arena::Face)) {
+    let reach = limit(exactness);
+    let faces = a.rows(Arena::Face);
+    let mut few = [Read::Bare; FEW];
+    let mut many: Vec<Read>;
+    let reads: &mut [Read] = if let Some(on_stack) = few.get_mut(..to_usize(faces)) {
+        on_stack
+    } else {
+        many = reserve(sink.meter(), u64::from(faces))?;
+        many.resize(to_usize(faces), Read::Bare);
+        &mut many
+    };
+    for (slot, f) in reads.iter_mut().zip(rows::<Face>(faces)) {
+        *slot = planar::read(a, f, exact, sink)?;
+    }
+    let reads: &[Read] = reads;
+    let read = |f: Ix<Face>| reads.get(f.to_usize()).copied().unwrap_or(Read::Bare);
+    let mut kept: Option<Vec<Slot>> = None;
+    for f in rows::<Face>(faces) {
         sink.charge()?;
+        let mut implicit = None;
+        if matches!(read(f), Read::Kept) {
+            implicit = pieces(keep(&mut kept, a, (reads, exact), sink)?, f)
+                .first()
+                .filter(|o| o.implicit);
+        }
         for (i, first) in edges(a, f).enumerate() {
             for second in edges(a, f).skip(i).skip(1) {
                 sink.charge()?;
-                let found = edges_meet(a, first, second);
+                let found = match implicit {
+                    Some(o) => planar::edges_meet(o, first, second, sink)?,
+                    None => edges_meet(a, first, second),
+                };
                 report(sink, found, Entity::Edge(first), Entity::Edge(second));
             }
         }
     }
-    for (i, f) in rows::<Face>(a.rows(Arena::Face)).enumerate() {
-        for g in rows::<Face>(a.rows(Arena::Face)).skip(i).skip(1) {
+    let cells = body.kind() == BodyKind::General;
+    for (i, f) in rows::<Face>(faces).enumerate() {
+        for g in rows::<Face>(faces).skip(i).skip(1) {
             sink.charge()?;
-            let found = surface(a, f, exact).zip(surface(a, g, exact)).map_or(
-                Ok(Meet::Unknown),
-                |(p, q)| match p.lies_with(&q) {
-                    Pair::Apart => Ok(Meet::Apart),
-                    Pair::Crossing => polygons_meet(a, f, g, sink),
-                    Pair::Circle => Ok(if shares_full_circle(a, f, g) {
-                        Meet::Apart
+            if cells && back_to_back(a, f, g) {
+                continue;
+            }
+            let found = match (read(f), read(g)) {
+                (Read::Bare, _) | (_, Read::Bare) => other_faces_meet(a, f, g, exact, reach),
+                (Read::Plain(p), Read::Plain(q)) => {
+                    match planar::look(a, (f, &p), (g, &q), sink)? {
+                        Look::Found(found) => found,
+                        Look::Left(left) => {
+                            let slots = keep(&mut kept, a, (reads, exact), sink)?;
+                            planar::finish(left, pieces(slots, f), pieces(slots, g), sink)?
+                        }
+                    }
+                }
+                _ => {
+                    let slots = keep(&mut kept, a, (reads, exact), sink)?;
+                    let (first, second) = (pieces(slots, f), pieces(slots, g));
+                    if first.is_empty() || second.is_empty() {
+                        other_faces_meet(a, f, g, exact, reach)
                     } else {
-                        Meet::Unknown
-                    }),
-                    Pair::Unknown => Ok(Meet::Unknown),
-                },
-            )?;
+                        planar::slots_meet(a, first, second, sink)?
+                    }
+                }
+            };
             report(sink, found, Entity::Face(f), Entity::Face(g));
         }
     }
     Ok(())
 }
 
+/// How many faces' reads ([`Read`]) a check holds on the stack; a body of more reserves a list
+/// for them. A box has six faces, and a prism on a polygon of n corners n + 2.
+const FEW: usize = 16;
+
+/// A count of rows as a length.
+fn to_usize(rows: u32) -> usize {
+    usize::try_from(rows).unwrap_or(usize::MAX)
+}
+
+/// The outlines of every face, kept the first time a test needs them: a body whose pairs its
+/// faces' reads settle ([`planar::look`]) keeps none.
+fn keep<'k>(
+    kept: &'k mut Option<Vec<Slot>>,
+    a: &Arenas,
+    (reads, exact): (&[Read], bool),
+    sink: &mut Sink<'_, '_>,
+) -> Result<&'k [Slot], Stopped> {
+    if kept.is_none() {
+        *kept = Some(planar::outlines(a, reads, exact, sink)?);
+    }
+    Ok(kept.as_deref().unwrap_or(&[]))
+}
+
+/// The outlines face `f` is made of, in `slots`, one slot per face.
+fn pieces(slots: &[Slot], f: Ix<Face>) -> &[Outline] {
+    slots
+        .get(f.to_usize())
+        .map_or(&[], |slot| slot.0.as_slice())
+}
+
+/// The edges of `f`, each with the way its fin runs, sorted.
+fn runs(a: &Arenas, f: Ix<Face>) -> Vec<(u32, bool)> {
+    let mut out = Vec::new();
+    // By the walk every other check of a face's fins takes: a ring walked by hand here ran for
+    // ever, filling this list, under one changed comparison.
+    for fin in face_fins(a, f).filter_map(|n| a.fins.get(n)) {
+        out.push((fin.edge.row(), fin.sense == Sense::Forward));
+    }
+    out.sort_unstable();
+    out
+}
+
+/// Whether `f` and `g` are the two sides of one wall: the same edges, each run the opposite way.
+fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
+    let turned: Vec<(u32, bool)> = runs(a, g).into_iter().map(|(e, way)| (e, !way)).collect();
+    runs(a, f) == turned
+}
+
+/// How two faces meet that are not both outlines, as far as their carriers say of two faces that
+/// may stray from them. A face whose vertices and edges lie on its surface exactly cannot; any
+/// other may by `reach`, the body's bound, which is all group 2 held it to. The distance between
+/// two written planes must clear what both faces may stray before it keeps them apart: a face
+/// bent within its bound, written under a plane a step above a face it ran through, was once
+/// passed as apart from it (issue #783). In a body recorded Exact the bound is nothing, so
+/// neither face can stray, whatever the answer.
+///
+/// The carriers are first asked for the most the two faces may stray, twice `reach`. Only two
+/// parallel planes read it, and planes that clear the most clear what the faces do stray, which
+/// is no more; every other answer but unknown does not depend on it. So the faces are asked
+/// whether they hold to their surfaces, a certified test of each of their edges, only where the
+/// most leaves the pair unknown, and the answer is the one their own stray gives.
+fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool, reach: f64) -> Meet {
+    let stray = |on: &Surface, face| {
+        if on.holds_face(a, face) { 0.0 } else { reach }
+    };
+    let lie = surface(a, f, exact)
+        .zip(surface(a, g, exact))
+        .map(|(p, q)| match p.lies_with(&q, reach + reach) {
+            Pair::Unknown => p.lies_with(&q, stray(&p, f) + stray(&q, g)),
+            settled => settled,
+        });
+    match lie {
+        Some(Pair::Apart) => Meet::Apart,
+        Some(Pair::Circle) if shares_full_circle(a, f, g) => Meet::Apart,
+        _ => Meet::Unknown,
+    }
+}
+
 /// What a test of two edges or two faces found.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Meet {
+pub(crate) enum Meet {
     /// They meet only where they share an edge or a vertex.
     Apart,
     /// They meet elsewhere.
     Cross,
     /// No test here separates them.
     Unknown,
+}
+
+impl Meet {
+    /// What two tests together found: a crossing over anything, an unknown over apart.
+    pub(crate) const fn or(self, other: Meet) -> Meet {
+        match (self, other) {
+            (Meet::Cross, _) | (_, Meet::Cross) => Meet::Cross,
+            (Meet::Unknown, _) | (_, Meet::Unknown) => Meet::Unknown,
+            (Meet::Apart, Meet::Apart) => Meet::Apart,
+        }
+    }
 }
 
 /// Reports what a test of `at` and `with` found: nothing if they are apart.
@@ -156,18 +297,18 @@ enum Shape<'c> {
     Circle(&'c Circle<3>, Option<Ix<Vertex>>),
 }
 
-/// Edge `e` as a shape: `None` for a line edge without two vertices at distinct points.
+/// Edge `e` as a shape: `None` for a line edge without two grid vertices at distinct points.
 fn shape(a: &Arenas, e: Ix<Edge>) -> Option<Shape<'_>> {
     let start = a.edges.start.get(e).copied().flatten();
     let end = a.edges.end.get(e).copied().flatten();
-    let end_at = |v: Ix<Vertex>| End {
-        vertex: v,
-        at: point(a, v),
+    let end_at = |v: Ix<Vertex>| match corner(a, v)? {
+        Corner::Grid(at) => Some(End { vertex: v, at }),
+        _ => None,
     };
     match Ends::of(a.edges.curve.get(e).and_then(|c| a.curves.get(*c)))? {
         Ends::Line(_) => {
             let (s, t) = start.zip(end)?;
-            let (s, t) = (end_at(s), end_at(t));
+            let (s, t) = (end_at(s)?, end_at(t)?);
             (s.at != t.at).then_some(Shape::Segment(s, t))
         }
         Ends::Circle(circle) => Some(Shape::Circle(circle, start)),
@@ -312,13 +453,13 @@ fn drop(p: P3, k: usize) -> [i128; 2] {
 }
 
 /// `p − q`, exactly.
-fn diff(p: P3, q: P3) -> Option<[i128; 3]> {
+pub(crate) fn diff(p: P3, q: P3) -> Option<[i128; 3]> {
     let d = |a: Coord, b: Coord| i128::from(a.get()).checked_sub(i128::from(b.get()));
     Some([d(p.x, q.x)?, d(p.y, q.y)?, d(p.z, q.z)?])
 }
 
 /// `u × w`, exactly.
-fn cross(u: [i128; 3], w: [i128; 3]) -> Option<[i128; 3]> {
+pub(crate) fn cross(u: [i128; 3], w: [i128; 3]) -> Option<[i128; 3]> {
     let [u0, u1, u2] = u;
     let [w0, w1, w2] = w;
     let term =
@@ -331,7 +472,7 @@ fn cross(u: [i128; 3], w: [i128; 3]) -> Option<[i128; 3]> {
 }
 
 /// `u · w`, exactly.
-fn dot(u: [i128; 3], w: [i128; 3]) -> Option<i128> {
+pub(crate) fn dot(u: [i128; 3], w: [i128; 3]) -> Option<i128> {
     let [u0, u1, u2] = u;
     let [w0, w1, w2] = w;
     u0.checked_mul(w0)?
@@ -351,149 +492,4 @@ fn shares_full_circle(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
         );
         full && edge_fins(a, e).any(|n| fin_face(a, n) == Some(g))
     })
-}
-
-/// How two faces on crossing planes meet: each edge of one that is not an edge of the other
-/// against the other's polygon, both ways; `Unknown` unless both are convex polygons of one loop.
-fn polygons_meet(
-    a: &Arenas,
-    f: Ix<Face>,
-    g: Ix<Face>,
-    sink: &mut Sink<'_, '_>,
-) -> Result<Meet, Stopped> {
-    for (from, onto) in [(f, g), (g, f)] {
-        let Some(polygon) = Polygon::of(a, onto) else {
-            return Ok(Meet::Unknown);
-        };
-        for e in edges(a, from) {
-            sink.charge()?;
-            if edge_fins(a, e).any(|n| fin_face(a, n) == Some(onto)) {
-                continue;
-            }
-            let found = match shape(a, e) {
-                Some(Shape::Segment(p, q)) => polygon.meets(p.at, q.at),
-                _ => Meet::Unknown,
-            };
-            if found != Meet::Apart {
-                return Ok(found);
-            }
-        }
-    }
-    Ok(Meet::Apart)
-}
-
-/// A face that is a strictly convex polygon of one loop of segments.
-struct Polygon<'a> {
-    a: &'a Arenas,
-    face: Ix<Face>,
-    /// Three of its corners, not on one line: its plane.
-    plane: [P3; 3],
-    /// The coordinate dropped to project it one to one onto a coordinate plane.
-    axis: usize,
-    /// The sign its corners turn with, in that projection.
-    turn: i128,
-}
-
-impl<'a> Polygon<'a> {
-    /// Face `face` as a polygon, if it is one: one loop, every edge a segment, every corner on
-    /// one plane and turning the same way, strictly.
-    fn of(a: &'a Arenas, face: Ix<Face>) -> Option<Polygon<'a>> {
-        let mut loops = face_loops(a, face);
-        let first = loops.next()?;
-        if loops.next().is_some() {
-            return None;
-        }
-        let corners = |n| {
-            let (start, end) = fin_ends(a, n)?;
-            let (_, after) = fin_ends(a, next(a, n))?;
-            let is_segment = matches!(shape(a, fin_edge(a, n)?), Some(Shape::Segment(..)));
-            is_segment.then_some([point(a, start), point(a, end), point(a, after)])
-        };
-        let head = loop_fins(a, first).next()?;
-        let plane = corners(head)?;
-        let [o, x, y] = plane;
-        // Dropping a coordinate in which the first corner's normal is not zero projects the plane
-        // one to one, and the corner's turn there is that coordinate of the normal, up to sign:
-        // never zero. A first corner on one line has no such coordinate, and no polygon.
-        let normal = cross(diff(x, o)?, diff(y, x)?)?;
-        let axis = (0..3).find(|&k| normal.get(k).is_some_and(|c| *c != 0))?;
-        let turn = |[o, x, y]: [P3; 3]| orient(drop(o, axis), drop(x, axis), drop(y, axis));
-        let sign = turn(plane)?.signum();
-        // Every corner on the plane of the first three, turning the same way.
-        let convex = loop_fins(a, first)
-            .map(|n| {
-                let corner = corners(n)?;
-                let [_, at, _] = corner;
-                let flat = orient3d(o, x, y, at).ok()? == Sign::Zero;
-                Some(flat && turn(corner)?.signum() == sign)
-            })
-            .try_fold(true, |all, x| Some(all && x?))?;
-        convex.then_some(Polygon {
-            a,
-            face,
-            plane,
-            axis,
-            turn: sign,
-        })
-    }
-
-    /// The corners in loop order, each with the next.
-    fn sides(&self) -> impl Iterator<Item = [P3; 2]> + 'a {
-        let a = self.a;
-        face_fins(a, self.face)
-            .filter_map(move |n| fin_ends(a, n).map(|(s, t)| [point(a, s), point(a, t)]))
-    }
-
-    /// How the segment from `p` to `q`, not an edge of the polygon, meets it.
-    fn meets(&self, p: P3, q: P3) -> Meet {
-        let [o, x, y] = self.plane;
-        let side = |v: P3| orient3d(o, x, y, v).ok();
-        match side(p).zip(side(q)) {
-            Some((Sign::Zero, Sign::Zero)) | None => Meet::Unknown,
-            Some((Sign::Zero, _)) => self.touches(p),
-            Some((_, Sign::Zero)) => self.touches(q),
-            Some((s, t)) if s == t => Meet::Apart,
-            Some(_) => self.pierced(p, q),
-        }
-    }
-
-    /// How a segment ending at `v`, on the polygon's plane, meets it there: apart at one of its
-    /// corners or outside it, crossing inside it or on a side.
-    fn touches(&self, v: P3) -> Meet {
-        if self.sides().any(|[s, _]| s == v) {
-            return Meet::Apart;
-        }
-        let at = drop(v, self.axis);
-        let inside = self
-            .sides()
-            .map(|[s, t]| {
-                let side = orient(drop(s, self.axis), drop(t, self.axis), at)?;
-                Some(!opposite(side, self.turn))
-            })
-            .try_fold(true, |all, x| Some(all && x?));
-        inside.map_or(Meet::Unknown, cross_if)
-    }
-
-    /// How a segment from `p` to `q`, its ends strictly on opposite sides of the plane, meets the
-    /// polygon: it crosses it where the orientations of the segment with each side keep one sign
-    /// or are zero.
-    fn pierced(&self, p: P3, q: P3) -> Meet {
-        let signs = self
-            .sides()
-            .map(|[s, t]| orient3d(p, q, s, t).ok().map(signum))
-            .try_fold((0, 0), |(low, high), x| {
-                let x = x?;
-                Some((low.min(x), high.max(x)))
-            });
-        signs.map_or(Meet::Unknown, |(low, high)| cross_if(!opposite(low, high)))
-    }
-}
-
-/// A sign as −1, 0 or 1.
-const fn signum(s: Sign) -> i128 {
-    match s {
-        Sign::Negative => -1,
-        Sign::Zero => 0,
-        Sign::Positive => 1,
-    }
 }

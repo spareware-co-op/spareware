@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d370c949427b3e2fe4fd114c071e2200a1d9510a75db20460d1774ab497cfae0 # shrinks to blocks = [Block { low: [5, 0, 0], high: [10, 1, 1] }]

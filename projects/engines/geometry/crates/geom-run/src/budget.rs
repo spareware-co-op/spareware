@@ -66,6 +66,7 @@ impl Budget {
 
     /// The limit of one kind.
     #[must_use]
+    #[inline]
     pub const fn limit(self, kind: BudgetKind) -> u64 {
         match kind {
             BudgetKind::Work => self.work,
@@ -112,6 +113,7 @@ impl Usage {
 
     /// `work` units and `logical_bytes` bytes used.
     #[must_use]
+    #[inline]
     pub const fn new(work: u128, logical_bytes: u128) -> Self {
         Self {
             work,
@@ -121,6 +123,7 @@ impl Usage {
 
     /// The amount used of one kind.
     #[must_use]
+    #[inline]
     pub const fn get(self, kind: BudgetKind) -> u128 {
         match kind {
             BudgetKind::Work => self.work,
@@ -152,6 +155,7 @@ impl Usage {
 
     /// This usage with one kind's amount replaced.
     #[must_use]
+    #[inline]
     pub(crate) const fn with(self, kind: BudgetKind, amount: u128) -> Usage {
         match kind {
             BudgetKind::Work => Usage::new(amount, self.logical_bytes),

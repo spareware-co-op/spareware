@@ -42,16 +42,22 @@
 //!   vertices and faces only along shared edges; exact on segments and flat convex polygons,
 //!   certified on circles; every other pair is reported unchecked, never passed.
 //! - `orientation`: group 3 on the flat shells of a solid, each facing the way its place says, and
-//!   each lying where its region allows (G102).
+//!   each lying where its region allows (G102). In a body that is not Exact, whose faces may be
+//!   bent, the volume's sign comes from the least and the most its faces' corners can give and the
+//!   nesting from the faces' stars, so that neither depends on where a ring starts (G134).
 //! - `exactness`: group 4, the exactness record against the geometry.
 //! - [`query`]: the exactness report and the validity report, as operations (G102).
+//! - `planar`: group 3 on flat faces of any shape, by the signs of planes (G134). A face its
+//!   rounded corners have bent stands for the star of triangles from the mean of its corners, so
+//!   that what is found of it does not depend on where its ring starts.
 //! - `sink`: the faults found so far, capped at [`MAX_FAULTS`], and the caller's meter.
 //!
 //! Status: the framework and groups 1 and 4 (G84) and groups 2 and 3 for primitive bodies (G85)
 //! built. Group 3 tests primitives with its own exact predicates and closed forms, as
-//! `geom-intersect` is not built yet. Flat bodies' orientation and nesting are built (G102);
-//! plane-based bodies, pcurves, general surfaces and the same checks on curved faces come in G134,
-//! G177 and G322, and a report counts what it left for them ([`Report::deferred`]).
+//! `geom-intersect` is not built yet. Flat bodies' orientation and nesting are built (G102), and
+//! plane-based bodies, with their vertices where three planes meet and faces of any shape (G134);
+//! pcurves, general surfaces and the same checks on curved faces come in G177 and G322, and a report
+//! counts what it left for them ([`Report::deferred`]).
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -63,6 +69,7 @@ mod exactness;
 mod flat;
 mod geometric;
 mod orientation;
+mod planar;
 pub mod query;
 pub mod report;
 mod run;

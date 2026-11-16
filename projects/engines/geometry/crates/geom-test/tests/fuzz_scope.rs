@@ -579,8 +579,8 @@ fn a_change_selects_every_harness_that_builds_it() {
     let select = |files: &[String]| scope.select(Some(files));
     let found = dependency_problems(&select, &metadata, &sources);
     assert!(found.is_empty(), "{found:#?}");
-    // The check reaches something on each side: geom-p21 is built by one target, and geom-bool by
-    // no harness.
+    // The check reaches something on each side: geom-p21 is built by one target, and
+    // geom-analysis by no harness (geom-bool now is, by the solids target).
     let p21 = select(&["projects/engines/geometry/crates/geom-p21/src/lib.rs".to_owned()]);
     let running: Vec<&str> = p21
         .targets
@@ -632,7 +632,7 @@ fn a_change_selects_every_harness_that_builds_it() {
     assert!(
         found
             .iter()
-            .any(|p| p.starts_with("a change to geom-bool, which no harness builds, runs")),
+            .any(|p| p.starts_with("a change to geom-analysis, which no harness builds, runs")),
         "{found:#?}"
     );
 }

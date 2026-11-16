@@ -5,7 +5,8 @@
 //! [`OPS`] and [`GROWTH`] are the single list. Every harness finds its benchmarks here: the
 //! instruction-count gate looks each one up by name ([`prepare_named`]), the WebAssembly fuel gate
 //! runs every name ([`names`]), the wall-clock harness runs every case, and the golden tests check
-//! every digest. Tests check that the gate's source lists exactly these benchmarks
+//! every digest. The reference runner times every name and the scenarios at full size
+//! ([`timed_names`]), each checked before it is timed ([`prepare_checked`]). Tests check that the gate's source lists exactly these benchmarks
 //! (`tests/coverage.rs`), and that every public function of `geom-num` is either measured here or
 //! named in [`UNMEASURED`] with a reason (principle 12: every operation ships with a benchmark).
 //!
@@ -94,9 +95,9 @@ impl fmt::Display for Case {
     }
 }
 
-/// Classes of the predicates, `Plane::side` and `Plane::side_of_tpi`.
+/// Classes of the predicates, `Plane::side`, `Plane::side_of_tpi` and `plane::determinant_sign`.
 const TDNE: &[Class] = &[Typical, Degenerate, NearlyDegenerate, Extreme];
-/// Classes of `Plane::through` and `Tpi::new`.
+/// Classes of `Plane::through`, `Tpi::new`, `Tpi::meeting` and `plane::normals_sign`.
 const TDE: &[Class] = &[Typical, Degenerate, Extreme];
 /// Classes of checked wide-integer arithmetic, of the random draws and of cutting stream ranges.
 const TEO: &[Class] = &[Typical, Extreme, Overflow];
@@ -107,6 +108,8 @@ const TE: &[Class] = &[Typical, Extreme];
 /// out of range.
 const TO: &[Class] = &[Typical, Overflow];
 /// Classes of the perturbed predicates: the exact path, and an exact tie the perturbation decides.
+/// Also of the face planes of `plane::determinant_sign` and `plane::normals_sign`: a nonzero sign
+/// and a zero, both decided by the machine-word rung.
 const TD: &[Class] = &[Typical, Degenerate];
 /// The class of operations with a single path, or whose paths one batch covers in rotation.
 const T: &[Class] = &[Typical];
@@ -201,8 +204,13 @@ pub static OPS: &[Op] = &[
     Op { group: "plane", name: "through", measures: "Plane::through", classes: TDE, prepare: |c| bind(inputs::plane::through(c), kernels::plane::through) },
     Op { group: "plane", name: "side", measures: "Plane::side", classes: TDNE, prepare: |c| bind(inputs::plane::side(c), kernels::plane::side) },
     Op { group: "plane", name: "tpi_new", measures: "Tpi::new", classes: TDE, prepare: |c| bind(inputs::plane::tpi_new(c), kernels::plane::tpi_new) },
+    Op { group: "plane", name: "tpi_meeting", measures: "Tpi::meeting", classes: TDE, prepare: |c| bind(inputs::plane::tpi_meeting(c), kernels::plane::tpi_meeting) },
+    Op { group: "plane", name: "normals_sign", measures: "plane::normals_sign", classes: TDE, prepare: |c| bind(inputs::plane::normals_sign(c), kernels::plane::normals_sign) },
+    Op { group: "plane", name: "normals_sign_faces", measures: "plane::normals_sign", classes: TD, prepare: |c| bind(inputs::plane::normals_sign_faces(c), kernels::plane::normals_sign_faces) },
     Op { group: "plane", name: "tpi_homogeneous", measures: "Tpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::tpi_homogeneous(c), kernels::plane::tpi_homogeneous) },
     Op { group: "plane", name: "side_of_tpi", measures: "Plane::side_of_tpi", classes: TDNE, prepare: |c| bind(inputs::plane::side_of_tpi(c), kernels::plane::side_of_tpi) },
+    Op { group: "plane", name: "determinant_sign", measures: "plane::determinant_sign", classes: TDNE, prepare: |c| bind(inputs::plane::determinant_sign(c), kernels::plane::determinant_sign) },
+    Op { group: "plane", name: "determinant_sign_faces", measures: "plane::determinant_sign", classes: TD, prepare: |c| bind(inputs::plane::determinant_sign_faces(c), kernels::plane::determinant_sign_faces) },
     Op { group: "plane", name: "to_grid", measures: "Tpi::to_grid", classes: &[Typical, OnGrid, Extreme, Overflow], prepare: |c| bind(inputs::plane::to_grid(c), kernels::plane::to_grid) },
     Op { group: "plane", name: "lpi_new", measures: "Lpi::new", classes: TDE, prepare: |c| bind(inputs::plane::lpi_new(c), kernels::plane::lpi_new) },
     Op { group: "plane", name: "lpi_homogeneous", measures: "Lpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::lpi_homogeneous(c), kernels::plane::lpi_homogeneous) },
@@ -408,6 +416,22 @@ pub static OPS: &[Op] = &[
     Op { group: "batch", name: "run_items", measures: "geom_op::Batch::run", classes: T, prepare: |c| bind(inputs::batch::run_items(c), kernels::batch::run_items) },
     Op { group: "batch", name: "curve_points", measures: "geom_curve::ParamCurve::points", classes: T, prepare: |c| bind(inputs::batch::curve_points(c), kernels::batch::curve_points) },
     Op { group: "batch", name: "surface_points", measures: "geom_surface::ParamSurface::points", classes: T, prepare: |c| bind(inputs::batch::surface_points(c), kernels::batch::surface_points) },
+    // The triangulation's hot path (piece G153; decision 32.46).
+    Op { group: "mesh", name: "cdt", measures: "geom_mesh::cdt::triangulate", classes: T, prepare: |c| bind(inputs::mesh::cdt(c), kernels::mesh::cdt) },
+    Op { group: "mesh", name: "exact_build", measures: "geom_mesh::exact::build::build", classes: T, prepare: |c| bind(inputs::mesh::exact_build(c), kernels::mesh::exact_build) },
+    Op { group: "mesh", name: "locate", measures: "geom_mesh::Classifier::locate_all", classes: T, prepare: |c| bind(inputs::mesh::locate(c), kernels::mesh::locate) },
+    Op { group: "mesh", name: "boolean", measures: "geom_mesh::boolean::boolean", classes: T, prepare: |c| bind(inputs::mesh::boolean(c), kernels::mesh::boolean) },
+    Op { group: "mesh", name: "hull", measures: "geom_mesh::Hull::of", classes: T, prepare: |c| bind(inputs::mesh::hull(c), kernels::mesh::hull) },
+    Op { group: "mesh", name: "slice", measures: "geom_mesh::slice::slice", classes: T, prepare: |c| bind(inputs::mesh::slice(c), kernels::mesh::slice) },
+    Op { group: "mesh", name: "point_point", measures: "distance::point_point", classes: T, prepare: |c| bind(inputs::mesh::point_point(c), kernels::mesh::point_point) },
+    Op { group: "mesh", name: "point_line", measures: "distance::point_line", classes: T, prepare: |c| bind(inputs::mesh::point_line(c), kernels::mesh::point_line) },
+    Op { group: "mesh", name: "point_plane", measures: "distance::point_plane", classes: T, prepare: |c| bind(inputs::mesh::point_plane(c), kernels::mesh::point_plane) },
+    Op { group: "mesh", name: "line_line", measures: "distance::line_line", classes: T, prepare: |c| bind(inputs::mesh::line_line(c), kernels::mesh::line_line) },
+    Op { group: "mesh", name: "closest_dots", measures: "distance::product_difference", classes: T, prepare: |c| bind(inputs::mesh::closest_dots(c), kernels::mesh::closest_dots) },
+    Op { group: "mesh", name: "triangles", measures: "geom_mesh::contact::triangles", classes: T, prepare: |c| bind(inputs::mesh::triangles(c), kernels::mesh::triangles) },
+    Op { group: "mesh", name: "envelope", measures: "geom_mesh::TriangleEnvelope::contains", classes: T, prepare: |c| bind(inputs::mesh::envelope(c), kernels::mesh::envelope) },
+    Op { group: "mesh", name: "decimate", measures: "geom_mesh::model::decimate::decimate", classes: T, prepare: |c| bind(inputs::mesh::decimate(c), kernels::mesh::decimate) },
+    Op { group: "mesh", name: "remesh", measures: "geom_mesh::model::remesh::remesh", classes: T, prepare: |c| bind(inputs::mesh::remesh(c), kernels::mesh::remesh) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.46): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -500,10 +524,128 @@ pub static OPS: &[Op] = &[
     // pool, so its lone wave is counted both ways (decision 32.46).
     Op { group: "helper", name: "lone_serial", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_serial(c), kernels::helper::lone_serial) },
     Op { group: "helper", name: "lone_pool", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_pool(c), kernels::helper::lone_pool) },
+    // The flat boolean's scenarios (piece G140; 23.13's scenarios at reduced scale): each batch is
+    // one whole job at about a tenth of its full size (inputs::scenario).
+    Op { group: "scenario", name: "openings", measures: "geom_bool::batch::cut", classes: T, prepare: |c| scenario("openings", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "moved_door", measures: "geom_bool::batch::cut", classes: T, prepare: |c| scenario("moved_door", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "slab_holes", measures: "geom_bool::batch::cut", classes: T, prepare: |c| scenario("slab_holes", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "union", measures: "geom_bool::combine::unite", classes: T, prepare: |c| scenario("union", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "one_selection", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("one_selection", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "three_selections", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("three_selections", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "storey", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("storey", c, inputs::scenario::reduced()) },
 ];
 
+/// The scenarios' names, as the operations of the scenario group name them.
+pub const SCENARIOS: [&str; 7] = [
+    "openings",
+    "moved_door",
+    "slab_holes",
+    "union",
+    "one_selection",
+    "three_selections",
+    "storey",
+];
+
+/// The scenario named `op` of class `class` at `sizes`, bound to its kernel. An unknown name gives
+/// an empty batch, which no catalogued benchmark has.
+fn scenario(op: &str, class: Class, sizes: inputs::scenario::Sizes) -> Prepared {
+    use inputs::scenario as s;
+    use kernels::scenario as k;
+    match op {
+        "openings" => bind(s::wall(class, sizes), k::openings),
+        "moved_door" => bind(s::moved_door(class, sizes), k::moved_door),
+        "slab_holes" => bind(s::slab(class, sizes), k::openings),
+        "union" => bind(s::boxes(class, sizes), k::union),
+        "one_selection" => bind(s::picks(class, sizes, 1), k::selections_of),
+        "three_selections" => bind(s::picks(class, sizes, 3), k::selections_of),
+        "storey" => bind(s::storey(class, sizes), k::storey),
+        _ => bind(s::wall(Class::Degenerate, sizes), k::openings),
+    }
+}
+
+/// `batch` bound to `kernel` if one run of it succeeds on every input.
+fn succeeding<T: Canonical + 'static>(
+    batch: Vec<T>,
+    kernel: Kernel<T, Result<[u32; 4], geom_op::OpError>>,
+) -> Option<Prepared> {
+    let mut out = Vec::with_capacity(batch.len());
+    kernel(&batch, &mut out);
+    (!out.is_empty() && out.iter().all(Result::is_ok)).then(|| bind(batch, kernel))
+}
+
+/// The scenario named `op` at full size, for the wall-clock harness (28.14: nightly, against Spare
+/// Construct's targets), once one run of it has succeeded; `None` for a name [`SCENARIOS`] does
+/// not hold or a run that failed. Full-size results have no golden digests, as the count gates
+/// never run them: the harness checks the reduced batch's digests before timing the full one.
+#[must_use]
+pub fn full_scenario(op: &str) -> Option<Prepared> {
+    use inputs::scenario as s;
+    use kernels::scenario as k;
+    let (class, sizes) = (Class::Typical, s::full());
+    match op {
+        "openings" => succeeding(s::wall(class, sizes), k::openings),
+        "moved_door" => succeeding(s::moved_door(class, sizes), k::moved_door),
+        "slab_holes" => succeeding(s::slab(class, sizes), k::openings),
+        "union" => succeeding(s::boxes(class, sizes), k::union),
+        "one_selection" => succeeding(s::picks(class, sizes, 1), k::selections_of),
+        "three_selections" => succeeding(s::picks(class, sizes, 3), k::selections_of),
+        "storey" => succeeding(s::storey(class, sizes), k::storey),
+        _ => None,
+    }
+}
+
+/// The variant a full-size scenario is named by: `scenario/<op>/full`.
+pub const FULL: &str = "full";
+
+/// Every benchmark the reference runner times each night (piece G107; 28.14): [`names`], then each
+/// of [`SCENARIOS`] at full size, `scenario/<op>/full`, the size 23.1's shares and 11.17's targets
+/// are stated at (the door move's share reads `scenario/moved_door/full`). The count gates and the
+/// fuel gate never run the full sizes, so [`names`] does not hold them.
+#[must_use]
+pub fn timed_names() -> Vec<String> {
+    let mut all = names();
+    all.extend(SCENARIOS.iter().map(|op| format!("scenario/{op}/{FULL}")));
+    all
+}
+
+/// Why [`prepare_checked`] has no benchmark to time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Unready {
+    /// No benchmark of [`timed_names`] has this name.
+    Unknown,
+    /// Its digests differ from `golden.txt`, or a full-size run failed: the message says which.
+    Wrong(String),
+}
+
+/// The benchmark named `name` of [`timed_names`], ready to time once it is known to compute the
+/// right thing: a catalogued benchmark when one pass's digests are `golden.txt`'s; a full-size
+/// scenario, which has no digest, when its reduced batch (`scenario/<op>/typical`) has
+/// `golden.txt`'s digests and one full-size run succeeds, as the wall-clock harness checks it.
+///
+/// # Errors
+///
+/// [`Unready::Unknown`] for a name [`timed_names`] does not hold; [`Unready::Wrong`] when the
+/// digests differ or the full-size run fails.
+pub fn prepare_checked(name: &str) -> Result<Prepared, Unready> {
+    let full = name
+        .strip_prefix("scenario/")
+        .and_then(|rest| rest.strip_suffix(FULL))
+        .and_then(|rest| rest.strip_suffix('/'))
+        .filter(|op| SCENARIOS.contains(op));
+    let Some(op) = full else {
+        let mut bench = prepare_named(name).ok_or(Unready::Unknown)?;
+        crate::golden::check(name, &bench.run()).map_err(Unready::Wrong)?;
+        return Ok(bench);
+    };
+    let reduced = format!("scenario/{op}/typical");
+    let mut checked = prepare_named(&reduced).ok_or(Unready::Unknown)?;
+    crate::golden::check(&reduced, &checked.run()).map_err(Unready::Wrong)?;
+    full_scenario(op)
+        .ok_or_else(|| Unready::Wrong(format!("{name}: a run at full size did not succeed")))
+}
+
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 49] = [
+pub const GROUPS: [&str; 51] = [
     "predicate",
     "sign",
     "wide",
@@ -531,6 +673,7 @@ pub const GROUPS: [&str; 49] = [
     "attributes",
     "topo",
     "batch",
+    "mesh",
     "nurbs",
     "curve",
     "format",
@@ -540,6 +683,7 @@ pub const GROUPS: [&str; 49] = [
     "linalg",
     "helper",
     "make",
+    "scenario",
     "cbor",
     "record",
     "body_record",
@@ -702,6 +846,14 @@ pub fn prepare_named(name: &str) -> Option<Prepared> {
 /// `tests/coverage.rs` checks that each constant still refuses, so its entry cannot outlive it.
 #[rustfmt::skip]
 pub static UNMEASURED: &[(&str, &str)] = &[
+    ("predicate::orient2d_step", "predicate::orient2d's path, with its step beside the sign"),
+    ("predicate::orient2d_narrow", "a step of predicate::orient2d, measured there on the targets that take it"),
+    ("predicate::orient3d_step", "predicate::orient3d's path, with its step beside the sign"),
+    ("predicate::incircle_step", "predicate::incircle's path, with its step beside the sign"),
+    ("Plane::side_of_tpi_step", "Plane::side_of_tpi's path, with its step beside the sign"),
+    ("Step::name", "a table of names"),
+    ("Step::route", "a table of the steps, for the twins that count"),
+    ("distance::dot_from", "one dot product of differences, inside mesh/closest_dots"),
     ("Coord::get", "field accessor"),
     ("Steps::get", "field accessor"),
     ("Real::get", "field accessor"),
@@ -712,6 +864,8 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Plane::n", "field accessor"),
     ("Plane::d", "field accessor"),
     ("Tpi::planes", "field accessor"),
+    ("Tpi::weight", "field accessor"),
+    ("Plane::new", "four magnitude comparisons on a plane already made"),
     ("Lpi::points", "field accessor"),
     ("Lpi::plane", "field accessor"),
     ("Ssi::points", "field accessor"),
@@ -822,6 +976,32 @@ mod tests {
             "nope/a/b",
         ] {
             assert!(prepare_named(bad).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_timed_names_are_the_catalogue_and_each_scenario_at_full_size() {
+        let (all, timed) = (names(), timed_names());
+        assert_eq!(timed[..all.len()], all[..]);
+        let full: Vec<&str> = timed[all.len()..].iter().map(String::as_str).collect();
+        assert_eq!(full.len(), SCENARIOS.len());
+        assert!(full.contains(&"scenario/moved_door/full"));
+        for name in &full {
+            // The gates never prepare a full size: only the timing path knows them.
+            assert!(prepare_named(name).is_none(), "{name}");
+        }
+        assert!(prepare_checked("predicate/orient2d/typical").is_ok());
+        for bad in [
+            "scenario/nope/full",
+            "scenario/moved_door/full/",
+            "scenario/moved_doorfull",
+            "scenario//full",
+            "nope/a/b",
+        ] {
+            assert!(
+                matches!(prepare_checked(bad), Err(Unready::Unknown)),
+                "{bad}"
+            );
         }
     }
 

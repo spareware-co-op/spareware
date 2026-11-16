@@ -13,6 +13,7 @@
 //!   replayable.
 //! - Every detail has its base kind, its remedies and its message, and every conversion from the
 //!   helper's and the numbers layer's errors lands on the detail of the same meaning.
+//! - Every `Internal` detail of every family offers a report, as chapter 22's row for the kind says.
 //! - An error is built from its detail, keeps what the operation adds in order, and prints its
 //!   kind, path and message.
 //! - Evidence, remedies, warnings, outputs and schema classes print and keep what they are given.
@@ -33,8 +34,9 @@ use std::error::Error as _;
 use geom_num::interval::Interval;
 use geom_num::{Exactness, GridStep, NumError, P2, P3, Steps};
 use geom_op::{
-    Bound, Class, Diagnostic, ErrorKind, Evidence, Label, NameId, NumDetail, OpContext, OpError,
-    OpErrorDetail, OpId, OpOutput, OpPath, Precision, Remedy, RunDetail, Value,
+    Bound, BoundDetail, Class, CombineDetail, Diagnostic, ErrorKind, Evidence, Label, MakeDetail,
+    NameId, NumDetail, OpContext, OpError, OpErrorDetail, OpId, OpOutput, OpPath, Precision,
+    QueryDetail, Remedy, RunDetail, Value,
 };
 use geom_run::{
     Budget, BudgetKind, Cancel, CancelToken, Exceeded, Interrupted, ItemError, Phase, RunError,
@@ -475,6 +477,32 @@ fn a_budget_failure_suggests_the_budget_it_needed_a_split_or_a_preview() {
         RunDetail::Internal { what: "x" }.remedies(),
         [Remedy::Report]
     );
+}
+
+#[test]
+fn every_defect_offers_a_report() {
+    // Every `Internal` detail of every family, named one by one: chapter 22's row for the kind
+    // says "Report it", so each offers exactly that, and so does an error built from it.
+    let defects: [OpErrorDetail; 9] = [
+        RunDetail::Internal { what: "x" }.into(),
+        NumDetail::EmptyInterval.into(),
+        NumDetail::WrongDirection.into(),
+        NumDetail::BitBudget.into(),
+        MakeDetail::ResultInvalid.into(),
+        MakeDetail::BuildFailed.into(),
+        QueryDetail::Overflow.into(),
+        CombineDetail::ResultInvalid.into(),
+        BoundDetail::OwnTermAstray.into(),
+    ];
+    for d in defects {
+        assert_eq!(d.kind(), ErrorKind::Internal, "{d:?}");
+        assert_eq!(d.remedies(), [Remedy::Report], "{d:?}");
+        assert_eq!(
+            OpError::new(path(), d).remedies(),
+            [Remedy::Report],
+            "{d:?}"
+        );
+    }
 }
 
 #[test]

@@ -506,8 +506,8 @@ fn the_ruleset_requires_checks_that_always_report() {
     assert!(
         seeded(
             "kernel.yml",
-            " wasm, wasm-suite, big-endian]",
-            " wasm, wasm-suite]"
+            " wasm, wasm-suite, big-endian, large-models]",
+            " wasm, wasm-suite, large-models]"
         )
         .iter()
         .any(|p| p.contains("does not judge [\"big-endian\"]"))
@@ -543,8 +543,8 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
         ),
         // A job dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope test suite wasm wasm-suite big-endian\"",
-            "merge_group) must=\"lint scope test suite wasm-suite big-endian\"",
+            "merge_group) must=\"lint scope test suite wasm wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope test suite wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // A job that would run again on a tree the queue passed.

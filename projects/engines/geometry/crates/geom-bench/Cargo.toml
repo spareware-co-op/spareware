@@ -20,6 +20,12 @@ name = "geom-bench-guest"
 test = false
 bench = false
 
+# Chapter 23.2's step mix, per corpus.
+[[bin]]
+name = "geom-bench-steps"
+test = false
+bench = false
+
 # The checks the gates run on count files: comparison with the merge base, removals, growth.
 [[bin]]
 name = "geom-bench-counts"
@@ -36,6 +42,8 @@ required-features = ["reference"]
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# The step mix (chapter 23.2) counts the plane table's steps too (ours, Apache-2.0).
+geom-poly = { path = "../geom-poly" }
 # The work meter the root-isolation engine runs under (its benchmarks, G53).
 geom-run = { path = "../geom-run" }
 # Cache keys, the memo store and body versions (piece G105), with the crates their inputs need
@@ -62,6 +70,12 @@ geom-topo = { path = "../geom-topo" }
 # The primitives and transforms of phase 3 (piece G101), and the context and output they take and
 # give, for the same count benchmarks.
 geom-make = { path = "../geom-make" }
+# The flat boolean's scenarios (piece G140; 23.13's scenarios at reduced scale): walls and their
+# openings, a moved door, a slab's holes, a union of many boxes and a storey's rooms, with the
+# arrangement cache a moved door is cut again from.
+geom-bool = { path = "../geom-bool" }
+# The triangulation (piece G153), for the same count benchmarks.
+geom-mesh = { path = "../geom-mesh" }
 # The checker's two queries, the exactness and validity reports (piece G102), for the same count
 # benchmarks as the other core queries in geom-topo and geom-name.
 geom-check = { path = "../geom-check" }

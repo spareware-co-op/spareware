@@ -9,12 +9,12 @@
 //! What it does: [`decode`] turns a fuzzer's bytes into a [`Case`]: two operation paths (an
 //! operation's ID and up to [`MAX_LABELS`] labels each, step names drawn as any text, often
 //! printable, or batch keys); up to [`MAX_ERRORS`] errors, each a detail of any family (the
-//! parallel helper's stops, the numbers layer's failures, a batch's, the Make and the Query
-//! families') at one of the paths, with up to [`MAX_ITEMS`] entities, evidence values and remedies
-//! of every kind added and its message kept or replaced; up to [`MAX_DIAGNOSTICS`] warnings, with
-//! codes valid and not; an exactness class; a context's budget, precision, cancellation and
-//! tally; a choice of the facade's operations; and the bytes every detail of the contract is built
-//! from once more. [`check`] holds each to the laws below, and [`harness`] decodes and checks
+//! parallel helper's stops, the numbers layer's failures, a batch's, the Make, Query and Combine
+//! families', the per-entity bounds' refusals and a local operation's) at one of the paths, with
+//! up to [`MAX_ITEMS`] entities, evidence values and remedies of every kind added and its message
+//! kept or replaced; up to [`MAX_DIAGNOSTICS`] warnings, with codes valid and not; an exactness
+//! class; a context's budget, precision, cancellation and tally; a choice of the facade's
+//! operations; and the bytes every detail of the contract is built from once more. [`check`] holds each to the laws below, and [`harness`] decodes and checks
 //! twice.
 //!
 //! Guarantees:
@@ -32,10 +32,13 @@
 //!     kind's row allows ("what the caller can do"); a budget failure offers to raise exactly the
 //!     limit it passed to what was used, to split the call and to preview; a defect offers a report;
 //!     `Cancelled` and `OutOfMemory` offer nothing; a class not accepted offers to accept the class
-//!     it carries; and the detail's message names its data (the limit, the used amount and the
-//!     phase; the coordinate; the key; the input, count, class or piece);
-//!   - *the details map by meaning*: every `NumError` lands on the kind chapter 22 gives it, and
-//!     every conversion from the helper's errors keeps the stop it is;
+//!     it carries; a bound past its limit offers to accept the bound it needs; a change not allowed
+//!     offers to change what is allowed; and the detail's message names its data (the limit, the
+//!     used amount and the phase; the coordinate; the key; the input, count, class or piece; the
+//!     bound and its limit; the change's class);
+//!   - *the details map by meaning*: every `NumError` lands on the kind chapter 22 gives it, every
+//!     conversion from the helper's errors keeps the stop it is, and each family's detail converts
+//!     as itself;
 //!   - *the schemas*: every error a schema of the facade's `OPERATIONS` lists is a detail the
 //!     contract builds, of the kind the schema states, that offers at least one remedy; no schema
 //!     lists `Cancelled` or `OutOfMemory`, or a detail twice; every warning code a schema lists is
@@ -69,7 +72,7 @@
 //! descriptions are written by `geom-gen`'s facade generator and read with `serde_json`; the
 //! canonical path is read with `ciborium-ll`, an encoder written elsewhere.
 //!
-//! Cost: about 40 details built and checked per input, the facade's schemas walked once and the
+//! Cost: about 60 details built and checked per input, the facade's schemas walked once and the
 //! chosen operations' tool descriptions written, parsed and written again, all twice; at most
 //! [`MAX_INPUT_BYTES`] bytes read.
 
@@ -82,10 +85,11 @@ use engine_geometry::schema::Operation;
 use geom_num::interval::Interval;
 use geom_num::{Exactness, GridStep, NumError, P2, P3, Steps};
 use geom_op::cbor::Encoder;
+use geom_op::local::{CLASSES, LocalDetail};
 use geom_op::{
-    BatchDetail, Bound, Class, Diagnostic, ErrorKind, Evidence, Label, MakeDetail, NameId,
-    NumDetail, OpContext, OpError, OpErrorDetail, OpId, OpOutput, OpPath, Precision, QueryDetail,
-    Remedy, RunDetail, Tally, Value,
+    BatchDetail, Bound, BoundDetail, ChangeClass, Class, CombineDetail, Diagnostic, ErrorKind,
+    Evidence, Label, MakeDetail, NameId, NumDetail, OpContext, OpError, OpErrorDetail, OpId,
+    OpOutput, OpPath, Precision, QueryDetail, Remedy, RunDetail, Tally, Value,
 };
 use geom_run::{
     Budget, BudgetKind, CancelToken, Exceeded, Interrupted, ItemError, Phase, RunError, Usage,
@@ -453,7 +457,7 @@ fn run_detail(variant: u8, p: [u8; PAYLOAD]) -> RunDetail {
 /// The Make family's detail `variant` picks, from `p`.
 fn make_detail(variant: u8, p: [u8; PAYLOAD]) -> MakeDetail {
     let wide = u64::from_le_bytes(p);
-    match variant % 14 {
+    match variant % 15 {
         0 => MakeDetail::ZeroLength {
             input: pick(&INPUTS, "", at(p, 0)),
         },
@@ -473,6 +477,7 @@ fn make_detail(variant: u8, p: [u8; PAYLOAD]) -> MakeDetail {
         10 => MakeDetail::RepeatedKey,
         11 => MakeDetail::SingularTransform,
         12 => MakeDetail::ResultInvalid,
+        13 => MakeDetail::NoSuchPlacement { index: quad(p, 0) },
         _ => MakeDetail::BuildFailed,
     }
 }
@@ -480,29 +485,85 @@ fn make_detail(variant: u8, p: [u8; PAYLOAD]) -> MakeDetail {
 /// The Query family's detail `variant` picks, from `p`.
 fn query_detail(variant: u8, p: [u8; PAYLOAD]) -> QueryDetail {
     let row = quad(p, 0);
-    match variant % 6 {
+    match variant % 7 {
         0 => QueryDetail::Malformed,
         1 => QueryDetail::CurvedEdge { edge: row },
         2 => QueryDetail::CurvedFace { face: row },
         3 => QueryDetail::NoLoops { face: row },
         4 => QueryDetail::NotSolid,
+        5 => QueryDetail::ImplicitVertex { vertex: row },
         _ => QueryDetail::Overflow,
     }
 }
 
-/// The variants of each family, in [`detail`]'s order of families.
-const FAMILY_SIZES: [u8; 5] = [5, 11, 1, 14, 6];
+/// The Combine family's detail `variant` picks, from `p`.
+fn combine_detail(variant: u8, p: [u8; PAYLOAD]) -> CombineDetail {
+    match variant % 10 {
+        0 => CombineDetail::DuplicateOperand,
+        1 => CombineDetail::UnknownOperand,
+        2 => CombineDetail::BadSelection,
+        3 => CombineDetail::InvalidOperand,
+        4 => CombineDetail::NotPlaneBased,
+        5 => CombineDetail::UnboundedResult,
+        6 => CombineDetail::SeedOnBoundary,
+        7 => CombineDetail::SeedOutside,
+        8 => CombineDetail::NotAccepted {
+            would: exactness(p),
+        },
+        _ => CombineDetail::ResultInvalid,
+    }
+}
+
+/// The per-entity bounds' refusal `variant` picks, from `p`.
+fn bound_detail(variant: u8, p: [u8; PAYLOAD]) -> BoundDetail {
+    let (bound, limit, step) = (
+        Steps(u64::from(quad(p, 0))),
+        Steps(u64::from(pair(p, 4))),
+        pick(&STEPS, GridStep::Q0, at(p, 6)),
+    );
+    match variant % 5 {
+        0 => BoundDetail::OverStep {
+            own: bound,
+            limit,
+            step,
+        },
+        1 => BoundDetail::OverCeiling {
+            needed: bound,
+            ceiling: limit,
+            step,
+        },
+        2 => BoundDetail::OwnTermAstray,
+        3 => BoundDetail::MixedSteps,
+        _ => BoundDetail::CommitFlip,
+    }
+}
+
+/// A local operation's refusal of the change class `variant` picks.
+fn local_detail(variant: u8) -> LocalDetail {
+    LocalDetail::TopologyChangeNotAllowed {
+        class: pick(&CLASSES, ChangeClass::VertexSplit, variant),
+    }
+}
+
+/// The variants of each family, in [`detail`]'s order of families; a local operation's refusal
+/// counts once per change class.
+const FAMILY_SIZES: [u8; 8] = [5, 11, 1, 15, 7, 10, 5, 9];
+
+const _: () = assert!(CLASSES.len() == 9);
 
 /// The detail of family `family` and variant `variant`, from `p`.
 fn detail(family: u8, variant: u8, p: [u8; PAYLOAD]) -> OpErrorDetail {
-    match family % 5 {
+    match family % 8 {
         0 => OpErrorDetail::Run(run_detail(variant, p)),
         1 => OpErrorDetail::Num(NumDetail::from(num_error(variant, p))),
         2 => OpErrorDetail::Batch(BatchDetail::RepeatedKey {
             key: sixteen(at(p, 0), at(p, 1)),
         }),
         3 => OpErrorDetail::Make(make_detail(variant, p)),
-        _ => OpErrorDetail::Query(query_detail(variant, p)),
+        4 => OpErrorDetail::Query(query_detail(variant, p)),
+        5 => OpErrorDetail::Combine(combine_detail(variant, p)),
+        6 => OpErrorDetail::Bound(bound_detail(variant, p)),
+        _ => OpErrorDetail::Local(local_detail(variant)),
     }
 }
 
@@ -1138,15 +1199,31 @@ fn data_texts(detail: &OpErrorDetail) -> Vec<String> {
             | MakeDetail::MinorNotBelowMajor { major: n } => {
                 vec![n.to_string()]
             }
+            MakeDetail::NoSuchPlacement { index } => vec![index.to_string()],
             MakeDetail::NotAccepted { would } => vec![format!("{would:?}")],
             MakeDetail::NotCertifiedYet { piece } => vec![(*piece).to_owned()],
             _ => Vec::new(),
         },
         OpErrorDetail::Query(
             QueryDetail::CurvedEdge { edge: row }
+            | QueryDetail::ImplicitVertex { vertex: row }
             | QueryDetail::CurvedFace { face: row }
             | QueryDetail::NoLoops { face: row },
         ) => vec![row.to_string()],
+        OpErrorDetail::Combine(CombineDetail::NotAccepted { would }) => vec![format!("{would:?}")],
+        OpErrorDetail::Bound(
+            BoundDetail::OverStep {
+                own: bound, limit, ..
+            }
+            | BoundDetail::OverCeiling {
+                needed: bound,
+                ceiling: limit,
+                ..
+            },
+        ) => vec![bound.0.to_string(), limit.0.to_string()],
+        OpErrorDetail::Local(LocalDetail::TopologyChangeNotAllowed { class }) => {
+            vec![format!("{class:?}")]
+        }
         _ => Vec::new(),
     }
 }
@@ -1174,10 +1251,31 @@ fn carried(detail: &OpErrorDetail, remedies: &[Remedy]) -> Option<&'static str> 
         }
         OpErrorDetail::Num(NumDetail::OutOfRange { .. }) => (!has(&Remedy::ChangeFrame))
             .then_some("a coordinate past the frame offers another frame"),
-        OpErrorDetail::Make(MakeDetail::NotAccepted { would }) => {
+        OpErrorDetail::Make(MakeDetail::NotAccepted { would })
+        | OpErrorDetail::Combine(CombineDetail::NotAccepted { would }) => {
             (!has(&Remedy::Accept { class: *would }))
                 .then_some("a class not accepted offers to accept the class it carries")
         }
+        OpErrorDetail::Bound(
+            BoundDetail::OverStep {
+                own: bound, step, ..
+            }
+            | BoundDetail::OverCeiling {
+                needed: bound,
+                step,
+                ..
+            },
+        ) => (!has(&Remedy::Accept {
+            class: Exactness::Certified {
+                bound: *bound,
+                step: *step,
+            },
+        }))
+        .then_some("a bound past its limit offers to accept the bound it needs"),
+        OpErrorDetail::Local(LocalDetail::TopologyChangeNotAllowed { .. }) => (!remedies
+            .iter()
+            .any(|r| matches!(r, Remedy::ChangeInput { input: "allow", .. })))
+        .then_some("a change not allowed offers to change what is allowed"),
         OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece }) => {
             (!has(&Remedy::AwaitPiece { piece })).then_some("a missing route names its piece")
         }
@@ -1421,7 +1519,7 @@ fn check_conversions(p: [u8; PAYLOAD], law: Law<'_>) -> Result<(), Finding> {
     );
     let what = pick(&BROKE, "", at(p, 2));
     let run = |stop: RunDetail| OpErrorDetail::Run(stop);
-    let pairs: [(OpErrorDetail, OpErrorDetail, ErrorKind); 15] = [
+    let pairs: [(OpErrorDetail, OpErrorDetail, ErrorKind); 13] = [
         (
             RunError::Failed(query).into(),
             OpErrorDetail::Query(query),
@@ -1482,8 +1580,6 @@ fn check_conversions(p: [u8; PAYLOAD], law: Law<'_>) -> Result<(), Finding> {
             run(RunDetail::Internal { what }),
             ErrorKind::Internal,
         ),
-        (make.into(), OpErrorDetail::Make(make), make.kind()),
-        (query.into(), OpErrorDetail::Query(query), query.kind()),
         (
             RunDetail::Cancelled.into(),
             run(RunDetail::Cancelled),
@@ -1495,6 +1591,37 @@ fn check_conversions(p: [u8; PAYLOAD], law: Law<'_>) -> Result<(), Finding> {
             made == expected && made.kind() == kind,
             law,
             "every conversion from the helper's errors keeps the stop it is",
+            || format!("{made:?} {expected:?}"),
+        )?;
+    }
+    check_families(p, law)
+}
+
+/// The families' laws, on values from `p`: each family's detail converts into `OpErrorDetail` as
+/// itself, and every error of the numbers layer lands on the kind chapter 22 gives it.
+fn check_families(p: [u8; PAYLOAD], law: Law<'_>) -> Result<(), Finding> {
+    let (query, make) = (query_detail(at(p, 0), p), make_detail(at(p, 1), p));
+    let (combine, bound, local) = (
+        combine_detail(at(p, 3), p),
+        bound_detail(at(p, 4), p),
+        local_detail(at(p, 5)),
+    );
+    let pairs: [(OpErrorDetail, OpErrorDetail, ErrorKind); 5] = [
+        (make.into(), OpErrorDetail::Make(make), make.kind()),
+        (query.into(), OpErrorDetail::Query(query), query.kind()),
+        (
+            combine.into(),
+            OpErrorDetail::Combine(combine),
+            combine.kind(),
+        ),
+        (bound.into(), OpErrorDetail::Bound(bound), bound.kind()),
+        (local.into(), OpErrorDetail::Local(local), local.kind()),
+    ];
+    for (made, expected, kind) in pairs {
+        hold(
+            made == expected && made.kind() == kind,
+            law,
+            "each family's detail converts as itself",
             || format!("{made:?} {expected:?}"),
         )?;
     }

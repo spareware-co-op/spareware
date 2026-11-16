@@ -210,7 +210,9 @@ const EDITS: [ColumnEdit; 30] = [
         a.vertices.point.set(ix(0), other(now)).unwrap();
     }),
     (table::POINTS, "point", |a| {
-        a.points.set(ix(0), P3::new(5, 6, 7).unwrap()).unwrap();
+        a.points
+            .set(ix(0), P3::new(5, 6, 7).unwrap().into())
+            .unwrap();
     }),
     (table::SURFACES, "surface", |a| {
         a.surfaces.set(ix(0), plane([3.0, 4.0, 5.0], 0, 1)).unwrap();
@@ -429,7 +431,10 @@ fn a_bodys_geometry_id_does_not_see_its_names() {
 fn a_bodys_geometry_id_sees_its_geometry() {
     let body = named_wall(1);
     let mut arenas = body.arenas().clone();
-    arenas.points.set(ix(0), P3::new(5, 6, 7).unwrap()).unwrap();
+    arenas
+        .points
+        .set(ix(0), P3::new(5, 6, 7).unwrap().into())
+        .unwrap();
     let names = body.names().unwrap().clone();
     let moved = Builder { arenas }
         .publish_named(&names, body.kind(), body.outside(), &mut meter())

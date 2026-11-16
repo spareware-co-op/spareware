@@ -28,8 +28,9 @@ name: Kernel
 # - In GitHub's merge queue for main (`merge_group`), once per change just before it lands: the
 #   same tests on the other platforms (the job `suite` on Linux arm64, Windows on both chips and
 #   macOS on both chips; `wasm-suite` on wasm32; `big-endian` on s390x), the other legs of the
-#   determinism matrix (`test`, `wasm`), and one plain debug run of the reachable tests on Linux
-#   x86-64 (the `suite` parts in debug).
+#   determinism matrix (`test`, `wasm`), one plain debug run of the reachable tests on Linux
+#   x86-64 (the `suite` parts in debug), and Manifold's large models, a test the suite leaves out
+#   for its minutes (`large-models`).
 # - On a push to main: nothing the merge queue already tested on the identical tree. The queue's
 #   last job leaves a mark named for the tree it passed (an artifact, `kernel-tested-<tree>`), and
 #   the job `changes` looks for it; a push that did not come through the queue runs both sets.
@@ -830,6 +831,53 @@ jobs:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
 
+  large-models:
+    # Gate 4 (G156): Manifold's seven models of more than 1,500 faces, each united alone and with a
+    # moved copy within its work budget, its exact volume inside the kernel's own (geom-test's
+    # tests/corpus_polyhedral.rs, `the_large_models_unite_within_their_work`, ignored in the
+    # suite). The merge queue's, when the change reaches a crate the unions run on (geom-poly,
+    # geom-bool or geom-mesh, as the job `scope` names them); otherwise its step is skipped and the
+    # job passes. The models are split over a few jobs by the test's own filter (SPAREKIT_MODELS),
+    # so each takes minutes: measured on the reference machine (15 Nov 2026), the two
+    # Generic_Twin_7081 models took 177 s and 107 s and the other five 2 to 15 s each, about
+    # five minutes in all, after a build.
+    name: Manifold's large models within their work (${{ matrix.models }})
+    needs: [changes, lint, scope]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every model of more than 1,500 faces, once; the test stops on a name that is not one.
+        models:
+          - Generic_Twin_7081.1.t0_left
+          - Generic_Twin_7081.1.t0_right
+          - Offset1,hull-body,hull-mask,self_intersectA,self_intersectB
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: large-models
+      - name: The models of more than 1,500 faces named here, united alone and with a moved copy
+        if: ${{ contains(format(' {0} ', needs.scope.outputs.crates), ' geom-poly ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-bool ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-mesh ') }}
+        env:
+          SPAREKIT_MODELS: ${{ matrix.models }}
+        run: >-
+          cargo test --locked --release -p geom-test --test corpus_polyhedral --
+          --ignored --exact the_large_models_unite_within_their_work
+
   lint:
     name: Format and lints
     needs: changes
@@ -874,7 +922,7 @@ jobs:
   # the merge queue it leaves the mark that lets the push to main skip the same tree.
   done:
     name: Kernel checks pass
-    needs: [changes, lint, scope, linux, guard, test, suite, wasm, wasm-suite, big-endian]
+    needs: [changes, lint, scope, linux, guard, test, suite, wasm, wasm-suite, big-endian, large-models]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -901,8 +949,8 @@ jobs:
             # lists to each job's condition).
             case "$EVENT" in
               pull_request) must="lint scope linux guard" ;;
-              merge_group) must="lint scope test suite wasm wasm-suite big-endian" ;;
-              *) must="lint scope linux guard test suite wasm wasm-suite big-endian" ;;
+              merge_group) must="lint scope test suite wasm wasm-suite big-endian large-models" ;;
+              *) must="lint scope linux guard test suite wasm wasm-suite big-endian large-models" ;;
             esac
             for job in $must; do
               result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")

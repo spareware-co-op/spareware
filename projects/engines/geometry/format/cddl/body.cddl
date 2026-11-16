@@ -4,16 +4,16 @@
 body = [
   kind: 0..4,                 ; solid, sheet, wire, acorn, general
   outside: uint,              ; the outside region's row plus one
-  tables: [* table-entry],    ; codes 1 to 11, then 12 to 15 when named
+  tables: [* table-entry],    ; codes 1 to 11, then 12 to 15 when named, then 16 when it has rows
   named: 0 / 1,
   extensions: {},
 ]
-table-entry = [table: 1..15, rows: uint, chunks: [* content-id]]
+table-entry = [table: 1..16, rows: uint, chunks: [* content-id]]
 content-id = [alg: uint, digest: bstr]
 
 chunk = regions-chunk / shells-chunk / faces-chunk / loops-chunk / fins-chunk / edges-chunk
       / vertices-chunk / points-chunk / surfaces-chunk / curves-chunk / pcurves-chunk
-      / names-chunk
+      / names-chunk / planes-chunk
 ; A column of one unsigned integer per row: a reference (row plus one, 0 for none), a sense
 ; (0 forward, 1 reversed) or a region kind (0 solid, 1 void).
 refs = [+ uint]
@@ -32,11 +32,16 @@ fins-chunk = [table: 5, position: uint, rows: 1..4096,
 edges-chunk = [table: 6, position: uint, rows: 1..4096,
                columns: [first-fin: refs, start: refs, end: refs, curve-ref: refs]]
 vertices-chunk = [table: 7, position: uint, rows: 1..4096, columns: [point: refs]]
-points-chunk = [table: 8, position: uint, rows: 1..4096, columns: [xyz: i64-column]]
+; Grid points alone: x, y, z per row. Holding a meeting: a kind per row (0 grid, 1 meeting),
+; x, y, z per grid point, and three plane references per meeting.
+points-chunk = [table: 8, position: uint, rows: 1..4096,
+                columns: [xyz: i64-column] / [kind: refs, xyz: i64-column, planes: refs]]
 surfaces-chunk = [table: 9, position: uint, rows: 1..4096, columns: [surfaces: [+ surface]]]
 curves-chunk = [table: 10, position: uint, rows: 1..4096, columns: [curves: [+ curve]]]
 pcurves-chunk = [table: 11, position: uint, rows: 1..4096, columns: [pcurves: [+ curve]]]
 names-chunk = [table: 12..15, position: uint, rows: 1..4096, columns: [keys: bstr]]
+; n_x, n_y, n_z and d of each plane, reduced; past 64 bits a bignum (tag 2 or 3).
+planes-chunk = [table: 16, position: uint, rows: 1..4096, columns: [planes: [+ integer]]]
 
 i64-column = #6.79(bstr)      ; RFC 8746: little-endian int64
 f64-column = #6.86(bstr)      ; RFC 8746: little-endian float64, every value finite

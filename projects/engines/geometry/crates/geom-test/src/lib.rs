@@ -14,6 +14,8 @@
 //! The first piece (G11) holds the parts every later test leans on, G15 adds the map, G16 the
 //! source ledger and the banned-source scan, and G19 the golden store and the determinism matrix:
 //!
+//! - [`second_mesh`]: 19.2's rules again for exact meshes, in exact rationals, sharing no code with
+//!   `geom-mesh`'s checker (chapter 28.4; G135).
 //! - [`seed`]: the seed discipline. Every seeded test prints `seed: <hex>` before it draws anything,
 //!   and the environment variable `SPAREKIT_SEED` replays any printed seed exactly (28.5, 28.17).
 //! - [`rng`]: `SplitMix64`, the small, specified, test-only generator behind every seeded test
@@ -42,6 +44,10 @@
 //!   target and build mode. The binary `golden` lists the store, checks it against the repository
 //!   (`-- check`), runs every golden in one CI leg's configuration (`-- run`) and holds a pull
 //!   request's edits to the record rule (`-- diff`).
+//! - [`second_check`]: chapter 8.3's rules again, for flat bodies, in exact rationals, sharing no
+//!   code with `geom-check` (chapter 28.4; G135).
+//! - [`plane_bodies`]: polyhedra whose every vertex is the meeting of three planes, moved a step off
+//!   the grid (G135).
 //! - [`faults`]: checker fault injection (chapter 28.4; G110): valid bodies broken one fault at a
 //!   time, each caught with the right kind, and every valid body passed.
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
@@ -65,6 +71,9 @@
 //! - [`museum`]: the format museum (28.13, 24.6; G99): sample files and operation logs of every
 //!   released format version and edition, compiled in and held to their recorded hashes on every
 //!   target.
+//! - [`naming`]: the naming and reference fixtures (28.3; G141): parametric walls built by the
+//!   kernel's operations, every stored reference resolved after each upstream edit and held to its
+//!   expected outcome, and their names a golden on every target.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -134,7 +143,34 @@
 //!   a dense sample of exact or 400-bit values (`tests/truth`, each kind's definition written from
 //!   its documentation); fixed, printed seeds on every change they reach (`SPAREKIT_SEED` replays another).
 //!
-//! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
+//! Piece G136 adds the reference for flat solids:
+//!
+//! - [`flat_reference`]: booleans, imprint, cells, plane sections, In-On-Out, volumes, centroids,
+//!   clash and first contact in exact rationals, by brute force over a full plane arrangement,
+//!   written from the definitions alone; `tests/flat_reference.rs` holds it to hand cases.
+//!
+//! Piece G155 adds the law catalogue of section 28.3 for numbers and frames, booleans and cells,
+//! flat mass properties, names and history, and formats:
+//!
+//! - `tests/laws_numbers.rs`, `tests/laws_booleans.rs`, `tests/laws_mass.rs`, `tests/laws_names.rs`
+//!   and `tests/laws_formats.rs`: each law of those rows as a seeded property test, the flat ones
+//!   held to [`flat_reference`] and every rounding to exact rationals; their shared draw, report
+//!   and flat solids are `tests/catalogue`. Fixed, printed seeds on every change they reach
+//!   (`SPAREKIT_SEED` replays another); the names row's digest is the golden
+//!   `geom-test/names-on-every-target`.
+//!
+//! Gate 4 (piece G156) completes 11.17's polyhedral corpus and puts the second checker over it:
+//!
+//! - [`polyhedral`]: EMBER's figures 24 and 25 as generated boxes, and Manifold's regression
+//!   models (the stored corpus `manifold-models`) read onto the grid by [`obj`], a test-only OBJ
+//!   reader with exact decimal-to-grid rounding; `tests/corpus_polyhedral.rs` holds every result
+//!   to [`flat_reference`] and the unit-cell count, with exact transforms, and its digest is the
+//!   golden `geom-test/polyhedral-corpus`.
+//! - [`agree`]: both checkers on one body, `geom-check`'s and [`second_check`], and whether they
+//!   find the same rules broken; the law catalogue's bodies, the scenarios and the corpus go
+//!   through it.
+//!
+//! The other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
@@ -205,12 +241,17 @@
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
+//! - `geom-mesh` and `geom-poly` (Apache-2.0, ours): the booleans `oracle::meshes` (G154) compares
+//!   with the mesh oracles.
 //! - `geom-nurbs` (Apache-2.0, ours): the curves `tests/nurbs_reference.rs` (G57) compares with the
 //!   reference, and `oracle::geomdl` (G113) with the first outside oracle.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), dependencies (G97): a fixture's operation log is
 //!   a standalone native file, and the meter its readers take.
 //! - `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), development dependencies (G69):
 //!   the kinds and transforms the law catalogue checks.
+//! - `geom-bool`, `geom-make`, `geom-topo`, `geom-check`, `geom-poly` and `geom-name` (Apache-2.0,
+//!   ours), development dependencies (G155): the booleans, primitives, transforms, queries, checker
+//!   and names the law catalogue checks.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -227,6 +268,11 @@
 //!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
 //!   `static_assertions`.
 //! - Apache-2.0: `num-modular`, which `dashu-int` brings in.
+//! - Apache-2.0: `manifold-rust`, a development dependency (G154), the mesh oracle one of its
+//!   tests runs.
+//! - Apache-2.0 OR MIT: `rustc-hash`, which `manifold-rust` brings in.
+//! - MIT OR Apache-2.0: `rustversion`, which the older dashu crates of `manifold-rust` bring in.
+//! - BSL-1.0: `clipper2-rust`, which `manifold-rust` brings in (chapter 29 lists it as an oracle).
 //! - MIT/Apache-2.0: `lcov` and `arraydeque` (the older spelling of MIT OR Apache-2.0).
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident` and `unicode-normalization`.
@@ -237,6 +283,7 @@
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
+pub mod agree;
 pub mod canonical;
 pub mod completeness;
 pub mod contract;
@@ -246,6 +293,7 @@ pub mod deps;
 pub mod faults;
 pub mod fixed;
 pub mod fixture;
+pub mod flat_reference;
 pub mod foundation;
 pub mod fuzz_scope;
 pub mod golden;
@@ -258,14 +306,20 @@ pub mod map;
 pub mod miri;
 pub mod museum;
 pub mod mutants;
+pub mod naming;
 pub mod nurbs_reference;
+pub mod obj;
 pub mod oracle;
+pub mod plane_bodies;
+pub mod polyhedral;
 pub mod prop;
 pub mod quality_ledger;
 pub mod recursion;
 pub mod rng;
 pub mod rust_source;
 pub mod scan;
+pub mod second_check;
+pub mod second_mesh;
 pub mod seed;
 pub mod test_scope;
 pub mod trip;

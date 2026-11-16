@@ -38,10 +38,10 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, contract, curve_offsets,
-    curves, encoder, euler, linalg, make, maths, names, naming, nurbs, open, operations, orient2d,
-    p21, predicates, prune, records, references, roots, sequence, surface_offsets, surfaces,
-    transforms, variants, wide,
+    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, curve_offsets,
+    curves, encoder, euler, exact, linalg, make, maths, names, naming, nurbs, open, operations,
+    orient2d, p21, planes, predicates, prune, records, references, roots, sequence, solids,
+    surface_offsets, surfaces, transforms, variants, wide,
 };
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
@@ -53,7 +53,7 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 33] = [
+const TARGETS: [(&str, Harness); 37] = [
     ("arenas", arenas::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
@@ -61,11 +61,13 @@ const TARGETS: [(&str, Harness); 33] = [
     ("boxtree", boxtree::harness),
     ("cache", cache::harness),
     ("cbor", cbor::harness),
+    ("cdt", cdt::harness),
     ("contract", contract::harness),
     ("curve_offsets", curve_offsets::harness),
     ("curves", curves::harness),
     ("encoder", encoder::harness),
     ("euler", euler::harness),
+    ("exact", exact::harness),
     ("linalg", linalg::harness),
     ("make", make::harness),
     ("maths", maths::harness),
@@ -76,12 +78,14 @@ const TARGETS: [(&str, Harness); 33] = [
     ("operations", operations::harness),
     ("orient2d", orient2d::harness),
     ("p21", p21::harness),
+    ("planes", planes::harness),
     ("predicates", predicates::harness),
     ("prune", prune::harness),
     ("records", records::harness),
     ("references", references::harness),
     ("roots", roots::harness),
     ("sequence", sequence::harness),
+    ("solids", solids::harness),
     ("surface_offsets", surface_offsets::harness),
     ("surfaces", surfaces::harness),
     ("transforms", transforms::harness),
@@ -867,11 +871,11 @@ fn attack_the_workflow_runs_when_any_crate_a_target_builds_changes() {
             .any(|v| v.contains("geom-run"))
     );
     let mut more = folders.clone();
-    more.insert("projects/engines/geometry/crates/geom-bool".to_owned());
+    more.insert("projects/engines/geometry/crates/geom-blend".to_owned());
     assert!(
         path_filter_violations(&workflow, &more)
             .iter()
-            .any(|v| v.contains("geom-bool"))
+            .any(|v| v.contains("geom-blend"))
     );
 }
 
