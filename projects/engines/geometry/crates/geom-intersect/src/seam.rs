@@ -162,8 +162,12 @@ fn torus_poles(big: f64, small: f64, (v0, v1): (f64, f64)) -> Vec<f64> {
         return out;
     };
     let mut k = first.get();
-    // A torus's v spans at most one turn, so at most five half-turns are visited.
-    while k <= last.get() {
+    // A torus's v spans at most one turn, so at most five half-turns are visited: the count, not
+    // k, ends the loop.
+    for _ in 0..5 {
+        if k > last.get() {
+            break;
+        }
         let v = k / 2.0;
         // R + r·c with c in {1, 0, −1}: r·c is r, 0 or −r, so the test is exact.
         if exact_cospi(v).is_some_and(|c| big == -(small * c)) {
