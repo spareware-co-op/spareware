@@ -249,6 +249,8 @@
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
+//! - `stl_io` 0.11.0 (MIT, no dependencies of its own; G156): the STL reader of [`stl`], for
+//!   EMBER's pairs' `Thingi10K` models.
 //! - `geom-mesh` and `geom-poly` (Apache-2.0, ours): the booleans `oracle::meshes` (G154) compares
 //!   with the mesh oracles.
 //! - `geom-nurbs` (Apache-2.0, ours): the curves `tests/nurbs_reference.rs` (G57) compares with the
@@ -287,7 +289,7 @@
 //! - Zlib OR Apache-2.0 OR MIT: `tinyvec`, which `unicode-normalization` brings in.
 //! - MIT OR Apache-2.0: `unicase`, which `pulldown-cmark` brings in.
 //! - Unlicense OR MIT: `memchr`.
-//! - MIT: `zmij`, `winnow`, `cargo_metadata` and `pulldown-cmark`.
+//! - MIT: `zmij`, `winnow`, `cargo_metadata`, `pulldown-cmark` and `stl_io`.
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 

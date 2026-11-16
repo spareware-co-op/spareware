@@ -20,10 +20,14 @@
 //!   for a pair named in [`NAMED_OUT`], with the reason the reference is left out for it.
 //!
 //! Tiers: the corpus is a download, so the pairs' test is ignored in the suite and runs in
-//! `kernel-oracles.yml`'s job `ember-pairs` on a push to main, after `corpus fetch`, a few pairs to
-//! a job (`SPAREKIT_PAIRS`) so that each job takes minutes. The guard tests run everywhere: every
-//! cleared pair is in exactly one of those jobs, and the corpus holds exactly the pairs' models
-//! and the case list; a planted gap is found.
+//! `kernel-oracles.yml` on a push to main. Its job `ember-corpus` fetches the corpus once a run
+//! (`corpus fetch`, or GitHub's cache of it, keyed by the register's digest), `ember-build` builds
+//! this test once, and each job of `ember-pairs` takes only its own pairs' models from that cache
+//! and runs those pairs (`SPAREKIT_PAIRS`), split by their measured seconds so that no job passes
+//! 15 minutes. Each file
+//! the test reads is held to its own SHA-256 in the register first. The guard tests run
+//! everywhere: every cleared pair is in exactly one of those jobs, and the corpus holds exactly the
+//! pairs' models and the case list; a planted gap is found.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -32,11 +36,12 @@
     clippy::panic,
     clippy::unreadable_literal,
     clippy::unwrap_used,
-    reason = "tests: native arithmetic, the wall clock for the jobs' balance, Thingi10K's file ids               written as it writes them, and a failure stops the test"
+    reason = "tests: native arithmetic, the wall clock for the jobs' balance, Thingi10K's file ids \
+              written as it writes them, and a failure stops the test"
 )]
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use geom_mesh::boolean::boolean;
@@ -46,8 +51,9 @@ use geom_op::{OpId, OpPath};
 use geom_poly::winding::WindingTest;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::agree::judge_mesh;
-use geom_test::corpus::{Fetch, Manifest, tree_digest};
+use geom_test::corpus::{Fetch, Manifest};
 use geom_test::flat_reference::{Test, six_volumes_where};
+use geom_test::golden::{Digest, sha256};
 use geom_test::obj::Grid;
 use geom_test::polyhedral::{mesh_polygons, mesh_solid};
 use geom_test::stl::{self, Case};
@@ -159,20 +165,34 @@ const CLEARED: [(usize, u64, u64); 92] = [
 
 /// The cleared pairs refused before any boolean, with the refusal: a file `stl_io` cannot read, or
 /// meshes `geom-mesh`'s builder refuses once on the grid (not closed and manifold there, whose
-/// remedy is healing, 19.2). Measured: model 123787 of pair 799 is an ASCII STL (its first line
-/// `solid`, its facets' normals `0 0 0`) that `stl_io` 0.11.0 stops reading partway.
+/// remedy is healing, 19.2).
+///
+/// Pair 799 is named out until the reader is fixed: the fault is `stl_io`'s, not the file's.
+/// Model 123787 is an ASCII STL that keeps the format's grammar line by line (13,098 facets, each
+/// `facet normal`, `outer loop`, three `vertex` lines, `endloop`, `endfacet`, and `endsolid` last),
+/// but its first line is `solid` with no name after it. The name is optional, yet `stl_io` 0.11.0
+/// (and its repository's head, 9a048baf) takes a file as ASCII only when its first line starts
+/// with `solid ` and a space, so it reads this one as binary and runs out of bytes. The nine lines
+/// `solid`, `facet normal 0 0 0`, `outer loop`, three `vertex` lines, `endloop`, `endfacet`,
+/// `endsolid` show it; with `solid x` and `endsolid x` the same triangle reads.
 const REFUSED: [(usize, &str); 1] = [(799, "123787.stl: Read(\"failed to fill whole buffer\")")];
 
 /// The cleared pairs held to both checkers and the kernel's own exact volume but not to the
-/// reference, each with why.
+/// reference, each with why. The kernel's boolean and both mesh checkers still run every one of
+/// them in its job.
 const NAMED_OUT: [(usize, &str); 2] = [
     (
         79,
-        "the reference's rationals took 957 s on one core of a development machine (27,362 and          85,010 faces), past a job of minutes (the testing principle's), though they agreed          exactly there; the kernel and both checkers take about 67 s",
+        "the reference's rationals took 957 s on one core of a development machine (27,362 and \
+         85,010 faces), past a job of 15 minutes, though they agreed exactly there; the kernel's \
+         boolean and both mesh checkers still run it here, in about 67 s",
     ),
     (
         930,
-        "the reference refuses the pair's meshes on the grid as not closed (NotClosed) where      geom-mesh's builder and both mesh checkers accept them; Thingi10K's own flags say a model      of this pair is not closed, so it is not a solid the reference's winding numbers can read",
+        "the reference refuses the pair's meshes on the grid as not closed (NotClosed) where \
+         geom-mesh's builder and both mesh checkers accept them; Thingi10K's own flags say a model \
+         of this pair is not closed, so it is not a solid the reference's winding numbers can \
+         read (issue #937)",
     ),
 ];
 
@@ -209,8 +229,8 @@ fn entry() -> geom_test::corpus::Corpus {
     Manifest::embedded().unwrap().get(CORPUS).unwrap().clone()
 }
 
-/// The fetched corpus's folder, `SPAREKIT_CORPORA/ember-cleared-pairs`, checked against the
-/// register's digest before anything reads it.
+/// The fetched corpus's folder, `SPAREKIT_CORPORA/ember-cleared-pairs`. A job's folder holds only
+/// its own pairs' models and the case list, so each file is checked by [`file`] as it is read.
 fn folder() -> PathBuf {
     let cache = std::env::var("SPAREKIT_CORPORA").unwrap_or_else(|_| {
         panic!(
@@ -218,14 +238,28 @@ fn folder() -> PathBuf {
              --bin corpus -- fetch --cache <dir> {CORPUS}`, and set SPAREKIT_CORPORA=<dir>"
         )
     });
-    let dir = PathBuf::from(cache).join(CORPUS);
+    PathBuf::from(cache).join(CORPUS)
+}
+
+/// The bytes of the corpus's file `name`, held to its own SHA-256 in the register before anything
+/// reads them.
+fn file(dir: &Path, name: &str) -> Vec<u8> {
+    let corpus = entry();
+    let Some(Fetch::Files(files)) = &corpus.fetch else {
+        panic!("{CORPUS} is not fetched file by file")
+    };
+    let want = files
+        .iter()
+        .find(|f| f.name == name)
+        .unwrap_or_else(|| panic!("{name} is not a file of {CORPUS}"));
+    let bytes = std::fs::read(dir.join(name))
+        .unwrap_or_else(|e| panic!("{name}: {e}; is it this job's pair's model?"));
     assert_eq!(
-        Some(tree_digest(&dir).unwrap()),
-        entry().sha256,
-        "{}: not the register's bytes",
-        dir.display()
+        Digest(sha256(&bytes)),
+        Digest(want.sha256.0),
+        "{name}: not the register's bytes"
     );
-    dir
+    bytes
 }
 
 /// The pairs this run takes: every cleared one, or those `SPAREKIT_PAIRS` names by number,
@@ -267,9 +301,9 @@ fn both_meshes(what: &str, mesh: &ExactMesh) -> dashu_ratio::RBig {
 
 /// One pair's two models moved by their transforms and put on one grid, or the file `stl_io`
 /// refuses, with its refusal.
-fn grids(dir: &std::path::Path, case: &Case) -> Result<[Grid; 2], String> {
+fn grids(dir: &Path, case: &Case) -> Result<[Grid; 2], String> {
     let model = |id: u64, by| {
-        let bytes = std::fs::read(dir.join(format!("{id}.stl"))).unwrap();
+        let bytes = file(dir, &format!("{id}.stl"));
         let read = stl::read(&bytes).map_err(|e| format!("{id}.stl: {e:?}"))?;
         Ok::<_, String>(stl::placed(&read, by).unwrap())
     };
@@ -283,7 +317,7 @@ fn grids(dir: &std::path::Path, case: &Case) -> Result<[Grid; 2], String> {
 
 /// A pair run as EMBER runs it, held to both checkers and the reference: its reader's or its
 /// builder's refusal, or nothing.
-fn run(pair: usize, case: &Case, dir: &std::path::Path) -> Option<String> {
+fn run(pair: usize, case: &Case, dir: &Path) -> Option<String> {
     let started = Instant::now();
     let [a, b] = match grids(dir, case) {
         Ok(grids) => grids,
@@ -351,7 +385,7 @@ fn run(pair: usize, case: &Case, dir: &std::path::Path) -> Option<String> {
             runs it on a push to main, a few pairs to a job"]
 fn every_cleared_pair_is_the_reference() {
     let dir = folder();
-    let cases = stl::cases(&std::fs::read_to_string(dir.join(CASES)).unwrap()).unwrap();
+    let cases = stl::cases(&String::from_utf8(file(&dir, CASES)).unwrap()).unwrap();
     let pairs = chosen();
     let mut refused = Vec::new();
     for (pair, id_a, id_b) in &pairs {
@@ -419,6 +453,15 @@ fn every_cleared_pair_runs_in_one_job() {
         .join(".github/workflows/kernel-oracles.yml");
     let workflow = std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
     let groups = job_groups(&workflow);
+    let docs = yaml_rust2::YamlLoader::load_from_str(&workflow).unwrap();
+    let needs: Vec<&str> = docs[0]["jobs"]["ember-pairs"]["needs"]
+        .as_vec()
+        .map(|n| n.iter().filter_map(yaml_rust2::Yaml::as_str).collect())
+        .unwrap_or_default();
+    assert!(
+        needs.contains(&"ember-corpus") && !docs[0]["jobs"]["ember-corpus"].is_badvalue(),
+        "ember-pairs does not take its models from the job ember-corpus: {needs:?}"
+    );
     let cleared: Vec<usize> = CLEARED.iter().map(|(n, _, _)| *n).collect();
     assert_eq!(every_once(&groups), Ok(cleared.clone()));
     for n in REFUSED
