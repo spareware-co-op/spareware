@@ -1907,20 +1907,23 @@ fn a_face_on_a_cone_s_lower_nappe_is_split_as_one_on_its_upper_nappe() {
 
 /// A cone whose domain reaches from one nappe through its apex into the other is no carrier a
 /// face can be seen on from one point (`Round::of`): its face waits, and so does the plane across
-/// it, though the face's own boundary lies on the upper nappe.
+/// it, though the face's own boundary lies on one nappe: the upper, below its rim at height 100,
+/// or the lower, above its rim at height −100.
 #[test]
 fn a_cone_whose_domain_reaches_both_nappes_waits() {
-    let mut b = Build::default();
-    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
-    let rim = b.circle(p(0, 0, 100), 100, frame, 0);
-    let domain = ((0.0, 2.0), (-(100 * S) as f64, (100 * S) as f64));
-    let cone = Cone::new([0.0; 3], 0.0, 1.0, frame, domain).unwrap();
-    let ix = b.surface(SurfaceKind::Cone(cone));
-    let body = b.face_with(ix, vec![vec![back(rim)]], 0);
-    let sheet = b.sheet(2, 25, (-1000, 1000), 1);
-    let (out, splitting) = b.run();
-    assert!(out.sections.is_empty(), "{:?}", out.sections);
-    assert_eq!(splitting.waiting, vec![body, sheet]);
+    for (h, ring) in [(100, back as fn(usize) -> EdgeUse), (-100, ahead)] {
+        let mut b = Build::default();
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let rim = b.circle(p(0, 0, h), 100, frame, 0);
+        let domain = ((0.0, 2.0), (-(100 * S) as f64, (100 * S) as f64));
+        let cone = Cone::new([0.0; 3], 0.0, 1.0, frame, domain).unwrap();
+        let ix = b.surface(SurfaceKind::Cone(cone));
+        let body = b.face_with(ix, vec![vec![ring(rim)]], 0);
+        let sheet = b.sheet(2, h / 4, (-1000, 1000), 1);
+        let (out, splitting) = b.run();
+        assert!(out.sections.is_empty(), "{h}: {:?}", out.sections);
+        assert_eq!(splitting.waiting, vec![body, sheet], "{h}");
+    }
 }
 
 /// The side of a cylinder of radius 50 whose axis runs along (0.6, 0.8, 0): the depth is measured
@@ -2047,6 +2050,27 @@ fn a_plane_whose_normal_is_largest_in_two_meets_a_cylinder_off_the_axes() {
             [300 * S, -300 * S, -25 * S],
             [300 * S, 0, -25 * S],
             [0, 0, 125 * S],
+        ],
+        1,
+    );
+    cut_in_two(&b, (side, sheet));
+}
+
+/// The same plane's kind, x + 2z = d, across a cylinder of radius 50 about an axis 3·10¹¹ steps
+/// out along x: its surface's first parameter, x/2, runs over the cylinder's box halved, about
+/// 1.5·10¹¹, which keeps the surface inside the closed forms' range, and the pair is met.
+#[test]
+fn a_plane_whose_normal_is_largest_in_two_meets_a_cylinder_far_out() {
+    let x0 = 300_000_000_000_i64;
+    let mut b = Build::default();
+    let (side, _, _) = b.tube((P3::new(x0, 0, 0).unwrap(), 2, 1.0), 50, (0, 100), 0);
+    let (w, z) = (300 * S, 50 * S);
+    let sheet = b.quad(
+        [
+            [x0 - w, -w, z + w / 2],
+            [x0 + w, -w, z - w / 2],
+            [x0 + w, w, z - w / 2],
+            [x0 - w, w, z + w / 2],
         ],
         1,
     );

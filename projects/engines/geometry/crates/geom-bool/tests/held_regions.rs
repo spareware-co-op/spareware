@@ -330,3 +330,22 @@ fn a_band_between_two_blocks_of_other_edges_is_refused() {
         "{a:?} {b:?}"
     );
 }
+
+/// The first circle's half from (0, −1105) to (0, 1105), and a NURBS copy of three quarters of it
+/// from the same start on to (−1105, 0): the arc's end cuts the copy, whose first piece is one
+/// block with the arc. The region where they overlap reaches, on the copy, past the pave at the
+/// arc's end into the copy's second piece, which no block holds: the region is covered on the
+/// arc but not on the copy, and is refused.
+#[test]
+fn a_region_reaching_past_an_overlap_into_a_piece_of_no_block_is_refused() {
+    let mut arr = Arrangement::default();
+    between(
+        &mut arr,
+        CurveKind::Circle(arc(1.0)),
+        [[0, -1105], [0, 1105]],
+        0,
+    );
+    between(&mut arr, copy(&arc(1.5)), [[0, -1105], [-1105, 0]], 2);
+    let (a, b, _) = refused(run(&arr));
+    assert_eq!((a, b), (Entity::Edge(0), Entity::Edge(1)));
+}
