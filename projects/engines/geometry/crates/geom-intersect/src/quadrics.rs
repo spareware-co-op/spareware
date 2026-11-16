@@ -45,13 +45,14 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use geom_curve::{
-    Axes, Basis, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola, Trimmed,
+    Axes, Basis, Circle, CurveError, CurveKind, DerivativeBound, Ellipse, Frame, Hyperbola, Line,
+    Parabola, Trimmed,
 };
 use geom_curve::{HYPERBOLA_REACH, ParamCurve, tight};
 use geom_num::grid::{GridStep, P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::{Exactness, NumError, Sign, predicate, quadric};
-use geom_nurbs::{Bounds, Limit};
+use geom_nurbs::{Bounds, Direction, Limit};
 use geom_run::WorkMeter;
 use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 
@@ -1951,20 +1952,28 @@ fn fits(s: &SurfaceKind, meter: &mut WorkMeter<'_>) -> Result<bool, IntersectErr
         let (o, ..) = p.vectors();
         return Ok(o.iter().all(|x| inside(*x)));
     }
-    let bounds = s.bound(((a, b), (c, d)), meter)?;
-    let sides = (Limit::FromRight, Limit::FromRight);
-    let found = s.partials_over(((a, b), (c, d)), sides, 1, meter)?;
+    let region = ((a, b), (c, d));
+    let bounds = s.bound(region, meter)?;
     let spacing = |x: f64, y: f64| {
         let far = tight::larger(x.abs(), y.abs());
         far.next_up() - far
     };
-    // The partials after the point are along u, then along v.
+    // The first partials alone, along u and then along v: the box above is the point's own, so
+    // reading it again through all the partials to order 1 would only repeat its work. Each kind
+    // bounds a first partial over a region by the same closed form or hull as its partials to
+    // order 1 there, and one it cannot bound is refused as those would be.
     let mut apart: f64 = 0.0;
-    for (gap, along) in [spacing(a, b), spacing(c, d)]
-        .iter()
-        .zip(found.iter().skip(1))
-    {
-        apart = tight::larger(apart, gap * Interval::norm(along)?.hi());
+    for (gap, dir) in [(spacing(a, b), Direction::U), (spacing(c, d), Direction::V)] {
+        let DerivativeBound::Bounded(along) = s.derivative_bound(region, dir, meter)? else {
+            return Err(CurveError::Unbounded.into());
+        };
+        let ([l0, l1, l2], [h0, h1, h2]) = (along.lo, along.hi);
+        let speed = [
+            Interval::new(l0, h0)?,
+            Interval::new(l1, h1)?,
+            Interval::new(l2, h2)?,
+        ];
+        apart = tight::larger(apart, gap * Interval::norm(&speed)?.hi());
     }
     Ok(bounds.lo.iter().chain(&bounds.hi).all(|x| inside(*x)) && apart <= STEP)
 }
