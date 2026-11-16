@@ -30,8 +30,9 @@
     clippy::disallowed_methods,
     clippy::indexing_slicing,
     clippy::panic,
+    clippy::unreadable_literal,
     clippy::unwrap_used,
-    reason = "tests: native arithmetic, the wall clock for the jobs' balance, and a failure stops the test"
+    reason = "tests: native arithmetic, the wall clock for the jobs' balance, Thingi10K's file ids               written as it writes them, and a failure stops the test"
 )]
 
 use std::collections::BTreeSet;
@@ -196,6 +197,9 @@ fn keep(operation: usize, w: &[i64]) -> bool {
     }
 }
 
+/// What one operation keeps, as the reference takes it.
+type Keep = Box<dyn Fn(&[i64]) -> bool>;
+
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
@@ -316,8 +320,8 @@ fn run(pair: usize, case: &Case, dir: &std::path::Path) -> Option<String> {
         mesh_solid(&a, [0; 3]).unwrap(),
         mesh_solid(&b, [0; 3]).unwrap(),
     ];
-    let keeps: Vec<Box<dyn Fn(&[i64]) -> bool>> = (0..OPERATIONS.len())
-        .map(|k| Box::new(move |w: &[i64]| keep(k, w)) as Box<dyn Fn(&[i64]) -> bool>)
+    let keeps: Vec<Keep> = (0..OPERATIONS.len())
+        .map(|k| Box::new(move |w: &[i64]| keep(k, w)) as Keep)
         .collect();
     let borrowed: Vec<&dyn Fn(&[i64]) -> bool> = keeps.iter().map(|k| k.as_ref()).collect();
     let reference = six_volumes_where(&[&solids[0], &solids[1]], &borrowed).unwrap();
