@@ -330,6 +330,95 @@ fn a_cone_keeps_its_normals_up_to_its_apex() {
     assert!(across.lo[2] < 0.0 && across.hi[2] > 0.0, "{across:?}");
 }
 
+/// The same with the radius falling to the apex, r₀ = 0 and k = −1: the normal's direction is
+/// sign(−v)·(e(u) + n̂), so its z is +1 on the nappe v < 0, which reaches the apex at its upper
+/// edge, and −1 on v > 0, which reaches it at its lower edge. A patch that is only the apex's
+/// line, v = 0, has a radius that is zero throughout and so no sign of its own: the cone goes on
+/// past it on both sides, so its bound holds both nappes' normals, z = +1 and z = −1, for a rising
+/// cone as for a falling one.
+#[test]
+fn a_falling_cone_keeps_its_normals_up_to_its_apex() {
+    let m = &mut meter();
+    let f = Frame::standard().unwrap();
+    let fall = Cone::new([0.0; 3], 0.0, -1.0, f, ((0.0, 2.0), (-4.0, 4.0))).unwrap();
+    let below = fall.normal_bound(((0.25, 0.5), (-0.25, 0.0)), m).unwrap();
+    assert!(below.lo[2] > 0.0, "{below:?}");
+    let above = fall.normal_bound(((0.25, 0.5), (0.0, 0.25)), m).unwrap();
+    assert!(above.hi[2] < 0.0, "{above:?}");
+    let rise = Cone::new([0.0; 3], 0.0, 1.0, f, ((0.0, 2.0), (-4.0, 4.0))).unwrap();
+    for cone in [&fall, &rise] {
+        let apex = cone.normal_bound(((0.25, 0.5), (0.0, 0.0)), m).unwrap();
+        assert!(apex.lo[2] <= -1.0 && apex.hi[2] >= 1.0, "{apex:?}");
+    }
+}
+
+/// A horn torus, R = r = 1, pinches to its centre at v = 1, where R + r·cos πv is exactly 0. A
+/// patch that is only that pinch, (u, v) = (0, 1), has a radius that is zero throughout, which
+/// gives no sign, so its normal bound holds both directions there, ±s·cos πv·e(u): x = ±1.
+#[test]
+fn a_horn_torus_at_its_pinch_holds_both_normals() {
+    let m = &mut meter();
+    let f = Frame::standard().unwrap();
+    let horn = Torus::new([0.0; 3], 1.0, 1.0, f, ((0.0, 2.0), (0.0, 2.0))).unwrap();
+    let pinch = horn.normal_bound(((0.0, 0.0), (1.0, 1.0)), m).unwrap();
+    assert!(pinch.lo[0] <= -1.0 && pinch.hi[0] >= 1.0, "{pinch:?}");
+}
+
+/// A similarity multiplies a cone's axial factor s by its scale, so the cone climbs |s| along n̂
+/// for each unit of v and its radius grows by σ = k/s for each unit of height: its equation
+/// |w|² − (r₀ + σ·h)² vanishes on it and its Hessian is 2·I − 2·(1 + σ²)·n̂n̂ᵀ. A cone scaled by 2
+/// (r₀ = 2, k = 2, s = 2, so σ = 1) and one built with s = 2 (r₀ = 1, k = 1, σ = 1/2), on the
+/// standard frame, where every one of these is exact. The slope read as k·s instead missed both.
+#[test]
+fn a_scaled_cones_equation_takes_its_slope_per_unit_of_height() {
+    let m = &mut meter();
+    let f = Frame::standard().unwrap();
+    let cone = Cone::new([0.0; 3], 1.0, 1.0, f, ((0.0, 2.0), (-0.5, 2.0))).unwrap();
+    let twice = TypedTransform::from(
+        RationalTransform::new([[2, 0, 0], [0, 2, 0], [0, 0, 2]], [0; 3], 1).unwrap(),
+    );
+    let SurfaceKind::Cone(scaled) = SurfaceKind::Cone(cone.clone())
+        .transformed(&twice, m)
+        .unwrap()
+        .value
+    else {
+        panic!("a similarity keeps the kind")
+    };
+    assert_eq!(scaled.axial_sign(), 2.0);
+    let stretched = cone.with_axial_sign(2.0).unwrap();
+    let sides = (Limit::FromRight, Limit::FromRight);
+    for (c, sigma) in [(&scaled, 1.0), (&stretched, 0.5)] {
+        let surface = SurfaceKind::Cone(c.clone());
+        for (u, v) in [(0.0, 1.0), (0.5, 2.0), (1.0, -0.5), (1.5, 0.25)] {
+            let at = surface
+                .point(u, v, sides)
+                .unwrap()
+                .map(|x| Interval::point(x).unwrap());
+            let value = c.enclose_box(at).unwrap().value;
+            assert!(
+                value.lo().abs() < 1e-9 && value.hi().abs() < 1e-9,
+                "{c:?} at ({u}, {v}): {value:?}"
+            );
+        }
+        let region = [Interval::new(-1.0, 1.0).unwrap(); 3];
+        let h = c.hessian_box(region).unwrap().expect("a cone has one");
+        let along = 2.0 - 2.0 * (1.0 + sigma * sigma);
+        for (i, row) in h.iter().enumerate() {
+            for (j, entry) in row.iter().enumerate() {
+                let want = match (i, j) {
+                    (2, 2) => along,
+                    (0, 0) | (1, 1) => 2.0,
+                    _ => 0.0,
+                };
+                assert!(
+                    entry.contains(want) && entry.hi() - entry.lo() < 1e-12,
+                    "{c:?} [{i}][{j}]: {entry:?} against {want}"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn split_and_reverse_are_exact_and_refusals_typed() {
     let m = &mut meter();
