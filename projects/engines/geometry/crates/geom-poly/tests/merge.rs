@@ -955,7 +955,7 @@ fn tilted_solids_near_the_edge_of_the_grid_merge_as_they_do_near_the_origin() {
     let scaled = |solid: [[i64; 3]; 4]| solid.map(|p| p.map(|v| v << 32));
     let test = WindingTest::unite();
     let near = tilted(&[a, b], &test, 1000).unwrap();
-    for &leaf in miri::rounds(&[1, 1000], &[7]) {
+    for &leaf in miri::rounds(&[1, 1000], &[1000]) {
         let far = tilted(&[scaled(a), scaled(b)], &test, leaf).unwrap();
         assert_eq!(counts(&far), counts(&near), "leaf {leaf}");
     }
@@ -979,7 +979,7 @@ fn tilted_solids_meet_where_three_planes_do() {
         assert_eq!(m.edges, whole.edges, "leaf {leaf}");
     }
     for test in [WindingTest::intersect(2), WindingTest::subtract(0)] {
-        tilted(&[a, b], &test, 4).unwrap();
+        tilted(&[a, b], &test, miri::at_least(4, 1000)).unwrap();
     }
 }
 
@@ -1021,7 +1021,8 @@ fn a_point_where_four_planes_meet_is_named_the_same_whichever_way_they_reach_it(
         ],
     ];
     let test = WindingTest::unite();
-    for (at, solids) in found.iter().enumerate() {
+    // Under Miri the first case.
+    for (at, solids) in found.iter().enumerate().take(miri::sized(2, 1)) {
         let whole = tilted(solids, &test, 1000).unwrap();
         for leaf in 1..10 {
             if !miri::keeps(leaf, &[7]) {
@@ -1614,7 +1615,7 @@ fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
     // And the same mirrored in x, which turns the sign of every three planes' determinant.
     let mirror = |c: [[i64; 3]; 4]| c.map(|[x, y, z]| [-x, y, z]);
     // A union keeps every piece as it faces; a difference turns the second solid's round.
-    // Under Miri the union of the solids as they are and the difference of their mirror images.
+    // Under Miri the union of the solids as they are.
     let mut round = 0;
     for test in [WindingTest::unite(), WindingTest::subtract(0)] {
         for (a, b) in [(a, b), (mirror(a), mirror(b))] {
@@ -1631,7 +1632,12 @@ fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
                     .iter()
                     .any(|v| !v.to_grid().unwrap().is_exact())
             );
-            for &leaf in miri::rounds(&[1, 4, 16], &[7]) {
+            // The same in smaller boxes, natively. Under Miri, where the boxes' planes clip these
+            // pieces into corners that each wide comparison reads again, so that one split alone
+            // takes longer than Miri's budget, the merge in one box is checked; Miri checks the
+            // boxes' splits on words in this file's other tests.
+            let leaves: &[usize] = if cfg!(miri) { &[] } else { &[1, 4, 16] };
+            for &leaf in leaves {
                 let m = tilted(&[a, b], &test, leaf).unwrap();
                 assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
                 assert_eq!(m.edges, whole.edges, "leaf {leaf}");
@@ -1743,7 +1749,7 @@ fn a_line_read_in_words_and_in_wide_integers_is_one_line() {
         at([16_777_213, -33_554_467, 3]),
     ];
     tetrahedron(wedge, 1, &mut polygons).unwrap();
-    for &leaf in miri::rounds(&[1, LEAF_POLYGONS], &[9]) {
+    for &leaf in miri::rounds(&[1, LEAF_POLYGONS], &[LEAF_POLYGONS]) {
         let pieces = kept(&polygons, &WindingTest::unite(), leaf);
         assert!(
             pieces
@@ -1852,7 +1858,11 @@ fn a_merge_from_another_merges_memo_is_the_merge_without_it() {
     // Everything again, nothing again, and a memo of nothing.
     let (_, all) = merged_again(&after, &after, None);
     assert_eq!(all, after.len());
-    let (_, none) = merged_again(&kept(&scene(&[A]), &test, 1), &after, None);
+    let (_, none) = merged_again(
+        &kept(&scene(&[A]), &test, miri::at_least(1, LEAF_POLYGONS)),
+        &after,
+        None,
+    );
     assert_eq!(none, 0);
     let (m, _) = merged_again(&[], &after, None);
     assert!(m.is_ok());
@@ -2512,7 +2522,7 @@ proptest! {
     fn a_tilted_merge_from_a_memo_is_the_merge_without_it(
         solids in prop::collection::vec(any_corners(), 2..miri::sized(4, 3)),
         moved in any_corners(),
-        leaf in miri::at_least(1, 7)..10,
+        leaf in miri::at_least(1, 8)..10,
     ) {
         let solid_pieces = |solids: &[[[i64; 3]; 4]]| {
             let mut polygons = Vec::new();
@@ -2531,7 +2541,7 @@ proptest! {
     #[test]
     fn every_tilted_union_closes_and_the_boxes_do_not_show(
         solids in prop::collection::vec(any_corners(), miri::at_least(1, 2)..miri::sized(4, 3)),
-        leaf in miri::at_least(1, 7)..10,
+        leaf in miri::at_least(1, 8)..10,
     ) {
         let test = WindingTest::unite();
         let once = tilted(&solids, &test, leaf);

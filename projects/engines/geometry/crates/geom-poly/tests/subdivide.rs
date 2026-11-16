@@ -684,10 +684,10 @@ fn a_fan_of_slivers_is_not_clipped_in_proportion_to_its_size() {
     // 15,157 at 2,627,533 for 128 and 60,830 for 256, about four times as many for each
     // doubling. No split pays here, as every one copies most slivers, so the fan is one leaf:
     // each sliver one piece (they never cross), and its local cuts' pairs the work, the square
-    // of the slivers and no more: 6m^2 + 2m for m slivers. Under Miri 40 slivers, still more than
+    // of the slivers and no more: 6m^2 + 2m for m slivers. Under Miri 33 slivers, still more than
     // a leaf holds.
     let fans: &[(i64, u128)] = if cfg!(miri) {
-        &[(40, 9_680)]
+        &[(33, 6_600)]
     } else {
         &[(64, 24_704), (128, 98_560)]
     };
@@ -709,15 +709,15 @@ fn a_fan_of_slivers_is_not_clipped_in_proportion_to_its_size() {
         assert_eq!(counted.used().work, work, "{m} slivers");
     }
     // A box of at most `LEAF_POLYGONS` splits as long as a split separates its polygons, for a
-    // caller that asks for smaller leaves: 32 slivers in leaves of 16 are clipped (under Miri 24 in leaves of 12).
-    let list = fan(i64::try_from(miri::sized(32, 24)).unwrap());
+    // caller that asks for smaller leaves: 32 slivers in leaves of 16 are clipped (under Miri 18 in leaves of 9).
+    let list = fan(i64::try_from(miri::sized(32, 18)).unwrap());
     let cell = around(&list).unwrap();
     let got = arrange(
         &Exec::serial(),
         cell,
         Winding::new(),
         &list,
-        miri::sized(16, 12),
+        miri::sized(16, 9),
         &[],
         &mut meter(),
     )
@@ -1049,12 +1049,12 @@ fn a_box_over_the_subtree_size_splits_level_by_level() {
             assert!(levels[first..].iter().all(|c| c.polygon >= far), "{test:?}");
         }
     }
-    // Traced, not taken as solids: every polygon in one box natively, and under Miri in boxes of
-    // the leaf size, apart.
-    let traced = if cfg!(miri) { LEAF_POLYGONS } else { 1_000_000 };
+    // Traced, not taken as solids, every polygon in one box: all 26 cubes natively, and under
+    // Miri the last four of the 25 and the far one.
+    let traced = &blocks[miri::at_least(0, 21)..];
     assert_eq!(
-        volume(&WindingTest::unite(), &run(&blocks, traced, &[])),
-        26 * 64
+        volume(&WindingTest::unite(), &run(traced, 1_000_000, &[])),
+        i64::try_from(traced.len()).unwrap() * 64
     );
 }
 

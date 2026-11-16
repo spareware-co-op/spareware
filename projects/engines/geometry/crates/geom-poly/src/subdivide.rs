@@ -1547,7 +1547,7 @@ mod tests {
     /// How deep the hundred-level test's tree goes (under Miri, a few levels).
     const HUNDRED: usize = if MIRI_TREES { 4 } else { 100 };
 
-    /// The leaf size of the split trees the print and compare tests keep of two blocks' twelve
+    /// The leaf size of the split trees the compare test keeps of two blocks' twelve
     /// faces, and a smaller one (under Miri larger, so fewer boxes: still split).
     const SPLIT: usize = if MIRI_TREES { 8 } else { 4 };
 
@@ -1740,8 +1740,12 @@ mod tests {
     fn the_kept_tree_prints_what_the_derived_form_prints() {
         let mut list = Vec::new();
         block([0; 3], [4; 3], 0, &mut list);
-        block([2; 3], [6; 3], 1, &mut list);
-        let split = kept(&list, SPLIT, &[]);
+        let mut second = Vec::new();
+        block([2; 3], [6; 3], 1, &mut second);
+        // Under Miri one face of the second block, which still cuts the first's: the same trees
+        // and printers, in less text.
+        list.extend(second.into_iter().take(if MIRI_TREES { 1 } else { 6 }));
+        let split = kept(&list, 4, &[]);
         let leaf = kept(&list, 64, &[]);
         let dropped = kept(&list, 4, &[WindingTest::intersect(2)]);
         assert!(matches!(split.shape, Shape::Split(_)));
