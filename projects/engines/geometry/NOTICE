@@ -1494,6 +1494,13 @@ LLVM's llvm-cov
 
 Manifold
   Licence:      Apache-2.0
+  Link:         https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/ember.rs
+      for how EMBER moves and combines a pair. No code copied.
+
+Manifold
+  Licence:      Apache-2.0
   Link:         https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/shared.h
   Consulted by:
     projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs

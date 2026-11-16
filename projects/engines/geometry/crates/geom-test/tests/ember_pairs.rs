@@ -386,6 +386,13 @@ fn run(pair: usize, case: &Case, dir: &Path) -> Option<String> {
 fn every_cleared_pair_is_the_reference() {
     let dir = folder();
     let cases = stl::cases(&String::from_utf8(file(&dir, CASES)).unwrap()).unwrap();
+    // The count benchmark `mesh/ember` takes its pair's entry from `geom_test::ember`, not from
+    // the list, so its job fetches the two models alone: it is the list's own entry.
+    assert_eq!(
+        cases[geom_test::ember::PAIR],
+        geom_test::ember::case().unwrap(),
+        "geom_test::ember::CASE is not the case list's entry"
+    );
     let pairs = chosen();
     let mut refused = Vec::new();
     for (pair, id_a, id_b) in &pairs {

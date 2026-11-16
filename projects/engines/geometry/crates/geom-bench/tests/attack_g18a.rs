@@ -847,14 +847,15 @@ fn both_legs_judge_the_summaries_by_the_same_rule() {
     }
     // Every measured run builds without the judge, so the benchmark binary does not change with
     // the tool that judges it: Gungraun's runner crate is in both. Two in the merge base's parts
-    // (its list and its groups), four in the change's (its list, its groups, the 1% listings and
-    // gate 1's planted slowdown, piece G43, run through geom-test's `trip`), none in the judge.
+    // (its list and its groups), five in the change's (its list, its groups, written once for
+    // EMBER's pair and once for the catalogue, the 1% listings and gate 1's planted slowdown,
+    // piece G43, run through geom-test's `trip`), none in the judge.
     let job_lines: Vec<&str> = gates.lines().map(str::trim).collect();
     let runs: Vec<&&str> = job_lines
         .iter()
         .filter(|l| l.starts_with("cargo \"+$") && l.contains(" bench "))
         .collect();
-    assert_eq!(runs.len(), 6, "{runs:#?}");
+    assert_eq!(runs.len(), 7, "{runs:#?}");
     assert!(!job.contains(" bench "), "the judge measures nothing");
     for run in runs {
         assert!(

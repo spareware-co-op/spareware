@@ -174,6 +174,8 @@
 //!   `ember-cleared-pairs`), read with `stl_io`, moved by EMBER's transforms exactly and put on
 //!   one grid per pair; `tests/ember_pairs.rs` runs each pair as EMBER does and holds it to
 //!   [`flat_reference`].
+//! - [`ember`]: EMBER's pair 827 as geom-bench's count benchmark `mesh/ember` takes it: its two
+//!   models alone, each held to the register's SHA-256, built into exact meshes on one grid.
 //! - [`agree`]: both checkers on one body, `geom-check`'s and [`second_check`], and whether they
 //!   find the same rules broken; the law catalogue's bodies, the scenarios and the corpus go
 //!   through it.
@@ -300,6 +302,7 @@ pub mod contract;
 pub mod corpus;
 pub mod coverage;
 pub mod deps;
+pub mod ember;
 pub mod faults;
 pub mod fixed;
 pub mod fixture;
