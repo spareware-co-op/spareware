@@ -2806,6 +2806,11 @@
               "shape": "unit"
             },
             {
+              "doc": "A sphere's or torus's axial factor is not 1 or −1. Every routine of those kinds reads the surface as round, so another factor (a spheroid, or a torus stretched along its axis) would be misread; such a surface is a kind of its own (chapter 7).",
+              "name": "AxialFactorNotUnit",
+              "shape": "unit"
+            },
+            {
               "doc": "A flat array of a many-point call holds the wrong number of values (chapter 23.6).",
               "name": "ArrayLength",
               "shape": "struct"
@@ -2994,7 +2999,7 @@
         },
         {
           "cost": "a few machine words; nothing allocates.",
-          "does": "[`CurveError`] names the failure of an operation of a curve or surface kind (the surface kinds of `geom-surface` share it, a span there being a box): a parameter or span outside the domain, a transform a 2D curve cannot take, a refusal from the NURBS algorithms underneath, a result that is not finite, or a budget that stopped the work. [`ContractError`] names the law of the kind contract (`crate::contract`) a kind broke, and where.",
+          "does": "[`CurveError`] names the failure of an operation of a curve or surface kind (the surface kinds of `geom-surface` share it, a span there being a box): a parameter or span outside the domain, a transform a 2D curve cannot take, a refusal from the NURBS algorithms underneath, a result that is not finite, a value the kind would misread (a sphere's or torus's axial factor other than 1 or −1), or a budget that stopped the work. [`ContractError`] names the law of the kind contract (`crate::contract`) a kind broke, and where.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/error.rs",
           "guarantees": [
@@ -14292,7 +14297,7 @@
       "modules": [
         {
           "cost": "constant per evaluation; a bound O(1) per piece (at most 64 pieces); a conversion O(m·n) for its control net.",
-          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a factor s on its axial term, ±1 as built, so that reversing either parameter is exact:",
+          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a factor s on its axial term, ±1 as built, so that reversing either parameter is exact (a sphere's and a torus's is ±1 always, any other refused, as their routines read them as round):",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
           "guarantees": [

@@ -18,9 +18,9 @@
 
 use geom_curve::geom_nurbs::{self, Direction};
 use geom_curve::{
-    Axes, Basis, BulgePolyline, Circle, Composite, CurvatureLaw, CurveKind, Ellipse, Frame, Helix,
-    HelixAxes, Hyperbola, Involute, Line, Offset, OffsetLaw, OnSurface, Parabola, ParamCurve,
-    Polynomial, Station, SurfaceRef, Transition, Trimmed,
+    Axes, Basis, BulgePolyline, Circle, Composite, CurvatureLaw, CurveError, CurveKind, Ellipse,
+    Frame, Helix, HelixAxes, Hyperbola, Involute, Line, Offset, OffsetLaw, OnSurface, Parabola,
+    ParamCurve, Polynomial, Station, SurfaceRef, Transition, Trimmed,
 };
 use geom_format::cbor::Decoder;
 use geom_format::kinds::{DEPTH, KindError, read_curve, read_surface, write_curve, write_surface};
@@ -628,6 +628,46 @@ fn a_round_kinds_axial_factor_refuses_every_other_double() {
         seen += 1;
     }
     assert!(seen >= 2, "{seen}");
+}
+
+/// A sphere's and a torus's axial factor is 1 or -1 only: their routines read them as round, so a
+/// record that gives either another factor is refused, with the kind's own error, never read as a
+/// spheroid or a stretched torus. As built, the factor is the record's last byte, the integer 1
+/// (`01`); the record is made by hand from that by swapping it for -1 (`20`), or for the
+/// half-precision double 2 (`f9 40 00`) or -3 (`f9 c2 00`).
+#[test]
+fn a_sphere_or_torus_record_with_another_axial_factor_is_refused() {
+    let mut seen = 0;
+    for (what, s) in surfaces() {
+        if !matches!(s, SurfaceKind::Sphere(_) | SurfaceKind::Torus(_)) {
+            continue;
+        }
+        let bytes = surface_bytes(&s);
+        let (last, head) = bytes.split_last().unwrap();
+        assert_eq!(*last, 0x01, "{what}: {bytes:?}");
+        let with = |factor: &[u8]| {
+            let b = [head, factor].concat();
+            read_surface(&mut Decoder::new(&b, DEPTH), &mut meter())
+        };
+        for bad in [[0xf9, 0x40, 0x00], [0xf9, 0xc2, 0x00]] {
+            assert_eq!(
+                with(&bad).map(|_| ()),
+                Err(KindError::Curve(CurveError::AxialFactorNotUnit)),
+                "{what}: a factor of {bad:02x?}"
+            );
+        }
+        for (good, factor) in [(0x01, 1.0), (0x20, -1.0)] {
+            let read = with(&[good]).unwrap();
+            let sign = match &read {
+                SurfaceKind::Sphere(c) => c.axial_sign(),
+                SurfaceKind::Torus(c) => c.axial_sign(),
+                other => panic!("{what}: read as {other:?}"),
+            };
+            assert_eq!(sign, factor, "{what}");
+        }
+        seen += 1;
+    }
+    assert_eq!(seen, 2);
 }
 
 #[test]
