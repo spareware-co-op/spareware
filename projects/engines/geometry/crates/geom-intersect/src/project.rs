@@ -755,22 +755,22 @@ fn search_inside(
         if !reaches(&gap, *upper)? {
             continue;
         }
-        let partials = match surface.partials_over(region, sides, 2, meter) {
-            Ok(partials) => Some(partials),
-            Err(CurveError::Unbounded) => None,
+        // The partials are read here and let go before the box is split, so they are not held
+        // while the search's own list grows.
+        let settled = match surface.partials_over(region, sides, 2, meter) {
+            Ok(partials) => {
+                let [_, su, sv, ..] = partials.as_slice() else {
+                    return Err(IntersectError::Internal);
+                };
+                let (fu, fv) = (dot(su, &gap)?, dot(sv, &gap)?);
+                if positive(fu) || negative(fu) || positive(fv) || negative(fv) {
+                    continue;
+                }
+                bowl(&partials, &gap)?
+            }
+            Err(CurveError::Unbounded) => false,
             Err(e) => return Err(e.into()),
         };
-        let mut settled = false;
-        if let Some(partials) = &partials {
-            let [_, su, sv, ..] = partials.as_slice() else {
-                return Err(IntersectError::Internal);
-            };
-            let (fu, fv) = (dot(su, &gap)?, dot(sv, &gap)?);
-            if positive(fu) || negative(fu) || positive(fv) || negative(fv) {
-                continue;
-            }
-            settled = bowl(partials, &gap)?;
-        }
         // Splitting takes the wider side, so the sides run out of doubles together.
         let cut = if image(&around) <= floor {
             None
