@@ -7,7 +7,9 @@
 //! how many of them the crate's tests ran. [`judge`] applies the bars of
 //! [`crate::foundation`]: in the foundation set every line run and every branch taken both ways;
 //! elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's
-//! crates against [`crate::quality_ledger::Ledger::coverage_off`].
+//! crates against [`crate::quality_ledger::Ledger::coverage_off`]. [`plan_parts`] shares a run's
+//! crates among jobs that measure side by side, balanced by each crate's measured time ([`TIMES`]),
+//! and [`missing_outputs`] names every crate the judge finds no files of, whichever part held it.
 //!
 //! Guarantees, each because a gate that passes when it should fail is worse than none:
 //!
@@ -1002,6 +1004,129 @@ pub fn affected_crates(
         }
     }
     Ok(all.into_iter().filter(|k| set.contains(k)).collect())
+}
+
+/// Each kernel crate's measured seconds of coverage measuring (`coverage-times.tsv`).
+pub const TIMES: &str = include_str!("coverage-times.tsv");
+
+/// The seconds of measuring one part of the coverage run is planned at: with the part's setup (the
+/// nightly, cargo-llvm-cov, the build cache) a part's job takes about a quarter of an hour.
+pub const PART_SECONDS: u64 = 480;
+
+/// Reads [`TIMES`]: `# ` comment lines, then one `crate<TAB>seconds` line per crate, each crate
+/// once, every time a whole number above zero.
+///
+/// # Errors
+///
+/// A description of the first line that is not so.
+pub fn parse_times(text: &str) -> Result<BTreeMap<String, u64>, String> {
+    let mut out = BTreeMap::new();
+    for (i, line) in text.lines().enumerate() {
+        if line.starts_with('#') || line.trim().is_empty() {
+            continue;
+        }
+        let n = i.saturating_add(1);
+        let (krate, seconds) = line
+            .split_once('\t')
+            .ok_or_else(|| format!("line {n}: not `crate<TAB>seconds`"))?;
+        let seconds: u64 = seconds
+            .parse()
+            .ok()
+            .filter(|s| *s > 0)
+            .ok_or_else(|| format!("line {n}: {seconds:?} is not a time above zero"))?;
+        if out.insert(krate.to_owned(), seconds).is_some() {
+            return Err(format!("line {n}: {krate} is listed twice"));
+        }
+    }
+    Ok(out)
+}
+
+/// The parts of a coverage run over `crates`, balanced by their measured `times`: as many parts as
+/// the times need at [`PART_SECONDS`] each (one at least, no more than there are crates), each
+/// crate, longest first, given to the part with the least so far (the lowest on a tie). A crate no
+/// run has measured is planned at the slowest measured time. An empty run is one empty part.
+#[must_use]
+pub fn plan_parts(crates: &[String], times: &BTreeMap<String, u64>) -> Vec<Vec<String>> {
+    let slowest = times.values().copied().max().unwrap_or(PART_SECONDS);
+    let time = |k: &String| times.get(k).copied().unwrap_or(slowest);
+    let total: u64 = crates.iter().map(time).fold(0, u64::saturating_add);
+    let most = crates.len().max(1);
+    let mut n = usize::try_from(total.div_ceil(PART_SECONDS))
+        .unwrap_or(usize::MAX)
+        .clamp(1, most);
+    let mut order: Vec<&String> = crates.iter().collect();
+    order.sort_by(|a, b| time(b).cmp(&time(a)).then_with(|| a.cmp(b)));
+    // One part more until every part fits the budget or holds a single crate.
+    loop {
+        let mut parts: Vec<(u64, Vec<String>)> = vec![(0, Vec::new()); n];
+        for krate in &order {
+            if let Some(part) = parts.iter_mut().min_by_key(|(load, _)| *load) {
+                part.0 = part.0.saturating_add(time(krate));
+                part.1.push((*krate).clone());
+            }
+        }
+        let fits = parts
+            .iter()
+            .all(|(load, p)| *load <= PART_SECONDS || p.len() <= 1);
+        if fits || n >= most {
+            return parts.into_iter().map(|(_, p)| p).collect();
+        }
+        n = n.saturating_add(1);
+    }
+}
+
+/// The problems of a plan of `parts` for `crates`: a crate in no part or in two, a part with a
+/// crate not in the run, an empty part beside others. None for a plan that measures each crate
+/// exactly once.
+#[must_use]
+pub fn plan_problems(crates: &[String], parts: &[Vec<String>]) -> Vec<String> {
+    let mut problems = Vec::new();
+    let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
+    for (k, part) in parts.iter().enumerate() {
+        let k = k.saturating_add(1);
+        if part.is_empty() && parts.len() > 1 {
+            problems.push(format!("part {k} is empty"));
+        }
+        for krate in part {
+            let count = seen.entry(krate.as_str()).or_insert(0);
+            *count = count.saturating_add(1);
+            if !crates.contains(krate) {
+                problems.push(format!("part {k}: {krate} is not in the run"));
+            }
+        }
+    }
+    for krate in crates {
+        match seen.get(krate.as_str()).copied().unwrap_or(0) {
+            1 => {}
+            0 => problems.push(format!("{krate} is in no part")),
+            times => problems.push(format!("{krate} is in {times} parts")),
+        }
+    }
+    problems
+}
+
+/// The crates of `crates` whose measuring run left no `<crate>.log` or no `<crate>.lcov` in `dir`,
+/// each with what is missing. The judge reads every part's files from one folder and lists the
+/// crates itself, so a part that was dropped, or failed before it uploaded, leaves its crates
+/// here, and the gate fails on them.
+#[must_use]
+pub fn missing_outputs(crates: &[String], dir: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    for krate in crates {
+        for (ext, what) in [
+            ("log", "no log of the measuring run"),
+            ("lcov", "no coverage data"),
+        ] {
+            let file = dir.join(format!("{krate}.{ext}"));
+            if !file.is_file() {
+                out.push(format!(
+                    "{krate}: {what} ({}): every crate the change reaches must be measured",
+                    file.display()
+                ));
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]

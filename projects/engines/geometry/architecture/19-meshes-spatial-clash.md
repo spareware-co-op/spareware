@@ -121,6 +121,8 @@ Mesh booleans have no algorithm of their own. `geom-mesh` hands its faces and th
 - **History and names.** A mesh operation emits the history of sections 20.2 and 20.3 at run level: each output run is unchanged, modified (trimmed, one piece kept), split (named `Split { piece: ByTools { tools, side } }` by the tool runs that cut it and the side), or merged, and deleted runs are listed. New edges are named `Bounded` by their two faces, and new corners by the faces meeting there. Faces inside an imported run have only weak ordinal names (section 20.2), so references should target runs or their carrier planes. The invariants of section 20.3 are property-tested on mesh booleans.
 - **Mixed representations.** The one boolean entry point across representations is the dispatcher in `geom-combine`, the internal crate below the facade that section 11.8 proposed and chapter 27 places in layer 10 (accepted in 32.13); `engine-geometry` only exposes its schema (sections 9 and 11.8). If any operand is a mesh, B-rep operands are tessellated with a certified δ, and the result is Certified with the summed bound.
 
+**As built (G148).** `geom-mesh::boolean`; its stage budgets are in `projects/kit/notes/G148-stage-budgets.md`. Under 32.11's rule (i), "Thingi10K pairs within 3 times EMBER's 1.6 ms" in this piece's done-when means the pairs whose two models carry a licence the rule admits (92 of EMBER's 1,000); EMBER's figures 24 and 25 and Manifold's test models stand in for the other 908.
+
 The same machinery gives:
 
 - **Plane slices**, for 3D-printing layers and plan cuts of imported meshes: closed contours whose vertices are exact line-plane meetings, committed to the grid only on output.

@@ -72,7 +72,7 @@ The tools behind the bar are built first: the first numbers pieces (G22 and G23)
 | 12. Native format and exchange | The remaining native records, cold open, the permanence harness; IFC, STEP, DXF (read and write), mesh, LandXML and 3dm exchange, rounding and healing on import, the conformance harness and its oracles | Gates 9, 10 and 11 | G444: the independent reader agrees; writers round-trip and validate; healed fraction at its baseline |
 | 13. Scale, truth, bindings, toolkits and the first Stable release | Spare Construct and cross-program scenarios, wall-clock gates, the C, WebAssembly and Python bindings, browser builds, Revit and AutoCAD truth tests, certify mode and research, domain toolkits | Gate 12 (toolkits start when a program needs them) | G482: the first Stable `engine-geometry`, released when the scenarios meet their shares and every truth-test difference is triaged |
 
-Each gate's full condition is the "done when" of its gate piece in 30.4. Wall-clock targets before phase 13 are recorded on each gate's commit on the reference runner (G107) and gated in instruction counts; they become merge gates in G452, once the owner has fixed the reference machine and the kernel's shares.
+Each gate's full condition is the "done when" of its gate piece in 30.4. Wall-clock targets before phase 13 are recorded on each gate's commit on the reference runner (G107) and gated in instruction counts; they become merge gates in G452; the reference machine is the home desktop (32.53) and the shares are 23.1's (32.16).
 
 **This is not "flat faces first, curves later".** From phase 2 every type, the topology, the checker and the names carry curved geometry. The exact plane-based path is built in phase 4 because the curved path in phase 7 is tested against it: a curved boolean given only flat input must return the same bytes. Each layer's proof is what the next layer leans on.
 
@@ -209,7 +209,7 @@ Lanes: A topology, contract, checker, facade, primitives and queries; B the cano
 | G104 | Batch runner | geom-op | M | A | G82, G33 |
 | G105 | Content hashes and cache keys | geom-format | M | A | G94 |
 | G106 | Reference mode and fast-path equality | CI | S | C | G105, G98 |
-| G107 | Reference runner and nightly timings | geom-bench, CI | S | C | G18, G72, G70 |
+| G107 | Reference runner and gate timings | geom-bench, CI | S | C | G18, G72, G70 |
 | G108 | Containers and trust on open | geom-format, geom-test | M | C | G94, G84 |
 | G109 | PruneHistory operation | geom-name | S | B | G95 (tests), G101 (tests) |
 | G110 | Checker fault injection: first catalogue | geom-test | M | B | G85, G101 |
