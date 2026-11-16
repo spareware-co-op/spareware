@@ -18,9 +18,9 @@
 
 use geom_curve::geom_nurbs::{self, Direction};
 use geom_curve::{
-    Axes, Basis, BulgePolyline, Circle, Composite, CurvatureLaw, CurveError, CurveKind, Ellipse, Frame, Helix,
-    HelixAxes, Hyperbola, Involute, Line, Offset, OffsetLaw, OnSurface, Parabola, ParamCurve,
-    Polynomial, Station, SurfaceRef, Transition, Trimmed,
+    Axes, Basis, BulgePolyline, Circle, Composite, CurvatureLaw, CurveError, CurveKind, Ellipse,
+    Frame, Helix, HelixAxes, Hyperbola, Involute, Line, Offset, OffsetLaw, OnSurface, Parabola,
+    ParamCurve, Polynomial, Station, SurfaceRef, Transition, Trimmed,
 };
 use geom_format::cbor::Decoder;
 use geom_format::kinds::{DEPTH, KindError, read_curve, read_surface, write_curve, write_surface};

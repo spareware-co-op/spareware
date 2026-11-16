@@ -339,7 +339,10 @@ fn a_sphere_or_torus_takes_an_axial_factor_of_one_or_minus_one_only() {
     let cylinder = Cylinder::new([0.0; 3], 2.0, f, ((0.0, 2.0), (-1.0, 1.0))).unwrap();
     let cone = Cone::new([0.0; 3], 2.0, 0.5, f, ((0.0, 2.0), (-1.0, 1.0))).unwrap();
     for factor in [2.0, -3.0] {
-        assert_eq!(cylinder.with_axial_sign(factor).unwrap().axial_sign(), factor);
+        assert_eq!(
+            cylinder.with_axial_sign(factor).unwrap().axial_sign(),
+            factor
+        );
         assert_eq!(cone.with_axial_sign(factor).unwrap().axial_sign(), factor);
     }
     let why = CurveError::AxialFactorNotUnit.to_string();
