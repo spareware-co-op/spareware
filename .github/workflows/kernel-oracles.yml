@@ -56,7 +56,7 @@ on:
       - ".cargo/**"
       - "rust-toolchain.toml"
       - ".github/workflows/kernel-oracles.yml"
-  # The mesh comparisons only (each other job's condition skips it on a pull request).
+  # The mesh comparisons only: `scope` gives every other job no crate on a pull request.
   pull_request:
     paths:
       - "projects/engines/geometry/**"
@@ -94,7 +94,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      crates: ${{ steps.scope.outputs.crates }}
+      # What every job but the mesh comparisons reads: no crate on a pull request, so they skip it.
+      crates: ${{ github.event_name != 'pull_request' && steps.scope.outputs.crates || '' }}
+      # What the mesh comparisons read, on every event.
+      reached: ${{ steps.scope.outputs.crates }}
     defaults:
       run:
         shell: bash
@@ -136,7 +139,7 @@ jobs:
   slow-fixtures:
     name: Slow fixtures
     needs: scope
-    if: github.event_name != 'pull_request' && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
@@ -152,7 +155,7 @@ jobs:
   corpora:
     name: Fetched corpora, by their digests
     needs: scope
-    if: github.event_name != 'pull_request' && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -168,7 +171,7 @@ jobs:
   clothoids:
     name: Clothoids, out of process
     needs: scope
-    if: github.event_name != 'pull_request' && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-curve ')
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-curve ')
     runs-on: ubuntu-latest
     # Measured (G63): the oracle builds in about a minute on twenty cores, so a few on a hosted
     # runner's four; the comparison takes seconds.
@@ -217,7 +220,7 @@ jobs:
   cbor2:
     name: Canonical CBOR against cbor2, out of process
     needs: scope
-    if: github.event_name != 'pull_request' && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-op ')
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-op ')
     runs-on: ubuntu-latest
     # The kernel's cases build and run in a few minutes; cbor2 installs from one wheel and encodes
     # them in seconds.
@@ -259,7 +262,7 @@ jobs:
   zcbor:
     name: Body records and kinds against their CDDL, with zcbor
     needs: scope
-    if: github.event_name != 'pull_request' && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-format ')
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-format ')
     runs-on: ubuntu-latest
     # The writers build and run in a few minutes; zcbor validates each file in well under a second.
     timeout-minutes: 30
@@ -295,7 +298,7 @@ jobs:
   meshes-images:
     name: ${{ matrix.oracle }}'s image, from its pinned source
     needs: scope
-    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-mesh ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    if: contains(format(' {0} ', needs.scope.outputs.reached), ' geom-mesh ') || contains(format(' {0} ', needs.scope.outputs.reached), ' geom-test ')
     runs-on: ubuntu-latest
     # Only a new pin builds: the oracle repository's own builds took up to about fifty minutes.
     timeout-minutes: 120
@@ -359,7 +362,7 @@ jobs:
   meshes:
     name: ${{ matrix.oracle }} on ${{ matrix.cases }}
     needs: [scope, meshes-images]
-    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-mesh ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    if: contains(format(' {0} ', needs.scope.outputs.reached), ' geom-mesh ') || contains(format(' {0} ', needs.scope.outputs.reached), ' geom-test ')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:

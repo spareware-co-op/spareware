@@ -3,8 +3,9 @@
 //! sees the structure GitHub sees, not a line that looks right:
 //!
 //! - **When.** It runs on a push to main and on a pull request, never on a timer. The mesh jobs
-//!   run when the job `scope` names geom-mesh or geom-test, on either event; every other job but
-//!   `scope` skips a pull request.
+//!   run when the job `scope` names geom-mesh or geom-test (its output `reached`), on either
+//!   event; every other job but `scope` reads only one crate of its output `crates`, which names no
+//!   crate on a pull request, so it skips one without a word about pull requests of its own.
 //! - **What.** Each mesh job's oracles are exactly the catalogue's live out-of-process mesh
 //!   oracles, and `meshes` runs exactly the case sets `oracle jobs` writes
 //!   (`geom_test::oracle::meshes::CASE_SETS`), so a set cannot be added to one and not the other.
@@ -33,8 +34,15 @@ use yaml_rust2::{Yaml, YamlLoader};
 
 const WORKFLOW: &str = ".github/workflows/kernel-oracles.yml";
 const MESH_JOBS: [&str; 2] = ["meshes-images", "meshes"];
-const REACHES: &str = "contains(format(' {0} ', needs.scope.outputs.crates), ' geom-mesh ') || \
-                       contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')";
+const REACHES: &str = "contains(format(' {0} ', needs.scope.outputs.reached), ' geom-mesh ') || \
+                       contains(format(' {0} ', needs.scope.outputs.reached), ' geom-test ')";
+/// `scope`'s outputs: what the other jobs read, empty on a pull request, and what the mesh jobs
+/// read.
+const CRATES: &str =
+    "${{ github.event_name != 'pull_request' && steps.scope.outputs.crates || '' }}";
+const REACHED: &str = "${{ steps.scope.outputs.crates }}";
+/// How every other job's condition starts: one crate of `scope`'s `crates`.
+const ONE_CRATE: &str = "contains(format(' {0} ', needs.scope.outputs.crates), ' ";
 const ORACLES: &str = "spareware-co-op/oracles";
 /// What would publish an image (as `oracle check --repository` holds the oracle repository).
 const PUBLISHING: [&str; 5] = [
@@ -141,6 +149,19 @@ fn problems(text: &str) -> Vec<String> {
     if !(commit.len() == 40 && commit.chars().all(|c| c.is_ascii_hexdigit())) {
         found.push(format!("ORACLES_COMMIT {commit:?} is not a full commit"));
     }
+    let outputs = &w["jobs"]["scope"]["outputs"];
+    if outputs["crates"].as_str() != Some(CRATES) {
+        found.push(format!(
+            "scope's crates {:?} are not empty on a pull request",
+            outputs["crates"].as_str()
+        ));
+    }
+    if outputs["reached"].as_str() != Some(REACHED) {
+        found.push(format!(
+            "scope's reached {:?} is not the crates it measured",
+            outputs["reached"].as_str()
+        ));
+    }
     let live: BTreeSet<String> = live_mesh_oracles().into_iter().collect();
     for job in keys(&w["jobs"]) {
         let j = &w["jobs"][job.as_str()];
@@ -156,7 +177,11 @@ fn problems(text: &str) -> Vec<String> {
             }
         }
         if !MESH_JOBS.contains(&job.as_str()) {
-            if job != "scope" && !condition.starts_with("github.event_name != 'pull_request' && ") {
+            let one_crate = condition.starts_with(ONE_CRATE)
+                && condition.ends_with(" ')")
+                && condition.matches("contains(").count() == 1
+                && !condition.contains("||");
+            if job != "scope" && !one_crate {
                 found.push(format!("{job} runs on a pull request"));
             }
             continue;
@@ -232,7 +257,7 @@ fn the_mesh_jobs_run_what_reaches_them_on_every_case_set() {
     finds(
         &planted(
             &text,
-            "    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-mesh ') || ",
+            "    if: contains(format(' {0} ', needs.scope.outputs.reached), ' geom-mesh ') || ",
             "    if: ",
         ),
         "not what reaches the meshes",
@@ -262,7 +287,11 @@ fn the_mesh_jobs_run_what_reaches_them_on_every_case_set() {
         "off the pin",
     );
     finds(
-        &planted(&text, "          fail-on-cache-miss: true\n", ""),
+        &planted(
+            &text,
+            "          key: ${{ steps.key.outputs.key }}\n          fail-on-cache-miss: true\n",
+            "          key: ${{ steps.key.outputs.key }}\n",
+        ),
         "lacks the image",
     );
     finds(&planted(&text, "--network none ", ""), "with a network");
@@ -282,12 +311,49 @@ fn the_mesh_jobs_run_what_reaches_them_on_every_case_set() {
         ),
         "would publish",
     );
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn only_the_mesh_jobs_run_on_a_pull_request() {
+    let text = source();
+    assert!(problems(&text).is_empty(), "{:#?}", problems(&text));
+
+    // Planted: a job that reads what reaches the meshes, or more than one crate, and scope's
+    // outputs changed.
     finds(
         &planted(
             &text,
-            "    if: github.event_name != 'pull_request' && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-op ')",
             "    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-op ')",
+            "    if: contains(format(' {0} ', needs.scope.outputs.reached), ' geom-op ')",
         ),
         "cbor2 runs on a pull request",
+    );
+    finds(
+        &planted(
+            &text,
+            "    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-op ')",
+            "    if: always() || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-op ')",
+        ),
+        "cbor2 runs on a pull request",
+    );
+    finds(
+        &planted(
+            &text,
+            "      crates: ${{ github.event_name != 'pull_request' && steps.scope.outputs.crates || '' }}",
+            "      crates: ${{ steps.scope.outputs.crates }}",
+        ),
+        "not empty on a pull request",
+    );
+    finds(
+        &planted(
+            &text,
+            "      reached: ${{ steps.scope.outputs.crates }}",
+            "      reached: geom-mesh",
+        ),
+        "not the crates it measured",
     );
 }

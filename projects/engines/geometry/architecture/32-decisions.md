@@ -847,8 +847,8 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-certificates.yml` | `fptaylor` | `trip hol-light`, on orient2d's leg: every bound of `FPTaylor`'s certificate halved as HOL Light's session loads it, which HOL Light must refuse to prove |
 | `kernel-certificates.yml` | `fptaylor-problems` | Not a gate: it lists the FPTaylor problems, one `fptaylor` job each |
 | `kernel-certificates.yml` | `fptaylor-certificates` | Not a gate: it runs FPTaylor once on each problem whose terms HOL Light checks in shards (`// hol-light-shards:`), so that every `fptaylor` shard checks that one certificate; each shard fails unless it proves exactly its own terms |
-| `kernel-oracles.yml` | `scope` | Not a gate: added after the gate, it decides which crates' tests the change reaches (`kernel-quality test-scope`, as `kernel.yml`'s `scope`), so which of this workflow's jobs run |
-| `kernel-oracles.yml` | `slow-fixtures` | Not a gate: added after the gate, it runs on a push to main, by hand and on a release tag; on a pull request its condition skips it |
+| `kernel-oracles.yml` | `scope` | Not a gate: added after the gate, it decides which crates' tests the change reaches (`kernel-quality test-scope`, as `kernel.yml`'s `scope`), so which of this workflow's jobs run: its output `crates` for every other job, empty on a pull request, and `reached` for the mesh jobs |
+| `kernel-oracles.yml` | `slow-fixtures` | Not a gate: added after the gate, it runs on a push to main, by hand and on a release tag; on a pull request `scope` gives it no crate, so its condition skips it |
 | `kernel-oracles.yml` | `corpora` | Not a gate: as `slow-fixtures` |
 | `kernel-oracles.yml` | `clothoids` | Not a gate: as `slow-fixtures` |
 | `kernel-oracles.yml` | `cbor2` | Not a gate: as `slow-fixtures` |
