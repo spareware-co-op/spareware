@@ -409,7 +409,8 @@ fn the_grids_range_is_a_limit_on_the_reach_in_steps() {
 fn first_scale(from: u32, x: f64, holds: impl Fn(f64, f64) -> bool) -> u32 {
     (from..60)
         .find(|k| {
-            let scale = 2.0_f64.powi(*k as i32);
+            // 2^k exactly (zero fraction, exponent biased by 1023), not `f64::powi`.
+            let scale = f64::from_bits((1023 + u64::from(*k)) << 52);
             holds(off(x, scale), scale)
         })
         .expect("a scale")

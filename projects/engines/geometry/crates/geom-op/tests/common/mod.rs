@@ -257,6 +257,13 @@ pub fn from_json(j: &Value) -> V {
     }
 }
 
+/// 2^e exactly, for a normal exponent (-1022..=1023): a zero fraction and the exponent biased by
+/// 1023. Not `f64::powi`: its last digit is not the same everywhere (Miri varies it), so a value
+/// meant to be a power of two would not be.
+fn two_to(e: i32) -> f64 {
+    f64::from_bits(u64::try_from(1023 + e).expect("a normal exponent") << 52)
+}
+
 /// Finite doubles, weighted towards the edges of the three widths: binary16 and binary32 values,
 /// their neighbours, zeros, subnormals and the extremes, and doubles of any bits.
 pub fn finite() -> BoxedStrategy<f64> {
@@ -269,12 +276,12 @@ pub fn finite() -> BoxedStrategy<f64> {
         Just(f64::MIN),
         Just(65504.0),
         Just(65505.0),
-        Just(2f64.powi(-24)),
-        Just(2f64.powi(-25)),
-        Just(2f64.powi(-14)),
-        Just(2f64.powi(-149)),
-        Just(2f64.powi(-150)),
-        Just(2f64.powi(-126)),
+        Just(two_to(-24)),
+        Just(two_to(-25)),
+        Just(two_to(-14)),
+        Just(two_to(-149)),
+        Just(two_to(-150)),
+        Just(two_to(-126)),
         Just(f64::from(f32::MAX)),
     ];
     let half = any::<u16>().prop_map(|h| half::f16::from_bits(h).to_f64());

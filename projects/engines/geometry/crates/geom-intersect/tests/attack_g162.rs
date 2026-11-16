@@ -14,6 +14,8 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+mod miri;
+
 use geom_curve::axes::Axes;
 use geom_curve::conic::{Circle, Ellipse};
 use geom_curve::line::Line;
@@ -29,6 +31,7 @@ use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind, Torus};
 use geom_test::Seed;
 use geom_test::rng::SplitMix64;
+use miri::{case, rounds, sized};
 
 /// A meter above what any case here takes, so a search that loses its way fails, not hangs. A
 /// torus's partials pay for the arctangent corners that take the certified arctangent's 192-bit
@@ -114,13 +117,14 @@ fn holds_curve(curve: &CurveKind<2>, t: f64, d: f64) {
 #[test]
 fn zero_wrong_answers_on_curves_with_known_feet() {
     let mut r = rng("g162 curves", 0x4731_3632);
-    for _ in 0..3_000 {
+    // Under Miri the first three circles and the first three ellipses of the same draws.
+    for _ in 0..sized(3_000, 3) {
         let radius = 1.0 + unit(&mut r) * 100.0;
         let t = unit(&mut r) * 1.8 + 0.1;
         let d = (unit(&mut r) - 0.5) * radius * 0.9;
         holds_curve(&circle(radius, (0.0, TURN)), t, d);
     }
-    for _ in 0..3_000 {
+    for _ in 0..sized(3_000, 3) {
         let a = 5.0 + unit(&mut r) * 50.0;
         let b = 1.0 + unit(&mut r) * a * 0.5;
         // An offset below the smallest radius of curvature, b²/a, keeps the foot nearest.
@@ -320,7 +324,8 @@ fn a_station_on_a_fifty_kilometre_clothoid_is_certified() {
         Transition::new([0.0, 0.0], [1.0, 0.0], length, law, &mut meter()).unwrap(),
     );
     let (a, b) = curve.domain();
-    for station in [0.13, 0.5, 0.87] {
+    // Under Miri the first station only: each search over the 50 km is minutes there.
+    for &station in rounds(&[0.13, 0.5, 0.87], &[0.13]) {
         let t = a + (b - a) * station;
         let mut out = [[0.0; 2]; 2];
         curve.derivatives(t, Limit::FromRight, &mut out).unwrap();
@@ -435,7 +440,9 @@ fn a_continuum_no_kind_names_is_undecided_not_a_foot() {
     let points = [[0.5, 0.0], [0.5, 0.5], [0.0, 0.5]];
     let weights = [1.0, core::f64::consts::FRAC_1_SQRT_2, 1.0];
     let arc = CurveKind::Nurbs(Curve::new_rational(basis, &points, &weights).unwrap());
-    let found = project_curve(&arc, &[0.0, 0.0], 1e-2, &mut meter()).unwrap();
+    // Under Miri a floor of a tenth: every span is still undecided, a tenth as many of them.
+    let floor = case(1e-2, 0.1);
+    let found = project_curve(&arc, &[0.0, 0.0], floor, &mut meter()).unwrap();
     let Projection::NonIsolated { enclosure: [t] } = found else {
         panic!("{found:?}");
     };
@@ -488,9 +495,11 @@ fn each_round_kind_from_its_axis_has_its_own_set() {
     };
     assert!(v.contains(0.25), "{v:?}");
     // A torus from its axis: the parallel nearest in its half-plane.
-    let torus = SurfaceKind::Torus(
-        Torus::new([0.0; 3], 6.0, 2.0, frame, ((0.0, TURN), (-1.0, 1.0))).unwrap(),
-    );
+    // Under Miri the torus's tube from v = 0.75 to 1, which still holds that parallel (v about
+    // 0.852): a search over the whole tube is minutes there.
+    let tube = case((-1.0, 1.0), (0.75, 1.0));
+    let torus =
+        SurfaceKind::Torus(Torus::new([0.0; 3], 6.0, 2.0, frame, ((0.0, TURN), tube)).unwrap());
     let found = project_surface(&torus, &[0.0, 0.0, 3.0], FLOOR, &mut meter()).unwrap();
     let Projection::Set { set, distance } = found else {
         panic!("{found:?}");
@@ -543,26 +552,29 @@ fn a_nurbs_surfaces_edges_do_not_tie_with_its_foot() {
         [4.0, 4.0, 0.0],
     ];
     let square = SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap());
-    let inside = project_surface(&square, &[1.0, 3.0, 2.0], FLOOR, &mut meter()).unwrap();
+    // Under Miri a floor of a half, and each enclosure within one floor of its value, as natively
+    // within ten: the same boxes split, fewer times.
+    let (floor, near) = case((FLOOR, 1e-5), (0.5, 0.5));
+    let inside = project_surface(&square, &[1.0, 3.0, 2.0], floor, &mut meter()).unwrap();
     let foot = inside.first().unwrap();
     assert_eq!(foot.place, Place::Foot);
-    assert!((foot.at[0].lo() - 0.25).abs() < 1e-5, "{foot:?}");
-    assert!((foot.at[1].lo() - 0.75).abs() < 1e-5, "{foot:?}");
-    assert!((foot.distance.lo() - 2.0).abs() < 1e-5, "{foot:?}");
+    assert!((foot.at[0].lo() - 0.25).abs() < near, "{foot:?}");
+    assert!((foot.at[1].lo() - 0.75).abs() < near, "{foot:?}");
+    assert!((foot.distance.lo() - 2.0).abs() < near, "{foot:?}");
     for (p, u, v) in [
         ([6.0, 1.0, 0.0], 1.0, 0.25),
         ([1.0, 6.0, 0.0], 0.25, 1.0),
         ([6.0, 6.0, 0.0], 1.0, 1.0),
     ] {
-        let found = project_surface(&square, &p, FLOOR, &mut meter()).unwrap();
+        let found = project_surface(&square, &p, floor, &mut meter()).unwrap();
         let edge = found.first().unwrap();
         assert_eq!(edge.place, Place::Boundary, "{found:?}");
         assert!(
-            edge.at[0].contains(u) || (edge.at[0].lo() - u).abs() < 1e-5,
+            edge.at[0].contains(u) || (edge.at[0].lo() - u).abs() < near,
             "{edge:?}"
         );
         assert!(
-            edge.at[1].contains(v) || (edge.at[1].lo() - v).abs() < 1e-5,
+            edge.at[1].contains(v) || (edge.at[1].lo() - v).abs() < near,
             "{edge:?}"
         );
     }
@@ -575,9 +587,15 @@ fn a_floor_below_the_doubles_still_ends() {
     let found = project_curve(&arc, &[4.0, 6.0], 1e-300, &mut meter()).unwrap();
     assert!(found.first().is_some(), "{found:?}");
     let frame = Frame::standard().unwrap();
-    let sphere =
-        SurfaceKind::Sphere(Sphere::new([0.0; 3], 4.0, frame, ((0.1, 1.9), (-0.3, 0.3))).unwrap());
-    let found = project_surface(&sphere, &[1.0, 2.0, 0.5], 1e-300, &mut meter()).unwrap();
+    let domain = ((0.1, 1.9), (-0.3, 0.3));
+    // Under Miri a cylinder on the same patch: the sphere's search to the last double is over
+    // 140,000 work units of its certified arctangent, hours there, and the cylinder's runs out of
+    // doubles the same way in 2,829.
+    let surface = case(
+        SurfaceKind::Sphere(Sphere::new([0.0; 3], 4.0, frame, domain).unwrap()),
+        SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 4.0, frame, domain).unwrap()),
+    );
+    let found = project_surface(&surface, &[1.0, 2.0, 0.5], 1e-300, &mut meter()).unwrap();
     assert!(found.first().is_some(), "{found:?}");
 }
 
