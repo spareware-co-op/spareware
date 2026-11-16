@@ -32,7 +32,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        unit: [fuzz-planes, fuzz-exact, fuzz-cdt, fuzz-solids, bench-scenario, bench-mesh, bench-plane]
+        unit: [fuzz-planes, fuzz-exact, fuzz-cdt, fuzz-solids, bench-scenario, bench-mesh, bench-plane,
+          fuzz-make, fuzz-sequence, fuzz-predicates, bench-group-query, bench-group-make, bench-group-predicate, bench-group-topo]
     defaults:
       run:
         shell: bash
@@ -81,7 +82,7 @@ jobs:
             local label=$1 variant=$2 pkg=$3 test=$4 filter=$5 names=${6:-}
             clear
             echo "::group::$label $variant"
-            if PIECE_MAP_NAMES="$names" cargo llvm-cov --no-report --no-clean --locked -p "$pkg" --release --branch \
+            if PIECE_MAP_NAMES="$names" cargo llvm-cov --no-report --locked -p "$pkg" --release --branch \
                 --test "$test" -- --exact "$filter" --test-threads 1 --nocapture; then
               cargo llvm-cov report --release --branch --json --summary-only \
                 --output-path "$out/$label.$variant.json"
@@ -114,6 +115,11 @@ jobs:
             bench-plane)
               one plane whole geom-bench piece_map_whole run_named "plane/"
               one plane kernel geom-bench piece_map_kernel run_named "plane/"
+              ;;
+            bench-group-*)
+              group=${UNIT#bench-group-}
+              one "$group" whole geom-bench piece_map_whole run_named "$group/"
+              one "$group" kernel geom-bench piece_map_kernel run_named "$group/"
               ;;
           esac
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
