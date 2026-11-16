@@ -501,6 +501,10 @@ fn held(
                     .any(|m: &usize| splits.get(*m).is_some_and(|q| q.source == other))
         })
     };
+    // Whether `a` lies before `b`: one strict order at both ends of a piece, so a span that only
+    // meets a pave's enclosure at its edge does not pass it, at either end (as a span starting at
+    // the domain's start, where a seam pave's enclosure starts).
+    let before = |a: f64, b: f64| a < b;
     let mut any = false;
     for (k, piece) in splits.iter().enumerate() {
         if piece.source != edge {
@@ -510,8 +514,8 @@ fn held(
             continue;
         };
         // The span ends past where the piece starts, and starts before where it ends.
-        let past_start = from.t.hi() < t.hi();
-        let before_end = t.lo() < to.t.lo();
+        let past_start = before(from.t.hi(), t.hi());
+        let before_end = before(t.lo(), to.t.lo());
         let reaches = if piece.block.wraps {
             past_start || before_end
         } else {
