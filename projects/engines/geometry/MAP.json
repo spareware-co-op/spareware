@@ -7970,6 +7970,7 @@
           "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
           "guarantees": [
             "**Exact where the data are.** A plane's being square to an axis is a sign on the stored doubles; through an axis, and Villarceau's angle, signs from `geom_num::quadric` on whole-number data. Off the grid an enclosure decides, and a pair it cannot tell is `None`.",
+            "**A meridian only where it is one.** A revolution's profile is read in a half-plane of its axis only where its own data prove, by exact signs of sums of products of the stored doubles, that it lies in that plane and on one side of the axis: a line by its ends, a circle, ellipse or parabola by its plane and a ball about its centre, a NURBS curve by its control points (issue 921). What they cannot prove is `None`.",
             "**Curve with curve is 12.5.** Each ring comes from a crossing or a tangency that [`crate::curve::curves`] proved, and is tangent where that was.",
             "**The kind is kept.** Lines stay lines, a circle maps to a circle where the map is a turn and to an ellipse otherwise, conics stay conics and NURBS stay NURBS.",
             "**Whole turns.** A torus or revolution of a part of a turn is `None`, for the general paths.",
