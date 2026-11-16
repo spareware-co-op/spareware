@@ -5,8 +5,10 @@ name: Kernel oracles
 # 28.16 and 28.17). They run after a change lands, on a push to main, and only for what that push
 # can reach (the owner's testing principle 2, decision 32.53): the job `scope` runs geom-test's
 # `kernel-quality test-scope` on the files the push changed, and each job runs only when the crate
-# whose tests it runs is among the crates named. By hand (`workflow_dispatch`) and on a release tag
-# (kernel-release.yml calls this workflow) every job runs. Nothing runs on a timer.
+# whose tests it runs is among the crates named. The mesh comparisons (`meshes-images` and
+# `meshes`) also run on a pull request, measured against its merge commit's first parent; the
+# other jobs do not. By hand (`workflow_dispatch`) and on a release tag (kernel-release.yml calls
+# this workflow) every job runs. Nothing runs on a timer.
 #
 # - Slow fixtures (piece G97, 28.16): geom-test's `fixture run --tier slow`.
 # - Fetched corpora (piece G114, 28.12): geom-test's `corpus fetch` downloads each at its pinned
@@ -20,6 +22,20 @@ name: Kernel oracles
 #   in its canonical mode in a container pinned by digest and reads the kernel's bytes back, and
 #   the test fails on any byte that differs.
 # - zcbor: geom-format's archived body records and every kind, validated against their CDDL.
+# - Manifold (Apache-2.0) and CGAL (GPL-3.0-or-later, run only as a separate program, never linked
+#   and never read, decision 32.6) on mesh booleans (piece G154, 28.10; Gate 4, G156), when the
+#   change reaches geom-mesh or geom-test. Each image is built from its harness in the oracle
+#   repository (spareware-co-op/oracles) at `ORACLES_COMMIT`, and kept in this repository's Actions
+#   cache under the key of that folder's tree, so a push restores it and builds nothing; it is
+#   never pushed to any registry (29.20, rule 8). `meshes-images` builds an image only when no run
+#   has kept it; `meshes` runs one leg per oracle and case set (`geom_test::oracle::meshes::
+#   CASE_SETS`: the seeded solids and Manifold's stored models), each writing its jobs with
+#   `oracle jobs`, running the image on them without a network, and judging the answers with
+#   `oracle compare`, which fails on any signature `geom-test/oracles/triaged.json` does not hold.
+#   The comparison names the leg's case set: a model the set records as refused is not sent to the
+#   oracle, and the kernel must refuse it exactly as recorded; a job on a model that crosses itself,
+#   which the oracle's documentation says it does not take, is judged by the exact reference alone
+#   (decision 32.59). A case set is one line of the matrix.
 #
 # Each seeded job's seed is the run's number in hexadecimal, printed first, so a failure replays
 # exactly: rerun the job, or set SPAREKIT_SEED to the printed value. The predicates' verification
@@ -43,6 +59,15 @@ on:
       - ".cargo/**"
       - "rust-toolchain.toml"
       - ".github/workflows/kernel-oracles.yml"
+  # The mesh comparisons only: `scope` gives every other job no crate on a pull request.
+  pull_request:
+    paths:
+      - "projects/engines/geometry/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - ".github/workflows/kernel-oracles.yml"
   # By hand, from the Actions tab: every job.
   workflow_dispatch:
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
@@ -51,9 +76,20 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same pull request cancels the run it supersedes; a run on main is never
+# cancelled.
+concurrency:
+  group: kernel-oracles-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   # The same pinned compiler as kernel.yml (chapter 28.13, the toolchain guard).
   RUST_TOOLCHAIN: "1.99.0"
+  # The oracle repository's commit whose Manifold and CGAL harnesses the mesh jobs run: CGAL's
+  # harness reading a solid shell by shell (spareware-co-op/oracles#4).
+  ORACLES_COMMIT: d9817fe4ecf67da5926b253f34f1f85101c9ecf5
+  # How many seeded mesh jobs a leg writes.
+  MESH_JOBS: "2000"
 
 jobs:
   # The crates whose tests the push reaches: every crate by hand and on a release tag.
@@ -62,7 +98,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      crates: ${{ steps.scope.outputs.crates }}
+      # What every job but the mesh comparisons reads: no crate on a pull request, so they skip it.
+      crates: ${{ github.event_name != 'pull_request' && steps.scope.outputs.crates || '' }}
+      # What the mesh comparisons read, on every event.
+      reached: ${{ steps.scope.outputs.crates }}
     defaults:
       run:
         shell: bash
@@ -78,15 +117,20 @@ jobs:
         env:
           BEFORE: ${{ github.event.before }}
         run: |
+          # A pull request against its merge commit's first parent, a push to main against the
+          # commit main was at; none (every crate) by hand, on a release tag or a first push.
           base=""
-          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then base="$BEFORE"; fi
+          case "$GITHUB_EVENT_NAME" in
+            pull_request) base=$(git rev-parse HEAD^1) ;;
+            push) if [ "$GITHUB_REF" = refs/heads/main ]; then base="$BEFORE"; fi ;;
+          esac
           case "$base" in 0000000000000000000000000000000000000000) base="" ;; esac
           if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null             && ! git fetch -q --no-tags --depth 1 origin "$base"; then
             base=""
           fi
           if [ -n "$base" ]; then
             git diff --no-ext-diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed.txt"
-            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt --base $base" >> "$GITHUB_ENV"
           else
             echo "SCOPE=--all" >> "$GITHUB_ENV"
           fi
@@ -423,3 +467,141 @@ jobs:
           docker run --rm -v "$PWD:/work:ro" -v "$ZCBOR_DIR:/cases:ro" -w /work "$PYTHON_IMAGE" \
             bash projects/engines/geometry/crates/geom-format/oracles/zcbor.sh \
             projects/engines/geometry/format/cddl/body.cddl /cases
+
+  # Each mesh oracle's image, from its harness at ORACLES_COMMIT, kept in the Actions cache under
+  # its folder's tree: a run that finds it there does nothing more, so only a new pin builds. The
+  # oracle repository is audited first (nothing there can publish an image, and every base image is
+  # pinned by digest), and the image is saved as a file, never pushed anywhere (29.20, rule 8).
+  meshes-images:
+    name: ${{ matrix.oracle }}'s image, from its pinned source
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.reached), ' geom-mesh ') || contains(format(' {0} ', needs.scope.outputs.reached), ' geom-test ')
+    runs-on: ubuntu-latest
+    # Only a new pin builds: the oracle repository's own builds took up to about fifty minutes.
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        oracle: [manifold, cgal]
+    env:
+      ORACLE: ${{ matrix.oracle }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: spareware-co-op/oracles
+          ref: ${{ env.ORACLES_COMMIT }}
+          persist-credentials: false
+          path: oracles
+      - name: The image's key, from its pinned source
+        id: key
+        run: echo "key=oracle-image-$ORACLE-$(git -C oracles rev-parse "HEAD:$ORACLE")" | tee -a "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: kept
+        with:
+          path: ${{ runner.temp }}/image
+          key: ${{ steps.key.outputs.key }}
+          lookup-only: true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.kept.outputs.cache-hit != 'true'
+        with:
+          persist-credentials: false
+          path: kernel
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        if: steps.kept.outputs.cache-hit != 'true'
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Nothing there can publish, and every base image is pinned
+        if: steps.kept.outputs.cache-hit != 'true'
+        working-directory: kernel
+        run: cargo run --locked --release -p geom-test --bin oracle -- check --repository "$GITHUB_WORKSPACE/oracles"
+      - name: The image, built from its pinned source and saved as a file
+        if: steps.kept.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/image"
+          docker build --tag "oracle-$ORACLE:local" "oracles/$ORACLE"
+          docker save --output "$RUNNER_TEMP/image/image.tar" "oracle-$ORACLE:local"
+          ls -l "$RUNNER_TEMP/image"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.kept.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/image
+          key: ${{ steps.key.outputs.key }}
+
+  # One leg per mesh oracle and case set. A leg writes the run's jobs of its set, runs the oracle's
+  # image on them in a container with no network, and judges the answers; a signature the triage
+  # register does not hold fails it (28.10). Every leg keeps its jobs, answers and comparison for
+  # triage, whatever the comparison found. A new case set (`geom_test::oracle::meshes::CASE_SETS`)
+  # is one line of `cases`.
+  meshes:
+    name: ${{ matrix.oracle }} on ${{ matrix.cases }}
+    needs: [scope, meshes-images]
+    if: contains(format(' {0} ', needs.scope.outputs.reached), ' geom-mesh ') || contains(format(' {0} ', needs.scope.outputs.reached), ' geom-test ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        oracle: [manifold, cgal]
+        cases:
+          - seeded
+          - manifold-models
+    env:
+      ORACLE: ${{ matrix.oracle }}
+      CASES: ${{ matrix.cases }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: kernel
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: spareware-co-op/oracles
+          ref: ${{ env.ORACLES_COMMIT }}
+          persist-credentials: false
+          path: oracles
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Nothing there can publish, and every base image is pinned
+        working-directory: kernel
+        run: cargo run --locked --release -p geom-test --bin oracle -- check --repository "$GITHUB_WORKSPACE/oracles"
+      - name: The image's key, from its pinned source
+        id: key
+        run: echo "key=oracle-image-$ORACLE-$(git -C oracles rev-parse "HEAD:$ORACLE")" | tee -a "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/image
+          key: ${{ steps.key.outputs.key }}
+          fail-on-cache-miss: true
+      - name: The image, from the cache
+        run: docker load --input "$RUNNER_TEMP/image/image.tar"
+      - name: The run's jobs, the oracle's answers, and the comparison
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/meshes"
+          mkdir -p "$out"
+          given=()
+          if [ "$CASES" = seeded ]; then
+            seed=$(printf '%016x' "$GITHUB_RUN_ID")
+            echo "seed: $seed"
+            given=(--seed "$seed" --count "$MESH_JOBS")
+          fi
+          cargo run --locked --release -p geom-test --bin oracle -- jobs "$ORACLE" --cases "$CASES" "${given[@]}" > "$out/jobs.jsonl"
+          time docker run --rm -i --network none "oracle-$ORACLE:local" < "$out/jobs.jsonl" > "$out/answers.jsonl"
+          time cargo run --locked --release -p geom-test --bin oracle -- compare "$ORACLE" --cases "$CASES" --jobs "$out/jobs.jsonl" --answers "$out/answers.jsonl" | tee "$out/compare.txt"
+      - name: The run's jobs, answers and differences, kept for triage
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: meshes-${{ matrix.oracle }}-${{ matrix.cases }}
+          path: ${{ runner.temp }}/meshes
+          retention-days: 90
+          if-no-files-found: warn

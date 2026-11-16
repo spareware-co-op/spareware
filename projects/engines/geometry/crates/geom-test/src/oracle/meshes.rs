@@ -5,17 +5,33 @@
 //! What it does: [`jobs`] draws a night's seeded pairs of closed solids with integer corners and a
 //! boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra.
 //! Each job is one JSON line in whole grid steps, so an exact oracle reads what the kernel read and
-//! a floating-point one reads integers an `f64` holds exactly, with no conversion to round. The
-//! harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer
+//! a floating-point one reads integers an `f64` holds exactly, with no conversion to round. Those
+//! are the case set `seeded`; the set `manifold-models` ([`model_jobs`]) is Manifold's stored
+//! models of the polyhedral corpus's smaller tier, each with a moved copy of itself, under each
+//! boolean ([`CASE_SETS`] names every set, and [`case_jobs`] writes one). The harness in the
+//! oracle repository answers one JSON line per job. [`judge`] compares an answer
 //! with `geom-mesh`'s boolean, and settles a difference by the exact reference
-//! ([`crate::flat_reference`]): whether the kernel's volume is the reference's.
+//! ([`crate::flat_reference`]): whether the kernel's volume is the reference's. A model a case set
+//! records as refused ([`REFUSED_MODELS`]) is not sent to an oracle, and the kernel is held to its
+//! refusal ([`held_refusal`]). A job on a model that crosses itself ([`crosses`]), which the
+//! oracle's documentation says it does not take ([`stated_input`]), is judged by the exact
+//! reference alone ([`judge_by_reference`]; decision 32.59).
 //!
 //! Guarantees:
 //!
 //! - **Exact oracles are compared exactly**: a rational volume, equal or not.
 //! - **The others can only refute**: volume and area are held to both sides' stated bounds, capped
 //!   at ours plus the fit bound ([`Allowance`]), and the Hausdorff distance is measured by dense
-//!   deterministic sampling, so it is a lower bound on the true distance.
+//!   deterministic sampling, so it is a lower bound on the true distance. Each sample's distance to
+//!   a triangle is itself a certified lower bound, never more than 10^-9 steps (and 2^-40 of the
+//!   distance) below the truth: from the triangle's own corners in intervals, and in exact
+//!   rationals where those cannot settle it.
+//! - **Outside the oracle's input, the reference alone**: a job whose solid crosses itself, by the
+//!   kernel's own exact winding numbers, is outside what Manifold's and CGAL's documentation say
+//!   they take, so the oracle's answer is not read: the kernel's volume must be the exact
+//!   reference's, or the job fails. The job is never a pass on the oracle's word.
+//! - **A recorded refusal is held exactly**: a model the case set records as refused fails its
+//!   jobs if the kernel accepts it or refuses it in another way.
 //! - **The kernel's side is its exact result**: its volume and area are computed exactly from its
 //!   corners, and the distance is measured from and to its exact faces, each corner the double
 //!   nearest its place, never from the export's triangles, whose corners are rounded to the grid.
@@ -29,29 +45,37 @@
 //!   the reference found.
 //!
 //! Method: chapter 28.10 (`projects/engines/geometry/architecture/28-testing.md`). A solid's volume
-//! is the divergence theorem over a fan of each loop; a point on a face or an edge is Ericson,
-//! "Real-Time Collision Detection", 2005, section 5.1.5, closest point on a triangle, and section
-//! 5.1.2 on a segment; whether a point of a face's plane is inside its loops is the crossing test
+//! is the divergence theorem over a fan of each loop; a point's distance to a triangle is its
+//! height over the triangle's plane where its foot is inside (three turns about the normal), or
+//! else its distance to the nearest side, Ericson, "Real-Time Collision Detection", 2005, section
+//! 5.1.2 on a segment, enclosed by interval arithmetic (Moore, Kearfott and Cloud, "Introduction
+//! to Interval Analysis", 2009) and decided in exact rationals where an enclosure cannot; whether a
+//! point of a face's plane is inside its loops is the crossing test
 //! (W. Randolph Franklin's PNPOLY, as in Haines, "Point in Polygon Strategies", Graphics Gems IV,
 //! 1994). An exact face is sampled along its sides and on a lattice over its box in the plan its
 //! normal leans on least, lifted to its plane where the lattice is inside it.
 //!
 //! Cost: a job's boolean is the kernel's; sampling is the sample points times the triangles or
-//! faces of the other side, on solids of a few dozen; the exact reference runs only on a
-//! difference.
+//! faces of the other side, on seeded solids of a few dozen and stored models of up to
+//! [`MODEL_FACES`] each, a triangle whose box is certainly farther than the nearest so far passed
+//! by; the exact reference runs on a difference, on each solid once per [`Judge`] to read whether
+//! it crosses itself, and on each job of a solid that does.
 
 use core::num::NonZeroU64;
+use std::collections::BTreeMap;
 
 use dashu_ratio::RBig;
 use geom_format::operation::Operation;
 use geom_format::payload::Reader;
 use geom_mesh::boolean::boolean;
 use geom_mesh::exact::build::{Corner, Polygons, Source, build};
-use geom_mesh::exact::{ExactMesh, PropTable, Role, Vertex};
+use geom_mesh::exact::{ExactMesh, MeshError, MeshFault, PropTable, Role, Vertex};
 use geom_mesh::export::triangles;
 use geom_num::grid::P3;
+use geom_num::interval::Interval;
 use geom_num::ladder::FIT;
 use geom_num::plane::Plane;
+use geom_num::{NumError, Sign};
 use geom_op::cbor::Encoder;
 use geom_op::{Exactness, NameId, NameSet, OpId, OpPath};
 use geom_poly::winding::WindingTest;
@@ -66,6 +90,8 @@ use crate::fixture::Spend;
 use crate::fixture::run::{Ran, Step};
 use crate::flat_reference::{self, Point, Polygon, Q};
 use crate::golden::Sha256;
+use crate::obj::{self, Grid};
+use crate::polyhedral::MODELS;
 use crate::rng::SplitMix64;
 use crate::seed::Seed;
 
@@ -122,7 +148,7 @@ impl Op {
 }
 
 /// A closed solid: integer corners in grid steps, and triangles counter-clockwise from outside.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Solid {
     /// The corners.
@@ -402,6 +428,238 @@ pub fn jobs(seed: Seed, count: u64) -> Vec<Job> {
     out
 }
 
+/// The case set of seeded solids: [`jobs`], from a seed and a count.
+pub const SEEDED: &str = "seeded";
+/// The case set of Manifold's stored models: [`model_jobs`], the same every run.
+pub const MANIFOLD_MODELS: &str = "manifold-models";
+/// Every case set `oracle jobs` writes for a mesh oracle, by name: `kernel-oracles.yml`'s job
+/// `meshes` runs each of them, and a set it names that is not here stops the run.
+pub const CASE_SETS: [&str; 2] = [SEEDED, MANIFOLD_MODELS];
+
+/// The models [`model_jobs`] takes: those of at most this many faces, the tier of the polyhedral
+/// corpus that is held to the exact reference. The seven larger ones are `kernel.yml`'s job
+/// `large-models`: the kernel takes minutes on each, and the reference, which settles a
+/// difference, over an hour.
+pub const MODEL_FACES: usize = 1_500;
+
+/// A model on the grid moved by `by`, as a job's solid.
+fn model_solid(grid: &Grid, by: [i64; 3]) -> Result<Solid, String> {
+    let vertices = grid
+        .points
+        .iter()
+        .map(|p| {
+            let mut moved = [0; 3];
+            for ((m, x), d) in moved.iter_mut().zip(p).zip(by) {
+                *m = x.checked_add(d).ok_or("a coordinate past i64")?;
+            }
+            Ok(moved)
+        })
+        .collect::<Result<Vec<[i64; 3]>, String>>()?;
+    let triangles = grid
+        .faces
+        .iter()
+        .map(|face| match face.as_slice() {
+            &[a, b, c] => Ok([a, b, c]),
+            _ => Err(format!("a face of {} corners, not a triangle", face.len())),
+        })
+        .collect::<Result<Vec<[u32; 3]>, String>>()?;
+    Ok(Solid {
+        vertices,
+        triangles,
+    })
+}
+
+/// Where a model's copy goes: a third of its extent and a step along each axis, as the polyhedral
+/// corpus's tests move it, so that the copy overlaps the model on every axis.
+fn copy_offset(grid: &Grid) -> [i64; 3] {
+    let mut by = [0; 3];
+    for (k, d) in by.iter_mut().enumerate() {
+        let along = grid.points.iter().filter_map(|p| p.get(k).copied());
+        let (low, high) = (along.clone().min(), along.max());
+        *d = high
+            .zip(low)
+            .map_or(0, |(h, l)| h.saturating_sub(l) / 3)
+            .saturating_add(1);
+    }
+    by
+}
+
+/// Manifold's stored models (the corpus `manifold-models`, [`crate::polyhedral::MODELS`]) of at
+/// most [`MODEL_FACES`] faces, each with its copy moved by [`copy_offset`], under each boolean in
+/// turn: union, intersection and difference. A job's family is the set's name and the model's.
+///
+/// # Errors
+///
+/// A model that cannot be read onto the grid or is not made of triangles, which only a change to
+/// the stored corpus can cause.
+pub fn model_jobs() -> Result<Vec<Job>, String> {
+    let mut out = Vec::new();
+    for (name, text) in MODELS {
+        let grid = obj::read(text)
+            .map_err(|e| format!("{name}: {e}"))?
+            .to_grid()
+            .ok_or_else(|| format!("{name}: no scale puts it on the grid"))?;
+        if grid.faces.len() > MODEL_FACES {
+            continue;
+        }
+        let a = model_solid(&grid, [0; 3]).map_err(|e| format!("{name}: {e}"))?;
+        let b = model_solid(&grid, copy_offset(&grid)).map_err(|e| format!("{name}: {e}"))?;
+        for op in [Op::Union, Op::Intersection, Op::Difference] {
+            out.push(Job {
+                id: u64::try_from(out.len()).map_err(|e| e.to_string())?,
+                family: format!("{MANIFOLD_MODELS}/{name}"),
+                op,
+                a: a.clone(),
+                b: b.clone(),
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// The jobs of the case set `cases`: [`SEEDED`]'s from `seeded`, its seed and count, which it
+/// needs; a stored set's from nothing else, and it refuses a seed or a count.
+///
+/// # Errors
+///
+/// A set not in [`CASE_SETS`], the seeded set without its seed and count, a stored set given one,
+/// or a stored set that cannot be read.
+pub fn case_jobs(cases: &str, seeded: Option<(Seed, u64)>) -> Result<Vec<Job>, String> {
+    match (cases, seeded) {
+        (SEEDED, Some((seed, count))) => Ok(jobs(seed, count)),
+        (SEEDED, None) => Err(format!("the case set {SEEDED} needs --seed and --count")),
+        (MANIFOLD_MODELS, None) => model_jobs(),
+        (MANIFOLD_MODELS, Some(_)) => Err(format!(
+            "the case set {MANIFOLD_MODELS} is stored: it takes no --seed or --count"
+        )),
+        _ => Err(format!(
+            "no case set {cases}; the sets are {}",
+            CASE_SETS.join(", ")
+        )),
+    }
+}
+
+/// The models of [`MANIFOLD_MODELS`] that are not valid exact meshes on the grid, each with the
+/// kernel's refusal of it, exactly (its kind and the place it names, as `geom-mesh`'s builder
+/// gives it; the polyhedral corpus test's `REFUSED` holds the same four). Each has repeated
+/// corners, faces of no area once on the grid, or edges of more than two faces: 19.2 has no such
+/// face or edge in an exact mesh, and the route for such a model is import and heal (19.7), tested
+/// where healing lives. The kernel is right to refuse them, so their jobs are not sent to an
+/// oracle ([`asked`]): `oracle compare` holds the kernel to each refusal instead
+/// ([`recorded_refusals`], [`held_refusal`]), and a job of them fails if the kernel accepts the
+/// model or refuses it otherwise.
+pub const REFUSED_MODELS: [(&str, MeshError); 4] = [
+    (
+        "dedupe_stale_duplicate",
+        MeshError::Fault(MeshFault::DegenerateFace { face: 0 }),
+    ),
+    (
+        "degenerate_split_quad_first",
+        MeshError::Fault(MeshFault::DegenerateFace { face: 51 }),
+    ),
+    (
+        "degenerate_swap_cycle_first",
+        MeshError::Fault(MeshFault::UnevenEdge { half_edge: 227 }),
+    ),
+    (
+        "openscad-nonmanifold-crash",
+        MeshError::Fault(MeshFault::DegenerateFace { face: 1359 }),
+    ),
+];
+
+/// The refusal [`REFUSED_MODELS`] records for `job`'s model, if any.
+#[must_use]
+pub fn recorded_refusal(job: &Job) -> Option<MeshError> {
+    REFUSED_MODELS
+        .iter()
+        .find(|(name, _)| job.family == format!("{MANIFOLD_MODELS}/{name}"))
+        .map(|(_, refusal)| *refusal)
+}
+
+/// Whether `job` is sent to the oracle: every job but those of a model recorded as refused.
+#[must_use]
+pub fn asked(job: &Job) -> bool {
+    recorded_refusal(job).is_none()
+}
+
+/// Whether `job` is one of the case set `cases`'s: a stored set's jobs are of its families, and
+/// the seeded set's of none of them.
+#[must_use]
+pub fn of_case_set(cases: &str, job: &Job) -> bool {
+    let stored = job.family.starts_with(&format!("{MANIFOLD_MODELS}/"));
+    match cases {
+        SEEDED => !stored,
+        MANIFOLD_MODELS => stored,
+        _ => false,
+    }
+}
+
+/// The jobs of the case set `cases` that are not sent to an oracle, each with the refusal it
+/// records: none for the seeded set.
+///
+/// # Errors
+///
+/// A set not in [`CASE_SETS`], a stored set that cannot be read, or a model recorded as refused
+/// that has no job in its set, so a record cannot fall out of use unseen.
+pub fn recorded_refusals(cases: &str) -> Result<Vec<(Job, MeshError)>, String> {
+    match cases {
+        SEEDED => Ok(Vec::new()),
+        MANIFOLD_MODELS => {
+            let jobs = model_jobs()?;
+            for (name, _) in REFUSED_MODELS {
+                let family = format!("{MANIFOLD_MODELS}/{name}");
+                if !jobs.iter().any(|j| j.family == family) {
+                    return Err(format!("{name} is recorded as refused but has no job"));
+                }
+            }
+            Ok(jobs
+                .into_iter()
+                .filter_map(|j| recorded_refusal(&j).map(|r| (j, r)))
+                .collect())
+        }
+        _ => Err(format!(
+            "no case set {cases}; the sets are {}",
+            CASE_SETS.join(", ")
+        )),
+    }
+}
+
+/// The kernel's refusal of `job`'s solids, as its builder types it: the first solid's that it
+/// refuses, or `None` if it builds both.
+///
+/// # Errors
+///
+/// A solid whose corners are past the grid, so it cannot be given to the builder.
+pub fn refusal(job: &Job) -> Result<Option<MeshError>, String> {
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let exec = Exec::serial();
+    for (solid, name) in [(&job.a, 1), (&job.b, 2)] {
+        if let Err(e) = build(&polygons(solid, name)?, &exec, &mut meter) {
+            return Ok(Some(e));
+        }
+    }
+    Ok(None)
+}
+
+/// Whether the kernel refuses `job` with exactly `expected`.
+///
+/// # Errors
+///
+/// What the kernel did instead, in words: accepted the model, or refused it otherwise.
+pub fn held_refusal(job: &Job, expected: MeshError) -> Result<(), String> {
+    match refusal(job)? {
+        Some(found) if found == expected => Ok(()),
+        Some(found) => Err(format!(
+            "job {}: the kernel refuses {} with {found:?}, not the recorded {expected:?}",
+            job.id, job.family
+        )),
+        None => Err(format!(
+            "job {}: the kernel accepts {}, recorded as refused with {expected:?}",
+            job.id, job.family
+        )),
+    }
+}
+
 /// A job's solid as polygons of one run named by `name`.
 fn polygons(solid: &Solid, name: u8) -> Result<Polygons, String> {
     let vertices = solid
@@ -660,33 +918,381 @@ fn along(a: [f64; 3], b: [f64; 3], t: f64) -> [f64; 3] {
     [x + t * u, y + t * v, z + t * w]
 }
 
-/// How far `p` is from triangle `[a, b, c]`: Ericson's regions of the triangle, in order.
-fn distance(p: [f64; 3], triangle: &Triangle) -> f64 {
-    let &[a, b, c] = triangle;
-    let (ab, ac, ap) = (sub(b, a), sub(c, a), sub(p, a));
-    let (d1, d2) = (dot(ab, ap), dot(ac, ap));
-    let (bp, cp) = (sub(p, b), sub(p, c));
-    let (d3, d4) = (dot(ab, bp), dot(ac, bp));
-    let (d5, d6) = (dot(ab, cp), dot(ac, cp));
-    let (vc, vb, va) = (d1 * d4 - d3 * d2, d5 * d2 - d1 * d6, d3 * d6 - d5 * d4);
-    let closest = if d1 <= 0.0 && d2 <= 0.0 {
-        a
-    } else if d3 >= 0.0 && d4 <= d3 {
-        b
-    } else if d6 >= 0.0 && d5 <= d6 {
-        c
-    } else if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
-        along(a, ab, d1 / (d1 - d3))
-    } else if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
-        along(a, ac, d2 / (d2 - d6))
-    } else if va <= 0.0 && d4 >= d3 && d5 >= d6 {
-        along(b, sub(c, b), (d4 - d3) / ((d4 - d3) + (d5 - d6)))
-    } else {
-        let scale = 1.0 / (va + vb + vc);
-        along(along(a, ab, vb * scale), ac, vc * scale)
+/// How far below the true distance a certified one may be, in grid steps: a thousandth of what
+/// sampling cannot see ([`SAMPLED`]), and with it [`WIDE`] of the distance itself.
+const CERTIFIED: f64 = 1e-9;
+
+/// The part of a distance its enclosure may be wide by besides [`CERTIFIED`]: 2^-40.
+const WIDE: f64 = 1.0 / 1_099_511_627_776.0;
+
+/// A point or a vector of enclosures.
+type Enclosed = [Interval; 3];
+
+fn enclose(p: [f64; 3]) -> Result<Enclosed, NumError> {
+    let [x, y, z] = p;
+    Ok([
+        Interval::point(x)?,
+        Interval::point(y)?,
+        Interval::point(z)?,
+    ])
+}
+
+#[allow(
+    clippy::many_single_char_names,
+    reason = "two vectors and their coordinates, as in the formula"
+)]
+fn less(a: Enclosed, b: Enclosed) -> Result<Enclosed, NumError> {
+    let [x, y, z] = a;
+    let [u, v, w] = b;
+    Ok([x.sub(u)?, y.sub(v)?, z.sub(w)?])
+}
+
+#[allow(
+    clippy::many_single_char_names,
+    reason = "two vectors and their coordinates, as in the formula"
+)]
+fn inner(a: Enclosed, b: Enclosed) -> Result<Interval, NumError> {
+    let [x, y, z] = a;
+    let [u, v, w] = b;
+    x.mul(u)?.add(y.mul(v)?)?.add(z.mul(w)?)
+}
+
+#[allow(
+    clippy::many_single_char_names,
+    reason = "two vectors and their coordinates, as in the formula"
+)]
+fn outer(a: Enclosed, b: Enclosed) -> Result<Enclosed, NumError> {
+    let [x, y, z] = a;
+    let [u, v, w] = b;
+    Ok([
+        y.mul(w)?.sub(z.mul(v)?)?,
+        z.mul(u)?.sub(x.mul(w)?)?,
+        x.mul(v)?.sub(y.mul(u)?)?,
+    ])
+}
+
+/// The smallest interval holding both `a` and `b`.
+fn hull(a: Interval, b: Interval) -> Result<Interval, NumError> {
+    Interval::new(smaller(a.lo(), b.lo()), larger(a.hi(), b.hi()))
+}
+
+/// An enclosure of the nearer of two distances enclosed by `a` and `b`.
+fn nearer(a: Interval, b: Interval) -> Result<Interval, NumError> {
+    Interval::new(smaller(a.lo(), b.lo()), smaller(a.hi(), b.hi()))
+}
+
+/// Whether every value of `x` is at least zero, or at most zero.
+fn at_least_zero(x: Interval) -> bool {
+    matches!(x.certain_sign(), Some(Sign::Positive | Sign::Zero))
+}
+
+fn at_most_zero(x: Interval) -> bool {
+    matches!(x.certain_sign(), Some(Sign::Negative | Sign::Zero))
+}
+
+/// An enclosure of how far the point `v` from a segment's start is from the segment, whose end is
+/// `e` from its start: from the start, the end or the line between, as the foot of `v` on the line
+/// falls. Where the enclosures cannot tell where the foot falls, the hull of each place it may,
+/// since the true distance is the one of the place it does. `None` for a segment that may have no
+/// length, which [`exact_reach`] decides.
+fn segment_enclosed(v: Enclosed, e: Enclosed) -> Result<Option<Interval>, NumError> {
+    let length = Interval::norm(&e)?;
+    if length.lo() <= 0.0 {
+        return Ok(None);
+    }
+    let foot = inner(v, e)?;
+    let past = foot.sub(inner(e, e)?)?;
+    let mut out: Option<Interval> = None;
+    let mut take = |d: Interval| -> Result<(), NumError> {
+        out = Some(match out {
+            Some(o) => hull(o, d)?,
+            None => d,
+        });
+        Ok(())
     };
-    let gap = sub(p, closest);
-    dot(gap, gap).sqrt()
+    if !matches!(foot.certain_sign(), Some(Sign::Positive)) {
+        take(Interval::norm(&v)?)?;
+    }
+    if !matches!(past.certain_sign(), Some(Sign::Negative)) {
+        take(Interval::norm(&less(v, e)?)?)?;
+    }
+    if !at_most_zero(foot) && !at_least_zero(past) {
+        take(Interval::norm(&outer(v, e)?)?.div(length)?)?;
+    }
+    Ok(out)
+}
+
+/// An enclosure of how far `p` is from `triangle`, every quantity measured from the triangle's own
+/// corners in intervals ([`Interval`]: each step's rounding enclosed): from its plane when `p`'s
+/// foot there is inside it, or else from the nearest side. Where the enclosures cannot tell
+/// whether the foot is inside, the hull of the two, since the true distance is one of them. Only
+/// the sides the foot may be beyond are measured: a foot outside the triangle is nearest a point
+/// of a side whose line it is beyond (the point's normal cone there leans out of that side). `None`
+/// for a triangle that may have no area, which [`exact_reach`] decides.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a point, the triangle's corners a, b and c and its normal n, as in the formulas"
+)]
+fn triangle_enclosed(p: [f64; 3], triangle: &Triangle) -> Result<Option<Interval>, NumError> {
+    let &[a, b, c] = triangle;
+    let (p, a, b, c) = (enclose(p)?, enclose(a)?, enclose(b)?, enclose(c)?);
+    let (ab, bc, ca) = (less(b, a)?, less(c, b)?, less(a, c)?);
+    let (ap, bp, cp) = (less(p, a)?, less(p, b)?, less(p, c)?);
+    let n = outer(ab, less(c, a)?)?;
+    let size = Interval::norm(&n)?;
+    if size.lo() <= 0.0 {
+        return Ok(None);
+    }
+    let turns = [
+        inner(n, outer(ab, ap)?)?,
+        inner(n, outer(bc, bp)?)?,
+        inner(n, outer(ca, cp)?)?,
+    ];
+    let inside = turns.iter().all(|t| at_least_zero(*t));
+    let plane = Interval::norm(&[inner(n, ap)?.div(size)?])?;
+    if inside {
+        return Ok(Some(plane));
+    }
+    let mut sides = None;
+    for (turn, (v, e)) in turns.iter().zip([(ap, ab), (bp, bc), (cp, ca)]) {
+        if matches!(turn.certain_sign(), Some(Sign::Positive)) {
+            continue;
+        }
+        let Some(d) = segment_enclosed(v, e)? else {
+            return Ok(None);
+        };
+        sides = Some(match sides {
+            Some(s) => nearer(s, d)?,
+            None => d,
+        });
+    }
+    let Some(sides) = sides else {
+        return Ok(None);
+    };
+    if turns
+        .iter()
+        .any(|t| matches!(t.certain_sign(), Some(Sign::Negative)))
+    {
+        return Ok(Some(sides));
+    }
+    hull(plane, sides).map(Some)
+}
+
+/// A vector of exact rationals.
+type Exact = [RBig; 3];
+
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
+    reason = "exact rationals, which cannot overflow; two vectors and their coordinates"
+)]
+fn exact_less(a: &Exact, b: &Exact) -> Exact {
+    let [x, y, z] = a;
+    let [u, v, w] = b;
+    [x - u, y - v, z - w]
+}
+
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
+    reason = "exact rationals, which cannot overflow; two vectors and their coordinates"
+)]
+fn exact_inner(a: &Exact, b: &Exact) -> RBig {
+    let [x, y, z] = a;
+    let [u, v, w] = b;
+    x * u + y * v + z * w
+}
+
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
+    reason = "exact rationals, which cannot overflow; two vectors and their coordinates"
+)]
+fn exact_outer(a: &Exact, b: &Exact) -> Exact {
+    let [x, y, z] = a;
+    let [u, v, w] = b;
+    [y * w - z * v, z * u - x * w, x * v - y * u]
+}
+
+/// The square of how far `v`, from a segment's start, is from the segment whose end is `e` from
+/// its start, exactly.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "exact rationals, which cannot overflow; the divisor is shown nonzero"
+)]
+fn exact_segment(v: &Exact, e: &Exact) -> RBig {
+    let (foot, length) = (exact_inner(v, e), exact_inner(e, e));
+    if foot <= RBig::ZERO || length == RBig::ZERO {
+        exact_inner(v, v)
+    } else if foot >= length {
+        let w = exact_less(v, e);
+        exact_inner(&w, &w)
+    } else {
+        let x = exact_outer(v, e);
+        exact_inner(&x, &x) / length
+    }
+}
+
+/// The square of how far `p` is from `triangle`, exactly: every double is a rational, and the
+/// rule is [`triangle_enclosed`]'s, decided without rounding. `None` if a coordinate is not
+/// finite.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "exact rationals, which cannot overflow; the divisor is shown nonzero"
+)]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a point, the triangle's corners a, b and c and its normal n, as in the formulas"
+)]
+fn exact_squared(p: [f64; 3], triangle: &Triangle) -> Option<RBig> {
+    let exact = |q: [f64; 3]| -> Option<Exact> {
+        let [x, y, z] = q.map(|x| RBig::try_from(x).ok());
+        Some([x?, y?, z?])
+    };
+    let &[a, b, c] = triangle;
+    let (p, a, b, c) = (exact(p)?, exact(a)?, exact(b)?, exact(c)?);
+    let (ab, bc, ca) = (exact_less(&b, &a), exact_less(&c, &b), exact_less(&a, &c));
+    let (ap, bp, cp) = (exact_less(&p, &a), exact_less(&p, &b), exact_less(&p, &c));
+    let n = exact_outer(&ab, &exact_less(&c, &a));
+    let size = exact_inner(&n, &n);
+    let inside = size > RBig::ZERO
+        && [(&ab, &ap), (&bc, &bp), (&ca, &cp)]
+            .iter()
+            .all(|(e, v)| exact_inner(&n, &exact_outer(e, v)) >= RBig::ZERO);
+    if inside {
+        let height = exact_inner(&n, &ap);
+        return Some(height.clone() * height / size);
+    }
+    [(&ap, &ab), (&bp, &bc), (&cp, &ca)]
+        .iter()
+        .map(|(v, e)| exact_segment(v, e))
+        .min()
+}
+
+/// Bounds on how far `p` is from `triangle` from the exact square: the largest double whose square
+/// is at most it, and the next double up, or that double twice when its square is it exactly.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "exact rationals, which cannot overflow"
+)]
+fn exact_reach(p: [f64; 3], triangle: &Triangle) -> (f64, f64) {
+    let Some(square) = exact_squared(p, triangle) else {
+        return (0.0, f64::INFINITY);
+    };
+    let squared = |x: f64| RBig::try_from(x).map(|r| r.clone() * r).ok();
+    let below = |x: f64| squared(x).is_some_and(|s| s <= square);
+    let mut root = square.to_f64().value().sqrt();
+    while root > 0.0 && !below(root) {
+        root = root.next_down();
+    }
+    while root.is_finite() && below(root.next_up()) {
+        root = root.next_up();
+    }
+    if squared(root).is_some_and(|s| s == square) {
+        (root, root)
+    } else {
+        (root, root.next_up())
+    }
+}
+
+/// How far `p` is from `triangle`, certified: the lower bound is never above the true distance and
+/// never more than [`CERTIFIED`], with [`WIDE`] of the distance, below it, and the upper bound is
+/// never below it.
+///
+/// Why not the doubles alone: in doubles, closest-point methods take differences of products, and
+/// on a sliver far from the origin those cancel (issue #951: a sample on its own triangle read
+/// 3.03 steps away). So every quantity is measured from the triangle's own corners in intervals
+/// (`geom_num::interval`, whose every step encloses its rounding), and where an enclosure is too
+/// wide to decide or to bound the distance closely enough, in exact rationals, which cannot be
+/// wrong.
+fn reach(p: [f64; 3], triangle: &Triangle) -> (f64, f64) {
+    if let Ok(Some(d)) = triangle_enclosed(p, triangle) {
+        let (lo, hi) = (larger(d.lo(), 0.0), d.hi());
+        if hi - lo <= CERTIFIED + hi * WIDE {
+            return (lo, hi);
+        }
+    }
+    exact_reach(p, triangle)
+}
+
+/// How far `p` is from `triangle`: [`reach`]'s lower bound, so a distance sampled from it can only
+/// refute.
+fn distance(p: [f64; 3], triangle: &Triangle) -> f64 {
+    reach(p, triangle).0
+}
+
+/// A lower bound on how far `p` is from the box from `low` to `high`, certified by intervals: 0
+/// where it cannot be told.
+fn to_box(p: [f64; 3], [low, high]: &[[f64; 3]; 2]) -> f64 {
+    let gap = |x: f64, l: f64, h: f64| -> Result<Interval, NumError> {
+        if x < l {
+            Interval::point(l)?.sub(Interval::point(x)?)
+        } else if x > h {
+            Interval::point(x)?.sub(Interval::point(h)?)
+        } else {
+            Interval::point(0.0)
+        }
+    };
+    let [x, y, z] = p;
+    let [lx, ly, lz] = *low;
+    let [hx, hy, hz] = *high;
+    [gap(x, lx, hx), gap(y, ly, hy), gap(z, lz, hz)]
+        .into_iter()
+        .collect::<Result<Vec<Interval>, NumError>>()
+        .and_then(|g| Interval::norm(&g))
+        .map_or(0.0, |d| larger(d.lo(), 0.0))
+}
+
+/// Whether the box from `low` to `high` is certainly farther from `p` than `highest`. First in
+/// doubles, with a wide margin: the square of the gap takes at most eight rounded steps, each off
+/// by at most a 2^-53 part of its value or the smallest subnormal, so a square in doubles over four
+/// times `highest`'s square and one more square step is beyond it whatever the rounding. Between
+/// that and `highest`, by [`to_box`]'s intervals.
+fn beyond(p: [f64; 3], bounds: &[[f64; 3]; 2], highest: f64) -> bool {
+    if !highest.is_finite() {
+        return false;
+    }
+    let [low, high] = bounds;
+    let mut plain = 0.0;
+    for ((x, l), h) in p.iter().zip(low).zip(high) {
+        let gap = if x < l {
+            l - x
+        } else if x > h {
+            x - h
+        } else {
+            0.0
+        };
+        plain += gap * gap;
+    }
+    if plain > 4.0 * highest * highest + 1.0 {
+        return true;
+    }
+    to_box(p, bounds) > highest
+}
+
+/// Triangles, each with its box, for the distance to the nearest.
+struct Near<'t> {
+    triangles: &'t [Triangle],
+    boxes: Vec<[[f64; 3]; 2]>,
+}
+
+impl<'t> Near<'t> {
+    fn new(triangles: &'t [Triangle]) -> Self {
+        let boxes = triangles
+            .iter()
+            .map(|t| {
+                let (mut low, mut high) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+                for corner in t {
+                    for ((l, h), x) in low.iter_mut().zip(&mut high).zip(corner) {
+                        *l = smaller(*l, *x);
+                        *h = larger(*h, *x);
+                    }
+                }
+                [low, high]
+            })
+            .collect();
+        Near { triangles, boxes }
+    }
 }
 
 /// Samples along each side of a triangle.
@@ -720,12 +1326,20 @@ fn farthest(samples: &[[f64; 3]], near: impl Fn([f64; 3]) -> f64) -> f64 {
     samples.iter().map(|&p| near(p)).fold(0.0, larger)
 }
 
-/// How far `p` is from the nearest of `triangles`; infinite if there are none.
-fn to_triangles(p: [f64; 3], triangles: &[Triangle]) -> f64 {
-    triangles
-        .iter()
-        .map(|t| distance(p, t))
-        .fold(f64::INFINITY, smaller)
+/// How far `p` is from the nearest of `near`'s triangles, by [`distance`]: a certified lower bound;
+/// infinite if there are none. A triangle whose box is certainly farther than the nearest found so
+/// far can be no nearer, and is passed by.
+fn to_triangles(p: [f64; 3], near: &Near<'_>) -> f64 {
+    let (mut lowest, mut highest) = (f64::INFINITY, f64::INFINITY);
+    for (triangle, bounds) in near.triangles.iter().zip(&near.boxes) {
+        if beyond(p, bounds, highest) {
+            continue;
+        }
+        let (lo, hi) = reach(p, triangle);
+        lowest = smaller(lowest, lo);
+        highest = smaller(highest, hi);
+    }
+    lowest
 }
 
 /// The two-sided Hausdorff distance between two triangle sets, by sampling, so it can only refute.
@@ -735,10 +1349,25 @@ pub fn hausdorff(a: &[Triangle], b: &[Triangle]) -> f64 {
     if a.is_empty() && b.is_empty() {
         return 0.0;
     }
+    let (near_a, near_b) = (Near::new(a), Near::new(b));
     larger(
-        farthest(&triangle_samples(a), |p| to_triangles(p, b)),
-        farthest(&triangle_samples(b), |p| to_triangles(p, a)),
+        farthest(&triangle_samples(a), |p| to_triangles(p, &near_b)),
+        farthest(&triangle_samples(b), |p| to_triangles(p, &near_a)),
     )
+}
+
+/// How far `p` is from `triangle`, as the comparison measures it: for tests of the measure, which
+/// is a certified lower bound on the true distance ([`distance`]).
+#[must_use]
+pub fn triangle_distance(p: [f64; 3], triangle: &Triangle) -> f64 {
+    distance(p, triangle)
+}
+
+/// The square of how far `p` is from `triangle`, exactly, as a rational: for tests of
+/// [`triangle_distance`]. `None` if a coordinate is not finite.
+#[must_use]
+pub fn triangle_distance_squared(p: [f64; 3], triangle: &Triangle) -> Option<RBig> {
+    exact_squared(p, triangle)
 }
 
 /// One face of the kernel's result, each corner the double nearest its exact place.
@@ -873,8 +1502,9 @@ fn hausdorff_exact(faces: &[Face], triangles: &[Triangle]) -> f64 {
     if faces.is_empty() && triangles.is_empty() {
         return 0.0;
     }
+    let near = Near::new(triangles);
     larger(
-        farthest(&face_samples(faces), |p| to_triangles(p, triangles)),
+        farthest(&face_samples(faces), |p| to_triangles(p, &near)),
         farthest(&triangle_samples(triangles), |p| to_faces(p, faces)),
     )
 }
@@ -961,20 +1591,37 @@ fn reference_solid(solid: &Solid) -> Result<flat_reference::Solid, String> {
     flat_reference::Solid::new(faces).map_err(error)
 }
 
-/// The exact reference's volume for `job`, written from the definitions alone.
+/// The exact reference's volume for `job`, written from the definitions alone: the volume where
+/// the two solids' winding numbers keep the job's boolean, by
+/// [`flat_reference::six_volume_where`], which cuts only the faces and so serves the stored models
+/// (at most about 20 s on one of them, optimised). The arrangement of space
+/// ([`flat_reference::boolean`]) cuts space by every plane: on the union of a model of 212
+/// triangles with its moved copy it was still running after 11 minutes, where this takes 2 s. The
+/// reference's own tests hold the two to one number.
 ///
 /// # Errors
 ///
 /// A job the reference cannot read.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "exact rationals, which cannot overflow"
+)]
 pub fn reference(job: &Job) -> Result<Q, String> {
-    let op = match job.op {
-        Op::Union => flat_reference::Op::Union,
-        Op::Intersection => flat_reference::Op::Intersection,
-        Op::Difference => flat_reference::Op::Difference,
-    };
     let (a, b) = (reference_solid(&job.a)?, reference_solid(&job.b)?);
-    flat_reference::boolean(&a, &b, op)
-        .map(|region| region.volume())
+    let op = job.op;
+    let keep = |w: &[i64]| {
+        let (a, b) = match w {
+            &[a, b] => (a > 0, b > 0),
+            _ => (false, false),
+        };
+        match op {
+            Op::Union => a || b,
+            Op::Intersection => a && b,
+            Op::Difference => a && !b,
+        }
+    };
+    flat_reference::six_volume_where(&[&a, &b], keep)
+        .map(|six| six / Q::from(6))
         .map_err(|e| format!("the reference: {e:?}"))
 }
 
@@ -1057,15 +1704,166 @@ fn floating(oracle: &str, job: &Job, ours: &Made, answer: &Answer) -> Result<Com
     Ok(difference(oracle, job, kind, settle(job, &ours.volume)?))
 }
 
-/// Judges one answer of `oracle`.
+/// Where `oracle`'s own documentation says it does not take a surface that crosses itself, or
+/// `None` for an oracle whose documentation says nothing of it, which is judged on such a job as
+/// on any other.
+#[must_use]
+pub fn stated_input(oracle: &str) -> Option<&'static str> {
+    match oracle {
+        MANIFOLD => Some(
+            "Manifold's documentation (its wiki, page \"Manifold Library\", section \"Overlaps\", \
+             https://github.com/elalish/manifold/wiki/Manifold-Library) promises a correct result \
+             only from input that does not overlap itself (epsilon-valid), and says that from a \
+             self-overlapping input mesh its triangulator may build output surfaces incorrectly",
+        ),
+        CGAL => Some(
+            "CGAL's user manual (6.0.1, Polygon Mesh Processing, \"Corefinement and Boolean \
+             Operations\", https://doc.cgal.org/6.0.1/Polygon_mesh_processing/index.html) states \
+             that the input meshes of its booleans must not self-intersect, and its Nef \
+             polyhedron from a polyhedral surface (Nef_3) is documented only as the point set \
+             that surface represents",
+        ),
+        _ => None,
+    }
+}
+
+/// Whether `solid` crosses itself, by the kernel's own exact reading of winding numbers
+/// ([`flat_reference::six_volume_where`], chapters 11.1 and 19.5): whether a region of positive
+/// volume has a winding number other than 0 and 1, an overlap (2 or more) or a pocket of the
+/// surface turned inside out (below 0). A surface whose sheets only touch has winding numbers 0
+/// and 1 alone, and does not cross itself by this reading. Never a hand-made mark: the solid as the
+/// oracle receives it, on the grid, decides.
+///
+/// # Errors
+///
+/// A solid the reference cannot read.
+pub fn crosses(solid: &Solid) -> Result<bool, String> {
+    let read = reference_solid(solid)?;
+    let six = flat_reference::six_volume_where(&[&read], |w| !matches!(w, [0 | 1]))
+        .map_err(|e| format!("the reference: {e:?}"))?;
+    Ok(six != Q::ZERO)
+}
+
+/// `solid` moved so its first corner is the origin: a solid's winding numbers move with it, so
+/// whether it crosses itself is the moved one's.
+fn placed(solid: &Solid) -> Solid {
+    let first = solid.vertices.first().copied().unwrap_or_default();
+    Solid {
+        vertices: solid.vertices.iter().map(|&v| minus(first, v)).collect(),
+        triangles: solid.triangles.clone(),
+    }
+}
+
+/// `job` judged by the exact reference alone, its model outside `oracle`'s stated input
+/// (`stated`), from the kernel's exact volume `ours` (or its refusal): [`Compared::Outside`] when
+/// that is the reference's volume, and otherwise a difference of kind `reference`, which fails
+/// the run like any other. The oracle's answer is not read.
+///
+/// # Errors
+///
+/// A job the reference cannot read.
+pub fn judge_by_reference(
+    oracle: &str,
+    job: &Job,
+    stated: &str,
+    ours: Result<RBig, String>,
+) -> Result<Compared, String> {
+    let volume = match ours {
+        Ok(volume) => volume,
+        Err(why) => {
+            return Ok(difference(
+                oracle,
+                job,
+                "reference",
+                format!("ours: the kernel refuses a model that crosses itself: {why}"),
+            ));
+        }
+    };
+    if reference(job)? != volume {
+        return Ok(difference(
+            oracle,
+            job,
+            "reference",
+            "ours: the kernel's volume is not the exact reference's, on a model that crosses \
+             itself"
+                .to_owned(),
+        ));
+    }
+    Ok(Compared::Outside {
+        why: format!(
+            "a model crosses itself, outside {oracle}'s stated input: {stated}. Judged by the \
+             exact reference alone: the kernel's volume is the reference's"
+        ),
+    })
+}
+
+/// The comparison's judge, which remembers which solids cross themselves, so a model's three jobs
+/// read its winding numbers once.
+#[derive(Debug, Default)]
+pub struct Judge {
+    crossing: BTreeMap<Solid, bool>,
+}
+
+impl Judge {
+    /// A judge that has read no solid yet.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether `solid` crosses itself ([`crosses`]). A solid off the grid, which the kernel cannot
+    /// read and rightly refuses, or one the reference cannot read, does not, and is judged as any
+    /// other.
+    fn crossing(&mut self, solid: &Solid) -> bool {
+        if solid
+            .vertices
+            .iter()
+            .any(|&[x, y, z]| P3::new(x, y, z).is_err())
+        {
+            return false;
+        }
+        let key = placed(solid);
+        if let Some(known) = self.crossing.get(&key) {
+            return *known;
+        }
+        let found = crosses(&key).unwrap_or(false);
+        self.crossing.insert(key, found);
+        found
+    }
+
+    /// Judges one answer of `oracle`. When a solid of `job` crosses itself ([`crosses`]) and
+    /// `oracle`'s documentation says it does not take such a surface ([`stated_input`]), the job is
+    /// judged by the exact reference alone ([`judge_by_reference`]); otherwise the answer is
+    /// compared with the kernel's result.
+    ///
+    /// # Errors
+    ///
+    /// A job or answer that cannot be read: the harness is broken, not the kernel.
+    pub fn judge(&mut self, oracle: &str, job: &Job, answer: &Answer) -> Result<Compared, String> {
+        if job.id != answer.id {
+            return Err(format!("answer {} for job {}", answer.id, job.id));
+        }
+        match stated_input(oracle) {
+            Some(stated) if self.crossing(&job.a) || self.crossing(&job.b) => {
+                let ours = run(job).and_then(|mesh| volume(&mesh));
+                judge_by_reference(oracle, job, stated, ours)
+            }
+            _ => compared(oracle, job, answer),
+        }
+    }
+}
+
+/// Judges one answer of `oracle`, as a fresh [`Judge`] does.
 ///
 /// # Errors
 ///
 /// A job or answer that cannot be read: the harness is broken, not the kernel.
 pub fn judge(oracle: &str, job: &Job, answer: &Answer) -> Result<Compared, String> {
-    if job.id != answer.id {
-        return Err(format!("answer {} for job {}", answer.id, job.id));
-    }
+    Judge::new().judge(oracle, job, answer)
+}
+
+/// `answer` compared with the kernel's result for `job`.
+fn compared(oracle: &str, job: &Job, answer: &Answer) -> Result<Compared, String> {
     let ours = run(job);
     let (mesh, theirs) = match (&ours, &answer.volume) {
         (Err(_), None) => return Ok(Compared::Agree),
