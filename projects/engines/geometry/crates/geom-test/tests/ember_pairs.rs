@@ -164,10 +164,16 @@ const REFUSED: [(usize, &str); 1] = [(799, "123787.stl: Read(\"failed to fill wh
 
 /// The cleared pairs held to both checkers and the kernel's own exact volume but not to the
 /// reference, each with why.
-const NAMED_OUT: [(usize, &str); 1] = [(
-    930,
-    "the reference refuses the pair's meshes on the grid as not closed (NotClosed) where      geom-mesh's builder and both mesh checkers accept them; Thingi10K's own flags say a model      of this pair is not closed, so it is not a solid the reference's winding numbers can read",
-)];
+const NAMED_OUT: [(usize, &str); 2] = [
+    (
+        79,
+        "the reference's rationals took 957 s on one core of a development machine (27,362 and          85,010 faces), past a job of minutes (the testing principle's), though they agreed          exactly there; the kernel and both checkers take about 67 s",
+    ),
+    (
+        930,
+        "the reference refuses the pair's meshes on the grid as not closed (NotClosed) where      geom-mesh's builder and both mesh checkers accept them; Thingi10K's own flags say a model      of this pair is not closed, so it is not a solid the reference's winding numbers can read",
+    ),
+];
 
 /// What EMBER's operation and the two beside it keep of the pair's winding numbers: the first
 /// less the second, their union and their intersection.
