@@ -32,8 +32,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        unit: [fuzz-planes, fuzz-exact, fuzz-cdt, fuzz-solids, bench-scenario, bench-mesh, bench-plane,
-          fuzz-make, fuzz-sequence, fuzz-predicates, bench-group-query, bench-group-make, bench-group-predicate, bench-group-topo]
+        # Run 43894768049 measured every other unit; these two stopped on a file name with a slash.
+        unit: [bench-scenario, bench-mesh]
     defaults:
       run:
         shell: bash
@@ -80,14 +80,15 @@ jobs:
           clear() { find target -name '*.profraw' -delete 2>/dev/null || true; }
           one() { # label variant package test filter [names]
             local label=$1 variant=$2 pkg=$3 test=$4 filter=$5 names=${6:-}
+            local file="$out/${label////_}.$variant"
             clear
             echo "::group::$label $variant"
             if PIECE_MAP_NAMES="$names" cargo llvm-cov --no-report --locked -p "$pkg" --release --branch \
                 --test "$test" -- --exact "$filter" --test-threads 1 --nocapture; then
               cargo llvm-cov report --release --branch --json --summary-only \
-                --output-path "$out/$label.$variant.json"
+                --output-path "$file.json"
               echo "::endgroup::"
-              show "$label" "$variant" "$out/$label.$variant.json" | tee "$out/$label.$variant.tsv"
+              show "$label" "$variant" "$file.json" | tee "$file.tsv"
             else
               echo "::endgroup::"
               echo "PMFAIL $label $variant"
