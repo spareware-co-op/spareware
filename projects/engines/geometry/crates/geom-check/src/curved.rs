@@ -362,6 +362,12 @@ pub(crate) enum Pair {
 /// that do, so two such faces can meet wherever their planes are 2b apart or nearer, however the
 /// planes are written. For faces that lie on their planes exactly, `stray` is nothing, and any
 /// two parallel planes that are not one keep them apart.
+///
+/// Two planes that cross are left unknown, as `Pair::Crossing` is not given here: the one caller,
+/// group 3's test of two faces, settles only on apart or a shared circle, and treats crossing and
+/// unknown alike, so a separate answer for crossing planes was one no input could tell apart (the
+/// mutation gate found it). `geometric::planes_lie` gives it for integer planes, where the planar
+/// tests use it.
 pub(crate) fn pair(first: &Carrier, second: &Carrier, stray: f64) -> Pair {
     match (first, second) {
         (
@@ -376,10 +382,10 @@ pub(crate) fn pair(first: &Carrier, second: &Carrier, stray: f64) -> Pair {
                 let offset = dot(sub3(*other, *origin)?, *normal)?;
                 Some((turn, offset))
             };
-            match planes() {
-                Some((turn, offset)) if zero(turn) && clear(offset, *normal, stray) => Pair::Apart,
-                Some((turn, _)) if turn.into_iter().any(away) => Pair::Crossing,
-                _ => Pair::Unknown,
+            if planes().is_some_and(|(turn, offset)| zero(turn) && clear(offset, *normal, stray)) {
+                Pair::Apart
+            } else {
+                Pair::Unknown
             }
         }
         (Carrier::Flat { normal, .. }, Carrier::Round(cone))
@@ -686,15 +692,16 @@ mod tests {
         assert!(matches!(pair(&floor, &ceiling, f64::NAN), Pair::Unknown));
     }
 
-    /// Two planes whose normals differ certainly cross along a line.
+    /// Two planes whose normals differ cross along a line, which certifies nothing that keeps
+    /// their faces apart: they are left unknown, never apart.
     #[test]
-    fn planes_with_different_normals_cross() {
+    fn planes_with_different_normals_are_not_apart() {
         let floor = flat_through(v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0));
         let wall = flat_through(v(2.0, 0.0, 0.0), v(1.0, 0.0, 0.0));
-        assert!(matches!(pair(&floor, &wall, 0.0), Pair::Crossing));
-        assert!(matches!(pair(&wall, &floor, 1.0), Pair::Crossing));
+        assert!(matches!(pair(&floor, &wall, 0.0), Pair::Unknown));
+        assert!(matches!(pair(&wall, &floor, 1.0), Pair::Unknown));
         let slant = flat_through(v(0.0, 0.0, 0.0), v(0.0, 1.0, 1.0));
-        assert!(matches!(pair(&floor, &slant, 0.0), Pair::Crossing));
+        assert!(matches!(pair(&floor, &slant, 0.0), Pair::Unknown));
     }
 
     /// A plane's normal that is not certain (an interval across zero) certifies nothing.

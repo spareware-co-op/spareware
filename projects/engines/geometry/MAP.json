@@ -18655,6 +18655,7 @@
         ],
         "unit": [
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/inherited_wait.rs",
           "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
@@ -18685,6 +18686,7 @@
         ],
         "unit": [
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/inherited_wait.rs",
           "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
@@ -18740,6 +18742,7 @@
         ],
         "unit": [
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/inherited_wait.rs",
           "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },

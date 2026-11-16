@@ -6462,9 +6462,9 @@
       "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
       "mutant": "replace == with != in Meeting::rounded",
       "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
-      "occurrences": 2,
+      "occurrences": 1,
       "kind": "equivalent",
-      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does). Of the line's two ==, this is the parity test, == 1: replaced, a tie rounds to odd rather than even, half a step off either way. The other, twice == w, is killed and not counted: replaced, a point with an odd floor that is not a tie rounds up, even one exactly on the grid, so a corner on the frame's last coordinate, which is odd, leaves the frame (geom-poly's recursion test the_kept_tree_clones_compares_prints_and_drops_a_hundred_levels_deep fails with OutOfRange)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
