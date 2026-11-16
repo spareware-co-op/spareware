@@ -872,7 +872,8 @@ fn circle_circle<const D: usize>(
     } else {
         alloc::vec![c.height, c.height.neg()]
     };
-    let mut items = Vec::new();
+    // One item at most for each height, so the list holds no more than it can need.
+    let mut items = Vec::with_capacity(heights.len());
     for h in heights {
         let (from_near, from_far) = c.point(h)?;
         let ([e, f], [g, k]) = if small_first {

@@ -715,7 +715,8 @@ fn padded<const D: usize>(x: &[Interval; D]) -> Result<[Interval; 3], NumError> 
     Ok(out)
 }
 
-/// What the interior search left: candidates and undecided boxes.
+/// What a surface's searches left: candidates and undecided boxes, the edges' first and then the
+/// interior's, each search adding to the same lists.
 struct Inside {
     points: Vec<Nearest<2, 3>>,
     open: Vec<([Interval; 2], f64)>,
@@ -734,18 +735,16 @@ fn bowl(partials: &[[Interval; 3]], gap: &[Interval; 3]) -> Result<bool, Interse
     Ok(positive(a) && positive(det))
 }
 
-/// The search of the inside of a surface: 12.4's steps 2 to 6 in two parameters.
+/// The search of the inside of a surface: 12.4's steps 2 to 6 in two parameters, its candidates
+/// and undecided boxes added to `inside`'s.
 fn search_inside(
     surface: &SurfaceKind,
     p: &[f64; 3],
     floor: f64,
     upper: &mut f64,
+    inside: &mut Inside,
     meter: &mut WorkMeter<'_>,
-) -> Result<Inside, IntersectError> {
-    let mut inside = Inside {
-        points: Vec::new(),
-        open: Vec::new(),
-    };
+) -> Result<(), IntersectError> {
     let sides = (Limit::FromRight, Limit::FromRight);
     let mut work = alloc::vec![surface.domain()];
     while let Some(region) = work.pop() {
@@ -805,7 +804,7 @@ fn search_inside(
             work.push(((a, b), (c, v)));
         }
     }
-    Ok(inside)
+    Ok(())
 }
 
 /// The axis of a round kind: its centre, frame vectors and whether a parallel of it is a continuum
@@ -1002,8 +1001,10 @@ pub fn project_surface(
         }
     }
     let ((a, b), (c, d)) = surface.domain();
-    let mut points: Vec<Nearest<2, 3>> = Vec::new();
-    let mut open: Vec<([Interval; 2], f64)> = Vec::new();
+    let mut inside = Inside {
+        points: Vec::new(),
+        open: Vec::new(),
+    };
     let mut upper = f64::INFINITY;
     for (at, fixed_u) in [(c, false), (d, false), (a, true), (b, true)] {
         let edge = Line {
@@ -1016,7 +1017,7 @@ pub fn project_surface(
         let fixed = Interval::point(at)?;
         for point in found.points {
             let [t] = point.at;
-            points.push(Nearest {
+            inside.points.push(Nearest {
                 at: if fixed_u { [fixed, t] } else { [t, fixed] },
                 point: point.point,
                 distance: point.distance,
@@ -1025,12 +1026,16 @@ pub fn project_surface(
         }
         for (span, low) in found.open {
             let t = Interval::new(span.0, span.1)?;
-            open.push((if fixed_u { [fixed, t] } else { [t, fixed] }, low));
+            inside
+                .open
+                .push((if fixed_u { [fixed, t] } else { [t, fixed] }, low));
         }
     }
-    let inside = search_inside(surface, p, floor, &mut upper, meter)?;
-    points.extend(inside.points);
-    open.extend(inside.open);
+    search_inside(surface, p, floor, &mut upper, &mut inside, meter)?;
+    let Inside {
+        mut points,
+        mut open,
+    } = inside;
     open.retain(|(_, low)| *low <= upper);
     if let Some(enclosure) = undecided(surface, p, &open, floor, &mut upper, &mut points, meter)? {
         return Ok(Projection::NonIsolated { enclosure });

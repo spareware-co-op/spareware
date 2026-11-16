@@ -562,20 +562,22 @@ fn last_within(base: Interval, t1: f64) -> Result<Option<f64>, CurveError> {
     Ok(None)
 }
 
-/// The members of a family to evaluate, clipped to the span (module documentation), in order
-/// among their four places, or `None` if they cannot be placed: a family as wide as half a period
-/// (coefficients enclosing the origin). A fixed list of the places takes no allocation. The bases
-/// are phases within [−2, 3] and the span is inside ±2⁵⁰ ([`extent`]), so 2m is exact.
+/// `out` hulled with g over the members of a family, each clipped to the span (module
+/// documentation), or `None` if they cannot be placed: a family as wide as half a period
+/// (coefficients enclosing the origin). Each member is evaluated as it is placed, so no list of
+/// them is made. The bases are phases within [−2, 3] and the span is inside ±2⁵⁰ ([`extent`]), so
+/// 2m is exact.
 fn members(
+    g: &Scalar,
     (base, periodic): (Interval, bool),
     (t0, t1): (f64, f64),
-) -> Result<Option<[Option<Interval>; 4]>, CurveError> {
+    mut out: Interval,
+) -> Result<Option<Interval>, CurveError> {
     if !periodic {
-        return Ok(Some(if base.hi() >= t0 && base.lo() <= t1 {
-            [Some(clip(base, (t0, t1))?), None, None, None]
-        } else {
-            [None; 4]
-        }));
+        if base.hi() >= t0 && base.lo() <= t1 {
+            out = hull(out, g.over(clip(base, (t0, t1))?)?)?;
+        }
+        return Ok(Some(out));
     }
     if base.hi() - base.lo() >= 1.0 {
         return Ok(None);
@@ -583,11 +585,10 @@ fn members(
     let (Some(first), Some(last)) = (first_reaching(base, t0)?, last_within(base, t1)?) else {
         return Ok(None);
     };
-    let mut out = [None; 4];
     let mut previous = f64::NEG_INFINITY;
-    for (place, m) in out.iter_mut().zip([first, first + 1.0, last - 1.0, last]) {
+    for m in [first, first + 1.0, last - 1.0, last] {
         if first <= m && m <= last && m > previous {
-            *place = Some(clip(member(base, m)?, (t0, t1))?);
+            out = hull(out, g.over(clip(member(base, m)?, (t0, t1))?)?)?;
             previous = m;
         }
     }
@@ -693,13 +694,14 @@ pub fn extent(
         return pieces(g, (t0, t1), meter);
     };
     let mut out = hull(g.over(point(t0)?)?, g.over(point(t1)?)?)?;
-    for family in families.into_iter().flatten() {
-        let Some(list) = members(family, (t0, t1))? else {
+    for &family in &families {
+        let Some(family) = family else {
+            continue;
+        };
+        let Some(hulled) = members(g, family, (t0, t1), out)? else {
             return pieces(g, (t0, t1), meter);
         };
-        for e in list.into_iter().flatten() {
-            out = hull(out, g.over(e)?)?;
-        }
+        out = hulled;
     }
     Ok(out)
 }
