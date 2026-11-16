@@ -276,10 +276,12 @@ jobs:
         with:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved). One part of
-          # a leg saves it: all of a leg's parts restore and would save the same cache.
-          save-if: ${{ github.ref == 'refs/heads/main' && matrix.k == 1 }}
-          # Release and debug builds are cached apart, so neither leg restores the other's.
-          key: ${{ matrix.mode }}
+          # each build saves it: the parts of a build restore and would save the same cache.
+          save-if: ${{ github.ref == 'refs/heads/main' && (matrix.k == 1 || matrix.k == 3) }}
+          # Debug, release with overflow checks on (parts 1 and 2) and release as shipped (parts
+          # 3 to 6) are cached apart, so no part restores another build's. Parts 7 to 10 build in
+          # their own folder, which no cache holds.
+          key: ${{ matrix.mode == 'release' && (matrix.k <= 2 && 'release-checked' || 'release-shipped') || 'debug' }}
       - name: Every golden in release, with overflow checks on (part 1 of 2)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}
         env:
