@@ -28,7 +28,7 @@ pub const fn sized(native: usize, miri: usize) -> usize {
 /// `miri / native`th of its native rounds there (a whole multiple, so each is a native round).
 pub const fn stride(native: usize, miri: usize) -> usize {
     assert!(
-        0 < native && native <= miri && miri % native == 0,
+        0 < native && native <= miri && miri.is_multiple_of(native),
         "a Miri step is a whole multiple of the native step"
     );
     if cfg!(miri) { miri } else { native }
