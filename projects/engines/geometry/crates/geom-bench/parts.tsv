@@ -1,0 +1,59 @@
+# The instruction gate's parts (kernel-bench.yml): each group's part and seconds.
+# Written by `geom-bench-counts plan` from the times of a run, never by hand.
+# x86-64: main's run 43868715590 (870022ada), the change's run, from its log
+# aarch64: main's run 43868715590 (870022ada), the change's run, from its log
+# x86-64: main's run 43829666943 (2bc7f284e), the change's run, from its log
+# aarch64: main's run 43829666943 (2bc7f284e), the change's run, from its log
+attributes	3	3
+ball	3	3
+batch	2	6
+body_record	4	8
+brent	2	2
+bvh	4	4
+cbor	4	6
+crossing	2	14
+curve	4	11
+dd	4	31
+dual	3	5
+eft	3	9
+encoder	2	4
+exact_sum	2	14
+exactness	4	4
+facade	2	5
+format	2	16
+generated	3	189
+grid	3	19
+growth	2	19
+helper	3	9
+history	2	4
+interval	3	32
+isolate	3	5
+linalg	4	3
+make	4	16
+math	4	23
+math_types	2	8
+mesh	1	426
+name_record	4	5
+names	3	4
+newton	4	9
+nurbs	4	4
+op_record	4	7
+open	4	19
+perturb	2	9
+plane	3	49
+predicate	3	17
+prune	2	5
+quadrature	2	2
+query	3	16
+real	2	4
+record	3	9
+resolve	3	2
+rng	3	24
+scenario	4	63
+sign	2	2
+surface	3	8
+topo	3	5
+unproven	4	35
+wide	4	77
+wide32	4	81
+*	4	-

@@ -33,7 +33,9 @@
 //!   is there; the merge base's counts are restored only from a run of main or of the same pull
 //!   request with the same workflow file, after their manifest is checked, and a missing count is
 //!   measured (`kept` is false unless the restore succeeded, and the measuring step runs then);
-//!   and the merge base is measured and kept before any step runs the change's own code.
+//!   the merge base is measured and kept in parts that never run the change's own code; and the
+//!   parts are geom-bench/parts.tsv's, the change's wait for the merge base's, and each leg's judge
+//!   waits for both, judges when a part failed and checks every part of both sides.
 //!
 //! Each check is also shown to fail on a seeded violation.
 
@@ -1017,10 +1019,13 @@ fn bench_problems(bench: &str) -> Vec<String> {
             found.push(format!("the legs are wrong: {said}"));
         }
     }
-    let job = &w["jobs"]["instructions"];
-    if text(&job["strategy"]["matrix"]["include"]) != "${{ fromJSON(needs.scope.outputs.legs) }}" {
+    let judge = &w["jobs"]["instructions"];
+    if text(&judge["strategy"]["matrix"]["include"]) != "${{ fromJSON(needs.scope.outputs.legs) }}"
+    {
         found.push("the instruction legs are not the scope's list".to_owned());
     }
+    found.extend(bench_part_problems(&w));
+    let job = &w["jobs"]["instructions-base"];
     let steps: Vec<&Yaml> = job["steps"].as_vec().into_iter().flatten().collect();
     let at = |name: &str| steps.iter().position(|s| s["name"].as_str() == Some(name));
     let kept =
@@ -1050,19 +1055,21 @@ fn bench_problems(bench: &str) -> Vec<String> {
     {
         found.push("a missing base count is not measured".to_owned());
     }
-    // Nothing runs the change's code before the merge base is measured and kept.
-    let keep = at("Keep the merge base's counts").unwrap_or(usize::MAX);
-    for (i, s) in steps.iter().enumerate() {
+    // Nothing in the merge base's parts runs the change's code: the change is only read there.
+    if at("Keep the merge base's counts").is_none() {
+        found.push("the merge base's counts are not kept".to_owned());
+    }
+    for s in &steps {
         let run = text(&s["run"]);
-        let heads_code = text(&s["working-directory"]) == "head"
-            && (run.contains("cargo \"+$HEAD_TOOLCHAIN\" test") || run.contains(" bench "));
-        if heads_code && i < keep {
+        let heads_code = text(&s["working-directory"]) == "head" || run.contains("$HEAD_TOOLCHAIN");
+        if heads_code && run.contains("cargo") {
             found.push(format!(
                 "{} runs the change's code before the merge base is kept",
                 text(&s["name"])
             ));
         }
     }
+    let steps: Vec<&Yaml> = judge["steps"].as_vec().into_iter().flatten().collect();
     let mark = steps.iter().any(|s| {
         text(&s["with"]["name"]) == "bench-aarch64-tested-${{ env.TREE }}"
             && text(&s["if"])
@@ -1072,6 +1079,162 @@ fn bench_problems(bench: &str) -> Vec<String> {
         found.push("the merge queue does not mark the tree aarch64 passed".to_owned());
     }
     found
+}
+
+/// What is wrong with the instruction gate's parts: each leg's parts are the scope's list, read
+/// from geom-bench/parts.tsv; the change's parts wait for the merge base's; the judge waits for
+/// both, judges when a part failed, and checks every part of both sides by the artifact names the
+/// parts upload; the planted slowdown runs in the part the scope names.
+fn bench_part_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let jobs = &w["jobs"];
+    let runs = |job: &str| -> String {
+        jobs[job]["steps"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .map(|s| format!("{}\n{}", text(&s["run"]), text(&s["with"]["name"])))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    for job in ["instructions-base", "instructions-parts"] {
+        if text(&jobs[job]["strategy"]["matrix"]["include"])
+            != "${{ fromJSON(needs.scope.outputs.parts) }}"
+        {
+            found.push(format!("the parts of {job} are not the scope's list"));
+        }
+    }
+    let scope = runs("scope");
+    for needle in [
+        "plan=\"$BENCH/parts.tsv\"",
+        "range(1; $of + 1) | $leg + {part: ., of: $of, trip: (. == $trip)}",
+        "if ($1 == \"sign\") s = $2",
+    ] {
+        if !scope.contains(needle) {
+            found.push(format!("the scope's parts are not parts.tsv's: {needle}"));
+        }
+    }
+    let needs = |job: &str| {
+        jobs[job]["needs"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .map(text)
+            .collect::<Vec<_>>()
+    };
+    if !needs("instructions-parts").contains(&"instructions-base".to_owned()) {
+        found.push("the change's parts do not wait for the merge base's".to_owned());
+    }
+    let judge_needs = needs("instructions");
+    if !["instructions-base", "instructions-parts"]
+        .iter()
+        .all(|j| judge_needs.contains(&(*j).to_owned()))
+    {
+        found.push("the judge does not wait for every part".to_owned());
+    }
+    if !text(&jobs["instructions"]["if"]).contains("!cancelled()") {
+        found.push("the judge does not judge when a part failed".to_owned());
+    }
+    if text(&jobs["instructions"]["env"]["OF"]) != "${{ needs.scope.outputs.of }}" {
+        found.push("the judge does not read the scope's number of parts".to_owned());
+    }
+    let judge = runs("instructions");
+    for needle in [
+        "--name \"count-$side-$TARGET-$k\"",
+        "for k in $(seq 1 \"$OF\"); do\n    gh run download",
+        "sides=\"base head\"",
+        "\"$counts\" parts \"$side\" \"$t/parts/$side\" \"$OF\" >> \"$t/parts.md\" || status=$?",
+    ] {
+        if !judge.contains(needle) {
+            found.push(format!("the judge does not check every part: {needle}"));
+        }
+    }
+    for (job, name) in [
+        (
+            "instructions-base",
+            "count-base-${{ matrix.target }}-${{ matrix.part }}",
+        ),
+        (
+            "instructions-parts",
+            "count-head-${{ matrix.target }}-${{ matrix.part }}",
+        ),
+    ] {
+        if !runs(job).contains(name) {
+            found.push(format!("{job} does not upload its counts as {name}"));
+        }
+    }
+    let trip = jobs["instructions-parts"]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .find(|s| text(&s["run"]).contains("--bin trip -- gungraun"));
+    if trip.is_none_or(|s| text(&s["if"]) != "matrix.trip") {
+        found.push("the planted slowdown does not run in the part that measures sign".to_owned());
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_count_gate_parts_measure_everything_once_and_a_lost_part_fails() {
+    let bench = read(&format!("{WORKFLOWS}/kernel-bench.yml"));
+    let found = bench_part_problems(&parse(&bench));
+    assert!(found.is_empty(), "{found:#?}");
+    for (from, to, said) in [
+        (
+            "include: ${{ fromJSON(needs.scope.outputs.parts) }}",
+            "include: ${{ fromJSON('[]') }}",
+            "the parts of instructions-base",
+        ),
+        (
+            "plan=\"$BENCH/parts.tsv\"",
+            "plan=\"$BENCH/retired.txt\"",
+            "not parts.tsv's",
+        ),
+        (
+            "    needs: [scope, instructions-base]\n",
+            "    needs: [scope]\n",
+            "do not wait for the merge base's",
+        ),
+        (
+            "    needs: [scope, instructions-base, instructions-parts]\n",
+            "    needs: [scope, instructions-parts]\n",
+            "does not wait for every part",
+        ),
+        (
+            "is named.\n    if: ${{ !cancelled() && ",
+            "is named.\n    if: ${{ ",
+            "when a part failed",
+        ),
+        (
+            "            sides=\"base head\"\n",
+            "            sides=\"head\"\n",
+            "does not check every part",
+        ),
+        (
+            "for k in $(seq 1 \"$OF\"); do\n              gh run download",
+            "for k in 1; do\n              gh run download",
+            "does not check every part",
+        ),
+        (
+            "name: count-head-${{ matrix.target }}-${{ matrix.part }}",
+            "name: count-head-${{ matrix.target }}",
+            "does not upload its counts",
+        ),
+        (
+            "        if: matrix.trip\n",
+            "        if: matrix.part == 1\n",
+            "the part that measures sign",
+        ),
+    ] {
+        let planted = bench.replacen(from, to, 1);
+        assert_ne!(planted, bench, "the planted edit {from:?} applies");
+        let found = bench_part_problems(&parse(&planted));
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
 }
 
 #[cfg_attr(
@@ -1126,11 +1289,11 @@ fn the_count_gates_measure_one_kind_a_push_and_the_base_once() {
         let found = bench_problems(&planted);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
-    // Planted: the change's own checks moved back before the merge base is kept.
+    // Planted: the change's own checks moved into the merge base's parts.
     let check = "      - name: Check the benchmarks' inputs, results and wiring\n        working-directory: head\n        run: cargo \"+$HEAD_TOOLCHAIN\" test --locked --release -p geom-bench\n\n";
     let planted = bench.replacen(check, "", 1).replacen(
-        "      - name: Install the Gungraun runner each tree needs",
-        &format!("{check}      - name: Install the Gungraun runner each tree needs"),
+        "      - name: Install the Gungraun runner the merge base needs",
+        &format!("{check}      - name: Install the Gungraun runner the merge base needs"),
         1,
     );
     assert_ne!(planted, bench);

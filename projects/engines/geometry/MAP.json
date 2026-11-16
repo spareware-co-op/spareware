@@ -1503,6 +1503,28 @@
           "target": "lib"
         },
         {
+          "cost": "[`plan`] is O(g · n) for g groups and n parts tried; [`check`] is O(b log b) for b benchmarks over all parts.",
+          "does": "`kernel-bench.yml` measures the merge base and the change in parts, each part one job with its share of the benchmark groups, so no job runs longer than 15 minutes; one judge per target then gathers every part's counts and judges the whole catalogue as one run did before.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/parts.rs",
+          "guarantees": [
+            "**Every benchmark in exactly one part, or no verdict.** [`check`] names every benchmark measured in no part or in two, every part that lists other benchmarks than the first, and every benchmark measured that is not listed; a part that left no files is a missing file to the command line, which refuses it (`geom-bench-counts parts`).",
+            "**Deterministic.** The plan depends only on the seconds and the limit: ties go to the lower part and the earlier name, and every map is a `BTreeMap`.",
+            "**Strict reading.** [`Plan::parse`] refuses a malformed line, a group twice, no `*` line or two, a part numbered 0, and parts that are not numbered 1 to n without a gap."
+          ],
+          "job": "The instruction-and-cache gate in parts: which part of the catalogue each runner measures, and the judge's check that the parts together measured every benchmark exactly once.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/0117039"
+            ],
+            "text": "longest processing time first (R. L. Graham, \"Bounds on multiprocessing timing anomalies\", SIAM J. Appl. Math. 17(2), 1969, <https://doi.org/10.1137/0117039>), as `geom_test::coverage::plan_parts` shares the coverage run's crates. Gungraun's summary model (`gungraun_runner::summary::model`, the `summary` feature at exactly the version the gate runs) gives each tool run's `duration_ns`."
+          },
+          "path": "geom_bench::parts",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few wrapping integer operations per draw, and one per byte of a seed's name.",
           "does": null,
           "family": [],
