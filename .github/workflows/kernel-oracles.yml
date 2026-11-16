@@ -114,7 +114,7 @@ jobs:
 
   corpora:
     name: Fetched corpora, by their digests
-    needs: scope
+    needs: [scope, ember-corpus]
     if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -125,8 +125,181 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
+      # EMBER's corpus as the job ember-corpus fetched it this run, so it is not fetched twice;
+      # `corpus fetch` still holds the whole tree to the register's digest ("already here").
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/corpora/ember-cleared-pairs
+          key: ember-cleared-pairs-all-${{ needs.ember-corpus.outputs.digest }}
+          fail-on-cache-miss: true
       - name: Every fetched corpus, unmodified
         run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora"
+
+  ember-corpus:
+    # Gate 4 (G156): EMBER's cleared pairs' corpus (299 MB), fetched once a run for the jobs
+    # `ember-pairs` and `corpora`, and kept in GitHub's cache under the register's digest of it
+    # (`ember-cleared-pairs-all-<digest>`), so a later run with the same corpus fetches nothing.
+    # When the cache holds it, the lookup downloads nothing and the job ends. The key changes with
+    # the register's digest, and cache-prune.yml keeps main's newest copy of each.
+    name: EMBER's cleared pairs' corpus, fetched once
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The register's digest of the corpus
+        id: digest
+        run: |
+          set -euo pipefail
+          digest=$(jq -r '.corpora[] | select(.id == "ember-cleared-pairs") | .sha256' \
+            projects/engines/geometry/crates/geom-test/corpora/manifest.json)
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::no digest for ember-cleared-pairs"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      # Saved at the end of the job when the lookup misses.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cache
+        with:
+          path: ${{ runner.temp }}/corpora/ember-cleared-pairs
+          key: ember-cleared-pairs-all-${{ steps.digest.outputs.digest }}
+          lookup-only: true
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The corpus, unmodified
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora" ember-cleared-pairs
+
+  ember-pairs:
+    # Gate 4 (G156): EMBER's pairs whose models' own licences rule (i) of 32.11 admits, each run as
+    # EMBER runs it through geom-mesh's boolean, both mesh checkers and the flat reference
+    # (geom-test's tests/ember_pairs.rs, `every_cleared_pair_is_the_reference`, ignored in the
+    # suite because it reads a download). Each job takes only its own pairs' models: from its own
+    # cache entry (`ember-cleared-pairs-from-<first pair>-<digest>-<pairs' hash>`), or, the first
+    # time, from the whole corpus ember-corpus keeps, cut to its pairs' models and saved as its
+    # own. The test holds every file it reads to that file's SHA-256 in the register. The pairs
+    # are split over jobs by the test's own filter (SPAREKIT_PAIRS) by their measured seconds
+    # (each group's beside it, whole runs on one core of a development machine, the reference
+    # included), about nine minutes a job, so none passes 15; each runs the test ember-build
+    # built, and compiles nothing itself. `every_cleared_pair_runs_in_one_job`
+    # holds every cleared pair to exactly one group here.
+    name: EMBER's cleared pairs to the reference (${{ matrix.pairs }})
+    needs: [scope, ember-corpus, ember-build]
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every cleared pair, once, by its number in EMBER's list.
+        pairs:
+          - "1,11,73,216,530,777,998" # 552 s
+          - "68,173,295,303,337,427,594,804" # 556 s
+          - "79,437,562,618,720,799,836,839" # 548 s
+          - "98,134,208,213,379,523,543,726" # 553 s
+          - "111,277,317,356,399,644,947" # 548 s
+          - "164,221,269,310,461,827,837,929" # 551 s
+          - "169,224,349,389,727,848,933" # 551 s
+          - "189,324,589,615,738,852,934" # 555 s
+          - "238" # 574 s
+          - "248,304,360,377,459,667,675,676" # 552 s
+          - "291,321,350,447,654,689,930" # 554 s
+          - "387,395,438,608,774,788,815,951" # 552 s
+          - "432,553,640,659,688,698,703,915" # 555 s
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The test built once by ember-build; this job compiles nothing and checks nothing out.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ember-pairs-test
+          path: ${{ runner.temp }}/test
+      - name: This job's cache key
+        id: key
+        env:
+          PAIRS: ${{ matrix.pairs }}
+          DIGEST: ${{ needs.ember-corpus.outputs.digest }}
+        run: |
+          set -euo pipefail
+          hash=$(printf '%s' "$PAIRS" | sha256sum | cut -c1-16)
+          echo "key=ember-cleared-pairs-from-${PAIRS%%,*}-$DIGEST-$hash" >> "$GITHUB_OUTPUT"
+      # Saved at the end of the job, holding only this job's models, when its own entry missed.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: models
+        with:
+          path: ${{ runner.temp }}/corpora/ember-cleared-pairs
+          key: ${{ steps.key.outputs.key }}
+          restore-keys: ember-cleared-pairs-all-${{ needs.ember-corpus.outputs.digest }}
+      - name: Only this job's pairs' models, cut from the whole corpus
+        if: steps.models.outputs.cache-hit != 'true'
+        env:
+          PAIRS: ${{ matrix.pairs }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/corpora/ember-cleared-pairs"
+          cases="$dir/ember-benchmark-cases.json"
+          [ -f "$cases" ] || { echo "::error::the cache holds no ember-cleared-pairs"; exit 1; }
+          keep=$(jq -r --arg pairs "$PAIRS" \
+            '. as $c | $pairs | split(",") | .[] | tonumber | $c[.] | "\(.id_a).stl", "\(.id_b).stl"' "$cases")
+          for f in "$dir"/*.stl; do
+            grep -qxF "$(basename "$f")" <<< "$keep" || rm -- "$f"
+          done
+          echo "Kept $(find "$dir" -name '*.stl' | wc -l) models for pairs $PAIRS"
+      - name: The pairs named here, to the reference
+        env:
+          SPAREKIT_CORPORA: ${{ runner.temp }}/corpora
+          SPAREKIT_PAIRS: ${{ matrix.pairs }}
+        run: |
+          chmod +x "$RUNNER_TEMP/test/ember_pairs"
+          "$RUNNER_TEMP/test/ember_pairs" --ignored --exact every_cleared_pair_is_the_reference --nocapture
+
+  ember-build:
+    # Gate 4 (G156): geom-test's tests/ember_pairs.rs built once in release for every job of
+    # ember-pairs, which run the binary it keeps for a day (a build there would take most of a
+    # job's 15 minutes; measured on 4 threads of a busy development machine, 584 s without a
+    # cache).
+    name: EMBER's pairs' test, built once
+    needs: scope
+    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; another ref restores main's.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ember-pairs
+      - name: The test, in release
+        run: |
+          set -euo pipefail
+          exe=$(cargo test --locked --release -p geom-test --test ember_pairs --no-run --message-format=json \
+            | jq -r 'select(.reason == "compiler-artifact" and .target.name == "ember_pairs" and .executable != null) | .executable')
+          [ -x "$exe" ] || { echo "::error::no ember_pairs test binary"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/test" && cp "$exe" "$RUNNER_TEMP/test/ember_pairs"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ember-pairs-test
+          path: ${{ runner.temp }}/test/ember_pairs
+          retention-days: 1
+          if-no-files-found: error
 
   clothoids:
     name: Clothoids, out of process

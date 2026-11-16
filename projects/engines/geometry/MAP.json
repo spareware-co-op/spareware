@@ -15149,6 +15149,39 @@
           "target": "lib"
         },
         {
+          "cost": "reading and hashing the two files (about 125 KB), [`crate::stl::placed`]'s rationals for their 2,504 faces' corners, and two builds.",
+          "does": "[`model`] reads one model of the fetched corpus `ember-cleared-pairs` from a folder and refuses bytes that are not the register's; [`case`] is the pair's entry of EMBER's case list, written here as the list writes it ([`CASE`]), so the benchmark's job fetches the two models alone and never the list or the rest of the corpus (`tests/ember_pairs.rs` holds this entry to the list's own wherever the whole corpus is fetched); [`meshes`] reads both models, moves each by its transform exactly, puts the two on one grid (`stl::on_one_grid`) and builds each with `geom-mesh`'s builder, serially.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ember.rs",
+          "guarantees": [
+            "**The register's bytes or nothing.** A model is read only after its SHA-256 equals the register's; a missing file, another file's bytes, or a name the corpus does not hold is an error naming the file, never a mesh.",
+            "**EMBER's pair.** [`MODELS`] are the pair's two models in EMBER's order, the first less the second being EMBER's own operation.",
+            "**The same meshes on every target.** The reading, the transforms and the grid are `geom_test::stl`'s exact arithmetic; the builder runs serially."
+          ],
+          "job": "EMBER's pair 827 as the count gate's benchmark `mesh/ember` takes it (Gate 4, G156): its two `Thingi10K` models, each held to its SHA-256 in the corpus register, moved by EMBER's transforms and built into exact meshes on one grid, exactly as `tests/ember_pairs.rs` runs every cleared pair.",
+          "method": {
+            "links": [
+              "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp"
+            ],
+            "text": "EMBER's case list and its transforms as Manifold's `extras/ember_tests/man_bench.cpp` reads them (<https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp>), through [`crate::stl`] and [`crate::polyhedral::mesh_polygons`]; SHA-256 by [`crate::golden::sha256`]."
+          },
+          "path": "geom_test::ember",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp",
+              "method_note": null,
+              "name": "Manifold",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for how EMBER moves and combines a pair. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one full check of the body per injection, each linear in its rows but for group 3's pairs of faces. Recursion: none.",
           "does": "[`CATALOGUE`] lists every [`Injection`]: a name from 28.4's list or chapter 8.3's groups, the [`FaultKind`]s that are the right answer, and a function that breaks a copy of a valid body. It breaks the rows, not the checker's view of them: each goes through `geom_topo::Builder::edit` and is published again, so only what the builder allows gets through, as with a body from a damaged file or a broken operation. An injection applies to the bodies that have what it breaks: a fin to flip, a line to move, a certified bound to lower. [`attack`] runs the catalogue on one valid body and says, per injection, whether it applied and whether the checker caught it, [`Outcome`]; [`missed`] reads the outcomes as a list of checker bugs.",
           "family": [],
@@ -17317,6 +17350,29 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the file for [`read`] and the list for [`cases`]; [`placed`] costs a few rational products a corner, and [`on_one_grid`] `obj::Read::to_grid`'s.",
+          "does": "[`read`] reads a binary or ASCII STL file with the `stl_io` crate, which welds corners only where their three `f32` values are bit for bit the same (24.8's rule), into [`Stl`]. [`cases`] reads EMBER's case list (Manifold's `ember-benchmark-cases.json`): each pair of `Thingi10K` file ids with the affine transform EMBER moves each model by. [`placed`] moves a model by its transform exactly, into the exact decimals of `geom_test::obj`, and [`on_one_grid`] puts the models of one pair on the grid at one scale, as `obj::Read::to_grid` does for one model, so the pair's two meshes meet on one grid:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/stl.rs",
+          "guarantees": [
+            "**Exact up to one stated rounding.** No coordinate passes through floating-point arithmetic after the file and the list: the grid value is the exact moved corner rounded once.",
+            "**Refused, never guessed.** A file `stl_io` cannot read, a value that is not finite, a transform whose last row is not `0 0 0 1`, and more corners or faces than a `u32` counts are each an [`StlError`]; a case list of another shape is an error with serde's message.",
+            "**The same on every target.** Integer and rational arithmetic only, after the file's bits."
+          ],
+          "job": "A test-only reader of STL meshes onto the grid, and of EMBER's case list: the way in for EMBER's boolean pairs (Gate 4, G156; the fetched corpus `ember-cleared-pairs`), before the kernel's own STL importer (`geom-meshio`, chapter 24.8) exists.",
+          "method": {
+            "links": [
+              "https://www.fabbers.com/tech/STL_Format",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229"
+            ],
+            "text": "the STL format as `stl_io` reads it (3D Systems' Stereolithography Interface Specification, 1989, as summarised at <https://www.fabbers.com/tech/STL_Format>); EMBER's case list and its transforms as Manifold's `extras/ember_tests/man_bench.cpp` reads them (Manifold at d056b8fb70de8c8e6d6bee2e639b71c20aa08d01, Apache-2.0: column-major 4 by 4, each model moved by its own, then the first less the second); an `f32` or `f64` value as the exact binary fraction IEEE 754-2019 defines (<https://doi.org/10.1109/IEEESTD.2019.8766229>)."
+          },
+          "path": "geom_test::stl",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the size of the metadata and of the crates' sources, and in the changed files times the workspace's crates.",
           "does": "[`Scope::read`] reads the workspace's crate graph from `cargo metadata` and finds the crates whose sources read files outside their own folder ([`reads_outside`]), and [`Scope::select`] takes the files a change touches (`git diff --name-only`, one path from the repository root each) and decides, for every workspace crate, whether its tests run, with the changed file that selected it and why. [`Selection::outputs`] writes the decision as the step outputs `kernel.yml`'s suites read, and [`Selection::report`] writes it for the job's log. [`Scope::build_reached`] says whether a change reaches what one crate's tests and benchmarks build, for `kernel-bench.yml`'s count gates. `kernel-quality test-scope` is the command line.",
           "family": [],
@@ -19268,6 +19324,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-run/src/exec.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp",
+      "method_note": null,
+      "name": "Manifold",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/ember.rs"
       ]
     },
     {

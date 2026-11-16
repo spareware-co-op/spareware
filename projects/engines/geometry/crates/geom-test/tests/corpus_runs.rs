@@ -18,7 +18,9 @@
 //!   not true there, or an `#[ignore]` is in force (a `cfg_attr` whose predicate is not false).
 //!   An option the leg does not settle counts as possibly true, so an unknown gate is a skip. The
 //!   one exception is a test ignored outright that an optimised workflow step runs by name with
-//!   `--ignored` (the large tier, `kernel.yml`'s `large-models`).
+//!   `--ignored` (the large tier, `kernel.yml`'s `large-models`), or that a step runs by name from
+//!   the binary a job it needs built optimised (`kernel-oracles.yml`'s `ember-pairs`, from
+//!   `ember-build`).
 //!
 //! A planted skip of each kind must be found: a test's gate changed back to `debug_assertions`, a
 //! test or a whole file compiled out, a plain `#[ignore]`, and a leg built at `opt-level` 0 or with
@@ -298,17 +300,46 @@ fn workflows() -> Vec<(String, String)> {
     out
 }
 
-/// Whether some optimised workflow step runs `test`, ignored, by name (`--ignored`).
+/// Whether some optimised workflow step runs `test`, ignored, by name (`--ignored`): a step that
+/// runs it with `--release`, or one that runs it in a job needing a job of the same workflow that
+/// builds the tests optimised and runs none (`--release` and `--no-run`; `kernel-oracles.yml`'s
+/// `ember-build`, whose binary the jobs `ember-pairs` run).
 fn run_by_name(test: &str, workflows: &[(String, String)]) -> bool {
+    let runs = |job: &Yaml| -> Vec<String> {
+        job["steps"]
+            .as_vec()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|step| step["run"].as_str().map(str::to_owned))
+            .collect()
+    };
     workflows.iter().any(|(_, text)| {
         let docs = YamlLoader::load_from_str(text).unwrap_or_default();
-        docs.first()
+        let jobs = docs
+            .first()
             .and_then(|d| d["jobs"].as_hash().cloned())
-            .into_iter()
-            .flat_map(|jobs| jobs.into_iter().map(|(_, job)| job))
-            .flat_map(|job| job["steps"].as_vec().cloned().unwrap_or_default())
-            .filter_map(|step| step["run"].as_str().map(str::to_owned))
-            .any(|run| run.contains("--release") && run.contains("--ignored") && run.contains(test))
+            .unwrap_or_default();
+        let builds_optimised = |name: &Yaml| {
+            jobs.get(name).is_some_and(|job| {
+                runs(job)
+                    .iter()
+                    .any(|run| run.contains("--release") && run.contains("--no-run"))
+            })
+        };
+        jobs.values().any(|job| {
+            let needs: Vec<Yaml> = match &job["needs"] {
+                Yaml::Array(names) => names.clone(),
+                one @ Yaml::String(_) => vec![one.clone()],
+                _ => Vec::new(),
+            };
+            let built = needs.iter().any(builds_optimised);
+            runs(job).iter().any(|run| {
+                run.contains("--ignored")
+                    && run.contains(test)
+                    && (built || run.contains("--release"))
+            })
+        })
     })
 }
 
@@ -443,6 +474,47 @@ fn every_reference_test_runs_in_every_optimised_leg() {
         files.keys()
     );
     assert_eq!(skipped, Vec::<String>::new());
+}
+
+/// A test run by name from a binary another job built counts only when that job builds it
+/// optimised and the running job needs it: EMBER's pairs (`kernel-oracles.yml`'s `ember-build` and
+/// `ember-pairs`) count, and each planted break, the build unoptimised or the need dropped, is
+/// found.
+#[test]
+#[cfg_attr(
+    target_os = "wasi",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
+fn a_test_built_in_one_job_and_run_in_another_counts_only_when_built_optimised() {
+    let pairs_test = "every_cleared_pair_is_the_reference";
+    let workflows = workflows();
+    assert!(run_by_name(pairs_test, &workflows));
+    let oracles = |from: &str, to: &str| -> Vec<(String, String)> {
+        workflows
+            .iter()
+            .map(|(name, text)| {
+                let text = if name == "kernel-oracles.yml" {
+                    plant(text, from, to, 1)
+                } else {
+                    text.clone()
+                };
+                (name.clone(), text)
+            })
+            .collect()
+    };
+    let unoptimised = oracles(
+        "cargo test --locked --release -p geom-test --test ember_pairs --no-run",
+        "cargo test --locked -p geom-test --test ember_pairs --no-run",
+    );
+    assert!(
+        !run_by_name(pairs_test, &unoptimised),
+        "an unoptimised build"
+    );
+    let unneeded = oracles(
+        "needs: [scope, ember-corpus, ember-build]",
+        "needs: [scope, ember-corpus]",
+    );
+    assert!(!run_by_name(pairs_test, &unneeded), "the build not needed");
 }
 
 /// `text` with `from` replaced by `to` `times` times (every time for 0), which must change it.
