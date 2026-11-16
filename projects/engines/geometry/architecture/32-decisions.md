@@ -845,6 +845,14 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-certificates.yml` | `fptaylor` | `trip hol-light`, on orient2d's leg: every bound of `FPTaylor`'s certificate halved as HOL Light's session loads it, which HOL Light must refuse to prove |
 | `kernel-certificates.yml` | `fptaylor-problems` | Not a gate: it lists the FPTaylor problems, one `fptaylor` job each |
 | `kernel-certificates.yml` | `fptaylor-certificates` | Not a gate: it runs FPTaylor once on each problem whose terms HOL Light checks in shards (`// hol-light-shards:`), so that every `fptaylor` shard checks that one certificate; each shard fails unless it proves exactly its own terms |
+| `kernel-oracles.yml` | `scope` | Not a gate: added after the gate, it decides which crates' tests the change reaches (`kernel-quality test-scope`, as `kernel.yml`'s `scope`), so which of this workflow's jobs run |
+| `kernel-oracles.yml` | `slow-fixtures` | Not a gate: added after the gate, it runs on a push to main, by hand and on a release tag; on a pull request its condition skips it |
+| `kernel-oracles.yml` | `corpora` | Not a gate: as `slow-fixtures` |
+| `kernel-oracles.yml` | `clothoids` | Not a gate: as `slow-fixtures` |
+| `kernel-oracles.yml` | `cbor2` | Not a gate: as `slow-fixtures` |
+| `kernel-oracles.yml` | `zcbor` | Not a gate: as `slow-fixtures` |
+| `kernel-oracles.yml` | `meshes-images` | Not a gate: added after the gate (Gate 4, G156), it builds each mesh oracle's image from its pinned source only when the Actions cache does not hold it, for `meshes` |
+| `kernel-oracles.yml` | `meshes` | Added after the gate (Gate 4, G156), on a pull request and a push to main that reach geom-mesh or geom-test, not required by main's ruleset: Manifold and CGAL on each case set, failing on any signature the triage register does not hold (J: `geom-test/tests/oracle_tool.rs::a_new_signature_fails_the_night`, `geom-test/tests/oracle_tool.rs::a_mesh_oracle_s_jobs_come_from_its_case_set`) |
 | `kernel-fuzz-campaign.yml` | `campaign` | Removed by decision 32.52, after the gate: Not a gate: nightly, or on a pull request only when it is labelled `fuzz-campaign` |
 | `kernel-fuzz-campaign.yml` | `select` | Removed by decision 32.52, after the gate: Not a gate: it runs only for a campaign started by hand with `affected_since`, never on a pull request, and picks the targets that campaign fuzzes |
 | `kernel-variants.yml` | `native` | Not a gate: timings for the variant report, on a pull request only when it is labelled `variant-bench` (its header: never a gate) |
