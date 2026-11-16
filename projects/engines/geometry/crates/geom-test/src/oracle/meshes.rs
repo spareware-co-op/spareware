@@ -1077,20 +1077,37 @@ fn reference_solid(solid: &Solid) -> Result<flat_reference::Solid, String> {
     flat_reference::Solid::new(faces).map_err(error)
 }
 
-/// The exact reference's volume for `job`, written from the definitions alone.
+/// The exact reference's volume for `job`, written from the definitions alone: the volume where
+/// the two solids' winding numbers keep the job's boolean, by
+/// [`flat_reference::six_volume_where`], which cuts only the faces and so serves the stored models
+/// (at most about 20 s on one of them, optimised). The arrangement of space
+/// ([`flat_reference::boolean`]) cuts space by every plane: on the union of a model of 212
+/// triangles with its moved copy it was still running after 11 minutes, where this takes 2 s. The
+/// reference's own tests hold the two to one number.
 ///
 /// # Errors
 ///
 /// A job the reference cannot read.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "exact rationals, which cannot overflow"
+)]
 pub fn reference(job: &Job) -> Result<Q, String> {
-    let op = match job.op {
-        Op::Union => flat_reference::Op::Union,
-        Op::Intersection => flat_reference::Op::Intersection,
-        Op::Difference => flat_reference::Op::Difference,
-    };
     let (a, b) = (reference_solid(&job.a)?, reference_solid(&job.b)?);
-    flat_reference::boolean(&a, &b, op)
-        .map(|region| region.volume())
+    let op = job.op;
+    let keep = |w: &[i64]| {
+        let (a, b) = match w {
+            &[a, b] => (a > 0, b > 0),
+            _ => (false, false),
+        };
+        match op {
+            Op::Union => a || b,
+            Op::Intersection => a && b,
+            Op::Difference => a && !b,
+        }
+    };
+    flat_reference::six_volume_where(&[&a, &b], keep)
+        .map(|six| six / Q::from(6))
         .map_err(|e| format!("the reference: {e:?}"))
 }
 
