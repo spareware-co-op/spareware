@@ -12,6 +12,14 @@ name: Kernel quality
 #
 # - A pull request: mutants in the diff, coverage and the gates' own proof once it is ready for
 #   review, never on a push to a draft (a draft's pushes skip them, and marking it ready runs them).
+#   A later push judges again only what its tests may judge otherwise since the last head whose
+#   run finished clean (principle 5; geom-test's src/increment.rs): `when` finds that head in
+#   GitHub's record of the pull request's runs (the newest finished run whose judge, or whose
+#   coverage job, succeeded), and the plan mutates the change's lines in every crate whose tests
+#   what changed since then (on the pull request's side and on its base's) can reach, a new test
+#   file and an added ledger entry left out and a removed one counted by its file; coverage
+#   measures the crates of what changed since then. With no such run, or a head that cannot be
+#   fetched, the whole change is judged.
 # - GitHub's merge queue for main: the same, unless they already passed on this very tree. A
 #   passing run leaves a mark named for the tree it judged (an artifact, `quality-tested-<tree>`),
 #   and `when` looks for it, so a pull request whose base has not moved is not judged twice.
@@ -151,6 +159,8 @@ jobs:
       files: ${{ steps.push.outputs.files || steps.when.outputs.files }}
       miri_packages: ${{ steps.push.outputs.miri_packages }}
       tree: ${{ steps.when.outputs.tree }}
+      since_mutants: ${{ steps.since.outputs.mutants }}
+      since_coverage: ${{ steps.since.outputs.coverage }}
     defaults:
       run:
         shell: bash
@@ -259,6 +269,39 @@ jobs:
             echo "kernel=$kernel"
           } | tee -a "$GITHUB_OUTPUT"
           echo "$EVENT: $why." | tee -a "$GITHUB_STEP_SUMMARY"
+      # The last heads of this pull request whose mutants were judged clean and whose coverage
+      # passed, from GitHub's record of its finished runs (never from the pull request's own
+      # word): the newest run whose job succeeded. None on any other event, or when the record
+      # cannot be read, so the whole change is judged.
+      - name: The last heads this pull request's gates passed on
+        id: since
+        if: github.event_name == 'pull_request' && steps.when.outputs.mutants == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          mutants="" coverage=""
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/kernel-quality.yml/runs?event=pull_request&status=completed&per_page=50&branch=$HEAD_REF" \
+            --jq ".workflow_runs[] | select(.head_repository.full_name == \"$HEAD_REPO\") | select(any(.pull_requests[]; .number == $PR)) | \"\(.id) \(.head_sha)\"") || runs=""
+          while read -r id sha; do
+            [ -n "$id" ] || continue
+            jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" \
+              --jq '.jobs[] | "\(.conclusion) \(.name)"') || continue
+            if [ -z "$mutants" ] && grep -qxF "success Mutants, judged against the ledger" <<< "$jobs"; then
+              mutants=$sha
+            fi
+            if [ -z "$coverage" ] && grep -qxF "success Coverage (lines, and branches on the pinned nightly)" <<< "$jobs"; then
+              coverage=$sha
+            fi
+            if [ -n "$mutants" ] && [ -n "$coverage" ]; then break; fi
+          done <<< "$runs"
+          {
+            echo "mutants=$mutants"
+            echo "coverage=$coverage"
+          } | tee -a "$GITHUB_OUTPUT"
+          echo "Mutants last judged clean on ${mutants:-no head}, coverage last passed on ${coverage:-no head}." >> "$GITHUB_STEP_SUMMARY"
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.when.outputs.kernel == 'true'
         with:
@@ -312,6 +355,7 @@ jobs:
       MODE: ${{ needs.when.outputs.mode }}
       BASE: ${{ needs.when.outputs.base }}
       FILES: ${{ needs.when.outputs.files }}
+      SINCE: ${{ needs.when.outputs.since_mutants }}
     defaults:
       run:
         shell: bash
@@ -319,7 +363,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 2
+          # The whole history, for what changed since the last clean head on the base's side.
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -342,6 +387,27 @@ jobs:
             # prints no list and exits 0: the judge reads the empty file as no mutants.
             git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch -q --no-tags --depth 1 origin "$BASE"
             git diff --no-ext-diff --no-color --no-renames "$BASE" HEAD -- '*.rs' > "$RUNNER_TEMP/plan/pr.diff"
+            # A later push: the change's lines in the files whose verdicts what changed since the
+            # last clean head can move (geom_test::increment), all of them when there is no such
+            # head or it cannot be fetched. The pull request's head is the merge commit's second
+            # parent.
+            if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ -n "$SINCE" ] \
+              && { git cat-file -e "$SINCE^{commit}" 2>/dev/null || git fetch -q --no-tags origin "$SINCE"; }; then
+              t="$RUNNER_TEMP/plan"
+              git diff --no-renames --name-only "$BASE" HEAD > "$t/changed.txt"
+              git diff --no-renames --name-only "$SINCE" HEAD^2 > "$t/head-changes.txt"
+              git diff --no-renames --name-only --diff-filter=A "$SINCE" HEAD^2 > "$t/added.txt"
+              git log --format= --name-only "$SINCE..$BASE" | sort -u > "$t/base-changes.txt"
+              cargo run --locked -q -p geom-test --bin kernel-quality -- mutants-increment \
+                --since "$SINCE" --changed "$t/changed.txt" --head-changes "$t/head-changes.txt" \
+                --added "$t/added.txt" --base-changes "$t/base-changes.txt" > "$t/again.txt"
+              if [ -s "$t/again.txt" ]; then
+                xargs -a "$t/again.txt" -d '\n' git diff --no-ext-diff --no-color --no-renames "$BASE" HEAD -- > "$t/pr.diff"
+              else
+                : > "$t/pr.diff"
+              fi
+              echo "Mutated again since $SINCE: $(wc -l < "$t/again.txt") of $(grep -c '\.rs$' "$t/changed.txt") Rust files of the change." | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
             cargo mutants --in-diff "$RUNNER_TEMP/plan/pr.diff" --list --json > "$RUNNER_TEMP/plan/list.json"
             # The base's ledger: the only source of the known entries a change may use
             # (geom_test::mutants). A base without a ledger has none.
@@ -627,7 +693,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 2
+          # The whole history, for what changed since the last clean head on the base's side.
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -646,10 +713,25 @@ jobs:
       - name: The crates to measure
         env:
           BASE: ${{ needs.when.outputs.base }}
+          SINCE: ${{ needs.when.outputs.since_coverage }}
         run: |
           if [ -n "$BASE" ]; then
             git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch -q --no-tags --depth 1 origin "$BASE"
             git diff --no-ext-diff --no-renames --name-only "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
+            # A later push: the crates of what changed since the last head whose coverage passed
+            # (geom_test::increment::coverage); the whole change without one.
+            if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ -n "$SINCE" ] \
+              && { git cat-file -e "$SINCE^{commit}" 2>/dev/null || git fetch -q --no-tags origin "$SINCE"; }; then
+              t="$RUNNER_TEMP"
+              git diff --no-renames --name-only "$SINCE" HEAD^2 > "$t/head-changes.txt"
+              git diff --no-renames --name-only --diff-filter=A "$SINCE" HEAD^2 > "$t/added.txt"
+              git log --format= --name-only "$SINCE..$BASE" | sort -u > "$t/base-changes.txt"
+              RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN" RUSTFLAGS= cargo run --locked -q -p geom-test \
+                --bin kernel-quality -- coverage-increment --since "$SINCE" \
+                --head-changes "$t/head-changes.txt" --added "$t/added.txt" \
+                --base-changes "$t/base-changes.txt" > "$t/changed.txt"
+              echo "Measured again since $SINCE: the crates of $(wc -l < "$t/changed.txt") changed file(s)." | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
             echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
           else
             echo "SCOPE=--all" >> "$GITHUB_ENV"

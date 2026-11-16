@@ -21,7 +21,10 @@ name: Kernel fuzzing and proofs
 # their targets' code builds (by the workspace's crate graph, through normal and build
 # dependencies, transitively) or among those targets' own files in geom-fuzz; a crate's Kani
 # proofs run when a changed file is in a crate that crate builds; a changed file in no crate (a
-# workflow, Cargo.lock, .cargo, the toolchain file, an architecture chapter) runs everything.
+# workflow, Cargo.lock, .cargo, the toolchain file, an architecture chapter) runs everything, but
+# MAP.json and the quality ledger are read against the base by their changed entries (`--base`):
+# a change to one runs only the proofs whose code reads it whole (none today; geom-test's
+# src/shared.rs), and everything when it cannot be placed so.
 # geom-test's src/fuzz_scope.rs gives the whole rule. Each job's `if` reads its output, and its log
 # and the run's summary name every proof job, whether it runs and why: a skipped job was not
 # affected, not failed. A push to main and a release tag run everything. geom-test's
@@ -188,7 +191,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
             git diff --no-ext-diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
-            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt --base $(git rev-parse HEAD^1)" >> "$GITHUB_ENV"
           else
             echo "SCOPE=--all" >> "$GITHUB_ENV"
           fi

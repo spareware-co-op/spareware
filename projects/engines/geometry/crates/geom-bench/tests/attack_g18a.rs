@@ -795,12 +795,19 @@ fn workflow_step(name: &str) -> &'static str {
 
 #[test]
 fn both_legs_judge_the_summaries_by_the_same_rule() {
-    // One job measures both processors (its matrix), and the judgement is a step of that job with
-    // no condition on the leg, so both legs run it, with the workflow's own percentage.
+    // One job measures both processors (its matrix, the legs the job `scope` lists for the event:
+    // x86-64 on a pull request, aarch64 in the merge queue), and the judgement is a step of that
+    // job with no condition on the leg, so both legs run it, with the workflow's own percentage.
     // No needle ends in a line break: a Windows checkout gives the workflow CRLF line ends.
     let job =
         &WORKFLOW[WORKFLOW.find("\n  instructions:").unwrap()..WORKFLOW.find("\n  fuel:").unwrap()];
-    assert!(job.contains("- target: x86-64") && job.contains("- target: aarch64"));
+    assert!(job.contains("include: ${{ fromJSON(needs.scope.outputs.legs) }}"));
+    let legs = workflow_step("The processor kinds this run measures");
+    assert!(
+        legs.contains("x86='{\"target\":\"x86-64\",\"runner\":\"ubuntu-24.04\"}'")
+            && legs.contains("arm='{\"target\":\"aarch64\",\"runner\":\"ubuntu-24.04-arm\"}'"),
+        "{legs}"
+    );
     let judge_step =
         workflow_step("Judge instructions, cycles and cache misses from the summaries");
     assert!(job.contains(judge_step));

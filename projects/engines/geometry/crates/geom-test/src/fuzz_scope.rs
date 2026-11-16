@@ -24,6 +24,12 @@
 //! - in another crate's `tests/`, `benches/` or `examples/` folder, nothing here: cargo builds
 //!   those only for that crate's own test targets, and no harness here is one. `MAP.json`,
 //!   `PROVENANCE.md` and `NOTICE` count as `geom-test`'s tests, which check them.
+//! - `MAP.json` or `quality-ledger.json`, when the change's base is given ([`crate::shared`]): a
+//!   target whose code reads the file whole (one of its modules, its tests file, the tests'
+//!   `tests/common/` or the crate root), and the Kani proofs beside a crate's code when that
+//!   crate's library reads it; a changed entry that names a crate reaches none here, since no
+//!   proof reads the file's entries. A change that cannot be placed so, or one given without its
+//!   base, reaches what a file in no crate does.
 //! - any other file of a crate C, every target whose build holds C: a target whose code names C, or
 //!   a crate that depends on C through normal or build dependencies, transitively; the Kani proofs
 //!   of `geom-fuzz`'s tests, when a target whose tests hold one is reached; the Kani proofs beside a
@@ -64,6 +70,8 @@ use std::path::Path;
 
 use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use serde_json::Value;
+
+use crate::shared::{Changes, Reach as SharedReach, Readers};
 
 /// The crate that holds the fuzz targets.
 pub const FUZZ_CRATE: &str = "geom-fuzz";
@@ -161,6 +169,10 @@ pub struct Scope {
     targets: BTreeMap<String, Target>,
     /// The targets whose tests hold a Kani proof.
     proof_targets: BTreeSet<String>,
+    /// `geom-fuzz`'s `tests/common/` files, by path inside its folder.
+    common: BTreeSet<String>,
+    /// The crates that read each shared file whole ([`crate::shared`]).
+    whole: Readers,
 }
 
 /// Where a changed file is.
@@ -227,7 +239,40 @@ impl Scope {
         let folder = Path::new(&manifest)
             .parent()
             .ok_or_else(|| format!("{manifest} has no folder"))?;
-        Self::new(metadata, &read_fuzz_sources(folder)?)
+        let scope = Self::new(metadata, &read_fuzz_sources(folder)?)?;
+        let root = metadata
+            .get("workspace_root")
+            .and_then(Value::as_str)
+            .ok_or("cargo metadata has no workspace root")?;
+        let libs = packages(metadata)?
+            .into_iter()
+            .filter_map(|p| Some((p.name, p.libs.first()?.clone())))
+            .collect();
+        let whole = Readers::read(Path::new(root), &scope.folders, &libs)?;
+        Ok(scope.with_whole_readers(whole))
+    }
+
+    /// The same scope, with `whole` the crates that read each shared file whole.
+    #[must_use]
+    pub fn with_whole_readers(self, whole: Readers) -> Self {
+        Self { whole, ..self }
+    }
+
+    /// Whether the target `name` reads the shared file `file` whole: one of its modules, its tests
+    /// file, the tests' `tests/common/` or the crate root reads it.
+    fn target_reads(&self, name: &str, target: &Target, file: &str) -> bool {
+        let w = &self.whole;
+        target
+            .modules
+            .iter()
+            .any(|m| w.module_reads(FUZZ_CRATE, m, file))
+            || w.file_reads(FUZZ_CRATE, &format!("tests/{name}.rs"), file)
+            || w.file_reads(FUZZ_CRATE, "src/lib.rs", file)
+            || w.module_reads(FUZZ_CRATE, "lib", file)
+            || self
+                .common
+                .iter()
+                .any(|c| w.file_reads(FUZZ_CRATE, c, file))
     }
 
     /// The scope of the workspace `metadata` describes, with `geom-fuzz`'s sources given as its
@@ -280,12 +325,19 @@ impl Scope {
             }
             targets.insert(m.clone(), target(m, &streams, &modules, &libs));
         }
+        let common = sources
+            .keys()
+            .filter(|p| p.starts_with("tests/common/"))
+            .cloned()
+            .collect();
         Ok(Self {
             folders,
             built_by,
             modules,
             targets,
             proof_targets,
+            common,
+            whole: Readers::default(),
         })
     }
 
@@ -369,8 +421,28 @@ impl Scope {
         )]))
     }
 
-    /// Why `file` selects the fuzz target `name`, if it does.
-    fn selects_target(&self, file: &str, name: &str, target: &Target) -> Option<String> {
+    /// Why `file` selects the fuzz target `name`, if it does, with `shared` what the change's
+    /// shared files reach.
+    fn selects_target(
+        &self,
+        file: &str,
+        name: &str,
+        target: &Target,
+        shared: &Changes,
+    ) -> Option<String> {
+        match shared.get(file) {
+            Some(SharedReach::Everything(why)) => {
+                return Some(format!(
+                    "{file} changed and {why}, so it may change any build"
+                ));
+            }
+            Some(SharedReach::Crates(_)) => {
+                return self.target_reads(name, target, file).then(|| {
+                    format!("{file} changed, and the target {name}'s code reads it whole")
+                });
+            }
+            None => {}
+        }
         match self.place(file) {
             Place::Outside => Some(format!("{file} is in no crate, so it may change any build")),
             Place::Fuzz(inside) => match self.fuzz_file_targets(&inside) {
@@ -394,8 +466,23 @@ impl Scope {
         }
     }
 
-    /// Why `file` selects the Kani proofs beside `krate`'s code, if it does.
-    fn selects_crate(&self, file: &str, krate: &str) -> Option<String> {
+    /// Why `file` selects the Kani proofs beside `krate`'s code, if it does, with `shared` what
+    /// the change's shared files reach.
+    fn selects_crate(&self, file: &str, krate: &str, shared: &Changes) -> Option<String> {
+        match shared.get(file) {
+            Some(SharedReach::Everything(why)) => {
+                return Some(format!(
+                    "{file} changed and {why}, so it may change any build"
+                ));
+            }
+            Some(SharedReach::Crates(_)) => {
+                return self
+                    .whole
+                    .library_reads(krate, file)
+                    .then(|| format!("{file} changed, and {krate}'s library reads it whole"));
+            }
+            None => {}
+        }
         let changed = match self.place(file) {
             Place::Outside => {
                 return Some(format!("{file} is in no crate, so it may change any build"));
@@ -423,6 +510,13 @@ impl Scope {
     /// repository root), or for everything when `changed` is `None`.
     #[must_use]
     pub fn select(&self, changed: Option<&[String]>) -> Selection {
+        self.select_with(changed, &Changes::new())
+    }
+
+    /// [`Scope::select`], with `shared` what the change's shared files reach
+    /// ([`crate::shared::changes`]); a shared file it does not hold is placed as before.
+    #[must_use]
+    pub fn select_with(&self, changed: Option<&[String]>, shared: &Changes) -> Selection {
         let files: Option<Vec<String>> = changed.map(|c| {
             c.iter()
                 .map(|f| f.trim().replace('\\', "/"))
@@ -444,7 +538,7 @@ impl Scope {
             .iter()
             .map(|(name, t)| Entry {
                 name: format!("{name}_fuzz"),
-                why: first(&|f| self.selects_target(f, name, t)),
+                why: first(&|f| self.selects_target(f, name, t, shared)),
             })
             .collect();
         let jobs = JOBS
@@ -454,10 +548,10 @@ impl Scope {
                     Reach::ProofTargets => first(&|f| {
                         self.proof_targets.iter().find_map(|name| {
                             let t = self.targets.get(name)?;
-                            self.selects_target(f, name, t)
+                            self.selects_target(f, name, t, shared)
                         })
                     }),
-                    Reach::Crate(krate) => first(&|f| self.selects_crate(f, krate)),
+                    Reach::Crate(krate) => first(&|f| self.selects_crate(f, krate, shared)),
                 };
                 JobSelection { job: *job, why }
             })

@@ -15774,6 +15774,28 @@
           "target": "lib"
         },
         {
+          "cost": "one selection over the changed files, and one comparison of the ledger's survivors.",
+          "does": "[`mutants`] takes the change's files (its base against its head), what changed since the last head whose mutants were judged clean ([`Since`]), and the crate graph, and says which of the change's Rust files the run must mutate again, every changed line of each, with why. [`coverage`] says which changed files the coverage gate must measure the crates of. `kernel-quality mutants-increment` and `coverage-increment` are the command line; `kernel-quality.yml` finds the last clean head through GitHub's record of the pull request's runs.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/increment.rs",
+          "guarantees": [
+            "**Over, never under.** Whatever cannot be placed (a file in no crate, a ledger that cannot be read) judges every file again; `tests/kernel_quality_workflow.rs` plants a changed line, a changed test, a removed ledger entry and a base-side change, each of which must be judged.",
+            "**No last clean head, everything.** The workflow judges the whole change when it finds no clean run, or cannot fetch its head."
+          ],
+          "job": "What a later push to a pull request must judge again, after an earlier push's mutation or coverage run finished clean (the owner's testing principle 5: \"a later push judges only the lines changed since the last judged head\"), so the gates do not repeat on code whose verdict cannot have changed, and never skip code whose verdict can.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies",
+              "https://mutants.rs/mutants.html"
+            ],
+            "text": "the crate graph's selection of `test_scope` (cargo's development-dependency rule, <https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies>), and the monotonicity of cargo-mutants' verdicts (<https://mutants.rs/mutants.html>): a mutant is caught when some test fails, so more tests over unchanged code catch at least what fewer did."
+          },
+          "path": "geom_test::increment",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the map's records, the licence texts and the notes, plus sorting them.",
           "does": "[`build`] takes the map as a value ([`crate::map::Generated::map`], the records `MAP.json` holds), the hand-kept licence texts under `projects/engines/geometry/notices/` ([`notices`]) and the method notes under `projects/engines/geometry/methods/` ([`methods`]), and returns the text of both files with every [`Problem`]: a ported source with no licence text, a licence text no port uses, a method note that breaks its template, a record whose method note credits another source, or a map whose headers are incomplete. [`repo`] reads the inputs from a workspace on disk and writes or checks the committed files; the binary `provenance` (`cargo run -p geom-test --bin provenance -- check`) runs it in CI.",
           "family": [],
@@ -17242,6 +17264,28 @@
             "text": "the replay discipline of sections 28.5 and 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`): \"Every generator prints its seed, so any failure replays exactly\", and \"Seeds belong to test generators only, and every one is printed\". The environment variable mirrors the seed variables of proptest (`PROPTEST_RNG_SEED`, <https://github.com/proptest-rs/proptest>) and bolero (`BOLERO_RANDOM_SEED`, <https://github.com/camshaft/bolero>), with one name for every Spare Kit test, so one value replays any of them."
           },
           "path": "geom_test::seed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the two texts; for the readers, linear in the size of the workspace's sources times the number of shared files, once per round of the search, which ends within one round per library module.",
+          "does": "[`compare`] takes one shared file's text at the change's base and at its head and says which crates its changed entries name ([`Reach::Crates`]), or that the change cannot be placed ([`Reach::Everything`]). [`Readers::read`] finds, from every workspace crate's Rust sources, which crates read a shared file whole, and through which modules of their library. `test_scope` and `fuzz_scope` use both when the base's text is given (`--base`), and treat the file as one outside every crate when it is not.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/shared.rs",
+          "guarantees": [
+            "**Over, never under.** Every crate an entry names is reached, an entry that names none, a change to a top-level value that is no list, a text that is not JSON and a missing file reach everything; a source that does not lex as Rust makes its crate a reader of every shared file. `tests/test_scope.rs` holds the rule with planted changes.",
+            "**Names, not text.** A name in a comment, a doc comment or a string is never a module path: the sources are read as Rust's tokens.",
+            "**Every decision has its reason.** Each reached crate comes with the list it was named in."
+          ],
+          "job": "The files outside every crate's folder that the change selections read by what changed in them, `MAP.json` and `quality-ledger.json` (chapter 28.17; the owner's testing principle 2: \"the code map and the mutant ledger count by the crates whose rows changed\"), so that a change to one of them reaches only the crates its changed entries name and the crates that read it whole, not every crate as any other file outside every crate does.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8259"
+            ],
+            "text": "JSON (RFC 8259, <https://www.rfc-editor.org/rfc/rfc8259>) read with `serde_json` and compared entry by entry as multisets of their serialised text; Rust's tokens read with `proc-macro2`, as `fuzz_scope` reads `geom-fuzz`."
+          },
+          "path": "geom_test::shared",
           "provenance": [],
           "spdx": null,
           "target": "lib"
