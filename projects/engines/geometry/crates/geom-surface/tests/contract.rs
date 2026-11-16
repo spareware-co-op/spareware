@@ -364,6 +364,13 @@ fn a_plane_bounds_its_equation_over_any_box() {
         let region = [0, 1, 2].map(|d| Interval::new(lo[d] as f64, hi[d] as f64).unwrap());
         let e = plane.enclose_box(region).unwrap();
         assert!(e.smooth);
+        // F is linear, so ∇²F is zero everywhere: given, exactly, and not left unknown.
+        let zero = Interval::point(0.0).unwrap();
+        assert_eq!(
+            plane.hessian_box(region).unwrap(),
+            Some([[zero; 3]; 3]),
+            "trial {trial}"
+        );
         for corner in 0..8 {
             let x = [0, 1, 2].map(|d| if corner >> d & 1 == 0 { lo[d] } else { hi[d] });
             let n = plane.n();

@@ -1646,12 +1646,22 @@ impl ImplicitBound for Cylinder {
     }
 }
 
+impl Cone {
+    /// σ = k/s, how fast the radius grows with the height h along n̂: the point at v is at
+    /// h = s·v, so its radius r₀ + k·v is r₀ + σ·h. The axial factor s is ±1 as built, where k/s
+    /// is k·s, but a similarity multiplies it by its scale (`Round::moved`), and then only k/s is
+    /// the slope (k·s made the equation of a cone scaled by 2 miss it by far).
+    fn axial_slope(&self) -> Result<Interval, CurveError> {
+        let [_, k] = self.round.lengths;
+        tight::div(point(k)?, point(self.round.sign)?)
+    }
+}
+
 impl ImplicitBound for Cone {
-    /// F = |x − c|² − h² − (r₀ + σ·h)², σ = k·s, so ∇²F = 2·I − 2·(1 + σ²)·n̂n̂ᵀ.
+    /// F = |x − c|² − h² − (r₀ + σ·h)², σ = k/s, so ∇²F = 2·I − 2·(1 + σ²)·n̂n̂ᵀ.
     fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
         let (_, _, n) = self.round.parts(&region)?;
-        let [_, k] = self.round.lengths;
-        let slope = Interval::point(k * self.round.sign)?;
+        let slope = self.axial_slope()?;
         let (zero, one, two) = (
             Interval::point(0.0)?,
             Interval::point(1.0)?,
@@ -1661,12 +1671,12 @@ impl ImplicitBound for Cone {
         Ok(Some(outer(two, (along, &n), (zero, &n))?))
     }
 
-    /// F(x) = |w|² − (r₀ + k·s·h)², for w and h the point's parts about the axis. It vanishes on
-    /// both nappes: past the apex as well as on the kind.
+    /// F(x) = |w|² − (r₀ + σ·h)², σ = k/s, for w and h the point's parts about the axis. It
+    /// vanishes on both nappes: past the apex as well as on the kind.
     fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
         let (w, h, n) = self.round.parts(&region)?;
-        let [r0, k] = self.round.lengths;
-        let slope = Interval::point(k * self.round.sign)?;
+        let [r0, _] = self.round.lengths;
+        let slope = self.axial_slope()?;
         let radius = Interval::point(r0)?.add(slope.mul(h)?)?;
         let two = Interval::point(2.0)?;
         Ok(ImplicitEnclosure {
