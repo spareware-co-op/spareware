@@ -247,7 +247,13 @@ pub fn observe() -> Observed {
 /// directly in its folder that `globals::NOT_CRATE_CODE` names, read for global state, in sorted
 /// order (the merge gate's ban on global state, G12).
 pub fn crate_sources(observed: &Observed, crates: &BTreeSet<&str>) -> Sources {
-    let root = workspace_root();
+    crate_sources_under(&workspace_root(), observed, crates)
+}
+
+/// [`crate_sources`] with each crate's folder taken relative to `root`, and each file named relative
+/// to it, in place of the workspace root: so a test can read a probe crate in its temporary folder
+/// with the gate's own reader wherever the target folder, and so the temporary folder, is.
+pub fn crate_sources_under(root: &Path, observed: &Observed, crates: &BTreeSet<&str>) -> Sources {
     let mut sources = Sources::new();
     for (name, package) in observed
         .packages
@@ -257,7 +263,7 @@ pub fn crate_sources(observed: &Observed, crates: &BTreeSet<&str>) -> Sources {
         let dir = package
             .dir
             .iter()
-            .fold(root.clone(), |p, part| p.join(part));
+            .fold(root.to_path_buf(), |p, part| p.join(part));
         let mut files = Vec::new();
         for (path, is_dir) in entries(&dir) {
             let skipped = path
@@ -273,7 +279,7 @@ pub fn crate_sources(observed: &Observed, crates: &BTreeSet<&str>) -> Sources {
         files.sort();
         let of_crate: Vec<SourceFile> = files
             .iter()
-            .map(|file| SourceFile::read(relative(file, &root), &read(file)))
+            .map(|file| SourceFile::read(relative(file, root), &read(file)))
             .collect();
         sources.insert(name.clone(), of_crate);
     }
@@ -285,8 +291,17 @@ pub fn crate_sources(observed: &Observed, crates: &BTreeSet<&str>) -> Sources {
 /// else whole. A file that is not UTF-8 text (data a crate pastes in with `include_bytes!`) cannot
 /// be read as Rust, so it counts as not lexing, which the rules report.
 pub fn compiled_sources(compiled: &BTreeMap<String, BTreeSet<PathBuf>>) -> Sources {
+    compiled_sources_under(&workspace_root(), compiled)
+}
+
+/// [`compiled_sources`] with each path taken relative to `root` in place of the workspace root,
+/// as [`crate_sources_under`] names them.
+pub fn compiled_sources_under(
+    root: &Path,
+    compiled: &BTreeMap<String, BTreeSet<PathBuf>>,
+) -> Sources {
     let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-    let root = canonical(&workspace_root());
+    let root = canonical(root);
     let mut sources = Sources::new();
     for (krate, files) in compiled {
         let of_crate = files

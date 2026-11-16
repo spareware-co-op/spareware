@@ -5,9 +5,25 @@ name: Kernel benchmarks
 # board entry G18). projects/engines/geometry/crates/geom-bench documents everything in full.
 #
 # It runs on every pull request and every push to main that touches anything that can change a
-# count (the path filters below). A pull request is compared with its merge base; a push to main
-# with the main it replaced, so two pull requests that each pass cannot together slip a rise past
-# the gate unseen.
+# count (the path filters below), and in GitHub's merge queue for main. A pull request is compared
+# with its merge base; a push to main with the main it replaced, so two pull requests that each
+# pass cannot together slip a rise past the gate unseen.
+#
+# One processor kind per push (the owner's testing principle 3): each push to a pull request
+# measures Linux x86-64; Linux aarch64 is measured once, just before the change lands, in the
+# merge queue, which leaves a mark named for the tree it passed (`bench-aarch64-tested-<tree>`);
+# a push to main measures x86-64, and aarch64 too unless that mark is there (a push that did not
+# come through the queue measures both). A release measures both.
+#
+# The merge base is measured once (principle 3, "keep the base's counts by its commit"): the leg
+# that measures it keeps its counts as an artifact named for the merge base's tree, the runner
+# image, Valgrind's version and this file (`bench-base-<target>-<tree>-<print>`), and a later run
+# with the same merge base restores them instead of measuring again. Only a run of main, or an
+# earlier run of the same pull request whose head holds this very file, is trusted for them; the
+# merge base is measured and kept before any step runs the change's own code; and the measured
+# counts of one tree as a merge base are the same on every runner of one image (708 of 708
+# benchmarks alike on both targets, runs 43768287593 and 43774825883). With none to restore, the
+# merge base is measured as before.
 #
 # One job checks geom-bench itself: formatting, Clippy with geom-bench's lints, and the tests in
 # release with overflow checks and in debug, with warnings as errors. geom-bench is a development
@@ -83,6 +99,8 @@ on:
       - "rust-toolchain.toml"
       - ".cargo/**"
       - ".github/workflows/kernel-bench.yml"
+  # The merge queue takes no path filter; the job `scope` checks the same list.
+  merge_group:
   push:
     branches: [main]
     paths:
@@ -121,8 +139,8 @@ env:
   DHAT_LIMITS: "totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%"
   # What is compared: a pull request's base branch and head, or the main a push replaced and the
   # main it made.
-  BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
-  HEAD_SHA: ${{ github.event_name == 'push' && github.sha || github.event.pull_request.head.sha }}
+  BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+  HEAD_SHA: ${{ github.event_name == 'push' && github.sha || github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
 
 jobs:
   cheap:
@@ -143,6 +161,7 @@ jobs:
       base_fuel: ${{ steps.scope.outputs.base_fuel }}
       base_toolchain: ${{ steps.scope.outputs.base_toolchain }}
       head_toolchain: ${{ steps.scope.outputs.head_toolchain }}
+      legs: ${{ steps.legs.outputs.legs }}
     steps:
       - name: Check out the change
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -153,7 +172,8 @@ jobs:
 
       # On a pull request, the count gates measure only when the change reaches what geom-bench's
       # benchmarks build (geom-test's `kernel-quality test-scope --build-of geom-bench`: a file in no
-      # crate, or in a crate geom-bench's benchmarks link, or among geom-bench's own); a push to main
+      # crate, or in a crate geom-bench's benchmarks link, or among geom-bench's own; MAP.json and
+      # the quality ledger by their changed entries, against the merge base); a push to main
       # and a release tag measure whenever a kernel file changed, as below.
       # The runner's rustup installs the workspace's pinned compiler from rust-toolchain.toml.
       - name: Whether the change reaches what geom-bench builds
@@ -161,8 +181,9 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          git diff --no-ext-diff --no-renames --name-only "$(git merge-base "$BASE_SHA" "$HEAD_SHA")" "$HEAD_SHA" > "$RUNNER_TEMP/changed.txt"
-          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope --changed "$RUNNER_TEMP/changed.txt" --build-of geom-bench --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          merge_base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          git diff --no-ext-diff --no-renames --name-only "$merge_base" "$HEAD_SHA" > "$RUNNER_TEMP/changed.txt"
+          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope --changed "$RUNNER_TEMP/changed.txt" --base "$merge_base" --build-of geom-bench --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Decide what to measure
         id: scope
@@ -232,13 +253,40 @@ jobs:
             echo "base_fuel=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # The processor kinds this run measures (the paragraph at the top): x86-64 on a pull
+      # request, aarch64 in the merge queue, x86-64 on a push to main and aarch64 too unless the
+      # queue's mark for this tree is there, both on a release. A call that fails counts as no mark.
+      - name: The processor kinds this run measures
+        id: legs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          x86='{"target":"x86-64","runner":"ubuntu-24.04"}'
+          arm='{"target":"aarch64","runner":"ubuntu-24.04-arm"}'
+          case "$GITHUB_EVENT_NAME" in
+            pull_request) legs="[$x86]" ;;
+            merge_group) legs="[$arm]" ;;
+            push)
+              legs="[$x86,$arm]"
+              tree=$(git rev-parse "$HEAD_SHA^{tree}")
+              if marks=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=bench-aarch64-tested-$tree" \
+                --jq '[.artifacts[] | select(.expired | not)] | length') && [ "$marks" -gt 0 ]; then
+                legs="[$x86]"
+              fi
+              ;;
+            *) legs="[$x86,$arm]" ;;
+          esac
+          echo "legs=$legs" | tee -a "$GITHUB_OUTPUT"
+
   # geom-bench's own checks, as kernel.yml makes them for geom-num, with the pinned toolchain. The
   # fuel host (geom-bench/fuel) is a workspace of its own, so it is formatted and linted by its
   # manifest.
   checks:
     name: Format, lints and tests (geom-bench)
     needs: scope
-    if: needs.scope.outputs.measure == 'true'
+    # The pull request's pushes ran these on its change; the merge queue measures only aarch64.
+    if: needs.scope.outputs.measure == 'true' && github.event_name != 'merge_group'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -301,13 +349,11 @@ jobs:
       # other's measurement and report.
       fail-fast: false
       matrix:
-        # Pinned images, so Valgrind's version only changes when these lines do. The two processors
-        # run different instructions, so each leg compares only its own two runs.
-        include:
-          - target: x86-64
-            runner: ubuntu-24.04
-          - target: aarch64
-            runner: ubuntu-24.04-arm
+        # Pinned images (ubuntu-24.04 for x86-64, ubuntu-24.04-arm for aarch64), so Valgrind's
+        # version only changes when those lines in the job `scope` do. The two processors run
+        # different instructions, so each leg compares only its own two runs. Which legs this event
+        # runs: the job `scope`'s step `legs`.
+        include: ${{ fromJSON(needs.scope.outputs.legs) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     env:
@@ -381,13 +427,6 @@ jobs:
           sudo apt-get install --yes --no-install-recommends valgrind
           valgrind --version
 
-      # The golden digests (no benchmark may get faster by computing something else, and the
-      # results recorded on one platform must come out the same here), the input classes, and the
-      # wiring of the gates.
-      - name: Check the benchmarks' inputs, results and wiring
-        working-directory: head
-        run: cargo "+$HEAD_TOOLCHAIN" test --locked --release -p geom-bench
-
       - name: Install the Gungraun runner each tree needs
         run: |
           set -euo pipefail
@@ -415,8 +454,54 @@ jobs:
             echo "BASE_RUNNER=$base_runner" >> "$GITHUB_ENV"
           fi
 
-      - name: Benchmark the merge base
+      # The merge base's counts, kept by an earlier run (the paragraph at the top): found by
+      # their name among the repository's artifacts, from a run of main or an earlier run of this
+      # pull request whose head holds this very workflow file, checked against their manifest,
+      # and restored into Gungraun's home as the saved run `base`. With none, `kept` is false and
+      # the next step measures the merge base.
+      - name: The merge base's counts, if a trusted run kept them
+        id: kept
         if: needs.scope.outputs.base_gate == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/kernel-bench.yml
+          mine=$(git -C head rev-parse "HEAD:$workflow")
+          tree=$(git -C base rev-parse 'HEAD^{tree}')
+          print=$(printf '%s\n' "${ImageOS:-} ${ImageVersion:-}" "$(valgrind --version)" "$mine" \
+            | sha256sum | cut -c1-16)
+          name="bench-base-$TARGET-$tree-$print"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          found=""
+          while read -r run branch sha; do
+            [ -n "$run" ] || continue
+            if [ "$branch" = main ]; then
+              found=$run
+            elif [ "$GITHUB_EVENT_NAME" = pull_request ] && [ "$branch" = "$HEAD_REF" ] \
+              && { git -C head cat-file -e "$sha^{commit}" 2>/dev/null || git -C head fetch -q --no-tags origin "$sha"; } \
+              && [ "$(git -C head rev-parse "$sha:$workflow" 2>/dev/null)" = "$mine" ]; then
+              found=$run
+            fi
+            if [ -n "$found" ]; then break; fi
+          done < <(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$name&per_page=30" \
+            --jq '.artifacts[] | select(.expired | not) | select(.workflow_run.head_repository_id == .workflow_run.repository_id) | "\(.workflow_run.id) \(.workflow_run.head_branch) \(.workflow_run.head_sha)"' || true)
+          kept=false
+          if [ -n "$found" ] && gh run download "$found" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "$RUNNER_TEMP/kept" \
+            && (cd "$RUNNER_TEMP/kept" && sha256sum --check --strict manifest.sha256); then
+            rm -rf "${GUNGRAUN_HOME:?}"
+            mkdir -p "$GUNGRAUN_HOME"
+            tar -xf "$RUNNER_TEMP/kept/base.tar" -C "$GUNGRAUN_HOME"
+            cp "$RUNNER_TEMP/kept/base.names" "$RUNNER_TEMP/base.names"
+            kept=true
+            echo "::notice::The merge base's counts on $TARGET come from run $found ($name); it is not measured again."
+          fi
+          echo "kept=$kept" >> "$GITHUB_OUTPUT"
+
+      - name: Benchmark the merge base
+        id: base
+        if: needs.scope.outputs.base_gate == 'true' && steps.kept.outputs.kept != 'true'
         working-directory: base
         env:
           # Read when the benchmark is compiled (gungraun::main! uses option_env!).
@@ -430,6 +515,31 @@ jobs:
           cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
             | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
             | sort > "$RUNNER_TEMP/base.names"
+
+      # The merge base's counts, kept for the next run with the same merge base, before any step
+      # runs the change's own code: Gungraun's home holds only the saved run `base` here.
+      - name: Keep the merge base's counts
+        if: steps.base.outcome == 'success'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/keep"
+          tar -cf "$RUNNER_TEMP/keep/base.tar" -C "$GUNGRAUN_HOME" .
+          cp "$RUNNER_TEMP/base.names" "$RUNNER_TEMP/keep/base.names"
+          (cd "$RUNNER_TEMP/keep" && sha256sum base.tar base.names > manifest.sha256)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.base.outcome == 'success'
+        with:
+          name: ${{ steps.kept.outputs.name }}
+          path: ${{ runner.temp }}/keep
+          retention-days: 14
+          if-no-files-found: error
+
+      # The golden digests (no benchmark may get faster by computing something else, and the
+      # results recorded on one platform must come out the same here), the input classes, and the
+      # wiring of the gates. After the merge base's counts are kept: it runs the change's code.
+      - name: Check the benchmarks' inputs, results and wiring
+        working-directory: head
+        run: cargo "+$HEAD_TOOLCHAIN" test --locked --release -p geom-bench
 
       # Every run of the benchmark binary in this job builds it with --no-default-features, without
       # geom-bench's judge: Gungraun's runner crate is also in the benchmark binary, and turning on
@@ -729,10 +839,27 @@ jobs:
           compare=(--baseline=head 'instructions::sign::*')
           cargo "+$HEAD_TOOLCHAIN" run --locked -q -p geom-test --bin trip -- gungraun -- cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- "${compare[@]}" --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS"
 
+      # The merge queue's mark that aarch64 passed on this tree, so the push to main that lands it
+      # measures x86-64 only (the paragraph at the top).
+      - name: The merge queue's mark for this tree
+        if: success() && github.event_name == 'merge_group' && matrix.target == 'aarch64'
+        run: |
+          mkdir -p "$RUNNER_TEMP/mark"
+          echo "$HEAD_SHA" > "$RUNNER_TEMP/mark/commit.txt"
+          echo "TREE=$(git -C head rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: success() && github.event_name == 'merge_group' && matrix.target == 'aarch64'
+        with:
+          name: bench-aarch64-tested-${{ env.TREE }}
+          path: ${{ runner.temp }}/mark
+          retention-days: 30
+          if-no-files-found: error
+
   fuel:
     name: WebAssembly fuel and growth (5% gate)
     needs: scope
-    if: needs.scope.outputs.measure == 'true'
+    # The pull request's pushes measured wasm32's fuel; the merge queue measures only aarch64.
+    if: needs.scope.outputs.measure == 'true' && github.event_name != 'merge_group'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:

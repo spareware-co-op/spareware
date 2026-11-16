@@ -581,7 +581,7 @@ fn attack_every_target_has_its_tests_and_its_proofs_in_the_kani_matrix() {
     );
 
     // Seeded violations: each must be reported.
-    let drop_proof = workflow.replace("- orient2d_proof\n", "");
+    let drop_proof = workflow.replace("- orient2d_proof_filter\n", "");
     assert_ne!(drop_proof, workflow);
     assert!(
         layout_violations(&targets, &tests, &drop_proof)
@@ -683,13 +683,13 @@ fn attack_a_should_panic_bolero_test_is_refused() {
     let mut returning = tests.clone();
     let text = returning.get_mut("orient2d").unwrap();
     *text = text.replace(
-        ".for_each(|draw| holds(prove(PROOF_BOUND, draw)));",
-        ".for_each(|draw| prove(PROOF_BOUND, draw));",
+        ".for_each(|draw| holds(prove(PROOF_BOUND, draw, Claim::Filter)));",
+        ".for_each(|draw| prove(PROOF_BOUND, draw, Claim::Filter));",
     );
     let v = layout_violations(&targets, &returning, &workflow);
     assert!(
         v.iter()
-            .any(|v| v.contains("orient2d_proof") && v.contains("holds")),
+            .any(|v| v.contains("orient2d_proof_filter") && v.contains("holds")),
         "{v:?}"
     );
     // A #[should_panic] test without check!, and a bolero test that catches the panic itself,

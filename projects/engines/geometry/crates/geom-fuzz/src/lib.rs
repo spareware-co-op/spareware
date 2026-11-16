@@ -107,8 +107,9 @@
 //! - **Kani, bounded proofs, on Linux.** A target's `<target>_proof` test wraps `check` in
 //!   `bolero::check!` over a generator of the domain to be proven and is marked `kani::proof`
 //!   under `cfg(kani)`; Kani 0.68.0 makes every generated value symbolic and proves the law for
-//!   all of them: `cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact`. Under
-//!   `cargo test` the same test is a property test over that domain.
+//!   all of them: `cargo kani --tests -p geom-fuzz --harness orient2d_proof_filter --exact`
+//!   (orient2d's proof is split by claim, one `<target>_proof_<claim>` test each, which together
+//!   prove `check`). Under `cargo test` the same test is a property test over that domain.
 //!
 //! Targets for operations, readers and operation sequences arrive with them.
 //!

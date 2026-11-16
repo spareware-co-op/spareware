@@ -5100,14 +5100,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
-      "mutant": "replace * with / in carrier",
-      "line_text": "slope: slope * s.axial_sign(),",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "A surface's axial sign is exactly +1 or -1 (geom_surface::analytic, Cone::axial_sign), and for s = +1 or -1, slope / s and slope * s are the same double: both are slope or -slope exactly."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
       "mutant": "replace * with / in away",
       "line_text": "a.lo() * a.hi() > 0.0",
       "occurrences": 1,
@@ -6422,9 +6414,9 @@
       "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
       "mutant": "replace == with != in Meeting::rounded",
       "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
-      "occurrences": 2,
+      "occurrences": 1,
       "kind": "equivalent",
-      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does). Of the line's two ==, this is the parity test, == 1: replaced, a tie rounds to odd rather than even, half a step off either way. The other, twice == w, is killed and not counted: replaced, a point with an odd floor that is not a tie rounds up, even one exactly on the grid, so a corner on the frame's last coordinate, which is odd, leaves the frame (geom-poly's recursion test the_kept_tree_clones_compares_prints_and_drops_a_hundred_levels_deep fails with OutOfRange)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
@@ -8292,14 +8284,6 @@
       "reason": "With && a split that separates too few polygons is taken anyway: the polygons that span it go to both halves, so each child holds about as many as the box and is split again, down to boxes a step wide, and the work grows until the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace | with ^ in splits",
-      "line_text": "let odd = middle | 1;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant moves an odd middle one half step down, onto a whole step, and leaves an even one as it was. The split is then on a plane of the grid, where a corner can lie. A polygon in that plane goes on as the in-plane test sends it, a path that meets the plane is settled by the moved planes of Simulation of Simplicity, and a box's vectors do not depend on where it was split (a_small_leaf_gives_the_vectors_a_large_one_does, and the body tests at every leaf size). Odd steps only keep those ties from arising, so no result changes."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
       "mutant": "replace > with >= in plan_axes",
       "line_text": "([1, 2], x > 0)",
@@ -8498,14 +8482,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "units is not 0 here: the function returned at the top for that."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
-      "mutant": "replace != with == in dyadic",
-      "line_text": "while part != 0 {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "With == the loop runs only while the fraction left is zero, and then for ever: cut(0) leaves it zero and writes another 0 each turn, so a whole number never returns and the tests stop it by their timeout. It hangs; it never writes a wrong number."
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",

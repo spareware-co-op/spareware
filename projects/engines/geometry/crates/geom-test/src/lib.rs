@@ -115,6 +115,10 @@
 //! - [`test_scope`]: which crates' tests a pull request's change can reach, by the crate graph
 //!   with development dependencies, so `kernel.yml`'s suites test only those
 //!   (`kernel-quality test-scope`).
+//! - [`shared`]: what a change to `MAP.json` or `quality-ledger.json` reaches, read by its changed
+//!   entries, and which crates read those files whole, for both selections.
+//! - [`increment`]: what a later push to a pull request must mutate or measure again after an
+//!   earlier push's run finished clean (`kernel-quality mutants-increment`).
 //!
 //! Gate 1 (piece G43) adds:
 //!
@@ -307,6 +311,7 @@ pub mod golden;
 pub mod grid;
 pub mod guard;
 pub mod history;
+pub mod increment;
 pub mod ledger;
 pub mod licence;
 pub mod map;
@@ -328,6 +333,7 @@ pub mod scan;
 pub mod second_check;
 pub mod second_mesh;
 pub mod seed;
+pub mod shared;
 pub mod ssi;
 pub mod test_scope;
 pub mod trip;

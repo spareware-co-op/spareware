@@ -37,10 +37,14 @@
 //! Method: chapter 8.3's rules (`projects/engines/geometry/architecture/08-topology.md`); the crossing
 //! number for a point in a polygon (Haines, "Point in polygon strategies", Graphics Gems IV, 1994,
 //! doi:10.1016/B978-0-12-336156-1.50013-6); Cramer's rule for three planes; the divergence theorem
-//! for a polyhedron's volume (Goldman, Graphics Gems II, 1991, doi:10.1016/B978-0-08-050754-5.50043-8).
+//! for a polyhedron's volume (Goldman, Graphics Gems II, 1991, doi:10.1016/B978-0-08-050754-5.50043-8);
+//! sort and sweep along one axis for the pairs of faces whose boxes meet (Baraff, "Dynamic
+//! Simulation of Non-Penetrating Rigid Bodies", doctoral thesis, Cornell University, 1992).
 //!
-//! Cost: rationals grow with the depth of the sums, and each pair of faces costs the product of
-//! their edges. This checker accepts that, because it runs on tests only. No recursion.
+//! Cost: rationals grow with the depth of the sums. The pairs of faces tested for crossing are
+//! those whose boxes meet along x, found by sorting the faces' boxes and sweeping, and each costs
+//! the product of their edges. This checker accepts that, because it runs on tests only. No
+//! recursion.
 
 // The lint is for fixed-width arithmetic, which can overflow. Every operator here is on dashu's
 // arbitrary-precision rationals, which cannot, and every division is by a value shown nonzero
@@ -517,39 +521,72 @@ fn on_segment(a: &V3, b: &V3, x: &V3) -> bool {
     }
 }
 
-/// Whether `x` is on something `f` and `g` share: a vertex of both, or a point of an edge of both.
-fn shared(r: &Read, f: &Plate, g: &Plate, x: &V3) -> bool {
-    let of = |p: &Plate| -> Vec<Side> { p.rings.iter().flatten().copied().collect() };
-    let (one, other) = (of(f), of(g));
-    let place = |v: u32| r.points.get(v as usize).and_then(Option::as_ref);
-    one.iter().any(|s| {
-        let vertex =
-            place(s.from).is_some_and(|p| p == x) && other.iter().any(|t| t.from == s.from);
-        let edge = other.iter().any(|t| t.edge == s.edge)
-            && place(s.from)
-                .zip(place(s.to))
-                .is_some_and(|(a, b)| on_segment(a, b, x));
-        vertex || edge
-    })
+/// What two faces share: the places of the vertices both have, and the segments of the edges both
+/// have.
+struct Shared {
+    corners: Vec<V3>,
+    edges: Vec<(V3, V3)>,
+}
+
+impl Shared {
+    /// What `f` and `g` share, found once for a pair: each of `f`'s sides whose edge is one of `g`'s,
+    /// and each of its corners that is one of `g`'s.
+    fn of(r: &Read, f: &Plate, g: &Plate) -> Shared {
+        let of = |p: &Plate| -> Vec<Side> { p.rings.iter().flatten().copied().collect() };
+        let (one, other) = (of(f), of(g));
+        let place = |v: u32| r.points.get(v as usize).and_then(Option::as_ref);
+        let mut corners = Vec::new();
+        let mut edges = Vec::new();
+        for s in &one {
+            if other.iter().any(|t| t.from == s.from) {
+                corners.extend(place(s.from).cloned());
+            }
+            if other.iter().any(|t| t.edge == s.edge) {
+                edges.extend(place(s.from).cloned().zip(place(s.to).cloned()));
+            }
+        }
+        Shared { corners, edges }
+    }
+
+    /// Whether `x` is on something the two faces share: a vertex of both, or a point of an edge of
+    /// both.
+    fn holds(&self, x: &V3) -> bool {
+        self.corners.iter().any(|p| p == x) || self.edges.iter().any(|(a, b)| on_segment(a, b, x))
+    }
 }
 
 /// Whether any of `list`, points of both faces' planes, lies in both faces away from what they
 /// share. Each face is read in its own plane, dropping the coordinate its own normal is largest
 /// in: dropped along the other face's, a face square to it is a segment, which holds every point
 /// of its plane's line in that segment's shadow, in the face or not.
+///
+/// A point outside either face's box is in neither's polygon: it lies on both planes, and a face
+/// lies inside its box, every corner having been found there first (`on_planes`, whose findings
+/// stop the crossing tests). So the boxes are read before the polygons, and what the two faces
+/// share is found once for the pair, not once a point. Gate 4's figure 24 has faces of dozens of
+/// edges and lists of dozens of points along a line, most of them beyond the other face.
 fn any_crossing(r: &Read, f: &Plate, g: &Plate, list: &[V3]) -> Option<bool> {
     let (fa, ga) = (largest(&f.n), largest(&g.n));
     let (one, other) = (flats(&sides(r, f)?, fa), flats(&sides(r, g)?, ga));
+    let boxed = |p: &Plate, x: &V3| {
+        x.iter()
+            .zip(p.low.iter().zip(&p.high))
+            .all(|(c, (lo, hi))| lo <= c && c <= hi)
+    };
+    let mut shared: Option<Shared> = None;
     Some(list.iter().any(|x| {
-        locate(&one, &flat(x, fa)) != Place::Out
+        boxed(f, x)
+            && boxed(g, x)
+            && locate(&one, &flat(x, fa)) != Place::Out
             && locate(&other, &flat(x, ga)) != Place::Out
-            && !shared(r, f, g, x)
+            && !shared.get_or_insert_with(|| Shared::of(r, f, g)).holds(x)
     }))
 }
 
 /// `points` sorted along `direction`, one of each place, with the midpoint of each two in turn.
 fn with_midpoints(mut points: Vec<V3>, direction: &V3) -> Vec<V3> {
-    points.sort_by_key(|p| dot(p, direction));
+    // Each key computed once; the sort is as stable as `sort_by_key`'s.
+    points.sort_by_cached_key(|p| dot(p, direction));
     points.dedup();
     let mut out = Vec::new();
     for pair in points.windows(2) {
@@ -703,26 +740,24 @@ fn sides_cross(r: &Read, axis: usize, s: Side, t: Side) -> Option<bool> {
     Some(touching || (opposite(&ab_c, &ab_d) && opposite(&cd_a, &cd_b)))
 }
 
-/// Whether `f` and `g` are the two sides of one wall: each side of one is a side of the other, the
-/// same edge between the same vertices run the other way.
-fn back_to_back(f: &Plate, g: &Plate) -> bool {
-    let of = |p: &Plate, turned: bool| -> Vec<(u32, u32, u32)> {
-        let mut list: Vec<(u32, u32, u32)> = p
-            .rings
-            .iter()
-            .flatten()
-            .map(|s| {
-                if turned {
-                    (s.edge, s.to, s.from)
-                } else {
-                    (s.edge, s.from, s.to)
-                }
-            })
-            .collect();
-        list.sort_unstable();
-        list
-    };
-    of(f, false) == of(g, true)
+/// A face's sides as `(edge, from, to)`, sorted; with `turned`, each run the other way. Two faces
+/// are the two sides of one wall, back to back, when one's list is the other's turned: each side
+/// of one is a side of the other, the same edge between the same vertices run the other way.
+fn wall(p: &Plate, turned: bool) -> Vec<(u32, u32, u32)> {
+    let mut list: Vec<(u32, u32, u32)> = p
+        .rings
+        .iter()
+        .flatten()
+        .map(|s| {
+            if turned {
+                (s.edge, s.to, s.from)
+            } else {
+                (s.edge, s.from, s.to)
+            }
+        })
+        .collect();
+    list.sort_unstable();
+    list
 }
 
 /// Group 3 of chapter 8.3 on the read plates; `cells` for a general body, whose walls are two faces
@@ -746,14 +781,56 @@ fn crossings(r: &mut Read, cells: bool) {
             }
         }
     }
-    for (i, f) in r.plates.iter().enumerate() {
-        for g in r.plates.iter().skip(i + 1) {
-            if cells && back_to_back(f, g) {
+    // Every pair of faces whose boxes meet along x, by sort and sweep: the faces in order of their
+    // boxes' lowest x, each against those after it that start at or before its highest x, which
+    // stops at the first that starts beyond. A pair left out is apart along x, which `faces_cross`
+    // answers first with no crossing, so leaving it out changes no finding; the findings are then
+    // put in the order of the faces' rows, as a scan of every pair lists them. A scan of every pair
+    // took minutes on Gate 4's figure 24 (5,760 faces, sixteen million pairs).
+    let mut spans: Vec<(&RBig, &RBig, usize)> = r
+        .plates
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let ([low, ..], [high, ..]) = (&p.low, &p.high);
+            (low, high, i)
+        })
+        .collect();
+    spans.sort_by(|a, b| a.0.cmp(b.0).then(a.2.cmp(&b.2)));
+    // The two sides of each face's wall, for a general body only.
+    let walls: Vec<[Vec<(u32, u32, u32)>; 2]> = if cells {
+        r.plates
+            .iter()
+            .map(|p| [wall(p, false), wall(p, true)])
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let back_to_back = |i: usize, j: usize| {
+        cells && walls.get(i).map(|[w, _]| w) == walls.get(j).map(|[_, turned]| turned)
+    };
+    let mut crossing: Vec<(usize, usize)> = Vec::new();
+    for (k, (_, high, i)) in spans.iter().enumerate() {
+        for (low, _, j) in spans.iter().skip(k + 1) {
+            if low > high {
+                break;
+            }
+            let (i, j) = ((*i).min(*j), (*i).max(*j));
+            let (Some(f), Some(g)) = (r.plates.get(i), r.plates.get(j)) else {
+                continue;
+            };
+            if back_to_back(i, j) {
                 continue;
             }
             if faces_cross(r, f, g).unwrap_or(false) {
-                found.push(Finding::FacesCross(f.row, g.row));
+                crossing.push((i, j));
             }
+        }
+    }
+    crossing.sort_unstable();
+    for (i, j) in crossing {
+        if let (Some(f), Some(g)) = (r.plates.get(i), r.plates.get(j)) {
+            found.push(Finding::FacesCross(f.row, g.row));
         }
     }
     r.findings.append(&mut found);

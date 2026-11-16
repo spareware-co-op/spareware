@@ -251,7 +251,7 @@ fn the_catalogue_is_every_job_and_target_of_the_workflow() {
     // A Kani harness of a target without proofs.
     planted(
         "harness",
-        &edited("- orient2d_proof\n", "- wide_proof\n"),
+        &edited("- orient2d_proof_filter\n", "- wide_proof\n"),
         &JOBS,
         "harness wide_proof is defined by no target",
     );
