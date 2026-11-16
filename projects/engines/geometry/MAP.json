@@ -14908,7 +14908,7 @@
           "guarantees": [
             "nothing here runs an oracle, and only `triage` writes a file: the register and the one fixture. Exit codes: 0 when everything checked holds; 1 when a check fails or a new signature appears; 2 for a usage error, or a file or a line that cannot be read (a broken harness is never a pass)."
           ],
-          "job": "`oracle`: the outside oracles' tool: list the catalogue, check it, write a night's jobs, compare the answers, and record a triage.",
+          "job": "`oracle`: the outside oracles' tool: list the catalogue, check it, write a run's jobs, compare the answers, and record a triage.",
           "method": {
             "none": "it parses its arguments and calls [`geom_test::oracle`], whose module headers carry the methods."
           },
@@ -15145,6 +15145,39 @@
           },
           "path": "geom_test::deps",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "reading and hashing the two files (about 125 KB), [`crate::stl::placed`]'s rationals for their 2,504 faces' corners, and two builds.",
+          "does": "[`model`] reads one model of the fetched corpus `ember-cleared-pairs` from a folder and refuses bytes that are not the register's; [`case`] is the pair's entry of EMBER's case list, written here as the list writes it ([`CASE`]), so the benchmark's job fetches the two models alone and never the list or the rest of the corpus (`tests/ember_pairs.rs` holds this entry to the list's own wherever the whole corpus is fetched); [`meshes`] reads both models, moves each by its transform exactly, puts the two on one grid (`stl::on_one_grid`) and builds each with `geom-mesh`'s builder, serially.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ember.rs",
+          "guarantees": [
+            "**The register's bytes or nothing.** A model is read only after its SHA-256 equals the register's; a missing file, another file's bytes, or a name the corpus does not hold is an error naming the file, never a mesh.",
+            "**EMBER's pair.** [`MODELS`] are the pair's two models in EMBER's order, the first less the second being EMBER's own operation.",
+            "**The same meshes on every target.** The reading, the transforms and the grid are `geom_test::stl`'s exact arithmetic; the builder runs serially."
+          ],
+          "job": "EMBER's pair 827 as the count gate's benchmark `mesh/ember` takes it (Gate 4, G156): its two `Thingi10K` models, each held to its SHA-256 in the corpus register, moved by EMBER's transforms and built into exact meshes on one grid, exactly as `tests/ember_pairs.rs` runs every cleared pair.",
+          "method": {
+            "links": [
+              "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp"
+            ],
+            "text": "EMBER's case list and its transforms as Manifold's `extras/ember_tests/man_bench.cpp` reads them (<https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp>), through [`crate::stl`] and [`crate::polyhedral::mesh_polygons`]; SHA-256 by [`crate::golden::sha256`]."
+          },
+          "path": "geom_test::ember",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp",
+              "method_note": null,
+              "name": "Manifold",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for how EMBER moves and combines a pair. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -16566,13 +16599,15 @@
           "target": "lib"
         },
         {
-          "cost": "a job's boolean is the kernel's; sampling is the sample points times the triangles or faces of the other side, on solids of a few dozen; the exact reference runs only on a difference.",
-          "does": "[`jobs`] draws a night's seeded pairs of closed solids with integer corners and a boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra. Each job is one JSON line in whole grid steps, so an exact oracle reads what the kernel read and a floating-point one reads integers an `f64` holds exactly, with no conversion to round. The harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer with `geom-mesh`'s boolean, and settles a difference by the exact reference ([`crate::flat_reference`]): whether the kernel's volume is the reference's.",
+          "cost": "a job's boolean is the kernel's; sampling is the sample points times the triangles or faces of the other side, on seeded solids of a few dozen and stored models of up to [`MODEL_FACES`] each, a triangle whose box is certainly farther than the nearest so far passed by; the exact reference runs on a difference, on each solid once per [`Judge`] to read whether it crosses itself, and on each job of a solid that does.",
+          "does": "[`jobs`] draws a night's seeded pairs of closed solids with integer corners and a boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra. Each job is one JSON line in whole grid steps, so an exact oracle reads what the kernel read and a floating-point one reads integers an `f64` holds exactly, with no conversion to round. Those are the case set `seeded`; the set `manifold-models` ([`model_jobs`]) is Manifold's stored models of the polyhedral corpus's smaller tier, each with a moved copy of itself, under each boolean ([`CASE_SETS`] names every set, and [`case_jobs`] writes one). The harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer with `geom-mesh`'s boolean, and settles a difference by the exact reference ([`crate::flat_reference`]): whether the kernel's volume is the reference's. A model a case set records as refused ([`REFUSED_MODELS`]) is not sent to an oracle, and the kernel is held to its refusal ([`held_refusal`]). A job on a model that crosses itself ([`crosses`]), which the oracle's documentation says it does not take ([`stated_input`]), is judged by the exact reference alone ([`judge_by_reference`]; decision 32.59).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/oracle/meshes.rs",
           "guarantees": [
             "**Exact oracles are compared exactly**: a rational volume, equal or not.",
-            "**The others can only refute**: volume and area are held to both sides' stated bounds, capped at ours plus the fit bound ([`Allowance`]), and the Hausdorff distance is measured by dense deterministic sampling, so it is a lower bound on the true distance.",
+            "**The others can only refute**: volume and area are held to both sides' stated bounds, capped at ours plus the fit bound ([`Allowance`]), and the Hausdorff distance is measured by dense deterministic sampling, so it is a lower bound on the true distance. Each sample's distance to a triangle is itself a certified lower bound, never more than 10^-9 steps (and 2^-40 of the distance) below the truth: from the triangle's own corners in intervals, and in exact rationals where those cannot settle it.",
+            "**Outside the oracle's input, the reference alone**: a job whose solid crosses itself, by the kernel's own exact winding numbers, is outside what Manifold's and CGAL's documentation say they take, so the oracle's answer is not read: the kernel's volume must be the exact reference's, or the job fails. The job is never a pass on the oracle's word.",
+            "**A recorded refusal is held exactly**: a model the case set records as refused fails its jobs if the kernel accepts it or refuses it in another way.",
             "**The kernel's side is its exact result**: its volume and area are computed exactly from its corners, and the distance is measured from and to its exact faces, each corner the double nearest its place, never from the export's triangles, whose corners are rounded to the grid. So the oracle is held to the kernel's exact answer, and no rounding of ours is allowed for.",
             "**Refusals are compared**: a job one side refuses and the other answers is a difference, of kind `refused`, never a pass.",
             "**A result the kernel cannot measure is a difference**: a result whose corners cannot be placed, which only a defect can cause, is a difference of kind `unmeasured`, never a pass and never the end of the night.",
@@ -16583,7 +16618,7 @@
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
             ],
-            "text": "chapter 28.10 (`projects/engines/geometry/architecture/28-testing.md`). A solid's volume is the divergence theorem over a fan of each loop; a point on a face or an edge is Ericson, \"Real-Time Collision Detection\", 2005, section 5.1.5, closest point on a triangle, and section 5.1.2 on a segment; whether a point of a face's plane is inside its loops is the crossing test (W. Randolph Franklin's PNPOLY, as in Haines, \"Point in Polygon Strategies\", Graphics Gems IV, 1994). An exact face is sampled along its sides and on a lattice over its box in the plan its normal leans on least, lifted to its plane where the lattice is inside it."
+            "text": "chapter 28.10 (`projects/engines/geometry/architecture/28-testing.md`). A solid's volume is the divergence theorem over a fan of each loop; a point's distance to a triangle is its height over the triangle's plane where its foot is inside (three turns about the normal), or else its distance to the nearest side, Ericson, \"Real-Time Collision Detection\", 2005, section 5.1.2 on a segment, enclosed by interval arithmetic (Moore, Kearfott and Cloud, \"Introduction to Interval Analysis\", 2009) and decided in exact rationals where an enclosure cannot; whether a point of a face's plane is inside its loops is the crossing test (W. Randolph Franklin's PNPOLY, as in Haines, \"Point in Polygon Strategies\", Graphics Gems IV, 1994). An exact face is sampled along its sides and on a lattice over its box in the plan its normal leans on least, lifted to its plane where the lattice is inside it."
           },
           "path": "geom_test::oracle::meshes",
           "provenance": [],
@@ -17312,6 +17347,29 @@
             "text": "JSON (RFC 8259, <https://www.rfc-editor.org/rfc/rfc8259>) read with `serde_json` and compared entry by entry as multisets of their serialised text; Rust's tokens read with `proc-macro2`, as `fuzz_scope` reads `geom-fuzz`."
           },
           "path": "geom_test::shared",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the file for [`read`] and the list for [`cases`]; [`placed`] costs a few rational products a corner, and [`on_one_grid`] `obj::Read::to_grid`'s.",
+          "does": "[`read`] reads a binary or ASCII STL file with the `stl_io` crate, which welds corners only where their three `f32` values are bit for bit the same (24.8's rule), into [`Stl`]. [`cases`] reads EMBER's case list (Manifold's `ember-benchmark-cases.json`): each pair of `Thingi10K` file ids with the affine transform EMBER moves each model by. [`placed`] moves a model by its transform exactly, into the exact decimals of `geom_test::obj`, and [`on_one_grid`] puts the models of one pair on the grid at one scale, as `obj::Read::to_grid` does for one model, so the pair's two meshes meet on one grid:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/stl.rs",
+          "guarantees": [
+            "**Exact up to one stated rounding.** No coordinate passes through floating-point arithmetic after the file and the list: the grid value is the exact moved corner rounded once.",
+            "**Refused, never guessed.** A file `stl_io` cannot read, a value that is not finite, a transform whose last row is not `0 0 0 1`, and more corners or faces than a `u32` counts are each an [`StlError`]; a case list of another shape is an error with serde's message.",
+            "**The same on every target.** Integer and rational arithmetic only, after the file's bits."
+          ],
+          "job": "A test-only reader of STL meshes onto the grid, and of EMBER's case list: the way in for EMBER's boolean pairs (Gate 4, G156; the fetched corpus `ember-cleared-pairs`), before the kernel's own STL importer (`geom-meshio`, chapter 24.8) exists.",
+          "method": {
+            "links": [
+              "https://www.fabbers.com/tech/STL_Format",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229"
+            ],
+            "text": "the STL format as `stl_io` reads it (3D Systems' Stereolithography Interface Specification, 1989, as summarised at <https://www.fabbers.com/tech/STL_Format>); EMBER's case list and its transforms as Manifold's `extras/ember_tests/man_bench.cpp` reads them (Manifold at d056b8fb70de8c8e6d6bee2e639b71c20aa08d01, Apache-2.0: column-major 4 by 4, each model moved by its own, then the first less the second); an `f32` or `f64` value as the exact binary fraction IEEE 754-2019 defines (<https://doi.org/10.1109/IEEESTD.2019.8766229>)."
+          },
+          "path": "geom_test::stl",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -19268,6 +19326,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-run/src/exec.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp",
+      "method_note": null,
+      "name": "Manifold",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/ember.rs"
       ]
     },
     {

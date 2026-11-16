@@ -1,0 +1,3 @@
+# Miri's time table is compared byte for byte with what its one writer gives (decision 32.58),
+# so a Windows checkout must not turn its line ends into \r\n.
+crates/geom-test/src/miri-times.tsv text eol=lf

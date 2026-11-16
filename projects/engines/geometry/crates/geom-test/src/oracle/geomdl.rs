@@ -375,6 +375,13 @@ pub enum Compared {
         /// What the exact reference found: whether the kernel is within its bound of the truth.
         settled: String,
     },
+    /// The job is outside what the oracle's own documentation says it takes, so the kernel was
+    /// judged by the exact reference alone, and equals it (the mesh oracles' rule, decision
+    /// 32.59). Never a difference, and never a signature to triage.
+    Outside {
+        /// Why: what the job is, and where the oracle's documentation says so.
+        why: String,
+    },
 }
 
 /// The difference `job` raised, of `kind`, with `settled`.
