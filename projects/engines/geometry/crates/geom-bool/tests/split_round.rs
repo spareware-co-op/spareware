@@ -1825,3 +1825,275 @@ fn a_section_is_kept_only_where_it_is_inside_both_faces() {
     ends.sort_unstable();
     assert_eq!(ends, [p(0, -50, 50), p(0, 50, 50)]);
 }
+
+/// The side of a cylinder of radius `r` (in steps) about the axis through `base` along the unit
+/// vector `axis`, with `first` square to it, from the height `from` to the height `to` (in steps):
+/// as [`Build::tube`], for any axis, radius and centre a double holds: the face, its circle at
+/// `from` and its circle at `to`.
+fn side_of(
+    b: &mut Build,
+    (base, axis, first): ([f64; 3], [f64; 3], [f64; 3]),
+    r: f64,
+    (from, to): (f64, f64),
+) -> (usize, usize, usize) {
+    let frame = Frame::new(first, axis).unwrap();
+    let along = |h: f64| core::array::from_fn(|c| base[c] + h * axis[c]);
+    let near = Circle::new(along(from), r, frame, (0.0, 2.0)).unwrap();
+    let far = Circle::new(along(to), r, frame, (0.0, 2.0)).unwrap();
+    let near = b.edge(CurveKind::Circle(near), None, 0);
+    let far = b.edge(CurveKind::Circle(far), None, 0);
+    let cylinder = Cylinder::new(base, r, frame, ((0.0, 2.0), (from, to))).unwrap();
+    let ix = b.surface(SurfaceKind::Cylinder(cylinder));
+    let face = b.face_with(ix, vec![vec![ahead(near)], vec![back(far)]], 0);
+    (face, near, far)
+}
+
+/// Whether a cylinder's side alone is one face, its outer loop the circle at the far end of its
+/// axis and its hole the other, or waits.
+fn one_side_or_waits(
+    (base, axis, first): ([f64; 3], [f64; 3], [f64; 3]),
+    r: f64,
+    heights: (f64, f64),
+) -> bool {
+    let mut b = Build::default();
+    let (side, near, far) = side_of(&mut b, (base, axis, first), r, heights);
+    let (out, splitting) = b.run();
+    if splitting.waiting == vec![side] {
+        return false;
+    }
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let parts = of_face(&splitting, side);
+    assert_eq!(parts.len(), 1, "{parts:?}");
+    assert_eq!(parts[0].outer, vec![run(whole_piece(&out, far), false)]);
+    assert_eq!(
+        parts[0].holes,
+        vec![vec![run(whole_piece(&out, near), true)]]
+    );
+    true
+}
+
+/// The largest coordinate of the grid, as a double.
+const EDGE: f64 = geom_num::grid::COORD_MAX as f64;
+
+/// A face on the nappe of a cone below its apex, where the radius `r + slope · v` is below zero
+/// over its domain, is split as the mirrored face on the nappe above: a plane across it at height
+/// −25 cuts it in a circle of radius 25 into the cap round the apex and the band to the rim. Seen
+/// from outside the cone, this face lies on its rim's left.
+#[test]
+fn a_face_on_a_cone_s_lower_nappe_is_split_as_one_on_its_upper_nappe() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let rim = b.circle(p(0, 0, -100), 100, frame, 0);
+    let domain = ((0.0, 2.0), (-(100 * S) as f64, 0.0));
+    let cone = Cone::new([0.0; 3], 0.0, 1.0, frame, domain).unwrap();
+    let ix = b.surface(SurfaceKind::Cone(cone));
+    let body = b.face_with(ix, vec![vec![ahead(rim)]], 0);
+    let sheet = b.sheet(2, -25, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(out.sections.len(), 1, "{:?}", out.sections);
+    let circle = Piece::Section(0);
+    let rim = whole_piece(&out, rim);
+    let mut parts: Vec<_> = of_face(&splitting, body)
+        .into_iter()
+        .map(shape_of)
+        .collect();
+    parts.sort();
+    let mut want = vec![(vec![rim], vec![vec![circle]]), (vec![circle], Vec::new())];
+    want.sort();
+    assert_eq!(parts, want);
+    assert_eq!(of_face(&splitting, sheet).len(), 2);
+}
+
+/// A cone whose domain reaches from one nappe through its apex into the other is no carrier a
+/// face can be seen on from one point (`Round::of`): its face waits, and so does the plane across
+/// it, though the face's own boundary lies on the upper nappe.
+#[test]
+fn a_cone_whose_domain_reaches_both_nappes_waits() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let rim = b.circle(p(0, 0, 100), 100, frame, 0);
+    let domain = ((0.0, 2.0), (-(100 * S) as f64, (100 * S) as f64));
+    let cone = Cone::new([0.0; 3], 0.0, 1.0, frame, domain).unwrap();
+    let ix = b.surface(SurfaceKind::Cone(cone));
+    let body = b.face_with(ix, vec![vec![back(rim)]], 0);
+    let sheet = b.sheet(2, 25, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert!(out.sections.is_empty(), "{:?}", out.sections);
+    assert_eq!(splitting.waiting, vec![body, sheet]);
+}
+
+/// The side of a cylinder of radius 50 whose axis runs along (0.6, 0.8, 0): the depth is measured
+/// in the second coordinate, which the axis runs only 0.8 along, so the centre must stand more
+/// than a radius and a quarter beyond the far end for the face to lie in front of it. It stands
+/// three radii and eight steps beyond, and the side is one face.
+#[test]
+fn a_cylinder_on_a_tilted_axis_is_one_face() {
+    let axis = [0.6, 0.8, 0.0];
+    let r = (50 * S) as f64;
+    assert!(one_side_or_waits(
+        ([0.0; 3], axis, [0.0, 0.0, 1.0]),
+        r,
+        (0.0, (100 * S) as f64)
+    ));
+}
+
+/// A cylinder of radius 10⁹ steps whose far end lies 4·10⁹ steps below the grid's edge: the
+/// centre it is seen from, three radii and eight steps beyond that end, is a grid point, and the
+/// side is one face. Where the far end lies a step less than that below the edge, the centre
+/// would stand a step past it: no such centre is had, and the side waits.
+#[test]
+fn a_cylinder_is_seen_from_three_radii_and_eight_steps_beyond_its_end() {
+    let r = 1.0e9;
+    let z = ([0.0; 3], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]);
+    let top = EDGE - 4.0e9;
+    assert!(one_side_or_waits(z, r, (top - r, top)));
+    let top = EDGE - 3.0 * r - 7.0;
+    assert!(!one_side_or_waits(z, r, (top - r, top)));
+}
+
+/// A cylinder of radius 0.3 steps about the axis through (0.5, 0.5) along the third coordinate:
+/// the grid point nearest any point of its axis lies half a step or more from it, outside the
+/// carrier, so no centre inside is had, and the side waits.
+#[test]
+fn a_thin_cylinder_with_no_grid_point_inside_waits() {
+    let z = ([0.5, 0.5, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]);
+    assert!(!one_side_or_waits(z, 0.3, (0.0, (100 * S) as f64)));
+}
+
+/// The plane z = 2x + 50 across a cylinder of radius 50 from height 0 to 100: its ellipse runs
+/// from height −50 to 150, past both ends of the cylinder's domain, where the closed form cuts it.
+/// The section's curve is the whole ellipse all the same, once, and its two stretches on the side
+/// are two sections, each from rim to rim.
+#[test]
+fn a_steep_plane_s_ellipse_cut_by_a_cylinder_s_ends_is_one_whole_curve() {
+    let mut b = Build::default();
+    let (side, _, _) = b.tube((p(0, 0, 0), 2, 1.0), 50, (0, 100), 0);
+    let m = 100 * S;
+    let sheet = b.quad(
+        [
+            [-m, -m, -3 * m / 2],
+            [m, -m, 5 * m / 2],
+            [m, m, 5 * m / 2],
+            [-m, m, -3 * m / 2],
+        ],
+        1,
+    );
+    let (out, splitting) = b.run();
+    assert_eq!(out.curves.len(), 1, "{:?}", out.curves);
+    match &out.curves[0] {
+        CurveKind::Ellipse(e) => assert_eq!(geom_curve::ParamCurve::domain(e), (0.0, 2.0)),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(out.sections.len(), 2, "{:?}", out.sections);
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let parts = of_face(&splitting, side);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    assert!(parts.iter().all(|s| s.outer.len() == 4), "{parts:?}");
+    assert_eq!(of_face(&splitting, sheet).len(), 1);
+}
+
+/// The plane x = 10 across the cap above height 30 of a sphere of radius 50 whose domain is its
+/// upper half: the plane's circle runs below the equator too, where the closed form cuts it at
+/// the domain's end. The section's curve is the whole circle all the same, and the cap splits
+/// in two along it.
+#[test]
+fn a_plane_s_circle_cut_by_a_sphere_s_domain_is_one_whole_curve() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let rim = b.circle(p(0, 0, 30), 40, frame, 0);
+    let upper = ((0.0, 2.0), (0.0, 0.5));
+    let ball = Sphere::new([0.0; 3], (50 * S) as f64, frame, upper).unwrap();
+    let ix = b.surface(SurfaceKind::Sphere(ball));
+    let cap = b.face_with(ix, vec![vec![ahead(rim)]], 0);
+    b.sheet(0, 10, (-1000, 1000), 1);
+    let (out, splitting) = b.run();
+    assert_eq!(out.curves.len(), 1, "{:?}", out.curves);
+    match &out.curves[0] {
+        CurveKind::Circle(c) => assert_eq!(geom_curve::ParamCurve::domain(c), (0.0, 2.0)),
+        other => panic!("{other:?}"),
+    }
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(of_face(&splitting, cap).len(), 2);
+}
+
+/// The cylinder's and the plane's faces each split in two along one closed section: a disc and
+/// the rest of the plane's face, and the side above and below.
+fn cut_in_two(b: &Build, (side, sheet): (usize, usize)) {
+    let (out, splitting) = b.run();
+    assert_eq!(out.sections.len(), 1, "{:?}", out.sections);
+    assert!(out.sections[0].from.is_none(), "{:?}", out.sections);
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let section = Piece::Section(0);
+    let parts = of_face(&splitting, side);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    let parts = of_face(&splitting, sheet);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    let inside: Vec<_> = parts.iter().filter(|s| s.outer.len() == 1).collect();
+    assert_eq!(inside.len(), 1, "{parts:?}");
+    assert_eq!(inside[0].outer[0].piece, section);
+}
+
+/// The plane x + 2z = 250 across a cylinder of radius 50 about the axis through (150, −150): the
+/// plane's normal is largest in z, 2, so its surface runs x/2 and y/2 in its parameters, over a
+/// box wholly on one side of each axis. The closed forms find the whole ellipse.
+#[test]
+fn a_plane_whose_normal_is_largest_in_two_meets_a_cylinder_off_the_axes() {
+    let mut b = Build::default();
+    let (side, _, _) = b.tube((p(150, -150, 0), 2, 1.0), 50, (0, 100), 0);
+    let sheet = b.quad(
+        [
+            [0, -300 * S, 125 * S],
+            [300 * S, -300 * S, -25 * S],
+            [300 * S, 0, -25 * S],
+            [0, 0, 125 * S],
+        ],
+        1,
+    );
+    cut_in_two(&b, (side, sheet));
+}
+
+/// The plane x + y + z = the grid's largest coordinate, across a cylinder about an axis through
+/// a point of it a third of the way out on each axis: the plane crosses its axis at the grid's
+/// edge, which a grid point holds, so it is met.
+#[test]
+fn a_plane_crossing_its_axis_at_the_grid_s_edge_is_met() {
+    let m3 = geom_num::grid::COORD_MAX / 3;
+    let mut b = Build::default();
+    let base = P3::new(m3, m3, m3 - 100 * S).unwrap();
+    let (side, _, _) = b.tube((base, 2, 1.0), 50, (0, 200), 0);
+    let d = 400 * S;
+    let sheet = b.quad(
+        [
+            [m3 - d, m3 - d, m3 + 2 * d],
+            [m3 + d, m3 - d, m3],
+            [m3 + d, m3 + d, m3 - 2 * d],
+            [m3 - d, m3 + d, m3],
+        ],
+        1,
+    );
+    cut_in_two(&b, (side, sheet));
+}
+
+/// A cylinder of radius 10⁹ steps whose side reaches to a radius of the grid's edge in x, cut
+/// across by a plane: the plane's surface reaches past the cylinder's box by an eighth of its
+/// width, which stays inside the closed forms' range, and the pair is met.
+#[test]
+fn a_cylinder_a_radius_from_the_grid_s_edge_is_cut_across() {
+    let max = geom_num::grid::COORD_MAX;
+    let r = 1_000_000_000_i64;
+    let c = max - 2 * r;
+    let mut b = Build::default();
+    let z = ([c as f64, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]);
+    let (side, _, _) = side_of(&mut b, z, r as f64, (0.0, 2.0 * r as f64));
+    let sheet = b.quad(
+        [
+            [c - 2 * r, -2 * r, r],
+            [max, -2 * r, r],
+            [max, 2 * r, r],
+            [c - 2 * r, 2 * r, r],
+        ],
+        1,
+    );
+    cut_in_two(&b, (side, sheet));
+}

@@ -1239,7 +1239,7 @@ const EXACT_WHOLE: u128 = 9_007_199_254_740_992;
 /// exactly by its doubles: with k the coordinate the normal is largest in, c the point where the
 /// plane crosses that axis, and a and b the whole vectors nₖ·eᵢ − nᵢ·eₖ and nₖ·eⱼ − nⱼ·eₖ,
 /// each square to n. Its domain reaches past the box `lo..hi` of the carrier it is to meet (where
-/// xᵢ = u·nₖ and xⱼ = v·nₖ) by an eighth of its width and a step each way, so it holds every
+/// xᵢ = u·nₖ and xⱼ = v·nₖ) by an eighth of its width each way, so it holds every
 /// point of that carrier on the plane: the closed forms take no plane without end. `None` when a
 /// number is not whole in a double, or c lies past the grid's range: the pair then waits, never
 /// met on a plane that is not the face's.
@@ -1282,7 +1282,9 @@ fn flat_surface(plane: &Plane, (lo, hi): ([f64; 3], [f64; 3])) -> Option<Surface
     let span = |i: usize| -> Option<(f64, f64)> {
         let (a, b) = (lo.get(i)? / top, hi.get(i)? / top);
         let (a, b) = (lesser(a, b), greater(a, b));
-        let margin = (b - a) / 8.0 + 1.0;
+        // An eighth of the width: the box holds the carrier, so any margin above nothing keeps
+        // its points off the surface's own edges, and this one also clears the rounding of a and b.
+        let margin = (b - a) * 0.125;
         Some((a - margin, b + margin))
     };
     let (i, j) = match k {
@@ -1389,8 +1391,10 @@ fn quadric(surface: &SurfaceKind) -> bool {
 /// as far from a cylinder's axis as its radius, say), with no band and no gap, so the carriers
 /// meet along it exactly. `None` when the closed forms leave the pair (general position, or no
 /// enclosure decides), or find what this stage does not make sections of: carriers that touch at a
-/// point, a touch the closed forms do not prove exact, a stretch ending at a flagged region, or an
-/// open curve cut at a seam. Two curves with an empty list: the carriers are proven not to meet.
+/// point, a touch the closed forms do not prove exact, or a stretch ending at a flagged region or
+/// at a seam (12.7's closed forms cut a curve only at a domain's end, so no stretch of theirs ends
+/// at a seam; one that did would be refused, a circle's or an ellipse's too). Two curves with an
+/// empty list: the carriers are proven not to meet.
 fn section_curves(
     a: &SurfaceKind,
     b: &SurfaceKind,
@@ -1424,7 +1428,7 @@ fn section_curves(
         }
         if ends
             .iter()
-            .any(|e| matches!(e, CurveEnd::Singular | CurveEnd::Flagged))
+            .any(|e| matches!(e, CurveEnd::Singular | CurveEnd::Flagged | CurveEnd::Seam))
         {
             return Ok(None);
         }
@@ -1438,8 +1442,7 @@ fn section_curves(
             CurveKind::Ellipse(e) => CurveKind::Ellipse(
                 Ellipse::new(e.center(), e.axes(), turn).map_err(IntersectError::from)?,
             ),
-            _ if ends.contains(&CurveEnd::Seam) => return Ok(None),
-            other => other.clone(),
+            _ => curve.clone(),
         };
         if !curves.contains(&whole) {
             curves.push(whole);

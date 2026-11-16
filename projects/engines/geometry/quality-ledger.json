@@ -9084,6 +9084,22 @@
       "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. With && a vertex is skipped only when it is outside on more axes at once, so fewer are skipped, and to_box finds those apart: touching returns the same vertex or none."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/picture.rs",
+      "mutant": "replace Central::turned_whole -> Option<[I256; 3]> with None",
+      "line_text": "let [first, second, third] = self.axes;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "turned_whole's only caller is Central::line_tangent, which then gives None: the same as line_tangent's own mutant to None, whose entry gives why no order changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/picture.rs",
+      "mutant": "replace Central::line_tangent -> Option<[I256; 2]> with None",
+      "line_text": "let [o0, o1, o2] = origin;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A curved face's whole tangent (split's Dir.exact) is read by cross only when both tangents are whole, and two whole straight pieces at one vertex of a curved face are rulings of a cone through its apex, never parallel (a cylinder's never meet; one ruling both ways leaves on two sides of the reference and never reaches cross), so their enclosed cross product is proven with the same sign. side reads it only so that a reference direction may lie exactly along a whole tangent; without it that direction is skipped for the next of DIRECTIONS, and every direction gives the same turning order. The order changes only where all 16 directions are met by tangents' enclosures at one vertex, and a piece's enclosure, a few ulps round its tangent, meets no line but its own: that needs a whole straight piece along each of the 16 lines through the vertex in the picture, sixteen edges of other operands along rulings of one cone from its apex, all but two held on the cone by the contact rule alone (a whole line exactly on a cone of whole data runs along a Pythagorean direction, which only (1, 0) and (0, 1) of the 16 are). There the order is refused (UndecidedOrder), never wrong."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
       "mutant": "replace > with >= in assemble",
       "line_text": ".is_some_and(|a| a.lo() > 0.0)",

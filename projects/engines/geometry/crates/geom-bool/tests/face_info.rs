@@ -536,3 +536,64 @@ fn a_curved_face_keeps_what_meets_it_pending() {
     assert_eq!(out.faces[slab.faces[5]].pending.faces, vec![ring]);
     assert_eq!(out.faces[slab.faces[4]].pending.faces, Vec::<usize>::new());
 }
+
+/// A point every ray of which, along each of the ray directions in turn, passes a corner of the
+/// face's boundary ahead within a step: no direction qualifies, and the point is refused, though
+/// it lies a thousand steps inside. Each corner stands a thousand of the direction's lengths out
+/// along its ray and off the ray's line by one or two in the units of the ray plane's value, the
+/// distance from the line times the direction's length: one where the direction is shorter than
+/// two, two where it is longer, so within a step either way. The face closes round the left,
+/// where no ray runs. A point half a thousand steps to the left is placed In.
+#[test]
+fn a_point_whose_every_ray_passes_within_a_step_of_a_corner_is_refused() {
+    // The directions in turning order, from the lowest.
+    let order: [(i64, i64); 16] = [
+        (1, -3),
+        (1, -2),
+        (2, -3),
+        (1, -1),
+        (3, -2),
+        (2, -1),
+        (3, -1),
+        (1, 0),
+        (3, 1),
+        (2, 1),
+        (3, 2),
+        (1, 1),
+        (2, 3),
+        (1, 2),
+        (1, 3),
+        (0, 1),
+    ];
+    let (mut given, mut all) = (order.to_vec(), geom_bool::inside::DIRECTIONS.to_vec());
+    given.sort_unstable();
+    all.sort_unstable();
+    assert_eq!(given, all);
+    let mut b = Build::default();
+    let mut ring = Vec::new();
+    for (run, rise) in order {
+        let value = if run * run + rise * rise < 4 { 1 } else { 2 };
+        // A whole offset o off the ray's line, whose value on the ray's plane, −rise·o₁ + run·o₂,
+        // is that.
+        let (x, y) = (-3..=3)
+            .flat_map(|x| (-3..=3).map(move |y| (x, y)))
+            .find(|&(x, y)| -rise * x + run * y == value)
+            .unwrap();
+        ring.push(b.vertex(raw(1000 * run + x, 1000 * rise + y, 0), 0));
+    }
+    ring.push(b.vertex(raw(-2000, 1000, 0), 0));
+    ring.push(b.vertex(raw(-2000, -3000, 0), 0));
+    let edges: Vec<usize> = (0..ring.len())
+        .map(|k| b.line(ring[k], ring[(k + 1) % ring.len()], 0))
+        .collect();
+    let plane = b.plane([0, 0, 1], 0);
+    let face = b.face(plane, &[edges], 0);
+    let m = &mut meter();
+    let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
+    match flat.place(&b.arr.carriers, raw(0, 0, 0), Bound::ZERO, m) {
+        Err(BuildError::Unclassified { face: f, at }) => assert_eq!((f, at), (face, raw(0, 0, 0))),
+        other => panic!("{other:?}"),
+    }
+    let placed = flat.place(&b.arr.carriers, raw(-500, 0, 0), Bound::ZERO, m);
+    assert_eq!(placed.unwrap(), Place::In);
+}

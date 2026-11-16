@@ -746,13 +746,14 @@ impl Central {
         let Ok(centre) = nearest_point([m0 + stand * a0, m1 + stand * a1, m2 + stand * a2]) else {
             return Ok(None);
         };
-        // The depth is measured in the coordinate the axis is largest in, the first of equals.
-        let mut drop = 0_usize;
-        for (k, part) in pointing.iter().enumerate() {
-            if part.abs() > pointing.get(drop).copied().unwrap_or(0.0).abs() {
-                drop = k;
-            }
-        }
+        // The depth is measured in the coordinate the axis is largest in, the first of equals
+        // (`min_by` keeps the first of equal least, here of the parts largest first). Which of
+        // two equal parts is taken does not matter: either is a picture the checks below prove.
+        let drop = pointing
+            .iter()
+            .enumerate()
+            .min_by(|(_, x), (_, y)| y.abs().total_cmp(&x.abs()))
+            .map_or(0, |(k, _)| k);
         let axes = axes_for(drop);
         let rising = !pointing
             .get(drop)

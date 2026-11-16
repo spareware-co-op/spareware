@@ -1,5 +1,5 @@
 //! Regions two edges' intersection could not decide (G243, chapter 11.4 steps 2 and 3): held
-//! until the common blocks are known, and accepted only where a common block covers the region on
+//! until the common blocks are known, and accepted only where common blocks pairing its two edges cover the region on
 //! both its edges, or where it touches a vertex both edges pass through. Two circles of radius
 //! 1105 whose centres lie 2210 steps apart, the second's radius a double's step past 1105, are
 //! such a region: they overlap by a fraction of a step's billionth around (1105, 0), and their
@@ -160,4 +160,173 @@ fn a_band_needs_a_block_on_both_its_edges() {
     arr.edges.remove(1);
     let out = run(&arr).unwrap();
     assert_eq!(out.common.len(), 1, "{:?}", out.common);
+}
+
+/// The two circles bound discs of two operands on the plane z = 0, and a third operand's
+/// triangle inside the first disc has its corner at (1105, 0), where the band stands: the edge
+/// stage makes the corner the circles' touch. The triangle's sides leave the corner into the disc
+/// at a steep angle to the circles' tangent there, along the circle's way on one side and against
+/// it on the other: no touch of theirs, so they are ordered round the corner by their tangents,
+/// not by how they bend (which would put the straight side on the wrong side of the arc), and the
+/// first disc splits into the triangle and the rest, whose loop runs round the circle and back
+/// round the triangle through the corner.
+#[test]
+fn sides_leaving_a_touch_of_two_other_edges_go_by_their_tangents() {
+    use geom_bool::carrier::CarrierIx;
+    use geom_bool::interfere::{EdgeUse, FaceIn};
+    use geom_bool::split::split;
+    use geom_curve::Line;
+    use geom_num::plane::Plane;
+
+    let mut arr = arrangement(
+        vec![
+            CurveKind::Circle(first([1.0, 0.0])),
+            CurveKind::Circle(second()),
+        ],
+        &[[1105, 0], [905, 600], [905, -600]],
+    );
+    // The triangle's corners, the vertices made above, in order counter-clockwise.
+    let corners = [[1105.0, 0.0], [905.0, 600.0], [905.0, -600.0]];
+    for k in 0..3 {
+        let next = (k + 1) % 3;
+        let ([ox, oy], [ex, ey]) = (corners[k], corners[next]);
+        let line = Line::new([ox, oy, 0.0], [ex - ox, ey - oy, 0.0], (0.0, 1.0)).unwrap();
+        let curve = arr.carriers.add_curve(CurveKind::Line(line)).unwrap();
+        arr.edges.push(EdgeIn {
+            curve,
+            ends: Some([k, next]),
+            operand: 2,
+        });
+    }
+    let plane = arr
+        .carriers
+        .add_plane(&Plane::new([0, 0, 1], 0).unwrap())
+        .unwrap();
+    for (operand, loop_) in [(0, vec![0]), (1, vec![1]), (2, vec![2, 3, 4])] {
+        arr.faces.push(FaceIn {
+            surface: CarrierIx::Plane(plane),
+            loops: vec![
+                loop_
+                    .into_iter()
+                    .map(|edge| EdgeUse {
+                        edge,
+                        forward: true,
+                    })
+                    .collect(),
+            ],
+            operand,
+        });
+    }
+    let out = run(&arr).unwrap();
+    assert_eq!(out.touches.len(), 1, "{:?}", out.touches);
+    let splitting = split(&arr, &out, &mut meter()).unwrap();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let mut loops: Vec<usize> = splitting
+        .faces
+        .iter()
+        .filter(|s| s.face == 0)
+        .map(|s| s.outer.len())
+        .collect();
+    loops.sort_unstable();
+    assert_eq!(loops, vec![3, 4], "{:?}", splitting.faces);
+    for f in [1, 2] {
+        assert_eq!(splitting.faces.iter().filter(|s| s.face == f).count(), 1);
+    }
+}
+
+/// An edge of `operand` along `curve` between new grid vertices of its own at `ends`.
+fn between(arr: &mut Arrangement, curve: CurveKind<3>, ends: [[i64; 2]; 2], operand: u32) -> usize {
+    let ends = Some(ends.map(|[x, y]| {
+        arr.vertices.push(VertexIn {
+            point: PointGeom::Grid(P3::new(x, y, 0).unwrap()),
+            operand,
+        });
+        arr.vertices.len() - 1
+    }));
+    let curve = arr.carriers.add_curve(curve).unwrap();
+    arr.edges.push(EdgeIn {
+        curve,
+        ends,
+        operand,
+    });
+    arr.edges.len() - 1
+}
+
+/// The first circle's arc from (0, −1105) turning `turns` half-turns counter-clockwise.
+fn arc(turns: f64) -> Circle<3> {
+    let frame = Frame::new([0.0, -1.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, turns)).unwrap()
+}
+
+/// A NURBS copy of a circle or arc.
+fn copy(c: &Circle<3>) -> CurveKind<3> {
+    CurveKind::Nurbs(
+        CurveKind::Circle(c.clone())
+            .to_nurbs(&mut meter())
+            .unwrap()
+            .value
+            .curve,
+    )
+}
+
+/// The first circle's half from (0, −1105) to (0, 1105) and its NURBS copy, of two operands, with
+/// a third operand's vertex at (1105, 0) halfway along: the vertex cuts both, and the two halves
+/// of each are two common blocks, which between them cover the region where the arc and its copy
+/// overlap, on both. A fourth operand's segment far off, whose parameter runs over the arc's, is
+/// in no block and changes nothing.
+#[test]
+fn an_overlap_cut_into_two_blocks_by_a_vertex_stands() {
+    let mut arr = Arrangement::default();
+    between(
+        &mut arr,
+        CurveKind::Circle(arc(1.0)),
+        [[0, -1105], [0, 1105]],
+        0,
+    );
+    between(&mut arr, copy(&arc(1.0)), [[0, -1105], [0, 1105]], 2);
+    arr.vertices.push(VertexIn {
+        point: PointGeom::Grid(P3::new(1105, 0, 0).unwrap()),
+        operand: 3,
+    });
+    let far = geom_curve::Line::new([5000.0, 0.0, 0.0], [1000.0, 0.0, 0.0], (0.0, 1.0)).unwrap();
+    between(&mut arr, CurveKind::Line(far), [[5000, 0], [6000, 0]], 4);
+    let out = run(&arr).unwrap();
+    assert_eq!(out.common.len(), 2, "{:?}", out.common);
+    assert!(
+        out.common.iter().all(|c| c.members.len() == 2),
+        "{:?}",
+        out.common
+    );
+}
+
+/// The first circle's half through (1105, 0) and its NURBS copy, and the second circle's half
+/// through its own leftmost point and its copy, of four operands: each arc is one block with its
+/// copy, but no block holds an edge of each circle, so the band where the circles touch is
+/// covered on neither and is refused.
+#[test]
+fn a_band_between_two_blocks_of_other_edges_is_refused() {
+    let mut arr = Arrangement::default();
+    between(
+        &mut arr,
+        CurveKind::Circle(arc(1.0)),
+        [[0, -1105], [0, 1105]],
+        0,
+    );
+    between(&mut arr, copy(&arc(1.0)), [[0, -1105], [0, 1105]], 1);
+    let frame = Frame::new([0.0, 1.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let other = Circle::new([2210.0, 0.0, 0.0], 1105.0_f64.next_up(), frame, (0.0, 1.0)).unwrap();
+    between(
+        &mut arr,
+        CurveKind::Circle(other.clone()),
+        [[2210, 1105], [2210, -1105]],
+        2,
+    );
+    between(&mut arr, copy(&other), [[2210, 1105], [2210, -1105]], 3);
+    let (a, b, _) = refused(run(&arr));
+    let first = [Entity::Edge(0), Entity::Edge(1)];
+    let second = [Entity::Edge(2), Entity::Edge(3)];
+    assert!(
+        first.contains(&a) && second.contains(&b) || first.contains(&b) && second.contains(&a),
+        "{a:?} {b:?}"
+    );
 }

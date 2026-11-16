@@ -468,32 +468,60 @@ struct Deferred {
     why: Unresolved,
 }
 
-/// Whether a parameter enclosure lies within a split edge's span. Only a common block's members
-/// are asked, and no member runs round a seam ([`crate::common`] leaves such a block to the face
-/// splitting), so the span runs forward from its first pave to its last.
-fn within_block(t: Interval, split: &SplitEdge) -> bool {
-    match (split.block.from, split.block.to) {
-        (Some(from), Some(to)) => t.lo() >= from.t.lo() && t.hi() <= to.t.hi(),
-        _ => false,
-    }
-}
-
-/// Whether a common block covers a deferred region on both its edges.
+/// Whether common blocks cover a deferred region on both its edges: on each, the region's span
+/// reaches into one of the edge's pieces at least, and every piece it reaches into belongs to a
+/// common block that holds a piece of the other edge too. So a region an overlap of the two edges
+/// makes is covered however many vertices cut the overlap into blocks.
 fn covered(region: &Deferred, splits: &[SplitEdge], common: &[CommonBlock]) -> bool {
     let (a, b) = region.edges;
     let (Some(s), Some(t)) = (region.at.spans().first(), region.at.spans().get(1)) else {
         return false;
     };
-    common.iter().any(|block: &CommonBlock| {
-        let holds = |edge: usize, span: Interval| {
-            block.members.iter().any(|m: &usize| {
-                splits
-                    .get(*m)
-                    .is_some_and(|piece| piece.source == edge && within_block(span, piece))
-            })
+    held(*s, (a, b), splits, common) && held(*t, (b, a), splits, common)
+}
+
+/// [`covered`] on one edge: whether the span `t` of `edge` reaches into a piece of it, past the
+/// paves at the piece's ends, and into none but those in a common block with a piece of `other`.
+/// Only a common block's members are counted, and no member runs round a seam ([`crate::common`]
+/// leaves such a block to the face splitting), so each runs forward from its first pave to its
+/// last; a piece with no paves, a whole closed edge, is in no block and holds nothing.
+fn held(
+    t: Interval,
+    (edge, other): (usize, usize),
+    splits: &[SplitEdge],
+    common: &[CommonBlock],
+) -> bool {
+    let paired = |k: usize| {
+        common.iter().any(|block: &CommonBlock| {
+            block.members.contains(&k)
+                && block
+                    .members
+                    .iter()
+                    .any(|m: &usize| splits.get(*m).is_some_and(|q| q.source == other))
+        })
+    };
+    let mut any = false;
+    for (k, piece) in splits.iter().enumerate() {
+        if piece.source != edge {
+            continue;
+        }
+        let (Some(from), Some(to)) = (piece.block.from, piece.block.to) else {
+            continue;
         };
-        holds(a, *s) && holds(b, *t)
-    })
+        // The piece ends where the span starts or before: the span does not reach into it.
+        if to.t.lo() <= t.lo() {
+            continue;
+        }
+        // Nor where the piece starts where the span ends or after.
+        if from.t.hi() >= t.hi() {
+            continue;
+        }
+        if !paired(k) {
+            return false;
+        }
+        any = true;
+    }
+    any
 }
 
 /// A grid point's coordinates as doubles, which hold them exactly (at most 2^40).
