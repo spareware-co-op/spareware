@@ -1290,7 +1290,7 @@
  },
  {
   "id": "G107",
-  "title": "Reference runner and nightly timings",
+  "title": "Reference runner and gate timings",
   "phase": "Phase 3",
   "crate": "geom-bench, CI",
   "size": "Small",
