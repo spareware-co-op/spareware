@@ -1082,7 +1082,7 @@
   "phase": "Phase 3",
   "crate": "geom-format",
   "size": "Medium",
-  "done_when": "no_std decoder for SKG's CBOR subset refusing non-canonical input; diagnostic text with hex floats round-trips bit for bit; cross-checked with cbor2; 24-hour clean fuzz; typed-array decode at least 500 MB/s per core.",
+  "done_when": "no_std decoder for SKG's CBOR subset refusing non-canonical input; diagnostic text with hex floats round-trips bit for bit; cross-checked with cbor2; the cbor harness's seeded test passes in the suite, and its saved cases replay; typed-array decode at least 500 MB/s per core.",
   "depends_on": [
    "G86"
   ],

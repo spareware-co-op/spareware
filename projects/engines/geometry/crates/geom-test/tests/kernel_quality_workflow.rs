@@ -603,11 +603,31 @@ fn every_shard_and_partition_runs_once() {
         "{matrix}"
     );
     assert_eq!(miri["strategy"]["fail-fast"].as_bool(), Some(false));
+    // Each partition runs the tests the plan of the recorded times gives it.
     let run = runs(&w, "miri");
+    for needle in [
+        "kernel-quality -- miri-filter",
+        "--partition \"${{ matrix.partition }}\" --of \"$PARTITIONS\" > \"$RUNNER_TEMP/miri-filter.txt\"",
+        "-E \"not package(geom-pool) & ($(cat \"$RUNNER_TEMP/miri-filter.txt\"))\"",
+    ] {
+        assert!(run.contains(needle), "{needle}\n{run}");
+    }
+    assert!(!run.contains("--partition \"hash:"), "{run}");
+    // The recorded times split into that many partitions keep each one's tests within
+    // `PART_SECONDS` at four at once (principle 8), and each filterset fits in one command-line
+    // argument (Linux takes at most 128 KiB in one).
+    let times = geom_test::miri::parse_times(geom_test::miri::TIMES).unwrap();
+    let parts = usize::try_from(n).unwrap();
+    let plan = geom_test::miri::plan(&times, parts).unwrap();
     assert!(
-        run.contains("--partition \"hash:${{ matrix.partition }}/$PARTITIONS\""),
-        "{run}"
+        plan.longest() <= geom_test::miri::PART_SECONDS,
+        "{} s in the slowest of {parts} partitions",
+        plan.longest()
     );
+    for k in 1..=parts {
+        let filter = plan.filterset(k).unwrap();
+        assert!(filter.len() < 100_000, "partition {k}: {}", filter.len());
+    }
 }
 
 #[cfg_attr(
@@ -749,7 +769,7 @@ fn only_geom_pool_runs_under_tree_borrows_and_only_while_crossbeam_needs_it() {
         .unwrap()
         .1;
     assert!(
-        main.contains(&format!("-E 'not package({TREE_BORROWS_CRATE})'")),
+        main.contains(&format!("-E \"not package({TREE_BORROWS_CRATE}) & (")),
         "{main}"
     );
     // The crate is the one that may name rayon, and the exception lasts only while the lock

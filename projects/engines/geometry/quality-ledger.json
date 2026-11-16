@@ -5124,14 +5124,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
-      "mutant": "replace * with / in carrier",
-      "line_text": "slope: slope * s.axial_sign(),",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "A surface's axial sign is exactly +1 or -1 (geom_surface::analytic, Cone::axial_sign), and for s = +1 or -1, slope / s and slope * s are the same double: both are slope or -slope exactly."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
       "mutant": "replace * with / in away",
       "line_text": "a.lo() * a.hi() > 0.0",
       "occurrences": 1,

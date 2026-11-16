@@ -16245,23 +16245,26 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the size of the metadata.",
-          "does": "[`packages`] reads `cargo metadata` and returns the package of every kernel crate, in name order, and [`cargo_args`] writes them as the `-p` arguments the workflow (`.github/workflows/kernel-quality.yml`) gives `cargo miri nextest run` and `cargo miri test --doc`. nextest runs each test in its own Miri process, splits the tests into partitions, one CI job each, and stops a test that reaches its budget (the `default-miri` profile in `.config/nextest.toml`): such a test passed every step Miri interpreted, and the job's report names it.",
+          "cost": "linear in the size of the metadata; a plan is O(t log t + t·p) for t tests and p partitions, and a filterset linear in its partition's tests and binaries.",
+          "does": "[`packages`] reads `cargo metadata` and returns the package of every kernel crate, in name order, and [`cargo_args`] writes them as the `-p` arguments the workflow (`.github/workflows/kernel-quality.yml`) gives `cargo miri nextest run` and `cargo miri test --doc`. nextest runs each test in its own Miri process, one partition per CI job, and stops a test that reaches its budget (the `default-miri` profile in `.config/nextest.toml`): such a test passed every step Miri interpreted, and the job's report names it. [`plan`] splits the tests into the partitions by their times under Miri in [`TIMES`] (`miri-times.tsv`, from a full run's reports), and [`Plan::filterset`] writes partition k's tests as the nextest filterset its job runs.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/miri.rs",
           "guarantees": [
-            "**Every kernel test suite, with nothing to keep in step.** The scope is every kernel crate in the metadata, so a new crate or test file runs under Miri the week it lands, and no list of test names or files is kept anywhere. A test that cannot run under Miri at all (one that starts a process or reads the repository) says so where it is written, with `#[cfg_attr(miri, ignore = \"<why>\")]`.",
+            "**Every kernel test suite, with nothing to keep in step.** The scope is every kernel crate in the metadata, so a new crate or test file runs under Miri the week it lands. A test that cannot run under Miri at all (one that starts a process or reads the repository) says so where it is written, with `#[cfg_attr(miri, ignore = \"<why>\")]`.",
+            "**Every test in exactly one partition, the times list only balancing them.** A test in the list runs in the partition the plan gives it; a test the list does not name runs in the partition its binary is given (each binary named in the list goes to one partition, by its place in name order); a binary the list does not name runs in partition 1. So a test added or renamed since the list was written still runs, once, and a stale list makes the partitions less even, never a test skipped.",
+            "**Balanced.** Longest processing time first (Graham): each test, the longest first, goes to the partition with the least time so far, so no partition passes the average by more than its longest test. With [`AT_ONCE`] tests at a time, [`Plan::longest`] is how long the slowest partition's tests take, which `kernel_quality_workflow.rs` holds under [`PART_SECONDS`] for the workflow's count.",
             "**The development crates are left out** (`geom-test`, `geom-fuzz`, `geom-gen`, `geom-bench`): they never ship, and their tests start processes and read files, which Miri's isolation refuses.",
-            "**A plan that runs nothing does not pass.** Metadata without any kernel crate, or with a package that has no name or manifest path, is an error."
+            "**A plan that runs nothing does not pass.** Metadata without any kernel crate, or with a package that has no name or manifest path, is an error; so are a times list with a line that is not `seconds<TAB>binary<TAB>test`, a name a filterset could misread, a test listed twice, and a plan of no partitions."
           ],
-          "job": "The Miri run's scope: every kernel crate, whose test suites Miri interprets.",
+          "job": "The Miri run's scope, every kernel crate, whose test suites Miri interprets, and its partitions, balanced by each test's measured time.",
           "method": {
             "links": [
               "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
               "https://nexte.st/docs/integrations/miri/",
-              "https://nexte.st/docs/ci-features/partitioning/"
+              "https://nexte.st/docs/filtersets/",
+              "https://doi.org/10.1137/0117039"
             ],
-            "text": "the `packages[]` of `cargo metadata --format-version 1` (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>); a kernel crate is a package whose manifest is in the kernel's crates folder, as [`crate::deps`] defines it. nextest's Miri support and partitions are documented at <https://nexte.st/docs/integrations/miri/> and <https://nexte.st/docs/ci-features/partitioning/>."
+            "text": "the `packages[]` of `cargo metadata --format-version 1` (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>); a kernel crate is a package whose manifest is in the kernel's crates folder, as [`crate::deps`] defines it. nextest's Miri support and filtersets are documented at <https://nexte.st/docs/integrations/miri/> and <https://nexte.st/docs/filtersets/>. The partitions by R. L. Graham, \"Bounds on multiprocessing timing anomalies\", SIAM Journal on Applied Mathematics 17(2) (1969), 416–429, <https://doi.org/10.1137/0117039> (the longest-processing-time rule, within 4/3 of the best)."
           },
           "path": "geom_test::miri",
           "provenance": [],

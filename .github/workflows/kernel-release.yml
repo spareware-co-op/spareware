@@ -38,9 +38,6 @@ on:
 
 permissions:
   contents: read
-  # kernel-golden.yml reads a pull request's reviews; called here it reads none, but a called
-  # workflow may not ask for more than its caller grants.
-  pull-requests: read
 
 concurrency:
   group: kernel-release-${{ github.ref }}
