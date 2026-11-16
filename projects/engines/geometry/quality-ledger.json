@@ -8244,14 +8244,6 @@
       "reason": "A crossing with nothing across it and off the domain stands beside a flagged box, or the trace is broken: an interior crossing always has a box across its side, and that box is settled or flagged. With || the test also accepts a flagged box level with the crossing in one parameter only, which differs only on that broken trace, where the answer is Internal rather than an ended branch."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
-      "mutant": "replace * with / in <impl ImplicitBound for Cone>::enclose_box",
-      "line_text": "let slope = Interval::point(k * self.round.sign)?;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The axial sign is exactly 1 or -1, so k / sign and k * sign are the same double."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
       "mutant": "replace * with + in <impl Field<1> for Quartic>::reach",
       "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
