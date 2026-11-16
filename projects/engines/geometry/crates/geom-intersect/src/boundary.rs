@@ -28,10 +28,15 @@
 //!
 //! Method: the parametric Krawczyk test is Kearfott and Xing's
 //! (<https://doi.org/10.1137/0731048>), the one [`crate::march`] steps with; the least-squares
-//! start for the middle of a piece is Gauss-Newton on the three residuals.
+//! start for the middle of a piece is Gauss-Newton on the three residuals. The box of a piece is
+//! one length on the other surface, a little more than the edge's travel over the piece, and each
+//! of `(s, r)` takes it in its own unit, by the surface's speed along that parameter, as the
+//! march's step box does: a turn and a height, or a plane's two vectors of different lengths, are
+//! not one unit.
 //!
-//! Cost: a piece takes a handful of reads of both surfaces; a straight edge takes one piece.
-//! All of it is charged to the meter. Recursion: none.
+//! Cost: a piece takes a handful of reads of both surfaces; a straight edge takes one piece where
+//! the piece's box stays inside the other surface's domain and the room past its ends, and is
+//! halved until it does where it does not. All of it is charged to the meter. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -148,6 +153,17 @@ fn columns(rows: &[[Interval; 3]; 3]) -> [[f64; 2]; 3] {
     })
 }
 
+/// How many of `r`'s units one of `s`'s is worth as a length on the other surface: its speed along
+/// `s` over its speed along `r`, by the partials `slope` holds. A cylinder's turn against its
+/// height, or a plane whose two vectors differ in length, has parameters in different units, and a
+/// length is the same number in both only where this is 1.
+fn pace(slope: &[[Interval; 3]; 3]) -> Result<f64, IntersectError> {
+    let [[_, s0, r0], [_, s1, r1], [_, s2, r2]] = *slope;
+    let along_s = Interval::norm(&[s0, s1, s2])?.hi();
+    let along_r = Interval::norm(&[r0, r1, r2])?.hi();
+    Ok(along_s / along_r)
+}
+
 /// The `(s, r)` at the middle of `t`, by Gauss-Newton on the three residuals, from the middle of
 /// the other surface's domain; `None` where it does not settle or is not defined.
 fn middle(
@@ -222,10 +238,19 @@ fn piece(
     };
     let yf0 = point(y00)?.mul(fi)?.add(point(y01)?.mul(fj)?)?;
     let yf1 = point(y10)?.mul(fi)?.add(point(y11)?.mul(fj)?)?;
-    let mut rho = larger(1.05 * larger(most(yf0), most(yf1)), 1e-12);
+    // The box's radius is one length on the other surface, a little more than the larger of the
+    // two first corrections Y.F(m; t) over the piece, and each unknown takes it in its own unit:
+    // `rho` in s's, `rho * pace` in r's. One number for both is that length only where the two
+    // parameters run at one speed. Where they do not, the box of one unknown was as wide, in its
+    // unit, as the edge is long in the other's: it left the domain, or held too much of a curved
+    // surface for the test below, however short the piece. The march's step box takes its room
+    // the same way (`around_step`).
+    let pace = pace(&slope)?;
+    let mut rho = larger(1.05 * larger(most(yf0), most(yf1) / pace), 1e-12);
     for _ in 0..TRIES {
         let x0 = Interval::new(m0 - rho, m0 + rho)?;
-        let x1 = Interval::new(m1 - rho, m1 + rho)?;
+        let wide = rho * pace;
+        let x1 = Interval::new(m1 - wide, m1 + wide)?;
         let Some(over) = soft(edge.slope(&[t, x0, x1], meter))? else {
             return Ok(None);
         };
@@ -236,6 +261,7 @@ fn piece(
                 .ok_or(IntersectError::Internal)
         };
         let reach = Interval::new(-rho, rho)?;
+        let reaches = [reach, reach.mul(point(pace)?)?];
         // K = m - Y.F(m; t) + (I - Y.J(x)).(x - m), one unknown at a time.
         let image = |y: [f64; 2],
                      diagonal: usize,
@@ -244,7 +270,7 @@ fn piece(
          -> Result<Interval, IntersectError> {
             let [ya, yb] = y;
             let mut out = point(held)?.sub(yf)?;
-            for (col, at) in [1_usize, 2].into_iter().enumerate() {
+            for ((col, at), reach) in [1_usize, 2].into_iter().enumerate().zip(reaches) {
                 let yj = point(ya)?
                     .mul(cell(i, at)?)?
                     .add(point(yb)?.mul(cell(j, at)?)?)?;
