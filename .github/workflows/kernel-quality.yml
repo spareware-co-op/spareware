@@ -43,7 +43,11 @@ name: Kernel quality
 # - The full run: every mutant of the files it covers, judged against those files' ledger entries
 #   as a whole; the judge also fails on any such entry that no survivor matches any more. Both runs
 #   are sharded across runners: the plan job lists the mutants and asks the judge how many shards
-#   they need, and the judge proves the shards together tested exactly that list. A matrix holds
+#   they need, and the judge proves the shards together tested exactly that list. The plan sums
+#   each shard's own mutants at their crates' measured rates and takes the fewest shards of about
+#   ten planned minutes each (geom_test::mutants::shard_count), so a shard's job ends in about a
+#   quarter of an hour; a run too large for 512 such shards takes 512, each within the job's limit.
+#   A matrix holds
 #   at most 256 jobs, so two jobs run the shards, `mutants` shards 0 to 255 and `mutants-2` shards
 #   256 to 511, each numbered in the whole run (`--shard k/n`). A full run narrowed to some files
 #   (`cargo mutants --re`) has its plan check that cargo-mutants selected every mutant of the
@@ -56,7 +60,9 @@ name: Kernel quality
 #   or Verus proof that the ledger records. A foundation line the tests do not run yet passes only
 #   while the ledger's awaiting_proof list names it, with the piece that proves it unreachable or
 #   tests it. A change measures the crates it changes and every kernel crate that depends on one of
-#   them; a dispatched or release run measures all.
+#   them; a dispatched or release run measures all. The crates are measured in parts side by
+#   side, balanced by each crate's measured time, and judged together; the judge lists the crates
+#   itself and fails on any whose files no part left.
 # - The gates' own proof: geom-test's seeded_gates test runs the real cargo-mutants and
 #   cargo-llvm-cov on a seeded crate and shows each gate fails on a seeded survivor, an uncovered
 #   line, an untaken branch and an uncited coverage(off) mark.
@@ -680,12 +686,20 @@ jobs:
           fi
           cargo run --locked -p geom-test --bin kernel-quality -- mutants "${args[@]}" "${outs[@]}"
 
-  coverage:
-    name: Coverage (lines, and branches on the pinned nightly)
+  # Coverage in parts side by side (each crate is measured by its own tests, so the crates share out
+  # whole): `coverage-plan` lists the crates the judge will judge and shares them among parts by
+  # their measured times (geom_test::coverage::plan_parts, src/coverage-times.tsv), each part
+  # measures its crates, and `coverage` judges them all from one folder. The judge lists the crates
+  # itself and fails on any crate whose files no part left (geom_test::coverage::missing_outputs),
+  # so a dropped or failed part fails the gate, and `done` fails on any part that did not pass.
+  coverage-plan:
+    name: Coverage, which part measures which crates
     needs: [when, cheap]
     if: needs.when.outputs.coverage == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
+    outputs:
+      matrix: ${{ steps.parts.outputs.matrix }}
     defaults:
       run:
         shell: bash
@@ -698,26 +712,23 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Install the pinned nightly with llvm-tools
-        run: |
-          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component llvm-tools-preview
-          rustc "+$RUST_NIGHTLY" -vV
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          key: coverage
-      - name: Install cargo-llvm-cov ${{ env.CARGO_LLVM_COV_VERSION }}
-        run: cargo install --locked cargo-llvm-cov --version "$CARGO_LLVM_COV_VERSION"
+          key: coverage-plan
       - name: The crates to measure
         env:
           BASE: ${{ needs.when.outputs.base }}
           SINCE: ${{ needs.when.outputs.since_coverage }}
         run: |
+          mkdir -p "$RUNNER_TEMP/scope"
+          # The judge reads the scope from this folder: changed.txt when there is a base.
+          echo "${BASE:-none}" > "$RUNNER_TEMP/scope/base.txt"
           if [ -n "$BASE" ]; then
             git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch -q --no-tags --depth 1 origin "$BASE"
-            git diff --no-ext-diff --no-renames --name-only "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
+            git diff --no-ext-diff --no-renames --name-only "$BASE" HEAD > "$RUNNER_TEMP/scope/changed.txt"
             # A later push: the crates of what changed since the last head whose coverage passed
             # (geom_test::increment::coverage); the whole change without one.
             if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ -n "$SINCE" ] \
@@ -729,15 +740,69 @@ jobs:
               RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN" RUSTFLAGS= cargo run --locked -q -p geom-test \
                 --bin kernel-quality -- coverage-increment --since "$SINCE" \
                 --head-changes "$t/head-changes.txt" --added "$t/added.txt" \
-                --base-changes "$t/base-changes.txt" > "$t/changed.txt"
-              echo "Measured again since $SINCE: the crates of $(wc -l < "$t/changed.txt") changed file(s)." | tee -a "$GITHUB_STEP_SUMMARY"
+                --base-changes "$t/base-changes.txt" > "$t/scope/changed.txt"
+              echo "Measured again since $SINCE: the crates of $(wc -l < "$t/scope/changed.txt") changed file(s)." | tee -a "$GITHUB_STEP_SUMMARY"
             fi
-            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+            echo "SCOPE=--changed $RUNNER_TEMP/scope/changed.txt" >> "$GITHUB_ENV"
           else
             echo "SCOPE=--all" >> "$GITHUB_ENV"
           fi
+      - name: Which part measures which crates
+        id: parts
+        run: |
+          # The list comes from the judge's own rule, so the parts measure what it will judge.
+          # shellcheck disable=SC2086 # SCOPE holds an option and its value.
+          matrix=$(cargo run --locked -q -p geom-test --bin kernel-quality -- coverage-parts $SCOPE)
+          jq -r '.include[] | "part \(.part) of \(.of): \(.crates)"' <<<"$matrix" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-scope
+          path: ${{ runner.temp }}/scope
+          if-no-files-found: error
+
+  coverage-parts:
+    name: Coverage part ${{ matrix.part }} of ${{ matrix.of }}
+    needs: [when, coverage-plan]
+    if: needs.when.outputs.coverage == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      # Every part reports, so the judge names every crate a failed part left unmeasured.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.coverage-plan.outputs.matrix) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with llvm-tools
+        # A run with no crate to measure has one empty part, which measures nothing.
+        if: matrix.crates != ''
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component llvm-tools-preview
+          rustc "+$RUST_NIGHTLY" -vV
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved). One part
+          # saves it: every part restores and would save the same cache.
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.part == 1 }}
+          key: coverage
+      - name: Install cargo-llvm-cov ${{ env.CARGO_LLVM_COV_VERSION }}
+        # A run with no crate to measure has one empty part, which measures nothing.
+        if: matrix.crates != ''
+        run: cargo install --locked cargo-llvm-cov --version "$CARGO_LLVM_COV_VERSION"
       - name: Measure each crate with its own tests
+        # A run with no crate to measure has one empty part, which measures nothing.
+        if: matrix.crates != ''
         env:
+          CRATES: ${{ matrix.crates }}
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
           # llvm-cov keeps the first coverage record of each function name it reads, across every
           # test binary, and drops the rest. Two things would give a function a first record that
@@ -754,20 +819,56 @@ jobs:
           #   geom-test's seeded_gates test proves it on an `#[inline]` function.
           RUSTFLAGS: -Z cross-crate-inline-threshold=never -C link-dead-code
         run: |
-          # The list comes from the judge itself, so it measures what it will judge.
-          # shellcheck disable=SC2086 # SCOPE holds an option and its value.
-          RUSTUP_TOOLCHAIN="$RUST_TOOLCHAIN" RUSTFLAGS= cargo run --locked -p geom-test \
-            --bin kernel-quality -- affected $SCOPE > "$RUNNER_TEMP/crates.txt"
-          cat "$RUNNER_TEMP/crates.txt"
           mkdir -p "$RUNNER_TEMP/cov"
-          while read -r crate; do
+          for crate in $CRATES; do
             echo "::group::$crate"
             cargo llvm-cov --locked -p "$crate" --release --branch \
               --lcov --output-path "$RUNNER_TEMP/cov/$crate.lcov" 2>&1 | tee "$RUNNER_TEMP/cov/$crate.log"
             echo "::endgroup::"
-          done < "$RUNNER_TEMP/crates.txt"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage-part-${{ matrix.part }}
+          path: ${{ runner.temp }}/cov
+          if-no-files-found: ignore
+
+  coverage:
+    name: Coverage (lines, and branches on the pinned nightly)
+    needs: [when, cheap, coverage-plan, coverage-parts]
+    # It judges even when a part failed, so every crate left unmeasured is named.
+    if: ${{ !cancelled() && needs.when.outputs.coverage == 'true' && needs.coverage-plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: false
+          key: coverage-plan
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage-scope
+          path: ${{ runner.temp }}/scope
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/cov
       - name: Judge the coverage against 28.8's bars, and every coverage(off) mark against its proof
         run: |
+          # The plan's scope: the changed files it wrote, or every crate.
+          SCOPE=--all
+          if [ -f "$RUNNER_TEMP/scope/changed.txt" ]; then SCOPE="--changed $RUNNER_TEMP/scope/changed.txt"; fi
+          mkdir -p "$RUNNER_TEMP/cov"
           # shellcheck disable=SC2086 # SCOPE holds an option and its value.
           cargo run --locked -p geom-test --bin kernel-quality -- coverage $SCOPE \
             --lcov-dir "$RUNNER_TEMP/cov"
@@ -949,7 +1050,7 @@ jobs:
   # a change it leaves the mark that spares the same tree a second run.
   done:
     name: Kernel quality checks pass
-    needs: [when, cheap, mutants-plan, mutants, mutants-2, mutants-judge, coverage, gates-seeded, miri]
+    needs: [when, cheap, mutants-plan, mutants, mutants-2, mutants-judge, coverage-plan, coverage-parts, coverage, gates-seeded, miri]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -973,7 +1074,7 @@ jobs:
           test "$(jq -r '.when.result' <<< "$NEEDS")" = success
           must=""
           if [ "$MUTANTS" = true ]; then must="$must mutants-plan mutants-judge"; fi
-          if [ "$COVERAGE" = true ]; then must="$must coverage gates-seeded"; fi
+          if [ "$COVERAGE" = true ]; then must="$must coverage-plan coverage-parts coverage gates-seeded"; fi
           if [ "$MIRI" = true ]; then must="$must miri"; fi
           for job in $must; do
             result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")
