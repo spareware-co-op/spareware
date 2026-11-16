@@ -25,6 +25,13 @@
 //!   the commit main was at; only the merge queue's last job marks a tree as tested, under the name
 //!   the push looks for; `kernel-quality.yml` marks a tree only when mutation and coverage both ran
 //!   on a pull request or in the queue, under the name it looks for.
+//! - `the_count_gates_measure_one_kind_a_push_and_the_base_once`: `kernel-bench.yml` runs in the
+//!   merge queue too; its instruction legs are the job `scope`'s list, x86-64 on a pull request,
+//!   aarch64 in the queue (which marks the tree it passed) and on a push to main unless that mark
+//!   is there; the merge base's counts are restored only from a run of main or of the same pull
+//!   request with the same workflow file, after their manifest is checked, and a missing count is
+//!   measured (`kept` is false unless the restore succeeded, and the measuring step runs then);
+//!   and the merge base is measured and kept before any step runs the change's own code.
 //!
 //! Each check is also shown to fail on a seeded violation.
 
@@ -669,4 +676,166 @@ fn each_change_is_measured_against_its_base_and_marked_once() {
         let found = mark_problems(&k, &q);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
+}
+
+/// What is wrong with the count gates' legs and their kept base counts.
+fn bench_problems(bench: &str) -> Vec<String> {
+    let w = parse(bench);
+    let mut found = Vec::new();
+    if w["on"]["merge_group"].is_badvalue() {
+        found.push("kernel-bench.yml does not run in the merge queue".to_owned());
+    }
+    let legs = w["jobs"]["scope"]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .find(|s| s["id"].as_str() == Some("legs"))
+        .map(|s| text(&s["run"]))
+        .unwrap_or_default();
+    for (needle, said) in [
+        (
+            "pull_request) legs=\"[$x86]\" ;;",
+            "a pull request measures x86-64 alone",
+        ),
+        (
+            "merge_group) legs=\"[$arm]\" ;;",
+            "the merge queue measures aarch64",
+        ),
+        (
+            "name=bench-aarch64-tested-$tree",
+            "a push to main looks for the queue's mark",
+        ),
+        (
+            "legs=\"[$x86]\"\n    fi",
+            "a marked push measures x86-64 alone",
+        ),
+    ] {
+        if !legs.contains(needle) {
+            found.push(format!("the legs are wrong: {said}"));
+        }
+    }
+    let job = &w["jobs"]["instructions"];
+    if text(&job["strategy"]["matrix"]["include"]) != "${{ fromJSON(needs.scope.outputs.legs) }}" {
+        found.push("the instruction legs are not the scope's list".to_owned());
+    }
+    let steps: Vec<&Yaml> = job["steps"].as_vec().into_iter().flatten().collect();
+    let at = |name: &str| steps.iter().position(|s| s["name"].as_str() == Some(name));
+    let kept =
+        at("The merge base's counts, if a trusted run kept them").map(|i| text(&steps[i]["run"]));
+    let kept = kept.unwrap_or_default();
+    let reset = kept.find("kept=false").unwrap_or(usize::MAX);
+    let check = kept
+        .find("sha256sum --check --strict manifest.sha256")
+        .unwrap_or(0);
+    let set = kept.find("kept=true").unwrap_or(0);
+    if !(reset < check && check < set) {
+        found.push("a missing or unchecked base count is taken as kept".to_owned());
+    }
+    for needle in [
+        "if [ \"$branch\" = main ]; then",
+        "[ \"$branch\" = \"$HEAD_REF\" ]",
+        "[ \"$(git -C head rev-parse \"$sha:$workflow\" 2>/dev/null)\" = \"$mine\" ]",
+        "name=\"bench-base-$TARGET-$tree-$print\"",
+    ] {
+        if !kept.contains(needle) {
+            found.push(format!("the kept counts are trusted wrongly: {needle}"));
+        }
+    }
+    let measure = at("Benchmark the merge base").map(|i| text(&steps[i]["if"]));
+    if measure.as_deref()
+        != Some("needs.scope.outputs.base_gate == 'true' && steps.kept.outputs.kept != 'true'")
+    {
+        found.push("a missing base count is not measured".to_owned());
+    }
+    // Nothing runs the change's code before the merge base is measured and kept.
+    let keep = at("Keep the merge base's counts").unwrap_or(usize::MAX);
+    for (i, s) in steps.iter().enumerate() {
+        let run = text(&s["run"]);
+        let heads_code = text(&s["working-directory"]) == "head"
+            && (run.contains("cargo \"+$HEAD_TOOLCHAIN\" test") || run.contains(" bench "));
+        if heads_code && i < keep {
+            found.push(format!(
+                "{} runs the change's code before the merge base is kept",
+                text(&s["name"])
+            ));
+        }
+    }
+    let mark = steps.iter().any(|s| {
+        text(&s["with"]["name"]) == "bench-aarch64-tested-${{ env.TREE }}"
+            && text(&s["if"])
+                .contains("github.event_name == 'merge_group' && matrix.target == 'aarch64'")
+    });
+    if !mark {
+        found.push("the merge queue does not mark the tree aarch64 passed".to_owned());
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_count_gates_measure_one_kind_a_push_and_the_base_once() {
+    let bench = read(&format!("{WORKFLOWS}/kernel-bench.yml"));
+    let found = bench_problems(&bench);
+    assert!(found.is_empty(), "{found:#?}");
+    for (from, to, said) in [
+        ("  merge_group:\n", "", "does not run in the merge queue"),
+        (
+            "pull_request) legs=\"[$x86]\" ;;",
+            "pull_request) legs=\"[$x86,$arm]\" ;;",
+            "x86-64 alone",
+        ),
+        (
+            "merge_group) legs=\"[$arm]\" ;;",
+            "merge_group) legs=\"[$x86]\" ;;",
+            "measures aarch64",
+        ),
+        (
+            "include: ${{ fromJSON(needs.scope.outputs.legs) }}",
+            "include: ${{ fromJSON('[]') }}",
+            "not the scope's list",
+        ),
+        (
+            "          kept=false\n",
+            "          kept=true\n",
+            "taken as kept",
+        ),
+        (
+            " && steps.kept.outputs.kept != 'true'",
+            " && steps.kept.outputs.kept == 'true'",
+            "a missing base count is not measured",
+        ),
+        (
+            "if [ \"$branch\" = main ]; then",
+            "if true; then",
+            "trusted wrongly",
+        ),
+        (
+            "matrix.target == 'aarch64'\n        with:\n          name: bench-aarch64-tested",
+            "matrix.target == 'x86-64'\n        with:\n          name: bench-aarch64-tested",
+            "does not mark",
+        ),
+    ] {
+        let planted = bench.replacen(from, to, 1);
+        assert_ne!(planted, bench, "the planted edit {from:?} applies");
+        let found = bench_problems(&planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+    // Planted: the change's own checks moved back before the merge base is kept.
+    let check = "      - name: Check the benchmarks' inputs, results and wiring\n        working-directory: head\n        run: cargo \"+$HEAD_TOOLCHAIN\" test --locked --release -p geom-bench\n\n";
+    let planted = bench.replacen(check, "", 1).replacen(
+        "      - name: Install the Gungraun runner each tree needs",
+        &format!("{check}      - name: Install the Gungraun runner each tree needs"),
+        1,
+    );
+    assert_ne!(planted, bench);
+    let found = bench_problems(&planted);
+    assert!(
+        found
+            .iter()
+            .any(|p| p.contains("before the merge base is kept")),
+        "{found:#?}"
+    );
 }

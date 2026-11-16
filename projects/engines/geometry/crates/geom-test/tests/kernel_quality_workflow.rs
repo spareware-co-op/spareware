@@ -34,6 +34,13 @@
 //! - **One aliasing exception.** Miri runs geom-pool, the only crate that names rayon, under Tree
 //!   Borrows and every other crate under Stacked Borrows, and only while `Cargo.lock` holds
 //!   crossbeam-epoch 0.9.21, whose `IsElement::element_of` Stacked Borrows refuses.
+//! - **A later push judges what it can reach.** `geom_test::increment` judges again every file of
+//!   the change whose crate's tests what changed since the last clean head reaches, held here to
+//!   planted changes that must be judged (a changed line, a changed test, a removed ledger entry,
+//!   a change on the base's side, a file in no crate) and ones that need not (nothing, a new test
+//!   target, an added ledger entry); and the workflow finds that head in GitHub's record of the
+//!   pull request's runs and narrows the plan and coverage by it, each piece shown to be checked
+//!   by a planted removal.
 
 // The crate denies native arithmetic in kernel code (Cargo.toml); tests may use it.
 #![allow(
@@ -47,9 +54,13 @@
     clippy::indexing_slicing
 )]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use geom_test::increment::{self, Since};
+use geom_test::quality_ledger::LEDGER_PATH;
+use geom_test::shared::Changes;
+use geom_test::test_scope::Scope;
 use yaml_rust2::{Yaml, YamlLoader};
 
 fn root() -> PathBuf {
@@ -858,4 +869,258 @@ fn the_tools_are_configured_as_the_gates_need() {
     assert_eq!(full["period"].as_str(), Some("300s"));
     assert_eq!(full["terminate-after"].as_integer(), Some(2));
     assert!(n["profile"].as_table().unwrap().get("default").is_none());
+}
+
+/// The files of `plan` that are not among `want`, and of `want` that `plan` lacks.
+fn plan_problems(plan: &increment::Plan, want: &[&str]) -> Vec<String> {
+    let got: BTreeSet<&str> = plan.keys().map(String::as_str).collect();
+    let want: BTreeSet<&str> = want.iter().copied().collect();
+    let mut found: Vec<String> = want
+        .difference(&got)
+        .map(|f| format!("{f} is not judged again"))
+        .collect();
+    found.extend(
+        got.difference(&want)
+            .map(|f| format!("{f} is judged again")),
+    );
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository and runs cargo metadata, which a WebAssembly test cannot"
+)]
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "each planted case beside what it must judge reads best in one place"
+)]
+fn a_later_push_judges_again_what_its_change_can_reach() {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let metadata = geom_test::deps::cargo_metadata(&cargo, &root().join("Cargo.toml")).unwrap();
+    let scope = Scope::read(&metadata).unwrap();
+    let folder = |c: &str| scope.folders()[c].clone();
+    // Two kernel crates whose tests one another's code does not reach, neither a reader.
+    let reach = |c: &str| -> BTreeSet<String> {
+        let file = format!("{}src/planted.rs", folder(c));
+        scope
+            .select(Some(&[file]))
+            .running()
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
+    };
+    let kernel: Vec<&String> = scope
+        .folders()
+        .keys()
+        .filter(|c| c.starts_with("geom-") && !scope.readers().contains(*c))
+        .collect();
+    let reached: BTreeMap<&String, BTreeSet<String>> =
+        kernel.iter().map(|c| (*c, reach(c))).collect();
+    let (x, y) = kernel
+        .iter()
+        .flat_map(|a| kernel.iter().map(move |b| (*a, *b)))
+        .find(|(a, b)| a != b && !reached[a].contains(*b) && !reached[b].contains(*a))
+        .map(|(a, b)| (a.clone(), b.clone()))
+        .expect("two crates whose changes do not reach one another");
+    let x = x.as_str();
+    let xf = format!("{}src/planted.rs", folder(x));
+    let yf = format!("{}src/planted.rs", folder(&y));
+    let changed = vec![xf.clone(), yf.clone()];
+    let ledger = |files: &[&str]| -> String {
+        let survivors: Vec<String> = files
+            .iter()
+            .map(|f| format!("{{\"file\": \"{f}\", \"mutant\": \"m\"}}"))
+            .collect();
+        format!("{{\"survivors\": [{}]}}", survivors.join(", "))
+    };
+    let plan = |since: &Since| increment::mutants(&scope, &changed, since, &Changes::new());
+    let s = |head: &[&str], added: &[&str], base: &[&str]| Since {
+        head: head.iter().map(|f| (*f).to_owned()).collect(),
+        added: added.iter().map(|f| (*f).to_owned()).collect(),
+        base: base.iter().map(|f| (*f).to_owned()).collect(),
+        ledger: (Some(ledger(&[])), Some(ledger(&[]))),
+    };
+    let x_test = format!("{}tests/attack.rs", folder(x));
+    let x_new = format!("{}tests/new_target.rs", folder(x));
+    let every = [xf.as_str(), yf.as_str()];
+    let cases: Vec<(&str, Since, Vec<&str>)> = vec![
+        ("nothing changed", s(&[], &[], &[]), vec![]),
+        ("a changed line of x", s(&[&xf], &[], &[]), vec![&xf]),
+        ("a changed test of x", s(&[&x_test], &[], &[]), vec![&xf]),
+        (
+            "a new test target of x",
+            s(&[&x_new], &[&x_new], &[]),
+            vec![],
+        ),
+        (
+            "a change on the base's side in y",
+            s(&[], &[], &[&yf]),
+            vec![&yf],
+        ),
+        (
+            "a file in no crate",
+            s(&["Cargo.lock"], &[], &[]),
+            every.to_vec(),
+        ),
+        (
+            "the base's ledger",
+            s(&[], &[], &[LEDGER_PATH]),
+            every.to_vec(),
+        ),
+        (
+            "a removed survivor of x",
+            Since {
+                ledger: (Some(ledger(&[&xf])), Some(ledger(&[]))),
+                ..s(&[LEDGER_PATH], &[], &[])
+            },
+            vec![&xf],
+        ),
+        (
+            "an added survivor of x",
+            Since {
+                ledger: (Some(ledger(&[])), Some(ledger(&[&xf]))),
+                ..s(&[LEDGER_PATH], &[], &[])
+            },
+            vec![],
+        ),
+        (
+            "a ledger that cannot be read",
+            Since {
+                ledger: (Some("not json".to_owned()), Some(ledger(&[]))),
+                ..s(&[LEDGER_PATH], &[], &[])
+            },
+            every.to_vec(),
+        ),
+    ];
+    for (what, since, want) in &cases {
+        let found = plan_problems(&plan(since), want);
+        assert!(found.is_empty(), "{what}: {found:#?}");
+    }
+    // Planted: a planner that reads only the lines changed since (the files the head changed),
+    // which misses a changed test, a removed survivor and the base's side.
+    let lines_only = |since: &Since| -> increment::Plan {
+        changed
+            .iter()
+            .filter(|f| since.head.contains(f))
+            .map(|f| (f.clone(), String::new()))
+            .collect()
+    };
+    let missed: Vec<&str> = cases
+        .iter()
+        .filter(|(_, since, want)| !plan_problems(&lines_only(since), want).is_empty())
+        .map(|(what, _, _)| *what)
+        .collect();
+    for what in [
+        "a changed test of x",
+        "a removed survivor of x",
+        "a change on the base's side in y",
+    ] {
+        assert!(missed.contains(&what), "{what}: {missed:?}");
+    }
+}
+
+/// What is wrong with how the workflow narrows a later push.
+fn narrowing_problems(text: &str) -> Vec<String> {
+    let w = YamlLoader::load_from_str(text).unwrap().remove(0);
+    let mut found = Vec::new();
+    let decide = runs(&w, "when");
+    for needle in [
+        "actions/workflows/kernel-quality.yml/runs?event=pull_request&status=completed",
+        "select(any(.pull_requests[]; .number == $PR))",
+        "grep -qxF \"success Mutants, judged against the ledger\" <<< \"$jobs\"",
+        "grep -qxF \"success Coverage (lines, and branches on the pinned nightly)\" <<< \"$jobs\"",
+    ] {
+        if !decide.contains(needle) {
+            found.push(format!("`when` does not read GitHub's record: {needle}"));
+        }
+    }
+    let outputs = &w["jobs"]["when"]["outputs"];
+    if outputs["since_mutants"].as_str() != Some("${{ steps.since.outputs.mutants }}")
+        || outputs["since_coverage"].as_str() != Some("${{ steps.since.outputs.coverage }}")
+    {
+        found.push("`when` does not hand on the last clean heads".to_owned());
+    }
+    let plan = &w["jobs"]["mutants-plan"];
+    if plan["env"]["SINCE"].as_str() != Some("${{ needs.when.outputs.since_mutants }}") {
+        found.push("the plan does not read the last clean head".to_owned());
+    }
+    let plan_runs = runs(&w, "mutants-plan");
+    for needle in [
+        "kernel-quality -- mutants-increment",
+        "git log --format= --name-only \"$SINCE..$BASE\"",
+        "git diff --no-renames --name-only \"$SINCE\" HEAD^2",
+        "xargs -a \"$t/again.txt\" -d '\\n' git diff --no-ext-diff --no-color --no-renames \"$BASE\" HEAD -- > \"$t/pr.diff\"",
+    ] {
+        if !plan_runs.contains(needle) {
+            found.push(format!(
+                "the plan does not narrow by the last clean head: {needle}"
+            ));
+        }
+    }
+    let narrowing = plan_runs.find("mutants-increment").unwrap_or(usize::MAX);
+    let listing = plan_runs
+        .find("cargo mutants --in-diff \"$RUNNER_TEMP/plan/pr.diff\" --list")
+        .unwrap_or(0);
+    if narrowing > listing {
+        found.push("the plan lists the mutants before it narrows the diff".to_owned());
+    }
+    let coverage = runs(&w, "coverage");
+    if !coverage.contains("kernel-quality -- coverage-increment --since \"$SINCE\"") {
+        found.push("coverage does not narrow by the last clean head".to_owned());
+    }
+    for job in ["mutants-plan", "coverage"] {
+        if w["jobs"][job]["steps"][0]["with"]["fetch-depth"].as_i64() != Some(0) {
+            found.push(format!("{job} lacks the history the base's side needs"));
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_later_push_is_narrowed_by_githubs_record_of_the_last_clean_run() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let found = narrowing_problems(&text);
+    assert!(found.is_empty(), "{found:#?}");
+    for (from, to, said) in [
+        (
+            "select(any(.pull_requests[]; .number == $PR))",
+            "select(true)",
+            "does not read GitHub's record",
+        ),
+        (
+            "since_mutants: ${{ steps.since.outputs.mutants }}",
+            "since_mutants: ''",
+            "does not hand on",
+        ),
+        (
+            "SINCE: ${{ needs.when.outputs.since_mutants }}",
+            "SINCE: ''",
+            "the plan does not read the last clean head",
+        ),
+        (
+            "git log --format= --name-only \"$SINCE..$BASE\"",
+            "true",
+            "the plan does not narrow",
+        ),
+        (
+            "coverage-increment --since",
+            "coverage-increment-not --since",
+            "coverage does not narrow",
+        ),
+        (
+            "          # The whole history, for what changed since the last clean head on the base's side.\n          fetch-depth: 0",
+            "          fetch-depth: 2",
+            "lacks the history",
+        ),
+    ] {
+        let planted = text.replacen(from, to, 1);
+        assert_ne!(planted, text, "the planted edit {from:?} applies");
+        let found = narrowing_problems(&planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
 }

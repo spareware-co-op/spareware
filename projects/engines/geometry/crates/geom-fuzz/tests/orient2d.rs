@@ -7,11 +7,14 @@
 //!   strings (`BOLERO_RANDOM_SEED=<seed>`, printed with any failure, replays one). Under Kani the
 //!   same test is a proof over its bounded bytes, so the two share their corpus and crash files:
 //!   raw bytes for one function.
-//! - `orient2d_proof` is the bounded proof: `bolero::check!` over draws of the proof's domain
-//!   (`geom_fuzz::orient2d::proof_case` with `PROOF_BOUND`), each checked by `check`. Under
-//!   `cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact` bolero's Kani engine makes every draw symbolic, so Kani proves the claims for every case of the domain.
-//!   Under `cargo test` it is a property test over the same domain, so the proof's statement is
-//!   also tested on stable Rust on every operating system.
+//! - `orient2d_proof_predicate`, `orient2d_proof_exact_path` and `orient2d_proof_filter` are the
+//!   bounded proof, one claim of `check` each: `bolero::check!` over draws of the proof's domain
+//!   (`geom_fuzz::orient2d::proof_case` with `PROOF_BOUND`), each checked by `check_claim` for its
+//!   claim. Under `cargo kani --tests -p geom-fuzz --harness orient2d_proof_filter --exact` (and
+//!   the other two) bolero's Kani engine makes every draw symbolic, so Kani proves the claim for
+//!   every case of the domain, and the three together prove `check`'s claims. Under `cargo test`
+//!   each is a property test over the same domain, so the proof's statement is also tested on
+//!   stable Rust on every operating system.
 //! - `orient2d_seeded` runs the harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same cases on every target, WebAssembly included.
 
@@ -40,7 +43,9 @@ mod common;
 use bolero::{ValueGenerator, check, produce};
 use common::holds;
 use geom_fuzz::Finding;
-use geom_fuzz::orient2d::{self, MAX_INPUT_BYTES, PROOF_BOUND, ProofDraw, harness, proof_case};
+use geom_fuzz::orient2d::{
+    self, Claim, MAX_INPUT_BYTES, PROOF_BOUND, ProofDraw, harness, proof_case,
+};
 use geom_fuzz::seeded;
 use geom_test::Seed;
 
@@ -88,14 +93,15 @@ fn proof_draws(bound: u64) -> impl ValueGenerator<Output = ProofDraw> {
         })
 }
 
-/// The proof's body for one draw: the case it names, checked.
-fn prove(bound: u64, draw: &ProofDraw) -> Result<(), Finding> {
+/// The proof's body for one draw and one claim: the case it names, checked for that claim
+/// (`geom_fuzz::orient2d::check_claim`; the three claims together are `check`).
+fn prove(bound: u64, draw: &ProofDraw, claim: Claim) -> Result<(), Finding> {
     let case = proof_case(bound, draw).ok_or_else(|| {
         Finding::new("every draw of the proof's domain names a grid case", || {
             format!("{draw:?}")
         })
     })?;
-    orient2d::check(&case)
+    orient2d::check_claim(&case, claim)
 }
 
 #[cfg_attr(
@@ -118,13 +124,20 @@ fn orient2d_fuzz() {
         .for_each(|data: &[u8]| holds(harness(data)));
 }
 
-/// Under Kani, the SAT solver is kissat: on the wide integers piece G37 rewrote, which the proof's
-/// exact path reaches, kissat proves it in 47 minutes on the hosted runner and `CaDiCaL` ran past
-/// three hours. Loops are unwound at most 10 times. Every loop a passing case runs is shorter:
-/// the six coordinates, drawn, mapped and checked one by one. The loops the bound cuts are in the
-/// formatting of a [`Finding`], whose digit loops run on symbolic values and would otherwise
-/// unwind forever; only a broken claim reaches them, and Kani's unwinding assertions fail the
-/// proof if any cut loop can be reached, so the bound never hides a failure.
+/// The bounded proof is three harnesses, one claim each (`geom_fuzz::orient2d::check_claim`):
+/// the predicate's sign, the exact path's value and the filter's sign, each for every case of the
+/// domain, which together prove what one harness of `check` did. Proved as one, the claims took
+/// one solve of 63 minutes on the hosted runner (run 43688165033). Apart, on a development
+/// machine, the exact path's and the filter's took about 7 minutes each and the predicate's 29:
+/// the predicate's own fast and total paths, never reached on the grid, are still in its formula,
+/// and splitting its domain did not shorten it (an eighth of the domain took 13 to 28 minutes).
+///
+/// Under Kani, the SAT solver is kissat (`CaDiCaL` ran past three hours on the whole). Loops are
+/// unwound at most 10 times. Every loop a passing case runs is shorter: the six coordinates,
+/// drawn, mapped and checked one by one. The loops the bound cuts are in the formatting of a
+/// [`Finding`], whose digit loops run on symbolic values and would otherwise unwind forever; only
+/// a broken claim reaches them, and Kani's unwinding assertions fail the proof if any cut loop
+/// can be reached, so the bound never hides a failure.
 #[cfg_attr(
     target_family = "wasm",
     ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
@@ -134,11 +147,57 @@ fn orient2d_fuzz() {
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(kissat))]
 #[cfg_attr(kani, kani::unwind(10))]
-fn orient2d_proof() {
+fn orient2d_proof_predicate() {
     check!()
         .with_generator(proof_draws(PROOF_BOUND))
         .with_iterations(PROOF_ITERATIONS)
-        .for_each(|draw| holds(prove(PROOF_BOUND, draw)));
+        .for_each(|draw| holds(prove(PROOF_BOUND, draw, Claim::Predicate)));
+}
+
+/// The exact path's claim of the bounded proof ([`orient2d_proof_predicate`] says how the three
+/// harnesses share it).
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_proof_exact_path() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| holds(prove(PROOF_BOUND, draw, Claim::ExactPath)));
+}
+
+/// The filter's claim of the bounded proof ([`orient2d_proof_predicate`] says how the three
+/// harnesses share it).
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_proof_filter() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| holds(prove(PROOF_BOUND, draw, Claim::Filter)));
+}
+
+/// The three proofs' claims are every claim of `check`, each once: a fourth claim added to
+/// `geom_fuzz::orient2d::CLAIMS` needs its harness here.
+#[test]
+fn the_proofs_cover_every_claim() {
+    assert_eq!(
+        orient2d::CLAIMS,
+        [Claim::Predicate, Claim::ExactPath, Claim::Filter]
+    );
 }
 
 #[test]

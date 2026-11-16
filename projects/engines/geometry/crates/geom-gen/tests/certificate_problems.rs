@@ -30,6 +30,10 @@
 //!   (k + 1) · 2^−53. Each `FPTaylor` problem bounds the sum of its error terms at once exactly
 //!   when `predicate_certificates::EXACT_OPTIMISATION` names its filter, and then the total HOL
 //!   Light proves is the largest double at most K; otherwise it bounds each term and names none.
+//!   A problem names the shards HOL Light checks its terms in exactly when
+//!   `predicate_certificates::SHARDED` names its filter, more than one, and only term by term,
+//!   with its number of terms and each shard's terms, every term in exactly one shard
+//!   (`a_term_left_out_or_shared_is_refused` shows that check failing).
 //! - `the_problems_are_current_and_registered`: the committed problems are what the registered
 //!   generators write now, the registry generates no other problem, and every generated filter is
 //!   held here.
@@ -62,7 +66,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use geom_gen::Generate;
 use geom_gen::predicate_certificates::{
-    EXACT_OPTIMISATION, UNPROVEN, fptaylor_problem, gappa_case_problem, gappa_cases, gappa_problem,
+    EXACT_OPTIMISATION, SHARDED, UNPROVEN, fptaylor_problem, gappa_case_problem, gappa_cases,
+    gappa_problem,
 };
 use geom_gen::predicates::{PREDICATES, derivation};
 use geom_gen::registry::REGISTRY;
@@ -1019,6 +1024,120 @@ fn the_bounds_are_the_constant_less_its_roundings() {
             }
             None => assert!(!exact, "{name}, {file}: no total for the exact problem"),
         }
+        check_shards(name, file, fptaylor, exact);
+    }
+}
+
+/// The shards HOL Light checks a problem's terms in: exactly those SHARDED names, more than one,
+/// only for a problem bounded term by term (`exact` false), each line naming its shard's terms,
+/// and every term of the certificate in exactly one shard.
+fn check_shards(name: &str, file: &str, fptaylor: &str, exact: bool) {
+    let header = |key: &str| {
+        fptaylor
+            .lines()
+            .find_map(|l| l.strip_prefix(&format!("// {key}: ")))
+    };
+    let sharded = SHARDED.iter().find(|(n, _)| *n == name).map(|(_, s)| *s);
+    assert_eq!(
+        header("hol-light-shards").map(|s| s.parse::<usize>().unwrap()),
+        sharded.map(|s| s.shards.len()),
+        "{name}, {file}: the shards"
+    );
+    assert_eq!(
+        header("hol-light-terms").map(|s| s.parse::<u32>().unwrap()),
+        sharded.map(|s| s.terms),
+        "{name}, {file}: the terms"
+    );
+    let lines: Vec<&str> = fptaylor
+        .lines()
+        .filter(|l| l.starts_with("// hol-light-shard "))
+        .collect();
+    let Some(shards) = sharded else {
+        assert!(
+            lines.is_empty(),
+            "{name}, {file}: shard lines without shards"
+        );
+        return;
+    };
+    assert!(
+        shards.shards.len() > 1,
+        "{name}, {file}: one shard is the whole problem"
+    );
+    assert!(
+        !exact,
+        "{name}, {file}: the exact problem has no terms to share"
+    );
+    assert_eq!(lines.len(), shards.shards.len(), "{name}, {file}");
+    for ((k, terms), l) in (1..).zip(shards.shards).zip(&lines) {
+        let listed: Vec<String> = terms.iter().map(u32::to_string).collect();
+        assert_eq!(
+            *l,
+            format!("// hol-light-shard {k}: {}", listed.join(" ")),
+            "{name}, {file}: shard {k}'s line"
+        );
+    }
+    assert_eq!(
+        every_term_once(&shards),
+        Ok(()),
+        "{name}, {file}: the shards' terms"
+    );
+}
+
+/// Whether `shards` names every term 1 to `terms` exactly once, each shard non-empty and in
+/// increasing order: then shards 1 to n, each proving its own terms and assuming the others,
+/// together prove every term of the certificate.
+fn every_term_once(shards: &geom_gen::predicate_certificates::Shards) -> Result<(), String> {
+    let mut seen = vec![0u32; shards.terms as usize + 1];
+    for (k, terms) in (1..).zip(shards.shards) {
+        if terms.is_empty() {
+            return Err(format!("shard {k} is empty"));
+        }
+        if terms.windows(2).any(|w| w[0] >= w[1]) {
+            return Err(format!("shard {k} is not in increasing order"));
+        }
+        for &t in *terms {
+            if t == 0 || t > shards.terms {
+                return Err(format!(
+                    "shard {k} names term {t}, outside 1 to {}",
+                    shards.terms
+                ));
+            }
+            seen[t as usize] += 1;
+        }
+    }
+    match (1..=shards.terms).find(|&t| seen[t as usize] != 1) {
+        Some(t) => Err(format!("term {t} is in {} shards", seen[t as usize])),
+        None => Ok(()),
+    }
+}
+
+/// The check of the shards' terms refuses a term left out, a term twice, a term past the count,
+/// an empty shard and a shard out of order.
+#[test]
+fn a_term_left_out_or_shared_is_refused() {
+    use geom_gen::predicate_certificates::Shards;
+    const BROKEN: [(&[&[u32]], &str); 5] = [
+        (&[&[1, 3], &[2]], "term 4 is in 0 shards"),
+        (&[&[1, 3], &[2, 3, 4]], "term 3 is in 2 shards"),
+        (
+            &[&[1, 3, 5], &[2, 4]],
+            "shard 1 names term 5, outside 1 to 4",
+        ),
+        (&[&[1, 2, 3, 4], &[]], "shard 2 is empty"),
+        (&[&[3, 1], &[2, 4]], "shard 1 is not in increasing order"),
+    ];
+    assert_eq!(
+        every_term_once(&Shards {
+            terms: 4,
+            shards: &[&[1, 3], &[2, 4]],
+        }),
+        Ok(())
+    );
+    for (shards, why) in BROKEN {
+        assert_eq!(
+            every_term_once(&Shards { terms: 4, shards }),
+            Err(why.to_owned())
+        );
     }
 }
 

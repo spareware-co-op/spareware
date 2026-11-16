@@ -3,7 +3,8 @@
 //! What it does: [`CurveError`] names the failure of an operation of a curve or surface kind (the
 //! surface kinds of `geom-surface` share it, a span there being a box): a parameter or span outside
 //! the domain, a transform a 2D curve cannot take, a refusal from the NURBS algorithms underneath,
-//! a result that is not finite, or a budget that stopped the work. [`ContractError`] names the law
+//! a result that is not finite, a value the kind would misread (a sphere's or torus's axial factor
+//! other than 1 or −1), or a budget that stopped the work. [`ContractError`] names the law
 //! of the kind contract (`crate::contract`) a kind broke, and where.
 //!
 //! Guarantees:
@@ -67,6 +68,10 @@ pub enum CurveError {
     TooManyPanels,
     /// A step its own bounds rule out failed: a defect in this crate, reported, never a panic.
     Defect,
+    /// A sphere's or torus's axial factor is not 1 or −1. Every routine of those kinds reads the
+    /// surface as round, so another factor (a spheroid, or a torus stretched along its axis) would
+    /// be misread; such a surface is a kind of its own (chapter 7).
+    AxialFactorNotUnit,
     /// A flat array of a many-point call holds the wrong number of values (chapter 23.6).
     ArrayLength {
         /// The values it must hold.
@@ -111,6 +116,9 @@ impl fmt::Display for CurveError {
                 "the transition's heading turns too far for its certified quadrature's panels",
             ),
             CurveError::Defect => f.write_str("an internal step failed (a defect in geom-curve)"),
+            CurveError::AxialFactorNotUnit => f.write_str(
+                "a sphere's or torus's axial factor must be 1 or -1: another would make a spheroid or a stretched torus, which the kind would read as round",
+            ),
             CurveError::ArrayLength { expected, given } => write!(
                 f,
                 "a flat array holds {given} values where the call needs {expected}"

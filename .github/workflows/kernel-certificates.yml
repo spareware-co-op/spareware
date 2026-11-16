@@ -13,7 +13,12 @@ name: Kernel certificates
 # - FPTaylor bounds each filter's normalised problem (each step divided by its scale, with a ratio
 #   parameter where a sum's operand has a smaller scale) with a proof certificate, HOL Light checks
 #   the certificate, one job per problem, and each job reports whether its bound is within the K
-#   Gappa's goal uses; the error model is homogeneous, so the bound holds at every scale.
+#   Gappa's goal uses; the error model is homogeneous, so the bound holds at every scale. A problem
+#   whose terms take HOL Light longer than a runner's six hours names shards
+#   (`// hol-light-shards: n`, geom-gen's SHARDED): FPTaylor runs once on it, and n jobs each check
+#   the terms of that certificate its `// hol-light-shard k:` line names, shared out by what each
+#   took to check, assuming the others; every term is in one shard, so the n together prove every
+#   term of the one certificate.
 #
 # The method note, projects/kit/notes/G35-filter-certificates.md, says what each proof covers and
 # what the written argument covers.
@@ -119,34 +124,88 @@ jobs:
           name: gappa-rocq-proofs
           path: ${{ runner.temp }}/proofs
 
+  # The problems, each with the shards its `// hol-light-shards:` line names (one when it names
+  # none), and those that name some.
   fptaylor-problems:
     name: The FPTaylor problems
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       problems: ${{ steps.list.outputs.problems }}
+      sharded: ${{ steps.list.outputs.sharded }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: List them
         id: list
         run: |
-          problems=$(cd "$PROBLEMS" && ls fptaylor-*.fpt | jq -R . | jq -sc .)
+          cd "$PROBLEMS"
+          problems=$(for problem in fptaylor-*.fpt; do
+            shards=$(sed -n 's|^// hol-light-shards: ||p' "$problem")
+            for shard in $(seq "${shards:-1}"); do
+              jq -nc --arg problem "$problem" --argjson shard "$shard" --argjson shards "${shards:-1}" \
+                '{problem: $problem, shard: $shard, shards: $shards}'
+            done
+          done | jq -sc '{include: .}')
+          sharded=$(grep -l '^// hol-light-shards: ' fptaylor-*.fpt | tr '\n' ' ' || true)
           echo "$problems"
+          echo "sharded: $sharded"
           echo "problems=$problems" >> "$GITHUB_OUTPUT"
+          echo "sharded=$sharded" >> "$GITHUB_OUTPUT"
 
-  # One job per problem: each sizes HOL Light's Taylor tables to its own problem's variables, and
-  # has a runner's whole budget to itself.
-  fptaylor:
-    name: FPTaylor, checked by HOL Light (${{ matrix.problem }})
+  # FPTaylor once on each problem whose terms HOL Light checks in shards, so that every shard of
+  # the next job checks the one certificate: shards 1 to n, each green, prove all of its terms.
+  fptaylor-certificates:
+    name: The FPTaylor certificates the shards check
     needs: fptaylor-problems
+    if: needs.fptaylor-problems.outputs.sharded != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SHARDED: ${{ needs.fptaylor-problems.outputs.sharded }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # As the shards do, so a problem the base proved needs no certificate here.
+      - name: Set aside the problems the base proved
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch -q --no-tags --depth 1 origin "$BASE"
+          for problem in $SHARDED; do
+            if git diff --quiet "$BASE" HEAD -- "$PROBLEMS/$problem" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
+              echo "$problem: same problem as $BASE, proved there; the nightly run proves it again"
+              rm "$PROBLEMS/$problem"
+            fi
+          done
+      - name: Run FPTaylor on each
+        run: |
+          mkdir -m 777 "$RUNNER_TEMP/certificates"
+          kept=()
+          for problem in $SHARDED; do
+            if [ -f "$PROBLEMS/$problem" ]; then kept+=("$PROBLEMS/$problem"); fi
+          done
+          if [ ${#kept[@]} -gt 0 ]; then
+            docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/certificates:/out" -e FPTAYLOR_OUT=/out \
+              -w /work "$OCAML_IMAGE" bash "$SCRIPTS/fptaylor.sh" "${kept[@]}"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fptaylor-certificates
+          path: ${{ runner.temp }}/certificates
+          if-no-files-found: ignore
+
+  # One job per problem, or per shard of a problem's terms: each sizes HOL Light's Taylor tables to
+  # its own problem's variables, and has a runner's whole budget to itself. It runs whether or not
+  # the certificates job ran or passed: a shard without its certificate fails on its own.
+  fptaylor:
+    name: FPTaylor, checked by HOL Light (${{ matrix.problem }}${{ matrix.shards > 1 && format(', shard {0} of {1}', matrix.shard, matrix.shards) || '' }})
+    needs: [fptaylor-problems, fptaylor-certificates]
+    if: ${{ !cancelled() && needs.fptaylor-problems.result == 'success' }}
     runs-on: ubuntu-24.04
     # HOL Light loads its multivariate analysis (about 40 minutes) and its Taylor tables before it
     # checks anything; GitHub stops a hosted runner's job at six hours.
     timeout-minutes: 350
     strategy:
       fail-fast: false
-      matrix:
-        problem: ${{ fromJSON(needs.fptaylor-problems.outputs.problems) }}
+      matrix: ${{ fromJSON(needs.fptaylor-problems.outputs.problems) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
@@ -176,8 +235,24 @@ jobs:
             echo "same=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Bound the filter and check the certificate
-        if: steps.base.outputs.same != 'true'
+        if: steps.base.outputs.same != 'true' && matrix.shards == 1
         env:
           PROBLEM: ${{ matrix.problem }}
         run: |
           docker run --rm -v "$PWD:/work:ro" -w /work "$OCAML_IMAGE"             bash "$SCRIPTS/fptaylor.sh" "$PROBLEMS/$PROBLEM"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.base.outputs.same != 'true' && matrix.shards > 1
+        with:
+          name: fptaylor-certificates
+          path: ${{ runner.temp }}/certificates
+      # The shard's terms of the one certificate, the others assumed; fptaylor.sh fails unless the
+      # certificate has the terms the problem shares out and it proved exactly its shard's.
+      - name: Check this shard's terms of the certificate
+        if: steps.base.outputs.same != 'true' && matrix.shards > 1
+        env:
+          PROBLEM: ${{ matrix.problem }}
+          FPTAYLOR_SHARD: ${{ matrix.shard }}
+        run: |
+          docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/certificates:/certificates:ro" \
+            -e FPTAYLOR_SHARD -e FPTAYLOR_CERTIFICATES=/certificates -w /work "$OCAML_IMAGE" \
+            bash "$SCRIPTS/fptaylor.sh" "$PROBLEMS/$PROBLEM"

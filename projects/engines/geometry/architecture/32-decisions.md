@@ -844,6 +844,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-certificates.yml` | `gappa` | `trip gappa`: orient2d's Gappa problem with its claimed bound K halved, which Gappa must fail to prove (its report names the property and the best enclosure it found, the shipped K), so that its Rocq output holds no theorem and Rocq refuses it |
 | `kernel-certificates.yml` | `fptaylor` | `trip hol-light`, on orient2d's leg: every bound of `FPTaylor`'s certificate halved as HOL Light's session loads it, which HOL Light must refuse to prove |
 | `kernel-certificates.yml` | `fptaylor-problems` | Not a gate: it lists the FPTaylor problems, one `fptaylor` job each |
+| `kernel-certificates.yml` | `fptaylor-certificates` | Not a gate: it runs FPTaylor once on each problem whose terms HOL Light checks in shards (`// hol-light-shards:`), so that every `fptaylor` shard checks that one certificate; each shard fails unless it proves exactly its own terms |
 | `kernel-fuzz-campaign.yml` | `campaign` | Removed by decision 32.52, after the gate: Not a gate: nightly, or on a pull request only when it is labelled `fuzz-campaign` |
 | `kernel-fuzz-campaign.yml` | `select` | Removed by decision 32.52, after the gate: Not a gate: it runs only for a campaign started by hand with `affected_since`, never on a pull request, and picks the targets that campaign fuzzes |
 | `kernel-variants.yml` | `native` | Not a gate: timings for the variant report, on a pull request only when it is labelled `variant-bench` (its header: never a gate) |

@@ -2806,6 +2806,11 @@
               "shape": "unit"
             },
             {
+              "doc": "A sphere's or torus's axial factor is not 1 or −1. Every routine of those kinds reads the surface as round, so another factor (a spheroid, or a torus stretched along its axis) would be misread; such a surface is a kind of its own (chapter 7).",
+              "name": "AxialFactorNotUnit",
+              "shape": "unit"
+            },
+            {
               "doc": "A flat array of a many-point call holds the wrong number of values (chapter 23.6).",
               "name": "ArrayLength",
               "shape": "struct"
@@ -2994,7 +2999,7 @@
         },
         {
           "cost": "a few machine words; nothing allocates.",
-          "does": "[`CurveError`] names the failure of an operation of a curve or surface kind (the surface kinds of `geom-surface` share it, a span there being a box): a parameter or span outside the domain, a transform a 2D curve cannot take, a refusal from the NURBS algorithms underneath, a result that is not finite, or a budget that stopped the work. [`ContractError`] names the law of the kind contract (`crate::contract`) a kind broke, and where.",
+          "does": "[`CurveError`] names the failure of an operation of a curve or surface kind (the surface kinds of `geom-surface` share it, a span there being a box): a parameter or span outside the domain, a transform a 2D curve cannot take, a refusal from the NURBS algorithms underneath, a result that is not finite, a value the kind would misread (a sphere's or torus's axial factor other than 1 or −1), or a budget that stopped the work. [`ContractError`] names the law of the kind contract (`crate::contract`) a kind broke, and where.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/error.rs",
           "guarantees": [
@@ -5770,7 +5775,7 @@
             "**The oracle cannot overflow on the grid.** Each coordinate has magnitude at most M = 2^40 − 1, so each of the six products is at most M² < 2^80, each 2 × 2 minor at most 2M² < 2^81, and the determinant at most 6M² < 2^83, far inside `i128`. Every step is a checked method all the same, and a step that failed would be reported as a [`Finding`] naming this harness as the defect, never a panic and never a wrapped value.",
             "**A wrong answer is a [`Finding`]**, naming the claim, the points, the reference value and what `geom-num` gave. An error from the predicate, or a `None` from the exact path, is a finding too, never read as a sign: `geom-num` proves every grid input answers.",
             "**A panic is a failure.** Nothing is caught: a panic in `geom-num` fails the run, and the engine reports the input.",
-            "**What is proven and what is tested.** For every case [`proof_case`] can give with bound [`PROOF_BOUND`] (every coordinate within `PROOF_BOUND` steps of 0 or of an edge ±(2^40 − 1) of the frame, in any combination), Kani proves that all three claims hold and that nothing on the way panics or overflows (`tests/orient2d.rs`, `orient2d_proof`; Kani checks every arithmetic step, index and unwrap by default). Near the edges the filter's products round, so the proof covers the filter's error bound, not only exact arithmetic. Everywhere else in the frame the claims are tested, by fuzzing and the property tests, not proven."
+            "**What is proven and what is tested.** For every case [`proof_case`] can give with bound [`PROOF_BOUND`] (every coordinate within `PROOF_BOUND` steps of 0 or of an edge ±(2^40 − 1) of the frame, in any combination), Kani proves that all three claims hold and that nothing on the way panics or overflows (`tests/orient2d.rs`: `orient2d_proof_predicate`, `orient2d_proof_exact_path` and `orient2d_proof_filter`, one claim each by [`check_claim`], which together prove what [`check`] checks; Kani checks every arithmetic step, index and unwrap by default). Near the edges the filter's products round, so the proof covers the filter's error bound, not only exact arithmetic. Everywhere else in the frame the claims are tested, by fuzzing and the property tests, not proven."
           ],
           "job": "Fuzz target and bounded proof: `geom-num`'s orient2d agrees with the exact determinant of its definition, computed here from scratch.",
           "method": {
@@ -10147,7 +10152,7 @@
             "**Exact for every input.** No rounding ever decides a sign, and `Zero` means exactly degenerate. Each predicate documents its degenerate cases, including which sign a degenerate but non-zero answer has.",
             "**The same answer in every build profile; no overflow, no panic.** Outside its tests this module uses no native `+`, `-` or `*` on a fixed-width integer, and no cast: every operation is a checked method (`checked_sub`, `checked_mul`, `checked_add`, `checked_neg`) that returns `None` instead of wrapping. So nothing here depends on overflow checks being on, which they are not in a default release build. `tests/attack_predicate.rs` scans this file's code to keep it that way.",
             "**Deterministic.** The same answer on every target: the integer paths are exact, and the filter's `f64` operations are correctly rounded everywhere and give a sign only when it is the exact sign.",
-            "**Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here). Verus proves that the generated exact paths of [`orient2d`], [`orient3d`], [`incircle`] and [`insphere`] compute their determinants exactly and never overflow, for every grid input (pieces G36 and G38: the twins in `verus/generated/`, token for token the shipped modules), and that the [`crate::wide`] arithmetic they run on is exact (G37). Kani proves that [`orient2d`] answers with the exact sign, nothing panicking or overflowing on the way, filter and routing included, for every coordinate within one step of 0 or of an edge of the frame (piece G14: geom-fuzz's `orient2d_proof`). The filters' error bounds are checked against exact arithmetic, not proven, until pieces G35 and G40 certify them; the routing and every other input are tested against exact oracles (`tests/attack_predicate.rs`, the verification suite)."
+            "**Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here). Verus proves that the generated exact paths of [`orient2d`], [`orient3d`], [`incircle`] and [`insphere`] compute their determinants exactly and never overflow, for every grid input (pieces G36 and G38: the twins in `verus/generated/`, token for token the shipped modules), and that the [`crate::wide`] arithmetic they run on is exact (G37). Kani proves that [`orient2d`] answers with the exact sign, nothing panicking or overflowing on the way, filter and routing included, for every coordinate within one step of 0 or of an edge of the frame (piece G14: geom-fuzz's `orient2d_proof_predicate`, `orient2d_proof_exact_path` and `orient2d_proof_filter`, one claim each). The filters' error bounds are checked against exact arithmetic, not proven, until pieces G35 and G40 certify them; the routing and every other input are tested against exact oracles (`tests/attack_predicate.rs`, the verification suite)."
           ],
           "job": "Exact geometric predicates on grid points: orientation in 2D and 3D, in-circle and in-sphere.",
           "method": {
@@ -14292,7 +14297,7 @@
       "modules": [
         {
           "cost": "constant per evaluation; a bound O(1) per piece (at most 64 pieces); a conversion O(m·n) for its control net.",
-          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a factor s on its axial term, ±1 as built, so that reversing either parameter is exact:",
+          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a factor s on its axial term, ±1 as built, so that reversing either parameter is exact (a sphere's and a torus's is ±1 always, any other refused, as their routines read them as round):",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
           "guarantees": [
@@ -15769,6 +15774,28 @@
           "target": "lib"
         },
         {
+          "cost": "one selection over the changed files, and one comparison of the ledger's survivors.",
+          "does": "[`mutants`] takes the change's files (its base against its head), what changed since the last head whose mutants were judged clean ([`Since`]), and the crate graph, and says which of the change's Rust files the run must mutate again, every changed line of each, with why. [`coverage`] says which changed files the coverage gate must measure the crates of. `kernel-quality mutants-increment` and `coverage-increment` are the command line; `kernel-quality.yml` finds the last clean head through GitHub's record of the pull request's runs.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/increment.rs",
+          "guarantees": [
+            "**Over, never under.** Whatever cannot be placed (a file in no crate, a ledger that cannot be read) judges every file again; `tests/kernel_quality_workflow.rs` plants a changed line, a changed test, a removed ledger entry and a base-side change, each of which must be judged.",
+            "**No last clean head, everything.** The workflow judges the whole change when it finds no clean run, or cannot fetch its head."
+          ],
+          "job": "What a later push to a pull request must judge again, after an earlier push's mutation or coverage run finished clean (the owner's testing principle 5: \"a later push judges only the lines changed since the last judged head\"), so the gates do not repeat on code whose verdict cannot have changed, and never skip code whose verdict can.",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies",
+              "https://mutants.rs/mutants.html"
+            ],
+            "text": "the crate graph's selection of `test_scope` (cargo's development-dependency rule, <https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies>), and the monotonicity of cargo-mutants' verdicts (<https://mutants.rs/mutants.html>): a mutant is caught when some test fails, so more tests over unchanged code catch at least what fewer did."
+          },
+          "path": "geom_test::increment",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the map's records, the licence texts and the notes, plus sorting them.",
           "does": "[`build`] takes the map as a value ([`crate::map::Generated::map`], the records `MAP.json` holds), the hand-kept licence texts under `projects/engines/geometry/notices/` ([`notices`]) and the method notes under `projects/engines/geometry/methods/` ([`methods`]), and returns the text of both files with every [`Problem`]: a ported source with no licence text, a licence text no port uses, a method note that breaks its template, a record whose method note credits another source, or a map whose headers are incomplete. [`repo`] reads the inputs from a workspace on disk and writes or checks the committed files; the binary `provenance` (`cargo run -p geom-test --bin provenance -- check`) runs it in CI.",
           "family": [],
@@ -17237,6 +17264,28 @@
             "text": "the replay discipline of sections 28.5 and 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`): \"Every generator prints its seed, so any failure replays exactly\", and \"Seeds belong to test generators only, and every one is printed\". The environment variable mirrors the seed variables of proptest (`PROPTEST_RNG_SEED`, <https://github.com/proptest-rs/proptest>) and bolero (`BOLERO_RANDOM_SEED`, <https://github.com/camshaft/bolero>), with one name for every Spare Kit test, so one value replays any of them."
           },
           "path": "geom_test::seed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the two texts; for the readers, linear in the size of the workspace's sources times the number of shared files, once per round of the search, which ends within one round per library module.",
+          "does": "[`compare`] takes one shared file's text at the change's base and at its head and says which crates its changed entries name ([`Reach::Crates`]), or that the change cannot be placed ([`Reach::Everything`]). [`Readers::read`] finds, from every workspace crate's Rust sources, which crates read a shared file whole, and through which modules of their library. `test_scope` and `fuzz_scope` use both when the base's text is given (`--base`), and treat the file as one outside every crate when it is not.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/shared.rs",
+          "guarantees": [
+            "**Over, never under.** Every crate an entry names is reached, an entry that names none, a change to a top-level value that is no list, a text that is not JSON and a missing file reach everything; a source that does not lex as Rust makes its crate a reader of every shared file. `tests/test_scope.rs` holds the rule with planted changes.",
+            "**Names, not text.** A name in a comment, a doc comment or a string is never a module path: the sources are read as Rust's tokens.",
+            "**Every decision has its reason.** Each reached crate comes with the list it was named in."
+          ],
+          "job": "The files outside every crate's folder that the change selections read by what changed in them, `MAP.json` and `quality-ledger.json` (chapter 28.17; the owner's testing principle 2: \"the code map and the mutant ledger count by the crates whose rows changed\"), so that a change to one of them reaches only the crates its changed entries name and the crates that read it whole, not every crate as any other file outside every crate does.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8259"
+            ],
+            "text": "JSON (RFC 8259, <https://www.rfc-editor.org/rfc/rfc8259>) read with `serde_json` and compared entry by entry as multisets of their serialised text; Rust's tokens read with `proc-macro2`, as `fuzz_scope` reads `geom-fuzz`."
+          },
+          "path": "geom_test::shared",
           "provenance": [],
           "spdx": null,
           "target": "lib"
