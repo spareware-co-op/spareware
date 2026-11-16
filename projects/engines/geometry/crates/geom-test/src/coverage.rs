@@ -1050,19 +1050,29 @@ pub fn plan_parts(crates: &[String], times: &BTreeMap<String, u64>) -> Vec<Vec<S
     let slowest = times.values().copied().max().unwrap_or(PART_SECONDS);
     let time = |k: &String| times.get(k).copied().unwrap_or(slowest);
     let total: u64 = crates.iter().map(time).fold(0, u64::saturating_add);
-    let n = usize::try_from(total.div_ceil(PART_SECONDS))
+    let most = crates.len().max(1);
+    let mut n = usize::try_from(total.div_ceil(PART_SECONDS))
         .unwrap_or(usize::MAX)
-        .clamp(1, crates.len().max(1));
+        .clamp(1, most);
     let mut order: Vec<&String> = crates.iter().collect();
     order.sort_by(|a, b| time(b).cmp(&time(a)).then_with(|| a.cmp(b)));
-    let mut parts: Vec<(u64, Vec<String>)> = vec![(0, Vec::new()); n];
-    for krate in order {
-        if let Some(part) = parts.iter_mut().min_by_key(|(load, _)| *load) {
-            part.0 = part.0.saturating_add(time(krate));
-            part.1.push(krate.clone());
+    // One part more until every part fits the budget or holds a single crate.
+    loop {
+        let mut parts: Vec<(u64, Vec<String>)> = vec![(0, Vec::new()); n];
+        for krate in &order {
+            if let Some(part) = parts.iter_mut().min_by_key(|(load, _)| *load) {
+                part.0 = part.0.saturating_add(time(krate));
+                part.1.push((*krate).clone());
+            }
         }
+        let fits = parts
+            .iter()
+            .all(|(load, p)| *load <= PART_SECONDS || p.len() <= 1);
+        if fits || n >= most {
+            return parts.into_iter().map(|(_, p)| p).collect();
+        }
+        n = n.saturating_add(1);
     }
-    parts.into_iter().map(|(_, p)| p).collect()
 }
 
 /// The problems of a plan of `parts` for `crates`: a crate in no part or in two, a part with a

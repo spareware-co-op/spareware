@@ -213,6 +213,43 @@ fn it_runs_once_per_change_and_never_on_a_timer() {
     ignore = "reads the repository's files, which a WebAssembly test run cannot"
 )]
 #[test]
+fn the_coverage_judge_reads_every_part() {
+    let w = workflow();
+    let jobs = &w["jobs"];
+    // The coverage judge judges even when a part failed, so it names every crate left unmeasured;
+    // it reads every part, and `done` fails on any part that did not pass.
+    assert_eq!(
+        text(&jobs["coverage"]["if"]),
+        "${{ !cancelled() && needs.when.outputs.coverage == 'true' && needs.coverage-plan.result == 'success' }}"
+    );
+    let needs: Vec<&str> = jobs["coverage"]["needs"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .map(text)
+        .collect();
+    assert_eq!(needs, ["when", "cheap", "coverage-plan", "coverage-parts"]);
+    assert!(
+        runs(&w, "done")
+            .contains("must=\"$must coverage-plan coverage-parts coverage gates-seeded\""),
+        "done does not require every coverage job"
+    );
+    assert!(
+        runs(&w, "coverage").contains("download-artifact") || {
+            let steps = jobs["coverage"]["steps"].as_vec().unwrap();
+            steps
+                .iter()
+                .any(|s| text(&s["with"]["pattern"]) == "coverage-part-*")
+        },
+        "the judge does not read every part's files"
+    );
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
 fn each_job_runs_on_the_events_its_gate_names() {
     let w = workflow();
     let jobs = &w["jobs"];
@@ -267,23 +304,6 @@ fn each_job_runs_on_the_events_its_gate_names() {
         .map(text)
         .collect();
     assert_eq!(needs, ["when", "mutants-plan", "mutants", "mutants-2"]);
-    // The coverage judge judges even when a part failed, so it names every crate left unmeasured;
-    // it reads every part, and `done` fails on any part that did not pass.
-    assert_eq!(
-        text(&jobs["coverage"]["if"]),
-        "${{ !cancelled() && needs.when.outputs.coverage == 'true' && needs.coverage-plan.result == 'success' }}"
-    );
-    let needs: Vec<&str> = jobs["coverage"]["needs"]
-        .as_vec()
-        .unwrap()
-        .iter()
-        .map(text)
-        .collect();
-    assert_eq!(needs, ["when", "cheap", "coverage-plan", "coverage-parts"]);
-    assert!(
-        runs(&w, "done").contains("must=\"$must coverage-plan coverage-parts coverage gates-seeded\""),
-        "done does not require every coverage job"
-    );
     // The judge checks the jobs it reads before it judges: a shard job may be skipped only when
     // the plan gave it no shard.
     let first = text(&jobs["mutants-judge"]["steps"][0]["run"]);
