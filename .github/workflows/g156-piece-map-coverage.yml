@@ -32,8 +32,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Run 43894768049 measured every other unit; these two stopped on a file name with a slash.
-        unit: [bench-scenario, bench-mesh]
+        # Runs 43894768049 and 43896027651 gave the files; this one the whole catalogue, every
+        # seeded test, per-op query and make, and hit lines for the files pieces share.
+        unit: [fuzz-all, fuzz-planes, fuzz-predicates, fuzz-solids, fuzz-make, bench-all, bench-scenario,
+          bench-query, bench-make, bench-group-predicate, bench-group-plane]
     defaults:
       run:
         shell: bash
@@ -63,10 +65,13 @@ jobs:
           set -u
           out="$RUNNER_TEMP/pm"
           mkdir -p "$out"
-          show() { # label variant json
-            python3 - "$1" "$2" "$3" <<'PY'
+          # The files whose hit lines are printed too ("PML <unit> <variant> <file> <ranges>"), for
+          # the pieces that share a file: which lines of it a unit reaches.
+          lines='geom-bool/src/(combine|batch|operand|names)\.rs|geom-poly/src/(merge|subdivide|plane)\.rs|geom-num/src/(predicate|plane|step)\.rs|geom-check/src/planar\.rs'
+          show() { # label variant json lcov
+            python3 - "$1" "$2" "$3" "$4" "$lines" <<'PY'
           import json, re, sys
-          label, variant, path = sys.argv[1:4]
+          label, variant, path, lcov, wanted = sys.argv[1:6]
           data = json.load(open(path))
           for f in data["data"][0]["files"]:
               name = f["filename"]
@@ -75,20 +80,41 @@ jobs:
                   continue
               lines = f["summary"]["lines"]
               print(f"PM\t{label}\t{variant}\t{m.group(1)}/src/{m.group(2)}\t{lines['covered']}\t{lines['count']}")
+          hits, src = {}, None
+          for line in open(lcov):
+              line = line.strip()
+              if line.startswith("SF:"):
+                  m = re.search(r"crates/(geom-[a-z]+/src/.*)$", line[3:])
+                  src = m.group(1) if m and re.fullmatch(wanted, m.group(1)) else None
+              elif src and line.startswith("DA:"):
+                  n, count = line[3:].split(",")[:2]
+                  if int(count) > 0:
+                      hits.setdefault(src, set()).add(int(n))
+          for src, got in sorted(hits.items()):
+              got, ranges, start = sorted(got), [], None
+              for i, n in enumerate(got):
+                  if start is None:
+                      start = n
+                  if i + 1 == len(got) or got[i + 1] != n + 1:
+                      ranges.append(f"{start}-{n}" if start != n else f"{n}")
+                      start = None
+              print(f"PML\t{label}\t{variant}\t{src}\t{','.join(ranges)}")
           PY
           }
           clear() { find target -name '*.profraw' -delete 2>/dev/null || true; }
-          one() { # label variant package test filter [names]
+          one() { # label variant package test filter [names]; an empty test runs every test binary
             local label=$1 variant=$2 pkg=$3 test=$4 filter=$5 names=${6:-}
             local file="$out/${label////_}.$variant"
+            local which=(--test "$test") match=(--exact "$filter")
+            if [ -z "$test" ]; then which=(--tests); match=("$filter"); fi
             clear
             echo "::group::$label $variant"
             if PIECE_MAP_NAMES="$names" cargo llvm-cov --no-report --locked -p "$pkg" --release --branch \
-                --test "$test" -- --exact "$filter" --test-threads 1 --nocapture; then
-              cargo llvm-cov report --release --branch --json --summary-only \
-                --output-path "$file.json"
+                "${which[@]}" -- "${match[@]}" --test-threads 1 --nocapture; then
+              cargo llvm-cov report --release --branch --json --summary-only --output-path "$file.json"
+              cargo llvm-cov report --release --branch --lcov --output-path "$file.lcov"
               echo "::endgroup::"
-              show "$label" "$variant" "$file.json" | tee "$file.tsv"
+              show "$label" "$variant" "$file.json" "$file.lcov" | tee "$file.tsv"
             else
               echo "::endgroup::"
               echo "PMFAIL $label $variant"
@@ -102,9 +128,17 @@ jobs:
             one "$family" kernel geom-bench piece_map_kernel run_named "$family/"
           }
           case "$UNIT" in
+            fuzz-all)
+              # Every target's seeded test, each test binary in its own process.
+              one all seeded geom-fuzz "" _seeded
+              ;;
             fuzz-*)
               target=${UNIT#fuzz-}
               one "$target" seeded geom-fuzz "$target" "${target}_seeded"
+              ;;
+            bench-all)
+              one all whole geom-bench piece_map_whole run_named "*"
+              one all kernel geom-bench piece_map_kernel run_named "*"
               ;;
             bench-scenario)
               bench scenario openings moved_door slab_holes union one_selection three_selections storey
@@ -113,9 +147,11 @@ jobs:
               bench mesh cdt exact_build locate boolean hull slice point_point point_line point_plane \
                 line_line closest_dots triangles envelope decimate remesh
               ;;
-            bench-plane)
-              one plane whole geom-bench piece_map_whole run_named "plane/"
-              one plane kernel geom-bench piece_map_kernel run_named "plane/"
+            bench-query)
+              bench query area bounding_box exactness faces validity volume
+              ;;
+            bench-make)
+              bench make build_box cylinder move_box turn_box
               ;;
             bench-group-*)
               group=${UNIT#bench-group-}

@@ -13,7 +13,7 @@ fn chosen() -> Vec<String> {
     let prefixes: Vec<&str> = prefixes.split_whitespace().collect();
     let chosen: Vec<String> = names()
         .into_iter()
-        .filter(|n| prefixes.iter().any(|p| n.starts_with(p)))
+        .filter(|n| prefixes.iter().any(|p| *p == "*" || n.starts_with(p)))
         .collect();
     assert!(!chosen.is_empty(), "no benchmark matches {prefixes:?}");
     println!("measured: {chosen:?}");
