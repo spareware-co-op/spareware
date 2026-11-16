@@ -59,6 +59,7 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use geom_curve::{Axes, Basis, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola};
 use geom_curve::{CurveError, ParamCurve, Trimmed, tight};
@@ -246,10 +247,6 @@ fn half_plane_of(
     Ok(in_half_plane(&Turn::new(c, e, anchor), kind, (lo, hi)).then_some(map))
 }
 
-/// Below this a product's error-free parts may underflow (Dekker's product is exact from
-/// `2^(e_min + p − 1)` = 2^−970 up; four times that, to spare), so a sign there is not told.
-const FLOOR: f64 = 4.0 * (f64::MIN_POSITIVE / f64::EPSILON);
-
 /// A sum of products of doubles, kept as its terms so that its sign is exact: each product is
 /// expanded into doubles by error-free products, and the parts summed exactly. A polynomial in
 /// the stored data, so no rounding of a difference or a product ever decides a side.
@@ -295,7 +292,10 @@ impl Exact {
         Exact(terms)
     }
 
-    /// The sign, exactly; `None` where a product overflows or could underflow.
+    /// The sign, exactly; `None` where a product of two parts is not exactly a pair of doubles: it
+    /// overflows, or its error is finer than the smallest subnormal. [`two_prod`] says which by
+    /// its error part, which is finite exactly when the pair is exact, so that one check is the
+    /// whole test, at every magnitude.
     fn sign(&self) -> Option<Sign> {
         let mut sum = ExactSum::new();
         for term in &self.0 {
@@ -310,7 +310,7 @@ impl Exact {
                 let mut next = Vec::with_capacity(parts.len().saturating_mul(2));
                 for part in parts {
                     let (p, e) = two_prod(part, factor);
-                    if !p.is_finite() || p.abs() < FLOOR {
+                    if !e.is_finite() {
                         return None;
                     }
                     next.push(p);
@@ -322,16 +322,14 @@ impl Exact {
             }
             sum.add_slice(&parts);
         }
-        let v = sum.round_ieee();
-        if v > 0.0 {
-            Some(Sign::Positive)
-        } else if v < 0.0 {
-            Some(Sign::Negative)
-        } else if v == 0.0 {
-            Some(Sign::Zero)
-        } else {
-            None
-        }
+        // The exact sum of finite doubles, rounded once to nearest: a nonzero one is a whole
+        // multiple of 2^−1074, so it rounds to a nonzero double or an infinity of its own sign,
+        // and zero is +0. Not a number only where the sum was lost, which has no order.
+        sum.round_ieee().partial_cmp(&0.0).map(|order| match order {
+            Ordering::Less => Sign::Negative,
+            Ordering::Equal => Sign::Zero,
+            Ordering::Greater => Sign::Positive,
+        })
     }
 
     /// Whether the sign is exactly `s`.

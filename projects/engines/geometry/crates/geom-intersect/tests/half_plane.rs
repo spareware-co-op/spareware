@@ -275,6 +275,75 @@ fn a_nurbs_profile_is_a_meridian_by_its_control_points() {
     );
 }
 
+/// A cubic Bézier curve on the control points `points`.
+fn bezier(points: &[[f64; 3]; 4]) -> CurveKind<3> {
+    let basis = geom_nurbs::Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    CurveKind::Nurbs(Curve::new(basis, points).unwrap())
+}
+
+#[test]
+fn a_nurbs_profile_takes_its_plane_from_its_first_control_point_off_the_axis() {
+    // The first control point is on the z axis, where w × ẑ = 0 names no plane of the axis: the
+    // plane is the next point's, y = 0, and the third stands 1 off it, so this is no meridian.
+    // Read in the first point's zero "plane", every point would be in it.
+    let twisted = revolution(bezier(&[
+        [0.0, 0.0, 0.0],
+        [3.0, 0.0, 1.0],
+        [3.0, 1.0, 2.0],
+        [2.0, 0.0, 3.0],
+    ]));
+    assert!(
+        natural(&level(1.5), &twisted, &mut meter())
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        natural(&through(), &twisted, &mut meter())
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn a_nurbs_profile_about_a_slanted_axis_is_read_in_the_plane_its_control_points_name() {
+    // About the axis along e = (1, 1, 1), stored as it is given, every w × e has three nonzero
+    // entries off the axis. The plane of e and u = (1, −1, 0) holds a·e + b·u = (a + b, a − b, a);
+    // w × e for each point of it is a multiple of (1, 1, −2), the plane's normal.
+    let slant = Frame::new([1.0, -1.0, 0.0], [1.0, 1.0, 1.0]).unwrap();
+    let about = |profile: CurveKind<3>| {
+        let span = profile.domain();
+        let profile = Trimmed::new(Basis::try_from(profile).unwrap(), span).unwrap();
+        SurfaceKind::Revolution(Revolution::new(profile, [0.0; 3], slant, ROUND).unwrap())
+    };
+    let tube = SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 3.5, slant, (ROUND, WIDE)).unwrap());
+    // In that plane, b from 2 out to 2.75 and back: ρ = b·√2 runs from 2.83 to 3.89 and back, so
+    // the coaxial cylinder ρ = 3.5 meets it in two rings.
+    let flat = about(bezier(&[
+        [2.0, -2.0, 0.0],
+        [4.0, -2.0, 1.0],
+        [5.0, -1.0, 2.0],
+        [5.0, 1.0, 3.0],
+    ]));
+    let r = natural(&tube, &flat, &mut meter()).unwrap().unwrap();
+    assert_eq!(r.items().len(), 2, "{r:?}");
+    for item in r.items() {
+        assert!(
+            matches!(item, Item::Curve { curve, .. } if matches!(curve.as_ref(), CurveKind::Circle(_))),
+            "{item:?}"
+        );
+    }
+    // The first control point off the axis names the plane even where a later one is on the axis
+    // (2, 2, 2), whose w × e is zero: the last, (6, 2, 1), stands (1, 1, −2) off the plane, so this
+    // is no meridian.
+    let twisted = about(bezier(&[
+        [2.0, -2.0, 0.0],
+        [4.0, -2.0, 1.0],
+        [2.0, 2.0, 2.0],
+        [6.0, 2.0, 1.0],
+    ]));
+    assert!(natural(&tube, &twisted, &mut meter()).unwrap().is_none());
+}
+
 #[test]
 fn a_circle_through_the_plane_at_its_ends_and_middle_is_no_meridian() {
     // About (5, 0, 0) of radius 1, tilted about x̂: its ends (6, 0, 0) and middle (4, 0, 0) are in
