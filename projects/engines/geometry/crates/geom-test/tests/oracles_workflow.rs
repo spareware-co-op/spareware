@@ -86,6 +86,42 @@ fn live_mesh_oracles() -> Vec<String> {
         .collect()
 }
 
+/// What is wrong with the job `meshes`, `j`, whose steps are `steps` and scripts `runs`.
+fn leg_problems(j: &Yaml, steps: &[Yaml], runs: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    if strings(&j["strategy"]["matrix"]["cases"]) != CASE_SETS {
+        found.push(format!(
+            "meshes runs the case sets {:?}, not {CASE_SETS:?}",
+            strings(&j["strategy"]["matrix"]["cases"])
+        ));
+    }
+    let missing = steps.iter().any(|s| {
+        s["uses"]
+            .as_str()
+            .is_some_and(|u| u.starts_with("actions/cache/restore@"))
+            && s["with"]["fail-on-cache-miss"].as_bool() == Some(true)
+    });
+    if !missing {
+        found.push("meshes does not fail when the cache lacks the image".to_owned());
+    }
+    if !runs.contains("--bin oracle -- check --repository") {
+        found.push("meshes does not audit the oracle repository".to_owned());
+    }
+    if !runs.contains("docker run --rm -i --network none ") {
+        found.push("meshes runs the oracle with a network".to_owned());
+    }
+    let judged = steps.iter().filter_map(|s| s["run"].as_str()).any(|r| {
+        r.contains("--bin oracle -- compare")
+            && r.trim_start().starts_with("set -euo pipefail")
+            && !r.contains("|| true")
+            && !r.contains("|| :")
+    });
+    if !judged {
+        found.push("meshes does not fail on what oracle compare finds".to_owned());
+    }
+    found
+}
+
 /// Everything wrong with the workflow `text`.
 fn problems(text: &str) -> Vec<String> {
     let mut found = Vec::new();
@@ -146,38 +182,8 @@ fn problems(text: &str) -> Vec<String> {
         if !runs.contains(r#"rev-parse "HEAD:$ORACLE""#) {
             found.push(format!("{job} does not key the image by its folder's tree"));
         }
-        if job != "meshes" {
-            continue;
-        }
-        if strings(&j["strategy"]["matrix"]["cases"]) != CASE_SETS {
-            found.push(format!(
-                "meshes runs the case sets {:?}, not {CASE_SETS:?}",
-                strings(&j["strategy"]["matrix"]["cases"])
-            ));
-        }
-        let missing = steps.iter().any(|s| {
-            s["uses"]
-                .as_str()
-                .is_some_and(|u| u.starts_with("actions/cache/restore@"))
-                && s["with"]["fail-on-cache-miss"].as_bool() == Some(true)
-        });
-        if !missing {
-            found.push("meshes does not fail when the cache lacks the image".to_owned());
-        }
-        if !runs.contains("--bin oracle -- check --repository") {
-            found.push("meshes does not audit the oracle repository".to_owned());
-        }
-        if !runs.contains("docker run --rm -i --network none ") {
-            found.push("meshes runs the oracle with a network".to_owned());
-        }
-        let judged = steps.iter().filter_map(|s| s["run"].as_str()).any(|r| {
-            r.contains("--bin oracle -- compare")
-                && r.trim_start().starts_with("set -euo pipefail")
-                && !r.contains("|| true")
-                && !r.contains("|| :")
-        });
-        if !judged {
-            found.push("meshes does not fail on what oracle compare finds".to_owned());
+        if job == "meshes" {
+            found.extend(leg_problems(j, &steps, &runs));
         }
     }
     for word in PUBLISHING {

@@ -14886,7 +14886,7 @@
           "guarantees": [
             "nothing here runs an oracle, and only `triage` writes a file: the register and the one fixture. Exit codes: 0 when everything checked holds; 1 when a check fails or a new signature appears; 2 for a usage error, or a file or a line that cannot be read (a broken harness is never a pass)."
           ],
-          "job": "`oracle`: the outside oracles' tool: list the catalogue, check it, write a night's jobs, compare the answers, and record a triage.",
+          "job": "`oracle`: the outside oracles' tool: list the catalogue, check it, write a run's jobs, compare the answers, and record a triage.",
           "method": {
             "none": "it parses its arguments and calls [`geom_test::oracle`], whose module headers carry the methods."
           },
@@ -16540,8 +16540,8 @@
           "target": "lib"
         },
         {
-          "cost": "a job's boolean is the kernel's; sampling is the sample points times the triangles or faces of the other side, on solids of a few dozen; the exact reference runs only on a difference.",
-          "does": "[`jobs`] draws a night's seeded pairs of closed solids with integer corners and a boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra. Each job is one JSON line in whole grid steps, so an exact oracle reads what the kernel read and a floating-point one reads integers an `f64` holds exactly, with no conversion to round. The harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer with `geom-mesh`'s boolean, and settles a difference by the exact reference ([`crate::flat_reference`]): whether the kernel's volume is the reference's.",
+          "cost": "a job's boolean is the kernel's; sampling is the sample points times the triangles or faces of the other side, on seeded solids of a few dozen and stored models of up to [`MODEL_FACES`] each; the exact reference runs only on a difference.",
+          "does": "[`jobs`] draws a night's seeded pairs of closed solids with integer corners and a boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra. Each job is one JSON line in whole grid steps, so an exact oracle reads what the kernel read and a floating-point one reads integers an `f64` holds exactly, with no conversion to round. Those are the case set `seeded`; the set `manifold-models` ([`model_jobs`]) is Manifold's stored models of the polyhedral corpus's smaller tier, each with a moved copy of itself, under each boolean ([`CASE_SETS`] names every set, and [`case_jobs`] writes one). The harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer with `geom-mesh`'s boolean, and settles a difference by the exact reference ([`crate::flat_reference`]): whether the kernel's volume is the reference's.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/oracle/meshes.rs",
           "guarantees": [
