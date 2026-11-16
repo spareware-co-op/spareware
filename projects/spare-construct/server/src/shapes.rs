@@ -61,10 +61,14 @@ impl<K: Kv, F: FileStore, C: Commands<K>> Keeper<K, F, C> {
             let args = to_value(args).map_err(|e| StoreError::Damaged(e.to_string()))?;
             let person = Id::parse(SYSTEM).map_err(|e| StoreError::Damaged(e.to_string()))?;
             let now = self.clock.now_ms();
+            let counter = self
+                .counter
+                .checked_add(1)
+                .ok_or_else(|| StoreError::Damaged("the checkpoint counter is full".to_owned()))?;
             let edit = Edit {
                 person,
                 client: self.client.clone(),
-                counter: self.counter + 1,
+                counter,
                 base: 0,
                 target: document.clone(),
                 cmd: "document.checkpoint".to_owned(),
@@ -81,7 +85,7 @@ impl<K: Kv, F: FileStore, C: Commands<K>> Keeper<K, F, C> {
                     }
                 }
             }
-            self.counter += 1;
+            self.counter = counter;
         }
         Ok(())
     }

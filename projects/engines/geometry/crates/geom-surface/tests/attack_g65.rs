@@ -493,8 +493,8 @@ fn ruled_surfaces_convert_unclamped_and_broken_curves() {
 }
 
 /// Claim: a rational rail's Taylor pieces stop at its knots, so the form stays within the deviation
-/// it states on either side of a join that falls inside a piece of even width. The nightly laws
-/// found a form five times further than it said, at a knot at 2/3.
+/// it states on either side of a join that falls inside a piece of even width. The laws' fresh
+/// seeds found a form five times further than it said, at a knot at 2/3.
 #[test]
 fn a_ruled_surfaces_taylor_forms_are_cut_at_its_rails_knots() {
     let m = &mut meter();

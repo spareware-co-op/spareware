@@ -1985,6 +1985,7 @@ pub mod mesh {
     use geom_mesh::exact::build::{Polygons, build};
     use geom_mesh::exact::{ExactMesh, MeshError};
     use geom_mesh::hull::{Hull, HullError};
+    use geom_mesh::model::{Decimate, ModelError, Modelled, Remesh};
     use geom_mesh::slice::{Contour, slice as cut};
     use geom_mesh::{Cdt, CdtError, contact, triangulate};
     use geom_num::grid::P3;
@@ -2041,6 +2042,38 @@ pub mod mesh {
     pub fn envelope(batch: &[([P3; 3], P3)], out: &mut Vec<Result<bool, NumError>>) {
         run(batch, out, |&(t, p)| {
             TriangleEnvelope::new(t, 1 << 16)?.contains(p)
+        });
+    }
+
+    /// `geom_mesh::model::decimate` on each sheet, to no triangle count, within 4 steps, serially,
+    /// under an unlimited budget.
+    #[inline(never)]
+    pub fn decimate(
+        batch: &[(Vec<P3>, Vec<[u32; 3]>)],
+        out: &mut Vec<Result<Modelled, ModelError>>,
+    ) {
+        run(batch, out, |(points, triangles)| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let settings = Decimate {
+                epsilon: 4,
+                target: 0,
+            };
+            geom_mesh::model::decimate(points, triangles, settings, &Exec::serial(), &mut meter)
+        });
+    }
+
+    /// `geom_mesh::model::remesh` on each sheet, toward edges of 64 steps within 4, one round,
+    /// serially, under an unlimited budget.
+    #[inline(never)]
+    pub fn remesh(batch: &[(Vec<P3>, Vec<[u32; 3]>)], out: &mut Vec<Result<Modelled, ModelError>>) {
+        run(batch, out, |(points, triangles)| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let settings = Remesh {
+                epsilon: 4,
+                length: 64,
+                iterations: 1,
+            };
+            geom_mesh::model::remesh(points, triangles, settings, &Exec::serial(), &mut meter)
         });
     }
 

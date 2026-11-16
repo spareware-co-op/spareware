@@ -1,5 +1,4 @@
-//! The variants fuzz target (piece G42), as tests: `variants_fuzz` is bolero's test mode, which
-//! cargo-bolero, `ClusterFuzzLite` and Kani select by name, and `variants_seeded` the seeded leg
+//! The variants fuzz target (piece G42), as tests: `variants_fuzz` is bolero's test mode, which Kani also proves under its name, and `variants_seeded` the seeded leg
 //! that runs on every target, WebAssembly included (the crate README sets out the layout). Each
 //! hands the fuzzer's raw bytes to `geom_fuzz::variants::harness`, which checks every variant of
 //! every generated exact path against the big-integer value of its description.
@@ -39,7 +38,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 2_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 4_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 4,000 cases in 1.948 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 4_100;
 
 /// The longest byte string the seeded leg draws. The harness reads at most
 /// [`MAX_INPUT_BYTES`] (620) bytes (derived in `geom_fuzz::variants`); the 80 more let some

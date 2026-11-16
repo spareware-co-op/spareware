@@ -14,8 +14,8 @@
 //!   operation and attribute records, and the curve and surface kinds.
 //!
 //! The values of the exchange crates' formats join the row as those crates are built. Seeds: each
-//! law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull requests run the fixed default
-//! seed and the nightly workflow a fresh one.
+//! law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; every run uses the fixed default
+//! seed, on every change the law reaches.
 
 #![allow(
     clippy::arithmetic_side_effects,

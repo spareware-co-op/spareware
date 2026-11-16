@@ -83,7 +83,7 @@ pub fn load(name: &str) -> Recorded {
 impl Recorded {
     /// A scenario's results by period, as `sc.res` held them when gen-expected.mjs ran the queries.
     pub fn results(&self, scenario: &str) -> Results {
-        self.scenarios[scenario]
+        self.scenarios.get(scenario).unwrap()
             .periods
             .iter()
             .map(|(p, r)| (p.to_string(), r.res.clone()))
@@ -96,7 +96,7 @@ pub fn project_and_record(name: &str) -> (Project, Recorded) {
     (super::support::load_project(name), load(name))
 }
 
-/// serde_json value of an output.
+/// `serde_json` value of an output.
 pub fn json<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serializes")
 }

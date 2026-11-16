@@ -23,7 +23,7 @@ use std::time::Duration;
 
 /// How long TiKV keeps old versions of a key, and how often it is told so.
 const KEEP_VERSIONS_MS: u64 = 15 * 60 * 1000;
-const COLLECT_EVERY: Duration = Duration::from_secs(5 * 60);
+const COLLECT_EVERY: Duration = Duration::from_mins(5);
 
 #[derive(Parser)]
 struct Cli {
@@ -124,7 +124,7 @@ async fn verify(kv: &Tikv, files: Files) -> Result<(), String> {
     let projects: Vec<Project> = scan_rows(&mut snapshot, &list::projects())
         .await
         .map_err(plain)?;
-    let mut bad = 0;
+    let mut bad = 0_usize;
     for project in projects {
         let mut check = verify_log(&mut snapshot, &Scope::Project(project.id.clone())).await;
         let mut shapes = 0;
@@ -144,7 +144,7 @@ async fn verify(kv: &Tikv, files: Files) -> Result<(), String> {
             }
             Err(e) => {
                 println!("{}: FAILED: {e}", project.id);
-                bad += 1;
+                bad = bad.saturating_add(1);
             }
         }
     }

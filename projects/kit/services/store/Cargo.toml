@@ -18,6 +18,9 @@ url = "=2.5.8"                     # MIT OR Apache-2.0
 
 [dev-dependencies]
 anyhow = "=1.0.100"
+# Apache-2.0. tikv-client's own version, with its failpoints on, so a test can stop a commit
+# halfway as a killed writer would.
+fail = { version = "=0.4.0", features = ["failpoints"] }
 kit-core = { path = "../../crates/kit-core" }
 kit-ops = { path = "../../crates/kit-ops" }
 kit-sync = { path = "../../crates/kit-sync" }

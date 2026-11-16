@@ -18,7 +18,7 @@
 //! Curved solids' mass properties, certified against closed forms, are piece G283's row, and the
 //! centroid and moments join with the kernel's mass-property query (piece G247), which this
 //! branch does not hold. Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`;
-//! pull requests run the fixed default seed and the nightly workflow a fresh one.
+//! every run uses the fixed default seed, on every change the law reaches.
 
 #![allow(
     clippy::arithmetic_side_effects,

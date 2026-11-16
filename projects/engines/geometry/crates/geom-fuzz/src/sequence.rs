@@ -61,16 +61,25 @@ pub const MAX_OPERATIONS: u8 = 12;
 
 /// The work units each case may spend, its operations together.
 ///
-/// Why this many. An ordinary case is cheap: of a 775-case corpus from a long fuzzing run, the
-/// operations of the median case charged 849 units, of 95% of them at most 1,344, and of every
-/// case without a wall of [`MANY_COPIES`] copies at most 1,370. `WORK` is 7.4 times that 95th
-/// percentile, the headroom the curves and surfaces targets' budgets have over theirs (9.1 and
-/// 8.0 times, measured the same way on their own corpora).
+/// Why this many. It holds every ordinary case whole and stops every wall of [`MANY_COPIES`]
+/// copies part way, where the laws still hold on what ran. An ordinary case is cheap: of 874
+/// stored and campaign inputs measured on 2026-11-13, no case without a wall charged more than
+/// 1,370 units (first set at 7.4 times the 95th percentile, 1,344, of a 775-case corpus without
+/// walls in any number). Walls are now 6.9% of the inputs, so the corpus's 95th percentile is a
+/// wall (19,967 units) and seven to nine times it, the headroom first chosen, would be about
+/// 148,000 units: 12 to 16 s a case on a hosted runner, past the 10-second limit on one input.
+/// So the limit, not the corpus, sets the budget, and the corpus no longer gives this number.
 ///
-/// A wall is not an ordinary case: one charges about 19,000 to 40,000 units, by the body it
-/// copies, so under `WORK` a wall stops part way, its copies made and checked up to the stop and
-/// the stop held to its laws. The test `the_extreme_wall_is_reached` runs a whole wall without
-/// the budget, so the laws of a whole wall still run on every `cargo test`.
+/// A stop narrows nothing that matters. A wall charges about 19,000 to 119,000 units, by the body
+/// it copies and how many walls the case holds, so under `WORK` every wall stops part way (56 of
+/// the 874 inputs, all of them among the 60 that hold a wall): each operation before the stop goes
+/// through the whole oracle stack, the log of successes replays (the replay, the replay read
+/// back, the replay under a cut budget), and the stop is held to its own laws. A stopped case
+/// costs 0.10 to 0.45 thousand million instructions, at most 0.57 s on a hosted runner. A budget
+/// that held one wall whole (about 40,000) would put the dearest case at 3.5 to 5 s and complete
+/// only the one-wall cases. The test `the_extreme_wall_is_reached` runs a whole wall without the
+/// budget, so the laws of a whole wall still run on every `cargo test`; what fuzzing does not
+/// reach is an operation after a wall.
 ///
 /// What a unit costs. Each operation runs four times (the case, two replays and the cut one) and
 /// each result is checked in full and written twice for its content ID, so where walls are a unit

@@ -4,9 +4,15 @@
 //! of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is
 //! built from, up to four parameters in its domain and a typed transform. [`check`] builds the
 //! kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to
-//! (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode`
-//! then `check`, the function every fuzzing engine drives (the crate README sets out the layout).
-//! It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.46).
+//! (piece G60, with G68's derivative laws), under a bounded work meter; when that check ends on
+//! the budget, it runs `geom_curve::contract::check_without_conversions` under a meter of its own,
+//! so the laws that need no conversion still run on a kind whose transform or NURBS form the
+//! budget could not pay for. [`harness`] is `decode` then `check`, the function every fuzzing
+//! engine drives (the crate README sets out the layout). An offset curve (tag [`OFFSET`]) is
+//! passed without being built: offsets cost most of what this target's inputs charge, so they
+//! have a target of their own, `crate::curve_offsets`, which reads the same bytes with the kind
+//! made an offset and runs this module's code on it. It reaches pieces G60 to G64, G67 and G68
+//! (Gate 2, 32.46).
 //!
 //! Guarantees:
 //!
@@ -16,10 +22,11 @@
 //!   tiny or huge power of two, or a double read from the input (non-finite ones replaced by 0).
 //! - **What is a finding.** A law of the contract broken with no error behind it, or any call
 //!   failing as `CurveError::Defect` (an internal step the kernel says cannot fail), is a
-//!   [`Finding`]; a kind that refuses to be built, or a call that refuses with a typed error
-//!   (an overflow at an extreme size, a budget stop), is legal. A panic fails every engine.
-//! - **No hang.** Every call runs under a work meter of [`WORK`] units; running out is a typed
-//!   stop, which is legal.
+//!   [`Finding`], in the check or in the pass after a budget stop; a kind that refuses to be
+//!   built, or a call that refuses with a typed error (an overflow at an extreme size, a budget
+//!   stop), is legal. A panic fails every engine.
+//! - **No hang.** Every call runs under a work meter of [`WORK`] units, and the pass after a stop
+//!   under one of [`PARTIAL_WORK`]; running out is a typed stop, which is legal.
 //! - **A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a
 //!   unit test builds the input that reaches it.
 //!
@@ -27,19 +34,20 @@
 //! coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists
 //! (`projects/engines/geometry/architecture/28-testing.md`).
 //!
-//! Cost: one kind built and one contract check per input, each bounded by [`WORK`] work units;
-//! at most [`MAX_INPUT_BYTES`] bytes read.
+//! Cost: one kind built and one contract check per input, each bounded by [`WORK`] work units,
+//! and after a budget stop one pass bounded by [`PARTIAL_WORK`]; at most [`MAX_INPUT_BYTES`]
+//! bytes read.
 
 use geom_curve::offset::{Offset, OffsetLaw};
 use geom_curve::on_surface::{OnSurface, SurfaceRef};
 use geom_curve::trimmed::Trimmed;
 use geom_curve::{
-    Axes, Basis, BulgePolyline, Circle, Composite, CurvatureLaw, CurveError, CurveKind, Ellipse,
-    Frame, Helix, HelixAxes, Hyperbola, Involute, Line, Parabola, ParamCurve, Polynomial,
-    Transition, contract,
+    Axes, Basis, BulgePolyline, Circle, Composite, ContractError, CurvatureLaw, CurveError,
+    CurveKind, Ellipse, Frame, Helix, HelixAxes, Hyperbola, Involute, Line, Parabola, ParamCurve,
+    Polynomial, Transition, contract,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
-use geom_run::{Budget, WorkMeter};
+use geom_run::{Budget, Stop, WorkMeter};
 use geom_test::{ByteSource, Entropy};
 
 use crate::Finding;
@@ -50,8 +58,32 @@ pub const VALUES: usize = 24;
 /// The parameters a case reads.
 pub const PARAMS: usize = 4;
 
-/// The work units each call may spend.
+/// The kind tag of `CurveKind::Offset`, which this target passes and `crate::curve_offsets`
+/// fuzzes.
+pub const OFFSET: u8 = 12;
+
+/// The work units each call may spend: 2,000,000.
+///
+/// Where it comes from. It was chosen when the target was written (PR #453), with no derivation
+/// stated, and is kept for what was measured since. On 3,856 stored and campaign inputs, each run
+/// once without a budget on 2026-11-13, the work a whole check charges has a 95th percentile of
+/// 6,958,418 units; seven to nine times that, the headroom `crate::sequence::WORK` was first set
+/// with, would be about 63 million units, 15 to 20 s a case on a hosted runner, past the 10-second
+/// limit on one input. So the limit, not the corpus, bounds this budget. Nearly all that work is
+/// the offsets', which have a target of their own. Of the fourteen kinds this target builds, 41
+/// inputs stop at this budget and 36 still stop at eight times it (helices and involutes over
+/// long domains, and one transition), and no input of the other eleven kinds charges more than
+/// 23,281 units: a larger budget would buy these kinds almost nothing. A stop is followed by the
+/// pass of [`PARTIAL_WORK`].
 pub const WORK: u64 = 2_000_000;
+
+/// The work units of the pass without conversions after a budget stop: 250,000.
+///
+/// Measured on the offsets, the kind that stops most: run without a budget on the inputs of
+/// [`WORK`], the laws that need no conversion charge a whole offset contract 41,532 units at the
+/// median and 177,814 at the most, so 250,000 holds the dearest seen, and a stopped case costs at
+/// most an eighth more than [`WORK`]. A law broken in the pass is a finding; a stop in it is legal.
+pub const PARTIAL_WORK: u64 = 250_000;
 
 /// The most bytes [`decode`] reads from any input: 223.
 ///
@@ -368,18 +400,71 @@ fn build<const D: usize>(kind: u8, v: &mut Values<'_>) -> Option<CurveKind<D>> {
     })
 }
 
-/// The kind contract on `kind` at `params` (fractions k/255 of its domain) under `transform`:
-/// [`check`] on a kind handed in, so tests can show it catches a broken one.
+/// How far the kind contract got on a case: what a test reads to see which laws ran. Every value
+/// is a legal outcome; a broken law is a [`Finding`] instead.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Reached {
+    /// The transform or the kind refused to be built, or the target passes the kind: no law ran.
+    Unbuilt,
+    /// `contract::check` ran to its end: every law held.
+    Whole,
+    /// `contract::check` ended on a typed error that is not a budget stop.
+    Refused(ContractError),
+    /// `contract::check` ended on its budget, and the pass without conversions ran after it.
+    Stopped {
+        /// Where the check stopped: the law it was on, with the meter's stop.
+        stop: ContractError,
+        /// The pass's end: every law it runs held, or a typed error (its own budget's stop among
+        /// them).
+        pass: Result<(), ContractError>,
+    },
+}
+
+/// The kind contract on `kind` at `params` (fractions k/255 of its domain) under `transform`,
+/// and after a budget stop the pass without conversions: [`check`] on a kind handed in, so tests
+/// can show it catches a broken one.
 ///
 /// # Errors
 ///
 /// A [`Finding`] when a law is broken with no error behind it, or a call fails as
-/// `CurveError::Defect`.
+/// `CurveError::Defect`, in the contract or in the pass after a budget stop.
 pub fn check_with<K: ParamCurve<D> + core::fmt::Debug, const D: usize>(
     kind: &K,
     params: &[u8; PARAMS],
     transform: &TypedTransform,
 ) -> Result<(), Finding> {
+    contract_on(kind, *params, transform, (WORK, PARTIAL_WORK)).map(drop)
+}
+
+/// Whether the contract ended on its meter's budget.
+pub(crate) fn over_budget(e: &ContractError) -> bool {
+    matches!(e.error, Some(CurveError::Stopped(s)) if matches!(s.reason(), Stop::OverBudget(_)))
+}
+
+/// The verdict on a contract's error: a finding when the law broke with no error behind it or a
+/// call failed as a defect, else legal. `law` names the entry, `detail` the case.
+pub(crate) fn verdict(
+    e: &ContractError,
+    law: &str,
+    detail: impl FnOnce() -> String,
+) -> Result<(), Finding> {
+    match e.error {
+        None => Err(Finding::new(law, move || format!("{e} {}", detail()))),
+        Some(CurveError::Defect) => Err(Finding::new("no call fails as a defect", move || {
+            format!("{e} {}", detail())
+        })),
+        Some(_) => Ok(()),
+    }
+}
+
+/// [`check_with`] on the budgets `(work, partial)`: `work` for the contract, `partial` for the pass
+/// without conversions after it stops on its budget; how far it got.
+pub(crate) fn contract_on<K: ParamCurve<D> + core::fmt::Debug, const D: usize>(
+    kind: &K,
+    params: [u8; PARAMS],
+    transform: &TypedTransform,
+    (work, partial): (u64, u64),
+) -> Result<Reached, Finding> {
     let (a, b) = kind.domain();
     let (lo, hi) = (
         if a.is_finite() { a } else { -8.0 },
@@ -389,28 +474,57 @@ pub fn check_with<K: ParamCurve<D> + core::fmt::Debug, const D: usize>(
         .iter()
         .map(|&k| (lo + (hi - lo) * (f64::from(k) / 255.0)).clamp(lo, hi))
         .collect();
-    let mut meter = WorkMeter::new(Budget::of_work(WORK));
-    match contract::check(kind, &ts, transform, &mut meter) {
-        Ok(()) => Ok(()),
-        Err(e) => match e.error {
-            None => Err(Finding::new(
-                "the kind contract (geom_curve::contract::check)",
-                || format!("{e} on {kind:?} at {ts:?} under {transform:?}"),
-            )),
-            Some(CurveError::Defect) => Err(Finding::new("no call fails as a defect", || {
-                format!("{e} on {kind:?} at {ts:?} under {transform:?}")
-            })),
-            Some(_) => Ok(()),
-        },
+    let mut meter = WorkMeter::new(Budget::of_work(work));
+    let Err(e) = contract::check(kind, &ts, transform, &mut meter) else {
+        return Ok(Reached::Whole);
+    };
+    verdict(
+        &e,
+        "the kind contract (geom_curve::contract::check)",
+        || format!("on {kind:?} at {ts:?} under {transform:?}"),
+    )?;
+    if !over_budget(&e) {
+        return Ok(Reached::Refused(e));
     }
+    // The laws that need no conversion, under a meter of their own.
+    let mut meter = WorkMeter::new(Budget::of_work(partial));
+    let pass = contract::check_without_conversions(kind, &ts, &mut meter);
+    if let Err(p) = &pass {
+        verdict(
+            p,
+            "the kind contract without its conversions, after a budget stop \
+             (geom_curve::contract::check_without_conversions)",
+            || format!("on {kind:?} at {ts:?}, after {e} under {transform:?}"),
+        )?;
+    }
+    Ok(Reached::Stopped { stop: e, pass })
 }
 
-/// Builds the case's kind and holds it to the kind contract (module documentation).
+/// Builds the case's kind and holds it to the kind contract (module documentation); an offset
+/// passes unbuilt, as `crate::curve_offsets` fuzzes it.
 ///
 /// # Errors
 ///
 /// As [`check_with`].
 pub fn check(case: &Case) -> Result<(), Finding> {
+    reached(case).map(drop)
+}
+
+/// [`check`], and how far the contract got.
+///
+/// # Errors
+///
+/// As [`check_with`].
+pub fn reached(case: &Case) -> Result<Reached, Finding> {
+    if case.kind == OFFSET {
+        return Ok(Reached::Unbuilt);
+    }
+    reached_on(case, (WORK, PARTIAL_WORK))
+}
+
+/// The case's kind built, whatever its tag, and held to the kind contract on the budgets
+/// `budgets`, as [`contract_on`] takes them; how far it got.
+pub(crate) fn reached_on(case: &Case, budgets: (u64, u64)) -> Result<Reached, Finding> {
     let mut v = Values::of(&case.values);
     // The helix, the on-surface curve and the 3D offset are space curves; the bulge polyline and
     // the transition are plane curves.
@@ -421,19 +535,19 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     };
     if space {
         let Some(t) = transform(case.transform, false, &mut v) else {
-            return Ok(());
+            return Ok(Reached::Unbuilt);
         };
         match build::<3>(case.kind, &mut v) {
-            Some(k) => check_with(&k, &case.params, &t),
-            None => Ok(()),
+            Some(k) => contract_on(&k, case.params, &t, budgets),
+            None => Ok(Reached::Unbuilt),
         }
     } else {
         let Some(t) = transform(case.transform, true, &mut v) else {
-            return Ok(());
+            return Ok(Reached::Unbuilt);
         };
         match build::<2>(case.kind, &mut v) {
-            Some(k) => check_with(&k, &case.params, &t),
-            None => Ok(()),
+            Some(k) => contract_on(&k, case.params, &t, budgets),
+            None => Ok(Reached::Unbuilt),
         }
     }
 }

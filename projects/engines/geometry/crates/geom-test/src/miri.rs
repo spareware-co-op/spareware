@@ -1,4 +1,4 @@
-//! The weekly Miri run's scope: every kernel crate, whose test suites Miri interprets.
+//! The Miri run's scope: every kernel crate, whose test suites Miri interprets.
 //!
 //! What it does: [`packages`] reads `cargo metadata` and returns the package of every kernel crate,
 //! in name order, and [`cargo_args`] writes them as the `-p` arguments the workflow

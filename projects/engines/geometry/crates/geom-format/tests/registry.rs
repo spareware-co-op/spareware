@@ -377,7 +377,7 @@ fn every_archived_file_matches_the_cddl() {
 }
 
 /// Writes every archived body record's payload as DIR/FILE-N.RULE.cbor for the zcbor oracle
-/// (oracles/zcbor.sh, kernel-nightly.yml), DIR from `ZCBOR_DIR`.
+/// (oracles/zcbor.sh, kernel-oracles.yml), DIR from `ZCBOR_DIR`.
 #[test]
 #[ignore = "writes the archived body records for the zcbor oracle"]
 fn write_the_body_payloads() {

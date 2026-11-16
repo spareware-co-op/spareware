@@ -1,5 +1,5 @@
 //! Piece G47's oracle check: the proven maths functions against the multiprecision reference on
-//! ten million seeded inputs each, and never a result off by more than the bound.
+//! seeded inputs, and never a result off by more than the bound.
 //!
 //! `sinpi`, `cospi`, `exp`, `ln` and `atan2` are correctly rounded (the module documentation of
 //! `geom_num::math`): an error of at most half an ulp, the bound the board asks to be "never
@@ -11,23 +11,22 @@
 //!
 //! The inputs come from `geom_test`'s `SplitMix64`, one generator per block of
 //! [`BLOCK`] inputs, from the seed `geom_test::seed::resolve` prints (`SPAREKIT_SEED` replaces
-//! it, so the nightly run draws ten million new inputs per function each night). Each function
+//! it, so a run by hand can draw other inputs). Each function
 //! mixes every binade of its domain with the ranges where its code paths and hard cases are: near
 //! the zeros and peaks of `sinpi` and `cospi`, the tiny, the underflowing and the overflowing
 //! arguments of `exp`, arguments next to 1 for `ln`, and pairs near the axes and the diagonals,
 //! of very different magnitudes and subnormal, for `atan2`. Arguments outside a function's domain
 //! and past its overflow are drawn too, and must be refused as owed.
 //!
-//! Every build checks the first [`PREFIX`] inputs of each function. The full run, ten million per
-//! function, is the ignored test `ten_million_inputs_per_function`, which the nightly workflow
-//! runs in a release build with CORE-MATH's worst-case lists (`math_full_worst_cases.rs`):
-//!
-//! ```text
-//! cargo test -p geom-num --release --test math_oracle -- --ignored --nocapture
-//! ```
-//!
-//! It shares the blocks among the machine's threads; which thread checks a block changes nothing
-//! but the time, and every mismatch is reported with its arguments' bits, in input order.
+//! Every build checks the first [`PREFIX`] inputs of each function on one thread, and a seeded
+//! sample of [`SAMPLE`] inputs per function ([`SAMPLE_DEBUG`] in a build with debug assertions) on
+//! the machine's threads, a few seconds in all: the quick seeded test that replaced the ten million
+//! inputs per function a timed run used to check (the owner's testing principles 2 and 4, decision
+//! 32.53). Measured on that run, an input took about 0.47 ms of one core in release, so the sample
+//! is about 2 s per function on one core. The sample shares the blocks among the threads; which
+//! thread checks a block changes nothing but the time, and every mismatch is reported with its
+//! arguments' bits, in input order. The board's ten million per function was met on main by the
+//! timed runs before decision 32.53 (G47's record).
 
 // Test code may use native arithmetic and casts (Cargo.toml); helpers outside `#[test]` functions
 // may panic, as clippy.toml allows inside them.
@@ -54,8 +53,11 @@ use geom_test::SplitMix64;
 use geom_test::seed::{Seed, resolve};
 use reference::{Owed, owed};
 
-/// Inputs per function in the full run: the board's ten million.
-const INPUTS: usize = 10_000_000;
+/// Inputs per function in the seeded sample, in an optimised build without debug assertions.
+const SAMPLE: usize = 4_000;
+
+/// Inputs per function in the seeded sample, in a build with debug assertions.
+const SAMPLE_DEBUG: usize = 1_000;
 
 /// The inputs per function every build checks.
 const PREFIX: usize = 400;
@@ -348,10 +350,14 @@ fn a_prefix_of_every_function_is_correctly_rounded() {
     run("math oracle, prefix", PREFIX, 1);
 }
 
-/// Ten million inputs per function, on every thread the machine has (the nightly workflow).
+/// A seeded sample of every function, on every thread the machine has, in every build.
 #[test]
-#[ignore = "ten million inputs per function: minutes on many threads; the nightly runs it"]
-fn ten_million_inputs_per_function() {
+fn a_seeded_sample_of_every_function_is_correctly_rounded() {
     let threads = std::thread::available_parallelism().map_or(1, usize::from);
-    run("math oracle, ten million", INPUTS, threads);
+    let n = if cfg!(debug_assertions) {
+        SAMPLE_DEBUG
+    } else {
+        SAMPLE
+    };
+    run("math oracle, seeded sample", n, threads);
 }

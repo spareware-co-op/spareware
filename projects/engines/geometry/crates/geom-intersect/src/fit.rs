@@ -582,7 +582,7 @@ pub fn true_point(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<[Interval; 4]>, IntersectError> {
     let domain = ParamCurve::domain(curve);
-    if !(domain.0 <= t && t <= domain.1) {
+    if !(domain.0..=domain.1).contains(&t) {
         return Err(IntersectError::InvalidInput);
     }
     let along = side(t, domain);

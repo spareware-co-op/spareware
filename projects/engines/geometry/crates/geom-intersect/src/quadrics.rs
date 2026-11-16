@@ -68,6 +68,9 @@ const STEP: f64 = 2.0;
 /// How far a shared domain is written, in each parameter of a surface with no end.
 const REACH: f64 = 1_099_511_627_776.0;
 
+/// The most periods a loop's parameter is moved by to bring it into the loop's domain.
+const WRAPS: usize = 1 << 20;
+
 /// What a pair's closed form finds.
 pub(crate) enum Piece {
     /// A curve on both.
@@ -239,7 +242,12 @@ pub(crate) struct Funnel {
 }
 
 pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
-    let line = axis(cone.center(), &cone.frame(), cone.axial_sign())?;
+    // S(u, v) = c + (r₀ + k·v)·e(u) + s·v·n̂: v runs along sign(s)·n̂, |s| of height for each unit
+    // of it, so the radius grows by |k/s| per unit of height and the apex, at v = −r₀/k, stands
+    // |s|·(−r₀/k) along that unit axis. The axial factor s is ±1 as built, where these are |k| and
+    // −r₀/k themselves, but a similarity multiplies it by its scale (and r₀ and k with it).
+    let s = cone.axial_sign();
+    let line = axis(cone.center(), &cone.frame(), s.signum())?;
     let (r0, k) = cone.radius_and_slope();
     // Exact where the data are: a grid apex is what makes the exact decisions possible. A cone
     // stored by its apex has it as its centre, exactly, whatever its axis; any other is reached
@@ -248,17 +256,18 @@ pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
         line.at
     } else {
         let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;
+        let h = tight::mul(v, tight::point(s.abs())?)?;
         let [a, b, c] = line.at;
         let [x, y, z] = line.along;
         [
-            tight::add(a, tight::mul(x, v)?)?,
-            tight::add(b, tight::mul(y, v)?)?,
-            tight::add(c, tight::mul(z, v)?)?,
+            tight::add(a, tight::mul(x, h)?)?,
+            tight::add(b, tight::mul(y, h)?)?,
+            tight::add(c, tight::mul(z, h)?)?,
         ]
     };
-    let slope = point(k.abs())?;
+    let slope = tight::div(point(k.abs())?, point(s.abs())?)?;
     let exact = (|| {
-        if wide(apex) > 0.0 {
+        if wide(apex) > 0.0 || slope.lo() != slope.hi() {
             return None;
         }
         let centre = middle(apex);
@@ -268,7 +277,7 @@ pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
             apex: grid_point(&centre)?,
             along: grid_point(&[a + p, b + q, c + r])?,
             slope: quadric::Slope {
-                rise: u64::try_from(whole(k.abs() * 1_048_576.0)?).ok()?,
+                rise: u64::try_from(whole(slope.lo() * 1_048_576.0)?).ok()?,
                 run: 1 << 20,
             },
         })
@@ -589,6 +598,10 @@ fn branch_span(extent: f64, lead: Vector, side: Vector) -> Result<f64, Intersect
 fn cone_extent(cone: &Cone) -> f64 {
     let (r0, k) = cone.radius_and_slope();
     let (_, (v0, v1)) = ParamSurface::domain(cone);
+    // The axial factor s, which a similarity scales, does not enter: a parabola's parameter is its
+    // distance across, at most the radius |r₀ + k·v| this bounds, and a hyperbola's branches run
+    // past this by the ratio of its axes (`branch_span` divides by the shorter), which covers the
+    // height |s·v| (tests/axial_factor.rs: a nappe 400 high and 20 wide, cut along its axis).
     let far = tight::larger(v0.abs(), v1.abs());
     (far + r0.abs()) * (1.0 + k.abs()) + 1.0
 }
@@ -995,8 +1008,12 @@ fn cone_cone(a: &Cone, b: &Cone) -> Result<Option<Vec<Piece>>, IntersectError> {
         let same = same_line(a.center(), e, b.center(), f);
         let equal = p.slope.lo() == q.slope.lo();
         if same {
-            let stored =
-                e == f && a.center() == b.center() && a.radius_and_slope() == b.radius_and_slope();
+            // One cone only if every stored datum is equal, the axial factor too: with it negated
+            // the cone is mirrored, and with it scaled its slope per unit of height is k/s.
+            let stored = e == f
+                && a.center() == b.center()
+                && a.radius_and_slope() == b.radius_and_slope()
+                && a.axial_sign() == b.axial_sign();
             if stored {
                 return Ok(Some(alloc::vec![Piece::Same]));
             }
@@ -1215,13 +1232,15 @@ fn parameters(surface: &SurfaceKind, at: Vector) -> Result<Option<[Interval; 2]>
                 wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?,
             ]
         }
+        // A cylinder's or cone's point at v stands s·v along n̂, so the height z is v = z/s: the
+        // axial factor s is ±1 as built, where z/s is z·s, but a similarity scales it.
         SurfaceKind::Cylinder(c) => {
             let [x, y, z] = local(&c.frame(), c.center())?;
-            [whole_turn(x, y)?, z.mul(point(c.axial_sign())?)?]
+            [whole_turn(x, y)?, z.div(point(c.axial_sign())?)?]
         }
         SurfaceKind::Cone(c) => {
             let [x, y, z] = local(&c.frame(), c.center())?;
-            let v = z.mul(point(c.axial_sign())?)?;
+            let v = z.div(point(c.axial_sign())?)?;
             let (r0, k) = c.radius_and_slope();
             let rho = point(r0)?.add(point(k)?.mul(v)?)?;
             let flip = if rho.hi() < 0.0 { -1.0 } else { 1.0 };
@@ -1525,14 +1544,20 @@ fn cut_at(
     };
     let (lo, hi) = crate::curve::finite(curve)?;
     let mut t = tight::middle(s);
-    // On a loop the turns wrap.
+    // On a loop the turns wrap. The count, not t, ends the loop: the angle is between −1 and 2
+    // half-turns, so [`WRAPS`] periods bring it into any loop's domain that starts within 2^19
+    // turns of zero; one further out is taken as not cut here. Both tests ask whether t has
+    // reached an end, so the loop's own start is on the loop and is never moved.
     if closed(curve) {
         let period = hi - lo;
-        while t < lo {
-            t += period;
-        }
-        while t >= hi {
-            t -= period;
+        for _ in 0..WRAPS {
+            if t >= hi {
+                t -= period;
+            } else if t >= lo {
+                break;
+            } else {
+                t += period;
+            }
         }
     }
     if t < lo || t > hi {

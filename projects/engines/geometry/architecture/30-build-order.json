@@ -37,7 +37,7 @@
   "phase": "Phase 1",
   "crate": "CI",
   "size": "Medium",
-  "done_when": "Runners for x86-64 Linux, Windows and macOS, aarch64 Linux and macOS, and wasm32 under wasmtime and Node, each in debug and release and with target-cpu=native; pull-request, nightly, weekly, toolchain-change and release workflows; a private registry for oracle container images; nightly fuzzing machines; one dedicated benchmark machine with a documented spec; access to a licensed Revit machine for exports; every cost entered in the K06 cost model.",
+  "done_when": "Runners for x86-64 Linux, Windows and macOS, aarch64 Linux and macOS, and wasm32 under wasmtime and Node, each in debug and release and with target-cpu=native; pull-request, merge-queue, main-branch, toolchain-change and release workflows; a private registry for oracle container images; one dedicated benchmark machine with a documented spec; access to a licensed Revit machine for exports; every cost entered in the K06 cost model.",
   "depends_on": [
    "G09",
    "G07"
@@ -142,7 +142,7 @@
   "phase": "Phase 1",
   "crate": "geom-bench",
   "size": "Large",
-  "done_when": "gungraun instruction and cache counts, DHAT peak heap and wasmtime fuel on every pull request, merge base and change built in one job, pool off; growth checks at n, 2n and 4n; every benchmark asserts its output hash; a rise over 5% blocks and every change over 1% is listed; written baseline re-recording procedure. Nightly wall-clock timing joins in G107.",
+  "done_when": "gungraun instruction and cache counts, DHAT peak heap and wasmtime fuel on every pull request, merge base and change built in one job, pool off; growth checks at n, 2n and 4n; every benchmark asserts its output hash; a rise over 5% blocks and every change over 1% is listed; written baseline re-recording procedure. Wall-clock timing on a gate's commit joins in G107.",
   "depends_on": [
    "G12"
   ],
@@ -180,7 +180,7 @@
   "phase": "Phase 1",
   "crate": "CI",
   "size": "Small",
-  "done_when": "cargo-mutants on the diff of every pull request: in 28.8's foundation set (geom-num, geom-poly, geom-check, geom-name, the builder in geom-topo, the arrangement module of geom-2d) no unexplained survivor, judged through public interfaces; elsewhere no new one; weekly sharded full run; cargo-llvm-cov with 100% of lines and branches in the foundation set and 90% of lines elsewhere, branch coverage with a pinned nightly on foundation changes; every coverage(off) mark cites a proof; Miri over the test suites weekly.",
+  "done_when": "cargo-mutants on the diff of every pull request: in 28.8's foundation set (geom-num, geom-poly, geom-check, geom-name, the builder in geom-topo, the arrangement module of geom-2d) no unexplained survivor, judged through public interfaces; elsewhere no new one; a sharded full run of the files each push to main changes; cargo-llvm-cov with 100% of lines and branches in the foundation set and 90% of lines elsewhere, branch coverage with a pinned nightly on foundation changes; every coverage(off) mark cites a proof; Miri over the test suites of the crates each push to main reaches.",
   "depends_on": [
    "G11",
    "G12"
@@ -259,7 +259,7 @@
   "phase": "Phase 1",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "I128, I256, I320 and I384 (and the I576 and I768 widths reserved for later predicates) with add, subtract, multiply, compare and sign, every step checked, so overflow is reported in every build; differential fuzzing against a big-integer oracle (num-bigint or dashu, 29.3) for 24 hours clean; extreme-value tests at every width's limits; benchmark per operation on x86-64, aarch64 and wasm32.",
+  "done_when": "I128, I256, I320 and I384 (and the I576 and I768 widths reserved for later predicates) with add, subtract, multiply, compare and sign, every step checked, so overflow is reported in every build; a seeded differential test against a big-integer oracle (num-bigint or dashu, 29.3), of fixed size, passing in the suite, with its saved cases replaying; extreme-value tests at every width's limits; benchmark per operation on x86-64, aarch64 and wasm32.",
   "depends_on": [
    "G22"
   ],
@@ -364,7 +364,7 @@
   "phase": "Phase 1",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "Every predicate compared with a big-integer oracle (num-bigint and num-rational, or dashu, 28.6) on random, \u00b11-step-degenerate and filter-boundary inputs on every pull request; corner sets as above; perturbation laws; failures minimised into fixtures; nightly fresh seeds.",
+  "done_when": "Every predicate compared with a big-integer oracle (num-bigint and num-rational, or dashu, 28.6) on random, \u00b11-step-degenerate and filter-boundary inputs on every pull request; corner sets as above; perturbation laws; failures minimised into fixtures; the seeded tests run in the suite on every change they reach.",
   "depends_on": [
    "G28",
    "G29",
@@ -442,7 +442,7 @@
   "phase": "Phase 1",
   "crate": "geom-gen, CI",
   "size": "Medium",
-  "done_when": "Every generated filter gets both problems; nightly checks that each constant is at least its proven bound; MAP.json labels each filter proven or 'checked, not proven', and every unproven filter has an open issue.",
+  "done_when": "Every generated filter gets both problems; a change to a problem or to a pinned tool proves again that each constant is at least its proven bound; MAP.json labels each filter proven or 'checked, not proven', and every unproven filter has an open issue.",
   "depends_on": [
    "G35"
   ],
@@ -837,7 +837,7 @@
   "phase": "Phase 2",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "The section 28.3 rows for kinds and NURBS as property tests with an independent dense refutation sampler in higher precision, fixed seeds on pull requests and fresh seeds nightly.",
+  "done_when": "The section 28.3 rows for kinds and NURBS as property tests with an independent dense refutation sampler in higher precision, seeded in the suite on every change they reach.",
   "depends_on": [
    "G62",
    "G65",
@@ -884,26 +884,6 @@
   "done_when": "An owner chooses the reference machine (8 cores, 23.1) and accepts or amends the kernel's proposed shares of Spare Construct's targets.",
   "depends_on": [],
   "chapter": "23, 32"
- },
- {
-  "id": "G73",
-  "title": "Who searches for patents (owner)",
-  "phase": "Phase 3",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent searches are made, so nobody is named to search or review.",
-  "depends_on": [],
-  "chapter": "29, 32"
- },
- {
-  "id": "G74",
-  "title": "Patent search: persistent naming and reference resolution (owner)",
-  "phase": "Phase 3",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of persistent naming and reference resolution is made, and G87 no longer needs this piece.",
-  "depends_on": [],
-  "chapter": "20, 29"
  },
  {
   "id": "G75",
@@ -1314,7 +1294,7 @@
   "phase": "Phase 3",
   "crate": "geom-bench, CI",
   "size": "Small",
-  "done_when": "The dedicated reference runner times every benchmark nightly at 1 and 8 threads, natively and in Chrome, Firefox and Safari, and keeps the history against 23.1's shares. It reports and does not block; G452 makes it block.",
+  "done_when": "The reference runner times every benchmark once on a gate's commit, and again only when timed code changes, at 1 and 8 threads, natively and in Chrome, Firefox and Safari, and keeps the history against 23.1's shares. It reports and does not block; G452 makes it block.",
   "depends_on": [
    "G18",
    "G72",
@@ -1414,25 +1394,12 @@
   "chapter": "28, 29"
  },
  {
-  "id": "G115",
-  "title": "Patent register",
-  "phase": "Phase 3",
-  "crate": "geometry/PATENTS.md",
-  "size": "Medium",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent register is kept, and no CI check asks for a recorded search; gate 3 (G118) no longer needs this piece.",
-  "depends_on": [
-   "G15",
-   "G70"
-  ],
-  "chapter": "29"
- },
- {
   "id": "G116",
   "title": "Adversarial generators and sequence fuzzing",
   "phase": "Phase 3",
   "crate": "geom-fuzz",
   "size": "Large",
-  "done_when": "Generators (sub-grid snaps, one-step moves, full range, deep trees, Tolerant bodies); a sequence fuzz target with checker, laws and replay as oracles; per-operation templates; ClusterFuzzLite on pull requests; nightly runs; robustness scoreboard per family.",
+  "done_when": "Generators (sub-grid snaps, one-step moves, full range, deep trees, Tolerant bodies); a sequence fuzz target with checker, laws and replay as oracles; per-operation templates; seeded tests in the suite on every pull request; robustness scoreboard per family.",
   "depends_on": [
    "G101",
    "G97",
@@ -1460,7 +1427,7 @@
   "phase": "Phase 3",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "Every primitive and transform passes the contract and history laws and all four checker groups; fault injection catches every catalogued fault for those groups; bodies and names save and reload bit-identically; the replay corpus is green on every leg, including the shipped-checker leg and reference mode; the topology model is proven in Verus; sequence fuzzing runs clean for seven consecutive nights; the reference runner records nightly times. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "Every primitive and transform passes the contract and history laws and all four checker groups; fault injection catches every catalogued fault for those groups; bodies and names save and reload bit-identically; the replay corpus is green on every leg, including the shipped-checker leg and reference mode; the topology model is proven in Verus; the sequence harness's seeded test passes in the suite on the gate's commit, and its saved cases replay; the reference runner records the gate commit's times. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G99",
    "G102",
@@ -1477,16 +1444,6 @@
    "G117"
   ],
   "chapter": "28, 30"
- },
- {
-  "id": "G119",
-  "title": "Patent search: slicing and toolpaths (owner)",
-  "phase": "Phase 4",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of slicing and toolpath methods is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "19, 29"
  },
  {
   "id": "G120",
@@ -1509,16 +1466,6 @@
   "chapter": "6, 23, 32"
  },
  {
-  "id": "G122",
-  "title": "Patent search: booleans, cellular models and batch cutting (owner)",
-  "phase": "Phase 4",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of EMBER, Nehring-Wirxel's integer plane arithmetic, Campen and Kobbelt's plane-based booleans, cellular models and batch cutting is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "11, 29"
- },
- {
   "id": "G123",
   "title": "Plane type, canonical planes and arrangement predicates",
   "phase": "Phase 4",
@@ -1529,7 +1476,6 @@
    "G29",
    "G30",
    "G81",
-   "G122",
    "G118"
   ],
   "chapter": "11, 23",
@@ -1872,8 +1818,7 @@
   "size": "Medium",
   "done_when": "Plane slices to closed contours; exact quickhull with symbolic perturbation; coplanar merge into a faceted B-rep that passes the checker; per-format export precision (exact decimals for OBJ, ASCII STL and 3MF, chunk-relative f32 for binary STL and glTF) with the post-rounding re-check; 1M faces sliced into 1,000 layers in 1 s on 8 threads.",
   "depends_on": [
-   "G148",
-   "G119"
+   "G148"
   ],
   "chapter": "19"
  },
@@ -1936,7 +1881,7 @@
   "phase": "Phase 4",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "Manifold (C++ container and Rust port), CGAL and Cherchi et al. run nightly on Manifold's models and the EMBER pairs; every new signature triaged.",
+  "done_when": "Manifold (C++ container and Rust port), CGAL and Cherchi et al. run on each push to main that reaches them, on Manifold's models and the EMBER pairs; every new signature triaged.",
   "depends_on": [
    "G113",
    "G148",
@@ -1950,7 +1895,7 @@
   "phase": "Phase 4",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "The 28.3 rows for numbers and frames, booleans and cells (the membership law included), flat mass properties, names and history, and formats as property tests, fixed seeds on pull requests and fresh seeds nightly.",
+  "done_when": "The 28.3 rows for numbers and frames, booleans and cells (the membership law included), flat mass properties, names and history, and formats as property tests, seeded in the suite on every change they reach.",
   "depends_on": [
    "G136",
    "G140",
@@ -1966,7 +1911,7 @@
   "phase": "Phase 4",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "The EMBER case list and the polyhedral corpus agree exactly with the rational reference; every injected fault is caught and the second checker agrees on the whole corpus; the law rows for numbers, booleans, cells, flat mass, names and formats pass on fixed and fresh seeds; count gates are set for EMBER, the 300-opening wall and the door move, with nightly times recorded against 23.1's shares; every Manifold and CGAL difference is triaged. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "The EMBER case list and the polyhedral corpus agree exactly with the rational reference; every injected fault is caught and the second checker agrees on the whole corpus; the law rows for numbers, booleans, cells, flat mass, names and formats pass on their seeds; count gates are set for EMBER, the 300-opening wall and the door move, with the gate commit's times recorded against 23.1's shares; every Manifold and CGAL difference is triaged. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G124",
    "G135",
@@ -2040,7 +1985,7 @@
   "phase": "Phase 5",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "SMLib's reference build run in fresh processes, limited to its 100% classes, and geomdl on NURBS pairs, both nightly through the oracle runner; every new signature triaged.",
+  "done_when": "SMLib's reference build run in fresh processes, limited to its 100% classes, and geomdl on NURBS pairs, both through the oracle runner on each push to main that reaches them; every new signature triaged.",
   "depends_on": [
    "G160",
    "G157"
@@ -2255,7 +2200,7 @@
   "phase": "Phase 5",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "Dense double-double sampling sharing no code with geom-intersect or geom-check; finds every curved fault in the catalogue; nightly on every curved fixture.",
+  "done_when": "Dense double-double sampling sharing no code with geom-intersect or geom-check; finds every curved fault in the catalogue; on every curved fixture, on each push to main that reaches it.",
   "depends_on": [
    "G135",
    "G177"
@@ -2296,7 +2241,7 @@
   "phase": "Phase 5",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "The ssi-corpus acceptance gate passes with no wrong-topology verdict and each class's flag count at or below its recorded ceiling; no miss against exact oracles for curve pairs; the refutation checker finds every curved fault in the catalogue and nothing in the clean corpus; the intersection law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "The ssi-corpus acceptance gate passes with no wrong-topology verdict and each class's flag count at or below its recorded ceiling; no miss against exact oracles for curve pairs; the refutation checker finds every curved fault in the catalogue and nothing in the clean corpus; the intersection law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G161",
    "G166",
@@ -2308,26 +2253,6 @@
    "G180"
   ],
   "chapter": "28, 30"
- },
- {
-  "id": "G182",
-  "title": "Patent search: clash, clearance and continuous collision detection (owner)",
-  "phase": "Phase 6",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of distance, clearance, clash and continuous collision detection is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "14, 19, 29"
- },
- {
-  "id": "G183",
-  "title": "Patent search: constraint solving and sketch diagnosis (owner)",
-  "phase": "Phase 6",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of constraint solving and sketch diagnosis is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "15, 29"
  },
  {
   "id": "G184",
@@ -2633,8 +2558,7 @@
   "depends_on": [
    "G198",
    "G195",
-   "G190",
-   "G182"
+   "G190"
   ],
   "chapter": "14"
  },
@@ -2723,7 +2647,7 @@
   "phase": "Phase 6",
   "crate": "geom-test, geom-fuzz",
   "size": "Medium",
-  "done_when": "Hostile inputs at budget limits, CADCraft failures recomputed, geo and JTS corpora; fuzz targets per operation; JTS, clipper2, i_overlay, cavalier_contours and CGAL compared nightly.",
+  "done_when": "Hostile inputs at budget limits, CADCraft failures recomputed, geo and JTS corpora; fuzz targets per operation; JTS, clipper2, i_overlay, cavalier_contours and CGAL compared on each push to main that reaches them.",
   "depends_on": [
    "G202",
    "G203",
@@ -2769,7 +2693,6 @@
   "depends_on": [
    "G52",
    "G62",
-   "G183",
    "G181"
   ],
   "chapter": "15"
@@ -2973,7 +2896,7 @@
   "phase": "Phase 6",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "geom-2d agrees with the one-root reference on every pull request; the JTS and geo corpora pass; rational-normal and parallel constructions are Exact; the sketch differential harness is green; the 2D and sketch law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "geom-2d agrees with the one-root reference on every pull request; the JTS and geo corpora pass; rational-normal and parallel constructions are Exact; the sketch differential harness is green; the 2D and sketch law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G205",
    "G207",
@@ -2987,46 +2910,6 @@
    "G232"
   ],
   "chapter": "28, 30"
- },
- {
-  "id": "G234",
-  "title": "Patent search: straight-skeleton roofs (owner)",
-  "phase": "Phase 7",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of straight skeletons and roof generation is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
- },
- {
-  "id": "G235",
-  "title": "Patent search: shells, offsets and thickening (owner)",
-  "phase": "Phase 7",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of shells, offsets and thickening, IntegrityWare's claim included is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
- },
- {
-  "id": "G236",
-  "title": "Patent search: Class-A blends and variable fillets (owner)",
-  "phase": "Phase 7",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of G2 and G3 Class-A blends and variable fillets is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
- },
- {
-  "id": "G237",
-  "title": "Patent search: direct face edits (owner)",
-  "phase": "Phase 7",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of face move, replace and delete with healing is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
  },
  {
   "id": "G238",
@@ -3197,7 +3080,7 @@
   "phase": "Phase 7",
   "crate": "geom-num",
   "size": "Medium",
-  "done_when": "I576 and I768 with add, subtract, multiply, compare and sign, overflow checked; differential fuzzing against dashu for 24 hours clean; extreme-value tests at both widths; Verus proofs as for I384; a benchmark per operation on three targets.",
+  "done_when": "I576 and I768 with add, subtract, multiply, compare and sign, overflow checked; a seeded differential test against dashu, of fixed size, passing in the suite, with its saved cases replaying; extreme-value tests at both widths; Verus proofs as for I384; a benchmark per operation on three targets.",
   "depends_on": [
    "G240",
    "G156",
@@ -3405,8 +3288,7 @@
   "size": "Large",
   "done_when": "Radius laws along chains, constant-chord and hold-line trimlines; certified deviation against the procedural definition.",
   "depends_on": [
-   "G265",
-   "G236"
+   "G265"
   ],
   "chapter": "13"
  },
@@ -3457,8 +3339,7 @@
   "done_when": "Offsets in kind (cones by apex shift), procedural offsets with certified caches, local and global self-intersection trimming; cusp regions found on known curvature.",
   "depends_on": [
    "G66",
-   "G253",
-   "G235"
+   "G253"
   ],
   "chapter": "13"
  },
@@ -3472,8 +3353,7 @@
   "depends_on": [
    "G142",
    "G196",
-   "G251",
-   "G234"
+   "G251"
   ],
   "chapter": "13"
  },
@@ -3525,8 +3405,7 @@
   "done_when": "Intersect joins through the 3D skeleton, per-face distances, thicken with rims; exact volumes on polyhedra; a 200-face body offset benchmarked.",
   "depends_on": [
    "G274",
-   "G144",
-   "G235"
+   "G144"
   ],
   "chapter": "13"
  },
@@ -3581,8 +3460,7 @@
   "depends_on": [
    "G260",
    "G144",
-   "G253",
-   "G237"
+   "G253"
   ],
   "chapter": "13"
  },
@@ -3650,7 +3528,7 @@
   "phase": "Phase 7",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "The curved boolean and chapter 13 corpora have no Failed case, only Known typed errors; the never-a-hole fuzz campaign runs clean for seven consecutive nights; every closed-form case is within its bound; the sweep, blend, offset, manufacturing and curved-mass law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "The curved boolean and chapter 13 corpora have no Failed case, only Known typed errors; the never-a-hole harness's seeded test passes in the suite on the gate's commit, and its saved cases replay; every closed-form case is within its bound; the sweep, blend, offset, manufacturing and curved-mass law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G249",
    "G261",
@@ -3673,26 +3551,6 @@
   "chapter": "19, 29, 32"
  },
  {
-  "id": "G286",
-  "title": "Patent search: simplification, remeshing and subdivision to NURBS (owner)",
-  "phase": "Phase 8",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of mesh simplification, remeshing and conversion from subdivision to NURBS is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "16, 19, 29"
- },
- {
-  "id": "G287",
-  "title": "Patent review: edge-first tessellation (owner)",
-  "phase": "Phase 8",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no review of how 19.3's edge-first tessellation relates to the claims of US 10,614,195 is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "19, 29"
- },
- {
   "id": "G288",
   "title": "Edge-first certified tessellation",
   "phase": "Phase 8",
@@ -3705,7 +3563,6 @@
    "G68",
    "G162",
    "G177",
-   "G287",
    "G156",
    "G181"
   ],
@@ -3744,8 +3601,7 @@
   "size": "Large",
   "done_when": "Safe no_std port of meshoptimizer's simplifier and meshlet builder with licence kept; byte-identical across targets and threads; error within 5% of the C++ library.",
   "depends_on": [
-   "G290",
-   "G286"
+   "G290"
   ],
   "chapter": "19, 23"
  },
@@ -3759,7 +3615,6 @@
   "depends_on": [
    "G165",
    "G151",
-   "G182",
    "G156",
    "G181"
   ],
@@ -3775,8 +3630,7 @@
   "depends_on": [
    "G289",
    "G147",
-   "G54",
-   "G182"
+   "G54"
   ],
   "chapter": "19"
  },
@@ -3837,7 +3691,6 @@
   "depends_on": [
    "G151",
    "G54",
-   "G182",
    "G285",
    "G156",
    "G181"
@@ -3882,7 +3735,6 @@
   "done_when": "Quadric collapses and isotropic remeshing as local operations with rollback, accepted only inside the two-way envelope; results Certified(eps).",
   "depends_on": [
    "G152",
-   "G286",
    "G156",
    "G181"
   ],
@@ -3991,7 +3843,7 @@
   "phase": "Phase 8",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "Every tessellation carries its closure certificate; the clash corpus has no miss and no false hit; the one-element live re-test meets its count gate, with its nightly time recorded against 1 ms median; the volume mesher returns a mesh or a typed error for all of Thingi10K; the mesh, spatial and contact law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "Every tessellation carries its closure certificate; the clash corpus has no miss and no false hit; the one-element live re-test meets its count gate, with its time on the gate's commit recorded against 1 ms median; the volume mesher returns a mesh or a typed error for all of Thingi10K; the mesh, spatial and contact law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G291",
    "G297",
@@ -4004,33 +3856,13 @@
  },
  {
   "id": "G309",
-  "title": "Patent search and legal check: general swept volumes (owner)",
+  "title": "Legal check: general swept volumes (owner)",
   "phase": "Phase 9",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "The patent search on Lifted Surfacing and general swept volumes is closed by the owner on 2026-11-13 (32.49): none is made. Left: chapter 13's legal check (question 7): the Adobe-licensed dependencies and libigl's copyleft module listed in section 29 as never to be read.",
+  "done_when": "Chapter 13's legal check (question 7) of Lifted Surfacing's dependencies: the Adobe-licensed dependencies and libigl's copyleft module listed in section 29 as never to be read.",
   "depends_on": [],
   "chapter": "13, 16, 29"
- },
- {
-  "id": "G310",
-  "title": "Patent search: point-cloud fitting and registration (owner)",
-  "phase": "Phase 9",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of point-cloud fitting and registration is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "16, 17, 29"
- },
- {
-  "id": "G311",
-  "title": "Patent search: panelisation (owner)",
-  "phase": "Phase 9",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of panelisation (Evolute, Pottmann et al.) is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "16, 29"
  },
  {
   "id": "G312",
@@ -4044,11 +3876,11 @@
  },
  {
   "id": "G313",
-  "title": "Patent and licence clearance for chapter 16 methods (owner)",
+  "title": "OpenSubdiv licence review (owner)",
   "phase": "Phase 9",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "The patent searches for the 16.6 methods and flagged patents are closed by the owner on 2026-11-13 (32.49): none is made. Left: the OpenSubdiv licence review and counsel sign-off; nothing in this phase reaches Stable before it.",
+  "done_when": "The OpenSubdiv licence review and counsel sign-off; nothing in this phase reaches Stable before it.",
   "depends_on": [],
   "chapter": "16, 29"
  },
@@ -4177,8 +4009,7 @@
   "size": "Large",
   "done_when": "Regular faces packed Exact and named Merged; PCCM at extraordinary vertices with its level chosen from the requested \u03b5, a certified ring-by-ring bound and measured deviation; G0 closure at darts and corners, or a typed refusal when G1 is required; exporters take an explicit conversion option; a 10,000-face net converted in 2 s.",
   "depends_on": [
-   "G322",
-   "G286"
+   "G322"
   ],
   "chapter": "16"
  },
@@ -4470,8 +4301,7 @@
   "depends_on": [
    "G342",
    "G123",
-   "G32",
-   "G311"
+   "G32"
   ],
   "chapter": "16"
  },
@@ -4550,8 +4380,7 @@
   "depends_on": [
    "G335",
    "G32",
-   "G215",
-   "G310"
+   "G215"
   ],
   "chapter": "16"
  },
@@ -4589,7 +4418,7 @@
   "phase": "Phase 9",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "The 28.3 rows for subdivision, fields and the cross-representation boolean; OpenSubdiv, libfive and Fidget compared nightly.",
+  "done_when": "The 28.3 rows for subdivision, fields and the cross-representation boolean; OpenSubdiv, libfive and Fidget compared on each push to main that reaches them.",
   "depends_on": [
    "G335",
    "G330",
@@ -4616,7 +4445,7 @@
   "phase": "Phase 9",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "OpenSubdiv agrees on the corpus; the field mesher certifies the analytic corpus; the conversion-graph laws hold; one cross-representation test per operand mix passes; the chapter 16 clearance is recorded. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "OpenSubdiv agrees on the corpus; the field mesher certifies the analytic corpus; the conversion-graph laws hold; one cross-representation test per operand mix passes; the chapter 16 clearance is recorded. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G325",
    "G337",
@@ -4633,22 +4462,12 @@
   "chapter": "28, 30"
  },
  {
-  "id": "G356",
-  "title": "Patent search: terrain, corridors and alignments (owner)",
-  "phase": "Phase 10",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of terrain, corridor and alignment methods is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "17, 29"
- },
- {
   "id": "G357",
   "title": "Alignment curve kinds (owner)",
   "phase": "Phase 10",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "An owner decides whether the Helmert, Bloss, Viennese bend and cubic spiral transitions and IFC's gradient and segmented reference curves are named kinds or compositions, with the decision note 26.1 requires; the Viennese bend's trademark and patent status is checked first (17).",
+  "done_when": "An owner decides whether the Helmert, Bloss, Viennese bend and cubic spiral transitions and IFC's gradient and segmented reference curves are named kinds or compositions, with the decision note 26.1 requires; the Viennese bend's trademark status is checked first (17).",
   "depends_on": [],
   "chapter": "7, 17, 26, 32"
  },
@@ -4717,7 +4536,6 @@
    "G30",
    "G146",
    "G358",
-   "G356",
    "G284"
   ],
   "chapter": "17"
@@ -4866,8 +4684,7 @@
    "G162",
    "G48",
    "G87",
-   "G371",
-   "G356"
+   "G371"
   ],
   "chapter": "17"
  },
@@ -4967,8 +4784,7 @@
    "G379",
    "G32",
    "G58",
-   "G364",
-   "G310"
+   "G364"
   ],
   "chapter": "17"
  },
@@ -4978,7 +4794,7 @@
   "phase": "Phase 10",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "The 28.3 rows for terrain, alignments, skeletons and point clouds (index queries equal brute force; an Approximate fit states the deviation an independent recomputation finds) as property tests; spade, startin, PROJ and GeographicLib compared nightly.",
+  "done_when": "The 28.3 rows for terrain, alignments, skeletons and point clouds (index queries equal brute force; an Approximate fit states the deviation an independent recomputation finds) as property tests; spade, startin, PROJ and GeographicLib compared on each push to main that reaches them.",
   "depends_on": [
    "G366",
    "G373",
@@ -4993,7 +4809,7 @@
   "phase": "Phase 10",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "TIN builds are byte-identical for 1,000 insertion orders and every thread count; net volumes equal the exact difference of the two surfaces within N\u00b7q\u00b3, N being the number of overlay pieces summed; the 50 km corridor meets its count gate with its time recorded; every ground oracle difference is triaged; the terrain, alignment, skeleton and point-cloud law rows pass. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "TIN builds are byte-identical for 1,000 insertion orders and every thread count; net volumes equal the exact difference of the two surfaces within N\u00b7q\u00b3, N being the number of overlay pieces summed; the 50 km corridor meets its count gate with its time recorded; every ground oracle difference is triaged; the terrain, alignment, skeleton and point-cloud law rows pass. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G360",
    "G361",
@@ -5004,16 +4820,6 @@
    "G381"
   ],
   "chapter": "28, 30"
- },
- {
-  "id": "G383",
-  "title": "Patent search: hidden lines, sections and drawings (owner)",
-  "phase": "Phase 11",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of hidden lines, sections and drawing generation is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "18, 29"
  },
  {
   "id": "G384",
@@ -5059,8 +4865,7 @@
   "done_when": "ViewDef with parallel, perspective and developed projections, bands, crops, sheet placement, DrawItems with roles; every InvalidView case tested.",
   "depends_on": [
    "G45",
-   "G386",
-   "G383"
+   "G386"
   ],
   "chapter": "18"
  },
@@ -5316,7 +5121,7 @@
   "phase": "Phase 11",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "Every edge's pieces cover its projection exactly once; the drawing checker catches every injected fault; incremental drawing equals full regeneration; the plan of the reference building meets its count gate, with its time recorded against the 250 ms share. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "Every edge's pieces cover its projection exactly once; the drawing checker catches every injected fault; incremental drawing equals full regeneration; the plan of the reference building meets its count gate, with its time recorded against the 250 ms share. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G393",
    "G395",
@@ -5796,7 +5601,7 @@
   "phase": "Phase 12",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "Corpus fetch scripts honouring each licence; nightly out-of-process comparison of volume, area and Hausdorff distance with a triage report; validation-property and EXPRESS checks; exchange outputs in the cross-target hash corpus.",
+  "done_when": "Corpus fetch scripts honouring each licence; out-of-process comparison on each push to main that reaches it of volume, area and Hausdorff distance with a triage report; validation-property and EXPRESS checks; exchange outputs in the cross-target hash corpus.",
   "depends_on": [
    "G426",
    "G429",
@@ -5812,7 +5617,7 @@
   "phase": "Phase 12",
   "crate": "geom-test",
   "size": "Small",
-  "done_when": "Containers built from pinned source; nightly IFC comparisons on the buildingSMART and IFC 4.3 samples; every new signature triaged.",
+  "done_when": "Containers built from pinned source; IFC comparisons on each push to main that reaches them on the buildingSMART and IFC 4.3 samples; every new signature triaged.",
   "depends_on": [
    "G440"
   ],
@@ -5824,7 +5629,7 @@
   "phase": "Phase 12",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "checkshape and bopargcheck run out of process on every STEP import and export and on boolean results, nightly; every difference triaged.",
+  "done_when": "checkshape and bopargcheck run out of process on every STEP import and export and on boolean results, on each push to main that reaches them; every difference triaged.",
   "depends_on": [
    "G440"
   ],
@@ -5836,7 +5641,7 @@
   "phase": "Phase 12",
   "crate": "geom-test",
   "size": "Medium",
-  "done_when": "NIST's STEP File Analyzer (its licence confirmed first), ezdxf's audit and LibreCAD reading every written file, nightly; every difference triaged.",
+  "done_when": "NIST's STEP File Analyzer (its licence confirmed first), ezdxf's audit and LibreCAD reading every written file, on each push to main that reaches them; every difference triaged.",
   "depends_on": [
    "G440"
   ],
@@ -5848,7 +5653,7 @@
   "phase": "Phase 12",
   "crate": "gate review",
   "size": "Small",
-  "done_when": "The independent Python reader dumps the whole archive identically; every writer's output round-trips byte for byte and passes its validator; every conformance-harness difference is triaged; the healed fraction is at or above its recorded baseline. A kernel owner records the result, with the CI runs that show it, in the decision log.",
+  "done_when": "The independent Python reader dumps the whole archive identically; every writer's output round-trips byte for byte and passes its validator; every conformance-harness difference is triaged; the healed fraction is at or above its recorded baseline. The main session records the result, with its reason and the CI runs that show it, in the decision log.",
   "depends_on": [
    "G411",
    "G412",
@@ -5860,26 +5665,6 @@
    "G443"
   ],
   "chapter": "28, 30"
- },
- {
-  "id": "G445",
-  "title": "Patent search: circuit-board pours and clearance (owner)",
-  "phase": "Phase 13",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of circuit-board pours and clearance is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "14, 29"
- },
- {
-  "id": "G446",
-  "title": "Patent search: sheet-metal bending and unfolding (owner)",
-  "phase": "Phase 13",
-  "crate": "owner action",
-  "size": "Small",
-  "done_when": "Closed by the owner on 2026-11-13 (32.49): no patent search of sheet-metal bending and unfolding is made. The pieces that need this one are ordinary pieces, built existing code first (solidcore, SMLib and other permissive sources, ported to Rust; 29.17).",
-  "depends_on": [],
-  "chapter": "13, 29"
  },
  {
   "id": "G447",
@@ -5907,7 +5692,7 @@
   "phase": "Phase 13",
   "crate": "owner action",
   "size": "Small",
-  "done_when": "An owner accepts or amends 23.13's proposal that a nightly wall-clock miss blocks merges to main, except the fix or a revert.",
+  "done_when": "An owner accepts or amends 23.13's proposal that a wall-clock miss blocks merges to main, except the fix or a revert.",
   "depends_on": [],
   "chapter": "23, 28, 32"
  },
@@ -5931,7 +5716,7 @@
   "phase": "Phase 13",
   "crate": "geom-bench",
   "size": "Large",
-  "done_when": "One scenario per target (open, door move, level change, plan view, instance memory, save encoding, replay, 100-sheet print), nightly native and in browsers with the kernel share asserted, reduced scale under count gates per pull request.",
+  "done_when": "One scenario per target (open, door move, level change, plan view, instance memory, save encoding, replay, 100-sheet print), timed natively and in browsers on a gate's commit with the kernel share asserted, reduced scale under count gates per pull request.",
   "depends_on": [
    "G450",
    "G139",
@@ -5949,7 +5734,7 @@
   "phase": "Phase 13",
   "crate": "geom-bench, CI",
   "size": "Medium",
-  "done_when": "The reference runner's timings become a gate: a statistical test on every kernel pull request blocks confident regressions over 5%; a scaling gate at 1, 2 and 8 threads; a nightly miss against 23.1's shares, confirmed by a same-night rerun, blocks merges to main except the fix or a revert (32.42); a weekly full run.",
+  "done_when": "The reference runner's timings become a gate: a statistical test on every kernel pull request blocks confident regressions over 5%; a scaling gate at 1, 2 and 8 threads; a miss against 23.1's shares on a gate's commit, confirmed by a rerun on that commit, blocks merges to main except the fix or a revert (32.42).",
   "depends_on": [
    "G451",
    "G10",
@@ -6242,7 +6027,6 @@
    "G261",
    "G343",
    "G256",
-   "G446",
    "G444"
   ],
   "chapter": "13, 26"
@@ -6259,7 +6043,6 @@
    "G207",
    "G210",
    "G206",
-   "G445",
    "G444"
   ],
   "chapter": "14, 26"
@@ -6401,5 +6184,44 @@
    "G465"
   ],
   "chapter": "25, 26"
+ },
+ {
+  "id": "G483",
+  "title": "Shape identity: the same shape under any placement",
+  "phase": "Phase 4",
+  "crate": "geom-num, geom-topo, geom-check",
+  "size": "Large",
+  "done_when": "query.shape_key, query.shape_id and query.shape_match for flat solids whose corners are grid points or three-plane points, under ShapeScheme v1 (32.51): neighbouring faces on one plane merged; the key from exact counts, squared edge lengths, G102's area vectors and volume; the id as the least canonical form over the candidate anchors, each corner written as three squared distances and an orient3d side, hashed with G86's encoder and SHA-256 under its own domain prefix; mirror_id and the symmetry count from the same pass; match returning Same, MirrorOnly, Different with a witness or NotCompared with a reason, the motion as a typed transform where it fits and always as named anchors, and the name map; a greatest common divisor on Wide<N> in geom-num, fuzzed against num-bigint; the widths on three-plane corners (about 1,120 bits) with a written derivation in the module header, a certificate, tests at every coordinate \u00b1(2^40 \u2212 1), a filter so the wide path runs only where narrower integers cannot hold the values, and instruction counts natively and in WebAssembly (32.29's terms); ShapeScheme v1 written as CDDL; schemas and cost bounds; a body outside the scheme is NotCanonical, never guessed. Tests: the id unchanged under renaming, arena shuffles, grid moves, quarter turns and exact rational rotations, and under two build routes to one shape (a boolean's split faces against an extruded profile); a mirror gives MirrorOnly unless the part has a mirror plane; one corner moved one step gives Different; symmetry counts equal the known groups of a box, a square prism, a cube and a tetrahedron; Same implies equal keys; agreement with a brute-force rational reference by a different author on the polyhedral corpus; ids equal on every target.",
+  "depends_on": [
+   "G102",
+   "G134",
+   "G87",
+   "G46",
+   "G131"
+  ],
+  "chapter": "6, 8, 10, 22, 32"
+ },
+ {
+  "id": "G484",
+  "title": "Shape identity: what the same shape means, and its widths (owner)",
+  "phase": "Phase 4",
+  "crate": "owner action",
+  "size": "Small",
+  "done_when": "Decided on 2026-11-14 (32.51): the same shape means equal under a rotation and a move only, exact, names and the cutting of faces ignored, holes and cuts counted, and mirror images reported apart as MirrorOnly with a mirror_id pairing opposite hands; ShapeScheme v1's canonical form and bytes, hashed with G86's SHA-256, are permanent once a program stores ids; and the wide arithmetic for three-plane corners (about 1,120 bits and a greatest common divisor on Wide<N>) joins 6.2 on 32.29's terms. G483 needs nothing more from an owner.",
+  "depends_on": [],
+  "chapter": "6, 32"
+ },
+ {
+  "id": "G485",
+  "title": "Shape identity for analytic bodies",
+  "phase": "Phase 7",
+  "crate": "geom-topo, geom-check",
+  "size": "Medium",
+  "done_when": "ShapeScheme v1's descriptors (32.51) for plane, cylinder, cone, sphere and torus faces and line, circle and ellipse edges with whole-step data: seams and same-surface neighbours merged; anchors from centres and apexes where corners are too few; bodies of revolution; every case not listed is NotCanonical; the widths derived in the module header like G483's. Tests: drilled and slotted plates, rolled sections with root radii, round bars and countersinks give equal ids under every exact motion and across build routes; a hole moved one step gives Different; the curved boolean corpus's bodies each get an id or a named reason.",
+  "depends_on": [
+   "G483",
+   "G248"
+  ],
+  "chapter": "8, 10, 22"
  }
 ]
