@@ -680,7 +680,10 @@ fn run(cli: Cli) -> Result<bool, String> {
             let parts = coverage::plan_parts(&crates, &times);
             let problems = coverage::plan_problems(&crates, &parts);
             if !problems.is_empty() {
-                return Err(format!("the coverage plan is wrong: {}", problems.join("; ")));
+                return Err(format!(
+                    "the coverage plan is wrong: {}",
+                    problems.join("; ")
+                ));
             }
             let n = parts.len();
             let include: Vec<serde_json::Value> = parts

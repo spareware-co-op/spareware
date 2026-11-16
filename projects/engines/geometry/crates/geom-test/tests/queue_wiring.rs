@@ -441,7 +441,10 @@ fn linux_part_problems(w: &Yaml) -> Vec<String> {
             continue;
         }
         let Some(on) = parts_of(&text(&step["if"]), &parts) else {
-            found.push(format!("{name}: its condition on the part is not read: {}", text(&step["if"])));
+            found.push(format!(
+                "{name}: its condition on the part is not read: {}",
+                text(&step["if"])
+            ));
             continue;
         };
         if let Some(of) = run

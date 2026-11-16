@@ -1295,19 +1295,29 @@ fn coverage_parts_measure_every_crate_once_and_a_lost_part_fails() {
     ];
     for crates in &lists {
         let parts = plan_parts(crates, &times);
-        assert_eq!(plan_problems(crates, &parts), Vec::<String>::new(), "{crates:?}");
+        assert_eq!(
+            plan_problems(crates, &parts),
+            Vec::<String>::new(),
+            "{crates:?}"
+        );
         assert!(!parts.is_empty());
         let time = |k: &String| times.get(k).copied().unwrap_or(slowest);
         for part in &parts {
             let load: u64 = part.iter().map(time).sum();
             // A part over the budget holds one crate, which no plan can split.
-            assert!(load <= PART_SECONDS || part.len() == 1, "{part:?}: {load} s");
+            assert!(
+                load <= PART_SECONDS || part.len() == 1,
+                "{part:?}: {load} s"
+            );
         }
     }
     // The planted cases: a crate dropped, measured twice, or not in the run is refused.
     let crates: Vec<String> = times.keys().cloned().collect();
     let mut parts = plan_parts(&crates, &times);
-    assert!(parts.len() > 1, "the kernel's coverage is measured in parts");
+    assert!(
+        parts.len() > 1,
+        "the kernel's coverage is measured in parts"
+    );
     let dropped = parts[0].pop().unwrap();
     assert_eq!(
         plan_problems(&crates, &parts),
@@ -1339,7 +1349,9 @@ fn coverage_parts_measure_every_crate_once_and_a_lost_part_fails() {
     assert_eq!(missing.len(), parts[0].len() * 2, "{missing:?}");
     for krate in &parts[0] {
         assert!(
-            missing.iter().any(|m| m.starts_with(&format!("{krate}: no coverage data"))),
+            missing
+                .iter()
+                .any(|m| m.starts_with(&format!("{krate}: no coverage data"))),
             "{missing:?}"
         );
     }

@@ -234,13 +234,12 @@ fn the_coverage_judge_reads_every_part() {
             .contains("must=\"$must coverage-plan coverage-parts coverage gates-seeded\""),
         "done does not require every coverage job"
     );
+    let steps = jobs["coverage"]["steps"].as_vec().unwrap();
     assert!(
-        runs(&w, "coverage").contains("download-artifact") || {
-            let steps = jobs["coverage"]["steps"].as_vec().unwrap();
-            steps
-                .iter()
-                .any(|s| text(&s["with"]["pattern"]) == "coverage-part-*")
-        },
+        steps.iter().any(|s| {
+            s["with"]["pattern"].as_str() == Some("coverage-part-*")
+                && s["with"]["merge-multiple"].as_bool() == Some(true)
+        }),
         "the judge does not read every part's files"
     );
 }
