@@ -53,7 +53,7 @@ use geom_surface::ParamSurface;
 
 use crate::IntersectError;
 use crate::general::{Edge, partials, point};
-use crate::solve::Field;
+use crate::solve::{Field, strictly_inside};
 
 /// How many times a stretch may be halved: down to a 4096th of it, so at most 4096 pieces.
 const DEPTH: u32 = 12;
@@ -282,8 +282,7 @@ fn piece(
         };
         let k0 = image([y00, y01], 0, m0, yf0)?;
         let k1 = image([y10, y11], 1, m1, yf1)?;
-        let inside =
-            x0.lo() < k0.lo() && k0.hi() < x0.hi() && x1.lo() < k1.lo() && k1.hi() < x1.hi();
+        let inside = strictly_inside([k0, k1], [x0, x1]);
         if inside {
             let Some(g) = soft(edge.over(&[t, k0, k1], meter))? else {
                 return Ok(None);

@@ -8164,22 +8164,6 @@
       "reason": "A crossing with nothing across it and off the domain stands beside a flagged box, or the trace is broken: an interior crossing always has a box across its side, and that box is settled or flagged. With || the test also accepts a flagged box level with the crossing in one parameter only, which differs only on that broken trace, where the answer is Internal rather than an ended branch."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/boundary.rs",
-      "mutant": "replace < with <= in piece",
-      "line_text": "x0.lo() < k0.lo() && k0.hi() < x0.hi() && x1.lo() < k1.lo() && k1.hi() < x1.hi();",
-      "occurrences": 4,
-      "kind": "known",
-      "reason": "The four strict tests are Krawczyk's interior test, K inside X. With <= one end of K may equal X's to the last bit: K within X still proves a zero in X for every t of the piece and K holds it, but not that it is the only one. Only that equality tells the forms apart. Near zero the box's ends and K's are far apart in units of their spacing; far from zero, where they are a few spacings apart (unit test a_box_that_holds_its_image_only_past_the_domain_proves_nothing, 10^7 out), K is widened by a spacing at each of its three operations, and in every case built (that test, its domain from 1 to 13 spacings, three piece lengths) an end of X that met one end of K met the other, so the mutant refused too. A test needs a curved other surface whose K lands one-sidedly on X's rounded end at a radius the doubling reaches, with the domain ending before the next one; none is built yet."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/boundary.rs",
-      "mutant": "replace && with || in piece",
-      "line_text": "x0.lo() < k0.lo() && k0.hi() < x0.hi() && x1.lo() < k1.lo() && k1.hi() < x1.hi();",
-      "occurrences": 1,
-      "kind": "known",
-      "reason": "The first of the three, (A || B) && C && D: it accepts a K that leaves X on one side in s while lying inside it in r. On a plane K does not depend on X beyond its rounding, and in every case built it left X on both sides or neither. On a curved surface a one-sided K needs a first radius short of the edge's travel, a piece long against the curvature, and there the third equation, enclosed over t and the box independently, is as wide as that travel and refuses the piece (the cause written up as F2 in the pull request that adds this entry): no input yet gets a one-sided K past it. When F2 is fixed this needs a test, such as a circle edge of a sphere's equator against a cylinder, a long piece whose K pokes out above its middle only."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
       "mutant": "replace > with >= in BernsteinCurve<D>::clip",
       "line_text": "if t0 > t1 {",
