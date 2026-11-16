@@ -7431,7 +7431,8 @@
             "**Exact where the data are.** A plane's being square to an axis is a sign on the stored doubles; through an axis, and Villarceau's angle, signs from `geom_num::quadric` on whole-number data. Off the grid an enclosure decides, and a pair it cannot tell is `None`.",
             "**Curve with curve is 12.5.** Each ring comes from a crossing or a tangency that [`crate::curve::curves`] proved, and is tangent where that was.",
             "**The kind is kept.** Lines stay lines, a circle maps to a circle where the map is a turn and to an ellipse otherwise, conics stay conics and NURBS stay NURBS.",
-            "**Whole turns.** A torus or revolution of a part of a turn is `None`, for the general paths."
+            "**Whole turns.** A torus or revolution of a part of a turn is `None`, for the general paths.",
+            "**Where the surface stands.** An extrusion or revolution keeps its shape as built and a placement c + L·x that a transform moves (`geom-surface`'s swept kinds), so each case reads it rebuilt in place first, the same surface on the same parameters: an extrusion's profile and direction moved by any L, a revolution's profile and axis by an L that is exactly a similarity, each moved datum exact (a transform stating no rounding). Any other placement is `None`, never read as if unmoved (issue 917: a wall moved by x ↦ (3x, 3y, −3z) met a cylinder moved with it in no lines)."
           ],
           "job": "Closed forms by reduction (chapter 12.7): tori in special positions, surfaces of revolution and extrusions.",
           "method": {
