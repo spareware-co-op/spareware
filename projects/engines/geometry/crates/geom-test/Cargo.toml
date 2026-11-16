@@ -103,6 +103,10 @@ regex-lite = "=0.1.9"
 # A fixture's names and logs in hexadecimal (src/fixture). MIT OR Apache-2.0, already in the lock
 # (the G21 tools' dependency tree), with its default `alloc` and `std`.
 hex = "=0.4.3"
+# Miri's measuring runs' reports, nextest's JUnit XML, read into a tree by `kernel-quality
+# miri-times` (`miri::read_junit`, decision 32.58). roxmltree 0.21.2: MIT OR Apache-2.0, without
+# its default `positions` feature; its one dependency, memchr, is already in the lock.
+roxmltree = { version = "=0.21.2", default-features = false, features = ["std"] }
 # The exact rationals of the NURBS reference implementation (G57, `nurbs_reference`): big integers
 # and rationals. MIT OR Apache-2.0, the versions geom-num's and geom-linalg's tests use, without
 # the default num-order and dashu-float features, which the reference does not use.

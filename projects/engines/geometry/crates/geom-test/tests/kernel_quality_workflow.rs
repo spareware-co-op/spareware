@@ -58,6 +58,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use geom_test::increment::{self, Since};
+use geom_test::miri;
 use geom_test::quality_ledger::LEDGER_PATH;
 use geom_test::shared::Changes;
 use geom_test::test_scope::Scope;
@@ -653,31 +654,212 @@ fn every_shard_and_partition_runs_once() {
         "{matrix}"
     );
     assert_eq!(miri["strategy"]["fail-fast"].as_bool(), Some(false));
-    // Each partition runs the tests the plan of the recorded times gives it.
+    // Each partition runs its finishing tests; a test of the run with no row fails it (32.58).
     let run = runs(&w, "miri");
     for needle in [
+        "cargo miri nextest list --locked $PACKAGES -E \"not package(geom-pool)\"",
+        "--message-format json > \"$RUNNER_TEMP/miri-list.json\"",
         "kernel-quality -- miri-filter",
-        "--partition \"${{ matrix.partition }}\" --of \"$PARTITIONS\" > \"$RUNNER_TEMP/miri-filter.txt\"",
+        "--partition \"${{ matrix.partition }}\" --of \"$PARTITIONS\"",
+        "--list \"$RUNNER_TEMP/miri-list.json\" > \"$RUNNER_TEMP/miri-filter.txt\"",
         "-E \"not package(geom-pool) & ($(cat \"$RUNNER_TEMP/miri-filter.txt\"))\"",
     ] {
         assert!(run.contains(needle), "{needle}\n{run}");
     }
     assert!(!run.contains("--partition \"hash:"), "{run}");
-    // The recorded times split into that many partitions keep each one's tests within
-    // `PART_SECONDS` at four at once (principle 8), and each filterset fits in one command-line
-    // argument (Linux takes at most 128 KiB in one).
-    let times = geom_test::miri::parse_times(geom_test::miri::TIMES).unwrap();
+    // The finishing tests split into that many partitions keep each one's tests within
+    // `PART_SECONDS` at four at once (principle 8), in the fewest partitions that do, and each
+    // filterset fits in one command-line argument (Linux takes at most 128 KiB in one).
+    let times = miri::finishing(&miri::parse_table(miri::TIMES).unwrap());
     let parts = usize::try_from(n).unwrap();
-    let plan = geom_test::miri::plan(&times, parts).unwrap();
+    let plan = miri::plan(&times, parts).unwrap();
+    let slowest = plan.longest();
     assert!(
-        plan.longest() <= geom_test::miri::PART_SECONDS,
-        "{} s in the slowest of {parts} partitions",
-        plan.longest()
+        slowest <= miri::PART_SECONDS,
+        "{slowest} s in the slowest of {parts}"
+    );
+    assert_eq!(
+        miri::fewest(&times),
+        Some(parts),
+        "not the fewest within the bound"
     );
     for k in 1..=parts {
         let filter = plan.filterset(k).unwrap();
         assert!(filter.len() < 100_000, "partition {k}: {}", filter.len());
     }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn miris_table_is_measured_and_every_unsafe_library_has_a_finishing_test() {
+    // The table reads (no row at the budget, no native-only mark without its measured time, no
+    // test in both states: `miri::parse_table`) and is in the form its one writer,
+    // `kernel-quality miri-times`, gives it, so it was not edited by hand.
+    let rows = geom_test::miri::parse_table(geom_test::miri::TIMES).unwrap();
+    let again = geom_test::miri::write_table(geom_test::miri::TIMES, &[], (1, 1), 1, None, None);
+    assert_eq!(
+        again.as_deref(),
+        Ok(geom_test::miri::TIMES),
+        "miri-times.tsv is not as `kernel-quality miri-times` writes it"
+    );
+    // Each library with unsafe code the kernel uses is driven by a test Miri finishes; geom-pool's
+    // tests have no rows, because Miri runs all of them, under Tree Borrows.
+    let problems = miri::undriven(&rows, miri::UNSAFE_LIBRARIES, TREE_BORROWS_CRATE);
+    assert!(problems.is_empty(), "{problems:#?}");
+    // Every library of the lock with unsafe code that the kernel uses is named, and nothing else.
+    let named: BTreeSet<&str> = geom_test::miri::UNSAFE_LIBRARIES
+        .iter()
+        .map(|l| l.name)
+        .collect();
+    let found = unsafe_libraries();
+    let missing: Vec<&String> = found
+        .iter()
+        .filter(|l| !named.contains(l.as_str()))
+        .collect();
+    let stale: Vec<&&str> = named.iter().filter(|l| !found.contains(**l)).collect();
+    assert!(
+        missing.is_empty() && stale.is_empty(),
+        "libraries with unsafe code that the kernel uses, with no finishing test named in \
+         geom_test::miri::UNSAFE_LIBRARIES: {missing:?}; named there, but not such a library: \
+         {stale:?}"
+    );
+}
+
+/// The registry packages the kernel uses whose own library sources hold the `unsafe` keyword, read
+/// as Rust tokens so comments and strings do not count: for Linux, the kernel crates' normal
+/// dependencies and theirs (what ships), and the registry crates the kernel crates' tests name
+/// directly; never a build script's or a procedural macro's, which Miri does not run, nor what
+/// reaches a test only through a development crate.
+fn unsafe_libraries() -> BTreeSet<String> {
+    let root = root();
+    let out = std::process::Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+        .args([
+            "metadata",
+            "--locked",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            "x86_64-unknown-linux-gnu",
+        ])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let meta: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let packages: BTreeMap<&str, &serde_json::Value> = meta["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p["id"].as_str().unwrap(), p))
+        .collect();
+    let kernel = geom_test::miri::packages(&meta).unwrap();
+    // How far to walk from a package: 0 a kernel crate (its normal dependencies, and its registry
+    // development dependencies themselves), 1 a normal dependency (its own), 2 no further.
+    let mut work: Vec<(&str, u8)> = packages
+        .iter()
+        .filter(|(_, p)| {
+            p["source"].is_null() && kernel.iter().any(|k| p["name"].as_str() == Some(k))
+        })
+        .map(|(id, _)| (*id, 0))
+        .collect();
+    let deps: BTreeMap<&str, &serde_json::Value> = meta["resolve"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| (n["id"].as_str().unwrap(), &n["deps"]))
+        .collect();
+    let mut seen = BTreeSet::new();
+    let mut found = BTreeSet::new();
+    while let Some((id, walk)) = work.pop() {
+        if !seen.insert((id, walk)) {
+            continue;
+        }
+        let p = packages[id];
+        if !p["source"].is_null() && has_unsafe(p) {
+            found.insert(p["name"].as_str().unwrap().to_owned());
+        }
+        for d in deps[id].as_array().unwrap() {
+            let target = packages[d["pkg"].as_str().unwrap()];
+            let kinds: Vec<&serde_json::Value> = d["dep_kinds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|k| &k["kind"])
+                .collect();
+            let normal = kinds.iter().any(|k| k.is_null());
+            let dev = walk == 0 && !target["source"].is_null() && kinds.iter().any(|k| *k == "dev");
+            let macro_only = target["targets"].as_array().unwrap().iter().all(|t| {
+                t["kind"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|k| k == "proc-macro")
+            });
+            if macro_only || walk == 2 {
+                continue;
+            }
+            if normal {
+                work.push((d["pkg"].as_str().unwrap(), 1));
+            } else if dev {
+                work.push((d["pkg"].as_str().unwrap(), 2));
+            }
+        }
+    }
+    found
+}
+
+/// Whether a registry package's library sources (its `src` folder, or the folder of its library
+/// target) hold the `unsafe` keyword as a token.
+fn has_unsafe(package: &serde_json::Value) -> bool {
+    let Some(lib) = package["targets"].as_array().unwrap().iter().find(|t| {
+        t["kind"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|k| matches!(k.as_str(), Some("lib" | "rlib")))
+    }) else {
+        return false;
+    };
+    let src = PathBuf::from(lib["src_path"].as_str().unwrap());
+    let mut dirs = vec![src.parent().unwrap().to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                let text = std::fs::read_to_string(&path).unwrap_or_default();
+                if let Ok(tokens) = text.parse::<proc_macro2::TokenStream>()
+                    && tokens_hold_unsafe(tokens)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Whether a token stream holds the identifier `unsafe`, at any depth.
+fn tokens_hold_unsafe(tokens: proc_macro2::TokenStream) -> bool {
+    let mut work = vec![tokens];
+    while let Some(stream) = work.pop() {
+        for t in stream {
+            match t {
+                proc_macro2::TokenTree::Ident(i) if i == "unsafe" => return true,
+                proc_macro2::TokenTree::Group(g) => work.push(g.stream()),
+                _ => {}
+            }
+        }
+    }
+    false
 }
 
 #[cfg_attr(
