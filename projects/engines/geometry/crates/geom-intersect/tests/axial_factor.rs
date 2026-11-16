@@ -354,8 +354,8 @@ fn a_moved_cylinder_meets_a_coaxial_torus_or_sweep_at_the_same_parameters() {
         SurfaceKind::Torus(Torus::new([0.0, 0.0, 40.0], 5.0, 2.0, up(), (ROUND, ROUND)).unwrap());
     same_pair(&tube, &torus, 2);
     // A sweep of the cylinder's direction runs s·v·(n̂ · d̂) along it: a wall from 30 to 40 high
-    // meets it in two lines. (Only the cylinder is given other factors here: a moved extrusion
-    // keeps its shape unplaced, which the sweep pairs read as it stands.)
+    // meets it in two lines. (Only the cylinder is given other factors here; moved extrusions are
+    // swept_placement.rs's.)
     let profile = segment([-10.0, 3.0, 30.0], [10.0, 3.0, 30.0]);
     let (lo, hi) = profile.domain();
     let wall = SurfaceKind::Extrusion(
