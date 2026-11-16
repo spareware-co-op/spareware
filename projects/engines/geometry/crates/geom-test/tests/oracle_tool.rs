@@ -93,7 +93,16 @@ fn a_mesh_oracle_s_jobs_come_from_its_case_set() {
     assert!(text(&models).contains("cases: manifold-models, 69 jobs"));
     for refused in [
         &["jobs", "manifold", "--cases", "seeded"][..],
-        &["jobs", "manifold", "--cases", "manifold-models", "--seed", "ab", "--count", "5"],
+        &[
+            "jobs",
+            "manifold",
+            "--cases",
+            "manifold-models",
+            "--seed",
+            "ab",
+            "--count",
+            "5",
+        ],
         &["jobs", "manifold", "--cases", "ember-pairs"],
         &["jobs", "geomdl", "--cases", "manifold-models"],
         &["jobs", "manifold", "--seed", "ab"],

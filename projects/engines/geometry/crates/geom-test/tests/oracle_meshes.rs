@@ -68,10 +68,7 @@ fn manifold_s_smaller_models_are_a_case_set() {
     for (k, job) in jobs.iter().enumerate() {
         assert_eq!(job.id, k as u64);
         assert_eq!(job.family, format!("{MANIFOLD_MODELS}/{}", smaller[k / 3]));
-        assert_eq!(
-            job.op,
-            [Op::Union, Op::Intersection, Op::Difference][k % 3]
-        );
+        assert_eq!(job.op, [Op::Union, Op::Intersection, Op::Difference][k % 3]);
         // The copy is the model moved by one vector, forward on every axis.
         assert_eq!(job.a.triangles, job.b.triangles);
         let by: BTreeSet<[i64; 3]> = job
@@ -95,7 +92,10 @@ fn a_case_set_is_named_and_given_what_it_needs() {
     assert_eq!(CASE_SETS, [SEEDED, MANIFOLD_MODELS]);
     let seed = Some((Seed(0x6d65_7368), 150));
     assert_eq!(case_jobs(SEEDED, seed).unwrap(), night());
-    assert_eq!(case_jobs(MANIFOLD_MODELS, None).unwrap(), model_jobs().unwrap());
+    assert_eq!(
+        case_jobs(MANIFOLD_MODELS, None).unwrap(),
+        model_jobs().unwrap()
+    );
     for (cases, given, why) in [
         (SEEDED, None, "needs --seed and --count"),
         (MANIFOLD_MODELS, seed, "takes no --seed or --count"),
