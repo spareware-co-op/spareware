@@ -1,0 +1,124 @@
+# A measurement for Gate 4's piece map (G156, gap 9), on its measurement branch only: the line
+# coverage of the geom-poly, geom-bool and geom-mesh files (and the other Phase 4 crates') that each
+# shared fuzz target's seeded test and each shared benchmark reaches, built as kernel-quality.yml's
+# coverage parts build (the pinned nightly, release with overflow checks and debug assertions,
+# --branch, -Z cross-crate-inline-threshold=never -C link-dead-code). Each unit runs alone in its
+# own process, its profiles cleared first, and its per-file summary is printed as lines
+# "PM <unit> <variant> <file> <covered> <count>" and kept as an artifact.
+# Benchmarks are measured twice: `whole` (inputs built and one pass) and `kernel` (the counters
+# zeroed after the inputs are built, so only the measured kernel's lines count).
+name: G156 piece map coverage
+
+on:
+  push:
+    branches: [measure/g156-piece-map-coverage]
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: "1.99.0"
+  RUST_NIGHTLY: "nightly-2026-10-01"
+  CARGO_LLVM_COV_VERSION: "0.9.1"
+  CARGO_TERM_COLOR: never
+  CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "true"
+  CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+
+jobs:
+  measure:
+    name: Coverage of ${{ matrix.unit }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        unit: [fuzz-planes, fuzz-exact, fuzz-cdt, fuzz-solids, bench-scenario, bench-mesh, bench-plane]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with llvm-tools
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component llvm-tools-preview
+          rustc "+$RUST_NIGHTLY" -vV
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: false
+          key: coverage
+      - name: Install cargo-llvm-cov ${{ env.CARGO_LLVM_COV_VERSION }}
+        run: cargo install --locked cargo-llvm-cov --version "$CARGO_LLVM_COV_VERSION"
+      - name: Measure each unit
+        env:
+          UNIT: ${{ matrix.unit }}
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          RUSTFLAGS: -Z cross-crate-inline-threshold=never -C link-dead-code
+        run: |
+          set -u
+          out="$RUNNER_TEMP/pm"
+          mkdir -p "$out"
+          show() { # label variant json
+            python3 - "$1" "$2" "$3" <<'PY'
+          import json, re, sys
+          label, variant, path = sys.argv[1:4]
+          data = json.load(open(path))
+          for f in data["data"][0]["files"]:
+              name = f["filename"]
+              m = re.search(r"crates/(geom-(?:poly|bool|mesh|num|topo|op|check|name|make|bvh))/src/(.*)$", name)
+              if not m:
+                  continue
+              lines = f["summary"]["lines"]
+              print(f"PM\t{label}\t{variant}\t{m.group(1)}/src/{m.group(2)}\t{lines['covered']}\t{lines['count']}")
+          PY
+          }
+          clear() { find target -name '*.profraw' -delete 2>/dev/null || true; }
+          one() { # label variant package test filter [names]
+            local label=$1 variant=$2 pkg=$3 test=$4 filter=$5 names=${6:-}
+            clear
+            echo "::group::$label $variant"
+            if PIECE_MAP_NAMES="$names" cargo llvm-cov --no-report --no-clean --locked -p "$pkg" --release --branch \
+                --test "$test" -- --exact "$filter" --test-threads 1 --nocapture; then
+              cargo llvm-cov report --release --branch --json --summary-only \
+                --output-path "$out/$label.$variant.json"
+              echo "::endgroup::"
+              show "$label" "$variant" "$out/$label.$variant.json" | tee "$out/$label.$variant.tsv"
+            else
+              echo "::endgroup::"
+              echo "PMFAIL $label $variant"
+            fi
+          }
+          bench() { # family, then one benchmark op per argument
+            local family=$1; shift
+            for op in "$@"; do one "$family/$op" whole geom-bench piece_map_whole run_named "$family/$op/"; done
+            one "$family" whole geom-bench piece_map_whole run_named "$family/"
+            for op in "$@"; do one "$family/$op" kernel geom-bench piece_map_kernel run_named "$family/$op/"; done
+            one "$family" kernel geom-bench piece_map_kernel run_named "$family/"
+          }
+          case "$UNIT" in
+            fuzz-*)
+              target=${UNIT#fuzz-}
+              one "$target" seeded geom-fuzz "$target" "${target}_seeded"
+              ;;
+            bench-scenario)
+              bench scenario openings moved_door slab_holes union one_selection three_selections storey
+              ;;
+            bench-mesh)
+              bench mesh cdt exact_build locate boolean hull slice point_point point_line point_plane \
+                line_line closest_dots triangles envelope decimate remesh
+              ;;
+            bench-plane)
+              one plane whole geom-bench piece_map_whole run_named "plane/"
+              one plane kernel geom-bench piece_map_kernel run_named "plane/"
+              ;;
+          esac
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: piece-map-${{ matrix.unit }}
+          path: ${{ runner.temp }}/pm
+          if-no-files-found: ignore
