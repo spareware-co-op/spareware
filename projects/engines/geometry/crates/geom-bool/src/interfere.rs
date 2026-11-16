@@ -482,9 +482,10 @@ fn covered(region: &Deferred, splits: &[SplitEdge], common: &[CommonBlock]) -> b
 
 /// [`covered`] on one edge: whether the span `t` of `edge` reaches into a piece of it, past the
 /// paves at the piece's ends, and into none but those in a common block with a piece of `other`.
-/// Only a common block's members are counted, and no member runs round a seam ([`crate::common`]
-/// leaves such a block to the face splitting), so each runs forward from its first pave to its
-/// last; a piece with no paves, a whole closed edge, is in no block and holds nothing.
+/// Only a common block's members are counted. A piece runs forward from its first pave to its
+/// last, or, round a closed edge's seam, from its last pave to the domain's end and on from the
+/// start to its first: the span reaches into it past the one pave or before the other. A piece
+/// with no paves, a whole closed edge, is in no block and holds nothing.
 fn held(
     t: Interval,
     (edge, other): (usize, usize),
@@ -508,12 +509,15 @@ fn held(
         let (Some(from), Some(to)) = (piece.block.from, piece.block.to) else {
             continue;
         };
-        // The piece ends where the span starts or before: the span does not reach into it.
-        if to.t.lo() <= t.lo() {
-            continue;
-        }
-        // Nor where the piece starts where the span ends or after.
-        if from.t.hi() >= t.hi() {
+        // The span ends past where the piece starts, and starts before where it ends.
+        let past_start = from.t.hi() < t.hi();
+        let before_end = t.lo() < to.t.lo();
+        let reaches = if piece.block.wraps {
+            past_start || before_end
+        } else {
+            past_start && before_end
+        };
+        if !reaches {
             continue;
         }
         if !paired(k) {

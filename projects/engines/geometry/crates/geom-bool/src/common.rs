@@ -6,11 +6,14 @@
 //! Two straight blocks on grid data are compared exactly: their lines are one when their
 //! directions and the gap between their origins are parallel, in whole numbers. Any other pair is
 //! held to the contact rule over its whole length, both ways: block A is cut into pieces, each
-//! piece's box is measured from the other block's curve by the certified projection
-//! (`geom_intersect::project::project_curve`), and the pair is one only when no piece is proven
-//! apart and every piece, at the finest refinement, lies within the contact radius. So a circle
-//! stored as a circle and a NURBS close to it form a common block only by the contact rule, and a
-//! circle and a line through the same two vertices never do.
+//! piece's box is measured from block B by the certified projection on B's own stretch of its
+//! curve (`geom_intersect::project::project_curve_over`), and the pair is one only when no piece
+//! is proven apart and every piece, at the finest refinement, lies within the contact radius. So a
+//! circle stored as a circle and a NURBS close to it form a common block only by the contact rule,
+//! and a circle and a line through the same two vertices never do. A block that runs round a
+//! closed edge's seam is two stretches of its parameter, one each side of the seam, and is
+//! measured and cut on both; so the two halves of a closed circle cut at two vertices, and of a
+//! NURBS copy of it, are two common blocks, each half with its copy and not with the other half.
 //!
 //! Guarantees:
 //!
@@ -30,17 +33,18 @@
 //! (`projects/engines/geometry/architecture/11-booleans.md`), the common blocks of `OpenCascade`'s
 //! General Fuse studied for method only
 //! (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`), decided exactly within one
-//! analytic kind and by the contact rule across kinds. The distance of a curve from another is
+//! analytic kind and by the contact rule across kinds. The distance of a block from another is
 //! bounded both ways on the boxes of its pieces: a ball round each box, and the certified distance
-//! of the ball's centre from the other curve.
+//! of the ball's centre from the other block, the nearest of its stretches.
 //!
 //! Cost: one exact test per straight pair; otherwise at most 2^`DEEPEST` pieces each way, each a
-//! box and one certified projection, all charged to the meter. No recursion.
+//! box and one certified projection per stretch of the other block (at most two), all charged to
+//! the meter. No recursion.
 
 use alloc::vec::Vec;
 
 use geom_intersect::IntersectError;
-use geom_intersect::project::{Projection, project_curve};
+use geom_intersect::project::{Projection, project_curve_over};
 use geom_num::interval::Interval;
 use geom_num::math::round_ties_even;
 use geom_num::{NumError, Sign};
@@ -130,11 +134,14 @@ enum Side {
     Touch(Interval),
 }
 
-/// An edge's curve and a span of its parameter.
-type Span<'a> = (&'a CurveKind<3>, (f64, f64));
+/// An edge's curve and the stretches of its parameter a block covers: one, or two for a block that
+/// runs round a closed curve's seam.
+type Span<'a> = (&'a CurveKind<3>, Vec<(f64, f64)>);
 
-/// The edge curve and parameter span of a block: `inner` gives the span inside the end paves'
-/// enclosures, otherwise the span covering them.
+/// The edge curve and parameter stretches of a block: `inner` gives them inside the end paves'
+/// enclosures, otherwise covering them. A block that runs round the seam, from the last pave of a
+/// closed edge to its first, is two stretches: from the last pave to the domain's end, and from
+/// the domain's start to the first pave (a point where that pave stands at the start itself).
 fn span_of<'a>(
     arr: &'a Arrangement,
     block: &PaveBlock,
@@ -151,20 +158,21 @@ fn span_of<'a>(
     let (Some(from), Some(to)) = (block.from, block.to) else {
         return Ok(None);
     };
-    // A block that runs round a seam is not one interval of its edge's parameter; it is left to
-    // the face splitting, which cuts at the seam.
-    if block.wraps {
-        return Ok(None);
-    }
     let (a, b) = curve.domain();
-    // Either span runs forward: an edge's paves are in proven order, each enclosure ending before
-    // the next begins (`crate::pave::order`), and a block runs between two neighbours.
-    let span = if inner {
-        (from.t.hi(), to.t.lo())
+    let (start, end) = if inner {
+        (lesser(from.t.hi(), b), greater(to.t.lo(), a))
     } else {
         (greater(from.t.lo(), a), lesser(to.t.hi(), b))
     };
-    Ok(Some((curve, span)))
+    // Each stretch runs forward: an edge's paves are in proven order, each enclosure ending before
+    // the next begins (`crate::pave::order`), and a block runs between two neighbours, or from the
+    // last round to the first.
+    let stretches = if block.wraps {
+        alloc::vec![(start, b), (a, end)]
+    } else {
+        alloc::vec![(start, end)]
+    };
+    Ok(Some((curve, stretches)))
 }
 
 /// The grid-aligned centre of a box and the radius of a ball about it holding the box.
@@ -181,52 +189,58 @@ fn ball(lo: [f64; 3], hi: [f64; 3]) -> Result<([f64; 3], f64), NumError> {
     Ok((centre, radius))
 }
 
-/// The one-sided distance of block `a` (its inner span) from block `b` (its outer span), held to
-/// the contact rule piece by piece.
+/// The distance of `centre` from a block: the nearest of its stretches of the curve, each searched
+/// on its own, so a nearest point of the curve outside the block is never taken for one of the
+/// block's. The upper end is infinite where a search is left undecided.
+fn from_block(
+    far_side: &Span<'_>,
+    centre: &[f64; 3],
+    floor: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Interval, BuildError> {
+    let (curve, stretches) = far_side;
+    let (mut lo, mut hi) = (f64::INFINITY, f64::INFINITY);
+    for &stretch in stretches {
+        let d = match project_curve_over(curve, stretch, centre, floor, meter)? {
+            // The nearest point found: of those whose distance starts lowest, the first.
+            Projection::Points(found) => found
+                .iter()
+                .map(|x| x.distance)
+                .min_by(|x, y| x.lo().total_cmp(&y.lo()))
+                .ok_or(IntersectError::Internal)?,
+            Projection::Set { distance, .. } => distance,
+            Projection::NonIsolated { .. } => Interval::new(0.0, f64::INFINITY)?,
+        };
+        lo = lesser(lo, d.lo());
+        hi = lesser(hi, d.hi());
+    }
+    Ok(Interval::new(lo, hi)?)
+}
+
+/// The one-sided distance of block `a` (its inner stretches) from block `b` (its outer ones), held
+/// to the contact rule piece by piece.
 fn one_side(
-    near_side: Span<'_>,
-    far_side: Span<'_>,
+    near_side: &Span<'_>,
+    far_side: &Span<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Side, BuildError> {
-    let (curve_a, (a0, a1)) = near_side;
-    let (curve_b, (b0, b1)) = far_side;
+    let (curve_a, stretches) = near_side;
     let mut widest: Option<Interval> = None;
-    let mut stack: Vec<(f64, f64, u32)> = alloc::vec![(a0, a1, 0)];
+    let mut stack: Vec<(f64, f64, u32)> = stretches.iter().map(|&(a0, a1)| (a0, a1, 0)).collect();
     while let Some((lo, hi, depth)) = stack.pop() {
         meter.charge(1).map_err(IntersectError::from)?;
         let bounds = curve_a
             .bound((lo, hi), meter)
             .map_err(IntersectError::from)?;
         let (centre, reach) = ball(bounds.lo, bounds.hi)?;
-        let floor = floor_at(depth.min(REFINEMENTS));
-        let (near, inside) = match project_curve(curve_b, &centre, floor, meter)? {
-            Projection::Points(found) => {
-                // The nearest point found: of those whose distance starts lowest, the first.
-                let nearest = found
-                    .iter()
-                    .min_by(|x, y| x.distance.lo().total_cmp(&y.distance.lo()))
-                    .ok_or(IntersectError::Internal)?;
-                let param = nearest
-                    .at
-                    .first()
-                    .copied()
-                    .ok_or(IntersectError::Internal)?;
-                (nearest.distance, param.lo() >= b0 && param.hi() <= b1)
-            }
-            Projection::Set { distance, .. } => (distance, true),
-            Projection::NonIsolated { .. } => (Interval::new(0.0, f64::MAX)?, false),
-        };
+        let near = from_block(far_side, &centre, floor_at(depth.min(REFINEMENTS)), meter)?;
         // The distance of every point of the piece from the other block: at least the centre's
-        // distance from the whole curve less the radius, and at most its distance from a point of
-        // the block plus the radius. It is read by the contact rule: above zero is apart, and at
-        // the finest refinement, holding zero within `ε_fit` touches (the enclosure's upper end is
-        // then its largest size, since the lower is above minus the radius).
+        // distance from the block less the radius, and at most that distance plus the radius. It
+        // is read by the contact rule: above zero is apart, and at the finest refinement, holding
+        // zero within `ε_fit` touches (the enclosure's upper end is then its largest size, since
+        // the lower is above minus the radius).
         let floor = near.lo() - reach;
-        let ceiling = if inside {
-            near.hi() + reach
-        } else {
-            f64::INFINITY
-        };
+        let ceiling = near.hi() + reach;
         let enclosure = Interval::new(floor, ceiling)?;
         let verdict = judge(enclosure);
         if verdict == Verdict::Decided(Sign::Positive) {
@@ -269,8 +283,8 @@ fn coincide(
     let (Some(inner_a), Some(inner_b)) = (span_of(arr, a, true)?, span_of(arr, b, true)?) else {
         return Ok(None);
     };
-    let there = one_side(inner_a, outer_b, meter)?;
-    let back = one_side(inner_b, outer_a, meter)?;
+    let there = one_side(&inner_a, &outer_b, meter)?;
+    let back = one_side(&inner_b, &outer_a, meter)?;
     match (there, back) {
         (Side::Touch(x), Side::Touch(y)) => {
             Ok(Some(Proof::Contact(if x.hi() >= y.hi() { x } else { y })))

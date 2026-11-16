@@ -4,7 +4,8 @@
 //! 2^k pieces; each piece's ball (its box's grid-aligned centre and the radius holding the box) is
 //! measured from the other line, and at the finest refinement (k = 8) a piece is apart when the
 //! line lies further than its radius, and touching when it lies within the contact radius of
-//! every point of the ball.
+//! every point of the ball. Then a closed circle and its NURBS copy, cut into halves that share
+//! both their vertices, among them halves that run round the seam.
 
 #![allow(
     clippy::unwrap_used,
@@ -19,7 +20,7 @@ use geom_bool::carrier::PointGeom;
 use geom_bool::common::Proof;
 use geom_bool::interfere::{Arrangement, EdgeIn, Interfered, VertexIn, interfere};
 use geom_bool::merge::default_remaining;
-use geom_curve::{CurveKind, Line};
+use geom_curve::{Circle, CurveKind, Frame, Line, ParamCurve};
 use geom_num::P3;
 use geom_run::{Budget, Exec, WorkMeter};
 
@@ -109,6 +110,59 @@ fn a_block_s_proof_is_its_widest_enclosure_both_ways() {
     let (members, widest) = proof_of(&out);
     assert_eq!(members, 2);
     assert!(2.6 < widest && widest < 2.8, "{widest}");
+}
+
+/// A closed circle of radius 1105 about the origin, starting from (1105, 0), and its NURBS copy,
+/// of two operands, each cut by a third operand's vertices at `cut`.
+fn closed_circle_and_copy(cut: [[i64; 2]; 2]) -> Interfered {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 2.0)).unwrap();
+    let copy = CurveKind::Circle(circle.clone())
+        .to_nurbs(&mut meter())
+        .unwrap()
+        .value
+        .curve;
+    let mut arr = Arrangement::default();
+    for (operand, curve) in [(0, CurveKind::Circle(circle)), (1, CurveKind::Nurbs(copy))] {
+        let curve = arr.carriers.add_curve(curve).unwrap();
+        arr.edges.push(EdgeIn {
+            curve,
+            ends: None,
+            operand,
+        });
+    }
+    for [x, y] in cut {
+        arr.vertices.push(VertexIn {
+            point: PointGeom::Grid(P3::new(x, y, 0).unwrap()),
+            operand: 2,
+        });
+    }
+    interfere(&arr, default_remaining(), &Exec::serial(), &mut meter()).unwrap()
+}
+
+/// The circle and its copy cut at (1105, 0) and (−1105, 0): each is two halves between the same
+/// two vertices, the lower half running from (−1105, 0) round to the seam at (1105, 0), where the
+/// vertex stands at the start of both domains. Each half is one block with the same half of the
+/// other curve, and not with the other half, whose nearest points to it lie on the curve but off
+/// that half: two blocks of two, the upper halves (pieces 0 and 2) and the lower (1 and 3).
+#[test]
+fn a_closed_circle_and_its_copy_cut_across_are_two_blocks() {
+    let out = closed_circle_and_copy([[1105, 0], [-1105, 0]]);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 2], vec![1, 3]], "{:?}", out.common);
+}
+
+/// The same cut at (0, 1105) and (0, −1105): each right half runs round its curve's seam, from
+/// the last vertex on to the domain's end and from the start to the first, and is one block with
+/// the other right half, as the left halves are.
+#[test]
+fn halves_that_run_round_the_seam_are_one_block() {
+    let out = closed_circle_and_copy([[0, 1105], [0, -1105]]);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 2], vec![1, 3]], "{:?}", out.common);
+    for piece in [1, 3] {
+        assert!(out.splits[piece].block.wraps, "{:?}", out.splits[piece]);
+    }
 }
 
 /// Three operands' edges between the same two points, on the axis, a quarter step above it and a

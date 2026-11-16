@@ -349,3 +349,33 @@ fn a_region_reaching_past_an_overlap_into_a_piece_of_no_block_is_refused() {
     let (a, b, _) = refused(run(&arr));
     assert_eq!((a, b), (Entity::Edge(0), Entity::Edge(1)));
 }
+
+/// The first circle whole, a closed edge starting from (1105, 0), and a NURBS copy of its right
+/// half from (0, −1105) to (0, 1105), of another operand: the copy's ends cut the circle into its
+/// left half and its right half, which runs round the seam. The right half is one block with the
+/// copy, and the region where they overlap, which reaches into the right half on both sides of
+/// the seam, stands.
+#[test]
+fn a_copy_of_the_half_across_a_circle_s_seam_is_one_block_with_it() {
+    let mut arr = arrangement(vec![CurveKind::Circle(first([1.0, 0.0]))], &[]);
+    between(&mut arr, copy(&arc(1.0)), [[0, -1105], [0, 1105]], 1);
+    let out = run(&arr).unwrap();
+    assert!(out.splits[1].block.wraps, "{:?}", out.splits[1]);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![1, 2]], "{:?}", out.common);
+}
+
+/// The first circle whole and a NURBS copy of its upper half, from (1105, 0) to (−1105, 0): the
+/// copy's ends cut the circle into the upper half, one block with the copy, and the lower half,
+/// which runs from (−1105, 0) round to the seam and is in no block. The region where the circle
+/// and the copy overlap reaches a little below both ends of the copy, past the pave at (−1105, 0)
+/// into the lower half, so it is not covered on the circle and is refused.
+#[test]
+fn a_region_reaching_into_a_piece_that_runs_to_the_seam_is_refused() {
+    let mut arr = arrangement(vec![CurveKind::Circle(first([1.0, 0.0]))], &[]);
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let upper = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 1.0)).unwrap();
+    between(&mut arr, copy(&upper), [[1105, 0], [-1105, 0]], 1);
+    let (a, b, _) = refused(run(&arr));
+    assert_eq!((a, b), (Entity::Edge(0), Entity::Edge(1)));
+}

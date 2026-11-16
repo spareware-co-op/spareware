@@ -1,12 +1,13 @@
 //! Projection and inversion: the nearest points of a curve or surface to a point, proven (12.4).
 //!
 //! What it does: [`project_curve`] and [`project_surface`] find every nearest point of a kind to a
-//! point. A line's foot and a plane's are closed forms. Everything else takes Ma and Hewitt's
-//! pruning, made certified: a work list of parameter spans, each dropped once a box around it lies
-//! further than the best distance so far, or once its distance's derivative cannot vanish, and the
-//! ends of a curve and the edges of a surface added as candidates, since a minimum on the boundary
-//! need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters of a point known
-//! to lie on a kind. A point on a round kind's axis, or on the axis of a surface of revolution
+//! point, and [`project_curve_over`] those of a part of a curve's domain, whose ends it takes as
+//! the curve's own. A line's foot and a plane's are closed forms. Everything else takes Ma and
+//! Hewitt's pruning, made certified: a work list of parameter spans, each dropped once a box
+//! around it lies further than the best distance so far, or once its distance's derivative cannot
+//! vanish, and the ends of a curve and the edges of a surface added as candidates, since a minimum
+//! on the boundary need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters
+//! of a point known to lie on a kind. A point on a round kind's axis, or on the axis of a surface of revolution
 //! that has only been moved, has a continuum of nearest points, returned as a typed [`Continuum`]
 //! rather than found by search. A closed direction's two ends are one seam: boxes undecided at
 //! both ends of it hold one point, reported once from each side.
@@ -228,9 +229,15 @@ trait Path<const D: usize> {
     ) -> Result<([Interval; D], [Interval; D]), IntersectError>;
 }
 
-impl<const D: usize> Path<D> for CurveKind<D> {
+/// A curve over a part of its domain, the part's ends taken as the path's own.
+struct Over<'a, const D: usize> {
+    curve: &'a CurveKind<D>,
+    span: (f64, f64),
+}
+
+impl<const D: usize> Path<D> for Over<'_, D> {
     fn span(&self) -> (f64, f64) {
-        self.domain()
+        self.span
     }
 
     fn around(
@@ -238,7 +245,7 @@ impl<const D: usize> Path<D> for CurveKind<D> {
         span: (f64, f64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; D], IntersectError> {
-        boxed(&self.bound(span, meter)?)
+        boxed(&self.curve.bound(span, meter)?)
     }
 
     fn derivative(
@@ -247,7 +254,7 @@ impl<const D: usize> Path<D> for CurveKind<D> {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<[Interval; D]>, IntersectError> {
-        match self.derivative_bound(span, order, meter)? {
+        match self.curve.derivative_bound(span, order, meter)? {
             DerivativeBound::Bounded(bounds) => Ok(Some(boxed(&bounds)?)),
             DerivativeBound::Unbounded => Ok(None),
         }
@@ -259,7 +266,7 @@ impl<const D: usize> Path<D> for CurveKind<D> {
         side: Limit,
         meter: &mut WorkMeter<'_>,
     ) -> Result<([Interval; D], [Interval; D]), IntersectError> {
-        let found = self.enclose(t, side, 1, meter)?;
+        let found = self.curve.enclose(t, side, 1, meter)?;
         match found.as_slice() {
             [point, first, ..] => Ok((*point, *first)),
             _ => Err(IntersectError::Internal),
@@ -644,18 +651,35 @@ pub fn project_curve<const D: usize>(
     floor: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Projection<1, D>, IntersectError> {
+    project_curve_over(curve, curve.domain(), p, floor, meter)
+}
+
+/// The nearest points to `p` of `curve` over `span`, a part of its domain, to a floor of `floor`
+/// in space: [`project_curve`] on that part of the curve, whose ends are the part's own.
+///
+/// # Errors
+///
+/// As [`project_curve`]; the curve's own error for a span outside its domain.
+pub fn project_curve_over<const D: usize>(
+    curve: &CurveKind<D>,
+    span: (f64, f64),
+    p: &[f64; D],
+    floor: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Projection<1, D>, IntersectError> {
     if floor <= 0.0 || floor.is_nan() {
         return Err(IntersectError::InvalidInput);
     }
+    let over = Over { curve, span };
     if let CurveKind::Line(line) = curve {
         let foot = line_foot(&line.origin(), &line.direction(), p)?;
-        let (a, b) = curve.domain();
+        let (a, b) = span;
         let (lo, hi) = (
             smaller(larger(foot.lo(), a), b),
             smaller(larger(foot.hi(), a), b),
         );
-        let (low, _) = Path::at(curve, lo, Limit::FromRight, meter)?;
-        let (high, _) = Path::at(curve, hi, Limit::FromLeft, meter)?;
+        let (low, _) = over.at(lo, Limit::FromRight, meter)?;
+        let (high, _) = over.at(hi, Limit::FromLeft, meter)?;
         let mut point = low;
         for (o, other) in point.iter_mut().zip(high) {
             *o = Interval::new(smaller(o.lo(), other.lo()), larger(o.hi(), other.hi()))?;
@@ -687,7 +711,7 @@ pub fn project_curve<const D: usize>(
             });
         }
     }
-    settled(curve, p, floor, meter)
+    settled(&over, p, floor, meter)
 }
 
 /// One path's search, and its answer.
