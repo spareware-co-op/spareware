@@ -217,9 +217,14 @@ fn to_half_plane(on: &Axis, at: Vector) -> Result<Option<Affine<2>>, IntersectEr
     Ok(Some(Affine::onto(on.at, [out, on.along])?))
 }
 
-/// The map to the half-plane of `on` that holds the profile `kind`, read at its middle, if the
-/// curve lies in that half-plane: decided from its own data, exactly, by [`in_half_plane`]. The
-/// axis is the profile's as stored, through `c` along `e`.
+/// The map to the half-plane of `on` that holds the profile `kind`, if the curve lies in that
+/// half-plane: decided from its own data, exactly, by [`in_half_plane`]. The axis is the profile's
+/// as stored, through `c` along `e`. The side is read at a circle's centre, which that proof needs
+/// off the axis, and at any other curve's middle. The map is read at the middle, as it always was,
+/// so no meridian moves; where the middle is on the axis, as a horn torus's circle has it, at the
+/// centre. (An ellipse's or a parabola's middle is nearer its centre than the radius of the ball
+/// [`in_half_plane`] proves clear, strictly, as its axes are not parallel; so where that proof
+/// holds the middle is off the axis, on the centre's side, and the middle serves.)
 fn half_plane_of(
     on: &Axis,
     (c, e): ([f64; 3], [f64; 3]),
@@ -227,10 +232,18 @@ fn half_plane_of(
 ) -> Result<Option<Affine<2>>, IntersectError> {
     let (lo, hi) = finite(kind)?;
     let middle_of = kind.point(lo * 0.5 + hi * 0.5, geom_nurbs::Limit::FromRight)?;
-    let Some(map) = to_half_plane(on, lift(middle_of)?)? else {
-        return Ok(None);
+    let anchor = match kind {
+        CurveKind::Circle(x) => x.center(),
+        _ => middle_of,
     };
-    Ok(in_half_plane(&Turn::new(c, e, middle_of), kind, (lo, hi)).then_some(map))
+    let map = match to_half_plane(on, lift(middle_of)?)? {
+        Some(map) => map,
+        None => match to_half_plane(on, lift(anchor)?)? {
+            Some(map) => map,
+            None => return Ok(None),
+        },
+    };
+    Ok(in_half_plane(&Turn::new(c, e, anchor), kind, (lo, hi)).then_some(map))
 }
 
 /// Below this a product's error-free parts may underflow (Dekker's product is exact from
@@ -472,8 +485,9 @@ fn axes_reach(axes: &Axes<3>) -> Exact {
 /// ends; a circle by its plane, through the axis, and its centre at least its radius off the
 /// axis; an ellipse or a parabola by its plane and a ball about its centre that holds it; a NURBS
 /// curve by every control point lying in the plane and on the side (its weights are positive, so
-/// it is in their convex hull). What none of these proves is `false`, for the general paths: a
-/// hyperbola, an arc whose whole circle reaches across the axis, another kind.
+/// it is in their convex hull); a curve on part of its span by the curve it is part of. What none
+/// of these proves is `false`, for the general paths: a hyperbola, an arc whose whole circle
+/// reaches across the axis, another kind.
 fn in_half_plane(turn: &Turn, kind: &CurveKind<3>, (lo, hi): (f64, f64)) -> bool {
     match kind {
         CurveKind::Line(l) => {
@@ -533,6 +547,9 @@ fn in_half_plane(turn: &Turn, kind: &CurveKind<3>, (lo, hi): (f64, f64)) -> bool
             };
             hull.iter().all(|w| Turn::square(&normal, w)) && turn.beside(&hull)
         }
+        // A curve on part of its span, as a profile on part of its span is read: where the whole
+        // curve is a meridian, so is any part of it.
+        CurveKind::Trimmed(t) => in_half_plane(turn, &CurveKind::from(t.basis().clone()), (lo, hi)),
         _ => false,
     }
 }

@@ -236,6 +236,15 @@ fn a_nurbs_profile_is_a_meridian_by_its_control_points() {
     ));
     let r = natural(&level(1.5), &flat, &mut meter()).unwrap().unwrap();
     assert_rings(&r, &[(2.75, 1.5)]);
+    // On part of its span, t in [0, 1/2], z = 3t: a part of a meridian is one. z = 1 cuts it at
+    // t = 1/3, ρ = 16/27 + 4/3 + 2/3 + 2/27 = 8/3; z = 2 is past its part.
+    let curve = CurveKind::Nurbs(Curve::new(basis.clone(), &points).unwrap());
+    let part = Trimmed::new(Basis::try_from(curve).unwrap(), (0.0, 0.5)).unwrap();
+    let part = SurfaceKind::Revolution(Revolution::new(part, [0.0; 3], up(), ROUND).unwrap());
+    let r = natural(&level(1.0), &part, &mut meter()).unwrap().unwrap();
+    assert_rings(&r, &[(8.0 / 3.0, 1.0)]);
+    let r = natural(&level(2.0), &part, &mut meter()).unwrap().unwrap();
+    assert_rings(&r, &[]);
     // From the axis outward, its first control point on it: still a meridian.
     let points = [
         [0.0, 0.0, 0.0],
@@ -358,8 +367,8 @@ fn an_ellipse_or_a_parabola_is_a_meridian_by_its_plane_and_a_ball_about_its_cent
     let e = Ellipse::new([2.0, 0.0, 0.0], by_vectors, ROUND).unwrap();
     let r = revolution(CurveKind::Ellipse(e));
     assert!(natural(&level(0.0), &r, &mut meter()).unwrap().is_none());
-    // ρ = 3 + t², z = t for t in [−1, 1]: z = 1/2 cuts ρ = 3.25. Its ball, (1 + 1)(1 + 1) = 4
-    // about ρ = 3, stays off the axis; about ρ = 2 it reaches across.
+    // ρ = 3 + t², z = t for t in [−1, 1]: z = 1/2 cuts ρ = 3.25. Its ball, of squared radius
+    // (1 + 1)(1 + 1) = 4 about ρ = 3, stays off the axis.
     let flat = Axes::Vectors {
         u: [1.0, 0.0, 0.0],
         v: [0.0, 0.0, 1.0],
@@ -373,7 +382,22 @@ fn an_ellipse_or_a_parabola_is_a_meridian_by_its_plane_and_a_ball_about_its_cent
     .unwrap()
     .unwrap();
     assert_rings(&r, &[(3.25, 0.5)]);
+    // About ρ = 2 the ball, of radius 2, touches the axis and does not cross it, so the parabola,
+    // ρ = 2 + t² ≥ 2, is proven in the half-plane and z = 1/2 cuts ρ = 2.25. (This case was
+    // written expecting a refusal, as if touching were crossing; a closed ball that touches the
+    // axis lies in the closed half-plane, as a horn torus's circle does.)
     let p = Parabola::new([2.0, 0.0, 0.0], flat, (-1.0, 1.0)).unwrap();
+    let r = natural(
+        &level(0.5),
+        &revolution(CurveKind::Parabola(p)),
+        &mut meter(),
+    )
+    .unwrap()
+    .unwrap();
+    assert_rings(&r, &[(2.25, 0.5)]);
+    // About ρ = 1.5 the ball reaches across the axis: left to the general paths, though the
+    // parabola itself does not cross it.
+    let p = Parabola::new([1.5, 0.0, 0.0], flat, (-1.0, 1.0)).unwrap();
     let r = revolution(CurveKind::Parabola(p));
     assert!(natural(&level(0.5), &r, &mut meter()).unwrap().is_none());
     // A hyperbola has no ball here: left to the general paths.
