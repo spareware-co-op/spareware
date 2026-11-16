@@ -19,9 +19,7 @@
 //!   pull request's Linux job (`linux`) together cover every native runner in release and debug,
 //!   once each; the suites run optimised with overflow checks and debug assertions on, on Linux
 //!   x86-64 for a pull request and on every other native runner in the queue, with one plain debug
-//!   run on Linux x86-64; and each release leg of `test` shares its work among its parts with every
-//!   golden and test step on exactly one part, each golden build's `--part j/m` shares whole, and
-//!   geom-num's library, binaries, doctests and every test target once in each build.
+//!   run on Linux x86-64.
 //! - `each_change_is_measured_against_its_base_and_marked_once`: `changes` measures a pull request
 //!   against its merge commit's first parent, the queue against the queue's base and a push against
 //!   the commit main was at; only the merge queue's last job marks a tree as tested, under the name
@@ -33,7 +31,9 @@
 //!   is there; the merge base's counts are restored only from a run of main or of the same pull
 //!   request with the same workflow file, after their manifest is checked, and a missing count is
 //!   measured (`kept` is false unless the restore succeeded, and the measuring step runs then);
-//!   and the merge base is measured and kept before any step runs the change's own code.
+//!   the merge base is measured and kept in parts that never run the change's own code; and the
+//!   parts are geom-bench/parts.tsv's, the change's wait for the merge base's, and each leg's judge
+//!   waits for both, judges when a part failed and checks every part of both sides.
 //!
 //! Each check is also shown to fail on a seeded violation.
 
@@ -383,7 +383,6 @@ fn leg_problems(kernel: &str) -> Vec<String> {
         ));
     }
     found.extend(linux_part_problems(&w));
-    found.extend(test_part_problems(&w, &geom_num_tests()));
     found
 }
 
@@ -466,164 +465,6 @@ fn linux_part_problems(w: &Yaml) -> Vec<String> {
         }
     }
     found
-}
-
-/// The first letters a test-target share `[x-y]*` takes, or `None` for any other form, so a new
-/// form is looked at, not passed.
-fn letters(share: &str) -> Option<core::ops::RangeInclusive<char>> {
-    let inner = share.strip_prefix("'[")?.strip_suffix("]*'")?;
-    let mut chars = inner.chars();
-    let (from, dash, to) = (chars.next()?, chars.next()?, chars.next()?);
-    (chars.next().is_none() && dash == '-' && from.is_ascii_lowercase() && to.is_ascii_lowercase())
-        .then_some(from..=to)
-}
-
-/// What is wrong with how `test` shares a release leg among its parts: parts not 1 to n or a name
-/// that does not count them, a debug leg on more than one part, a heavy step on no part or on more
-/// than one, a golden step's `--part j/m` shares not exactly 1 to m in each build (one dropped from
-/// every part), and geom-num's every test vector, in each build, not its library, binaries,
-/// doctests and every test target of `crates/geom-num/tests` exactly once (`tests` names them).
-fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
-    let mut found = Vec::new();
-    let test = &w["jobs"]["test"];
-    let parts: Vec<i64> = test["strategy"]["matrix"]["k"]
-        .as_vec()
-        .into_iter()
-        .flatten()
-        .filter_map(Yaml::as_i64)
-        .collect();
-    let n = i64::try_from(parts.len()).unwrap();
-    if parts != (1..=n).collect::<Vec<_>>() {
-        found.push(format!("test's parts are {parts:?}, not 1 to {n}"));
-    }
-    if !text(&test["name"]).contains(&format!("part {{0}} of {n}', matrix.k)")) {
-        found.push(format!("test's name does not count its {n} parts"));
-    }
-    let excluded: BTreeSet<i64> = test["strategy"]["matrix"]["exclude"]
-        .as_vec()
-        .into_iter()
-        .flatten()
-        .filter(|x| text(&x["mode"]) == "debug" && x["target"].is_badvalue())
-        .filter_map(|x| x["k"].as_i64())
-        .collect();
-    if excluded != (2..=n).collect::<BTreeSet<_>>() {
-        found.push(format!(
-            "a debug leg runs on more than part 1: parts {excluded:?} excluded"
-        ));
-    }
-    // A golden step's build (its flags and folder) and command without `--part`, to its shares.
-    let mut goldens: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    // geom-num's builds, to what each step of it runs.
-    let mut vectors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for step in test["steps"].as_vec().into_iter().flatten() {
-        let run = text(&step["run"]);
-        let name = text(&step["name"]);
-        let golden = run.starts_with("cargo run --locked -p geom-test --bin golden");
-        if !(golden || run.starts_with("cargo test") || run.starts_with("cargo nextest")) {
-            continue;
-        }
-        match parts_of(&text(&step["if"]), &parts) {
-            Some(on) if on.len() == 1 => {}
-            Some(on) => found.push(format!("{name}: runs on parts {on:?}, not exactly one")),
-            None => found.push(format!("{name}: its condition on the part is not read")),
-        }
-        let build = format!(
-            "{} {} {}",
-            text(&step["env"]["RUSTFLAGS"]),
-            text(&step["env"]["CARGO_TARGET_DIR"]),
-            text(&step["if"]).contains("'debug'")
-        );
-        let words: Vec<&str> = run.split_whitespace().collect();
-        if golden {
-            let share = words
-                .iter()
-                .position(|w| *w == "--part")
-                .and_then(|at| words.get(at + 1))
-                .map_or_else(|| "1/1".to_owned(), |s| (*s).to_owned());
-            let whole = run.replacen(&format!("--part {share} "), "", 1);
-            goldens
-                .entry(format!("{build} {whole}"))
-                .or_default()
-                .push(share);
-        } else if let Some(rest) =
-            run.strip_prefix("cargo test -p geom-num --release --locked --no-fail-fast ")
-        {
-            vectors.entry(build).or_default().extend(
-                rest.split(" --")
-                    .map(|s| s.trim_start_matches("--").to_owned()),
-            );
-        }
-    }
-    for (build, shares) in &goldens {
-        let m = shares.len();
-        let wanted: BTreeSet<String> = (1..=m).map(|j| format!("{j}/{m}")).collect();
-        let got: BTreeSet<String> = shares.iter().cloned().collect();
-        if got != wanted || shares.len() != got.len() {
-            found.push(format!(
-                "the goldens of `{build}` run shares {shares:?}, not each of {wanted:?} once"
-            ));
-        }
-    }
-    if vectors.len() != 2 {
-        found.push(format!(
-            "geom-num's every test vector runs in {} builds, not as shipped and for the runner's \
-             own CPU",
-            vectors.len()
-        ));
-    }
-    for (build, runs) in &vectors {
-        found.extend(vector_problems(build, runs, tests));
-    }
-    found
-}
-
-/// What is wrong with what one build of geom-num's every test vector runs (`runs`, each step's
-/// target selections): its library, binaries and doctests not once, a share not of the form
-/// `[x-y]*`, or a file of its `tests` folder (`tests`) in no share or in two.
-fn vector_problems(build: &str, runs: &[String], tests: &[String]) -> Vec<String> {
-    let mut found = Vec::new();
-    for whole in ["lib", "bins", "doc"] {
-        let times = runs.iter().filter(|r| *r == whole).count();
-        if times != 1 {
-            found.push(format!(
-                "geom-num's --{whole} runs {times} times in `{build}`"
-            ));
-        }
-    }
-    let mut shares = Vec::new();
-    for r in runs
-        .iter()
-        .filter(|r| !["lib", "bins", "doc"].contains(&r.as_str()))
-    {
-        match r.strip_prefix("test ").and_then(letters) {
-            Some(l) => shares.push(l),
-            None => found.push(format!("geom-num's share --{r} in `{build}` is not read")),
-        }
-    }
-    for t in tests {
-        let first = t.chars().next().unwrap_or(' ');
-        let times = shares.iter().filter(|l| l.contains(&first)).count();
-        if times != 1 {
-            found.push(format!(
-                "geom-num's tests/{t}.rs runs {times} times in `{build}`"
-            ));
-        }
-    }
-    found
-}
-
-/// geom-num's test targets: the files of its `tests` folder.
-fn geom_num_tests() -> Vec<String> {
-    let dir = root().join("projects/engines/geometry/crates/geom-num/tests");
-    let mut out: Vec<String> = std::fs::read_dir(dir)
-        .unwrap()
-        .filter_map(|e| {
-            let name = e.unwrap().file_name().into_string().unwrap();
-            name.strip_suffix(".rs").map(str::to_owned)
-        })
-        .collect();
-    out.sort();
-    out
 }
 
 /// What is wrong with how a change finds its base and how a tree is marked.
@@ -876,42 +717,6 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
             "",
             "without debug assertions",
         ),
-        // A release part dropped from `test`: its step runs nowhere.
-        (
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]",
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9]",
-            "geom-num's every test vector in release for this machine's own CPU (part 2 of 2): runs on parts [], not exactly one",
-        ),
-        // A golden step on two parts.
-        (
-            "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}",
-            "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k <= 2 }}",
-            "(part 1 of 2): runs on parts [1, 2], not exactly one",
-        ),
-        // A golden share dropped from every part: the second share run as the first again.
-        (
-            "run --part 2/2 --release",
-            "run --part 1/2 --release",
-            "run shares [\"1/2\", \"1/2\"]",
-        ),
-        // A debug leg on a second part.
-        (
-            "          - { mode: debug, k: 10 }\n",
-            "",
-            "a debug leg runs on more than part 1",
-        ),
-        // geom-num's test targets of one first letter in no share.
-        (
-            "--test '[a-d]*'",
-            "--test '[a-c]*'",
-            "geom-num's tests/dd.rs runs 0 times",
-        ),
-        // geom-num's doctests dropped.
-        (
-            "--no-fail-fast --doc",
-            "--no-fail-fast --lib",
-            "geom-num's --doc runs 0 times",
-        ),
         // A platform left out of the queue.
         (
             "          - name: Windows arm64\n            os: windows-11-arm\n          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The one plain debug run",
@@ -1017,10 +822,13 @@ fn bench_problems(bench: &str) -> Vec<String> {
             found.push(format!("the legs are wrong: {said}"));
         }
     }
-    let job = &w["jobs"]["instructions"];
-    if text(&job["strategy"]["matrix"]["include"]) != "${{ fromJSON(needs.scope.outputs.legs) }}" {
+    let judge = &w["jobs"]["instructions"];
+    if text(&judge["strategy"]["matrix"]["include"]) != "${{ fromJSON(needs.scope.outputs.legs) }}"
+    {
         found.push("the instruction legs are not the scope's list".to_owned());
     }
+    found.extend(bench_part_problems(&w));
+    let job = &w["jobs"]["instructions-base"];
     let steps: Vec<&Yaml> = job["steps"].as_vec().into_iter().flatten().collect();
     let at = |name: &str| steps.iter().position(|s| s["name"].as_str() == Some(name));
     let kept =
@@ -1050,19 +858,21 @@ fn bench_problems(bench: &str) -> Vec<String> {
     {
         found.push("a missing base count is not measured".to_owned());
     }
-    // Nothing runs the change's code before the merge base is measured and kept.
-    let keep = at("Keep the merge base's counts").unwrap_or(usize::MAX);
-    for (i, s) in steps.iter().enumerate() {
+    // Nothing in the merge base's parts runs the change's code: the change is only read there.
+    if at("Keep the merge base's counts").is_none() {
+        found.push("the merge base's counts are not kept".to_owned());
+    }
+    for s in &steps {
         let run = text(&s["run"]);
-        let heads_code = text(&s["working-directory"]) == "head"
-            && (run.contains("cargo \"+$HEAD_TOOLCHAIN\" test") || run.contains(" bench "));
-        if heads_code && i < keep {
+        let heads_code = text(&s["working-directory"]) == "head" || run.contains("$HEAD_TOOLCHAIN");
+        if heads_code && run.contains("cargo") {
             found.push(format!(
                 "{} runs the change's code before the merge base is kept",
                 text(&s["name"])
             ));
         }
     }
+    let steps: Vec<&Yaml> = judge["steps"].as_vec().into_iter().flatten().collect();
     let mark = steps.iter().any(|s| {
         text(&s["with"]["name"]) == "bench-aarch64-tested-${{ env.TREE }}"
             && text(&s["if"])
@@ -1072,6 +882,162 @@ fn bench_problems(bench: &str) -> Vec<String> {
         found.push("the merge queue does not mark the tree aarch64 passed".to_owned());
     }
     found
+}
+
+/// What is wrong with the instruction gate's parts: each leg's parts are the scope's list, read
+/// from geom-bench/parts.tsv; the change's parts wait for the merge base's; the judge waits for
+/// both, judges when a part failed, and checks every part of both sides by the artifact names the
+/// parts upload; the planted slowdown runs in the part the scope names.
+fn bench_part_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let jobs = &w["jobs"];
+    let runs = |job: &str| -> String {
+        jobs[job]["steps"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .map(|s| format!("{}\n{}", text(&s["run"]), text(&s["with"]["name"])))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    for job in ["instructions-base", "instructions-parts"] {
+        if text(&jobs[job]["strategy"]["matrix"]["include"])
+            != "${{ fromJSON(needs.scope.outputs.parts) }}"
+        {
+            found.push(format!("the parts of {job} are not the scope's list"));
+        }
+    }
+    let scope = runs("scope");
+    for needle in [
+        "plan=\"$BENCH/parts.tsv\"",
+        "range(1; $of + 1) | $leg + {part: ., of: $of, trip: (. == $trip)}",
+        "if ($1 == \"sign\") s = $2",
+    ] {
+        if !scope.contains(needle) {
+            found.push(format!("the scope's parts are not parts.tsv's: {needle}"));
+        }
+    }
+    let needs = |job: &str| {
+        jobs[job]["needs"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .map(text)
+            .collect::<Vec<_>>()
+    };
+    if !needs("instructions-parts").contains(&"instructions-base".to_owned()) {
+        found.push("the change's parts do not wait for the merge base's".to_owned());
+    }
+    let judge_needs = needs("instructions");
+    if !["instructions-base", "instructions-parts"]
+        .iter()
+        .all(|j| judge_needs.contains(&(*j).to_owned()))
+    {
+        found.push("the judge does not wait for every part".to_owned());
+    }
+    if !text(&jobs["instructions"]["if"]).contains("!cancelled()") {
+        found.push("the judge does not judge when a part failed".to_owned());
+    }
+    if text(&jobs["instructions"]["env"]["OF"]) != "${{ needs.scope.outputs.of }}" {
+        found.push("the judge does not read the scope's number of parts".to_owned());
+    }
+    let judge = runs("instructions");
+    for needle in [
+        "--name \"count-$side-$TARGET-$k\"",
+        "for k in $(seq 1 \"$OF\"); do\n    gh run download",
+        "sides=\"base head\"",
+        "\"$counts\" parts \"$side\" \"$t/parts/$side\" \"$OF\" >> \"$t/parts.md\" || status=$?",
+    ] {
+        if !judge.contains(needle) {
+            found.push(format!("the judge does not check every part: {needle}"));
+        }
+    }
+    for (job, name) in [
+        (
+            "instructions-base",
+            "count-base-${{ matrix.target }}-${{ matrix.part }}",
+        ),
+        (
+            "instructions-parts",
+            "count-head-${{ matrix.target }}-${{ matrix.part }}",
+        ),
+    ] {
+        if !runs(job).contains(name) {
+            found.push(format!("{job} does not upload its counts as {name}"));
+        }
+    }
+    let trip = jobs["instructions-parts"]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .find(|s| text(&s["run"]).contains("--bin trip -- gungraun"));
+    if trip.is_none_or(|s| text(&s["if"]) != "matrix.trip") {
+        found.push("the planted slowdown does not run in the part that measures sign".to_owned());
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_count_gate_parts_measure_everything_once_and_a_lost_part_fails() {
+    let bench = read(&format!("{WORKFLOWS}/kernel-bench.yml"));
+    let found = bench_part_problems(&parse(&bench));
+    assert!(found.is_empty(), "{found:#?}");
+    for (from, to, said) in [
+        (
+            "include: ${{ fromJSON(needs.scope.outputs.parts) }}",
+            "include: ${{ fromJSON('[]') }}",
+            "the parts of instructions-base",
+        ),
+        (
+            "plan=\"$BENCH/parts.tsv\"",
+            "plan=\"$BENCH/retired.txt\"",
+            "not parts.tsv's",
+        ),
+        (
+            "    needs: [scope, instructions-base]\n",
+            "    needs: [scope]\n",
+            "do not wait for the merge base's",
+        ),
+        (
+            "    needs: [scope, instructions-base, instructions-parts]\n",
+            "    needs: [scope, instructions-parts]\n",
+            "does not wait for every part",
+        ),
+        (
+            "is named.\n    if: ${{ !cancelled() && ",
+            "is named.\n    if: ${{ ",
+            "when a part failed",
+        ),
+        (
+            "            sides=\"base head\"\n",
+            "            sides=\"head\"\n",
+            "does not check every part",
+        ),
+        (
+            "for k in $(seq 1 \"$OF\"); do\n              gh run download",
+            "for k in 1; do\n              gh run download",
+            "does not check every part",
+        ),
+        (
+            "name: count-head-${{ matrix.target }}-${{ matrix.part }}",
+            "name: count-head-${{ matrix.target }}",
+            "does not upload its counts",
+        ),
+        (
+            "        if: matrix.trip\n",
+            "        if: matrix.part == 1\n",
+            "the part that measures sign",
+        ),
+    ] {
+        let planted = bench.replacen(from, to, 1);
+        assert_ne!(planted, bench, "the planted edit {from:?} applies");
+        let found = bench_part_problems(&parse(&planted));
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
 }
 
 #[cfg_attr(
@@ -1126,11 +1092,11 @@ fn the_count_gates_measure_one_kind_a_push_and_the_base_once() {
         let found = bench_problems(&planted);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
-    // Planted: the change's own checks moved back before the merge base is kept.
+    // Planted: the change's own checks moved into the merge base's parts.
     let check = "      - name: Check the benchmarks' inputs, results and wiring\n        working-directory: head\n        run: cargo \"+$HEAD_TOOLCHAIN\" test --locked --release -p geom-bench\n\n";
     let planted = bench.replacen(check, "", 1).replacen(
-        "      - name: Install the Gungraun runner each tree needs",
-        &format!("{check}      - name: Install the Gungraun runner each tree needs"),
+        "      - name: Install the Gungraun runner the merge base needs",
+        &format!("{check}      - name: Install the Gungraun runner the merge base needs"),
         1,
     );
     assert_ne!(planted, bench);

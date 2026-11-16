@@ -195,18 +195,8 @@ jobs:
             echo "Touches the kernel's files: $kernel. The merge queue passed this tree: $tested."
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # A release leg is ten parts side by side, each one build (chapter 28.17; the owner's rule of 15
-  # minutes a job). On main's run 43829666754 the macOS x86-64 leg took 88 minutes in one job, and
-  # nearly all of it was building: each golden step 16 to 26 minutes, its tests running in seconds.
-  # So each golden step is two parts (`golden run --part k/2`, whole crates to a part, every golden
-  # in exactly one), and geom-num's every test vector is two parts in each build (its test targets
-  # by first letter, `[a-d]*` and `[e-z]*`; the library, its binaries and doctests in the first).
-  # Parts: 1, 2 the goldens with overflow checks on; 3, 4 the goldens as shipped (4 also the
-  # shipped checker's corpus); 5, 6 geom-num as shipped; 7, 8 the goldens for the runner's own CPU;
-  # 9, 10 geom-num for the runner's own CPU. A debug leg is one part. geom-test's
-  # tests/queue_wiring.rs holds every step to exactly one part and every share to a whole.
   test:
-    name: Test (${{ matrix.target.name }}, ${{ matrix.mode }}${{ matrix.mode == 'release' && format(', part {0} of 10', matrix.k) || '' }})
+    name: Test (${{ matrix.target.name }}, ${{ matrix.mode }})
     # The cheap job goes first: when format or lints fail, no runner starts on the matrix.
     needs: [changes, lint]
     # The merge queue's legs of the determinism matrix (and a release's, and a push that skipped
@@ -225,7 +215,6 @@ jobs:
         # runner's own CPU) and geom-num's test vectors; the debug legs run the golden digest in
         # debug. The whole suite, in release with overflow checks on and in debug, is `suite`.
         mode: [release, debug]
-        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         target:
           - name: Linux x86-64
             os: ubuntu-latest
@@ -251,16 +240,6 @@ jobs:
             target:
               name: Linux x86-64
               os: ubuntu-latest
-          # A debug leg is one part.
-          - { mode: debug, k: 2 }
-          - { mode: debug, k: 3 }
-          - { mode: debug, k: 4 }
-          - { mode: debug, k: 5 }
-          - { mode: debug, k: 6 }
-          - { mode: debug, k: 7 }
-          - { mode: debug, k: 8 }
-          - { mode: debug, k: 9 }
-          - { mode: debug, k: 10 }
     defaults:
       run:
         # bash with -eo pipefail on every runner, Windows included.
@@ -275,86 +254,49 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved). One part of
-          # each build saves it: the parts of a build restore and would save the same cache.
-          save-if: ${{ github.ref == 'refs/heads/main' && (matrix.k == 1 || matrix.k == 3) }}
-          # Debug, release with overflow checks on (parts 1 and 2) and release as shipped (parts
-          # 3 to 6) are cached apart, so no part restores another build's. Parts 7 to 10 build in
-          # their own folder, which no cache holds.
-          key: ${{ matrix.mode == 'release' && (matrix.k <= 2 && 'release-checked' || 'release-shipped') || 'debug' }}
-      - name: Every golden in release, with overflow checks on (part 1 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Release and debug builds are cached apart, so neither leg restores the other's.
+          key: ${{ matrix.mode }}
+      - name: Every golden in release, with overflow checks on
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
-      - name: Every golden in release, with overflow checks on (part 2 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 2 }}
-        env:
-          RUSTFLAGS: -C overflow-checks=on
-        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
-      - name: Every golden in release as shipped, without overflow checks (part 1 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 3 }}
-        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
-      - name: Every golden in release as shipped, without overflow checks (part 2 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 4 }}
-        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: Every golden in release as shipped, without overflow checks
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        run: cargo run --locked -p geom-test --bin golden -- run --release
       # The shipped-checker leg (chapters 8.3 and 28.4; decision 32.48). Every other test build
       # turns the full checker on (geom-test's default feature `full-checker`), the golden steps
       # above included. This one builds geom-test alone without it, so operations check their
       # results with the cheap groups, as a shipped build does, and must answer as the full-checker
       # legs do: the replay corpus's digest, and tests/shipped.rs's sweep of transforms.
       - name: The replay corpus and the transform sweep with the checker as shipped
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 4 }}
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
-      # geom-num's whole suite as `cargo test -p geom-num` runs it (its library, binaries and every
-      # test target, then its doctests), in two shares of its test targets.
-      - name: geom-num's every test vector in release as shipped (part 1 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 5 }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins --test '[a-d]*'
-      - name: geom-num's doctests in release as shipped
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 5 }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast --doc
-      - name: geom-num's every test vector in release as shipped (part 2 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 6 }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[e-z]*'
+      - name: geom-num's every test vector in release as shipped
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast
       - name: Show this machine's CPU features
         if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: rustc -vV && rustc --print cfg -C target-cpu=native
-      - name: Every golden in release for this machine's own CPU (part 1 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 7 }}
+      - name: Every golden in release for this machine's own CPU
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           # Its own build folder, which the build cache never saves or restores: the cache's key
           # does not name the processor, so a restored native build from another machine's CPU
           # can hold instructions this one lacks (SIGILL). Built fresh here, it is this CPU's.
           CARGO_TARGET_DIR: target-native
-        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
-      - name: Every golden in release for this machine's own CPU (part 2 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 8 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: geom-num's every test vector in release for this machine's own CPU
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
-        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
-      - name: geom-num's every test vector in release for this machine's own CPU (part 1 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 9 }}
-        env:
-          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
-          CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins --test '[a-d]*'
-      - name: geom-num's doctests in release for this machine's own CPU
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 9 }}
-        env:
-          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
-          CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast --doc
-      - name: geom-num's every test vector in release for this machine's own CPU (part 2 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 10 }}
-        env:
-          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
-          CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[e-z]*'
+        run: cargo test -p geom-num --release --locked --no-fail-fast
       - name: Every golden in debug
-        if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 1 }}
+        if: ${{ !cancelled() && matrix.mode == 'debug' }}
         # The runner calls `cargo test -p geom-test`, and cargo builds a package's binaries for its
         # integration tests: in this same debug folder that can mean replacing the running golden
         # binary, which Windows refuses ("failed to remove file ... golden.exe: Access is denied",

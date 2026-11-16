@@ -1503,6 +1503,28 @@
           "target": "lib"
         },
         {
+          "cost": "[`plan`] is O(g · n) for g groups and n parts tried; [`check`] is O(b log b) for b benchmarks over all parts.",
+          "does": "`kernel-bench.yml` measures the merge base and the change in parts, each part one job with its share of the benchmark groups, so no job runs longer than 15 minutes; one judge per target then gathers every part's counts and judges the whole catalogue as one run did before.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/parts.rs",
+          "guarantees": [
+            "**Every benchmark in exactly one part, or no verdict.** [`check`] names every benchmark measured in no part or in two, every part that lists other benchmarks than the first, and every benchmark measured that is not listed; a part that left no files is a missing file to the command line, which refuses it (`geom-bench-counts parts`).",
+            "**Deterministic.** The plan depends only on the seconds and the limit: ties go to the lower part and the earlier name, and every map is a `BTreeMap`.",
+            "**Strict reading.** [`Plan::parse`] refuses a malformed line, a group twice, no `*` line or two, a part numbered 0, and parts that are not numbered 1 to n without a gap."
+          ],
+          "job": "The instruction-and-cache gate in parts: which part of the catalogue each runner measures, and the judge's check that the parts together measured every benchmark exactly once.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/0117039"
+            ],
+            "text": "longest processing time first (R. L. Graham, \"Bounds on multiprocessing timing anomalies\", SIAM J. Appl. Math. 17(2), 1969, <https://doi.org/10.1137/0117039>), as `geom_test::coverage::plan_parts` shares the coverage run's crates. Gungraun's summary model (`gungraun_runner::summary::model`, the `summary` feature at exactly the version the gate runs) gives each tool run's `duration_ns`."
+          },
+          "path": "geom_bench::parts",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few wrapping integer operations per draw, and one per byte of a seed's name.",
           "does": null,
           "family": [],
@@ -14810,7 +14832,7 @@
           "target": "bin"
         },
         {
-          "cost": "`run` costs one `cargo test --no-run` that builds, then one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
+          "cost": "`run` costs one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/golden.rs",
@@ -15524,13 +15546,12 @@
         },
         {
           "cost": "linear in the store and in the output read.",
-          "does": "[`plan`] groups the current edition's test-checked goldens by crate and test target; [`Group::cargo_args`] gives the `cargo test` arguments that run exactly those test functions (libtest's `--exact` filters) with the leg's own arguments (`--release`, `--target wasm32-wasip1`, ...) and its environment (`RUSTFLAGS` with `-C target-cpu=native` or overflow checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and requires that libtest ran exactly the planned functions, all passed, and that every planned golden printed its `golden <id> ... agrees with the store` line ([`super::check`]); [`build_args`] gives the one `cargo test --no-run` that builds every group's binary side by side before the groups run, and [`part`] shares the groups out among CI jobs, whole crates to each part, balanced by measured seconds, each group in exactly one part. The binary `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build mode: debug, release with overflow checks on and as shipped, natively with `-C target-cpu=native`, and on wasm32-wasip1 under wasmtime and Node in debug and release.",
+          "does": "[`plan`] groups the current edition's test-checked goldens by crate and test target; [`Group::cargo_args`] gives the `cargo test` arguments that run exactly those test functions (libtest's `--exact` filters) with the leg's own arguments (`--release`, `--target wasm32-wasip1`, ...) and its environment (`RUSTFLAGS` with `-C target-cpu=native` or overflow checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and requires that libtest ran exactly the planned functions, all passed, and that every planned golden printed its `golden <id> ... agrees with the store` line ([`super::check`]). The binary `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build mode: debug, release with overflow checks on and as shipped, natively with `-C target-cpu=native`, and on wasm32-wasip1 under wasmtime and Node in debug and release.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/matrix.rs",
           "guarantees": [
             "**Exactly the store's goldens.** One group per crate and test target, in store order, each naming its functions exactly; a golden checked by a file has no test and is checked by `golden check` instead.",
-            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line: `golden <id> (edition <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's own first line follows it on the same output line; with several threads it starts its own.",
-            "**Every group in exactly one part.** [`part`] places every crate of the plan in one part of `n`, so the parts of a leg run every group once between them, a golden added to the store included."
+            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line: `golden <id> (edition <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's own first line follows it on the same output line; with several threads it starts its own."
           ],
           "job": "The determinism matrix's runner: every golden of the current edition, run by cargo in whatever configuration a CI leg sets, with proof that each one really ran and agreed.",
           "method": {

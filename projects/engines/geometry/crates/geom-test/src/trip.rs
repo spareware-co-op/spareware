@@ -132,7 +132,7 @@ pub const VIOLATIONS: [Violation; 12] = [
     },
     Violation {
         name: "gungraun",
-        gate: "kernel-bench.yml instructions",
+        gate: "kernel-bench.yml instructions-parts",
         file: "projects/engines/geometry/crates/geom-num/src/sign.rs",
         anchor: "        if v < 0 {",
         planted: "        if core::hint::black_box(v) < 0 {",

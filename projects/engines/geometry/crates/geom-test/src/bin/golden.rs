@@ -4,7 +4,7 @@
 //! ```text
 //! cargo run -p geom-test --bin golden -- list
 //! cargo run -p geom-test --bin golden -- check [--root <dir>]
-//! cargo run -p geom-test --bin golden -- run [--part <k>/<n>] [<cargo test arguments>...]
+//! cargo run -p geom-test --bin golden -- run [<cargo test arguments>...]
 //! cargo run -p geom-test --bin golden -- diff --base <commit> [--root <dir>]
 //! ```
 //!
@@ -18,9 +18,7 @@
 //!   (`--release`, `--target wasm32-wasip1`, ...) and the environment as it is (`RUSTFLAGS`,
 //!   `CARGO_TARGET_DIR`, a target runner), one invocation per crate and test target, prints each
 //!   run's output, and requires that each ran exactly its goldens and that each agreed with the
-//!   store ([`geom_test::golden::matrix`]). It first builds every group's test binary in one
-//!   `cargo test --no-run`, side by side. `--part k/n` runs part `k` of `n` alone, whole crates to
-//!   a part, so `n` jobs run every golden once between them; a part with no golden fails.
+//!   store ([`geom_test::golden::matrix`]).
 //! - `diff` compares the store at `<commit>` (read with `git show`; none there is an empty base)
 //!   with the working tree's and prints what changed ([`geom_test::golden::diff`]): each moved
 //!   answer with the history record that says why, for the merge record to name. A refused change
@@ -35,8 +33,7 @@
 //! Method: none; it parses its arguments and calls [`geom_test::golden`], whose module headers
 //! carry the methods.
 //!
-//! Cost: `run` costs one `cargo test --no-run` that builds, then one `cargo test` per crate and
-//! test target; the other commands read the store
+//! Cost: `run` costs one `cargo test` per crate and test target; the other commands read the store
 //! and, for `check`, the kernel's sources once.
 
 #![forbid(unsafe_code)]
@@ -48,12 +45,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
 use geom_test::golden::diff::diff;
-use geom_test::golden::matrix::{build_args, part, plan, verify};
+use geom_test::golden::matrix::{plan, verify};
 use geom_test::golden::repo;
 use geom_test::golden::store::{EMBEDDED, STORE_PATH, Store};
 use geom_test::map::repo::workspace_root;
 
-const USAGE: &str = "usage: golden list | check [--root <dir>] | run [--part <k>/<n>] [<cargo test args>...] | \
+const USAGE: &str = "usage: golden list | check [--root <dir>] | run [<cargo test args>...] | \
                      diff --base <commit> [--root <dir>]";
 
 fn main() -> ExitCode {
@@ -199,41 +196,10 @@ fn run(extra: &[String]) -> ExitCode {
         Err(e) => return fail(&e.to_string()),
     };
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
-    let all = plan(&store);
-    if all.is_empty() {
+    let groups = plan(&store);
+    if groups.is_empty() {
         eprintln!("golden run: the store's current edition has no golden checked by a test");
         return ExitCode::from(1);
-    }
-    // `--part k/n` first: this run's share of the groups, every group in exactly one part.
-    let (groups, extra, of) = match extra.split_first() {
-        Some((flag, rest)) if flag == "--part" => {
-            let Some((spec, rest)) = rest.split_first() else {
-                return usage("--part needs k/n");
-            };
-            let parsed = spec
-                .split_once('/')
-                .and_then(|(k, n)| Some((k.parse::<usize>().ok()?, n.parse::<usize>().ok()?)));
-            let Some(groups) = parsed.and_then(|(k, n)| part(&all, k, n)) else {
-                return usage(&format!("--part {spec}: not k/n with k in 1 to n"));
-            };
-            (groups, rest, format!(", part {spec}"))
-        }
-        _ => (all, extra, String::new()),
-    };
-    // A part left with no golden is a workflow with more parts than the plan has crates.
-    if groups.is_empty() {
-        eprintln!("golden run: no golden to run{of}");
-        return ExitCode::from(1);
-    }
-    // Every group's binary at once, side by side; a build that fails here fails again, with its
-    // message, in the group's own run below, which is what is judged.
-    for args in build_args(&groups, extra) {
-        println!("golden run: cargo {}", args.join(" "));
-        match Command::new(&cargo).args(&args).current_dir(&root).status() {
-            Ok(s) if s.success() => {}
-            Ok(s) => println!("golden run: the build of every group failed ({s}); each runs alone"),
-            Err(e) => return fail(&format!("cannot run cargo: {e}")),
-        }
     }
     let mut failures = Vec::new();
     for group in &groups {
@@ -282,7 +248,7 @@ fn run(extra: &[String]) -> ExitCode {
             .map(|g| g.ids.len())
             .fold(0, usize::saturating_add);
         println!(
-            "golden run: every golden of the current edition{of} agrees ({total} golden(s) in {} \
+            "golden run: every golden of the current edition agrees ({total} golden(s) in {} \
              run(s), arguments {extra:?})",
             groups.len()
         );
