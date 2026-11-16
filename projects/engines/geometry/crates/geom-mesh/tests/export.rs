@@ -16,9 +16,6 @@
 )]
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
-#[cfg(not(target_family = "wasm"))]
-use std::num::NonZeroUsize;
-
 use geom_mesh::boolean::boolean;
 use geom_mesh::exact::ExactMesh;
 use geom_mesh::exact::build::{Polygons, build};
@@ -27,10 +24,9 @@ use geom_num::Exactness;
 use geom_num::grid::{GridStep, Steps};
 use geom_op::{OpId, OpPath};
 use geom_poly::winding::WindingTest;
-#[cfg(not(target_family = "wasm"))]
-use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
 
+mod miri;
 mod shapes;
 
 use shapes::{cuboid, frustum, g, join, soup, source};
@@ -555,7 +551,7 @@ fn a_face_whose_rounded_sides_cross_is_refused() {
 #[test]
 fn the_same_mesh_gives_the_same_bytes_on_any_pool() {
     let m = mesh(&frustum());
-    let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
+    let pool = miri::pool(4);
     for format in [
         Format::Obj,
         Format::AsciiStl,
@@ -577,7 +573,7 @@ fn the_same_mesh_gives_the_same_bytes_on_any_pool() {
             format,
             GridStep::Q0,
             false,
-            &Exec::with_pool(&pool),
+            &Exec::with_pool(&*pool),
             &mut meter(),
         )
         .unwrap();

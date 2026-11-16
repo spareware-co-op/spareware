@@ -16,8 +16,6 @@
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::num::NonZeroU64;
-#[cfg(not(target_family = "wasm"))]
-use std::num::NonZeroUsize;
 
 use geom_mesh::boolean::{Outcome, boolean, soup as kept_pieces};
 use geom_mesh::exact::build::{Corner, Polygons, build};
@@ -29,14 +27,15 @@ use geom_num::wide::I256;
 use geom_op::{NameId, NameSet, OpId, OpPath, Origin, PieceKey, Side, TopoName};
 use geom_poly::merge::{Merge, Rules, merge_on};
 use geom_poly::winding::{Term, WindingTest};
-#[cfg(not(target_family = "wasm"))]
-use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::agree::judge_mesh;
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
+mod miri;
 mod shapes;
+
+use miri::{keeps, sized};
 
 use shapes::{cuboid, g, soup, source};
 
@@ -61,14 +60,15 @@ fn solid(low: [i64; 3], high: [i64; 3], name: u8) -> ExactMesh {
     build(&input, &Exec::serial(), &mut meter()).unwrap()
 }
 
-/// Runs `f` on one thread and, on a native target, on a pool of four threads too. WebAssembly has
-/// no threads, so there it runs on one thread only.
+/// Runs `f` on one thread and, on a native target, on a pool of four threads too (`miri::pool`
+/// says which). WebAssembly has no threads, so there it runs on one thread only. Under Miri it
+/// runs on the pool only: the chunks run the same kernel code there as on one thread.
 fn on_each_exec(mut f: impl FnMut(&Exec<'_>)) {
-    f(&Exec::serial());
+    if !cfg!(miri) {
+        f(&Exec::serial());
+    }
     #[cfg(not(target_family = "wasm"))]
-    f(&Exec::with_pool(
-        &Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap(),
-    ));
+    f(&Exec::with_pool(&*miri::pool(4)));
 }
 
 /// `mesh` with the class `class`, every face within its bound.
@@ -177,7 +177,7 @@ fn volumes_agree_with_counted_cells() {
     let seed = resolve("geom-mesh boolean cells", Seed(0x148)).unwrap();
     let mut rng = SplitMix64::new(seed);
     let side = NonZeroU64::new(6).unwrap();
-    for _ in 0..40 {
+    for round in 0..40 {
         let mut pick = || {
             let mut low = [0; 3];
             let mut high = [0; 3];
@@ -190,6 +190,10 @@ fn volumes_agree_with_counted_cells() {
             (low, high)
         };
         let boxes = [pick(), pick(), pick()];
+        // Under Miri, rounds 9 and 31.
+        if !keeps(round, &[9, 31]) {
+            continue;
+        }
         let meshes: Vec<ExactMesh> = boxes
             .iter()
             .zip(1..)
@@ -354,11 +358,18 @@ fn solids_give_what_their_arrays_give() {
     assert!(pa != pb && pb != pc && a != c);
     assert_ne!(format!("{pa:?}"), format!("{pb:?}"));
     assert!(format!("{pa:?}").starts_with("ExactMesh { parts: Parts {"));
-    for test in [
+    for (i, test) in [
         WindingTest::unite(),
         WindingTest::intersect(2),
         WindingTest::subtract(0),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // Under Miri the union and the difference: the intersection reaches nothing they do not.
+        if !keeps(i, &[0, 2]) {
+            continue;
+        }
         on_each_exec(|exec| {
             let run = |operands: &[&ExactMesh]| {
                 checked(
@@ -411,11 +422,18 @@ fn solids_of_many_faces_give_what_their_arrays_give() {
     assert!(sa.is_solid() && sb.is_solid());
     let plain = |m: &ExactMesh| ExactMesh::new(m.parts().clone(), &Exec::serial(), &mut meter());
     let (pa, pb) = (plain(&sa).unwrap(), plain(&sb).unwrap());
-    for test in [
+    for (i, test) in [
         WindingTest::unite(),
         WindingTest::intersect(2),
         WindingTest::subtract(0),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // Under Miri the union and the difference: the intersection reaches nothing they do not.
+        if !keeps(i, &[0, 2]) {
+            continue;
+        }
         on_each_exec(|exec| {
             let run = |operands: &[&ExactMesh]| {
                 checked(
@@ -451,8 +469,13 @@ fn ties_on_a_small_lattice_hold_up() {
     let shift = [8, 4, 3, 16];
     for round in 0..120 {
         let mut pick = || core::array::from_fn(|_| 16 + rng.below(height) as i64);
-        let a = wedge(0, pick(), 1);
-        let b = wedge(shift[round % 4], pick(), 2);
+        let (low, high) = (pick(), pick());
+        // Under Miri, round 74 alone.
+        if !keeps(round, &[74]) {
+            continue;
+        }
+        let a = wedge(0, low, 1);
+        let b = wedge(shift[round % 4], high, 2);
         holds_up(&a, &b);
     }
 }
@@ -460,7 +483,9 @@ fn ties_on_a_small_lattice_hold_up() {
 #[test]
 fn many_openings_are_one_call() {
     let plate = solid([0, 0, 0], [440, 440, 8], 1);
-    let holes: Vec<ExactMesh> = (0..40)
+    // Under Miri 24: with 16 the arrangement's phase over its subdivided boxes is not reached.
+    let openings = sized(40, 24);
+    let holes: Vec<ExactMesh> = (0..openings as i64)
         .map(|i| {
             let (x, y) = (4 + (i % 8) * 54, 4 + (i / 8) * 54);
             solid([x, y, -1], [x + 40, y + 40, 9], 2 + i as u8)
@@ -469,7 +494,10 @@ fn many_openings_are_one_call() {
     let mut refs = vec![&plate];
     refs.extend(holes.iter());
     let cut = one(&refs, WindingTest::subtract(0));
-    assert_eq!(six_volume(&cut.mesh), six(440 * 440 * 8 - 40 * 40 * 40 * 8));
+    assert_eq!(
+        six_volume(&cut.mesh),
+        six(440 * 440 * 8 - openings as i128 * 40 * 40 * 8)
+    );
     assert_eq!(cut.mesh.kind(), MeshKind::Closed);
 }
 
@@ -673,13 +701,13 @@ fn the_threads_and_the_order_do_not_show() {
     let plain = one(&[&a, &b, &c], test.clone());
     #[cfg(not(target_family = "wasm"))]
     {
-        let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
+        let pool = miri::pool(4);
         let threaded = checked(
             boolean(
                 &[&a, &b, &c],
                 std::slice::from_ref(&test),
                 &step(),
-                &Exec::with_pool(&pool),
+                &Exec::with_pool(&*pool),
                 &mut meter(),
             )
             .unwrap(),
