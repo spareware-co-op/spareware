@@ -541,14 +541,17 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
                 .and_then(|at| words.get(at + 1))
                 .map_or_else(|| "1/1".to_owned(), |s| (*s).to_owned());
             let whole = run.replacen(&format!("--part {share} "), "", 1);
-            goldens.entry(format!("{build} {whole}")).or_default().push(share);
+            goldens
+                .entry(format!("{build} {whole}"))
+                .or_default()
+                .push(share);
         } else if let Some(rest) =
             run.strip_prefix("cargo test -p geom-num --release --locked --no-fail-fast ")
         {
-            vectors
-                .entry(build)
-                .or_default()
-                .extend(rest.split(" --").map(|s| s.trim_start_matches("--").to_owned()));
+            vectors.entry(build).or_default().extend(
+                rest.split(" --")
+                    .map(|s| s.trim_start_matches("--").to_owned()),
+            );
         }
     }
     for (build, shares) in &goldens {
@@ -569,27 +572,41 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
         ));
     }
     for (build, runs) in &vectors {
-        for whole in ["lib", "bins", "doc"] {
-            let times = runs.iter().filter(|r| *r == whole).count();
-            if times != 1 {
-                found.push(format!("geom-num's --{whole} runs {times} times in `{build}`"));
-            }
+        found.extend(vector_problems(build, runs, tests));
+    }
+    found
+}
+
+/// What is wrong with what one build of geom-num's every test vector runs (`runs`, each step's
+/// target selections): its library, binaries and doctests not once, a share not of the form
+/// `[x-y]*`, or a file of its `tests` folder (`tests`) in no share or in two.
+fn vector_problems(build: &str, runs: &[String], tests: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    for whole in ["lib", "bins", "doc"] {
+        let times = runs.iter().filter(|r| *r == whole).count();
+        if times != 1 {
+            found.push(format!(
+                "geom-num's --{whole} runs {times} times in `{build}`"
+            ));
         }
-        let mut shares = Vec::new();
-        for r in runs.iter().filter(|r| !["lib", "bins", "doc"].contains(&r.as_str())) {
-            match r.strip_prefix("test ").and_then(letters) {
-                Some(l) => shares.push(l),
-                None => found.push(format!("geom-num's share --{r} in `{build}` is not read")),
-            }
+    }
+    let mut shares = Vec::new();
+    for r in runs
+        .iter()
+        .filter(|r| !["lib", "bins", "doc"].contains(&r.as_str()))
+    {
+        match r.strip_prefix("test ").and_then(letters) {
+            Some(l) => shares.push(l),
+            None => found.push(format!("geom-num's share --{r} in `{build}` is not read")),
         }
-        for t in tests {
-            let first = t.chars().next().unwrap_or(' ');
-            let times = shares.iter().filter(|l| l.contains(&first)).count();
-            if times != 1 {
-                found.push(format!(
-                    "geom-num's tests/{t}.rs runs {times} times in `{build}`"
-                ));
-            }
+    }
+    for t in tests {
+        let first = t.chars().next().unwrap_or(' ');
+        let times = shares.iter().filter(|l| l.contains(&first)).count();
+        if times != 1 {
+            found.push(format!(
+                "geom-num's tests/{t}.rs runs {times} times in `{build}`"
+            ));
         }
     }
     found

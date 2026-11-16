@@ -461,17 +461,21 @@ mod tests {
         });
         for groups in [&real, &planted] {
             for n in 1..=6 {
-                let parts: Vec<Vec<Group>> =
-                    (1..=n).map(|k| part(groups, k, n).unwrap()).collect();
-                for g in groups.iter() {
+                let parts: Vec<Vec<Group>> = (1..=n).map(|k| part(groups, k, n).unwrap()).collect();
+                for g in groups {
                     let homes = parts.iter().filter(|p| p.contains(g)).count();
                     assert_eq!(homes, 1, "{}::{} in {homes} of {n} parts", g.krate, g.test);
                     let of_crate: Vec<usize> = (0..n)
                         .filter(|i| parts[*i].iter().any(|h| h.krate == g.krate))
                         .collect();
-                    assert_eq!(of_crate.len(), 1, "{} split over parts {of_crate:?}", g.krate);
+                    assert_eq!(
+                        of_crate.len(),
+                        1,
+                        "{} split over parts {of_crate:?}",
+                        g.krate
+                    );
                 }
-                assert_eq!(parts.iter().map(Vec::len).sum::<usize>(), groups.len());
+                assert_eq!(parts.iter().fold(0, |all, p| all + p.len()), groups.len());
             }
             assert_eq!(part(groups, 0, 2), None);
             assert_eq!(part(groups, 3, 2), None);
@@ -498,11 +502,27 @@ mod tests {
             args,
             [
                 words(&[
-                    "test", "--locked", "--no-run", "-p", "geom-a", "-p", "geom-c", "--test",
-                    "det", "--test", "other", "--release"
+                    "test",
+                    "--locked",
+                    "--no-run",
+                    "-p",
+                    "geom-a",
+                    "-p",
+                    "geom-c",
+                    "--test",
+                    "det",
+                    "--test",
+                    "other",
+                    "--release"
                 ]),
                 words(&[
-                    "test", "--locked", "--no-run", "-p", "geom-b", "--lib", "--release"
+                    "test",
+                    "--locked",
+                    "--no-run",
+                    "-p",
+                    "geom-b",
+                    "--lib",
+                    "--release"
                 ]),
             ]
         );

@@ -206,6 +206,7 @@ fn the_goldens_the_crates_pinned_are_byte_identical_in_the_store() {
 /// release modes the whole-suite steps do not cover. Each is checked as written, so a step that
 /// lost its environment or its arguments fails here.
 #[test]
+#[allow(clippy::too_many_lines, reason = "the steps are written out in full")]
 fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
     let yml = KERNEL_YML.replace("\r\n", "\n");
     let steps = [
