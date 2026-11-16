@@ -30,6 +30,13 @@ const FLOOR: f64 = 1e-3;
 const CEILING: f64 = 1e-2;
 const TURN: f64 = 2.0;
 
+/// 2^e exactly, for |e| up to 63. Not `f64::powi`: its last digit is not the same everywhere (Miri
+/// varies it), so data meant to be whole numbers or exact scales would not be.
+fn two_to(e: i32) -> f64 {
+    let p = (1u64 << e.unsigned_abs()) as f64;
+    if e < 0 { 1.0 / p } else { p }
+}
+
 /// A meter above what any case here takes, so a march that loses its way fails, not hangs.
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 22))
@@ -106,7 +113,7 @@ fn round_kinds_close_only_over_one_whole_turn() {
         charts(&sphere(((0.0, 1.5), (-0.5, 0.5)))).closes,
         [false, false]
     );
-    let start = 2.0_f64.powi(-60);
+    let start = two_to(-60);
     assert_eq!(
         TURN - start,
         TURN,

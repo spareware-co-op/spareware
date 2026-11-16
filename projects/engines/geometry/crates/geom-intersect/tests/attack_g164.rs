@@ -32,6 +32,13 @@ use geom_test::{Seed, SplitMix64};
 /// The meeting, within a budget well past the heaviest case here (a curve bent as the bowl is,
 /// some 4.5 million units): a closed form lost to the engine on an infinite line stops instead of
 /// running on.
+/// 2^e exactly, for |e| up to 63. Not `f64::powi`: its last digit is not the same everywhere (Miri
+/// varies it), so data meant to be whole numbers or exact scales would not be.
+fn two_to(e: i32) -> f64 {
+    let p = (1u64 << e.unsigned_abs()) as f64;
+    if e < 0 { 1.0 / p } else { p }
+}
+
 fn meet(c: &CurveKind<3>, s: &SurfaceKind) -> Intersection {
     let mut m = WorkMeter::new(Budget::of_work(50_000_000));
     curve_surface(c, s, &mut m).unwrap()
@@ -168,7 +175,7 @@ fn a_parallel_line_misses_a_plane_or_lies_in_it() {
         spans_hold(&r, [(0.0, 1.0), (0.0, 5.0), (0.0, 3.0)]);
     }
     // Parallel by the least the doubles can say: a tolerance would call it so, and it is not.
-    let tiny = 2.0_f64.powi(-40);
+    let tiny = two_to(-40);
     let r = meet(&line([0.0, 0.0, 1.0], [1.0, 0.0, -tiny]), &plane());
     is_empty(&r);
 }
@@ -463,7 +470,7 @@ fn a_stop_stops() {
 
 /// A number in [0, 1).
 fn unit(rng: &mut SplitMix64) -> f64 {
-    (rng.next_u64() >> 11) as f64 / 2.0_f64.powi(53)
+    (rng.next_u64() >> 11) as f64 / two_to(53)
 }
 
 fn times(a: &[f64], b: &[f64]) -> Vec<f64> {
@@ -908,13 +915,13 @@ fn a_bound_on_a_domain_end_is_past_it() {
     // Every enclosure is rounded outward, so one whose bound lands exactly on a domain's end holds
     // a value strictly past it. A segment stopping 9 doubles short of the plane, and lines 5 doubles
     // above and below the cylinder's height, meet each enclosure's end exactly, and miss.
-    let h = 1.0 + 9.0 * 2.0_f64.powi(-52);
+    let h = 1.0 + 9.0 * two_to(-52);
     is_empty(&meet(
         &segment([3.0, 4.0, h], [3.0, 4.0, h - 1.0]),
         &plane(),
     ));
     for side in [-1.0, 1.0] {
-        let z = side * (50.0 + 5.0 * 2.0_f64.powi(-47));
+        let z = side * (50.0 + 5.0 * two_to(-47));
         is_empty(&meet(
             &line([-9.0, 3.0, z], [1.0, 0.0, 0.0]),
             &cylinder(5.0),
