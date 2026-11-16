@@ -489,6 +489,18 @@ fn axes_reach(axes: &Axes<3>) -> Exact {
 /// of these proves is `false`, for the general paths: a hyperbola, an arc whose whole circle
 /// reaches across the axis, another kind.
 fn in_half_plane(turn: &Turn, kind: &CurveKind<3>, (lo, hi): (f64, f64)) -> bool {
+    // A curve on part of its span is read as the curve it is part of, on the same span, as a
+    // profile on part of its span is read: where the whole curve is a meridian, so is any part of
+    // it. What a trim holds is a leaf (`Basis`), never itself trimmed, so one unwrapping reaches
+    // the leaf and this function never calls itself.
+    let leaf;
+    let kind = match kind {
+        CurveKind::Trimmed(t) => {
+            leaf = CurveKind::from(t.basis().clone());
+            &leaf
+        }
+        other => other,
+    };
     match kind {
         CurveKind::Line(l) => {
             let (o, d) = (turn.offset(l.origin()), exact3(l.direction()));
@@ -547,9 +559,6 @@ fn in_half_plane(turn: &Turn, kind: &CurveKind<3>, (lo, hi): (f64, f64)) -> bool
             };
             hull.iter().all(|w| Turn::square(&normal, w)) && turn.beside(&hull)
         }
-        // A curve on part of its span, as a profile on part of its span is read: where the whole
-        // curve is a meridian, so is any part of it.
-        CurveKind::Trimmed(t) => in_half_plane(turn, &CurveKind::from(t.basis().clone()), (lo, hi)),
         _ => false,
     }
 }
