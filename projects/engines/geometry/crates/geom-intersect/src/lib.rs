@@ -84,7 +84,7 @@ pub use level::{
 pub use order::{CanonicalKey, Geom, Operand, PLAN, pair, pairs, share};
 pub use project::{
     Continuum, Nearest, Place, Projection, invert_curve, invert_surface, project_curve,
-    project_surface,
+    project_curve_over, project_surface,
 };
 pub use result::{
     Coincidence, Coverage, CurveContact, CurveEnd, Degeneracy, Diag, Intersection, Item,
