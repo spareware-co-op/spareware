@@ -226,7 +226,8 @@ fn one_side(
 ) -> Result<Side, BuildError> {
     let (curve_a, stretches) = near_side;
     let mut widest: Option<Interval> = None;
-    let mut stack: Vec<(f64, f64, u32)> = stretches.iter().map(|&(a0, a1)| (a0, a1, 0)).collect();
+    let mut stack: Vec<(f64, f64, u32)> =
+        stretches.iter().map(|&(a0, a1)| (a0, a1, 0u32)).collect();
     while let Some((lo, hi, depth)) = stack.pop() {
         meter.charge(1).map_err(IntersectError::from)?;
         let bounds = curve_a
