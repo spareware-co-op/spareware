@@ -225,6 +225,8 @@ fn each_job_runs_on_the_events_its_gate_names() {
             "mutants",
             "mutants-2",
             "mutants-judge",
+            "coverage-plan",
+            "coverage-parts",
             "coverage",
             "gates-seeded",
             "miri",
@@ -235,7 +237,8 @@ fn each_job_runs_on_the_events_its_gate_names() {
     // the judge even when a shard failed, so a lost shard is reported, not skipped.
     for (job, gate) in [
         ("mutants-plan", "mutants"),
-        ("coverage", "coverage"),
+        ("coverage-plan", "coverage"),
+        ("coverage-parts", "coverage"),
         ("gates-seeded", "coverage"),
         ("miri", "miri"),
     ] {
@@ -264,6 +267,23 @@ fn each_job_runs_on_the_events_its_gate_names() {
         .map(text)
         .collect();
     assert_eq!(needs, ["when", "mutants-plan", "mutants", "mutants-2"]);
+    // The coverage judge judges even when a part failed, so it names every crate left unmeasured;
+    // it reads every part, and `done` fails on any part that did not pass.
+    assert_eq!(
+        text(&jobs["coverage"]["if"]),
+        "${{ !cancelled() && needs.when.outputs.coverage == 'true' && needs.coverage-plan.result == 'success' }}"
+    );
+    let needs: Vec<&str> = jobs["coverage"]["needs"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .map(text)
+        .collect();
+    assert_eq!(needs, ["when", "cheap", "coverage-plan", "coverage-parts"]);
+    assert!(
+        runs(&w, "done").contains("must=\"$must coverage-plan coverage-parts coverage gates-seeded\""),
+        "done does not require every coverage job"
+    );
     // The judge checks the jobs it reads before it judges: a shard job may be skipped only when
     // the plan gave it no shard.
     let first = text(&jobs["mutants-judge"]["steps"][0]["run"]);
@@ -696,10 +716,17 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
     assert_eq!(shard.matches("cargo mutants ").count(), 1);
     assert!(shard.contains("case \"$code\" in 0|2|3) ;; *) exit \"$code\" ;; esac"));
     assert!(shard.contains("test -f \"$RUNNER_TEMP/out/mutants.out/mutants.json\""));
-    // Coverage: measured on the nightly with branches, each run's log kept, then judged.
-    let coverage = runs(&w, "coverage");
+    // Coverage: planned in parts by the judge's own list, each part measured on the nightly with
+    // branches, each run's log kept, then every part judged together.
+    let coverage = format!(
+        "{}{}{}",
+        runs(&w, "coverage-plan"),
+        runs(&w, "coverage-parts"),
+        runs(&w, "coverage")
+    );
     for needle in [
-        "kernel-quality -- affected $SCOPE",
+        "kernel-quality -- coverage-parts $SCOPE",
+        "for crate in $CRATES; do",
         "kernel-quality -- coverage $SCOPE",
         "--branch",
         "| tee \"$RUNNER_TEMP/cov/$crate.log\"",
@@ -709,7 +736,17 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
             "coverage does not run {needle:?}"
         );
     }
-    let measure = w["jobs"]["coverage"]["steps"]
+    let parts = &w["jobs"]["coverage-parts"];
+    assert_eq!(
+        text(&parts["strategy"]["matrix"]),
+        "${{ fromJSON(needs.coverage-plan.outputs.matrix) }}"
+    );
+    assert_eq!(parts["strategy"]["fail-fast"].as_bool(), Some(false));
+    assert_eq!(
+        text(&w["jobs"]["coverage-plan"]["outputs"]["matrix"]),
+        "${{ steps.parts.outputs.matrix }}"
+    );
+    let measure = w["jobs"]["coverage-parts"]["steps"]
         .as_vec()
         .unwrap()
         .iter()
@@ -1065,11 +1102,11 @@ fn narrowing_problems(text: &str) -> Vec<String> {
     if narrowing > listing {
         found.push("the plan lists the mutants before it narrows the diff".to_owned());
     }
-    let coverage = runs(&w, "coverage");
+    let coverage = runs(&w, "coverage-plan");
     if !coverage.contains("kernel-quality -- coverage-increment --since \"$SINCE\"") {
         found.push("coverage does not narrow by the last clean head".to_owned());
     }
-    for job in ["mutants-plan", "coverage"] {
+    for job in ["mutants-plan", "coverage-plan"] {
         if w["jobs"][job]["steps"][0]["with"]["fetch-depth"].as_i64() != Some(0) {
             found.push(format!("{job} lacks the history the base's side needs"));
         }

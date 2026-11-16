@@ -23,8 +23,9 @@ name: Kernel
 # When each part runs (chapter 28.17; the owner's testing principles 2 and 3, decision 32.53):
 #
 # - On each push to a pull request: format and lints (`lint`), then the tests the change can reach,
-#   once, optimised with overflow checks and debug assertions on, on Linux x86-64 (`linux`, in two
-#   parts), with the goldens there, and the toolchain guard's proof (`guard`).
+#   once, optimised with overflow checks and debug assertions on, on Linux x86-64 (`linux`, in four
+#   parts: two of tests, two of goldens), with the goldens there, and the toolchain guard's proof
+#   (`guard`).
 # - In GitHub's merge queue for main (`merge_group`), once per change just before it lands: the
 #   same tests on the other platforms (the job `suite` on Linux arm64, Windows on both chips and
 #   macOS on both chips; `wasm-suite` on wasm32; `big-endian` on s390x), the other legs of the
@@ -355,10 +356,14 @@ jobs:
           --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
   # On each push to a pull request: the goldens of Linux x86-64 in release and the tests the change
-  # can reach, once, optimised with overflow checks and debug assertions on (principle 3), in two
-  # parts side by side; part 1 also runs the goldens and the doctests, which nextest does not.
+  # can reach, once, optimised with overflow checks and debug assertions on (principle 3), in four
+  # parts side by side: parts 1 and 2 the tests (`--partition count:k/2`), part 1 also the
+  # doctests, which nextest does not run; part 3 the goldens with checks on and as shipped, part 4
+  # the shipped checker's corpus, geom-num's vectors as shipped and the goldens for the runner's
+  # own CPU. On main's run 43809830554 part 1 took 32 minutes with every golden in it (goldens 20,
+  # tests 8) and part 2 took 11; each part is now one of those builds.
   linux:
-    name: Tests (Linux x86-64, optimised with checks on, part ${{ matrix.k }} of 2)
+    name: Tests (Linux x86-64, optimised with checks on, part ${{ matrix.k }} of 4)
     needs: [changes, lint, scope]
     if: github.event_name != 'merge_group' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
@@ -366,7 +371,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        k: [1, 2]
+        k: [1, 2, 3, 4]
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"
       # A part the selection leaves without a test passes (nextest's `--no-tests`).
@@ -403,28 +408,28 @@ jobs:
           echo "Testing:${list:- no crate, as the change reaches none}"
       # The same build as the suite below, so the two share it.
       - name: Every golden in release, with overflow checks and debug assertions on
-        if: ${{ !cancelled() && matrix.k == 1 }}
+        if: ${{ !cancelled() && matrix.k == 3 }}
         env:
           RUSTFLAGS: -C overflow-checks=on
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
         run: cargo run --locked -p geom-test --bin golden -- run --release
       - name: Every golden in release as shipped, without overflow checks
-        if: ${{ !cancelled() && matrix.k == 1 }}
+        if: ${{ !cancelled() && matrix.k == 3 }}
         run: cargo run --locked -p geom-test --bin golden -- run --release
       - name: The replay corpus and the transform sweep with the checker as shipped
-        if: ${{ !cancelled() && matrix.k == 1 }}
+        if: ${{ !cancelled() && matrix.k == 4 }}
         run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
       - name: geom-num's every test vector in release as shipped
-        if: ${{ !cancelled() && matrix.k == 1 }}
+        if: ${{ !cancelled() && matrix.k == 4 }}
         run: cargo test -p geom-num --release --locked --no-fail-fast
       - name: Every golden in release for this machine's own CPU
-        if: ${{ !cancelled() && matrix.k == 1 }}
+        if: ${{ !cancelled() && matrix.k == 4 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo run --locked -p geom-test --bin golden -- run --release
       - name: The tests the change can reach, optimised with overflow checks and debug assertions on (part ${{ matrix.k }} of 2)
-        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
+        if: ${{ !cancelled() && matrix.k <= 2 && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"

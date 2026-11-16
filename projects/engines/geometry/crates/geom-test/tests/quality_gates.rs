@@ -84,6 +84,15 @@ const REASON: &str =
 )]
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
+/// This repository's root, five folders above geom-test's manifest.
+fn root_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(5)
+        .unwrap()
+        .to_path_buf()
+}
+
 /// A temporary repository, removed when dropped.
 struct Repo {
     root: PathBuf,
@@ -685,18 +694,37 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
         assert_eq!(shard_count(&of(package, per_shard + 1)), Ok(2), "{package}");
     }
     // cargo-mutants' slices (`--sharding slice`, its default; src/shard.rs at v27.1.0): shard k of
-    // n runs mutants k c to (k + 1) c - 1 of the list, c = ceil(len / n), the last fewer.
+    // n runs mutants k c to (k + 1) c - 1 of the list, c = ceil(len / n), the last fewer. The
+    // plan's `slice` is that rule, written out again here so a change to it shows.
     let slices = |len: u64, n: u64| -> Vec<u64> {
         let c = len.div_ceil(n);
         (0..n)
             .map(|k| len.min((k + 1) * c).saturating_sub(k * c))
             .collect()
     };
-    // Several crates, in cargo-mutants' order (by name): the kernel on 2026-10-29, which the old
-    // plan of 4 minutes a mutant refused (17557 mutants in 293 shards), a few small lists, and
-    // geom-num beside a fast crate. Every shard is sized at the list's slowest crate, wherever
-    // its slice falls: each holds at least one mutant and fits the budget at that rate, and one
-    // shard fewer would give some slice more mutants than fit.
+    for (len, n) in [(10, 4), (9, 4), (17_589, 512), (1, 1), (7, 3)] {
+        let sizes: Vec<u64> = (0..n)
+            .map(|k| geom_test::mutants::slice(len, k, n).len() as u64)
+            .collect();
+        assert_eq!(sizes, slices(len as u64, n), "{len} in {n}");
+    }
+    // Each shard's planned seconds: its own mutants at their own crates' rates.
+    let planned = |mutants: &[Mutant], n: u64| -> Vec<u64> {
+        (0..n)
+            .map(|k| {
+                mutants[geom_test::mutants::slice(mutants.len(), k, n)]
+                    .iter()
+                    .map(|m| seconds_per_mutant(&m.package))
+                    .sum()
+            })
+            .collect()
+    };
+    let limit = geom_test::mutants::SHARD_LIMIT_MINUTES * 60;
+    assert!(budget < limit);
+    // Several crates, in cargo-mutants' order (by name): the kernel on 2026-10-29 (17557 mutants),
+    // a few small lists, and geom-num beside a fast crate. Every shard holds a mutant and is
+    // planned within the budget (within the job's limit for a run too large for 512 shards of the
+    // budget), and no fewer shards would do: the plan is by each shard's own mutants.
     let kernel = [
         ("geom-bvh", 357),
         ("geom-curve", 5228),
@@ -718,32 +746,45 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
     for list in lists {
         let mutants: Vec<Mutant> = list.iter().flat_map(|(p, n)| of(p, *n)).collect();
         let len = mutants.len() as u64;
-        let rate = list
-            .iter()
-            .map(|(p, _)| seconds_per_mutant(p))
-            .max()
-            .unwrap();
         let shards = shard_count(&mutants).unwrap();
-        assert!(shards <= MAX_SHARDS, "{list:?}");
+        assert!((1..=MAX_SHARDS).contains(&shards), "{list:?}");
+        let fit = |n: u64, within: u64| {
+            slices(len, n).iter().all(|&size| size >= 1)
+                && planned(&mutants, n).iter().all(|&s| s <= within)
+        };
         for (k, size) in slices(len, shards).into_iter().enumerate() {
             assert!(size >= 1, "{list:?}: shard {k} of {shards} is empty");
-            assert!(
-                size * rate <= budget,
-                "{list:?}: shard {k} of {shards} holds {size}"
-            );
         }
-        if shards > 1 {
+        if fit(shards, budget) {
             assert!(
-                slices(len, shards - 1)
-                    .iter()
-                    .any(|size| size * rate > budget),
-                "{list:?}: {} shards would do",
-                shards - 1
+                (1..shards).all(|n| !fit(n, budget)),
+                "{list:?}: fewer than {shards} shards would do"
+            );
+        } else {
+            // Too large for the budget in 512 shards: within the limit, and the slowest shard
+            // planned at least.
+            assert!((1..=MAX_SHARDS).all(|n| !fit(n, budget)), "{list:?}");
+            let slowest = |n: u64| planned(&mutants, n).into_iter().max().unwrap();
+            assert!(slowest(shards) <= limit, "{list:?}");
+            assert!(
+                (1..=MAX_SHARDS)
+                    .filter(|&n| fit(n, u64::MAX))
+                    .all(|n| slowest(n) >= slowest(shards)),
+                "{list:?}"
             );
         }
     }
-    // More than the two shard jobs hold fails, and names why.
-    let per_shard = (budget / seconds_per_mutant("geom-num")) as usize;
+    // The planted case: a plan sized at the list's slowest crate (the plan before this one) gives
+    // the fast crate's mutants shards of their own, and the plan by each shard's own mutants
+    // needs fewer.
+    let mixed: Vec<Mutant> = [("geom-curve", 9000), ("geom-num", 1)]
+        .iter()
+        .flat_map(|(p, n)| of(p, *n))
+        .collect();
+    let by_slowest = 9001_u64.div_ceil(budget / seconds_per_mutant("geom-num"));
+    assert!(shard_count(&mixed).unwrap() < by_slowest);
+    // A run too large for 512 shards within the job's limit fails, and names why.
+    let per_shard = (limit / seconds_per_mutant("geom-num")) as usize;
     let most = of("geom-num", per_shard * MAX_SHARDS as usize);
     assert_eq!(shard_count(&most), Ok(MAX_SHARDS));
     let too_many = of("geom-num", per_shard * MAX_SHARDS as usize + 1);
@@ -1224,6 +1265,87 @@ fn mutants_outside_kernel_sources_mean_a_wrong_configuration() {
 // ---------------------------------------------------------------------------------------------
 // The coverage gate
 // ---------------------------------------------------------------------------------------------
+
+/// The coverage run's parts: every crate measured in exactly one part, the parts balanced by the
+/// recorded times within `PART_SECONDS` where one crate allows it, and a dropped part's crates
+/// named by the judge's check of its folder.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn coverage_parts_measure_every_crate_once_and_a_lost_part_fails() {
+    use coverage::{PART_SECONDS, TIMES, missing_outputs, parse_times, plan_parts, plan_problems};
+    let times = parse_times(TIMES).unwrap();
+    // The table names kernel crates only, each once (parse_times refuses a second line).
+    let kernel = geom_test::foundation::kernel_crates(&root_dir()).unwrap();
+    for krate in times.keys() {
+        assert!(kernel.contains(krate), "{krate} is not a kernel crate");
+    }
+    assert!(parse_times("geom-num\t3\ngeom-num\t4\n").is_err());
+    assert!(parse_times("geom-num\t0\n").is_err());
+    assert!(parse_times("geom-num 3\n").is_err());
+    let slowest = times.values().copied().max().unwrap();
+    let lists: Vec<Vec<String>> = vec![
+        kernel.clone(),
+        times.keys().cloned().collect(),
+        vec!["geom-num".to_owned()],
+        vec!["geom-unmeasured".to_owned(), "geom-p21".to_owned()],
+        Vec::new(),
+    ];
+    for crates in &lists {
+        let parts = plan_parts(crates, &times);
+        assert_eq!(plan_problems(crates, &parts), Vec::<String>::new(), "{crates:?}");
+        assert!(!parts.is_empty());
+        let time = |k: &String| times.get(k).copied().unwrap_or(slowest);
+        for part in &parts {
+            let load: u64 = part.iter().map(time).sum();
+            // A part over the budget holds one crate, which no plan can split.
+            assert!(load <= PART_SECONDS || part.len() == 1, "{part:?}: {load} s");
+        }
+    }
+    // The planted cases: a crate dropped, measured twice, or not in the run is refused.
+    let crates: Vec<String> = times.keys().cloned().collect();
+    let mut parts = plan_parts(&crates, &times);
+    assert!(parts.len() > 1, "the kernel's coverage is measured in parts");
+    let dropped = parts[0].pop().unwrap();
+    assert_eq!(
+        plan_problems(&crates, &parts),
+        [format!("{dropped} is in no part")]
+    );
+    parts[1].push(dropped.clone());
+    parts[2].push(dropped.clone());
+    assert_eq!(
+        plan_problems(&crates, &parts),
+        [format!("{dropped} is in 2 parts")]
+    );
+    parts[2].pop();
+    parts[0].push("geom-elsewhere".to_owned());
+    assert_eq!(
+        plan_problems(&crates, &parts),
+        ["part 1: geom-elsewhere is not in the run"]
+    );
+    // A part whose files never reached the judge's folder: its crates are named, each file.
+    let repo = Repo::new("coverage-parts");
+    let dir = repo.path("cov");
+    let parts = plan_parts(&crates, &times);
+    for part in &parts[1..] {
+        for krate in part {
+            repo.write(&format!("cov/{krate}.lcov"), "");
+            repo.write(&format!("cov/{krate}.log"), "");
+        }
+    }
+    let missing = missing_outputs(&crates, &dir);
+    assert_eq!(missing.len(), parts[0].len() * 2, "{missing:?}");
+    for krate in &parts[0] {
+        assert!(
+            missing.iter().any(|m| m.starts_with(&format!("{krate}: no coverage data"))),
+            "{missing:?}"
+        );
+    }
+    repo.write(&format!("cov/{}.lcov", parts[0][0]), "");
+    assert_eq!(missing_outputs(&crates, &dir).len(), parts[0].len() * 2 - 1);
+}
 
 /// An LCOV record for `file` under `repo`, with its lines and branch outcomes; `brf` defaults to
 /// the number of branch outcomes.
