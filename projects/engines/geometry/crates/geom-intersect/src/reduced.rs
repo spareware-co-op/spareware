@@ -16,6 +16,11 @@
 //! - **Exact where the data are.** A plane's being square to an axis is a sign on the stored
 //!   doubles; through an axis, and Villarceau's angle, signs from `geom_num::quadric` on whole-number
 //!   data. Off the grid an enclosure decides, and a pair it cannot tell is `None`.
+//! - **A meridian only where it is one.** A revolution's profile is read in a half-plane of its
+//!   axis only where its own data prove, by exact signs of sums of products of the stored doubles,
+//!   that it lies in that plane and on one side of the axis: a line by its ends, a circle,
+//!   ellipse or parabola by its plane and a ball about its centre, a NURBS curve by its control
+//!   points (issue 921). What they cannot prove is `None`.
 //! - **Curve with curve is 12.5.** Each ring comes from a crossing or a tangency that
 //!   [`crate::curve::curves`] proved, and is tangent where that was.
 //! - **The kind is kept.** Lines stay lines, a circle maps to a circle where the map is a turn and to
@@ -58,6 +63,8 @@ use alloc::vec::Vec;
 use geom_curve::{Axes, Basis, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola};
 use geom_curve::{CurveError, ParamCurve, Trimmed, tight};
 use geom_math::{Transform, TypedTransform};
+use geom_num::eft::two_prod;
+use geom_num::exact_sum::ExactSum;
 use geom_num::grid::Steps;
 use geom_num::interval::Interval;
 use geom_num::{Sign, quadric};
@@ -210,21 +217,324 @@ fn to_half_plane(on: &Axis, at: Vector) -> Result<Option<Affine<2>>, IntersectEr
     Ok(Some(Affine::onto(on.at, [out, on.along])?))
 }
 
-/// The map to the half-plane of `on` that holds the profile `kind`, read at its middle, if its
-/// ends lie in that plane too: how far each stands from it along the plane's normal holds zero.
-fn half_plane_of(on: &Axis, kind: &CurveKind<3>) -> Result<Option<Affine<2>>, IntersectError> {
+/// The map to the half-plane of `on` that holds the profile `kind`, read at its middle, if the
+/// curve lies in that half-plane: decided from its own data, exactly, by [`in_half_plane`]. The
+/// axis is the profile's as stored, through `c` along `e`.
+fn half_plane_of(
+    on: &Axis,
+    (c, e): ([f64; 3], [f64; 3]),
+    kind: &CurveKind<3>,
+) -> Result<Option<Affine<2>>, IntersectError> {
     let (lo, hi) = finite(kind)?;
-    let middle_of = lift(kind.point(lo * 0.5 + hi * 0.5, geom_nurbs::Limit::FromRight)?)?;
-    let Some(map) = to_half_plane(on, middle_of)? else {
+    let middle_of = kind.point(lo * 0.5 + hi * 0.5, geom_nurbs::Limit::FromRight)?;
+    let Some(map) = to_half_plane(on, lift(middle_of)?)? else {
         return Ok(None);
     };
-    for t in [lo, hi] {
-        let at = lift(kind.point(t, geom_nurbs::Limit::FromRight)?)?;
-        if !map.leaves(at, on.at)?.contains(0.0) {
-            return Ok(None);
+    Ok(in_half_plane(&Turn::new(c, e, middle_of), kind, (lo, hi)).then_some(map))
+}
+
+/// Below this a product's error-free parts may underflow (Dekker's product is exact from
+/// `2^(e_min + p − 1)` = 2^−970 up; four times that, to spare), so a sign there is not told.
+const FLOOR: f64 = 4.0 * (f64::MIN_POSITIVE / f64::EPSILON);
+
+/// A sum of products of doubles, kept as its terms so that its sign is exact: each product is
+/// expanded into doubles by error-free products, and the parts summed exactly. A polynomial in
+/// the stored data, so no rounding of a difference or a product ever decides a side.
+#[derive(Clone)]
+struct Exact(Vec<Vec<f64>>);
+
+impl Exact {
+    /// The double `x`.
+    fn of(x: f64) -> Exact {
+        Exact(alloc::vec![alloc::vec![x]])
+    }
+
+    /// `self + other`.
+    fn plus(&self, other: &Exact) -> Exact {
+        let mut terms = self.0.clone();
+        terms.extend(other.0.iter().cloned());
+        Exact(terms)
+    }
+
+    /// `self − other`.
+    fn less(&self, other: &Exact) -> Exact {
+        let mut terms = self.0.clone();
+        for term in &other.0 {
+            let mut negated = term.clone();
+            if let Some(first) = negated.first_mut() {
+                *first = -*first;
+            }
+            terms.push(negated);
+        }
+        Exact(terms)
+    }
+
+    /// `self · other`.
+    fn times(&self, other: &Exact) -> Exact {
+        let mut terms = Vec::new();
+        for a in &self.0 {
+            for b in &other.0 {
+                let mut term = a.clone();
+                term.extend_from_slice(b);
+                terms.push(term);
+            }
+        }
+        Exact(terms)
+    }
+
+    /// The sign, exactly; `None` where a product overflows or could underflow.
+    fn sign(&self) -> Option<Sign> {
+        let mut sum = ExactSum::new();
+        for term in &self.0 {
+            let Some((&first, rest)) = term.split_first() else {
+                continue;
+            };
+            if term.contains(&0.0) {
+                continue;
+            }
+            let mut parts = alloc::vec![first];
+            for &factor in rest {
+                let mut next = Vec::with_capacity(parts.len().saturating_mul(2));
+                for part in parts {
+                    let (p, e) = two_prod(part, factor);
+                    if !p.is_finite() || p.abs() < FLOOR {
+                        return None;
+                    }
+                    next.push(p);
+                    if e != 0.0 {
+                        next.push(e);
+                    }
+                }
+                parts = next;
+            }
+            sum.add_slice(&parts);
+        }
+        let v = sum.round_ieee();
+        if v > 0.0 {
+            Some(Sign::Positive)
+        } else if v < 0.0 {
+            Some(Sign::Negative)
+        } else if v == 0.0 {
+            Some(Sign::Zero)
+        } else {
+            None
         }
     }
-    Ok(Some(map))
+
+    /// Whether the sign is exactly `s`.
+    fn is(&self, s: Sign) -> bool {
+        self.sign() == Some(s)
+    }
+
+    /// Whether the sum is proven at least zero.
+    fn at_least_zero(&self) -> bool {
+        matches!(self.sign(), Some(Sign::Positive | Sign::Zero))
+    }
+}
+
+/// A vector of [`Exact`] entries.
+type Exact3 = [Exact; 3];
+
+/// `v` as exact entries.
+fn exact3(v: [f64; 3]) -> Exact3 {
+    v.map(Exact::of)
+}
+
+/// `a − b`.
+fn less3(a: &Exact3, b: &Exact3) -> Exact3 {
+    let [p, q, r] = a;
+    let [x, y, z] = b;
+    [p.less(x), q.less(y), r.less(z)]
+}
+
+/// `k · v`.
+fn scale3(v: &Exact3, k: &Exact) -> Exact3 {
+    let [x, y, z] = v;
+    [x.times(k), y.times(k), z.times(k)]
+}
+
+/// `a · b`.
+fn dot3(a: &Exact3, b: &Exact3) -> Exact {
+    let [p, q, r] = a;
+    let [x, y, z] = b;
+    p.times(x).plus(&q.times(y)).plus(&r.times(z))
+}
+
+/// `a × b`.
+fn cross3(a: &Exact3, b: &Exact3) -> Exact3 {
+    let [p, q, r] = a;
+    let [x, y, z] = b;
+    [
+        q.times(z).less(&r.times(y)),
+        r.times(x).less(&p.times(z)),
+        p.times(y).less(&q.times(x)),
+    ]
+}
+
+/// A profile's axis, through `c` along `e`, and the side of it the map reads: the side of the
+/// profile's middle point `m`, as (m − c) × e.
+struct Turn {
+    c: Exact3,
+    e: Exact3,
+    toward: Exact3,
+}
+
+impl Turn {
+    fn new(c: [f64; 3], e: [f64; 3], m: [f64; 3]) -> Turn {
+        let (c, e) = (exact3(c), exact3(e));
+        let toward = cross3(&less3(&exact3(m), &c), &e);
+        Turn { c, e, toward }
+    }
+
+    /// `x` − c.
+    fn offset(&self, x: [f64; 3]) -> Exact3 {
+        less3(&exact3(x), &self.c)
+    }
+
+    /// Whether the direction `d` is square to the normal `n`, exactly.
+    fn square(n: &Exact3, d: &Exact3) -> bool {
+        dot3(n, d).is(Sign::Zero)
+    }
+
+    /// Whether the plane through c of normal `n` holds the axis, exactly.
+    fn holds_axis(&self, n: &Exact3) -> bool {
+        Turn::square(n, &self.e)
+    }
+
+    /// Where the point c + `w` stands about the axis: the sign of (w × e) · `toward`, positive on
+    /// the side the map reads and zero on the axis, for a point of the plane of the axis and the
+    /// middle point. Any positive multiple of w gives the same sign.
+    fn side(&self, w: &Exact3) -> Option<Sign> {
+        dot3(&cross3(w, &self.e), &self.toward).sign()
+    }
+
+    /// Whether every point c + wᵢ is on the side the map reads or on the axis, and one of them off
+    /// it: a curve in the convex hull of such points lies in that half-plane.
+    fn beside(&self, hull: &[Exact3]) -> bool {
+        let mut off = false;
+        for w in hull {
+            match self.side(w) {
+                Some(Sign::Positive) => off = true,
+                Some(Sign::Zero) => {}
+                _ => return false,
+            }
+        }
+        off
+    }
+
+    /// Whether the ball about c + `w` of squared radius `reach` stays on the side the map reads:
+    /// its centre is on that side and |w × e|² ≥ reach·|e|², so no point of it is across the
+    /// axis.
+    fn clear(&self, w: &Exact3, reach: &Exact) -> bool {
+        let across = cross3(w, &self.e);
+        self.side(w) == Some(Sign::Positive)
+            && dot3(&across, &across)
+                .less(&reach.times(&dot3(&self.e, &self.e)))
+                .at_least_zero()
+    }
+}
+
+/// Whether the conic of `axes` about `centre` lies in a plane of the axis: by its plane's normal,
+/// the frame's or u × v, square to the axis and to the centre's offset from it.
+fn conic_in_plane(turn: &Turn, centre: [f64; 3], axes: &Axes<3>) -> bool {
+    let normal = match axes {
+        Axes::Frame { frame, .. } => exact3(frame.normal()),
+        Axes::Vectors { u, v } => {
+            let n = cross3(&exact3(*u), &exact3(*v));
+            if n.iter().all(|x| x.is(Sign::Zero)) {
+                return false;
+            }
+            n
+        }
+    };
+    turn.holds_axis(&normal) && Turn::square(&normal, &turn.offset(centre))
+}
+
+/// |u|² + |v|² for a conic's axes, a² + b² on a frame. A point α·u + β·v from the centre is
+/// within (α² + β²)(|u|² + |v|²) of it, squared, by Cauchy and Schwarz.
+fn axes_reach(axes: &Axes<3>) -> Exact {
+    match axes {
+        Axes::Frame { a, b, .. } => {
+            let (a, b) = (Exact::of(*a), Exact::of(*b));
+            a.times(&a).plus(&b.times(&b))
+        }
+        Axes::Vectors { u, v } => {
+            let (u, v) = (exact3(*u), exact3(*v));
+            dot3(&u, &u).plus(&dot3(&v, &v))
+        }
+    }
+}
+
+/// Whether the profile `kind` on `(lo, hi)` lies in the half-plane of the turn's axis that holds
+/// its middle point, decided from its own data, exactly (issue 921; it read the ends and the
+/// middle, which a circle or a NURBS curve can leave the plane between, and not which side of the
+/// axis they were on, so a profile across the axis lost the rings of its far part). A line by its
+/// ends; a circle by its plane, through the axis, and its centre at least its radius off the
+/// axis; an ellipse or a parabola by its plane and a ball about its centre that holds it; a NURBS
+/// curve by every control point lying in the plane and on the side (its weights are positive, so
+/// it is in their convex hull). What none of these proves is `false`, for the general paths: a
+/// hyperbola, an arc whose whole circle reaches across the axis, another kind.
+fn in_half_plane(turn: &Turn, kind: &CurveKind<3>, (lo, hi): (f64, f64)) -> bool {
+    match kind {
+        CurveKind::Line(l) => {
+            let (o, d) = (turn.offset(l.origin()), exact3(l.direction()));
+            let end = |t: f64| {
+                let [p, q, r] = &o;
+                let [x, y, z] = &d;
+                let t = Exact::of(t);
+                [
+                    p.plus(&x.times(&t)),
+                    q.plus(&y.times(&t)),
+                    r.plus(&z.times(&t)),
+                ]
+            };
+            Turn::square(&cross3(&turn.e, &d), &o) && turn.beside(&[end(lo), end(hi)])
+        }
+        CurveKind::Circle(x) => {
+            let r = Exact::of(x.radius());
+            let centre = turn.offset(x.center());
+            turn.holds_axis(&exact3(x.frame().normal()))
+                && Turn::square(&exact3(x.frame().normal()), &centre)
+                && turn.clear(&centre, &r.times(&r))
+        }
+        CurveKind::Ellipse(x) => {
+            // c + cos πt·u + sin πt·v: cos² + sin² = 1.
+            let axes = x.axes();
+            conic_in_plane(turn, x.center(), &axes)
+                && turn.clear(&turn.offset(x.center()), &axes_reach(&axes))
+        }
+        CurveKind::Parabola(x) => {
+            // c + t²·u + t·v with |t| ≤ T: t⁴ + t² ≤ T⁴ + T².
+            let axes = x.axes();
+            let far = Exact::of(tight::larger(lo.abs(), hi.abs()));
+            let square = far.times(&far);
+            let sum = square.times(&square).plus(&square);
+            conic_in_plane(turn, x.vertex(), &axes)
+                && turn.clear(&turn.offset(x.vertex()), &sum.times(&axes_reach(&axes)))
+        }
+        CurveKind::Nurbs(n) => {
+            let weights = n.weights();
+            let hull: Vec<Exact3> = n
+                .homogeneous()
+                .iter()
+                .enumerate()
+                .map(|(i, h)| {
+                    let w = weights.and_then(|all| all.get(i)).copied().unwrap_or(1.0);
+                    less3(&exact3(*h), &scale3(&turn.c, &Exact::of(w)))
+                })
+                .collect();
+            // The plane of the axis and the first control point off it holds every other.
+            let Some(normal) = hull
+                .iter()
+                .map(|w| cross3(&turn.e, w))
+                .find(|n| n.iter().any(|x| !x.is(Sign::Zero)))
+            else {
+                return false;
+            };
+            hull.iter().all(|w| Turn::square(&normal, w)) && turn.beside(&hull)
+        }
+        _ => false,
+    }
 }
 
 /// The linear part of a swept surface's placement as built.
@@ -406,12 +716,12 @@ fn revolution_axis(r: &Revolution) -> Result<Axis, IntersectError> {
 /// The profile of `r` in the half-plane of its axis, if it lies in one: of a revolution
 /// [`revolution_in_place`] gave.
 fn profile_meridian(r: &Revolution) -> Result<Option<Meridians>, IntersectError> {
-    let (profile, ..) = r.shape()?;
+    let (profile, at, frame) = r.shape()?;
     let on = revolution_axis(r)?;
     let Some(kind) = untrimmed(profile)? else {
         return Ok(None);
     };
-    let Some(map) = half_plane_of(&on, &kind)? else {
+    let Some(map) = half_plane_of(&on, (at, frame.normal()), &kind)? else {
         return Ok(None);
     };
     Ok(map.image(&kind)?.map(|(curve, _)| alloc::vec![curve]))
@@ -705,7 +1015,7 @@ pub(crate) fn plane_revolution(
         return Ok(None);
     };
     // A profile off a half-plane of the axis sweeps no copies of itself.
-    let Some(flat) = half_plane_of(&on, &kind)? else {
+    let Some(flat) = half_plane_of(&on, (at, e), &kind)? else {
         return Ok(None);
     };
     // Turn the half-plane of the profile onto each half of the plane.
@@ -1114,15 +1424,6 @@ impl Affine<2> {
     /// The point `x` maps to.
     fn at_point(&self, x: Vector) -> Result<[Interval; 2], IntersectError> {
         self.point(x)
-    }
-
-    /// How far `x` stands from the plane this map reads, through `origin`, along the normal of its
-    /// two axes. (It read x less its part along the axes, which holds the origin's part off the
-    /// plane, and summed that rest's entries, which cancel along a normal such as (1, −1, 0).)
-    fn leaves(&self, x: Vector, origin: Vector) -> Result<Interval, IntersectError> {
-        let [[a, e], [b, f], [c, g]] = self.columns;
-        let normal = cross([a, b, c], [e, f, g])?;
-        dot(minus(x, origin)?, normal)
     }
 
     /// This map, then (ρ, z) ↦ `to` + ρ·`out` + z·`up`: a turn about the axis.
