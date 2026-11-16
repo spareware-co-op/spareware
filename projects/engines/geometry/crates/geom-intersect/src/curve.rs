@@ -74,13 +74,7 @@ const REACH: f64 = COORD_MAX as f64;
 
 /// The sign of Σ aᵢ·bᵢ, exactly: each product is a double and its error, and their sum is exact.
 pub(crate) fn sign_of(terms: &[(f64, f64)]) -> Sign {
-    let mut sum = ExactSum::new();
-    for &(a, b) in terms {
-        let (p, e) = two_prod(a, b);
-        sum.add(p);
-        sum.add(e);
-    }
-    let v = sum.round_ieee();
+    let v = sum_of(terms);
     if v > 0.0 {
         Sign::Positive
     } else if v < 0.0 {
@@ -88,6 +82,24 @@ pub(crate) fn sign_of(terms: &[(f64, f64)]) -> Sign {
     } else {
         Sign::Zero
     }
+}
+
+/// Σ aᵢ·bᵢ, summed exactly and rounded once to the nearest double.
+fn sum_of(terms: &[(f64, f64)]) -> f64 {
+    let mut sum = ExactSum::new();
+    for &(a, b) in terms {
+        let (p, e) = two_prod(a, b);
+        sum.add(p);
+        sum.add(e);
+    }
+    sum.round_ieee()
+}
+
+/// An enclosure of Σ aᵢ·bᵢ two steps wide: the doubles either side of its exact sum rounded to
+/// nearest, which is within half a step of the sum.
+fn enclosed_sum(terms: &[(f64, f64)]) -> Result<Interval, IntersectError> {
+    let v = sum_of(terms);
+    Ok(Interval::new(v.next_down(), v.next_up())?)
 }
 
 /// The answer for items that all stand proven.
@@ -717,6 +729,15 @@ fn line_line<const D: usize>(
     let i = |v: f64| Interval::point(v);
     let (wx, wy) = (i(px)?.sub(i(ox)?)?, i(py)?.sub(i(oy)?)?);
     let d = i(dx)?.mul(i(ey)?)?.sub(i(dy)?.mul(i(ex)?)?)?;
+    // The exact sign says the lines are not parallel, but when they are parallel to within the
+    // products' rounding this enclosure can still reach zero (issue 921: a direction rounded from
+    // 30 to 30.000000000000004). Then the determinant's exact sum, two steps wide, encloses it
+    // away from zero. Only there, so every other answer keeps its boxes.
+    let d = if d.contains(0.0) {
+        enclosed_sum(&[(dx, ey), (-dy, ex)])?
+    } else {
+        d
+    };
     let (t_lo, t_hi) = ParamCurve::domain(b);
     let s = wx.mul(i(ey)?)?.sub(wy.mul(i(ex)?)?)?.div(d)?;
     let t = wx.mul(i(dy)?)?.sub(wy.mul(i(dx)?)?)?.div(d)?;
