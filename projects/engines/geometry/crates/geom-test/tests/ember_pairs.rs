@@ -47,7 +47,7 @@ use geom_poly::winding::WindingTest;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::agree::judge_mesh;
 use geom_test::corpus::{Fetch, Manifest, tree_digest};
-use geom_test::flat_reference::six_volumes_where;
+use geom_test::flat_reference::{Test, six_volumes_where};
 use geom_test::obj::Grid;
 use geom_test::polyhedral::{mesh_polygons, mesh_solid};
 use geom_test::stl::{self, Case};
@@ -323,7 +323,7 @@ fn run(pair: usize, case: &Case, dir: &std::path::Path) -> Option<String> {
     let keeps: Vec<Keep> = (0..OPERATIONS.len())
         .map(|k| Box::new(move |w: &[i64]| keep(k, w)) as Keep)
         .collect();
-    let borrowed: Vec<&dyn Fn(&[i64]) -> bool> = keeps.iter().map(|k| k.as_ref()).collect();
+    let borrowed: Vec<Test<'_>> = keeps.iter().map(|k| k.as_ref()).collect();
     let reference = six_volumes_where(&[&solids[0], &solids[1]], &borrowed).unwrap();
     for ((got, want), what) in volumes.iter().zip(&reference).zip(OPERATIONS) {
         assert_eq!(
