@@ -1029,9 +1029,17 @@ pub fn seconds_per_mutant(package: &str) -> u64 {
         .map_or(0, |(_, s)| *s)
 }
 
-/// The minutes of mutation one shard may plan for: the shard job's timeout (345 minutes, under
+/// The minutes of mutation a shard is planned at when the run fits [`MAX_SHARDS`] shards so: a
+/// push's checks end in about a quarter of an hour (the owner, 16 Nov 2026), and a shard's job adds
+/// its setup and its baseline build and test to the mutants' time. Planned times are twice the
+/// largest measured mean ([`SECONDS_PER_MUTANT`]), and the slowest stretch measured took at most
+/// 0.69 of its plan, so ten planned minutes run in about seven.
+pub const SHARD_MINUTES: u64 = 10;
+
+/// The most minutes of mutation one shard may plan for, for a run too large to fit
+/// [`MAX_SHARDS`] shards of [`SHARD_MINUTES`]: the shard job's timeout (345 minutes, under
 /// GitHub's six-hour limit for a job) less its setup and a margin for runs slower than the mean.
-pub const SHARD_MINUTES: u64 = 240;
+pub const SHARD_LIMIT_MINUTES: u64 = 240;
 
 /// The most jobs one GitHub Actions matrix may hold
 /// (<https://docs.github.com/en/actions/reference/limits>).
@@ -1044,48 +1052,91 @@ pub const SHARD_JOBS: u64 = 2;
 /// The most shards a run may have: [`MATRIX_JOBS`] in each of the [`SHARD_JOBS`].
 pub const MAX_SHARDS: u64 = MATRIX_JOBS.saturating_mul(SHARD_JOBS);
 
-/// How many shards a run of `mutants` needs so each shard plans for at most [`SHARD_MINUTES`], and
-/// no more: none for no mutant (a diff that touches none), whose judge then has nothing to wait
-/// for.
+/// The mutants cargo-mutants gives shard `k` of `n` (`--sharding slice`, its default; src/shard.rs
+/// at v27.1.0): positions `k c` to `(k + 1) c - 1` of the list, `c = ceil(len / n)`, the last
+/// fewer, so a shard can be empty when `n` does not divide the list well.
+#[must_use]
+pub fn slice(len: usize, k: u64, n: u64) -> std::ops::Range<usize> {
+    let n = usize::try_from(n.max(1)).unwrap_or(usize::MAX);
+    let k = usize::try_from(k).unwrap_or(usize::MAX);
+    let c = len.div_ceil(n);
+    let start = k.saturating_mul(c).min(len);
+    start..k.saturating_add(1).saturating_mul(c).min(len)
+}
+
+/// The planned seconds of each shard of `n` over `mutants`: the sum of [`seconds_per_mutant`] of
+/// the mutants its [`slice`] holds, each at its own crate's rate. An empty shard reads `None`.
+#[must_use]
+pub fn shard_seconds(mutants: &[Mutant], n: u64) -> Vec<Option<u64>> {
+    (0..n)
+        .map(|k| {
+            let part = mutants.get(slice(mutants.len(), k, n))?;
+            (!part.is_empty()).then(|| {
+                part.iter()
+                    .map(|m| seconds_per_mutant(&m.package))
+                    .fold(0, u64::saturating_add)
+            })
+        })
+        .collect()
+}
+
+/// Whether every shard of `n` holds a mutant and is planned at no more than `minutes`.
+fn fits(mutants: &[Mutant], n: u64, minutes: u64) -> bool {
+    let budget = minutes.saturating_mul(60);
+    shard_seconds(mutants, n)
+        .iter()
+        .all(|s| s.is_some_and(|s| s <= budget))
+}
+
+/// How many shards a run of `mutants` needs, by each mutant's measured time: the fewest shards of
+/// which every one holds a mutant and is planned at no more than [`SHARD_MINUTES`]; when the run
+/// is too large for [`MAX_SHARDS`] such shards, [`MAX_SHARDS`] shards, each planned at no more than
+/// [`SHARD_LIMIT_MINUTES`]. None for no mutant (a diff that touches none), whose judge then has
+/// nothing to wait for.
 ///
-/// cargo-mutants gives each shard a run of consecutive mutants, as many as it can share out evenly
-/// (`--sharding slice`), and one run can lie inside a single crate, so every shard is sized at the
-/// slowest crate in the list: it takes at most `SHARD_MINUTES × 60 / s` mutants for the largest
-/// [`seconds_per_mutant`] `s`. With n shards of at most that many each, every shard has at least
-/// one mutant, so none runs empty.
+/// cargo-mutants gives each shard a run of consecutive mutants ([`slice`]), so the plan sums each
+/// shard's own mutants at their own crates' rates ([`shard_seconds`]): a slice of fast crates holds
+/// as many as its count, and only a slice of geom-num's mutants is sized at geom-num's rate. What
+/// each shard tests is cargo-mutants' choice from `--shard k/n`, never this plan's: the plan picks
+/// only `n`, and the judge proves the shards together tested every mutant of the list
+/// (`--expected`), whatever `n` is.
 ///
 /// # Errors
 ///
-/// A description, when the run would need more than [`MAX_SHARDS`] shards, or one mutant is
-/// planned at more than a shard's time: raise the shard budget or split the run before the gate
-/// silently loses mutants.
+/// A description, when no number of shards up to [`MAX_SHARDS`] keeps every shard within
+/// [`SHARD_LIMIT_MINUTES`]: split the run before the gate silently loses mutants.
 pub fn shard_count(mutants: &[Mutant]) -> Result<u64, String> {
-    let Some((slowest, seconds)) = mutants
-        .iter()
-        .map(|m| (m.package.as_str(), seconds_per_mutant(&m.package)))
-        .max_by_key(|(_, s)| *s)
-    else {
+    if mutants.is_empty() {
         return Ok(0);
-    };
-    let per_shard = SHARD_MINUTES
-        .saturating_mul(60)
-        .checked_div(seconds)
-        .unwrap_or(u64::MAX);
-    if per_shard == 0 {
-        return Err(format!(
-            "a {slowest} mutant is planned at {seconds} s, more than a shard's {SHARD_MINUTES} min"
-        ));
     }
-    let n = mutants.len();
-    let shards = u64::try_from(n).unwrap_or(u64::MAX).div_ceil(per_shard);
-    if shards > MAX_SHARDS {
-        return Err(format!(
-            "{n} mutants, {per_shard} to a shard of {SHARD_MINUTES} min at {seconds} s each \
-             ({slowest}'s), need {shards} shards, more than the {MAX_SHARDS} the workflow's \
-             {SHARD_JOBS} shard jobs of {MATRIX_JOBS} may hold"
-        ));
+    let total: u64 = mutants
+        .iter()
+        .map(|m| seconds_per_mutant(&m.package))
+        .fold(0, u64::saturating_add);
+    let lower = total
+        .div_ceil(SHARD_MINUTES.saturating_mul(60))
+        .clamp(1, MAX_SHARDS);
+    if let Some(n) = (lower..=MAX_SHARDS).find(|&n| fits(mutants, n, SHARD_MINUTES)) {
+        return Ok(n);
     }
-    Ok(shards)
+    // Too large for shards of SHARD_MINUTES: the plan whose slowest shard is planned at least,
+    // the fewer shards on a tie, when it is within the job's limit.
+    let best = (1..=MAX_SHARDS)
+        .filter_map(|n| {
+            let seconds = shard_seconds(mutants, n);
+            let slowest = seconds.iter().copied().collect::<Option<Vec<u64>>>()?;
+            Some((slowest.into_iter().max().unwrap_or(0), n))
+        })
+        .min();
+    match best {
+        Some((slowest, n)) if slowest <= SHARD_LIMIT_MINUTES.saturating_mul(60) => Ok(n),
+        _ => Err(format!(
+            "{} mutants, planned at {total} s, need more than the {MAX_SHARDS} shards the \
+             workflow's {SHARD_JOBS} shard jobs of {MATRIX_JOBS} may hold: no plan of at most \
+             {MAX_SHARDS} keeps every shard within {SHARD_LIMIT_MINUTES} min",
+            mutants.len()
+        )),
+    }
 }
 
 /// The shard plan as JSON for the workflow: `{"count": n, "shards": [...], "count_2": m,

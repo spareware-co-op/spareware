@@ -15053,7 +15053,7 @@
         },
         {
           "cost": "linear in the size of the LCOV files and the crates' sources.",
-          "does": "[`parse_lcov`] reads the LCOV file cargo-llvm-cov writes for one crate (`cargo llvm-cov -p <crate> --branch --lcov`). [`measure`] counts, for every file under the crate's `src/`, the lines and branches outside test code (found by [`crate::rust_source`]) and how many of them the crate's tests ran. [`judge`] applies the bars of [`crate::foundation`]: in the foundation set every line run and every branch taken both ways; elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's crates against [`crate::quality_ledger::Ledger::coverage_off`].",
+          "does": "[`parse_lcov`] reads the LCOV file cargo-llvm-cov writes for one crate (`cargo llvm-cov -p <crate> --branch --lcov`). [`measure`] counts, for every file under the crate's `src/`, the lines and branches outside test code (found by [`crate::rust_source`]) and how many of them the crate's tests ran. [`judge`] applies the bars of [`crate::foundation`]: in the foundation set every line run and every branch taken both ways; elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's crates against [`crate::quality_ledger::Ledger::coverage_off`]. [`plan_parts`] shares a run's crates among jobs that measure side by side, balanced by each crate's measured time ([`TIMES`]), and [`missing_outputs`] names every crate the judge finds no files of, whichever part held it.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/coverage.rs",
           "guarantees": [
@@ -18678,6 +18678,7 @@
         ],
         "unit": [
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/inherited_wait.rs",
           "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
@@ -18708,6 +18709,7 @@
         ],
         "unit": [
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/inherited_wait.rs",
           "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
@@ -18763,6 +18765,7 @@
         ],
         "unit": [
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/inherited_wait.rs",
           "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
