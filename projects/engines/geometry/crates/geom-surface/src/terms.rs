@@ -5,8 +5,10 @@
 //! the kernel's proven angle form), and [`Terms`] holds a kind's c and terms in doubles and as
 //! enclosures of the exact values its stored data define. It evaluates every partial derivative
 //! ∂^{i+j}S/∂u^i∂v^j in closed form: in doubles at a point, and in intervals over any box, which
-//! is both the certified evaluation and the bound. [`Terms::distance`] bounds how far two surfaces
-//! of the same terms lie apart over a box, and [`Terms::to_nurbs`] writes them as one
+//! is both the certified evaluation and the bound. [`Terms::ceiling`] bounds a first partial's
+//! length over a box from the functions' forms alone, evaluating none. [`Terms::distance`] bounds
+//! how far two surfaces of the same terms lie apart over a box, and [`Terms::to_nurbs`] writes
+//! them as one
 //! tensor-product NURBS surface: each direction's functions are the coordinates of a unit circle
 //! (cos, sin and 1, the exact rational quadratic of `geom-curve`) or of a line (t and 1), and a
 //! product of two such curves is a tensor product (The NURBS Book, section 8.2, on surfaces of
@@ -41,9 +43,10 @@ use alloc::vec::Vec;
 
 use geom_curve::tight::{self, point};
 use geom_curve::{Circle, CurveError, Frame, ParamCurve, ParamMap};
+use geom_num::eft::{two_prod, two_sum};
 use geom_num::interval::Interval;
 use geom_num::math;
-use geom_nurbs::{Basis, Changed, Surface};
+use geom_nurbs::{Basis, Changed, Direction, Surface};
 use geom_run::WorkMeter;
 
 use crate::param::{ParamBox, SurfaceForm};
@@ -133,6 +136,39 @@ fn enclosed(f: Fun, t: Interval, k: usize) -> Result<Interval, CurveError> {
     })
 }
 
+/// sup |f| over [lo, hi], or sup |f′| if `differentiated`, from f's form alone, as a double at
+/// least it: 1 for a constant, a cos, a sin or t's slope, π rounded up for a cos's or a sin's
+/// slope, the end further from zero for t; `None` for a constant's slope, which is zero everywhere
+/// (the term then vanishes, whatever the other factor's ceiling, a plane's t over a domain without
+/// end among them).
+fn ceiling(f: Fun, (lo, hi): (f64, f64), differentiated: bool) -> Option<f64> {
+    match (f, differentiated) {
+        (Fun::One, true) => None,
+        (Fun::One | Fun::Cos | Fun::Sin, false) | (Fun::Lin, true) => Some(1.0),
+        (Fun::Lin, false) => Some(tight::larger(lo.abs(), hi.abs())),
+        (Fun::Cos | Fun::Sin, true) => Some(PI_HI),
+    }
+}
+
+/// a + b rounded up: the nearest sum, stepped up once where `geom-num`'s exact error of it says
+/// it fell below, so an exact sum stays exact.
+///
+/// The ceilings are sums and products of non-negative doubles only, so rounding each nearest
+/// result up where it fell short bounds it from above without the interval arithmetic of `tight`,
+/// which would carry a lower end nobody reads and cost several times as much on a path every range
+/// check takes. A sum that overflows is infinite, and its caller refuses it.
+pub(crate) fn add_up(a: f64, b: f64) -> f64 {
+    let (s, e) = two_sum(a, b);
+    if e > 0.0 { s.next_up() } else { s }
+}
+
+/// a·b rounded up ([`add_up`]): `two_prod`'s error has the exact error's sign for every finite
+/// product, a subnormal one included.
+pub(crate) fn mul_up(a: f64, b: f64) -> f64 {
+    let (p, e) = two_prod(a, b);
+    if e > 0.0 { p.next_up() } else { p }
+}
+
 impl Term {
     /// The term f(u)·g(v)·W, its W given as doubles that are its exact value.
     pub(crate) fn exact(u: Fun, v: Fun, w: [f64; 3]) -> Result<Term, CurveError> {
@@ -205,6 +241,42 @@ impl Terms {
             }
         }
         Ok(out)
+    }
+
+    /// An upper bound on the length of the first partial along `dir` anywhere in the box:
+    /// Σ sup|f⁽ⁱ⁾|·sup|g⁽ʲ⁾|·|W|₁ over the terms, each function's ceiling read from its form alone
+    /// (`ceiling`) and W's length by the sum of its coordinates' magnitudes, so no function is
+    /// evaluated over the box. Each coordinate of the partial is at most
+    /// Σ sup|f⁽ⁱ⁾|·sup|g⁽ʲ⁾|·|Wₖ| in magnitude, so by the triangle inequality the partial's length,
+    /// and the length of any box that holds only its values (up to that box's rounding), is at
+    /// most this. Every sum and product is rounded up ([`add_up`]).
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if the bound overflows.
+    pub(crate) fn ceiling(
+        &self,
+        ((a, b), (c, d)): ParamBox,
+        dir: Direction,
+    ) -> Result<f64, CurveError> {
+        let along_u = dir == Direction::U;
+        let mut total = 0.0;
+        for t in &self.terms {
+            let (Some(f), Some(g)) = (
+                ceiling(t.u, (a, b), along_u),
+                ceiling(t.v, (c, d), !along_u),
+            ) else {
+                continue;
+            };
+            let [w0, w1, w2] = t.we.map(tight::magnitude);
+            let w = add_up(add_up(w0, w1), w2);
+            total = add_up(total, mul_up(mul_up(f, g), w));
+        }
+        if total.is_finite() {
+            Ok(total)
+        } else {
+            Err(CurveError::NotFinite)
+        }
     }
 
     /// An upper bound on the distance between these terms and `other`'s (the same functions,

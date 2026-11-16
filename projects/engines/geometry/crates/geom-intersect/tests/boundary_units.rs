@@ -206,3 +206,41 @@ fn a_planes_edge_along_a_cylinders_line_is_proven_in_pieces_of_half_a_unit() {
         along_the_tube(tall, false, pieces);
     }
 }
+
+/// The plane z = 0 written with its two vectors leaning on each other, u along x and v along
+/// (1, 1, 0), both in units: the point at (u, v) is (u + v, v, 0) units. The wall's edge, the line
+/// x = 0 from y = 0 to 2 units, is the line u = −v from v = 0 to 2, and the domain holds it with a
+/// quarter of a unit to spare across.
+fn leaning() -> SurfaceKind {
+    let domain = ((-2.25, 0.25), (0.0, 2.0));
+    SurfaceKind::Plane(Plane::new([0.0; 3], [UNIT, 0.0, 0.0], [UNIT, UNIT, 0.0], domain).unwrap())
+}
+
+/// Where each piece of the edge stands on the other surface is found by Gauss-Newton from the
+/// middle of its domain, (−1, 1), and on a plane one step lands on the point exactly. The edge is
+/// proven in its two halves, whose middles stand at (−1/2, 1/2) and (−3/2, 3/2). With vectors at an
+/// eighth of a turn, a step that took the cross term of the normal equations' inverse with the
+/// wrong sign would leave s off by twice as much, the other way, at each step: 2^11 units after
+/// the twelve, far outside the domain, and neither half would be proven. The branch is the line,
+/// held exactly, ending at the two halves' ends.
+#[test]
+fn an_edge_along_a_plane_whose_vectors_lean_is_proven_where_it_lies() {
+    let wall = wall((0.0, 2.0), (0.0, 1.0));
+    let strip = leaning();
+    for strip_first in [true, false] {
+        let (found, [u, v, t, z]) = if strip_first {
+            (branch(&strip, &wall), [0, 1, 2, 3])
+        } else {
+            (branch(&wall, &strip), [2, 3, 0, 1])
+        };
+        for p in &found.vertices {
+            // On the line the wall's u is y in units, the plane's v is the same, its u is −v, and
+            // z, the wall's v, is 0.
+            assert!(holds(p[z], 0.0), "{p:?}");
+            assert!(meets((p[v], 1.0), (p[t], 1.0)), "{p:?}");
+            let minus_v = Interval::new(-p[v].hi(), -p[v].lo()).unwrap();
+            assert!(meets((p[u], 1.0), (minus_v, 1.0)), "{p:?}");
+        }
+        evenly(&places(&found, t), 2.0, 2);
+    }
+}

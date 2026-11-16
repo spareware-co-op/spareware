@@ -645,6 +645,17 @@ macro_rules! round_kind {
                 $kind::build(round)
             }
 
+            /// An upper bound on the first partial's length along `dir` over `region`, from the
+            /// terms' forms alone ([`SurfaceKind::speed_ceiling`]).
+            pub(crate) fn ceiling(
+                &self,
+                region: ParamBox,
+                dir: Direction,
+            ) -> Result<f64, CurveError> {
+                check_box(region, self.round.domain)?;
+                self.terms.ceiling(region, dir)
+            }
+
             fn build(round: Round) -> Result<$kind, CurveError> {
                 round.check($which)?;
                 let terms = round_terms($which, &round)?;
@@ -1060,6 +1071,13 @@ impl Plane {
     fn bounded(&self) -> bool {
         let ((a, b), (c, d)) = self.domain;
         a.is_finite() && b.is_finite() && c.is_finite() && d.is_finite()
+    }
+
+    /// An upper bound on the first partial's length along `dir` over `region`, from the terms'
+    /// forms alone ([`SurfaceKind::speed_ceiling`]).
+    pub(crate) fn ceiling(&self, region: ParamBox, dir: Direction) -> Result<f64, CurveError> {
+        check_box(region, self.domain)?;
+        self.terms.ceiling(region, dir)
     }
 }
 

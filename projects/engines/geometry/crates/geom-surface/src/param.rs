@@ -10,7 +10,9 @@
 //! partials and on the unit normal's partials over any box
 //! ([`ParamSurface::second_derivative_bound`], [`ParamSurface::normal_derivative_bound`], piece
 //! G68), which tessellation's chord and normal-angle bounds rest on (chapter 19.3).
-//! [`SurfaceKind`] is the storage enum, one variant per kind, which dispatches to it. New surfaces
+//! [`SurfaceKind`] is the storage enum, one variant per kind, which dispatches to it, and gives the
+//! kinds written as fixed terms, and an extrusion, a quick ceiling on their first partials'
+//! lengths that takes no extent ([`SurfaceKind::speed_ceiling`], which a range check tries first). New surfaces
 //! come back as [`SurfaceKind`] inside `geom-nurbs`'s [`Changed`], with a certified bound on their
 //! distance from the exact result. Errors are
 //! `geom-curve`'s [`CurveError`], shared by every kind (a span there is a box here).
@@ -375,6 +377,43 @@ pub enum SurfaceKind {
     Ruled(Ruled),
     /// An offset surface: a base kind moved along its normal (G66).
     Offset(Offset),
+}
+
+impl SurfaceKind {
+    /// A quick upper bound on the length of the first partial along `dir` anywhere in `region`,
+    /// for the kinds written as sums of fixed terms f(u)·g(v)·W (a plane, cylinder, cone, sphere or
+    /// torus) and for an extrusion along its sweep, or across a straight profile; `None` for every
+    /// other kind and direction. Each term's functions are bounded from their forms alone (a cos or
+    /// a sin by 1 and its slope by π, t by the region's end further from zero) and each vector by
+    /// the sum of its coordinates' magnitudes, every sum and product rounded up, so no extent is
+    /// taken and it costs a few operations a term, charged to no meter. It is at least the length
+    /// of every value the partial takes over the region, so at least the length of the box
+    /// [`ParamSurface::derivative_bound`] gives there, up to that box's rounding; it may be wider
+    /// by a few times.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::SpanOutside`] unless the region is finite and inside the domain;
+    /// [`CurveError::NotFinite`] if the bound overflows.
+    pub fn speed_ceiling(
+        &self,
+        region: ParamBox,
+        dir: Direction,
+    ) -> Result<Option<f64>, CurveError> {
+        Ok(Some(match self {
+            SurfaceKind::Plane(s) => s.ceiling(region, dir)?,
+            SurfaceKind::Cylinder(s) => s.ceiling(region, dir)?,
+            SurfaceKind::Cone(s) => s.ceiling(region, dir)?,
+            SurfaceKind::Sphere(s) => s.ceiling(region, dir)?,
+            SurfaceKind::Torus(s) => s.ceiling(region, dir)?,
+            SurfaceKind::Extrusion(s) => return s.ceiling(region, dir),
+            SurfaceKind::Nurbs(_)
+            | SurfaceKind::Affine(_)
+            | SurfaceKind::Revolution(_)
+            | SurfaceKind::Ruled(_)
+            | SurfaceKind::Offset(_) => return Ok(None),
+        }))
+    }
 }
 
 impl ParamSurface for SurfaceKind {

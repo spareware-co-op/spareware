@@ -773,3 +773,37 @@ fn a_point_beside_a_seam_is_one_point_not_a_continuum() {
         }
     }
 }
+
+/// A part of a curve's domain is projected as a curve of its own: its ends are the part's, and
+/// nothing of the curve outside it is found. Seen from beyond the right of a whole circle about
+/// (1, 2) of radius 5, over its left half, the nearest points are the half's two ends, a tie;
+/// the circle's own foot, on the right, is not among them. A segment's foot outside the part is
+/// clamped to the part's nearer end. A part outside the domain is refused.
+#[test]
+fn a_part_of_a_curve_is_projected_with_its_own_ends() {
+    use geom_intersect::project_curve_over;
+    let c = circle(5.0, (0.0, TURN));
+    let found = project_curve_over(&c, (0.5, 1.5), &[20.0, 2.0], FLOOR, &mut meter()).unwrap();
+    let Projection::Points(points) = &found else {
+        panic!("{found:?}");
+    };
+    assert_eq!(points.len(), 2, "{points:?}");
+    assert!(points[0].at[0].contains(0.5), "{points:?}");
+    assert!(points[1].at[0].contains(1.5), "{points:?}");
+    let reach = (19.0_f64 * 19.0 + 25.0).sqrt();
+    for n in points {
+        assert_eq!(n.place, Place::Boundary);
+        assert!(
+            n.distance.lo() - FLOOR <= reach && reach <= n.distance.hi() + FLOOR,
+            "{n:?}"
+        );
+    }
+    let segment = CurveKind::Line(Line::segment([0.0, 0.0], [10.0, 0.0]).unwrap().value);
+    let found =
+        project_curve_over(&segment, (0.75, 1.0), &[3.0, 4.0], FLOOR, &mut meter()).unwrap();
+    let end = found.first().unwrap();
+    assert!(end.at[0].contains(0.75), "{end:?}");
+    assert!(end.point[0].contains(7.5), "{end:?}");
+    assert_eq!(end.place, Place::Boundary);
+    assert!(project_curve_over(&c, (1.5, 2.5), &[20.0, 2.0], FLOOR, &mut meter()).is_err());
+}
