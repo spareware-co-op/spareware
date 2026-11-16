@@ -55,7 +55,17 @@ reference resolution gives 20.4's outcome on any history from `geom-test`'s kit;
 schedule, and the pruned record reads back and reads only its one encoding; and `contract`
 (`src/contract.rs`, G82), the operation contract's errors keep their detail's kind and chapter 22's
 remedies and write text that names what they hold, and every schema the facade lists names details
-the contract has, whose MCP tool descriptions parse and round-trip. `src/adversarial.rs`
+the contract has, whose MCP tool descriptions parse and round-trip. For Gate 4's pieces (30.1: a
+fuzz target per code piece): `planes` (`src/planes.rs`, G123, and through it G124's step ladder
+and G125's convex faces), `geom-poly`'s canonical planes and arrangement predicates give one entry
+to one plane and one order to any points, rays or flaps; `exact` (`src/exact.rs`, G146),
+`geom-mesh`'s exact mesh refuses what is not a mesh and gives one mesh in any input order; `cdt`
+(`src/cdt.rs`, G153), the triangulation is a true constrained Delaunay triangulation and one answer
+in any input order; and `solids` (`src/solids.rs`, G147 to G152, and through the mesh boolean
+G126 to G129's arrangement code), `geom-mesh`'s operations on small solids agree with counted
+cells. `make` and `sequence` reach G134's checker groups. Which lines of each piece they reach, and
+the pieces no target reaches yet (`geom-bool`'s, G142 to G145), are in
+`projects/kit/notes/G156-piece-map.md`. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
