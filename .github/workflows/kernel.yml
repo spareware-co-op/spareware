@@ -49,7 +49,10 @@ name: Kernel
 # what its test binaries link (the crate, its normal and build dependencies' closure, and its
 # development dependencies' closure), among its own tests, or anywhere when its sources read files
 # outside its folder; a changed file in no crate (a workflow, Cargo.lock, .cargo, the toolchain
-# file, an architecture chapter) runs every crate's. geom-test's src/test_scope.rs gives the whole
+# file, an architecture chapter) runs every crate's, but MAP.json and the quality ledger are read
+# against the base by their changed entries (`--base`): a change to one runs the tests of the crates
+# its changed entries name and of the crates that read it whole (geom-test's src/shared.rs), and
+# everything when it cannot be placed so. geom-test's src/test_scope.rs gives the whole
 # rule, its tests/test_scope.rs holds it to the crate graph, and the job's summary names every
 # crate and why it runs or not. The suites (`linux`, `suite`, `wasm-suite`) test only the crates
 # it names, and a part left with nothing to test passes. A release tag tests every crate. The
@@ -340,7 +343,7 @@ jobs:
           if [ -n "$BASE" ]; then
             git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch -q --no-tags --depth 1 origin "$BASE"
             git diff --no-ext-diff --no-renames --name-only "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
-            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt" >> "$GITHUB_ENV"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt --base $BASE" >> "$GITHUB_ENV"
           else
             echo "SCOPE=--all" >> "$GITHUB_ENV"
           fi

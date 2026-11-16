@@ -14,7 +14,10 @@
 //! A crate Y's tests run when a changed file is:
 //!
 //! - in no workspace crate's folder (a workflow, `Cargo.lock`, `.cargo/`, the toolchain file, an
-//!   architecture chapter, `MAP.json`): every crate's tests run;
+//!   architecture chapter): every crate's tests run;
+//! - `MAP.json` or `quality-ledger.json`, when the change's base is given: Y's tests run when one of
+//!   the file's changed entries names Y, or Y's sources read the file whole ([`crate::shared`]); a
+//!   change that cannot be placed so, or one given without its base, runs every crate's tests;
 //! - in a crate X's folder, outside its `tests/`, `benches/` and `examples/`, where X is in what
 //!   Y's test binaries link: Y itself, every crate Y reaches through normal and build
 //!   dependencies, transitively, and every crate Y's development dependencies reach the same way
@@ -51,6 +54,7 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::fuzz_scope::{TEST_FOLDERS, packages};
+use crate::shared::{Changes, Reach, Readers};
 
 /// What in a crate's source says it reads files outside its own folder: a relative path that
 /// climbs out of a folder, a walk up the folder tree, the workspace's root, or the workspace's
@@ -78,6 +82,8 @@ pub struct Scope {
     links: BTreeMap<String, BTreeSet<String>>,
     /// The crates whose sources read files outside their own folder.
     readers: BTreeSet<String>,
+    /// The crates that read each shared file whole ([`crate::shared`]).
+    whole: Readers,
 }
 
 /// Where a changed file is.
@@ -124,13 +130,31 @@ impl Scope {
             .and_then(Value::as_str)
             .ok_or("cargo metadata has no workspace root")?;
         let mut readers = BTreeSet::new();
+        let mut libs = BTreeMap::new();
         for p in packages(metadata)? {
             let folder = Path::new(root).join(&p.folder);
             if reads_outside(&folder)? {
-                readers.insert(p.name);
+                readers.insert(p.name.clone());
+            }
+            if let Some(lib) = p.libs.first() {
+                libs.insert(p.name, lib.clone());
             }
         }
-        Self::new(metadata, readers)
+        let scope = Self::new(metadata, readers)?;
+        let whole = Readers::read(Path::new(root), &scope.folders, &libs)?;
+        Ok(scope.with_whole_readers(whole))
+    }
+
+    /// The same scope, with `whole` the crates that read each shared file whole.
+    #[must_use]
+    pub fn with_whole_readers(self, whole: Readers) -> Self {
+        Self { whole, ..self }
+    }
+
+    /// The crates that read each shared file whole.
+    #[must_use]
+    pub fn whole_readers(&self) -> &Readers {
+        &self.whole
     }
 
     /// The scope of the workspace `metadata` describes, with `readers` the crates whose sources
@@ -210,6 +234,7 @@ impl Scope {
             folders,
             links,
             readers,
+            whole: Readers::default(),
         })
     }
 
@@ -243,12 +268,36 @@ impl Scope {
         }
     }
 
-    /// Why `file` runs the tests of `krate`, if it does.
-    fn selects(&self, file: &str, krate: &str) -> Option<String> {
+    /// Why the shared file `file`, whose change reaches `reach`, reaches `krate` (its tests and
+    /// what they build), if it does: one of its changed entries names `krate`, or `krate`'s sources
+    /// read it whole.
+    fn shared_reaches(&self, file: &str, reach: &Reach, krate: &str) -> Option<String> {
+        match reach {
+            Reach::Everything(why) => Some(format!(
+                "{file} changed and {why}, so it may change any build"
+            )),
+            Reach::Crates(named) => named
+                .get(krate)
+                .map(|why| format!("{file} changed: {why}"))
+                .or_else(|| {
+                    self.whole
+                        .crates(file)
+                        .contains(krate)
+                        .then(|| format!("{file} changed, and {krate}'s sources read it whole"))
+                }),
+        }
+    }
+
+    /// Why `file` runs the tests of `krate`, if it does, with `shared` what the change's shared
+    /// files reach.
+    fn selects(&self, file: &str, krate: &str, shared: &Changes) -> Option<String> {
         if self.readers.contains(krate) {
             return Some(format!(
                 "{file} changed, and {krate}'s sources read files outside its folder"
             ));
+        }
+        if let Some(reach) = shared.get(file) {
+            return self.shared_reaches(file, reach, krate);
         }
         match self.place(file) {
             Place::Outside => Some(format!("{file} is in no crate, so it may change any build")),
@@ -272,26 +321,48 @@ impl Scope {
     /// returned: no change list reaches everything.
     #[must_use]
     pub fn build_reached(&self, changed: Option<&[String]>, krate: &str) -> Option<String> {
+        self.build_reached_with(changed, &Changes::new(), krate)
+    }
+
+    /// [`Scope::build_reached`], with `shared` what the change's shared files reach: such a file
+    /// reaches `krate`'s build when one of its changed entries names `krate` or `krate`'s sources
+    /// read it whole.
+    #[must_use]
+    pub fn build_reached_with(
+        &self,
+        changed: Option<&[String]>,
+        shared: &Changes,
+        krate: &str,
+    ) -> Option<String> {
         let Some(files) = changed else {
             return Some(EVERYTHING.to_owned());
         };
         let links = self.links.get(krate)?;
-        files
-            .iter()
-            .map(|f| normal(f))
-            .find_map(|f| match self.place(&f) {
+        files.iter().map(|f| normal(f)).find_map(|f| {
+            if let Some(reach) = shared.get(&f) {
+                return self.shared_reaches(&f, reach, krate);
+            }
+            match self.place(&f) {
                 Place::Outside => Some(format!("{f} is in no crate, so it may change any build")),
                 Place::OwnTests(c) => (c == krate).then(|| format!("{f} is among {krate}'s own")),
                 Place::Crate(c) => links
                     .contains(&c)
                     .then(|| format!("{f} is in {c}, which {krate} builds")),
-            })
+            }
+        })
     }
 
     /// The decision for every crate, from the files a change touches (paths from the repository
     /// root), or for every crate when `changed` is `None`.
     #[must_use]
     pub fn select(&self, changed: Option<&[String]>) -> Selection {
+        self.select_with(changed, &Changes::new())
+    }
+
+    /// [`Scope::select`], with `shared` what the change's shared files reach
+    /// ([`crate::shared::changes`]); a shared file it does not hold counts as a file in no crate.
+    #[must_use]
+    pub fn select_with(&self, changed: Option<&[String]>, shared: &Changes) -> Selection {
         let files: Option<Vec<String>> = changed.map(|c| {
             c.iter()
                 .map(|f| normal(f))
@@ -305,7 +376,7 @@ impl Scope {
                 name: name.clone(),
                 why: match &files {
                     None => Some(EVERYTHING.to_owned()),
-                    Some(files) => files.iter().find_map(|f| self.selects(f, name)),
+                    Some(files) => files.iter().find_map(|f| self.selects(f, name, shared)),
                 },
             })
             .collect();

@@ -26,6 +26,9 @@
 //!   balanced by their recorded times gives it ([`geom_test::miri::plan`]).
 //! - `mutants-files` prints the regular expression of the files a push to main's full mutation
 //!   run mutates ([`geom_test::mutants::push_files`]).
+//! - `mutants-increment` and `coverage-increment` print what a later push to a pull request must
+//!   mutate again, or measure the crates of, after the last head whose run finished clean
+//!   ([`geom_test::increment`]).
 //! - `fuzz-scope` prints which of `geom-fuzz`'s targets and `kernel-fuzz.yml`'s Kani proofs a
 //!   change can affect, and why, and writes the step outputs that workflow's jobs read
 //!   ([`geom_test::fuzz_scope`]); `.github/workflows/kernel-fuzz.yml`'s job `select` runs it.
@@ -33,7 +36,8 @@
 //! - `test-scope` prints which crates' tests a change can reach, and why, and writes the step
 //!   outputs `kernel.yml`'s suites read ([`geom_test::test_scope`]); with `--build-of <crate>` it
 //!   says instead whether the change reaches what that crate's tests and benchmarks build, for
-//!   `kernel-bench.yml`'s count gates.
+//!   `kernel-bench.yml`'s count gates. With `--base <commit>`, `test-scope` and `fuzz-scope` read
+//!   `MAP.json` and `quality-ledger.json` by their changed entries ([`geom_test::shared`]).
 //!
 //! Guarantees:
 //!
@@ -50,6 +54,7 @@
 //! Cost: what each gate costs (see its module), plus one `cargo metadata` run for `affected
 //! --changed`, `miri-packages` and `fuzz-scope`.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -58,6 +63,7 @@ use geom_test::coverage::{self, CrateReport};
 use geom_test::fuzz_scope;
 use geom_test::mutants::{self, Mode};
 use geom_test::quality_ledger::{LEDGER_PATH, Ledger};
+use geom_test::shared;
 use geom_test::test_scope;
 use regex_lite::Regex;
 
@@ -94,6 +100,26 @@ struct Scope {
     /// These kernel crates, for a local run.
     #[arg(long, value_delimiter = ',', value_name = "A,B")]
     crates: Vec<String>,
+}
+
+/// What changed since the last clean head of a pull request.
+#[derive(Args)]
+struct SinceArgs {
+    /// The last clean head.
+    #[arg(long, value_name = "COMMIT")]
+    since: String,
+    /// The files that differ between that head and this pull request's head.
+    #[arg(long, value_name = "FILES.txt")]
+    head_changes: PathBuf,
+    /// Of those, the files the pull request's head added.
+    #[arg(long, value_name = "FILES.txt")]
+    added: PathBuf,
+    /// The files the base's commits since that head touch.
+    #[arg(long, value_name = "FILES.txt")]
+    base_changes: PathBuf,
+    /// The repository root, checked out at the change.
+    #[arg(long, default_value = ".")]
+    repo: PathBuf,
 }
 
 /// Which mutation gate is judging.
@@ -200,6 +226,10 @@ enum Command {
         /// The files the change touches, one path per line from the repository root.
         #[arg(long, value_name = "FILES.txt")]
         changed: Option<PathBuf>,
+        /// The change's base commit: `MAP.json` and `quality-ledger.json` are then read by their
+        /// changed entries (`geom_test::shared`); without it each counts as a file in no crate.
+        #[arg(long, value_name = "COMMIT", requires = "changed")]
+        base: Option<String>,
         /// Whether the change reaches what this crate's tests and benchmarks build, as the output
         /// `reached`, instead of the crates whose tests run.
         #[arg(long, value_name = "CRATE")]
@@ -212,6 +242,22 @@ enum Command {
         #[arg(long, default_value = ".")]
         repo: PathBuf,
     },
+    /// Prints the change's Rust files a later push mutates again, one per line, after the last
+    /// head whose mutants were judged clean (`geom_test::increment::mutants`); why goes to
+    /// standard error.
+    MutantsIncrement {
+        #[command(flatten)]
+        since: SinceArgs,
+        /// The change's files, base against head, one path per line from the repository root.
+        #[arg(long, value_name = "FILES.txt")]
+        changed: PathBuf,
+    },
+    /// Prints the files whose crates a later push's coverage run measures, one per line, after the
+    /// last head whose coverage passed (`geom_test::increment::coverage`).
+    CoverageIncrement {
+        #[command(flatten)]
+        since: SinceArgs,
+    },
     /// Prints which fuzz targets and Kani proofs a change can affect, and why.
     FuzzScope {
         /// Every target and proof: a push to main, a release tag.
@@ -220,6 +266,10 @@ enum Command {
         /// The files the change touches, one path per line from the repository root.
         #[arg(long, value_name = "FILES.txt")]
         changed: Option<PathBuf>,
+        /// The change's base commit: `MAP.json` and `quality-ledger.json` are then read by their
+        /// changed entries (`geom_test::shared`); without it each is placed as before.
+        #[arg(long, value_name = "COMMIT", requires = "changed")]
+        base: Option<String>,
         /// Appends the step outputs to this file (GitHub's `$GITHUB_OUTPUT`) instead of printing
         /// them.
         #[arg(long, value_name = "FILE")]
@@ -333,14 +383,77 @@ fn judge_coverage(scope: &Scope, dir: &Path, repo: &Repo) -> Result<bool, String
     Ok(failures.is_empty())
 }
 
+/// What the change's shared files reach (`geom_test::shared`): each compared with its text at
+/// `base` (`git show <base>:<file>` in `repo`; a file missing there, or a base git cannot read,
+/// reaches everything). None without a base or a change list, so each shared file is then placed
+/// as before.
+fn shared_changes(
+    repo: &Path,
+    files: Option<&[String]>,
+    base: Option<&str>,
+    folders: &BTreeMap<String, String>,
+) -> shared::Changes {
+    let (Some(files), Some(base)) = (files, base) else {
+        return shared::Changes::new();
+    };
+    let changes = shared::changes(files, &|file: &str| show(repo, base, file), repo, folders);
+    for (file, reach) in &changes {
+        match reach {
+            shared::Reach::Everything(why) => {
+                println!("{file} changed and {why}: it reaches everything.");
+            }
+            shared::Reach::Crates(reached) => {
+                let list: Vec<&str> = reached.keys().map(String::as_str).collect();
+                let list = if list.is_empty() {
+                    "no crate".to_owned()
+                } else {
+                    list.join(", ")
+                };
+                println!("{file} changed: its changed entries name {list}.");
+            }
+        }
+    }
+    changes
+}
+
+/// The text of `file` at `commit` (`git show`), or `None` when git cannot give it.
+fn show(repo: &Path, commit: &str, file: &str) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .arg("show")
+        .arg(format!("{commit}:{file}"))
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8(out.stdout).ok()
+}
+
+/// What changed since the last clean head, as `geom_test::increment` reads it.
+fn since(args: &SinceArgs, root: &Path) -> Result<geom_test::increment::Since, String> {
+    Ok(geom_test::increment::Since {
+        head: read_lines(&args.head_changes)?,
+        added: read_lines(&args.added)?.into_iter().collect(),
+        base: read_lines(&args.base_changes)?,
+        ledger: (
+            show(root, &args.since, LEDGER_PATH),
+            std::fs::read_to_string(root.join(LEDGER_PATH)).ok(),
+        ),
+    })
+}
+
 /// `fuzz-scope`: the decision for every job, printed, and its step outputs written.
 fn fuzz_scope(
     all: bool,
     changed: Option<&Path>,
+    base: Option<&str>,
     github_output: Option<&Path>,
     repo: &Path,
 ) -> Result<bool, String> {
-    let scope = fuzz_scope::Scope::read(&metadata(&canonical(repo)?)?)?;
+    let root = canonical(repo)?;
+    let scope = fuzz_scope::Scope::read(&metadata(&root)?)?;
     let files: Option<Vec<String>> = match changed {
         Some(file) if !all => {
             let text =
@@ -349,7 +462,8 @@ fn fuzz_scope(
         }
         _ => None,
     };
-    let selection = scope.select(files.as_deref());
+    let shared = shared_changes(&root, files.as_deref(), base, scope.folders());
+    let selection = scope.select_with(files.as_deref(), &shared);
     print!("{}", selection.report());
     let mut lines = String::new();
     for (key, value) in selection.outputs() {
@@ -377,11 +491,13 @@ fn fuzz_scope(
 /// outputs written.
 fn test_scope(
     changed: Option<&Path>,
+    base: Option<&str>,
     build_of: Option<&str>,
     github_output: Option<&Path>,
     repo: &Path,
 ) -> Result<bool, String> {
-    let scope = test_scope::Scope::read(&metadata(&canonical(repo)?)?)?;
+    let root = canonical(repo)?;
+    let scope = test_scope::Scope::read(&metadata(&root)?)?;
     let files: Option<Vec<String>> = changed
         .map(|file| {
             std::fs::read_to_string(file)
@@ -389,11 +505,12 @@ fn test_scope(
                 .map_err(|e| format!("{}: {e}", file.display()))
         })
         .transpose()?;
+    let shared = shared_changes(&root, files.as_deref(), base, scope.folders());
     let outputs = if let Some(krate) = build_of {
         if !scope.folders().contains_key(krate) {
             return Err(format!("{krate} is not a workspace crate"));
         }
-        let reached = scope.build_reached(files.as_deref(), krate);
+        let reached = scope.build_reached_with(files.as_deref(), &shared, krate);
         if let Some(why) = &reached {
             println!("The change reaches what {krate} builds: {why}.");
         } else {
@@ -401,7 +518,7 @@ fn test_scope(
         }
         vec![("reached".to_owned(), reached.is_some().to_string())]
     } else {
-        let selection = scope.select(files.as_deref());
+        let selection = scope.select_with(files.as_deref(), &shared);
         print!("{}", selection.report());
         selection.outputs()
     };
@@ -486,7 +603,32 @@ fn judge_mutants(
     Ok(verdict.passes())
 }
 
+/// `mutants-increment`: the change's Rust files a later push mutates again, printed one per
+/// line, with why on standard error.
+fn mutants_increment(args: &SinceArgs, changed: &Path) -> Result<bool, String> {
+    let root = canonical(&args.repo)?;
+    let scope = test_scope::Scope::read(&metadata(&root)?)?;
+    let since = since(args, &root)?;
+    let shared = shared_changes(&root, Some(&since.head), Some(&args.since), scope.folders());
+    let plan = geom_test::increment::mutants(&scope, &read_lines(changed)?, &since, &shared);
+    for (file, why) in &plan {
+        eprintln!("mutates {file} again: {why}");
+        println!("{file}");
+    }
+    if plan.is_empty() {
+        eprintln!(
+            "nothing changed since {} that any mutant's tests build or read",
+            args.since
+        );
+    }
+    Ok(true)
+}
+
 /// Runs the command: `Ok(true)` when the gate passes, `Ok(false)` when it fails.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one arm per subcommand, each a call into the library"
+)]
 fn run(cli: Cli) -> Result<bool, String> {
     match cli.command {
         Command::MutantsPlan { list, files, all } => {
@@ -572,21 +714,38 @@ fn run(cli: Cli) -> Result<bool, String> {
         Command::TestScope {
             all,
             changed,
+            base,
             build_of,
             github_output,
             repo,
         } => test_scope(
             changed.as_deref().filter(|_| !all),
+            base.as_deref(),
             build_of.as_deref(),
             github_output.as_deref(),
             &repo,
         ),
+        Command::MutantsIncrement { since, changed } => mutants_increment(&since, &changed),
+        Command::CoverageIncrement { since: args } => {
+            let root = canonical(&args.repo)?;
+            for file in geom_test::increment::coverage(&since(&args, &root)?) {
+                println!("{file}");
+            }
+            Ok(true)
+        }
         Command::FuzzScope {
             all,
             changed,
+            base,
             github_output,
             repo,
-        } => fuzz_scope(all, changed.as_deref(), github_output.as_deref(), &repo),
+        } => fuzz_scope(
+            all,
+            changed.as_deref(),
+            base.as_deref(),
+            github_output.as_deref(),
+            &repo,
+        ),
     }
 }
 
