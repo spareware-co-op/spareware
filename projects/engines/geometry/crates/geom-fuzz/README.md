@@ -91,9 +91,12 @@ The module holds, with a header in the grammar of `projects/engines/geometry/HEA
   leg drives (the crate's `Harness` type).
 - For a target with a proof: `ProofDraw`, `proof_case(bound, &ProofDraw) -> Option<Case>` and
   `PROOF_BOUND`, the bounded domain the proof covers. The module header says exactly what is
-  proven and what is only tested (28.7).
+  proven and what is only tested (28.7). A proof too slow as one solve is split by claim
+  (orient2d's `Claim`, `CLAIMS` and `check_claim`: one harness a claim, which together prove what
+  `check` checks).
 
-The test file holds three tests:
+The test file holds three tests (a proof split by claim has one `<target>_proof_<claim>` test
+a claim in place of `<target>_proof`):
 
 ```rust
 #[test]
@@ -192,8 +195,10 @@ seeded leg prints `seed: <hex>`; set `SPAREKIT_SEED=<hex>` to replay it.
 ```text
 cargo install kani-verifier --version 0.68.0 --locked
 cargo kani setup
-cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact
+cargo kani --tests -p geom-fuzz --harness orient2d_proof_filter --exact
 ```
+
+(and `orient2d_proof_predicate` and `orient2d_proof_exact_path`, the other two claims).
 
 `cfg(kani)`, which marks the proof tests, is declared to the compiler by `build.rs`
 (`cargo::rustc-check-cfg`), not in the manifest's `[lints]` table, which repeats `geom-num`'s
@@ -220,7 +225,9 @@ touches the code a proof reaches.
 
 ## What the orient2d proof covers
 
-`orient2d_proof` drives `check` over every case `proof_case` gives with bound `PROOF_BOUND`:
+`orient2d_proof_predicate`, `orient2d_proof_exact_path` and `orient2d_proof_filter` drive
+`check_claim`, one claim each, which together are `check`, over every case `proof_case` gives
+with bound `PROOF_BOUND`:
 every one of the six coordinates within `PROOF_BOUND` grid steps of 0 or of an edge
 ±(2^40 − 1) of the frame, in any combination. Kani proves, for every such case, that orient2d
 answers with the reference's sign, that the exact path returns the reference's value, that the
