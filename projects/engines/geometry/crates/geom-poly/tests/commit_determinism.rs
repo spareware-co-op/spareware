@@ -1,6 +1,12 @@
 //! Committed planes are the same on every target and at any number of threads (principle 5, chapter
 //! 21; G142): seeded commits of both kinds and their images, every coefficient and every deviation's
 //! bits, hashed into one golden digest.
+//!
+//! Under Miri the corpus is its first few commits (`miri::sized`): every function the whole corpus
+//! reaches, checked for undefined behaviour on golden's two perturbed heaps and on every thread
+//! count, the runs required to agree. Their digest is not the golden's, which covers all 2,000,
+//! so there the store is required to hold the golden and to differ only in the digest; every
+//! native and WebAssembly leg checks the digest itself.
 
 #![allow(
     clippy::disallowed_methods,
@@ -12,11 +18,20 @@
 use geom_math::{Axis, GridTransform};
 use geom_num::P3;
 use geom_poly::commit::{Committed, PlaneClass};
-use geom_test::golden::{self, Sha256, hex};
+use geom_test::golden::{self, GoldenError, Sha256, hex};
 use geom_test::rng::SplitMix64;
 use geom_test::seed::Seed;
 
+mod miri;
+
 const GOLDEN: &str = "geom-poly/commits";
+
+/// The golden's corpus: 2,000 commits (under Miri the first 8).
+const CORPUS: usize = miri::sized(2_000, 8);
+
+/// The corpus each thread of the thread-count test hashes: the golden's (under Miri the first one,
+/// on each of the 14 threads and the one before them).
+const THREADED: usize = miri::sized(2_000, 1);
 
 /// A component in (-1, 1), from the top bits of a word.
 fn unit_component(rng: &mut SplitMix64) -> f64 {
@@ -39,12 +54,13 @@ fn put(hash: &mut Sha256, c: &Committed) {
     hash.write(&c.deviation.to_bits().to_le_bytes());
 }
 
-fn corpus() -> Sha256 {
+/// The first `commits` of the corpus, hashed.
+fn corpus(commits: usize) -> Sha256 {
     let mut rng = SplitMix64::new(Seed(0x434f_4d4d_4954_3031));
     let mut hash = Sha256::new();
     let turn = GridTransform::quarter_turns(Axis::Z, 1);
     let mirror = GridTransform::mirror(Axis::X);
-    for _ in 0..2_000 {
+    for _ in 0..commits {
         let direction = [0, 1, 2].map(|_| unit_component(&mut rng));
         let edge = [0, 1, 2].map(|_| i128::from(coordinate(&mut rng)));
         let [x, y, z] = [0, 1, 2].map(|_| coordinate(&mut rng));
@@ -65,9 +81,19 @@ fn corpus() -> Sha256 {
 
 #[test]
 fn golden_hash_is_the_same_on_every_target() {
-    let checked = golden::check(GOLDEN, || (corpus().finish(), ()));
+    let checked = golden::check(GOLDEN, || (corpus(CORPUS).finish(), ()));
     println!("geom-poly commits golden hash: {}", hex(checked.digest.0));
-    checked.verdict().unwrap_or_else(|e| panic!("{e}"));
+    if cfg!(miri) {
+        // The two runs agreed (the repeat is judged before the store) and the store holds the
+        // golden; only the digest of the shorter corpus is not the golden's (the header says why).
+        assert!(
+            matches!(checked.verdict(), Err(GoldenError::Mismatch { .. })),
+            "{:?}",
+            checked.verdict()
+        );
+    } else {
+        checked.verdict().unwrap_or_else(|e| panic!("{e}"));
+    }
 }
 
 /// Chapter 21's thread-count test: the same digest on 1, 2, 3 and 8 threads at once.
@@ -78,11 +104,11 @@ fn golden_hash_is_the_same_on_every_target() {
               std::thread::scope cannot spawn"
 )]
 fn golden_hash_is_the_same_on_every_thread_count() {
-    let one = hex(corpus().finish());
+    let one = hex(corpus(THREADED).finish());
     for threads in golden::THREAD_COUNTS {
         let digests: Vec<String> = std::thread::scope(|s| {
             let handles: Vec<_> = (0..threads)
-                .map(|_| s.spawn(|| hex(corpus().finish())))
+                .map(|_| s.spawn(|| hex(corpus(THREADED).finish())))
                 .collect();
             handles.into_iter().map(|h| h.join().unwrap()).collect()
         });

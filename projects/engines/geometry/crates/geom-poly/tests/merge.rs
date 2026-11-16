@@ -28,6 +28,8 @@ use geom_run::{Budget, Exec, WorkMeter};
 use num_bigint::BigInt;
 use proptest::prelude::*;
 
+mod miri;
+
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
@@ -469,7 +471,7 @@ fn a_cut_on_a_face_holds_its_outline_and_not_where_the_boxes_parted_it() {
         entry: None,
     });
     for polygons in [with_square, scene(&[A, standing])] {
-        for leaf in [1, 2, LEAF_POLYGONS] {
+        for &leaf in miri::rounds(&[1, 2, LEAF_POLYGONS], &[6]) {
             let found = classified(&polygons, leaf);
             // A's pieces, as an imprint keeps its target's; the others' are cuts.
             let test = WindingTest::new(vec![Term::Inside(0)]).unwrap();
@@ -695,11 +697,12 @@ fn the_same_numbers_come_out_however_the_boxes_fall() {
         out
     };
     let whole = pieces(1000);
-    for leaf in [1, 2, 4, 8, LEAF_POLYGONS] {
-        assert_eq!(pieces(leaf).faces, whole.faces, "leaf {leaf}");
-        assert_eq!(pieces(leaf).edges, whole.edges, "leaf {leaf}");
-        assert_eq!(pieces(leaf).vertices, whole.vertices, "leaf {leaf}");
-        assert_eq!(pieces(leaf).shells, whole.shells, "leaf {leaf}");
+    for &leaf in miri::rounds(&[1, 2, 4, 8, LEAF_POLYGONS], &[16]) {
+        let m = pieces(leaf);
+        assert_eq!(m.faces, whole.faces, "leaf {leaf}");
+        assert_eq!(m.edges, whole.edges, "leaf {leaf}");
+        assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+        assert_eq!(m.shells, whole.shells, "leaf {leaf}");
     }
 }
 
@@ -862,14 +865,15 @@ fn a_corner_that_is_no_point_is_reported_from_its_phase() {
 #[test]
 fn every_budget_stops_a_nested_merge_in_some_step_or_gives_the_same_answer() {
     // A box with a box-shaped cavity: two shells, so the merge also nests them. Every budget up
-    // to the whole merge's, one unit apart, so each parallel step is stopped in turn.
+    // to the whole merge's, one unit apart, so each parallel step is stopped in turn. Under Miri
+    // every fourth, and the whole merge's.
     let tool = block([1, 1, 1], [3, 3, 3]);
     let pieces = kept(&scene(&[A, tool]), &WindingTest::subtract(0), LEAF_POLYGONS);
     let mut counted = meter();
     let whole = merge(&pieces, Merge::RemoveRedundant, &mut counted).unwrap();
     assert_eq!(whole.shells.len(), 2);
     let used = u64::try_from(counted.used().work).unwrap();
-    for budget in 0..=used {
+    for budget in (0..=used).step_by(miri::stride(1, 4)).chain([used]) {
         let mut small = WorkMeter::new(Budget::new(budget, u64::MAX));
         match merge(&pieces, Merge::RemoveRedundant, &mut small) {
             Ok(m) => assert_eq!(m, whole, "budget {budget}"),
@@ -890,7 +894,8 @@ fn any_budget_either_stops_the_merge_or_gives_the_same_answer() {
     let pieces = kept(&scene(&[A, tool]), &WindingTest::subtract(0), LEAF_POLYGONS);
     let whole = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
     let mut stops = 0;
-    for budget in (0..4000).step_by(7) {
+    // Under Miri every 37th of these budgets.
+    for budget in (0..4000).step_by(miri::stride(7, 7 * 37)) {
         let mut small = WorkMeter::new(Budget::new(budget, u64::MAX));
         match merge(&pieces, Merge::RemoveRedundant, &mut small) {
             Ok(m) => assert_eq!(m, whole),
@@ -950,7 +955,7 @@ fn tilted_solids_near_the_edge_of_the_grid_merge_as_they_do_near_the_origin() {
     let scaled = |solid: [[i64; 3]; 4]| solid.map(|p| p.map(|v| v << 32));
     let test = WindingTest::unite();
     let near = tilted(&[a, b], &test, 1000).unwrap();
-    for leaf in [1, 1000] {
+    for &leaf in miri::rounds(&[1, 1000], &[7]) {
         let far = tilted(&[scaled(a), scaled(b)], &test, leaf).unwrap();
         assert_eq!(counts(&far), counts(&near), "leaf {leaf}");
     }
@@ -968,7 +973,7 @@ fn tilted_solids_meet_where_three_planes_do() {
             .iter()
             .any(|v| !v.to_grid().unwrap().is_exact())
     );
-    for leaf in [1, 2, 4, 16] {
+    for &leaf in miri::rounds(&[1, 2, 4, 16], &[7]) {
         let m = tilted(&[a, b], &test, leaf).unwrap();
         assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
         assert_eq!(m.edges, whole.edges, "leaf {leaf}");
@@ -990,7 +995,7 @@ fn a_point_on_a_split_is_not_named_by_it() {
     let spike = turned_out([[0, 0, -1], [1, 2, 1], [3, 0, 1], [0, 4, 1]]);
     let test = WindingTest::unite();
     let whole = tilted(&[wide, spike], &test, 1000).unwrap();
-    for leaf in [1, 2, 4, 8] {
+    for &leaf in miri::rounds(&[1, 2, 4, 8], &[7]) {
         let m = tilted(&[wide, spike], &test, leaf).unwrap();
         assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
     }
@@ -1019,6 +1024,9 @@ fn a_point_where_four_planes_meet_is_named_the_same_whichever_way_they_reach_it(
     for (at, solids) in found.iter().enumerate() {
         let whole = tilted(solids, &test, 1000).unwrap();
         for leaf in 1..10 {
+            if !miri::keeps(leaf, &[7]) {
+                continue;
+            }
             let m = tilted(solids, &test, leaf).unwrap();
             assert_eq!(m.vertices, whole.vertices, "case {at}, leaf {leaf}");
             assert_eq!(m.edges, whole.edges, "case {at}, leaf {leaf}");
@@ -1068,6 +1076,9 @@ fn a_point_is_named_the_same_whatever_scale_its_planes_reach_it_at() {
     };
     let whole = merged(&polygons, 1000);
     for leaf in (1..10).chain([1000]) {
+        if !miri::keeps(leaf, &[7, 1000]) {
+            continue;
+        }
         let m = merged(&mixed, leaf);
         assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
         assert_eq!(m.edges, whole.edges, "leaf {leaf}");
@@ -1171,7 +1182,7 @@ fn a_point_is_named_the_same_however_its_planes_are_written() {
     tetrahedron(spike, 1, &mut polygons).unwrap();
     for k in [1, 2] {
         let polygons = scaled(&polygons, k);
-        for leaf in [1, 2, 4, 1000] {
+        for &leaf in miri::rounds(&[1, 2, 4, 1000], &[9, 1000]) {
             let pieces = kept(&polygons, &WindingTest::unite(), leaf);
             let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
             closed(&m, &pieces);
@@ -1224,9 +1235,10 @@ fn a_closed_body_s_points_are_named_by_its_faces_however_its_bounds_are_written(
     let mut polygons = Vec::new();
     tetrahedron(a, 0, &mut polygons).unwrap();
     tetrahedron(b, 1, &mut polygons).unwrap();
-    for k in [-3, 1, 5] {
+    // Under Miri the bounds leant one way, five steps.
+    for k in [-3, 1, 5].into_iter().skip(if cfg!(miri) { 2 } else { 0 }) {
         let leant = leant(&polygons, k);
-        for leaf in [1, 2, 4, 1000] {
+        for &leaf in miri::rounds(&[1, 2, 4, 1000], &[7]) {
             let pieces = kept(&leant, &test, leaf);
             let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
             closed(&m, &pieces);
@@ -1264,6 +1276,9 @@ fn a_point_is_not_named_by_a_plane_whose_face_stops_short_of_it() {
     assert!(!on_grid(crossed[0]) && !crossed[0].planes().contains(&stray));
     assert!(crossed[0].planes().contains(&beside) && crossed[0].planes().contains(&across));
     for leaf in 1..10 {
+        if !miri::keeps(leaf, &[9]) {
+            continue;
+        }
         let m = tilted(&solids, &test, leaf).unwrap();
         assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
         assert_eq!(m.edges, whole.edges, "leaf {leaf}");
@@ -1293,6 +1308,9 @@ fn a_sheet_s_rim_is_named_by_its_face_and_then_the_bounds_of_its_fins() {
     };
     let mut turns = 0;
     for (polygon, own) in polygons.iter().enumerate() {
+        if !miri::keeps(polygon, &[0, 4]) {
+            continue;
+        }
         let whole = sheet(polygon, 1000);
         let face = reduced(&own.piece.face);
         for (at, point) in whole.vertices.iter().enumerate() {
@@ -1310,7 +1328,7 @@ fn a_sheet_s_rim_is_named_by_its_face_and_then_the_bounds_of_its_fins() {
             let name = first_meeting(&planes).unwrap();
             assert_eq!(*point, name, "polygon {polygon}, vertex {at}");
         }
-        for leaf in [1, 2, 4] {
+        for &leaf in miri::rounds(&[1, 2, 4], &[7]) {
             let m = sheet(polygon, leaf);
             assert_eq!(m.vertices, whole.vertices, "polygon {polygon}, leaf {leaf}");
             assert_eq!(m.edges, whole.edges, "polygon {polygon}, leaf {leaf}");
@@ -1378,7 +1396,11 @@ fn the_end_of_a_section_s_curve_is_named_by_its_two_faces_and_then_a_plane_of_it
                 );
             }
         }
-        for leaf in [1, 2, 4] {
+        for &leaf in miri::rounds(&[1, 2, 4], &[7]) {
+            // Under Miri every face's whole section, and two faces' in boxes of seven.
+            if !miri::keeps(face, &[0, 4]) {
+                break;
+            }
             let (curves, _) = cut(face, leaf);
             assert_eq!(curves.vertices, whole.vertices, "face {face}, leaf {leaf}");
             assert_eq!(curves.edges, whole.edges, "face {face}, leaf {leaf}");
@@ -1418,6 +1440,9 @@ fn planes_through_one_line_are_passed_over_for_the_next_that_crosses_it() {
     let name = [on_the_axis[0], on_the_axis[1], across];
     assert_eq!(*whole.vertices[at].planes(), name);
     for leaf in 1..10 {
+        if !miri::keeps(leaf, &[9]) {
+            continue;
+        }
         let m = tilted(&solids, &test, leaf).unwrap();
         assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
         assert_eq!(m.edges, whole.edges, "leaf {leaf}");
@@ -1451,6 +1476,9 @@ fn a_rim_on_a_block_s_face_takes_the_block_s_bounds_however_they_are_written() {
         };
         let mut on_an_edge = 0;
         for (polygon, own) in polygons.iter().enumerate().take(6) {
+            if !miri::keeps(polygon, &[0, 3]) {
+                continue;
+            }
             let whole = sheet(polygon, 1000);
             let face = reduced(&own.piece.face);
             for (at, point) in whole.vertices.iter().enumerate() {
@@ -1464,7 +1492,7 @@ fn a_rim_on_a_block_s_face_takes_the_block_s_bounds_however_they_are_written() {
                 let name = first_meeting(&planes).unwrap();
                 assert_eq!(*point, name, "k {k}, polygon {polygon}, vertex {at}");
             }
-            for leaf in [1, 2, 4] {
+            for &leaf in miri::rounds(&[1, 2, 4], &[7]) {
                 let m = sheet(polygon, leaf);
                 assert_eq!(
                     m.vertices, whole.vertices,
@@ -1527,6 +1555,10 @@ fn a_split_through_the_end_of_a_section_s_curve_is_not_among_its_planes() {
             }
         }
         for leaf in [1, 2, 4, 8] {
+            // Under Miri every face's whole section, and one face's in boxes of eight.
+            if !(miri::keeps(leaf, &[8]) && miri::keeps(face, &[4])) {
+                continue;
+            }
             let curves = cut(face, leaf);
             assert_eq!(curves.vertices, whole.vertices, "face {face}, leaf {leaf}");
             assert_eq!(curves.edges, whole.edges, "face {face}, leaf {leaf}");
@@ -1582,8 +1614,14 @@ fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
     // And the same mirrored in x, which turns the sign of every three planes' determinant.
     let mirror = |c: [[i64; 3]; 4]| c.map(|[x, y, z]| [-x, y, z]);
     // A union keeps every piece as it faces; a difference turns the second solid's round.
+    // Under Miri the union of the solids as they are and the difference of their mirror images.
+    let mut round = 0;
     for test in [WindingTest::unite(), WindingTest::subtract(0)] {
         for (a, b) in [(a, b), (mirror(a), mirror(b))] {
+            round += 1;
+            if !miri::keeps(round, &[1]) {
+                continue;
+            }
             let whole = tilted(&[a, b], &test, 1000).unwrap();
             assert!(whole.vertices.iter().any(wide));
             // Where faces cross, the points are off the grid, and named as such.
@@ -1593,7 +1631,7 @@ fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
                     .iter()
                     .any(|v| !v.to_grid().unwrap().is_exact())
             );
-            for leaf in [1, 4, 16] {
+            for &leaf in miri::rounds(&[1, 4, 16], &[7]) {
                 let m = tilted(&[a, b], &test, leaf).unwrap();
                 assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
                 assert_eq!(m.edges, whole.edges, "leaf {leaf}");
@@ -1670,7 +1708,7 @@ fn a_point_off_the_grid_is_named_by_the_lowest_three_planes_of_its_faces() {
     )
     .unwrap();
     let key = |p: &Plane| (p.n(), p.d());
-    for leaf in [1, 4, LEAF_POLYGONS] {
+    for &leaf in miri::rounds(&[1, 4, LEAF_POLYGONS], &[7]) {
         let pieces = kept(&polygons, &WindingTest::unite(), leaf);
         let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
         closed(&m, &pieces);
@@ -1705,7 +1743,7 @@ fn a_line_read_in_words_and_in_wide_integers_is_one_line() {
         at([16_777_213, -33_554_467, 3]),
     ];
     tetrahedron(wedge, 1, &mut polygons).unwrap();
-    for leaf in [1, LEAF_POLYGONS] {
+    for &leaf in miri::rounds(&[1, LEAF_POLYGONS], &[9]) {
         let pieces = kept(&polygons, &WindingTest::unite(), leaf);
         assert!(
             pieces
@@ -1797,7 +1835,14 @@ fn a_merge_from_another_merges_memo_is_the_merge_without_it() {
     // A wall with three openings, the last moved along it: most pieces stay as they were.
     let wall = block([0, 0, 0], [40, 2, 10]);
     let opening = |at: i64| block([at, -1, 2], [at + 4, 3, 8]);
-    let scene_with = |last: i64| scene(&[wall, opening(4), opening(14), opening(last)]);
+    // Under Miri the wall with the first opening and the moved one.
+    let scene_with = |last: i64| {
+        if cfg!(miri) {
+            scene(&[wall, opening(4), opening(last)])
+        } else {
+            scene(&[wall, opening(4), opening(14), opening(last)])
+        }
+    };
     let test = WindingTest::subtract(0);
     let before = kept(&scene_with(26), &test, LEAF_POLYGONS);
     let after = kept(&scene_with(30), &test, LEAF_POLYGONS);
@@ -1860,7 +1905,8 @@ fn a_memo_starts_the_sorts_but_the_budget_stops_them_where_it_would() {
         LEAF_POLYGONS,
     );
     let mut stops = 0;
-    for budget in (0..4000).step_by(7) {
+    // Under Miri every 113th of these budgets.
+    for budget in (0..4000).step_by(miri::stride(7, 7 * 113)) {
         let (m, _) = merged_again(&before, &after, Some(budget));
         stops += usize::from(m.is_err());
     }
@@ -1881,7 +1927,7 @@ fn faces_that_look_like_splits_name_the_points_on_them() {
     for k in [1, 2] {
         let mut polygons = scaled(&scene(&[block([1, 1, 1], [9, 9, 9])]), k);
         tetrahedron(wedge, 1, &mut polygons).unwrap();
-        for leaf in [1, 4, 1000] {
+        for &leaf in miri::rounds(&[1, 4, 1000], &[7]) {
             let pieces = kept(&polygons, &WindingTest::unite(), leaf);
             let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
             closed(&m, &pieces);
@@ -2046,7 +2092,8 @@ fn points_in_wide_cells_keep_their_order_and_meet_points_in_words() {
         [2003, 5897, 2610],
         [2708, 1301, 5801],
     ];
-    for mirror in [false, true] {
+    // Under Miri the solids as they are, not their mirror images too.
+    for mirror in [false, true].into_iter().take(miri::sized(2, 1)) {
         let way = |t: [[i64; 3]; 4]| if mirror { mirrored_x(t) } else { t };
         let mut polygons = scene(&[if mirror {
             block([0, -4, -4], [4, 0, 0])
@@ -2059,7 +2106,7 @@ fn points_in_wide_cells_keep_their_order_and_meet_points_in_words() {
                 tetrahedron([t[1], t[0], t[2], t[3]], entry as u32 + 1, &mut polygons).unwrap();
             }
         }
-        for leaf in [1, LEAF_POLYGONS] {
+        for &leaf in miri::rounds(&[1, LEAF_POLYGONS], &[7]) {
             let pieces = kept(&polygons, &WindingTest::unite(), leaf);
             let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
             closed(&m, &pieces);
@@ -2110,7 +2157,7 @@ fn points_whose_first_coordinates_agree_to_32_binary_places_are_ordered_by_them(
         let (k, v) = found.unwrap();
         (k, exact_point(v))
     };
-    for leaf in [1, 4, LEAF_POLYGONS] {
+    for &leaf in miri::rounds(&[1, 4, LEAF_POLYGONS], &[7]) {
         let pieces = kept(&polygons, &WindingTest::unite(), leaf);
         let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
         closed(&m, &pieces);
@@ -2148,14 +2195,18 @@ fn points_whose_fractions_need_more_than_96_bits_keep_their_order() {
         [30729, 92172, 40962],
         [40967, 20490, 92160],
     ];
-    for (a, b) in [(a, b), (mirrored_x(a), mirrored_x(b))] {
+    // Under Miri the solids as they are, not their mirror images too.
+    for (a, b) in [(a, b), (mirrored_x(a), mirrored_x(b))]
+        .into_iter()
+        .take(miri::sized(2, 1))
+    {
         let mut polygons = Vec::new();
         for (entry, t) in [a, b].into_iter().enumerate() {
             if tetrahedron(t, entry as u32, &mut polygons).is_none() {
                 tetrahedron([t[1], t[0], t[2], t[3]], entry as u32, &mut polygons).unwrap();
             }
         }
-        for leaf in [1, LEAF_POLYGONS] {
+        for &leaf in miri::rounds(&[1, LEAF_POLYGONS], &[7]) {
             let pieces = kept(&polygons, &WindingTest::unite(), leaf);
             let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
             closed(&m, &pieces);
@@ -2423,13 +2474,15 @@ fn any_corners() -> impl Strategy<Value = [[i64; 3]; 4]> {
     [corner(), corner(), corner(), corner()]
 }
 
+// Under Miri the first two cases of each, of up to two blocks or solids: one case of three tilted
+// solids alone takes Miri minutes.
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(miri::cases(64, 1)))]
 
     #[test]
     fn every_union_closes_and_the_boxes_do_not_show(
-        blocks in prop::collection::vec(any_block(), 1..4),
-        leaf in 1usize..10,
+        blocks in prop::collection::vec(any_block(), miri::at_least(1, 2)..miri::sized(4, 3)),
+        leaf in miri::at_least(1, 7)..10,
     ) {
         let test = WindingTest::unite();
         let once = merged(&blocks, &test, leaf);
@@ -2440,10 +2493,10 @@ proptest! {
 
     #[test]
     fn a_merge_from_a_memo_is_the_merge_without_it(
-        blocks in prop::collection::vec(any_block(), 1..4),
+        blocks in prop::collection::vec(any_block(), miri::at_least(1, 2)..miri::sized(4, 3)),
         moved in any_block(),
         which in 0usize..4,
-        leaf in 1usize..10,
+        leaf in miri::at_least(1, 7)..10,
         budget in prop::option::of(0u64..3000),
     ) {
         let test = WindingTest::unite();
@@ -2457,9 +2510,9 @@ proptest! {
 
     #[test]
     fn a_tilted_merge_from_a_memo_is_the_merge_without_it(
-        solids in prop::collection::vec(any_corners(), 2..4),
+        solids in prop::collection::vec(any_corners(), 2..miri::sized(4, 3)),
         moved in any_corners(),
-        leaf in 1usize..10,
+        leaf in miri::at_least(1, 7)..10,
     ) {
         let solid_pieces = |solids: &[[[i64; 3]; 4]]| {
             let mut polygons = Vec::new();
@@ -2477,8 +2530,8 @@ proptest! {
 
     #[test]
     fn every_tilted_union_closes_and_the_boxes_do_not_show(
-        solids in prop::collection::vec(any_corners(), 1..4),
-        leaf in 1usize..10,
+        solids in prop::collection::vec(any_corners(), miri::at_least(1, 2)..miri::sized(4, 3)),
+        leaf in miri::at_least(1, 7)..10,
     ) {
         let test = WindingTest::unite();
         let once = tilted(&solids, &test, leaf);

@@ -414,7 +414,9 @@ mod tests {
     }
 
     proptest! {
-        #![proptest_config(ProptestConfig::with_cases(256))]
+        // Under Miri, which interprets each step thousands of times slower and stops a test at
+        // ten minutes, the first 16 of the same cases: every function the 256 reach.
+        #![proptest_config(ProptestConfig::with_cases(if cfg!(miri) { 16 } else { 256 }))]
 
         #[test]
         fn a_triangle_or_quadrilateral_is_what_the_partition_gives(

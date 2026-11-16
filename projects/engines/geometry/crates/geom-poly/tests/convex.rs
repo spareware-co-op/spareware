@@ -19,6 +19,8 @@ use geom_run::{Budget, WorkMeter};
 use num_bigint::BigInt;
 use proptest::prelude::*;
 
+mod miri;
+
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
@@ -315,7 +317,7 @@ fn star() -> impl Strategy<Value = Vec<(i64, i64)>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(miri::cases(128, 20)))]
 
     #[test]
     fn a_star_adds_up_whatever_its_shape(corners in star()) {

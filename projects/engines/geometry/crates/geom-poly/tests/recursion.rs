@@ -72,11 +72,15 @@ fn the_kept_tree_clones_compares_prints_and_drops_a_hundred_levels_deep() {
     // Two one-step cubes at opposite corners of the frame: the box around them spans the whole
     // frame, and with one polygon to a leaf each corner's box splits until no odd half step lies
     // inside it, along all three axes, about 42 times each, so the tree nests over a hundred
-    // levels deep on each side, near the statement's bound of 127.
+    // levels deep on each side, near the statement's bound of 127. Under Miri, which interprets
+    // each step thousands of times slower and stops a test at ten minutes, the cubes are 2^32
+    // steps wide, still at the frame's corners: each box splits about 11 times an axis, the same
+    // walks over fewer levels.
     let m = COORD_MAX;
+    let (side, levels) = if cfg!(miri) { (1 << 32, 30) } else { (1, 120) };
     let mut list = Vec::new();
-    block([m - 1; 3], [m; 3], 0, &mut list);
-    block([-m; 3], [1 - m; 3], 1, &mut list);
+    block([m - side; 3], [m; 3], 0, &mut list);
+    block([-m; 3], [side - m; 3], 1, &mut list);
     let cell = around(&list).unwrap();
     let meter = &mut WorkMeter::new(Budget::UNLIMITED);
     let exec = Exec::serial();
@@ -93,6 +97,6 @@ fn the_kept_tree_clones_compares_prints_and_drops_a_hundred_levels_deep() {
     // Every division of the copy is the original's, so this counts the tree's boxes: two for each
     // split along the paths to the two corners, and the root.
     let boxes = solved.divisions_shared_with(&copy);
-    assert!(boxes > 4 * 120, "{boxes} boxes");
+    assert!(boxes > 4 * levels, "{boxes} boxes");
     drop(copy);
 }

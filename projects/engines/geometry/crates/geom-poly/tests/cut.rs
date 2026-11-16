@@ -17,6 +17,8 @@ use geom_poly::cut::{Clipped, clip, crosses, local_cuts};
 use geom_run::{Budget, WorkMeter};
 use proptest::prelude::*;
 
+mod miri;
+
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
@@ -342,7 +344,7 @@ fn any_rect() -> impl Strategy<Value = Piece> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(200))]
+    #![proptest_config(ProptestConfig::with_cases(miri::cases(200, 4)))]
 
     #[test]
     fn after_local_cuts_no_piece_crosses_another_and_every_area_stays(

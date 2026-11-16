@@ -25,6 +25,8 @@ use geom_poly::winding::{Kept, Winding, WindingError, WindingTest, kept};
 use geom_run::{Budget, Cancel, POLL_EVERY, Usage, WorkMeter};
 use proptest::prelude::*;
 
+mod miri;
+
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
@@ -490,7 +492,8 @@ fn polygons_inside_their_box_are_classified_by_each_path_s_first_leg() {
         low: [-100; 3],
         high: [100; 3],
     };
-    for blocks in scenes {
+    // Under Miri the first two scenes.
+    for blocks in scenes.into_iter().take(miri::sized(3, 2)) {
         let polygons: Vec<Polygon> = blocks
             .iter()
             .enumerate()
@@ -505,6 +508,10 @@ fn polygons_inside_their_box_are_classified_by_each_path_s_first_leg() {
         // charges, so started at each place in that count, the reads it makes show how many
         // charges the call made, one more included.
         for before in 0..POLL_EVERY {
+            // Under Miri the last place in the count, where the call's first charge reads it.
+            if !miri::keeps(before, &[POLL_EVERY - 1]) {
+                continue;
+            }
             let asked = Asked(std::sync::atomic::AtomicUsize::new(0));
             let mut first = meter().with_cancel(&asked);
             for _ in 0..before {
@@ -874,8 +881,10 @@ fn any_block() -> impl Strategy<Value = Block> {
     })
 }
 
+// Under Miri each block runs the first of its cases (`miri::cases`), every function the whole run
+// reaches: a box of tilted solids is cheap, a scene of them or of blocks traced whole is not.
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(160))]
+    #![proptest_config(ProptestConfig::with_cases(miri::cases(160, 8)))]
 
     #[test]
     fn every_tilted_box_agrees_with_the_solids(
@@ -889,16 +898,20 @@ proptest! {
         };
         wedges_in_cell(&solids, &cell);
     }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(miri::cases(160, 1)))]
 
     #[test]
     fn every_tilted_piece_agrees_with_the_solids(
-        solids in prop::collection::vec(any_wedge(), 1..4)
+        solids in prop::collection::vec(any_wedge(), 1..miri::sized(4, 3))
     ) {
         wedges_agree(&solids);
     }
 
     #[test]
-    fn every_piece_agrees_with_the_blocks(blocks in prop::collection::vec(any_block(), 1..5)) {
+    fn every_piece_agrees_with_the_blocks(blocks in prop::collection::vec(any_block(), 1..miri::sized(5, 3))) {
         let classified = scene(&blocks);
         agrees(&blocks, &classified);
         for test in [
@@ -909,6 +922,10 @@ proptest! {
             prop_assert_eq!(volume(&test, &classified), counted(&test, &blocks));
         }
     }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(160))]
 
     #[test]
     fn every_box_agrees_with_the_blocks(

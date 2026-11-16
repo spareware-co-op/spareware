@@ -25,6 +25,8 @@ use geom_run::Pool;
 use geom_run::{Budget, Exec, RunError, WorkMeter};
 use proptest::prelude::*;
 
+mod miri;
+
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
@@ -280,6 +282,9 @@ fn an_entry_that_overlaps_itself_is_traced() {
 fn a_small_leaf_gives_the_vectors_a_large_one_does() {
     let blocks = [A, B];
     for leaf in [1, 2, 4, 8, LEAF_POLYGONS] {
+        if !miri::keeps(leaf, &[8]) {
+            continue;
+        }
         let classified = run(&blocks, leaf, &[]);
         agrees(&blocks, &classified);
         assert_eq!(volume(&WindingTest::unite(), &classified), 120 * 8);
@@ -312,8 +317,10 @@ fn a_polygon_names_its_source_in_every_box() {
 fn a_test_that_is_settled_drops_its_box_and_nothing_it_keeps() {
     let blocks = [A, B];
     let test = WindingTest::intersect(2);
-    let whole = run(&blocks, 1, &[]);
-    let dropped = run(&blocks, 1, std::slice::from_ref(&test));
+    // Under Miri the boxes are leaves at four polygons, not one: the same splits, fewer of them.
+    let leaf = if cfg!(miri) { 4 } else { 1 };
+    let whole = run(&blocks, leaf, &[]);
+    let dropped = run(&blocks, leaf, std::slice::from_ref(&test));
     assert!(dropped.len() < whole.len(), "{}", dropped.len());
     assert_eq!(volume(&test, &dropped), volume(&test, &whole));
     assert!(
@@ -422,6 +429,9 @@ fn a_box_a_multiple_of_four_half_steps_wide_splits_between_the_whole_steps() {
             && p.d() % 2 != 0
     };
     for leaf in [1, 2, 4] {
+        if !miri::keeps(leaf, &[4]) {
+            continue;
+        }
         let got = run(&blocks, leaf, &[]);
         agrees(&blocks, &got);
         assert!(got.len() > list.len(), "leaf {leaf}: the box split");
@@ -439,8 +449,10 @@ fn a_box_a_multiple_of_four_half_steps_wide_splits_between_the_whole_steps() {
 
 #[test]
 fn twenty_cubes_on_one_top_and_bottom_stop_at_their_shared_planes() {
-    // Each overlaps the next, all between z = 0 and z = 4 (EMBER's figure 25).
-    let blocks: Vec<Block> = (0..20)
+    // Each overlaps the next, all between z = 0 and z = 4 (EMBER's figure 25). Under Miri the
+    // first three, still more polygons than a leaf holds.
+    let n = i64::try_from(miri::sized(20, 2)).unwrap();
+    let blocks: Vec<Block> = (0..n)
         .map(|i| Block {
             low: [i, 0, 0],
             high: [i + 4, 4, 4],
@@ -448,20 +460,22 @@ fn twenty_cubes_on_one_top_and_bottom_stop_at_their_shared_planes() {
         .collect();
     let classified = run(&blocks, 8, &[]);
     agrees(&blocks, &classified);
-    assert_eq!(volume(&WindingTest::unite(), &classified), 23 * 16 * 8);
+    assert_eq!(volume(&WindingTest::unite(), &classified), (n + 3) * 16 * 8);
 }
 
 #[test]
 fn ten_by_ten_crossing_beams_are_counted_at_every_crossing() {
+    // Under Miri three by three, still more polygons than a leaf holds.
+    let n = i64::try_from(miri::sized(10, 2)).unwrap();
     let mut blocks = Vec::new();
-    for i in 0..10 {
+    for i in 0..n {
         blocks.push(Block {
             low: [i * 3, 0, 0],
-            high: [i * 3 + 1, 30, 1],
+            high: [i * 3 + 1, 3 * n, 1],
         });
         blocks.push(Block {
             low: [0, i * 3, 1],
-            high: [30, i * 3 + 1, 2],
+            high: [3 * n, i * 3 + 1, 2],
         });
         blocks.push(Block {
             low: [i * 3, i * 3, 0],
@@ -471,7 +485,10 @@ fn ten_by_ten_crossing_beams_are_counted_at_every_crossing() {
     let test = WindingTest::unite();
     let classified = run(&blocks, LEAF_POLYGONS, &[]);
     agrees(&blocks, &classified);
-    assert_eq!(volume(&test, &classified), counted(&test, &blocks, -1..31));
+    assert_eq!(
+        volume(&test, &classified),
+        counted(&test, &blocks, -1..3 * n + 1)
+    );
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -485,10 +502,21 @@ fn the_same_pieces_come_out_on_any_threads() {
             high: [3, 9, 3],
         },
     ];
-    let list = polygons(&blocks);
+    // Under Miri the first two blocks, in boxes of four polygons.
+    let list = polygons(&blocks[..miri::sized(3, 2)]);
     let cell = around(&list).unwrap();
-    let go =
-        |exec: &Exec<'_>| arrange(exec, cell, Winding::new(), &list, 2, &[], &mut meter()).unwrap();
+    let go = |exec: &Exec<'_>| {
+        arrange(
+            exec,
+            cell,
+            Winding::new(),
+            &list,
+            miri::at_least(2, 4),
+            &[],
+            &mut meter(),
+        )
+        .unwrap()
+    };
     assert_eq!(go(&Exec::serial()), go(&Exec::with_pool(&Threads)));
 }
 
@@ -656,8 +684,14 @@ fn a_fan_of_slivers_is_not_clipped_in_proportion_to_its_size() {
     // 15,157 at 2,627,533 for 128 and 60,830 for 256, about four times as many for each
     // doubling. No split pays here, as every one copies most slivers, so the fan is one leaf:
     // each sliver one piece (they never cross), and its local cuts' pairs the work, the square
-    // of the slivers and no more.
-    for (m, work) in [(64, 24_704), (128, 98_560)] {
+    // of the slivers and no more: 6m^2 + 2m for m slivers. Under Miri 40 slivers, still more than
+    // a leaf holds.
+    let fans: &[(i64, u128)] = if cfg!(miri) {
+        &[(40, 9_680)]
+    } else {
+        &[(64, 24_704), (128, 98_560)]
+    };
+    for &(m, work) in fans {
         let list = fan(m);
         let cell = around(&list).unwrap();
         let mut counted = meter();
@@ -675,15 +709,15 @@ fn a_fan_of_slivers_is_not_clipped_in_proportion_to_its_size() {
         assert_eq!(counted.used().work, work, "{m} slivers");
     }
     // A box of at most `LEAF_POLYGONS` splits as long as a split separates its polygons, for a
-    // caller that asks for smaller leaves: 32 slivers in leaves of 16 are clipped.
-    let list = fan(32);
+    // caller that asks for smaller leaves: 32 slivers in leaves of 16 are clipped (under Miri 24 in leaves of 12).
+    let list = fan(i64::try_from(miri::sized(32, 24)).unwrap());
     let cell = around(&list).unwrap();
     let got = arrange(
         &Exec::serial(),
         cell,
         Winding::new(),
         &list,
-        16,
+        miri::sized(16, 12),
         &[],
         &mut meter(),
     )
@@ -698,7 +732,7 @@ fn a_split_with_an_empty_half_pays_and_is_taken() {
     // halves hold exactly the box's pairs, and it is taken, so the box closes in on them instead
     // of stopping as a leaf of 48 polygons the size of half the frame (refusing it gives 170
     // pieces at work 45,464: fewer pieces, at half as much work again).
-    let mut blocks: Vec<Block> = (0..8)
+    let mut blocks: Vec<Block> = (0..i64::try_from(miri::sized(8, 4)).unwrap())
         .map(|i| Block {
             low: [i, i % 2, 0],
             high: [i + 3, i % 2 + 3, 3],
@@ -722,7 +756,14 @@ fn a_split_with_an_empty_half_pays_and_is_taken() {
     )
     .unwrap();
     agrees(&blocks, &got);
-    assert_eq!((got.len(), counted.used().work), (224, 29_706));
+    assert_eq!(
+        (got.len(), counted.used().work),
+        if cfg!(miri) {
+            (82, 14_204)
+        } else {
+            (224, 29_706)
+        }
+    );
 }
 
 fn any_block() -> impl Strategy<Value = Block> {
@@ -733,15 +774,15 @@ fn any_block() -> impl Strategy<Value = Block> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(96))]
+    #![proptest_config(ProptestConfig::with_cases(miri::cases(96, 1)))]
 
     /// Every block is a solid, so a box of one block's faces is a leaf, solved without cuts or
     /// tracing: no more pieces than tracing gives, each with the blocks' own vectors, and the same
     /// volumes.
     #[test]
     fn a_solid_s_leaves_are_what_tracing_gives(
-        blocks in prop::collection::vec(any_block(), 1..5),
-        leaf in 1usize..12,
+        blocks in prop::collection::vec(any_block(), miri::at_least(1, 2)..miri::sized(5, 3)),
+        leaf in miri::at_least(1, 4)..12,
     ) {
         let list = polygons(&blocks);
         let cell = around(&list).unwrap();
@@ -798,8 +839,8 @@ proptest! {
 
     #[test]
     fn every_arrangement_agrees_with_the_blocks(
-        blocks in prop::collection::vec(any_block(), 1..5),
-        leaf in 1usize..12,
+        blocks in prop::collection::vec(any_block(), miri::at_least(1, 2)..miri::sized(5, 3)),
+        leaf in miri::at_least(1, 4)..12,
     ) {
         let classified = run(&blocks, leaf, &[]);
         agrees(&blocks, &classified);
@@ -866,10 +907,12 @@ fn an_edit_far_from_a_box_leaves_its_answer_to_be_reused() {
         low: [100, 0, 0],
         high: [104, 4, 4],
     };
-    let (_, before, _) = reusing(&[A, far], 1, None);
+    // Under Miri the boxes are leaves at three polygons, not one: the same splits, fewer of them.
+    let leaf = if cfg!(miri) { 3 } else { 1 };
+    let (_, before, _) = reusing(&[A, far], leaf, None);
     let now = [A, moved(far, [0, 1, 0])];
-    let (full, solved, work) = reusing(&now, 1, None);
-    let (local, again, local_work) = reusing(&now, 1, Some(&before));
+    let (full, solved, work) = reusing(&now, leaf, None);
+    let (local, again, local_work) = reusing(&now, leaf, Some(&before));
     assert_eq!(local, full);
     assert_eq!(local_work, work);
     assert_eq!(again, solved);
@@ -879,7 +922,7 @@ fn an_edit_far_from_a_box_leaves_its_answer_to_be_reused() {
         "{kept} of {}",
         solved.len()
     );
-    assert_eq!(run(&now, 1, &[]), full);
+    assert_eq!(run(&now, leaf, &[]), full);
     // The boxes about the near block are taken whole from the last tree, not divided again.
     let (held, fresh) = (
         again.divisions_shared_with(&before),
@@ -896,18 +939,21 @@ fn a_tree_divided_for_other_tests_or_leaves_is_divided_again() {
     // leaf size, the boxes divide otherwise, so the tree is not taken, and the answer is the full one.
     let blocks = [A, B];
     let test = WindingTest::intersect(2);
-    let (_, plain, _) = reusing(&blocks, 1, None);
-    let (full, solved, work) = reusing_under(&blocks, 1, std::slice::from_ref(&test), None);
+    // Under Miri the boxes are leaves at four polygons, not one, and the other leaf size is six,
+    // not three: the same splits, fewer of them.
+    let (leaf, other) = if cfg!(miri) { (4, 6) } else { (1, 3) };
+    let (_, plain, _) = reusing(&blocks, leaf, None);
+    let (full, solved, work) = reusing_under(&blocks, leaf, std::slice::from_ref(&test), None);
     let (local, again, local_work) =
-        reusing_under(&blocks, 1, std::slice::from_ref(&test), Some(&plain));
+        reusing_under(&blocks, leaf, std::slice::from_ref(&test), Some(&plain));
     assert_eq!((local, again.clone(), local_work), (full, solved, work));
     assert_eq!(again.divisions_shared_with(&plain), 0);
-    let (full, solved, work) = reusing(&blocks, 3, None);
-    let (local, again, local_work) = reusing(&blocks, 3, Some(&plain));
+    let (full, solved, work) = reusing(&blocks, other, None);
+    let (local, again, local_work) = reusing(&blocks, other, Some(&plain));
     assert_eq!((local, again.clone(), local_work), (full, solved, work));
     assert_eq!(again.divisions_shared_with(&plain), 0);
     // The same tests and leaf take the whole tree.
-    let (_, all, _) = reusing(&blocks, 1, Some(&plain));
+    let (_, all, _) = reusing(&blocks, leaf, Some(&plain));
     assert!(all.divisions_shared_with(&plain) > 0);
 }
 
@@ -922,13 +968,13 @@ fn a_cache_from_other_inputs_changes_nothing() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(miri::cases(64, 1)))]
 
     #[test]
     fn a_reused_arrangement_is_the_full_one_bit_for_bit_at_the_same_work(
-        blocks in prop::collection::vec(any_block(), 1..5),
-        edits in prop::collection::vec((0usize..5, [-2i64..3, -2i64..3, -2i64..3]), 1..4),
-        leaf in 1usize..12,
+        blocks in prop::collection::vec(any_block(), miri::at_least(1, 2)..miri::sized(5, 3)),
+        edits in prop::collection::vec((0usize..5, [-2i64..3, -2i64..3, -2i64..3]), 1..miri::sized(4, 2)),
+        leaf in miri::at_least(1, 4)..12,
     ) {
         let mut now = blocks;
         let (_, mut cache, _) = reusing(&now, leaf, None);
@@ -969,7 +1015,10 @@ fn a_box_over_the_subtree_size_splits_level_by_level() {
     for polygon in &mut list {
         polygon.entry = Some(u32::from(polygon.entry == Some(25)));
     }
-    for test in [WindingTest::unite(), WindingTest::intersect(2)] {
+    for test in [WindingTest::unite(), WindingTest::intersect(2)]
+        .into_iter()
+        .take(miri::sized(2, 1))
+    {
         let tests = [test.clone()];
         let at = |leaf: usize| {
             let cell = around(&list).unwrap();
@@ -983,8 +1032,15 @@ fn a_box_over_the_subtree_size_splits_level_by_level() {
             )
             .unwrap()
         };
-        let (levels, one) = (at(LEAF_POLYGONS), at(1_000_000));
-        assert_eq!(volume(&test, &levels), volume(&test, &one), "{test:?}");
+        let levels = at(LEAF_POLYGONS);
+        // Against every polygon in one box natively; under Miri, where that box alone takes
+        // minutes, against the volume the cubes count to (the union's, the one test there).
+        let want = if cfg!(miri) {
+            26 * 64
+        } else {
+            volume(&test, &at(1_000_000))
+        };
+        assert_eq!(volume(&test, &levels), want, "{test:?}");
         // The far cube is in the upper half, a task at the first level, while the lower half is
         // split again: tree order still puts it last.
         let far = 25 * 6;
@@ -993,8 +1049,11 @@ fn a_box_over_the_subtree_size_splits_level_by_level() {
             assert!(levels[first..].iter().all(|c| c.polygon >= far), "{test:?}");
         }
     }
+    // Traced, not taken as solids: every polygon in one box natively, and under Miri in boxes of
+    // the leaf size, apart.
+    let traced = if cfg!(miri) { LEAF_POLYGONS } else { 1_000_000 };
     assert_eq!(
-        volume(&WindingTest::unite(), &run(&blocks, 1_000_000, &[])),
+        volume(&WindingTest::unite(), &run(&blocks, traced, &[])),
         26 * 64
     );
 }
@@ -1181,13 +1240,15 @@ fn a_kept_tree_prints_as_a_derived_debug_would() {
 
 /// Two faces of entry 0 a step apart across x, at `x` and `x + 1`, each the square from `x` to
 /// `x + 1` on the other axes: a box holds both until a split falls between them, and a split
-/// across y or z is taken until one would cut them.
+/// across y or z is taken until one would cut them. Under Miri, which interprets each step
+/// thousands of times slower and stops a test at ten minutes, the faces are [`PAIR`] steps apart
+/// and wide: the same splits down the frame, fewer of them.
 fn pair_at(x: i64) -> Vec<Polygon> {
     let block = Block {
         low: [x; 3],
-        high: [x + 1; 3],
+        high: [x + PAIR; 3],
     };
-    [(x + 1, true), (x, false)]
+    [(x + PAIR, true), (x, false)]
         .into_iter()
         .map(|(at, upward)| Polygon {
             piece: side(&block, 0, at, upward),
@@ -1195,6 +1256,13 @@ fn pair_at(x: i64) -> Vec<Polygon> {
         })
         .collect()
 }
+
+/// How far apart [`pair_at`]'s faces are, and the fewest splits on the path down to where they
+/// part: one step and a hundred natively, 2^32 steps and [`SPLITS`] under Miri.
+const PAIR: i64 = if cfg!(miri) { 1 << 37 } else { 1 };
+
+/// The fewest splits [`pair_at`]'s tree makes (see [`PAIR`]).
+const SPLITS: usize = if cfg!(miri) { 8 } else { 100 };
 
 /// The box around the whole frame, a step clear, on odd half steps.
 const FRAME: Cell = Cell {
@@ -1214,7 +1282,7 @@ fn a_kept_tree_far_down_the_frame_compares_and_prints() {
     // path down to where they part: more than a hundred levels, near the tree's bound of 127.
     let deep = deep_at(1_000_000_000_001);
     let splits = format!("{deep:?}").matches("Split(").count();
-    assert!(splits > 100, "{splits} splits");
+    assert!(splits > SPLITS, "{splits} splits");
     assert_eq!(deep, deep_at(1_000_000_000_001));
     assert_ne!(deep, deep_at(1_000_000_000_003));
     let pretty = format!("{deep:#?}");
