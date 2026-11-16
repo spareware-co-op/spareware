@@ -244,6 +244,8 @@
 //! - `lcov` 0.8 (G21), to read the LCOV tracefiles cargo-llvm-cov writes ([`coverage`]).
 //! - `regex-lite` 0.1.9, the regular expressions of a full mutation run narrowed to some files
 //!   ([`mutants::check_narrowed`]), in the syntax of cargo-mutants' `--re`.
+//! - `roxmltree` 0.21.2, without its default features: the nextest reports (`junit.xml`) of Miri's
+//!   measuring runs, read by [`miri::read_junit`] (32.58).
 //! - `yaml-rust2` 0.13, a development dependency (G21), which reads
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
@@ -276,7 +278,7 @@
 //!   `thiserror-impl`, `clap`, `clap_builder`, `clap_derive`, `clap_lex`, `anstyle`, `heck`,
 //!   `yaml-rust2`, `hashlink`, `hex`, `wait-timeout`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
 //!   `typenum`, `petgraph`, `fixedbitset`, `hashbrown`, `indexmap`, `equivalent`, `num-rational`,
-//!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
+//!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite`, `roxmltree` and
 //!   `static_assertions`.
 //! - Apache-2.0: `num-modular`, which `dashu-int` brings in.
 //! - Apache-2.0: `manifold-rust`, a development dependency (G154), the mesh oracle one of its

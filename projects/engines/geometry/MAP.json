@@ -1563,6 +1563,28 @@
           "target": "lib"
         },
         {
+          "cost": "[`plan`] is O(g · n) for g groups and n parts tried; [`check`] is O(b log b) for b benchmarks over all parts.",
+          "does": "`kernel-bench.yml` measures the merge base and the change in parts, each part one job with its share of the benchmark groups, so no job runs longer than 15 minutes; one judge per target then gathers every part's counts and judges the whole catalogue as one run did before.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/parts.rs",
+          "guarantees": [
+            "**Every benchmark in exactly one part, or no verdict.** [`check`] names every benchmark measured in no part or in two, every part that lists other benchmarks than the first, and every benchmark measured that is not listed; a part that left no files is a missing file to the command line, which refuses it (`geom-bench-counts parts`).",
+            "**Deterministic.** The plan depends only on the seconds and the limit: ties go to the lower part and the earlier name, and every map is a `BTreeMap`.",
+            "**Strict reading.** [`Plan::parse`] refuses a malformed line, a group twice, no `*` line or two, a part numbered 0, and parts that are not numbered 1 to n without a gap."
+          ],
+          "job": "The instruction-and-cache gate in parts: which part of the catalogue each runner measures, and the judge's check that the parts together measured every benchmark exactly once.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/0117039"
+            ],
+            "text": "longest processing time first (R. L. Graham, \"Bounds on multiprocessing timing anomalies\", SIAM J. Appl. Math. 17(2), 1969, <https://doi.org/10.1137/0117039>), as `geom_test::coverage::plan_parts` shares the coverage run's crates. Gungraun's summary model (`gungraun_runner::summary::model`, the `summary` feature at exactly the version the gate runs) gives each tool run's `duration_ns`."
+          },
+          "path": "geom_bench::parts",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few wrapping integer operations per draw, and one per byte of a seed's name.",
           "does": null,
           "family": [],
@@ -16398,7 +16420,7 @@
           "target": "bin"
         },
         {
-          "cost": "`run` costs one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
+          "cost": "`run` costs one `cargo test --no-run` that builds, then one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/golden.rs",
@@ -17160,12 +17182,13 @@
         },
         {
           "cost": "linear in the store and in the output read.",
-          "does": "[`plan`] groups the current edition's test-checked goldens by crate and test target; [`Group::cargo_args`] gives the `cargo test` arguments that run exactly those test functions (libtest's `--exact` filters) with the leg's own arguments (`--release`, `--target wasm32-wasip1`, ...) and its environment (`RUSTFLAGS` with `-C target-cpu=native` or overflow checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and requires that libtest ran exactly the planned functions, all passed, and that every planned golden printed its `golden <id> ... agrees with the store` line ([`super::check`]). The binary `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build mode: debug, release with overflow checks on and as shipped, natively with `-C target-cpu=native`, and on wasm32-wasip1 under wasmtime and Node in debug and release.",
+          "does": "[`plan`] groups the current edition's test-checked goldens by crate and test target; [`Group::cargo_args`] gives the `cargo test` arguments that run exactly those test functions (libtest's `--exact` filters) with the leg's own arguments (`--release`, `--target wasm32-wasip1`, ...) and its environment (`RUSTFLAGS` with `-C target-cpu=native` or overflow checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and requires that libtest ran exactly the planned functions, all passed, and that every planned golden printed its `golden <id> ... agrees with the store` line ([`super::check`]); [`build_args`] gives the one `cargo test --no-run` that builds every group's binary side by side before the groups run, and [`part`] shares the groups out among CI jobs, whole crates to each part, balanced by measured seconds, each group in exactly one part. The binary `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build mode: debug, release with overflow checks on and as shipped, natively with `-C target-cpu=native`, and on wasm32-wasip1 under wasmtime and Node in debug and release.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/matrix.rs",
           "guarantees": [
             "**Exactly the store's goldens.** One group per crate and test target, in store order, each naming its functions exactly; a golden checked by a file has no test and is checked by `golden check` instead.",
-            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line: `golden <id> (edition <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's own first line follows it on the same output line; with several threads it starts its own."
+            "**Nothing passes unrun.** [`verify`] fails unless the run has exactly one libtest summary, its verdict is `ok.`, it says exactly the group's number of tests passed, none failed and none was ignored, and every planned id printed its agreeing line: `golden <id> (edition <label>): <64 hexadecimal digits> agrees with the store`, read wherever it starts in an output line. libtest runs tests on one thread on wasm32-wasip1 (no threads) and whenever `RUST_TEST_THREADS=1`, and then prints `test <name> ... ` before the test runs, so the test's own first line follows it on the same output line; with several threads it starts its own.",
+            "**Every group in exactly one part.** [`part`] places every crate of the plan in one part of `n`, so the parts of a leg run every group once between them, a golden added to the store included."
           ],
           "job": "The determinism matrix's runner: every golden of the current edition, run by cargo in whatever configuration a CI leg sets, with proof that each one really ran and agreed.",
           "method": {
@@ -17908,26 +17931,29 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the size of the metadata; a plan is O(t log t + t·p) for t tests and p partitions, and a filterset linear in its partition's tests and binaries.",
-          "does": "[`packages`] reads `cargo metadata` and returns the package of every kernel crate, in name order, and [`cargo_args`] writes them as the `-p` arguments the workflow (`.github/workflows/kernel-quality.yml`) gives `cargo miri nextest run` and `cargo miri test --doc`. nextest runs each test in its own Miri process, one partition per CI job, and stops a test that reaches its budget (the `default-miri` profile in `.config/nextest.toml`): such a test passed every step Miri interpreted, and the job's report names it. [`plan`] splits the tests into the partitions by their times under Miri in [`TIMES`] (`miri-times.tsv`, from a full run's reports), and [`Plan::filterset`] writes partition k's tests as the nextest filterset its job runs.",
+          "cost": "linear in the size of the metadata, the table, the list and the report; a plan is O(t log t + t·p) for t tests and p partitions, and a filterset linear in its partition's tests.",
+          "does": "[`packages`] reads `cargo metadata` and returns the package of every kernel crate, in name order, and [`cargo_args`] writes them as the `-p` arguments the workflow (`.github/workflows/kernel-quality.yml`) gives `cargo miri nextest run` and `cargo miri test --doc`. [`parse_table`] reads [`TIMES`] (`miri-times.tsv`): one row a test, either the seconds Miri took to finish it or a native-only mark with what was measured (32.58). [`write_table`] is the only writer of those rows: it reads a measuring run's nextest report (`junit.xml`) ([`read_junit`]) and gives each test it names the state the report shows (the `kernel-quality miri-times` command). [`plan`] splits the finishing tests into the partitions by their times, and [`Plan::filterset`] writes partition k's tests as the nextest filterset its job runs; [`unlisted`] names every test of a nextest list ([`listed_tests`]) the table has no row for, and the workflow's filter step fails on any.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/miri.rs",
           "guarantees": [
-            "**Every kernel test suite, with nothing to keep in step.** The scope is every kernel crate in the metadata, so a new crate or test file runs under Miri the week it lands. A test that cannot run under Miri at all (one that starts a process or reads the repository) says so where it is written, with `#[cfg_attr(miri, ignore = \"<why>\")]`.",
-            "**Every test in exactly one partition, the times list only balancing them.** A test in the list runs in the partition the plan gives it; a test the list does not name runs in the partition its binary is given (each binary named in the list goes to one partition, by its place in name order); a binary the list does not name runs in partition 1. So a test added or renamed since the list was written still runs, once, and a stale list makes the partitions less even, never a test skipped.",
-            "**Balanced.** Longest processing time first (Graham): each test, the longest first, goes to the partition with the least time so far, so no partition passes the average by more than its longest test. With [`AT_ONCE`] tests at a time, [`Plan::longest`] is how long the slowest partition's tests take, which `kernel_quality_workflow.rs` holds under [`PART_SECONDS`] for the workflow's count.",
+            "**Every test Miri finishes, and only those.** Each kernel test has a row. A test Miri finishes within the measuring run's stop has its measured seconds, always under [`BUDGET`]; a test measured over it is native-only, with its measured time or the stop it ran past, and its partition's filterset leaves it out, so it runs in every native suite and not under Miri. A test with no row fails the filter step ([`unlisted`]): nothing runs under Miri by default, and nothing is left out without a measurement. A test that cannot run under Miri at all (one that reads the repository, or allocates tens of mebibytes) says so where it is written, with `#[cfg_attr(miri, ignore = \"<why>\")]`, and needs no row. This rests on every kernel crate forbidding unsafe code in its manifest (engine-geometry's scaffold check, rule `UnsafeNotForbidden`): Miri cannot find a fault in the kernel's own code, only in the unsafe code of the libraries it drives and of the standard library, so [`UNSAFE_LIBRARIES`] names, for each library with unsafe code the kernel uses, a finishing test that drives it.",
+            "**The table is measured, never edited.** [`parse_table`] refuses a row at or over the budget (such a test was stopped with no verdict, or never timed), a native-only mark with no measured time, a native-only mark of a time under the budget (Miri finished it), a test in both states and a test listed twice; `kernel_quality_workflow.rs` holds the file to the form [`write_table`] writes. A report that shows a test failing under Miri, or killed, is refused with every such test named, so a fault Miri found is read, never written down as slow.",
+            "**Every finishing test in exactly one partition.** A partition's filterset names its tests one by one, so every finishing test runs once, and native-only tests in none.",
+            "**Balanced.** Longest processing time first (Graham): each test, the longest first, goes to the partition with the least time so far, so no partition passes the average by more than its longest test. With [`AT_ONCE`] tests at a time, [`Plan::longest`] is how long the slowest partition's tests take, which `kernel_quality_workflow.rs` holds under [`PART_SECONDS`] with the fewest partitions that do.",
             "**The development crates are left out** (`geom-test`, `geom-fuzz`, `geom-gen`, `geom-bench`): they never ship, and their tests start processes and read files, which Miri's isolation refuses.",
-            "**A plan that runs nothing does not pass.** Metadata without any kernel crate, or with a package that has no name or manifest path, is an error; so are a times list with a line that is not `seconds<TAB>binary<TAB>test`, a name a filterset could misread, a test listed twice, and a plan of no partitions."
+            "**A plan that runs nothing does not pass.** Metadata without any kernel crate, or with a package that has no name or manifest path, is an error; so are a table row that is not `state<TAB>binary<TAB>test`, a name a filterset could misread, and a plan of no partitions."
           ],
-          "job": "The Miri run's scope, every kernel crate, whose test suites Miri interprets, and its partitions, balanced by each test's measured time.",
+          "job": "The Miri run's scope, every kernel crate, whose tests Miri interprets; its table, which says of each test whether Miri finishes it and how long it took; and its partitions, balanced by the times of the tests Miri finishes.",
           "method": {
             "links": [
               "https://doc.rust-lang.org/cargo/commands/cargo-metadata.html",
               "https://nexte.st/docs/integrations/miri/",
               "https://nexte.st/docs/filtersets/",
+              "https://nexte.st/docs/listing/",
+              "https://nexte.st/docs/machine-readable/junit/",
               "https://doi.org/10.1137/0117039"
             ],
-            "text": "the `packages[]` of `cargo metadata --format-version 1` (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>); a kernel crate is a package whose manifest is in the kernel's crates folder, as [`crate::deps`] defines it. nextest's Miri support and filtersets are documented at <https://nexte.st/docs/integrations/miri/> and <https://nexte.st/docs/filtersets/>. The partitions by R. L. Graham, \"Bounds on multiprocessing timing anomalies\", SIAM Journal on Applied Mathematics 17(2) (1969), 416–429, <https://doi.org/10.1137/0117039> (the longest-processing-time rule, within 4/3 of the best)."
+            "text": "the `packages[]` of `cargo metadata --format-version 1` (<https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>); a kernel crate is a package whose manifest is in the kernel's crates folder, as [`crate::deps`] defines it. nextest's Miri support, filtersets, list output and `junit.xml` report are documented at <https://nexte.st/docs/integrations/miri/>, <https://nexte.st/docs/filtersets/>, <https://nexte.st/docs/listing/> and <https://nexte.st/docs/machine-readable/junit/>; the report is read with roxmltree. The partitions by R. L. Graham, \"Bounds on multiprocessing timing anomalies\", SIAM Journal on Applied Mathematics 17(2) (1969), 416–429, <https://doi.org/10.1137/0117039> (the longest-processing-time rule, within 4/3 of the best)."
           },
           "path": "geom_test::miri",
           "provenance": [],

@@ -312,6 +312,10 @@ pub mod guest;
 pub mod harness;
 pub mod inputs;
 pub mod kernels;
+// With the judge, for the same reasons: the parts' plan and the judge's check of them
+// (kernel-bench.yml).
+#[cfg(all(feature = "judge", any(unix, windows)))]
+pub mod parts;
 pub mod rng;
 pub mod sha256;
 pub mod steps;
