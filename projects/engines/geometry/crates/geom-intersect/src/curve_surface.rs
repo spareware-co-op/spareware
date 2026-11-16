@@ -443,10 +443,12 @@ fn line_cylinder(
     if exact == Some(Meeting::Within) {
         return along_ruling(line, cylinder, meter).map(Some);
     }
-    let sign = cylinder.axial_sign();
+    // The point at v stands s·v along n̂, so the height z is at v = z/s (z·s only for s = ±1, as
+    // built; a similarity scales the axial factor).
+    let factor = Interval::point(cylinder.axial_sign())?;
     let place = |t: Interval| -> Result<Option<(Interval, Interval)>, IntersectError> {
         let (x, y, z) = (along(ox, dx, t)?, along(oy, dy, t)?, along(oz, dz, t)?);
-        let v = z.mul(Interval::point(sign)?)?;
+        let v = z.div(factor)?;
         let (Some(u), Some(v)) = (around(x, y, domain.0)?, within(v, domain.1)?) else {
             return Ok(None);
         };
@@ -477,10 +479,11 @@ fn along_ruling(
     let Some(u) = around(ox, oy, domain.0)? else {
         return proven(Vec::new(), meter);
     };
-    let sign = Interval::point(cylinder.axial_sign())?;
+    // The height z is at v = z/s.
+    let factor = Interval::point(cylinder.axial_sign())?;
     let (start, end) = finite_line(line)?;
     let v_of = |t: f64| -> Result<Interval, IntersectError> {
-        Ok(along(oz, dz, Interval::point(t)?)?.mul(sign)?)
+        Ok(along(oz, dz, Interval::point(t)?)?.div(factor)?)
     };
     let (first, last) = (v_of(start)?, v_of(end)?);
     let (lo, hi) = (
@@ -501,7 +504,8 @@ fn along_ruling(
     proven(alloc::vec![overlap], meter)
 }
 
-/// A line with a cone: ρ = r₀ + k·v on the axis at s·v, ρ² against x² + y².
+/// A line with a cone: ρ = r₀ + k·v on the axis at z = s·v, so ρ = r₀ + (k/s)·z, ρ² against
+/// x² + y².
 fn line_cone(
     line: &Line<3>,
     cone: &Cone,
@@ -510,9 +514,12 @@ fn line_cone(
 ) -> Result<Option<Intersection>, IntersectError> {
     let ([ox, oy, oz], [dx, dy, dz]) = local(line, cone.center(), &cone.frame())?;
     let (r0, k) = cone.radius_and_slope();
-    let sign = Interval::point(cone.axial_sign())?;
+    // k/s and z/s, not k·s and z·s: the two agree only for s = ±1, as built, and a similarity
+    // scales the axial factor.
+    let factor = Interval::point(cone.axial_sign())?;
     let (r0, k) = (Interval::point(r0)?, Interval::point(k)?);
-    let (e, f) = (r0.add(k.mul(sign)?.mul(oz)?)?, k.mul(sign)?.mul(dz)?);
+    let sigma = k.div(factor)?;
+    let (e, f) = (r0.add(sigma.mul(oz)?)?, sigma.mul(dz)?);
     let terms = [
         dx.square()?.add(dy.square()?)?.sub(f.square()?)?,
         ox.mul(dx)?.add(oy.mul(dy)?)?.sub(e.mul(f)?)?,
@@ -521,7 +528,7 @@ fn line_cone(
     let domain = ParamSurface::domain(cone);
     let place = |t: Interval| -> Result<Option<(Interval, Interval)>, IntersectError> {
         let (x, y, z) = (along(ox, dx, t)?, along(oy, dy, t)?, along(oz, dz, t)?);
-        let v = z.mul(sign)?;
+        let v = z.div(factor)?;
         let rho = r0.add(k.mul(v)?)?;
         let Some(v) = within(v, domain.1)? else {
             return Ok(None);
@@ -1192,10 +1199,11 @@ fn helix_on_cylinder(
     let (_, [_, _, m]) = frame.unit_vectors()?;
     let start = dot(minus(lift([p, q, r])?, lift([e, f, g])?)?, n)?;
     let rise = dot(m, n)?.mul(Interval::point(pitch * 0.5)?)?;
-    let sign = Interval::point(cylinder.axial_sign())?;
+    // The cylinder's point at v stands s·v along n̂: the height is at v = height/s.
+    let factor = Interval::point(cylinder.axial_sign())?;
     let (t0, t1) = curve.domain();
     let v_at = |t: f64| -> Result<Interval, IntersectError> {
-        Ok(along(start, rise, Interval::point(t)?)?.mul(sign)?)
+        Ok(along(start, rise, Interval::point(t)?)?.div(factor)?)
     };
     let (first, last) = (v_at(t0)?, v_at(t1)?);
     let (lo, hi) = (

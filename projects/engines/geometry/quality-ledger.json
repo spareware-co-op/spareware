@@ -8078,7 +8078,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
       "mutant": "replace > with >= in meridians",
-      "line_text": "let (lo, hi) = if sense > 0.0 { (v0, v1) } else { (-v1, -v0) };",
+      "line_text": "let rate = if sense > 0.0 { s } else { -s };",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "sense is the stored frame normal, a non-zero vector, dotted with the unit axis it lies along (the arm runs only for a cylinder about that axis, by same_line's exact parallel test), so it is ±|n|, never zero: > 0 and >= 0 decide alike."
