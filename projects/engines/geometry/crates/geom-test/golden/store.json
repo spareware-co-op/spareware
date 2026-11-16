@@ -308,15 +308,9 @@
               "kind": "corpus",
               "piece": "Phase 5 train 1 (the count gates' time)",
               "why": "Three of the Phase 5 train's count benchmarks hold fewer inputs, so that both 5% count gates finish inside their jobs: they ran out of their 150 minutes on every pull request into the train, the merge base's run alone taking 69 to 92 minutes, of which these three took 44 to 59 (each of their calls is hundreds of millions of instructions). Each keeps a few inputs of its batch of 64 (geom-bench's inputs::SHORT_BATCHES): intersect/march_poles the first 8, intersect/natural_apex inputs 0, 1, 2 and 8, and intersect/selfcross_sweep inputs 4 and 45, chosen so that the measured pass over them runs every function and every source line that the pass over all 64 runs, but for the C library growing its heap (Callgrind's output for both, compared: the first four of natural_apex missed 18 lines, the second fast path of atan2, and the first four of selfcross_sweep three functions and 19 lines of geom-intersect). Each input kept is the one the full batch held in that place and each call is the same call, so only which inputs the batches hold changed, and with it these three rows' input and result digests. No gate, limit, kernel or other digest changed (intersect/fit_curve's inputs are now built with one march per distinct sheet and are the same inputs, so its row is unchanged). Merged after the Phase 4 train's rows, G300's mesh/decimate and mesh/remesh among them, which are kept unchanged"
-            },
-            {
-              "sha256": "25bd37b7778840912d42dff9d956fe29968779b2f94557256076f8f569117c20",
-              "kind": "improvement",
-              "piece": "Phase 5 train 1 (p5-intersect-3: a turn far from zero)",
-              "why": "The seven closed-form rows (intersect/natural_plane, natural_spheres, natural_tee, natural_apex, reduced_torus, reduced_tube and reduced_wall) move in their result digests only; their inputs are unchanged. natural's range check (quadrics.rs fits) now also reads each operand's partials over its domain, so that an operand whose parameters' doubles stand more than a step apart on it, as a turn far from zero does, is refused with FrameRange rather than trimmed without its cuts, and that read is charged to the meter, so every pair's work grows; a surface's turn whose domain starts a turn or more from zero is now moved onto it by its whole turns in one step, which can move the last bit of its enclosure, and a loop's domain is moved to within two turns of zero. geom-intersect's pinned answers (attack_g165's and attack_g167's makes_what_it_made strings) are unchanged. No other digest moved"
             }
           ],
-          "sha256": "344ea05b1588e8e56f9105a750e37e34a0406cec7ef99ba822124b23d8beafe4"
+          "sha256": "25bd37b7778840912d42dff9d956fe29968779b2f94557256076f8f569117c20"
         },
         {
           "id": "geom-nurbs/operations",
