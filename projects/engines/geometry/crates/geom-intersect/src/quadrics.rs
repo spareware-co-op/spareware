@@ -1962,8 +1962,19 @@ fn fits(s: &SurfaceKind, meter: &mut WorkMeter<'_>) -> Result<bool, IntersectErr
     // reading it again through all the partials to order 1 would only repeat its work. Each kind
     // bounds a first partial over a region by the same closed form or hull as its partials to
     // order 1 there, and one it cannot bound is refused as those would be.
+    //
+    // A kind written as fixed terms, or an extrusion, is screened first by its speed's ceiling
+    // from its forms and vectors alone, which takes no extent. That ceiling is at least the length of the extent's box
+    // up to the box's rounding, so twice it is more than that length: where twice the ceiling
+    // holds the doubles within a step, the extent's bound does too, and the answer is the
+    // extent's. Only a parameter far from zero, where the spacing is coarse, falls to the extent.
     let mut apart: f64 = 0.0;
     for (gap, dir) in [(spacing(a, b), Direction::U), (spacing(c, d), Direction::V)] {
+        if let Some(ceiling) = s.speed_ceiling(region, dir)?
+            && gap * (2.0 * ceiling) <= STEP
+        {
+            continue;
+        }
         let DerivativeBound::Bounded(along) = s.derivative_bound(region, dir, meter)? else {
             return Err(CurveError::Unbounded.into());
         };
