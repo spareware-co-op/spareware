@@ -6963,14 +6963,6 @@
       "reason": "Without the box around the shells sides_of_first takes around_on's box for the same polygons, also a step clear of every one with its faces on odd half steps. classify_inside gives the same vectors for any box that holds every polygon strictly inside (the path runs along its walls just inside, where no polygon is), around_on charges nothing and the trace charges by polygon, so the counts and the work are the same."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace | with ^ in splits",
-      "line_text": "let odd = middle | 1;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant moves an odd middle one half step down, onto a whole step, and leaves an even one as it was. The split is then on a plane of the grid, where a corner can lie. A polygon in that plane goes on as the in-plane test sends it, a path that meets the plane is settled by the moved planes of Simulation of Simplicity, and a box's vectors do not depend on where it was split (a_small_leaf_gives_the_vectors_a_large_one_does, and the body tests at every leaf size). Odd steps only keep those ties from arising, so no result changes."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
       "mutant": "replace > with >= in plan_axes",
       "line_text": "([1, 2], x > 0)",
@@ -7169,14 +7161,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "units is not 0 here: the function returned at the top for that."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
-      "mutant": "replace != with == in dyadic",
-      "line_text": "while part != 0 {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "With == the loop runs only while the fraction left is zero, and then for ever: cut(0) leaves it zero and writes another 0 each turn, so a whole number never returns and the tests stop it by their timeout. It hangs; it never writes a wrong number."
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
