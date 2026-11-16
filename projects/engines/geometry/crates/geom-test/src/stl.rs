@@ -5,7 +5,7 @@
 //! What it does: [`read`] reads a binary or ASCII STL file with the `stl_io` crate, which welds
 //! corners only where their three `f32` values are bit for bit the same (24.8's rule), into
 //! [`Stl`]. [`cases`] reads EMBER's case list (Manifold's `ember-benchmark-cases.json`): each pair
-//! of Thingi10K file ids with the affine transform EMBER moves each model by. [`placed`] moves a
+//! of `Thingi10K` file ids with the affine transform EMBER moves each model by. [`placed`] moves a
 //! model by its transform exactly, into the exact decimals of `geom_test::obj`, and
 //! [`on_one_grid`] puts the models of one pair on the grid at one scale, as `obj::Read::to_grid`
 //! does for one model, so the pair's two meshes meet on one grid:
@@ -27,7 +27,7 @@
 //!   each an [`StlError`]; a case list of another shape is an error with serde's message.
 //! - **The same on every target.** Integer and rational arithmetic only, after the file's bits.
 //!
-//! Method: the STL format as `stl_io` reads it (3D Systems' StereoLithography Interface
+//! Method: the STL format as `stl_io` reads it (3D Systems' Stereolithography Interface
 //! Specification, 1989, as summarised at <https://www.fabbers.com/tech/STL_Format>); EMBER's case
 //! list and its transforms as Manifold's `extras/ember_tests/man_bench.cpp` reads them (Manifold
 //! at d056b8fb70de8c8e6d6bee2e639b71c20aa08d01, Apache-2.0: column-major 4 by 4, each model moved
@@ -149,7 +149,7 @@ pub struct Transform {
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Case {
-    /// The first model's Thingi10K file id.
+    /// The first model's `Thingi10K` file id.
     pub id_a: u64,
     /// The second's.
     pub id_b: u64,

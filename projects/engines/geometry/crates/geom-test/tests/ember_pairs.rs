@@ -3,7 +3,7 @@
 //! reference (Gate 4, G156, conditions 1 and 4 under reading R1's A and R2's A).
 //!
 //! - **The pairs.** Of EMBER's 1,000 pairs (Manifold's `extras/ember_tests`), the 92 whose two
-//!   Thingi10K models both carry a licence rule (i) of 32.11 admits ([`CLEARED`]): their 171
+//!   `Thingi10K` models both carry a licence rule (i) of 32.11 admits ([`CLEARED`]): their 171
 //!   models and EMBER's case list are the fetched corpus `ember-cleared-pairs`, each file pinned
 //!   by its SHA-256 with its own licence and credit. Nothing of it is in the repository.
 //! - **Each pair as EMBER runs it.** Both models read (`geom_test::stl`), each moved by its own
@@ -58,8 +58,8 @@ const CORPUS: &str = "ember-cleared-pairs";
 const CASES: &str = "ember-benchmark-cases.json";
 
 /// The 92 pairs whose two models' own licences rule (i) of 32.11 admits: each pair's number in
-/// EMBER's list (its place, from 0) and its two Thingi10K file ids, as the list gives them.
-/// Each model's licence is Thingi10K's own record of it (its dataset's `metadata/input_summary.csv`
+/// EMBER's list (its place, from 0) and its two `Thingi10K` file ids, as the list gives them.
+/// Each model's licence is `Thingi10K`'s own record of it (its dataset's `metadata/input_summary.csv`
 /// at tag v1.5.0, which its `contextual_data.csv` agrees with), and the register carries it.
 const CLEARED: [(usize, u64, u64); 92] = [
     (1, 80604, 500107),

@@ -19,7 +19,7 @@
 //!   unmodified, which a digest pins.
 //! - **Credits.** Every stored corpus carries its credit, unless its licence asks for none (CC0).
 //! - **Files of their own licence.** A downloaded file may carry its own licence and credit (each
-//!   model of Thingi10K has its own): then it is held to the same rules as a corpus (nothing
+//!   model of `Thingi10K` has its own): then it is held to the same rules as a corpus (nothing
 //!   non-commercial, a credit unless its licence asks for none), and the corpus's licence names
 //!   every file's. A file's name is a plain name, never a path, and no two files share one.
 //! - **Vendored files match.** Every file under the corpora folder belongs to a stored corpus, sits
@@ -125,7 +125,7 @@ pub struct FetchFile {
     pub name: String,
     /// Its SHA-256.
     pub sha256: Hash,
-    /// Its own licence, for a corpus whose files each carry one (a model of Thingi10K): an SPDX
+    /// Its own licence, for a corpus whose files each carry one (a model of `Thingi10K`): an SPDX
     /// expression, or `LicenseRef-<name>`, which the corpus's licence names.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub licence: Option<String>,

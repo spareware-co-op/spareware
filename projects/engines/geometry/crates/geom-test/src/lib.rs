@@ -170,7 +170,7 @@
 //!   reader with exact decimal-to-grid rounding; `tests/corpus_polyhedral.rs` holds every result
 //!   to [`flat_reference`] and the unit-cell count, with exact transforms, and its digest is the
 //!   golden `geom-test/polyhedral-corpus`.
-//! - [`stl`]: EMBER's case list and its pairs' Thingi10K models (the fetched corpus
+//! - [`stl`]: EMBER's case list and its pairs' `Thingi10K` models (the fetched corpus
 //!   `ember-cleared-pairs`), read with `stl_io`, moved by EMBER's transforms exactly and put on
 //!   one grid per pair; `tests/ember_pairs.rs` runs each pair as EMBER does and holds it to
 //!   [`flat_reference`].
