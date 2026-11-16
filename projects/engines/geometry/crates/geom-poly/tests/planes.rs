@@ -25,6 +25,8 @@ use geom_test::seed::Seed;
 use num_bigint::BigInt;
 use proptest::prelude::*;
 
+mod miri;
+
 fn p(x: i64, y: i64, z: i64) -> P3 {
     P3::new(x, y, z).unwrap()
 }
@@ -646,7 +648,7 @@ fn along_agrees_with_big_integers() {
     seeded(
         "geom-poly planes: along",
         0x6142_0004,
-        256,
+        miri::cases(256, 24),
         &cases,
         |(a, b, c, d)| {
             prop_assume!(Line::new(a, b).is_ok());
@@ -672,7 +674,7 @@ fn determinants_agree_with_big_integers() {
     seeded(
         "geom-poly planes: determinants",
         0x6142_0005,
-        256,
+        miri::cases(256, 32),
         &cases,
         |(a, b, c)| {
             let want = sign(&det(&normal(&a), &normal(&b), &normal(&c)));
@@ -694,7 +696,7 @@ fn turns_agree_with_big_integers() {
     seeded(
         "geom-poly planes: turns",
         0x6142_0006,
-        256,
+        miri::cases(256, 8),
         &cases,
         |(f, g, h, x, y)| {
             let (nf, ng, nh) = (normal(&f), normal(&g), normal(&h));
@@ -726,7 +728,7 @@ fn a_table_gives_one_entry_to_one_plane() {
     seeded(
         "geom-poly planes: table",
         0x6142_0007,
-        256,
+        miri::cases(256, 12),
         &cases,
         |(q, r)| {
             let mut table = PlaneTable::new();

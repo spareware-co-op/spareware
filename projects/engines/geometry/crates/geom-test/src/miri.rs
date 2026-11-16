@@ -23,6 +23,11 @@
 //!   place in name order); a binary the list does not name runs in partition 1. So a test added
 //!   or renamed since the list was written still runs, once, and a stale list makes the
 //!   partitions less even, never a test skipped.
+//! - **No crate of [`FINISHED`] has a test Miri stops.** A test still running at its [`BUDGET`]
+//!   is stopped and gives no verdict, so Miri never checks the code it had not reached. Each crate
+//!   of [`FINISHED`] runs its slow tests on a smaller case under Miri, the same functions reached;
+//!   `kernel_quality_workflow.rs` refuses a row of such a crate that reads the budget and any test
+//!   of it ignored or compiled out under Miri, so none can drop out of Miri unseen.
 //! - **Balanced.** Longest processing time first (Graham): each test, the longest first, goes to
 //!   the partition with the least time so far, so no partition passes the average by more than its
 //!   longest test. With [`AT_ONCE`] tests at a time, [`Plan::longest`] is how long the slowest
@@ -64,6 +69,15 @@ pub const AT_ONCE: u64 = 4;
 /// The longest a partition's tests may take, in seconds (the owner's testing principle 8: no run
 /// takes more than a few minutes). A test Miri stops at its budget takes 600.
 pub const PART_SECONDS: u64 = 900;
+
+/// A test's budget under Miri, in seconds: the `default-miri` profile's two periods of five
+/// minutes (`.config/nextest.toml`). A test still running then is stopped, and its row reads this.
+pub const BUDGET: u64 = 600;
+
+/// The kernel crates each of whose tests Miri finishes within its [`BUDGET`]: their slow tests run
+/// a smaller case under Miri (each crate's `tests/miri/mod.rs` says how), and no row of theirs in
+/// [`TIMES`] reads the budget. A crate joins once its stopped tests are cut.
+pub const FINISHED: [&str; 1] = ["geom-poly"];
 
 /// One test's measured time under Miri.
 #[derive(Clone, Debug, PartialEq, Eq)]

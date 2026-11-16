@@ -34,6 +34,9 @@
 //! - **One aliasing exception.** Miri runs geom-pool, the only crate that names rayon, under Tree
 //!   Borrows and every other crate under Stacked Borrows, and only while `Cargo.lock` holds
 //!   crossbeam-epoch 0.9.21, whose `IsElement::element_of` Stacked Borrows refuses.
+//! - **No test of a finished crate drops out of Miri.** Each crate of `geom_test::miri::FINISHED`
+//!   has no row in the times list at the budget (the default-miri profile's), so Miri finishes
+//!   every test of it, and no test or code of it is ignored or compiled out under Miri.
 //! - **A later push judges what it can reach.** `geom_test::increment` judges again every file of
 //!   the change whose crate's tests what changed since the last clean head reaches, held here to
 //!   planted changes that must be judged (a changed line, a changed test, a removed ledger entry,
@@ -869,6 +872,73 @@ fn the_tools_are_configured_as_the_gates_need() {
     assert_eq!(full["period"].as_str(), Some("300s"));
     assert_eq!(full["terminate-after"].as_integer(), Some(2));
     assert!(n["profile"].as_table().unwrap().get("default").is_none());
+}
+
+/// The Rust files under `dir`, at any depth.
+fn rust_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            out.extend(rust_files(&path));
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            out.push(path);
+        }
+    }
+    out
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn no_test_of_a_finished_crate_is_stopped_or_left_out_under_miri() {
+    use geom_test::miri::{BUDGET, FINISHED, TIMES, parse_times};
+    // The budget is the full run's: the default-miri profile's period times its count.
+    let n = toml_file(".config/nextest.toml");
+    let slow = &n["profile"]["default-miri"]["slow-timeout"];
+    let period: u64 = slow["period"]
+        .as_str()
+        .unwrap()
+        .trim_end_matches('s')
+        .parse()
+        .unwrap();
+    let after = u64::try_from(slow["terminate-after"].as_integer().unwrap()).unwrap();
+    assert_eq!(period * after, BUDGET);
+    let times = parse_times(TIMES).unwrap();
+    for krate in FINISHED {
+        // Its rows: its unit tests' binary is the crate, an integration test's `crate::file`.
+        let rows: Vec<_> = times
+            .iter()
+            .filter(|t| t.binary == krate || t.binary.starts_with(&format!("{krate}::")))
+            .collect();
+        assert!(!rows.is_empty(), "{krate} has no row");
+        let stopped: Vec<String> = rows
+            .iter()
+            .filter(|t| t.seconds >= BUDGET)
+            .map(|t| format!("{} {}", t.binary, t.test))
+            .collect();
+        assert!(
+            stopped.is_empty(),
+            "Miri stops these tests of {krate}: {stopped:?}"
+        );
+        // Every one of its tests runs under Miri: none is ignored there, and no code is compiled
+        // out there (a test sizes itself with `cfg!(miri)`, which compiles both).
+        let dir = root().join("projects/engines/geometry/crates").join(krate);
+        let files = rust_files(&dir);
+        assert!(files.len() > 2, "{}", dir.display());
+        for file in files {
+            let text = std::fs::read_to_string(&file).unwrap();
+            for left_out in ["cfg_attr(miri", "cfg(miri)", "not(miri)"] {
+                assert!(
+                    !text.contains(left_out),
+                    "{}: {left_out} leaves code out of Miri's run",
+                    file.display()
+                );
+            }
+        }
+    }
 }
 
 /// The files of `plan` that are not among `want`, and of `want` that `plan` lacks.

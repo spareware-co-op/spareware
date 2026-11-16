@@ -1529,12 +1529,30 @@ mod tests {
     use crate::trace::{Cell, Polygon};
     use crate::winding::{Winding, WindingTest};
 
-    /// How deep the trees of the deep tests go, far past the tree's bound of 127.
-    const DEEP: usize = 100_000;
+    /// Whether the tree tests run their Miri sizes. Miri interprets each step thousands of times
+    /// slower than it runs and stops a test at ten minutes, so there the deep tests go less deep
+    /// and the printed and compared trees have fewer boxes: the same walks and printers, over
+    /// fewer levels and in less text. The tree's walks are loops, not calls, so past its bound is past it at any
+    /// depth natively, and under Miri, which has no native stack, as deep as Miri can afford.
+    const MIRI_TREES: bool = cfg!(miri);
+
+    /// How deep the trees of the deep tests go, far past the tree's bound of 127 (under Miri,
+    /// past it).
+    const DEEP: usize = if MIRI_TREES { 200 } else { 100_000 };
 
     /// How deep the pretty text's deep test goes: its indent grows with the depth, so its length
     /// grows with the square.
-    const DEEP_PRETTY: usize = 1_000;
+    const DEEP_PRETTY: usize = if MIRI_TREES { 8 } else { 1_000 };
+
+    /// How deep the hundred-level test's tree goes (under Miri, a few levels).
+    const HUNDRED: usize = if MIRI_TREES { 3 } else { 100 };
+
+    /// The leaf size of the split trees the compare test keeps of two blocks' twelve
+    /// faces, and a smaller one (under Miri larger, so fewer boxes: still split).
+    const SPLIT: usize = if MIRI_TREES { 8 } else { 4 };
+
+    /// See [`SPLIT`].
+    const SMALLER: usize = if MIRI_TREES { 6 } else { 2 };
 
     /// The tree's types as `#[derive]` writes them, the same names, fields and order: the text and
     /// the answers the tree's own walks must give. The derived walks recurse a level a call, so
@@ -1722,7 +1740,10 @@ mod tests {
     fn the_kept_tree_prints_what_the_derived_form_prints() {
         let mut list = Vec::new();
         block([0; 3], [4; 3], 0, &mut list);
-        block([2; 3], [6; 3], 1, &mut list);
+        let mut second = Vec::new();
+        block([2; 3], [6; 3], 1, &mut second);
+        // Under Miri the first block alone: the same trees and printers, in less text.
+        list.extend(second.into_iter().take(if MIRI_TREES { 0 } else { 6 }));
         let split = kept(&list, 4, &[]);
         let leaf = kept(&list, 64, &[]);
         let dropped = kept(&list, 4, &[WindingTest::intersect(2)]);
@@ -1736,19 +1757,26 @@ mod tests {
 
     #[test]
     fn the_kept_tree_compares_as_the_derived_form_does() {
+        // Under Miri the second block is one face of it, which still cuts the first: the same
+        // trees, fewer boxes.
+        let faces = if MIRI_TREES { 1 } else { 6 };
         let mut list = Vec::new();
         block([0; 3], [4; 3], 0, &mut list);
-        block([2; 3], [6; 3], 1, &mut list);
+        let mut second = Vec::new();
+        block([2; 3], [6; 3], 1, &mut second);
+        list.extend(second.into_iter().take(faces));
         let mut moved = Vec::new();
         block([0; 3], [4; 3], 0, &mut moved);
-        block([2; 3], [7, 6, 6], 1, &mut moved);
+        let mut second = Vec::new();
+        block([2; 3], [7, 6, 6], 1, &mut second);
+        moved.extend(second.into_iter().take(faces));
         let trees = [
-            kept(&list, 4, &[]),
-            kept(&list, 4, &[]),
-            kept(&list, 2, &[]),
+            kept(&list, SPLIT, &[]),
+            kept(&list, SPLIT, &[]),
+            kept(&list, SMALLER, &[]),
             kept(&list, 64, &[]),
-            kept(&list, 4, &[WindingTest::intersect(2)]),
-            kept(&moved, 4, &[]),
+            kept(&list, SPLIT, &[WindingTest::intersect(2)]),
+            kept(&moved, SPLIT, &[]),
             chain(3, Shape::Dropped),
             chain(3, Shape::Leaf([7; 32])),
             chain(3, Shape::Leaf([8; 32])),
@@ -1908,11 +1936,11 @@ mod tests {
 
     #[test]
     fn the_kept_tree_prints_compares_and_drops_a_hundred_levels_deep() {
-        let tree = chain(100, Shape::Dropped);
+        let tree = chain(HUNDRED, Shape::Dropped);
         prints_as_derived(&tree);
-        assert_eq!(*tree, *chain(100, Shape::Dropped));
-        assert_ne!(*tree, *chain(100, Shape::Leaf([7; 32])));
-        assert_ne!(*tree, *chain(99, Shape::Dropped));
+        assert_eq!(*tree, *chain(HUNDRED, Shape::Dropped));
+        assert_ne!(*tree, *chain(HUNDRED, Shape::Leaf([7; 32])));
+        assert_ne!(*tree, *chain(HUNDRED - 1, Shape::Dropped));
         drop(tree);
     }
 
