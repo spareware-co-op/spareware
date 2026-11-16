@@ -2121,3 +2121,73 @@ fn a_cylinder_a_radius_from_the_grid_s_edge_is_cut_across() {
     );
     cut_in_two(&b, (side, sheet));
 }
+
+/// The cone of `a_cone_is_split_through_its_apex`, whole to its rim at height 100, and eight
+/// sectors of eight other operands on it, each bounded by two straight edges from the apex and an
+/// arc between their ends: seven about the first axis, from (k·a, −k·b, h) to (k·a, k·b, h) for
+/// (a, b) = (3, 1), (2, 1), (3, 2), (1, 1), (2, 3), (1, 2) and (1, 3), each reaching further than
+/// the one before, and one from (0, k, k) round to (−k, 0, k). Each edge's end is
+/// whole, h the whole number nearest its distance from the axis, so the edges lie on the cone
+/// within half a step. Seen from a point on the axis, the sixteen edges leave the apex along the
+/// sixteen ray directions' lines exactly, one each, so every line holds a tangent there. Only the
+/// edges' whole tangents (`Central::line_tangent`) show that a reference along a tangent leaves
+/// every other on one side; their enclosures, round the same tangents, meet every line, and with
+/// them alone no direction would serve and the order round the apex could not be counted. The
+/// sixteen are ordered, and the cone splits into the sectors' nine regions.
+#[test]
+fn sixteen_rulings_from_a_cone_s_apex_along_every_ray_direction_are_ordered() {
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let cone = |domain| SurfaceKind::Cone(Cone::new([0.0; 3], 0.0, 1.0, frame, domain).unwrap());
+    let rim = b.circle(p(0, 0, 100), 100, frame, 0);
+    let whole = b.surface(cone(((0.0, 2.0), (0.0, (100 * S) as f64))));
+    let body = b.face_with(whole, vec![vec![back(rim)]], 0);
+    // Each sector's (a, b) and how far it reaches from the axis, in steps: nested, the narrower
+    // ones nearer the apex, so no edge of one crosses another's.
+    let sectors: [((i64, i64), i64); 8] = [
+        ((3, 1), 2000),
+        ((2, 1), 4000),
+        ((3, 2), 6000),
+        ((1, 1), 8000),
+        ((2, 3), 10_000),
+        ((1, 2), 12_000),
+        ((1, 3), 14_000),
+        ((0, 1), 16_000),
+    ];
+    let mut faces = Vec::new();
+    for (operand, ((a, c), reach)) in (1..).zip(sectors) {
+        // The last is the sector from (0, k, k) round to (−k, 0, k), the rest each about the
+        // first axis.
+        let (first, second) = if a == 0 {
+            ((0, 1), (-1, 0))
+        } else {
+            ((a, -c), (a, c))
+        };
+        let length = ((first.0 * first.0 + first.1 * first.1) as f64).sqrt();
+        let k = (reach as f64 / length).round() as i64;
+        let h = (k as f64 * length).round() as i64;
+        let apex = b.vertex(P3::new(0, 0, 0).unwrap(), operand);
+        let ends =
+            [first, second].map(|(x, y)| b.vertex(P3::new(k * x, k * y, h).unwrap(), operand));
+        let out_ruling = b.line(apex, ends[0], operand);
+        let start = (first.1 as f64).atan2(first.0 as f64) / std::f64::consts::PI;
+        let end = (second.1 as f64).atan2(second.0 as f64) / std::f64::consts::PI;
+        let arc =
+            Circle::new([0.0, 0.0, h as f64], k as f64 * length, frame, (start, end)).unwrap();
+        let arc = b.edge(CurveKind::Circle(arc), Some(ends), operand);
+        let back_ruling = b.line(ends[1], apex, operand);
+        let patch = b.surface(cone(((start, end), (0.0, h as f64))));
+        let ring = reversed(&b.runs(&[out_ruling, arc, back_ruling]));
+        faces.push(b.face_with(patch, vec![ring], operand));
+    }
+    let (out, splitting) = b.run();
+    assert_eq!(out.faces[body].same_carrier, faces);
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    // The cone: the innermost sector, the six bands between neighbouring sectors about the first
+    // axis, the eighth sector, and the rest inside the rim.
+    let parts = of_face(&splitting, body);
+    assert_eq!(parts.len(), 9, "{parts:?}");
+    let rest: Vec<_> = parts.iter().filter(|s| s.outer.len() == 1).collect();
+    assert_eq!(rest.len(), 1, "{parts:?}");
+    assert_eq!(rest[0].outer, vec![run(whole_piece(&out, rim), false)]);
+}
