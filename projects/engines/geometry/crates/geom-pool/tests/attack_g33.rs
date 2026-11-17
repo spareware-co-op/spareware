@@ -17,7 +17,7 @@
 //!   answer, failures and the meter left behind included. `geom-run`'s own golden test holds the
 //!   helper's answers to one SHA-256 digest at the same thread counts and chunk sizes with pools
 //!   that start threads directly; this holds the rayon pool to the same answers. Under Miri the
-//!   sweep is smaller (pools of 2 and 3 threads, chunk sizes 1, 7 and 64), so Miri finishes it;
+//!   sweep is smaller (pools of 2 and 3 threads, chunk sizes 7 and 4,096), so Miri finishes it;
 //!   `MIRI_THREADS` says why and what it keeps.
 //!
 //! Native targets only: WebAssembly has no threads here, so the pool does not exist there and the
@@ -260,18 +260,21 @@ fn every_helper(exec: Exec<'_>, size: usize, items: &[Item], cap: u64, total: u6
 }
 
 /// Under Miri, the sweep of the rayon test is smaller: Miri runs each thread's every step in its
-/// interpreter, and the native sweep (four pools, four chunk sizes, eight rounds of up to 600
-/// items) never finished inside Miri's 600-second stop. Miri's sweep keeps what it is there to
+/// interpreter, and neither the native sweep (four pools, four chunk sizes, eight rounds of up to
+/// 600 items) nor a sweep of pools of 2 and 3 threads at chunk sizes 1, 7 and 64 over six rounds
+/// of up to 48 items finished inside Miri's 600-second stop on GitHub's runners (each chunk a
+/// pool hands to a thread costs Miri tens of seconds). Miri's sweep keeps what it is there to
 /// check, the rayon pools' threads handing work and answers to each other: pools of 2 and 3
-/// threads (two that run in parallel, one an odd count), chunk sizes 1, 7 and 64 (one item a
-/// task, an uneven chunk, and every item in one chunk, which is what 4,096 gives the native
-/// sweep), and six rounds of up to 48 items, so each round's budget case (none, just short, any)
-/// comes up in a round with failing items and in one without. Failing items are as common for the
-/// size: one in a quarter of the round's largest size, the native sweep's one in 150 of 600.
+/// threads (two that run in parallel, one an odd count), and two of the chunk sizes chapter 23.4
+/// forces, 7 (an uneven chunk) and 4,096 (every item in one chunk), over three rounds of up to 14
+/// items, so each of the three outcomes (passing, out of budget, an item's own error) comes up,
+/// and the round with failing items is split into chunks of 7 on both pools. Failing items are
+/// as common for the size: one in a quarter of the round's largest size, the native sweep's one
+/// in 150 of 600.
 const MIRI_THREADS: [usize; 2] = [2, 3];
-const MIRI_SIZES: [usize; 3] = [1, 7, 64];
-const MIRI_ROUNDS: usize = 6;
-const MIRI_MOST_ITEMS: u64 = 48;
+const MIRI_SIZES: [usize; 2] = [7, 4_096];
+const MIRI_ROUNDS: usize = 3;
+const MIRI_MOST_ITEMS: u64 = 14;
 
 /// Every helper gives the serial answer on rayon pools of 1, 2, 3 and 8 threads, at every forced
 /// chunk size, on seeded inputs whose budgets make every outcome happen (under Miri, the smaller
