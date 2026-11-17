@@ -1660,7 +1660,7 @@ mod repository {
             "os: windows-11-arm",
             "os: macos-latest",
             "os: macos-15-intel",
-            "run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}",
+            "run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast ${{ matrix.part.targets }}",
             "run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}",
             "run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast",
             "run: cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked --archive-file \"$RUNNER_TEMP/wasm-checked.tar.zst\"",
