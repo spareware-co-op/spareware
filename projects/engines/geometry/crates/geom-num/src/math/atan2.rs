@@ -2007,6 +2007,181 @@ mod proofs {
         }
     }
 
+    /// TRIAL (measuring only, removed before the pull request is proved): the claims `claim` (a
+    /// mask) of `mul_keeps_every_carry` for only the operands of class `class` of the candidate
+    /// split `kind`.
+    fn trial_3(claim: u8, kind: u8, class: u64) {
+        let a = any_tint();
+        let b = any_tint();
+        let (ah, am, al) = (u128::from(a.h), u128::from(a.m), u128::from(a.l));
+        let (bh, bm, bl) = (u128::from(b.h), u128::from(b.m), u128::from(b.l));
+        let w = |x: u64| u128::from(x);
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // Whether the kept sum's top bit is set (the branch the claim takes): 2 classes.
+            3 => {
+                let rh = ah.wrapping_mul(bh);
+                let rm1 = ah.wrapping_mul(bm);
+                let rm2 = am.wrapping_mul(bh);
+                let rl1 = ah.wrapping_mul(bl);
+                let rl2 = am.wrapping_mul(bm);
+                let rl3 = al.wrapping_mul(bh);
+                let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
+                let c1 = w(hi64(c0)) + w(lo64(rh)) + w(hi64(rm1)) + w(hi64(rm2));
+                let c2 = w(hi64(rh)) + w(hi64(c1));
+                lo64(c2) >> 63
+            }
+            // Which operands are zero: 4 classes.
+            _ => u64::from(a.h == 0) | (u64::from(b.h == 0) << 1),
+        };
+        if part != class {
+            return;
+        }
+        let r = a.mul(&b).unwrap();
+        let rh = ah.checked_mul(bh).unwrap();
+        let rm1 = ah.checked_mul(bm).unwrap();
+        let rm2 = am.checked_mul(bh).unwrap();
+        let rl1 = ah.checked_mul(bl).unwrap();
+        let rl2 = am.checked_mul(bm).unwrap();
+        let rl3 = al.checked_mul(bh).unwrap();
+        let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
+        let c1 = w(hi64(c0)) + w(lo64(rh)) + w(hi64(rm1)) + w(hi64(rm2));
+        let c2 = w(hi64(rh)) + w(hi64(c1));
+        let (kh, km, kl) = (lo64(c2), lo64(c1), lo64(c0));
+        let ex = a.ex + b.ex;
+        if claim & 1 != 0 {
+            assert!(c2 >> 64 == 0, "K is below 2^192");
+            assert_eq!(r.sgn, a.sgn ^ b.sgn);
+        }
+        if kh >> 63 == 1 {
+            if claim & 1 != 0 {
+                assert_eq!(r.ex, ex);
+            }
+            if claim & 2 != 0 {
+                assert_eq!(r.l, kl);
+            }
+            if claim & 4 != 0 {
+                assert_eq!(r.m, km);
+            }
+            if claim & 8 != 0 {
+                assert_eq!(r.h, kh);
+            }
+        } else {
+            let shifted = ((kh << 1) | (km >> 63), (km << 1) | (kl >> 63), kl << 1);
+            if claim & 2 != 0 {
+                assert_eq!(r.l, shifted.2);
+            }
+            if claim & 4 != 0 {
+                assert_eq!(r.m, shifted.1);
+            }
+            if claim & 8 != 0 {
+                assert_eq!(r.h, shifted.0);
+                assert!(
+                    r.h >> 63 == 1 || (r.h, r.m, r.l) == (0, 0, 0),
+                    "normalised or zero"
+                );
+            }
+            if claim & 1 != 0 && r.h != 0 {
+                assert_eq!(r.ex, ex - 1);
+            }
+        }
+    }
+
+    /// TRIAL (measuring only, removed before the pull request is proved): the claims `claim` (a
+    /// mask) of `agreed_answers_exactly_when_both_ends_round_alike` for only the values of class
+    /// `class` of the candidate split `kind`.
+    fn trial_5(claim: u8, kind: u8, class: u64) {
+        let (fh, fl, eps): (f64, f64, f64) = (kani::any(), kani::any(), kani::any());
+        kani::assume(fh.abs() <= 4.0 && fl.abs() <= 1.0 && eps > 0.0 && eps <= 1.0);
+        let (hb, lb) = (fh.to_bits(), fl.to_bits());
+        let signs = (hb >> 63) | ((lb >> 63) << 1);
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // The signs of the angle and of its low part: 4 classes.
+            1 => signs,
+            // The two signs and whether the low part is at least the bound: 8 classes.
+            2 => signs | (u64::from(fl.abs() >= eps) << 2),
+            // The two signs and whether the angle is at least the bound: 8 classes.
+            3 => signs | (u64::from(fh.abs() >= eps) << 2),
+            // The two signs and both of: the low part at least the bound, the angle at least the
+            // low part: 16 classes.
+            _ => signs | (u64::from(fl.abs() >= eps) << 2) | (u64::from(fh.abs() >= fl.abs()) << 3),
+        };
+        if part != class {
+            return;
+        }
+        let lower = fh + (fl - eps);
+        let upper = fh + (fl + eps);
+        match agreed(fh, fl, eps) {
+            Some(r) => {
+                if claim & 1 != 0 {
+                    assert!(lower == upper);
+                }
+                if claim & 2 != 0 {
+                    assert!(r.to_bits() == upper.to_bits());
+                }
+            }
+            None => {
+                if claim & 1 != 0 {
+                    assert!(lower != upper);
+                }
+            }
+        }
+    }
+
+    macro_rules! trial {
+        ($($(#[$attr:meta])* $name:ident: $law:ident, $claim:expr, $kind:expr, $class:expr;)*) => {
+            $(
+                #[kani::proof]
+                $(#[$attr])*
+                fn $name() {
+                    $law($claim, $kind, $class);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        t5_c_signs_3: trial_5, 3, 1, 3;
+        t5_c_bound_1: trial_5, 3, 2, 1;
+        t5_c_bound_2: trial_5, 3, 2, 2;
+        t5_c_bound_3: trial_5, 3, 2, 3;
+        t5_c_bound_4: trial_5, 3, 2, 4;
+        t5_c_bound_7: trial_5, 3, 2, 7;
+        t5_c_angle_2: trial_5, 3, 3, 2;
+        t5_c_angle_6: trial_5, 3, 3, 6;
+        t5_c_both_2: trial_5, 3, 4, 2;
+        t5_c_both_6: trial_5, 3, 4, 6;
+        t5_c_both_10: trial_5, 3, 4, 10;
+        t5_c_both_14: trial_5, 3, 4, 14;
+        t5_c_when: trial_5, 1, 0, 0;
+        t5_c_that: trial_5, 2, 0, 0;
+        t5_c_when_signs_2: trial_5, 1, 1, 2;
+        t5_c_that_signs_2: trial_5, 2, 1, 2;
+        #[kani::solver(kissat)] t5_k_whole: trial_5, 3, 0, 0;
+        #[kani::solver(kissat)] t5_k_signs_0: trial_5, 3, 1, 0;
+        #[kani::solver(kissat)] t5_k_signs_1: trial_5, 3, 1, 1;
+        #[kani::solver(kissat)] t5_k_signs_2: trial_5, 3, 1, 2;
+        #[kani::solver(kissat)] t5_k_signs_3: trial_5, 3, 1, 3;
+        #[kani::solver(kissat)] t5_k_when: trial_5, 1, 0, 0;
+        #[kani::solver(kissat)] t5_k_that: trial_5, 2, 0, 0;
+        #[kani::solver(minisat)] t5_m_whole: trial_5, 3, 0, 0;
+        t3_c_rest: trial_3, 1, 0, 0;
+        t3_c_low: trial_3, 2, 0, 0;
+        t3_c_middle: trial_3, 4, 0, 0;
+        t3_c_high: trial_3, 8, 0, 0;
+        #[kani::solver(kissat)] t3_k_whole: trial_3, 15, 0, 0;
+        #[kani::solver(kissat)] t3_k_branch_0: trial_3, 15, 3, 0;
+        #[kani::solver(kissat)] t3_k_branch_1: trial_3, 15, 3, 1;
+        #[kani::solver(kissat)] t3_k_zero_0: trial_3, 15, 4, 0;
+        #[kani::solver(kissat)] t3_k_low: trial_3, 2, 0, 0;
+        #[kani::solver(kissat)] t3_k_middle: trial_3, 4, 0, 0;
+        #[kani::solver(kissat)] t3_k_high: trial_3, 8, 0, 0;
+        #[kani::solver(minisat)] t3_m_whole: trial_3, 15, 0, 0;
+    }
+
     /// A non-negative integer below 2^448, as seven 64-bit words, least significant first.
     type Big = [u64; 7];
 

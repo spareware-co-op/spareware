@@ -760,6 +760,93 @@ mod proofs {
         }
     }
 
+    /// TRIAL (measuring only, removed before the pull request is proved): the claims `claims` (a
+    /// mask) of `coarsen_is_nearest_and_reported` for only the inputs of class `class` of the
+    /// candidate split `kind`.
+    fn trial_2(claims: u8, kind: u8, class: u64) {
+        let c = coord();
+        let (from, to) = (step(kani::any()), step(kani::any()));
+        let v = i128::from(c.get());
+        let steps = u64::from(from.rung()) * 3 + u64::from(to.rung());
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // The two steps: 9 classes.
+            2 => steps,
+            // The sign and the two steps: 18 classes.
+            5 => u64::from(v < 0) * 9 + steps,
+            // Two rungs apart only: the sign and whether the remainder rounds up: 4 classes.
+            _ => {
+                if steps == 6 {
+                    u64::from(v < 0) | (u64::from(v.rem_euclid(625) > 312) << 1)
+                } else {
+                    99
+                }
+            }
+        };
+        if part != class {
+            return;
+        }
+        let got = coarsen(c, from, to);
+        match from.rung().checked_sub(to.rung()) {
+            None => assert!(got == Err(NumError::WrongDirection)),
+            Some(k) => {
+                let d: i128 = match k {
+                    0 => 1,
+                    1 => 25,
+                    _ => 625,
+                };
+                match got {
+                    Ok(r) => {
+                        let q = i128::from(r.value().get());
+                        let moved = q * d - v;
+                        if claims & 1 != 0 {
+                            assert!(2 * moved.abs() < d);
+                        }
+                        if claims & 2 != 0 {
+                            assert!(q.abs() <= v.abs());
+                        }
+                        if claims & 4 != 0 {
+                            assert!(r.is_exact() == (v % d == 0));
+                        }
+                    }
+                    Err(_) => assert!(false, "coarsening towards a coarser step always answers"),
+                }
+            }
+        }
+    }
+
+    macro_rules! trial {
+        ($($(#[$attr:meta])* $name:ident: $claims:expr, $kind:expr, $class:expr;)*) => {
+            $(
+                #[kani::proof]
+                $(#[$attr])*
+                fn $name() {
+                    trial_2($claims, $kind, $class);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        t2_c_nearest_plus_far: 1, 5, 6;
+        t2_c_nearest_up_0: 1, 6, 0;
+        t2_c_nearest_up_1: 1, 6, 1;
+        t2_c_nearest_up_2: 1, 6, 2;
+        t2_c_nearest_up_3: 1, 6, 3;
+        #[kani::solver(kissat)] t2_k_whole: 7, 0, 0;
+        #[kani::solver(kissat)] t2_k_nearest: 1, 0, 0;
+        #[kani::solver(kissat)] t2_k_far: 7, 2, 6;
+        #[kani::solver(kissat)] t2_k_nearest_far: 1, 2, 6;
+        #[kani::solver(kissat)] t2_k_nearest_plus_far: 1, 5, 6;
+        #[kani::solver(kissat)] t2_k_nearest_minus_far: 1, 5, 15;
+        #[kani::solver(kissat)] t2_k_nearest_up_0: 1, 6, 0;
+        #[kani::solver(kissat)] t2_k_nearest_up_1: 1, 6, 1;
+        #[kani::solver(kissat)] t2_k_nearest_up_2: 1, 6, 2;
+        #[kani::solver(kissat)] t2_k_nearest_up_3: 1, 6, 3;
+        #[kani::solver(minisat)] t2_m_whole: 7, 0, 0;
+    }
+
     /// `Steps::refine` never panics: the exact product, or `None` on overflow or towards a coarser
     /// step, for every count.
     #[kani::proof]
