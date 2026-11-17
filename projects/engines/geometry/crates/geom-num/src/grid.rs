@@ -800,53 +800,51 @@ mod proofs {
     }
 
     // TRIAL-BEGIN (measuring only, never in a pull request)
-    /// The claims of the mask `claims` (1 nearest, 2 no larger, 4 exactness) for the pairs of the
-    /// mask `pairs` (bit i is `PAIRS[i]`), the coordinates of sign `sign` (0 any, 1 not negative,
-    /// 2 negative) and magnitude band `band` (0 any; 1 below 2^20, 2 below 2^30, 3 below 2^35, 4
-    /// below 2^38, 5 below 2^39, 6 the rest).
-    fn trial_4(pairs: u16, sign: u8, claims: u8, band: u8) {
-        for (i, (from, to)) in PAIRS.into_iter().enumerate() {
-            if pairs & (1 << i) != 0 {
-                trial_law(from, to, sign, claims, band);
-            }
-        }
-    }
-
-    fn trial_law(from: GridStep, to: GridStep, sign: u8, claims: u8, band: u8) {
+    /// The claims of the mask `claims` (1 nearest, 2 no larger, 4 exactness) for `PAIRS[pair]`
+    /// and the coordinates of sign `sign` (0 any, 1 not negative, 2 negative). `form` is how the
+    /// nearest claim is written: 0 in i128 as on main; 1 in i64; 2 in i64 with its two sides as
+    /// two assertions; 3 in i64 on the negated pair (`-q` and `-v`).
+    fn trial_5(pair: usize, sign: u8, claims: u8, form: u8) {
+        let (from, to) = PAIRS[pair];
         let c = coord();
-        let v = i128::from(c.get());
-        if (sign == 1 && v < 0) || (sign == 2 && v >= 0) {
-            return;
-        }
-        let m = v.unsigned_abs();
-        let inside = match band {
-            0 => true,
-            1 => m < 1 << 20,
-            2 => m >= 1 << 20 && m < 1 << 30,
-            3 => m >= 1 << 30 && m < 1 << 35,
-            4 => m >= 1 << 35 && m < 1 << 38,
-            5 => m >= 1 << 38 && m < 1 << 39,
-            _ => m >= 1 << 39,
-        };
-        if !inside {
+        if (sign == 1 && c.get() < 0) || (sign == 2 && c.get() >= 0) {
             return;
         }
         let got = coarsen(c, from, to);
         match from.rung().checked_sub(to.rung()) {
             None => assert!(got == Err(NumError::WrongDirection)),
             Some(k) => {
-                let d: i128 = match k {
+                let d: i64 = match k {
                     0 => 1,
                     1 => 25,
                     _ => 625,
                 };
                 match got {
                     Ok(r) => {
-                        let q = i128::from(r.value().get());
+                        let (q, v) = (r.value().get(), c.get());
                         if claims & 1 != 0 {
-                            let moved = q * d - v;
-                            assert!(2 * moved.abs() < d);
+                            match form {
+                                0 => {
+                                    let (q, v, d) = (i128::from(q), i128::from(v), i128::from(d));
+                                    let moved = q * d - v;
+                                    assert!(2 * moved.abs() < d);
+                                }
+                                1 => {
+                                    let moved = q * d - v;
+                                    assert!(2 * moved.abs() < d);
+                                }
+                                2 => {
+                                    let moved = q * d - v;
+                                    assert!(2 * moved < d);
+                                    assert!(2 * moved > -d);
+                                }
+                                _ => {
+                                    let moved = (-q) * d - (-v);
+                                    assert!(2 * moved.abs() < d);
+                                }
+                            }
                         }
+                        let (q, v, d) = (i128::from(q), i128::from(v), i128::from(d));
                         if claims & 2 != 0 {
                             assert!(q.abs() <= v.abs());
                         }
@@ -860,57 +858,58 @@ mod proofs {
         }
     }
 
-    macro_rules! trial {
-        ($($(#[$attr:meta])* $name:ident: $pairs:expr, $sign:expr, $claims:expr, $band:expr;)*) => {
+    macro_rules! trial5 {
+        ($($c:ident $k:ident: $pair:expr, $sign:expr, $claims:expr, $form:expr;)*) => {
             $(
                 #[kani::proof]
-                $(#[$attr])*
-                fn $name() {
-                    trial_4($pairs, $sign, $claims, $band);
+                fn $c() {
+                    trial_5($pair, $sign, $claims, $form);
+                }
+
+                #[kani::proof]
+                #[kani::solver(kissat)]
+                fn $k() {
+                    trial_5($pair, $sign, $claims, $form);
                 }
             )*
         };
     }
 
-    trial! {
-        #[kani::solver(kissat)] t4g_k_all: 511, 0, 7, 0;
-        t4g_c_far: 64, 0, 7, 0;
-        #[kani::solver(kissat)] t4g_k_far: 64, 0, 7, 0;
-        t4g_c_far_near: 64, 0, 1, 0;
-        t4g_c_far_size: 64, 0, 2, 0;
-        t4g_c_far_exact: 64, 0, 4, 0;
-        #[kani::solver(kissat)] t4g_k_far_near: 64, 0, 1, 0;
-        #[kani::solver(kissat)] t4g_k_far_size: 64, 0, 2, 0;
-        #[kani::solver(kissat)] t4g_k_far_exact: 64, 0, 4, 0;
-        t4g_c_far_plus: 64, 1, 7, 0;
-        t4g_c_far_minus: 64, 2, 7, 0;
-        #[kani::solver(kissat)] t4g_k_far_plus: 64, 1, 7, 0;
-        #[kani::solver(kissat)] t4g_k_far_minus: 64, 2, 7, 0;
-        t4g_c_far_plus_near: 64, 1, 1, 0;
-        t4g_c_far_minus_near: 64, 2, 1, 0;
-        #[kani::solver(kissat)] t4g_k_far_plus_near: 64, 1, 1, 0;
-        #[kani::solver(kissat)] t4g_k_far_minus_near: 64, 2, 1, 0;
-        t4g_c_one: 136, 0, 7, 0;
-        #[kani::solver(kissat)] t4g_k_one: 136, 0, 7, 0;
-        t4g_c_rest: 311, 0, 7, 0;
-        t4g_c_far_minus_near_1: 64, 2, 1, 1;
-        t4g_c_far_minus_near_2: 64, 2, 1, 2;
-        t4g_c_far_minus_near_3: 64, 2, 1, 3;
-        t4g_c_far_minus_near_4: 64, 2, 1, 4;
-        t4g_c_far_minus_near_5: 64, 2, 1, 5;
-        t4g_c_far_minus_near_6: 64, 2, 1, 6;
-        #[kani::solver(kissat)] t4g_k_far_minus_near_1: 64, 2, 1, 1;
-        #[kani::solver(kissat)] t4g_k_far_minus_near_2: 64, 2, 1, 2;
-        #[kani::solver(kissat)] t4g_k_far_minus_near_3: 64, 2, 1, 3;
-        #[kani::solver(kissat)] t4g_k_far_minus_near_4: 64, 2, 1, 4;
-        #[kani::solver(kissat)] t4g_k_far_minus_near_5: 64, 2, 1, 5;
-        #[kani::solver(kissat)] t4g_k_far_minus_near_6: 64, 2, 1, 6;
-        #[kani::solver(kissat)] t4g_k_far_minus_1: 64, 2, 7, 1;
-        #[kani::solver(kissat)] t4g_k_far_minus_2: 64, 2, 7, 2;
-        #[kani::solver(kissat)] t4g_k_far_minus_3: 64, 2, 7, 3;
-        #[kani::solver(kissat)] t4g_k_far_minus_4: 64, 2, 7, 4;
-        #[kani::solver(kissat)] t4g_k_far_minus_5: 64, 2, 7, 5;
-        #[kani::solver(kissat)] t4g_k_far_minus_6: 64, 2, 7, 6;
+    trial5! {
+        t5g_c_p3_plus_f0 t5g_k_p3_plus_f0: 3, 1, 1, 0;
+        t5g_c_p3_plus_f1 t5g_k_p3_plus_f1: 3, 1, 1, 1;
+        t5g_c_p3_plus_f2 t5g_k_p3_plus_f2: 3, 1, 1, 2;
+        t5g_c_p3_minus_f0 t5g_k_p3_minus_f0: 3, 2, 1, 0;
+        t5g_c_p3_minus_f1 t5g_k_p3_minus_f1: 3, 2, 1, 1;
+        t5g_c_p3_minus_f2 t5g_k_p3_minus_f2: 3, 2, 1, 2;
+        t5g_c_p3_minus_f3 t5g_k_p3_minus_f3: 3, 2, 1, 3;
+        t5g_c_p3_any_f1 t5g_k_p3_any_f1: 3, 0, 1, 1;
+        t5g_c_p3_any_f2 t5g_k_p3_any_f2: 3, 0, 1, 2;
+        t5g_c_p3_rest t5g_k_p3_rest: 3, 0, 6, 0;
+        t5g_c_p3_all_f1 t5g_k_p3_all_f1: 3, 0, 7, 1;
+        t5g_c_p3_all_f2 t5g_k_p3_all_f2: 3, 0, 7, 2;
+        t5g_c_p7_plus_f0 t5g_k_p7_plus_f0: 7, 1, 1, 0;
+        t5g_c_p7_plus_f1 t5g_k_p7_plus_f1: 7, 1, 1, 1;
+        t5g_c_p7_plus_f2 t5g_k_p7_plus_f2: 7, 1, 1, 2;
+        t5g_c_p7_minus_f0 t5g_k_p7_minus_f0: 7, 2, 1, 0;
+        t5g_c_p7_minus_f1 t5g_k_p7_minus_f1: 7, 2, 1, 1;
+        t5g_c_p7_minus_f2 t5g_k_p7_minus_f2: 7, 2, 1, 2;
+        t5g_c_p7_minus_f3 t5g_k_p7_minus_f3: 7, 2, 1, 3;
+        t5g_c_p7_any_f1 t5g_k_p7_any_f1: 7, 0, 1, 1;
+        t5g_c_p7_any_f2 t5g_k_p7_any_f2: 7, 0, 1, 2;
+        t5g_c_p7_rest t5g_k_p7_rest: 7, 0, 6, 0;
+        t5g_c_p7_all_f1 t5g_k_p7_all_f1: 7, 0, 7, 1;
+        t5g_c_p7_all_f2 t5g_k_p7_all_f2: 7, 0, 7, 2;
+        t5g_c_p6_plus_f1 t5g_k_p6_plus_f1: 6, 1, 1, 1;
+        t5g_c_p6_plus_f2 t5g_k_p6_plus_f2: 6, 1, 1, 2;
+        t5g_c_p6_minus_f1 t5g_k_p6_minus_f1: 6, 2, 1, 1;
+        t5g_c_p6_minus_f2 t5g_k_p6_minus_f2: 6, 2, 1, 2;
+        t5g_c_p6_minus_f3 t5g_k_p6_minus_f3: 6, 2, 1, 3;
+        t5g_c_p6_any_f1 t5g_k_p6_any_f1: 6, 0, 1, 1;
+        t5g_c_p6_any_f2 t5g_k_p6_any_f2: 6, 0, 1, 2;
+        t5g_c_p6_rest t5g_k_p6_rest: 6, 0, 6, 0;
+        t5g_c_p6_all_f1 t5g_k_p6_all_f1: 6, 0, 7, 1;
+        t5g_c_p6_all_f2 t5g_k_p6_all_f2: 6, 0, 7, 2;
     }
     // TRIAL-END
 

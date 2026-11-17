@@ -2123,74 +2123,43 @@ mod proofs {
         ]
     }
 
-    /// Where the time goes: the products twice (1: one pair, 2: all six), the bound (3), the
-    /// column sums of the two sets (4), K below 2^192 for real products (5).
-    fn trial_x(kind: u8) {
+    /// 0: the caller's claims one word at a time, the lowest first, against `column_sums`. 1: the
+    /// same with the reference's sum taken from `mul_sum`'s contract. 2: no `mul` at all: the
+    /// products twice, asserted equal, then their column sums (does an asserted equality of the
+    /// products make the sums quick?).
+    fn trial_5(kind: u8) {
         let a = any_tint();
         let b = any_tint();
-        let p = six(&a, &b);
-        match kind {
-            1 => {
-                let q = six(&a, &b);
-                assert!(p[0] == q[0]);
-            }
-            2 => {
-                let q = six(&a, &b);
-                assert!(p == q);
-            }
-            3 => {
-                assert!(
-                    p[0] <= LARGEST_PRODUCT
-                        && p[1] <= LARGEST_PRODUCT
-                        && p[2] <= LARGEST_PRODUCT
-                        && p[3] <= LARGEST_PRODUCT
-                        && p[4] <= LARGEST_PRODUCT
-                        && p[5] <= LARGEST_PRODUCT
-                );
-            }
-            4 => {
-                let q = six(&a, &b);
-                assert!(
-                    column_sums(p[0], p[1], p[2], p[3], p[4], p[5])
-                        == column_sums(q[0], q[1], q[2], q[3], q[4], q[5])
-                );
-            }
-            _ => {
-                assert!(column_sums(p[0], p[1], p[2], p[3], p[4], p[5]).is_some());
-            }
+        if kind == 2 {
+            let p = six(&a, &b);
+            let q = six(&a, &b);
+            assert!(p == q);
+            assert!(
+                column_sums(p[0], p[1], p[2], p[3], p[4], p[5])
+                    == column_sums(q[0], q[1], q[2], q[3], q[4], q[5])
+            );
+            return;
         }
-    }
-
-    /// `mul_keeps_every_carry`'s body with only the claims of the mask: 1 answers (and the
-    /// contract's requirement), 2 K below 2^192, 4 the sign, 8 the unshifted answer, 16 the
-    /// shifted one.
-    fn trial_m(claims: u8) {
-        let a = any_tint();
-        let b = any_tint();
         let r = a.mul(&b).unwrap();
-        if claims == 1 {
-            return;
-        }
         let p = six(&a, &b);
-        let k = column_sums(p[0], p[1], p[2], p[3], p[4], p[5]);
-        if claims & 2 != 0 {
-            assert!(k.is_some(), "K is below 2^192");
-        }
-        if k.is_none() {
-            return;
-        }
+        let k = if kind == 0 {
+            column_sums(p[0], p[1], p[2], p[3], p[4], p[5])
+        } else {
+            mul_sum(p[0], p[1], p[2], p[3], p[4], p[5])
+        };
+        assert!(k.is_some(), "K is below 2^192");
         let (kh, km, kl) = k.unwrap();
         let ex = a.ex + b.ex;
-        if claims & 4 != 0 {
-            assert_eq!(r.sgn, a.sgn ^ b.sgn);
-        }
+        assert_eq!(r.sgn, a.sgn ^ b.sgn);
         if kh >> 63 == 1 {
-            if claims & 8 != 0 {
-                assert_eq!((r.h, r.m, r.l, r.ex), (kh, km, kl, ex));
-            }
-        } else if claims & 16 != 0 {
-            let shifted = ((kh << 1) | (km >> 63), (km << 1) | (kl >> 63), kl << 1);
-            assert_eq!((r.h, r.m, r.l), shifted);
+            assert!(r.l == kl);
+            assert!(r.m == km);
+            assert!(r.h == kh);
+            assert!(r.ex == ex);
+        } else {
+            assert!(r.l == kl << 1);
+            assert!(r.m == (km << 1) | (kl >> 63));
+            assert!(r.h == (kh << 1) | (km >> 63));
             assert!(
                 r.h >> 63 == 1 || (r.h, r.m, r.l) == (0, 0, 0),
                 "normalised or zero"
@@ -2201,43 +2170,29 @@ mod proofs {
         }
     }
 
-    macro_rules! trial {
-        ($($(#[$attr:meta])* $name:ident: $f:ident($arg:expr);)*) => {
+    macro_rules! trial5 {
+        ($($c:ident $k:ident: $kind:expr;)*) => {
             $(
                 #[kani::proof]
                 #[kani::stub_verified(mul_sum)]
-                $(#[$attr])*
-                fn $name() {
-                    $f($arg);
+                fn $c() {
+                    trial_5($kind);
+                }
+
+                #[kani::proof]
+                #[kani::stub_verified(mul_sum)]
+                #[kani::solver(kissat)]
+                fn $k() {
+                    trial_5($kind);
                 }
             )*
         };
     }
 
-    trial! {
-        t4x_c_1: trial_x(1);
-        t4x_c_2: trial_x(2);
-        t4x_c_3: trial_x(3);
-        t4x_c_4: trial_x(4);
-        t4x_c_5: trial_x(5);
-        #[kani::solver(kissat)] t4x_k_1: trial_x(1);
-        #[kani::solver(kissat)] t4x_k_2: trial_x(2);
-        #[kani::solver(kissat)] t4x_k_3: trial_x(3);
-        #[kani::solver(kissat)] t4x_k_4: trial_x(4);
-        #[kani::solver(kissat)] t4x_k_5: trial_x(5);
-        t4m_c_whole: trial_m(31);
-        #[kani::solver(kissat)] t4m_k_whole: trial_m(31);
-        #[kani::solver(minisat)] t4m_m_whole: trial_m(31);
-        t4m_c_claim_1: trial_m(1);
-        t4m_c_claim_2: trial_m(2);
-        t4m_c_claim_4: trial_m(4);
-        t4m_c_claim_8: trial_m(8);
-        t4m_c_claim_16: trial_m(16);
-        #[kani::solver(kissat)] t4m_k_claim_1: trial_m(1);
-        #[kani::solver(kissat)] t4m_k_claim_2: trial_m(2);
-        #[kani::solver(kissat)] t4m_k_claim_4: trial_m(4);
-        #[kani::solver(kissat)] t4m_k_claim_8: trial_m(8);
-        #[kani::solver(kissat)] t4m_k_claim_16: trial_m(16);
+    trial5! {
+        t5m_c_words t5m_k_words: 0;
+        t5m_c_contract t5m_k_contract: 1;
+        t5m_c_lemma t5m_k_lemma: 2;
     }
     // TRIAL-END
 
