@@ -790,6 +790,82 @@ mod proofs {
         }
     }
 
+    /// TRIAL (measuring only, removed before the pull request): the claim of
+    /// `add_sub_mul_enclose_the_rounded_result` for one operation `op` (0 add, 1 sub, 2 mul) and
+    /// only the inputs of class `class` of the candidate split `kind`.
+    fn trial_1(op: u8, kind: u8, class: u64) {
+        let (x, y) = (finite(), finite());
+        let (xb, yb) = (x.to_bits(), y.to_bits());
+        let mag = u64::MAX >> 1;
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // The two signs: 4 classes.
+            1 => (xb >> 63) | ((yb >> 63) << 1),
+            // The top three fraction bits of x: 8 classes.
+            2 => (xb >> 49) & 7,
+            // The top two bits of each exponent field: 16 classes.
+            3 => ((xb >> 61) & 3) | (((yb >> 61) & 3) << 2),
+            // The signs and which magnitude is larger: 8 classes.
+            4 => (xb >> 63) | ((yb >> 63) << 1) | (u64::from((xb & mag) >= (yb & mag)) << 2),
+            // The low three fraction bits of x and of y: 64 classes.
+            5 => (xb & 7) | ((yb & 7) << 3),
+            // The floor: both signs and both exponent fields fixed.
+            _ => (xb >> 52) | ((yb >> 52) << 12),
+        };
+        if part != class {
+            return;
+        }
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        let (got, rounded) = match op {
+            0 => (a.add(b), x + y),
+            1 => (a.sub(b), x - y),
+            _ => (a.mul(b), x * y),
+        };
+        if let Ok(r) = got {
+            assert!(r.lo() <= r.hi());
+            if rounded.is_finite() {
+                assert!(r.contains(rounded));
+            }
+        }
+    }
+
+    macro_rules! trial {
+        ($($name:ident: $op:expr, $kind:expr, $class:expr;)*) => {
+            $(
+                #[kani::proof]
+                fn $name() {
+                    trial_1($op, $kind, $class);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        trial_1_add_whole: 0, 0, 0;
+        trial_1_sub_whole: 1, 0, 0;
+        trial_1_mul_whole: 2, 0, 0;
+        trial_1_add_signs_0: 0, 1, 0;
+        trial_1_add_signs_1: 0, 1, 1;
+        trial_1_sub_signs_0: 1, 1, 0;
+        trial_1_mul_signs_0: 2, 1, 0;
+        trial_1_mul_signs_1: 2, 1, 1;
+        trial_1_add_frac_5: 0, 2, 5;
+        trial_1_mul_frac_0: 2, 2, 0;
+        trial_1_mul_frac_5: 2, 2, 5;
+        trial_1_add_exp_6: 0, 3, 6;
+        trial_1_mul_exp_6: 2, 3, 6;
+        trial_1_mul_exp_5: 2, 3, 5;
+        trial_1_add_order_1: 0, 4, 1;
+        trial_1_add_order_5: 0, 4, 5;
+        trial_1_mul_order_5: 2, 4, 5;
+        trial_1_add_low_42: 0, 5, 42;
+        trial_1_mul_low_0: 2, 5, 0;
+        trial_1_mul_low_42: 2, 5, 42;
+        trial_1_add_floor: 0, 6, 0x3ff | (0x400 << 12);
+        trial_1_mul_floor: 2, 6, 0x3ff | (0x400 << 12);
+    }
+
     /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
     /// refuses when it does, for every finite dividend and the divisor `y`; proven for the six
     /// divisors the module header names, one harness each (kissat as the SAT solver).

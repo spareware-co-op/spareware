@@ -1204,4 +1204,73 @@ mod proofs {
             None => assert!(v.unsigned_abs() >= 1 << 106),
         }
     }
+
+    /// TRIAL (measuring only, removed before the pull request): the claim of
+    /// `from_i128_accepts_exactly_below_2_106` for only the values of class `class` of the
+    /// candidate split `kind`.
+    fn trial_7(kind: u8, class: u64) {
+        let v: i128 = kani::any();
+        let width = u64::from(u128::BITS - v.unsigned_abs().leading_zeros());
+        let negative = u64::from(v < 0);
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // The sign: 2 classes.
+            1 => negative,
+            // The sign and the magnitude's width in four bands (to 53 bits, to 64, to 106, over):
+            // 8 classes.
+            2 => {
+                let band = match width {
+                    0..=53 => 0,
+                    54..=64 => 1,
+                    65..=106 => 2,
+                    _ => 3,
+                };
+                negative | (band << 1)
+            }
+            // The low three bits: 8 classes.
+            3 => v.unsigned_abs() as u64 & 7,
+            // The sign and the width in bands of eight bits: 34 classes.
+            4 => negative | ((width / 8) << 1),
+            // The floor: the sign and the width fixed.
+            _ => negative | (width << 1),
+        };
+        if part != class {
+            return;
+        }
+        match DD::from_i128(v) {
+            Some(d) => {
+                assert!(v.unsigned_abs() < 1 << 106);
+                #[allow(clippy::cast_precision_loss, reason = "the rounding is the claim")]
+                let rounded = v as f64;
+                assert!(d.hi().to_bits() == zero_to_plus(rounded).to_bits());
+            }
+            None => assert!(v.unsigned_abs() >= 1 << 106),
+        }
+    }
+
+    macro_rules! trial {
+        ($($name:ident: $kind:expr, $class:expr;)*) => {
+            $(
+                #[kani::proof]
+                fn $name() {
+                    trial_7($kind, $class);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        trial_7_sign_0: 1, 0;
+        trial_7_sign_1: 1, 1;
+        trial_7_band_0: 2, 0;
+        trial_7_band_2: 2, 2;
+        trial_7_band_4: 2, 4;
+        trial_7_band_5: 2, 5;
+        trial_7_band_6: 2, 6;
+        trial_7_low_5: 3, 5;
+        trial_7_eight_24: 4, 24;
+        trial_7_eight_16: 4, 16;
+        trial_7_floor: 5, 200;
+    }
 }

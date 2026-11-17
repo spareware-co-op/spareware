@@ -2007,6 +2007,147 @@ mod proofs {
         }
     }
 
+    /// TRIAL (measuring only, removed before the pull request): the claim of
+    /// `mul_keeps_every_carry` for only the operands of class `class` of the candidate split
+    /// `kind`.
+    fn trial_3(kind: u8, class: u64) {
+        let a = any_tint();
+        let b = any_tint();
+        let (ah, am, al) = (u128::from(a.h), u128::from(a.m), u128::from(a.l));
+        let (bh, bm, bl) = (u128::from(b.h), u128::from(b.m), u128::from(b.l));
+        let w = |x: u64| u128::from(x);
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // The three bits under the leading one of each high word: 64 classes.
+            1 => ((a.h >> 60) & 7) | (((b.h >> 60) & 7) << 3),
+            // The low three bits of each high word: 64 classes.
+            2 => (a.h & 7) | ((b.h & 7) << 3),
+            // Whether the kept sum's top bit is set (the branch the claim takes): 2 classes.
+            3 => {
+                let rh = ah.wrapping_mul(bh);
+                let rm1 = ah.wrapping_mul(bm);
+                let rm2 = am.wrapping_mul(bh);
+                let rl1 = ah.wrapping_mul(bl);
+                let rl2 = am.wrapping_mul(bm);
+                let rl3 = al.wrapping_mul(bh);
+                let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
+                let c1 = w(hi64(c0)) + w(lo64(rh)) + w(hi64(rm1)) + w(hi64(rm2));
+                let c2 = w(hi64(rh)) + w(hi64(c1));
+                lo64(c2) >> 63
+            }
+            // Which operands are zero: 4 classes.
+            4 => u64::from(a.h == 0) | (u64::from(b.h == 0) << 1),
+            // The top bit under the leading one of each high word: 4 classes.
+            5 => ((a.h >> 62) & 1) | (((b.h >> 62) & 1) << 1),
+            // The floor: the top sixteen bits of each high word fixed.
+            _ => (a.h >> 48) | ((b.h >> 48) << 16),
+        };
+        if part != class {
+            return;
+        }
+        let r = a.mul(&b).unwrap();
+        let rh = ah.checked_mul(bh).unwrap();
+        let rm1 = ah.checked_mul(bm).unwrap();
+        let rm2 = am.checked_mul(bh).unwrap();
+        let rl1 = ah.checked_mul(bl).unwrap();
+        let rl2 = am.checked_mul(bm).unwrap();
+        let rl3 = al.checked_mul(bh).unwrap();
+        // Each column is a sum of at most five 64-bit numbers: below 2^67.
+        let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
+        let c1 = w(hi64(c0)) + w(lo64(rh)) + w(hi64(rm1)) + w(hi64(rm2));
+        let c2 = w(hi64(rh)) + w(hi64(c1));
+        assert!(c2 >> 64 == 0, "K is below 2^192");
+        let (kh, km, kl) = (lo64(c2), lo64(c1), lo64(c0));
+        let ex = a.ex + b.ex;
+        assert_eq!(r.sgn, a.sgn ^ b.sgn);
+        if kh >> 63 == 1 {
+            assert_eq!((r.h, r.m, r.l, r.ex), (kh, km, kl, ex));
+        } else {
+            let shifted = ((kh << 1) | (km >> 63), (km << 1) | (kl >> 63), kl << 1);
+            assert_eq!((r.h, r.m, r.l), shifted);
+            assert!(
+                r.h >> 63 == 1 || (r.h, r.m, r.l) == (0, 0, 0),
+                "normalised or zero"
+            );
+            if r.h != 0 {
+                assert_eq!(r.ex, ex - 1);
+            }
+        }
+    }
+
+    /// TRIAL (measuring only, removed before the pull request): the claim of
+    /// `agreed_answers_exactly_when_both_ends_round_alike` for only the values of class `class`
+    /// of the candidate split `kind`.
+    fn trial_5(kind: u8, class: u64) {
+        let (fh, fl, eps): (f64, f64, f64) = (kani::any(), kani::any(), kani::any());
+        kani::assume(fh.abs() <= 4.0 && fl.abs() <= 1.0 && eps > 0.0 && eps <= 1.0);
+        let (hb, lb, eb) = (fh.to_bits(), fl.to_bits(), eps.to_bits());
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // The signs of the angle and of its low part: 4 classes.
+            1 => (hb >> 63) | ((lb >> 63) << 1),
+            // The two signs and whether the low part is at least the bound: 8 classes.
+            2 => (hb >> 63) | ((lb >> 63) << 1) | (u64::from(fl.abs() >= eps) << 2),
+            // The two signs and whether the angle is at least its low part: 8 classes.
+            3 => (hb >> 63) | ((lb >> 63) << 1) | (u64::from(fh.abs() >= fl.abs()) << 2),
+            // The low two bits of each of the three: 64 classes.
+            4 => (hb & 3) | ((lb & 3) << 2) | ((eb & 3) << 4),
+            // Whether the two ends agree (the branch the claim takes): 2 classes.
+            5 => u64::from(fh + (fl - eps) == fh + (fl + eps)),
+            // The floor: the three signs and exponent fields fixed.
+            _ => (hb >> 52) | ((lb >> 52) << 12) | ((eb >> 52) << 24),
+        };
+        if part != class {
+            return;
+        }
+        let lower = fh + (fl - eps);
+        let upper = fh + (fl + eps);
+        match agreed(fh, fl, eps) {
+            Some(r) => assert!(lower == upper && r.to_bits() == upper.to_bits()),
+            None => assert!(lower != upper),
+        }
+    }
+
+    macro_rules! trial {
+        ($($name:ident: $law:ident, $kind:expr, $class:expr;)*) => {
+            $(
+                #[kani::proof]
+                fn $name() {
+                    $law($kind, $class);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        trial_3_top_0: trial_3, 1, 0;
+        trial_3_top_63: trial_3, 1, 63;
+        trial_3_top_44: trial_3, 1, 44;
+        trial_3_low_0: trial_3, 2, 0;
+        trial_3_low_43: trial_3, 2, 43;
+        trial_3_branch_0: trial_3, 3, 0;
+        trial_3_branch_1: trial_3, 3, 1;
+        trial_3_zero_0: trial_3, 4, 0;
+        trial_3_next_0: trial_3, 5, 0;
+        trial_3_next_3: trial_3, 5, 3;
+        trial_3_floor: trial_3, 6, 0xc000 | (0xa000 << 16);
+        trial_5_signs_0: trial_5, 1, 0;
+        trial_5_signs_1: trial_5, 1, 1;
+        trial_5_signs_2: trial_5, 1, 2;
+        trial_5_bound_0: trial_5, 2, 0;
+        trial_5_bound_5: trial_5, 2, 5;
+        trial_5_bound_6: trial_5, 2, 6;
+        trial_5_order_4: trial_5, 3, 4;
+        trial_5_order_1: trial_5, 3, 1;
+        trial_5_low_0: trial_5, 4, 0;
+        trial_5_low_27: trial_5, 4, 27;
+        trial_5_branch_0: trial_5, 5, 0;
+        trial_5_branch_1: trial_5, 5, 1;
+        trial_5_floor: trial_5, 6, 0x400 | (0x3ca << 12) | (0x3c3 << 24);
+    }
+
     /// A non-negative integer below 2^448, as seven 64-bit words, least significant first.
     type Big = [u64; 7];
 

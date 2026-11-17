@@ -598,6 +598,82 @@ mod proofs {
         }
     }
 
+    /// TRIAL (measuring only, removed before the pull request): [`two_sum_law`]'s claim for the
+    /// operand `y`, in one order (`order` 0: x then y; 1: y then x; 2: both), and only the first
+    /// operands of class `class` of the candidate split `kind`.
+    fn trial_ts(y: f64, order: u8, kind: u8, class: u64) {
+        let x = finite();
+        let xb = x.to_bits();
+        let mag = u64::MAX >> 1;
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // x's sign: 2 classes.
+            1 => xb >> 63,
+            // x's sign and which magnitude is larger: 4 classes.
+            2 => (xb >> 63) | (u64::from((xb & mag) >= (y.to_bits() & mag)) << 1),
+            // x's sign and the top two bits of its exponent field: 8 classes.
+            3 => xb >> 61,
+            // The low three fraction bits of x: 8 classes.
+            4 => xb & 7,
+            // The floor: x's sign and exponent field fixed.
+            _ => xb >> 52,
+        };
+        if part != class {
+            return;
+        }
+        let claim = |a: f64, b: f64| {
+            let (s, e) = two_sum(a, b);
+            let (fs, fe) = fast_two_sum(a, b);
+            assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
+            assert!(s.to_bits() == (a + b).to_bits());
+            if s.is_finite() {
+                assert!(e.is_finite() && s + e == s);
+            }
+        };
+        if order != 1 {
+            claim(x, y);
+        }
+        if order != 0 {
+            claim(y, x);
+        }
+    }
+
+    macro_rules! trial {
+        ($($name:ident: $y:expr, $order:expr, $kind:expr, $class:expr;)*) => {
+            $(
+                #[kani::proof]
+                #[kani::solver(kissat)]
+                fn $name() {
+                    trial_ts($y, $order, $kind, $class);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        trial_ts_tenth_xy_whole: -0.1, 0, 0, 0;
+        trial_ts_tenth_yx_whole: -0.1, 1, 0, 0;
+        trial_ts_tenth_both_sign_0: -0.1, 2, 1, 0;
+        trial_ts_tenth_both_sign_1: -0.1, 2, 1, 1;
+        trial_ts_tenth_xy_sign_0: -0.1, 0, 1, 0;
+        trial_ts_tenth_xy_sign_1: -0.1, 0, 1, 1;
+        trial_ts_tenth_both_order_0: -0.1, 2, 2, 0;
+        trial_ts_tenth_both_order_2: -0.1, 2, 2, 2;
+        trial_ts_tenth_both_order_3: -0.1, 2, 2, 3;
+        trial_ts_tenth_xy_order_2: -0.1, 0, 2, 2;
+        trial_ts_tenth_both_exp_1: -0.1, 2, 3, 1;
+        trial_ts_tenth_both_exp_2: -0.1, 2, 3, 2;
+        trial_ts_tenth_xy_exp_1: -0.1, 0, 3, 1;
+        trial_ts_tenth_both_low_5: -0.1, 2, 4, 5;
+        trial_ts_tenth_both_floor: -0.1, 2, 5, 0x3fb;
+        trial_ts_pow53_xy_whole: 9_007_199_254_740_992.0, 0, 0, 0;
+        trial_ts_pow53_both_sign_0: 9_007_199_254_740_992.0, 2, 1, 0;
+        trial_ts_pow53_both_order_2: 9_007_199_254_740_992.0, 2, 2, 2;
+        trial_ts_three_xy_whole: 3.0, 0, 0, 0;
+        trial_ts_tiny_xy_whole: f64::from_bits(1), 0, 0, 0;
+    }
+
     /// [`two_sum_law`] with 3: an inexact positive sum.
     #[kani::proof]
     #[kani::solver(kissat)]
