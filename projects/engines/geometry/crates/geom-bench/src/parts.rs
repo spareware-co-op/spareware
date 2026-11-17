@@ -274,9 +274,14 @@ pub enum Side {
     Head,
 }
 
+/// The bench targets the gate measures: the catalogue (`benches/instructions`) and EMBER's pair 827
+/// (`benches/ember`, measured in the gate's last part).
+pub const BENCHES: [&str; 2] = ["instructions", "ember"];
+
 /// The benchmarks one part measured on `side`, from the list of its saved files (`tar -t` of its
-/// Gungraun home: `geom-bench/instructions/<group>/<op>.<class>/<file>`, with or without a
-/// leading `./`). Entries at other depths (the folders themselves) are not files of a benchmark.
+/// Gungraun home: `geom-bench/<bench>/<group>/<op>.<class>/<file>`, `<bench>` one of
+/// [`BENCHES`], with or without a leading `./`). Entries at other depths (the folders themselves)
+/// are not files of a benchmark.
 ///
 /// # Errors
 ///
@@ -289,7 +294,7 @@ pub fn measured(listing: &str, side: Side) -> Result<BTreeSet<String>, String> {
         let [package, bench, group, folder, file] = path.as_slice() else {
             continue;
         };
-        if *package != "geom-bench" || *bench != "instructions" || file.is_empty() {
+        if *package != "geom-bench" || !BENCHES.contains(bench) || file.is_empty() {
             continue;
         }
         if side == Side::Head && *file != "summary.json" {
@@ -468,6 +473,14 @@ mod tests {
                 Side::Head
             )
             .is_err()
+        );
+        // EMBER's pair, in the gate's last part, is a benchmark too; another bench target's files
+        // are not.
+        let ember = "./geom-bench/ember/mesh/ember.pair_827/summary.json\n\
+            ./geom-bench/wall_clock/mesh/ember.pair_827/summary.json\n";
+        assert_eq!(
+            measured(ember, Side::Head).unwrap(),
+            set(&["mesh/ember/pair_827"])
         );
     }
 

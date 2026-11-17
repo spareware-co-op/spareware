@@ -238,6 +238,65 @@ fn a_source_is_pinned() {
     assert!(rule(c).contains("at least one"));
 }
 
+fn file(name: &str, licence: Option<&str>, credit: Option<&str>) -> FetchFile {
+    FetchFile {
+        url: format!("https://example.org/{name}"),
+        name: name.to_owned(),
+        sha256: Hash([2; 32]),
+        licence: licence.map(str::to_owned),
+        credit: credit.map(str::to_owned),
+    }
+}
+
+/// A corpus of `files` under `licence`.
+fn of_files(licence: &str, files: Vec<FetchFile>) -> Corpus {
+    let mut c = entry("a", licence, Storage::Fetched);
+    c.fetch = Some(Fetch::Files(files));
+    c
+}
+
+#[test]
+fn a_file_of_its_own_licence_keeps_the_rules() {
+    let both = "Apache-2.0 AND LicenseRef-Thingi10K-CC-BY";
+    let good = vec![
+        file("cases.json", Some("Apache-2.0"), Some("Manifold")),
+        file(
+            "1.stl",
+            Some("LicenseRef-Thingi10K-CC-BY"),
+            Some("\"A\" by B"),
+        ),
+        file("2.stl", None, None),
+    ];
+    assert!(parsed(vec![of_files(both, good)]).is_ok());
+    // A credit its licence asks for, missing or blank.
+    for credit in [None, Some(" ")] {
+        let c = of_files(both, vec![file("1.stl", Some("Apache-2.0"), credit)]);
+        assert!(rule(c).contains("asks for a credit"));
+    }
+    // CC0 asks for none.
+    let c = of_files("CC0-1.0", vec![file("1.stl", Some("CC0-1.0"), None)]);
+    assert!(parsed(vec![c]).is_ok());
+    // A credit with no licence to ask for it.
+    let c = of_files(both, vec![file("1.stl", None, Some("B"))]);
+    assert!(rule(c).contains("without its licence"));
+    // Nothing non-commercial, whatever the corpus says.
+    let c = of_files(both, vec![file("1.stl", Some("CC-BY-NC-4.0"), Some("B"))]);
+    assert!(rule(c).contains("non-commercial"));
+    // A licence the corpus's does not name.
+    let c = of_files(both, vec![file("1.stl", Some("CC-BY-4.0"), Some("B"))]);
+    assert!(rule(c).contains("not named"));
+    // A name that is a path, hidden or empty, or one name twice.
+    for name in ["../x.stl", "a/b.stl", ".x", "", "a b"] {
+        let c = of_files(both, vec![file(name, None, None)]);
+        assert!(rule(c).contains("plain name"), "{name}");
+    }
+    let c = of_files(
+        both,
+        vec![file("1.stl", None, None), file("1.stl", None, None)],
+    );
+    assert!(rule(c).contains("two files"));
+}
+
 #[test]
 fn nothing_ambiguous_parses() {
     assert!(matches!(Manifest::parse("{"), Err(CorpusError::Json(_))));
@@ -433,6 +492,8 @@ fn a_file_source_is_checked_file_by_file() {
         url: url.clone(),
         name: "one.bin".to_owned(),
         sha256: Hash(sha256(b"one")),
+        licence: None,
+        credit: None,
     }]));
     c.sha256 = Some(digest_of(&[("one.bin".to_owned(), b"one".to_vec())]));
     assert_eq!(fetch(&c, &cache).unwrap(), Fetched::Downloaded);
@@ -441,6 +502,8 @@ fn a_file_source_is_checked_file_by_file() {
         url,
         name: "one.bin".to_owned(),
         sha256: Hash([0; 32]),
+        licence: None,
+        credit: None,
     }]));
     fs::remove_dir_all(cache.join("one")).unwrap();
     assert!(fetch(&c, &cache).unwrap_err().contains("SHA-256"));
@@ -450,6 +513,8 @@ fn a_file_source_is_checked_file_by_file() {
         url: format!("file://{}", root.join("gone").display()),
         name: "gone".to_owned(),
         sha256: Hash([0; 32]),
+        licence: None,
+        credit: None,
     }]));
     assert!(fetch(&c, &cache).is_err());
     // A corpus with no bytes has nothing to fetch.
