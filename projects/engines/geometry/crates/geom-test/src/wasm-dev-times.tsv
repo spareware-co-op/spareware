@@ -8,6 +8,8 @@
 # or `test <name>`; a unit not listed here is planned at the slowest listed time. Two units of one
 # name in two crates (`test naming`, `test orient2d`) cannot be told apart in the logs, so both carry
 # the larger.
+# `test certificates_workflow` came after those pushes: its seconds are the same job's on the head
+# of the pull request that added it (run 44086231115).
 # crate unit<TAB>seconds
 geom-fuzz bin replay-hashes	1
 geom-fuzz doc	1
@@ -89,6 +91,7 @@ geom-test test attack_g19	2
 geom-test test attack_g20	1
 geom-test test attack_g43	2
 geom-test test canonical	2
+geom-test test certificates_workflow	1
 geom-test test completeness	1
 geom-test test contract_kit	1
 geom-test test corpus	1
