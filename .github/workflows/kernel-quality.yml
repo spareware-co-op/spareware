@@ -77,6 +77,25 @@ name: Kernel quality
 #   budget, the miri-smoke profile. geom-pool's tests run under Tree Borrows, every other crate's
 #   under Stacked Borrows, while crossbeam-epoch 0.9.21 is in the lock (the step says why).
 #
+# Miri's measuring run, by hand only (`-f miri_measure=new` or `all`; not a gate): it measures the
+# tests for Miri's table on these runners instead of a development machine, and runs no gate. Its
+# plan lists the ref's tests under Miri and takes those with no row in the table (`new`) or every
+# one (`all`, to measure the whole table again), only those a nextest filterset selects when
+# `miri_measure_tests` gives one; `kernel-quality miri-measure` packs them into the fewest parts
+# whose tests end within the stop at four at once, each planned at its finishing row's seconds or
+# at the stop, so a part's job ends in about a quarter of an hour with its build. Each part runs
+# the miri-measure-ci profile (the miri-measure profile with the budget, 600 s, as its stop),
+# uploads its nextest report for three days, and fails, naming it, on any test that failed under
+# Miri: a fault is read, never recorded as slow. It saves no cache and writes no table; the rows
+# are written afterwards on a development computer, from the reports, by the table's one writer:
+#
+#   gh workflow run kernel-quality.yml --ref <branch> -f miri_measure=new
+#   gh run download <run id> -n miri-measure-plan -D measure/plan
+#   gh run download <run id> -p 'miri-measure-[0-9]*' -D measure/parts
+#   reports=(); for f in measure/parts/*/junit.xml; do reports+=(--report "$f"); done
+#   cargo run -p geom-test --bin kernel-quality -- miri-times "${reports[@]}" \
+#     --scale 1 --stop 600 --list measure/plan/miri-list.json --note "<the run, its ref and commit>"
+#
 # Every pull request and queued change runs this workflow, so its last job, `done` ("Kernel quality
 # checks pass"), always reports: main's ruleset requires it (.github/rulesets/protect-main.json).
 #
@@ -111,6 +130,17 @@ on:
         required: false
         default: ""
         type: string
+      miri_measure:
+        description: "Miri's measuring run instead of the gates: new (the tests with no row in Miri's table) or all (every test); none runs the gates"
+        required: false
+        default: none
+        type: choice
+        options: [none, new, all]
+      miri_measure_tests:
+        description: "With miri_measure: only the tests this nextest filterset selects, e.g. package(geom-num) (empty: every one)"
+        required: false
+        default: ""
+        type: string
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
 
@@ -119,9 +149,10 @@ permissions:
 
 # A newer push to the same pull request cancels the runs it supersedes. Dispatches on one branch
 # queue behind each other only when they narrow to the same files, so a narrowed run never waits
-# hours behind a whole one.
+# hours behind a whole one; a measuring run has a group of its own (every other run's group is
+# as it was: the second term is empty).
 concurrency:
-  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}
+  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}${{ (inputs.miri_measure == 'new' || inputs.miri_measure == 'all') && format('-miri-measure-{0}', inputs.miri_measure) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -154,7 +185,9 @@ jobs:
   # What this run judges. `mutants`, `coverage` and `miri`: whether each runs. `mode`: `diff` (a
   # pull request's or the queue's change, against `base`) or `full`. `files`: a full run's files, as
   # a regular expression (empty: every mutant). `miri_packages`: on a push to main, the crates whose
-  # tests it reaches (empty: every kernel crate). `tree`: the tree judged.
+  # tests it reaches (empty: every kernel crate). `tree`: the tree judged. `miri_measure`: on a
+  # dispatch that asks for Miri's measuring run, `new` or `all`, and every gate off (empty on
+  # every other run), with `miri_measure_tests`, its filterset.
   when:
     name: What this run judges
     runs-on: ubuntu-latest
@@ -170,6 +203,8 @@ jobs:
       tree: ${{ steps.when.outputs.tree }}
       since_mutants: ${{ steps.since.outputs.mutants }}
       since_coverage: ${{ steps.since.outputs.coverage }}
+      miri_measure: ${{ steps.when.outputs.miri_measure }}
+      miri_measure_tests: ${{ steps.when.outputs.miri_measure_tests }}
     defaults:
       run:
         shell: bash
@@ -187,6 +222,8 @@ jobs:
           QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
           BEFORE: ${{ github.event.before }}
           INPUT_FILES: ${{ inputs.files }}
+          INPUT_MIRI_MEASURE: ${{ inputs.miri_measure }}
+          INPUT_MIRI_MEASURE_TESTS: ${{ inputs.miri_measure_tests }}
         run: |
           # The change's base, as kernel.yml's job `changes` finds it.
           base=""
@@ -233,6 +270,7 @@ jobs:
           mutants=true
           coverage=true
           miri=true
+          measure="" measure_tests=""
           why="every gate runs whole"
           case "$EVENT" in
             pull_request | merge_group)
@@ -261,6 +299,23 @@ jobs:
                 coverage=false miri=false
                 why="the full mutation run narrowed to $files"
               fi
+              # Miri's measuring run, asked for by hand: it alone runs, never a gate.
+              case "$INPUT_MIRI_MEASURE" in
+                new | all)
+                  if [ -n "$files" ]; then
+                    echo "::error::Ask for the narrowed mutation run or Miri's measuring run, not both."
+                    exit 1
+                  fi
+                  measure="$INPUT_MIRI_MEASURE"
+                  measure_tests="$INPUT_MIRI_MEASURE_TESTS"
+                  if [[ "$measure_tests" == *$'\n'* ]]; then
+                    echo "::error::A filterset of one line, please."
+                    exit 1
+                  fi
+                  mutants=false coverage=false miri=false
+                  why="Miri's measuring run of the tests: $measure ${measure_tests:-(every one)}"
+                  ;;
+              esac
               ;;
           esac
           if [ "$kernel" = false ]; then
@@ -276,6 +331,8 @@ jobs:
             echo "files=$files"
             echo "tree=$tree"
             echo "kernel=$kernel"
+            echo "miri_measure=$measure"
+            echo "miri_measure_tests=$measure_tests"
           } | tee -a "$GITHUB_OUTPUT"
           echo "$EVENT: $why." | tee -a "$GITHUB_STEP_SUMMARY"
       # The last heads of this pull request whose mutants were judged clean and whose coverage
@@ -1059,12 +1116,250 @@ jobs:
           path: target/nextest/*/junit*.xml
           if-no-files-found: ignore
 
+  # Miri's measuring run (the header says what it is for and how its reports become rows): only on
+  # a dispatch that asks for it, and never a gate. Every job below restores main's Miri cache and
+  # saves none, and none writes the table.
+  miri-measure-plan:
+    name: Miri's measuring run, the plan
+    needs: when
+    if: needs.when.outputs.miri_measure != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      parts: ${{ steps.plan.outputs.parts }}
+      count_2: ${{ steps.plan.outputs.count_2 }}
+      parts_2: ${{ steps.plan.outputs.parts_2 }}
+    env:
+      MEASURE: ${{ needs.when.outputs.miri_measure }}
+      MEASURE_TESTS: ${{ needs.when.outputs.miri_measure_tests }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with Miri
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component miri,rust-src
+          cargo "+$RUST_NIGHTLY" miri setup
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Restores the cache main's job `miri` saves and saves nothing: a measuring run leaves
+          # nothing another run reads. rust-cache names a job's cache by its key and then its job
+          # id (`v0-rust-miri-miri-...` for that job), so this job asks for that name whole.
+          save-if: false
+          key: miri-miri
+          add-job-id-key: false
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        run: cargo install --locked cargo-nextest --version "$CARGO_NEXTEST_VERSION"
+      - name: The kernel crates
+        run: |
+          packages=$(cargo run --locked -p geom-test --bin kernel-quality -- miri-packages)
+          echo "$packages"
+          echo "PACKAGES=$packages" >> "$GITHUB_ENV"
+      - name: The run's tests
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          # The whole listing, as Miri's run lists it: the table's rows are written against it.
+          mkdir -p "$RUNNER_TEMP/measure"
+          # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
+          cargo miri nextest list --locked $PACKAGES -E "not package(geom-pool)" \
+            --message-format json > "$RUNNER_TEMP/measure/miri-list.json"
+          # Only the tests the dispatch's filterset selects, when it gives one.
+          if [ -n "$MEASURE_TESTS" ]; then
+            # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
+            cargo miri nextest list --locked $PACKAGES -E "not package(geom-pool) & ($MEASURE_TESTS)" \
+              --message-format json > "$RUNNER_TEMP/measure/only-list.json"
+          fi
+      - name: The parts
+        id: plan
+        run: |
+          only=()
+          if [ -f "$RUNNER_TEMP/measure/only-list.json" ]; then
+            only=(--only "$RUNNER_TEMP/measure/only-list.json")
+          fi
+          plan=$(cargo run --locked -q -p geom-test --bin kernel-quality -- miri-measure \
+            --which "$MEASURE" --list "$RUNNER_TEMP/measure/miri-list.json" "${only[@]}" \
+            --out "$RUNNER_TEMP/measure")
+          echo "$plan"
+          echo "count=$(jq -r .count <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "parts=$(jq -c .parts <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "count_2=$(jq -r .count_2 <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "parts_2=$(jq -c .parts_2 <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "Miri's measuring run: $(jq -r .tests <<<"$plan") tests in $(jq -r .count <<<"$plan") parts." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: miri-measure-plan
+          path: ${{ runner.temp }}/measure
+          retention-days: 3
+          if-no-files-found: error
+
+  miri-measure:
+    name: Miri's measuring run (part ${{ matrix.part }})
+    needs: [when, miri-measure-plan]
+    # A plan with no test to measure runs no part; its matrix still lists part 1, because a matrix
+    # may not be empty.
+    if: needs.miri-measure-plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      # Every part reports, so one failure does not lose the others' times.
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.miri-measure-plan.outputs.parts) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with Miri
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component miri,rust-src
+          cargo "+$RUST_NIGHTLY" miri setup
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Restores the cache main's job `miri` saves and saves nothing: a measuring run leaves
+          # nothing another run reads. rust-cache names a job's cache by its key and then its job
+          # id (`v0-rust-miri-miri-...` for that job), so this job asks for that name whole.
+          save-if: false
+          key: miri-miri
+          add-job-id-key: false
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        run: cargo install --locked cargo-nextest --version "$CARGO_NEXTEST_VERSION"
+      - name: The kernel crates
+        run: |
+          packages=$(cargo run --locked -p geom-test --bin kernel-quality -- miri-packages)
+          echo "$packages"
+          echo "PACKAGES=$packages" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: miri-measure-plan
+          path: ${{ runner.temp }}/measure
+      - name: Measure this part's tests under Miri (part ${{ matrix.part }})
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          # The flags of the job `miri`, so the times are that run's.
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          # The miri-measure-ci profile stops a test at the budget and counts it as timed out, so
+          # nextest's exit status is 100 when any test was stopped or failed: the report says
+          # which, and the next step reads it. Any other status (a build that failed) fails here.
+          status=0
+          # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
+          cargo miri nextest run --locked $PACKAGES --profile miri-measure-ci \
+            -E "$(cat "$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt")" || status=$?
+          case "$status" in 0|100) ;; *) exit "$status" ;; esac
+          test -f target/nextest/miri-measure-ci/junit.xml
+      # nextest writes the report under the workspace's own target/nextest/<profile>/.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: miri-measure-${{ matrix.part }}
+          path: target/nextest/miri-measure-ci/junit.xml
+          retention-days: 3
+          if-no-files-found: error
+      - name: Every test finished or was stopped, none failed
+        run: |
+          # The table's one writer reads the report and writes nothing (--dry-run): it fails,
+          # naming each, on a test that failed or was killed under Miri.
+          cargo run --locked -q -p geom-test --bin kernel-quality -- miri-times \
+            --report target/nextest/miri-measure-ci/junit.xml --scale 1 --stop 600 --dry-run
+
+  miri-measure-2:
+    name: Miri's measuring run (part ${{ matrix.part }})
+    needs: [when, miri-measure-plan]
+    # Parts 257 on, for a run of more parts than one matrix may hold: the same steps as
+    # `miri-measure`, word for word. A plan of 256 parts or fewer runs none; its matrix still
+    # lists part 257, because a matrix may not be empty.
+    if: needs.miri-measure-plan.outputs.count_2 != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      # Every part reports, so one failure does not lose the others' times.
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.miri-measure-plan.outputs.parts_2) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with Miri
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component miri,rust-src
+          cargo "+$RUST_NIGHTLY" miri setup
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Restores the cache main's job `miri` saves and saves nothing: a measuring run leaves
+          # nothing another run reads. rust-cache names a job's cache by its key and then its job
+          # id (`v0-rust-miri-miri-...` for that job), so this job asks for that name whole.
+          save-if: false
+          key: miri-miri
+          add-job-id-key: false
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        run: cargo install --locked cargo-nextest --version "$CARGO_NEXTEST_VERSION"
+      - name: The kernel crates
+        run: |
+          packages=$(cargo run --locked -p geom-test --bin kernel-quality -- miri-packages)
+          echo "$packages"
+          echo "PACKAGES=$packages" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: miri-measure-plan
+          path: ${{ runner.temp }}/measure
+      - name: Measure this part's tests under Miri (part ${{ matrix.part }})
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          # The flags of the job `miri`, so the times are that run's.
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          # The miri-measure-ci profile stops a test at the budget and counts it as timed out, so
+          # nextest's exit status is 100 when any test was stopped or failed: the report says
+          # which, and the next step reads it. Any other status (a build that failed) fails here.
+          status=0
+          # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
+          cargo miri nextest run --locked $PACKAGES --profile miri-measure-ci \
+            -E "$(cat "$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt")" || status=$?
+          case "$status" in 0|100) ;; *) exit "$status" ;; esac
+          test -f target/nextest/miri-measure-ci/junit.xml
+      # nextest writes the report under the workspace's own target/nextest/<profile>/.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: miri-measure-${{ matrix.part }}
+          path: target/nextest/miri-measure-ci/junit.xml
+          retention-days: 3
+          if-no-files-found: error
+      - name: Every test finished or was stopped, none failed
+        run: |
+          # The table's one writer reads the report and writes nothing (--dry-run): it fails,
+          # naming each, on a test that failed or was killed under Miri.
+          cargo run --locked -q -p geom-test --bin kernel-quality -- miri-times \
+            --report target/nextest/miri-measure-ci/junit.xml --scale 1 --stop 600 --dry-run
+
   # The one check main's ruleset requires of this workflow: it fails if any job failed or was
   # cancelled, or if a gate `when` chose did not run, and when mutation and coverage both passed on
   # a change it leaves the mark that spares the same tree a second run.
   done:
     name: Kernel quality checks pass
-    needs: [when, cheap, mutants-plan, mutants, mutants-2, mutants-judge, coverage-plan, coverage-parts, coverage, gates-seeded, miri]
+    needs: [when, cheap, mutants-plan, mutants, mutants-2, mutants-judge, coverage-plan, coverage-parts, coverage, gates-seeded, miri, miri-measure-plan, miri-measure, miri-measure-2]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10

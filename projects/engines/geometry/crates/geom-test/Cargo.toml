@@ -116,6 +116,10 @@ dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] 
 # The intersection harness (G160): the kernel's kinds a corpus case becomes and the result type an
 # answer comes back in. Ours, Apache-2.0.
 geom-intersect = { path = "../geom-intersect" }
+# STL files, binary and ASCII, for EMBER's pairs' Thingi10K models (src/stl.rs; Gate 4, G156):
+# the usual Rust STL reader, which welds corners only where bit for bit the same. stl_io 0.11.0:
+# MIT, with no dependencies of its own.
+stl_io = "=0.11.0"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 # The timeout of `fixture fails`, so a fixture that hangs on the merge base counts as failing there
