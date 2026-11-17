@@ -13,6 +13,7 @@ use crate::compliance::{engine, net};
 use crate::graph::js_sort_by;
 use crate::util::{fmt, r1, r3};
 use std::collections::HashSet;
+use std::fmt::Write as _;
 
 /* =====================================================================================
    Options and alternatives (reg-alternatives)
@@ -27,6 +28,7 @@ pub struct OptionEntry<'a> {
 }
 
 /// `optionList(P)`: the author's tagged options, or every scenario other than the do-minimum when none are tagged.
+#[must_use]
 pub fn option_list(p: &V) -> Vec<OptionEntry<'_>> {
     let cx = data(p);
     let base = pair(p).base;
@@ -59,6 +61,83 @@ fn year_of(p: &V, sc: &V) -> f64 {
     if y > 0.0 { y } else { numk(p.g("settings"), "year") }
 }
 
+/// The appraisal columns of an option that ran with the do-minimum (per modelled peak hour, each period on its own; the means fill the numeric
+/// columns), and the warning when its inputs are not identical to the do-minimum's.
+fn alt_ran(p: &V, base: &V, sc: &V, o: &V, ps: &[&str], row: &mut V, warnings: &mut Vec<String>) {
+    // per modelled peak hour, each period on its own (the means fill the numeric columns)
+    let vht = per_period(base, sc, &|s, pd| kpi_p("vht", s, pd), ps, 1, "veh\u{b7}h/h");
+    let vkt = per_period(base, sc, &|s, pd| kpi_p("vkt", s, pd), ps, 0, "veh-km/h");
+    let co2 = per_period(base, sc, &|s, pd| kpi_p("co2", s, pd), ps, 2, "t/h");
+    let route = per_period(base, sc, &|s, pd| route_p(s, pd), ps, 0, "s");
+    let means = [vht.g("mean").clone(), vkt.g("mean").clone(), co2.g("mean").clone(), route.g("mean").clone()];
+    row.put("pp", jobj! { "vht" => vht, "vkt" => vkt, "co2" => co2, "route" => route });
+    row.put("dVht", means[0].clone());
+    row.put("dVkt", means[1].clone());
+    row.put("dCo2", means[2].clone());
+    row.put("dRoute", means[3].clone());
+    row.put("periods", strs(ps.iter()));
+    // the busiest junction
+    let mut nodes: Vec<(String, &str, &V)> = Vec::new();
+    for &pd in ps {
+        for (id, nr) in res_of(sc, pd).map_or_else(Vec::new, |r| r.g("nodes").entries()) {
+            nodes.push((id.to_string(), pd, nr));
+        }
+    }
+    js_sort_by(&mut nodes, |a, b| b.2.g("dos").n() - a.2.g("dos").n());
+    row.put(
+        "worst",
+        match nodes.first() {
+            Some((id, pd, nr)) => format!("{} {}: DoS {}, LoS {}", node_name(sc, id), pd, num(nr.g("dos"), 2), los_text(nr)),
+            None => fmt::DASH.to_string(),
+        },
+    );
+    let ch = changed_links(base, sc);
+    let mut km = 0.0;
+    for id in &ch {
+        let l = sc.g("links").g(id);
+        if !l.t() || !l.g("cycle").t() || l.g("cycle").eq_s("none") {
+            continue;
+        }
+        let bl = base.g("links").g(&l.g("id").s());
+        if !bl.t() || !bl.g("cycle").strict_eq(l.g("cycle")) {
+            km += net::len(sc, l) / 1000.0;
+        }
+    }
+    row.put("cycleKm", km);
+    row.put("cas", crashes_on(p, base, &ch));
+    let ec = econ_of(p, base, sc);
+    let bcr = if ec.t() && !ec.g("mismatch").t() {
+        if ec.g("bcrText").t() { ec.g("bcrText").clone() } else { V::String(num(ec.g("bcr"), 1)) }
+    } else if ec.t() && ec.g("mismatch").t() {
+        V::String("years differ".into())
+    } else {
+        V::String(fmt::DASH.into())
+    };
+    row.put("bcr", bcr);
+    let ipm = if ec.t() && ec.g("ipm").t() && ec.g("ipm").jlen() > 0 {
+        ec.g("ipm").items().iter().map(|b| format!("{}{}", fld_s(b, "band"), if b.g("draft").t() { " (draft)" } else { "" })).collect::<Vec<_>>().join(" / ")
+    } else {
+        fmt::DASH.to_string()
+    };
+    row.put("ipm", ipm);
+    if !o.g("cost").nullish() && !o.g("cost").eq_s("") {
+        row.put("cost", V::Number(o.g("cost").n()));
+    } else if ec.t() {
+        put_some(row, "cost", ec.get("cap"));
+    } else {
+        row.put("cost", V::Null);
+    }
+    let identical = year_of(p, sc) == year_of(p, base) && dev_mix(sc) == dev_mix(base);
+    row.put("identical", identical);
+    if !identical {
+        warnings.push(format!(
+            "{} does not use identical inputs to {} (year or development land use differ): options must be compared on the same inputs.",
+            row.g("name").s(),
+            base.g("name").s()
+        ));
+    }
+}
+
 /// `alternatives(P)`: the options against the intervention hierarchy: `{ base, rows, warnings, sections, label, source }`. `base` is a copy of
 /// the do-minimum scenario, as the prototype hands the scenario itself back.
 pub fn alternatives(p: &V) -> V {
@@ -89,78 +168,7 @@ pub fn alternatives(p: &V) -> V {
         row.put("ran", !ps.is_empty());
         row.put("notes", or_s(o.g("notes"), ""));
         if let (Some(sc), false) = (sc, ps.is_empty()) {
-            // per modelled peak hour, each period on its own (the means fill the numeric columns)
-            let vht = per_period(base, sc, &|s, pd| kpi_p("vht", s, pd), &ps, 1, "veh\u{b7}h/h");
-            let vkt = per_period(base, sc, &|s, pd| kpi_p("vkt", s, pd), &ps, 0, "veh-km/h");
-            let co2 = per_period(base, sc, &|s, pd| kpi_p("co2", s, pd), &ps, 2, "t/h");
-            let route = per_period(base, sc, &|s, pd| route_p(s, pd), &ps, 0, "s");
-            let means = [vht.g("mean").clone(), vkt.g("mean").clone(), co2.g("mean").clone(), route.g("mean").clone()];
-            row.put("pp", jobj! { "vht" => vht, "vkt" => vkt, "co2" => co2, "route" => route });
-            row.put("dVht", means[0].clone());
-            row.put("dVkt", means[1].clone());
-            row.put("dCo2", means[2].clone());
-            row.put("dRoute", means[3].clone());
-            row.put("periods", strs(ps.iter()));
-            // the busiest junction
-            let mut nodes: Vec<(String, &str, &V)> = Vec::new();
-            for &pd in &ps {
-                for (id, nr) in res_of(sc, pd).map_or_else(Vec::new, |r| r.g("nodes").entries()) {
-                    nodes.push((id.to_string(), pd, nr));
-                }
-            }
-            js_sort_by(&mut nodes, |a, b| b.2.g("dos").n() - a.2.g("dos").n());
-            row.put(
-                "worst",
-                match nodes.first() {
-                    Some((id, pd, nr)) => format!("{} {}: DoS {}, LoS {}", node_name(sc, id), pd, num(nr.g("dos"), 2), los_text(nr)),
-                    None => fmt::DASH.to_string(),
-                },
-            );
-            let ch = changed_links(base, sc);
-            let mut km = 0.0;
-            for id in &ch {
-                let l = sc.g("links").g(id);
-                if !l.t() || !l.g("cycle").t() || l.g("cycle").eq_s("none") {
-                    continue;
-                }
-                let bl = base.g("links").g(&l.g("id").s());
-                if !bl.t() || !bl.g("cycle").strict_eq(l.g("cycle")) {
-                    km += net::len(sc, l) / 1000.0;
-                }
-            }
-            row.put("cycleKm", km);
-            row.put("cas", crashes_on(p, base, &ch));
-            let ec = econ_of(p, base, sc);
-            let bcr = if ec.t() && !ec.g("mismatch").t() {
-                if ec.g("bcrText").t() { ec.g("bcrText").clone() } else { V::String(num(ec.g("bcr"), 1)) }
-            } else if ec.t() && ec.g("mismatch").t() {
-                V::String("years differ".into())
-            } else {
-                V::String(fmt::DASH.into())
-            };
-            row.put("bcr", bcr);
-            let ipm = if ec.t() && ec.g("ipm").t() && ec.g("ipm").jlen() > 0 {
-                ec.g("ipm").items().iter().map(|b| format!("{}{}", fld_s(b, "band"), if b.g("draft").t() { " (draft)" } else { "" })).collect::<Vec<_>>().join(" / ")
-            } else {
-                fmt::DASH.to_string()
-            };
-            row.put("ipm", ipm);
-            if !o.g("cost").nullish() && !o.g("cost").eq_s("") {
-                row.put("cost", V::Number(o.g("cost").n()));
-            } else if ec.t() {
-                put_some(&mut row, "cost", ec.get("cap"));
-            } else {
-                row.put("cost", V::Null);
-            }
-            let identical = year_of(p, sc) == year_of(p, base) && dev_mix(sc) == dev_mix(base);
-            row.put("identical", identical);
-            if !identical {
-                warnings.push(format!(
-                    "{} does not use identical inputs to {} (year or development land use differ): options must be compared on the same inputs.",
-                    row.g("name").s(),
-                    base.g("name").s()
-                ));
-            }
+            alt_ran(p, base, sc, o, &ps, &mut row, &mut warnings);
         }
         row.put("dsi", if !o.g("dsi").nullish() && !o.g("dsi").eq_s("") { V::Number(o.g("dsi").n()) } else { V::Null });
         rows.push(row);
@@ -179,14 +187,12 @@ pub fn alternatives(p: &V) -> V {
 }
 
 /// `alternativeSections(P, c)`: which alternatives sections the document needs, by pathway and the author's flags: `[{ id, title, ref, include, why }]`.
+#[must_use]
 pub fn alternative_sections(p: &V, c: Option<&V>) -> V {
     let own;
-    let c = match c {
-        Some(c) => c,
-        None => {
-            own = context(p);
-            &own
-        }
+    let c = if let Some(c) = c { c } else {
+        own = context(p);
+        &own
     };
     let mut out: Vec<V> = Vec::new();
     let mut add = |id: &str, title: &str, rf: &str, include: V, why: &str| out.push(jobj! { "id" => id, "title" => title, "ref" => rf, "include" => include, "why" => why });
@@ -231,6 +237,7 @@ pub fn alternative_sections(p: &V, c: Option<&V>) -> V {
    ===================================================================================== */
 
 /// `zonedOf(z, proposed)`: a zone's entered zoned capacity (operative, or PC120 proposed) when it is an object, else null.
+#[must_use]
 pub fn zoned_of(z: &V, proposed: bool) -> V {
     let x = z.g("cx").g(if proposed { "zonedProposed" } else { "zoned" });
     if x.is_obj() { x.clone() } else { V::Null }
@@ -242,6 +249,7 @@ pub const DW_KEYS: [&str; 3] = ["residential", "apartment", "retirement"];
 /// `mergeZoned(current, zoned)`: a zone's full build-out land use: the entered zoned capacity merged over its current land use. Entered
 /// dwelling capacity (of any type) replaces all of the zone's dwellings; every other land use without an entered capacity is kept. Blank
 /// entries are ignored. `{ lu, replaced, kept }`.
+#[must_use]
 pub fn merge_zoned(current: &V, zoned: &V) -> V {
     let landuses = model("LANDUSES");
     let mut entered = V::object();
@@ -261,21 +269,22 @@ pub fn merge_zoned(current: &V, zoned: &V) -> V {
     for (k, v) in entered.entries() {
         out.set(k, v.clone());
     }
-    let mut replaced: Vec<String> = entered.keys().iter().map(|k| k.to_string()).collect();
+    let mut replaced: Vec<String> = entered.keys().iter().map(std::string::ToString::to_string).collect();
     if dw_in {
-        replaced.extend(DW_KEYS.iter().filter(|k| !entered.has(k) && cur.g(k).n() > 0.0).map(|k| k.to_string()));
+        replaced.extend(DW_KEYS.iter().filter(|k| !entered.has(k) && cur.g(k).n() > 0.0).map(std::string::ToString::to_string));
     }
     let kept: Vec<String> = cur
         .keys()
         .into_iter()
-        .filter(|k| !entered.has(k) && !(dw_in && DW_KEYS.contains(k)) && cur.g(k).n() > 0.0)
-        .map(|k| k.to_string())
+        .filter(|k| !entered.has(k) && (!dw_in || !DW_KEYS.contains(k)) && cur.g(k).n() > 0.0)
+        .map(std::string::ToString::to_string)
         .collect();
     jobj! { "lu" => out, "replaced" => strs(replaced.iter()), "kept" => strs(kept.iter()) }
 }
 
 /// `fullBuildout(P, sc)`: every zone with entered zoned capacity takes that capacity at 100% (PC120 proposed capacity when selected, labelled
 /// proposed): `{ zones, dwellings, gfa, proposed, label, rule }`.
+#[must_use]
 pub fn full_buildout(p: &V, sc: Option<&V>) -> V {
     let sc = sc.unwrap_or_else(|| active_sc(p));
     let proposed = data(p).g("planChange").g("useProposed").t();
@@ -314,7 +323,7 @@ pub fn full_buildout(p: &V, sc: Option<&V>) -> V {
 /// build-out) and returns it; null when no zone has entered capacity. `sc` is the scenario to copy (the active one by default); pass a copy
 /// when it belongs to the project being changed. The new scenario's id is a counter-based one.
 pub fn create_full_buildout(p: &mut V, sc: Option<&V>) -> V {
-    let sc: V = sc.map_or_else(|| active_sc(p).clone(), |s| s.clone());
+    let sc: V = sc.map_or_else(|| active_sc(p).clone(), std::clone::Clone::clone);
     let fb = full_buildout(p, Some(&sc));
     if fb.g("zones").jlen() == 0 {
         return V::Null;
@@ -322,17 +331,17 @@ pub fn create_full_buildout(p: &mut V, sc: Option<&V>) -> V {
     let mut ns = engine::scenario_copy_without_links(&sc, &HashSet::new());
     for z in fb.g("zones").items() {
         let id = z.g("id").s();
-        if let Some(nz) = ns.get_mut("zones").and_then(|zs| zs.get_mut(&id)) {
-            if nz.t() {
+        if let Some(nz) = ns.get_mut("zones").and_then(|zs| zs.get_mut(&id))
+            && nz.t() {
                 nz.set("lu", merge(&V::object(), z.g("lu")));
                 nz.remove("buildout");
             }
-        }
     }
     let taken: Vec<String> = p.g("scenarios").items().iter().map(|s| s.g("id").s()).collect();
-    let mut n = 1;
+    // Bound: at most one more than the number of scenarios, far below u32::MAX
+    let mut n: u32 = 1;
     while taken.contains(&format!("s{n}")) {
-        n += 1;
+        n = n.saturating_add(1);
     }
     ns.set("id", V::String(format!("s{n}")));
     ns.set("name", V::String(format!("{} \u{b7} full build-out{}", sc.g("name").s(), if fb.g("proposed").t() { " (PC120 proposed)" } else { "" })));
@@ -352,6 +361,7 @@ pub fn create_full_buildout(p: &mut V, sc: Option<&V>) -> V {
 }
 
 /// `rltpRelied(P)`: the network projects the assessment relies on, in words: the committed roads of the active scenario and the transport rows of the register.
+#[must_use]
 pub fn rltp_relied(p: &V) -> String {
     let sc = active_sc(p);
     let funding = model("FUNDING");
@@ -375,102 +385,93 @@ pub fn rltp_relied(p: &V) -> String {
         return "None recorded: mark committed network projects (road inspector \u{203a} stage) or add them to the register.".to_string();
     }
     let shown = names.iter().take(8).cloned().collect::<Vec<_>>().join("; ");
-    if names.len() > 8 { format!("{shown}; and {} more", names.len() - 8) } else { shown }
+    if names.len() > 8 { format!("{shown}; and {} more", names.len().saturating_sub(8)) } else { shown }
 }
 
-/// `planChange(P)`: the plan change process, s32 table, policy rows, road function table and the cl 23 pack:
-/// `{ kind, notification, process, buildout, s32, s32Label, policy, roads, cl23, triggers }`.
-pub fn plan_change(p: &V) -> V {
-    let c = context(p);
-    let cx = data(p);
-    let pc = cx.g("planChange");
-    let kind = if c.g("kind").eq_s("pc") { c.g("pathway").s() } else if pc.g("kind").t() { pc.g("kind").s() } else { String::new() };
-    let n = if c.g("notification").t() { c.g("notification").s() } else { day(pc.g("notification")) };
+/// The plan change process notes for the pathway (`kind`) and the notification date (YYYY-MM-DD or "").
+fn pc_process(kind: &str, notified: &str) -> Vec<V> {
     let transition = xs("STD.dates.transition");
     let private_bar = xs("STD.dates.privatePcBar");
     let mut proc: Vec<V> = Vec::new();
     if kind == "pc-council" {
-        proc.push(if !n.is_empty() && n < transition {
-            jobj! { "level" => "info", "text" => format!("Notified {}, before 30 Oct 2026: check the Planning Act 2026 Sch 1 transition for plan changes.", long_date_s(&n)) }
+        proc.push(if !notified.is_empty() && notified < transition.as_str() {
+            jobj! { "level" => "info", "text" => format!("Notified {}, before 30 Oct 2026: check the Planning Act 2026 Sch 1 transition for plan changes.", long_date_s(notified)) }
         } else {
             jobj! { "level" => "warn", "text" => "Plan stop until the specified transition date (s80P) unless exempt (s80U-80W)." }
         });
     }
     if kind == "pc-private" {
-        proc.push(if !n.is_empty() && n >= private_bar {
-            jobj! { "level" => "warn", "text" => format!("Notified {}: Ministerial exemption required (s80YA).", long_date_s(&n)) }
+        proc.push(if !notified.is_empty() && notified >= private_bar.as_str() {
+            jobj! { "level" => "warn", "text" => format!("Notified {}: Ministerial exemption required (s80YA).", long_date_s(notified)) }
         } else {
             jobj! { "level" => "info", "text" => format!("A private plan change request notified on or after {} needs a Ministerial exemption (s80YA){}.", long_date_s(&private_bar),
-                if !n.is_empty() { format!("; this one is notified {}", long_date_s(&n)) } else { "; enter the notification date".to_string() }) }
+                if notified.is_empty() { "; enter the notification date".to_string() } else { format!("; this one is notified {}", long_date_s(notified)) }) }
         });
     }
     if kind.is_empty() {
         proc.push(jobj! { "level" => "info", "text" => "Choose a plan change pathway (Compliance tab) to check the process dates." });
     }
-    let pr = pair(p);
-    let base = pr.base;
-    let fb = full_buildout(p, None);
-    let alt = alternatives(p);
+    proc
+}
+
+/// The s32 transport table: a row for each option that ran against the do-minimum.
+fn s32_rows(p: &V, alt: &V, base: &V) -> Vec<V> {
     let econ_settings = if p.g("settings").g("econ").t() { p.g("settings").g("econ").clone() } else { V::object() };
     let hrs = if econ_settings.g("periodHours").t() { econ_settings.g("periodHours").clone() } else { jobj! { "AM" => 600, "PM" => 600 } };
-    let a = assumptions(p);
+    let asm = assumptions(p);
     let opts = option_list(p);
-    let voc = a.g("vocPerKm");
+    let voc = asm.g("vocPerKm");
     let mut s32: Vec<V> = Vec::new();
     for r in alt.g("rows").items() {
         if !r.g("ran").t() {
             continue;
         }
         let empty = V::object();
-        let found = opts.iter().find(|x| x.o.g("id").strict_eq(r.g("id")));
-        let (o, sc) = match found {
-            Some(e) => (&e.o, e.sc),
+        let found = opts.iter().find(|cand| cand.o.g("id").strict_eq(r.g("id")));
+        let (opt_v, sc) = match found {
+            Some(entry) => (&entry.o, entry.sc),
             None => (&empty, None),
         };
-        let ps: Vec<&str> = sc.map_or_else(Vec::new, |s| periods_of(s).into_iter().filter(|x| res_of(base, x).is_some()).collect());
-        let kpi_of = |x: &V, pd: &str| res_of(x, pd).map_or(V::Null, |r| r.g("kpi").clone());
-        let ann = |k: &str| {
-            ps.iter().fold(0.0, |s, &pd| {
-                let ks = sc.map_or(V::Null, |x| kpi_of(x, pd));
-                s + (numk(&ks, k) - numk(&kpi_of(base, pd), k)) * n0(hrs.g(pd))
+        let ps: Vec<&str> = sc.map_or_else(Vec::new, |scn| periods_of(scn).into_iter().filter(|x| res_of(base, x).is_some()).collect());
+        let kpi_of = |scn: &V, pd: &str| res_of(scn, pd).map_or(V::Null, |res| res.g("kpi").clone());
+        let ann = |key: &str| {
+            ps.iter().fold(0.0, |acc, &pd| {
+                let ks = sc.map_or(V::Null, |scn| kpi_of(scn, pd));
+                acc + (numk(&ks, key) - numk(&kpi_of(base, pd), key)) * n0(hrs.g(pd))
             })
         };
         let (ann_h, ann_vkt) = (ann("vht"), ann("vkt"));
-        let unf: Vec<&V> = sc.map_or_else(Vec::new, |s| s.g("links").vals().into_iter().filter(|l| !l.g("status").eq_s("closed") && net::link_unfunded(l)).collect());
+        let unf: Vec<&V> = sc.map_or_else(Vec::new, |scn| scn.g("links").vals().into_iter().filter(|l| !l.g("status").eq_s("closed") && net::link_unfunded(l)).collect());
         let cas = r.g("cas");
         let safety = if cas.t() {
             format!(
                 "{} crashes ({} DSI) on changed roads in the CAS window; predicted change {}",
                 cas.g("crashes").s(), cas.g("dsi").s(),
-                if !r.g("dsi").nullish() { format!("{} DSI/yr", fmt::signed(r.g("dsi").n(), 1)) } else { "not modelled".to_string() }
+                if r.g("dsi").nullish() { "not modelled".to_string() } else { format!("{} DSI/yr", fmt::signed(r.g("dsi").n(), 1)) }
             )
         } else {
             "CAS not loaded".to_string()
         };
-        let timing = o.g("timing");
+        let timing = opt_v.g("timing");
         let names = unique(unf.iter().map(|l| link_name(l)).collect());
         s32.push(jobj! {
             "name" => r.g("name"), "label" => r.g("label"),
             "travel" => format!("{}; about {} veh\u{b7}h a year", pp_text(&neg_pp(r.g("pp").g("vht")), 1, "veh\u{b7}h saved per modelled peak hour"), fmt::signed(-ann_h, 0)),
             "safety" => safety,
             "voc" => format!("{} NZ$m a year ({} M veh-km \u{d7} NZ${}/km, {})", fmt::signed(ann_vkt * voc.n() / 1e6, 2), fmt::signed(ann_vkt / 1e6, 2), voc.s(), assumption()),
-            "cost" => if !r.g("cost").nullish() { format!("{}{}", fmt::money(r.g("cost").n()), if timing.t() { format!(", {}", timing.s()) } else { String::new() }) } else { "Not costed".to_string() },
+            "cost" => if r.g("cost").nullish() { "Not costed".to_string() } else { format!("{}{}", fmt::money(r.g("cost").n()), if timing.t() { format!(", {}", timing.s()) } else { String::new() }) },
             "timing" => or_s(timing, ""),
-            "acting" => if !unf.is_empty() {
+            "acting" => if unf.is_empty() { "Relies on no unfunded project".to_string() } else {
                 format!("Relies on {} unfunded project{} ({}): effects return if they are not funded", unf.len(), if unf.len() == 1 { "" } else { "s" }, names.iter().take(3).cloned().collect::<Vec<_>>().join(", "))
-            } else { "Relies on no unfunded project".to_string() },
+            },
             "notActing" => format!("Do-minimum: {} effects screened in {}", mitigation::effects(p, Some(base)).jlen(), base.g("name").s()),
         });
     }
-    let vkt_label = label("vkt");
-    let rltp = rltp_relied(p);
-    let policy = vec![
-        jobj! { "ref" => "RMA s74(2)(b)(i)", "policy" => "Regional land transport plan", "text" => rltp.as_str() },
-        jobj! { "ref" => "RMA s74(2)(d); ERP2", "policy" => "Emissions reduction plan (information only)", "text" => format!("\u{394}VKT and \u{394}CO2e are reported in the s32 table and alternatives table: {vkt_label}.") },
-        jobj! { "ref" => "NPS-UD Policy 1(c)", "policy" => "Good accessibility for all people (jobs, services, open space) by all modes", "text" => "See the accessibility rows in the policy alignment table." },
-        jobj! { "ref" => "NPS-UD Policy 1(e)", "policy" => "Supports reductions in greenhouse gas emissions", "text" => format!("Information only: {vkt_label}.") },
-        jobj! { "ref" => "NPS-I Policies 10-11", "policy" => "Infrastructure integrated with land use and funded", "text" => format!("Network projects relied on: {rltp}") },
-    ];
+    s32
+}
+
+/// The draft road function table: the proposed roads of the active scenario and the roads with an entered function or RASF.
+fn road_rows(p: &V) -> Vec<V> {
     let sc = active_sc(p);
     let fn_default = |cls: &V| -> String {
         match cls.s().as_str() {
@@ -503,10 +504,15 @@ pub fn plan_change(p: &V) -> V {
             "status" => if statuses.has(&st) && statuses.g(&st).t() { statuses.g(&st).clone() } else { l.g("status").clone() },
         });
     }
+    roads
+}
+
+/// The Sch 1 cl 23 response pack: model status, sensitivity tests, full build-out, options, linter findings and staging triggers.
+fn cl23_rows(p: &V, fb: &V, alt: &V, cx: &V) -> Vec<V> {
     let lint_n = lint::lint(p, None).g("findings").jlen();
     let stat = engine::model_status(p, "AM").g("label").clone();
     let sens_rows = p.g("report").g("sens").g("rows");
-    let cl23 = vec![
+    vec![
         jarr!["Model status and purpose", stat],
         jarr!["Sensitivity tests", if sens_rows.t() { format!("{} tests run", sens_rows.jlen()) } else { "Not run: run the sensitivity pack".to_string() }],
         jarr![
@@ -520,9 +526,37 @@ pub fn plan_change(p: &V) -> V {
         jarr!["Options assessed (s32(1)(b))", format!("{} option{}", alt.g("rows").jlen(), if alt.g("rows").jlen() == 1 { "" } else { "s" })],
         jarr!["Scope and wording", if lint_n > 0 { format!("{} linter finding{} open", lint_n, if lint_n == 1 { "" } else { "s" }) } else { "No linter findings".to_string() }],
         jarr!["Staging triggers", if cx.g("triggers").t() { "Trigger finder run" } else { "Not run" }],
+    ]
+}
+
+/// `planChange(P)`: the plan change process, s32 table, policy rows, road function table and the cl 23 pack:
+/// `{ kind, notification, process, buildout, s32, s32Label, policy, roads, cl23, triggers }`.
+#[must_use]
+pub fn plan_change(p: &V) -> V {
+    let cxt = context(p);
+    let cx = data(p);
+    let pc = cx.g("planChange");
+    let kind = if cxt.g("kind").eq_s("pc") { cxt.g("pathway").s() } else if pc.g("kind").t() { pc.g("kind").s() } else { String::new() };
+    let notified = if cxt.g("notification").t() { cxt.g("notification").s() } else { day(pc.g("notification")) };
+    let proc = pc_process(&kind, &notified);
+    let pr = pair(p);
+    let base = pr.base;
+    let fb = full_buildout(p, None);
+    let alt = alternatives(p);
+    let s32 = s32_rows(p, &alt, base);
+    let vkt_label = label("vkt");
+    let rltp = rltp_relied(p);
+    let policy = vec![
+        jobj! { "ref" => "RMA s74(2)(b)(i)", "policy" => "Regional land transport plan", "text" => rltp.as_str() },
+        jobj! { "ref" => "RMA s74(2)(d); ERP2", "policy" => "Emissions reduction plan (information only)", "text" => format!("\u{394}VKT and \u{394}CO2e are reported in the s32 table and alternatives table: {vkt_label}.") },
+        jobj! { "ref" => "NPS-UD Policy 1(c)", "policy" => "Good accessibility for all people (jobs, services, open space) by all modes", "text" => "See the accessibility rows in the policy alignment table." },
+        jobj! { "ref" => "NPS-UD Policy 1(e)", "policy" => "Supports reductions in greenhouse gas emissions", "text" => format!("Information only: {vkt_label}.") },
+        jobj! { "ref" => "NPS-I Policies 10-11", "policy" => "Infrastructure integrated with land use and funded", "text" => format!("Network projects relied on: {rltp}") },
     ];
+    let roads = road_rows(p);
+    let cl23 = cl23_rows(p, &fb, &alt, &cx);
     jobj! {
-        "kind" => kind.as_str(), "notification" => n, "process" => V::Array(proc), "buildout" => fb, "s32" => V::Array(s32), "s32Label" => label("s32"), "policy" => V::Array(policy),
+        "kind" => kind.as_str(), "notification" => notified, "process" => V::Array(proc), "buildout" => fb, "s32" => V::Array(s32), "s32Label" => label("s32"), "policy" => V::Array(policy),
         "roads" => V::Array(roads), "cl23" => V::Array(cl23), "triggers" => cx.g("triggers"),
     }
 }
@@ -532,6 +566,7 @@ pub fn plan_change(p: &V) -> V {
    ===================================================================================== */
 
 /// `optionsCSV(P)`: the options appraisal, ready for the EAST and AST tools, with the version stamp.
+#[must_use]
 pub fn options_csv(p: &V) -> String {
     let a = alternatives(p);
     let pv = |r: &V, k: &str, pd: &str, f: &dyn Fn(f64) -> f64| -> V {
@@ -554,11 +589,11 @@ pub fn options_csv(p: &V) -> String {
         rows.push(cells![
             r.g("name"), r.g("label"), r.g("scName"), pv(r, "vht", "AM", &r1), pv(r, "vht", "PM", &r1), or_s(r.g("worst"), ""),
             pv(r, "route", "AM", &|x| r1(x / 60.0)), pv(r, "route", "PM", &|x| r1(x / 60.0)),
-            if !r.g("cycleKm").nullish() { V::Number(r3(r.g("cycleKm").n())) } else { blank() },
+            if r.g("cycleKm").nullish() { blank() } else { V::Number(r3(r.g("cycleKm").n())) },
             if cas.t() { cas.g("crashes").clone() } else { blank() }, if cas.t() { cas.g("dsi").clone() } else { blank() },
-            if !r.g("dsi").nullish() { r.g("dsi").clone() } else { V::String("not modelled".into()) },
+            if r.g("dsi").nullish() { V::String("not modelled".into()) } else { r.g("dsi").clone() },
             pv(r, "vkt", "AM", &r1), pv(r, "vkt", "PM", &r1), pv(r, "co2", "AM", &r3), pv(r, "co2", "PM", &r3), or_s(r.g("bcr"), ""), or_s(r.g("ipm"), ""),
-            if !r.g("cost").nullish() { V::Number(r3(r.g("cost").n())) } else { blank() }, r.g("notes")
+            if r.g("cost").nullish() { blank() } else { V::Number(r3(r.g("cost").n())) }, r.g("notes")
         ]);
     }
     rows.push(vec![]);
@@ -571,6 +606,7 @@ pub fn options_csv(p: &V) -> String {
 }
 
 /// `planChangeCSV(P)`: the plan change s32 pack: process, s32 table, policy rows, road function table, full build-out and the cl 23 pack.
+#[must_use]
 pub fn plan_change_csv(p: &V) -> String {
     let pc = plan_change(p);
     let bo = pc.g("buildout");
@@ -612,6 +648,7 @@ pub fn plan_change_csv(p: &V) -> String {
    ===================================================================================== */
 
 /// `altTable(a)`: the multi-criteria table of the options (against the do-minimum).
+#[must_use]
 pub fn alt_table(a: &V) -> String {
     let head = [
         th("Option"), th("Hierarchy"), th("\u{394}VHT veh\u{b7}h/h"), th("Worst junction"), th("Bus time \u{394} min"), thn("New cycle km"), th("CAS (DSI)"), th("Predicted DSI"),
@@ -633,7 +670,7 @@ pub fn alt_table(a: &V) -> String {
                 vec![
                     esc(r.g("name")), esc(r.g("label")), esc_s(&pp_text(r.g("pp").g("vht"), 1, "")), esc(r.g("worst")), esc_s(&pp_text(&route_pp, 1, "")), num(r.g("cycleKm"), 2),
                     if cas.t() { format!("{} ({})", cas.g("crashes").s(), cas.g("dsi").s()) } else { dash() },
-                    if !r.g("dsi").nullish() { fmt::signed(r.g("dsi").n(), 1) } else { "not modelled".to_string() },
+                    if r.g("dsi").nullish() { "not modelled".to_string() } else { fmt::signed(r.g("dsi").n(), 1) },
                     esc_s(&pp_text(r.g("pp").g("vkt"), 0, "")), esc_s(&pp_text(r.g("pp").g("co2"), 2, "")), esc(r.g("bcr")), esc(r.g("ipm")),
                     fmt::money(if r.g("cost").nullish() { f64::NAN } else { r.g("cost").n() }),
                 ]
@@ -659,10 +696,12 @@ fn report_alternatives(p: &V, ctx: Option<&dyn ReportCtx>) -> String {
     let mut out = rt(ctx, "Options against the intervention hierarchy", &alt_table(&a), &note);
     out.push_str(&disc("D3", p, None));
     for w in a.g("warnings").items() {
-        out.push_str(&format!("<p class=\"note warn\">{}</p>", esc(w)));
+        // Writing to a String cannot fail
+        let _ = write!(out, "<p class=\"note warn\">{}</p>", esc(w));
     }
     for s in a.g("sections").items().iter().filter(|s| s.g("include").t()) {
-        out.push_str(&format!("<p class=\"note\">{} ({}): {}</p>", esc(s.g("title")), esc(s.g("ref")), esc(s.g("why"))));
+        // Writing to a String cannot fail
+        let _ = write!(out, "<p class=\"note\">{} ({}): {}</p>", esc(s.g("title")), esc(s.g("ref")), esc(s.g("why")));
     }
     out
 }
@@ -674,7 +713,8 @@ fn report_plan_change(p: &V, ctx: Option<&dyn ReportCtx>) -> String {
     }
     let mut out = String::new();
     for x in pc.g("process").items() {
-        out.push_str(&format!("<p class=\"note{}\">{}</p>", if x.g("level").eq_s("warn") { " warn" } else { "" }, esc(x.g("text"))));
+        // Writing to a String cannot fail
+        let _ = write!(out, "<p class=\"note{}\">{}</p>", if x.g("level").eq_s("warn") { " warn" } else { "" }, esc(x.g("text")));
     }
     let s32_rows: Vec<Vec<String>> =
         pc.g("s32").items().iter().map(|r| ["name", "travel", "safety", "voc", "cost", "acting", "notActing"].iter().map(|k| esc(r.g(k))).collect()).collect();
@@ -684,10 +724,12 @@ fn report_plan_change(p: &V, ctx: Option<&dyn ReportCtx>) -> String {
     let bo = pc.g("buildout");
     out.push_str("\n        ");
     out.push_str(&rt(ctx, "Policy matters", &tbl(&["Reference", "Policy", "Evidence"], pol_rows, ""), ""));
-    out.push_str(&format!(
+    // Writing to a String cannot fail
+    let _ = write!(
+        out,
         "<p class=\"note\">Full build-out: {} dwellings, {} m\u{b2} GFA ({}; {}).</p>",
         fmt::int(bo.g("dwellings").n()), fmt::int(bo.g("gfa").n()), esc(bo.g("label")), esc(bo.g("rule"))
-    ));
+    );
     out
 }
 
@@ -696,6 +738,7 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-alternatives", "compliance-e
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
+#[must_use]
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
     match id {
         "compliance-extra-alternatives" => Some(report_alternatives(p, ctx)),
@@ -708,6 +751,7 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
 pub const EXPORT_IDS: &[&str] = &["compliance-extra-options", "compliance-extra-planchange"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_build(id: &str, p: &V) -> Option<String> {
     match id {
         "compliance-extra-options" => Some(options_csv(p)),
@@ -717,6 +761,7 @@ pub fn export_build(id: &str, p: &V) -> Option<String> {
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
+#[must_use]
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     match id {
         "compliance-extra-options" => Some(alternatives(p).g("rows").jlen() > 0),

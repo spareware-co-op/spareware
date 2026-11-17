@@ -950,7 +950,8 @@ fn read_optional_column(
     }
 }
 
-/// A round kind's axial factor: 1, −1, or a finite nonzero double.
+/// A round kind's axial factor: 1, −1, or a finite nonzero double. A sphere's or torus's other
+/// than 1 or −1 is then refused by its kind ([`CurveError::AxialFactorNotUnit`]).
 fn read_axial(d: &mut Decoder<'_>, m: &mut WorkMeter<'_>) -> Result<f64, KindError> {
     match next(d, m)? {
         Item::Uint(1) => Ok(1.0),

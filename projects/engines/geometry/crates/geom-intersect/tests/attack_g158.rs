@@ -20,6 +20,8 @@
     reason = "test code: a failure should stop loudly, and a test pool of scoped threads"
 )]
 
+mod miri;
+
 use geom_curve::{CurveKind, Frame, Line};
 use geom_intersect::{
     CanonicalKey, Coincidence, Coverage, CurveContact, CurveEnd, Diag, Geom, IntersectError,
@@ -33,6 +35,7 @@ use geom_nurbs::{Basis, Curve};
 use geom_run::{Budget, CancelToken, Exec, Pool, WorkMeter};
 use geom_surface::{Plane, Sphere, SurfaceKind};
 use geom_test::{Seed, SplitMix64};
+use miri::sized;
 
 /// A test pool: `threads` scoped threads, task i on thread i mod threads, each running its tasks
 /// last first, so the tasks run in an order unlike the serial one.
@@ -599,7 +602,9 @@ fn segments(rng: &mut SplitMix64) -> CurveKind<3> {
 fn intersect_a_b_is_intersect_b_a_with_the_roles_swapped_on_10000_pairs() {
     let mut rng = SplitMix64::new(geom_test::seed::fixed("g158 pairs", Seed::DEFAULT));
     let mut crossed = 0;
-    for _ in 0..10_000 {
+    // Under Miri the first 250 of the same pairs (the module `miri` says why).
+    let count = sized(10_000, 250);
+    for _ in 0..count {
         let (a, b) = (segments(&mut rng), segments(&mut rng));
         let (x, y) = (operand(&a), operand(&b));
         let canonical = |p: &Operand<'_>, q: &Operand<'_>| {
@@ -618,13 +623,15 @@ fn intersect_a_b_is_intersect_b_a_with_the_roles_swapped_on_10000_pairs() {
         assert_eq!(one.clone().swapped(unknowns), two, "{a:?} {b:?}");
         crossed += one.items().len();
     }
-    assert!(crossed > 1000, "{crossed}");
+    // More crossings than a tenth of the pairs, at either size (58 for the 250 under Miri).
+    assert!(crossed > count / 10, "{crossed}");
 }
 
 #[test]
 fn a_batch_gives_the_same_answers_at_1_to_8_threads() {
     let mut rng = SplitMix64::new(geom_test::seed::fixed("g158 batch", Seed::DEFAULT));
-    let curves: Vec<(CurveKind<3>, CurveKind<3>)> = (0..400)
+    // Under Miri the first 40 of the same pairs, still more than the most threads.
+    let curves: Vec<(CurveKind<3>, CurveKind<3>)> = (0..sized(400, 40))
         .map(|_| (segments(&mut rng), segments(&mut rng)))
         .collect();
     let list: Vec<(Operand<'_>, Operand<'_>)> = curves

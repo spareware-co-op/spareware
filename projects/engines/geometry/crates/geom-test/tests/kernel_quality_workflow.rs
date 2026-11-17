@@ -7,15 +7,16 @@
 //! configuration files as TOML (toml), so a check sees the structure GitHub and the tools see, not
 //! a line that looks right:
 //!
-//! - **Triggers.** Pull requests that touch the kernel, the schedule (weekly), on demand, and when
-//!   kernel-release.yml calls it on a release tag, never an ordinary push; and the path filters
-//!   cover everything the gates read.
-//! - **Jobs and when they run.** The mutation plan, shards and judge on every event (the plan picks
-//!   the diff or the full run), each shard job only when the plan gives it shards, the judge even
-//!   when a shard failed; a full run narrowed to some files, on demand only, runs the mutation gate
-//!   alone, its plan checking the files cargo-mutants selected and its judge counting their ledger
-//!   entries; coverage and the seeded gates on every event; Miri weekly and on demand, and on
-//!   a pull request only when it changes how Miri runs.
+//! - **Triggers.** Every pull request (once it is ready for review), GitHub's merge queue, a push
+//!   to main, on demand, and when kernel-release.yml calls it on a release tag, never on a timer;
+//!   and the files the job `when` watches cover everything the gates read.
+//! - **Jobs and when they run.** The job `when` decides each gate; the mutation plan and judge run
+//!   when it chose mutation (the plan picks the diff or the full run by its mode), each shard job
+//!   only when the plan gives it shards, the judge even when a shard failed; a full run narrowed to
+//!   some files, on demand or on a push to main, has its plan check the files cargo-mutants
+//!   selected and its judge count their ledger entries; coverage and the seeded gates when it chose
+//!   coverage; Miri when it chose Miri, on a pull request only when it changes how Miri runs. A
+//!   draft runs none of them. The last job, `done`, fails unless every gate chosen ran and passed.
 //! - **Least privilege.** One permission, `contents: read`, and no credentials kept by checkout.
 //! - **Pins.** Every action pinned to a full commit, the same commit as `kernel.yml` where both use
 //!   an action; one `RUST_TOOLCHAIN`, equal to `rust-toolchain.toml`; the nightly pinned by its
@@ -33,6 +34,19 @@
 //! - **One aliasing exception.** Miri runs geom-pool, the only crate that names rayon, under Tree
 //!   Borrows and every other crate under Stacked Borrows, and only while `Cargo.lock` holds
 //!   crossbeam-epoch 0.9.21, whose `IsElement::element_of` Stacked Borrows refuses.
+//! - **A later push judges what it can reach.** `geom_test::increment` judges again every file of
+//!   the change whose crate's tests what changed since the last clean head reaches, held here to
+//!   planted changes that must be judged (a changed line, a changed test, a removed ledger entry,
+//!   a change on the base's side, a file in no crate) and ones that need not (nothing, a new test
+//!   target, an added ledger entry); and the workflow finds that head in GitHub's record of the
+//!   pull request's runs and narrows the plan and coverage by it, each piece shown to be checked
+//!   by a planted removal.
+//! - **Miri's measuring run leaves every other run as it was.** It runs only on a dispatch whose
+//!   input asks for it, and then runs no gate; its jobs save no cache and write no table; each part
+//!   runs the measuring profile at the budget, uploads its report for a few days, and fails on a
+//!   test that failed; the second part job is the first word for word. Each shown to be checked by
+//!   a planted change (the plan running without the input, a measuring run that runs the gates, a
+//!   cache saved, the table written, a part with no report upload, a stop other than the budget).
 
 // The crate denies native arithmetic in kernel code (Cargo.toml); tests may use it.
 #![allow(
@@ -46,9 +60,14 @@
     clippy::indexing_slicing
 )]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use geom_test::increment::{self, Since};
+use geom_test::miri;
+use geom_test::quality_ledger::LEDGER_PATH;
+use geom_test::shared::Changes;
+use geom_test::test_scope::Scope;
 use yaml_rust2::{Yaml, YamlLoader};
 
 fn root() -> PathBuf {
@@ -137,44 +156,99 @@ fn runs(w: &Yaml, job: &str) -> String {
     ignore = "reads the repository's files, which a WebAssembly test run cannot"
 )]
 #[test]
-fn it_runs_on_kernel_pull_requests_weekly_and_on_demand() {
+fn it_runs_once_per_change_and_never_on_a_timer() {
     let w = workflow();
     let on = &w["on"];
     assert_eq!(
         keys(on),
         [
             "pull_request",
-            "schedule",
+            "merge_group",
+            "push",
             "workflow_dispatch",
             "workflow_call"
         ],
-        "pushes run kernel.yml, not the quality gates; kernel-release.yml calls them on a release"
+        "a change's gates run when it is ready, in the queue and on main; never on a timer"
     );
-    let cron = text(&on["schedule"][0]["cron"]);
-    let fields: Vec<&str> = cron.split_whitespace().collect();
-    assert_eq!(fields.len(), 5, "{cron}");
-    assert!(
-        fields[2] == "*" && fields[3] == "*" && fields[4] != "*",
-        "weekly: {cron}"
-    );
-    let paths: Vec<&str> = on["pull_request"]["paths"]
+    let types: Vec<&str> = on["pull_request"]["types"]
         .as_vec()
         .unwrap()
         .iter()
         .map(text)
         .collect();
+    assert!(types.contains(&"ready_for_review"), "{types:?}");
+    assert_eq!(
+        on["push"]["branches"]
+            .as_vec()
+            .unwrap()
+            .iter()
+            .map(text)
+            .collect::<Vec<_>>(),
+        ["main"]
+    );
+    // No path filter, so the required check `done` reports on every change; `when` reads the
+    // kernel's paths instead.
+    assert!(on["pull_request"]["paths"].is_badvalue());
+    let paths: Vec<&str> = text(&w["env"]["KERNEL_PATHS"]).lines().collect();
     for path in [
         "projects/engines/geometry/**",
         ".cargo/**",
-        ".config/nextest.toml",
+        ".config/**",
         "Cargo.toml",
         "Cargo.lock",
         "rust-toolchain.toml",
-        ".github/workflows/kernel-quality.yml",
+        ".github/**",
     ] {
-        assert!(paths.contains(&path), "no path filter {path}");
+        assert!(paths.contains(&path), "no path {path}");
     }
+    let decide = runs(&w, "when");
+    assert!(decide.contains("done <<< \"$KERNEL_PATHS\""), "{decide}");
+    // A draft runs no gate.
+    let draft = decide.find("if [ \"$DRAFT\" = true ]; then").unwrap();
+    assert!(
+        decide[draft..]
+            .lines()
+            .nth(1)
+            .is_some_and(|l| l.trim() == "mutants=false coverage=false miri=false"),
+        "{decide}"
+    );
     assert!(geom_test::quality_ledger::LEDGER_PATH.starts_with("projects/engines/geometry/"));
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_coverage_judge_reads_every_part() {
+    let w = workflow();
+    let jobs = &w["jobs"];
+    // The coverage judge judges even when a part failed, so it names every crate left unmeasured;
+    // it reads every part, and `done` fails on any part that did not pass.
+    assert_eq!(
+        text(&jobs["coverage"]["if"]),
+        "${{ !cancelled() && needs.when.outputs.coverage == 'true' && needs.coverage-plan.result == 'success' }}"
+    );
+    let needs: Vec<&str> = jobs["coverage"]["needs"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .map(text)
+        .collect();
+    assert_eq!(needs, ["when", "cheap", "coverage-plan", "coverage-parts"]);
+    assert!(
+        runs(&w, "done")
+            .contains("must=\"$must coverage-plan coverage-parts coverage gates-seeded\""),
+        "done does not require every coverage job"
+    );
+    let steps = jobs["coverage"]["steps"].as_vec().unwrap();
+    assert!(
+        steps.iter().any(|s| {
+            s["with"]["pattern"].as_str() == Some("coverage-part-*")
+                && s["with"]["merge-multiple"].as_bool() == Some(true)
+        }),
+        "the judge does not read every part's files"
+    );
 }
 
 #[cfg_attr(
@@ -188,23 +262,37 @@ fn each_job_runs_on_the_events_its_gate_names() {
     assert_eq!(
         keys(jobs),
         [
+            "when",
             "cheap",
             "mutants-plan",
             "mutants",
             "mutants-2",
             "mutants-judge",
+            "coverage-plan",
+            "coverage-parts",
             "coverage",
             "gates-seeded",
             "miri",
+            "miri-measure-plan",
+            "miri-measure",
+            "miri-measure-2",
+            "done",
         ]
     );
-    // Every job runs on every event, but each shard job only when the plan gives it shards, and
+    // Each gate runs when `when` chose it; each shard job only when the plan gives it shards, and
     // the judge even when a shard failed, so a lost shard is reported, not skipped.
-    assert!(jobs["mutants-plan"]["if"].is_badvalue());
-    // A narrowed mutation run (a dispatch with `files`) skips the other gates; every other run,
-    // a pull request's among them, runs them.
-    for job in ["coverage", "gates-seeded", "miri"] {
-        assert_eq!(text(&jobs[job]["if"]), "${{ !inputs.files }}", "{job}");
+    for (job, gate) in [
+        ("mutants-plan", "mutants"),
+        ("coverage-plan", "coverage"),
+        ("coverage-parts", "coverage"),
+        ("gates-seeded", "coverage"),
+        ("miri", "miri"),
+    ] {
+        assert_eq!(
+            text(&jobs[job]["if"]),
+            format!("needs.when.outputs.{gate} == 'true'"),
+            "{job}"
+        );
     }
     assert_eq!(
         text(&jobs["mutants"]["if"]),
@@ -214,14 +302,17 @@ fn each_job_runs_on_the_events_its_gate_names() {
         text(&jobs["mutants-2"]["if"]),
         "needs.mutants-plan.outputs.count_2 != '0'"
     );
-    assert_eq!(text(&jobs["mutants-judge"]["if"]), "${{ !cancelled() }}");
+    assert_eq!(
+        text(&jobs["mutants-judge"]["if"]),
+        "${{ !cancelled() && needs.when.outputs.mutants == 'true' }}"
+    );
     let needs: Vec<&str> = jobs["mutants-judge"]["needs"]
         .as_vec()
         .unwrap()
         .iter()
         .map(text)
         .collect();
-    assert_eq!(needs, ["mutants-plan", "mutants", "mutants-2"]);
+    assert_eq!(needs, ["when", "mutants-plan", "mutants", "mutants-2"]);
     // The judge checks the jobs it reads before it judges: a shard job may be skipped only when
     // the plan gave it no shard.
     let first = text(&jobs["mutants-judge"]["steps"][0]["run"]);
@@ -235,23 +326,44 @@ fn each_job_runs_on_the_events_its_gate_names() {
             "{first}"
         );
     }
-    // The plan decides between the diff and the full run by the event.
+    // The plan decides between the diff and the full run by the mode `when` chose.
     let plan = runs(&w, "mutants-plan");
-    assert!(plan.contains("if [ \"$GITHUB_EVENT_NAME\" = pull_request ]; then"));
-    // Miri: every partition weekly and on demand; one partition on a pull request, and only when
-    // it changes the Miri run.
-    let miri = runs(&w, "miri");
+    assert!(plan.contains("if [ \"$MODE\" = diff ]; then"));
+    // Miri: one partition on a pull request, and only when it changes the Miri run; never in the
+    // merge queue.
+    let decide = runs(&w, "when");
     for watched in [
         ".github/workflows/kernel-quality",
         ".config/nextest",
         "geom-test/src/miri",
     ] {
-        assert!(miri.contains(watched), "{watched}");
+        assert!(decide.contains(watched), "{watched}");
     }
-    for step in jobs["miri"]["steps"].as_vec().unwrap().iter().skip(2) {
-        let condition = text(&step["if"]);
-        assert!(condition.contains("env.NEEDED == 'true'"), "{condition}");
-    }
+    assert!(decide.contains("miri=$miri_files"), "{decide}");
+    assert!(
+        decide.contains("if [ \"$EVENT\" = merge_group ]; then miri=false; fi"),
+        "{decide}"
+    );
+    // A push to main mutates the files it changed and those its ledger entries tie to a moved
+    // function, and Miri runs the crates its tests reach.
+    assert!(
+        decide.contains("kernel-quality -- mutants-files"),
+        "{decide}"
+    );
+    assert!(
+        decide.contains("kernel-quality -- miri-packages"),
+        "{decide}"
+    );
+    // The last job judges every other.
+    let done_needs: Vec<&str> = jobs["done"]["needs"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .map(text)
+        .collect();
+    let others: Vec<String> = keys(jobs).into_iter().filter(|j| j != "done").collect();
+    assert_eq!(done_needs, others);
+    assert_eq!(text(&jobs["done"]["if"]), "${{ always() }}");
 }
 
 #[cfg_attr(
@@ -284,10 +396,11 @@ fn permissions_are_read_only_and_credentials_are_not_kept() {
         }
     }
     // Every job that has steps (the job `cheap` only calls cheap-checks.yml, a workflow of this
-    // repository at the same commit, which runs no repository code).
+    // repository at the same commit, which runs no repository code; `done` reads only the other
+    // jobs' results).
     let with_steps = keys(&w["jobs"])
         .iter()
-        .filter(|job| !w["jobs"][job.as_str()]["steps"].is_badvalue())
+        .filter(|job| *job != "done" && !w["jobs"][job.as_str()]["steps"].is_badvalue())
         .count();
     assert_eq!(checkouts, with_steps, "one checkout per job");
 }
@@ -315,8 +428,8 @@ fn actions_are_pinned_to_the_commits_kernel_yml_uses() {
             );
         }
     }
-    // The artifact actions kernel.yml does not use, pinned to the commits of their tags: v7.0.2
-    // and v8.0.2.
+    // The artifact actions, pinned to the commits of their tags (v7.0.2 and v8.0.2), as kernel.yml
+    // pins them too.
     assert!(
         pins["actions/upload-artifact"]
             .iter()
@@ -429,16 +542,38 @@ fn only_a_dispatch_narrows_the_full_run() {
     assert_eq!(files["required"].as_bool(), Some(false));
     assert_eq!(text(&files["default"]), "");
     assert_eq!(text(&files["type"]), "string");
-    assert_eq!(keys(&w["on"]["workflow_dispatch"]["inputs"]), ["files"]);
+    // (The other two inputs ask for Miri's measuring run instead of the gates:
+    // `a_measuring_run_runs_only_when_asked_and_leaves_nothing_behind`.)
+    assert_eq!(
+        keys(&w["on"]["workflow_dispatch"]["inputs"]),
+        ["files", "miri_measure", "miri_measure_tests"]
+    );
     // ... that no caller can set (kernel-release.yml's run is whole) ...
     assert!(w["on"]["workflow_call"].is_null() || w["on"]["workflow_call"]["inputs"].is_badvalue());
-    // ... with a concurrency group of its own, so it never queues behind a whole run ...
+    // ... with a concurrency group of its own, so it never queues behind a whole run (the second
+    // term is empty on every run but a measuring one, so every other run's group is the files') ...
     assert_eq!(
         text(&w["concurrency"]["group"]),
-        "kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}"
+        "kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}${{ \
+         (inputs.miri_measure == 'new' || inputs.miri_measure == 'all') && \
+         format('-miri-measure-{0}', inputs.miri_measure) || '' }}"
     );
-    // ... reaching the steps only through the environment, never pasted into a script.
-    assert_eq!(text(&w["env"]["FILES"]), "${{ inputs.files }}");
+    // ... reaching the steps only through the environment, never pasted into a script: `when`
+    // reads it, and every job that narrows reads `when`'s choice.
+    let decide = w["jobs"]["when"]["steps"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"].as_str() == Some("when"))
+        .unwrap();
+    assert_eq!(text(&decide["env"]["INPUT_FILES"]), "${{ inputs.files }}");
+    for job in ["mutants-plan", "mutants", "mutants-2", "mutants-judge"] {
+        assert_eq!(
+            text(&w["jobs"][job]["env"]["FILES"]),
+            "${{ needs.when.outputs.files }}",
+            "{job}"
+        );
+    }
     for (job, step) in steps(&w) {
         if let Some(run) = step["run"].as_str() {
             assert!(
@@ -447,10 +582,10 @@ fn only_a_dispatch_narrows_the_full_run() {
             );
         }
     }
-    // A pull request never narrows: the plan and the judge read FILES only after the diff branch.
+    // A change's diff never narrows: the plan and the judge read FILES only after the diff branch.
     for job in ["mutants-plan", "mutants-judge"] {
         let run = runs(&w, job);
-        let diff = run.find("= pull_request ]").unwrap();
+        let diff = run.find("= diff ]").unwrap();
         assert!(run.find("$FILES").unwrap() > diff, "{job}");
     }
 }
@@ -520,27 +655,228 @@ fn every_shard_and_partition_runs_once() {
             "{plan_run}"
         );
     }
-    // Miri: the weekly matrix lists partitions 1 to PARTITIONS, and each runs its own.
+    // Miri: the full matrix lists partitions 1 to PARTITIONS, and each runs its own.
     let miri = &w["jobs"]["miri"];
     let n = miri["env"]["PARTITIONS"].as_i64().unwrap();
     let matrix = text(&miri["strategy"]["matrix"]["partition"]);
-    let weekly = matrix
+    let full = matrix
         .split("|| '")
         .nth(1)
         .and_then(|rest| rest.split('\'').next())
         .unwrap();
-    let listed: Vec<i64> = serde_json::from_str(weekly).unwrap();
+    let listed: Vec<i64> = serde_json::from_str(full).unwrap();
     assert_eq!(listed, (1..=n).collect::<Vec<_>>());
     assert!(
         matrix.contains("github.event_name == 'pull_request' && '[1]'"),
         "{matrix}"
     );
     assert_eq!(miri["strategy"]["fail-fast"].as_bool(), Some(false));
+    // Each partition runs its finishing tests; a test of the run with no row fails it (32.58).
     let run = runs(&w, "miri");
+    for needle in [
+        "cargo miri nextest list --locked $PACKAGES -E \"not package(geom-pool)\"",
+        "--message-format json > \"$RUNNER_TEMP/miri-list.json\"",
+        "kernel-quality -- miri-filter",
+        "--partition \"${{ matrix.partition }}\" --of \"$PARTITIONS\"",
+        "--list \"$RUNNER_TEMP/miri-list.json\" > \"$RUNNER_TEMP/miri-filter.txt\"",
+        "-E \"not package(geom-pool) & ($(cat \"$RUNNER_TEMP/miri-filter.txt\"))\"",
+    ] {
+        assert!(run.contains(needle), "{needle}\n{run}");
+    }
+    assert!(!run.contains("--partition \"hash:"), "{run}");
+    // The finishing tests split into that many partitions keep each one's tests within
+    // `PART_SECONDS` at four at once (principle 8), in the fewest partitions that do, and each
+    // filterset fits in one command-line argument (Linux takes at most 128 KiB in one).
+    let times = miri::finishing(&miri::parse_table(miri::TIMES).unwrap());
+    let parts = usize::try_from(n).unwrap();
+    let plan = miri::plan(&times, parts).unwrap();
+    let slowest = plan.longest();
     assert!(
-        run.contains("--partition \"hash:${{ matrix.partition }}/$PARTITIONS\""),
-        "{run}"
+        slowest <= miri::PART_SECONDS,
+        "{slowest} s in the slowest of {parts}"
     );
+    assert_eq!(
+        miri::fewest(&times),
+        Some(parts),
+        "not the fewest within the bound"
+    );
+    for k in 1..=parts {
+        let filter = plan.filterset(k).unwrap();
+        assert!(filter.len() < 100_000, "partition {k}: {}", filter.len());
+    }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn miris_table_is_measured_and_every_unsafe_library_has_a_finishing_test() {
+    // The table reads (no row at the budget, no native-only mark without its measured time, no
+    // test in both states: `miri::parse_table`) and is in the form its one writer,
+    // `kernel-quality miri-times`, gives it, so it was not edited by hand.
+    let rows = geom_test::miri::parse_table(geom_test::miri::TIMES).unwrap();
+    let again = geom_test::miri::write_table(geom_test::miri::TIMES, &[], (1, 1), 1, None, None);
+    assert_eq!(
+        again.as_deref(),
+        Ok(geom_test::miri::TIMES),
+        "miri-times.tsv is not as `kernel-quality miri-times` writes it"
+    );
+    // Each library with unsafe code the kernel uses is driven by a test Miri finishes; geom-pool's
+    // tests have no rows, because Miri runs all of them, under Tree Borrows.
+    let problems = miri::undriven(&rows, miri::UNSAFE_LIBRARIES, TREE_BORROWS_CRATE);
+    assert!(problems.is_empty(), "{problems:#?}");
+    // Every library of the lock with unsafe code that the kernel uses is named, and nothing else.
+    let named: BTreeSet<&str> = geom_test::miri::UNSAFE_LIBRARIES
+        .iter()
+        .map(|l| l.name)
+        .collect();
+    let found = unsafe_libraries();
+    let missing: Vec<&String> = found
+        .iter()
+        .filter(|l| !named.contains(l.as_str()))
+        .collect();
+    let stale: Vec<&&str> = named.iter().filter(|l| !found.contains(**l)).collect();
+    assert!(
+        missing.is_empty() && stale.is_empty(),
+        "libraries with unsafe code that the kernel uses, with no finishing test named in \
+         geom_test::miri::UNSAFE_LIBRARIES: {missing:?}; named there, but not such a library: \
+         {stale:?}"
+    );
+}
+
+/// The registry packages the kernel uses whose own library sources hold the `unsafe` keyword, read
+/// as Rust tokens so comments and strings do not count: for Linux, the kernel crates' normal
+/// dependencies and theirs (what ships), and the registry crates the kernel crates' tests name
+/// directly; never a build script's or a procedural macro's, which Miri does not run, nor what
+/// reaches a test only through a development crate.
+fn unsafe_libraries() -> BTreeSet<String> {
+    let root = root();
+    let out = std::process::Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+        .args([
+            "metadata",
+            "--locked",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            "x86_64-unknown-linux-gnu",
+        ])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let meta: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let packages: BTreeMap<&str, &serde_json::Value> = meta["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p["id"].as_str().unwrap(), p))
+        .collect();
+    let kernel = geom_test::miri::packages(&meta).unwrap();
+    // How far to walk from a package: 0 a kernel crate (its normal dependencies, and its registry
+    // development dependencies themselves), 1 a normal dependency (its own), 2 no further.
+    let mut work: Vec<(&str, u8)> = packages
+        .iter()
+        .filter(|(_, p)| {
+            p["source"].is_null() && kernel.iter().any(|k| p["name"].as_str() == Some(k))
+        })
+        .map(|(id, _)| (*id, 0))
+        .collect();
+    let deps: BTreeMap<&str, &serde_json::Value> = meta["resolve"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| (n["id"].as_str().unwrap(), &n["deps"]))
+        .collect();
+    let mut seen = BTreeSet::new();
+    let mut found = BTreeSet::new();
+    while let Some((id, walk)) = work.pop() {
+        if !seen.insert((id, walk)) {
+            continue;
+        }
+        let p = packages[id];
+        if !p["source"].is_null() && has_unsafe(p) {
+            found.insert(p["name"].as_str().unwrap().to_owned());
+        }
+        for d in deps[id].as_array().unwrap() {
+            let target = packages[d["pkg"].as_str().unwrap()];
+            let kinds: Vec<&serde_json::Value> = d["dep_kinds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|k| &k["kind"])
+                .collect();
+            let normal = kinds.iter().any(|k| k.is_null());
+            let dev = walk == 0 && !target["source"].is_null() && kinds.iter().any(|k| *k == "dev");
+            let macro_only = target["targets"].as_array().unwrap().iter().all(|t| {
+                t["kind"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|k| k == "proc-macro")
+            });
+            if macro_only || walk == 2 {
+                continue;
+            }
+            if normal {
+                work.push((d["pkg"].as_str().unwrap(), 1));
+            } else if dev {
+                work.push((d["pkg"].as_str().unwrap(), 2));
+            }
+        }
+    }
+    found
+}
+
+/// Whether a registry package's library sources (its `src` folder, or the folder of its library
+/// target) hold the `unsafe` keyword as a token.
+fn has_unsafe(package: &serde_json::Value) -> bool {
+    let Some(lib) = package["targets"].as_array().unwrap().iter().find(|t| {
+        t["kind"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|k| matches!(k.as_str(), Some("lib" | "rlib")))
+    }) else {
+        return false;
+    };
+    let src = PathBuf::from(lib["src_path"].as_str().unwrap());
+    let mut dirs = vec![src.parent().unwrap().to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                let text = std::fs::read_to_string(&path).unwrap_or_default();
+                if let Ok(tokens) = text.parse::<proc_macro2::TokenStream>()
+                    && tokens_hold_unsafe(tokens)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Whether a token stream holds the identifier `unsafe`, at any depth.
+fn tokens_hold_unsafe(tokens: proc_macro2::TokenStream) -> bool {
+    let mut work = vec![tokens];
+    while let Some(stream) = work.pop() {
+        for t in stream {
+            match t {
+                proc_macro2::TokenTree::Ident(i) if i == "unsafe" => return true,
+                proc_macro2::TokenTree::Group(g) => work.push(g.stream()),
+                _ => {}
+            }
+        }
+    }
+    false
 }
 
 #[cfg_attr(
@@ -555,7 +891,7 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
         "cargo mutants --in-diff \"$RUNNER_TEMP/plan/pr.diff\" --list --json > \"$RUNNER_TEMP/plan/list.json\"",
         "cargo mutants --list --json > \"$RUNNER_TEMP/plan/list.json\"",
         "kernel-quality -- mutants-plan",
-        "git show \"HEAD^1:projects/engines/geometry/quality-ledger.json\"",
+        "git show \"$BASE:projects/engines/geometry/quality-ledger.json\"",
     ] {
         assert!(plan.contains(needle), "the plan does not run {needle:?}");
     }
@@ -598,10 +934,17 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
     assert_eq!(shard.matches("cargo mutants ").count(), 1);
     assert!(shard.contains("case \"$code\" in 0|2|3) ;; *) exit \"$code\" ;; esac"));
     assert!(shard.contains("test -f \"$RUNNER_TEMP/out/mutants.out/mutants.json\""));
-    // Coverage: measured on the nightly with branches, each run's log kept, then judged.
-    let coverage = runs(&w, "coverage");
+    // Coverage: planned in parts by the judge's own list, each part measured on the nightly with
+    // branches, each run's log kept, then every part judged together.
+    let coverage = format!(
+        "{}{}{}",
+        runs(&w, "coverage-plan"),
+        runs(&w, "coverage-parts"),
+        runs(&w, "coverage")
+    );
     for needle in [
-        "kernel-quality -- affected $SCOPE",
+        "kernel-quality -- coverage-parts $SCOPE",
+        "for crate in $CRATES; do",
         "kernel-quality -- coverage $SCOPE",
         "--branch",
         "| tee \"$RUNNER_TEMP/cov/$crate.log\"",
@@ -611,7 +954,17 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
             "coverage does not run {needle:?}"
         );
     }
-    let measure = w["jobs"]["coverage"]["steps"]
+    let parts = &w["jobs"]["coverage-parts"];
+    assert_eq!(
+        text(&parts["strategy"]["matrix"]),
+        "${{ fromJSON(needs.coverage-plan.outputs.matrix) }}"
+    );
+    assert_eq!(parts["strategy"]["fail-fast"].as_bool(), Some(false));
+    assert_eq!(
+        text(&w["jobs"]["coverage-plan"]["outputs"]["matrix"]),
+        "${{ steps.parts.outputs.matrix }}"
+    );
+    let measure = w["jobs"]["coverage-parts"]["steps"]
         .as_vec()
         .unwrap()
         .iter()
@@ -682,7 +1035,7 @@ fn only_geom_pool_runs_under_tree_borrows_and_only_while_crossbeam_needs_it() {
         .unwrap()
         .1;
     assert!(
-        main.contains(&format!("-E 'not package({TREE_BORROWS_CRATE})'")),
+        main.contains(&format!("-E \"not package({TREE_BORROWS_CRATE}) & (")),
         "{main}"
     );
     // The crate is the one that may name rayon, and the exception lasts only while the lock
@@ -766,9 +1119,667 @@ fn the_tools_are_configured_as_the_gates_need() {
         assert_eq!(p["fail-fast"].as_bool(), Some(false), "{profile}");
         assert_eq!(p["junit"]["path"].as_str(), Some("junit.xml"), "{profile}");
     }
-    // The weekly budget: two periods of five minutes, so a partition's worst case fits the job.
-    let weekly = &n["profile"]["default-miri"]["slow-timeout"];
-    assert_eq!(weekly["period"].as_str(), Some("300s"));
-    assert_eq!(weekly["terminate-after"].as_integer(), Some(2));
+    // The full run's budget: two periods of five minutes, so a partition's worst case fits the job.
+    let full = &n["profile"]["default-miri"]["slow-timeout"];
+    assert_eq!(full["period"].as_str(), Some("300s"));
+    assert_eq!(full["terminate-after"].as_integer(), Some(2));
     assert!(n["profile"].as_table().unwrap().get("default").is_none());
+}
+
+/// The files of `plan` that are not among `want`, and of `want` that `plan` lacks.
+fn plan_problems(plan: &increment::Plan, want: &[&str]) -> Vec<String> {
+    let got: BTreeSet<&str> = plan.keys().map(String::as_str).collect();
+    let want: BTreeSet<&str> = want.iter().copied().collect();
+    let mut found: Vec<String> = want
+        .difference(&got)
+        .map(|f| format!("{f} is not judged again"))
+        .collect();
+    found.extend(
+        got.difference(&want)
+            .map(|f| format!("{f} is judged again")),
+    );
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository and runs cargo metadata, which a WebAssembly test cannot"
+)]
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "each planted case beside what it must judge reads best in one place"
+)]
+fn a_later_push_judges_again_what_its_change_can_reach() {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let metadata = geom_test::deps::cargo_metadata(&cargo, &root().join("Cargo.toml")).unwrap();
+    let scope = Scope::read(&metadata).unwrap();
+    let folder = |c: &str| scope.folders()[c].clone();
+    // Two kernel crates whose tests one another's code does not reach, neither a reader.
+    let reach = |c: &str| -> BTreeSet<String> {
+        let file = format!("{}src/planted.rs", folder(c));
+        scope
+            .select(Some(&[file]))
+            .running()
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
+    };
+    let kernel: Vec<&String> = scope
+        .folders()
+        .keys()
+        .filter(|c| c.starts_with("geom-") && !scope.readers().contains(*c))
+        .collect();
+    let reached: BTreeMap<&String, BTreeSet<String>> =
+        kernel.iter().map(|c| (*c, reach(c))).collect();
+    let (x, y) = kernel
+        .iter()
+        .flat_map(|a| kernel.iter().map(move |b| (*a, *b)))
+        .find(|(a, b)| a != b && !reached[a].contains(*b) && !reached[b].contains(*a))
+        .map(|(a, b)| (a.clone(), b.clone()))
+        .expect("two crates whose changes do not reach one another");
+    let x = x.as_str();
+    let xf = format!("{}src/planted.rs", folder(x));
+    let yf = format!("{}src/planted.rs", folder(&y));
+    let changed = vec![xf.clone(), yf.clone()];
+    let ledger = |files: &[&str]| -> String {
+        let survivors: Vec<String> = files
+            .iter()
+            .map(|f| format!("{{\"file\": \"{f}\", \"mutant\": \"m\"}}"))
+            .collect();
+        format!("{{\"survivors\": [{}]}}", survivors.join(", "))
+    };
+    let plan = |since: &Since| increment::mutants(&scope, &changed, since, &Changes::new());
+    let s = |head: &[&str], added: &[&str], base: &[&str]| Since {
+        head: head.iter().map(|f| (*f).to_owned()).collect(),
+        added: added.iter().map(|f| (*f).to_owned()).collect(),
+        base: base.iter().map(|f| (*f).to_owned()).collect(),
+        ledger: (Some(ledger(&[])), Some(ledger(&[]))),
+    };
+    let x_test = format!("{}tests/attack.rs", folder(x));
+    let x_new = format!("{}tests/new_target.rs", folder(x));
+    let every = [xf.as_str(), yf.as_str()];
+    let cases: Vec<(&str, Since, Vec<&str>)> = vec![
+        ("nothing changed", s(&[], &[], &[]), vec![]),
+        ("a changed line of x", s(&[&xf], &[], &[]), vec![&xf]),
+        ("a changed test of x", s(&[&x_test], &[], &[]), vec![&xf]),
+        (
+            "a new test target of x",
+            s(&[&x_new], &[&x_new], &[]),
+            vec![],
+        ),
+        (
+            "a change on the base's side in y",
+            s(&[], &[], &[&yf]),
+            vec![&yf],
+        ),
+        (
+            "a file in no crate",
+            s(&["Cargo.lock"], &[], &[]),
+            every.to_vec(),
+        ),
+        (
+            "the base's ledger",
+            s(&[], &[], &[LEDGER_PATH]),
+            every.to_vec(),
+        ),
+        (
+            "a removed survivor of x",
+            Since {
+                ledger: (Some(ledger(&[&xf])), Some(ledger(&[]))),
+                ..s(&[LEDGER_PATH], &[], &[])
+            },
+            vec![&xf],
+        ),
+        (
+            "an added survivor of x",
+            Since {
+                ledger: (Some(ledger(&[])), Some(ledger(&[&xf]))),
+                ..s(&[LEDGER_PATH], &[], &[])
+            },
+            vec![],
+        ),
+        (
+            "a ledger that cannot be read",
+            Since {
+                ledger: (Some("not json".to_owned()), Some(ledger(&[]))),
+                ..s(&[LEDGER_PATH], &[], &[])
+            },
+            every.to_vec(),
+        ),
+    ];
+    for (what, since, want) in &cases {
+        let found = plan_problems(&plan(since), want);
+        assert!(found.is_empty(), "{what}: {found:#?}");
+    }
+    // Planted: a planner that reads only the lines changed since (the files the head changed),
+    // which misses a changed test, a removed survivor and the base's side.
+    let lines_only = |since: &Since| -> increment::Plan {
+        changed
+            .iter()
+            .filter(|f| since.head.contains(f))
+            .map(|f| (f.clone(), String::new()))
+            .collect()
+    };
+    let missed: Vec<&str> = cases
+        .iter()
+        .filter(|(_, since, want)| !plan_problems(&lines_only(since), want).is_empty())
+        .map(|(what, _, _)| *what)
+        .collect();
+    for what in [
+        "a changed test of x",
+        "a removed survivor of x",
+        "a change on the base's side in y",
+    ] {
+        assert!(missed.contains(&what), "{what}: {missed:?}");
+    }
+}
+
+/// What is wrong with how the workflow narrows a later push.
+fn narrowing_problems(text: &str) -> Vec<String> {
+    let w = YamlLoader::load_from_str(text).unwrap().remove(0);
+    let mut found = Vec::new();
+    let decide = runs(&w, "when");
+    for needle in [
+        "actions/workflows/kernel-quality.yml/runs?event=pull_request&status=completed",
+        "select(any(.pull_requests[]; .number == $PR))",
+        "grep -qxF \"success Mutants, judged against the ledger\" <<< \"$jobs\"",
+        "grep -qxF \"success Coverage (lines, and branches on the pinned nightly)\" <<< \"$jobs\"",
+    ] {
+        if !decide.contains(needle) {
+            found.push(format!("`when` does not read GitHub's record: {needle}"));
+        }
+    }
+    let outputs = &w["jobs"]["when"]["outputs"];
+    if outputs["since_mutants"].as_str() != Some("${{ steps.since.outputs.mutants }}")
+        || outputs["since_coverage"].as_str() != Some("${{ steps.since.outputs.coverage }}")
+    {
+        found.push("`when` does not hand on the last clean heads".to_owned());
+    }
+    let plan = &w["jobs"]["mutants-plan"];
+    if plan["env"]["SINCE"].as_str() != Some("${{ needs.when.outputs.since_mutants }}") {
+        found.push("the plan does not read the last clean head".to_owned());
+    }
+    let plan_runs = runs(&w, "mutants-plan");
+    for needle in [
+        "kernel-quality -- mutants-increment",
+        "git log --format= --name-only \"$SINCE..$BASE\"",
+        "git diff --no-renames --name-only \"$SINCE\" HEAD^2",
+        "xargs -a \"$t/again.txt\" -d '\\n' git diff --no-ext-diff --no-color --no-renames \"$BASE\" HEAD -- > \"$t/pr.diff\"",
+    ] {
+        if !plan_runs.contains(needle) {
+            found.push(format!(
+                "the plan does not narrow by the last clean head: {needle}"
+            ));
+        }
+    }
+    let narrowing = plan_runs.find("mutants-increment").unwrap_or(usize::MAX);
+    let listing = plan_runs
+        .find("cargo mutants --in-diff \"$RUNNER_TEMP/plan/pr.diff\" --list")
+        .unwrap_or(0);
+    if narrowing > listing {
+        found.push("the plan lists the mutants before it narrows the diff".to_owned());
+    }
+    let coverage = runs(&w, "coverage-plan");
+    if !coverage.contains("kernel-quality -- coverage-increment --since \"$SINCE\"") {
+        found.push("coverage does not narrow by the last clean head".to_owned());
+    }
+    for job in ["mutants-plan", "coverage-plan"] {
+        if w["jobs"][job]["steps"][0]["with"]["fetch-depth"].as_i64() != Some(0) {
+            found.push(format!("{job} lacks the history the base's side needs"));
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_later_push_is_narrowed_by_githubs_record_of_the_last_clean_run() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let found = narrowing_problems(&text);
+    assert!(found.is_empty(), "{found:#?}");
+    for (from, to, said) in [
+        (
+            "select(any(.pull_requests[]; .number == $PR))",
+            "select(true)",
+            "does not read GitHub's record",
+        ),
+        (
+            "since_mutants: ${{ steps.since.outputs.mutants }}",
+            "since_mutants: ''",
+            "does not hand on",
+        ),
+        (
+            "SINCE: ${{ needs.when.outputs.since_mutants }}",
+            "SINCE: ''",
+            "the plan does not read the last clean head",
+        ),
+        (
+            "git log --format= --name-only \"$SINCE..$BASE\"",
+            "true",
+            "the plan does not narrow",
+        ),
+        (
+            "coverage-increment --since",
+            "coverage-increment-not --since",
+            "coverage does not narrow",
+        ),
+        (
+            "          # The whole history, for what changed since the last clean head on the base's side.\n          fetch-depth: 0",
+            "          fetch-depth: 2",
+            "lacks the history",
+        ),
+    ] {
+        let planted = text.replacen(from, to, 1);
+        assert_ne!(planted, text, "the planted edit {from:?} applies");
+        let found = narrowing_problems(&planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// The jobs of Miri's measuring run.
+const MEASURE_JOBS: [&str; 3] = ["miri-measure-plan", "miri-measure", "miri-measure-2"];
+
+/// The part jobs of Miri's measuring run, each with the plan's list and count it reads.
+const MEASURE_PARTS: [(&str, &str, &str); 2] = [
+    ("miri-measure", "parts", "count"),
+    ("miri-measure-2", "parts_2", "count_2"),
+];
+
+/// Where nextest writes a measuring part's report: the workspace's own target folder.
+const MEASURE_REPORT: &str = "target/nextest/miri-measure-ci/junit.xml";
+
+/// A script's commands with continued lines joined and runs of spaces made one, comments left out.
+fn joined(script: &str) -> Vec<String> {
+    script
+        .replace("\\\n", " ")
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect()
+}
+
+/// The stop of a nextest profile, in seconds (its period times its periods), and whether it counts
+/// a stopped test as passing; `None` without a slow timeout.
+fn profile_stop(n: &toml::Table, profile: &str) -> Option<(i64, bool)> {
+    let slow = n.get("profile")?.get(profile)?.get("slow-timeout")?;
+    let period: i64 = slow
+        .get("period")?
+        .as_str()?
+        .strip_suffix('s')?
+        .parse()
+        .ok()?;
+    let after = slow.get("terminate-after")?.as_integer()?;
+    Some((period * after, slow.get("on-timeout").is_some()))
+}
+
+/// What is wrong with how a dispatch asks for Miri's measuring run, and with `when`'s handling of
+/// it: only a dispatch's input sets it, and it turns every gate off.
+fn measure_input_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let inputs = &w["on"]["workflow_dispatch"]["inputs"];
+    let options: Vec<&str> = inputs["miri_measure"]["options"]
+        .as_vec()
+        .map(|v| v.iter().filter_map(Yaml::as_str).collect())
+        .unwrap_or_default();
+    if inputs["miri_measure"]["type"].as_str() != Some("choice")
+        || inputs["miri_measure"]["default"].as_str() != Some("none")
+        || inputs["miri_measure"]["required"].as_bool() != Some(false)
+        || options != ["none", "new", "all"]
+    {
+        found.push("the input miri_measure is not a choice of none, new and all".to_owned());
+    }
+    if inputs["miri_measure_tests"]["type"].as_str() != Some("string")
+        || inputs["miri_measure_tests"]["default"].as_str() != Some("")
+    {
+        found.push("the input miri_measure_tests is not empty unless given".to_owned());
+    }
+    let when = &w["jobs"]["when"];
+    let decide = when["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .find(|s| s["id"].as_str() == Some("when"))
+        .cloned()
+        .unwrap_or(Yaml::BadValue);
+    if decide["env"]["INPUT_MIRI_MEASURE"].as_str() != Some("${{ inputs.miri_measure }}")
+        || decide["env"]["INPUT_MIRI_MEASURE_TESTS"].as_str()
+            != Some("${{ inputs.miri_measure_tests }}")
+    {
+        found.push("`when` does not read the inputs from its environment".to_owned());
+    }
+    let script = decide["run"].as_str().unwrap_or("");
+    // The dispatch's branch of `when`'s case on the event, up to that case's end (YAML strips the
+    // script's indent, so that case starts its lines and its branches are indented once).
+    let dispatch = script.find("\n  workflow_dispatch)\n");
+    let end = dispatch.and_then(|d| script[d..].find("\nesac\n").map(|e| d + e));
+    let inside = |at: Option<usize>| matches!((dispatch, at, end), (Some(d), Some(a), Some(e)) if d < a && a < e);
+    if !script.contains("measure=\"\" measure_tests=\"\"")
+        || !inside(script.find("measure=\"$INPUT_MIRI_MEASURE\""))
+    {
+        found.push(
+            "the measuring run runs without the input: `when` sets it outside a dispatch"
+                .to_owned(),
+        );
+    }
+    let branch = script.find("new | all)");
+    let gates_off = branch.is_some_and(|b| {
+        let rest = &script[b..];
+        rest[..rest.find(";;").unwrap_or(0)].contains("mutants=false coverage=false miri=false")
+    });
+    if !inside(branch) || !gates_off {
+        found.push("a measuring run runs the gates too".to_owned());
+    }
+    for output in ["miri_measure", "miri_measure_tests"] {
+        let from = if output == "miri_measure" {
+            "echo \"miri_measure=$measure\""
+        } else {
+            "echo \"miri_measure_tests=$measure_tests\""
+        };
+        if when["outputs"][output].as_str()
+            != Some(format!("${{{{ steps.when.outputs.{output} }}}}").as_str())
+            || !script.contains(from)
+        {
+            found.push(format!("`when` does not hand on {output}"));
+        }
+    }
+    found
+}
+
+/// What is wrong with the measuring run's jobs: when they run, what they hand on, and that they
+/// leave nothing another run reads.
+fn measure_job_problems(w: &Yaml) -> Vec<String> {
+    let jobs = &w["jobs"];
+    let mut found = Vec::new();
+    let plan = &jobs["miri-measure-plan"];
+    if plan["if"].as_str() != Some("needs.when.outputs.miri_measure != ''") {
+        found.push("the measuring run runs without the input: the plan's condition".to_owned());
+    }
+    if plan["env"]["MEASURE"].as_str() != Some("${{ needs.when.outputs.miri_measure }}")
+        || plan["env"]["MEASURE_TESTS"].as_str()
+            != Some("${{ needs.when.outputs.miri_measure_tests }}")
+    {
+        found.push("the plan does not read `when`'s choice".to_owned());
+    }
+    let plan_runs = joined(&runs(w, "miri-measure-plan")).join("\n");
+    for needle in [
+        "cargo miri nextest list --locked $PACKAGES -E \"not package(geom-pool)\" \
+         --message-format json > \"$RUNNER_TEMP/measure/miri-list.json\"",
+        "-E \"not package(geom-pool) & ($MEASURE_TESTS)\"",
+        "kernel-quality -- miri-measure --which \"$MEASURE\" --list \
+         \"$RUNNER_TEMP/measure/miri-list.json\" \"${only[@]}\"",
+    ] {
+        if !plan_runs.contains(needle) {
+            found.push(format!("the plan does not run {needle:?}"));
+        }
+    }
+    for (job, list, count) in MEASURE_PARTS {
+        let part = &jobs[job];
+        let after_plan = part["needs"]
+            .as_vec()
+            .is_some_and(|v| v.iter().any(|j| j.as_str() == Some("miri-measure-plan")));
+        if part["if"].as_str()
+            != Some(format!("needs.miri-measure-plan.outputs.{count} != '0'").as_str())
+            || !after_plan
+        {
+            found.push(format!(
+                "the measuring run runs without the input: {job}'s condition"
+            ));
+        }
+        if part["strategy"]["matrix"]["part"].as_str()
+            != Some(format!("${{{{ fromJSON(needs.miri-measure-plan.outputs.{list}) }}}}").as_str())
+            || part["strategy"]["fail-fast"].as_bool() != Some(false)
+        {
+            found.push(format!("{job} does not run every one of the plan's parts"));
+        }
+        for (out, how) in [(list, "-c"), (count, "-r")] {
+            let echo =
+                format!("echo \"{out}=$(jq {how} .{out} <<<\"$plan\")\" >> \"$GITHUB_OUTPUT\"");
+            if plan["outputs"][out].as_str()
+                != Some(format!("${{{{ steps.plan.outputs.{out} }}}}").as_str())
+                || !plan_runs.contains(&echo)
+            {
+                found.push(format!("the plan does not hand on {out}"));
+            }
+        }
+    }
+    // The second part job is the first, word for word, but for its matrix and condition.
+    for key in ["runs-on", "timeout-minutes", "env", "defaults", "steps"] {
+        if jobs["miri-measure-2"][key] != jobs["miri-measure"][key] {
+            found.push(format!("miri-measure-2's {key} is not miri-measure's"));
+        }
+    }
+    found.extend(measure_leaves_problems(w));
+    found
+}
+
+/// What the measuring run's jobs leave that another run could read: a cache saved, the table
+/// written, anything pushed, an artifact kept more than a few days. The cache they restore is the
+/// one the job `miri` saves, named whole: its key, then its job id.
+fn measure_leaves_problems(w: &Yaml) -> Vec<String> {
+    let jobs = &w["jobs"];
+    let mut found = Vec::new();
+    let is_cache = |s: &&Yaml| {
+        s["uses"]
+            .as_str()
+            .is_some_and(|u| u.starts_with("Swatinem/rust-cache@"))
+    };
+    let miri_cache = jobs["miri"]["steps"]
+        .as_vec()
+        .and_then(|v| v.iter().find(is_cache))
+        .and_then(|s| s["with"]["key"].as_str())
+        .map(|key| format!("{key}-miri"));
+    for job in MEASURE_JOBS {
+        for step in jobs[job]["steps"].as_vec().into_iter().flatten() {
+            let uses = step["uses"].as_str().unwrap_or("");
+            if (is_cache(&step) && step["with"]["save-if"].as_bool() != Some(false))
+                || uses.starts_with("actions/cache")
+            {
+                found.push(format!("{job} saves a cache"));
+            }
+            if is_cache(&step)
+                && (step["with"]["key"].as_str() != miri_cache.as_deref()
+                    || step["with"]["add-job-id-key"].as_bool() != Some(false))
+            {
+                found.push(format!("{job} does not restore the job miri's cache"));
+            }
+            if uses.starts_with("actions/upload-artifact@")
+                && step["with"]["retention-days"]
+                    .as_i64()
+                    .is_none_or(|d| !(1..=7).contains(&d))
+            {
+                found.push(format!("{job} keeps an artifact more than a few days"));
+            }
+        }
+        let writes = joined(&runs(w, job)).iter().any(|c| {
+            (c.contains("miri-times") && !c.contains("--dry-run"))
+                || c.contains("git push")
+                || c.contains("git commit")
+        });
+        if writes {
+            found.push(format!("{job} writes the table"));
+        }
+    }
+    found
+}
+
+/// What is wrong with a measuring part: the measuring profile at the budget on its own tests, any
+/// failure but a test's passed on, its report uploaded whatever happened, then every test read,
+/// so one that failed under Miri fails the part, named.
+fn measure_part_problems(w: &Yaml, n: &toml::Table) -> Vec<String> {
+    let mut found = Vec::new();
+    let budget = i64::try_from(miri::BUDGET).unwrap();
+    let inherits = n
+        .get("profile")
+        .and_then(|p| p.get("miri-measure-ci"))
+        .and_then(|p| p.get("inherits"))
+        .and_then(toml::Value::as_str);
+    let stop = profile_stop(n, "miri-measure-ci");
+    if inherits != Some("miri-measure") || stop != Some((budget, false)) {
+        found.push(format!(
+            "the miri-measure-ci profile does not stop a test at the budget as timed out: {stop:?}"
+        ));
+    }
+    let measure = n.get("profile").and_then(|p| p.get("miri-measure"));
+    let fail_fast = measure
+        .and_then(|p| p.get("fail-fast"))
+        .and_then(toml::Value::as_bool);
+    let junit = measure
+        .and_then(|p| p.get("junit"))
+        .and_then(|j| j.get("path"))
+        .and_then(toml::Value::as_str);
+    if fail_fast != Some(false)
+        || junit != Some("junit.xml")
+        || profile_stop(n, "miri-measure").is_none_or(|(_, pass)| pass)
+    {
+        found.push("the miri-measure profile does not report every test as it ended".to_owned());
+    }
+    let steps = w["jobs"]["miri-measure"]["steps"]
+        .as_vec()
+        .cloned()
+        .unwrap_or_default();
+    let running = |s: &&Yaml, what: &str| s["run"].as_str().is_some_and(|r| r.contains(what));
+    let run_at = steps
+        .iter()
+        .position(|s| running(&s, "cargo miri nextest run"));
+    let check_at = steps.iter().position(|s| running(&s, "miri-times"));
+    let upload_at = steps.iter().position(|s| {
+        s["uses"]
+            .as_str()
+            .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
+            && s["with"]["path"].as_str() == Some(MEASURE_REPORT)
+            && s["with"]["name"].as_str() == Some("miri-measure-${{ matrix.part }}")
+            && s["if"].as_str() == Some("${{ !cancelled() }}")
+    });
+    match (run_at, upload_at, check_at) {
+        (Some(run), Some(upload), Some(check)) if run < upload && upload < check => {}
+        _ => found.push(format!(
+            "a part uploads no report of {MEASURE_REPORT} between its run and its check: \
+             {run_at:?} {upload_at:?} {check_at:?}"
+        )),
+    }
+    let commands = joined(&runs(w, "miri-measure")).join("\n");
+    for needle in [
+        "cargo miri nextest run --locked $PACKAGES --profile miri-measure-ci -E \
+         \"$(cat \"$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt\")\" || status=$?"
+            .to_owned(),
+        "case \"$status\" in 0|100) ;; *) exit \"$status\" ;; esac".to_owned(),
+        format!("test -f {MEASURE_REPORT}"),
+        format!(
+            "kernel-quality -- miri-times --report {MEASURE_REPORT} --scale 1 --stop {budget} \
+             --dry-run"
+        ),
+    ] {
+        if !commands.contains(&needle) {
+            found.push(format!("a part does not run {needle:?}"));
+        }
+    }
+    found
+}
+
+/// What is wrong with Miri's measuring run, given the workflow's text and `.config/nextest.toml`'s.
+fn measure_problems(text: &str, nextest: &str) -> Vec<String> {
+    let w = YamlLoader::load_from_str(text).unwrap().remove(0);
+    let n = nextest.parse::<toml::Table>().unwrap();
+    let mut found = measure_input_problems(&w);
+    found.extend(measure_job_problems(&w));
+    found.extend(measure_part_problems(&w, &n));
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_measuring_run_runs_only_when_asked_and_leaves_nothing_behind() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let nextest = read(".config/nextest.toml").replace("\r\n", "\n");
+    let found = measure_problems(&text, &nextest);
+    assert!(found.is_empty(), "{found:#?}");
+    for (from, to, said) in [
+        // The measuring job running without the input, three ways.
+        (
+            "if: needs.when.outputs.miri_measure != ''",
+            "if: ${{ always() }}",
+            "runs without the input: the plan's condition",
+        ),
+        (
+            "measure=\"\" measure_tests=\"\"",
+            "measure=\"$INPUT_MIRI_MEASURE\" measure_tests=\"\"",
+            "runs without the input: `when` sets it",
+        ),
+        (
+            "if: needs.miri-measure-plan.outputs.count != '0'",
+            "if: ${{ !cancelled() }}",
+            "runs without the input: miri-measure's condition",
+        ),
+        // A measuring run that runs the gates too.
+        (
+            "                  mutants=false coverage=false miri=false\n                  why=\"Miri's",
+            "                  why=\"Miri's",
+            "runs the gates too",
+        ),
+        // A measuring job saving a cache.
+        (
+            "          save-if: false\n          key: miri-miri\n",
+            "          save-if: ${{ github.ref == 'refs/heads/main' }}\n          key: miri-miri\n",
+            "miri-measure-plan saves a cache",
+        ),
+        (
+            "          key: miri-miri\n",
+            "          key: miri\n",
+            "miri-measure-plan does not restore the job miri's cache",
+        ),
+        // The table written.
+        (
+            "--scale 1 --stop 600 --dry-run",
+            "--scale 1 --stop 600",
+            "miri-measure writes the table",
+        ),
+        // A part with no report upload, and one kept for months.
+        (
+            "          path: target/nextest/miri-measure-ci/junit.xml\n",
+            "          path: target/nextest/miri-measure/junit.xml\n",
+            "a part uploads no report",
+        ),
+        (
+            "          path: target/nextest/miri-measure-ci/junit.xml\n          retention-days: 3\n",
+            "          path: target/nextest/miri-measure-ci/junit.xml\n          retention-days: 90\n",
+            "miri-measure keeps an artifact more than a few days",
+        ),
+        // A build that failed, read as a measured run.
+        (
+            "case \"$status\" in 0|100) ;; *) exit \"$status\" ;; esac",
+            "true",
+            "a part does not run",
+        ),
+    ] {
+        let planted = text.replacen(from, to, 1);
+        assert_ne!(planted, text, "the planted edit {from:?} applies");
+        let found = measure_problems(&planted, &nextest);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+    // A stop other than the budget, or one that counts a stopped test as passing.
+    let ci =
+        "inherits = \"miri-measure\"\nslow-timeout = { period = \"300s\", terminate-after = 2 }";
+    for to in [
+        "inherits = \"miri-measure\"\nslow-timeout = { period = \"60s\", terminate-after = 2 }",
+        "inherits = \"miri-measure\"\nslow-timeout = { period = \"300s\", terminate-after = 2, \
+         on-timeout = \"pass\" }",
+        "slow-timeout = { period = \"300s\", terminate-after = 2 }",
+    ] {
+        let planted = nextest.replacen(ci, to, 1);
+        assert_ne!(planted, nextest, "the planted edit {to:?} applies");
+        let found = measure_problems(&text, &planted);
+        assert!(
+            found
+                .iter()
+                .any(|p| p.contains("does not stop a test at the budget")),
+            "{to}: {found:#?}"
+        );
+    }
 }

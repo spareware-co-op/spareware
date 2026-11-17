@@ -138,10 +138,10 @@ flowchart LR
 ## How copies are stopped
 
 - **Fingerprints.** Every upload is fingerprinted and compared with the catalogue and with reference fingerprints verified artists add. A close match holds the release for review by a trained person who hears both recordings and sees both rights declarations. False matches are expected: covers against originals, recordings of the same public-domain work, shared samples, silence and noise.
-- **Methods to study** (licences read from the source, 2026-10-19): Chromaprint's own code is MIT but the project as a whole is LGPL-2.1 because it bundles FFmpeg code ([licence](https://github.com/acoustid/chromaprint/blob/master/LICENSE.md)); the AcoustID server is MIT, its data CC BY-SA 3.0 and its web service free only for non-commercial use ([AcoustID](https://acoustid.org/webservice)); audfprint and dejavu are MIT landmark methods; Panako and Olaf are AGPL, read only. The first landmark fingerprint patent (US 6,990,453) is listed as expired ([Google Patents](https://patents.google.com/patent/US6990453B2/en)); related and newer patents need a search before any method is chosen.
+- **Methods to study** (licences read from the source, 2026-10-19): Chromaprint's own code is MIT but the project as a whole is LGPL-2.1 because it bundles FFmpeg code ([licence](https://github.com/acoustid/chromaprint/blob/master/LICENSE.md)); the AcoustID server is MIT, its data CC BY-SA 3.0 and its web service free only for non-commercial use ([AcoustID](https://acoustid.org/webservice)); audfprint and dejavu are MIT landmark methods; Panako and Olaf are AGPL, read only.
 - **Copyright notices** follow each country's rules for hosts, with counter-notices, a published repeat-infringer policy and money held for the claimed track only until it is settled.
 - **Fake plays.** Deezer said about 7% of plays in 2022 were fraudulent, and that up to 70% of plays of fully AI-made tracks were (June 2025) ([Deezer](https://newsroom-deezer.com/2025/06/deezer-launches-worlds-first-ai-tagging-system-for-music-streaming/)). Fake plays earn nothing and count for nothing. If the pass is shared by each listener's own plays, a bot account can only move the money its own pass paid, which removes most of the reward for play farms.
-- **Copy protection** is an open decision (below). Watermarks are one option: Meta's AudioSeal is MIT for its code and, per its README, its weights ([AudioSeal](https://github.com/facebookresearch/audioseal)); companies such as Digimarc and Verance hold watermarking patents, so a patent search comes first (freedom to operate unverified).
+- **Copy protection** is an open decision (below). Watermarks are one option: Meta's AudioSeal is MIT for its code and, per its README, its weights ([AudioSeal](https://github.com/facebookresearch/audioseal)).
 
 ## Human and AI sections
 
@@ -182,7 +182,7 @@ Each society has its own licences, rates, reporting formats, periods and matchin
 
 ### Fingerprinting to stop stolen uploads
 
-Without it, anyone can upload someone else's album and take its earnings. The method has to be accurate with noise, edits and re-recordings, licensed for the core, clear of patents and cheap enough at scale. Matches go to people, so the number of matches people can review each week sets how fast uploads can grow. See [How copies are stopped](#how-copies-are-stopped).
+Without it, anyone can upload someone else's album and take its earnings. The method has to be accurate with noise, edits and re-recordings, licensed for the core and cheap enough at scale. Matches go to people, so the number of matches people can review each week sets how fast uploads can grow. See [How copies are stopped](#how-copies-are-stopped).
 
 ### What each country asks of a host
 
@@ -240,12 +240,12 @@ Licences were read from each project's own licence file on 2026-10-19. GPL and A
 | Faircamp | Static site generator for artists, in Rust | AGPL-3.0-or-later | Read only: artist-owned pages |
 | [OpenSubsonic](https://github.com/opensubsonic/open-subsonic-api) | Open API for music players | Apache-2.0 (repository) | Implement from the specification |
 | [Chromaprint](https://github.com/acoustid/chromaprint), [AcoustID server](https://github.com/acoustid/acoustid-server) | Audio fingerprints and their index | LGPL-2.1 as a whole (own code MIT); server MIT; data CC BY-SA 3.0 | Study; decide whether Chromaprint can be linked |
-| audfprint, [dejavu](https://github.com/worldveil/dejavu) | Landmark fingerprinting | MIT | Usable after a patent check |
+| audfprint, [dejavu](https://github.com/worldveil/dejavu) | Landmark fingerprinting | MIT | Usable |
 | Panako, Olaf | Fingerprinting | AGPL-3.0 | Read only |
 | [Symphonia](https://crates.io/crates/symphonia), [cpal](https://github.com/RustAudio/cpal), [rodio](https://github.com/RustAudio/rodio) | Rust audio decoding and output | MPL-2.0; Apache-2.0; MIT or Apache-2.0 | Usable in the core, through `engine-media` |
 | [Opus](https://github.com/xiph/opus), [FLAC](https://github.com/xiph/flac) | Codecs | BSD-3-Clause; Xiph BSD-style (command-line tools GPL) | Libraries usable; tools not |
 | [c2pa-rs](https://github.com/contentauth/c2pa-rs) | Content credentials | MIT or Apache-2.0 | Usable, through the kit |
-| [AudioSeal](https://github.com/facebookresearch/audioseal), [WavMark](https://github.com/wavmark/wavmark) | Audio watermarking | MIT (WavMark's weights terms unverified) | Study, after a patent search |
+| [AudioSeal](https://github.com/facebookresearch/audioseal), [WavMark](https://github.com/wavmark/wavmark) | Audio watermarking | MIT (WavMark's weights terms unverified) | Study |
 
 ## Open decisions
 
@@ -257,7 +257,7 @@ Licences were read from each project's own licence file on 2026-10-19. GPL and A
 | First catalogue | Independent artists who own their rights; also label catalogues on one published at-cost licence | Independent artists first; research first |
 | Songwriting licences | A society licence in each country; direct licences from writers who can give them (United States writers, APRA's Licence Back); both | Research first, country by country |
 | Covers and samples at launch | Covers where a licence covers them and samples with proof; neither at first | Research first |
-| Fingerprinting method | Chromaprint (LGPL-2.1 as a whole); a landmark method such as audfprint (MIT); our own | Research first, with a patent search |
+| Fingerprinting method | Chromaprint (LGPL-2.1 as a whole); a landmark method such as audfprint (MIT); our own | Research first |
 | Streaming formats | Opus and FLAC; add AAC or MP3 for older devices | Opus and FLAC, pending the kit's codec study |
 | First countries | Any set of the six example countries, or others | Research first: licences, tax and host duties together |
 | Federation | ActivityPub from the start; later | Later |

@@ -1,6 +1,14 @@
 //! The turning-movement commands against the prototype's recorded answers (tools/transport-truth gen-turns.mjs): movement rows, junction
 //! names, turning-count sheets, junction diagrams and the SIDRA export, for each scenario and period of the truth projects.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::panic,
+    clippy::needless_pass_by_value,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_api::Session;

@@ -170,6 +170,18 @@ fn inside(a: Interval, b: Interval) -> bool {
     b.lo() <= a.lo() && a.hi() <= b.hi()
 }
 
+/// Whether the box `k` of two unknowns lies in the interior of the box `x`: in each coordinate
+/// strictly above `x`'s lower end and strictly below its upper. This is Krawczyk's interior test
+/// on its own: an image `K` strictly inside its box `X` proves that `X` holds one zero and only
+/// one, while an end of `K` on an end of `X` proves a zero but not that it is the only one. The
+/// edge proof of chapter 12.8 step 5 decides each of its pieces by it.
+#[must_use]
+pub fn strictly_inside(k: [Interval; 2], x: [Interval; 2]) -> bool {
+    let [k0, k1] = k;
+    let [x0, x1] = x;
+    x0.lo() < k0.lo() && k0.hi() < x0.hi() && x1.lo() < k1.lo() && k1.hi() < x1.hi()
+}
+
 /// The part `a` and `b` share, or `None`.
 fn shared(a: Interval, b: Interval) -> Option<Interval> {
     let lo = Real::new(a.lo())

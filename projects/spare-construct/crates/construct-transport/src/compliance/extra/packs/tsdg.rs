@@ -26,7 +26,7 @@ pub fn run_design_life(p: &mut V, opts: &V) -> V {
         let a = opts.g("pct").n();
         if truthy_number(a) { a } else { or_n(cx.g("pct"), 10.0) }
     };
-    let periods: Vec<String> = if opts.g("periods").t() { opts.g("periods").items().iter().map(|x| x.s()).collect() } else { vec!["AM".to_string(), "PM".to_string()] };
+    let periods: Vec<String> = if opts.g("periods").t() { opts.g("periods").items().iter().map(crate::compliance::jv::Jx::s).collect() } else { vec!["AM".to_string(), "PM".to_string()] };
     let res = {
         let pr = pair(p);
         let sc = pr.opt;
@@ -40,25 +40,17 @@ pub fn run_design_life(p: &mut V, opts: &V) -> V {
             "at" => crate::edit::ids::iso_string(dates::now_ms()), "pct" => pc, "years" => or_n(cx.g("years"), 10.0), "scId" => sc.g("id"), "nodes" => nodes,
         }
     };
-    if !opts.g("save").strict_eq(&V::Bool(false)) {
-        data_mut(p).get_mut("tsdg").expect("tsdg record").set("result", res.clone());
+    // data_mut fills the record's defaults in, tsdg among them
+    if !opts.g("save").strict_eq(&V::Bool(false))
+        && let Some(rec) = data_mut(p).and_then(|record| record.get_mut("tsdg"))
+    {
+        rec.set("result", res.clone());
     }
     res
 }
 
-/// `tsdgPack(P)`: the ATOC Traffic Signals Design Guidelines s2.5 signal pack (CSV).
-pub fn tsdg_pack(p: &V) -> String {
-    let pr = pair(p);
-    let sc = pr.opt;
-    let signals = signal_nodes(sc);
-    let ids: Vec<String> = if !signals.is_empty() {
-        signals
-    } else {
-        match res_of(sc, "AM").or_else(|| res_of(sc, "PM")) {
-            Some(r) => r.g("nodes").keys().into_iter().take(10).map(|k| k.to_string()).collect(),
-            None => vec![],
-        }
-    };
+/// The counts within 150 m of the signals, by class.
+fn tsdg_counts(p: &V, sc: &V, ids: &[String]) -> Vec<Vec<V>> {
     let counts: Vec<&V> = p
         .g("data")
         .g("counts")
@@ -71,11 +63,31 @@ pub fn tsdg_pack(p: &V) -> String {
             })
         })
         .collect();
-    let stat = "95th percentile back of queue (m)";
+    counts
+        .iter()
+        .map(|c| {
+            let hv = c.g("hv");
+            vec![
+                c.g("name").clone(),
+                c.g("src").clone(),
+                or_blank(c.g("date")),
+                c.g("adt").clone(),
+                or_blank(c.g("peak")),
+                or_blank(c.g("peakTime")),
+                if hv.nullish() { sv("") } else { hv.clone() },
+                if hv.nullish() { sv("") } else { V::Number(math_round(c.g("adt").n() * (1.0 - hv.n() / 100.0))) },
+                if hv.nullish() { sv("") } else { V::Number(math_round(c.g("adt").n() * hv.n() / 100.0)) },
+            ]
+        })
+        .collect()
+}
+
+/// The delay, level of service and queue of each approach of the signals, per option and period.
+fn tsdg_perf(scs: &[&V], ids: &[String], stat: &str) -> Vec<Vec<V>> {
     let mut perf: Vec<Vec<V>> = Vec::new();
-    for sx in distinct(&[Some(pr.base), Some(pr.opt), pr.mit]) {
+    for sx in scs {
         for per in periods_of(sx) {
-            for id in &ids {
+            for id in ids {
                 let nr = res_of(sx, per).map_or(&NULL, |r| r.g("nodes")).g(id);
                 if !nr.t() {
                     continue;
@@ -97,11 +109,15 @@ pub fn tsdg_pack(p: &V) -> String {
             }
         }
     }
-    let dl = data(p).g("tsdg").g("result").clone();
+    perf
+}
+
+/// The approaches of the signals in the stored design-life run.
+fn tsdg_life(dl: &V, sc: &V, ids: &[String], stat: &str) -> Vec<Vec<V>> {
     let mut life: Vec<Vec<V>> = Vec::new();
     if dl.t() {
         for (per, nodes) in dl.g("nodes").entries() {
-            for id in &ids {
+            for id in ids {
                 let nr = nodes.g(id);
                 if nr.t() {
                     for a in nr.g("appr").items() {
@@ -121,9 +137,13 @@ pub fn tsdg_pack(p: &V) -> String {
             }
         }
     }
+    life
+}
+
+/// The control, cycle time and phase splits of each signal.
+fn tsdg_timing(sc: &V, ids: &[String]) -> Vec<Vec<V>> {
     let controls = model("CONTROLS");
-    let timing: Vec<Vec<V>> = ids
-        .iter()
+    ids.iter()
         .map(|id| {
             let n = sc.g("nodes").g(id);
             let nr = res_of(sc, "AM").map_or(&NULL, |r| r.g("nodes")).g(id);
@@ -138,24 +158,29 @@ pub fn tsdg_pack(p: &V) -> String {
             };
             vec![V::String(node_name(sc, id)), cl, cycle, if nr.g("split").t() { V::String(nr.g("split").stringify()) } else { sv("optimised by Spare Construct (Webster)") }]
         })
-        .collect();
-    let counts_rows: Vec<Vec<V>> = counts
-        .iter()
-        .map(|c| {
-            let hv = c.g("hv");
-            vec![
-                c.g("name").clone(),
-                c.g("src").clone(),
-                or_blank(c.g("date")),
-                c.g("adt").clone(),
-                or_blank(c.g("peak")),
-                or_blank(c.g("peakTime")),
-                if hv.nullish() { sv("") } else { hv.clone() },
-                if !hv.nullish() { V::Number(math_round(c.g("adt").n() * (1.0 - hv.n() / 100.0))) } else { sv("") },
-                if !hv.nullish() { V::Number(math_round(c.g("adt").n() * hv.n() / 100.0)) } else { sv("") },
-            ]
-        })
-        .collect();
+        .collect()
+}
+
+/// `tsdgPack(P)`: the ATOC Traffic Signals Design Guidelines s2.5 signal pack (CSV).
+#[must_use]
+pub fn tsdg_pack(p: &V) -> String {
+    let pr = pair(p);
+    let sc = pr.opt;
+    let signals = signal_nodes(sc);
+    let ids: Vec<String> = if signals.is_empty() {
+        match res_of(sc, "AM").or_else(|| res_of(sc, "PM")) {
+            Some(r) => r.g("nodes").keys().into_iter().take(10).map(std::string::ToString::to_string).collect(),
+            None => vec![],
+        }
+    } else {
+        signals
+    };
+    let counts_rows = tsdg_counts(p, sc, &ids);
+    let stat = "95th percentile back of queue (m)";
+    let perf = tsdg_perf(&distinct(&[Some(pr.base), Some(pr.opt), pr.mit]), &ids, stat);
+    let dl = data(p).g("tsdg").g("result").clone();
+    let life = tsdg_life(&dl, sc, &ids, stat);
+    let timing = tsdg_timing(sc, &ids);
     let secs: Vec<Section> = vec![
         section(
             "Counts by class and period",

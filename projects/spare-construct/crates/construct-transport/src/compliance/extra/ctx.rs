@@ -10,31 +10,37 @@ use crate::compliance::{docs, net, record};
 use crate::jsnum::truthy_number;
 
 /// The label of a value Spare Construct chose itself (`ASSUMPTION`).
+#[must_use]
 pub fn assumption() -> &'static str {
     xdata("ASSUMPTION").as_str().unwrap_or("")
 }
 
 /// `nn(v)`: a number the user entered, None for null, blank or not a number.
+#[must_use]
 pub fn nn(v: &V) -> Option<f64> {
     if v.nullish() || v.eq_s("") || !v.n().is_finite() { None } else { Some(v.n()) }
 }
 
 /// `num(v, d)`: a number printed with d decimals, an en dash for null and non-finite values.
+#[must_use]
 pub fn num(v: &V, d: usize) -> String {
     record::num(v, d)
 }
 
 /// `num(x, d)` for a number.
+#[must_use]
 pub fn numf(x: f64, d: usize) -> String {
     record::numf(x, d)
 }
 
 /// `esc` of a loose value (null prints as nothing).
+#[must_use]
 pub fn esc(v: &V) -> String {
     record::esc(v)
 }
 
 /// `esc` of text.
+#[must_use]
 pub fn esc_s(s: &str) -> String {
     crate::util::esc(s)
 }
@@ -44,6 +50,7 @@ pub fn esc_s(s: &str) -> String {
    ===================================================================================== */
 
 /// `A(P)`: the assumptions (`ASSUME` with the project's `settings.complianceExtra` entries over it where they are numbers).
+#[must_use]
 pub fn assumptions(p: &V) -> V {
     let mut out = xdata("ASSUME").clone();
     let s = p.g("settings").g("complianceExtra");
@@ -61,6 +68,7 @@ pub fn assumptions(p: &V) -> V {
    ===================================================================================== */
 
 /// `BLANK()`: the blank Compliance+ record.
+#[must_use]
 pub fn blank() -> V {
     let arr = || V::Array(vec![]);
     jobj! {
@@ -86,6 +94,7 @@ pub fn blank() -> V {
 }
 
 /// `data(P)`: the project's Compliance+ record with the defaults filled in (the project is not changed).
+#[must_use]
 pub fn data(p: &V) -> V {
     let mut c = if p.g("complianceExtra").is_obj() { p.g("complianceExtra").clone() } else { V::object() };
     record::fill(&mut c, &blank());
@@ -93,14 +102,16 @@ pub fn data(p: &V) -> V {
 }
 
 /// `data(P)` for changing: the record, created and filled with the defaults first.
-pub fn data_mut(p: &mut V) -> &mut V {
+///
+/// Always Some for a project (an object); None when `p` is not an object (no field can be set on it).
+pub fn data_mut(p: &mut V) -> Option<&mut V> {
     if !p.g("complianceExtra").is_obj() {
         p.set("complianceExtra", V::object());
     }
     let b = blank();
-    let c = p.get_mut("complianceExtra").expect("set above");
+    let c = p.get_mut("complianceExtra")?;
     record::fill(c, &b);
-    c
+    Some(c)
 }
 
 /* =====================================================================================
@@ -108,6 +119,7 @@ pub fn data_mut(p: &mut V) -> &mut V {
    ===================================================================================== */
 
 /// `isISO(s)`: text that starts with a YYYY-MM-DD day (and nothing shorter).
+#[must_use]
 pub fn is_iso(v: &V) -> bool {
     match v {
         V::String(s) => s.chars().count() >= 10 && rx(r"^\d{4}-\d{2}-\d{2}$", "").test(&slice(s, 0, Some(10))),
@@ -116,16 +128,19 @@ pub fn is_iso(v: &V) -> bool {
 }
 
 /// `day(s)`: the YYYY-MM-DD at the start of text, or "".
+#[must_use]
 pub fn day(v: &V) -> String {
     if is_iso(v) { slice(&v.s(), 0, Some(10)) } else { String::new() }
 }
 
 /// `dOf(s)`: midnight UTC of the day, in milliseconds (NaN when it is not a day).
+#[must_use]
 pub fn d_of(s: &str) -> f64 {
     crate::compliance::dates::parse_day(s).unwrap_or(f64::NAN)
 }
 
 /// `today()`: today in New Zealand as YYYY-MM-DD.
+#[must_use]
 pub fn today() -> String {
     nz_today(&V::Null)
 }
@@ -133,50 +148,56 @@ pub fn today() -> String {
 const SHORT_MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /// `longDate(s)`: "21 Oct 2026", or an en dash when it is not a day.
+#[must_use]
 pub fn long_date(v: &V) -> String {
     if !is_iso(v) {
         return "\u{2013}".to_string();
     }
     match parts(d_of(&day(v))) {
-        Some((y, m0, d, _)) => format!("{} {} {}", d, SHORT_MONTHS[m0 as usize], y),
+        // parts gives a month in 0..=11, so the name is always there
+        Some((y, m0, d, _)) => format!("{} {} {}", d, usize::try_from(m0).ok().and_then(|i| SHORT_MONTHS.get(i)).copied().unwrap_or(""), y),
         None => "\u{2013}".to_string(),
     }
 }
 
 /// `longDate(s)` for text.
+#[must_use]
 pub fn long_date_s(s: &str) -> String {
     long_date(&V::String(s.to_string()))
 }
 
 /// `addMonths(s, m)`: the same day m months on (the last day of a shorter month), as YYYY-MM-DD; None when s is not a day.
+#[must_use]
 pub fn add_months(v: &V, m: f64) -> Option<String> {
     if !is_iso(v) {
         return None;
     }
     let (y, m0, d, _) = parts(d_of(&day(v)))?;
     // d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + m); then the last day of that month caps the day
-    let total = m0 as f64 + m;
-    let ty = y as f64 + (total / 12.0).floor();
+    let total = f64::from(m0) + m;
+    let ty = crate::jsnum::i64_to_f64(y) + (total / 12.0).floor();
     let tm = total.rem_euclid(12.0);
     let t1 = date_utc(ty, tm, 1.0);
-    let last = parts(date_utc(ty, tm + 1.0, 0.0)).map(|p| p.2).unwrap_or(28);
-    let (ry, rm, rd, _) = parts(t1 + ((d.min(last) - 1) as f64) * DAY)?;
-    Some(format!("{}-{:02}-{:02}", ry, rm + 1, rd))
+    let last = parts(date_utc(ty, tm + 1.0, 0.0)).map_or(28, |p| p.2);
+    // parts gives days from 1 and months from 0, so neither step leaves its range
+    let (ry, rm, rd, _) = parts(t1 + f64::from(d.min(last).saturating_sub(1)) * DAY)?;
+    Some(format!("{}-{:02}-{:02}", ry, rm.saturating_add(1), rd))
 }
 
 /// `addWorkingDays(s, n, kind)`: the day n working days on (Legislation Act s13 days for "ftaa", RMA s2 days for "rma") and the basis.
 /// `{ date, basis }`; the date is null when s is not a day.
+#[must_use]
 pub fn add_working_days(v: &V, n: f64, kind: &str) -> V {
     let d = day(v);
-    if let Some(r) = crate::compliance::add_working_days(&d, n, kind) {
-        if is_iso(&V::String(r.clone())) {
+    if let Some(r) = crate::compliance::add_working_days(&d, n, kind)
+        && is_iso(&V::String(r.clone())) {
             return jobj! { "date" => r, "basis" => if kind == "ftaa" { "Legislation Act 2019 s13 working days" } else { "RMA s2 working days" } };
         }
-    }
     jobj! { "date" => V::Null, "basis" => "" }
 }
 
 /// The label of a pathway (`PATHS[pathway] || pathway || 'Not set'`).
+#[must_use]
 pub fn path_label(pathway: &str) -> String {
     let t = xdata("PATHS");
     if t.has(pathway) && t.g(pathway).t() {
@@ -190,6 +211,7 @@ pub fn path_label(pathway: &str) -> String {
 
 /// `context(P)`: what every check here reads about the regulatory context: pathway, label, kind (rc, pc, nor, ftaa, fund, speed, dc,
 /// tou), lodgement, notification, asAt, side, post, landInterest, sigEffect, mbcmFull and the regime in words.
+#[must_use]
 pub fn context(p: &V) -> V {
     let own = data(p);
     let own_ctx = own.g("ctx");
@@ -241,7 +263,7 @@ pub fn context(p: &V) -> V {
     } else {
         V::Null
     };
-    let key = if !lodgement.is_empty() { lodgement.clone() } else { as_at.clone() };
+    let key = if lodgement.is_empty() { as_at.clone() } else { lodgement.clone() };
     let regime_text = if reg.t() {
         reg.g("text").clone()
     } else if lodgement.is_empty() {
@@ -264,16 +286,19 @@ pub fn context(p: &V) -> V {
 }
 
 /// `stamp(P)`: the version stamp line (the Compliance module's).
+#[must_use]
 pub fn stamp(p: &V) -> String {
     record::stamp(p, &V::Null).g("text").s()
 }
 
 /// `isSH(L, P)`: the link is a state highway (the Compliance module's resolver).
+#[must_use]
 pub fn is_sh(p: &V, l: &V) -> bool {
     crate::compliance::sh_of(p, l).g("sh").t()
 }
 
 /// `authorityOf(L, P, sc)`: who controls the road and who decides on it: `{ name, decision, nzta }`.
+#[must_use]
 pub fn authority_of(p: &V, l: &V, sc: &V) -> V {
     let a = crate::compliance::link_authority(p, l, sc);
     jobj! { "name" => a.g("name"), "decision" => a.g("decision").g("who"), "nzta" => a.g("operator").eq_s("nzta") }
@@ -287,32 +312,38 @@ pub fn authority_of(p: &V, l: &V, sc: &V) -> V {
 pub const PERIODS: [&str; 3] = ["AM", "PM", "IP"];
 
 /// `periodsOf(sc)`: the periods that have results that are not a year mismatch.
+#[must_use]
 pub fn periods_of(sc: &V) -> Vec<&'static str> {
     PERIODS.into_iter().filter(|p| sc.g("res").g(p).t() && !sc.g("res").g(p).g("mismatch").t()).collect()
 }
 
 /// `resOf(sc, p)`: a scenario's results for a period.
+#[must_use]
 pub fn res_of<'a>(sc: &'a V, p: &str) -> Option<&'a V> {
     let r = sc.g("res").g(p);
     if r.t() { Some(r) } else { None }
 }
 
 /// `scById(P, id)`.
+#[must_use]
 pub fn sc_by_id<'a>(p: &'a V, id: &V) -> Option<&'a V> {
     p.g("scenarios").items().iter().find(|s| s.g("id").strict_eq(id))
 }
 
 /// `activeSc(P)`.
+#[must_use]
 pub fn active_sc(p: &V) -> &V {
     sc_by_id(p, p.g("active")).or_else(|| p.g("scenarios").items().first()).unwrap_or(&NULL)
 }
 
 /// `baseSc(P)`.
+#[must_use]
 pub fn base_sc(p: &V) -> &V {
     sc_by_id(p, p.g("base")).or_else(|| p.g("scenarios").items().first()).unwrap_or(&NULL)
 }
 
 /// `roleSc(P, role)`: the first scenario with a role.
+#[must_use]
 pub fn role_sc<'a>(p: &'a V, role: &str) -> Option<&'a V> {
     p.g("scenarios").items().iter().find(|s| s.g("role").eq_s(role))
 }
@@ -330,51 +361,57 @@ pub struct Pair<'a> {
 }
 
 /// `pair(P)`.
+#[must_use]
 pub fn pair(p: &V) -> Pair<'_> {
     let opt = active_sc(p);
     let mit = role_sc(p, "mitigation");
     let mut base = base_sc(p);
-    if std::ptr::eq(base, opt) {
-        if let Some(b) = role_sc(p, "baseline") {
-            if !std::ptr::eq(b, opt) {
+    if std::ptr::eq(base, opt)
+        && let Some(b) = role_sc(p, "baseline")
+            && !std::ptr::eq(b, opt) {
                 base = b;
             }
-        }
-    }
     Pair { base, opt, mit, same: std::ptr::eq(base, opt) }
 }
 
 /// `nodeName(sc, id)`: the name of a junction.
+#[must_use]
 pub fn node_name(sc: &V, id: &str) -> String {
     net::junction_name(sc, id)
 }
 
 /// `isDev(z)`: a zone that is a development (`Engine.zoneClass`).
+#[must_use]
 pub fn is_dev(z: &V) -> bool {
     z.t() && !z.g("kind").eq_s("gateway") && net::zone_class(z) == "development"
 }
 
 /// `devZones(sc)`.
+#[must_use]
 pub fn dev_zones(sc: &V) -> Vec<&V> {
     sc.g("zones").vals().into_iter().filter(|z| is_dev(z)).collect()
 }
 
 /// `luOf(z, k)`: the quantity of a land use in a zone.
+#[must_use]
 pub fn lu_of(z: &V, k: &str) -> f64 {
     net::lu_of(z, k)
 }
 
 /// `stageOf(z, sc)`.
+#[must_use]
 pub fn stage_of(z: &V, sc: &V) -> f64 {
     net::stage_of(z, sc)
 }
 
 /// `dwellings(z, sc)`: the dwellings in a zone at the scenario's build-out.
+#[must_use]
 pub fn dwellings(z: &V, sc: &V) -> f64 {
     (lu_of(z, "residential") + lu_of(z, "apartment") + lu_of(z, "retirement")) * stage_of(z, sc)
 }
 
 /// `sumDw(sc)`: the dwellings in the development zones.
+#[must_use]
 pub fn sum_dw(sc: &V) -> f64 {
     dev_zones(sc).iter().fold(0.0, |s, z| s + dwellings(z, sc))
 }
@@ -383,11 +420,13 @@ pub fn sum_dw(sc: &V) -> f64 {
 pub const GFA_KEYS: [&str; 7] = ["retail", "supermarket", "fastfood", "office", "medical", "industrial", "warehouse"];
 
 /// `sumGfa(sc)`: the floor area in the development zones at the scenario's build-out.
+#[must_use]
 pub fn sum_gfa(sc: &V) -> f64 {
     dev_zones(sc).iter().fold(0.0, |s, z| s + GFA_KEYS.iter().fold(0.0, |t, k| t + lu_of(z, k)) * stage_of(z, sc))
 }
 
 /// `cloneSc(sc, over)`: a copy of a scenario without results, with fields replaced.
+#[must_use]
 pub fn clone_sc(sc: &V, over: &[(&str, V)]) -> V {
     let mut c = sc.clone();
     c.set("res", V::object());
@@ -398,6 +437,7 @@ pub fn clone_sc(sc: &V, over: &[(&str, V)]) -> V {
 }
 
 /// `arcLink(key)`: the link id of an arc key ("l1:ab" gives "l1").
+#[must_use]
 pub fn arc_link(key: &str) -> String {
     match key.rfind(':') {
         Some(i) => key[..i].to_string(),
@@ -406,6 +446,7 @@ pub fn arc_link(key: &str) -> String {
 }
 
 /// `CLASSES[cls] || CLASSES.local`.
+#[must_use]
 pub fn class_of(cls: &V) -> &'static V {
     let t = model("CLASSES");
     let k = cls.s();
@@ -413,6 +454,7 @@ pub fn class_of(cls: &V) -> &'static V {
 }
 
 /// `linkName(L)`: the road's name, or "Unnamed arterial road" and so on.
+#[must_use]
 pub fn link_name(l: &V) -> String {
     if l.g("name").t() {
         return l.g("name").s();
@@ -424,6 +466,7 @@ pub fn link_name(l: &V) -> String {
 }
 
 /// `posted(L)`: the posted speed limit of a road (km/h): its legal limit, the NSLR limit, its link speed, or its class's speed.
+#[must_use]
 pub fn posted(l: &V) -> f64 {
     let a = l.g("speedLimit").n();
     if truthy_number(a) {
@@ -443,52 +486,63 @@ pub fn posted(l: &V) -> f64 {
 }
 
 /// `pct(a, b)`: the change from b to a as a percentage of b, None when b is not above 0.
+#[must_use]
 pub fn pct(a: f64, b: f64) -> Option<f64> {
     if b > 0.0 && a.is_finite() { Some((a - b) / b * 100.0) } else { None }
 }
 
 /// `LETTERS.indexOf(a) > LETTERS.indexOf(b)`: level of service a is worse than b.
+#[must_use]
 pub fn los_worse(a: &str, b: &str) -> bool {
-    let idx = |x: &str| ["A", "B", "C", "D", "E", "F"].iter().position(|l| *l == x).map_or(-1, |i| i as i32);
+    // None (indexOf's -1) orders below every Some, as -1 is below every index
+    let idx = |x: &str| ["A", "B", "C", "D", "E", "F"].iter().position(|l| *l == x);
     idx(a) > idx(b)
 }
 
 /// `stamped(text, P, tool)`: a CSV with the version stamp and the disclaimers in footer comment rows (and D12 for a hand-over tool).
+#[must_use]
 pub fn stamped(text: &str, p: &V, tool: Option<&str>) -> String {
     docs::stamp_csv(text, p, tool)
 }
 
 /// `csv(rows)`.
+#[must_use]
 pub fn csv_text(rows: &[Vec<V>]) -> String {
     csv(rows)
 }
 
 /// `disclaimer(id, P, tool)`.
+#[must_use]
 pub fn disclaimer(id: &str, p: &V, tool: Option<&str>) -> String {
     docs::disclaimer(id, Some(p), tool)
 }
 
 /// `disc(id, P, tool)`: the disclaimer as a paragraph of a report.
+#[must_use]
 pub fn disc(id: &str, p: &V, tool: Option<&str>) -> String {
     format!("<p class=\"note disclaimer\" data-disclaimer=\"{id}\"><b>{id}.</b> {}</p>", esc_s(&disclaimer(id, p, tool)))
 }
 
 /// `verify(s)`: the "verify" tag for a source that has not been checked against the document.
+#[must_use]
 pub fn verify(s: &V) -> String {
     if s.g("verified").strict_eq(&V::Bool(false)) { " <span class=\"pill warn\" title=\"Not yet checked against the source document\">verify</span>".to_string() } else { String::new() }
 }
 
 /// `link(url, t)`: a link that opens in a new tab.
+#[must_use]
 pub fn link(url: &str, t: &str) -> String {
     format!("<a href=\"{}\" target=\"_blank\" rel=\"noopener\">{}</a>", esc_s(url), esc_s(t))
 }
 
 /// `assumed(t)`: a value with the assumption label.
+#[must_use]
 pub fn assumed(t: &str) -> String {
     format!("{t} <span class=\"note\">({})</span>", assumption())
 }
 
 /// The day number (days since 1970) of a YYYY-MM-DD day, for ordering.
+#[must_use]
 pub fn day_number(s: &str) -> Option<i64> {
     let (y, m, d) = (s.get(0..4)?.parse::<i64>().ok()?, s.get(5..7)?.parse::<u32>().ok()?, s.get(8..10)?.parse::<u32>().ok()?);
     Some(days_from_civil(y, m, d))

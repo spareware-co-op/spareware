@@ -4,8 +4,10 @@
 //! What this file proves:
 //!
 //! - `check`, `list` and `run` work on the real tree.
-//! - `diff` refuses a deleted fixture against a real commit, and needs an owner for a changed
-//!   expectation; `fixes` lists what a pull request adds that must fail on the base.
+//! - `diff` refuses a deleted fixture against a real commit, and holds a changed expectation to its
+//!   record, with no review: a proper record passes and is printed; no record, a wrong old value,
+//!   a kind the fixture's rules do not allow and an empty reason fail. `fixes` lists what a pull
+//!   request adds that must fail on the base.
 //! - `fails` passes when a fixture fails on the tree it runs in, and `one` says so.
 //! - `seeds` writes each log in the native format; `minimise` keeps a failure; `improve` refuses a
 //!   fixture that did not improve.
@@ -188,67 +190,6 @@ fn diff_holds_a_pull_request_to_the_rules() {
     let out = tool(&["diff", "--base", &base, "--root", at]);
     assert_eq!(out.status.code(), Some(1));
     assert!(text(&out).contains("never deleted"), "{}", text(&out));
-    // A recorded change to an expectation needs a kernel owner.
-    let mut changed = fixture("bool/0001-kept", None);
-    let key = changed.expect.keys().next().unwrap().clone();
-    changed.expect.insert(key.clone(), expect(2));
-    changed.history.push(Change {
-        edition: key.0,
-        operations: key.1,
-        was: expect(1),
-        kind: ChangeKind::Bug,
-        piece: "G1".to_owned(),
-        why: "w".to_owned(),
-    });
-    store(&root, &changed);
-    let out = tool(&["diff", "--base", &base, "--root", at]);
-    assert_eq!(out.status.code(), Some(1));
-    assert!(
-        text(&out).contains("needs a kernel owner's approval"),
-        "{}",
-        text(&out)
-    );
-    // With an approving review on the head commit, it stands.
-    let reviews = root.join("reviews.json");
-    fs::write(
-        &reviews,
-        r#"[{"user":{"login":"owner"},"state":"APPROVED","commit_id":"abc","author_association":"OWNER"}]"#,
-    )
-    .unwrap();
-    let out = tool(&[
-        "diff",
-        "--base",
-        &base,
-        "--root",
-        at,
-        "--reviews",
-        reviews.to_str().unwrap(),
-        "--head",
-        "abc",
-        "--author",
-        "someone",
-    ]);
-    assert!(out.status.success(), "{}", text(&out));
-    assert!(
-        text(&out).contains("approved on abc by owner"),
-        "{}",
-        text(&out)
-    );
-    // On another commit it does not.
-    let out = tool(&[
-        "diff",
-        "--base",
-        &base,
-        "--root",
-        at,
-        "--reviews",
-        reviews.to_str().unwrap(),
-        "--head",
-        "def",
-        "--author",
-        "someone",
-    ]);
-    assert_eq!(out.status.code(), Some(1));
     // A commit that is not there cannot be read.
     assert_eq!(
         tool(&["diff", "--base", "nosuchcommit", "--root", at])
@@ -256,6 +197,107 @@ fn diff_holds_a_pull_request_to_the_rules() {
             .code(),
         Some(2)
     );
+    // The review options are gone with the review rule (decision 32.55).
+    let gone: [&[&str]; 3] = [
+        &["--reviews", "reviews.json"],
+        &["--head", "abc", "--author", "someone"],
+        &["--permissions", "permissions.json"],
+    ];
+    for options in gone {
+        let mut args: Vec<&str> = vec!["diff", "--base", base.as_str(), "--root", at];
+        args.extend_from_slice(options);
+        assert_eq!(tool(&args).status.code(), Some(2), "{options:?}");
+    }
+    fs::remove_dir_all(&root).unwrap();
+}
+
+/// `bool/0001-kept` with its expectation changed to `now`, carrying `record` if there is one.
+fn changed(now: Expect, record: Option<Change>) -> Fixture {
+    let mut f = fixture("bool/0001-kept", None);
+    let key = f.expect.keys().next().unwrap().clone();
+    f.expect.insert(key, now);
+    f.history.extend(record);
+    f
+}
+
+/// A record of the stored expectation, `expect(1)`, as `kind`.
+fn record_of(kind: ChangeKind) -> Change {
+    let key = fixture("bool/0001-kept", None)
+        .expect
+        .into_keys()
+        .next()
+        .unwrap();
+    Change {
+        edition: key.0,
+        operations: key.1,
+        was: expect(1),
+        kind,
+        piece: "G999".to_owned(),
+        why: "attack".to_owned(),
+    }
+}
+
+/// `fixture diff` end to end in a scratch repository, with no review anywhere: a planted change of
+/// an expectation with a proper record passes and is printed with its record; a planted change with
+/// no record, with a record of a wrong old value, with a kind the fixture's rules do not allow, or
+/// with an empty reason fails.
+#[test]
+fn diff_holds_a_changed_expectation_to_its_record_end_to_end() {
+    let (root, base) = repository("record");
+    let at = root.to_str().unwrap();
+    let diff = |f: &Fixture| {
+        store(&root, f);
+        let out = tool(&["diff", "--base", &base, "--root", at]);
+        (out.status.code(), text(&out))
+    };
+    // A proper record: the hash alone moved, recorded as a bug, or as a change of encoding.
+    for kind in [ChangeKind::Bug, ChangeKind::Corpus] {
+        let (code, said) = diff(&changed(expect(2), Some(record_of(kind))));
+        assert_eq!(code, Some(0), "{kind}: {said}");
+        assert!(
+            said.contains(&format!(
+                "changed: bool/0001-kept: the expectation of {EDITION} at {{\"no.such.op\": 1}}; \
+                 recorded as {kind} by G999: attack\n"
+            )),
+            "{said}"
+        );
+        assert!(
+            said.contains("verdict: every changed expectation carries its record"),
+            "{said}"
+        );
+    }
+    // No record.
+    let (code, said) = diff(&changed(expect(2), None));
+    assert_eq!(code, Some(1), "{said}");
+    assert!(said.contains("changed without a record"), "{said}");
+    // A record of a wrong old value.
+    let mut wrong = record_of(ChangeKind::Bug);
+    wrong.was = expect(3);
+    let (code, said) = diff(&changed(expect(2), Some(wrong)));
+    assert_eq!(code, Some(1), "{said}");
+    assert!(said.contains("another old value"), "{said}");
+    // A kind the fixture's rules do not allow: `corpus`, though a measure moved.
+    let mut faces = expect(2);
+    if let Expect::Ok { measures, .. } = &mut faces {
+        measures.counts.faces = 1;
+    }
+    let (code, said) = diff(&changed(faces, Some(record_of(ChangeKind::Corpus))));
+    assert_eq!(code, Some(1), "{said}");
+    assert!(
+        said.contains("on a record of kind corpus, which the fixture's rules do not allow"),
+        "{said}"
+    );
+    // An empty reason, and a blank piece.
+    let mut no_reason = record_of(ChangeKind::Bug);
+    no_reason.why = String::new();
+    let mut no_piece = record_of(ChangeKind::Bug);
+    no_piece.piece = " ".to_owned();
+    for record in [no_reason, no_piece] {
+        let (code, said) = diff(&changed(expect(2), Some(record)));
+        assert_eq!(code, Some(1), "{said}");
+        assert!(said.contains("names no piece or gives no reason"), "{said}");
+        assert!(said.contains("verdict: refused"), "{said}");
+    }
     fs::remove_dir_all(&root).unwrap();
 }
 

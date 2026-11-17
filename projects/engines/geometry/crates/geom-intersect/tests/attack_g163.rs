@@ -36,6 +36,14 @@ fn meet<const D: usize>(a: &CurveKind<D>, b: &CurveKind<D>) -> Intersection {
     curves(a, b, &mut meter()).unwrap()
 }
 
+/// 2^e exactly, for |e| up to 63. Not `f64::powi`: its last digit is not the same everywhere (Miri
+/// varies it, and gave 2^40 one unit high), so data meant to be whole numbers would not be, and
+/// a test of whole-number data would judge something else.
+fn two_to(e: i32) -> f64 {
+    let p = (1u64 << e.unsigned_abs()) as f64;
+    if e < 0 { 1.0 / p } else { p }
+}
+
 fn segment<const D: usize>(a: [f64; D], b: [f64; D]) -> CurveKind<D> {
     CurveKind::Line(Line::segment(a, b).unwrap().value)
 }
@@ -166,7 +174,7 @@ fn parallel_lines_never_meet_and_collinear_ones_overlap() {
 fn nearly_parallel_lines_keep_their_crossing() {
     // 2^-50 apart in direction: a tolerance would call them parallel, and the determinant's exact
     // sign does not.
-    let tiny = 2.0_f64.powi(-50);
+    let tiny = two_to(-50);
     let r = meet(
         &infinite([0.0, 0.0], [1.0, 0.0]),
         &infinite([3.0, 0.0], [1.0, tiny]),
@@ -237,7 +245,7 @@ fn cadcraft_926_a_small_circle_on_a_large_one_crosses_twice() {
     // false "tangent" whose foot need not lie on the small circle. Rebuilt from the mathematics: a
     // unit circle centred on a circle of radius 2^30 crosses it twice, about one half-turn of the
     // small circle apart.
-    let big = 2.0_f64.powi(30);
+    let big = two_to(30);
     let a = circle([0.0, 0.0], big);
     let b = circle([big, 0.0], 1.0);
     let r = meet(&a, &b);
@@ -259,9 +267,9 @@ fn cadcraft_926_a_small_circle_on_a_large_one_crosses_twice() {
     // Radii a billion apart, either side of the true tangent by the least the doubles can say.
     let touch = circle([big + 1.0, 0.0], 1.0);
     assert_eq!(contacts(&meet(&a, &touch)), [PointContact::IsolatedTangent]);
-    let past = circle([big + 1.0 + 2.0_f64.powi(-22), 0.0], 1.0);
+    let past = circle([big + 1.0 + two_to(-22), 0.0], 1.0);
     is_empty(&meet(&a, &past));
-    let short = circle([big + 1.0 - 2.0_f64.powi(-22), 0.0], 1.0);
+    let short = circle([big + 1.0 - two_to(-22), 0.0], 1.0);
     assert_eq!(meet(&a, &short).items().len(), 2);
 }
 
@@ -272,7 +280,7 @@ fn circles_too_close_to_tell_apart_are_one_band_or_two_points() {
     let (x, y) = (1_000_000_007.0_f64, 998_244_353.0_f64);
     let r = x.hypot(y) * 0.5;
     for k in -3..=3 {
-        let q = r + f64::from(k) * 2.0_f64.powi(-23);
+        let q = r + f64::from(k) * two_to(-23);
         let a = circle([0.0, 0.0], r);
         let found = meet(&a, &circle([x, y], q));
         match found.items() {
@@ -358,7 +366,7 @@ fn a_line_meets_a_circle() {
     assert_eq!(contacts(&tangent), [PointContact::IsolatedTangent]);
     is_empty(&meet(&infinite([0.0, 6.0], [1.0, 0.0]), &a));
     // A whole-number line and circle decide a tangent that no interval could see: 3-4-5 scaled up.
-    let k = 2.0_f64.powi(30);
+    let k = two_to(30);
     let huge = circle([0.0, 0.0], 5.0 * k);
     let line = infinite([3.0 * k * 3.0, 4.0 * k * 3.0], [-4.0, 3.0]);
     is_empty(&meet(&line, &huge));
@@ -651,7 +659,7 @@ fn a_curve_overlaps_itself_exactly() {
 #[test]
 fn a_near_copy_is_flagged_and_never_reported_apart() {
     let a = bezier(&[[0.0, 0.0], [500.0, 900.0], [1000.0, 0.0]]);
-    let b = bezier(&[[0.0, 2.0_f64.powi(-30)], [500.0, 900.0], [1000.0, 0.0]]);
+    let b = bezier(&[[0.0, two_to(-30)], [500.0, 900.0], [1000.0, 0.0]]);
     let r = meet(&a, &b);
     assert_eq!(r.coverage(), Coverage::CompleteOutsideFlagged);
     assert!(
@@ -733,7 +741,7 @@ fn a_stop_stops() {
 
 /// A number in [0, 1).
 fn unit(rng: &mut SplitMix64) -> f64 {
-    (rng.next_u64() >> 11) as f64 / 2.0_f64.powi(53)
+    (rng.next_u64() >> 11) as f64 / two_to(53)
 }
 
 /// The Bernstein coefficients of the polynomial with these monomial coefficients, degree p.
@@ -958,9 +966,7 @@ fn pieces_are(r: &Intersection, want: &[(bool, [f64; 4])]) {
     for ((o, g), (p, w)) in got.iter().zip(want) {
         assert_eq!(o, p, "{got:?}");
         assert!(
-            g.iter()
-                .zip(w)
-                .all(|(g, w)| (g - w).abs() < 2.0_f64.powi(-40)),
+            g.iter().zip(w).all(|(g, w)| (g - w).abs() < two_to(-40)),
             "{got:?}"
         );
     }
@@ -1165,14 +1171,14 @@ fn a_conic_near_the_grid_s_reach_keeps_its_plane() {
     // In the plane z = x again, centred three quarters of the grid's reach out: the centre moved
     // along each axis stays on the grid (moved back, it would leave it), so the plane is proven and
     // the meeting with a line in it is a crossing.
-    let k = 0.75 * 2.0_f64.powi(40);
-    let half = 2.0_f64.powi(39);
+    let k = 0.75 * two_to(40);
+    let half = two_to(39);
     let axes = Axes::Vectors {
         u: [-half, 0.0, -half],
         v: [0.0, half, 0.0],
     };
     let e = CurveKind::Ellipse(Ellipse::new([k, -k, k], axes, (0.0, 2.0)).unwrap());
-    let reach = 2.0_f64.powi(40) - 1.0;
+    let reach = two_to(40) - 1.0;
     let line = bezier(&[[k, -reach, k], [k, -k, k], [k, 0.0, k]]);
     let r = meet(&e, &line);
     assert!(
@@ -1198,7 +1204,7 @@ fn a_line_all_but_tangent_to_a_circle_is_answered() {
     // against terms near k⁴, has an enclosure reaching far below zero. The closed form must take
     // the root of what is not negative and leave the pair to the engine, never fail.
     for e in [20, 26] {
-        let k = 2.0_f64.powi(e);
+        let k = two_to(e);
         let unit = circle([0.0, 0.0], 1.0);
         is_empty(&meet(&segment([k, 0.0], [2.0 * k, 1.0]), &unit));
         let r = meet(&infinite([k, 0.0], [k, 1.0]), &unit);
@@ -1219,7 +1225,7 @@ fn an_overlap_far_along_its_parameter_is_flagged_within_budget() {
     // grid steps a unit: a side one step of a double wide still reaches 4 grid steps, past the
     // floor. Such a side cannot be halved, so its box is flagged there; splitting it into itself
     // would go round for ever. The two lines are one, so the answer is one flagged run.
-    let t = 2.0_f64.powi(40);
+    let t = two_to(40);
     let far = CurveKind::Nurbs(
         Curve::new(
             Basis::new(1, vec![t, t, t + 1.0, t + 1.0]).unwrap(),
@@ -1268,7 +1274,7 @@ fn touches(r: &Intersection) -> Vec<(PointContact, f64)> {
 fn touches_are(got: &[(PointContact, f64)], want: &[(PointContact, f64)]) {
     assert_eq!(got.len(), want.len(), "{got:?}");
     for ((c, s), (d, t)) in got.iter().zip(want) {
-        assert!(c == d && (s - t).abs() < 2.0_f64.powi(-30), "{got:?}");
+        assert!(c == d && (s - t).abs() < two_to(-30), "{got:?}");
     }
 }
 
@@ -1629,7 +1635,7 @@ fn a_crossing_on_a_whole_circle_s_join_is_found_wherever_its_turn_starts() {
 fn a_meeting_at_the_grid_s_edge_is_on_the_grid() {
     // The lines cross at (2^40 - 1.5, 0): the grid box around the crossing, rounded outward, reaches
     // 2^40 - 1, the last grid coordinate, and is a box of the grid, not out of its range.
-    let reach = 2.0_f64.powi(40) - 1.0;
+    let reach = two_to(40) - 1.0;
     let x = reach - 0.5;
     let r = meet(
         &segment([x, -1.0], [x, 1.0]),
@@ -1796,7 +1802,7 @@ fn a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide() {
             .iter()
             .any(|d| d.code == "closed-form-to-engine")
     };
-    let k = 2.0_f64.powi(20);
+    let k = two_to(20);
     assert!(routed(
         &infinite([k, 0.0], [k, 1.0]),
         &circle([0.0, 0.0], 1.0)
@@ -1997,7 +2003,7 @@ fn a_line_tangent_at_the_grid_s_edge_is_an_isolated_tangent() {
     // A circle of radius 5 whose centre is 10 steps in from the grid's edge, and the line x = 5 in
     // from it, through a point 1 in from the bottom running up 2: both on the grid, so the exact
     // count says tangent. One step back from that point the line leaves the grid.
-    let reach = 2.0_f64.powi(40) - 1.0;
+    let reach = two_to(40) - 1.0;
     let c = circle([-reach + 10.0, 0.0], 5.0);
     let line = infinite([-reach + 5.0, -reach + 1.0], [0.0, 2.0]);
     let r = meet(&line, &c);

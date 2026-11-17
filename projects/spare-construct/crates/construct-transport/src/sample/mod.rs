@@ -41,9 +41,9 @@ pub const JUSTIFY: &str = "Screening-level corridor assessment for a plan change
 /// The source written on every made-up quantity.
 pub const SAMPLE_SRC: &str = "Spare Construct sample (illustrative): made up for the Drury sample, not from a survey, consent or precinct provision";
 /// The outer time limit for the road download (ms); the host enforces it.
-pub const LIMIT_ROADS_MS: f64 = 150000.0;
+pub const LIMIT_ROADS_MS: f64 = 150_000.0;
 /// The outer time limit for the building download (ms); the host enforces it.
-pub const LIMIT_BUILDINGS_MS: f64 = 180000.0;
+pub const LIMIT_BUILDINGS_MS: f64 = 180_000.0;
 /// The peaks the sample assesses.
 pub const PERIODS: [&str; 2] = ["AM", "PM"];
 /// The most characters the saved project should have (3 MB).
@@ -58,6 +58,7 @@ pub const ZONE_CELL: f64 = 700.0;
 pub const DROP_HIGHWAY: [&str; 2] = ["residential", "living_street"];
 
 /// The modelled area: the study box and a 25% margin. Roads are cut at its edge and counts and crashes are downloaded for it.
+#[must_use]
 pub fn area() -> Bx {
     let (a, b) = (BOUNDS[0], BOUNDS[1]);
     let h = (b[0] - a[0]) * 0.25;
@@ -66,6 +67,7 @@ pub fn area() -> Bx {
 }
 
 /// The modelled area as JSON, `{ s, w, n, e }`.
+#[must_use]
 pub fn area_value() -> Value {
     let a = area();
     json!({ "s": json_number(a.s), "w": json_number(a.w), "n": json_number(a.n), "e": json_number(a.e) })
@@ -151,6 +153,7 @@ pub const PROPOSAL: [Proposal; 2] = [
 
 /// The full trip-generation schedule on the plan change area: person-trip rates with a mode split for the homes and the childcare centre, vehicle rates
 /// for the shops, opening hours, directional splits, internal and pass-by shares. Every rate is a sample value with no survey behind it.
+#[must_use]
 pub fn tg() -> Value {
     let src = "Illustrative sample rate (not surveyed): replace with RTA, TDB or RR 453 rates";
     json!({
@@ -173,6 +176,7 @@ pub fn tg() -> Value {
 pub type TurnVolumes = [(&'static str, [(&'static str, f64); 3]); 4];
 
 /// The turning-count volumes of a peak (`TURN_VOL[period]`).
+#[must_use]
 pub fn turn_vol(period: &str) -> TurnVolumes {
     if period == "AM" {
         [("N", [("L", 180.0), ("T", 420.0), ("R", 60.0)]), ("S", [("L", 50.0), ("T", 520.0), ("R", 260.0)]), ("E", [("L", 300.0), ("T", 40.0), ("R", 380.0)]), ("W", [("L", 70.0), ("T", 30.0), ("R", 60.0)])]
@@ -184,6 +188,7 @@ pub fn turn_vol(period: &str) -> TurnVolumes {
 /// The share of the peak-hour volume in each 15 minutes; bins 3 to 6 make the peak hour.
 pub const BIN: [f64; 8] = [0.17, 0.2, 0.23, 0.26, 0.27, 0.24, 0.2, 0.18];
 /// The first minute of the day of each peak's turning count (07:00 and 16:00).
+#[must_use]
 pub fn window(period: &str) -> f64 {
     if period == "AM" { 7.0 * 60.0 } else { 16.0 * 60.0 }
 }
@@ -191,7 +196,7 @@ pub fn window(period: &str) -> f64 {
 /// Why a step stopped: the user cancelled, or it failed with a message.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SampleError {
-    /// The build was cancelled (the prototype's AbortError, "Sample cancelled").
+    /// The build was cancelled (the prototype's `AbortError`, "Sample cancelled").
     Cancelled,
     /// The step failed. `stage` is "roads" when the roads could not be downloaded (the prototype's `sampleStage`).
     Failed {
@@ -208,6 +213,7 @@ impl SampleError {
         SampleError::Failed { message: message.into(), stage: None }
     }
     /// The error's message (`e.message`).
+    #[must_use]
     pub fn message(&self) -> String {
         match self {
             SampleError::Cancelled => "Sample cancelled".to_string(),
@@ -215,6 +221,7 @@ impl SampleError {
         }
     }
     /// True for a cancel (`isAbort(e)`).
+    #[must_use]
     pub fn is_cancel(&self) -> bool {
         matches!(self, SampleError::Cancelled)
     }
@@ -247,6 +254,7 @@ pub struct Failed {
 
 impl Failed {
     /// The record as JSON, `{ id, label, why }`.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({ "id": self.id, "label": self.label, "why": self.why })
     }
@@ -254,6 +262,10 @@ impl Failed {
 
 /// Which optional modules the page has loaded (the prototype's `MODS()`): a step whose module is not loaded is left out and said so.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the prototype's MODS() object: nine independent loaded-or-not flags, none derived from or excluding another"
+)]
 pub struct Modules {
     /// The land use feature (Census, employees, schools, zoning, trip-generation tables).
     pub lp: bool,
@@ -284,6 +296,7 @@ impl Default for Modules {
 
 impl Modules {
     /// Nothing loaded.
+    #[must_use]
     pub fn none() -> Modules {
         Modules { lp: false, cal: false, cb: false, jn: false, co: false, cx: false, fe: false, elu: false, rp: false }
     }

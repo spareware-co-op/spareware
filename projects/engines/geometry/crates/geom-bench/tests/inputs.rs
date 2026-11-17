@@ -71,16 +71,37 @@ fn exponent(x: f64) -> i64 {
 
 #[test]
 fn every_benchmark_has_a_full_batch() {
-    // A scenario's batch is one whole job (inputs::scenario).
+    // A scenario's batch is one whole job (inputs::scenario); the heaviest few hold the sizes
+    // inputs::SHORT_BATCHES gives.
     for name in names() {
+        let short = inputs::SHORT_BATCHES
+            .iter()
+            .find(|(short, _)| *short == name);
         let full = if name.starts_with("scenario/") {
             1
+        } else if let Some(&(_, size)) = short {
+            size
         } else {
             BATCH
         };
         assert_eq!(prepare_named(&name).unwrap().len(), full, "{name}");
     }
     assert_eq!(names().len(), cases().count() + growth_cases().count());
+}
+
+#[test]
+fn every_short_batch_is_a_catalogued_benchmark() {
+    // Every short batch names a catalogued benchmark, once, and is shorter than a full one, but
+    // never empty (that its inputs are the full batch's is checked in inputs/mod.rs).
+    let all = names();
+    for (i, (name, size)) in inputs::SHORT_BATCHES.iter().enumerate() {
+        assert!(all.iter().any(|n| n == name), "{name}");
+        assert!((1..BATCH).contains(size), "{name}: {size}");
+        assert!(
+            inputs::SHORT_BATCHES[..i].iter().all(|(n, _)| n != name),
+            "{name}"
+        );
+    }
 }
 
 #[test]
@@ -2556,17 +2577,19 @@ fn records_typical_batches_all_succeed() {
     }
 }
 
-/// Runs `kernel` on `batch` and requires a full batch of `Ok` results, naming the first error.
+/// Runs `kernel` on `batch` and requires one `Ok` result per input, naming the first error. That
+/// the batch is full is `every_benchmark_has_a_full_batch`'s check.
 fn all_ok<T, R, E: core::fmt::Debug>(
     name: &str,
     kernel: fn(&[T], &mut Vec<Result<R, E>>),
     batch: &[T],
 ) {
+    assert!(!batch.is_empty(), "{name}: an empty batch");
     let mut out = Vec::with_capacity(batch.len());
     kernel(batch, &mut out);
     assert_eq!(
         out.len(),
-        BATCH,
+        batch.len(),
         "{name}: a kernel that could not build its transform or frame"
     );
     for r in &out {
@@ -2823,6 +2846,8 @@ fn mesh_typical_batches_all_succeed() {
     k::locate(&probes, &mut found);
     assert!(found.iter().flatten().all(|l| l.len() == m::PROBES));
     all_ok("boolean", k::boolean, &m::boolean(Typical));
+    all_ok("hull", k::hull, &m::hull(Typical));
+    all_ok("slice", k::slice, &m::slice(Typical));
     all_ok("point_point", k::point_point, &m::point_point(Typical));
     all_ok("point_line", k::point_line, &m::point_line(Typical));
     all_ok("point_plane", k::point_plane, &m::point_plane(Typical));
@@ -2830,6 +2855,8 @@ fn mesh_typical_batches_all_succeed() {
     all_ok("closest_dots", k::closest_dots, &m::closest_dots(Typical));
     all_ok("triangles", k::triangles, &m::triangles(Typical));
     all_ok("envelope", k::envelope, &m::envelope(Typical));
+    all_ok("decimate", k::decimate, &m::decimate(Typical));
+    all_ok("remesh", k::remesh, &m::remesh(Typical));
 }
 
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.46) maps every list.

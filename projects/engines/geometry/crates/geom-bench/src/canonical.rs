@@ -813,6 +813,12 @@ impl Canonical for crate::inputs::mesh::Pair {
     }
 }
 
+impl Canonical for crate::inputs::mesh::Layers {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for crate::inputs::mesh::Probe {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
@@ -831,6 +837,33 @@ impl Canonical for geom_mesh::exact::ExactMesh {
     }
 }
 
+impl Canonical for geom_mesh::hull::Hull {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::slice::Contour {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::hull::HullError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 impl Canonical for geom_mesh::classify::Located {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
@@ -838,6 +871,27 @@ impl Canonical for geom_mesh::classify::Located {
 }
 
 impl<T: Canonical> Canonical for Result<T, geom_mesh::exact::MeshError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_mesh::model::Modelled {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::model::ModelError> {
     fn encode(&self, h: &mut Sha256) {
         match self {
             Ok(v) => {

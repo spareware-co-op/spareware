@@ -12,12 +12,14 @@
 # not failed: FPTaylor's bound is its own, rounded up to a double, and can exceed a K that Gappa
 # proves (the method note).
 # A problem's `// hol-light-shards: n` line (geom-gen's SHARDED) has HOL Light check its terms in
-# n jobs, all of one certificate: FPTAYLOR_OUT=<dir> runs FPTaylor alone and writes each
+# n jobs, all of one certificate, with `// hol-light-terms: t`, its number of terms, and a
+# `// hol-light-shard k: ...` line for each shard naming the terms it proves (geom-gen's test holds
+# every term 1 to t to exactly one shard): FPTAYLOR_OUT=<dir> runs FPTaylor alone and writes each
 # problem's certificate there as <problem>.proof; FPTAYLOR_SHARD=k with FPTAYLOR_CERTIFICATES=<dir>
-# checks one problem's certificate from that folder, proving its k-th term and every n-th after it
-# and assuming the others, and fails unless it proved exactly those. Shards 1 to n, each green,
-# prove every term of the one certificate; their theorems are its bound under the terms the others
-# proved.
+# checks one problem's certificate from that folder, proving the terms shard k names and assuming
+# the others, and fails unless the certificate has t terms and it proved exactly those. Shards 1
+# to n, each green, prove every term of the one certificate; their theorems are its bound under
+# the terms the others proved.
 # Usage: fptaylor.sh <problem.fpt>...  (geom-gen writes the problems: generated/fptaylor-*.fpt)
 #
 # OCaml 4.11: FPTaylor saves certificates as marshalled `Num` values, and HOL Light uses the Num
@@ -36,12 +38,20 @@ out=${FPTAYLOR_OUT:-}
 certificates=${FPTAYLOR_CERTIFICATES:-}
 shard=${FPTAYLOR_SHARD:-}
 shards=1
+# The terms this run proves, as an OCaml list; empty for every term.
+shard_terms=
 if [ -n "$shard" ]; then
   [ $# -eq 1 ] && [ -n "$certificates" ] && [ -z "$out" ] ||
     { echo "a shard checks one problem's certificate from FPTAYLOR_CERTIFICATES"; exit 1; }
   shards=$(sed -n 's|^// hol-light-shards: ||p' "$1")
   [[ $shards =~ ^[1-9][0-9]*$ && $shard =~ ^[1-9][0-9]*$ ]] && [ "$shard" -le "$shards" ] ||
     { echo "$1: no shard $shard of '$shards'"; exit 1; }
+  shard_count=$(sed -n 's|^// hol-light-terms: ||p' "$1")
+  shard_list=$(sed -n "s|^// hol-light-shard $shard: ||p" "$1")
+  numbers='^[1-9][0-9]*( [1-9][0-9]*)*$'
+  [[ $shard_count =~ ^[1-9][0-9]*$ && $shard_list =~ $numbers ]] ||
+    { echo "$1: no terms for shard $shard"; exit 1; }
+  shard_terms=${shard_list// /; }
 elif [ -n "$certificates" ]; then
   echo "FPTAYLOR_CERTIFICATES is for a shard"; exit 1
 fi
@@ -76,12 +86,12 @@ sed -i "s/^let max_dim = 8;;$/let max_dim = $most;;/" "$work/hol-light/Formal_in
 grep -n '^let max_dim' "$work/hol-light/Formal_ineqs/taylor/m_taylor.hl"
 
 # FPTaylor's checker proves each term's inequality in turn (formal/build_tform2.hl,
-# prove_opt_approx). Here it proves those of this shard, the k-th and every n-th after it, naming
-# each, and assumes the others, so the theorem it ends with holds under them; with one shard
-# (k = n = 1) it proves every term, as written.
+# prove_opt_approx). Here it proves those of this shard, the terms its line names, naming each,
+# and assumes the others, so the theorem it ends with holds under them; with no shard (an empty
+# list) it proves every term, as written.
 checker="$work/FPTaylor/formal/build_tform2.hl"
-sed -i 's|^\(\s*\)prove_bound_cond pp tm) bound_conds in$|\1(if (!counter - 1) mod shard_count = shard_index - 1 then (let th = prove_bound_cond pp tm in report (sprintf "Proved: %d/%d" !counter total_bounds); th) else ASSUME tm)) bound_conds in|' "$checker"
-[ "$(grep -c 'mod shard_count = shard_index - 1 then' "$checker")" = 1 ] ||
+sed -i 's|^\(\s*\)prove_bound_cond pp tm) bound_conds in$|\1(if shard_terms = [] \|\| List.mem !counter shard_terms then (let th = prove_bound_cond pp tm in report (sprintf "Proved: %d/%d" !counter total_bounds); th) else ASSUME tm)) bound_conds in|' "$checker"
+[ "$(grep -c 'List.mem !counter shard_terms then' "$checker")" = 1 ] ||
   { echo "$checker: no term loop to shard"; exit 1; }
 
 if [ -z "$certificates" ]; then
@@ -152,7 +162,7 @@ session="$work/session.ml"
   echo 'Arith_options.min_exp := 300;;'
   echo 'needs "Multivariate/realanalysis.ml";;'
   echo 'needs "verifier/m_verifier_main.hl";;'
-  echo "let shard_index = ${shard:-1} and shard_count = $shards;;"
+  echo "let shard_terms : int list = [$shard_terms];;"
   echo 'needs "build_tform2.hl";;'
   echo 'needs "tests/utils.hl";;'
   # A shard's theorems hold under the terms it assumed: their conclusions are printed, with how
@@ -190,7 +200,13 @@ for check in "${checks[@]}"; do
   terms=$(sed -n 's/^\(# \)*Bounds: \([0-9][0-9]*\)$/\2/p' "$work/$name.log")
   [ -n "$terms" ] || terms=0
   proved=$(sed -n 's|^\(# \)*Proved: \([0-9][0-9]*\)/[0-9]*$|\2|p' "$work/$name.log" | tr '\n' ' ')
-  want=$(if [ "$terms" -gt 0 ]; then seq "${shard:-1}" "$shards" "$terms" | tr '\n' ' '; fi)
+  if [ -n "$shard" ]; then
+    [ "$terms" = "$shard_count" ] ||
+      { echo "$name: the certificate has $terms terms, the shards share out $shard_count"; exit 1; }
+    want="$shard_list "
+  else
+    want=$(if [ "$terms" -gt 0 ]; then seq 1 "$terms" | tr '\n' ' '; fi)
+  fi
   assumed=$(sed -n "s/^\\(# \\)*$name assumed \\([0-9][0-9]*\\) terms$/\\2/p" "$work/$name.log")
   if [ "$proved" != "$want" ] || [ "$assumed" != "$((terms - $(wc -w <<<"$want")))" ]; then
     echo "$name: proved terms '$proved' and assumed '$assumed' of $terms, not shard ${shard:-1} of $shards"

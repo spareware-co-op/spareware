@@ -14,9 +14,18 @@
 //! A file that is not present is reported and skipped. For `sinpi` the images of the file's set (b)
 //! under every power of two up to `2^968`, which the file says to add, are checked too.
 //!
-//! Every night `.github/workflows/kernel-nightly.yml` (piece G47) fetches the five files at that
-//! commit, checks each against its SHA-256, so none can be missing or changed, and runs these
-//! tests, before `math_oracle.rs`'s ten million inputs per function.
+//! No workflow runs them: a timed run that fetched the five files did until decision 32.53 (the
+//! owner's testing principle 2), and the suite keeps a sample of each file in the other `math_*`
+//! tests, with `math_oracle.rs`'s seeded sample. Run them by hand after a change to a ported
+//! function, with the files at that commit, whose SHA-256 sums are:
+//!
+//! ```text
+//! 476d2c6bad1332cc2257a9b73dd95fcc86aa8ec2288d31db30695ed105955c37  sinpi/sinpi.wc
+//! ae02bccca8ea664673cf5b1035acb66d8bd3d74ad14d1e6f321ea73a2ae7e34f  cospi/cospi.wc
+//! 8c62a01572eb5c66d0303f287ca528fffbb69f3d3935ca29f852f656553b128b  exp/exp.wc
+//! 2d213b6758e257a1dc68dee717af2fc04b2907db19639b80bf196dfbf04ed9fb  log/log.wc
+//! 9e4fb81a3c4a789ea739203d2db3ef9689c48208d94196726fa7a22886e573db  atan2/atan2.wc
+//! ```
 //!
 //! The functions return a `Real` or an error (the module documentation of `geom_num::math`): each
 //! call is checked against what it owes, `reference::owed`, from the reference's IEEE 754 value

@@ -3,8 +3,7 @@
 //!
 //! - `make_fuzz` wraps `geom_fuzz::make::harness` in `bolero::check!`: the crate's corpus and crash
 //!   files, then [`ITERATIONS`] random byte strings; a failing one's seed is printed as
-//!   `BOLERO_RANDOM_SEED=<seed>`. Under `cargo bolero test make_fuzz --package geom-fuzz` it is a
-//!   libFuzzer target.
+//!   `BOLERO_RANDOM_SEED=<seed>`.
 //! - `make_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly; both a primitive built and each kind of step are reached;
@@ -48,7 +47,11 @@ use geom_topo::Builder;
 const ITERATIONS: usize = 500;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 1_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 1,000 cases in 0.172 s), about 2.1 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 12_000;
 
 /// The longest byte string the seeded leg draws: the harness reads at most [`MAX_INPUT_BYTES`];
 /// the rest must change nothing.

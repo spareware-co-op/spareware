@@ -11,7 +11,7 @@
 //!   conic: a closed curve one full turn, an open one running to the patch's edge or its apex.
 //!
 //! The fourth law of the row, completeness as section 12 promises it, is scored on the exact-truth
-//! SSI corpus by `ssi gate` (`geom_test::ssi::gate`), nightly in `ssi-acceptance`.
+//! SSI corpus by `ssi gate` (`geom_test::ssi::gate`), in `kernel-oracles.yml`'s `ssi-acceptance`.
 //!
 //! The method these laws are for is G165's closed form, `geom_intersect::quadrics::natural`, which
 //! `the_laws_hold` runs on every case beside `stand_in`, each case's stated closed form, which holds
@@ -20,7 +20,7 @@
 //! everything the laws read is `pair`'s. G170's marching joins when it answers these pairs.
 //!
 //! Each law lists every broken case it finds. Seeds: each law prints `seed: <hex>` and replays with
-//! `SPAREKIT_SEED`; pull requests run the fixed default seed, and the nightly workflow a fresh one.
+//! `SPAREKIT_SEED`; every run uses the fixed default seed, on every change the law reaches.
 
 #![allow(
     clippy::arithmetic_side_effects,

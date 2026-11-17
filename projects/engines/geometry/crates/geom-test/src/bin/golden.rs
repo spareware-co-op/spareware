@@ -1,12 +1,11 @@
 //! `golden`: the golden store's tool: list it, check it against the repository, run every golden in
-//! one CI leg's configuration, and hold a pull request's edits to the owner-approval rule.
+//! one CI leg's configuration, and hold a pull request's edits to the record rule.
 //!
 //! ```text
 //! cargo run -p geom-test --bin golden -- list
 //! cargo run -p geom-test --bin golden -- check [--root <dir>]
-//! cargo run -p geom-test --bin golden -- run [<cargo test arguments>...]
+//! cargo run -p geom-test --bin golden -- run [--part <k>/<n>] [<cargo test arguments>...]
 //! cargo run -p geom-test --bin golden -- diff --base <commit> [--root <dir>]
-//!     [--reviews <file> --head <commit> --author <login> [--permissions <file>]]
 //! ```
 //!
 //! - `list` prints every edition and golden of the store.
@@ -19,21 +18,25 @@
 //!   (`--release`, `--target wasm32-wasip1`, ...) and the environment as it is (`RUSTFLAGS`,
 //!   `CARGO_TARGET_DIR`, a target runner), one invocation per crate and test target, prints each
 //!   run's output, and requires that each ran exactly its goldens and that each agreed with the
-//!   store ([`geom_test::golden::matrix`]).
+//!   store ([`geom_test::golden::matrix`]). It first builds every group's test binary in one
+//!   `cargo test --no-run`, side by side. `--part k/n` runs part `k` of `n` alone, whole crates to
+//!   a part, so `n` jobs run every golden once between them; a part with no golden fails.
 //! - `diff` compares the store at `<commit>` (read with `git show`; none there is an empty base)
-//!   with the working tree's and prints what changed ([`geom_test::golden::diff`]). A change no
-//!   approval can make fails. A change that needs a kernel owner's approval fails unless the
-//!   reviews given (GitHub's JSON list of the pull request's reviews, and optionally a JSON object
-//!   of reviewers' repository permissions) approve the head commit.
+//!   with the working tree's and prints what changed ([`geom_test::golden::diff`]): each moved
+//!   answer with the history record that says why, for the merge record to name. A refused change
+//!   fails: a moved digest without exactly one new record holding the old digest, of a kind the
+//!   golden allows, with its piece and a reason, and every other change the rule refuses. No
+//!   review is read (decision 32.54).
 //!
 //! Guarantees: `list`, `check`, `run` and `diff` never write a file. Exit codes: 0 when everything
-//! checked holds; 1 when a check fails (a problem, a failed or unproven golden, a refused or
-//! unapproved edit); 2 for a usage error or a file or command that cannot be read or run.
+//! checked holds; 1 when a check fails (a problem, a failed or unproven golden, a refused edit); 2
+//! for a usage error or a file or command that cannot be read or run.
 //!
 //! Method: none; it parses its arguments and calls [`geom_test::golden`], whose module headers
 //! carry the methods.
 //!
-//! Cost: `run` costs one `cargo test` per crate and test target; the other commands read the store
+//! Cost: `run` costs one `cargo test --no-run` that builds, then one `cargo test` per crate and
+//! test target; the other commands read the store
 //! and, for `check`, the kernel's sources once.
 
 #![forbid(unsafe_code)]
@@ -44,15 +47,14 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
-use geom_test::golden::diff::{approved, diff};
-use geom_test::golden::matrix::{plan, verify};
+use geom_test::golden::diff::diff;
+use geom_test::golden::matrix::{build_args, part, plan, verify};
 use geom_test::golden::repo;
 use geom_test::golden::store::{EMBEDDED, STORE_PATH, Store};
 use geom_test::map::repo::workspace_root;
 
-const USAGE: &str = "usage: golden list | check [--root <dir>] | run [<cargo test args>...] | \
-                     diff --base <commit> [--root <dir>] [--reviews <file> --head <commit> \
-                     --author <login> [--permissions <file>]]";
+const USAGE: &str = "usage: golden list | check [--root <dir>] | run [--part <k>/<n>] [<cargo test args>...] | \
+                     diff --base <commit> [--root <dir>]";
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
@@ -69,17 +71,7 @@ fn main() -> ExitCode {
             Err(m) => usage(&m),
         },
         Some("run") => run(&rest),
-        Some("diff") => match options(
-            &rest,
-            &[
-                "--base",
-                "--root",
-                "--reviews",
-                "--head",
-                "--author",
-                "--permissions",
-            ],
-        ) {
+        Some("diff") => match options(&rest, &["--base", "--root"]) {
             Ok(o) => with_root(&o, |root| diff_command(root, &o)),
             Err(m) => usage(&m),
         },
@@ -207,10 +199,41 @@ fn run(extra: &[String]) -> ExitCode {
         Err(e) => return fail(&e.to_string()),
     };
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
-    let groups = plan(&store);
-    if groups.is_empty() {
+    let all = plan(&store);
+    if all.is_empty() {
         eprintln!("golden run: the store's current edition has no golden checked by a test");
         return ExitCode::from(1);
+    }
+    // `--part k/n` first: this run's share of the groups, every group in exactly one part.
+    let (groups, extra, of) = match extra.split_first() {
+        Some((flag, rest)) if flag == "--part" => {
+            let Some((spec, rest)) = rest.split_first() else {
+                return usage("--part needs k/n");
+            };
+            let parsed = spec
+                .split_once('/')
+                .and_then(|(k, n)| Some((k.parse::<usize>().ok()?, n.parse::<usize>().ok()?)));
+            let Some(groups) = parsed.and_then(|(k, n)| part(&all, k, n)) else {
+                return usage(&format!("--part {spec}: not k/n with k in 1 to n"));
+            };
+            (groups, rest, format!(", part {spec}"))
+        }
+        _ => (all, extra, String::new()),
+    };
+    // A part left with no golden is a workflow with more parts than the plan has crates.
+    if groups.is_empty() {
+        eprintln!("golden run: no golden to run{of}");
+        return ExitCode::from(1);
+    }
+    // Every group's binary at once, side by side; a build that fails here fails again, with its
+    // message, in the group's own run below, which is what is judged.
+    for args in build_args(&groups, extra) {
+        println!("golden run: cargo {}", args.join(" "));
+        match Command::new(&cargo).args(&args).current_dir(&root).status() {
+            Ok(s) if s.success() => {}
+            Ok(s) => println!("golden run: the build of every group failed ({s}); each runs alone"),
+            Err(e) => return fail(&format!("cannot run cargo: {e}")),
+        }
     }
     let mut failures = Vec::new();
     for group in &groups {
@@ -259,7 +282,7 @@ fn run(extra: &[String]) -> ExitCode {
             .map(|g| g.ids.len())
             .fold(0, usize::saturating_add);
         println!(
-            "golden run: every golden of the current edition agrees ({total} golden(s) in {} \
+            "golden run: every golden of the current edition{of} agrees ({total} golden(s) in {} \
              run(s), arguments {extra:?})",
             groups.len()
         );
@@ -315,43 +338,9 @@ fn diff_command(root: &Path, o: &BTreeMap<String, String>) -> ExitCode {
     };
     let d = diff(base_store.as_ref(), &head);
     println!("{d}");
-    if !d.is_acceptable() {
-        return ExitCode::from(1);
-    }
-    if !d.needs_approval() {
-        return ExitCode::SUCCESS;
-    }
-    let (Some(reviews), Some(head_commit), Some(author)) =
-        (o.get("--reviews"), o.get("--head"), o.get("--author"))
-    else {
-        eprintln!(
-            "golden diff: this change needs a kernel owner's approval; pass --reviews, --head and \
-             --author to check the pull request's reviews"
-        );
-        return ExitCode::from(1);
-    };
-    let reviews = match std::fs::read_to_string(reviews) {
-        Ok(t) => t,
-        Err(e) => return fail(&format!("{reviews}: {e}")),
-    };
-    let permissions: BTreeMap<String, String> = match o.get("--permissions") {
-        None => BTreeMap::new(),
-        Some(file) => match std::fs::read_to_string(file)
-            .map_err(|e| e.to_string())
-            .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))
-        {
-            Ok(p) => p,
-            Err(e) => return fail(&format!("{file}: {e}")),
-        },
-    };
-    match approved(&reviews, head_commit, author, &permissions) {
-        Ok(who) => {
-            println!("golden diff: approved on {head_commit} by {who}");
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("golden diff: {e}");
-            ExitCode::from(1)
-        }
+    if d.is_acceptable() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     }
 }

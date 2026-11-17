@@ -3,7 +3,8 @@
 //! own plane, for the exact mesh's build and check.
 //!
 //! For point location (piece G147), that field closed into a solid, with points in its box; for
-//! booleans (piece G148), two small prisms that cross. For
+//! booleans (piece G148), two small prisms that cross; for slicing (piece G149), that solid and
+//! level planes; for hulls, points of a lattice. For
 //! the distance comparisons of piece G151, grid points in a room a million steps across, each
 //! with a clearance of up to as much; for triangle contact, pairs of triangles in that room whose
 //! planes mostly cut each other.
@@ -29,6 +30,7 @@ use geom_mesh::exact::build::{Corner, Polygons, Source, build};
 use geom_mesh::exact::{ExactMesh, PropTable, Role};
 use geom_num::Exactness;
 use geom_num::grid::{P2, P3};
+use geom_num::plane::Plane;
 use geom_op::NameId;
 use geom_run::{Budget, Exec, WorkMeter};
 
@@ -57,6 +59,18 @@ pub struct Pair {
     pub first: ExactMesh,
     /// The other, of the same ground plan and other heights.
     pub second: ExactMesh,
+}
+
+/// The planes of one [`Layers`].
+pub const LAYERS: usize = 8;
+
+/// What `geom_mesh::slice::slice` takes.
+#[derive(Clone, Debug)]
+pub struct Layers {
+    /// A closed solid.
+    pub solid: ExactMesh,
+    /// Level planes, rising, across its top.
+    pub planes: Vec<Plane>,
 }
 
 /// What `geom_mesh::classify` takes.
@@ -301,6 +315,49 @@ pub fn boolean(class: Class) -> Vec<Pair> {
     })
 }
 
+/// Points of a small lattice, many on one plane, for `geom_mesh::hull::Hull::of`.
+#[must_use]
+pub fn hull(class: Class) -> Vec<Vec<P3>> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::hull", class);
+    batch_of(|_| {
+        let mut points = Vec::with_capacity(PROBES);
+        for _ in 0..PROBES {
+            points.push(p3(
+                within(&mut g, 16),
+                within(&mut g, 16),
+                within(&mut g, 16),
+            ));
+        }
+        Some(points)
+    })
+}
+
+/// A closed solid and level planes across it for `geom_mesh::slice::slice`.
+#[must_use]
+pub fn slice(class: Class) -> Vec<Layers> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::slice", class);
+    batch_of(|_| {
+        let mut planes = Vec::with_capacity(LAYERS);
+        for k in 0..LAYERS {
+            let height = i128::try_from(k)
+                .ok()?
+                .saturating_mul(512)
+                .saturating_add(256);
+            planes.push(Plane::new([0, 0, 1], height.saturating_neg()).ok()?);
+        }
+        Some(Layers {
+            solid: solid(&mut g)?,
+            planes,
+        })
+    })
+}
+
 /// The reach of the distance benchmarks' coordinates, in grid steps.
 const ROOM: i64 = 1 << 20;
 
@@ -380,4 +437,48 @@ pub fn envelope(class: Class) -> Vec<([P3; 3], P3)> {
         let t = core::array::from_fn(|_| point(&mut g));
         Some((t, point(&mut g)))
     })
+}
+
+/// A small bent sheet from `rng`: `cells` × `cells` cells of 64 steps, two triangles a cell, at
+/// heights of 0 to 3 steps.
+fn bent_sheet(r: &mut SplitMix64, cells: u32) -> Option<(Vec<P3>, Vec<[u32; 3]>)> {
+    let side = cells.saturating_add(1);
+    let mut points = Vec::new();
+    for y in 0..i64::from(side) {
+        for x in 0..i64::from(side) {
+            let z = i64::try_from(r.next_u64() >> 62).ok()?;
+            points.push(P3::new(x.saturating_mul(64), y.saturating_mul(64), z).ok()?);
+        }
+    }
+    let mut triangles = Vec::new();
+    for y in 0..cells {
+        for x in 0..cells {
+            let a = y.saturating_mul(side).saturating_add(x);
+            let (b, d) = (a.saturating_add(1), a.saturating_add(side));
+            let c = d.saturating_add(1);
+            triangles.push([a, b, c]);
+            triangles.push([a, c, d]);
+        }
+    }
+    Some((points, triangles))
+}
+
+/// Small bent sheets of 2 × 2 cells for `geom_mesh::model::decimate`.
+#[must_use]
+pub fn decimate(class: Class) -> Vec<(Vec<P3>, Vec<[u32; 3]>)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::decimate", class);
+    batch_of(|_| bent_sheet(&mut g, 2))
+}
+
+/// Bent cells, two triangles each, for `geom_mesh::model::remesh`.
+#[must_use]
+pub fn remesh(class: Class) -> Vec<(Vec<P3>, Vec<[u32; 3]>)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::remesh", class);
+    batch_of(|_| bent_sheet(&mut g, 1))
 }

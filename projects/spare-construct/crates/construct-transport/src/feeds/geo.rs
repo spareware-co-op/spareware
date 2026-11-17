@@ -13,6 +13,7 @@ pub type Ring = Vec<[f64; 2]>;
 pub type RingsBox = [f64; 4];
 
 /// `ringsBox(rings)`: the box around every point of the rings (infinite and reversed for no points).
+#[must_use]
 pub fn rings_box(rings: &[Ring]) -> RingsBox {
     let (mut x0, mut y0, mut x1, mut y1) = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
     for r in rings {
@@ -35,22 +36,28 @@ pub fn rings_box(rings: &[Ring]) -> RingsBox {
 }
 
 /// `inRings(x, y, rings)`: even-odd point in polygon (holes included); x is longitude, y latitude.
+#[must_use]
 pub fn in_rings(x: f64, y: f64, rings: &[Ring]) -> bool {
     let mut inside = false;
     for r in rings {
-        let mut j = r.len().wrapping_sub(1);
-        for i in 0..r.len() {
-            let (xi, yi, xj, yj) = (r[i][0], r[i][1], r[j][0], r[j][1]);
+        // Each point with the one before it, the first with the last
+        let Some(&last) = r.last() else {
+            continue;
+        };
+        let mut pj = last;
+        for &pi in r {
+            let ([xi, yi], [xj, yj]) = (pi, pj);
             if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
                 inside = !inside;
             }
-            j = i;
+            pj = pi;
         }
     }
     inside
 }
 
 /// `centroid(rings)`: the area centroid of the biggest ring as [lat, lng] (the middle of the box when the area is zero).
+#[must_use]
 pub fn centroid(rings: &[Ring]) -> LatLng {
     let empty: Ring = Vec::new();
     let mut r = rings.first().unwrap_or(&empty);
@@ -60,17 +67,20 @@ pub fn centroid(rings: &[Ring]) -> LatLng {
         }
     }
     let (mut a, mut cx, mut cy) = (0.0, 0.0, 0.0);
-    let mut j = r.len().wrapping_sub(1);
-    for i in 0..r.len() {
-        let f = r[j][0] * r[i][1] - r[i][0] * r[j][1];
-        a += f;
-        cx += (r[j][0] + r[i][0]) * f;
-        cy += (r[j][1] + r[i][1]) * f;
-        j = i;
+    // Each point with the one before it, the first with the last
+    if let Some(&last) = r.last() {
+        let mut pj = last;
+        for &pi in r {
+            let f = pj[0] * pi[1] - pi[0] * pj[1];
+            a += f;
+            cx += (pj[0] + pi[0]) * f;
+            cy += (pj[1] + pi[1]) * f;
+            pj = pi;
+        }
     }
     if a == 0.0 || a.is_nan() {
         let bb = rings_box(rings);
-        return [(bb[1] + bb[3]) / 2.0, (bb[0] + bb[2]) / 2.0];
+        return [f64::midpoint(bb[1], bb[3]), f64::midpoint(bb[0], bb[2])];
     }
     [cy / (3.0 * a), cx / (3.0 * a)]
 }
@@ -91,7 +101,7 @@ pub struct PolyIndex {
 }
 
 fn key(i: f64, j: f64) -> i64 {
-    (i * 1e6 + j) as i64
+    crate::jsnum::f64_to_i64(i * 1e6 + j)
 }
 
 impl PolyIndex {
@@ -120,7 +130,10 @@ impl PolyIndex {
                 v.iter()
                     .copied()
                     .filter(|&n| {
-                        let p = &polys[n];
+                        // n is a position in the list that was indexed; a shorter list simply holds no such polygon
+                        let Some(p) = polys.get(n) else {
+                            return false;
+                        };
                         let bb = p.bb();
                         x >= bb[0] && x <= bb[2] && y >= bb[1] && y <= bb[3] && in_rings(x, y, p.rings())
                     })
@@ -131,6 +144,7 @@ impl PolyIndex {
 }
 
 /// Rings as downloaded (`geometry.rings`): lists of [x, y, ...] points.
+#[must_use]
 pub fn rings_of(v: Option<&JsonValue>) -> Vec<Ring> {
     match v {
         Some(JsonValue::Array(rs)) => rs
@@ -151,6 +165,7 @@ pub fn rings_of(v: Option<&JsonValue>) -> Vec<Ring> {
 }
 
 /// `liveLinks(sc)`: the links that are not closed and have both end junctions.
+#[must_use]
 pub fn live_links(sc: &Scenario) -> Vec<&Link> {
     sc.links.values().filter(|l| !l.status.is("closed") && sc.nodes.contains_key(&l.a) && sc.nodes.contains_key(&l.b)).collect()
 }
@@ -169,6 +184,7 @@ pub struct LatLngBox {
 }
 
 /// `netBox(sc)`: the box around the scenario's junctions; None for none.
+#[must_use]
 pub fn net_box(sc: &Scenario) -> Option<LatLngBox> {
     if sc.nodes.is_empty() {
         return None;
@@ -184,23 +200,27 @@ pub fn net_box(sc: &Scenario) -> Option<LatLngBox> {
 }
 
 /// `inBox(B, ll)`: the point is inside the box (edges included).
+#[must_use]
 pub fn in_box(b: &LatLngBox, ll: &LatLng) -> bool {
     ll[0] >= b.s && ll[0] <= b.n && ll[1] >= b.w && ll[1] <= b.e
 }
 
 /// `padBox(b, m)`: the box moved out by m metres on every side.
+#[must_use]
 pub fn pad_box(b: &LatLngBox, m: f64) -> LatLngBox {
-    let dy = m / 110574.0;
-    let dx = m / (111320.0 * jsmath::cos((b.s + b.n) / 2.0 * std::f64::consts::PI / 180.0));
+    let dy = m / 110_574.0;
+    let dx = m / (111_320.0 * jsmath::cos(f64::midpoint(b.s, b.n) * std::f64::consts::PI / 180.0));
     LatLngBox { s: b.s - dy, w: b.w - dx, n: b.n + dy, e: b.e + dx }
 }
 
 /// The Leaflet-style bounds of a box.
+#[must_use]
 pub fn bounds_of_box(b: &LatLngBox) -> crate::importers::Bounds {
     crate::importers::Bounds { south: b.s, west: b.w, north: b.n, east: b.e }
 }
 
 /// A box from Leaflet-style bounds.
+#[must_use]
 pub fn box_of_bounds(b: &crate::importers::Bounds) -> LatLngBox {
     LatLngBox { s: b.south, w: b.west, n: b.north, e: b.east }
 }

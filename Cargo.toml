@@ -30,3 +30,41 @@ inherits = "dev"
 opt-level = 3
 incremental = false
 codegen-units = 1
+
+# The exact big integers and rationals (dashu, MIT OR Apache-2.0) are compiled with optimisation in
+# the dev profile too, which tests build with: a profile override for those packages alone, as the
+# Cargo book's chapter on profiles describes. Only how dashu's own code is compiled changes, never
+# what it computes: its debug assertions and overflow checks stay on, and every crate of ours stays
+# unoptimised. Unoptimised, dashu made one run of geom-gen's generators take 11 s instead of 1.9 s
+# (the quadrature-rules generator's exact enclosures are almost all of it), and the exact oracles of
+# the kernel's tests run on it too.
+[profile.dev.package.dashu-base]
+opt-level = 3
+
+[profile.dev.package.dashu-int]
+opt-level = 3
+
+[profile.dev.package.dashu-ratio]
+opt-level = 3
+
+# dashu-int's own modular arithmetic, which its multiplication and division call.
+[profile.dev.package.num-modular]
+opt-level = 3
+
+# The other exact oracles of the kernel's tests, num-bigint and num-rational with the num-integer
+# and num-traits they rest on (all MIT OR Apache-2.0; development dependencies only, never linked
+# into a kernel crate), compiled the same way and for the same reason. Unoptimised, the rationals'
+# greatest common divisors were almost all of the time of the slowest tests in the plain debug
+# run: geom-math's decimal-text and float-length tests took 59 s and 45 s on a development machine,
+# nearly every sample of their stacks inside num-bigint's gcd.
+[profile.dev.package.num-bigint]
+opt-level = 3
+
+[profile.dev.package.num-rational]
+opt-level = 3
+
+[profile.dev.package.num-integer]
+opt-level = 3
+
+[profile.dev.package.num-traits]
+opt-level = 3

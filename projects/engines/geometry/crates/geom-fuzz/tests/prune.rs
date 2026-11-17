@@ -1,5 +1,5 @@
 //! The `PruneHistory` fuzz target (piece G109), as tests: `prune_fuzz` is bolero's test mode,
-//! which cargo-bolero and `ClusterFuzzLite` select by name, and `prune_seeded` the seeded leg that
+//! a property test on bytes bolero draws, and `prune_seeded` the seeded leg that
 //! runs on every target, WebAssembly included (the crate README sets out the layout). Each hands
 //! the fuzzer's raw bytes to `geom_fuzz::prune::harness`. The case's input bound is reached and
 //! never passed, and the bytes after it reach the record's reader.
@@ -23,7 +23,11 @@ use geom_test::{Seed, SplitMix64};
 const ITERATIONS: usize = 1_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 1_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 1,000 cases in 0.247 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 8_100;
 
 /// The longest byte string the seeded leg draws: the case and a short payload after it.
 const MAX_LEN: u16 = 160;

@@ -19,6 +19,12 @@
 //!   and a touch at one point a [`PointContact::IsolatedTangent`].
 //! - **Trimmed to both domains.** Each curve is cut where the edges of either surface meet the other,
 //!   and each stretch is kept if its middle lies on both.
+//! - **A turn far from zero loses nothing.** A loop's parameter, or a round surface's, may start any
+//!   number of turns out. A loop is cut and kept on its domain moved by whole turns, exactly, to
+//!   within two turns of zero, and a surface's turn is read on its own domain the same way, so no
+//!   cut and no point is lost to how far out a domain starts. An operand whose parameters start so
+//!   far out that their doubles stand more than a step apart on it cannot hold its own points, or
+//!   a cut, to a step: it is refused with `FrameRange`, as one outside the frame is.
 //!
 //! Method: Goldman and Miller, SMA '91 (<https://doi.org/10.1145/112515.112545>) and GMIP 57(1), 1995
 //! (<https://doi.org/10.1006/gmip.1995.1006>); the table of chapter 12.7
@@ -39,13 +45,14 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use geom_curve::{
-    Axes, Basis, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola, Trimmed,
+    Axes, Basis, Circle, CurveError, CurveKind, DerivativeBound, Ellipse, Frame, Hyperbola, Line,
+    Parabola, Trimmed,
 };
 use geom_curve::{HYPERBOLA_REACH, ParamCurve, tight};
 use geom_num::grid::{GridStep, P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::{Exactness, NumError, Sign, predicate, quadric};
-use geom_nurbs::{Bounds, Limit};
+use geom_nurbs::{Bounds, Direction, Limit};
 use geom_run::WorkMeter;
 use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 
@@ -67,6 +74,11 @@ const STEP: f64 = 2.0;
 
 /// How far a shared domain is written, in each parameter of a surface with no end.
 const REACH: f64 = 1_099_511_627_776.0;
+
+/// The most periods a loop's parameter is moved by to bring it into the loop's domain: a turn's
+/// angle lies from −1 to 2 half-turns, and a loop's domain starts within two turns of zero
+/// ([`nearer`]), so three periods reach it from any angle and the fourth pass ends the loop.
+const WRAPS: usize = 4;
 
 /// What a pair's closed form finds.
 pub(crate) enum Piece {
@@ -239,7 +251,12 @@ pub(crate) struct Funnel {
 }
 
 pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
-    let line = axis(cone.center(), &cone.frame(), cone.axial_sign())?;
+    // S(u, v) = c + (r₀ + k·v)·e(u) + s·v·n̂: v runs along sign(s)·n̂, |s| of height for each unit
+    // of it, so the radius grows by |k/s| per unit of height and the apex, at v = −r₀/k, stands
+    // |s|·(−r₀/k) along that unit axis. The axial factor s is ±1 as built, where these are |k| and
+    // −r₀/k themselves, but a similarity multiplies it by its scale (and r₀ and k with it).
+    let s = cone.axial_sign();
+    let line = axis(cone.center(), &cone.frame(), s.signum())?;
     let (r0, k) = cone.radius_and_slope();
     // Exact where the data are: a grid apex is what makes the exact decisions possible. A cone
     // stored by its apex has it as its centre, exactly, whatever its axis; any other is reached
@@ -248,17 +265,18 @@ pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
         line.at
     } else {
         let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;
+        let h = tight::mul(v, tight::point(s.abs())?)?;
         let [a, b, c] = line.at;
         let [x, y, z] = line.along;
         [
-            tight::add(a, tight::mul(x, v)?)?,
-            tight::add(b, tight::mul(y, v)?)?,
-            tight::add(c, tight::mul(z, v)?)?,
+            tight::add(a, tight::mul(x, h)?)?,
+            tight::add(b, tight::mul(y, h)?)?,
+            tight::add(c, tight::mul(z, h)?)?,
         ]
     };
-    let slope = point(k.abs())?;
+    let slope = tight::div(point(k.abs())?, point(s.abs())?)?;
     let exact = (|| {
-        if wide(apex) > 0.0 {
+        if wide(apex) > 0.0 || slope.lo() != slope.hi() {
             return None;
         }
         let centre = middle(apex);
@@ -268,7 +286,7 @@ pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
             apex: grid_point(&centre)?,
             along: grid_point(&[a + p, b + q, c + r])?,
             slope: quadric::Slope {
-                rise: u64::try_from(whole(k.abs() * 1_048_576.0)?).ok()?,
+                rise: u64::try_from(whole(slope.lo() * 1_048_576.0)?).ok()?,
                 run: 1 << 20,
             },
         })
@@ -589,6 +607,10 @@ fn branch_span(extent: f64, lead: Vector, side: Vector) -> Result<f64, Intersect
 fn cone_extent(cone: &Cone) -> f64 {
     let (r0, k) = cone.radius_and_slope();
     let (_, (v0, v1)) = ParamSurface::domain(cone);
+    // The axial factor s, which a similarity scales, does not enter: a parabola's parameter is its
+    // distance across, at most the radius |r₀ + k·v| this bounds, and a hyperbola's branches run
+    // past this by the ratio of its axes (`branch_span` divides by the shorter), which covers the
+    // height |s·v| (tests/axial_factor.rs: a nappe 400 high and 20 wide, cut along its axis).
     let far = tight::larger(v0.abs(), v1.abs());
     (far + r0.abs()) * (1.0 + k.abs()) + 1.0
 }
@@ -995,8 +1017,12 @@ fn cone_cone(a: &Cone, b: &Cone) -> Result<Option<Vec<Piece>>, IntersectError> {
         let same = same_line(a.center(), e, b.center(), f);
         let equal = p.slope.lo() == q.slope.lo();
         if same {
-            let stored =
-                e == f && a.center() == b.center() && a.radius_and_slope() == b.radius_and_slope();
+            // One cone only if every stored datum is equal, the axial factor too: with it negated
+            // the cone is mirrored, and with it scaled its slope per unit of height is k/s.
+            let stored = e == f
+                && a.center() == b.center()
+                && a.radius_and_slope() == b.radius_and_slope()
+                && a.axial_sign() == b.axial_sign();
             if stored {
                 return Ok(Some(alloc::vec![Piece::Same]));
             }
@@ -1181,7 +1207,16 @@ fn parameters(surface: &SurfaceKind, at: Vector) -> Result<Option<[Interval; 2]>
         } else {
             let t = turn_of(x, y)?;
             let two = point(2.0)?;
-            let mut moved = t;
+            // Whole turns to the domain's start first: `%` is exact, so this is a multiple of two
+            // half-turns within a turn of the start, and the angle lands within two periods of the
+            // domain however many turns out it starts. A domain within a turn of zero needs none,
+            // and its angle is not widened by adding it.
+            let shift = u.0 - u.0 % 2.0;
+            let mut moved = if shift == 0.0 {
+                t
+            } else {
+                t.add(point(shift)?)?
+            };
             for _ in 0..8 {
                 if moved.hi() >= u.0 {
                     break;
@@ -1215,13 +1250,15 @@ fn parameters(surface: &SurfaceKind, at: Vector) -> Result<Option<[Interval; 2]>
                 wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?,
             ]
         }
+        // A cylinder's or cone's point at v stands s·v along n̂, so the height z is v = z/s: the
+        // axial factor s is ±1 as built, where z/s is z·s, but a similarity scales it.
         SurfaceKind::Cylinder(c) => {
             let [x, y, z] = local(&c.frame(), c.center())?;
-            [whole_turn(x, y)?, z.mul(point(c.axial_sign())?)?]
+            [whole_turn(x, y)?, z.div(point(c.axial_sign())?)?]
         }
         SurfaceKind::Cone(c) => {
             let [x, y, z] = local(&c.frame(), c.center())?;
-            let v = z.mul(point(c.axial_sign())?)?;
+            let v = z.div(point(c.axial_sign())?)?;
             let (r0, k) = c.radius_and_slope();
             let rho = point(r0)?.add(point(k)?.mul(v)?)?;
             let flip = if rho.hi() < 0.0 { -1.0 } else { 1.0 };
@@ -1444,6 +1481,29 @@ fn closed(curve: &CurveKind<3>) -> bool {
     matches!(curve, CurveKind::Circle(_) | CurveKind::Ellipse(_)) && hi - lo >= 2.0
 }
 
+/// `curve`, and a loop on its domain moved by whole turns to within two turns of zero: the same
+/// points at the same angles. A domain may start any number of turns out, and there a double holds
+/// an angle no better than its spacing, which far enough out is wider than a step, while
+/// [`cut_at`]'s count of periods and the room [`trimmed`] leaves between cuts are in half-turns
+/// near zero: a loop 2^20 turns out lost every cut, and one 2^29 turns out had room of a
+/// half-turn.
+///
+/// The move is exact, so the moved domain is as long as the loop's own to the last bit. `lo % 4` is
+/// exact, so the shift `lo − lo % 4` is a multiple of four half-turns that leaves `lo % 4`, between
+/// −4 and 4. Under four half-turns out the shift is 0. Further out, `hi` less the shift is a
+/// multiple of `hi`'s own spacing (the shift is a multiple of four, and of that spacing), and lies
+/// between −2 and 6: under 4 in size where `hi` is at least 2 in size and its spacing at least
+/// 2^−51, and from 4 to 6 only where `hi` is past 4 and its spacing at least 2^−50. A double holds
+/// every such multiple.
+fn nearer(curve: CurveKind<3>) -> Result<CurveKind<3>, IntersectError> {
+    if !closed(&curve) {
+        return Ok(curve);
+    }
+    let (lo, hi) = curve.domain();
+    let shift = lo - lo % 4.0;
+    Ok(stretch(&curve, lo - shift, hi - shift)?.unwrap_or(curve))
+}
+
 /// `curve` over `(lo, hi)`.
 pub(crate) fn stretch(
     curve: &CurveKind<3>,
@@ -1525,14 +1585,20 @@ fn cut_at(
     };
     let (lo, hi) = crate::curve::finite(curve)?;
     let mut t = tight::middle(s);
-    // On a loop the turns wrap.
+    // On a loop the turns wrap. The count, not t, ends the loop, and [`WRAPS`] periods bring the
+    // angle into every loop's domain, which [`nearer`] has moved to within two turns of zero. Both
+    // tests ask whether t has reached an end, so the loop's own start is on the loop and is never
+    // moved.
     if closed(curve) {
         let period = hi - lo;
-        while t < lo {
-            t += period;
-        }
-        while t >= hi {
-            t -= period;
+        for _ in 0..WRAPS {
+            if t >= hi {
+                t -= period;
+            } else if t >= lo {
+                break;
+            } else {
+                t += period;
+            }
         }
     }
     if t < lo || t > hi {
@@ -1844,7 +1910,7 @@ fn items_of(
                 tangent,
                 reach,
             } => {
-                for kept in trimmed(&curve, a, b, meter)? {
+                for kept in trimmed(&nearer(*curve)?, a, b, meter)? {
                     let (part, ends) = match kept {
                         Part::Curve(part, ends) => (*part, ends),
                         Part::Point { at, width } => {
@@ -1884,7 +1950,15 @@ fn items_of(
 }
 
 /// Whether an operand fits the frame's range (12.1): its box over its domain within 2^40 steps of
-/// the origin, or, for a plane that runs on without end, the point it is stored by.
+/// the origin, or, for a plane that runs on without end, the point it is stored by; and its
+/// parameters hold its own points to a step.
+///
+/// A parameter far from zero is held no closer than the doubles' spacing there, and the surface
+/// moves that spacing times its speed between two of them: a turn starts any number of turns out,
+/// and 2^42 half-turns out a circle of a unit's radius has its representable points more than two
+/// steps apart, so no cut on it, and none of its points, can be placed to a step. The spacing is
+/// that of the domain's end further from zero, and the speed the largest the partials reach over
+/// the domain, so the bound holds everywhere on it.
 fn fits(s: &SurfaceKind, meter: &mut WorkMeter<'_>) -> Result<bool, IntersectError> {
     let inside = |x: f64| x.abs() <= REACH;
     let ((a, b), (c, d)) = ParamSurface::domain(s);
@@ -1894,8 +1968,41 @@ fn fits(s: &SurfaceKind, meter: &mut WorkMeter<'_>) -> Result<bool, IntersectErr
         let (o, ..) = p.vectors();
         return Ok(o.iter().all(|x| inside(*x)));
     }
-    let bounds = s.bound(((a, b), (c, d)), meter)?;
-    Ok(bounds.lo.iter().chain(&bounds.hi).all(|x| inside(*x)))
+    let region = ((a, b), (c, d));
+    let bounds = s.bound(region, meter)?;
+    let spacing = |x: f64, y: f64| {
+        let far = tight::larger(x.abs(), y.abs());
+        far.next_up() - far
+    };
+    // The first partials alone, along u and then along v: the box above is the point's own, so
+    // reading it again through all the partials to order 1 would only repeat its work. Each kind
+    // bounds a first partial over a region by the same closed form or hull as its partials to
+    // order 1 there, and one it cannot bound is refused as those would be.
+    //
+    // A kind written as fixed terms, or an extrusion, is screened first by its speed's ceiling
+    // from its forms and vectors alone, which takes no extent. That ceiling is at least the length of the extent's box
+    // up to the box's rounding, so twice it is more than that length: where twice the ceiling
+    // holds the doubles within a step, the extent's bound does too, and the answer is the
+    // extent's. Only a parameter far from zero, where the spacing is coarse, falls to the extent.
+    let mut apart: f64 = 0.0;
+    for (gap, dir) in [(spacing(a, b), Direction::U), (spacing(c, d), Direction::V)] {
+        if let Some(ceiling) = s.speed_ceiling(region, dir)?
+            && gap * (2.0 * ceiling) <= STEP
+        {
+            continue;
+        }
+        let DerivativeBound::Bounded(along) = s.derivative_bound(region, dir, meter)? else {
+            return Err(CurveError::Unbounded.into());
+        };
+        let ([l0, l1, l2], [h0, h1, h2]) = (along.lo, along.hi);
+        let speed = [
+            Interval::new(l0, h0)?,
+            Interval::new(l1, h1)?,
+            Interval::new(l2, h2)?,
+        ];
+        apart = tight::larger(apart, gap * Interval::norm(&speed)?.hi());
+    }
+    Ok(bounds.lo.iter().chain(&bounds.hi).all(|x| inside(*x)) && apart <= STEP)
 }
 
 /// Where two natural quadrics meet in closed form (12.7); `None` for a pair that is not natural, or
@@ -1903,8 +2010,9 @@ fn fits(s: &SurfaceKind, meter: &mut WorkMeter<'_>) -> Result<bool, IntersectErr
 ///
 /// # Errors
 ///
-/// [`IntersectError::FrameRange`] if an operand does not fit the frame's range (12.1), checked
-/// before any closed form; a kind's errors, and the meter's stop.
+/// [`IntersectError::FrameRange`] if an operand does not fit the frame's range (12.1), or its
+/// parameters' doubles stand more than a step apart on it, checked before any closed form; a kind's
+/// errors, and the meter's stop.
 pub fn natural(
     a: &SurfaceKind,
     b: &SurfaceKind,
