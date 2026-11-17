@@ -4,8 +4,9 @@
 //! equation, a line with a sphere, cylinder or cone a quadratic in the surface's own coordinates, and
 //! a line with a torus a quartic, isolated by [`crate::solve`], each with its count from an exact sign
 //! or a Sturm chain where the data are whole. A helix on a coaxial cylinder of its radius is an
-//! overlap. Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval Projected
-//! Polyhedron step narrowing the boxes of NURBS pieces.
+//! overlap, and so is a circle lying in a plane, or about the axis of a cylinder or cone at its
+//! radius there. Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval
+//! Projected Polyhedron step narrowing the boxes of NURBS pieces.
 //!
 //! Guarantees:
 //!
@@ -19,8 +20,13 @@
 //!   curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ,
 //!   [`Unresolved::HigherOrderContact`] where they cannot be told apart, and
 //!   [`Unresolved::NearCoincident`] for a long run, a curve lying near the surface.
-//! - **Overlap by identity.** A line in a plane or along a ruling, and a helix on a coaxial cylinder of
-//!   its radius, are [`Item::Overlap`]s with [`Coincidence::Identical`].
+//! - **Overlap by identity.** A line in a plane or along a ruling, a helix on a coaxial cylinder of
+//!   its radius, and a circle lying in a plane or on a coaxial cylinder or cone, are
+//!   [`Item::Overlap`]s with [`Coincidence::Identical`]. Whether a circle lies on the surface is
+//!   decided by exact signs of sums of products of the stored doubles, never by an enclosure. A
+//!   circle the signs cannot place goes to the engine as before: on a cone, or at an end of a
+//!   round kind's domain, where the axis is off the coordinate axes; where a domain holds only a
+//!   part of the circle; and on a sphere (decision 32.64).
 //! - **A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's
 //!   v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a
 //!   [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands
@@ -33,7 +39,11 @@
 //! fat plane; Krawczyk's test finishes every box.
 //!
 //! Cost: a closed form is a few predicates. The engine's boxes are near the logarithm of the kinds'
-//! reach for a transversal root, each a few evaluations; a clip is O(p·q). Recursion: none.
+//! reach for a transversal root, each a few evaluations; a clip is O(p·q). A curve lying on the
+//! surface that no closed form takes costs the engine boxes in proportion to its length over the
+//! resolution floor, each flagged: a circle of radius 207 lying in a plane cost 1,164,603 work
+//! units (46,647 boxes) before its closed form, and one on an axis off the coordinate axes still
+//! does, bounded by the work budget (issue 974). Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -44,7 +54,9 @@
 use alloc::vec::Vec;
 
 use geom_curve::tight::{self, larger, smaller};
-use geom_curve::{CurveError, CurveKind, DerivativeBound, Frame, HelixAxes, Line, ParamCurve};
+use geom_curve::{
+    Circle, CurveError, CurveKind, DerivativeBound, Frame, HelixAxes, Line, ParamCurve,
+};
 use geom_num::Sign;
 use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
@@ -63,6 +75,7 @@ use crate::curve::{
     onto, proven, quadratic, seam_of, sign_of, slope_over, span, turn_of, whole, widest,
 };
 use crate::error::IntersectError;
+use crate::quadrics::same_line;
 use crate::result::{
     Coincidence, Coverage, Degeneracy, Intersection, Item, OverlapRegion, ParamBox, PointContact,
     StepsInterval, Test, Unresolved,
@@ -1225,6 +1238,222 @@ fn helix_on_cylinder(
     proven(alloc::vec![overlap], meter).map(Some)
 }
 
+/// The height of `p` over `c` along the unit vector of `n`, as two exact terms, where `n` runs along
+/// one coordinate axis: there the unit vector is that axis, signed, and the height is a difference
+/// of two stored doubles. `None` for any other direction: its unit vector is no vector of doubles
+/// (the only ones of length exactly one are the signed axes), so the height is no sum of products
+/// of stored doubles.
+fn height_terms(n: [f64; 3], p: [f64; 3], c: [f64; 3]) -> Option<[(f64, f64); 2]> {
+    let [a, b, e] = n;
+    let [p0, p1, p2] = p;
+    let [c0, c1, c2] = c;
+    let (along, at, from) = match (a != 0.0, b != 0.0, e != 0.0) {
+        (true, false, false) => (a, p0, c0),
+        (false, true, false) => (b, p1, c1),
+        (false, false, true) => (e, p2, c2),
+        _ => return None,
+    };
+    let sigma = if along > 0.0 { 1.0 } else { -1.0 };
+    Some([(sigma, at), (-sigma, from)])
+}
+
+/// The sign of `(p − c) · n`, exactly: a sum of six products of stored doubles.
+fn side_of(p: [f64; 3], c: [f64; 3], n: [f64; 3]) -> Sign {
+    let [p0, p1, p2] = p;
+    let [c0, c1, c2] = c;
+    let [n0, n1, n2] = n;
+    sign_of(&[
+        (p0, n0),
+        (-c0, n0),
+        (p1, n1),
+        (-c1, n1),
+        (p2, n2),
+        (-c2, n2),
+    ])
+}
+
+/// The whole of `curve`, a circle lying on the surface, as an overlap over `u` and `v`.
+fn lying(
+    curve: &CurveKind<3>,
+    u: Interval,
+    v: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Intersection, IntersectError> {
+    let (t0, t1) = curve.domain();
+    let overlap = Item::Overlap {
+        at: ParamBox::new(&[Interval::new(t0, t1)?, u, v])?,
+        region: OverlapRegion {
+            boundary: Vec::new(),
+        },
+        proof: Coincidence::Identical,
+        class: certified(),
+    };
+    proven(alloc::vec![overlap], meter)
+}
+
+/// A circle lying in a plane: an overlap where the plane's domain holds all of it, nothing where
+/// it holds none of it, and `None`, the engine's, where it holds a part or the circle stands off
+/// the plane.
+///
+/// Theorem. A circle of positive radius (a circle kind has no other) holds three points not on one
+/// line, so exactly one plane holds it: the plane through its centre across its frame's stored
+/// normal n, which defines the frame exactly. It lies in the plane c + u·a + v·b if and only if
+/// that is the same plane: n·a = 0, n·b = 0 (a and b are not parallel, so n is then the plane's
+/// normal) and (centre − c)·n = 0. Each is the sign of a sum of products of stored doubles, exact.
+fn circle_in_plane(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    plane: &Plane,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (c, a, b) = plane.vectors();
+    let n = circle.frame().normal();
+    let zero = [0.0; 3];
+    let signs = [
+        side_of(a, zero, n),
+        side_of(b, zero, n),
+        side_of(circle.center(), c, n),
+    ];
+    if signs.iter().any(|s| *s != Sign::Zero) {
+        return Ok(None);
+    }
+    // The circle's box, read in the plane's parameters, holds every (u, v) of the circle.
+    let w = minus(sides(&curve.bound(curve.domain(), meter)?)?, lift(c)?)?;
+    let (a, b) = (lift(a)?, lift(b)?);
+    let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
+    let (wa, wb) = (dot(w, a)?, dot(w, b)?);
+    let det = aa.mul(bb)?.sub(ab.mul(ab)?)?;
+    let u = wa.mul(bb)?.sub(wb.mul(ab)?)?.div(det)?;
+    let v = wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?;
+    let ((u0, u1), (v0, v1)) = ParamSurface::domain(plane);
+    if u.hi() < u0 || u.lo() > u1 || v.hi() < v0 || v.lo() > v1 {
+        return proven(Vec::new(), meter).map(Some);
+    }
+    if u.lo() < u0 || u.hi() > u1 || v.lo() < v0 || v.hi() > v1 {
+        return Ok(None);
+    }
+    lying(curve, u, v, meter).map(Some)
+}
+
+/// A circle about a round kind's axis and of its radius there: an overlap at the v of its height,
+/// over every u, where the domain holds that v; nothing where it does not; and `None`, the
+/// engine's, where the domain is short of a whole turn (it may hold a part of the circle) or an
+/// enclosure cannot place v against an end and the axis is off the coordinate axes.
+///
+/// The point at v stands s·v along the unit axis, so the circle's v is its height over the centre
+/// divided by s, and v against an end `e` of the domain is the sign of (height − s·e) with the
+/// sign of s: exact where [`height_terms`] has the height.
+fn ring_overlap(
+    curve: &CurveKind<3>,
+    at: [f64; 3],
+    (center, frame, factor): ([f64; 3], Frame<3>, f64),
+    (du, dv): ((f64, f64), (f64, f64)),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    if du.1 - du.0 < 2.0 {
+        return Ok(None);
+    }
+    let (_, [_, _, n]) = frame.unit_vectors()?;
+    let height = dot(minus(lift(at)?, lift(center)?)?, n)?;
+    let v = height.div(Interval::point(factor)?)?;
+    if v.hi() < dv.0 || v.lo() > dv.1 {
+        return proven(Vec::new(), meter).map(Some);
+    }
+    let exact = height_terms(frame.normal(), at, center);
+    for (end, inside, outward) in [
+        (dv.0, v.lo() >= dv.0, Sign::Negative),
+        (dv.1, v.hi() <= dv.1, Sign::Positive),
+    ] {
+        if inside {
+            continue;
+        }
+        let Some([p, q]) = exact else {
+            return Ok(None);
+        };
+        let side = sign_of(&[p, q, (-factor, end)]);
+        let side = if factor < 0.0 { side.negate() } else { side };
+        if side == outward {
+            return proven(Vec::new(), meter).map(Some);
+        }
+    }
+    lying(curve, Interval::new(du.0, du.1)?, held(v, dv)?, meter).map(Some)
+}
+
+/// A circle lying on a cylinder.
+///
+/// Theorem. A plane across a right circular cylinder's axis cuts it in the circle of its radius
+/// about the axis; a plane tilted from that cuts it in an ellipse whose half-axes differ; and a
+/// plane along the axis in at most two lines. A circle of positive radius lies in one plane only
+/// and shares at most four points with any other conic, so it lies on the cylinder if and only if
+/// its normal is parallel to the axis, its centre is on the axis, and its radius is the
+/// cylinder's: the first two exact signs ([`same_line`]), the third two stored doubles compared.
+fn circle_on_cylinder(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    cylinder: &Cylinder,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (center, frame) = (cylinder.center(), cylinder.frame());
+    let coaxial = same_line(
+        center,
+        frame.normal(),
+        circle.center(),
+        circle.frame().normal(),
+    );
+    if !coaxial || circle.radius() != cylinder.radius() {
+        return Ok(None);
+    }
+    ring_overlap(
+        curve,
+        circle.center(),
+        (center, frame, cylinder.axial_sign()),
+        ParamSurface::domain(cylinder),
+        meter,
+    )
+}
+
+/// A circle lying on a cone.
+///
+/// Theorem. A plane across a right circular cone's axis at height h over its centre cuts it in
+/// the circle of radius |r₀ + k·h/s| about the axis; a plane tilted from that cuts it in a conic of
+/// eccentricity above zero, or through the apex in a point or lines. So, as for a cylinder, a
+/// circle of positive radius r lies on the cone if and only if its normal is parallel to the
+/// axis, its centre is on the axis, and r₀·s + k·h = r·s or −r·s. With the axis along a coordinate
+/// axis h is a difference of two stored doubles and each equation the sign of a sum of four
+/// products, exact; on any other axis h is no such sum, and the circle is left to the engine.
+fn circle_on_cone(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    cone: &Cone,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (center, frame) = (cone.center(), cone.frame());
+    let at = circle.center();
+    if !same_line(center, frame.normal(), at, circle.frame().normal()) {
+        return Ok(None);
+    }
+    let Some([(sigma, p), (_, c)]) = height_terms(frame.normal(), at, center) else {
+        return Ok(None);
+    };
+    let (r0, k) = cone.radius_and_slope();
+    let (s, r) = (cone.axial_sign(), circle.radius());
+    // k·sigma is k or −k, exactly.
+    let rise = k * sigma;
+    let on_it = [r, -r]
+        .iter()
+        .any(|q| sign_of(&[(r0, s), (rise, p), (-rise, c), (-*q, s)]) == Sign::Zero);
+    if !on_it {
+        return Ok(None);
+    }
+    ring_overlap(
+        curve,
+        at,
+        (center, frame, s),
+        ParamSurface::domain(cone),
+        meter,
+    )
+}
+
 /// The closed form for the pair, if one decides.
 fn closed_form(
     curve: &CurveKind<3>,
@@ -1238,6 +1467,9 @@ fn closed_form(
         (CurveKind::Line(l), SurfaceKind::Cylinder(c)) => line_cylinder(l, c, seams, meter),
         (CurveKind::Line(l), SurfaceKind::Cone(c)) => line_cone(l, c, seams, meter),
         (CurveKind::Line(l), SurfaceKind::Torus(t)) => line_torus(l, t, seams, meter).map(Some),
+        (CurveKind::Circle(k), SurfaceKind::Plane(p)) => circle_in_plane(curve, k, p, meter),
+        (CurveKind::Circle(k), SurfaceKind::Cylinder(c)) => circle_on_cylinder(curve, k, c, meter),
+        (CurveKind::Circle(k), SurfaceKind::Cone(c)) => circle_on_cone(curve, k, c, meter),
         (_, SurfaceKind::Cylinder(c)) => helix_on_cylinder(curve, c, meter),
         _ => Ok(None),
     }

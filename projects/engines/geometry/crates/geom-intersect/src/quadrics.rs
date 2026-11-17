@@ -1627,14 +1627,15 @@ fn apex_ends(surface: &SurfaceKind) -> Result<Vec<Vector>, IntersectError> {
     })
 }
 
-/// Where the curve's stretches on both domains end: the parameters at which an edge of either surface
-/// meets the other, sorted.
-fn cuts(
-    curve: &CurveKind<3>,
+/// What can cut a piece of the pair: the box of each edge of either surface where it meets the
+/// other, and each apex a domain ends at (a curve through one leaves the domain there). They hang
+/// on the two surfaces alone, so a call finds them once, whatever the count of its pieces: before,
+/// every piece ran every edge against the other surface again.
+fn marks(
     a: &SurfaceKind,
     b: &SurfaceKind,
     meter: &mut WorkMeter<'_>,
-) -> Result<Vec<f64>, IntersectError> {
+) -> Result<Vec<Vector>, IntersectError> {
     let mut out = Vec::new();
     for (surface, other) in [(a, b), (b, a)] {
         for edge in edges(surface)? {
@@ -1643,17 +1644,25 @@ fn cuts(
                 let [t, ..] = item.at().spans() else {
                     continue;
                 };
-                let box_of = edge.bound((t.lo(), t.hi()), meter)?;
-                if let Some(t) = cut_at(curve, sides(&box_of)?, meter)? {
-                    out.push(t);
-                }
+                out.push(sides(&edge.bound((t.lo(), t.hi()), meter)?)?);
             }
         }
-        // A curve through an apex the domain ends at leaves the domain there.
-        for at in apex_ends(surface)? {
-            if let Some(t) = cut_at(curve, at, meter)? {
-                out.push(t);
-            }
+        out.extend(apex_ends(surface)?);
+    }
+    Ok(out)
+}
+
+/// Where the curve's stretches on both domains end: the parameters at which a mark of the pair
+/// (an edge of either surface meeting the other, or an apex) lies on the curve, sorted.
+fn cuts(
+    curve: &CurveKind<3>,
+    marks: &[Vector],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<f64>, IntersectError> {
+    let mut out = Vec::new();
+    for at in marks {
+        if let Some(t) = cut_at(curve, *at, meter)? {
+            out.push(t);
         }
     }
     out.sort_unstable_by(f64::total_cmp);
@@ -1674,12 +1683,12 @@ enum Part {
 /// be a stretch, a point.
 fn trimmed(
     curve: &CurveKind<3>,
-    a: &SurfaceKind,
-    b: &SurfaceKind,
+    (a, b): (&SurfaceKind, &SurfaceKind),
+    marks: &[Vector],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Part>, IntersectError> {
     let (lo, hi) = crate::curve::finite(curve)?;
-    let cut = cuts(curve, a, b, meter)?;
+    let cut = cuts(curve, marks, meter)?;
     let loops = closed(curve);
     if cut.is_empty() {
         let inside = on_both(curve, lo * 0.5 + hi * 0.5, a, b, meter)?;
@@ -1877,6 +1886,8 @@ fn items_of(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Item>, IntersectError> {
     let mut items = Vec::new();
+    // The pair's marks, found on the first piece that is a curve and kept for the rest.
+    let mut found_marks: Option<Vec<Vector>> = None;
     for piece in found {
         match piece {
             Piece::Same => {
@@ -1910,7 +1921,13 @@ fn items_of(
                 tangent,
                 reach,
             } => {
-                for kept in trimmed(&nearer(*curve)?, a, b, meter)? {
+                let marks = match found_marks.take() {
+                    Some(list) => list,
+                    None => marks(a, b, meter)?,
+                };
+                let parts = trimmed(&nearer(*curve)?, (a, b), &marks, meter)?;
+                found_marks = Some(marks);
+                for kept in parts {
                     let (part, ends) = match kept {
                         Part::Curve(part, ends) => (*part, ends),
                         Part::Point { at, width } => {
