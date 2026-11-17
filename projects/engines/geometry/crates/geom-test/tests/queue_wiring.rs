@@ -24,7 +24,7 @@
 //!   on any branch, writes nothing another run trusts. The one upload let through is an in-run
 //!   hand-over of [`HAND_OVERS`].
 //! - `an_in_run_hand_over_is_kept_a_day_and_read_in_its_run`: each of [`HAND_OVERS`] (`kernel.yml`'s
-//!   wasm archive, `kernel-quality.yml`'s Miri plan) is uploaded by exactly its job under exactly
+//!   wasm archive and goldens' runner, `kernel-quality.yml`'s Miri plan) is uploaded by exactly its job under exactly
 //!   its name, kept one day, and downloaded under that name by exactly its jobs of the same run;
 //!   no other upload of either workflow is kept one day, and none other uses a hand-over's name.
 //! - `the_queue_and_the_pull_request_cover_every_leg`: the goldens' matrix (`test`) and the
@@ -34,6 +34,12 @@
 //!   run on Linux x86-64; and each release leg of `test` shares its work among its parts with every
 //!   golden and test step on exactly one part, each golden build's `--part j/m` shares whole, and
 //!   geom-num's library, binaries, doctests and every test target once in each build.
+//! - `the_goldens_run_only_the_runner_their_run_built_and_checked`: `golden-runner` builds the
+//!   goldens' runner once for each of `test`'s targets, with no part's build flags, gives its
+//!   sha256 as that target's output and uploads it, failing without the file; every part of
+//!   `test` downloads this run's own runner, checks a full sha256 was given, the file is there and
+//!   its digest is that one, before any golden step, and every golden step runs that checked file;
+//!   no part builds the runner itself.
 //! - `the_wasm32_legs_run_every_golden_and_test_once_in_parts`: each runtime's goldens on wasm32
 //!   (`wasm`) are parts 1 to n, every golden and test step and the guard's proof on exactly one,
 //!   each build's `--part j/m` shares whole; the suite on wasm32 is built once per build
@@ -95,15 +101,23 @@ struct HandOver {
     read_as: &'static str,
 }
 
-/// Every in-run hand-over: `kernel.yml`'s wasm build archive for its suite's parts, and
-/// `kernel-quality.yml`'s Miri plan (filtersets, crates and cargo-nextest) for its Miri jobs.
-const HAND_OVERS: [HandOver; 2] = [
+/// Every in-run hand-over: `kernel.yml`'s wasm build archive for its suite's parts and its
+/// goldens' runner for each system's `test` parts, and `kernel-quality.yml`'s Miri plan
+/// (filtersets, crates and cargo-nextest) for its Miri jobs.
+const HAND_OVERS: [HandOver; 3] = [
     HandOver {
         workflow: "kernel.yml",
         job: "wasm-build",
         name: "wasm-${{ matrix.build }}",
         readers: &["wasm-suite"],
         read_as: "wasm-${{ matrix.part.build }}",
+    },
+    HandOver {
+        workflow: "kernel.yml",
+        job: "golden-runner",
+        name: RUNNER_ARTIFACT,
+        readers: &["test"],
+        read_as: RUNNER_ARTIFACT,
     },
     HandOver {
         workflow: "kernel-quality.yml",
@@ -435,10 +449,10 @@ fn writer_problems(kernel: &str) -> Vec<String> {
         {
             let uses = text(&step["uses"]);
             let run = text(&step["run"]);
-            // A hand-over inside one run (`wasm-build`'s archive for `wasm-suite`'s parts) is not
-            // for later runs: it is named by its build, kept one day, and downloaded under the
-            // same name by a job of the same run (`hand_over_problems`). Anything else that
-            // uploads is held to the rule.
+            // A hand-over inside one run (`wasm-build`'s archive for `wasm-suite`'s parts, and
+            // `golden-runner`'s runner for `test`'s parts) is not for later runs: it is named by
+            // its build or system, kept one day, and downloaded under the same name by a job of
+            // the same run (`hand_over_problems`). Anything else that uploads is held to the rule.
             if uses.starts_with("actions/upload-artifact@")
                 && is_hand_over(&w, "kernel.yml", &job, step)
             {
@@ -1016,9 +1030,6 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
     if parts != (1..=n).collect::<Vec<_>>() {
         found.push(format!("test's parts are {parts:?}, not 1 to {n}"));
     }
-    if !text(&test["name"]).contains(&format!("part {{0}} of {n}', matrix.k)")) {
-        found.push(format!("test's name does not count its {n} parts"));
-    }
     let excluded: BTreeSet<i64> = test["strategy"]["matrix"]["exclude"]
         .as_vec()
         .into_iter()
@@ -1026,9 +1037,18 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
         .filter(|x| text(&x["mode"]) == "debug" && x["target"].is_badvalue())
         .filter_map(|x| x["k"].as_i64())
         .collect();
-    if excluded != (2..=n).collect::<BTreeSet<_>>() {
+    // A debug leg is parts 1 to d, the rest excluded.
+    let d = n - i64::try_from(excluded.len()).unwrap();
+    if d < 1 || excluded != (d + 1..=n).collect::<BTreeSet<_>>() {
         found.push(format!(
-            "a debug leg runs on more than part 1: parts {excluded:?} excluded"
+            "the debug legs' parts are not 1 to {d}: parts {excluded:?} excluded"
+        ));
+    }
+    let counted =
+        format!("format('part {{0}} of {{1}}', matrix.k, matrix.mode == 'release' && {n} || {d})");
+    if !text(&test["name"]).contains(&counted) {
+        found.push(format!(
+            "test's name does not count its {n} release and {d} debug parts"
         ));
     }
     // A golden step's build (its flags and folder) and command without `--part`, to its shares.
@@ -1038,7 +1058,9 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
     for step in test["steps"].as_vec().into_iter().flatten() {
         let run = text(&step["run"]);
         let name = text(&step["name"]);
-        let golden = run.starts_with("cargo run --locked -p geom-test --bin golden");
+        // The runner `golden-runner` built for this system, checked by its digest.
+        let golden = run.starts_with("cargo run --locked -p geom-test --bin golden")
+            || run.starts_with(RUNS_GOLDEN);
         if !(golden || run.starts_with("cargo test") || run.starts_with("cargo nextest")) {
             continue;
         }
@@ -1060,7 +1082,7 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
                 .position(|w| *w == "--part")
                 .and_then(|at| words.get(at + 1))
                 .map_or_else(|| "1/1".to_owned(), |s| (*s).to_owned());
-            let whole = run.replacen(&format!("--part {share} "), "", 1);
+            let whole = run.replacen(&format!("--part {share}"), "", 1);
             goldens
                 .entry(format!("{build} {whole}"))
                 .or_default()
@@ -1543,14 +1565,20 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
         ),
         // A job dropped from what the queue must run.
         (
+            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite wasm-build wasm-suite big-endian large-models\"",
+            "on merge_group the jobs",
+        ),
+        // The goldens' runner's build dropped from what the queue must run.
+        (
+            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models\"",
             "merge_group) must=\"lint scope test suite wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope test suite wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // The wasm32 suite's build dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope test suite wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope test suite wasm wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // A job that would run again on a tree the queue passed.
@@ -1597,8 +1625,8 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
     }
 
     // An arm naming a push and a run by hand together is read as both, and asks the same.
-    let full =
-        "lint scope linux guard test suite wasm wasm-build wasm-suite big-endian large-models";
+    let full = "lint scope linux guard golden-runner test suite wasm wasm-build wasm-suite \
+                big-endian large-models";
     let both = kernel.replacen(
         "              *) must=",
         &format!(
@@ -1660,6 +1688,18 @@ fn a_run_by_hand_writes_nothing_later_runs_read() {
             "          name: kernel-archive-${{ matrix.build }}
           path:",
             "wasm-build's step 8",
+        ),
+        // The runner's hand-over kept for a month, for later runs to find.
+        (
+            "          retention-days: 1\n          if-no-files-found: error\n",
+            "          retention-days: 30\n          if-no-files-found: error\n",
+            "golden-runner's step 4",
+        ),
+        // The runner uploaded under a name no part of this run downloads.
+        (
+            "          name: golden-runner-${{ matrix.target.os }}\n          path: ${{ runner.temp }}/golden-runner\n          retention-days: 1",
+            "          name: runner-${{ matrix.target.os }}\n          path: ${{ runner.temp }}/golden-runner\n          retention-days: 1",
+            "golden-runner's step 4",
         ),
         // A timing record written through `gh` on every run.
         (
@@ -1740,6 +1780,20 @@ fn an_in_run_hand_over_is_kept_a_day_and_read_in_its_run() {
         found
             .iter()
             .any(|p| p.contains("wasm-build does not hand wasm-${{ matrix.build }} over once")),
+        "{found:#?}"
+    );
+    // The goldens' runner kept a month: no longer a hand-over, and nothing else is let through.
+    let planted = kernel.replacen(
+        "          path: ${{ runner.temp }}/golden-runner\n          retention-days: 1\n",
+        "          path: ${{ runner.temp }}/golden-runner\n          retention-days: 30\n",
+        1,
+    );
+    assert_ne!(planted, kernel);
+    let found = hand_over_problems("kernel.yml", &planted);
+    assert!(
+        found.iter().any(|p| p.contains(&format!(
+            "golden-runner does not hand {RUNNER_ARTIFACT} over once"
+        ))),
         "{found:#?}"
     );
 }
@@ -1849,8 +1903,8 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A share in a form the reading does not know is looked at, not passed.
         (
-            "--test 'attack2_[p-z]*' --test",
-            "--test 'attack?*' --test",
+            "targets: \"--test 'attack2_[p-z]*' --test",
+            "targets: \"--test 'attack?*' --test",
             "geom-num's share --test 'attack?*' in `suite's geom-num parts` is not read",
         ),
         // geom-test's doctests in two of its parts.
@@ -1891,32 +1945,44 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A release part dropped from `test`: its step runs nowhere.
         (
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]",
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9]",
-            "geom-num's every test vector in release for this machine's own CPU (part 2 of 2): runs on parts [], not exactly one",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45]",
+            "geom-num's every test vector in release for this machine's own CPU (part 6 of 6): runs on parts [], not exactly one",
         ),
         // A golden step on two parts.
         (
             "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}",
             "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k <= 2 }}",
-            "(part 1 of 2): runs on parts [1, 2], not exactly one",
+            "(part 1 of 11): runs on parts [1, 2], not exactly one",
         ),
         // A golden share dropped from every part: the second share run as the first again.
         (
-            "run --part 2/2 --release",
-            "run --part 1/2 --release",
-            "run shares [\"1/2\", \"1/2\"]",
+            "run --part 2/11 --release",
+            "run --part 1/11 --release",
+            "run shares [\"1/11\", \"1/11\"",
         ),
-        // A debug leg on a second part.
+        // A debug leg on a part past its last.
         (
-            "          - { mode: debug, k: 10 }\n",
+            "          - { mode: debug, k: 46 }\n",
             "",
-            "a debug leg runs on more than part 1",
+            "the debug legs' parts are not 1 to 5",
+        ),
+        // A debug golden share dropped from every part: the second share run as the first again.
+        (
+            "'\"$GOLDEN\" run --part 2/4'",
+            "'\"$GOLDEN\" run --part 1/4'",
+            "run shares [\"1/4\", \"1/4\"",
+        ),
+        // A part added without the name counting it.
+        (
+            "matrix.mode == 'release' && 46 || 4)",
+            "matrix.mode == 'release' && 45 || 4)",
+            "test's name does not count its 46 release and 4 debug parts",
         ),
         // geom-num's test targets of one first letter in no share.
         (
-            "--test '[a-d]*'",
-            "--test '[a-c]*'",
+            "--test '[b-z]*'",
+            "--test '[e-z]*'",
             "geom-num's tests/dd.rs runs 0 times",
         ),
         // geom-num's doctests dropped.
@@ -1935,6 +2001,246 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         let k = kernel.replacen(from, to, 1);
         assert_ne!(k, kernel, "the planted edit {from:?} applies");
         let found = leg_problems(&k);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// How a step of `test` runs the goldens: the runner `golden-runner` built, by the path its
+/// digest check put in `GOLDEN`.
+const RUNS_GOLDEN: &str = "\"$GOLDEN\" run";
+/// The artifact a system's runner goes to its parts as, named by the system's label.
+const RUNNER_ARTIFACT: &str = "golden-runner-${{ matrix.target.os }}";
+/// The digest check's tests: a full sha256 given, the file there, and its digest that one.
+const RUNNER_CHECKS: [&str; 3] = [
+    "[[ $want =~ ^[0-9a-f]{64}$ ]] ||",
+    "[ -f \"$golden\" ] ||",
+    "[ \"$got\" = \"$want\" ] ||",
+];
+
+/// A target's output name in `golden-runner` (`macOS x86-64` is `macos-x86-64`) and its digest's
+/// variable in the check (`SHA256_MACOS_X86_64`).
+fn runner_key(target: &str) -> (String, String) {
+    let key = target.to_lowercase().replace(' ', "-");
+    let var = format!("SHA256_{}", key.to_uppercase().replace('-', "_"));
+    (key, var)
+}
+
+/// The targets of a job's matrix, as (name, label).
+fn targets(job: &Yaml) -> Vec<(String, String)> {
+    job["strategy"]["matrix"]["target"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .map(|t| (text(&t["name"]), text(&t["os"])))
+        .collect()
+}
+
+/// What is wrong with how `test` gets its runner: `golden-runner` not building it once for each
+/// of `test`'s targets, alone, with no build flags of a part, and giving its sha256 as that
+/// target's output and uploading it whole (a missing file failing the upload); a part that does
+/// not download this run's runner on every part, unguarded, before it checks it; a check that
+/// runs on some parts only, lacks a target's digest or one of [`RUNNER_CHECKS`], or does not give
+/// the checked path; a golden step that runs anything but that runner, or before the check; and
+/// a step that builds the runner in a part.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one list of the hand-over's rules, read in order"
+)]
+fn runner_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let builder = &w["jobs"]["golden-runner"];
+    let test = &w["jobs"]["test"];
+    if builder.is_badvalue() {
+        return vec!["kernel.yml has no job golden-runner".to_owned()];
+    }
+    let wanted = targets(test);
+    if targets(builder) != wanted {
+        found.push(format!(
+            "golden-runner builds for {:?}, not test's targets {wanted:?}",
+            targets(builder)
+        ));
+    }
+    if text(&builder["if"]) != text(&test["if"]) {
+        found.push("golden-runner does not run exactly when test does".to_owned());
+    }
+    if !strings(&test["needs"]).contains(&"golden-runner".to_owned()) {
+        found.push("test does not wait for golden-runner".to_owned());
+    }
+    let steps: Vec<&Yaml> = builder["steps"].as_vec().into_iter().flatten().collect();
+    let build = steps
+        .iter()
+        .find(|s| text(&s["run"]).starts_with("cargo build --locked -p geom-test --bin golden\n"));
+    match build {
+        None => found.push("golden-runner does not build the runner alone".to_owned()),
+        Some(b) => {
+            if !b["env"]["RUSTFLAGS"].is_badvalue() || !b["env"]["CARGO_TARGET_DIR"].is_badvalue() {
+                found.push("golden-runner builds the runner with a part's flags".to_owned());
+            }
+            if !text(&b["run"]).contains("echo \"$key=$sha256\" >> \"$GITHUB_OUTPUT\"") {
+                found.push("golden-runner does not give the runner's sha256".to_owned());
+            }
+            if !b["if"].is_badvalue() {
+                found.push("golden-runner's build has a condition".to_owned());
+            }
+        }
+    }
+    for (name, _) in &wanted {
+        let (key, _) = runner_key(name);
+        let output = text(&builder["outputs"][key.as_str()]);
+        if output != format!("${{{{ steps.build.outputs['{key}'] }}}}") {
+            found.push(format!(
+                "golden-runner's output {key} is {output:?}, not its build's"
+            ));
+        }
+    }
+    let upload = steps
+        .iter()
+        .find(|s| text(&s["uses"]).starts_with("actions/upload-artifact@"));
+    if !upload.is_some_and(|u| {
+        text(&u["with"]["name"]) == RUNNER_ARTIFACT
+            && text(&u["with"]["if-no-files-found"]) == "error"
+            && u["if"].is_badvalue()
+    }) {
+        found.push(format!(
+            "golden-runner does not upload {RUNNER_ARTIFACT} on every leg, failing without it"
+        ));
+    }
+    let steps: Vec<&Yaml> = test["steps"].as_vec().into_iter().flatten().collect();
+    let download = steps.iter().position(|s| {
+        text(&s["uses"]).starts_with("actions/download-artifact@")
+            && text(&s["with"]["name"]) == RUNNER_ARTIFACT
+    });
+    let check = steps.iter().position(|s| {
+        let run = text(&s["run"]);
+        RUNNER_CHECKS.iter().any(|c| run.contains(c))
+    });
+    match download {
+        None => found.push(format!("test does not download {RUNNER_ARTIFACT}")),
+        Some(d) => {
+            let s = steps[d];
+            if !s["if"].is_badvalue() || !s["continue-on-error"].is_badvalue() {
+                found.push("test's download of its runner is not on every part, unguarded".into());
+            }
+            if !text(&s["with"]["repository"]).is_empty() || !text(&s["with"]["run-id"]).is_empty()
+            {
+                found.push("test's runner is downloaded from another run".to_owned());
+            }
+            if check.is_some_and(|c| c < d) {
+                found.push("test checks its runner before it downloads it".to_owned());
+            }
+        }
+    }
+    let Some(c) = check else {
+        found.push("test does not check its runner's digest".to_owned());
+        return found;
+    };
+    let s = steps[c];
+    let run = text(&s["run"]);
+    if !s["if"].is_badvalue() || !s["continue-on-error"].is_badvalue() {
+        found.push("test's runner check is not on every part, unguarded".to_owned());
+    }
+    for needed in RUNNER_CHECKS {
+        if !run.contains(needed) {
+            found.push(format!("test's runner check lacks `{needed}`"));
+        }
+    }
+    if !run.contains("echo \"GOLDEN=$golden\" >> \"$GITHUB_ENV\"") {
+        found.push("test's runner check does not give the path it checked".to_owned());
+    }
+    for (name, _) in &wanted {
+        let (key, var) = runner_key(name);
+        let got = text(&s["env"][var.as_str()]);
+        if got != format!("${{{{ needs.golden-runner.outputs['{key}'] }}}}") {
+            found.push(format!(
+                "test's runner check reads {var} as {got:?}, not golden-runner's output {key}"
+            ));
+        }
+    }
+    for (i, s) in steps.iter().enumerate() {
+        let run = text(&s["run"]);
+        let name = text(&s["name"]);
+        if run.contains("--bin golden") {
+            found.push(format!("{name}: builds the runner in a part"));
+        }
+        if name.starts_with("Every golden") && !run.starts_with(RUNS_GOLDEN) {
+            found.push(format!("{name}: does not run the checked runner"));
+        }
+        if run.starts_with(RUNS_GOLDEN) && i < c {
+            found.push(format!("{name}: runs the runner before it is checked"));
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_goldens_run_only_the_runner_their_run_built_and_checked() {
+    let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
+    assert_eq!(runner_problems(&parse(&kernel)), Vec::<String>::new());
+
+    // Seeded violations: each must be reported.
+    for (from, to, said) in [
+        // The digest no longer compared: any file named golden would run.
+        (
+            "          [ \"$got\" = \"$want\" ] ||\n",
+            "          [ -n \"$got\" ] ||\n",
+            "lacks `[ \"$got\" = \"$want\" ] ||`",
+        ),
+        // A missing runner passed over, so a part could pass having run nothing.
+        (
+            "          [ -f \"$golden\" ] || { echo",
+            "          [ -f \"$golden\" ] && { echo",
+            "lacks `[ -f \"$golden\" ] ||`",
+        ),
+        // The download let fail quietly.
+        (
+            "      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2\n        with:\n          name: golden-runner-",
+            "      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2\n        continue-on-error: true\n        with:\n          name: golden-runner-",
+            "not on every part, unguarded",
+        ),
+        // The check skipped on the debug parts.
+        (
+            "      - name: Check the goldens' runner by the digest its build gave\n",
+            "      - name: Check the goldens' runner by the digest its build gave\n        if: ${{ matrix.mode == 'release' }}\n",
+            "test's runner check is not on every part",
+        ),
+        // One system's digest not handed to the check.
+        (
+            "          SHA256_MACOS_X86_64: ${{ needs.golden-runner.outputs['macos-x86-64'] }}\n",
+            "",
+            "reads SHA256_MACOS_X86_64",
+        ),
+        // A part building the runner again (and the minutes with it).
+        (
+            "        run: '\"$GOLDEN\" run --part 3/11 --release'",
+            "        run: cargo run --locked -p geom-test --bin golden -- run --part 3/11 --release",
+            "builds the runner in a part",
+        ),
+        // A system the runner is not built for.
+        (
+            "          - name: macOS x86-64\n            os: macos-15-intel\n    defaults:",
+            "    defaults:",
+            "golden-runner builds for",
+        ),
+        // The upload let pass with no file.
+        (
+            "          retention-days: 1\n          if-no-files-found: error\n",
+            "          retention-days: 1\n          if-no-files-found: warn\n",
+            "failing without it",
+        ),
+        // The runner built with a part's flags.
+        (
+            "      - name: Build the goldens' runner and give its sha256\n        id: build\n        env:\n",
+            "      - name: Build the goldens' runner and give its sha256\n        id: build\n        env:\n          RUSTFLAGS: -C target-cpu=native\n",
+            "with a part's flags",
+        ),
+    ] {
+        let k = kernel.replacen(from, to, 1);
+        assert_ne!(k, kernel, "the planted edit {from:?} applies");
+        let found = runner_problems(&parse(&k));
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }

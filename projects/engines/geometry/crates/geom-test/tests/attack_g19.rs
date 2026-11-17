@@ -210,83 +210,296 @@ fn the_goldens_the_crates_pinned_are_byte_identical_in_the_store() {
 fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
     let yml = KERNEL_YML.replace("\r\n", "\n");
     let steps = [
-        "      - name: Every golden in release, with overflow checks on (part 1 of 2)
+        "      - name: Every golden in release, with overflow checks on (part 1 of 11)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
+        run: '\"$GOLDEN\" run --part 1/11 --release'
 ",
-        "      - name: Every golden in release, with overflow checks on (part 2 of 2)
+        "      - name: Every golden in release, with overflow checks on (part 2 of 11)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 2 }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
+        run: '\"$GOLDEN\" run --part 2/11 --release'
 ",
-        "      - name: Every golden in release as shipped, without overflow checks (part 1 of 2)
+        "      - name: Every golden in release, with overflow checks on (part 3 of 11)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 3 }}
-        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 3/11 --release'
 ",
-        "      - name: Every golden in release as shipped, without overflow checks (part 2 of 2)
+        "      - name: Every golden in release, with overflow checks on (part 4 of 11)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 4 }}
-        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 4/11 --release'
 ",
-        "      - name: geom-num's every test vector in release as shipped (part 1 of 2)
+        "      - name: Every golden in release, with overflow checks on (part 5 of 11)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 5 }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins --test '[a-d]*'
-      - name: geom-num's doctests in release as shipped
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 5 }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast --doc
-      - name: geom-num's every test vector in release as shipped (part 2 of 2)
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 5/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 6 of 11)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 6 }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[e-z]*'
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 6/11 --release'
 ",
-        "        env:
+        "      - name: Every golden in release, with overflow checks on (part 7 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 7 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 7/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 8 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 8 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 8/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 9 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 9 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 9/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 10 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 10 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 10/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 11 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 11 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 11/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 1 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 12 }}
+        run: '\"$GOLDEN\" run --part 1/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 2 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 13 }}
+        run: '\"$GOLDEN\" run --part 2/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 3 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 14 }}
+        run: '\"$GOLDEN\" run --part 3/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 4 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 15 }}
+        run: '\"$GOLDEN\" run --part 4/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 5 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 16 }}
+        run: '\"$GOLDEN\" run --part 5/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 6 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 17 }}
+        run: '\"$GOLDEN\" run --part 6/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 7 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 18 }}
+        run: '\"$GOLDEN\" run --part 7/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 8 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 19 }}
+        run: '\"$GOLDEN\" run --part 8/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 9 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 20 }}
+        run: '\"$GOLDEN\" run --part 9/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 10 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 21 }}
+        run: '\"$GOLDEN\" run --part 10/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 11 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 22 }}
+        run: '\"$GOLDEN\" run --part 11/11 --release'
+",
+        "      - name: The replay corpus and the transform sweep with the checker as shipped
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 23 }}
+        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
+",
+        "      - name: geom-num's every test vector in release as shipped (part 1 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 24 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins
+",
+        "      - name: geom-num's doctests in release as shipped
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 24 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --doc
+",
+        "      - name: geom-num's every test vector in release as shipped (part 2 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 25 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[a-g]*'
+",
+        "      - name: geom-num's every test vector in release as shipped (part 3 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 26 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[e-i]*'
+",
+        "      - name: geom-num's every test vector in release as shipped (part 4 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 27 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[p-z]*' --test 'attack_[s-z]*'
+",
+        "      - name: geom-num's every test vector in release as shipped (part 5 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 28 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[h-r]*'
+",
+        "      - name: geom-num's every test vector in release as shipped (part 6 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 29 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[b-z]*'
+",
+        "      - name: Show this machine's CPU features
+        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        run: rustc -vV && rustc --print cfg -C target-cpu=native
+",
+        "      - name: Every golden in release for this machine's own CPU (part 1 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 30 }}
+        env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           # Its own build folder, which the build cache never saves or restores: the cache's key
           # does not name the processor, so a restored native build from another machine's CPU
           # can hold instructions this one lacks (SIGILL). Built fresh here, it is this CPU's.
           CARGO_TARGET_DIR: target-native
-        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
+        run: '\"$GOLDEN\" run --part 1/11 --release'
 ",
-        "      - name: Every golden in release for this machine's own CPU (part 2 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 8 }}
+        "      - name: Every golden in release for this machine's own CPU (part 2 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 31 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
-        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
+        run: '\"$GOLDEN\" run --part 2/11 --release'
 ",
-        "      - name: geom-num's every test vector in release for this machine's own CPU (part 1 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 9 }}
+        "      - name: Every golden in release for this machine's own CPU (part 3 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 32 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins --test '[a-d]*'
-      - name: geom-num's doctests in release for this machine's own CPU
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 9 }}
+        run: '\"$GOLDEN\" run --part 3/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 4 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 33 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 4/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 5 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 34 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 5/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 6 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 35 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 6/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 7 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 36 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 7/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 8 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 37 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 8/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 9 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 38 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 9/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 10 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 39 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 10/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 11 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 40 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 11/11 --release'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 1 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 41 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins
+",
+        "      - name: geom-num's doctests in release for this machine's own CPU
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 41 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo test -p geom-num --release --locked --no-fail-fast --doc
-      - name: geom-num's every test vector in release for this machine's own CPU (part 2 of 2)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 10 }}
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 2 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 42 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[e-z]*'
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[a-g]*'
 ",
-        "      - name: Every golden in debug
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 3 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 43 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[e-i]*'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 4 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 44 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[p-z]*' --test 'attack_[s-z]*'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 5 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 45 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[h-r]*'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 6 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 46 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[b-z]*'
+",
+        "      - name: Every golden in debug (part 1 of 4)
         if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 1 }}
-        # The runner calls `cargo test -p geom-test`, and cargo builds a package's binaries for its
-        # integration tests: in this same debug folder that can mean replacing the running golden
-        # binary, which Windows refuses (\"failed to remove file ... golden.exe: Access is denied\",
-        # so the goldens never ran). The release steps build their tests in another profile's
-        # folder. So the debug runner runs from a copy outside the build folder.
-        run: |
-          cargo build --locked -p geom-test --bin golden
-          exe=\"\"
-          if [ \"$RUNNER_OS\" = \"Windows\" ]; then exe=\".exe\"; fi
-          cp \"target/debug/golden$exe\" \"$RUNNER_TEMP/golden$exe\"
-          \"$RUNNER_TEMP/golden$exe\" run
+        run: '\"$GOLDEN\" run --part 1/4'
+",
+        "      - name: Every golden in debug (part 2 of 4)
+        if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 2 }}
+        run: '\"$GOLDEN\" run --part 2/4'
+",
+        "      - name: Every golden in debug (part 3 of 4)
+        if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 3 }}
+        run: '\"$GOLDEN\" run --part 3/4'
+",
+        "      - name: Every golden in debug (part 4 of 4)
+        if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 4 }}
+        run: '\"$GOLDEN\" run --part 4/4'
 ",
         // The whole suite, in parts that run side by side (the job `suite`): in release every part
         // runs its own crates' tests (a share of the crates, or a crate's share of its targets),
