@@ -61,10 +61,15 @@ and G125's convex faces), `geom-poly`'s canonical planes and arrangement predica
 to one plane and one order to any points, rays or flaps; `exact` (`src/exact.rs`, G146),
 `geom-mesh`'s exact mesh refuses what is not a mesh and gives one mesh in any input order; `cdt`
 (`src/cdt.rs`, G153), the triangulation is a true constrained Delaunay triangulation and one answer
-in any input order; and `solids` (`src/solids.rs`, G147 to G152, and through the mesh boolean
+in any input order; `solids` (`src/solids.rs`, G147 to G152, and through the mesh boolean
 G126 to G129's arrangement code), `geom-mesh`'s operations on small solids agree with counted
-cells. `make` and `sequence` reach G134's checker groups. Which lines of each piece they reach, and
-the pieces no target reaches yet (`geom-bool`'s, G142 to G145), are in
+cells; and `booleans` (`src/booleans.rs`, G130 to G133, G137 to G139 and G144, with G129's
+`rebuild.rs`), `geom-bool`'s boolean pipeline on small solids agrees with counted cells: every
+selection of one arrangement, a half-space and a wire kept inside the boxes, rooms and their
+leaks, batch cuts and a re-cut from the last cut's cache, and a local step on its full and fast
+paths, every result passing the full checker and the second checker, which agree. `make` and
+`sequence` reach G134's checker groups. Which lines of each piece they reach, and the pieces no
+target reaches yet (G142, G143 and G145, which the boolean pipeline does not call), are in
 `projects/kit/notes/G156-piece-map.md`. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
