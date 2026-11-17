@@ -128,44 +128,72 @@ pub fn build_args(groups: &[Group], extra: &[String]) -> Vec<Vec<String>> {
     out
 }
 
-/// Seconds each crate's golden groups took to build and run on the slowest native leg, macOS
-/// x86-64 in release with overflow checks on (main's run 43829666754 of 16 November 2026, from each
-/// group's `golden run: cargo` line to the next). They only balance [`part`]: a crate not listed
-/// counts [`UNMEASURED_SECONDS`] and still runs in exactly one part.
-const CRATE_SECONDS: [(&str, u64); 16] = [
-    ("geom-num", 466),
-    ("geom-test", 312),
-    ("geom-run", 155),
-    ("geom-format", 106),
-    ("geom-poly", 88),
-    ("geom-curve", 29),
-    ("geom-math", 26),
-    ("geom-nurbs", 12),
-    ("geom-surface", 9),
+/// Seconds each crate's golden groups took to run in release on macOS x86-64, the slowest native
+/// leg, on its quicker runners (main's run 44052487998 of 17 November 2026, parts 1 and 2 of the
+/// checked goldens, from each group's `golden run: cargo` line to the next). They only balance
+/// [`part`]: a crate not listed counts [`UNMEASURED_SECONDS`] and still runs in exactly one part.
+/// The six long ones (geom-run to geom-topo) each go to a part of their own when a leg has six.
+const RELEASE_SECONDS: [(&str, u64); 16] = [
+    ("geom-run", 141),
+    ("geom-num", 130),
+    ("geom-format", 110),
+    ("geom-linalg", 100),
+    ("geom-poly", 81),
+    ("geom-topo", 78),
+    ("geom-test", 30),
+    ("geom-curve", 30),
+    ("geom-math", 15),
+    ("geom-surface", 12),
+    ("geom-nurbs", 11),
     ("geom-mesh", 6),
     ("geom-op", 5),
-    ("geom-bvh", 4),
-    ("geom-topo", 3),
+    ("geom-bvh", 5),
     ("geom-name", 3),
     ("geom-make", 2),
-    ("geom-linalg", 2),
 ];
 
-/// What [`part`] counts for a crate [`CRATE_SECONDS`] does not list.
+/// The same in debug (the same run's `Test (macOS x86-64, debug)`), where geom-test's polyhedral
+/// corpus is the longest and geom-run's golden is short.
+const DEBUG_SECONDS: [(&str, u64); 16] = [
+    ("geom-test", 200),
+    ("geom-num", 80),
+    ("geom-poly", 52),
+    ("geom-curve", 50),
+    ("geom-format", 46),
+    ("geom-mesh", 35),
+    ("geom-surface", 35),
+    ("geom-math", 15),
+    ("geom-run", 10),
+    ("geom-topo", 8),
+    ("geom-linalg", 8),
+    ("geom-nurbs", 5),
+    ("geom-bvh", 3),
+    ("geom-op", 3),
+    ("geom-name", 3),
+    ("geom-make", 2),
+];
+
+/// What [`part`] counts for a crate its table does not list.
 const UNMEASURED_SECONDS: u64 = 30;
 
 /// The groups of part `k` of `n` (1 to `n`), so that `n` CI jobs side by side run every group
 /// exactly once between them. Whole crates are shared out, so a crate's groups build their crate
-/// once: the longest first ([`CRATE_SECONDS`], then the name), each to the part with the fewest
-/// seconds so far (the lowest part on a tie). The groups keep their plan order. `None` when `k`
+/// once: the longest first ([`RELEASE_SECONDS`] when `release`, else [`DEBUG_SECONDS`], then the
+/// name), each to the part with the fewest seconds so far (the lowest part on a tie). The groups
+/// keep their plan order. `None` when `k`
 /// is not in 1 to `n`.
 #[must_use]
-pub fn part(groups: &[Group], k: usize, n: usize) -> Option<Vec<Group>> {
+pub fn part(groups: &[Group], k: usize, n: usize, release: bool) -> Option<Vec<Group>> {
     if k == 0 || k > n {
         return None;
     }
+    let table: &[(&str, u64)] = if release {
+        &RELEASE_SECONDS
+    } else {
+        &DEBUG_SECONDS
+    };
     let seconds = |c: &str| {
-        CRATE_SECONDS
+        table
             .iter()
             .find(|(name, _)| *name == c)
             .map_or(UNMEASURED_SECONDS, |(_, s)| *s)
@@ -460,8 +488,10 @@ mod tests {
             ids: vec!["geom-new/det".to_owned()],
         });
         for groups in [&real, &planted] {
-            for n in 1..=6 {
-                let parts: Vec<Vec<Group>> = (1..=n).map(|k| part(groups, k, n).unwrap()).collect();
+            for (n, release) in (1..=6).flat_map(|n| [(n, true), (n, false)]) {
+                let parts: Vec<Vec<Group>> = (1..=n)
+                    .map(|k| part(groups, k, n, release).unwrap())
+                    .collect();
                 for g in groups {
                     let homes = parts.iter().filter(|p| p.contains(g)).count();
                     assert_eq!(homes, 1, "{}::{} in {homes} of {n} parts", g.krate, g.test);
@@ -477,13 +507,33 @@ mod tests {
                 }
                 assert_eq!(parts.iter().fold(0, |all, p| all + p.len()), groups.len());
             }
-            assert_eq!(part(groups, 0, 2), None);
-            assert_eq!(part(groups, 3, 2), None);
+            assert_eq!(part(groups, 0, 2, true), None);
+            assert_eq!(part(groups, 3, 2, false), None);
         }
-        // The two slowest crates go to different parts of two.
-        let one = part(&real, 1, 2).unwrap();
-        assert!(one.iter().any(|g| g.krate == "geom-num"));
-        assert!(!one.iter().any(|g| g.krate == "geom-test"));
+        // The two slowest crates go to different parts of two, by each mode's own table.
+        let one = part(&real, 1, 2, true).unwrap();
+        assert!(one.iter().any(|g| g.krate == "geom-run"));
+        assert!(!one.iter().any(|g| g.krate == "geom-num"));
+        let one = part(&real, 1, 2, false).unwrap();
+        assert!(one.iter().any(|g| g.krate == "geom-test"));
+        assert!(!one.iter().any(|g| g.krate == "geom-num"));
+        // In release, six parts give each of the six long crates a part of its own.
+        let long = [
+            "geom-run",
+            "geom-num",
+            "geom-format",
+            "geom-linalg",
+            "geom-poly",
+            "geom-topo",
+        ];
+        for k in 1..=6 {
+            let p = part(&real, k, 6, true).unwrap();
+            let held = long
+                .iter()
+                .filter(|c| p.iter().any(|g| g.krate == **c))
+                .count();
+            assert_eq!(held, 1, "release part {k} of 6 holds {held} long crates");
+        }
     }
 
     /// The build before the runs names every group's crate and test once, unit tests apart, with

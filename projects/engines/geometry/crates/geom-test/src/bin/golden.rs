@@ -213,7 +213,9 @@ fn run(extra: &[String]) -> ExitCode {
             let parsed = spec
                 .split_once('/')
                 .and_then(|(k, n)| Some((k.parse::<usize>().ok()?, n.parse::<usize>().ok()?)));
-            let Some(groups) = parsed.and_then(|(k, n)| part(&all, k, n)) else {
+            // Shared out by the seconds of the leg's own mode: release when its arguments say so.
+            let release = rest.iter().any(|a| a == "--release");
+            let Some(groups) = parsed.and_then(|(k, n)| part(&all, k, n, release)) else {
                 return usage(&format!("--part {spec}: not k/n with k in 1 to n"));
             };
             (groups, rest, format!(", part {spec}"))

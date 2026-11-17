@@ -910,9 +910,6 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
     if parts != (1..=n).collect::<Vec<_>>() {
         found.push(format!("test's parts are {parts:?}, not 1 to {n}"));
     }
-    if !text(&test["name"]).contains(&format!("part {{0}} of {n}', matrix.k)")) {
-        found.push(format!("test's name does not count its {n} parts"));
-    }
     let excluded: BTreeSet<i64> = test["strategy"]["matrix"]["exclude"]
         .as_vec()
         .into_iter()
@@ -920,9 +917,18 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
         .filter(|x| text(&x["mode"]) == "debug" && x["target"].is_badvalue())
         .filter_map(|x| x["k"].as_i64())
         .collect();
-    if excluded != (2..=n).collect::<BTreeSet<_>>() {
+    // A debug leg is parts 1 to d, the rest excluded.
+    let d = n - i64::try_from(excluded.len()).unwrap();
+    if d < 1 || excluded != (d + 1..=n).collect::<BTreeSet<_>>() {
         found.push(format!(
-            "a debug leg runs on more than part 1: parts {excluded:?} excluded"
+            "the debug legs' parts are not 1 to {d}: parts {excluded:?} excluded"
+        ));
+    }
+    let counted =
+        format!("format('part {{0}} of {{1}}', matrix.k, matrix.mode == 'release' && {n} || {d})");
+    if !text(&test["name"]).contains(&counted) {
+        found.push(format!(
+            "test's name does not count its {n} release and {d} debug parts"
         ));
     }
     // A golden step's build (its flags and folder) and command without `--part`, to its shares.
@@ -932,7 +938,9 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
     for step in test["steps"].as_vec().into_iter().flatten() {
         let run = text(&step["run"]);
         let name = text(&step["name"]);
-        let golden = run.starts_with("cargo run --locked -p geom-test --bin golden");
+        // In debug the runner runs from a copy outside the build folder.
+        let golden = run.starts_with("cargo run --locked -p geom-test --bin golden")
+            || run.contains("\"$RUNNER_TEMP/golden$exe\" run");
         if !(golden || run.starts_with("cargo test") || run.starts_with("cargo nextest")) {
             continue;
         }
@@ -954,7 +962,7 @@ fn test_part_problems(w: &Yaml, tests: &[String]) -> Vec<String> {
                 .position(|w| *w == "--part")
                 .and_then(|at| words.get(at + 1))
                 .map_or_else(|| "1/1".to_owned(), |s| (*s).to_owned());
-            let whole = run.replacen(&format!("--part {share} "), "", 1);
+            let whole = run.replacen(&format!("--part {share}"), "", 1);
             goldens
                 .entry(format!("{build} {whole}"))
                 .or_default()
@@ -1674,8 +1682,8 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A share in a form the reading does not know is looked at, not passed.
         (
-            "--test 'attack2_[p-z]*' --test",
-            "--test 'attack?*' --test",
+            "targets: \"--test 'attack2_[p-z]*' --test",
+            "targets: \"--test 'attack?*' --test",
             "geom-num's share --test 'attack?*' in `suite's geom-num parts` is not read",
         ),
         // geom-test's doctests in two of its parts.
@@ -1716,32 +1724,44 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A release part dropped from `test`: its step runs nowhere.
         (
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]",
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9]",
-            "geom-num's every test vector in release for this machine's own CPU (part 2 of 2): runs on parts [], not exactly one",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]",
+            "geom-num's every test vector in release for this machine's own CPU (part 5 of 5): runs on parts [], not exactly one",
         ),
         // A golden step on two parts.
         (
             "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}",
             "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k <= 2 }}",
-            "(part 1 of 2): runs on parts [1, 2], not exactly one",
+            "(part 1 of 6): runs on parts [1, 2], not exactly one",
         ),
         // A golden share dropped from every part: the second share run as the first again.
         (
-            "run --part 2/2 --release",
-            "run --part 1/2 --release",
-            "run shares [\"1/2\", \"1/2\"]",
+            "run --part 2/6 --release",
+            "run --part 1/6 --release",
+            "run shares [\"1/6\", \"1/6\"",
         ),
-        // A debug leg on a second part.
+        // A debug leg on a part past its last.
         (
-            "          - { mode: debug, k: 10 }\n",
+            "          - { mode: debug, k: 29 }\n",
             "",
-            "a debug leg runs on more than part 1",
+            "the debug legs' parts are not 1 to 5",
+        ),
+        // A debug golden share dropped from every part: the second share run as the first again.
+        (
+            "\"$RUNNER_TEMP/golden$exe\" run --part 2/4",
+            "\"$RUNNER_TEMP/golden$exe\" run --part 1/4",
+            "run shares [\"1/4\", \"1/4\"",
+        ),
+        // A part added without the name counting it.
+        (
+            "matrix.mode == 'release' && 29 || 4)",
+            "matrix.mode == 'release' && 28 || 4)",
+            "test's name does not count its 29 release and 4 debug parts",
         ),
         // geom-num's test targets of one first letter in no share.
         (
-            "--test '[a-d]*'",
-            "--test '[a-c]*'",
+            "--test '[b-z]*'",
+            "--test '[e-z]*'",
             "geom-num's tests/dd.rs runs 0 times",
         ),
         // geom-num's doctests dropped.
