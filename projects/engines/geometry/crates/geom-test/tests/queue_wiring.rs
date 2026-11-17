@@ -1625,8 +1625,8 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
     }
 
     // An arm naming a push and a run by hand together is read as both, and asks the same.
-    let full =
-        "lint scope linux guard test suite wasm wasm-build wasm-suite big-endian large-models";
+    let full = "lint scope linux guard golden-runner test suite wasm wasm-build wasm-suite \
+                big-endian large-models";
     let both = kernel.replacen(
         "              *) must=",
         &format!(
@@ -1791,9 +1791,9 @@ fn an_in_run_hand_over_is_kept_a_day_and_read_in_its_run() {
     assert_ne!(planted, kernel);
     let found = hand_over_problems("kernel.yml", &planted);
     assert!(
-        found
-            .iter()
-            .any(|p| p.contains(&format!("golden-runner does not hand {RUNNER_ARTIFACT} over once"))),
+        found.iter().any(|p| p.contains(&format!(
+            "golden-runner does not hand {RUNNER_ARTIFACT} over once"
+        ))),
         "{found:#?}"
     );
 }
@@ -2073,8 +2073,7 @@ fn runner_problems(w: &Yaml) -> Vec<String> {
     match build {
         None => found.push("golden-runner does not build the runner alone".to_owned()),
         Some(b) => {
-            if !b["env"]["RUSTFLAGS"].is_badvalue() || !b["env"]["CARGO_TARGET_DIR"].is_badvalue()
-            {
+            if !b["env"]["RUSTFLAGS"].is_badvalue() || !b["env"]["CARGO_TARGET_DIR"].is_badvalue() {
                 found.push("golden-runner builds the runner with a part's flags".to_owned());
             }
             if !text(&b["run"]).contains("echo \"$key=$sha256\" >> \"$GITHUB_OUTPUT\"") {
