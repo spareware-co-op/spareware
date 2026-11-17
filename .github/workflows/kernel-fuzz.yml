@@ -452,6 +452,10 @@ jobs:
   # one they took 16 to 25 minutes on a hosted runner (run 44020080291), apart 1 to 8 (run
   # 44051779140). A cut by claim is measured before it is kept: interval's mul alone ran past an
   # hour where add, sub and mul in one harness take 46 minutes (run 44046765712).
+  # dd's from_i128 (18 to 20 minutes as one harness of every i128) is one harness for each of
+  # eight classes of the value, its sign and its magnitude's width in four bands, with a cover
+  # harness that proves every i128 is in one of the eight, so the nine together prove what the
+  # one did.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
@@ -463,7 +467,15 @@ jobs:
       matrix:
         proof:
           - dd::proofs::exponent_reads_the_leading_bit
-          - dd::proofs::from_i128_accepts_exactly_below_2_106
+          - dd::proofs::from_i128_classes_cover_every_value
+          - dd::proofs::from_i128_of_a_negative_of_54_to_64_bits
+          - dd::proofs::from_i128_of_a_negative_of_65_to_106_bits
+          - dd::proofs::from_i128_of_a_negative_of_at_most_53_bits
+          - dd::proofs::from_i128_of_a_negative_of_over_106_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_54_to_64_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_65_to_106_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_at_most_53_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_over_106_bits
           - dd::proofs::pow2_is_exact_over_its_range
           - dd::proofs::scale_pow2_never_reports_a_defect
           - dd::proofs::whole_reads_what_it_accepts_exactly
