@@ -105,8 +105,8 @@ pub(crate) struct Cone {
     axis: V3,
     /// The radius at height 0.
     radius: f64,
-    /// The change of radius per unit of height: 0 for a cylinder.
-    slope: f64,
+    /// The change of radius per unit of height, enclosed: 0 for a cylinder.
+    slope: Interval,
 }
 
 /// A ring torus's data.
@@ -132,20 +132,25 @@ pub(crate) fn carrier(surface: &SurfaceKind) -> Option<Carrier> {
                 normal: cross(lift(a)?, lift(b)?)?,
             })
         }
+        // A cylinder's height is read from the point, h = w · n̂, never from its parameter v, so
+        // its axial factor s (which a similarity scales) does not enter.
         SurfaceKind::Cylinder(s) => Some(Carrier::Round(Cone {
             center: lift(s.center())?,
             axis: axis(&s.frame())?,
             radius: s.radius(),
-            slope: 0.0,
+            slope: at(0.0)?,
         })),
         SurfaceKind::Cone(s) => {
-            // S(u, v) = c + (r₀ + k·v)·e(u) + s·v·n̂: at height h = s·v the radius is r₀ + k·s·h.
+            // S(u, v) = c + (r₀ + k·v)·e(u) + s·v·n̂: the point at v is at height h = s·v, so its
+            // radius r₀ + k·v is r₀ + (k/s)·h. The factor s is ±1 as built, where k/s is k·s, but a
+            // similarity multiplies it by its scale (and k with it), and then only k/s is the
+            // slope. Enclosed: exact wherever the quotient is a double, as it is for s = ±1.
             let (radius, slope) = s.radius_and_slope();
             Some(Carrier::Round(Cone {
                 center: lift(s.center())?,
                 axis: axis(&s.frame())?,
                 radius,
-                slope: slope * s.axial_sign(),
+                slope: divide(at(slope)?, at(s.axial_sign())?)?,
             }))
         }
         SurfaceKind::Sphere(s) => Some(Carrier::Ball {
@@ -262,7 +267,7 @@ struct End {
 impl Cone {
     /// The radius at height `h`; `None` where it may be negative.
     fn radius_at(&self, h: Interval) -> Option<Interval> {
-        let r = plus(at(self.radius)?, times(at(self.slope)?, h)?)?;
+        let r = plus(at(self.radius)?, times(self.slope, h)?)?;
         if r.lo() < 0.0 {
             return None;
         }
@@ -357,6 +362,12 @@ pub(crate) enum Pair {
 /// that do, so two such faces can meet wherever their planes are 2b apart or nearer, however the
 /// planes are written. For faces that lie on their planes exactly, `stray` is nothing, and any
 /// two parallel planes that are not one keep them apart.
+///
+/// Two planes that cross are left unknown, as `Pair::Crossing` is not given here: the one caller,
+/// group 3's test of two faces, settles only on apart or a shared circle, and treats crossing and
+/// unknown alike, so a separate answer for crossing planes was one no input could tell apart (the
+/// mutation gate found it). `geometric::planes_lie` gives it for integer planes, where the planar
+/// tests use it.
 pub(crate) fn pair(first: &Carrier, second: &Carrier, stray: f64) -> Pair {
     match (first, second) {
         (
@@ -371,10 +382,10 @@ pub(crate) fn pair(first: &Carrier, second: &Carrier, stray: f64) -> Pair {
                 let offset = dot(sub3(*other, *origin)?, *normal)?;
                 Some((turn, offset))
             };
-            match planes() {
-                Some((turn, offset)) if zero(turn) && clear(offset, *normal, stray) => Pair::Apart,
-                Some((turn, _)) if turn.into_iter().any(away) => Pair::Crossing,
-                _ => Pair::Unknown,
+            if planes().is_some_and(|(turn, offset)| zero(turn) && clear(offset, *normal, stray)) {
+                Pair::Apart
+            } else {
+                Pair::Unknown
             }
         }
         (Carrier::Flat { normal, .. }, Carrier::Round(cone))
@@ -502,8 +513,8 @@ fn polar(center: V3, axis: V3, q: V3) -> Option<(Interval, Interval)> {
 }
 
 /// √(1 + k²).
-fn slant(slope: f64) -> Option<Interval> {
-    tight::sqrt(plus(at(1.0)?, square(at(slope)?)?)?).ok()
+fn slant(slope: Interval) -> Option<Interval> {
+    tight::sqrt(plus(at(1.0)?, square(slope)?)?).ok()
 }
 
 /// The upper bound of a sum of enclosures.
@@ -681,15 +692,16 @@ mod tests {
         assert!(matches!(pair(&floor, &ceiling, f64::NAN), Pair::Unknown));
     }
 
-    /// Two planes whose normals differ certainly cross along a line.
+    /// Two planes whose normals differ cross along a line, which certifies nothing that keeps
+    /// their faces apart: they are left unknown, never apart.
     #[test]
-    fn planes_with_different_normals_cross() {
+    fn planes_with_different_normals_are_not_apart() {
         let floor = flat_through(v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0));
         let wall = flat_through(v(2.0, 0.0, 0.0), v(1.0, 0.0, 0.0));
-        assert!(matches!(pair(&floor, &wall, 0.0), Pair::Crossing));
-        assert!(matches!(pair(&wall, &floor, 1.0), Pair::Crossing));
+        assert!(matches!(pair(&floor, &wall, 0.0), Pair::Unknown));
+        assert!(matches!(pair(&wall, &floor, 1.0), Pair::Unknown));
         let slant = flat_through(v(0.0, 0.0, 0.0), v(0.0, 1.0, 1.0));
-        assert!(matches!(pair(&floor, &slant, 0.0), Pair::Crossing));
+        assert!(matches!(pair(&floor, &slant, 0.0), Pair::Unknown));
     }
 
     /// A plane's normal that is not certain (an interval across zero) certifies nothing.

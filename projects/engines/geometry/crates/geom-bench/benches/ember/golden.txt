@@ -1,0 +1,5 @@
+# Golden digests of geom-bench's benchmark of EMBER's pair 827 (chapter 23.13, "Output hash"), in
+# src/golden.txt's format: its name, the SHA-256 of its inputs and the SHA-256 of its results.
+# tests/ember.rs and the benchmark's teardown print the line when a digest changes; replace it only
+# when the change is intended, and say why in the pull request.
+mesh/ember/pair_827 64316ad64d13482fc7472c80b5d65092358cb80a1da007f0dbe9f0005c578631 5c2ffa4c74143a3ec59a3b64b4ac59a7c9564d232719eef4079266f86eb3836b

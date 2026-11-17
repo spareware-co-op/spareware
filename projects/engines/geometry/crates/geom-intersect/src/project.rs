@@ -1,12 +1,13 @@
 //! Projection and inversion: the nearest points of a curve or surface to a point, proven (12.4).
 //!
 //! What it does: [`project_curve`] and [`project_surface`] find every nearest point of a kind to a
-//! point. A line's foot and a plane's are closed forms. Everything else takes Ma and Hewitt's
-//! pruning, made certified: a work list of parameter spans, each dropped once a box around it lies
-//! further than the best distance so far, or once its distance's derivative cannot vanish, and the
-//! ends of a curve and the edges of a surface added as candidates, since a minimum on the boundary
-//! need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters of a point known
-//! to lie on a kind. A point on a round kind's axis, or on the axis of a surface of revolution
+//! point, and [`project_curve_over`] those of a part of a curve's domain, whose ends it takes as
+//! the curve's own. A line's foot and a plane's are closed forms. Everything else takes Ma and
+//! Hewitt's pruning, made certified: a work list of parameter spans, each dropped once a box
+//! around it lies further than the best distance so far, or once its distance's derivative cannot
+//! vanish, and the ends of a curve and the edges of a surface added as candidates, since a minimum
+//! on the boundary need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters
+//! of a point known to lie on a kind. A point on a round kind's axis, or on the axis of a surface of revolution
 //! that has only been moved, has a continuum of nearest points, returned as a typed [`Continuum`]
 //! rather than found by search. A closed direction's two ends are one seam: boxes undecided at
 //! both ends of it hold one point, reported once from each side.
@@ -228,9 +229,15 @@ trait Path<const D: usize> {
     ) -> Result<([Interval; D], [Interval; D]), IntersectError>;
 }
 
-impl<const D: usize> Path<D> for CurveKind<D> {
+/// A curve over a part of its domain, the part's ends taken as the path's own.
+struct Over<'a, const D: usize> {
+    curve: &'a CurveKind<D>,
+    span: (f64, f64),
+}
+
+impl<const D: usize> Path<D> for Over<'_, D> {
     fn span(&self) -> (f64, f64) {
-        self.domain()
+        self.span
     }
 
     fn around(
@@ -238,7 +245,7 @@ impl<const D: usize> Path<D> for CurveKind<D> {
         span: (f64, f64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; D], IntersectError> {
-        boxed(&self.bound(span, meter)?)
+        boxed(&self.curve.bound(span, meter)?)
     }
 
     fn derivative(
@@ -247,7 +254,7 @@ impl<const D: usize> Path<D> for CurveKind<D> {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<[Interval; D]>, IntersectError> {
-        match self.derivative_bound(span, order, meter)? {
+        match self.curve.derivative_bound(span, order, meter)? {
             DerivativeBound::Bounded(bounds) => Ok(Some(boxed(&bounds)?)),
             DerivativeBound::Unbounded => Ok(None),
         }
@@ -259,7 +266,7 @@ impl<const D: usize> Path<D> for CurveKind<D> {
         side: Limit,
         meter: &mut WorkMeter<'_>,
     ) -> Result<([Interval; D], [Interval; D]), IntersectError> {
-        let found = self.enclose(t, side, 1, meter)?;
+        let found = self.curve.enclose(t, side, 1, meter)?;
         match found.as_slice() {
             [point, first, ..] => Ok((*point, *first)),
             _ => Err(IntersectError::Internal),
@@ -644,18 +651,35 @@ pub fn project_curve<const D: usize>(
     floor: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Projection<1, D>, IntersectError> {
+    project_curve_over(curve, curve.domain(), p, floor, meter)
+}
+
+/// The nearest points to `p` of `curve` over `span`, a part of its domain, to a floor of `floor`
+/// in space: [`project_curve`] on that part of the curve, whose ends are the part's own.
+///
+/// # Errors
+///
+/// As [`project_curve`]; the curve's own error for a span outside its domain.
+pub fn project_curve_over<const D: usize>(
+    curve: &CurveKind<D>,
+    span: (f64, f64),
+    p: &[f64; D],
+    floor: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Projection<1, D>, IntersectError> {
     if floor <= 0.0 || floor.is_nan() {
         return Err(IntersectError::InvalidInput);
     }
+    let over = Over { curve, span };
     if let CurveKind::Line(line) = curve {
         let foot = line_foot(&line.origin(), &line.direction(), p)?;
-        let (a, b) = curve.domain();
+        let (a, b) = span;
         let (lo, hi) = (
             smaller(larger(foot.lo(), a), b),
             smaller(larger(foot.hi(), a), b),
         );
-        let (low, _) = Path::at(curve, lo, Limit::FromRight, meter)?;
-        let (high, _) = Path::at(curve, hi, Limit::FromLeft, meter)?;
+        let (low, _) = over.at(lo, Limit::FromRight, meter)?;
+        let (high, _) = over.at(hi, Limit::FromLeft, meter)?;
         let mut point = low;
         for (o, other) in point.iter_mut().zip(high) {
             *o = Interval::new(smaller(o.lo(), other.lo()), larger(o.hi(), other.hi()))?;
@@ -687,7 +711,7 @@ pub fn project_curve<const D: usize>(
             });
         }
     }
-    settled(curve, p, floor, meter)
+    settled(&over, p, floor, meter)
 }
 
 /// One path's search, and its answer.
@@ -715,7 +739,8 @@ fn padded<const D: usize>(x: &[Interval; D]) -> Result<[Interval; 3], NumError> 
     Ok(out)
 }
 
-/// What the interior search left: candidates and undecided boxes.
+/// What a surface's searches left: candidates and undecided boxes, the edges' first and then the
+/// interior's, each search adding to the same lists.
 struct Inside {
     points: Vec<Nearest<2, 3>>,
     open: Vec<([Interval; 2], f64)>,
@@ -734,18 +759,16 @@ fn bowl(partials: &[[Interval; 3]], gap: &[Interval; 3]) -> Result<bool, Interse
     Ok(positive(a) && positive(det))
 }
 
-/// The search of the inside of a surface: 12.4's steps 2 to 6 in two parameters.
+/// The search of the inside of a surface: 12.4's steps 2 to 6 in two parameters, its candidates
+/// and undecided boxes added to `inside`'s.
 fn search_inside(
     surface: &SurfaceKind,
     p: &[f64; 3],
     floor: f64,
     upper: &mut f64,
+    inside: &mut Inside,
     meter: &mut WorkMeter<'_>,
-) -> Result<Inside, IntersectError> {
-    let mut inside = Inside {
-        points: Vec::new(),
-        open: Vec::new(),
-    };
+) -> Result<(), IntersectError> {
     let sides = (Limit::FromRight, Limit::FromRight);
     let mut work = alloc::vec![surface.domain()];
     while let Some(region) = work.pop() {
@@ -756,22 +779,22 @@ fn search_inside(
         if !reaches(&gap, *upper)? {
             continue;
         }
-        let partials = match surface.partials_over(region, sides, 2, meter) {
-            Ok(partials) => Some(partials),
-            Err(CurveError::Unbounded) => None,
+        // The partials are read here and let go before the box is split, so they are not held
+        // while the search's own list grows.
+        let settled = match surface.partials_over(region, sides, 2, meter) {
+            Ok(partials) => {
+                let [_, su, sv, ..] = partials.as_slice() else {
+                    return Err(IntersectError::Internal);
+                };
+                let (fu, fv) = (dot(su, &gap)?, dot(sv, &gap)?);
+                if positive(fu) || negative(fu) || positive(fv) || negative(fv) {
+                    continue;
+                }
+                bowl(&partials, &gap)?
+            }
+            Err(CurveError::Unbounded) => false,
             Err(e) => return Err(e.into()),
         };
-        let mut settled = false;
-        if let Some(partials) = &partials {
-            let [_, su, sv, ..] = partials.as_slice() else {
-                return Err(IntersectError::Internal);
-            };
-            let (fu, fv) = (dot(su, &gap)?, dot(sv, &gap)?);
-            if positive(fu) || negative(fu) || positive(fv) || negative(fv) {
-                continue;
-            }
-            settled = bowl(partials, &gap)?;
-        }
         // Splitting takes the wider side, so the sides run out of doubles together.
         let cut = if image(&around) <= floor {
             None
@@ -805,7 +828,7 @@ fn search_inside(
             work.push(((a, b), (c, v)));
         }
     }
-    Ok(inside)
+    Ok(())
 }
 
 /// The axis of a round kind: its centre, frame vectors and whether a parallel of it is a continuum
@@ -1002,8 +1025,10 @@ pub fn project_surface(
         }
     }
     let ((a, b), (c, d)) = surface.domain();
-    let mut points: Vec<Nearest<2, 3>> = Vec::new();
-    let mut open: Vec<([Interval; 2], f64)> = Vec::new();
+    let mut inside = Inside {
+        points: Vec::new(),
+        open: Vec::new(),
+    };
     let mut upper = f64::INFINITY;
     for (at, fixed_u) in [(c, false), (d, false), (a, true), (b, true)] {
         let edge = Line {
@@ -1016,7 +1041,7 @@ pub fn project_surface(
         let fixed = Interval::point(at)?;
         for point in found.points {
             let [t] = point.at;
-            points.push(Nearest {
+            inside.points.push(Nearest {
                 at: if fixed_u { [fixed, t] } else { [t, fixed] },
                 point: point.point,
                 distance: point.distance,
@@ -1025,12 +1050,16 @@ pub fn project_surface(
         }
         for (span, low) in found.open {
             let t = Interval::new(span.0, span.1)?;
-            open.push((if fixed_u { [fixed, t] } else { [t, fixed] }, low));
+            inside
+                .open
+                .push((if fixed_u { [fixed, t] } else { [t, fixed] }, low));
         }
     }
-    let inside = search_inside(surface, p, floor, &mut upper, meter)?;
-    points.extend(inside.points);
-    open.extend(inside.open);
+    search_inside(surface, p, floor, &mut upper, &mut inside, meter)?;
+    let Inside {
+        mut points,
+        mut open,
+    } = inside;
     open.retain(|(_, low)| *low <= upper);
     if let Some(enclosure) = undecided(surface, p, &open, floor, &mut upper, &mut points, meter)? {
         return Ok(Projection::NonIsolated { enclosure });

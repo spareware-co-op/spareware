@@ -21,7 +21,7 @@
 )]
 
 use geom_curve::affine::int_interval;
-use geom_curve::{CurveError, DerivativeBound, Law};
+use geom_curve::{ContractError, CurveError, DerivativeBound, Law};
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
 use geom_num::grid::P3;
 use geom_num::interval::Interval;
@@ -33,6 +33,39 @@ use geom_surface::{ImplicitBound, ParamBox, ParamSurface, SurfaceForm, SurfaceKi
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
+}
+
+/// Checks that `run` ends with the meter's stop as its law's error on every budget below `whole`,
+/// running one budget of each stretch the meter cannot tell apart; returns how many stretches.
+///
+/// The meter adds a charge and then stops if its total passes the cap, so a run capped at b stops
+/// at the first charge that takes the total past b, and every cap from b to that total less one
+/// stops at the same charge after the same work: up to the stop they are one run. So the sweep
+/// runs b, reads the total its meter reached with the refused charge, and goes on from there:
+/// every place a stop can fall, each once, where running every budget ran each about 18 times
+/// over (6,872 budgets, 380 places, on the apex below). Each stretch's last budget runs too and
+/// must end in the same error as its first, so a check whose path came to depend on the cap itself
+/// fails here rather than going unseen.
+fn every_stop(whole: u64, run: impl Fn(&mut WorkMeter<'_>) -> Result<(), ContractError>) -> u64 {
+    let (mut budget, mut stretches) = (0, 0);
+    while budget < whole {
+        let mut m = WorkMeter::new(Budget::of_work(budget));
+        let e = run(&mut m).unwrap_err();
+        assert!(
+            matches!(e.error, Some(CurveError::Stopped(_))),
+            "budget {budget} of {whole}: {e}"
+        );
+        let next = u64::try_from(m.used().work).unwrap();
+        assert!(next > budget, "budget {budget}: the meter reached {next}");
+        let last = next.min(whole) - 1;
+        if last > budget {
+            let other = run(&mut WorkMeter::new(Budget::of_work(last))).unwrap_err();
+            assert_eq!(other, e, "budgets {budget} and {last} of {whole}");
+        }
+        budget = next;
+        stretches += 1;
+    }
+    stretches
 }
 
 struct Lcg(u64);
@@ -143,13 +176,8 @@ fn a_meter_that_runs_out_anywhere_is_reported_as_the_stop() {
     check(&s, &ps, t, &mut m).unwrap();
     let whole = u64::try_from(m.used().work).unwrap();
     assert!(0 < whole && whole < 20_000, "{whole}");
-    for budget in 0..whole {
-        let e = check(&s, &ps, t, &mut WorkMeter::new(Budget::of_work(budget))).unwrap_err();
-        assert!(
-            matches!(e.error, Some(CurveError::Stopped(_))),
-            "budget {budget} of {whole}: {e}"
-        );
-    }
+    let stretches = every_stop(whole, |m| check(&s, &ps, t, m));
+    assert!(stretches > 100, "{stretches} of {whole}");
     assert!(check(&s, &ps, t, &mut WorkMeter::new(Budget::of_work(whole))).is_ok());
     // The same for the entry without the conversions, which the fuzz target runs after a stop,
     // on the first five pairs (every law it runs, at a fifth of the work).
@@ -158,14 +186,7 @@ fn a_meter_that_runs_out_anywhere_is_reported_as_the_stop() {
     check_without_conversions(&s, ps, &mut m).unwrap();
     let part = u64::try_from(m.used().work).unwrap();
     assert!(0 < part && part < whole, "{part} of {whole}");
-    for budget in 0..part {
-        let e = check_without_conversions(&s, ps, &mut WorkMeter::new(Budget::of_work(budget)))
-            .unwrap_err();
-        assert!(
-            matches!(e.error, Some(CurveError::Stopped(_))),
-            "budget {budget} of {part}: {e}"
-        );
-    }
+    every_stop(part, |m| check_without_conversions(&s, ps, m));
     assert!(check_without_conversions(&s, ps, &mut WorkMeter::new(Budget::of_work(part))).is_ok());
 }
 

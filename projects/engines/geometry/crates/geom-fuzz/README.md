@@ -69,7 +69,22 @@ reference resolution gives 20.4's outcome on any history from `geom-test`'s kit;
 schedule, and the pruned record reads back and reads only its one encoding; and `contract`
 (`src/contract.rs`, G82), the operation contract's errors keep their detail's kind and chapter 22's
 remedies and write text that names what they hold, and every schema the facade lists names details
-the contract has, whose MCP tool descriptions parse and round-trip. `src/adversarial.rs`
+the contract has, whose MCP tool descriptions parse and round-trip. For Gate 4's pieces (30.1: a
+fuzz target per code piece): `planes` (`src/planes.rs`, G123, and through it G124's step ladder
+and G125's convex faces), `geom-poly`'s canonical planes and arrangement predicates give one entry
+to one plane and one order to any points, rays or flaps; `exact` (`src/exact.rs`, G146),
+`geom-mesh`'s exact mesh refuses what is not a mesh and gives one mesh in any input order; `cdt`
+(`src/cdt.rs`, G153), the triangulation is a true constrained Delaunay triangulation and one answer
+in any input order; `solids` (`src/solids.rs`, G147 to G152, and through the mesh boolean
+G126 to G129's arrangement code), `geom-mesh`'s operations on small solids agree with counted
+cells; and `booleans` (`src/booleans.rs`, G130 to G133, G137 to G139 and G144, with G129's
+`rebuild.rs`), `geom-bool`'s boolean pipeline on small solids agrees with counted cells: every
+selection of one arrangement, a half-space and a wire kept inside the boxes, rooms and their
+leaks, batch cuts and a re-cut from the last cut's cache, and a local step on its full and fast
+paths, every result passing the full checker and the second checker, which agree. `make` and
+`sequence` reach G134's checker groups. Which lines of each piece they reach, and the pieces no
+target reaches yet (G142, G143 and G145, which the boolean pipeline does not call), are in
+`projects/kit/notes/G156-piece-map.md`. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
@@ -105,9 +120,12 @@ The module holds, with a header in the grammar of `projects/engines/geometry/HEA
   leg drives (the crate's `Harness` type).
 - For a target with a proof: `ProofDraw`, `proof_case(bound, &ProofDraw) -> Option<Case>` and
   `PROOF_BOUND`, the bounded domain the proof covers. The module header says exactly what is
-  proven and what is only tested (28.7).
+  proven and what is only tested (28.7). A proof too slow as one solve is split by claim
+  (orient2d's `Claim`, `CLAIMS` and `check_claim`: one harness a claim, which together prove what
+  `check` checks).
 
-The test file holds three tests:
+The test file holds three tests (a proof split by claim has one `<target>_proof_<claim>` test
+a claim in place of `<target>_proof`):
 
 ```rust
 #[test]
@@ -206,8 +224,11 @@ seeded leg prints `seed: <hex>`; set `SPAREKIT_SEED=<hex>` to replay it.
 ```text
 cargo install kani-verifier --version 0.68.0 --locked
 cargo kani setup
-cargo kani --tests -p geom-fuzz --harness orient2d_proof --exact
+cargo kani --tests -p geom-fuzz --harness orient2d_proof_filter --exact
 ```
+
+(and `orient2d_proof_exact_path`, and the predicate's claim in parts:
+`orient2d_proof_predicate_cover` and `orient2d_proof_predicate_part_0` to `_part_63`).
 
 `cfg(kani)`, which marks the proof tests, is declared to the compiler by `build.rs`
 (`cargo::rustc-check-cfg`), not in the manifest's `[lints]` table, which repeats `geom-num`'s
@@ -234,7 +255,13 @@ touches the code a proof reaches.
 
 ## What the orient2d proof covers
 
-`orient2d_proof` drives `check` over every case `proof_case` gives with bound `PROOF_BOUND`:
+`orient2d_proof_predicate`, `orient2d_proof_exact_path` and `orient2d_proof_filter` drive
+`check_claim`, one claim each, which together are `check`, over every case `proof_case` gives
+with bound `PROOF_BOUND`. Kani proves the predicate's claim in 64 parts, one job each
+(`orient2d_proof_predicate_part_<k>`: the draws whose six coordinates have the signs k names,
+`predicate_part`), with `orient2d_proof_predicate_cover` proving that every draw is in one of
+them; as one harness it took 35 to 46 minutes on the hosted runner, and a part takes 4 to 9.
+The domain:
 every one of the six coordinates within `PROOF_BOUND` grid steps of 0 or of an edge
 ±(2^40 − 1) of the frame, in any combination. Kani proves, for every such case, that orient2d
 answers with the reference's sign, that the exact path returns the reference's value, that the

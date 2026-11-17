@@ -56,6 +56,7 @@ use geom_run::WorkMeter;
 
 use crate::analytic::{check_finite, check_turn, cuts};
 use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};
+use crate::terms::{add_up, mul_up};
 
 /// π enclosed.
 fn pi() -> Result<Interval, CurveError> {
@@ -177,6 +178,18 @@ impl Placement {
             }
         }
         Ok(tight::norm(&v)?.hi())
+    }
+
+    /// An upper bound on the length of L·x for x exact: Σ over L's rows of Σₖ |Lᵣₖ|·|xₖ|, the
+    /// placed vector's coordinates' magnitudes summed, each sum and product rounded up.
+    fn ceiling(&self, x: [f64; 3]) -> f64 {
+        let mut total = 0.0;
+        for row in &self.l {
+            for (r, y) in row.iter().zip(&x) {
+                total = add_up(total, mul_up(r.abs(), y.abs()));
+            }
+        }
+        total
     }
 }
 
@@ -1321,6 +1334,30 @@ impl Extrusion {
         match &self.inner.shape {
             Shape::Extrusion { profile, direction } => Ok((profile, *direction)),
             _ => Err(CurveError::Defect),
+        }
+    }
+
+    /// An upper bound on the first partial's length along `dir` over `region`, from the placed
+    /// vectors alone ([`SurfaceKind::speed_ceiling`]): along v the placed direction, along u the
+    /// placed direction of a straight profile, whose slope is that one vector everywhere; `None`
+    /// along u for any other profile.
+    pub(crate) fn ceiling(
+        &self,
+        region: ParamBox,
+        dir: Direction,
+    ) -> Result<Option<f64>, CurveError> {
+        check_box(region, self.inner.domain)?;
+        let (profile, direction) = self.shape()?;
+        let along = match (dir, profile.basis()) {
+            (Direction::V, _) => direction,
+            (Direction::U, geom_curve::Basis::Line(line)) => line.direction(),
+            (Direction::U, _) => return Ok(None),
+        };
+        let c = self.inner.place.ceiling(along);
+        if c.is_finite() {
+            Ok(Some(c))
+        } else {
+            Err(CurveError::NotFinite)
         }
     }
 

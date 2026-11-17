@@ -23,7 +23,10 @@ use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
+mod miri;
 mod shapes;
+
+use miri::sized;
 
 use shapes::{cuboid, frustum, g, hexahedron, prism, soup};
 
@@ -153,6 +156,9 @@ fn solids_off_the_grid_agree_with_their_planes() {
         }
     };
     let (mut inside, mut on) = (0, 0);
+    // Every point natively; under Miri a quarter of them, those whose coordinates sum to a
+    // multiple of 4, which keeps points on every face (a stride along each axis would miss them).
+    let keep = sized(1, 4) as i64;
     for (a, b) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
         for by in 0..3 {
             let planes = leaning(a, b, by);
@@ -171,7 +177,7 @@ fn solids_off_the_grid_agree_with_their_planes() {
             let c = classifier(&m);
             for &x in &span(by, 0) {
                 for &y in &span(by, 1) {
-                    for &z in &span(by, 2) {
+                    for &z in span(by, 2).iter().filter(|&&z| (x + y + z) % keep == 0) {
                         let q = p(x, y, z);
                         let want = against_planes(&planes, q);
                         assert_eq!(locate(&c, q), want, "{a} {b} {by} {q:?}");
@@ -185,7 +191,9 @@ fn solids_off_the_grid_agree_with_their_planes() {
             }
         }
     }
-    assert!(inside > 1000 && on > 1000, "{inside} {on}");
+    // Natively over 1,000 of each; under Miri over an eighth of that.
+    let each = if keep == 1 { 1000 } else { 1000 / (2 * keep) };
+    assert!(inside > each && on > each, "{inside} {on}");
 }
 
 #[test]
@@ -206,7 +214,8 @@ fn height_fields_agree_with_their_heights() {
     let mut rng = SplitMix64::new(seed);
     let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
     let (mut inside, mut outside, mut on) = (0, 0, 0);
-    for _ in 0..24 {
+    let (fields, points) = (sized(24, 4), sized(4000, 100));
+    for _ in 0..fields {
         let n = 3 + below(&mut rng, 5) as usize;
         let step = 4 * (1 + below(&mut rng, 3) as i64);
         let heights: Vec<Vec<i64>> = (0..n)
@@ -214,7 +223,7 @@ fn height_fields_agree_with_their_heights() {
             .collect();
         let m = mesh(&prism(&heights, step).0);
         let c = classifier(&m);
-        for _ in 0..4000 {
+        for _ in 0..points {
             let span = (n as u64 + 1) * step as u64;
             let q = p(
                 below(&mut rng, span) as i64 - step / 2,
@@ -246,8 +255,9 @@ fn height_fields_agree_with_their_heights() {
             }
         }
     }
+    let all = fields * points;
     assert!(
-        inside > 1000 && outside > 1000 && on > 100,
+        inside > all / 96 && outside > all / 96 && on > all / 960,
         "{inside} {outside} {on}"
     );
 }
@@ -405,19 +415,18 @@ fn an_open_mesh_is_refused() {
 #[cfg(not(target_family = "wasm"))]
 #[test]
 fn the_points_come_back_in_order_on_any_pool() {
-    use geom_pool::native::Rayon;
-
     let m = mesh(&cuboid(40, 40, 40));
     let c = classifier(&m);
-    let points: Vec<P3> = (0..3000)
+    // Two chunks of the helper's 1,024 points under Miri, so the pool still runs them.
+    let points: Vec<P3> = (0..sized(3000, 1100) as i64)
         .map(|i| p(i % 50, (i * 7) % 50, (i * 13) % 50))
         .collect();
     let serial = c
         .locate_all(&points, &Exec::serial(), &mut meter())
         .unwrap();
-    let rayon = Rayon::new(std::num::NonZeroUsize::new(3).unwrap()).unwrap();
+    let threads = miri::pool(3);
     let pooled = c
-        .locate_all(&points, &Exec::with_pool(&rayon), &mut meter())
+        .locate_all(&points, &Exec::with_pool(&*threads), &mut meter())
         .unwrap();
     assert_eq!(serial, pooled);
     for (q, got) in points.iter().zip(&serial) {

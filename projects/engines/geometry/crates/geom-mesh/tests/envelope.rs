@@ -21,6 +21,10 @@ use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
+mod miri;
+
+use miri::sized;
+
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 20))
 }
@@ -130,7 +134,8 @@ fn inside_proves_within_and_within_proves_inside() {
     let mut rng = SplitMix64::new(seed);
     let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
     let (mut inside, mut outside) = (0, 0);
-    for case in 0..40_000 {
+    let cases = sized(40_000, 400);
+    for case in 0..cases {
         let reach = [8, 16, 64][case % 3];
         let corner = |rng: &mut SplitMix64| {
             p(
@@ -170,7 +175,10 @@ fn inside_proves_within_and_within_proves_inside() {
             );
         }
     }
-    assert!(inside > 2000 && outside > 2000, "{inside} {outside}");
+    assert!(
+        inside > cases / 20 && outside > cases / 20,
+        "{inside} {outside}"
+    );
 }
 
 #[test]

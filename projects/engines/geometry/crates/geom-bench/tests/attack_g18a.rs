@@ -795,12 +795,28 @@ fn workflow_step(name: &str) -> &'static str {
 
 #[test]
 fn both_legs_judge_the_summaries_by_the_same_rule() {
-    // One job measures both processors (its matrix), and the judgement is a step of that job with
-    // no condition on the leg, so both legs run it, with the workflow's own percentage.
+    // One judge per processor (its matrix, the legs the job `scope` lists for the event: x86-64
+    // on a pull request, aarch64 in the merge queue) judges the counts its parts measured, and the
+    // judgement is a step of that job with no condition on the leg, so both legs run it, with the
+    // workflow's own percentage. The parts of each leg are the scope's list too.
     // No needle ends in a line break: a Windows checkout gives the workflow CRLF line ends.
+    let gates = &WORKFLOW
+        [WORKFLOW.find("\n  instructions-base:").unwrap()..WORKFLOW.find("\n  fuel:").unwrap()];
     let job =
         &WORKFLOW[WORKFLOW.find("\n  instructions:").unwrap()..WORKFLOW.find("\n  fuel:").unwrap()];
-    assert!(job.contains("- target: x86-64") && job.contains("- target: aarch64"));
+    assert!(job.contains("include: ${{ fromJSON(needs.scope.outputs.legs) }}"));
+    assert_eq!(
+        gates
+            .matches("include: ${{ fromJSON(needs.scope.outputs.parts) }}")
+            .count(),
+        2
+    );
+    let legs = workflow_step("The processor kinds this run measures");
+    assert!(
+        legs.contains("x86='{\"target\":\"x86-64\",\"runner\":\"ubuntu-24.04\"}'")
+            && legs.contains("arm='{\"target\":\"aarch64\",\"runner\":\"ubuntu-24.04-arm\"}'"),
+        "{legs}"
+    );
     let judge_step =
         workflow_step("Judge instructions, cycles and cache misses from the summaries");
     assert!(job.contains(judge_step));
@@ -821,6 +837,7 @@ fn both_legs_judge_the_summaries_by_the_same_rule() {
     // The gate saves the summaries the judgement reads, and Gungraun's own limits no longer gate a
     // miss count at a plain 5%: neither the workflow's nor the tree's.
     let gate = workflow_step("Benchmark the pull request against the merge base");
+    assert!(gates.contains(gate) && !job.contains(gate));
     assert!(gate.contains("--save-summary=json"));
     assert!(gate.contains("--callgrind-limits=\"$CALLGRIND_LIMITS\""));
     assert!(WORKFLOW.contains("  CALLGRIND_LIMITS: \"ir=5%,estimatedcycles=5%\""));
@@ -829,14 +846,17 @@ fn both_legs_judge_the_summaries_by_the_same_rule() {
         assert!(!WORKFLOW.contains(&format!("CALLGRIND_LIMITS: \"{miss}")));
     }
     // Every measured run builds without the judge, so the benchmark binary does not change with
-    // the tool that judges it: Gungraun's runner crate is in both. The seventh is gate 1's planted
-    // slowdown (piece G43), run through geom-test's `trip`.
-    let job_lines: Vec<&str> = job.lines().map(str::trim).collect();
+    // the tool that judges it: Gungraun's runner crate is in both. Two in the merge base's parts
+    // (its list and its groups), five in the change's (its list, its groups, written once for
+    // EMBER's pair and once for the catalogue, the 1% listings and gate 1's planted slowdown,
+    // piece G43, run through geom-test's `trip`), none in the judge.
+    let job_lines: Vec<&str> = gates.lines().map(str::trim).collect();
     let runs: Vec<&&str> = job_lines
         .iter()
         .filter(|l| l.starts_with("cargo \"+$") && l.contains(" bench "))
         .collect();
     assert_eq!(runs.len(), 7, "{runs:#?}");
+    assert!(!job.contains(" bench "), "the judge measures nothing");
     for run in runs {
         assert!(
             run.contains(" bench --no-default-features --locked -p geom-bench "),

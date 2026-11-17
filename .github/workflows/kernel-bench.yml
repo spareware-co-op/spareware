@@ -5,9 +5,26 @@ name: Kernel benchmarks
 # board entry G18). projects/engines/geometry/crates/geom-bench documents everything in full.
 #
 # It runs on every pull request and every push to main that touches anything that can change a
-# count (the path filters below). A pull request is compared with its merge base; a push to main
-# with the main it replaced, so two pull requests that each pass cannot together slip a rise past
-# the gate unseen.
+# count (the path filters below), and in GitHub's merge queue for main. A pull request is compared
+# with its merge base; a push to main with the main it replaced, so two pull requests that each
+# pass cannot together slip a rise past the gate unseen.
+#
+# One processor kind per push (the owner's testing principle 3): each push to a pull request
+# measures Linux x86-64; Linux aarch64 is measured once, just before the change lands, in the
+# merge queue, which leaves a mark named for the tree it passed (`bench-aarch64-tested-<tree>`);
+# a push to main measures x86-64, and aarch64 too unless that mark is there (a push that did not
+# come through the queue measures both). A release measures both.
+#
+# The merge base is measured once (principle 3, "keep the base's counts by its commit"): the leg
+# that measures it keeps its counts as an artifact named for the merge base's tree, the runner
+# image, Valgrind's version, this file and the part of geom-bench/parts.tsv it measured
+# (`bench-base-<target>-<tree>-<print>`, one for each part), and a later run
+# with the same merge base restores them instead of measuring again. Only a run of main, or an
+# earlier run of the same pull request whose head holds this very file, is trusted for them; the
+# merge base is measured and kept before any step runs the change's own code; and the measured
+# counts of one tree as a merge base are the same on every runner of one image (708 of 708
+# benchmarks alike on both targets, runs 43768287593 and 43774825883). With none to restore, the
+# merge base is measured as before.
 #
 # One job checks geom-bench itself: formatting, Clippy with geom-bench's lints, and the tests in
 # release with overflow checks and in debug, with warnings as errors. geom-bench is a development
@@ -15,9 +32,12 @@ name: Kernel benchmarks
 # as geom-num's do (.github/workflows/kernel.yml), but not the native arithmetic, lossy casts and
 # disallowed methods geom-num also denies in kernel code.
 #
-# Two jobs measure the base and the change, each in one job with pinned toolchains, and compare
-# them:
-#  - instructions: every benchmark under Valgrind, through Gungraun. Callgrind counts instructions,
+# Two gates measure the base and the change with pinned toolchains, and compare them:
+#  - instructions: every benchmark under Valgrind, through Gungraun, in parts so no job runs over
+#    15 minutes (the comment above the job `instructions-base`): parts of the merge base, parts of
+#    the change, and one judge per target that judges the whole catalogue from every part's counts;
+#    the last part measures EMBER's pair 827 (`mesh/ember/pair_827`, geom-bench's benches/ember),
+#    the only part that fetches anything: that pair's two models. Callgrind counts instructions,
 #    L1 and last-level cache misses and estimated cycles; DHAT counts the heap the measured function
 #    uses. A rise over 5% in instructions, estimated cycles or heap fails. Code layout alone moves
 #    miss counts, at every size, so every miss count's changes are listed and judged through
@@ -49,7 +69,8 @@ name: Kernel benchmarks
 #    inlining moves with it in benchmarks nobody touched (chapter 23.13).
 #  - Base and change are built with the toolchains pinned in their own geom-bench/toolchain.txt
 #    (the same one unless the change bumps it; a test keeps it equal to kernel.yml's), installed
-#    with dtolnay/rust-toolchain, on one runner, in one job, and only those two runs are compared.
+#    with dtolnay/rust-toolchain, on runners of one image (the fuel gate in one job), and only
+#    those two runs are compared, each benchmark with itself.
 #    Gungraun turns address-space randomisation off and clears the environment; no benchmark
 #    starts a thread.
 #
@@ -83,6 +104,8 @@ on:
       - "rust-toolchain.toml"
       - ".cargo/**"
       - ".github/workflows/kernel-bench.yml"
+  # The merge queue takes no path filter; the job `scope` checks the same list.
+  merge_group:
   push:
     branches: [main]
     paths:
@@ -121,8 +144,8 @@ env:
   DHAT_LIMITS: "totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%"
   # What is compared: a pull request's base branch and head, or the main a push replaced and the
   # main it made.
-  BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
-  HEAD_SHA: ${{ github.event_name == 'push' && github.sha || github.event.pull_request.head.sha }}
+  BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+  HEAD_SHA: ${{ github.event_name == 'push' && github.sha || github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
 
 jobs:
   cheap:
@@ -143,6 +166,9 @@ jobs:
       base_fuel: ${{ steps.scope.outputs.base_fuel }}
       base_toolchain: ${{ steps.scope.outputs.base_toolchain }}
       head_toolchain: ${{ steps.scope.outputs.head_toolchain }}
+      legs: ${{ steps.legs.outputs.legs }}
+      parts: ${{ steps.legs.outputs.parts }}
+      of: ${{ steps.legs.outputs.of }}
     steps:
       - name: Check out the change
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -153,7 +179,8 @@ jobs:
 
       # On a pull request, the count gates measure only when the change reaches what geom-bench's
       # benchmarks build (geom-test's `kernel-quality test-scope --build-of geom-bench`: a file in no
-      # crate, or in a crate geom-bench's benchmarks link, or among geom-bench's own); a push to main
+      # crate, or in a crate geom-bench's benchmarks link, or among geom-bench's own; MAP.json and
+      # the quality ledger by their changed entries, against the merge base); a push to main
       # and a release tag measure whenever a kernel file changed, as below.
       # The runner's rustup installs the workspace's pinned compiler from rust-toolchain.toml.
       - name: Whether the change reaches what geom-bench builds
@@ -161,8 +188,9 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          git diff --no-ext-diff --no-renames --name-only "$(git merge-base "$BASE_SHA" "$HEAD_SHA")" "$HEAD_SHA" > "$RUNNER_TEMP/changed.txt"
-          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope --changed "$RUNNER_TEMP/changed.txt" --build-of geom-bench --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          merge_base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          git diff --no-ext-diff --no-renames --name-only "$merge_base" "$HEAD_SHA" > "$RUNNER_TEMP/changed.txt"
+          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope --changed "$RUNNER_TEMP/changed.txt" --base "$merge_base" --build-of geom-bench --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Decide what to measure
         id: scope
@@ -232,13 +260,57 @@ jobs:
             echo "base_fuel=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # The processor kinds this run measures (the paragraph at the top): x86-64 on a pull
+      # request, aarch64 in the merge queue, x86-64 on a push to main and aarch64 too unless the
+      # queue's mark for this tree is there, both on a release. A call that fails counts as no mark.
+      - name: The processor kinds this run measures
+        id: legs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          x86='{"target":"x86-64","runner":"ubuntu-24.04"}'
+          arm='{"target":"aarch64","runner":"ubuntu-24.04-arm"}'
+          case "$GITHUB_EVENT_NAME" in
+            pull_request) legs="[$x86]" ;;
+            merge_group) legs="[$arm]" ;;
+            push)
+              legs="[$x86,$arm]"
+              tree=$(git rev-parse "$HEAD_SHA^{tree}")
+              if marks=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=bench-aarch64-tested-$tree" \
+                --jq '[.artifacts[] | select(.expired | not)] | length') && [ "$marks" -gt 0 ]; then
+                legs="[$x86]"
+              fi
+              ;;
+            *) legs="[$x86,$arm]" ;;
+          esac
+          echo "legs=$legs" | tee -a "$GITHUB_OUTPUT"
+          # The instruction gate's parts on each leg (geom-bench/parts.tsv, the job
+          # `instructions-base`'s comment): part 1 to n, and which part runs the planted slowdown,
+          # the one that measures the group `sign`; and one part more, the last, which measures
+          # EMBER's pair 827 alone (`ember`).
+          plan="$BENCH/parts.tsv"
+          planned=$(awk -F'\t' '!/^#/ && NF == 3 && $2 + 0 > n { n = $2 + 0 } END { print n + 0 }' "$plan")
+          trip=$(awk -F'\t' '!/^#/ && NF == 3 { if ($1 == "sign") s = $2; if ($1 == "*") r = $2 }
+            END { print (s != "" ? s : r) + 0 }' "$plan")
+          if [ "$planned" -lt 1 ] || [ "$trip" -lt 1 ]; then
+            echo "::error::$plan names no parts."
+            exit 1
+          fi
+          of=$((planned + 1))
+          echo "of=$of" >> "$GITHUB_OUTPUT"
+          parts=$(jq -c --argjson of "$of" --argjson trip "$trip" \
+            '[.[] as $leg | range(1; $of + 1) | $leg + {part: ., of: $of, trip: (. == $trip), ember: (. == $of)}]' <<<"$legs")
+          echo "parts=$parts" | tee -a "$GITHUB_OUTPUT"
+
   # geom-bench's own checks, as kernel.yml makes them for geom-num, with the pinned toolchain. The
   # fuel host (geom-bench/fuel) is a workspace of its own, so it is formatted and linted by its
   # manifest.
   checks:
     name: Format, lints and tests (geom-bench)
     needs: scope
-    if: needs.scope.outputs.measure == 'true'
+    # The pull request's pushes ran these on its change; the merge queue measures only aarch64.
+    if: needs.scope.outputs.measure == 'true' && github.event_name != 'merge_group'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -292,54 +364,60 @@ jobs:
           RUSTFLAGS: -D warnings
         run: cargo "+$HEAD_TOOLCHAIN" test --locked -p geom-bench
 
-  instructions:
-    name: Instructions, cache and heap on ${{ matrix.target }} (5% gate)
+  # The instruction gate runs in parts, so no job takes more than 15 minutes (the owner's rule):
+  # `instructions-base` measures the merge base, `instructions-parts` the change against it, and
+  # `instructions` judges the whole catalogue from every part's counts, one target at a time. Each
+  # part measures its share of the benchmark groups, from geom-bench/parts.tsv (written by
+  # `geom-bench-counts plan` from the seconds of a run, never by hand; a group the file does not
+  # list goes to the part its `*` line names), and the judge refuses the parts unless every
+  # benchmark was measured in exactly one part on each side (geom_bench::parts::check), so a part
+  # that dropped out, or a benchmark no part measured, fails the gate. Each benchmark runs under
+  # Valgrind in a process of its own, with arguments of one length whatever is filtered
+  # (gungraun-runner's `bench_args`), so a part measures each of its benchmarks exactly as one run
+  # of the whole catalogue did; base and change are measured on runners of one image, which give
+  # the same counts (708 of 708 benchmarks alike on both targets, runs 43768287593 and
+  # 43774825883, the evidence the kept counts already rest on).
+  #
+  # The last part (`matrix.ember`) measures geom-bench's second count benchmark, `benches/ember`:
+  # the boolean EMBER benchmarks, on EMBER's pair 827 (Gate 4, G156), under the same tools, limits
+  # and judge. Its two models are files of the fetched corpus `ember-cleared-pairs`; this part
+  # alone fetches them, by the register's URLs, and holds each to the SHA-256 written below, which
+  # geom-test's `tests/queue_wiring.rs` keeps equal to the register's, so no other bench or test
+  # job fetches anything. Every part lists the ember benchmark with the catalogue's, so the judge
+  # refuses the run if no part measured it. A merge base without `benches/ember` lists and
+  # measures none of it, and the change's run records it as new, not compared, as it records any
+  # new benchmark; from the first merge base that holds it, it is compared like every other.
+  instructions-base:
+    name: Instructions on ${{ matrix.target }}, the merge base, part ${{ matrix.part }} of ${{ matrix.of }}
     needs: scope
-    if: needs.scope.outputs.measure == 'true'
+    if: needs.scope.outputs.measure == 'true' && needs.scope.outputs.base_gate == 'true'
     strategy:
-      # Each target is a gate of its own: a rise on one fails its leg, and does not cancel the
-      # other's measurement and report.
+      # Every part reports, so the judge names every benchmark a failed part left unmeasured.
       fail-fast: false
       matrix:
-        # Pinned images, so Valgrind's version only changes when these lines do. The two processors
-        # run different instructions, so each leg compares only its own two runs.
-        include:
-          - target: x86-64
-            runner: ubuntu-24.04
-          - target: aarch64
-            runner: ubuntu-24.04-arm
+        include: ${{ fromJSON(needs.scope.outputs.parts) }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
+    timeout-minutes: 30
     env:
-      # The target this leg measures, for its summary and annotations.
       TARGET: ${{ matrix.target }}
-      # Each tree builds into a target directory of its own. Cargo names a path crate's build by
-      # its place in the workspace, which is the same in both checkouts, so in one shared directory
-      # the second tree reused the first tree's crates and the pull request was measured on the
-      # merge base's code (a pull request with 424 benchmarks ran the base's 350). The pull request
-      # builds here; the merge base in target-base, set on its step. Gungraun keeps both trees'
-      # saved runs in one home, where the second run finds the first.
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      PART: ${{ matrix.part }}
+      EMBER: ${{ matrix.ember }}
+      MODELS: ${{ github.workspace }}/ember
       GUNGRAUN_HOME: ${{ github.workspace }}/gungraun
       # Every run of the benchmarks runs those of one group side by side, one per processor
       # (Gungraun's --parallel; a group's benchmarks run together, and the next group starts when
       # they have all ended). Each benchmark is still its own Valgrind process, and Callgrind's
       # counts and caches and DHAT's heap are simulated inside that process, so no count depends on
       # what runs beside it: the counts are those of one benchmark at a time, to the instruction.
-      # One at a time, the merge base's run alone took 69 to 92 minutes of this job's 150.
+      # One at a time, the merge base's whole catalogue took 69 to 92 minutes in one job.
       GUNGRAUN_PARALLEL: auto
-      # Every function on its own cache line, so the code the measured pass runs only once sits on
-      # lines it already fetched (geom_bench::harness).
       RUSTFLAGS: "-C llvm-args=-align-all-functions=6"
-      # Both trees' benchmark binaries in one codegen unit per crate, so which functions are inlined
-      # does not depend on how rustc splits geom-bench into units (chapter 23.13). Set here, not in
-      # a Cargo profile, so the merge base, which has no such profile, is built the same way.
       CARGO_PROFILE_BENCH_CODEGEN_UNITS: "1"
       MERGE_BASE: ${{ needs.scope.outputs.merge_base }}
-      HAS_BASE: ${{ needs.scope.outputs.base_gate }}
       BASE_TOOLCHAIN: ${{ needs.scope.outputs.base_toolchain }}
-      HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
     steps:
+      # The change is checked out for its workflow file and its parts.tsv, which are only read: no
+      # step of this job runs the change's code.
       - name: Check out the change
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -351,12 +429,210 @@ jobs:
       - name: Check out the merge base beside it
         run: git -C head worktree add --detach "$GITHUB_WORKSPACE/base" "$MERGE_BASE"
 
-      # Each tree's own geom-bench/toolchain.txt; the change's last, so it is also the default.
       - name: Install the merge base's pinned toolchain
-        if: env.BASE_TOOLCHAIN != env.HEAD_TOOLCHAIN
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.BASE_TOOLCHAIN }}
+
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved). One part
+          # saves it: every part builds the same.
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.part == 1 }}
+          workspaces: |
+            base -> ../target-base
+          key: ${{ matrix.target }}-base-${{ needs.scope.outputs.base_toolchain }}
+          cache-directories: ~/.gungraun-runner
+
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends valgrind
+          valgrind --version
+
+      - name: Install the Gungraun runner the merge base needs
+        run: |
+          set -euo pipefail
+          # gungraun-runner must have exactly the version of the gungraun library the tree locks.
+          version=$(cargo "+$BASE_TOOLCHAIN" metadata --locked --format-version 1 \
+              --manifest-path base/Cargo.toml \
+            | jq -r '[.packages[] | select(.name == "gungraun") | .version] | unique | join(" ")')
+          case "$version" in
+            "" | *" "*)
+              echo "::error::The merge base must lock exactly one gungraun version (found '$version')"
+              exit 1
+              ;;
+          esac
+          cargo "+$BASE_TOOLCHAIN" install --locked gungraun-runner --version "$version" \
+            --root "$HOME/.gungraun-runner/$version"
+          echo "BASE_RUNNER=$HOME/.gungraun-runner/$version/bin/gungraun-runner" >> "$GITHUB_ENV"
+
+      # This part's counts of the merge base, kept by an earlier run (the paragraph at the top):
+      # found by their name among the repository's artifacts, from a run of main or an earlier run
+      # of this pull request whose head holds this very workflow file, checked against their
+      # manifest. The name holds the part and the plan it was measured by. With none, `kept` is
+      # false and the next step measures them.
+      - name: The merge base's counts, if a trusted run kept them
+        id: kept
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+          OF: ${{ matrix.of }}
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/kernel-bench.yml
+          mine=$(git -C head rev-parse "HEAD:$workflow")
+          plan=$(git -C head rev-parse "HEAD:$BENCH/parts.tsv")
+          tree=$(git -C base rev-parse 'HEAD^{tree}')
+          print=$(printf '%s\n' "${ImageOS:-} ${ImageVersion:-}" "$(valgrind --version)" "$mine" \
+              "$plan part $PART of $OF" \
+            | sha256sum | cut -c1-16)
+          name="bench-base-$TARGET-$tree-$print"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          found=""
+          while read -r run branch sha; do
+            [ -n "$run" ] || continue
+            if [ "$branch" = main ]; then
+              found=$run
+            elif [ "$GITHUB_EVENT_NAME" = pull_request ] && [ "$branch" = "$HEAD_REF" ] \
+              && { git -C head cat-file -e "$sha^{commit}" 2>/dev/null || git -C head fetch -q --no-tags origin "$sha"; } \
+              && [ "$(git -C head rev-parse "$sha:$workflow" 2>/dev/null)" = "$mine" ]; then
+              found=$run
+            fi
+            if [ -n "$found" ]; then break; fi
+          done < <(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$name&per_page=30" \
+            --jq '.artifacts[] | select(.expired | not) | select(.workflow_run.head_repository_id == .workflow_run.repository_id) | "\(.workflow_run.id) \(.workflow_run.head_branch) \(.workflow_run.head_sha)"' || true)
+          kept=false
+          if [ -n "$found" ] && gh run download "$found" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "$RUNNER_TEMP/keep" \
+            && (cd "$RUNNER_TEMP/keep" && sha256sum --check --strict manifest.sha256); then
+            kept=true
+            echo "::notice::The merge base's counts on $TARGET, part $PART, come from run $found ($name); they are not measured again."
+          fi
+          echo "kept=$kept" >> "$GITHUB_OUTPUT"
+
+      # The ember part's two models (the comment above this job): each fetched by the register's
+      # URL with curl's own retries, and held to its SHA-256 before anything reads it.
+      - name: Fetch EMBER's pair 827's two models, each held to its SHA-256
+        if: matrix.ember && steps.kept.outputs.kept == 'false'
+        run: |
+          set -euo pipefail
+          register=head/projects/engines/geometry/crates/geom-test/corpora/manifest.json
+          mkdir -p "$MODELS"
+          for model in 375267.stl 251402.stl; do
+            url=$(jq -er --arg name "$model" '.corpora[] | select(.id == "ember-cleared-pairs")
+              | .fetch.files[] | select(.name == $name) | .url' "$register")
+            curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 10 \
+              --output "$MODELS/$model" "$url"
+          done
+          printf '%s  %s\n' \
+            d6b7c98c518fd73601f44ef3a8726180c641ac92265b510d4e9d36d9a4e50298 375267.stl \
+            6eceb3087934115667bec1ed4b245549b67baed65a05371fd38ce8bd03f1724b 251402.stl \
+            > "$RUNNER_TEMP/models.sha256"
+          (cd "$MODELS" && sha256sum --check --strict "$RUNNER_TEMP/models.sha256")
+
+      # This part's groups (geom-bench/parts.tsv; a group the file does not list is measured by the
+      # part its `*` line names), each measured into the saved run `base`, one Gungraun run a group;
+      # the ember part measures benches/ember's groups instead. The run's list is every benchmark
+      # of both bench targets the merge base has.
+      - name: Benchmark the merge base
+        id: base
+        if: needs.scope.outputs.base_gate == 'true' && steps.kept.outputs.kept != 'true'
+        working-directory: base
+        env:
+          # Read when the benchmark is compiled (gungraun::main! uses option_env!).
+          GUNGRAUN_RUNNER: ${{ env.BASE_RUNNER }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-base
+        run: |
+          set -euo pipefail
+          rm -rf "${GUNGRAUN_HOME:?}" "$RUNNER_TEMP/keep"
+          mkdir -p "$RUNNER_TEMP/keep"
+          # The benchmarks a bench target lists, as group/op/class.
+          names() {
+            cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench "$1" -- --list \
+              | sed -nE "s/^$1::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark\$/\1\/\2\/\3/p" | sort
+          }
+          names instructions > "$RUNNER_TEMP/instructions.names"
+          : > "$RUNNER_TEMP/ember.names"
+          if [ -f "$BENCH/benches/ember/main.rs" ]; then
+            names ember > "$RUNNER_TEMP/ember.names"
+          fi
+          sort -u "$RUNNER_TEMP/instructions.names" "$RUNNER_TEMP/ember.names" > "$RUNNER_TEMP/keep/base.names"
+          if [ "$EMBER" = true ]; then
+            bench=ember
+            export SPAREKIT_EMBER=$MODELS
+            groups=$(cut -d/ -f1 "$RUNNER_TEMP/ember.names" | uniq)
+          else
+            bench=instructions
+            groups=$(awk -F'\t' -v k="$PART" '
+              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
+              { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
+                if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
+            ' "$GITHUB_WORKSPACE/head/$BENCH/parts.tsv" "$RUNNER_TEMP/instructions.names")
+          fi
+          echo "Part $PART measures: $(echo $groups)"
+          for group in $groups; do
+            cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench "$bench" -- \
+              --save-baseline=base "$bench::$group::*" 2>&1 | tee -a "$RUNNER_TEMP/base.log"
+          done
+
+      # This part's counts of the merge base, kept for the next run with the same merge base, and
+      # for this run's parts of the change.
+      - name: Keep the merge base's counts
+        if: steps.base.outcome == 'success'
+        run: |
+          set -euo pipefail
+          mkdir -p "$GUNGRAUN_HOME"
+          tar -cf "$RUNNER_TEMP/keep/base.tar" -C "$GUNGRAUN_HOME" .
+          (cd "$RUNNER_TEMP/keep" && sha256sum base.tar base.names > manifest.sha256)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.base.outcome == 'success'
+        with:
+          name: ${{ steps.kept.outputs.name }}
+          path: ${{ runner.temp }}/keep
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: count-base-${{ matrix.target }}-${{ matrix.part }}
+          path: ${{ runner.temp }}/keep
+          retention-days: 3
+          if-no-files-found: error
+
+  instructions-parts:
+    name: Instructions on ${{ matrix.target }}, the change, part ${{ matrix.part }} of ${{ matrix.of }}
+    needs: [scope, instructions-base]
+    # It runs when the merge base has no count benchmarks too (instructions-base skipped); a part
+    # whose merge base counts are missing fails at their download.
+    if: ${{ !cancelled() && needs.scope.outputs.measure == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.scope.outputs.parts) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      TARGET: ${{ matrix.target }}
+      PART: ${{ matrix.part }}
+      EMBER: ${{ matrix.ember }}
+      MODELS: ${{ github.workspace }}/ember
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      GUNGRAUN_HOME: ${{ github.workspace }}/gungraun
+      # Each group's benchmarks side by side, as the merge base's parts measure them (the job
+      # `instructions-base`'s GUNGRAUN_PARALLEL): the counts are those of one at a time.
+      GUNGRAUN_PARALLEL: auto
+      RUSTFLAGS: "-C llvm-args=-align-all-functions=6"
+      CARGO_PROFILE_BENCH_CODEGEN_UNITS: "1"
+      HAS_BASE: ${{ needs.scope.outputs.base_gate }}
+      HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
+    steps:
+      - name: Check out the change
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          path: head
+          persist-credentials: false
 
       - name: Install the pinned toolchain (geom-bench/toolchain.txt)
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
@@ -366,14 +642,275 @@ jobs:
       - name: Cache the Rust build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.part == 1 }}
+          workspaces: |
+            head -> ../target
+          key: ${{ matrix.target }}-head-${{ needs.scope.outputs.head_toolchain }}
+          cache-directories: ~/.gungraun-runner
+
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends valgrind
+          valgrind --version
+
+      - name: Install the Gungraun runner the change needs
+        run: |
+          set -euo pipefail
+          version=$(cargo "+$HEAD_TOOLCHAIN" metadata --locked --format-version 1 \
+              --manifest-path head/Cargo.toml \
+            | jq -r '[.packages[] | select(.name == "gungraun") | .version] | unique | join(" ")')
+          case "$version" in
+            "" | *" "*)
+              echo "::error::The change must lock exactly one gungraun version (found '$version')"
+              exit 1
+              ;;
+          esac
+          cargo "+$HEAD_TOOLCHAIN" install --locked gungraun-runner --version "$version" \
+            --root "$HOME/.gungraun-runner/$version"
+          echo "HEAD_RUNNER=$HOME/.gungraun-runner/$version/bin/gungraun-runner" >> "$GITHUB_ENV"
+
+      # This part's counts of the merge base, from this run's part of the merge base with the same
+      # number: the saved run `base` of the same groups. GitHub's storage can refuse a download for
+      # a while (HTTP 503 on #950's first run), so gh tries three times, a minute apart, before
+      # the step fails.
+      - name: This part's counts of the merge base
+        if: env.HAS_BASE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for try in 1 2 3; do
+            rm -rf "$RUNNER_TEMP/kept"
+            if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+              --name "count-base-$TARGET-$PART" --dir "$RUNNER_TEMP/kept"; then
+              break
+            fi
+            if [ "$try" = 3 ]; then
+              echo "::error::count-base-$TARGET-$PART could not be downloaded in three tries."
+              exit 1
+            fi
+            echo "::warning::count-base-$TARGET-$PART: download $try of 3 failed; trying again in 60 s."
+            sleep 60
+          done
+          (cd "$RUNNER_TEMP/kept" && sha256sum --check --strict manifest.sha256)
+          rm -rf "${GUNGRAUN_HOME:?}"
+          mkdir -p "$GUNGRAUN_HOME"
+          tar -xf "$RUNNER_TEMP/kept/base.tar" -C "$GUNGRAUN_HOME"
+          cp "$RUNNER_TEMP/kept/base.names" "$RUNNER_TEMP/base.names"
+
+      # Every run of the benchmark binary in these jobs builds it with --no-default-features,
+      # without geom-bench's judge: Gungraun's runner crate is also in the benchmark binary, and
+      # turning on its summary model there would change the binary measured.
+      #
+      # The gate, on this part's groups. Gungraun compares every benchmark with the merge base's
+      # saved run and, after reporting all of them, fails (exit code 3, reported by cargo as a
+      # failed bench) if instructions, estimated cycles or a heap measure rose by more than 5%. The
+      # limits are this workflow's, passed on the command line, which takes precedence over the
+      # configuration in the tree. Each benchmark's teardown also checks its golden digests and
+      # fails the run if they differ. A benchmark with no saved run is recorded, not compared. Every
+      # benchmark's counts, from both runs, are saved as JSON (summary.json in its output folder)
+      # for the judge. Every group runs, and the step fails after the last if any failed.
+      # The ember part's two models, as the merge base's part fetched them.
+      - name: Fetch EMBER's pair 827's two models, each held to its SHA-256
+        if: matrix.ember
+        run: |
+          set -euo pipefail
+          register=head/projects/engines/geometry/crates/geom-test/corpora/manifest.json
+          mkdir -p "$MODELS"
+          for model in 375267.stl 251402.stl; do
+            url=$(jq -er --arg name "$model" '.corpora[] | select(.id == "ember-cleared-pairs")
+              | .fetch.files[] | select(.name == $name) | .url' "$register")
+            curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 10 \
+              --output "$MODELS/$model" "$url"
+          done
+          printf '%s  %s\n' \
+            d6b7c98c518fd73601f44ef3a8726180c641ac92265b510d4e9d36d9a4e50298 375267.stl \
+            6eceb3087934115667bec1ed4b245549b67baed65a05371fd38ce8bd03f1724b 251402.stl \
+            > "$RUNNER_TEMP/models.sha256"
+          (cd "$MODELS" && sha256sum --check --strict "$RUNNER_TEMP/models.sha256")
+
+      - name: Benchmark the pull request against the merge base
+        id: gate
+        working-directory: head
+        env:
+          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
+        run: |
+          set -euo pipefail
+          if [ "$HAS_BASE" != true ]; then
+            rm -rf "${GUNGRAUN_HOME:?}"
+          fi
+          mkdir -p "$RUNNER_TEMP/part"
+          # The benchmarks a bench target lists, as group/op/class: the run's list is both targets'.
+          names() {
+            cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench "$1" -- --list \
+              | sed -nE "s/^$1::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark\$/\1\/\2\/\3/p" | sort
+          }
+          names instructions > "$RUNNER_TEMP/instructions.names"
+          names ember > "$RUNNER_TEMP/ember.names"
+          sort -u "$RUNNER_TEMP/instructions.names" "$RUNNER_TEMP/ember.names" > "$RUNNER_TEMP/part/head.names"
+          if [ "$EMBER" = true ]; then
+            bench=ember
+            export SPAREKIT_EMBER=$MODELS
+            groups=$(cut -d/ -f1 "$RUNNER_TEMP/ember.names" | uniq)
+          else
+            bench=instructions
+            groups=$(awk -F'\t' -v k="$PART" '
+              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
+              { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
+                if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
+            ' "$BENCH/parts.tsv" "$RUNNER_TEMP/instructions.names")
+          fi
+          echo "Part $PART measures: $(echo $groups)"
+          echo "$groups" > "$RUNNER_TEMP/part/groups"
+          status=0
+          for group in $groups; do
+            if [ "$HAS_BASE" = true ]; then
+              compare=(--baseline=base "$bench::$group::*")
+            else
+              compare=("$bench::$group::*")
+            fi
+            # The catalogue's command is written out apart, as gate 1's planted slowdown runs it.
+            if [ "$bench" = ember ]; then
+              cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench ember -- \
+                "${compare[@]}" --save-baseline=head --save-summary=json \
+                --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS" \
+                2>&1 | tee -a "$RUNNER_TEMP/part/head.log" || status=$?
+            else
+              cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
+                "${compare[@]}" --save-baseline=head --save-summary=json \
+                --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS" \
+                2>&1 | tee -a "$RUNNER_TEMP/part/head.log" || status=$?
+            fi
+          done
+          echo "$status" > "$RUNNER_TEMP/part/gate.status"
+          exit "$status"
+
+      # Chapter 23.13 lists every change over 1%. This part's two saved runs are compared again
+      # with 1% limits each way, a group at a time; these runs read the saved results and measure
+      # nothing. Their failing exit status only means "something was listed"; a listing that does
+      # not complete fails the step. The judge reports them, and the benchmarks not compared.
+      - name: List changes over 1% and benchmarks not compared
+        id: listing
+        if: always() && needs.scope.outputs.base_gate == 'true' && steps.gate.outcome != 'skipped'
+        working-directory: head
+        env:
+          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
+        run: |
+          set -euo pipefail
+          incomplete=0
+          bench=instructions
+          if [ "$EMBER" = true ]; then
+            bench=ember
+            export SPAREKIT_EMBER=$MODELS
+          fi
+          for group in $(cat "$RUNNER_TEMP/part/groups"); do
+            for way in rises:1 falls:-1; do
+              limit=${way#*:}
+              log="$RUNNER_TEMP/${way%%:*}-$group.log"
+              # Its failing exit status only means something was listed; whether the run completed
+              # is checked next.
+              cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench "$bench" -- \
+                --load-baseline=head --baseline=base "$bench::$group::*" \
+                --callgrind-limits="ir=${limit}%,estimatedcycles=${limit}%,i1mr=${limit}%,d1mr=${limit}%,d1mw=${limit}%,ilmr=${limit}%,dlmr=${limit}%,dlmw=${limit}%" \
+                --dhat-limits="totalbytes=${limit}%,totalblocks=${limit}%,attgmaxbytes=${limit}%,maximumbytes=${limit}%" \
+                > "$log" 2>&1 || true
+              if ! grep -q '^Gungraun result:' "$log"; then
+                echo "::error::Listing the ${way%%:*} over 1% did not complete, so the job summary may miss changes; see its output below."
+                cat "$log"
+                incomplete=1
+              fi
+              cat "$log" >> "$RUNNER_TEMP/part/${way%%:*}.log"
+            done
+          done
+          echo "$incomplete" > "$RUNNER_TEMP/part/listing.status"
+          if [ "$incomplete" -ne 0 ]; then
+            exit 1
+          fi
+
+      # This part's files for the judge: its Gungraun home (the merge base's saved run and the
+      # change's, with every summary), the run's list of benchmarks, its log and its verdicts.
+      - name: Pack this part's counts
+        if: ${{ !cancelled() && steps.gate.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$GUNGRAUN_HOME" "$RUNNER_TEMP/part"
+          tar -cf "$RUNNER_TEMP/part/home.tar" -C "$GUNGRAUN_HOME" .
+          if [ -f "$RUNNER_TEMP/base.names" ]; then
+            cp "$RUNNER_TEMP/base.names" "$RUNNER_TEMP/part/base.names"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.gate.outcome != 'skipped' }}
+        with:
+          name: count-head-${{ matrix.target }}-${{ matrix.part }}
+          path: ${{ runner.temp }}/part
+          retention-days: 3
+          if-no-files-found: error
+
+      # Gate 1 (piece G43): the gate is shown to fail on a planted rise, in the part that measured
+      # the group `sign` (geom_bench::parts::TRIP_GROUP). `trip gungraun` makes `Sign::of_i128`
+      # read its argument through `core::hint::black_box` (the same answer for more instructions)
+      # and runs the gate's own command on that one benchmark, compared with the pull request's run
+      # saved as `head` above, under the gate's limits; Gungraun must report the regression. It
+      # saves nothing (the gate's --save options are left out), and it runs after the part's files
+      # are packed, so its rebuild of the planted code changes no measurement of the change.
+      - name: A benchmark slowed on purpose fails the comparison
+        if: matrix.trip
+        working-directory: head
+        env:
+          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
+        run: |
+          set -euo pipefail
+          compare=(--baseline=head 'instructions::sign::*')
+          cargo "+$HEAD_TOOLCHAIN" run --locked -q -p geom-test --bin trip -- gungraun -- cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- "${compare[@]}" --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS"
+
+  instructions:
+    name: Instructions, cache and heap on ${{ matrix.target }} (5% gate)
+    needs: [scope, instructions-base, instructions-parts]
+    # It judges even when a part failed, so every benchmark a part left unmeasured is named.
+    if: ${{ !cancelled() && needs.scope.outputs.measure == 'true' }}
+    strategy:
+      # Each target is a gate of its own: a rise on one fails its leg, and does not cancel the
+      # other's judgement and report.
+      fail-fast: false
+      matrix:
+        # Pinned images (ubuntu-24.04 for x86-64, ubuntu-24.04-arm for aarch64), so Valgrind's
+        # version only changes when those lines in the job `scope` do. The two processors run
+        # different instructions, so each leg judges only its own parts. Which legs this event
+        # runs: the job `scope`'s step `legs`.
+        include: ${{ fromJSON(needs.scope.outputs.legs) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      # The target this leg judges, for its summary and annotations.
+      TARGET: ${{ matrix.target }}
+      OF: ${{ needs.scope.outputs.of }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      GUNGRAUN_HOME: ${{ github.workspace }}/gungraun
+      MERGE_BASE: ${{ needs.scope.outputs.merge_base }}
+      HAS_BASE: ${{ needs.scope.outputs.base_gate }}
+      BASE_TOOLCHAIN: ${{ needs.scope.outputs.base_toolchain }}
+      HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
+    steps:
+      - name: Check out the change
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          path: head
+          persist-credentials: false
+
+      - name: Install the pinned toolchain (geom-bench/toolchain.txt)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.HEAD_TOOLCHAIN }}
+
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             head -> ../target
-            base -> ../target-base
-          key: ${{ matrix.target }}-${{ needs.scope.outputs.base_toolchain }}-${{ needs.scope.outputs.head_toolchain }}
-          cache-directories: ~/.gungraun-runner
+          key: ${{ matrix.target }}-judge-${{ needs.scope.outputs.head_toolchain }}
 
       - name: Install Valgrind
         run: |
@@ -383,107 +920,100 @@ jobs:
 
       # The golden digests (no benchmark may get faster by computing something else, and the
       # results recorded on one platform must come out the same here), the input classes, and the
-      # wiring of the gates.
+      # wiring of the gates. It builds the judge's tool too.
       - name: Check the benchmarks' inputs, results and wiring
         working-directory: head
         run: cargo "+$HEAD_TOOLCHAIN" test --locked --release -p geom-bench
 
-      - name: Install the Gungraun runner each tree needs
-        run: |
-          set -euo pipefail
-          shopt -s inherit_errexit
-          # gungraun-runner must have exactly the version of the gungraun library the tree locks.
-          runner_for() {
-            local version
-            version=$(cargo "+$HEAD_TOOLCHAIN" metadata --locked --format-version 1 \
-                --manifest-path "$1/Cargo.toml" \
-              | jq -r '[.packages[] | select(.name == "gungraun") | .version] | unique | join(" ")')
-            case "$version" in
-              "" | *" "*)
-                echo "::error::$1 must lock exactly one gungraun version (found '$version')" >&2
-                return 1
-                ;;
-            esac
-            cargo "+$HEAD_TOOLCHAIN" install --locked gungraun-runner --version "$version" \
-              --root "$HOME/.gungraun-runner/$version" >&2 || return 1
-            echo "$HOME/.gungraun-runner/$version/bin/gungraun-runner"
-          }
-          head_runner=$(runner_for head)
-          echo "HEAD_RUNNER=$head_runner" >> "$GITHUB_ENV"
-          if [ "$HAS_BASE" = true ]; then
-            base_runner=$(runner_for base)
-            echo "BASE_RUNNER=$base_runner" >> "$GITHUB_ENV"
-          fi
-
-      - name: Benchmark the merge base
-        if: needs.scope.outputs.base_gate == 'true'
-        working-directory: base
-        env:
-          # Read when the benchmark is compiled (gungraun::main! uses option_env!).
-          GUNGRAUN_RUNNER: ${{ env.BASE_RUNNER }}
-          CARGO_TARGET_DIR: ${{ github.workspace }}/target-base
-        run: |
-          set -euo pipefail
-          rm -rf "${GUNGRAUN_HOME:?}"
-          cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
-            --save-baseline=base 2>&1 | tee "$RUNNER_TEMP/base.log"
-          cargo "+$BASE_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
-            | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
-            | sort > "$RUNNER_TEMP/base.names"
-
-      # Every run of the benchmark binary in this job builds it with --no-default-features, without
-      # geom-bench's judge: Gungraun's runner crate is also in the benchmark binary, and turning on
-      # its summary model there would change the binary measured.
-      #
-      # The gate. Gungraun compares every benchmark with the merge base's saved run and, after
-      # reporting all of them, fails (exit code 3, reported by cargo as a failed bench) if
-      # instructions, estimated cycles or a heap measure rose by more than 5%. The limits are this
-      # workflow's, passed on the command line, which takes precedence over the configuration in
-      # the tree. Each benchmark's teardown also checks its golden digests and fails the run if
-      # they differ. A benchmark with no saved run is recorded, not compared. Every benchmark's
-      # counts, from both runs, are saved as JSON (summary.json in its output folder) for the next
-      # step.
-      - name: Benchmark the pull request against the merge base
-        id: gate
+      # Every part's files, part k in parts/<side>/k, and the check that every benchmark the run
+      # lists was measured in exactly one part on each side (geom_bench::parts::check): a part
+      # that dropped out has no folder, which the check refuses as a missing file. Only then are
+      # the parts' Gungraun homes put together into one, as one run of the catalogue left it.
+      - name: Gather every part's counts
+        id: gather
         working-directory: head
         env:
-          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          cargo "+$HEAD_TOOLCHAIN" build --locked --release -p geom-bench --bin geom-bench-counts
+          counts="$CARGO_TARGET_DIR/release/geom-bench-counts"
+          t=$RUNNER_TEMP
+          sides=head
           if [ "$HAS_BASE" = true ]; then
-            compare=(--baseline=base)
-          else
-            rm -rf "${GUNGRAUN_HOME:?}"
-            compare=()
+            sides="base head"
           fi
-          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
-            "${compare[@]}" --save-baseline=head --save-summary=json \
-            --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS" \
-            2>&1 | tee "$RUNNER_TEMP/head.log"
+          for side in $sides; do
+            for k in $(seq 1 "$OF"); do
+              gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+                --name "count-$side-$TARGET-$k" --dir "$t/parts/$side/$k" \
+                || echo "::error::Part $k of $OF on $TARGET left no counts of the $side."
+              if [ -f "$t/parts/$side/$k/$side.tar" ] || [ -f "$t/parts/$side/$k/home.tar" ]; then
+                tar -tf "$t/parts/$side/$k/"*.tar > "$t/parts/$side/$k/home.list"
+              fi
+            done
+          done
+          status=0
+          for side in $sides; do
+            "$counts" parts "$side" "$t/parts/$side" "$OF" >> "$t/parts.md" || status=$?
+          done
+          if [ "$status" -ne 0 ]; then
+            cat "$t/parts.md"
+            echo "::error::The parts on $TARGET did not measure every benchmark exactly once; see the job summary."
+            exit 1
+          fi
+          rm -rf "${GUNGRAUN_HOME:?}"
+          mkdir -p "$GUNGRAUN_HOME"
+          for k in $(seq 1 "$OF"); do
+            tar -xf "$t/parts/head/$k/home.tar" -C "$GUNGRAUN_HOME"
+            cat "$t/parts/head/$k/head.log" >> "$t/head.log"
+            for way in rises falls; do
+              if [ -f "$t/parts/head/$k/$way.log" ]; then
+                cat "$t/parts/head/$k/$way.log" >> "$t/$way.log"
+              fi
+            done
+          done
+          cp "$t/parts/head/1/head.names" "$t/judged.names"
+          cp "$t/judged.names" "$t/head.names"
+          if [ "$HAS_BASE" = true ]; then
+            cp "$t/parts/base/1/base.names" "$t/base.names"
+          fi
+
+      # Each part's gate (Gungraun's limits on its groups) and 1% listing, as the part ended them.
+      - name: Every part's gate passed
+        id: gate
+        if: always() && steps.gather.outcome == 'success'
+        run: |
+          set -euo pipefail
+          failed=""
+          for k in $(seq 1 "$OF"); do
+            if [ "$(cat "$RUNNER_TEMP/parts/head/$k/gate.status")" != 0 ]; then
+              failed="$failed $k"
+            fi
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::The gate failed in part(s)$failed on $TARGET; see the job summary."
+            exit 1
+          fi
 
       # The miss counts (and instructions and estimated cycles again, exactly), judged from the
-      # summaries the gate saved, by one rule on both legs (geom_bench::callgrind; chapter 23.13):
-      # a rise over 5% fails on instructions and on estimated cycles. Code layout alone moves miss
-      # counts, so every miss count's changes are listed and judged through estimated cycles, which
-      # price every miss. Every benchmark the run lists must have exactly one
-      # summary with every count, or the judgement fails. It runs after a failed gate too, to
-      # report everything.
+      # summaries every part saved, by one rule on both legs (geom_bench::callgrind; chapter
+      # 23.13): a rise over 5% fails on instructions and on estimated cycles. Code layout alone
+      # moves miss counts, so every miss count's changes are listed and judged through estimated
+      # cycles, which price every miss. Every benchmark the run lists must have exactly one summary
+      # with every count, or the judgement fails: the summaries of both benchmark targets,
+      # `instructions` and `ember`, are read. It runs after a failed gate too, to report
+      # everything.
       - name: Judge instructions, cycles and cache misses from the summaries
         id: judge
         if: always() && needs.scope.outputs.base_gate == 'true' && steps.gate.outcome != 'skipped'
         working-directory: head
-        env:
-          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
         run: |
           set -euo pipefail
-          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
-            | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
-            | sort > "$RUNNER_TEMP/judged.names"
-          cargo "+$HEAD_TOOLCHAIN" build --locked --release -p geom-bench --bin geom-bench-counts
           # Exit status 1: a rise over the limit; 2: the judgement could not be made.
           status=0
           "$CARGO_TARGET_DIR/release/geom-bench-counts" callgrind \
-            "$GUNGRAUN_HOME/geom-bench/instructions" "$RUNNER_TEMP/judged.names" \
+            "$GUNGRAUN_HOME/geom-bench" "$RUNNER_TEMP/judged.names" \
             "$GATE_PERCENT" "Instructions, estimated cycles and cache misses on $TARGET" \
             > "$RUNNER_TEMP/callgrind.md" || status=$?
           case "$status" in
@@ -525,24 +1055,16 @@ jobs:
                   done
               done
 
-      # Chapter 23.13 lists every change over 1%. The two saved runs are compared again with 1%
-      # limits each way; these runs read the saved results and measure nothing. Their failing exit
-      # status only means "something was listed"; a listing that does not complete fails the step.
       # A benchmark of the merge base that this pull request no longer has fails the gate unless
-      # retired.txt names it: a rename must not hide a regression.
-      - name: List changes over 1% and benchmarks not compared
-        id: listing
-        if: always() && needs.scope.outputs.base_gate == 'true' && steps.gate.outcome != 'skipped'
+      # retired.txt names it: a rename must not hide a regression. And every part's 1% listing
+      # must have completed.
+      - name: Benchmarks of the merge base the change no longer has
+        id: removed
+        if: always() && needs.scope.outputs.base_gate == 'true' && steps.gather.outcome == 'success'
         working-directory: head
-        env:
-          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
         run: |
           set -euo pipefail
-          cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- --list \
-            | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
-            | sort > "$RUNNER_TEMP/head.names"
           comm -13 "$RUNNER_TEMP/base.names" "$RUNNER_TEMP/head.names" > "$RUNNER_TEMP/added.names"
-          cargo "+$HEAD_TOOLCHAIN" build --locked --release -p geom-bench --bin geom-bench-counts
           # Exit status 1: a benchmark was removed without being retired; 2: the check could not
           # run. Either fails the step, after the listing below.
           removed_status=0
@@ -552,22 +1074,10 @@ jobs:
           while read -r name; do
             echo "::error::$name is at the merge base but not in this pull request. Name it in geom-bench/retired.txt if that is intended."
           done < "$RUNNER_TEMP/removed.names"
-          # A listing that does not complete could leave a change over 1% unlisted, so it fails the
-          # step too, after the rest is reported.
           incomplete=0
-          for way in rises:1 falls:-1; do
-            limit=${way#*:}
-            log="$RUNNER_TEMP/${way%%:*}.log"
-            # Its failing exit status only means something was listed; whether the run completed
-            # is checked next.
-            cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- \
-              --load-baseline=head --baseline=base \
-              --callgrind-limits="ir=${limit}%,estimatedcycles=${limit}%,i1mr=${limit}%,d1mr=${limit}%,d1mw=${limit}%,ilmr=${limit}%,dlmr=${limit}%,dlmw=${limit}%" \
-              --dhat-limits="totalbytes=${limit}%,totalblocks=${limit}%,attgmaxbytes=${limit}%,maximumbytes=${limit}%" \
-              > "$log" 2>&1 || true
-            if ! grep -q '^Gungraun result:' "$log"; then
-              echo "::error::Listing the ${way%%:*} over 1% did not complete, so the job summary may miss changes; see its output below."
-              cat "$log"
+          for k in $(seq 1 "$OF"); do
+            if [ "$(cat "$RUNNER_TEMP/parts/head/$k/listing.status" 2>/dev/null)" != 0 ]; then
+              echo "::error::Part $k's listing of changes over 1% did not complete, so the job summary may miss changes; see its log."
               incomplete=1
             fi
           done
@@ -608,11 +1118,11 @@ jobs:
             echo "## Kernel benchmarks: instructions, cache and heap on Linux $TARGET"
             echo
             echo "Merge base \`${MERGE_BASE:0:12}\` (Rust $BASE_TOOLCHAIN) against" \
-              "\`${HEAD_SHA:0:12}\` (Rust $HEAD_TOOLCHAIN), measured in one job with" \
-              "$(valgrind --version 2>/dev/null). The gate: no benchmark's instructions, estimated" \
-              "cycles or heap use may rise by more than $GATE_PERCENT% (every cache-miss count" \
-              "that changed is listed and judged through estimated cycles), and every benchmark's" \
-              "inputs and results must match golden.txt."
+              "\`${HEAD_SHA:0:12}\` (Rust $HEAD_TOOLCHAIN), measured in $OF parts on runners of" \
+              "one image, with $(valgrind --version 2>/dev/null). The gate: no benchmark's" \
+              "instructions, estimated cycles or heap use may rise by more than $GATE_PERCENT%" \
+              "(every cache-miss count that changed is listed and judged through estimated" \
+              "cycles), and every benchmark's inputs and results must match golden.txt."
             echo
             case "$GATE_OUTCOME/$HAS_BASE" in
               success/true)
@@ -634,8 +1144,12 @@ jobs:
                   echo "**Failed:** the benchmarks did not build or run. See the job log."
                 fi
                 ;;
-              *) echo "**Not run** (${GATE_OUTCOME:-an earlier step failed}). See the job log." ;;
+              *) echo "**Not run** (${GATE_OUTCOME:-an earlier step failed}: a part left no counts, or measured a benchmark twice or not at all). See the job log." ;;
             esac
+            if [ -s "$t/parts.md" ]; then
+              echo
+              cat "$t/parts.md"
+            fi
             if listed "$t/head.log"; then
               echo
               echo "### Rises over $GATE_PERCENT%"
@@ -648,7 +1162,7 @@ jobs:
               echo
               cat "$t/callgrind.md"
             fi
-            if [ "$HAS_BASE" = true ] && [ -f "$t/rises.log" ]; then
+            if [ "$HAS_BASE" = true ] && [ -f "$t/removed.names" ]; then
               for way in rises falls; do
                 echo
                 echo "### ${way^} over $LIST_PERCENT%"
@@ -657,7 +1171,7 @@ jobs:
                   echo '```text'
                   regressions "$t/$way.log"
                   echo '```'
-                elif grep -q '^Gungraun result:' "$t/$way.log" 2>/dev/null; then
+                elif [ -f "$t/$way.log" ]; then
                   echo "None."
                 else
                   echo "**Not listed:** the listing did not complete, which blocks the merge. See the job log."
@@ -667,9 +1181,7 @@ jobs:
               echo "### Benchmarks not compared"
               echo
               if [ -s "$t/removed.names" ] || [ -s "$t/added.names" ]; then
-                if [ -f "$t/removed.names" ]; then
-                  sed 's/^/- Removed without being retired (blocks the merge): /' "$t/removed.names"
-                fi
+                sed 's/^/- Removed without being retired (blocks the merge): /' "$t/removed.names"
                 if [ -f "$t/added.names" ]; then
                   sed 's/^/- New: /' "$t/added.names"
                 fi
@@ -691,13 +1203,13 @@ jobs:
           exit 0
 
       # How long each benchmark of the pull request took to measure: its Callgrind and DHAT
-      # processes together, from the summaries the gate saved, the longest first, in the log and the
-      # job summary. The log's timestamps cannot tell it: Gungraun prints a benchmark's counts only
-      # after both its runs, and runs a group's benchmarks side by side. A benchmark that takes
-      # minutes is cut to a size that does not (geom-bench's inputs::SHORT_BATCHES). It only
-      # reports, so it never fails the job.
+      # processes together, from the summaries every part of the change saved, the longest first, in
+      # the log and the job summary. The log's timestamps cannot tell it: Gungraun prints a
+      # benchmark's counts only after both its runs, and runs a group's benchmarks side by side. A
+      # benchmark that takes minutes is cut to a size that does not (geom-bench's
+      # inputs::SHORT_BATCHES). It only reports, so it never fails the job.
       - name: List the benchmarks that took longest
-        if: always() && steps.gate.outcome != 'skipped'
+        if: always() && steps.gather.outcome == 'success'
         run: |
           set +e
           set -uo pipefail
@@ -714,25 +1226,47 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
-      # Gate 1 (piece G43): the gate is shown to fail on a planted rise. `trip gungraun` makes
-      # `Sign::of_i128` read its argument through `core::hint::black_box` (the same answer for more
-      # instructions) and runs the gate's own command on that one benchmark, compared with the pull
-      # request's run saved as `head` above, under the gate's limits; Gungraun must report the
-      # regression. It saves nothing (the gate's --save options are left out), and it runs last,
-      # after the reports, so its rebuild of the planted code changes no measurement of the change.
-      - name: A benchmark slowed on purpose fails the comparison
+      # Each group's seconds on this target, from the durations in the summaries
+      # (`geom-bench-counts times`), for `geom-bench-counts plan` to rewrite geom-bench/parts.tsv
+      # from when the parts' times drift.
+      - name: Each group's seconds
+        if: always() && steps.gather.outcome == 'success'
         working-directory: head
-        env:
-          GUNGRAUN_RUNNER: ${{ env.HEAD_RUNNER }}
         run: |
           set -euo pipefail
-          compare=(--baseline=head 'instructions::sign::*')
-          cargo "+$HEAD_TOOLCHAIN" run --locked -q -p geom-test --bin trip -- gungraun -- cargo "+$HEAD_TOOLCHAIN" bench --no-default-features --locked -p geom-bench --bench instructions -- "${compare[@]}" --callgrind-limits="$CALLGRIND_LIMITS" --dhat-limits="$DHAT_LIMITS"
+          mkdir -p "$RUNNER_TEMP/times"
+          {
+            echo "# $TARGET: run $GITHUB_RUN_ID (${HEAD_SHA:0:9}), the change's parts, from their summaries"
+            "$CARGO_TARGET_DIR/release/geom-bench-counts" times "$GUNGRAUN_HOME/geom-bench/instructions"
+          } > "$RUNNER_TEMP/times/times-$TARGET.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.gather.outcome == 'success'
+        with:
+          name: bench-times-${{ matrix.target }}
+          path: ${{ runner.temp }}/times
+          if-no-files-found: error
+
+      # The merge queue's mark that aarch64 passed on this tree, so the push to main that lands it
+      # measures x86-64 only (the paragraph at the top).
+      - name: The merge queue's mark for this tree
+        if: success() && github.event_name == 'merge_group' && matrix.target == 'aarch64'
+        run: |
+          mkdir -p "$RUNNER_TEMP/mark"
+          echo "$HEAD_SHA" > "$RUNNER_TEMP/mark/commit.txt"
+          echo "TREE=$(git -C head rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: success() && github.event_name == 'merge_group' && matrix.target == 'aarch64'
+        with:
+          name: bench-aarch64-tested-${{ env.TREE }}
+          path: ${{ runner.temp }}/mark
+          retention-days: 30
+          if-no-files-found: error
 
   fuel:
     name: WebAssembly fuel and growth (5% gate)
     needs: scope
-    if: needs.scope.outputs.measure == 'true'
+    # The pull request's pushes measured wasm32's fuel; the merge queue measures only aarch64.
+    if: needs.scope.outputs.measure == 'true' && github.event_name != 'merge_group'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:

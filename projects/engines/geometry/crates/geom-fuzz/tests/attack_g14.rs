@@ -7,10 +7,12 @@
 //! rounding and both of its answers, and that every stored corpus and crash file is a case.
 //!
 //! The layout attacks read the repository: every target has its fuzz and seeded tests, the Kani
-//! matrix lists exactly the targets' proof tests, the workflow's path filters cover every crate a
-//! target builds, the Kani version agrees wherever it is written, and the workspace has the
-//! profile cargo-bolero builds with. Each of those checks is a function of the files' text, and
-//! each is shown to fail on a seeded violation, so none can pass by reading nothing.
+//! matrix lists exactly the targets' proof tests, the parts of the predicate's proof are one for
+//! each class of its domain with the harness that proves the classes cover it, the workflow's path
+//! filters cover every crate a target builds, the Kani version agrees wherever it is written, and
+//! the workspace has the profile cargo-bolero builds with. Each of those checks is a function of
+//! the files' text, and each is shown to fail on a seeded violation, so none can pass by reading
+//! nothing.
 
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them, and std's reductions, to build their oracles.
@@ -36,13 +38,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
+use geom_fuzz::orient2d::{
+    Case, PREDICATE_PARTS, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference,
+};
 use geom_fuzz::{
-    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, cdt, contract, crossings,
-    curve_offsets, curves, encoder, euler, exact, general, intersect, level, linalg, make, maths,
-    names, naming, natural, nurbs, open, operations, orient2d, p21, pencils, piercing, planes,
-    predicates, project, prune, quadric, records, reductions, references, roots, sequence, solids,
-    surface_offsets, surfaces, transforms, variants, wide,
+    Harness, arenas, attributes, batch, bodies, booleans, boxtree, cache, cbor, cdt, contract,
+    crossings, curve_offsets, curves, encoder, euler, exact, general, intersect, level, linalg,
+    make, maths, names, naming, natural, nurbs, open, operations, orient2d, p21, pencils, piercing,
+    planes, predicates, project, prune, quadric, records, reductions, references, roots, sequence,
+    solids, surface_offsets, surfaces, transforms, variants, wide,
 };
 
 use geom_num::Sign;
@@ -55,11 +59,12 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 47] = [
+const TARGETS: [(&str, Harness); 48] = [
     ("arenas", arenas::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
     ("bodies", bodies::harness),
+    ("booleans", booleans::harness),
     ("boxtree", boxtree::harness),
     ("cache", cache::harness),
     ("cbor", cbor::harness),
@@ -581,7 +586,7 @@ fn attack_every_target_has_its_tests_and_its_proofs_in_the_kani_matrix() {
     );
 
     // Seeded violations: each must be reported.
-    let drop_proof = workflow.replace("- orient2d_proof\n", "");
+    let drop_proof = workflow.replace("- orient2d_proof_filter\n", "");
     assert_ne!(drop_proof, workflow);
     assert!(
         layout_violations(&targets, &tests, &drop_proof)
@@ -683,13 +688,13 @@ fn attack_a_should_panic_bolero_test_is_refused() {
     let mut returning = tests.clone();
     let text = returning.get_mut("orient2d").unwrap();
     *text = text.replace(
-        ".for_each(|draw| holds(prove(PROOF_BOUND, draw)));",
-        ".for_each(|draw| prove(PROOF_BOUND, draw));",
+        ".for_each(|draw| holds(prove(PROOF_BOUND, draw, Claim::Filter)));",
+        ".for_each(|draw| prove(PROOF_BOUND, draw, Claim::Filter));",
     );
     let v = layout_violations(&targets, &returning, &workflow);
     assert!(
         v.iter()
-            .any(|v| v.contains("orient2d_proof") && v.contains("holds")),
+            .any(|v| v.contains("orient2d_proof_filter") && v.contains("holds")),
         "{v:?}"
     );
     // A #[should_panic] test without check!, and a bolero test that catches the panic itself,
@@ -701,6 +706,186 @@ fn attack_a_should_panic_bolero_test_is_refused() {
              {call}.for_each(|_: &[u8]| ());\n    }});\n}}\n"
         )),
         Vec::<String>::new()
+    );
+}
+
+/// The predicate's claim over the whole domain, as a test on every system.
+const WHOLE: &str = "orient2d_proof_predicate";
+/// The harness that proves every draw of the domain has a class.
+const COVER: &str = "orient2d_proof_predicate_cover";
+/// The parts of the predicate's proof: this prefix, then the class.
+const PART: &str = "orient2d_proof_predicate_part_";
+
+/// The body of `fn name(` in `text`, from its `fn` line to the first line that closes it, `}` at
+/// the start of a line; empty when `text` has no such function.
+fn body_of<'a>(text: &'a str, name: &str) -> &'a str {
+    let Some(start) = text.find(&format!("fn {name}(")) else {
+        return "";
+    };
+    let body = &text[start..];
+    &body[..body.find("\n}").unwrap_or(body.len())]
+}
+
+/// What the predicate's proof in parts gets wrong, read from `text`, the text of
+/// `tests/orient2d.rs`, for `parts` classes, and from the workflow. The proof is sound when the
+/// cover harness proves that every draw of the domain has a class below `parts`, and each class
+/// has a part that proves the claim for every draw of that class. So: the cover harness is a Kani
+/// proof of `covered`; each class 0 to `parts` − 1 has its part, a Kani proof whose body assumes
+/// that class and no other (`prove_part` with the class's number); no part is of a class past
+/// the last; Kani's matrix runs every one of them; and the claim still runs whole as a test.
+fn part_violations(text: &str, parts: u32, workflow: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let proofs = proof_tests(text);
+    let matrix = workflow_list(workflow, "harness");
+    let runs = |name: &str, found: &mut Vec<String>| {
+        if !matrix.iter().any(|m| m == name) {
+            found.push(format!("{name} is not in kernel-fuzz.yml's Kani matrix"));
+        }
+    };
+    if proofs.iter().any(|p| p == COVER) {
+        if !body_of(text, COVER).contains("holds(covered(draw))") {
+            found.push(format!(
+                "{COVER} does not prove that every draw has a class: its body has no \
+                 `holds(covered(draw))`"
+            ));
+        }
+        runs(COVER, &mut found);
+    } else {
+        found.push(format!(
+            "the predicate's proof has no cover harness {COVER}, so nothing proves that its \
+             classes are the whole domain"
+        ));
+    }
+    for class in 0..parts {
+        let name = format!("{PART}{class}");
+        if !proofs.contains(&name) {
+            found.push(format!("class {class} has no part {name}"));
+            continue;
+        }
+        let assumes = format!("holds(prove_part(PROOF_BOUND, draw, {class}))");
+        if !body_of(text, &name).contains(&assumes) {
+            found.push(format!(
+                "{name} does not assume class {class}: its body has no `{assumes}`"
+            ));
+        }
+        runs(&name, &mut found);
+    }
+    for name in proofs.iter().filter(|p| p.starts_with(PART)) {
+        let class = name[PART.len()..].parse::<u32>().ok();
+        if class.is_none_or(|c| c >= parts) {
+            found.push(format!(
+                "{name} is a part of no class: the classes are 0 to {}",
+                parts.saturating_sub(1)
+            ));
+        }
+    }
+    if !text.contains(&format!("#[test]\nfn {WHOLE}() {{"))
+        || !body_of(text, WHOLE).contains("holds(prove(PROOF_BOUND, draw, Claim::Predicate))")
+    {
+        found.push(format!(
+            "the predicate's claim no longer runs whole, over every class at once, as the test \
+             {WHOLE}"
+        ));
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
+#[test]
+fn attack_the_parts_of_the_predicates_proof_are_its_whole_domain() {
+    let workflow = read(".github/workflows/kernel-fuzz.yml");
+    let text = test_files().remove("orient2d").unwrap();
+    assert_eq!(
+        part_violations(&text, PREDICATE_PARTS, &workflow),
+        Vec::<String>::new()
+    );
+
+    // Seeded violations: each must be reported.
+    let last = PREDICATE_PARTS - 1;
+    let seeded = |label: &str, text: &str, parts: u32, workflow: &str, expect: &str| {
+        let v = part_violations(text, parts, workflow);
+        assert!(v.iter().any(|v| v.contains(expect)), "{label}: {v:?}");
+    };
+    let edited = |of: &str, from: &str, to: &str| {
+        let out = of.replacen(from, to, 1);
+        assert_ne!(out, of, "the planted edit {from:?} applies");
+        out
+    };
+    // A part missing from the matrix, and the cover harness missing from it.
+    seeded(
+        "part out of the matrix",
+        &text,
+        PREDICATE_PARTS,
+        &edited(&workflow, &format!("- {PART}{last}\n"), ""),
+        &format!("{PART}{last} is not in kernel-fuzz.yml's Kani matrix"),
+    );
+    seeded(
+        "cover out of the matrix",
+        &text,
+        PREDICATE_PARTS,
+        &edited(&workflow, &format!("- {COVER}\n"), ""),
+        &format!("{COVER} is not in kernel-fuzz.yml's Kani matrix"),
+    );
+    // The cover harness missing from the source, and one that proves nothing about the classes.
+    seeded(
+        "no cover harness",
+        &edited(&text, &format!("fn {COVER}()"), "fn covers_nothing()"),
+        PREDICATE_PARTS,
+        &workflow,
+        "has no cover harness",
+    );
+    seeded(
+        "a cover that proves nothing",
+        &edited(&text, "holds(covered(draw))", "holds(Ok(()))"),
+        PREDICATE_PARTS,
+        &workflow,
+        "does not prove that every draw has a class",
+    );
+    // A part whose assumption is no longer its class: the last part assuming class 0 leaves the
+    // last class unproved, and so does a part removed from the source.
+    seeded(
+        "a class nobody assumes",
+        &edited(
+            &text,
+            &format!("prove_part(PROOF_BOUND, draw, {last})"),
+            "prove_part(PROOF_BOUND, draw, 0)",
+        ),
+        PREDICATE_PARTS,
+        &workflow,
+        &format!("{PART}{last} does not assume class {last}"),
+    );
+    seeded(
+        "a part removed",
+        &edited(&text, &format!("fn {PART}{last}()"), "fn removed()"),
+        PREDICATE_PARTS,
+        &workflow,
+        &format!("class {last} has no part"),
+    );
+    // One class more than the parts, and one part more than the classes.
+    seeded(
+        "a class without a part",
+        &text,
+        PREDICATE_PARTS + 1,
+        &workflow,
+        &format!("class {PREDICATE_PARTS} has no part"),
+    );
+    seeded(
+        "a part without a class",
+        &text,
+        last,
+        &workflow,
+        &format!("{PART}{last} is a part of no class"),
+    );
+    // The whole claim no longer a test.
+    seeded(
+        "the whole removed",
+        &edited(&text, &format!("fn {WHOLE}()"), "fn whole_removed()"),
+        PREDICATE_PARTS,
+        &workflow,
+        "no longer runs whole",
     );
 }
 

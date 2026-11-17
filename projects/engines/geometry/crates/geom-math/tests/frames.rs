@@ -149,7 +149,16 @@ fn exact_map(f: &FrameRecord, p: P3) -> [BigRational; 3] {
 /// Checks a conversion against the exact values: correctly rounded, ties to even, exact flag right,
 /// or `OutOfRange` exactly when a rounded coordinate leaves the frame.
 fn check_rounded(f: &FrameRecord, m: MapPoint) -> Result<(), TestCaseError> {
-    let want = exact_frame(f, m);
+    check_rounded_to(f, m, &exact_frame(f, m))
+}
+
+/// [`check_rounded`] against `want`, the exact values `exact_frame` gives for `m`, for a caller
+/// that reads them too and so computes them once.
+fn check_rounded_to(
+    f: &FrameRecord,
+    m: MapPoint,
+    want: &[BigRational; 3],
+) -> Result<(), TestCaseError> {
     let rounded: Vec<i128> = want.iter().map(|w| to_i128(&round_half_even(w))).collect();
     let out = rounded
         .iter()
@@ -413,8 +422,8 @@ fn ground_frame_sweep_settles_ties_and_exact_values() {
                     northing: 2000.0 + f64::from(l) / 4096.0,
                     height: 0.0,
                 };
-                check_rounded(&f, m).unwrap();
                 let want = exact_frame(&f, m);
+                check_rounded_to(&f, m, &want).unwrap();
                 ties += usize::from(want[..2].iter().any(is_midpoint));
                 exacts += usize::from(want.iter().all(is_integer));
                 total += 1;

@@ -6,12 +6,23 @@
 //! geom-bench-counts growth <head counts>
 //! geom-bench-counts removed <base names> <head names> <retired.txt>
 //! geom-bench-counts callgrind <summary folder> <head names> <gate %> <title>
+//! geom-bench-counts parts <base|head> <parts folder> <parts>
+//! geom-bench-counts times <summary folder>
+//! geom-bench-counts plan <times file>...
 //! ```
 //!
 //! `callgrind` judges the instruction-and-cache gate's Callgrind counts from the `summary.json`
 //! files Gungraun saved under the folder (`geom_bench::callgrind`): instructions and estimated
 //! cycles at the gate's percentage, with every miss count that changed listed and judged through
 //! estimated cycles.
+//!
+//! `parts` checks the instruction gate's parts (`geom_bench::parts::check`): for each part k from
+//! 1, `<parts folder>/k/<side>.names` lists the run's benchmarks and `<parts folder>/k/home.list`
+//! the part's saved files; every listed benchmark must have been measured in exactly one part. A
+//! part's files that are missing (a part that dropped out) are a file that cannot be read. `times`
+//! prints each group's seconds (`<group> <seconds>`) from the durations in the summaries, and
+//! `plan` prints `parts.tsv` from one or more such files, each group at the most seconds any of
+//! them gives, after their comment lines (`geom_bench::parts::plan`, at `PART_SECONDS`).
 //!
 //! Each prints a Markdown report on standard output (`removed` prints one name per line) and exits
 //! with 0 when the check passes, 1 when it fails, 2 when an argument or file is wrong, so a
@@ -31,12 +42,15 @@
 //!
 //! Cost: reading and parsing the files, then O(n log n) for n benchmarks.
 
+use std::fmt::Write as _;
 use std::io::Write as _;
 use std::process::ExitCode;
 
 #[cfg(all(feature = "judge", any(unix, windows)))]
 use geom_bench::callgrind::{judge, read_summaries};
 use geom_bench::counts::{Counts, compare, growth, growth_report, parse_names, unretired_removals};
+#[cfg(all(feature = "judge", any(unix, windows)))]
+use geom_bench::parts::{PART_SECONDS, Side, check, group_seconds, measured, plan, read_durations};
 
 /// A file's text, or a message naming it.
 fn read(path: &str) -> Result<String, String> {
@@ -89,8 +103,78 @@ fn run(args: &[&str], out: &mut String) -> Result<bool, String> {
             out.push_str(&judgement.report(title));
             Ok(judgement.passed())
         }
+        #[cfg(all(feature = "judge", any(unix, windows)))]
+        ["parts", side, folder, parts] => {
+            let (side, file) = match *side {
+                "base" => (Side::Base, "base.names"),
+                "head" => (Side::Head, "head.names"),
+                _ => return Err(format!("parts: not base or head: {side}")),
+            };
+            let parts: usize = parts
+                .parse()
+                .ok()
+                .filter(|&n| n > 0)
+                .ok_or_else(|| format!("parts: not a number of parts: {parts}"))?;
+            let (mut listed, mut done) = (Vec::new(), Vec::new());
+            for k in 1..=parts {
+                listed.push(parse_names(&read(&format!("{folder}/{k}/{file}"))?));
+                let listing = read(&format!("{folder}/{k}/home.list"))?;
+                done.push(measured(&listing, side).map_err(|e| format!("part {k}: {e}"))?);
+            }
+            let found = check(&listed, &done);
+            let _ = writeln!(out, "#### The {} parts
+", if side == Side::Base { "merge base's" } else { "change's" });
+            if found.is_empty() {
+                for (k, names) in done.iter().enumerate() {
+                    let _ = writeln!(out, "- Part {}: {} benchmarks.", k + 1, names.len());
+                }
+                let _ = writeln!(out, "
+Every benchmark was measured in exactly one part.");
+            } else {
+                for problem in &found {
+                    let _ = writeln!(out, "- {problem}");
+                }
+            }
+            Ok(found.is_empty())
+        }
+        #[cfg(all(feature = "judge", any(unix, windows)))]
+        ["times", folder] => {
+            let seconds = group_seconds(&read_durations(std::path::Path::new(folder))?);
+            for (group, s) in seconds {
+                let _ = writeln!(out, "{group} {s}");
+            }
+            Ok(true)
+        }
+        #[cfg(all(feature = "judge", any(unix, windows)))]
+        ["plan", files @ ..] if !files.is_empty() => {
+            let mut seconds = std::collections::BTreeMap::new();
+            let mut header = vec![
+                "The instruction gate's parts (kernel-bench.yml): each group's part and seconds."
+                    .to_owned(),
+                "Written by `geom-bench-counts plan` from the times of a run, never by hand."
+                    .to_owned(),
+            ];
+            for file in files {
+                for line in read(file)?.lines() {
+                    if let Some(comment) = line.strip_prefix('#') {
+                        header.push(comment.trim().to_owned());
+                        continue;
+                    }
+                    let mut fields = line.split(' ');
+                    let (Some(group), Some(s), None) = (fields.next(), fields.next(), fields.next())
+                    else {
+                        return Err(format!("{file}: not `<group> <seconds>`: {line:?}"));
+                    };
+                    let s: u64 = s.parse().map_err(|_| format!("{file}: not seconds: {line:?}"))?;
+                    let most = seconds.entry(group.to_owned()).or_insert(0);
+                    *most = s.max(*most);
+                }
+            }
+            out.push_str(&plan(&seconds, PART_SECONDS).text(&header));
+            Ok(true)
+        }
         #[cfg(not(all(feature = "judge", any(unix, windows))))]
-        ["callgrind", ..] => Err(
+        ["callgrind" | "parts" | "times" | "plan", ..] => Err(
             "callgrind needs the `judge` feature, on Unix or Windows: Gungraun's summary model is \
              not built here"
                 .to_owned(),
@@ -98,7 +182,7 @@ fn run(args: &[&str], out: &mut String) -> Result<bool, String> {
         _ => Err(
             "usage: geom-bench-counts compare <base> <head> <gate %> <list %> <retired> \
                   <title> | growth <counts> | removed <base names> <head names> <retired> | \
-                  callgrind <summary folder> <head names> <gate %> <title>"
+                  callgrind <summary folder> <head names> <gate %> <title> | parts <base|head>                   <parts folder> <parts> | times <summary folder> | plan <times file>..."
                 .to_owned(),
         ),
     }

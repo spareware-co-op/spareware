@@ -37,6 +37,13 @@ use geom_num::math;
 use geom_num::quadrature::{self, QuadError};
 use geom_num::{NumError, Real};
 
+/// 2^e exactly, for |e| up to 63. Not `f64::powi`: its last digit is not the same everywhere (Miri
+/// varies it), so data meant to be whole numbers or exact scales would not be.
+fn two_to(e: i32) -> f64 {
+    let p = (1u64 << e.unsigned_abs()) as f64;
+    if e < 0 { 1.0 / p } else { p }
+}
+
 fn r(v: f64) -> Real {
     Real::new(v).unwrap()
 }
@@ -190,8 +197,8 @@ fn hang_23_a_far_angle_reduces_at_once_and_exactly() {
     for x in [
         9_223_372_036_854_775_807.0,
         9_007_199_254_740_992.0,
-        2f64.powi(61),
-        -(2f64.powi(61)),
+        two_to(61),
+        -two_to(61),
         1e100,
         -1e300,
         f64::MAX,

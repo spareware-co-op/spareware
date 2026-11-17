@@ -42,8 +42,11 @@
 //! - **What is proven and what is tested.** For every case [`proof_case`] can give with bound
 //!   [`PROOF_BOUND`] (every coordinate within `PROOF_BOUND` steps of 0 or of an edge ±(2^40 − 1)
 //!   of the frame, in any combination), Kani proves that all three claims hold and that nothing
-//!   on the way panics or overflows (`tests/orient2d.rs`, `orient2d_proof`; Kani checks every
-//!   arithmetic step, index and unwrap by default). Near the edges the filter's products round,
+//!   on the way panics or overflows (`tests/orient2d.rs`: `orient2d_proof_predicate`,
+//!   `orient2d_proof_exact_path` and `orient2d_proof_filter`, one claim each by [`check_claim`],
+//!   which together prove what [`check`] checks; Kani checks every arithmetic step, index and
+//!   unwrap by default; the predicate's claim is proved in [`PREDICATE_PARTS`] parts, one for
+//!   each class of [`predicate_part`], with a proof that the classes are the whole domain). Near the edges the filter's products round,
 //!   so the proof covers the filter's error bound, not only exact arithmetic. Everywhere else in
 //!   the frame the claims are tested, by fuzzing and the property tests, not proven.
 //!
@@ -126,6 +129,53 @@ pub fn reference(a: P2, b: P2, c: P2) -> Option<i128> {
 /// computed (a defect in this harness).
 pub fn check(case: &Case) -> Result<(), Finding> {
     check_with(case, orient2d, filter, value)
+}
+
+/// One of [`check`]'s three claims (the module header numbers them), for a bounded proof of that
+/// claim alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Claim {
+    /// 1. The predicate answers, with the reference's sign.
+    Predicate,
+    /// 2. The generated exact path returns the reference's value.
+    ExactPath,
+    /// 3. The generated filter declines or gives the reference's sign.
+    Filter,
+}
+
+/// Every claim of [`check`]: a case passes [`check`] exactly when it passes [`check_claim`] with
+/// each of these.
+pub const CLAIMS: [Claim; 3] = [Claim::Predicate, Claim::ExactPath, Claim::Filter];
+
+/// [`check`]'s claim `claim` alone, for `case`: [`check_with`] on `geom-num`'s function for that
+/// claim, with the reference itself standing in for the other two, which it always meets (its own
+/// sign, its own value, and a filter that declines). So `check_claim` fails exactly when the
+/// reference cannot be computed or that claim is broken, and a case passes [`check`] exactly when
+/// it passes `check_claim` for every one of [`CLAIMS`]: a proof split by claim proves what one
+/// proof of [`check`] proves.
+///
+/// # Errors
+///
+/// A [`Finding`] for the claim, or if the reference itself could not be computed.
+pub fn check_claim(case: &Case, claim: Claim) -> Result<(), Finding> {
+    match claim {
+        Claim::Predicate => check_with(case, orient2d, declines, reference),
+        Claim::ExactPath => check_with(case, reference_sign, declines, value),
+        Claim::Filter => check_with(case, reference_sign, filter, reference),
+    }
+}
+
+/// The sign of [`reference`], standing in for the predicate in [`check_claim`]; an error only
+/// where the reference cannot be computed, which [`check_with`] reports first.
+fn reference_sign(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+    reference(a, b, c)
+        .map(Sign::of_i128)
+        .ok_or(NumError::BudgetExceeded)
+}
+
+/// A filter that declines every case, standing in for the filter in [`check_claim`].
+fn declines(_: P2, _: P2, _: P2) -> Option<Sign> {
+    None
 }
 
 /// [`check`] on the given predicate, filter and exact path, so a test can hand it broken ones and
@@ -261,6 +311,26 @@ pub fn proof_case(bound: u64, draw: &ProofDraw) -> Option<Case> {
     })
 }
 
+/// How many classes [`predicate_part`] cuts the proof's domain into: 64, one for each pattern of
+/// the six coordinates' signs.
+pub const PREDICATE_PARTS: u32 = 64;
+
+/// The class of the proof's domain `draw` is in, for the predicate's proof in parts
+/// (`tests/orient2d.rs`): the six negative flags read as a number, a.x's worth 1, a.y's 2, b.x's
+/// 4, b.y's 8, c.x's 16 and c.y's 32, so always below [`PREDICATE_PARTS`]. The near-edge flags
+/// and the offsets do not enter it: a class is every draw with those six signs.
+///
+/// Kani proves the predicate's claim one class at a time, and proves of this function that every
+/// draw of the domain has a class below [`PREDICATE_PARTS`], so the parts together are the
+/// domain. The signs are what to split on because they are what the solver's time follows: one
+/// class of them took 4 to 9 minutes on the hosted runner where the whole domain took 35 to 46.
+#[must_use]
+pub fn predicate_part(draw: &ProofDraw) -> u32 {
+    let [ax, ay, bx, by, cx, cy] = draw.negative;
+    let worth = |negative: bool, weight: u32| if negative { weight } else { 0 };
+    worth(ax, 1) | worth(ay, 2) | worth(bx, 4) | worth(by, 8) | worth(cx, 16) | worth(cy, 32)
+}
+
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,
@@ -357,6 +427,54 @@ mod tests {
         assert!(zero.is_err());
     }
 
+    /// Each claim's stand-ins are met by every case: with all three the reference's own, the
+    /// check passes, even where the claimed functions would not run. So a proof of one claim by
+    /// [`check_claim`] fails only on that claim, and the three together are [`check`].
+    #[test]
+    fn the_stand_ins_always_pass_and_each_claim_is_its_own() {
+        let cases = [
+            Case {
+                a: p(0, 0),
+                b: p(1, 0),
+                c: p(0, 1),
+            },
+            Case {
+                a: p(-M, -M),
+                b: p(M, -M),
+                c: p(M, M),
+            },
+            Case {
+                a: p(M, M),
+                b: p(-M, -M),
+                c: p(M - 1, M),
+            },
+        ];
+        for case in &cases {
+            check_with(case, reference_sign, declines, reference).unwrap();
+            for claim in CLAIMS {
+                check_claim(case, claim).unwrap();
+            }
+        }
+        // Broken on its own, each claim still fails with the stand-ins for the other two.
+        let case = &cases[0];
+        let flipped = |a, b, c| orient2d(a, b, c).map(Sign::negate);
+        assert!(check_with(case, flipped, declines, reference).is_err());
+        assert!(
+            check_with(case, reference_sign, declines, |a, b, c| value(a, b, c)
+                .map(|v| v + 1))
+            .is_err()
+        );
+        assert!(
+            check_with(
+                case,
+                reference_sign,
+                |_, _, _| Some(Sign::Negative),
+                reference
+            )
+            .is_err()
+        );
+    }
+
     #[test]
     fn empty_and_tiny_inputs_are_cases() {
         harness(&[]).unwrap();
@@ -428,6 +546,25 @@ mod tests {
         assert_eq!(proof_coord(u64::MAX, true, true, u64::MAX), None);
     }
 
+    /// Every draw of the domain is in the part its six signs name, and every part has the same
+    /// number of draws: 2^12, the near-edge flags and the offsets.
+    #[test]
+    fn the_predicates_parts_are_the_sign_patterns() {
+        let mut draws = [0u32; PREDICATE_PARTS as usize];
+        for pattern in 0u32..(1 << 18) {
+            let bit = |i: u32| pattern >> i & 1 == 1;
+            let draw = ProofDraw {
+                near_edge: core::array::from_fn(|i| bit(i as u32)),
+                negative: core::array::from_fn(|i| bit(6 + i as u32)),
+                offset: core::array::from_fn(|i| u64::from(bit(12 + i as u32))),
+            };
+            let part = predicate_part(&draw);
+            assert_eq!(part, pattern >> 6 & 63);
+            draws[part as usize] += 1;
+        }
+        assert_eq!(draws, [1 << 12; PREDICATE_PARTS as usize]);
+    }
+
     #[test]
     fn every_proof_case_is_on_the_grid_and_passes() {
         // Every coordinate pattern of the proof's domain at offsets 0 and the bound: 4^6 sign and
@@ -442,6 +579,9 @@ mod tests {
             };
             let case = proof_case(b, &draw).unwrap();
             check(&case).unwrap();
+            for claim in CLAIMS {
+                check_claim(&case, claim).unwrap();
+            }
         }
         let mut too_far = ProofDraw {
             near_edge: [false; 6],

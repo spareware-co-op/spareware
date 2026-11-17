@@ -15,6 +15,18 @@
 //!   on a pull request's changed files, and its suites test only the crates it names, keeping
 //!   their job names, with nextest told that a part with no test passes (`NEXTEST_NO_TESTS`); `kernel-bench.yml`'s count
 //!   gates measure only when the change reaches what `geom-bench` builds.
+//! - `a_changed_map_row_or_ledger_entry_runs_the_crates_it_names`: a change to one crate's row of
+//!   the repository's `MAP.json`, or to one survivor of its quality ledger, read against the
+//!   unchanged file, runs exactly that crate's tests, the readers' and the tests of the crates that
+//!   read the file whole; a change that cannot be placed runs everything; the count gates measure
+//!   only when `geom-bench` is named or reads the file; and the Kani proofs run only where their
+//!   code reads the file. Planted: the changed entries dropped, so the named crate does not run.
+//! - `the_crates_that_read_a_shared_file_whole_are_found`: every crate whose Rust sources hold a
+//!   string naming `MAP.json` or `quality-ledger.json`, found here by plain text, is among the
+//!   readers `geom_test::shared` finds, and `geom-test` reads both.
+//! - `the_selections_read_the_shared_files_against_the_base`: `kernel.yml`'s scope, the Kani
+//!   selection and the count gates' reach each pass the change's base (`--base`). Planted: each
+//!   `--base` taken out.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -31,6 +43,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use geom_test::deps::cargo_metadata;
+use geom_test::shared::{self, Changes, Reach};
 use geom_test::test_scope::{Scope, Selection, text_reads_outside};
 use serde_json::Value;
 use yaml_rust2::{Yaml, YamlLoader};
@@ -383,7 +396,7 @@ fn workflow_problems(kernel: &str, bench: &str) -> Vec<String> {
     if text(&scope["outputs"]["crates"]) != "${{ steps.scope.outputs.crates }}" {
         found.push("kernel.yml's job scope does not hand on its crates".to_owned());
     }
-    for job in ["linux", "suite", "wasm-suite"] {
+    for job in ["linux", "suite", "wasm-build", "wasm-suite"] {
         let y = &k["jobs"][job];
         let needs: Vec<String> = y["needs"]
             .as_vec()
@@ -489,8 +502,8 @@ fn the_suites_run_the_selection() {
             "skipped on the selection as a whole",
         ),
         (
-            "\"$RUNNER_TEMP/changed.txt\" --build-of geom-bench",
-            "\"$RUNNER_TEMP/changed.txt\" --build-of geom-num",
+            "--base \"$merge_base\" --build-of geom-bench",
+            "--base \"$merge_base\" --build-of geom-num",
             "reaches geom-bench's build",
         ),
     ] {
@@ -500,6 +513,318 @@ fn the_suites_run_the_selection() {
             "the planted edit {from:?} applies"
         );
         let found = workflow_problems(&k, &b);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+const MAP: &str = "projects/engines/geometry/MAP.json";
+const LEDGER: &str = "projects/engines/geometry/quality-ledger.json";
+
+/// The repository's text of a shared file, and the same file with `edit` applied to its JSON.
+fn edited(file: &str, edit: &dyn Fn(&mut Value)) -> (String, String) {
+    let base = read(file);
+    let mut v: Value = serde_json::from_str(&base).unwrap();
+    edit(&mut v);
+    let head = serde_json::to_string_pretty(&v).unwrap();
+    assert_ne!(base, head, "the planted edit of {file} changes it");
+    (base, head)
+}
+
+/// What a change to `file` from `base` to `head` reaches, as the selections take it.
+fn reach_of(scope: &Scope, file: &str, base: &str, head: &str) -> Changes {
+    Changes::from([(
+        file.to_owned(),
+        shared::compare(Some(base), Some(head), scope.folders()),
+    )])
+}
+
+/// What a selection from a change to `file` alone runs that it should not, or does not run that
+/// it should: `named`'s tests, every reader's and every crate that reads the file whole, nothing
+/// else.
+fn shared_problems(scope: &Scope, file: &str, named: &str, selection: &Selection) -> Vec<String> {
+    let mut want: BTreeSet<String> = scope.readers().clone();
+    want.extend(scope.whole_readers().crates(file));
+    want.insert(named.to_owned());
+    let got = running(selection);
+    let mut found = Vec::new();
+    for c in want.difference(&got) {
+        found.push(format!(
+            "a change to {named}'s entry of {file} does not run {c}'s tests"
+        ));
+    }
+    for c in got.difference(&want) {
+        found.push(format!(
+            "a change to {named}'s entry of {file} runs {c}'s tests"
+        ));
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository and runs cargo metadata, which a WebAssembly test cannot"
+)]
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "each planted change beside what it must run reads best in one place"
+)]
+fn a_changed_map_row_or_ledger_entry_runs_the_crates_it_names() {
+    let metadata = metadata();
+    let scope = Scope::read(&metadata).unwrap();
+    let all: BTreeSet<String> = members(&metadata).into_keys().collect();
+    let one = |file: &str| vec![file.to_owned()];
+    // A crate with a row in the map whose tests run only when something names it: no reader,
+    // and no reader of either shared file.
+    let map: Value = serde_json::from_str(&read(MAP)).unwrap();
+    let (named, named_folder) = members(&metadata)
+        .into_iter()
+        .find(|(c, folder)| {
+            !scope.readers().contains(c)
+                && !scope.whole_readers().crates(MAP).contains(c)
+                && !scope.whole_readers().crates(LEDGER).contains(c)
+                && map["crates"].as_array().unwrap().iter().any(|r| {
+                    r["folder"]
+                        .as_str()
+                        .is_some_and(|f| format!("{f}/") == *folder)
+                })
+        })
+        .expect("a crate that reads nothing outside its folder");
+    let named = named.as_str();
+
+    // A crate's row of the map: its job reworded.
+    let (base, head) = edited(MAP, &|v| {
+        let row = v["crates"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|r| {
+                r["folder"]
+                    .as_str()
+                    .unwrap()
+                    .ends_with(&format!("/{named}"))
+            })
+            .unwrap();
+        row["job"] = Value::String(format!("{} (planted)", row["job"].as_str().unwrap()));
+    });
+    let changes = reach_of(&scope, MAP, &base, &head);
+    let selection = scope.select_with(Some(&one(MAP)), &changes);
+    let found = shared_problems(&scope, MAP, named, &selection);
+    assert!(found.is_empty(), "{found:#?}");
+    assert!(
+        running(&selection).len() < all.len(),
+        "a row change runs everything"
+    );
+    // Planted: the changed entries dropped.
+    let dropped = Changes::from([(MAP.to_owned(), Reach::Crates(BTreeMap::new()))]);
+    let found = shared_problems(
+        &scope,
+        MAP,
+        named,
+        &scope.select_with(Some(&one(MAP)), &dropped),
+    );
+    assert!(
+        found
+            .iter()
+            .any(|p| p.contains(&format!("does not run {named}'s tests"))),
+        "{found:#?}"
+    );
+
+    // The ledger, with a planted survivor of that crate at its end: the survivor's reason
+    // reworded, the survivor removed, another added; each names its crate.
+    let planted = serde_json::json!({
+        "file": format!("{named_folder}src/planted.rs"),
+        "mutant": "replace + with - in planted",
+        "line_text": "a + b",
+        "occurrences": 1,
+        "kind": "harmless",
+        "reason": "planted by the test of the selection",
+    });
+    let with_planted = {
+        let mut v: Value = serde_json::from_str(&read(LEDGER)).unwrap();
+        v["survivors"].as_array_mut().unwrap().push(planted.clone());
+        v
+    };
+    let at = with_planted["survivors"].as_array().unwrap().len() - 1;
+    for (how, edit) in [
+        (
+            "reworded",
+            Box::new(move |v: &mut Value| {
+                let s = &mut v["survivors"][at];
+                s["reason"] = Value::String(format!("{} (planted)", s["reason"].as_str().unwrap()));
+            }) as Box<dyn Fn(&mut Value)>,
+        ),
+        (
+            "removed",
+            Box::new(move |v: &mut Value| {
+                v["survivors"].as_array_mut().unwrap().remove(at);
+            }),
+        ),
+        (
+            "added",
+            Box::new(move |v: &mut Value| {
+                let mut s = v["survivors"][at].clone();
+                s["mutant"] = Value::String("replace + with - in planted".to_owned());
+                v["survivors"].as_array_mut().unwrap().push(s);
+            }),
+        ),
+    ] {
+        let base = serde_json::to_string_pretty(&with_planted).unwrap();
+        let mut v = with_planted.clone();
+        edit(&mut v);
+        let head = serde_json::to_string_pretty(&v).unwrap();
+        assert_ne!(base, head, "{how}: the planted edit changes the ledger");
+        let changes = reach_of(&scope, LEDGER, &base, &head);
+        let selection = scope.select_with(Some(&one(LEDGER)), &changes);
+        let found = shared_problems(&scope, LEDGER, named, &selection);
+        assert!(found.is_empty(), "{how}: {found:#?}");
+        // The count gates measure only when geom-bench is named or reads the ledger whole.
+        let bench = scope
+            .build_reached_with(Some(&one(LEDGER)), &changes, "geom-bench")
+            .is_some();
+        assert_eq!(
+            bench,
+            scope.whole_readers().crates(LEDGER).contains("geom-bench"),
+            "{how}"
+        );
+    }
+
+    // What cannot be placed runs everything: a change to the ledger's own description, a file
+    // that is not JSON, and a shared file given without its base.
+    let (base, head) = edited(LEDGER, &|v| {
+        v["about"] = Value::String("planted".to_owned());
+    });
+    for changes in [
+        reach_of(&scope, LEDGER, &base, &head),
+        reach_of(&scope, LEDGER, &base, "not json"),
+        Changes::new(),
+    ] {
+        assert_eq!(
+            running(&scope.select_with(Some(&one(LEDGER)), &changes)),
+            all
+        );
+    }
+    // Another file outside every crate beside it still runs everything.
+    let changes = reach_of(&scope, MAP, &read(MAP), &read(MAP));
+    let files = vec![MAP.to_owned(), "Cargo.lock".to_owned()];
+    assert_eq!(running(&scope.select_with(Some(&files), &changes)), all);
+
+    // The Kani proofs: a ledger entry reaches only the proofs whose code reads the ledger whole.
+    let fuzz = geom_test::fuzz_scope::Scope::read(&metadata).unwrap();
+    let at = read(LEDGER).parse::<Value>().unwrap()["survivors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|s| s["file"].as_str().unwrap().contains("/geom-num/"))
+        .unwrap();
+    let (base, head) = edited(LEDGER, &move |v| {
+        let s = &mut v["survivors"][at];
+        s["reason"] = Value::String(format!("{} (planted)", s["reason"].as_str().unwrap()));
+    });
+    let changes = Changes::from([(
+        LEDGER.to_owned(),
+        shared::compare(Some(&base), Some(&head), fuzz.folders()),
+    )]);
+    let selection = fuzz.select_with(Some(&one(LEDGER)), &changes);
+    let running_jobs: Vec<&str> = selection
+        .jobs
+        .iter()
+        .filter(|j| j.why.is_some())
+        .map(|j| j.job.name)
+        .collect();
+    assert!(running_jobs.is_empty(), "{running_jobs:?}");
+    // Planted: the ledger placed in no crate, as without its base: every proof runs.
+    let every = fuzz.select(Some(&one(LEDGER)));
+    assert!(every.jobs.iter().all(|j| j.why.is_some()));
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository and runs cargo metadata, which a WebAssembly test cannot"
+)]
+#[test]
+fn the_crates_that_read_a_shared_file_whole_are_found() {
+    let metadata = metadata();
+    let scope = Scope::read(&metadata).unwrap();
+    let whole = scope.whole_readers();
+    for (file, name) in [(MAP, "MAP.json\""), (LEDGER, "quality-ledger.json\"")] {
+        let readers = whole.crates(file);
+        assert!(readers.contains("geom-test"), "{file}: {readers:?}");
+        for (krate, folder) in members(&metadata) {
+            let mut stack: Vec<PathBuf> = ["src", "tests", "benches", "examples", "build.rs"]
+                .iter()
+                .map(|s| root().join(&folder).join(s))
+                .collect();
+            let mut names = false;
+            while let Some(p) = stack.pop() {
+                if p.is_dir() {
+                    stack.extend(std::fs::read_dir(&p).unwrap().map(|e| e.unwrap().path()));
+                } else if p.is_file() && p.extension().is_some_and(|e| e == "rs") {
+                    let text = std::fs::read_to_string(&p).unwrap();
+                    names |= text
+                        .lines()
+                        .filter(|l| !l.trim_start().starts_with("//"))
+                        .any(|l| l.contains(name));
+                }
+            }
+            if names {
+                assert!(
+                    readers.contains(&krate),
+                    "{krate} names {file} in a string, and is not found to read it"
+                );
+            }
+        }
+    }
+    assert!(
+        whole.crates(MAP).contains("geom-op"),
+        "geom-op's attack_g82 reads the map"
+    );
+}
+
+/// What is wrong with the selections' commands: each must pass the change's base.
+fn base_problems(kernel: &str, fuzz: &str, bench: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    if !kernel.contains("echo \"SCOPE=--changed $RUNNER_TEMP/changed.txt --base $BASE\"") {
+        found.push("kernel.yml's scope reads the shared files without the base".to_owned());
+    }
+    if !fuzz.contains(
+        "echo \"SCOPE=--changed $RUNNER_TEMP/changed.txt --base $(git rev-parse HEAD^1)\"",
+    ) {
+        found
+            .push("kernel-fuzz.yml's selection reads the shared files without the base".to_owned());
+    }
+    if !bench.contains(
+        "--changed \"$RUNNER_TEMP/changed.txt\" --base \"$merge_base\" --build-of geom-bench",
+    ) {
+        found.push("kernel-bench.yml's reach reads the shared files without the base".to_owned());
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_selections_read_the_shared_files_against_the_base() {
+    let kernel = read(".github/workflows/kernel.yml");
+    let fuzz = read(".github/workflows/kernel-fuzz.yml");
+    let bench = read(".github/workflows/kernel-bench.yml");
+    let found = base_problems(&kernel, &fuzz, &bench);
+    assert!(found.is_empty(), "{found:#?}");
+    for (which, said) in [
+        (0, "kernel.yml"),
+        (1, "kernel-fuzz.yml"),
+        (2, "kernel-bench.yml"),
+    ] {
+        let mut texts = [kernel.clone(), fuzz.clone(), bench.clone()];
+        let before = texts[which].clone();
+        texts[which] = before
+            .replacen(" --base $BASE\"", "\"", 1)
+            .replacen(" --base $(git rev-parse HEAD^1)\"", "\"", 1)
+            .replacen(" --base \"$merge_base\"", "", 1);
+        assert_ne!(texts[which], before, "the planted edit applies to {said}");
+        let found = base_problems(&texts[0], &texts[1], &texts[2]);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }

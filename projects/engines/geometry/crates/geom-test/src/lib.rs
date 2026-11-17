@@ -115,6 +115,10 @@
 //! - [`test_scope`]: which crates' tests a pull request's change can reach, by the crate graph
 //!   with development dependencies, so `kernel.yml`'s suites test only those
 //!   (`kernel-quality test-scope`).
+//! - [`shared`]: what a change to `MAP.json` or `quality-ledger.json` reaches, read by its changed
+//!   entries, and which crates read those files whole, for both selections.
+//! - [`increment`]: what a later push to a pull request must mutate or measure again after an
+//!   earlier push's run finished clean (`kernel-quality mutants-increment`).
 //!
 //! Gate 1 (piece G43) adds:
 //!
@@ -169,6 +173,12 @@
 //!   reader with exact decimal-to-grid rounding; `tests/corpus_polyhedral.rs` holds every result
 //!   to [`flat_reference`] and the unit-cell count, with exact transforms, and its digest is the
 //!   golden `geom-test/polyhedral-corpus`.
+//! - [`stl`]: EMBER's case list and its pairs' `Thingi10K` models (the fetched corpus
+//!   `ember-cleared-pairs`), read with `stl_io`, moved by EMBER's transforms exactly and put on
+//!   one grid per pair; `tests/ember_pairs.rs` runs each pair as EMBER does and holds it to
+//!   [`flat_reference`].
+//! - [`ember`]: EMBER's pair 827 as geom-bench's count benchmark `mesh/ember` takes it: its two
+//!   models alone, each held to the register's SHA-256, built into exact meshes on one grid.
 //! - [`agree`]: both checkers on one body, `geom-check`'s and [`second_check`], and whether they
 //!   find the same rules broken; the law catalogue's bodies, the scenarios and the corpus go
 //!   through it.
@@ -240,10 +250,14 @@
 //! - `lcov` 0.8 (G21), to read the LCOV tracefiles cargo-llvm-cov writes ([`coverage`]).
 //! - `regex-lite` 0.1.9, the regular expressions of a full mutation run narrowed to some files
 //!   ([`mutants::check_narrowed`]), in the syntax of cargo-mutants' `--re`.
+//! - `roxmltree` 0.21.2, without its default features: the nextest reports (`junit.xml`) of Miri's
+//!   measuring runs, read by [`miri::read_junit`] (32.58).
 //! - `yaml-rust2` 0.13, a development dependency (G21), which reads
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
+//! - `stl_io` 0.11.0 (MIT, no dependencies of its own; G156): the STL reader of [`stl`], for
+//!   EMBER's pairs' `Thingi10K` models.
 //! - `geom-mesh` and `geom-poly` (Apache-2.0, ours): the booleans `oracle::meshes` (G154) compares
 //!   with the mesh oracles.
 //! - `geom-nurbs` (Apache-2.0, ours): the curves `tests/nurbs_reference.rs` (G57) compares with the
@@ -272,7 +286,7 @@
 //!   `thiserror-impl`, `clap`, `clap_builder`, `clap_derive`, `clap_lex`, `anstyle`, `heck`,
 //!   `yaml-rust2`, `hashlink`, `hex`, `wait-timeout`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
 //!   `typenum`, `petgraph`, `fixedbitset`, `hashbrown`, `indexmap`, `equivalent`, `num-rational`,
-//!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
+//!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite`, `roxmltree` and
 //!   `static_assertions`.
 //! - Apache-2.0: `num-modular`, which `dashu-int` brings in.
 //! - Apache-2.0: `manifold-rust`, a development dependency (G154), the mesh oracle one of its
@@ -286,7 +300,7 @@
 //! - Zlib OR Apache-2.0 OR MIT: `tinyvec`, which `unicode-normalization` brings in.
 //! - MIT OR Apache-2.0: `unicase`, which `pulldown-cmark` brings in.
 //! - Unlicense OR MIT: `memchr`.
-//! - MIT: `zmij`, `winnow`, `cargo_metadata` and `pulldown-cmark`.
+//! - MIT: `zmij`, `winnow`, `cargo_metadata`, `pulldown-cmark` and `stl_io`.
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
@@ -297,6 +311,7 @@ pub mod contract;
 pub mod corpus;
 pub mod coverage;
 pub mod deps;
+pub mod ember;
 pub mod faults;
 pub mod fixed;
 pub mod fixture;
@@ -307,6 +322,7 @@ pub mod golden;
 pub mod grid;
 pub mod guard;
 pub mod history;
+pub mod increment;
 pub mod ledger;
 pub mod licence;
 pub mod map;
@@ -328,7 +344,9 @@ pub mod scan;
 pub mod second_check;
 pub mod second_mesh;
 pub mod seed;
+pub mod shared;
 pub mod ssi;
+pub mod stl;
 pub mod test_scope;
 pub mod trip;
 pub mod truth;

@@ -116,7 +116,10 @@ pub const EXACT_OPTIMISATION: [&str; 2] = ["insphere", "tpi_side"];
 /// together prove every term of the one certificate (`certificates/fptaylor.sh`,
 /// `kernel-certificates.yml`; `tests/certificate_problems.rs` holds each term to exactly one
 /// shard). The bound HOL Light proves is still `FPTaylor`'s own, term by term (`opt-approx`).
-pub const SHARDED: [(&str, Shards); 1] = [("line_cone", LINE_CONE_SHARDS)];
+pub const SHARDED: [(&str, Shards); 2] = [
+    ("lpi_side", LPI_SIDE_SHARDS),
+    ("line_cone", LINE_CONE_SHARDS),
+];
 
 /// The shards of one problem's terms: how many terms HOL Light's check of its certificate has,
 /// and the terms of each shard, by their place in that check's list (1 to `terms`).
@@ -127,6 +130,26 @@ pub struct Shards {
     /// Each shard's terms, in increasing order.
     pub shards: &'static [&'static [u32]],
 }
+
+/// `lpi_side`'s 68 terms, shared out by what each took to check on a hosted runner (run
+/// 43604320155, 157 minutes whole: 94 of them the 68 terms, 0.2 to 9.8 minutes each, after 4
+/// minutes of setup, 5 of `FPTaylor`, 27 of loading HOL Light and 22 of its Taylor tables for 24
+/// variables). Longest first, each to the shard with the least so far: four shards of about 23
+/// minutes of terms each. Every shard still pays the 53 minutes of setup, loading and tables,
+/// which sharding cannot cut.
+pub const LPI_SIDE_SHARDS: Shards = Shards {
+    terms: 68,
+    shards: &[
+        &[1, 8, 12, 13, 15, 24, 25, 27, 32, 34, 38, 39, 40, 42, 58, 64],
+        &[
+            2, 3, 6, 14, 18, 23, 26, 29, 35, 44, 47, 48, 52, 55, 60, 61, 65, 66, 68,
+        ],
+        &[
+            4, 5, 10, 17, 21, 22, 30, 33, 37, 43, 45, 46, 50, 51, 53, 56, 63, 67,
+        ],
+        &[7, 9, 11, 16, 19, 20, 28, 31, 36, 41, 49, 54, 57, 59, 62],
+    ],
+};
 
 /// `line_cone`'s 70 terms (35 error terms, each bounded above and below), shared out by what each
 /// took to check on GitHub's hosted runners: runs 43474945047, 43550180189, 43568172080 (in order,

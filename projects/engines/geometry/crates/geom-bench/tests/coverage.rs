@@ -374,6 +374,38 @@ fn main_runs_every_group() {
     assert!(MAIN.contains("config = gate::config();"));
 }
 
+/// `benches/ember` (EMBER's pair 827, outside the catalogue) measures under exactly `gate.rs`'s
+/// tools and limits, with only the models' folder passed through Gungraun's cleared environment,
+/// and its program runs that configuration.
+#[test]
+fn the_ember_benchmark_runs_under_the_gates_configuration() {
+    const EMBER: &str = include_str!("../benches/ember/main.rs");
+    let body = |source: &str, signature: &str| -> Vec<String> {
+        source
+            .split(signature)
+            .nth(1)
+            .and_then(|rest| rest.split("\n    config\n}").next())
+            .map(|body| {
+                body.lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty() && !line.starts_with("use "))
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut gate = body(GATE, "pub fn config() -> LibraryBenchmarkConfig {");
+    let ember = body(
+        EMBER,
+        "pub fn config() -> gungraun::LibraryBenchmarkConfig {",
+    );
+    assert!(gate.len() > 10, "gate.rs's config: {gate:?}");
+    gate.push("config.pass_through_env(pair::FOLDER);".to_owned());
+    assert_eq!(ember, gate);
+    assert!(EMBER.contains("config = config();"));
+    assert!(EMBER.contains("#[library_benchmark(teardown = verify)]"));
+}
+
 #[test]
 fn catalogue_names_are_unique_and_grouped() {
     let all = names();
@@ -607,6 +639,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_bool",
         &[
             ("batch", include_str!("../../geom-bool/src/batch.rs")),
+            ("broad", include_str!("../../geom-bool/src/broad.rs")),
             ("combine", include_str!("../../geom-bool/src/combine.rs")),
         ],
     ),
@@ -1071,7 +1104,8 @@ fn the_workflow_passes_the_documented_limits_and_build() {
         "geom-bench-counts\" removed",
         "--save-summary=json",
         "\"$CARGO_TARGET_DIR/release/geom-bench-counts\" callgrind",
-        "\"$GUNGRAUN_HOME/geom-bench/instructions\"",
+        // The judge reads the summaries of both bench targets, the catalogue's and EMBER's pair.
+        "\"$GUNGRAUN_HOME/geom-bench\" \"$RUNNER_TEMP/judged.names\"",
         // Each tree builds apart (cargo names a path crate's build by its place in the workspace),
         // and both trees' saved runs share one Gungraun home.
         "GUNGRAUN_HOME: ${{ github.workspace }}/gungraun",
