@@ -26,7 +26,7 @@ mod common;
 
 use common::holds;
 
-use geom_fuzz::natural::{Case, Drawn, MAX_INPUT_BYTES, check, decode, harness};
+use geom_fuzz::natural::{Case, Drawn, MAX_INPUT_BYTES, check, decode, harness, work_of};
 use geom_fuzz::seeded;
 use geom_test::Seed;
 
@@ -84,6 +84,29 @@ fn the_input_bound_is_reached_and_never_passed() {
     let (empty, read) = decode(&[]);
     assert_eq!(read, 0);
     holds(check(&empty));
+}
+
+/// Issue 974's four inputs, stored in the target's `crashes` folder, each with the most work one
+/// call of `natural` may take on it. In all four the circle where the surfaces meet is an end
+/// circle of one of them, so that edge lies wholly on the other surface. Before the closed form for
+/// such a circle the engine bisected round all of it: over 4,194,304 units (the budget's stop),
+/// 1,376,154, 1,287,083 and 1,164,683. Now 46, 2,524, 38 and 38: the second still runs its other
+/// edges, which cross the other surface, through the engine.
+const EDGES_ON_THE_OTHER: [(&[u8], u128); 4] = [
+    (&[0x7e, 0x00, 0x00, 0x00, 0x95, 0x08, 0x08, 0xf7], 64),
+    (&[0x7e, 0x00, 0x00, 0x40, 0x95, 0x08, 0x08, 0xf7], 4_096),
+    (&[0x93, 0x03, 0x02, 0x4b, 0x00, 0x00, 0x03], 64),
+    (&[0x3e, 0x00, 0x00, 0xb5, 0xce], 64),
+];
+
+#[test]
+fn an_edge_lying_on_the_other_surface_costs_a_closed_form() {
+    for (data, most) in EDGES_ON_THE_OTHER {
+        let (case, _) = decode(data);
+        let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        assert!(work <= most, "{work} units, over {most}, on {data:02x?}");
+        holds(harness(data));
+    }
 }
 
 #[test]

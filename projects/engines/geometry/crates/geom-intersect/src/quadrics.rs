@@ -33,7 +33,13 @@
 //! (√l·Q − √k·P)(√l·Q + √k·P), two planes.
 //!
 //! Cost: a few predicates and square roots for a pair, and a curve-surface pair for each edge that a
-//! trimmed domain has. Recursion: none.
+//! trimmed domain has, once a call whatever the count of its pieces. An edge that crosses the
+//! other surface costs the engine 13 to 2,481 work units in the stored cases. An edge that lies on
+//! the other surface is a closed form, a few predicates, where exact signs place it (decision
+//! 32.64); where they cannot (an end circle whose centre the frame rounds, as on an axis off the
+//! coordinate axes; a sphere's latitude; a domain that holds only part of the edge) it costs the
+//! engine boxes all along it, about a million units for a circle of radius 200, bounded by the work
+//! budget (issue 974). Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
