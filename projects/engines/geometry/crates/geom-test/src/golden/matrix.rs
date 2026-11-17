@@ -129,27 +129,27 @@ pub fn build_args(groups: &[Group], extra: &[String]) -> Vec<Vec<String>> {
 
 /// Seconds each crate's goldens took in release on macOS x86-64, the slowest native leg, its own
 /// build included: from its `golden run: cargo test --no-run` line through its groups' runs, the
-/// median over the checked, shipped and native legs of the by-hand run 44079334701 of 18 November
+/// median over the checked, shipped and native legs of the by-hand run 44079334701 of 17 November
 /// 2026 (written by the lane's `tables.py` from the job logs). A part's first crate builds the
-/// libraries in full (seven to nine minutes there), and a later crate builds them again only when
+/// libraries in full (five to fifteen minutes there), and a later crate builds them again only when
 /// its own features differ, so the eleven crates of 100 seconds or more are the ones that build
 /// the libraries, and a leg of eleven parts gives each of them a part of its own. The table only
 /// balances [`part`]: a crate not listed counts [`UNMEASURED_SECONDS`] and still runs in exactly
 /// one part.
 const RELEASE_SECONDS: [(&str, u64); 16] = [
+    ("geom-test", 629),
     ("geom-curve", 531),
-    ("geom-test", 503),
     ("geom-math", 502),
     ("geom-num", 455),
     ("geom-nurbs", 444),
     ("geom-run", 329),
+    ("geom-op", 251),
     ("geom-format", 178),
-    ("geom-op", 172),
     ("geom-topo", 144),
-    ("geom-poly", 110),
+    ("geom-poly", 129),
     ("geom-bvh", 100),
     ("geom-surface", 11),
-    ("geom-mesh", 5),
+    ("geom-mesh", 9),
     ("geom-make", 3),
     ("geom-name", 3),
     ("geom-linalg", 2),
@@ -515,8 +515,8 @@ mod tests {
         }
         // The two slowest crates go to different parts of two, by each mode's own table.
         let one = part(&real, 1, 2, true).unwrap();
-        assert!(one.iter().any(|g| g.krate == "geom-curve"));
-        assert!(!one.iter().any(|g| g.krate == "geom-test"));
+        assert!(one.iter().any(|g| g.krate == "geom-test"));
+        assert!(!one.iter().any(|g| g.krate == "geom-curve"));
         let one = part(&real, 1, 2, false).unwrap();
         assert!(one.iter().any(|g| g.krate == "geom-test"));
         assert!(!one.iter().any(|g| g.krate == "geom-math"));
