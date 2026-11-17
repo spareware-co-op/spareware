@@ -826,7 +826,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-fuzz.yml` | `libfuzzer` | Removed by decision 32.52, after the gate: `trip libfuzzer` |
 | `kernel-fuzz.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-fuzz.yml` | `select` | Not a gate: it decides which of this workflow's targets and proofs a pull request's change can affect, by the crate graph, and names in its log each one and why; a skipped job was not affected. J: `geom-test/tests/fuzz_scope.rs::a_change_selects_every_harness_that_builds_it`, `geom-test/tests/fuzz_scope.rs::a_file_outside_every_crate_selects_everything`, `geom-test/tests/fuzz_scope.rs::the_catalogue_is_every_job_and_target_of_the_workflow` |
-| `kernel-fuzz.yml` | `kani` | `trip kani-fuzz` |
+| `kernel-fuzz.yml` | `kani` | `trip kani-fuzz`; the parts of orient2d's predicate proof, one for each class of its domain, and the harness that proves the classes cover it are held to this job's matrix by `geom-fuzz/tests/attack_g14.rs::attack_the_parts_of_the_predicates_proof_are_its_whole_domain` |
 | `kernel-fuzz.yml` | `kani-num` | `trip kani-num` |
 | `kernel-fuzz.yml` | `kani-format` | `trip kani-format` |
 | `kernel-fuzz.yml` | `kani-op` | `trip kani-op` |

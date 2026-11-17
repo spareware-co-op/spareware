@@ -213,7 +213,8 @@ cargo kani setup
 cargo kani --tests -p geom-fuzz --harness orient2d_proof_filter --exact
 ```
 
-(and `orient2d_proof_predicate` and `orient2d_proof_exact_path`, the other two claims).
+(and `orient2d_proof_exact_path`, and the predicate's claim in parts:
+`orient2d_proof_predicate_cover` and `orient2d_proof_predicate_part_0` to `_part_63`).
 
 `cfg(kani)`, which marks the proof tests, is declared to the compiler by `build.rs`
 (`cargo::rustc-check-cfg`), not in the manifest's `[lints]` table, which repeats `geom-num`'s
@@ -242,7 +243,11 @@ touches the code a proof reaches.
 
 `orient2d_proof_predicate`, `orient2d_proof_exact_path` and `orient2d_proof_filter` drive
 `check_claim`, one claim each, which together are `check`, over every case `proof_case` gives
-with bound `PROOF_BOUND`:
+with bound `PROOF_BOUND`. Kani proves the predicate's claim in 64 parts, one job each
+(`orient2d_proof_predicate_part_<k>`: the draws whose six coordinates have the signs k names,
+`predicate_part`), with `orient2d_proof_predicate_cover` proving that every draw is in one of
+them; as one harness it took 35 to 46 minutes on the hosted runner, and a part takes 4 to 9.
+The domain:
 every one of the six coordinates within `PROOF_BOUND` grid steps of 0 or of an edge
 ±(2^40 − 1) of the frame, in any combination. Kani proves, for every such case, that orient2d
 answers with the reference's sign, that the exact path returns the reference's value, that the

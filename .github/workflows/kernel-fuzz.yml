@@ -209,15 +209,83 @@ jobs:
     # The bounded proof of orient2d is three harnesses, one claim of its check each (geom-fuzz's
     # tests/orient2d.rs): proved as one, kissat's single solve took 63 minutes on the hosted runner
     # (run 43688165033); apart, on a development machine, the exact path's and the filter's took
-    # about 7 minutes and the predicate's 29. 60 minutes is about one and a half times the
-    # predicate's on a runner.
-    timeout-minutes: 60
+    # about 7 minutes and the predicate's 29, and 35 to 46 on a runner. So the predicate's claim is
+    # proved in parts, one job each: orient2d_proof_predicate_part_<k> for the draws of class k of
+    # the six coordinates' signs, and orient2d_proof_predicate_cover, which proves that every draw
+    # is in one of the 64 classes; a part took 4 to 9 minutes on a runner. geom-fuzz's
+    # tests/attack_g14.rs holds the parts and the cover to this list. 30 minutes is about twice the
+    # longest harness's on a runner.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         harness:
           - orient2d_fuzz
-          - orient2d_proof_predicate
+          - orient2d_proof_predicate_cover
+          - orient2d_proof_predicate_part_0
+          - orient2d_proof_predicate_part_1
+          - orient2d_proof_predicate_part_2
+          - orient2d_proof_predicate_part_3
+          - orient2d_proof_predicate_part_4
+          - orient2d_proof_predicate_part_5
+          - orient2d_proof_predicate_part_6
+          - orient2d_proof_predicate_part_7
+          - orient2d_proof_predicate_part_8
+          - orient2d_proof_predicate_part_9
+          - orient2d_proof_predicate_part_10
+          - orient2d_proof_predicate_part_11
+          - orient2d_proof_predicate_part_12
+          - orient2d_proof_predicate_part_13
+          - orient2d_proof_predicate_part_14
+          - orient2d_proof_predicate_part_15
+          - orient2d_proof_predicate_part_16
+          - orient2d_proof_predicate_part_17
+          - orient2d_proof_predicate_part_18
+          - orient2d_proof_predicate_part_19
+          - orient2d_proof_predicate_part_20
+          - orient2d_proof_predicate_part_21
+          - orient2d_proof_predicate_part_22
+          - orient2d_proof_predicate_part_23
+          - orient2d_proof_predicate_part_24
+          - orient2d_proof_predicate_part_25
+          - orient2d_proof_predicate_part_26
+          - orient2d_proof_predicate_part_27
+          - orient2d_proof_predicate_part_28
+          - orient2d_proof_predicate_part_29
+          - orient2d_proof_predicate_part_30
+          - orient2d_proof_predicate_part_31
+          - orient2d_proof_predicate_part_32
+          - orient2d_proof_predicate_part_33
+          - orient2d_proof_predicate_part_34
+          - orient2d_proof_predicate_part_35
+          - orient2d_proof_predicate_part_36
+          - orient2d_proof_predicate_part_37
+          - orient2d_proof_predicate_part_38
+          - orient2d_proof_predicate_part_39
+          - orient2d_proof_predicate_part_40
+          - orient2d_proof_predicate_part_41
+          - orient2d_proof_predicate_part_42
+          - orient2d_proof_predicate_part_43
+          - orient2d_proof_predicate_part_44
+          - orient2d_proof_predicate_part_45
+          - orient2d_proof_predicate_part_46
+          - orient2d_proof_predicate_part_47
+          - orient2d_proof_predicate_part_48
+          - orient2d_proof_predicate_part_49
+          - orient2d_proof_predicate_part_50
+          - orient2d_proof_predicate_part_51
+          - orient2d_proof_predicate_part_52
+          - orient2d_proof_predicate_part_53
+          - orient2d_proof_predicate_part_54
+          - orient2d_proof_predicate_part_55
+          - orient2d_proof_predicate_part_56
+          - orient2d_proof_predicate_part_57
+          - orient2d_proof_predicate_part_58
+          - orient2d_proof_predicate_part_59
+          - orient2d_proof_predicate_part_60
+          - orient2d_proof_predicate_part_61
+          - orient2d_proof_predicate_part_62
+          - orient2d_proof_predicate_part_63
           - orient2d_proof_exact_path
           - orient2d_proof_filter
     defaults:
