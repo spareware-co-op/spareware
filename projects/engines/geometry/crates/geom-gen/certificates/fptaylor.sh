@@ -20,6 +20,11 @@
 # the others, and fails unless the certificate has t terms and it proved exactly those. Shards 1
 # to n, each green, prove every term of the one certificate; their theorems are its bound under
 # the terms the others proved.
+# A term too costly for one job is cut into pieces: `// hol-light-cut t: d` has term t checked as
+# 2^d pieces, its box halved d times as HOL Light's own search would first halve it, named t.1 to
+# t.2^d on the shard lines (fptaylor_cut.hl, which this script puts into FPTaylor's checker). A
+# shard with pieces of t proves its pieces, assumes the others, and proves t from them, so every
+# piece in some green shard proves t; the check below holds it to exactly its pieces.
 # A shard can start from a saved state of HOL Light instead of loading it (about an hour on a
 # runner): FPTAYLOR_STATE_OUT=<dir> with one problem loads HOL Light, its multivariate analysis and
 # the inequality verifier with that problem's Taylor tables, as a shard's session does, saves the
@@ -70,8 +75,11 @@ if [ -n "$state_out$state" ]; then
 else
   work=$(mktemp -d)
 fi
-# The terms this run proves, as an OCaml list; empty for every term.
+# What this run proves, for the session: every term (no shard), or the terms the shard proves
+# whole, as an OCaml list, and each term it proves pieces of, as `(term, depth, [pieces]); `.
+shard_whole=true
 shard_terms=
+shard_cuts=
 if [ -n "$shard" ]; then
   [ $# -eq 1 ] && [ -n "$certificates" ] && [ -z "$out" ] ||
     { echo "a shard checks one problem's certificate from FPTAYLOR_CERTIFICATES"; exit 1; }
@@ -80,10 +88,32 @@ if [ -n "$shard" ]; then
     { echo "$1: no shard $shard of '$shards'"; exit 1; }
   shard_count=$(sed -n 's|^// hol-light-terms: ||p' "$1")
   shard_list=$(sed -n "s|^// hol-light-shard $shard: ||p" "$1")
-  numbers='^[1-9][0-9]*( [1-9][0-9]*)*$'
+  numbers='^[1-9][0-9]*(\.[1-9][0-9]*)?( [1-9][0-9]*(\.[1-9][0-9]*)?)*$'
   [[ $shard_count =~ ^[1-9][0-9]*$ && $shard_list =~ $numbers ]] ||
     { echo "$1: no terms for shard $shard"; exit 1; }
-  shard_terms=${shard_list// /; }
+  shard_whole=false
+  # The terms proved whole, and the pieces (t.p), each followed by a space.
+  whole=$(tr ' ' '\n' <<<"$shard_list" | grep -v '\.' | tr '\n' ' ' || true)
+  pieces=$(tr ' ' '\n' <<<"$shard_list" | grep '\.' | tr '\n' ' ' || true)
+  shard_terms=$(echo $whole | sed 's/ /; /g')
+  # The shard assumes every term it does not prove whole, less each it proves from its pieces,
+  # and the pieces of those it does not prove.
+  assume=$((shard_count - $(wc -w <<<"$whole")))
+  joins=
+  while read -r t d; do
+    own=$(tr ' ' '\n' <<<"$pieces" | sed -n "s/^$t\.//p" | tr '\n' ' ')
+    for p in $own; do
+      [ "$p" -le $((1 << d)) ] || { echo "$1: no piece $t.$p of $((1 << d))"; exit 1; }
+    done
+    if [ -n "$own" ]; then
+      shard_cuts+="($t, $d, [$(echo $own | sed 's/ /; /g')]); "
+      assume=$((assume - 1 + (1 << d) - $(wc -w <<<"$own")))
+      joins+="$t "
+    fi
+  done < <(sed -n 's|^// hol-light-cut \([1-9][0-9]*\): \([1-9][0-9]*\)$|\1 \2|p' "$1")
+  for p in $pieces; do
+    grep -q "^// hol-light-cut ${p%%.*}: " "$1" || { echo "$1: piece $p of a term not cut"; exit 1; }
+  done
 elif [ -n "$certificates" ]; then
   echo "FPTAYLOR_CERTIFICATES is for a shard"; exit 1
 fi
@@ -117,13 +147,29 @@ done
 sed -i "s/^let max_dim = 8;;$/let max_dim = $most;;/" "$work/hol-light/Formal_ineqs/taylor/m_taylor.hl"
 grep -n '^let max_dim' "$work/hol-light/Formal_ineqs/taylor/m_taylor.hl"
 
+# The verifier builds a function's Taylor theorems on each call, which for a large term takes
+# longer than checking a piece of its box; fptaylor_cache.hl has it build them once a function,
+# so a cut term's pieces share them.
+verifier="$work/hol-light/Formal_ineqs/verifier/m_verifier_main.hl"
+sed -i 's/^let mk_verification_functions =$/let mk_verification_functions_uncached =/' "$verifier"
+awk -v f="$here/fptaylor_cache.hl" \
+  '/^\(\* Normalizes a verification result \*\)$/ { while ((getline l < f) > 0) print l } { print }' \
+  "$verifier" >"$verifier.new"
+mv "$verifier.new" "$verifier"
+[ "$(grep -c '^let mk_verification_functions_uncached =$' "$verifier")" = 1 ] &&
+  [ "$(grep -c '^let mk_verification_functions =$' "$verifier")" = 1 ] ||
+  { echo "$verifier: no mk_verification_functions to remember"; exit 1; }
+
 # FPTaylor's checker proves each term's inequality in turn (formal/build_tform2.hl,
-# prove_opt_approx). Here it proves those of this shard, the terms its line names, naming each,
-# and assumes the others, so the theorem it ends with holds under them; with no shard (an empty
-# list) it proves every term, as written.
+# prove_opt_approx). Here each goes through shard_prove (fptaylor_cut.hl, put in after
+# prove_bound_cond): proved whole, naming each, when this shard names it or there is no shard;
+# proved from its pieces when this shard names some of them; assumed otherwise, so the theorem
+# the loop ends with holds under the terms and pieces assumed.
 checker="$work/FPTaylor/formal/build_tform2.hl"
-sed -i 's|^\(\s*\)prove_bound_cond pp tm) bound_conds in$|\1(if shard_terms = [] \|\| List.mem !counter shard_terms then (let th = prove_bound_cond pp tm in report (sprintf "Proved: %d/%d" !counter total_bounds); th) else ASSUME tm)) bound_conds in|' "$checker"
-[ "$(grep -c 'List.mem !counter shard_terms then' "$checker")" = 1 ] ||
+sed -i 's|^\(\s*\)prove_bound_cond pp tm) bound_conds in$|\1shard_prove pp !counter total_bounds tm) bound_conds in|' "$checker"
+sed -i "/^  with _ -> error \"prove_bound_cond\" \[tm\] \[\];;\$/r $here/fptaylor_cut.hl" "$checker"
+[ "$(grep -c 'shard_prove pp !counter total_bounds tm) bound_conds in' "$checker")" = 1 ] &&
+  [ "$(grep -c '^let shard_prove ' "$checker")" = 1 ] ||
   { echo "$checker: no term loop to shard"; exit 1; }
 
 # The first part of the HOL Light session, the same for every problem with as many variables: load
@@ -301,7 +347,9 @@ fi
 # The rest of the HOL Light session: FPTaylor's checker (FPTaylor's formal/load.hl, with this
 # machine's paths), then each certificate checked against its bound.
 {
+  echo "let shard_whole = $shard_whole;;"
   echo "let shard_terms : int list = [$shard_terms];;"
+  echo "let shard_cuts : (int * int * int list) list = [$shard_cuts];;"
   echo 'needs "build_tform2.hl";;'
   echo 'needs "tests/utils.hl";;'
   # A shard's theorems hold under the terms it assumed: their conclusions are printed, with how
@@ -331,23 +379,28 @@ for check in "${checks[@]}"; do
   IFS='|' read -r _ _ _ name _ <<<"$check"
   grep -q "^\(# \)*checked $name " "$work/hol.log" || { echo "HOL Light did not check $name"; exit 1; }
   grep -h "^\(# \)*$name: \(within\|above\) K$" "$work/hol.log" || echo "$name: K not compared"
-  # Every term is proven, or for a shard exactly its own, the rest assumed. The exact problem
-  # is one inequality, and names no terms.
+  # Every term is proven, or for a shard exactly its own whole terms and pieces, each cut term it
+  # has pieces of joined from them, the rest assumed. The exact problem is one inequality, and
+  # names no terms.
   awk -v n="$name" '/^(# )*PROBLEM: / { on = ($NF == n) } on' "$work/hol.log" >"$work/$name.log"
   terms=$(sed -n 's/^\(# \)*Bounds: \([0-9][0-9]*\)$/\2/p' "$work/$name.log")
   [ -n "$terms" ] || terms=0
   proved=$(sed -n 's|^\(# \)*Proved: \([0-9][0-9]*\)/[0-9]*$|\2|p' "$work/$name.log" | tr '\n' ' ')
+  proved_pieces=$(sed -n 's|^\(# \)*Proved: \([0-9][0-9]*\)/[0-9]* piece \([0-9][0-9]*\)/[0-9]* in [0-9]* s$|\2.\3|p' "$work/$name.log" | tr '\n' ' ')
+  joined=$(sed -n 's|^\(# \)*Joined: \([0-9][0-9]*\)/[0-9]* from [0-9]* pieces, [0-9]* of them proved here$|\2|p' "$work/$name.log" | tr '\n' ' ')
   if [ -n "$shard" ]; then
     [ "$terms" = "$shard_count" ] ||
       { echo "$name: the certificate has $terms terms, the shards share out $shard_count"; exit 1; }
-    want="$shard_list "
+    want=$whole
   else
     want=$(if [ "$terms" -gt 0 ]; then seq 1 "$terms" | tr '\n' ' '; fi)
+    pieces= joins= assume=0
   fi
   assumed=$(sed -n "s/^\\(# \\)*$name assumed \\([0-9][0-9]*\\) terms$/\\2/p" "$work/$name.log")
-  if [ "$proved" != "$want" ] || [ "$assumed" != "$((terms - $(wc -w <<<"$want")))" ]; then
-    echo "$name: proved terms '$proved' and assumed '$assumed' of $terms, not shard ${shard:-1} of $shards"
+  if [ "$proved" != "$want" ] || [ "$proved_pieces" != "$pieces" ] || [ "$joined" != "$joins" ] ||
+    [ "$assumed" != "$assume" ]; then
+    echo "$name: proved terms '$proved', pieces '$proved_pieces', joined '$joined' and assumed '$assumed' of $terms, not shard ${shard:-1} of $shards"
     exit 1
   fi
-  [ -z "$shard" ] || echo "$name: shard $shard of $shards proved terms ${want% } of $terms and assumed the other $assumed"
+  [ -z "$shard" ] || echo "$name: shard $shard of $shards proved terms '${want% }' and pieces '${pieces% }' of $terms and assumed the other $assumed"
 done

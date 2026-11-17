@@ -66,8 +66,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use geom_gen::Generate;
 use geom_gen::predicate_certificates::{
-    EXACT_OPTIMISATION, SHARDED, UNPROVEN, fptaylor_problem, gappa_case_problem, gappa_cases,
-    gappa_problem,
+    EXACT_OPTIMISATION, Part, SHARDED, Shards, UNPROVEN, fptaylor_problem, gappa_case_problem,
+    gappa_cases, gappa_problem,
 };
 use geom_gen::predicates::{PREDICATES, derivation};
 use geom_gen::registry::REGISTRY;
@@ -1121,9 +1121,19 @@ fn check_shards(name: &str, file: &str, fptaylor: &str, exact: bool) {
         !exact,
         "{name}, {file}: the exact problem has no terms to share"
     );
+    let cuts: Vec<&str> = fptaylor
+        .lines()
+        .filter(|l| l.starts_with("// hol-light-cut "))
+        .collect();
+    let want: Vec<String> = shards
+        .cuts
+        .iter()
+        .map(|(t, d)| format!("// hol-light-cut {t}: {d}"))
+        .collect();
+    assert_eq!(cuts, want, "{name}, {file}: the cut terms");
     assert_eq!(lines.len(), shards.shards.len(), "{name}, {file}");
     for ((k, terms), l) in (1..).zip(shards.shards).zip(&lines) {
-        let listed: Vec<String> = terms.iter().map(u32::to_string).collect();
+        let listed: Vec<String> = terms.iter().map(Part::to_string).collect();
         assert_eq!(
             *l,
             format!("// hol-light-shard {k}: {}", listed.join(" ")),
@@ -1137,60 +1147,164 @@ fn check_shards(name: &str, file: &str, fptaylor: &str, exact: bool) {
     );
 }
 
-/// Whether `shards` names every term 1 to `terms` exactly once, each shard non-empty and in
-/// increasing order: then shards 1 to n, each proving its own terms and assuming the others,
-/// together prove every term of the certificate.
-fn every_term_once(shards: &geom_gen::predicate_certificates::Shards) -> Result<(), String> {
-    let mut seen = vec![0u32; shards.terms as usize + 1];
-    for (k, terms) in (1..).zip(shards.shards) {
-        if terms.is_empty() {
+/// The most halvings a cut term's box takes: 2^12 pieces is far more than any job needs.
+const MOST_DEPTH: u32 = 12;
+
+/// Whether `shards` names every term 1 to `terms` exactly once, a term it cuts by each of its
+/// pieces 1 to 2^depth exactly once and never whole, each shard non-empty and in increasing order:
+/// then shards 1 to n, each proving its own terms and pieces and assuming the others, together
+/// prove every piece, so every term, of the certificate.
+fn every_term_once(shards: &Shards) -> Result<(), String> {
+    let n = shards.terms as usize + 1;
+    let mut depth = vec![None; n];
+    let mut last = 0;
+    for &(t, d) in shards.cuts {
+        if t <= last || t > shards.terms {
+            return Err(format!(
+                "cut term {t} is out of order or outside 1 to {}",
+                shards.terms
+            ));
+        }
+        if d == 0 || d > MOST_DEPTH {
+            return Err(format!("term {t} is cut {d} times, not 1 to {MOST_DEPTH}"));
+        }
+        last = t;
+        depth[t as usize] = Some(d);
+    }
+    let mut seen: Vec<Vec<u32>> = depth
+        .iter()
+        .map(|d| vec![0; d.map_or(1, |d| 1usize << d)])
+        .collect();
+    for (k, parts) in (1..).zip(shards.shards) {
+        if parts.is_empty() {
             return Err(format!("shard {k} is empty"));
         }
-        if terms.windows(2).any(|w| w[0] >= w[1]) {
+        if parts.windows(2).any(|w| w[0].key() >= w[1].key()) {
             return Err(format!("shard {k} is not in increasing order"));
         }
-        for &t in *terms {
+        for &part in *parts {
+            let (t, p) = part.key();
             if t == 0 || t > shards.terms {
                 return Err(format!(
                     "shard {k} names term {t}, outside 1 to {}",
                     shards.terms
                 ));
             }
-            seen[t as usize] += 1;
+            let at = match (depth[t as usize], part) {
+                (None, Part::Term(_)) => 0,
+                (Some(d), Part::Piece(..)) if p >= 1 && p <= 1 << d => p as usize - 1,
+                _ => return Err(format!("shard {k} names {part}, not a part of term {t}")),
+            };
+            seen[t as usize][at] += 1;
         }
     }
-    match (1..=shards.terms).find(|&t| seen[t as usize] != 1) {
-        Some(t) => Err(format!("term {t} is in {} shards", seen[t as usize])),
-        None => Ok(()),
+    for t in 1..=shards.terms {
+        if let Some(at) = seen[t as usize].iter().position(|&s| s != 1) {
+            let s = seen[t as usize][at];
+            return Err(match depth[t as usize] {
+                None => format!("term {t} is in {s} shards"),
+                Some(_) => format!("piece {t}.{} is in {s} shards", at + 1),
+            });
+        }
     }
+    Ok(())
 }
 
 /// The check of the shards' terms refuses a term left out, a term twice, a term past the count,
-/// an empty shard and a shard out of order.
+/// an empty shard, a shard out of order, a piece left out or twice, a cut term named whole, a
+/// piece of a term not cut or past its count, and a cut out of order or of no depth.
 #[test]
 fn a_term_left_out_or_shared_is_refused() {
-    use geom_gen::predicate_certificates::Shards;
-    const BROKEN: [(&[&[u32]], &str); 5] = [
-        (&[&[1, 3], &[2]], "term 4 is in 0 shards"),
-        (&[&[1, 3], &[2, 3, 4]], "term 3 is in 2 shards"),
+    use Part::{Piece as P, Term as T};
+    type Broken = (
+        &'static [(u32, u32)],
+        &'static [&'static [Part]],
+        &'static str,
+    );
+    const BROKEN: [Broken; 13] = [
+        (&[], &[&[T(1), T(3)], &[T(2)]], "term 4 is in 0 shards"),
         (
-            &[&[1, 3, 5], &[2, 4]],
+            &[],
+            &[&[T(1), T(3)], &[T(2), T(3), T(4)]],
+            "term 3 is in 2 shards",
+        ),
+        (
+            &[],
+            &[&[T(1), T(3), T(5)], &[T(2), T(4)]],
             "shard 1 names term 5, outside 1 to 4",
         ),
-        (&[&[1, 2, 3, 4], &[]], "shard 2 is empty"),
-        (&[&[3, 1], &[2, 4]], "shard 1 is not in increasing order"),
+        (&[], &[&[T(1), T(2), T(3), T(4)], &[]], "shard 2 is empty"),
+        (
+            &[],
+            &[&[T(3), T(1)], &[T(2), T(4)]],
+            "shard 1 is not in increasing order",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 1), T(3)], &[T(4)]],
+            "piece 2.2 is in 0 shards",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 1), T(3)], &[P(2, 1), P(2, 2), T(4)]],
+            "piece 2.1 is in 2 shards",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), T(2), T(3)], &[P(2, 1), P(2, 2), T(4)]],
+            "shard 1 names 2, not a part of term 2",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 1), P(3, 1)], &[P(2, 2), T(4)]],
+            "shard 1 names 3.1, not a part of term 3",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 1), T(3)], &[P(2, 3), T(4)]],
+            "shard 2 names 2.3, not a part of term 2",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 2), P(2, 1)], &[T(3), T(4)]],
+            "shard 1 is not in increasing order",
+        ),
+        (
+            &[(3, 1), (2, 1)],
+            &[&[T(1), P(2, 1), P(3, 1)], &[P(2, 2), P(3, 2), T(4)]],
+            "cut term 2 is out of order or outside 1 to 4",
+        ),
+        (
+            &[(2, 0)],
+            &[&[T(1), P(2, 1), T(3)], &[T(4)]],
+            "term 2 is cut 0 times, not 1 to 12",
+        ),
     ];
     assert_eq!(
         every_term_once(&Shards {
             terms: 4,
-            shards: &[&[1, 3], &[2, 4]],
+            cuts: &[],
+            shards: &[&[T(1), T(3)], &[T(2), T(4)]],
         }),
         Ok(())
     );
-    for (shards, why) in BROKEN {
+    assert_eq!(
+        every_term_once(&Shards {
+            terms: 4,
+            cuts: &[(2, 2)],
+            shards: &[&[T(1), P(2, 1), P(2, 4), T(3)], &[P(2, 2), P(2, 3), T(4)]],
+        }),
+        Ok(())
+    );
+    for (cuts, shards, why) in BROKEN {
         assert_eq!(
-            every_term_once(&Shards { terms: 4, shards }),
-            Err(why.to_owned())
+            every_term_once(&Shards {
+                terms: 4,
+                cuts,
+                shards
+            }),
+            Err(why.to_owned()),
+            "{shards:?}"
         );
     }
 }
