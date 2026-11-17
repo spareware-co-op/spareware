@@ -12,9 +12,16 @@
 //!   (`always()`) and needs every other job.
 //! - `each_event_runs_the_jobs_the_last_job_expects`: every job of `kernel.yml` but `changes` and
 //!   `done` runs only when `changes` found kernel files and the queue had not passed the tree, and
-//!   on the events its condition admits; for a pull request, the merge queue and any other event
-//!   (a push to main the queue did not test, a release), that set of jobs is exactly the list
-//!   `done` holds the run to, so a job the event must run cannot be skipped unseen.
+//!   on the events its condition admits; for a pull request, the merge queue, a push (to main, or
+//!   a release tag's) and a run by hand (`workflow_dispatch`), that set of jobs is exactly the list
+//!   `done` holds the run to, by the first arm of its `case` the event matches, so a job the event
+//!   must run cannot be skipped unseen. A run by hand runs exactly what a push runs, and it takes
+//!   no inputs, so nothing can leave a job out of it.
+//! - `a_run_by_hand_writes_nothing_later_runs_read`: in `kernel.yml` a step that leaves something
+//!   for later runs (a build cache saved, an artifact uploaded, a release, a cache entry or a
+//!   repository written through `gh` or `git push`) does so only on a push to main or in the merge
+//!   queue, by `&&` terms of its condition with no `||` beside them, so a run by hand, on main or
+//!   on any branch, writes nothing another run trusts.
 //! - `the_queue_and_the_pull_request_cover_every_leg`: the goldens' matrix (`test`) and the
 //!   pull request's Linux job (`linux`) together cover every native runner in release and debug,
 //!   once each; the suites run optimised with overflow checks and debug assertions on, on Linux
@@ -22,10 +29,16 @@
 //!   run on Linux x86-64; and each release leg of `test` shares its work among its parts with every
 //!   golden and test step on exactly one part, each golden build's `--part j/m` shares whole, and
 //!   geom-num's library, binaries, doctests and every test target once in each build.
+//! - `the_wasm32_legs_run_every_golden_and_test_once_in_parts`: each runtime's goldens on wasm32
+//!   (`wasm`) are parts 1 to n, every golden and test step and the guard's proof on exactly one,
+//!   each build's `--part j/m` shares whole; the suite on wasm32 is built once per build
+//!   (`wasm-build`, its nextest archive uploaded and its doctests once under each runtime) and run
+//!   from that archive in parts (`wasm-suite`, `--partition count:k/n` for k = 1 to n once under
+//!   each runtime), the parts waiting for the build.
 //! - `each_change_is_measured_against_its_base_and_marked_once`: `changes` measures a pull request
 //!   against its merge commit's first parent, the queue against the queue's base and a push against
 //!   the commit main was at; only the merge queue's last job marks a tree as tested, under the name
-//!   the push looks for; `kernel-quality.yml` marks a tree only when mutation and coverage both ran
+//!   the push looks for, and only a push to main looks for it; `kernel-quality.yml` marks a tree only when mutation and coverage both ran
 //!   on a pull request or in the queue, under the name it looks for.
 //! - `the_count_gates_measure_one_kind_a_push_and_the_base_once`: `kernel-bench.yml` runs in the
 //!   merge queue too; its instruction legs are the job `scope`'s list, x86-64 on a pull request,
@@ -74,8 +87,16 @@ const REQUIRED: [(&str, &str, &str); 3] = [
     ("pieces.yml", "checked-out", "Piece is checked out"),
 ];
 
-/// The events the last job of `kernel.yml` tells apart, as its `case` names them.
-const EVENTS: [&str; 3] = ["pull_request", "merge_group", "*"];
+/// The events `kernel.yml` runs on, by the name its conditions read (`github.event_name`): a pull
+/// request, the merge queue, a push (to main, or a release tag's, which kernel-release.yml calls
+/// it for) and a run by hand.
+const EVENTS: [&str; 4] = ["pull_request", "merge_group", "push", "workflow_dispatch"];
+
+/// A run by hand, which must run what [`PUSH`] runs.
+const BY_HAND: &str = "workflow_dispatch";
+
+/// A push.
+const PUSH: &str = "push";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -252,18 +273,24 @@ fn admitted(condition: &str) -> Result<BTreeSet<&'static str>, String> {
     Ok(events)
 }
 
-/// The jobs `done` requires for each event, from its `case`.
+/// The jobs `done` requires for each event of [`EVENTS`], from its `case`: the list of the first
+/// arm whose patterns (`a|b`, or `*`) the event matches, as the shell picks it.
 fn expected(script: &str) -> BTreeMap<String, BTreeSet<String>> {
     let mut out = BTreeMap::new();
     for line in script.lines() {
-        let line = line.trim();
+        let Some((patterns, rest)) = line.trim().split_once(") must=\"") else {
+            continue;
+        };
+        let list: BTreeSet<String> = rest
+            .split('"')
+            .next()
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect();
         for event in EVENTS {
-            if let Some(rest) = line.strip_prefix(&format!("{event}) must=\"")) {
-                let list = rest.split('"').next().unwrap_or_default();
-                out.insert(
-                    event.to_owned(),
-                    list.split_whitespace().map(str::to_owned).collect(),
-                );
+            if patterns.split('|').any(|p| p == event || p == "*") {
+                out.entry(event.to_owned()).or_insert_with(|| list.clone());
             }
         }
     }
@@ -274,6 +301,16 @@ fn expected(script: &str) -> BTreeMap<String, BTreeSet<String>> {
 fn event_problems(kernel: &str) -> Vec<String> {
     let mut found = Vec::new();
     let w = parse(kernel);
+    let by_hand = &w["on"][BY_HAND];
+    if by_hand.is_badvalue() {
+        found.push(format!(
+            "kernel.yml has no {BY_HAND}, so a branch cannot be given a push's run"
+        ));
+    } else if !by_hand["inputs"].is_badvalue() {
+        found.push(format!(
+            "kernel.yml's {BY_HAND} takes inputs, which could leave a job out of the run"
+        ));
+    }
     let lists = expected(&runs(&w, "done"));
     if lists.len() != EVENTS.len() {
         found.push(format!("done lists the jobs of {:?} only", lists.keys()));
@@ -299,6 +336,113 @@ fn event_problems(kernel: &str) -> Vec<String> {
             found.push(format!(
                 "on {event} the jobs {runs:?} run, but done requires {listed:?}"
             ));
+        }
+    }
+    let push = running.get(PUSH).cloned().unwrap_or_default();
+    let by_hand = running.get(BY_HAND).cloned().unwrap_or_default();
+    if by_hand != push {
+        found.push(format!(
+            "a run by hand runs {by_hand:?}, but a push runs {push:?}"
+        ));
+    }
+    if lists.get(BY_HAND) != lists.get(PUSH) {
+        found.push(format!(
+            "done requires {:?} of a run by hand, but {:?} of a push",
+            lists.get(BY_HAND),
+            lists.get(PUSH)
+        ));
+    }
+    found
+}
+
+/// Whether a condition, without its `${{ }}`, has `||` outside every bracket, so its `&&` terms
+/// do not each hold.
+fn or_outside_brackets(condition: &str) -> bool {
+    let mut depth = 0_i32;
+    let mut last = ' ';
+    for c in condition.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '|' if last == '|' && depth == 0 => return true,
+            _ => {}
+        }
+        last = c;
+    }
+    false
+}
+
+/// The commands of a `run:` script that write something a later run can read.
+const WRITES: [&str; 5] = [
+    "git push",
+    "gh release",
+    "gh cache",
+    "gh api -X",
+    "gh api --method",
+];
+
+/// What is wrong with the steps of `kernel.yml` that leave something for later runs: each must
+/// write only on a push to main (its condition's terms `github.event_name == 'push'` and
+/// `github.ref == 'refs/heads/main'`) or in the merge queue (`github.event_name ==
+/// 'merge_group'`), never on a run by hand. The condition is a build cache's `save-if` (the cache
+/// saves when it has none) or the step's `if`.
+fn writer_problems(kernel: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let w = parse(kernel);
+    for job in keys(&w["jobs"]) {
+        for (i, step) in w["jobs"][job.as_str()]["steps"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let uses = text(&step["uses"]);
+            let run = text(&step["run"]);
+            // A hand-over inside one run (`wasm-build`'s archive for `wasm-suite`'s parts) is not
+            // for later runs: it is named by its build, kept one day, and downloaded under the
+            // same name by a job of the same run. Anything else that uploads is held to the rule.
+            if uses.starts_with("actions/upload-artifact@")
+                && job == "wasm-build"
+                && text(&step["with"]["name"]) == "wasm-${{ matrix.build }}"
+                && step["with"]["retention-days"].as_i64() == Some(1)
+                && w["jobs"]["wasm-suite"]["steps"]
+                    .as_vec()
+                    .into_iter()
+                    .flatten()
+                    .any(|d| {
+                        text(&d["uses"]).starts_with("actions/download-artifact@")
+                            && text(&d["with"]["name"]) == "wasm-${{ matrix.part.build }}"
+                    })
+            {
+                continue;
+            }
+            let condition = if uses.starts_with("Swatinem/rust-cache@") {
+                text(&step["with"]["save-if"])
+            } else if uses.starts_with("actions/upload-artifact@")
+                || uses.starts_with("actions/cache@")
+                || uses.starts_with("actions/cache/save@")
+                || WRITES.iter().any(|c| run.contains(c))
+            {
+                text(&step["if"])
+            } else {
+                continue;
+            };
+            let said = format!("{job}'s step {} ({})", i + 1, text(&step["name"]));
+            let t = terms(&condition);
+            let has = |term: &str| t.iter().any(|x| x == term);
+            let push = has("github.event_name == 'push'") && has("github.ref == 'refs/heads/main'");
+            let queue = has("github.event_name == 'merge_group'");
+            let bare = condition
+                .trim()
+                .strip_prefix("${{")
+                .and_then(|c| c.strip_suffix("}}"))
+                .unwrap_or(&condition);
+            if !(push || queue) || or_outside_brackets(bare) {
+                found.push(format!(
+                    "{said} writes for later runs on a run by hand, not on a push to main or in \
+                     the queue alone: {condition:?}"
+                ));
+            }
         }
     }
     found
@@ -393,6 +537,8 @@ fn leg_problems(kernel: &str) -> Vec<String> {
     }
     found.extend(linux_part_problems(&w));
     found.extend(test_part_problems(&w, &geom_num_tests()));
+    found.extend(wasm_part_problems(&w));
+    found.extend(wasm_suite_part_problems(&w));
     found
 }
 
@@ -621,6 +767,218 @@ fn vector_problems(build: &str, runs: &[String], tests: &[String]) -> Vec<String
     found
 }
 
+/// The parts of a matrix's `k`, checked to be 1 to n, and the problem when they are not.
+fn numbered(job: &str, k: &Yaml, found: &mut Vec<String>) -> Vec<i64> {
+    let parts: Vec<i64> = k
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter_map(Yaml::as_i64)
+        .collect();
+    let n = i64::try_from(parts.len()).unwrap();
+    if n == 0 || parts != (1..=n).collect::<Vec<_>>() {
+        found.push(format!("{job}'s parts are {parts:?}, not 1 to {n}"));
+    }
+    parts
+}
+
+/// What is wrong with how `wasm` shares a runtime's leg among its parts: parts not 1 to n or a
+/// name that does not count them, a golden, test or guard step on no part or on more than one,
+/// and a golden build's `--part j/m` shares not exactly 1 to m (one dropped from every part, or
+/// run twice). A golden build is its flags, whether it is in release, and its command without
+/// `--part`; the guard's proof runs one whole golden run, which the shares of its build make up.
+fn wasm_part_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let wasm = &w["jobs"]["wasm"];
+    let parts = numbered("wasm", &wasm["strategy"]["matrix"]["k"], &mut found);
+    let n = parts.len();
+    if !text(&wasm["name"]).ends_with(&format!("part ${{{{ matrix.k }}}} of {n})")) {
+        found.push(format!("wasm's name does not count its {n} parts"));
+    }
+    let mut goldens: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut guarded = Vec::new();
+    for step in wasm["steps"].as_vec().into_iter().flatten() {
+        let run = text(&step["run"]);
+        let name = text(&step["name"]);
+        let golden = run.starts_with("cargo run --locked -p geom-test --bin golden");
+        let guard = run.contains("--bin guard -- prove");
+        if !(golden || guard || run.starts_with("cargo test")) {
+            continue;
+        }
+        match parts_of(&text(&step["if"]), &parts) {
+            Some(on) if on.len() == 1 => {}
+            Some(on) => found.push(format!("{name}: runs on parts {on:?}, not exactly one")),
+            None => found.push(format!("{name}: its condition on the part is not read")),
+        }
+        if guard {
+            guarded.push(
+                run.split("--golden-run")
+                    .nth(1)
+                    .unwrap_or("")
+                    .trim()
+                    .to_owned(),
+            );
+        }
+        if golden {
+            let words: Vec<&str> = run.split_whitespace().collect();
+            let share = words
+                .iter()
+                .position(|w| *w == "--part")
+                .and_then(|at| words.get(at + 1))
+                .map_or_else(|| "1/1".to_owned(), |s| (*s).to_owned());
+            let whole = run.replacen(&format!("--part {share} "), "", 1);
+            goldens
+                .entry(format!("{} | {whole}", text(&step["env"]["RUSTFLAGS"])))
+                .or_default()
+                .push(share);
+        }
+    }
+    for (build, shares) in &goldens {
+        let m = shares.len();
+        let wanted: BTreeSet<String> = (1..=m).map(|j| format!("{j}/{m}")).collect();
+        let got: BTreeSet<String> = shares.iter().cloned().collect();
+        if got != wanted || shares.len() != got.len() {
+            found.push(format!(
+                "wasm's goldens of `{build}` run shares {shares:?}, not each of {wanted:?} once"
+            ));
+        }
+    }
+    if goldens.len() != 3 {
+        found.push(format!(
+            "wasm runs the goldens in {} builds, not with overflow checks on, as shipped and in \
+             debug",
+            goldens.len()
+        ));
+    }
+    if guarded.len() != 1 {
+        found.push(format!(
+            "wasm proves the guard {} times, not once",
+            guarded.len()
+        ));
+    }
+    found
+}
+
+/// What is wrong with how the wasm32 suite is built once and run in parts: `wasm-build`'s builds
+/// are not the two of `wasm-suite`'s parts, a build does not archive what its parts run or does
+/// not upload it under the name its parts download, its doctests (which nextest does not run) not
+/// once under each runtime, a build's parts not `--partition count:k/n` for exactly k = 1 to n
+/// under each runtime (a part dropped, or run twice), or the parts not waiting for the build.
+fn wasm_suite_part_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let build = &w["jobs"]["wasm-build"];
+    let suite = &w["jobs"]["wasm-suite"];
+    let needs: Vec<String> = suite["needs"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .map(text)
+        .collect();
+    if !needs.contains(&"wasm-build".to_owned()) {
+        found.push("wasm-suite's parts do not wait for wasm-build".to_owned());
+    }
+    let builds = strings(&build["strategy"]["matrix"]["build"]);
+    let runtimes = strings(&suite["strategy"]["matrix"]["runtime"]);
+    if runtimes != ["wasmtime", "node"] {
+        found.push(format!(
+            "wasm-suite runs under {runtimes:?}, not wasmtime and node"
+        ));
+    }
+    let steps: Vec<&Yaml> = build["steps"].as_vec().into_iter().flatten().collect();
+    let mut parts: BTreeMap<String, Vec<(i64, i64)>> = BTreeMap::new();
+    for p in suite["strategy"]["matrix"]["part"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+    {
+        let (Some(k), Some(n)) = (p["k"].as_i64(), p["n"].as_i64()) else {
+            found.push(format!("a wasm-suite part is not read: {p:?}"));
+            continue;
+        };
+        parts.entry(text(&p["build"])).or_default().push((k, n));
+    }
+    let wanted: BTreeSet<String> = builds.iter().cloned().collect();
+    if parts.keys().cloned().collect::<BTreeSet<_>>() != wanted {
+        found.push(format!(
+            "wasm-suite's parts run the builds {:?}, but wasm-build makes {wanted:?}",
+            parts.keys()
+        ));
+    }
+    for (b, ks) in &parts {
+        let n = ks.first().map_or(0, |(_, n)| *n);
+        let mut got: Vec<i64> = ks.iter().map(|(k, _)| *k).collect();
+        got.sort_unstable();
+        if ks.iter().any(|(_, m)| *m != n) || got != (1..=n).collect::<Vec<_>>() {
+            found.push(format!(
+                "wasm-suite runs the {b} build's parts {ks:?}, not each of 1 to {n} once"
+            ));
+        }
+    }
+    found.extend(wasm_build_problems(&steps, &builds));
+    let suite_steps: Vec<&Yaml> = suite["steps"].as_vec().into_iter().flatten().collect();
+    let downloads = suite_steps.iter().any(|s| {
+        text(&s["uses"]).starts_with("actions/download-artifact@")
+            && text(&s["with"]["name"]) == "wasm-${{ matrix.part.build }}"
+    });
+    let runs = suite_steps.iter().any(|s| {
+        text(&s["run"])
+            == "cargo nextest run --archive-file \"$RUNNER_TEMP/wasm-${{ matrix.part.build }}.tar.zst\" \
+                --workspace-remap . --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}"
+    });
+    if !(downloads && runs) {
+        found.push(
+            "a wasm-suite part does not run its share of the archive its build uploaded".to_owned(),
+        );
+    }
+    found
+}
+
+/// What is wrong with `wasm-build`'s steps (`steps`) for its builds (`builds`): a build that does
+/// not archive its tests, its doctests not once under each runtime, or its archive not uploaded
+/// under the name its parts download.
+fn wasm_build_problems(steps: &[&Yaml], builds: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    for b in builds {
+        let of_build: Vec<&&Yaml> = steps
+            .iter()
+            .filter(|s| text(&s["if"]).contains(&format!("matrix.build == '{b}'")))
+            .collect();
+        let archived = of_build.iter().any(|s| {
+            text(&s["run"]).starts_with(&format!(
+                "cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked \
+                 --archive-file \"$RUNNER_TEMP/wasm-{b}.tar.zst\""
+            ))
+        });
+        if !archived {
+            found.push(format!("wasm-build does not archive the {b} build's tests"));
+        }
+        for runtime in ["wasmtime", "node"] {
+            let doctests = of_build
+                .iter()
+                .filter(|s| {
+                    text(&s["run"])
+                        .starts_with("cargo test $KERNEL_CRATES --doc --target wasm32-wasip1")
+                        && text(&s["env"]["CARGO_TARGET_WASM32_WASIP1_RUNNER"]).starts_with(runtime)
+                })
+                .count();
+            if doctests != 1 {
+                found.push(format!(
+                    "the {b} build's doctests run {doctests} times under {runtime}"
+                ));
+            }
+        }
+    }
+    let uploads = steps.iter().any(|s| {
+        text(&s["uses"]).starts_with("actions/upload-artifact@")
+            && text(&s["with"]["name"]) == "wasm-${{ matrix.build }}"
+            && text(&s["with"]["path"]) == "${{ runner.temp }}/wasm-${{ matrix.build }}.tar.zst"
+    });
+    if !uploads {
+        found.push("wasm-build does not upload its archive as wasm-<build>".to_owned());
+    }
+    found
+}
+
 /// geom-num's test targets: the files of its `tests` folder.
 fn geom_num_tests() -> Vec<String> {
     let dir = root().join("projects/engines/geometry/crates/geom-num/tests");
@@ -652,6 +1010,10 @@ fn mark_problems(kernel: &str, quality: &str) -> Vec<String> {
         ),
         ("base=\"$BEFORE\"", "a push against the commit main was at"),
         ("name=kernel-tested-$tree", "the queue's mark by its tree"),
+        (
+            "if [ \"$EVENT\" = push ] && [ \"$GITHUB_REF\" = refs/heads/main ]; then\n  if marks=",
+            "the queue's mark on a push to main alone, so a run by hand skips nothing",
+        ),
     ] {
         if !decide.contains(needle) {
             found.push(format!("changes does not measure {why}"));
@@ -765,11 +1127,21 @@ fn the_ruleset_requires_checks_that_always_report() {
     assert!(
         seeded(
             "kernel.yml",
-            " wasm, wasm-suite, big-endian, large-models]",
-            " wasm, wasm-suite, large-models]"
+            " wasm, wasm-build, wasm-suite, big-endian, large-models]",
+            " wasm, wasm-build, wasm-suite, large-models]"
         )
         .iter()
         .any(|p| p.contains("does not judge [\"big-endian\"]"))
+    );
+    // The wasm32 suite's one build left out of the last job: a failed build would go unjudged.
+    assert!(
+        seeded(
+            "kernel.yml",
+            " wasm, wasm-build, wasm-suite, big-endian, large-models]",
+            " wasm, wasm-suite, big-endian, large-models]"
+        )
+        .iter()
+        .any(|p| p.contains("does not judge [\"wasm-build\"]"))
     );
     assert!(
         seeded(
@@ -802,8 +1174,14 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
         ),
         // A job dropped from what the queue must run.
         (
+            "merge_group) must=\"lint scope test suite wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope test suite wasm-build wasm-suite big-endian large-models\"",
+            "on merge_group the jobs",
+        ),
+        // The wasm32 suite's build dropped from what the queue must run.
+        (
+            "merge_group) must=\"lint scope test suite wasm wasm-build wasm-suite big-endian large-models\"",
             "merge_group) must=\"lint scope test suite wasm wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope test suite wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // A job that would run again on a tree the queue passed.
@@ -818,10 +1196,112 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
             "    # The merge queue's: the tests the change can reach on the other platforms, optimised with\n    # overflow checks and debug assertions on, and one plain debug run on Linux x86-64.\n    if: github.actor != 'someone' && github.event_name != 'pull_request'",
             "a term this test cannot read",
         ),
+        // A job a push runs left out of a run by hand.
+        (
+            "    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'\n    runs-on: ubuntu-24.04\n",
+            "    if: github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'\n    runs-on: ubuntu-24.04\n",
+            "a run by hand runs",
+        ),
+        // The last job asking less of a run by hand than of a push.
+        (
+            "              *) must=",
+            "              workflow_dispatch) must=\"lint scope linux guard\" ;;\n              *) must=",
+            "of a run by hand, but",
+        ),
+        // No run by hand at all.
+        (
+            "  # By hand, on any branch: what a push to main runs (the paragraph at the top). No inputs.\n  workflow_dispatch:\n",
+            "",
+            "kernel.yml has no workflow_dispatch",
+        ),
+        // A run by hand given an input that could choose what runs.
+        (
+            "  workflow_dispatch:\n",
+            "  workflow_dispatch:\n    inputs:\n      jobs:\n        type: string\n",
+            "takes inputs",
+        ),
     ] {
         let k = kernel.replacen(from, to, 1);
         assert_ne!(k, kernel, "the planted edit {from:?} applies");
         let found = event_problems(&k);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+
+    // An arm naming a push and a run by hand together is read as both, and asks the same.
+    let full =
+        "lint scope linux guard test suite wasm wasm-build wasm-suite big-endian large-models";
+    let both = kernel.replacen(
+        "              *) must=",
+        &format!(
+            "              push|workflow_dispatch) must=\"{full}\" ;;\n              *) must="
+        ),
+        1,
+    );
+    assert_ne!(both, kernel);
+    assert_eq!(event_problems(&both), Vec::<String>::new());
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_run_by_hand_writes_nothing_later_runs_read() {
+    let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
+    assert_eq!(writer_problems(&kernel), Vec::<String>::new());
+
+    // Seeded violations: each must be reported.
+    for (from, to, said) in [
+        // A cache saved by any run of main, a run by hand on main among them.
+        (
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.k == 1 }}",
+            "save-if: ${{ github.ref == 'refs/heads/main' && matrix.k == 1 }}",
+            "linux's step 3",
+        ),
+        // A cache with no `save-if`, which saves on every run.
+        (
+            "          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: guard\n",
+            "          key: guard\n",
+            "guard's step 3",
+        ),
+        // A run by hand let in beside the terms.
+        (
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: large-models",
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}\n          key: large-models",
+            "large-models's step 3",
+        ),
+        // The queue's mark uploaded on every event.
+        (
+            "        if: github.event_name == 'merge_group' && needs.changes.outputs.kernel == 'true'\n        with:",
+            "        if: needs.changes.outputs.kernel == 'true'\n        with:",
+            "done's step 3",
+        ),
+        // The in-run archive hand-over kept for a month, for later runs to find.
+        (
+            "          retention-days: 1
+          # The archive is compressed already.",
+            "          retention-days: 30
+          # The archive is compressed already.",
+            "wasm-build's step 8",
+        ),
+        // The same upload under another name, which no part of this run downloads.
+        (
+            "          name: wasm-${{ matrix.build }}
+          path:",
+            "          name: kernel-archive-${{ matrix.build }}
+          path:",
+            "wasm-build's step 8",
+        ),
+        // A timing record written through `gh` on every run.
+        (
+            "      - name: The merge queue's mark for this tree\n",
+            "      - name: A timing record for later runs\n        run: gh api -X PUT \"repos/$GITHUB_REPOSITORY/actions/variables/TIMES\" -f value=1\n      - name: The merge queue's mark for this tree\n",
+            "(A timing record for later runs)",
+        ),
+    ] {
+        let k = kernel.replacen(from, to, 1);
+        assert_ne!(k, kernel, "the planted edit {from:?} applies");
+        let found = writer_problems(&k);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }
@@ -940,6 +1420,91 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
     ignore = "reads the repository's files, which a WebAssembly test run cannot"
 )]
 #[test]
+fn the_wasm32_legs_run_every_golden_and_test_once_in_parts() {
+    let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
+    assert_eq!(leg_problems(&kernel), Vec::<String>::new());
+
+    // Seeded violations: each must be reported.
+    for (from, to, said) in [
+        // A part of the wasm32 goldens dropped from the matrix: its share runs nowhere.
+        (
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8]",
+            "        k: [1, 2, 3, 4, 5, 6, 7]",
+            "Every golden on wasm32 in debug (part 3 of 3): runs on parts [], not exactly one",
+        ),
+        // A wasm32 golden step on two parts: run twice.
+        (
+            "        if: ${{ !cancelled() && matrix.k == 3 }}\n        env:\n          RUSTFLAGS: -C overflow-checks=on\n        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2",
+            "        if: ${{ !cancelled() && matrix.k <= 3 }}\n        env:\n          RUSTFLAGS: -C overflow-checks=on\n        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2",
+            "(part 2 of 2): runs on parts [1, 2, 3], not exactly one",
+        ),
+        // A wasm32 golden share in no part: the second debug share run as the first again.
+        (
+            "run --part 2/3 --target wasm32-wasip1\n",
+            "run --part 1/3 --target wasm32-wasip1\n",
+            "run shares [\"1/3\", \"1/3\", \"3/3\"]",
+        ),
+        // The wasm32 guard's proof on every part.
+        (
+            "        if: ${{ matrix.k == 1 }}\n        run: cargo run --locked --release -p geom-test --bin guard",
+            "        run: cargo run --locked --release -p geom-test --bin guard",
+            "A one-bit change to libm's sin fails a golden on wasm32: runs on parts [1, 2, 3, 4, 5, 6, 7, 8]",
+        ),
+        // A part added to the wasm32 goldens without its name counting it.
+        (
+            "    name: Test (wasm32-wasip1 under ${{ matrix.runtime }}, part ${{ matrix.k }} of 8)",
+            "    name: Test (wasm32-wasip1 under ${{ matrix.runtime }}, part ${{ matrix.k }} of 7)",
+            "wasm's name does not count its 8 parts",
+        ),
+        // A part of the wasm32 suite dropped: its share of the tests runs nowhere.
+        (
+            "          - { build: checked, k: 2, n: ",
+            "          - { build: checked, k: 1, n: ",
+            "wasm-suite runs the checked build's parts",
+        ),
+        // The shipped build's parts dropped: geom-num's vectors as shipped run nowhere.
+        (
+            "          - { build: shipped, k: 1, n: ",
+            "          - { build: checked, k: 9, n: ",
+            "wasm-suite's parts run the builds",
+        ),
+        // The parts no longer waiting for the build.
+        (
+            "    needs: [changes, lint, scope, wasm-build]\n",
+            "    needs: [changes, lint, scope]\n",
+            "do not wait for wasm-build",
+        ),
+        // A build's doctests dropped under one runtime.
+        (
+            "      - name: geom-num's doctests on wasm32 in release as shipped, under Node\n        if: ${{ !cancelled() && matrix.build == 'shipped'",
+            "      - name: geom-num's doctests on wasm32 in release as shipped, under Node\n        if: ${{ !cancelled() && matrix.build == 'checked'",
+            "the shipped build's doctests run 0 times under node",
+        ),
+        // The archive uploaded under a name no part downloads.
+        (
+            "          name: wasm-${{ matrix.build }}\n",
+            "          name: wasm-suite-${{ matrix.build }}\n",
+            "does not upload its archive",
+        ),
+        // A part that runs the whole archive, not its share.
+        (
+            "--workspace-remap . --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}\n",
+            "--workspace-remap . --no-fail-fast\n",
+            "does not run its share",
+        ),
+    ] {
+        let k = kernel.replacen(from, to, 1);
+        assert_ne!(k, kernel, "the planted edit {from:?} applies");
+        let found = leg_problems(&k);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
 fn each_change_is_measured_against_its_base_and_marked_once() {
     let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
     let quality = read(&format!("{WORKFLOWS}/kernel-quality.yml"));
@@ -965,6 +1530,15 @@ fn each_change_is_measured_against_its_base_and_marked_once() {
             ),
             quality.clone(),
             "only the merge queue may mark",
+        ),
+        (
+            kernel.replacen(
+                "if [ \"$EVENT\" = push ] && [ \"$GITHUB_REF\" = refs/heads/main ]; then",
+                "if [ \"$EVENT\" != pull_request ]; then",
+                1,
+            ),
+            quality.clone(),
+            "the queue's mark on a push to main alone",
         ),
         (
             kernel.clone(),

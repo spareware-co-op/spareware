@@ -428,8 +428,8 @@ fn actions_are_pinned_to_the_commits_kernel_yml_uses() {
             );
         }
     }
-    // The artifact actions kernel.yml does not use, pinned to the commits of their tags: v7.0.2
-    // and v8.0.2.
+    // The artifact actions, pinned to the commits of their tags (v7.0.2 and v8.0.2), as kernel.yml
+    // pins them too.
     assert!(
         pins["actions/upload-artifact"]
             .iter()

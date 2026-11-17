@@ -45,7 +45,8 @@
 //!   on the way panics or overflows (`tests/orient2d.rs`: `orient2d_proof_predicate`,
 //!   `orient2d_proof_exact_path` and `orient2d_proof_filter`, one claim each by [`check_claim`],
 //!   which together prove what [`check`] checks; Kani checks every arithmetic step, index and
-//!   unwrap by default). Near the edges the filter's products round,
+//!   unwrap by default; the predicate's claim is proved in [`PREDICATE_PARTS`] parts, one for
+//!   each class of [`predicate_part`], with a proof that the classes are the whole domain). Near the edges the filter's products round,
 //!   so the proof covers the filter's error bound, not only exact arithmetic. Everywhere else in
 //!   the frame the claims are tested, by fuzzing and the property tests, not proven.
 //!
@@ -310,6 +311,26 @@ pub fn proof_case(bound: u64, draw: &ProofDraw) -> Option<Case> {
     })
 }
 
+/// How many classes [`predicate_part`] cuts the proof's domain into: 64, one for each pattern of
+/// the six coordinates' signs.
+pub const PREDICATE_PARTS: u32 = 64;
+
+/// The class of the proof's domain `draw` is in, for the predicate's proof in parts
+/// (`tests/orient2d.rs`): the six negative flags read as a number, a.x's worth 1, a.y's 2, b.x's
+/// 4, b.y's 8, c.x's 16 and c.y's 32, so always below [`PREDICATE_PARTS`]. The near-edge flags
+/// and the offsets do not enter it: a class is every draw with those six signs.
+///
+/// Kani proves the predicate's claim one class at a time, and proves of this function that every
+/// draw of the domain has a class below [`PREDICATE_PARTS`], so the parts together are the
+/// domain. The signs are what to split on because they are what the solver's time follows: one
+/// class of them took 4 to 9 minutes on the hosted runner where the whole domain took 35 to 46.
+#[must_use]
+pub fn predicate_part(draw: &ProofDraw) -> u32 {
+    let [ax, ay, bx, by, cx, cy] = draw.negative;
+    let worth = |negative: bool, weight: u32| if negative { weight } else { 0 };
+    worth(ax, 1) | worth(ay, 2) | worth(bx, 4) | worth(by, 8) | worth(cx, 16) | worth(cy, 32)
+}
+
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,
@@ -523,6 +544,25 @@ mod tests {
         assert_eq!(proof_coord(max, false, true, max), Some(-M));
         assert_eq!(proof_coord(max + 1, false, false, 0), None);
         assert_eq!(proof_coord(u64::MAX, true, true, u64::MAX), None);
+    }
+
+    /// Every draw of the domain is in the part its six signs name, and every part has the same
+    /// number of draws: 2^12, the near-edge flags and the offsets.
+    #[test]
+    fn the_predicates_parts_are_the_sign_patterns() {
+        let mut draws = [0u32; PREDICATE_PARTS as usize];
+        for pattern in 0u32..(1 << 18) {
+            let bit = |i: u32| pattern >> i & 1 == 1;
+            let draw = ProofDraw {
+                near_edge: core::array::from_fn(|i| bit(i as u32)),
+                negative: core::array::from_fn(|i| bit(6 + i as u32)),
+                offset: core::array::from_fn(|i| u64::from(bit(12 + i as u32))),
+            };
+            let part = predicate_part(&draw);
+            assert_eq!(part, pattern >> 6 & 63);
+            draws[part as usize] += 1;
+        }
+        assert_eq!(draws, [1 << 12; PREDICATE_PARTS as usize]);
     }
 
     #[test]

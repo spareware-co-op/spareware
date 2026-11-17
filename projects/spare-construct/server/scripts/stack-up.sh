@@ -2,6 +2,8 @@
 # Starts PD, TiKV and RustFS on this machine, for local testing. Data stays in $STACK_HOME/data.
 # STACK_NODES=3 starts three each of PD and TiKV instead, as production has on three machines,
 # each copy on its own ports. deploy/deploy.sh runs these programs as system services.
+# STACK_TIKV_RAMDISK, a folder on a RAM disk, puts TiKV's data there instead: CI's checklist job
+# does, so its time limits measure the server and the store, not the runner's disk (issue #886).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -13,6 +15,14 @@ bin="$STACK_HOME/bin"
 data="$STACK_HOME/data"
 log="$STACK_HOME/log"
 mkdir -p "$data/rustfs" "$log"
+tikv_data="${STACK_TIKV_RAMDISK:-$data}"
+tikv_config="$here/config/tikv.toml"
+if [ -n "${STACK_TIKV_RAMDISK:-}" ]; then
+  # TiKV keeps gigabytes free as a reserve against a full disk, partly as a file it writes. On a
+  # RAM disk that would be memory, so there it keeps none.
+  tikv_config="$log/tikv-ramdisk.toml"
+  { cat "$here/config/tikv.toml"; printf '\n[storage]\nreserve-space = "0MB"\nreserve-raft-space = "0MB"\n'; } >"$tikv_config"
+fi
 
 # TiKV won't start with fewer open files than this, and says so only in its log.
 files=123880
@@ -48,10 +58,10 @@ if ! running tikv-server; then
     pds="$pds,127.0.0.1:$(pd_client "$node")"
   done
   for node in $(seq 1 "$STACK_NODES"); do
-    mkdir -p "$data/tikv$node"
+    mkdir -p "$tikv_data/tikv$node"
     setsid nohup "$bin/tikv-server" --pd-endpoints="${pds#,}" \
       --addr="127.0.0.1:$((20160 + node - 1))" --status-addr="127.0.0.1:$((20180 + node - 1))" \
-      --data-dir="$data/tikv$node" --config="$here/config/tikv.toml" \
+      --data-dir="$tikv_data/tikv$node" --config="$tikv_config" \
       --log-file="$log/tikv$node.log" >/dev/null 2>&1 &
   done
 fi

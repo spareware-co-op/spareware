@@ -14,6 +14,9 @@ services="$here/../../kit/services/Cargo.toml"
 cargo build --release -p spare-server --bins --examples
 pkill -u "$(id -u)" -x spare-server || true
 bash scripts/stack-wipe.sh
+# Pass or fail, end with how long TiKV took to sync its Raft log, to tell a slow disk from a slow
+# server.
+trap 'bash scripts/store-sync-times.sh' EXIT
 if ! pgrep -u "$(id -u)" -x mock_oidc >/dev/null; then
   setsid nohup "$target/release/examples/mock_oidc" >/dev/null 2>&1 &
 fi
