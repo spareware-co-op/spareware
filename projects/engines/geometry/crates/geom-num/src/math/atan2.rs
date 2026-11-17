@@ -1857,15 +1857,99 @@ mod proofs {
     /// is, are the same double, and it answers that double. For the fast paths' values: an angle,
     /// its low part and a small positive bound.
     #[kani::proof]
+    #[kani::solver(kissat)]
     fn agreed_answers_exactly_when_both_ends_round_alike() {
         let (fh, fl, eps): (f64, f64, f64) = (kani::any(), kani::any(), kani::any());
         kani::assume(fh.abs() <= 4.0 && fl.abs() <= 1.0 && eps > 0.0 && eps <= 1.0);
         let lower = fh + (fl - eps);
         let upper = fh + (fl + eps);
         match agreed(fh, fl, eps) {
+            Some(r) => {
+                assert!(lower == upper);
+                assert!(r.to_bits() == upper.to_bits());
+            }
+            None => assert!(lower != upper),
+        }
+    }
+
+    /// TRIAL, in the form a cut would have: the class of the values in a cut of the proof above.
+    /// 0: neither the angle nor its low part has its sign bit set; 1: only the angle; 2: both;
+    /// 3 to 6: only the low part, by whether the low part is at least the bound (bit 0 of the
+    /// class less 3) and whether the angle is at least the low part (bit 1). Always under 7.
+    fn agreed_class(fh: f64, fl: f64, eps: f64) -> u64 {
+        match (fh.to_bits() >> 63 == 1, fl.to_bits() >> 63 == 1) {
+            (false, false) => 0,
+            (true, false) => 1,
+            (true, true) => 2,
+            (false, true) => {
+                3 + (u64::from(fl.abs() >= eps) | (u64::from(fh.abs() >= fl.abs()) << 1))
+            }
+        }
+    }
+
+    /// TRIAL, in the form a cut would have: the proof's claim, its assertions unchanged, for
+    /// every value of the class `class`.
+    fn agreed_law(class: u64) {
+        let (fh, fl, eps): (f64, f64, f64) = (kani::any(), kani::any(), kani::any());
+        kani::assume(fh.abs() <= 4.0 && fl.abs() <= 1.0 && eps > 0.0 && eps <= 1.0);
+        if agreed_class(fh, fl, eps) != class {
+            return;
+        }
+        let lower = fh + (fl - eps);
+        let upper = fh + (fl + eps);
+        match agreed(fh, fl, eps) {
             Some(r) => assert!(lower == upper && r.to_bits() == upper.to_bits()),
             None => assert!(lower != upper),
         }
+    }
+
+    /// TRIAL: every three doubles are in one of the seven classes.
+    #[kani::proof]
+    fn agreed_classes_cover_every_value() {
+        let (fh, fl, eps): (f64, f64, f64) = (kani::any(), kani::any(), kani::any());
+        assert!(agreed_class(fh, fl, eps) < 7);
+    }
+
+    /// TRIAL: class 0.
+    #[kani::proof]
+    fn agreed_class_0() {
+        agreed_law(0);
+    }
+
+    /// TRIAL: class 1.
+    #[kani::proof]
+    fn agreed_class_1() {
+        agreed_law(1);
+    }
+
+    /// TRIAL: class 2.
+    #[kani::proof]
+    fn agreed_class_2() {
+        agreed_law(2);
+    }
+
+    /// TRIAL: class 3.
+    #[kani::proof]
+    fn agreed_class_3() {
+        agreed_law(3);
+    }
+
+    /// TRIAL: class 4.
+    #[kani::proof]
+    fn agreed_class_4() {
+        agreed_law(4);
+    }
+
+    /// TRIAL: class 5.
+    #[kani::proof]
+    fn agreed_class_5() {
+        agreed_law(5);
+    }
+
+    /// TRIAL: class 6.
+    #[kani::proof]
+    fn agreed_class_6() {
+        agreed_law(6);
     }
 
     /// The bits of the double nearest `(−1)^s·(h·2^128 + m·2^64 + l)·2^(ex − 192)` (`s` = 1 when
@@ -2129,6 +2213,57 @@ mod proofs {
                 }
             }
         }
+    }
+
+    /// EXPERIMENT (local only): `mul`'s accumulation of its six products, word for word, as a
+    /// function of the products.
+    fn e1_carry(p: [u128; 6]) -> Option<(u64, u64, u64)> {
+        let [rh, rm1, rm2, rl1, rl2, rl3] = p;
+        let (mut m, mut h) = halves(rh);
+        let (mut l, c) = halves(rm1);
+        m = m.wrapping_add(c);
+        h = h.checked_add(u64::from(m < c))?;
+        let (lo2, c) = halves(rm2);
+        l = l.wrapping_add(lo2);
+        let mut cm = u64::from(l < lo2);
+        m = m.wrapping_add(c);
+        h = h.checked_add(u64::from(m < c))?;
+        let s = u128::from(hi64(rl1))
+            .checked_add(u128::from(hi64(rl2)))?
+            .checked_add(u128::from(hi64(rl3)))?;
+        let (lo3, s_hi) = halves(s);
+        cm = cm.checked_add(s_hi)?;
+        l = l.wrapping_add(lo3);
+        cm = cm.checked_add(u64::from(l < lo3))?;
+        m = m.wrapping_add(cm);
+        h = h.checked_add(u64::from(m < cm))?;
+        Some((h, m, l))
+    }
+
+    /// EXPERIMENT (local only): the accumulation equals the column sums for any six values no
+    /// larger than a product of two 64-bit words.
+    #[kani::proof]
+    fn e1_carries_over_free_products() {
+        let p: [u128; 6] = kani::any();
+        let max = u128::from(u64::MAX) * u128::from(u64::MAX);
+        kani::assume(p[0] <= max && p[1] <= max && p[2] <= max);
+        kani::assume(p[3] <= max && p[4] <= max && p[5] <= max);
+        let [rh, rm1, rm2, rl1, rl2, rl3] = p;
+        let w = |x: u64| u128::from(x);
+        let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
+        let c1 = w(hi64(c0)) + w(lo64(rh)) + w(hi64(rm1)) + w(hi64(rm2));
+        let c2 = w(hi64(rh)) + w(hi64(c1));
+        assert!(c2 >> 64 == 0, "K is below 2^192");
+        let got = e1_carry(p).unwrap();
+        assert_eq!(got, (lo64(c2), lo64(c1), lo64(c0)));
+    }
+
+    /// EXPERIMENT (local only): a product of two 64-bit words is no larger than the bound above.
+    #[kani::proof]
+    fn e2_a_product_is_in_range() {
+        let (a, b): (u64, u64) = (kani::any(), kani::any());
+        let max = u128::from(u64::MAX) * u128::from(u64::MAX);
+        assert!(u128::from(a).checked_mul(u128::from(b)).unwrap() <= max);
     }
 
     macro_rules! trial {
