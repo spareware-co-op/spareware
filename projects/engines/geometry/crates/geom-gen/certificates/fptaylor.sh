@@ -20,6 +20,16 @@
 # the others, and fails unless the certificate has t terms and it proved exactly those. Shards 1
 # to n, each green, prove every term of the one certificate; their theorems are its bound under
 # the terms the others proved.
+# A shard can start from a saved state of HOL Light instead of loading it (about an hour on a
+# runner): FPTAYLOR_STATE_OUT=<dir> with one problem loads HOL Light, its multivariate analysis and
+# the inequality verifier with that problem's Taylor tables, as a shard's session does, saves the
+# process with DMTCP (HOL Light's README names it, and HOL Light's own make-checkpoint.sh uses it)
+# to <dir>/hol-light-state.tar and prints the file's sha256; FPTAYLOR_STATE=<dir> with
+# FPTAYLOR_STATE_SHA256=<that sha256>, for a shard, refuses a file with any other digest, restores
+# the process from it and sends it the rest of the session: FPTaylor's checker, loaded as written
+# with the shard's terms, and the certificate's check. The saved state holds no theorem the check
+# relies on: every term the shard names is still proved after the restore. Both runs work in one
+# fixed folder, so that the paths the saved process holds are the shard's.
 # Usage: fptaylor.sh <problem.fpt>...  (geom-gen writes the problems: generated/fptaylor-*.fpt)
 #
 # OCaml 4.11: FPTaylor saves certificates as marshalled `Num` values, and HOL Light uses the Num
@@ -30,14 +40,36 @@ set -euo pipefail
 
 FPTAYLOR_COMMIT=f85a7a7797990fe5fb3436071afaa72c3f05629b    # v0.9.3 (MIT)
 HOL_LIGHT_COMMIT=d30e8239887b2348a063f82232a864de1cc2df15   # 2026-10-20 (BSD-style licence)
+# DMTCP saves and restores the HOL Light process. It runs as programs of its own around HOL Light's
+# toplevel, never in the kernel; built from source at this commit, in the container.
+DMTCP_COMMIT=f8009ce7b4ad211311ca2f72a929b975e4aa1155       # v4.2.0 (LGPL-3.0-or-later)
 
 here=$(cd "$(dirname "$0")" && pwd)
-work=$(mktemp -d)
 
 out=${FPTAYLOR_OUT:-}
 certificates=${FPTAYLOR_CERTIFICATES:-}
 shard=${FPTAYLOR_SHARD:-}
+state_out=${FPTAYLOR_STATE_OUT:-}
+state=${FPTAYLOR_STATE:-}
+state_sha256=${FPTAYLOR_STATE_SHA256:-}
 shards=1
+if [ -n "$state_out" ]; then
+  [ $# -eq 1 ] && [ -z "$out$certificates$shard$state" ] ||
+    { echo "FPTAYLOR_STATE_OUT saves the state for one problem, and does nothing else"; exit 1; }
+fi
+if [ -n "$state" ]; then
+  [ -n "$shard" ] && [[ $state_sha256 =~ ^[0-9a-f]{64}$ ]] ||
+    { echo "FPTAYLOR_STATE is for a shard, with the FPTAYLOR_STATE_SHA256 its making job printed"; exit 1; }
+fi
+# A saved state holds its folder's paths, so the run that saves it and the shards that restore it
+# use the same one, new in each container.
+if [ -n "$state_out$state" ]; then
+  work=/tmp/fptaylor-hol-state/$(basename "$1" .fpt)
+  [ ! -e "$work" ] || { echo "$work is in use"; exit 1; }
+  mkdir -p "$work"
+else
+  work=$(mktemp -d)
+fi
 # The terms this run proves, as an OCaml list; empty for every term.
 shard_terms=
 if [ -n "$shard" ]; then
@@ -59,7 +91,7 @@ fi
 # The image's user installs system packages through sudo; a root user needs none.
 SUDO=$(command -v sudo || true)
 $SUDO apt-get update -qq
-$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git gcc make m4 pkg-config libpcre2-dev >/dev/null
+$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git gcc make m4 pkg-config libpcre2-dev ${state_out:+g++} >/dev/null
 eval "$(opam env)"
 opam update -q >/dev/null
 opam install -y num camlp5 camlp-streams ocamlfind >/dev/null
@@ -93,6 +125,96 @@ checker="$work/FPTaylor/formal/build_tform2.hl"
 sed -i 's|^\(\s*\)prove_bound_cond pp tm) bound_conds in$|\1(if shard_terms = [] \|\| List.mem !counter shard_terms then (let th = prove_bound_cond pp tm in report (sprintf "Proved: %d/%d" !counter total_bounds); th) else ASSUME tm)) bound_conds in|' "$checker"
 [ "$(grep -c 'List.mem !counter shard_terms then' "$checker")" = 1 ] ||
   { echo "$checker: no term loop to shard"; exit 1; }
+
+# The first part of the HOL Light session, the same for every problem with as many variables: load
+# HOL Light, its multivariate analysis and the inequality verifier bundled with it (Formal_ineqs),
+# with this machine's paths. A saved state is this part, loaded.
+load_session() {
+  # camlp5 8.03.06 and later need libraries of their own (PCRE2, Re, camlp-streams' Stream), which
+  # HOL Light's loader for OCaml before 4.14 does not load: it loads camlp5o.cma directly. So
+  # findlib loads camlp5 with everything it needs first, as HOL Light's own loader for OCaml 4.14
+  # does (load_camlp5_topfind.ml), and hol.ml then loads camlp5o.cma. camlp5's findlib package
+  # does not name camlp-streams, whose `Stream` camlp5o.cma needs, so it is loaded by name.
+  echo '#use "topfind";;'
+  echo 'Topfind.don'"'"'t_load ["compiler-libs.common"];;'
+  echo 'Topfind.load_deeply ["camlp-streams"; "pcre2"; "re"; "camlp5"];;'
+  echo "#use \"$work/hol-light/hol.ml\";;"
+  echo "let formal_ineqs_path = \"$work/hol-light/Formal_ineqs\";;"
+  echo "let fptaylor_path = \"$work/FPTaylor\";;"
+  echo 'let fptaylor_formal_path = fptaylor_path ^ "/formal";;'
+  echo 'load_path := formal_ineqs_path :: fptaylor_formal_path :: !load_path;;'
+  echo 'needs "arith_options.hl";;'
+  echo 'Arith_options.base := 100;;'
+  echo 'Arith_options.min_exp := 300;;'
+  echo 'needs "Multivariate/realanalysis.ml";;'
+  echo 'needs "verifier/m_verifier_main.hl";;'
+}
+
+# A saved state is restored on whichever runner a shard gets. glibc picks each string and memory
+# routine for the processor it starts on, and a restored process keeps those picks, so HOL Light
+# starts with glibc's AVX-512 and TSX routines turned off (glibc's hwcaps tunable): every runner
+# has the rest of what glibc can pick (`cpu_flags`), and a shard checks it has each flag of the
+# runner that saved the state.
+tunables=glibc.cpu.hwcaps=-AVX512F,-AVX512CD,-AVX512BW,-AVX512DQ,-AVX512VL,-RTM
+cpu_flags() {
+  local all
+  all=" $(sed -n 's/^flags\s*: //p' /proc/cpuinfo | head -n 1) "
+  for flag in sse4_1 sse4_2 ssse3 popcnt abm bmi1 bmi2 movbe avx avx2 fma; do
+    [[ $all != *" $flag "* ]] || printf '%s ' "$flag"
+  done
+}
+
+if [ -n "$state_out" ]; then
+  echo "::group::Build HOL Light and DMTCP"
+  make -C "$work/hol-light" >/dev/null
+  fetch https://github.com/dmtcp/dmtcp.git "$work/dmtcp-source" "$DMTCP_COMMIT"
+  (cd "$work/dmtcp-source" && ./configure --prefix="$work/dmtcp" >/dev/null && make -j "$(nproc)" >/dev/null &&
+    make install >/dev/null)
+  echo "::endgroup::"
+  load_session >"$work/load.ml"
+  echo 'print_endline "HOL Light state: loaded";;' >>"$work/load.ml"
+  cat "$work/load.ml"
+  # HOL Light reads the session from a pipe held open until the state is saved: at the end of its
+  # input it would stop.
+  mkfifo "$work/input"
+  mkdir "$work/checkpoint"
+  export HOLLIGHT_DIR="$work/hol-light"
+  GLIBC_TUNABLES=$tunables "$work/dmtcp/bin/dmtcp_launch" --new-coordinator --coord-port 0 \
+    --port-file "$work/port" --ckptdir "$work/checkpoint" --no-gzip \
+    "$work/hol-light/ocaml-hol" -I "$(camlp5 -where)" -safe-string -I "$work/hol-light" \
+    <"$work/input" >"$work/hol.log" 2>&1 &
+  hol=$!
+  exec 3>"$work/input"
+  cat "$work/load.ml" >&3
+  tail -n +1 -f --pid="$hol" "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
+  until grep -q '^\(# \)*HOL Light state: loaded$' "$work/hol.log"; do
+    kill -0 "$hol" 2>/dev/null || { echo "HOL Light stopped before it was loaded"; exit 1; }
+    sleep 5
+  done
+  port=$(cat "$work/port")
+  # `-bc` waits for the checkpoint to be written. (v4.2.0's dmtcp_command reads the long form,
+  # `--bcheckpoint`, as `b`, which it does not know, and then a checkpoint it does not wait for.)
+  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" -bc
+  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" --quit
+  exec 3>&-
+  wait "$hol" || true
+  wait
+  images=("$work"/checkpoint/ckpt_*.dmtcp)
+  [ ${#images[@]} -eq 1 ] && [ -f "${images[0]}" ] || { echo "DMTCP saved no single image"; exit 1; }
+  mv "${images[0]}" "$work/hol.dmtcp"
+  {
+    echo "hol-light $HOL_LIGHT_COMMIT"
+    echo "dmtcp $DMTCP_COMMIT"
+    echo "max_dim $most"
+    echo "cpu-flags $(cpu_flags)"
+  } >"$work/manifest"
+  cat "$work/manifest"
+  echo "saved on: $(sed -n 's/^model name\s*: //p' /proc/cpuinfo | head -n 1)"
+  tar -C "$work" -cf "$state_out/hol-light-state.tar" hol.dmtcp dmtcp manifest
+  ls -l "$state_out/hol-light-state.tar"
+  echo "HOL Light state sha256 $(sha256sum <"$state_out/hol-light-state.tar" | cut -d' ' -f1)"
+  exit 0
+fi
 
 if [ -z "$certificates" ]; then
   echo "::group::Build FPTaylor"
@@ -135,33 +257,41 @@ for problem in "$@"; do
 done
 [ -z "$out" ] || exit 0
 
-echo "::group::Build HOL Light"
-make -C "$work/hol-light" >/dev/null
-echo "::endgroup::"
-
-# The HOL Light session: load HOL Light, its multivariate analysis, the inequality verifier
-# bundled with it (Formal_ineqs) and FPTaylor's checker (FPTaylor's formal/load.hl, with this
-# machine's paths), then check each certificate against its bound.
 session="$work/session.ml"
+if [ -n "$state" ]; then
+  # The saved state, only if it is the file its making job printed the digest of, made from the
+  # commits and Taylor tables this run would load, on a processor whose flags this one has.
+  echo "::group::Restore HOL Light's saved state"
+  digest=$(sha256sum <"$state/hol-light-state.tar" | cut -d' ' -f1)
+  [ "$digest" = "$state_sha256" ] ||
+    { echo "the saved state's sha256 is $digest, not $state_sha256, which its making job printed"; exit 1; }
+  echo "saved state sha256 $digest, as its making job printed"
+  tar -C "$work" -xf "$state/hol-light-state.tar"
+  cat "$work/manifest"
+  for want in "hol-light $HOL_LIGHT_COMMIT" "dmtcp $DMTCP_COMMIT" "max_dim $most"; do
+    grep -qx "$want" "$work/manifest" || { echo "the saved state was not made with $want"; exit 1; }
+  done
+  here_flags=" $(cpu_flags)"
+  for flag in $(sed -n 's/^cpu-flags //p' "$work/manifest"); do
+    [[ $here_flags == *" $flag "* ]] ||
+      { echo "the saved state was made on a processor with $flag, and this one has none"; exit 1; }
+  done
+  echo "restored on: $(sed -n 's/^model name\s*: //p' /proc/cpuinfo | head -n 1)"
+  echo "::endgroup::"
+  hol=("$work/dmtcp/bin/dmtcp_restart" --new-coordinator --coord-port 0 "$work/hol.dmtcp")
+  echo 'print_endline "HOL Light state: restored";;' >"$session"
+else
+  echo "::group::Build HOL Light"
+  make -C "$work/hol-light" >/dev/null
+  echo "::endgroup::"
+  export HOLLIGHT_DIR="$work/hol-light"
+  hol=("$work/hol-light/ocaml-hol" -I "$(camlp5 -where)" -safe-string -I "$work/hol-light")
+  load_session >"$session"
+fi
+
+# The rest of the HOL Light session: FPTaylor's checker (FPTaylor's formal/load.hl, with this
+# machine's paths), then each certificate checked against its bound.
 {
-  # camlp5 8.03.06 and later need libraries of their own (PCRE2, Re, camlp-streams' Stream), which
-  # HOL Light's loader for OCaml before 4.14 does not load: it loads camlp5o.cma directly. So
-  # findlib loads camlp5 with everything it needs first, as HOL Light's own loader for OCaml 4.14
-  # does (load_camlp5_topfind.ml), and hol.ml then loads camlp5o.cma. camlp5's findlib package
-  # does not name camlp-streams, whose `Stream` camlp5o.cma needs, so it is loaded by name.
-  echo '#use "topfind";;'
-  echo 'Topfind.don'"'"'t_load ["compiler-libs.common"];;'
-  echo 'Topfind.load_deeply ["camlp-streams"; "pcre2"; "re"; "camlp5"];;'
-  echo "#use \"$work/hol-light/hol.ml\";;"
-  echo "let formal_ineqs_path = \"$work/hol-light/Formal_ineqs\";;"
-  echo "let fptaylor_path = \"$work/FPTaylor\";;"
-  echo 'let fptaylor_formal_path = fptaylor_path ^ "/formal";;'
-  echo 'load_path := formal_ineqs_path :: fptaylor_formal_path :: !load_path;;'
-  echo 'needs "arith_options.hl";;'
-  echo 'Arith_options.base := 100;;'
-  echo 'Arith_options.min_exp := 300;;'
-  echo 'needs "Multivariate/realanalysis.ml";;'
-  echo 'needs "verifier/m_verifier_main.hl";;'
   echo "let shard_terms : int list = [$shard_terms];;"
   echo 'needs "build_tform2.hl";;'
   echo 'needs "tests/utils.hl";;'
@@ -182,12 +312,10 @@ session="$work/session.ml"
     echo "Printf.printf \"$name assumed %d terms\\n\" (length (hyp bound_th));;"
     echo "(try let th = trans_bound bound_th \`$bound\` in print_bound th; print_newline (); print_endline \"$name: within K\" with Failure _ -> print_endline \"$name: above K\");;"
   done
-} >"$session"
+} >>"$session"
 cat "$session"
 
-export HOLLIGHT_DIR="$work/hol-light"
-"$work/hol-light/ocaml-hol" -I "$(camlp5 -where)" -safe-string -I "$work/hol-light" \
-  <"$session" | tee "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' || true
+"${hol[@]}" <"$session" | tee "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' || true
 # Every problem's certificate must have checked; whether each bound is within K is reported. The
 # toplevel may print its prompt, "# ", before a line.
 for check in "${checks[@]}"; do
