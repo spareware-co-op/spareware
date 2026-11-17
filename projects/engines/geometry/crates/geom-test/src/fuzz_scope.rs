@@ -142,9 +142,37 @@ pub const JOBS: [Job; 6] = [
     },
 ];
 
-/// The workflow's jobs the selection does not decide: the wait for the cheap checks, and the
-/// selection itself.
-pub const UNSCOPED_JOBS: [&str; 2] = ["cheap", "select"];
+/// The workflow's jobs the selection does not decide: the wait for the cheap checks, the
+/// selection itself, and the three jobs of a run by hand ([`BY_HAND_JOBS`]), which prove only the
+/// harnesses that run names.
+pub const UNSCOPED_JOBS: [&str; 5] = ["cheap", "select", "named", "kani-named", "kani-num-named"];
+
+/// One job of a run by hand (`workflow_dispatch`) that proves the harnesses the run names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ByHand {
+    /// Its key under `jobs:`.
+    pub name: &'static str,
+    /// The job whose steps it runs, word for word but for the planted violation.
+    pub copies: &'static str,
+    /// The run's input that names its harnesses, which is also the output of the job `named`
+    /// that hands them on.
+    pub input: &'static str,
+}
+
+/// The jobs of a run by hand that prove: each copies one of [`JOBS`]. `tests/fuzz_scope.rs` holds
+/// them to the workflow, and every other job to not running by hand.
+pub const BY_HAND_JOBS: [ByHand; 2] = [
+    ByHand {
+        name: "kani-named",
+        copies: "kani",
+        input: "kani",
+    },
+    ByHand {
+        name: "kani-num-named",
+        copies: "kani-num",
+        input: "kani_num",
+    },
+];
 
 /// One fuzz target of `geom-fuzz`: what its code is made of.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
