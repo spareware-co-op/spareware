@@ -1859,9 +1859,10 @@ mod proofs {
     ///
     /// The SAT solver is kissat, and an answer's two claims (the ends agree; the answer is that
     /// double) are two assertions. The claim is one solve, which took `CaDiCaL` (Kani's default)
-    /// 22 to 29 minutes on a hosted runner (runs 44020080291 and 44052487978). Under kissat it
-    /// takes 9 minutes with the two assertions apart (run 44077877942) and took 15.4 with them
-    /// joined by `&&` in one (run 44083788360): the same claim either way, since both must hold.
+    /// 22 to 29 minutes on a hosted runner (runs 44020080291 and 44052487978). Under kissat this
+    /// text took 6.7 and 9.8 minutes (runs 44089885389 and 44086584465), and 15.4 with the two
+    /// assertions joined by `&&` in one (run 44083788360): the same claim either way, since both
+    /// must hold.
     #[kani::proof]
     #[kani::solver(kissat)]
     fn agreed_answers_exactly_when_both_ends_round_alike() {
