@@ -211,6 +211,108 @@ fn a_tool_that_holds_the_whole_host_cuts_it() {
     );
 }
 
+#[test]
+fn each_tool_is_judged_against_the_host_itself() {
+    // The host keyed first, so the tool keyed next is never read as the host: a tool that misses
+    // takes nothing, and one that holds the host takes it all, whatever the other tool is.
+    let host = cuboid([2, 2, 2], [2, 2, 2]);
+    let far = cuboid([10, 0, 0], [2, 2, 2]);
+    let cube = cuboid([0, 0, 0], [6, 6, 6]);
+    let one = Cut {
+        host: solid(0, &host),
+        tools: vec![solid(1, &far), solid(2, &cube)],
+        reuse: None,
+    };
+    let out = cut(&ctx(), &SERIAL, &[one], BatchRule::Atomic).unwrap();
+    assert_eq!(
+        out.result[0].tools,
+        [
+            ToolReport {
+                key: key(1),
+                cut: false
+            },
+            ToolReport {
+                key: key(2),
+                cut: true
+            },
+        ]
+    );
+}
+
+#[test]
+fn a_cutter_that_holds_the_host_takes_nothing_of_it() {
+    // A cutter bounds no material, so one with no face near the host takes none of it.
+    let host = cuboid([2, 2, 2], [2, 2, 2]);
+    let cube = cuboid([0, 0, 0], [6, 6, 6]);
+    let one = Cut {
+        host: solid(0, &host),
+        tools: vec![Operand {
+            kind: OperandKind::Cutter,
+            ..solid(1, &cube)
+        }],
+        reuse: None,
+    };
+    let out = cut(&ctx(), &SERIAL, &[one], BatchRule::Atomic).unwrap();
+    assert_eq!(
+        out.result[0].tools,
+        [ToolReport {
+            key: key(1),
+            cut: false
+        }]
+    );
+    assert_eq!(sixfold(&out.result[0].result.body), 6 * 2 * 2 * 2);
+    assert!(
+        out.diagnostics
+            .iter()
+            .any(|d| d.code == "bool.tool_misses_host")
+    );
+}
+
+#[test]
+fn a_tool_whose_box_misses_or_only_touches_the_hosts_charges_no_trace() {
+    // A solid tool none of whose pieces has the host behind it is traced against the host only
+    // when their boxes overlap, and a cutter never is. Each box is a step and a half clear of its
+    // body (geom_poly::subdivide::around), so the boxes of a 4-step host and a tool 3 steps beyond
+    // one of its faces touch, and the box test is strict. Far from the host, a solid and a cutter
+    // make the same arrangement, so where neither is traced they cost the same.
+    let host = cuboid([0, 0, 0], [4, 4, 4]);
+    let as_a = |tool: &Body, kind: OperandKind| {
+        least(&Cut {
+            host: solid(0, &host),
+            tools: vec![Operand {
+                kind,
+                ..solid(1, tool)
+            }],
+            reuse: None,
+        })
+    };
+    // Far off; 3 steps beyond the host's high x face; 3 steps below its low x face.
+    for low in [[10, 0, 0], [7, 0, 0], [-5, 0, 0]] {
+        let tool = cuboid(low, [2, 2, 2]);
+        let one = Cut {
+            host: solid(0, &host),
+            tools: vec![solid(1, &tool)],
+            reuse: None,
+        };
+        let out = cut(&ctx(), &SERIAL, &[one], BatchRule::Atomic).unwrap();
+        assert_eq!(
+            out.result[0].tools,
+            [ToolReport {
+                key: key(1),
+                cut: false
+            }]
+        );
+        assert_eq!(
+            as_a(&tool, OperandKind::Solid),
+            as_a(&tool, OperandKind::Cutter),
+            "{low:?}"
+        );
+    }
+    // A step nearer, the boxes overlap and the solid is traced: the comparison sees a trace.
+    let near = cuboid([6, 0, 0], [2, 2, 2]);
+    assert!(as_a(&near, OperandKind::Solid) > as_a(&near, OperandKind::Cutter));
+}
+
 fn round() -> Body {
     let input = RoundInput {
         base: P3::new(50, 5, 10).unwrap(),
