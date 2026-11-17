@@ -39,7 +39,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use geom_test::deps::cargo_metadata;
-use geom_test::fuzz_scope::{JOBS, Job, Reach, Scope, Selection, UNSCOPED_JOBS};
+use geom_test::fuzz_scope::{BY_HAND_JOBS, JOBS, Job, Reach, Scope, Selection, UNSCOPED_JOBS};
 use serde_json::Value;
 use yaml_rust2::{Yaml, YamlLoader};
 
@@ -279,6 +279,290 @@ fn the_catalogue_is_every_job_and_target_of_the_workflow() {
         ),
         &JOBS,
         "select does not hand on kani_topo",
+    );
+}
+
+/// The step every proving job runs first on its first leg, which a run by hand leaves out.
+const PLANT_STEP: &str = "Kani fails on a planted violation";
+
+/// What is wrong with the workflow's run by hand (`workflow_dispatch`): it must prove only the
+/// harnesses it names, with the steps of the jobs that prove them on a push, and change nothing
+/// for any other event.
+fn by_hand_problems(workflow: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let w = parse(workflow);
+    let by_hand = "github.event_name == 'workflow_dispatch'";
+    let not_by_hand = "github.event_name != 'workflow_dispatch'";
+
+    // The inputs: one list of names for each proving job of a run by hand, each empty by default.
+    let inputs = &w["on"]["workflow_dispatch"]["inputs"];
+    let mut named: Vec<String> = keys(inputs);
+    named.sort();
+    let mut wanted: Vec<String> = BY_HAND_JOBS.iter().map(|j| j.input.to_owned()).collect();
+    wanted.sort();
+    if named != wanted {
+        found.push(format!(
+            "a run by hand takes the inputs {named:?}, not {wanted:?}"
+        ));
+    }
+    for name in &named {
+        let input = &inputs[name.as_str()];
+        if input["type"].as_str() != Some("string") || input["default"].as_str() != Some("") {
+            found.push(format!(
+                "the input {name} is not a string that is empty by default"
+            ));
+        }
+    }
+
+    // Every job but the run by hand's own is skipped by hand: `cheap` and `select` by their own
+    // `if`, every other job by needing `select` with no status function that would run it anyway.
+    for name in keys(&w["jobs"]) {
+        let y = &w["jobs"][name.as_str()];
+        let condition = y["if"].as_str().unwrap_or_default();
+        if name == "named" || BY_HAND_JOBS.iter().any(|j| j.name == name) {
+            continue;
+        }
+        if name == "cheap" || name == "select" {
+            if condition != not_by_hand {
+                found.push(format!(
+                    "{name} runs on a run by hand: its if is {condition:?}"
+                ));
+            }
+            continue;
+        }
+        let forced = ["always()", "failure()", "cancelled()"]
+            .iter()
+            .any(|f| condition.contains(f));
+        if forced || !needs(y).iter().any(|n| n == "select") {
+            found.push(format!(
+                "{name} would run on a run by hand: it must need select and not force its run"
+            ));
+        }
+    }
+
+    // The job that checks the names: by hand only, waiting for nothing, each name checked before
+    // it is handed on, no run without a name, and no input written into the script itself.
+    let job = &w["jobs"]["named"];
+    if job["if"].as_str() != Some(by_hand) || !job["needs"].is_badvalue() {
+        found.push("named does not run exactly on a run by hand".to_owned());
+    }
+    let steps: Vec<&Yaml> = job["steps"].as_vec().into_iter().flatten().collect();
+    let script = match steps.as_slice() {
+        [one] => one["run"].as_str().unwrap_or_default(),
+        _ => "",
+    };
+    if !script.contains("[[ ! \"$name\" =~ ^[A-Za-z0-9_:]+$ ]]") || script.contains("${{") {
+        found.push("named does not check every name before handing it on".to_owned());
+    }
+    if !script.contains("if [ \"$kani$kani_num\" = \"[][]\" ]; then") {
+        found.push("named does not refuse a run that names no harness".to_owned());
+    }
+    for by in &BY_HAND_JOBS {
+        let output = by.input;
+        let handed = format!("${{{{ steps.lists.outputs.{output} }}}}");
+        if job["outputs"][output].as_str() != Some(handed.as_str()) {
+            found.push(format!("named does not hand on {output}"));
+        }
+        let read = format!("${{{{ inputs.{output} }}}}");
+        let env = format!("INPUT_{}", output.to_uppercase());
+        let reads = steps
+            .iter()
+            .any(|s| s["env"][env.as_str()].as_str() == Some(read.as_str()));
+        if !reads || !script.contains(&format!("$(list \"${env}\")")) {
+            found.push(format!("named does not read the input {output}"));
+        }
+    }
+
+    // Each proving job of a run by hand: by hand only and only when its list has a name, one leg
+    // for each name, and the steps, runner and limit of the job it copies but for the plant.
+    for by in &BY_HAND_JOBS {
+        let (y, source) = (&w["jobs"][by.name], &w["jobs"][by.copies]);
+        if y.is_badvalue() || source.is_badvalue() {
+            found.push(format!(
+                "{} or {} is not in the workflow",
+                by.name, by.copies
+            ));
+            continue;
+        }
+        let condition = format!("{by_hand} && needs.named.outputs.{} != '[]'", by.input);
+        if y["if"].as_str() != Some(condition.as_str()) || needs(y) != ["named"] {
+            found.push(format!(
+                "{} does not run exactly by hand on the names it is handed",
+                by.name
+            ));
+        }
+        let variable = matrix_variable(source).unwrap_or_default();
+        let legs = format!(
+            "${{{{ fromJSON(needs.named.outputs.{} || '[\"\"]') }}}}",
+            by.input
+        );
+        if matrix_variable(y).as_deref() != Some(variable.as_str())
+            || y["strategy"]["matrix"][variable.as_str()].as_str() != Some(legs.as_str())
+        {
+            found.push(format!("{}'s legs are not the names it is handed", by.name));
+        }
+        let steps = |job: &Yaml| -> Vec<Yaml> {
+            job["steps"]
+                .as_vec()
+                .into_iter()
+                .flatten()
+                .filter(|s| s["name"].as_str() != Some(PLANT_STEP))
+                .cloned()
+                .collect()
+        };
+        let planted = source["steps"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .filter(|s| s["name"].as_str() == Some(PLANT_STEP))
+            .count();
+        if planted != 1 || steps(y).len() < 4 || steps(y) != steps(source) {
+            found.push(format!(
+                "{}'s steps are not {}'s but for the planted violation",
+                by.name, by.copies
+            ));
+        }
+        for key in ["runs-on", "timeout-minutes", "defaults"] {
+            if y[key].is_badvalue() || y[key] != source[key] {
+                found.push(format!("{}'s {key} is not {}'s", by.name, by.copies));
+            }
+        }
+    }
+
+    // A run by hand waits in a group of its own; every other run's group is the branch's.
+    let group = w["concurrency"]["group"].as_str().unwrap_or_default();
+    let own = format!("${{{{ {by_hand} && format('-by-hand-{{0}}', github.run_id) || '' }}}}");
+    if group != format!("kernel-fuzz-${{{{ github.ref }}}}{own}") {
+        found.push(format!("the concurrency group is {group:?}"));
+    }
+    found
+}
+
+/// A run by hand proves only the harnesses it names, as the jobs of a push prove them, and no
+/// other event reaches its jobs; each planted mistake is found.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository, which a WebAssembly test cannot"
+)]
+#[test]
+fn a_run_by_hand_proves_only_the_harnesses_it_names() {
+    let workflow = read(WORKFLOW);
+    let found = by_hand_problems(&workflow);
+    assert!(found.is_empty(), "{found:#?}");
+
+    let planted = |label: &str, from: &str, to: &str, expect: &str| {
+        let text = workflow.replacen(from, to, 1);
+        assert_ne!(text, workflow, "{label}: the planted edit {from:?} applies");
+        let found = by_hand_problems(&text);
+        assert!(
+            found.iter().any(|p| p.contains(expect)),
+            "{label}: {found:#?}"
+        );
+    };
+    // An input lost, and one that is not empty by default.
+    planted(
+        "input-lost",
+        "      kani_num:\n        description",
+        "      kani_other:\n        description",
+        "a run by hand takes the inputs",
+    );
+    planted(
+        "input-default",
+        "        default: \"\"\n        type: string\n      kani:",
+        "        default: \"all\"\n        type: string\n      kani:",
+        "the input kani_num is not a string that is empty by default",
+    );
+    // A job of a push that a run by hand would run: the selection, the cheap checks, a proving
+    // job that does not wait for the selection, and one that forces its run.
+    planted(
+        "select-runs",
+        "    name: Which proofs the change can affect\n    if: github.event_name != 'workflow_dispatch'\n",
+        "    name: Which proofs the change can affect\n",
+        "select runs on a run by hand",
+    );
+    planted(
+        "cheap-runs",
+        "    if: github.event_name != 'workflow_dispatch'\n    uses: ./.github/workflows/cheap-checks.yml\n",
+        "    uses: ./.github/workflows/cheap-checks.yml\n",
+        "cheap runs on a run by hand",
+    );
+    planted(
+        "no-needs",
+        "    needs: select\n    if: needs.select.outputs.kani_op",
+        "    if: needs.select.outputs.kani_op",
+        "kani-op would run on a run by hand",
+    );
+    planted(
+        "forced",
+        "    if: needs.select.outputs.kani_format == 'true'\n",
+        "    if: always() && needs.select.outputs.kani_format == 'true'\n",
+        "kani-format would run on a run by hand",
+    );
+    // The job that checks the names: on every event, without its check, without its refusal, and
+    // with an input written into its script.
+    planted(
+        "named-always",
+        "    name: The harnesses named by hand\n    if: github.event_name == 'workflow_dispatch'\n",
+        "    name: The harnesses named by hand\n",
+        "named does not run exactly on a run by hand",
+    );
+    planted(
+        "unchecked",
+        "              if [[ ! \"$name\" =~ ^[A-Za-z0-9_:]+$ ]]; then\n",
+        "              if [[ -z \"$name\" ]]; then\n",
+        "named does not check every name",
+    );
+    planted(
+        "injected",
+        "          kani=$(list \"$INPUT_KANI\")\n",
+        "          kani=$(list \"${{ inputs.kani }}\")\n",
+        "named does not check every name",
+    );
+    planted(
+        "no-refusal",
+        "          if [ \"$kani$kani_num\" = \"[][]\" ]; then\n",
+        "          if false; then\n",
+        "named does not refuse a run that names no harness",
+    );
+    planted(
+        "not-handed",
+        "      kani_num: ${{ steps.lists.outputs.kani_num }}\n",
+        "",
+        "named does not hand on kani_num",
+    );
+    // A proving job of a run by hand: on other events, on other legs, and with other steps than
+    // the job it copies (the first edit changes the copied job's command, the second the copy's
+    // runner).
+    planted(
+        "on-a-push",
+        "    if: github.event_name == 'workflow_dispatch' && needs.named.outputs.kani_num != '[]'\n",
+        "    if: needs.named.outputs.kani_num != '[]'\n",
+        "kani-num-named does not run exactly by hand",
+    );
+    planted(
+        "other-legs",
+        "        harness: ${{ fromJSON(needs.named.outputs.kani || '[\"\"]') }}\n",
+        "        harness: [orient2d_fuzz]\n",
+        "kani-named's legs are not the names it is handed",
+    );
+    planted(
+        "other-steps",
+        "          cargo kani -p geom-num --harness \"${{ matrix.proof }}\" --exact\n",
+        "          cargo kani -p geom-num --harness \"${{ matrix.proof }}\" --exact --no-assertion-reach-checks\n",
+        "kani-num-named's steps are not kani-num's",
+    );
+    planted(
+        "other-limit",
+        "    if: github.event_name == 'workflow_dispatch' && needs.named.outputs.kani != '[]'\n    runs-on: ubuntu-latest\n    timeout-minutes: 30\n",
+        "    if: github.event_name == 'workflow_dispatch' && needs.named.outputs.kani != '[]'\n    runs-on: ubuntu-latest\n    timeout-minutes: 300\n",
+        "kani-named's timeout-minutes is not kani's",
+    );
+    // A run by hand in the branch's own group, where it would wait behind another.
+    planted(
+        "group",
+        "${{ github.event_name == 'workflow_dispatch' && format('-by-hand-{0}', github.run_id) || '' }}\n",
+        "\n",
+        "the concurrency group is",
     );
 }
 
