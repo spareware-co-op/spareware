@@ -234,9 +234,7 @@ fn run(extra: &[String]) -> ExitCode {
         println!("golden run: cargo {}", args.join(" "));
         match Command::new(&cargo).args(&args).current_dir(&root).status() {
             Ok(s) if s.success() => {}
-            Ok(s) => {
-                println!("golden run: the build of a crate's groups failed ({s}); each runs alone")
-            }
+            Ok(s) => println!("golden run: a crate's build failed ({s}); each runs alone"),
             Err(e) => return fail(&format!("cannot run cargo: {e}")),
         }
     }
