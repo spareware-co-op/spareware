@@ -1109,7 +1109,7 @@ jobs:
           # The artifact keeps no file modes. The binary is the plan's own locked build of the
           # pinned version from crates.io, checked here before it runs anything.
           install -m 755 "$RUNNER_TEMP/miri-plan/cargo-nextest" "$HOME/.cargo/bin/cargo-nextest"
-          cargo nextest --version | grep -qxF "cargo-nextest $CARGO_NEXTEST_VERSION"
+          cargo nextest --version | grep -qxF "release: $CARGO_NEXTEST_VERSION"
           packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
           echo "$packages"
           echo "PACKAGES=$packages" >> "$GITHUB_ENV"
@@ -1182,7 +1182,7 @@ jobs:
           # The artifact keeps no file modes. The binary is the plan's own locked build of the
           # pinned version from crates.io, checked here before it runs anything.
           install -m 755 "$RUNNER_TEMP/miri-plan/cargo-nextest" "$HOME/.cargo/bin/cargo-nextest"
-          cargo nextest --version | grep -qxF "cargo-nextest $CARGO_NEXTEST_VERSION"
+          cargo nextest --version | grep -qxF "release: $CARGO_NEXTEST_VERSION"
           packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
           echo "$packages"
           echo "PACKAGES=$packages" >> "$GITHUB_ENV"

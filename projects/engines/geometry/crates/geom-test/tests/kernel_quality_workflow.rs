@@ -1065,7 +1065,7 @@ fn only_geom_pool_runs_under_tree_borrows_and_only_while_crossbeam_needs_it() {
 const HANDOVER_INSTALL: &str =
     "install -m 755 \"$RUNNER_TEMP/miri-plan/cargo-nextest\" \"$HOME/.cargo/bin/cargo-nextest\"";
 const HANDOVER_CHECK: &str =
-    "cargo nextest --version | grep -qxF \"cargo-nextest $CARGO_NEXTEST_VERSION\"";
+    "cargo nextest --version | grep -qxF \"release: $CARGO_NEXTEST_VERSION\"";
 
 /// The Miri jobs that run from the plan's hand-over.
 const FROM_THE_PLAN: [&str; 2] = ["miri", "miri-pool"];
