@@ -774,44 +774,20 @@ mod proofs {
         }
     }
 
-    /// An operation of two points, `got`, encloses the rounded result of the same operation on
-    /// the doubles, `rounded`, with ordered finite bounds, or refuses.
-    ///
-    /// `add`, `sub` and `mul` each have a harness of this claim, for every pair of finite doubles
-    /// and never a panic. As one harness of the three operations the claims shared one solve of
-    /// 46 minutes on a hosted runner (run 44020080291); apart, `add`'s took 9 and `sub`'s 8
-    /// (run 44046765712).
-    fn encloses(got: Result<Interval, NumError>, rounded: f64) {
-        if let Ok(r) = got {
-            assert!(r.lo() <= r.hi());
-            if rounded.is_finite() {
-                assert!(r.contains(rounded));
+    /// `add`, `sub` and `mul` of two points enclose the rounded result of the same operation,
+    /// with ordered finite bounds, or refuse; never a panic.
+    #[kani::proof]
+    fn add_sub_mul_enclose_the_rounded_result() {
+        let (x, y) = (finite(), finite());
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        for (got, rounded) in [(a.add(b), x + y), (a.sub(b), x - y), (a.mul(b), x * y)] {
+            if let Ok(r) = got {
+                assert!(r.lo() <= r.hi());
+                if rounded.is_finite() {
+                    assert!(r.contains(rounded));
+                }
             }
         }
-    }
-
-    /// `add` of two points [`encloses`] the rounded sum, or refuses; never a panic.
-    #[kani::proof]
-    fn add_encloses_the_rounded_result() {
-        let (x, y) = (finite(), finite());
-        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
-        encloses(a.add(b), x + y);
-    }
-
-    /// `sub` of two points [`encloses`] the rounded difference, or refuses; never a panic.
-    #[kani::proof]
-    fn sub_encloses_the_rounded_result() {
-        let (x, y) = (finite(), finite());
-        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
-        encloses(a.sub(b), x - y);
-    }
-
-    /// `mul` of two points [`encloses`] the rounded product, or refuses; never a panic.
-    #[kani::proof]
-    fn mul_encloses_the_rounded_result() {
-        let (x, y) = (finite(), finite());
-        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
-        encloses(a.mul(b), x * y);
     }
 
     /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
