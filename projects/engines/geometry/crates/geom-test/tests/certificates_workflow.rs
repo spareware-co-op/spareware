@@ -318,28 +318,6 @@ fn the_shards_restore_only_a_state_their_run_made_and_checked() {
         "gives no sha256",
     );
 
-    // Planted: a shard that can start without the state (run 44012975257: the states job passed
-    // with no state, and every shard then failed to find the artifact).
-    finds(
-        &planted(
-            &workflow,
-            " && needs.hol-light-states.result == 'success' }}",
-            " }}",
-        ),
-        &script,
-        "can start without the state",
-    );
-    finds(
-        &planted(&workflow, "          set -o pipefail\n", ""),
-        &script,
-        "can pass without a state",
-    );
-    finds(
-        &planted(&workflow, NO_STATE, r#"echo "$problem: no saved state""#),
-        &script,
-        "can pass without a state",
-    );
-
     // Planted: the digest check skipped, in the workflow or in the script.
     finds(
         &planted(&workflow, "-e FPTAYLOR_STATE_SHA256 ", ""),
@@ -377,4 +355,38 @@ fn the_shards_restore_only_a_state_their_run_made_and_checked() {
         &format!("  {DIGEST_COMPARED} exit 1\n  for want in "),
     );
     finds(&workflow, &after, "skips the digest check before");
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_shard_never_starts_without_its_state() {
+    let workflow = read(WORKFLOW);
+    let script = read(SCRIPT);
+    let found = problems(&workflow, &script);
+    assert!(found.is_empty(), "{found:#?}");
+
+    // Planted: a shard that can start without the state (run 44012975257: the states job passed
+    // with no state, and every shard then failed to find the artifact).
+    finds(
+        &planted(
+            &workflow,
+            " && needs.hol-light-states.result == 'success' }}",
+            " }}",
+        ),
+        &script,
+        "can start without the state",
+    );
+    finds(
+        &planted(&workflow, "          set -o pipefail\n", ""),
+        &script,
+        "can pass without a state",
+    );
+    finds(
+        &planted(&workflow, NO_STATE, r#"echo "$problem: no saved state""#),
+        &script,
+        "can pass without a state",
+    );
 }
