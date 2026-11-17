@@ -38,11 +38,15 @@
 //!   Miri, fails on a test with no row, and hands every partition and geom-pool's job its
 //!   filterset, the crates and the cargo-nextest it built, for one day; no other Miri job lists
 //!   every test or builds a tool, and each checks the binary's version. The partitions are the
-//!   plan's, each ending within what is left of 15 minutes on a runner a fifth slower after the
+//!   plan's, each ending within what is left of 15 minutes on a runner 1.6 times slower after the
 //!   measured set-up (`geom_test::miri::PART_SECONDS`), and geom-pool's tests run by the table
 //!   like any other's. Each shown to be checked by a planted change (a partition that lists every
 //!   test or builds cargo-nextest, a matrix not the plan's, the hand-over kept a month or not
 //!   checked, geom-pool run whole).
+//! - **A partition's report is never lost silently.** Its upload is two tries of the same
+//!   artifact, each bounded to a few minutes, so a stalled upload cannot hold the job to its limit;
+//!   the first's failure only starts the second, and the second's fails the job. Each shown by a
+//!   planted change (a try unbounded, the second run every time or hidden, another name, none).
 //! - **A later push judges what it can reach.** `geom_test::increment` judges again every file of
 //!   the change whose crate's tests what changed since the last clean head reaches, held here to
 //!   planted changes that must be judged (a changed line, a changed test, a removed ledger entry,
@@ -1240,14 +1244,17 @@ fn miris_jobs_run_from_one_plan_each_within_fifteen_minutes() {
         miri::finishing(&rows).len(),
         "a finishing test left out"
     );
-    // The arithmetic: a part's set-up and its listing and tests fill 15 minutes on a runner a
-    // fifth slower, and the longest test that finishes fits a part alone.
-    assert_eq!(
-        (miri::FIXED_SECONDS + miri::PART_SECONDS) * miri::SLOWER.0,
-        miri::JOB_SECONDS * miri::SLOWER.1
-    );
+    // The arithmetic: a part's set-up and its listing and tests fill 15 minutes, the tests
+    // planned on a runner 1.6 times slower and never over the stop, and the longest test that
+    // finishes fits a part alone with its binary's listing on that runner.
+    assert_eq!(miri::FIXED_SECONDS + miri::PART_SECONDS, miri::JOB_SECONDS);
     assert_eq!(miri::JOB_SECONDS, 15 * 60);
-    const { assert!(miri::BUDGET + miri::LIST_SECONDS <= miri::PART_SECONDS) };
+    assert_eq!(miri::FIXED_SECONDS, 120);
+    assert_eq!(miri::SLOWER, (8, 5));
+    assert_eq!(miri::planned(miri::BUDGET - 1), miri::BUDGET);
+    assert_eq!(miri::planned(300), 480);
+    let listing = (miri::LIST_SECONDS * miri::SLOWER.0).div_ceil(miri::SLOWER.1);
+    assert!(miri::BUDGET + listing <= miri::PART_SECONDS);
     assert_eq!(miri::TREE_BORROWS_CRATE, TREE_BORROWS_CRATE);
     // Seeded violations: each must be reported.
     for (from, to, said) in [
@@ -1306,6 +1313,177 @@ fn miris_jobs_run_from_one_plan_each_within_fifteen_minutes() {
         let planted = text.replacen(from, to, 1);
         assert_ne!(planted, text, "the planted edit {from:?} applies");
         let found = miri_plan_problems(&planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// A Miri partition's report: the artifact `miri-<partition>`, the files nextest writes.
+const MIRI_REPORT: (&str, &str) = (
+    "miri-${{ matrix.partition }}",
+    "target/nextest/*/junit*.xml",
+);
+
+/// The condition of the second try: the first was tried and did not succeed.
+const MIRI_SECOND_TRY: &str =
+    "${{ !cancelled() && steps.report.outcome != 'success' && steps.report.outcome != 'skipped' }}";
+
+/// What is wrong with how a Miri partition uploads its report, given the workflow's text: its last
+/// two steps are two tries of the same artifact, each bounded to a few minutes; the first runs
+/// whatever the tests did and its failure only starts the second; the second runs only then, may
+/// replace what the first left, and its failure fails the job. No other step continues on error.
+fn miri_upload_problems(text: &str) -> Vec<String> {
+    let w = YamlLoader::load_from_str(text).unwrap().remove(0);
+    let steps: Vec<&Yaml> = w["jobs"]["miri"]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .collect();
+    let uploads: Vec<(usize, &Yaml)> = steps
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(_, s)| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
+        })
+        .collect();
+    let mut found = Vec::new();
+    let [(first_at, first), (second_at, second)] = uploads.as_slice() else {
+        found.push(format!(
+            "miri uploads its report in {} steps, not two tries",
+            uploads.len()
+        ));
+        return found;
+    };
+    if *second_at != first_at + 1 || *second_at + 1 != steps.len() {
+        found.push("miri's two tries are not its last two steps".to_owned());
+    }
+    for (which, s) in [("first", first), ("second", second)] {
+        if s["with"]["name"].as_str() != Some(MIRI_REPORT.0)
+            || s["with"]["path"].as_str() != Some(MIRI_REPORT.1)
+        {
+            found.push(format!(
+                "miri's {which} try does not upload {} as {}",
+                MIRI_REPORT.1, MIRI_REPORT.0
+            ));
+        }
+        if !s["timeout-minutes"]
+            .as_i64()
+            .is_some_and(|m| (1..=5).contains(&m))
+        {
+            found.push(format!(
+                "miri's {which} try is not bounded to a few minutes"
+            ));
+        }
+    }
+    if first["id"].as_str() != Some("report") || first["if"].as_str() != Some("${{ !cancelled() }}")
+    {
+        found.push("miri's first try does not run, as `report`, whatever the tests did".to_owned());
+    }
+    if first["continue-on-error"].as_bool() != Some(true) {
+        found.push(
+            "miri's first try fails the job by itself, so a second try that works cannot pass it"
+                .to_owned(),
+        );
+    }
+    if second["if"].as_str() != Some(MIRI_SECOND_TRY) {
+        found.push("miri's second try does not run only when the first did not succeed".to_owned());
+    }
+    if second["with"]["overwrite"].as_bool() != Some(true) {
+        found.push("miri's second try cannot replace what the first left".to_owned());
+    }
+    for (at, s) in steps.iter().enumerate() {
+        if at != *first_at && !s["continue-on-error"].is_badvalue() {
+            found.push(format!(
+                "miri's step {} continues on error, which hides a lost report or a red test",
+                at + 1
+            ));
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_partitions_report_is_uploaded_in_two_bounded_tries_and_a_lost_one_fails_the_job() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let found = miri_upload_problems(&text);
+    assert!(found.is_empty(), "{found:#?}");
+    let second_if = format!("        if: {MIRI_SECOND_TRY}\n");
+    let second_if_timed = format!("{second_if}        timeout-minutes: 3\n");
+    let second_if_hidden = format!("{second_if}        continue-on-error: true\n");
+    let second = "      - name: The report again, the first try having failed\n        uses: \
+                  actions/upload-artifact@";
+    let second_gone = "      - name: The report again, the first try having failed\n        uses: \
+                       actions/download-artifact@";
+    let tests_step = "/part-${{ matrix.partition }}.txt\"))\"\n";
+    let tests_step_hidden = format!("{tests_step}        continue-on-error: true\n");
+    // Seeded violations: each must be reported.
+    for (from, to, said) in [
+        // The first try unbounded, or bounded to the job's limit.
+        (
+            "        timeout-minutes: 3\n        continue-on-error: true\n",
+            "        continue-on-error: true\n",
+            "first try is not bounded",
+        ),
+        (
+            "        timeout-minutes: 3\n        continue-on-error: true\n",
+            "        timeout-minutes: 30\n        continue-on-error: true\n",
+            "first try is not bounded",
+        ),
+        // The first try's failure failing the job.
+        (
+            "        timeout-minutes: 3\n        continue-on-error: true\n",
+            "        timeout-minutes: 3\n",
+            "first try fails the job by itself",
+        ),
+        // The second try unbounded.
+        (
+            second_if_timed.as_str(),
+            second_if.as_str(),
+            "second try is not bounded",
+        ),
+        // The second try run every time, or only on a failure, not on a timeout.
+        (
+            second_if.as_str(),
+            "        if: ${{ !cancelled() }}\n",
+            "second try does not run only when",
+        ),
+        (
+            second_if.as_str(),
+            "        if: steps.report.outcome == 'failure'\n",
+            "second try does not run only when",
+        ),
+        // The second try's failure hidden.
+        (
+            second_if.as_str(),
+            second_if_hidden.as_str(),
+            "continues on error",
+        ),
+        // The second try under another name than its reader's.
+        (
+            "          name: miri-${{ matrix.partition }}\n          path: target/nextest/*/junit*.xml\n          if-no-files-found: ignore\n          overwrite: true\n",
+            "          name: miri-${{ matrix.partition }}-again\n          path: target/nextest/*/junit*.xml\n          if-no-files-found: ignore\n          overwrite: true\n",
+            "second try does not upload",
+        ),
+        // The second try unable to replace a part the first left.
+        (
+            "          overwrite: true\n",
+            "",
+            "cannot replace what the first left",
+        ),
+        // No second try.
+        (second, second_gone, "not two tries"),
+        // The tests' step made to pass whatever they did.
+        (tests_step, tests_step_hidden.as_str(), "continues on error"),
+    ] {
+        let planted = text.replacen(from, to, 1);
+        assert_ne!(planted, text, "the planted edit {from:?} applies");
+        let found = miri_upload_problems(&planted);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }

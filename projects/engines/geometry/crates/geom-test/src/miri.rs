@@ -40,12 +40,14 @@
 //!   with every such test named, so a fault Miri found is read, never written down as slow.
 //! - **Every finishing test in exactly one partition.** A partition's filterset names its tests
 //!   one by one, so every finishing test runs once, and native-only tests in none.
-//! - **Each Miri job within 15 minutes, on a cold cache and a runner a fifth slower.** With
-//!   [`AT_ONCE`] tests at a time, [`Plan::part_seconds`] is the most a partition's tests can take
-//!   in whatever order nextest starts them, and nextest lists each of its binaries under Miri
-//!   first, [`LIST_SECONDS`] a binary. [`gate_plan`] packs the finishing tests first fit
-//!   decreasing into partitions whose listing and tests each end within [`PART_SECONDS`], what a
-//!   job has left after [`FIXED_SECONDS`] on a runner [`SLOWER`]; any finishing test, under
+//! - **Each Miri job within 15 minutes, on a cold cache and a runner 1.6 times slower.** A gate
+//!   job plans each finishing test at [`planned`] seconds: its row's seconds on a runner
+//!   [`SLOWER`], and never over [`BUDGET`], where nextest stops it. With [`AT_ONCE`] tests at a
+//!   time, [`Plan::part_seconds`] is the most a partition's tests can take in whatever order
+//!   nextest starts them, and nextest lists each of its binaries under Miri first,
+//!   [`LIST_SECONDS`] a binary, on that runner [`SLOWER`] too. [`gate_plan`] packs the finishing
+//!   tests first fit decreasing into partitions whose listing and tests each end within
+//!   [`PART_SECONDS`], what a job has left after [`FIXED_SECONDS`]; any finishing test, under
 //!   [`BUDGET`], fits one alone with its listing, so none is left out for want of a partition.
 //!   geom-pool's finishing tests, which run under Tree
 //!   Borrows, are one part of their own, held to the same rule. `kernel_quality_workflow.rs` holds
@@ -101,16 +103,20 @@ pub const AT_ONCE: u64 = 4;
 /// set-up counted.
 pub const JOB_SECONDS: u64 = 900;
 
-/// How much slower than the table's runners a runner may be, as a fraction (num, den): a fifth.
-/// A partition is sized so that its job ends within [`JOB_SECONDS`] on such a runner.
-pub const SLOWER: (u64, u64) = (6, 5);
+/// How much slower than the table's runners a runner may be, as a fraction (num, den): 1.6 times.
+/// A partition is sized so that its job ends within [`JOB_SECONDS`] on such a runner. Run
+/// 44075531453 ran its partitions' tests at 0.84 to 1.59 times the table's seconds, the same
+/// tests at the same concurrency: GitHub's runners vary that much.
+pub const SLOWER: (u64, u64) = (8, 5);
 
 /// What a partition's job costs before nextest lists its tests, in seconds, with a cold cache:
 /// checkout, both toolchains, Miri's sysroot and the cache's restore (44 to 60 s, main's runs
 /// 43973938568 and 44000736866), the kernel built under Miri (44 to 47 s), the plan's hand-over
 /// downloaded and its cargo-nextest put in place (a few seconds), and the upload and the cache's
 /// post step (about 6 s). The plan job (`miri-plan`) lists every test under Miri once, and builds
-/// cargo-nextest and this tool once, so no partition does.
+/// cargo-nextest and this tool once, so no partition does. Most of it is downloads, which a slow
+/// runner does not stretch: run 44075531453's partition 64, whose tests ran 1.59 times the
+/// table's seconds, spent 53 s before its test step and 2 s on its upload.
 pub const FIXED_SECONDS: u64 = 120;
 
 /// What nextest's listing of a partition's tests costs for each test binary it runs tests of, in
@@ -118,19 +124,31 @@ pub const FIXED_SECONDS: u64 = 120;
 /// run 44000736866: 20 to 50 s for 43 to 55 binaries, at most 0.97 s a binary).
 pub const LIST_SECONDS: u64 = 1;
 
-/// The longest a partition's listing and tests may take, in seconds: what is left of
-/// [`JOB_SECONDS`] on a runner [`SLOWER`] after [`FIXED_SECONDS`], so `(120 + 630) x 6/5 = 900`;
-/// its tests take at most [`Plan::part_seconds`] at [`AT_ONCE`] at a time, its listing
-/// [`LIST_SECONDS`] a binary. It is not [`BUDGET`], the longest a test may take and still
-/// finish under Miri: the two are two constants, and [`BUDGET`] with one binary's listing is
-/// within this, so a test that finishes always has a partition that holds it and never leaves
-/// Miri for want of one (`kernel_quality_workflow.rs` and this module's tests hold the
+/// The longest a partition's listing and tests may take, in seconds, on a runner [`SLOWER`]: what
+/// is left of [`JOB_SECONDS`] after [`FIXED_SECONDS`], so `120 + 780 = 900`; its tests take at
+/// most [`Plan::part_seconds`] of their [`planned`] seconds at [`AT_ONCE`] at a time, its listing
+/// [`LIST_SECONDS`] a binary on that runner. It is not [`BUDGET`], the longest a test may take
+/// and still finish under Miri: the two are two constants, and [`BUDGET`] with one binary's
+/// listing is within this, so a test that finishes always has a partition that holds it and never
+/// leaves Miri for want of one (`kernel_quality_workflow.rs` and this module's tests hold the
 /// arithmetic).
-pub const PART_SECONDS: u64 = 630;
+pub const PART_SECONDS: u64 = 780;
 
 /// The budget of one test under Miri, in seconds: the `default-miri` profile of
 /// `.config/nextest.toml` stops a test still running then. A finishing row is always under it.
 pub const BUDGET: u64 = 600;
+
+/// `seconds` on a runner [`SLOWER`], rounded up.
+fn on_a_slower_runner(seconds: u64) -> u64 {
+    seconds.saturating_mul(SLOWER.0).div_ceil(SLOWER.1)
+}
+
+/// The seconds a gate job plans a finishing test of `seconds` at: on a runner [`SLOWER`], rounded
+/// up, and never over [`BUDGET`], since nextest stops a test there whatever the runner.
+#[must_use]
+pub fn planned(seconds: u64) -> u64 {
+    on_a_slower_runner(seconds).min(BUDGET)
+}
 
 /// The one crate Miri runs under Tree Borrows (the workflow's job `miri-pool` says why): its
 /// finishing tests run in that job, and no partition holds them.
@@ -786,9 +804,9 @@ pub struct Plan {
 /// What a part must end within ([`pack`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rule {
-    /// A Miri gate job (`miri`, `miri-pool`): its tests and its listing of their binaries within
-    /// [`PART_SECONDS`], so the job ends within [`JOB_SECONDS`] on a runner [`SLOWER`] after
-    /// [`FIXED_SECONDS`].
+    /// A Miri gate job (`miri`, `miri-pool`): its tests at their [`planned`] seconds and its
+    /// listing of their binaries on a runner [`SLOWER`] within [`PART_SECONDS`], so the job ends
+    /// within [`JOB_SECONDS`] on such a runner after [`FIXED_SECONDS`].
     Job,
     /// A measuring part (`miri-measure`): its tests within [`BUDGET`], the measuring stop.
     Stop,
@@ -807,15 +825,17 @@ fn any_order(total: u64, longest: u64, count: usize) -> u64 {
 }
 
 /// Whether a part of `count` tests of `total` seconds, the longest `longest`, from `binaries`
-/// test binaries, ends within `rule`.
+/// test binaries, ends within `rule`. For [`Rule::Job`] the seconds are [`planned`] ones.
 fn within(rule: Rule, total: u64, longest: u64, count: usize, binaries: usize) -> bool {
     let tests = any_order(total, longest, count);
     match rule {
         Rule::Stop => tests <= BUDGET,
         Rule::Job => {
-            let listing = u64::try_from(binaries)
-                .unwrap_or(u64::MAX)
-                .saturating_mul(LIST_SECONDS);
+            let listing = on_a_slower_runner(
+                u64::try_from(binaries)
+                    .unwrap_or(u64::MAX)
+                    .saturating_mul(LIST_SECONDS),
+            );
             listing.saturating_add(tests) <= PART_SECONDS
         }
     }
@@ -823,10 +843,20 @@ fn within(rule: Rule, total: u64, longest: u64, count: usize, binaries: usize) -
 
 /// `tests` packed into the fewest parts this packs them into that each end within `rule`: first
 /// fit decreasing, each test, the longest first (then by binary and name), into the first part it
-/// fits, or a new part. No tests give one empty part. `None` if a test alone does not fit.
+/// fits, or a new part. No tests give one empty part. `None` if a test alone does not fit. For
+/// [`Rule::Job`] the tests are finishing ones, each under [`BUDGET`] (`None` for one that is
+/// not), and the plan holds them at their [`planned`] seconds.
 #[must_use]
 pub fn pack(tests: &[Timed], rule: Rule) -> Option<Plan> {
     let mut order = tests.to_vec();
+    if rule == Rule::Job {
+        for t in &mut order {
+            if t.seconds >= BUDGET {
+                return None;
+            }
+            t.seconds = planned(t.seconds);
+        }
+    }
     order.sort_by(|x, y| {
         y.seconds
             .cmp(&x.seconds)
@@ -997,7 +1027,8 @@ pub fn measure_matrix(tests: usize, count: usize) -> String {
 }
 
 impl Plan {
-    /// How many partitions.
+    /// How many partitions. A gate job's plan ([`Rule::Job`]) holds each test at its [`planned`]
+    /// seconds, so its [`Plan::part_seconds`] and [`Plan::longest`] are on a runner [`SLOWER`].
     #[must_use]
     pub fn len(&self) -> usize {
         self.parts.len()
@@ -1533,30 +1564,34 @@ mod tests {
         let none = pack(&[], Rule::Job).unwrap();
         assert_eq!(none.len(), 1);
         assert_eq!(none.filterset(1).unwrap(), "none()");
-        // A job's partitions: the same, 590 s and two binaries' listing within PART_SECONDS.
+        // A job's partitions: the same split, each test planned on a runner 1.6 times slower and
+        // never over the stop (600, 600, 600, 160 s, then 144 and 16 s), with its binaries'
+        // listing within PART_SECONDS.
         let p = pack(&tests, Rule::Job).unwrap();
         assert_eq!(p.len(), 2);
         assert_eq!(p.tests_of(2), [("c", "x"), ("c", "y")]);
         assert!((1..=2).all(|k| p.ends_within(k, Rule::Job)));
-        // Many quick tests of many binaries: the listing fills the job first. 503 tests of 1 s in
-        // 503 binaries: 127 s of tests at most and 503 s of listing fit; 504 do not.
-        let wide: Vec<Timed> = (0..504).map(|i| timed(1, &format!("w{i}"), "t")).collect();
-        assert_eq!(pack(&wide[..503], Rule::Job).unwrap().len(), 1);
+        assert_eq!(p.longest(), BUDGET);
+        assert_eq!(p.part_seconds(2), 144);
+        // Many quick tests of many binaries: the listing fills the job first. 370 tests of 1 s
+        // (2 s planned) in 370 binaries: 187 s of tests at most and 592 s of listing fit; 371 do
+        // not.
+        let wide: Vec<Timed> = (0..371).map(|i| timed(1, &format!("w{i}"), "t")).collect();
+        assert_eq!(pack(&wide[..370], Rule::Job).unwrap().len(), 1);
         assert_eq!(pack(&wide, Rule::Job).unwrap().len(), 2);
-        // Four tests of 500 s start at once and end at 500 s; a fifth may start only then.
+        // Four tests of 500 s, planned at the stop, start at once and end by 600 s; a fifth may
+        // start only then.
         let many: Vec<Timed> = (0..40).map(|i| timed(500, "d", &format!("t{i}"))).collect();
         let p = pack(&many, Rule::Job).unwrap();
         assert_eq!(p.len(), 10);
         assert!((1..=10).all(|k| p.tests_of(k).len() == 4));
-        // Alone, a test fits a job only with its binary's listing within PART_SECONDS.
+        // A test that does not finish fits no job; one that finishes fits alone, planned at the
+        // stop, with its binary's listing.
         assert!(pack(&[timed(901, "e", "alone")], Rule::Job).is_none());
-        assert!(pack(&[timed(PART_SECONDS, "e", "alone")], Rule::Job).is_none());
-        assert_eq!(
-            pack(&[timed(BUDGET - 1, "e", "alone")], Rule::Job)
-                .unwrap()
-                .len(),
-            1
-        );
+        assert!(pack(&[timed(BUDGET, "e", "alone")], Rule::Job).is_none());
+        let alone = pack(&[timed(BUDGET - 1, "e", "alone")], Rule::Job).unwrap();
+        assert_eq!(alone.len(), 1);
+        assert_eq!(alone.part_seconds(1), BUDGET);
     }
 
     #[test]
@@ -1581,21 +1616,27 @@ mod tests {
         assert_eq!(p.part_seconds(0), 0);
         assert_eq!(p.part_seconds(2), 0);
         assert_eq!(p.binaries(2), 0);
-        // A job's listing counts: 630 s of tests and listing in all; 575 s of tests here.
+        // A job's listing counts, on the slower runner: 780 s of tests and listing in all; 575 s
+        // of tests here leave 205 s, 128 binaries' listing at 1.6 s each, rounded up.
         assert_eq!(any_order(2_000, 100, 20), 575);
-        assert!(within(Rule::Job, 2_000, 100, 20, 55));
-        assert!(!within(Rule::Job, 2_000, 100, 20, 56));
-        // The longest test that finishes fits alone, with its binary's listing.
-        assert!(within(Rule::Job, BUDGET - 1, BUDGET - 1, 1, 1));
+        assert!(within(Rule::Job, 2_000, 100, 20, 128));
+        assert!(!within(Rule::Job, 2_000, 100, 20, 129));
+        // The longest a test is planned at, the stop, fits alone, with its binary's listing.
+        assert!(within(Rule::Job, BUDGET, BUDGET, 1, 1));
         assert!(within(Rule::Stop, 600, 600, 1, 1));
         assert!(!within(Rule::Stop, 601, 601, 1, 1));
-        // The bound is what a job a fifth slower has left after its set-up, and it holds any
-        // finishing test alone, so none leaves Miri for want of a partition.
-        assert_eq!(
-            (FIXED_SECONDS + PART_SECONDS) * SLOWER.0,
-            JOB_SECONDS * SLOWER.1
-        );
-        const { assert!(BUDGET + LIST_SECONDS <= PART_SECONDS) };
+        // Planned: 1.6 times, rounded up, and never over the stop, which nextest holds.
+        assert_eq!(SLOWER, (8, 5));
+        assert_eq!(planned(0), 0);
+        assert_eq!(planned(1), 2);
+        assert_eq!(planned(5), 8);
+        assert_eq!(planned(375), BUDGET);
+        assert_eq!(planned(374), 599);
+        assert_eq!(planned(BUDGET - 1), BUDGET);
+        // The bound is what a job has left after its set-up, and it holds any finishing test
+        // alone, planned at the stop, so none leaves Miri for want of a partition.
+        assert_eq!(FIXED_SECONDS + PART_SECONDS, JOB_SECONDS);
+        assert!(planned(BUDGET - 1) + on_a_slower_runner(LIST_SECONDS) <= PART_SECONDS);
     }
 
     #[test]

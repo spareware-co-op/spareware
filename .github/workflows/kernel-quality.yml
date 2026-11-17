@@ -79,7 +79,7 @@ name: Kernel quality
 #   geom-pool's, and hands them on with the cargo-nextest it built, for one day; the partitions
 #   (`miri`) and geom-pool's job (`miri-pool`, with the doctests) run from that hand-over, so none
 #   lists every test or builds a tool. The plan packs the partitions so each job ends within 15
-#   minutes, its set-up counted, on a cold cache and a runner a fifth slower
+#   minutes, its set-up counted, on a cold cache and a runner 1.6 times slower
 #   (`geom_test::miri::PART_SECONDS`). A pull request that changes how Miri runs gets the plan,
 #   partition 1 and geom-pool's job at a short budget, the miri-smoke profile. geom-pool's tests
 #   run under Tree Borrows, every other crate's under Stacked Borrows, while crossbeam-epoch 0.9.21
@@ -1099,8 +1099,9 @@ jobs:
     env:
       # The plan packs the tests Miri finishes (geom-test's src/miri-times.tsv) into the
       # partitions, so that each partition's listing and tests end within what is left of 15
-      # minutes (principle 8) after its set-up on a runner a fifth slower
-      # (`geom_test::miri::PART_SECONDS`), in whatever order nextest starts them: geom-test's
+      # minutes (principle 8) after its set-up, each test planned at 1.6 times its seconds and
+      # never over the stop (`geom_test::miri::PART_SECONDS`, `planned`), in whatever order
+      # nextest starts them: geom-test's
       # kernel_quality_workflow.rs holds the plan to it. Hashed into 16, every test took 1.7 to 3.4
       # hours a partition (run 43696026626), 823 of them stopped at their budget; such tests are
       # native-only now (32.58).
@@ -1159,12 +1160,33 @@ jobs:
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
           cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
             -E "not package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/part-${{ matrix.partition }}.txt"))"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      # The partition's report, in two tries. GitHub's storage can stall an upload until the
+      # job's limit (run 44075531453: partition 31's tests passed in 466 s, then its upload hung
+      # for 22 minutes), so each try is bounded; a first try that fails or runs out of time does
+      # not fail the job by itself, only starts the second, under the same name (`overwrite`
+      # replaces a part the first left), for the reader of `miri-<partition>`
+      # (`gh run download <run id> -n miri-<partition>`, for `kernel-quality miri-times`). The
+      # second try's failure fails the job: a report lost twice is never passed over. A reader of
+      # a job red only there: the tests' verdict is in the test step's log; re-run the job for its
+      # report.
+      - id: report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
+        timeout-minutes: 3
+        continue-on-error: true
         with:
           name: miri-${{ matrix.partition }}
           path: target/nextest/*/junit*.xml
           if-no-files-found: ignore
+      - name: The report again, the first try having failed
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.report.outcome != 'success' && steps.report.outcome != 'skipped' }}
+        timeout-minutes: 3
+        with:
+          name: miri-${{ matrix.partition }}
+          path: target/nextest/*/junit*.xml
+          if-no-files-found: ignore
+          overwrite: true
 
   # geom-pool's finishing tests under Tree Borrows, and the kernel's doctests, in a job of their
   # own beside the partitions, from the plan's hand-over.

@@ -17,8 +17,9 @@
 //!   input it cannot use.
 //! - **Miri's plan.** `miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan`
 //!   packs drawn sets of tests for Miri's gate jobs and holds every part, in every order an oracle
-//!   written here starts its tests, within what 15 minutes leave on a runner a fifth slower, and
-//!   runs `kernel-quality miri-plan` on the real table, which fails on a test with no row.
+//!   written here starts its tests, within 15 minutes on a runner 1.6 times slower, each test
+//!   stopped at the budget, and runs `kernel-quality miri-plan` on the real table, which fails on
+//!   a test with no row.
 
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them, and std's reductions, to build their oracles.
@@ -2377,9 +2378,10 @@ fn list_schedule(seconds: &[u64], order: &[usize]) -> u64 {
 }
 
 /// Miri's partitions: drawn sets of tests packed for a gate job, each test in exactly one part,
-/// and each part's listing (a second a binary) and its tests, in every order the oracle tries,
-/// within what 15 minutes leave on a runner a fifth slower after the set-up; and the binary's
-/// plan of the real table, which fails on a test with no row.
+/// and each part's set-up (120 s), listing (a second a binary) and tests, in every order the
+/// oracle tries, within 15 minutes on a runner 1.6 times slower, where each test takes 1.6 times
+/// its seconds or runs to nextest's 600 s stop, whichever is less; and the binary's plan of the
+/// real table, which fails on a test with no row.
 #[cfg_attr(
     target_family = "wasm",
     ignore = "runs the binary as a child process and writes files, which a WebAssembly test run cannot"
@@ -2394,8 +2396,11 @@ fn miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan()
     .unwrap();
     let mut rng = SplitMix64::new(seed);
     let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
-    // What a job leaves its listing and tests: (900 x 5/6) - 120 s.
-    let room = 900 * 5 / 6 - 120;
+    // On a runner 1.6 times slower, in fifths of a second so the oracle rounds nothing: a test
+    // takes 8/5 of its seconds, or stops at 600 s; a binary's listing 8/5 of a second; and the
+    // job's set-up, 120 s, leaves the rest of 900 s.
+    let slow = |s: u64| (8 * s).min(5 * 600);
+    let room = 5 * (900 - 120);
     for trial in 0..200 {
         let count = 1 + below(&mut rng, 300) as usize;
         let binaries = 1 + below(&mut rng, 60);
@@ -2423,7 +2428,7 @@ fn miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan()
         for k in 1..=plan.len() {
             let names = plan.tests_of(k);
             placed += names.len();
-            let seconds: Vec<u64> = names.iter().map(|n| by_name[n]).collect();
+            let seconds: Vec<u64> = names.iter().map(|n| slow(by_name[n])).collect();
             let listing = names
                 .iter()
                 .map(|(b, _)| *b)
@@ -2438,9 +2443,9 @@ fn miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan()
                 }
                 let ends = list_schedule(&seconds, &order);
                 assert!(
-                    ends <= plan.part_seconds(k) && listing + ends <= room,
-                    "trial {trial} part {k}: {ends} s of tests and {listing} binaries, over \
-                     {room} s ({seed:?})"
+                    ends <= 5 * plan.part_seconds(k) && 8 * listing + ends <= room,
+                    "trial {trial} part {k}: {ends} fifths of a second of tests and {listing} \
+                     binaries, over {room} ({seed:?})"
                 );
             }
         }

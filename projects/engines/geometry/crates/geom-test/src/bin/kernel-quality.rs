@@ -910,8 +910,10 @@ fn run(cli: Cli) -> Result<bool, String> {
             );
             match geom_test::miri::gate_plan(&rows) {
                 Ok(gate) => println!(
-                    "the gate's plan: {} partitions within {} s, the slowest {} s, and {}'s \
-                     {} tests in {} s",
+                    "the gate's plan, its tests at {}/{} of their seconds and never over the stop: \
+                     {} partitions within {} s, the slowest {} s, and {}'s {} tests in {} s",
+                    geom_test::miri::SLOWER.0,
+                    geom_test::miri::SLOWER.1,
                     gate.parts.len(),
                     geom_test::miri::PART_SECONDS,
                     gate.parts.longest(),
