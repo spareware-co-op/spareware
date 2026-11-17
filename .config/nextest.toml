@@ -30,12 +30,20 @@ fail-fast = false
 [profile.miri-smoke.junit]
 path = "junit.xml"
 
-# A measuring run for Miri's table (32.58), never run by CI: each test is stopped at two periods of
-# one minute and counted as timed out, not passed, so its JUnit report tells a test Miri finishes
-# from one it does not; `kernel-quality miri-times` writes the table from that report.
+# A measuring run for Miri's table (32.58), on a development machine: each test is stopped at two
+# periods of one minute and counted as timed out, not passed, so its JUnit report tells a test Miri
+# finishes from one it does not; `kernel-quality miri-times` writes the table from that report.
 [profile.miri-measure]
 slow-timeout = { period = "60s", terminate-after = 2 }
 fail-fast = false
 
 [profile.miri-measure.junit]
 path = "junit.xml"
+
+# The same measuring run on GitHub's runners (kernel-quality.yml's measuring mode, by hand only):
+# the stop is the budget itself, two periods of five minutes, so a CI runner's report is read as it
+# is (`kernel-quality miri-times --scale 1 --stop 600`) and a test that finishes under the budget
+# is never written as native-only.
+[profile.miri-measure-ci]
+inherits = "miri-measure"
+slow-timeout = { period = "300s", terminate-after = 2 }

@@ -41,6 +41,12 @@
 //!   target, an added ledger entry); and the workflow finds that head in GitHub's record of the
 //!   pull request's runs and narrows the plan and coverage by it, each piece shown to be checked
 //!   by a planted removal.
+//! - **Miri's measuring run leaves every other run as it was.** It runs only on a dispatch whose
+//!   input asks for it, and then runs no gate; its jobs save no cache and write no table; each part
+//!   runs the measuring profile at the budget, uploads its report for a few days, and fails on a
+//!   test that failed; the second part job is the first word for word. Each shown to be checked by
+//!   a planted change (the plan running without the input, a measuring run that runs the gates, a
+//!   cache saved, the table written, a part with no report upload, a stop other than the budget).
 
 // The crate denies native arithmetic in kernel code (Cargo.toml); tests may use it.
 #![allow(
@@ -267,6 +273,9 @@ fn each_job_runs_on_the_events_its_gate_names() {
             "coverage",
             "gates-seeded",
             "miri",
+            "miri-measure-plan",
+            "miri-measure",
+            "miri-measure-2",
             "done",
         ]
     );
@@ -533,13 +542,21 @@ fn only_a_dispatch_narrows_the_full_run() {
     assert_eq!(files["required"].as_bool(), Some(false));
     assert_eq!(text(&files["default"]), "");
     assert_eq!(text(&files["type"]), "string");
-    assert_eq!(keys(&w["on"]["workflow_dispatch"]["inputs"]), ["files"]);
+    // (The other two inputs ask for Miri's measuring run instead of the gates:
+    // `a_measuring_run_runs_only_when_asked_and_leaves_nothing_behind`.)
+    assert_eq!(
+        keys(&w["on"]["workflow_dispatch"]["inputs"]),
+        ["files", "miri_measure", "miri_measure_tests"]
+    );
     // ... that no caller can set (kernel-release.yml's run is whole) ...
     assert!(w["on"]["workflow_call"].is_null() || w["on"]["workflow_call"]["inputs"].is_badvalue());
-    // ... with a concurrency group of its own, so it never queues behind a whole run ...
+    // ... with a concurrency group of its own, so it never queues behind a whole run (the second
+    // term is empty on every run but a measuring one, so every other run's group is the files') ...
     assert_eq!(
         text(&w["concurrency"]["group"]),
-        "kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}"
+        "kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}${{ \
+         (inputs.miri_measure == 'new' || inputs.miri_measure == 'all') && \
+         format('-miri-measure-{0}', inputs.miri_measure) || '' }}"
     );
     // ... reaching the steps only through the environment, never pasted into a script: `when`
     // reads it, and every job that narrows reads `when`'s choice.
@@ -1360,5 +1377,409 @@ fn a_later_push_is_narrowed_by_githubs_record_of_the_last_clean_run() {
         assert_ne!(planted, text, "the planted edit {from:?} applies");
         let found = narrowing_problems(&planted);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// The jobs of Miri's measuring run.
+const MEASURE_JOBS: [&str; 3] = ["miri-measure-plan", "miri-measure", "miri-measure-2"];
+
+/// The part jobs of Miri's measuring run, each with the plan's list and count it reads.
+const MEASURE_PARTS: [(&str, &str, &str); 2] = [
+    ("miri-measure", "parts", "count"),
+    ("miri-measure-2", "parts_2", "count_2"),
+];
+
+/// Where nextest writes a measuring part's report: the workspace's own target folder.
+const MEASURE_REPORT: &str = "target/nextest/miri-measure-ci/junit.xml";
+
+/// A script's commands with continued lines joined and runs of spaces made one, comments left out.
+fn joined(script: &str) -> Vec<String> {
+    script
+        .replace("\\\n", " ")
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect()
+}
+
+/// The stop of a nextest profile, in seconds (its period times its periods), and whether it counts
+/// a stopped test as passing; `None` without a slow timeout.
+fn profile_stop(n: &toml::Table, profile: &str) -> Option<(i64, bool)> {
+    let slow = n.get("profile")?.get(profile)?.get("slow-timeout")?;
+    let period: i64 = slow
+        .get("period")?
+        .as_str()?
+        .strip_suffix('s')?
+        .parse()
+        .ok()?;
+    let after = slow.get("terminate-after")?.as_integer()?;
+    Some((period * after, slow.get("on-timeout").is_some()))
+}
+
+/// What is wrong with how a dispatch asks for Miri's measuring run, and with `when`'s handling of
+/// it: only a dispatch's input sets it, and it turns every gate off.
+fn measure_input_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let inputs = &w["on"]["workflow_dispatch"]["inputs"];
+    let options: Vec<&str> = inputs["miri_measure"]["options"]
+        .as_vec()
+        .map(|v| v.iter().filter_map(Yaml::as_str).collect())
+        .unwrap_or_default();
+    if inputs["miri_measure"]["type"].as_str() != Some("choice")
+        || inputs["miri_measure"]["default"].as_str() != Some("none")
+        || inputs["miri_measure"]["required"].as_bool() != Some(false)
+        || options != ["none", "new", "all"]
+    {
+        found.push("the input miri_measure is not a choice of none, new and all".to_owned());
+    }
+    if inputs["miri_measure_tests"]["type"].as_str() != Some("string")
+        || inputs["miri_measure_tests"]["default"].as_str() != Some("")
+    {
+        found.push("the input miri_measure_tests is not empty unless given".to_owned());
+    }
+    let when = &w["jobs"]["when"];
+    let decide = when["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .find(|s| s["id"].as_str() == Some("when"))
+        .cloned()
+        .unwrap_or(Yaml::BadValue);
+    if decide["env"]["INPUT_MIRI_MEASURE"].as_str() != Some("${{ inputs.miri_measure }}")
+        || decide["env"]["INPUT_MIRI_MEASURE_TESTS"].as_str()
+            != Some("${{ inputs.miri_measure_tests }}")
+    {
+        found.push("`when` does not read the inputs from its environment".to_owned());
+    }
+    let script = decide["run"].as_str().unwrap_or("");
+    // The dispatch's branch of `when`'s case on the event, up to that case's end (YAML strips the
+    // script's indent, so that case starts its lines and its branches are indented once).
+    let dispatch = script.find("\n  workflow_dispatch)\n");
+    let end = dispatch.and_then(|d| script[d..].find("\nesac\n").map(|e| d + e));
+    let inside = |at: Option<usize>| matches!((dispatch, at, end), (Some(d), Some(a), Some(e)) if d < a && a < e);
+    if !script.contains("measure=\"\" measure_tests=\"\"")
+        || !inside(script.find("measure=\"$INPUT_MIRI_MEASURE\""))
+    {
+        found.push(
+            "the measuring run runs without the input: `when` sets it outside a dispatch"
+                .to_owned(),
+        );
+    }
+    let branch = script.find("new | all)");
+    let gates_off = branch.is_some_and(|b| {
+        let rest = &script[b..];
+        rest[..rest.find(";;").unwrap_or(0)].contains("mutants=false coverage=false miri=false")
+    });
+    if !inside(branch) || !gates_off {
+        found.push("a measuring run runs the gates too".to_owned());
+    }
+    for output in ["miri_measure", "miri_measure_tests"] {
+        let from = if output == "miri_measure" {
+            "echo \"miri_measure=$measure\""
+        } else {
+            "echo \"miri_measure_tests=$measure_tests\""
+        };
+        if when["outputs"][output].as_str()
+            != Some(format!("${{{{ steps.when.outputs.{output} }}}}").as_str())
+            || !script.contains(from)
+        {
+            found.push(format!("`when` does not hand on {output}"));
+        }
+    }
+    found
+}
+
+/// What is wrong with the measuring run's jobs: when they run, what they hand on, and that they
+/// leave nothing another run reads.
+fn measure_job_problems(w: &Yaml) -> Vec<String> {
+    let jobs = &w["jobs"];
+    let mut found = Vec::new();
+    let plan = &jobs["miri-measure-plan"];
+    if plan["if"].as_str() != Some("needs.when.outputs.miri_measure != ''") {
+        found.push("the measuring run runs without the input: the plan's condition".to_owned());
+    }
+    if plan["env"]["MEASURE"].as_str() != Some("${{ needs.when.outputs.miri_measure }}")
+        || plan["env"]["MEASURE_TESTS"].as_str()
+            != Some("${{ needs.when.outputs.miri_measure_tests }}")
+    {
+        found.push("the plan does not read `when`'s choice".to_owned());
+    }
+    let plan_runs = joined(&runs(w, "miri-measure-plan")).join("\n");
+    for needle in [
+        "cargo miri nextest list --locked $PACKAGES -E \"not package(geom-pool)\" \
+         --message-format json > \"$RUNNER_TEMP/measure/miri-list.json\"",
+        "-E \"not package(geom-pool) & ($MEASURE_TESTS)\"",
+        "kernel-quality -- miri-measure --which \"$MEASURE\" --list \
+         \"$RUNNER_TEMP/measure/miri-list.json\" \"${only[@]}\"",
+    ] {
+        if !plan_runs.contains(needle) {
+            found.push(format!("the plan does not run {needle:?}"));
+        }
+    }
+    for (job, list, count) in MEASURE_PARTS {
+        let part = &jobs[job];
+        let after_plan = part["needs"]
+            .as_vec()
+            .is_some_and(|v| v.iter().any(|j| j.as_str() == Some("miri-measure-plan")));
+        if part["if"].as_str()
+            != Some(format!("needs.miri-measure-plan.outputs.{count} != '0'").as_str())
+            || !after_plan
+        {
+            found.push(format!(
+                "the measuring run runs without the input: {job}'s condition"
+            ));
+        }
+        if part["strategy"]["matrix"]["part"].as_str()
+            != Some(format!("${{{{ fromJSON(needs.miri-measure-plan.outputs.{list}) }}}}").as_str())
+            || part["strategy"]["fail-fast"].as_bool() != Some(false)
+        {
+            found.push(format!("{job} does not run every one of the plan's parts"));
+        }
+        for (out, how) in [(list, "-c"), (count, "-r")] {
+            let echo =
+                format!("echo \"{out}=$(jq {how} .{out} <<<\"$plan\")\" >> \"$GITHUB_OUTPUT\"");
+            if plan["outputs"][out].as_str()
+                != Some(format!("${{{{ steps.plan.outputs.{out} }}}}").as_str())
+                || !plan_runs.contains(&echo)
+            {
+                found.push(format!("the plan does not hand on {out}"));
+            }
+        }
+    }
+    // The second part job is the first, word for word, but for its matrix and condition.
+    for key in ["runs-on", "timeout-minutes", "env", "defaults", "steps"] {
+        if jobs["miri-measure-2"][key] != jobs["miri-measure"][key] {
+            found.push(format!("miri-measure-2's {key} is not miri-measure's"));
+        }
+    }
+    found.extend(measure_leaves_problems(w));
+    found
+}
+
+/// What the measuring run's jobs leave that another run could read: a cache saved, the table
+/// written, anything pushed, an artifact kept more than a few days. The cache they restore is the
+/// one the job `miri` saves, named whole: its key, then its job id.
+fn measure_leaves_problems(w: &Yaml) -> Vec<String> {
+    let jobs = &w["jobs"];
+    let mut found = Vec::new();
+    let is_cache = |s: &&Yaml| {
+        s["uses"]
+            .as_str()
+            .is_some_and(|u| u.starts_with("Swatinem/rust-cache@"))
+    };
+    let miri_cache = jobs["miri"]["steps"]
+        .as_vec()
+        .and_then(|v| v.iter().find(is_cache))
+        .and_then(|s| s["with"]["key"].as_str())
+        .map(|key| format!("{key}-miri"));
+    for job in MEASURE_JOBS {
+        for step in jobs[job]["steps"].as_vec().into_iter().flatten() {
+            let uses = step["uses"].as_str().unwrap_or("");
+            if (is_cache(&step) && step["with"]["save-if"].as_bool() != Some(false))
+                || uses.starts_with("actions/cache")
+            {
+                found.push(format!("{job} saves a cache"));
+            }
+            if is_cache(&step)
+                && (step["with"]["key"].as_str() != miri_cache.as_deref()
+                    || step["with"]["add-job-id-key"].as_bool() != Some(false))
+            {
+                found.push(format!("{job} does not restore the job miri's cache"));
+            }
+            if uses.starts_with("actions/upload-artifact@")
+                && step["with"]["retention-days"]
+                    .as_i64()
+                    .is_none_or(|d| !(1..=7).contains(&d))
+            {
+                found.push(format!("{job} keeps an artifact more than a few days"));
+            }
+        }
+        let writes = joined(&runs(w, job)).iter().any(|c| {
+            (c.contains("miri-times") && !c.contains("--dry-run"))
+                || c.contains("git push")
+                || c.contains("git commit")
+        });
+        if writes {
+            found.push(format!("{job} writes the table"));
+        }
+    }
+    found
+}
+
+/// What is wrong with a measuring part: the measuring profile at the budget on its own tests, any
+/// failure but a test's passed on, its report uploaded whatever happened, then every test read,
+/// so one that failed under Miri fails the part, named.
+fn measure_part_problems(w: &Yaml, n: &toml::Table) -> Vec<String> {
+    let mut found = Vec::new();
+    let budget = i64::try_from(miri::BUDGET).unwrap();
+    let inherits = n
+        .get("profile")
+        .and_then(|p| p.get("miri-measure-ci"))
+        .and_then(|p| p.get("inherits"))
+        .and_then(toml::Value::as_str);
+    let stop = profile_stop(n, "miri-measure-ci");
+    if inherits != Some("miri-measure") || stop != Some((budget, false)) {
+        found.push(format!(
+            "the miri-measure-ci profile does not stop a test at the budget as timed out: {stop:?}"
+        ));
+    }
+    let measure = n.get("profile").and_then(|p| p.get("miri-measure"));
+    let fail_fast = measure
+        .and_then(|p| p.get("fail-fast"))
+        .and_then(toml::Value::as_bool);
+    let junit = measure
+        .and_then(|p| p.get("junit"))
+        .and_then(|j| j.get("path"))
+        .and_then(toml::Value::as_str);
+    if fail_fast != Some(false)
+        || junit != Some("junit.xml")
+        || profile_stop(n, "miri-measure").is_none_or(|(_, pass)| pass)
+    {
+        found.push("the miri-measure profile does not report every test as it ended".to_owned());
+    }
+    let steps = w["jobs"]["miri-measure"]["steps"]
+        .as_vec()
+        .cloned()
+        .unwrap_or_default();
+    let running = |s: &&Yaml, what: &str| s["run"].as_str().is_some_and(|r| r.contains(what));
+    let run_at = steps
+        .iter()
+        .position(|s| running(&s, "cargo miri nextest run"));
+    let check_at = steps.iter().position(|s| running(&s, "miri-times"));
+    let upload_at = steps.iter().position(|s| {
+        s["uses"]
+            .as_str()
+            .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
+            && s["with"]["path"].as_str() == Some(MEASURE_REPORT)
+            && s["with"]["name"].as_str() == Some("miri-measure-${{ matrix.part }}")
+            && s["if"].as_str() == Some("${{ !cancelled() }}")
+    });
+    match (run_at, upload_at, check_at) {
+        (Some(run), Some(upload), Some(check)) if run < upload && upload < check => {}
+        _ => found.push(format!(
+            "a part uploads no report of {MEASURE_REPORT} between its run and its check: \
+             {run_at:?} {upload_at:?} {check_at:?}"
+        )),
+    }
+    let commands = joined(&runs(w, "miri-measure")).join("\n");
+    for needle in [
+        "cargo miri nextest run --locked $PACKAGES --profile miri-measure-ci -E \
+         \"$(cat \"$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt\")\" || status=$?"
+            .to_owned(),
+        "case \"$status\" in 0|100) ;; *) exit \"$status\" ;; esac".to_owned(),
+        format!("test -f {MEASURE_REPORT}"),
+        format!(
+            "kernel-quality -- miri-times --report {MEASURE_REPORT} --scale 1 --stop {budget} \
+             --dry-run"
+        ),
+    ] {
+        if !commands.contains(&needle) {
+            found.push(format!("a part does not run {needle:?}"));
+        }
+    }
+    found
+}
+
+/// What is wrong with Miri's measuring run, given the workflow's text and `.config/nextest.toml`'s.
+fn measure_problems(text: &str, nextest: &str) -> Vec<String> {
+    let w = YamlLoader::load_from_str(text).unwrap().remove(0);
+    let n = nextest.parse::<toml::Table>().unwrap();
+    let mut found = measure_input_problems(&w);
+    found.extend(measure_job_problems(&w));
+    found.extend(measure_part_problems(&w, &n));
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_measuring_run_runs_only_when_asked_and_leaves_nothing_behind() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let nextest = read(".config/nextest.toml").replace("\r\n", "\n");
+    let found = measure_problems(&text, &nextest);
+    assert!(found.is_empty(), "{found:#?}");
+    for (from, to, said) in [
+        // The measuring job running without the input, three ways.
+        (
+            "if: needs.when.outputs.miri_measure != ''",
+            "if: ${{ always() }}",
+            "runs without the input: the plan's condition",
+        ),
+        (
+            "measure=\"\" measure_tests=\"\"",
+            "measure=\"$INPUT_MIRI_MEASURE\" measure_tests=\"\"",
+            "runs without the input: `when` sets it",
+        ),
+        (
+            "if: needs.miri-measure-plan.outputs.count != '0'",
+            "if: ${{ !cancelled() }}",
+            "runs without the input: miri-measure's condition",
+        ),
+        // A measuring run that runs the gates too.
+        (
+            "                  mutants=false coverage=false miri=false\n                  why=\"Miri's",
+            "                  why=\"Miri's",
+            "runs the gates too",
+        ),
+        // A measuring job saving a cache.
+        (
+            "          save-if: false\n          key: miri-miri\n",
+            "          save-if: ${{ github.ref == 'refs/heads/main' }}\n          key: miri-miri\n",
+            "miri-measure-plan saves a cache",
+        ),
+        (
+            "          key: miri-miri\n",
+            "          key: miri\n",
+            "miri-measure-plan does not restore the job miri's cache",
+        ),
+        // The table written.
+        (
+            "--scale 1 --stop 600 --dry-run",
+            "--scale 1 --stop 600",
+            "miri-measure writes the table",
+        ),
+        // A part with no report upload, and one kept for months.
+        (
+            "          path: target/nextest/miri-measure-ci/junit.xml\n",
+            "          path: target/nextest/miri-measure/junit.xml\n",
+            "a part uploads no report",
+        ),
+        (
+            "          path: target/nextest/miri-measure-ci/junit.xml\n          retention-days: 3\n",
+            "          path: target/nextest/miri-measure-ci/junit.xml\n          retention-days: 90\n",
+            "miri-measure keeps an artifact more than a few days",
+        ),
+        // A build that failed, read as a measured run.
+        (
+            "case \"$status\" in 0|100) ;; *) exit \"$status\" ;; esac",
+            "true",
+            "a part does not run",
+        ),
+    ] {
+        let planted = text.replacen(from, to, 1);
+        assert_ne!(planted, text, "the planted edit {from:?} applies");
+        let found = measure_problems(&planted, &nextest);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+    // A stop other than the budget, or one that counts a stopped test as passing.
+    let ci =
+        "inherits = \"miri-measure\"\nslow-timeout = { period = \"300s\", terminate-after = 2 }";
+    for to in [
+        "inherits = \"miri-measure\"\nslow-timeout = { period = \"60s\", terminate-after = 2 }",
+        "inherits = \"miri-measure\"\nslow-timeout = { period = \"300s\", terminate-after = 2, \
+         on-timeout = \"pass\" }",
+        "slow-timeout = { period = \"300s\", terminate-after = 2 }",
+    ] {
+        let planted = nextest.replacen(ci, to, 1);
+        assert_ne!(planted, nextest, "the planted edit {to:?} applies");
+        let found = measure_problems(&text, &planted);
+        assert!(
+            found
+                .iter()
+                .any(|p| p.contains("does not stop a test at the budget")),
+            "{to}: {found:#?}"
+        );
     }
 }
