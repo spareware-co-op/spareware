@@ -127,49 +127,53 @@ pub fn build_args(groups: &[Group], extra: &[String]) -> Vec<Vec<String>> {
         .collect()
 }
 
-/// Seconds each crate's golden groups took to run in release on macOS x86-64, the slowest native
-/// leg, on its quicker runners (main's run 44052487998 of 17 November 2026, parts 1 and 2 of the
-/// checked goldens, from each group's `golden run: cargo` line to the next). They only balance
-/// [`part`]: a crate not listed counts [`UNMEASURED_SECONDS`] and still runs in exactly one part.
-/// The six long ones (geom-run to geom-topo) each go to a part of their own when a leg has six.
+/// Seconds each crate's goldens took in release on macOS x86-64, the slowest native leg, its own
+/// build included: from its `golden run: cargo test --no-run` line through its groups' runs, the
+/// median over the checked, shipped and native legs of the by-hand run 44079334701 of 18 November
+/// 2026 (written by the lane's `tables.py` from the job logs). A part's first crate builds the
+/// libraries in full (seven to nine minutes there), and a later crate builds them again only when
+/// its own features differ, so the eleven crates of 100 seconds or more are the ones that build
+/// the libraries, and a leg of eleven parts gives each of them a part of its own. The table only
+/// balances [`part`]: a crate not listed counts [`UNMEASURED_SECONDS`] and still runs in exactly
+/// one part.
 const RELEASE_SECONDS: [(&str, u64); 16] = [
-    ("geom-run", 141),
-    ("geom-num", 130),
-    ("geom-format", 110),
-    ("geom-linalg", 100),
-    ("geom-poly", 81),
-    ("geom-topo", 78),
-    ("geom-test", 30),
-    ("geom-curve", 30),
-    ("geom-math", 15),
-    ("geom-surface", 12),
-    ("geom-nurbs", 11),
-    ("geom-mesh", 6),
-    ("geom-op", 5),
-    ("geom-bvh", 5),
+    ("geom-curve", 531),
+    ("geom-test", 503),
+    ("geom-math", 502),
+    ("geom-num", 455),
+    ("geom-nurbs", 444),
+    ("geom-run", 329),
+    ("geom-format", 178),
+    ("geom-op", 172),
+    ("geom-topo", 144),
+    ("geom-poly", 110),
+    ("geom-bvh", 100),
+    ("geom-surface", 11),
+    ("geom-mesh", 5),
+    ("geom-make", 3),
     ("geom-name", 3),
-    ("geom-make", 2),
+    ("geom-linalg", 2),
 ];
 
-/// The same in debug (the same run's `Test (macOS x86-64, debug)`), where geom-test's polyhedral
-/// corpus is the longest and geom-run's golden is short.
+/// The same in debug (the same run's `Test (macOS x86-64, debug, part k of 4)`), where geom-test's
+/// polyhedral corpus is the longest and geom-run's golden is short.
 const DEBUG_SECONDS: [(&str, u64); 16] = [
-    ("geom-test", 200),
-    ("geom-num", 80),
-    ("geom-poly", 52),
-    ("geom-curve", 50),
-    ("geom-format", 46),
-    ("geom-mesh", 35),
-    ("geom-surface", 35),
-    ("geom-math", 15),
-    ("geom-run", 10),
-    ("geom-topo", 8),
-    ("geom-linalg", 8),
-    ("geom-nurbs", 5),
-    ("geom-bvh", 3),
-    ("geom-op", 3),
-    ("geom-name", 3),
-    ("geom-make", 2),
+    ("geom-test", 371),
+    ("geom-math", 98),
+    ("geom-format", 89),
+    ("geom-topo", 88),
+    ("geom-num", 82),
+    ("geom-poly", 81),
+    ("geom-curve", 69),
+    ("geom-mesh", 40),
+    ("geom-surface", 38),
+    ("geom-nurbs", 12),
+    ("geom-bvh", 10),
+    ("geom-run", 8),
+    ("geom-op", 7),
+    ("geom-linalg", 4),
+    ("geom-make", 4),
+    ("geom-name", 2),
 ];
 
 /// What [`part`] counts for a crate its table does not list.
@@ -473,7 +477,7 @@ mod tests {
         plan(&store(&[golden("geom-a/one", "det", "f1")])).remove(0)
     }
 
-    /// The real store's plan, shared out among 1 to 6 parts: every group lands in exactly one part,
+    /// The real store's plan, shared out among 1 to 11 parts: every group lands in exactly one part,
     /// whole crates stay together, and a part outside 1 to `n` is refused. Planted: a golden of a
     /// crate no table lists still lands in exactly one part.
     #[test]
@@ -487,7 +491,7 @@ mod tests {
             ids: vec!["geom-new/det".to_owned()],
         });
         for groups in [&real, &planted] {
-            for (n, release) in (1..=6).flat_map(|n| [(n, true), (n, false)]) {
+            for (n, release) in (1..=11).flat_map(|n| [(n, true), (n, false)]) {
                 let parts: Vec<Vec<Group>> = (1..=n)
                     .map(|k| part(groups, k, n, release).unwrap())
                     .collect();
@@ -511,27 +515,26 @@ mod tests {
         }
         // The two slowest crates go to different parts of two, by each mode's own table.
         let one = part(&real, 1, 2, true).unwrap();
-        assert!(one.iter().any(|g| g.krate == "geom-run"));
-        assert!(!one.iter().any(|g| g.krate == "geom-num"));
+        assert!(one.iter().any(|g| g.krate == "geom-curve"));
+        assert!(!one.iter().any(|g| g.krate == "geom-test"));
         let one = part(&real, 1, 2, false).unwrap();
         assert!(one.iter().any(|g| g.krate == "geom-test"));
-        assert!(!one.iter().any(|g| g.krate == "geom-num"));
-        // In release, six parts give each of the six long crates a part of its own.
-        let long = [
-            "geom-run",
-            "geom-num",
-            "geom-format",
-            "geom-linalg",
-            "geom-poly",
-            "geom-topo",
-        ];
-        for k in 1..=6 {
-            let p = part(&real, k, 6, true).unwrap();
+        assert!(!one.iter().any(|g| g.krate == "geom-math"));
+        // In release, eleven parts give each of the eleven crates that build the libraries a part
+        // of its own.
+        let long: Vec<&str> = RELEASE_SECONDS
+            .iter()
+            .filter(|(_, s)| *s >= 100)
+            .map(|(c, _)| *c)
+            .collect();
+        assert_eq!(long.len(), 11);
+        for k in 1..=11 {
+            let p = part(&real, k, 11, true).unwrap();
             let held = long
                 .iter()
                 .filter(|c| p.iter().any(|g| g.krate == **c))
                 .count();
-            assert_eq!(held, 1, "release part {k} of 6 holds {held} long crates");
+            assert_eq!(held, 1, "release part {k} of 11 holds {held} long crates");
         }
     }
 

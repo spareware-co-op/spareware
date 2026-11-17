@@ -1724,25 +1724,25 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A release part dropped from `test`: its step runs nowhere.
         (
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]",
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45]",
             "geom-num's every test vector in release for this machine's own CPU (part 6 of 6): runs on parts [], not exactly one",
         ),
         // A golden step on two parts.
         (
             "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}",
             "        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k <= 2 }}",
-            "(part 1 of 6): runs on parts [1, 2], not exactly one",
+            "(part 1 of 11): runs on parts [1, 2], not exactly one",
         ),
         // A golden share dropped from every part: the second share run as the first again.
         (
-            "run --part 2/6 --release",
-            "run --part 1/6 --release",
-            "run shares [\"1/6\", \"1/6\"",
+            "run --part 2/11 --release",
+            "run --part 1/11 --release",
+            "run shares [\"1/11\", \"1/11\"",
         ),
         // A debug leg on a part past its last.
         (
-            "          - { mode: debug, k: 31 }\n",
+            "          - { mode: debug, k: 46 }\n",
             "",
             "the debug legs' parts are not 1 to 5",
         ),
@@ -1754,9 +1754,9 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A part added without the name counting it.
         (
-            "matrix.mode == 'release' && 31 || 4)",
-            "matrix.mode == 'release' && 30 || 4)",
-            "test's name does not count its 31 release and 4 debug parts",
+            "matrix.mode == 'release' && 46 || 4)",
+            "matrix.mode == 'release' && 45 || 4)",
+            "test's name does not count its 46 release and 4 debug parts",
         ),
         // geom-num's test targets of one first letter in no share.
         (
