@@ -12,7 +12,10 @@
 //! `kernel-quality miri-times` command). [`plan`] splits the finishing tests into the partitions
 //! by their times, and [`Plan::filterset`] writes partition k's tests as the nextest filterset its
 //! job runs; [`unlisted`] names every test of a nextest list ([`listed_tests`]) the table has no
-//! row for, and the workflow's filter step fails on any.
+//! row for, and the workflow's filter step fails on any. [`to_measure`] picks the tests a
+//! measuring run on GitHub's runners measures (the workflow's measuring mode: the tests with no
+//! row, or every test), each planned at its finishing row's seconds or at the stop, and
+//! [`measure_plan`] packs them into the fewest parts that each end within the stop.
 //!
 //! Guarantees:
 //!
@@ -41,6 +44,12 @@
 //!   longest test. With [`AT_ONCE`] tests at a time, [`Plan::longest`] is how long the slowest
 //!   partition's tests take, which `kernel_quality_workflow.rs` holds under [`PART_SECONDS`] with
 //!   the fewest partitions that do.
+//! - **A measuring part ends within the stop.** Each test of a measuring run is planned at its
+//!   finishing row's seconds, or at [`BUDGET`], the stop of a measuring run on a CI runner, when
+//!   its row is native-only or it has none, so a part's tests take at most [`BUDGET`] at
+//!   [`AT_ONCE`] a time; a run of more parts than the workflow's two part jobs hold
+//!   ([`crate::mutants::MAX_SHARDS`]) is refused, to be narrowed by a filterset. Every test picked
+//!   is in exactly one part.
 //! - **The development crates are left out** (`geom-test`, `geom-fuzz`, `geom-gen`,
 //!   `geom-bench`): they never ship, and their tests start processes and read files, which Miri's
 //!   isolation refuses.
@@ -762,11 +771,105 @@ pub fn plan(tests: &[Timed], parts: usize) -> Result<Plan, String> {
 /// the least the total allows; `None` if a test alone takes longer.
 #[must_use]
 pub fn fewest(tests: &[Timed]) -> Option<usize> {
+    fewest_within(tests, PART_SECONDS)
+}
+
+/// The fewest partitions whose plan keeps every partition within `bound` seconds at [`AT_ONCE`] a
+/// time, searched from the least the total allows; `None` if a test alone takes longer, or for a
+/// bound of zero.
+#[must_use]
+pub fn fewest_within(tests: &[Timed], bound: u64) -> Option<usize> {
     let total = tests.iter().fold(0_u64, |a, t| a.saturating_add(t.seconds));
-    let least = total.div_ceil(AT_ONCE.saturating_mul(PART_SECONDS)).max(1);
-    let least = usize::try_from(least).ok()?;
+    let per = AT_ONCE.checked_mul(bound).filter(|&p| p > 0)?;
+    let least = usize::try_from(total.div_ceil(per).max(1)).ok()?;
     let most = tests.len().max(1);
-    (least..=most).find(|&n| plan(tests, n).is_ok_and(|p| p.longest() <= PART_SECONDS))
+    (least..=most).find(|&n| plan(tests, n).is_ok_and(|p| p.longest() <= bound))
+}
+
+/// Which tests a measuring run measures (`kernel-quality miri-measure`, the workflow's dispatch
+/// input `miri_measure`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Measuring {
+    /// The tests the table has no row for: what a change added.
+    New,
+    /// Every test, to measure the whole table again.
+    All,
+}
+
+/// The tests of `listed` (a run's nextest listing, [`listed_tests`]) a measuring run measures,
+/// in the listing's order, each planned at the seconds it is expected to take: its finishing
+/// row's, or [`BUDGET`], a CI measuring run's stop, for a test whose row is native-only or that
+/// has none.
+#[must_use]
+pub fn to_measure(rows: &[Row], listed: &[(String, String)], which: Measuring) -> Vec<Timed> {
+    let table: BTreeMap<(&str, &str), State> = rows
+        .iter()
+        .map(|r| ((r.binary.as_str(), r.test.as_str()), r.state))
+        .collect();
+    listed
+        .iter()
+        .filter_map(|(binary, test)| {
+            let state = table.get(&(binary.as_str(), test.as_str()));
+            if which == Measuring::New && state.is_some() {
+                return None;
+            }
+            let seconds = match state {
+                Some(State::Finishes(s)) => *s,
+                Some(State::NativeOnly(_)) | None => BUDGET,
+            };
+            Some(Timed {
+                seconds,
+                binary: binary.clone(),
+                test: test.clone(),
+            })
+        })
+        .collect()
+}
+
+/// The parts of a measuring run: the fewest whose tests each take at most [`BUDGET`] at
+/// [`AT_ONCE`] a time, balanced as [`plan`] balances the partitions. No tests give one empty
+/// part.
+///
+/// # Errors
+///
+/// For more parts than the workflow's part jobs hold ([`crate::mutants::MAX_SHARDS`]): the run is
+/// to be narrowed by a filterset. Also for a test planned over the stop, which [`to_measure`]
+/// never gives.
+pub fn measure_plan(tests: &[Timed]) -> Result<Plan, String> {
+    let n = fewest_within(tests, BUDGET).ok_or_else(|| {
+        format!("a test is planned over the {BUDGET} s stop, which no part can hold")
+    })?;
+    let most = usize::try_from(crate::mutants::MAX_SHARDS).unwrap_or(usize::MAX);
+    if n > most {
+        return Err(format!(
+            "{} tests need {n} parts of at most {BUDGET} s, more than the workflow's {most}: \
+             narrow the run with a filterset (the input miri_measure_tests)",
+            tests.len()
+        ));
+    }
+    plan(tests, n)
+}
+
+/// A measuring run's parts as JSON for the workflow: `{"tests": t, "count": n, "parts": [...],
+/// "count_2": m, "parts_2": [...]}`, numbered from 1. `parts` lists the first part job's, 1 to
+/// `min(n, 256)`, and `parts_2` the second's, 257 to `n`, `count_2` of them. A GitHub Actions
+/// matrix may not be empty, so a job with no part still lists its first (1 or 257); the workflow
+/// runs a job only when its count is not 0. `count` is 0 when there is no test to measure.
+#[must_use]
+pub fn measure_matrix(tests: usize, count: usize) -> String {
+    let jobs = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap_or(usize::MAX);
+    let first: Vec<usize> = (1..=count.clamp(1, jobs)).collect();
+    let count_2 = count.saturating_sub(jobs);
+    let second: Vec<usize> =
+        (jobs.saturating_add(1)..=jobs.saturating_add(count_2.max(1))).collect();
+    serde_json::json!({
+        "tests": tests,
+        "count": count,
+        "parts": first,
+        "count_2": count_2,
+        "parts_2": second,
+    })
+    .to_string()
 }
 
 impl Plan {
@@ -1281,5 +1384,92 @@ mod tests {
         let p = plan(&tests, 16).unwrap();
         let average = total.div_ceil(16 * AT_ONCE);
         assert!(p.longest() <= average + BUDGET, "{} {average}", p.longest());
+    }
+
+    fn listed(names: &[(&str, &str)]) -> Vec<(String, String)> {
+        names
+            .iter()
+            .map(|(b, t)| ((*b).to_owned(), (*t).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn a_measuring_run_picks_its_tests_and_plans_them_within_the_stop() {
+        let rows = [
+            row("a", "quick", State::Finishes(30)),
+            row("a", "slow", State::NativeOnly(Measured::Over(276))),
+            row("a", "long", State::NativeOnly(Measured::Took(700))),
+            row("a", "gone", State::Finishes(5)),
+        ];
+        let run = listed(&[("a", "quick"), ("a", "slow"), ("a", "long"), ("b", "new")]);
+        // New: only the test with no row, planned at the stop.
+        assert_eq!(
+            to_measure(&rows, &run, Measuring::New),
+            [timed(BUDGET, "b", "new")]
+        );
+        // All: every listed test, a finishing one at its seconds, the rest at the stop; a row the
+        // listing lacks is not measured.
+        assert_eq!(
+            to_measure(&rows, &run, Measuring::All),
+            [
+                timed(30, "a", "quick"),
+                timed(BUDGET, "a", "slow"),
+                timed(BUDGET, "a", "long"),
+                timed(BUDGET, "b", "new"),
+            ]
+        );
+        // Four tests at the stop fill a part; a fifth needs a second.
+        let at_stop: Vec<Timed> = (0..5)
+            .map(|i| timed(BUDGET, "c", &format!("t{i}")))
+            .collect();
+        assert_eq!(measure_plan(&at_stop[..4]).unwrap().len(), 1);
+        let p = measure_plan(&at_stop).unwrap();
+        assert_eq!(p.len(), 2);
+        assert!(p.longest() <= BUDGET);
+        let mut seen: Vec<(&str, &str)> = (1..=2).flat_map(|k| p.tests_of(k)).collect();
+        seen.sort_unstable();
+        assert_eq!(seen.len(), 5, "every test in exactly one part");
+        seen.dedup();
+        assert_eq!(seen.len(), 5);
+        // Quick tests share a part up to the stop at four at once: 100 of 24 s is 600 s.
+        let quick: Vec<Timed> = (0..101).map(|i| timed(24, "d", &format!("t{i}"))).collect();
+        assert_eq!(measure_plan(&quick[..100]).unwrap().len(), 1);
+        assert_eq!(measure_plan(&quick).unwrap().len(), 2);
+        // No test: one empty part, which runs nothing.
+        assert_eq!(measure_plan(&[]).unwrap().filterset(1).unwrap(), "none()");
+        // Too many parts for the two part jobs: refused, to be narrowed.
+        let most = usize::try_from(crate::mutants::MAX_SHARDS).unwrap();
+        let fits: Vec<Timed> = (0..4 * most)
+            .map(|i| timed(BUDGET, "e", &format!("t{i}")))
+            .collect();
+        assert_eq!(measure_plan(&fits).unwrap().len(), most);
+        let over: Vec<Timed> = (0..=4 * most)
+            .map(|i| timed(BUDGET, "e", &format!("t{i}")))
+            .collect();
+        assert!(
+            measure_plan(&over).is_err_and(|e| e.contains("narrow the run with a filterset")),
+            "more parts than the jobs hold"
+        );
+        assert!(measure_plan(&[timed(BUDGET + 1, "f", "x")]).is_err());
+        assert_eq!(fewest_within(&at_stop, 0), None);
+    }
+
+    #[test]
+    fn a_measuring_matrix_numbers_its_parts_from_one_in_two_jobs() {
+        let read = |s: String| serde_json::from_str::<Value>(&s).unwrap();
+        let m = read(measure_matrix(0, 0));
+        assert_eq!(m["count"], 0);
+        assert_eq!(m["parts"], serde_json::json!([1]));
+        assert_eq!(m["count_2"], 0);
+        assert_eq!(m["parts_2"], serde_json::json!([257]));
+        let m = read(measure_matrix(9, 3));
+        assert_eq!(m["tests"], 9);
+        assert_eq!(m["parts"], serde_json::json!([1, 2, 3]));
+        let m = read(measure_matrix(2000, 300));
+        let first: Vec<u64> = (1..=256).collect();
+        let second: Vec<u64> = (257..=300).collect();
+        assert_eq!(m["parts"], serde_json::json!(first));
+        assert_eq!(m["count_2"], 44);
+        assert_eq!(m["parts_2"], serde_json::json!(second));
     }
 }

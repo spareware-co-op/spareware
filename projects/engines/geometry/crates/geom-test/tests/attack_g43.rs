@@ -649,11 +649,18 @@ fn guard_problems(workflows: &BTreeMap<String, String>) -> Vec<String> {
             proved.len()
         )];
     };
+    // A golden step that runs one share (`--part j/m`) runs the same golden run's arguments; the
+    // job's parts hold every share once (geom-test's queue_wiring.rs).
     let golden = ["--bin", "golden", "--", "run"].map(str::to_owned);
     let own = runs.iter().flat_map(|r| commands(r)).any(|c| {
-        c.windows(4)
-            .position(|w| w == golden)
-            .is_some_and(|at| c[at + 4..] == proved[..])
+        c.windows(4).position(|w| w == golden).is_some_and(|at| {
+            let rest = &c[at + 4..];
+            let rest = match rest {
+                [flag, _, tail @ ..] if flag == "--part" => tail,
+                _ => rest,
+            };
+            rest == &proved[..]
+        })
     });
     if own {
         Vec::new()

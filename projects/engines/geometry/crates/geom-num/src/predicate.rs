@@ -25,8 +25,8 @@
 //!   and that the [`crate::wide`] arithmetic they run on is exact (G37). Kani proves that
 //!   [`orient2d`] answers with the exact sign, nothing panicking or overflowing on the way, filter
 //!   and routing included, for every coordinate within one step of 0 or of an edge of the frame
-//!   (piece G14: geom-fuzz's `orient2d_proof_predicate`, `orient2d_proof_exact_path` and
-//!   `orient2d_proof_filter`, one claim each). The filters' error bounds are checked against
+//!   (piece G14: geom-fuzz's `orient2d_proof_predicate`, in parts, `orient2d_proof_exact_path`
+//!   and `orient2d_proof_filter`, one claim each). The filters' error bounds are checked against
 //!   exact arithmetic, not proven, until pieces G35 and G40 certify them; the routing and every
 //!   other input are tested against exact oracles (`tests/attack_predicate.rs`, the verification
 //!   suite).

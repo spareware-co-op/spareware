@@ -6,9 +6,8 @@
 
 The code pieces are the 27 a shipped build links: G123 to G134, G137 to G139 and G142 to G153 (G135, G136, G140, G141, G154 and G155 are in geom-test or geom-bench and build the tools behind the bar, Gate 4's reading R10, as 32.56).
 
-- **15 have every part of the bar**: G123 to G129, G134, G146 to G149 and G151 to G153. Four of them have files no target or no benchmark reaches, listed under "Reached in part".
-- **7 lack only a fuzz target**: G130 to G133 and G137 to G139. No fuzz target reaches `geom-bool` at all (`geom-fuzz` does not depend on it); the scenario benchmarks reach each of them.
-- **5 lack more**: G142 (fuzz target and benchmark), G143, G144 and G145 (fuzz target, benchmark and golden) and G150 (benchmark and golden).
+- **22 have every part of the bar**: G123 to G134, G137 to G139, G146 to G149 and G151 to G153. Four of them have files no target or no benchmark reaches, listed under "Reached in part". G130 to G133 and G137 to G139 have their fuzz target in `booleans`, `geom-bool`'s pipeline held to counted cells and both checkers (#949).
+- **5 lack more**: G142 (fuzz target and benchmark), G143 and G145 (fuzz target, benchmark and golden), G144 (benchmark and golden; `booleans` is its fuzz target) and G150 (benchmark and golden).
 
 No figure here counts a piece as served unless the measurement shows the lines it runs; a file no unit reaches is named as such.
 
@@ -24,18 +23,18 @@ One row a piece. "Own" means the target's or benchmark's header or catalogue ent
 | G126 clipping and local cuts | geom-poly `cut.rs` | shared: `solids`, `planes` | shared: `scenario/*`, `mesh/boolean` | geom-poly `tests/cut.rs` | `output-hashes` |
 | G127 winding vectors, tracing, selection | geom-poly `winding.rs`, `trace.rs` | shared: `solids` | shared: `scenario/*`, `mesh/boolean` | geom-poly `tests/winding.rs`, `trace.rs` | `output-hashes` |
 | G128 adaptive subdivision | geom-poly `subdivide.rs` | shared: `solids` | shared: `scenario/*`, `mesh/boolean` | geom-poly `tests/subdivide.rs` | `output-hashes` |
-| G129 canonical rebuild | geom-poly `merge.rs`; geom-bool `rebuild.rs` | shared: `solids` (`merge.rs` only) | shared: `scenario/*`, `mesh/boolean` | geom-poly `tests/merge.rs`, `nest_box.rs`; geom-bool `tests/rebuild.rs` | `output-hashes` |
-| G130 operands, selections, schema | geom-bool `operand.rs`, `half_space.rs`, `wires.rs` | **none** | shared: `scenario/*` | geom-bool `tests/combine.rs` | `output-hashes` (`scenario/*`) |
-| G131 n-ary cut and union entry | geom-bool `combine.rs` | **none** | own: `scenario/union` (`combine::unite`), `one_selection`, `three_selections`, `storey` (`combine::combine`) | geom-bool `tests/combine.rs` | `output-hashes` |
-| G132 boolean names and history | geom-bool `names.rs` | **none** | shared: `scenario/*` | geom-bool `tests/names.rs` | `output-hashes` |
-| G133 arrangement certificate | geom-bool `certificate.rs` | **none** | shared: `scenario/*` | geom-bool `tests/certificate.rs` | `output-hashes` |
+| G129 canonical rebuild | geom-poly `merge.rs`; geom-bool `rebuild.rs` | shared: `solids` (`merge.rs` only); `booleans` (own, `rebuild.rs`) | shared: `scenario/*`, `mesh/boolean` | geom-poly `tests/merge.rs`, `nest_box.rs`; geom-bool `tests/rebuild.rs` | `output-hashes` |
+| G130 operands, selections, schema | geom-bool `operand.rs`, `half_space.rs`, `wires.rs` | `booleans` (own) | shared: `scenario/*` | geom-bool `tests/combine.rs` | `output-hashes` (`scenario/*`) |
+| G131 n-ary cut and union entry | geom-bool `combine.rs` | `booleans` (own) | own: `scenario/union` (`combine::unite`), `one_selection`, `three_selections`, `storey` (`combine::combine`) | geom-bool `tests/combine.rs` | `output-hashes` |
+| G132 boolean names and history | geom-bool `names.rs` | `booleans` (own) | shared: `scenario/*` | geom-bool `tests/names.rs` | `output-hashes` |
+| G133 arrangement certificate | geom-bool `certificate.rs` | `booleans` (own) | shared: `scenario/*` | geom-bool `tests/certificate.rs` | `output-hashes` |
 | G134 checker groups 2 and 3, plane-based | geom-check `planar.rs` (and its parts of `flat.rs`, `self_intersection.rs`) | shared: `make`, `sequence` | shared: `query/validity`, `make/*` | geom-check `tests/attack_g134.rs`; geom-topo `tests/meet.rs` | `output-hashes` (`query/validity`, `make/*`) |
-| G137 cells, rooms, space boundaries | geom-bool `passage.rs` and the cells in `combine.rs` | **none** | shared: `scenario/storey` (not `passage.rs`) | geom-bool `tests/cells.rs`, `passage.rs`; geom-check `tests/attack_g137.rs` | `output-hashes` (`scenario/storey`) |
-| G138 batch cutting | geom-bool `batch.rs` | **none** | own: `scenario/openings`, `moved_door`, `slab_holes` (`batch::cut`) | geom-bool `tests/batch.rs` | `output-hashes` |
-| G139 arrangement cache, local re-cut | its parts of geom-bool `batch.rs`, `combine.rs`, `operand.rs`, `names.rs` and geom-poly `merge.rs`, `subdivide.rs` | **none** | shared: `scenario/moved_door` | geom-bool `tests/batch.rs`; geom-poly `tests/merge.rs` | `output-hashes` (`scenario/moved_door`) |
+| G137 cells, rooms, space boundaries | geom-bool `passage.rs` and the cells in `combine.rs` | `booleans` (own) | shared: `scenario/storey` (not `passage.rs`) | geom-bool `tests/cells.rs`, `passage.rs`; geom-check `tests/attack_g137.rs` | `output-hashes` (`scenario/storey`) |
+| G138 batch cutting | geom-bool `batch.rs` | `booleans` (own) | own: `scenario/openings`, `moved_door`, `slab_holes` (`batch::cut`) | geom-bool `tests/batch.rs` | `output-hashes` |
+| G139 arrangement cache, local re-cut | its parts of geom-bool `batch.rs`, `combine.rs`, `operand.rs`, `names.rs` and geom-poly `merge.rs`, `subdivide.rs` | `booleans` (own) | shared: `scenario/moved_door` | geom-bool `tests/batch.rs`; geom-poly `tests/merge.rs` | `output-hashes` (`scenario/moved_door`) |
 | G142 plane commit routine | geom-poly `commit.rs` | **none** | **none** | geom-poly `tests/commit.rs`, `commit_determinism.rs` | `geom-poly/commits` (own) |
 | G143 per-entity error bounds | geom-op `bounds.rs` | **none** | **none** | geom-op `tests/bounds.rs` | **none** |
-| G144 local-operation driver | geom-bool `local.rs`; geom-op `local.rs` | **none** (seeded tests reach 23 of geom-op `local.rs`'s 70 lines, none of geom-bool's) | **none** | geom-bool `tests/attack_g144.rs`; geom-op `tests/attack_g144.rs` | **none** |
+| G144 local-operation driver | geom-bool `local.rs`; geom-op `local.rs` | `booleans` (own: `local_step` on its full and fast paths, with geom-op's `AllowSet`) | **none** | geom-bool `tests/attack_g144.rs`; geom-op `tests/attack_g144.rs` | **none** |
 | G145 placed instances | geom-topo `placed.rs`; geom-make `placed.rs` | **none** | **none** | geom-topo `tests/placed.rs`; geom-make `tests/placed.rs` | **none** |
 | G146 exact mesh | geom-mesh `exact/` | `exact` (own) | own: `mesh/exact_build` | geom-mesh `tests/exact.rs`, `exact_determinism.rs` | `geom-mesh/exact` (own) |
 | G147 point classification | geom-mesh `classify.rs` | `solids` (own, its header) | own: `mesh/locate` | geom-mesh `tests/classify.rs` | `output-hashes` (`mesh/locate`) |
@@ -81,7 +80,6 @@ The pieces with their own target and benchmark reach them too, as their own unit
 Files of a piece that has every part, which a unit of the bar does not reach (from run C's whole catalogue, every benchmark built and run once, and every target's seeded test, `_seeded` in every geom-fuzz test binary):
 
 - G124: geom-num `step.rs` (14 lines), the narrow `i64` step of `predicate.rs` (the catalogue's `UNMEASURED` says `orient2d`'s benchmark measures it on the targets that take that path; x86-64 does not) and geom-poly `plane.rs`'s axis step `side_step`: no target and no benchmark run them here. geom-num's and geom-bench's `tests/steps.rs` do.
-- G129: geom-bool `rebuild.rs` (63 lines): no target.
 - G146: `exact/raw.rs` (36 lines): neither; `exact/mass.rs`: no benchmark (the `solids` target runs 41 of its 130 lines).
 - G149: `faceted.rs` (68 lines): neither; `export.rs`: no benchmark; geom-poly `publish.rs`: no target (the scenarios run 261 of its 364 lines).
 - G151: geom-num `distance.rs`: no target.
@@ -90,10 +88,10 @@ Files of a piece that has every part, which a unit of the bar does not reach (fr
 
 Code for a further lane, decided by the main session; nothing here lowers the bar.
 
-- **A fuzz target for geom-bool**: G130, G131, G132, G133, G137, G138 and G139, with G129's `rebuild.rs` and G144's driver. One target in the way `solids` holds geom-mesh's operations to counted cells would serve them all: flat booleans of small grid boxes through `geom_bool::combine` (selections, names, the certificate), batch cuts and a re-cut after a move (`batch::cut` and its cache), cells and the passage (`passage.rs` is reached by nothing today), half-spaces and wires (`half_space.rs`, `wires.rs`, reached by nothing). `geom-fuzz` needs `geom-bool` as a dependency.
+- **A fuzz target for geom-bool**: made, `booleans` (`geom-fuzz/src/booleans.rs`), for G130, G131, G132, G133, G137, G138 and G139, with G129's `rebuild.rs` and G144's driver. It holds to counted cells, in the way `solids` holds geom-mesh's operations, the selections of one arrangement (`geom_bool::combine`, with the names, history and certificate), a half-space and a wire kept inside the boxes (`half_space.rs`, `wires.rs`), rooms in an envelope and two seeds' leak (`passage.rs`), batch cuts, many hosts and a re-cut after a move from the last cut's cache (`batch::cut`), and `local_step` on both paths; every result passes the full checker and the second checker, which agree. Its rows are "own" (its header names each piece); the lines it reaches are to be measured on GitHub as the figures above were. The boolean pipeline calls none of G142's, G143's or G145's code, so they still need their own.
 - **G142, plane commit**: a fuzz target and a count benchmark for `geom_poly::commit`; it has its golden (`geom-poly/commits`) and its tests.
 - **G143, per-entity error bounds**: a fuzz target, a count benchmark and a golden for `geom_op::bounds`.
-- **G144, local-operation driver**: a fuzz target, a count benchmark and a golden for `geom_bool::local` (and `geom_op::local` beyond the 23 lines the seeded tests reach).
+- **G144, local-operation driver**: a count benchmark and a golden for `geom_bool::local`; `booleans` is its fuzz target.
 - **G145, placed instances**: a fuzz target, a count benchmark and a golden for `geom_topo::placed` and `geom_make::placed`.
 - **G150, Minkowski sums**: a count benchmark (`mesh/minkowski`) and a golden; `solids` already runs `minkowski.rs`.
 

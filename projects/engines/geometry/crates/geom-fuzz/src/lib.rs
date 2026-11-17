@@ -48,7 +48,9 @@
 //! triangulation is a true constrained Delaunay triangulation and one answer in any input order,
 //! [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a mesh and gives one mesh in any
 //! input order, and [`solids`] (G147 to G152), `geom-mesh`'s operations on small solids agree with
-//! counted cells. For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
+//! counted cells, and [`booleans`] (G130 to G133, G137 to G139 and G144, with G129's rebuild),
+//! `geom-bool`'s boolean pipeline on small solids agrees with counted cells, every result passing
+//! both checkers. For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
 //! holds `geom-topo`'s Euler operators to their table of counts, Euler's formula and their
 //! refusals (G81); [`naming`] holds names, the name graph, the duplicate detector and the ordinal
 //! order to their laws (G87); [`references`], reference resolution gives 20.4's outcome on any
@@ -97,7 +99,9 @@
 //!   under `cfg(kani)`; Kani 0.68.0 makes every generated value symbolic and proves the law for
 //!   all of them: `cargo kani --tests -p geom-fuzz --harness orient2d_proof_filter --exact`
 //!   (orient2d's proof is split by claim, one `<target>_proof_<claim>` test each, which together
-//!   prove `check`). Under `cargo test` the same test is a property test over that domain.
+//!   prove `check`, and the predicate's claim by the six coordinates' signs, in parts with a
+//!   proof that they cover the domain). Under `cargo test` the same test is a property test
+//!   over that domain.
 //!
 //! Targets for operations, readers and operation sequences arrive with them.
 //!
@@ -150,6 +154,8 @@
 //!   test of the [`p21`] target, read through `geom-format`'s byte sources.
 //! - `geom-make`, `geom-check` and `geom-op` (Apache-2.0, ours), with the crates above, the code
 //!   under test of the [`make`] target and the checker it judges them by.
+//! - `geom-bool` (Apache-2.0, ours), the code under test of the [`booleans`] target, with
+//!   `geom-make`'s boxes and `geom-test`'s two checkers.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `geom-op`, `geom-curve`, `geom-surface`, `geom-nurbs` and `geom-run` (Apache-2.0, ours), the
@@ -207,6 +213,7 @@ pub mod arenas;
 pub mod attributes;
 pub mod batch;
 pub mod bodies;
+pub mod booleans;
 pub mod boxtree;
 pub mod cache;
 pub mod cbor;
