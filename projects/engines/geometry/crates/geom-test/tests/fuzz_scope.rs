@@ -547,8 +547,8 @@ fn a_run_by_hand_proves_only_the_harnesses_it_names() {
     );
     planted(
         "other-steps",
-        "          cargo kani -p geom-num --harness \"${{ matrix.proof }}\" --exact\n",
-        "          cargo kani -p geom-num --harness \"${{ matrix.proof }}\" --exact --no-assertion-reach-checks\n",
+        "          cargo kani -p geom-num -Z function-contracts -Z stubbing --harness \"${{ matrix.proof }}\" --exact\n",
+        "          cargo kani -p geom-num -Z function-contracts -Z stubbing --harness \"${{ matrix.proof }}\" --exact --no-assertion-reach-checks\n",
         "kani-num-named's steps are not kani-num's",
     );
     planted(

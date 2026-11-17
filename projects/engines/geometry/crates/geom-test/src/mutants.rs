@@ -610,13 +610,14 @@ fn check_entries(ledger: &Ledger, repo: &Path, failures: &mut Vec<String>) {
     }
 }
 
-/// Whether `text` has a function `name` marked `#[kani::proof]` (other attributes may stand
-/// between the two).
+/// Whether `text` has a function `name` marked `#[kani::proof]`, or
+/// `#[kani::proof_for_contract(...)]` as a harness that proves a function's contract is (other
+/// attributes may stand between the two).
 fn is_harness(text: &str, name: &str) -> bool {
     let head = format!("fn {name}(");
     let mut marked = false;
     for line in text.lines().map(str::trim) {
-        if line == "#[kani::proof]" {
+        if line == "#[kani::proof]" || line.starts_with("#[kani::proof_for_contract(") {
             marked = true;
         } else if marked && line.starts_with(&head) {
             return true;
@@ -1314,5 +1315,10 @@ mod tests {
             "#[kani::proof]\nconst X: u8 = 0;\nfn g() {}\n",
             "g"
         ));
+        // A harness that proves a function's contract is a harness; a function that only names
+        // a contract is not.
+        let contracts = "#[kani::proof_for_contract(f)]\nfn f_keeps_its_contract() {}\n#[kani::stub_verified(f)]\nfn h() {}\n";
+        assert!(is_harness(contracts, "f_keeps_its_contract"));
+        assert!(!is_harness(contracts, "h"));
     }
 }

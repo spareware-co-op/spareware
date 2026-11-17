@@ -458,8 +458,8 @@ jobs:
   # one did.
   # atan2's proof of `agreed` (22 to 29 minutes under CaDiCaL, Kani's default SAT solver) names
   # kissat as its solver, with an answer's two claims as two assertions: one harness with the
-  # same claim, 9 minutes (run 44077877942); with the two joined in one assertion kissat took
-  # 15.4 (run 44083788360).
+  # same claim, 6.7 and 9.8 minutes on its final text (runs 44089885389 and 44086584465); with
+  # the two joined in one assertion kissat took 15.4 (run 44083788360).
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
@@ -523,6 +523,7 @@ jobs:
           - grid::proofs::coord_new_accepts_exactly_the_frame
           - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
           - grid::proofs::refine_is_exact_or_refused
+          - grid::proofs::the_nine_pairs_are_every_pair_of_steps
           - grid::proofs::steps_refine_is_exact_or_none
           - interval::proofs::add_sub_mul_enclose_the_rounded_result
           - interval::proofs::div_by_minus_a_tenth
@@ -540,6 +541,7 @@ jobs:
           - math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike
           - math::atan2::proofs::is_zero_holds_exactly_for_zero
           - math::atan2::proofs::mul_keeps_every_carry
+          - math::atan2::proofs::mul_sum_keeps_every_carry
           - math::atan2::proofs::shl_moves_every_bit_up
           - math::atan2::proofs::to_f64_rounds_to_nearest
           - math::log::proofs::is_zero_reads_both_words
@@ -596,11 +598,11 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-num --
-          cargo kani -p geom-num --harness sign::proofs::signs_follow_the_integers --exact
+          cargo kani -p geom-num -Z function-contracts -Z stubbing --harness sign::proofs::signs_follow_the_integers --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
-          cargo kani -p geom-num --harness "${{ matrix.proof }}" --exact
+          cargo kani -p geom-num -Z function-contracts -Z stubbing --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
@@ -643,7 +645,7 @@ jobs:
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
-          cargo kani -p geom-num --harness "${{ matrix.proof }}" --exact
+          cargo kani -p geom-num -Z function-contracts -Z stubbing --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
@@ -748,11 +750,11 @@ jobs:
       - name: Kani fails on a planted violation
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-limbs --
-          cargo kani -p geom-num --harness generated::limbs::proofs::rounded_83_in_3
+          cargo kani -p geom-num -Z function-contracts -Z stubbing --harness generated::limbs::proofs::rounded_83_in_3
       - name: Prove every limb step
         run: |
           start=$(date +%s)
-          cargo kani -p geom-num --harness generated::limbs::proofs::
+          cargo kani -p geom-num -Z function-contracts -Z stubbing --harness generated::limbs::proofs::
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock

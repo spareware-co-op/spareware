@@ -730,12 +730,51 @@ mod proofs {
         }
     }
 
+    /// Every pair of steps, `from` then `to`: the nine classes `coarsen_is_nearest_and_reported`
+    /// is proven in, one after another. `the_nine_pairs_are_every_pair_of_steps` proves that no
+    /// pair is missing.
+    const PAIRS: [(GridStep, GridStep); 9] = [
+        (GridStep::Q0, GridStep::Q0),
+        (GridStep::Q0, GridStep::Q1),
+        (GridStep::Q0, GridStep::Q2),
+        (GridStep::Q1, GridStep::Q0),
+        (GridStep::Q1, GridStep::Q1),
+        (GridStep::Q1, GridStep::Q2),
+        (GridStep::Q2, GridStep::Q0),
+        (GridStep::Q2, GridStep::Q1),
+        (GridStep::Q2, GridStep::Q2),
+    ];
+
+    /// The cover of `coarsen_is_nearest_and_reported`'s nine classes: whatever two steps `step`
+    /// gives, for every pair of bytes, the pair is one of `PAIRS`.
+    #[kani::proof]
+    fn the_nine_pairs_are_every_pair_of_steps() {
+        let pair = (step(kani::any()), step(kani::any()));
+        assert!(PAIRS.contains(&pair));
+    }
+
     /// `coarsen` never panics or overflows, and towards a coarser step gives the nearest step,
-    /// within half a coarse step, no larger in magnitude, exact exactly when the division is.
+    /// within half a coarse step, no larger in magnitude, exact exactly when the division is: for
+    /// every coordinate and every pair of steps.
+    ///
+    /// The pairs of steps are taken one after another from `PAIRS`, each with every coordinate,
+    /// where this harness once drew the two steps as it draws the coordinate. The claim and its
+    /// assertions are what they were, and `the_nine_pairs_are_every_pair_of_steps` proves that
+    /// the nine are every pair the old draw could give, so the two harnesses together prove what
+    /// the one did. Why: with the steps drawn, the divisor (1, 25 or 625) was unknown to the
+    /// solver in every division and product, and the proof took 32 to 44 minutes on a hosted
+    /// runner (runs 44052487978 and main's push of 07ce8f43b); with a pair fixed the divisor is a
+    /// constant.
     #[kani::proof]
     fn coarsen_is_nearest_and_reported() {
+        for (from, to) in PAIRS {
+            coarsen_law(from, to);
+        }
+    }
+
+    /// `coarsen_is_nearest_and_reported`'s claim from one step to another, for every coordinate.
+    fn coarsen_law(from: GridStep, to: GridStep) {
         let c = coord();
-        let (from, to) = (step(kani::any()), step(kani::any()));
         let got = coarsen(c, from, to);
         match from.rung().checked_sub(to.rung()) {
             None => assert!(got == Err(NumError::WrongDirection)),
@@ -759,6 +798,121 @@ mod proofs {
             }
         }
     }
+
+    // TRIAL-BEGIN (measuring only, never in a pull request)
+    /// The claims of the mask `claims` (1 nearest, 2 no larger, 4 exactness) for the pairs of the
+    /// mask `pairs` (bit i is `PAIRS[i]`), the coordinates of sign `sign` (0 any, 1 not negative,
+    /// 2 negative) and magnitude band `band` (0 any; 1 below 2^20, 2 below 2^30, 3 below 2^35, 4
+    /// below 2^38, 5 below 2^39, 6 the rest).
+    fn trial_4(pairs: u16, sign: u8, claims: u8, band: u8) {
+        for (i, (from, to)) in PAIRS.into_iter().enumerate() {
+            if pairs & (1 << i) != 0 {
+                trial_law(from, to, sign, claims, band);
+            }
+        }
+    }
+
+    fn trial_law(from: GridStep, to: GridStep, sign: u8, claims: u8, band: u8) {
+        let c = coord();
+        let v = i128::from(c.get());
+        if (sign == 1 && v < 0) || (sign == 2 && v >= 0) {
+            return;
+        }
+        let m = v.unsigned_abs();
+        let inside = match band {
+            0 => true,
+            1 => m < 1 << 20,
+            2 => m >= 1 << 20 && m < 1 << 30,
+            3 => m >= 1 << 30 && m < 1 << 35,
+            4 => m >= 1 << 35 && m < 1 << 38,
+            5 => m >= 1 << 38 && m < 1 << 39,
+            _ => m >= 1 << 39,
+        };
+        if !inside {
+            return;
+        }
+        let got = coarsen(c, from, to);
+        match from.rung().checked_sub(to.rung()) {
+            None => assert!(got == Err(NumError::WrongDirection)),
+            Some(k) => {
+                let d: i128 = match k {
+                    0 => 1,
+                    1 => 25,
+                    _ => 625,
+                };
+                match got {
+                    Ok(r) => {
+                        let q = i128::from(r.value().get());
+                        if claims & 1 != 0 {
+                            let moved = q * d - v;
+                            assert!(2 * moved.abs() < d);
+                        }
+                        if claims & 2 != 0 {
+                            assert!(q.abs() <= v.abs());
+                        }
+                        if claims & 4 != 0 {
+                            assert!(r.is_exact() == (v % d == 0));
+                        }
+                    }
+                    Err(_) => assert!(false, "coarsening towards a coarser step always answers"),
+                }
+            }
+        }
+    }
+
+    macro_rules! trial {
+        ($($(#[$attr:meta])* $name:ident: $pairs:expr, $sign:expr, $claims:expr, $band:expr;)*) => {
+            $(
+                #[kani::proof]
+                $(#[$attr])*
+                fn $name() {
+                    trial_4($pairs, $sign, $claims, $band);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        #[kani::solver(kissat)] t4g_k_all: 511, 0, 7, 0;
+        t4g_c_far: 64, 0, 7, 0;
+        #[kani::solver(kissat)] t4g_k_far: 64, 0, 7, 0;
+        t4g_c_far_near: 64, 0, 1, 0;
+        t4g_c_far_size: 64, 0, 2, 0;
+        t4g_c_far_exact: 64, 0, 4, 0;
+        #[kani::solver(kissat)] t4g_k_far_near: 64, 0, 1, 0;
+        #[kani::solver(kissat)] t4g_k_far_size: 64, 0, 2, 0;
+        #[kani::solver(kissat)] t4g_k_far_exact: 64, 0, 4, 0;
+        t4g_c_far_plus: 64, 1, 7, 0;
+        t4g_c_far_minus: 64, 2, 7, 0;
+        #[kani::solver(kissat)] t4g_k_far_plus: 64, 1, 7, 0;
+        #[kani::solver(kissat)] t4g_k_far_minus: 64, 2, 7, 0;
+        t4g_c_far_plus_near: 64, 1, 1, 0;
+        t4g_c_far_minus_near: 64, 2, 1, 0;
+        #[kani::solver(kissat)] t4g_k_far_plus_near: 64, 1, 1, 0;
+        #[kani::solver(kissat)] t4g_k_far_minus_near: 64, 2, 1, 0;
+        t4g_c_one: 136, 0, 7, 0;
+        #[kani::solver(kissat)] t4g_k_one: 136, 0, 7, 0;
+        t4g_c_rest: 311, 0, 7, 0;
+        t4g_c_far_minus_near_1: 64, 2, 1, 1;
+        t4g_c_far_minus_near_2: 64, 2, 1, 2;
+        t4g_c_far_minus_near_3: 64, 2, 1, 3;
+        t4g_c_far_minus_near_4: 64, 2, 1, 4;
+        t4g_c_far_minus_near_5: 64, 2, 1, 5;
+        t4g_c_far_minus_near_6: 64, 2, 1, 6;
+        #[kani::solver(kissat)] t4g_k_far_minus_near_1: 64, 2, 1, 1;
+        #[kani::solver(kissat)] t4g_k_far_minus_near_2: 64, 2, 1, 2;
+        #[kani::solver(kissat)] t4g_k_far_minus_near_3: 64, 2, 1, 3;
+        #[kani::solver(kissat)] t4g_k_far_minus_near_4: 64, 2, 1, 4;
+        #[kani::solver(kissat)] t4g_k_far_minus_near_5: 64, 2, 1, 5;
+        #[kani::solver(kissat)] t4g_k_far_minus_near_6: 64, 2, 1, 6;
+        #[kani::solver(kissat)] t4g_k_far_minus_1: 64, 2, 7, 1;
+        #[kani::solver(kissat)] t4g_k_far_minus_2: 64, 2, 7, 2;
+        #[kani::solver(kissat)] t4g_k_far_minus_3: 64, 2, 7, 3;
+        #[kani::solver(kissat)] t4g_k_far_minus_4: 64, 2, 7, 4;
+        #[kani::solver(kissat)] t4g_k_far_minus_5: 64, 2, 7, 5;
+        #[kani::solver(kissat)] t4g_k_far_minus_6: 64, 2, 7, 6;
+    }
+    // TRIAL-END
 
     /// `Steps::refine` never panics: the exact product, or `None` on overflow or towards a coarser
     /// step, for every count.

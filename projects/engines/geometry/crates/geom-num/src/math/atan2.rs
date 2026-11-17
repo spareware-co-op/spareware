@@ -662,6 +662,64 @@ impl Wide192 {
     }
 }
 
+/// The sum [`Tint::mul`] keeps of its six partial products, as three words, the highest first:
+/// `rh·2^64 + rm1 + rm2 + ⌊rl1/2^64⌋ + ⌊rl2/2^64⌋ + ⌊rl3/2^64⌋` (C: the accumulation in
+/// `mul_tint`). `None` only if a step overflowed, which none does when each argument is a product
+/// of two 64-bit words (each step says why).
+///
+/// It is [`Tint::mul`]'s own body, apart so that Kani proves it as a function contract (chapter
+/// 28.7): for any six values no larger than `(2^64 − 1)^2` it returns the reference's column
+/// sums (`proofs::mul_sum_keeps_every_carry`), and the proof of `mul` then uses that contract in
+/// its place (`proofs::mul_keeps_every_carry`). Always inline, so that `mul` compiles to the
+/// instructions it had as one function, which the count gate measures.
+#[cfg_attr(
+    kani,
+    kani::requires(
+        rh <= proofs::LARGEST_PRODUCT
+            && rm1 <= proofs::LARGEST_PRODUCT
+            && rm2 <= proofs::LARGEST_PRODUCT
+            && rl1 <= proofs::LARGEST_PRODUCT
+            && rl2 <= proofs::LARGEST_PRODUCT
+            && rl3 <= proofs::LARGEST_PRODUCT
+    )
+)]
+#[cfg_attr(
+    kani,
+    kani::ensures(|r| r.is_some() && *r == proofs::column_sums(rh, rm1, rm2, rl1, rl2, rl3))
+)]
+#[allow(
+    clippy::inline_always,
+    reason = "mul's own body: out of line it would cost mul a call"
+)]
+#[inline(always)]
+fn mul_sum(rh: u128, rm1: u128, rm2: u128, rl1: u128, rl2: u128, rl3: u128) -> Option<(u64, u64, u64)> {
+    let (mut m, mut h) = halves(rh);
+    // Accumulate rm1. The limb sums are C's unsigned arithmetic modulo 2^64 with the carry
+    // kept by comparison, as the C does; the carry into h cannot overflow it (h is the high
+    // part of the product of two numbers below 2^192, so it stays below 2^64).
+    let (mut l, c) = halves(rm1);
+    m = m.wrapping_add(c);
+    h = h.checked_add(u64::from(m < c))?;
+    // accumulate rm2
+    let (lo2, c) = halves(rm2);
+    l = l.wrapping_add(lo2);
+    let mut cm = u64::from(l < lo2); // carry into m
+    m = m.wrapping_add(c);
+    h = h.checked_add(u64::from(m < c))?;
+    // Accumulate the high halves of rl1 + rl2 + rl3: each below 2^64, so their sum is below
+    // 3·2^64 and the carry count cm at most 4.
+    let s = u128::from(hi64(rl1))
+        .checked_add(u128::from(hi64(rl2)))?
+        .checked_add(u128::from(hi64(rl3)))?;
+    let (lo3, s_hi) = halves(s);
+    cm = cm.checked_add(s_hi)?;
+    l = l.wrapping_add(lo3);
+    cm = cm.checked_add(u64::from(l < lo3))?;
+    m = m.wrapping_add(cm);
+    h = h.checked_add(u64::from(m < cm))?;
+    Some((h, m, l))
+}
+
 impl Tint {
     /// The 192-bit significand.
     fn wide(&self) -> Wide192 {
@@ -715,30 +773,7 @@ impl Tint {
         let rl1 = ah.checked_mul(bl)?;
         let rl2 = am.checked_mul(bm)?;
         let rl3 = al.checked_mul(bh)?;
-        let (mut m, mut h) = halves(rh);
-        // Accumulate rm1. The limb sums are C's unsigned arithmetic modulo 2^64 with the carry
-        // kept by comparison, as the C does; the carry into h cannot overflow it (h is the high
-        // part of the product of two numbers below 2^192, so it stays below 2^64).
-        let (mut l, c) = halves(rm1);
-        m = m.wrapping_add(c);
-        h = h.checked_add(u64::from(m < c))?;
-        // accumulate rm2
-        let (lo2, c) = halves(rm2);
-        l = l.wrapping_add(lo2);
-        let mut cm = u64::from(l < lo2); // carry into m
-        m = m.wrapping_add(c);
-        h = h.checked_add(u64::from(m < c))?;
-        // Accumulate the high halves of rl1 + rl2 + rl3: each below 2^64, so their sum is below
-        // 3·2^64 and the carry count cm at most 4.
-        let s = u128::from(hi64(rl1))
-            .checked_add(u128::from(hi64(rl2)))?
-            .checked_add(u128::from(hi64(rl3)))?;
-        let (lo3, s_hi) = halves(s);
-        cm = cm.checked_add(s_hi)?;
-        l = l.wrapping_add(lo3);
-        cm = cm.checked_add(u64::from(l < lo3))?;
-        m = m.wrapping_add(cm);
-        h = h.checked_add(u64::from(m < cm))?;
+        let (h, m, l) = mul_sum(rh, rm1, rm2, rl1, rl2, rl3)?;
         let mut r = Tint {
             h,
             m,
@@ -1859,9 +1894,10 @@ mod proofs {
     ///
     /// The SAT solver is kissat, and an answer's two claims (the ends agree; the answer is that
     /// double) are two assertions. The claim is one solve, which took `CaDiCaL` (Kani's default)
-    /// 22 to 29 minutes on a hosted runner (runs 44020080291 and 44052487978). Under kissat it
-    /// takes 9 minutes with the two assertions apart (run 44077877942) and took 15.4 with them
-    /// joined by `&&` in one (run 44083788360): the same claim either way, since both must hold.
+    /// 22 to 29 minutes on a hosted runner (runs 44020080291 and 44052487978). Under kissat this
+    /// text took 6.7 and 9.8 minutes (runs 44089885389 and 44086584465), and 15.4 with the two
+    /// assertions joined by `&&` in one (run 44083788360): the same claim either way, since both
+    /// must hold.
     #[kani::proof]
     #[kani::solver(kissat)]
     fn agreed_answers_exactly_when_both_ends_round_alike() {
@@ -1972,6 +2008,54 @@ mod proofs {
         a
     }
 
+    /// The largest product of two 64-bit words, `(2^64 − 1)^2`: what `mul_sum`'s contract asks of
+    /// each of its six arguments.
+    pub(super) const LARGEST_PRODUCT: u128 = (u64::MAX as u128) * (u64::MAX as u128);
+
+    /// The reference for `mul_sum`: `K = rh·2^64 + rm1 + rm2 + ⌊rl1/2^64⌋ + ⌊rl2/2^64⌋ +
+    /// ⌊rl3/2^64⌋` as three words, the highest first, added by columns in 128-bit sums, not by
+    /// `mul_sum`'s comparisons. `None` if `K` is 2^192 or more.
+    pub(super) fn column_sums(
+        rh: u128,
+        rm1: u128,
+        rm2: u128,
+        rl1: u128,
+        rl2: u128,
+        rl3: u128,
+    ) -> Option<(u64, u64, u64)> {
+        let w = |x: u64| u128::from(x);
+        // Each column is a sum of at most five 64-bit numbers: below 2^67.
+        let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
+        let c1 = w(hi64(c0)) + w(lo64(rh)) + w(hi64(rm1)) + w(hi64(rm2));
+        let c2 = w(hi64(rh)) + w(hi64(c1));
+        if c2 >> 64 == 0 {
+            Some((lo64(c2), lo64(c1), lo64(c0)))
+        } else {
+            None
+        }
+    }
+
+    /// `mul_sum`'s contract, for every six values no larger than a product of two 64-bit words
+    /// (`LARGEST_PRODUCT`): it answers, and its answer is the reference's column sums, so `K` is
+    /// below 2^192 and every carry `mul_sum` keeps by comparison is checked against a 128-bit sum.
+    /// Kani assumes the contract's requirement, runs `mul_sum`'s own body and asserts what the
+    /// contract ensures (`-Z function-contracts`).
+    ///
+    /// This is the first half of what `mul_keeps_every_carry` proved as one harness, which took
+    /// 31 to 33 minutes on a hosted runner (runs 44052487978 and main's push of 07ce8f43b): the
+    /// accumulation, for every six values in range, whether or not they are products.
+    #[kani::proof_for_contract(mul_sum)]
+    fn mul_sum_keeps_every_carry() {
+        mul_sum(
+            kani::any(),
+            kani::any(),
+            kani::any(),
+            kani::any(),
+            kani::any(),
+            kani::any(),
+        );
+    }
+
     /// `mul`'s contract, for every pair of operands: it returns exactly the six partial products
     /// it keeps, `K = ah·bh·2^64 + ah·bm + am·bh + ⌊ah·bl/2^64⌋ + ⌊am·bm/2^64⌋ + ⌊al·bh/2^64⌋` in
     /// units of `2^(a.ex + b.ex − 192)`, shifted left once if its top bit is clear, with the signs'
@@ -1980,7 +2064,19 @@ mod proofs {
     /// (the low halves of the last three products, `am·bl + al·bm` and `al·bl`) is below
     /// `3·2^192 + 2·(2^64 − 1)^2·2^64 + 2^128 < 5·2^192`, so `K` is within 5 of its units of the
     /// exact product, and after the shift within 10 ulps: the bound `mul` documents.
+    ///
+    /// The second half of the proof, composed with the first by Kani's function contracts. Here
+    /// `mul`'s call of `mul_sum` is replaced by `mul_sum`'s contract (`stub_verified`): Kani
+    /// asserts the contract's requirement at the call, for every pair of operands, and takes for
+    /// the result any value the contract ensures. Why the two harnesses prove what the one did:
+    /// the requirement is the product bound, asserted and so proven here for the six products
+    /// `mul` forms; what the contract ensures is proven for every six values within that bound by
+    /// `mul_sum_keeps_every_carry`, on `mul_sum`'s own body; and this harness uses nothing of
+    /// `mul_sum` but that contract, while every other line of `mul` (the products, the sign, the
+    /// exponent and the normalising shift) is run as it is and held to the same assertions as
+    /// before, against the same reference.
     #[kani::proof]
+    #[kani::stub_verified(mul_sum)]
     fn mul_keeps_every_carry() {
         let a = any_tint();
         let b = any_tint();
@@ -1993,13 +2089,9 @@ mod proofs {
         let rl1 = ah.checked_mul(bl).unwrap();
         let rl2 = am.checked_mul(bm).unwrap();
         let rl3 = al.checked_mul(bh).unwrap();
-        let w = |x: u64| u128::from(x);
-        // Each column is a sum of at most five 64-bit numbers: below 2^67.
-        let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
-        let c1 = w(hi64(c0)) + w(lo64(rh)) + w(hi64(rm1)) + w(hi64(rm2));
-        let c2 = w(hi64(rh)) + w(hi64(c1));
-        assert!(c2 >> 64 == 0, "K is below 2^192");
-        let (kh, km, kl) = (lo64(c2), lo64(c1), lo64(c0));
+        let k = column_sums(rh, rm1, rm2, rl1, rl2, rl3);
+        assert!(k.is_some(), "K is below 2^192");
+        let (kh, km, kl) = k.unwrap();
         let ex = a.ex + b.ex;
         assert_eq!(r.sgn, a.sgn ^ b.sgn);
         if kh >> 63 == 1 {
@@ -2016,6 +2108,138 @@ mod proofs {
             }
         }
     }
+
+    // TRIAL-BEGIN (measuring only, never in a pull request)
+    fn six(a: &Tint, b: &Tint) -> [u128; 6] {
+        let (ah, am, al) = (u128::from(a.h), u128::from(a.m), u128::from(a.l));
+        let (bh, bm, bl) = (u128::from(b.h), u128::from(b.m), u128::from(b.l));
+        [
+            ah.checked_mul(bh).unwrap(),
+            ah.checked_mul(bm).unwrap(),
+            am.checked_mul(bh).unwrap(),
+            ah.checked_mul(bl).unwrap(),
+            am.checked_mul(bm).unwrap(),
+            al.checked_mul(bh).unwrap(),
+        ]
+    }
+
+    /// Where the time goes: the products twice (1: one pair, 2: all six), the bound (3), the
+    /// column sums of the two sets (4), K below 2^192 for real products (5).
+    fn trial_x(kind: u8) {
+        let a = any_tint();
+        let b = any_tint();
+        let p = six(&a, &b);
+        match kind {
+            1 => {
+                let q = six(&a, &b);
+                assert!(p[0] == q[0]);
+            }
+            2 => {
+                let q = six(&a, &b);
+                assert!(p == q);
+            }
+            3 => {
+                assert!(
+                    p[0] <= LARGEST_PRODUCT
+                        && p[1] <= LARGEST_PRODUCT
+                        && p[2] <= LARGEST_PRODUCT
+                        && p[3] <= LARGEST_PRODUCT
+                        && p[4] <= LARGEST_PRODUCT
+                        && p[5] <= LARGEST_PRODUCT
+                );
+            }
+            4 => {
+                let q = six(&a, &b);
+                assert!(
+                    column_sums(p[0], p[1], p[2], p[3], p[4], p[5])
+                        == column_sums(q[0], q[1], q[2], q[3], q[4], q[5])
+                );
+            }
+            _ => {
+                assert!(column_sums(p[0], p[1], p[2], p[3], p[4], p[5]).is_some());
+            }
+        }
+    }
+
+    /// `mul_keeps_every_carry`'s body with only the claims of the mask: 1 answers (and the
+    /// contract's requirement), 2 K below 2^192, 4 the sign, 8 the unshifted answer, 16 the
+    /// shifted one.
+    fn trial_m(claims: u8) {
+        let a = any_tint();
+        let b = any_tint();
+        let r = a.mul(&b).unwrap();
+        if claims == 1 {
+            return;
+        }
+        let p = six(&a, &b);
+        let k = column_sums(p[0], p[1], p[2], p[3], p[4], p[5]);
+        if claims & 2 != 0 {
+            assert!(k.is_some(), "K is below 2^192");
+        }
+        if k.is_none() {
+            return;
+        }
+        let (kh, km, kl) = k.unwrap();
+        let ex = a.ex + b.ex;
+        if claims & 4 != 0 {
+            assert_eq!(r.sgn, a.sgn ^ b.sgn);
+        }
+        if kh >> 63 == 1 {
+            if claims & 8 != 0 {
+                assert_eq!((r.h, r.m, r.l, r.ex), (kh, km, kl, ex));
+            }
+        } else if claims & 16 != 0 {
+            let shifted = ((kh << 1) | (km >> 63), (km << 1) | (kl >> 63), kl << 1);
+            assert_eq!((r.h, r.m, r.l), shifted);
+            assert!(
+                r.h >> 63 == 1 || (r.h, r.m, r.l) == (0, 0, 0),
+                "normalised or zero"
+            );
+            if r.h != 0 {
+                assert_eq!(r.ex, ex - 1);
+            }
+        }
+    }
+
+    macro_rules! trial {
+        ($($(#[$attr:meta])* $name:ident: $f:ident($arg:expr);)*) => {
+            $(
+                #[kani::proof]
+                #[kani::stub_verified(mul_sum)]
+                $(#[$attr])*
+                fn $name() {
+                    $f($arg);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        t4x_c_1: trial_x(1);
+        t4x_c_2: trial_x(2);
+        t4x_c_3: trial_x(3);
+        t4x_c_4: trial_x(4);
+        t4x_c_5: trial_x(5);
+        #[kani::solver(kissat)] t4x_k_1: trial_x(1);
+        #[kani::solver(kissat)] t4x_k_2: trial_x(2);
+        #[kani::solver(kissat)] t4x_k_3: trial_x(3);
+        #[kani::solver(kissat)] t4x_k_4: trial_x(4);
+        #[kani::solver(kissat)] t4x_k_5: trial_x(5);
+        t4m_c_whole: trial_m(31);
+        #[kani::solver(kissat)] t4m_k_whole: trial_m(31);
+        #[kani::solver(minisat)] t4m_m_whole: trial_m(31);
+        t4m_c_claim_1: trial_m(1);
+        t4m_c_claim_2: trial_m(2);
+        t4m_c_claim_4: trial_m(4);
+        t4m_c_claim_8: trial_m(8);
+        t4m_c_claim_16: trial_m(16);
+        #[kani::solver(kissat)] t4m_k_claim_1: trial_m(1);
+        #[kani::solver(kissat)] t4m_k_claim_2: trial_m(2);
+        #[kani::solver(kissat)] t4m_k_claim_4: trial_m(4);
+        #[kani::solver(kissat)] t4m_k_claim_8: trial_m(8);
+        #[kani::solver(kissat)] t4m_k_claim_16: trial_m(16);
+    }
+    // TRIAL-END
 
     /// A non-negative integer below 2^448, as seven 64-bit words, least significant first.
     type Big = [u64; 7];

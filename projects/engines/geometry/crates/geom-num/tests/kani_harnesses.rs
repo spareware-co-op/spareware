@@ -28,13 +28,15 @@ use std::path::{Path, PathBuf};
 /// The workflow that proves them.
 const WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel-fuzz.yml");
 
-/// The harnesses in `text`, the source of module `module`: every function after `#[kani::proof]`.
+/// The harnesses in `text`, the source of module `module`: every function after `#[kani::proof]`,
+/// or after `#[kani::proof_for_contract(...)]`, the mark of a harness that proves a function's
+/// contract.
 fn harnesses(module: &str, text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut marked = false;
     for line in text.lines() {
         let t = line.trim();
-        if t == "#[kani::proof]" {
+        if t == "#[kani::proof]" || t.starts_with("#[kani::proof_for_contract(") {
             marked = true;
         } else if marked {
             if let Some(rest) = t.strip_prefix("fn ") {
@@ -126,7 +128,11 @@ fn every_harness_is_in_the_kani_job_and_every_entry_is_a_harness() {
         .lines()
         .take_while(|l| !l.starts_with("  ") || l.starts_with("   "))
         .collect();
-    let command = format!("cargo kani -p geom-num --harness {LIMB_PROOFS}");
+    // The two flags are what the crate's function contracts need under Kani 0.68.0 (atan2's
+    // `mul_sum`): the crate does not compile under Kani without them, whichever harness is asked.
+    let command = format!(
+        "cargo kani -p geom-num -Z function-contracts -Z stubbing --harness {LIMB_PROOFS}"
+    );
     assert!(job.iter().any(|l| l.trim() == command), "{job:?}");
 }
 
@@ -139,7 +145,12 @@ fn the_scan_reads_marks_and_attributes() {
     let text =
         "#[kani::proof]\n#[kani::unwind(9)]\nfn a() {}\nfn b() {}\n#[kani::proof]\nfn c() {}\n";
     assert_eq!(harnesses("m", text), ["m::proofs::a", "m::proofs::c"]);
-    let yaml = "jobs:\n  kani-num:\n    strategy:\n      matrix:\n        proof:\n          - m::proofs::a\n          - m::proofs::c\n    defaults:\n";
+    // A harness that proves a function's contract carries its own mark. One that uses a proven
+    // contract carries the plain mark and names the contract on the next line; naming a contract
+    // alone marks nothing.
+    let contracts = "#[kani::proof_for_contract(f)]\nfn d() {}\n#[kani::stub_verified(f)]\nfn e() {}\n#[kani::proof]\n#[kani::stub_verified(f)]\nfn g() {}\n";
+    assert_eq!(harnesses("m", contracts), ["m::proofs::d", "m::proofs::g"]);
+    let yaml ="jobs:\n  kani-num:\n    strategy:\n      matrix:\n        proof:\n          - m::proofs::a\n          - m::proofs::c\n    defaults:\n";
     assert_eq!(
         matrix(yaml),
         BTreeSet::from(["m::proofs::a".to_owned(), "m::proofs::c".to_owned()])
