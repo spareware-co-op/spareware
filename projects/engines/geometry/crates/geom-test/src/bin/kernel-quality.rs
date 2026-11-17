@@ -27,7 +27,12 @@
 //!   test of the run's nextest listing that Miri's table has no row for
 //!   ([`geom_test::miri::unlisted`]).
 //! - `miri-times` writes Miri's table from a measuring run's nextest reports (`junit.xml`)
-//!   ([`geom_test::miri::write_table`]), the only way its rows change (32.58).
+//!   ([`geom_test::miri::write_table`]), the only way its rows change (32.58); with `--dry-run`
+//!   it writes nothing and only says what the reports measured, failing on a test that failed.
+//! - `miri-measure` plans a measuring run on GitHub's runners (the workflow's dispatch input
+//!   `miri_measure`): the tests with no row, or every test, of a Miri listing, packed into parts
+//!   that each end within the stop ([`geom_test::miri::measure_plan`]), each part's filterset
+//!   written to a file and the parts printed as JSON for the workflow's two part matrices.
 //! - `mutants-files` prints the regular expression of the files a push to main's full mutation
 //!   run mutates ([`geom_test::mutants::push_files`]).
 //! - `mutants-increment` and `coverage-increment` print what a later push to a pull request must
@@ -133,6 +138,15 @@ enum ModeArg {
     Diff,
     /// A full run over every mutant, or every mutant of some files.
     Full,
+}
+
+/// Which tests a Miri measuring run measures.
+#[derive(Clone, Copy, ValueEnum)]
+enum Which {
+    /// The tests with no row in Miri's table.
+    New,
+    /// Every test, to measure the whole table again.
+    All,
 }
 
 #[derive(Subcommand)]
@@ -244,9 +258,30 @@ enum Command {
         /// lacks, renamed or removed, is dropped.
         #[arg(long, value_name = "LIST.json")]
         list: Option<PathBuf>,
+        /// Reads the reports and prints what the table would hold, writing nothing: a test that
+        /// failed under Miri still fails it, named.
+        #[arg(long)]
+        dry_run: bool,
         /// The repository root.
         #[arg(long, default_value = ".")]
         repo: PathBuf,
+    },
+    /// Plans a measuring run of Miri's table on GitHub's runners: picks the tests, packs them into
+    /// parts that each end within the stop, writes each part's nextest filterset to
+    /// `OUT/part-<k>.txt` and prints the parts as JSON for the workflow's matrices.
+    MiriMeasure {
+        /// Which tests: those with no row in the table, or all of them.
+        #[arg(long, value_enum)]
+        which: Which,
+        /// The run's whole listing, `cargo miri nextest list --message-format json`.
+        #[arg(long, value_name = "LIST.json")]
+        list: PathBuf,
+        /// A narrower listing of the same run (a filterset's), to measure only its tests.
+        #[arg(long, value_name = "LIST.json")]
+        only: Option<PathBuf>,
+        /// Where to write the parts' filtersets.
+        #[arg(long, value_name = "DIR")]
+        out: PathBuf,
     },
     /// Prints the regular expression of the files a push to main's full mutation run mutates
     /// (empty: none), for `cargo mutants --re` and the judge's `--files`.
@@ -327,6 +362,14 @@ fn read_lines(file: &Path) -> Result<Vec<String>, String> {
     std::fs::read_to_string(file)
         .map(|text| text.lines().map(str::to_owned).collect())
         .map_err(|e| format!("{}: {e}", file.display()))
+}
+
+/// The tests a `cargo nextest list --message-format json` file lists to run.
+fn read_listing(file: &Path) -> Result<Vec<(String, String)>, String> {
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let listing: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", file.display()))?;
+    geom_test::miri::listed_tests(&listing).map_err(|e| format!("{}: {e}", file.display()))
 }
 
 fn canonical(repo: &Path) -> Result<PathBuf, String> {
@@ -782,19 +825,14 @@ fn run(cli: Cli) -> Result<bool, String> {
             stop,
             note,
             list,
+            dry_run,
             repo,
         } => {
             let path = canonical(&repo)?.join(geom_test::miri::TABLE_PATH);
             let old =
                 std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
             let listed = match &list {
-                Some(file) => {
-                    let text = std::fs::read_to_string(file)
-                        .map_err(|e| format!("{}: {e}", file.display()))?;
-                    let listing: serde_json::Value = serde_json::from_str(&text)
-                        .map_err(|e| format!("{}: {e}", file.display()))?;
-                    Some(geom_test::miri::listed_tests(&listing)?)
-                }
+                Some(file) => Some(read_listing(file)?),
                 None => None,
             };
             let mut reported = Vec::new();
@@ -815,7 +853,18 @@ fn run(cli: Cli) -> Result<bool, String> {
                 listed.as_deref(),
                 note.as_deref(),
             )?;
-            std::fs::write(&path, &text).map_err(|e| format!("{}: {e}", path.display()))?;
+            let of_report = geom_test::miri::measured(&[], &reported, scale, stop)?;
+            let report_finish = geom_test::miri::finishing(&of_report).len();
+            println!(
+                "the reports measured {} tests: {report_finish} finish under Miri, {} native-only",
+                of_report.len(),
+                of_report.len().saturating_sub(report_finish)
+            );
+            if dry_run {
+                println!("a dry run: {} is not written", path.display());
+            } else {
+                std::fs::write(&path, &text).map_err(|e| format!("{}: {e}", path.display()))?;
+            }
             let rows = geom_test::miri::parse_table(&text)?;
             let tests = geom_test::miri::finishing(&rows);
             let finish = tests.len();
@@ -832,6 +881,51 @@ fn run(cli: Cli) -> Result<bool, String> {
                 ),
                 None => println!("a test alone takes longer than a partition may"),
             }
+            Ok(true)
+        }
+        Command::MiriMeasure {
+            which,
+            list,
+            only,
+            out,
+        } => {
+            let whole = read_listing(&list)?;
+            let picked = match &only {
+                Some(file) => {
+                    let narrow = read_listing(file)?;
+                    let all: std::collections::BTreeSet<&(String, String)> = whole.iter().collect();
+                    if let Some((b, t)) = narrow.iter().find(|n| !all.contains(n)) {
+                        return Err(format!(
+                            "{}: {b} {t} is not in the run's whole listing",
+                            file.display()
+                        ));
+                    }
+                    narrow
+                }
+                None => whole,
+            };
+            let rows = geom_test::miri::parse_table(geom_test::miri::TIMES)?;
+            let which = match which {
+                Which::New => geom_test::miri::Measuring::New,
+                Which::All => geom_test::miri::Measuring::All,
+            };
+            let tests = geom_test::miri::to_measure(&rows, &picked, which);
+            let plan = geom_test::miri::measure_plan(&tests)?;
+            let count = if tests.is_empty() { 0 } else { plan.len() };
+            std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+            for k in 1..=count {
+                let file = out.join(format!("part-{k}.txt"));
+                std::fs::write(&file, plan.filterset(k)?)
+                    .map_err(|e| format!("{}: {e}", file.display()))?;
+            }
+            eprintln!(
+                "{} of the run's {} tests to measure, in {count} parts of at most {} s at {} at once",
+                tests.len(),
+                picked.len(),
+                geom_test::miri::BUDGET,
+                geom_test::miri::AT_ONCE
+            );
+            println!("{}", geom_test::miri::measure_matrix(tests.len(), count));
             Ok(true)
         }
         Command::MutantsFiles {
