@@ -22,10 +22,11 @@
 //!   naming on standard error) any without a function to measure ([`geom_test::coverage::has_code`]).
 //! - `miri-packages` prints the `-p` arguments of every kernel crate for the Miri run
 //!   ([`geom_test::miri`]); with `--changed`, of those whose tests the change reaches.
-//! - `miri-filter` prints the nextest filterset of one Miri partition, the finishing tests the
-//!   plan balanced by their recorded times gives it ([`geom_test::miri::plan`]), and fails on any
-//!   test of the run's nextest listing that Miri's table has no row for
-//!   ([`geom_test::miri::unlisted`]).
+//! - `miri-plan` plans the Miri gate once for every job of a run: it fails on any test of the
+//!   run's nextest listing that Miri's table has no row for ([`geom_test::miri::unlisted`]),
+//!   writes each partition's nextest filterset, its finishing tests balanced by their recorded
+//!   times, and geom-pool's ([`geom_test::miri::gate_plan`]), and prints the partitions as JSON for
+//!   the workflow's matrix.
 //! - `miri-times` writes Miri's table from a measuring run's nextest reports (`junit.xml`)
 //!   ([`geom_test::miri::write_table`]), the only way its rows change (32.58); with `--dry-run`
 //!   it writes nothing and only says what the reports measured, failing on a test that failed.
@@ -225,19 +226,17 @@ enum Command {
         #[arg(long, default_value = ".")]
         repo: PathBuf,
     },
-    /// Prints the nextest filterset of one Miri partition: its tests in the plan the recorded
-    /// times balance (`geom_test::miri::plan`).
-    MiriFilter {
-        /// The partition, from 1.
-        #[arg(long)]
-        partition: usize,
-        /// How many partitions the run has.
-        #[arg(long)]
-        of: usize,
+    /// Plans the Miri gate (`geom_test::miri::gate_plan`): writes partition k's nextest filterset
+    /// to `OUT/part-<k>.txt` and geom-pool's to `OUT/pool.txt`, and prints `{"count": n, "parts":
+    /// [1, ..., n], "tests": t, "pool": p}`.
+    MiriPlan {
         /// The run's tests, `cargo miri nextest list --message-format json`: every one must have
         /// a row in the table.
         #[arg(long, value_name = "LIST.json")]
         list: PathBuf,
+        /// Where to write the filtersets.
+        #[arg(long, value_name = "DIR")]
+        out: PathBuf,
     },
     /// Writes Miri's table (geom-test's `src/miri-times.tsv`) from a measuring run's nextest
     /// reports (`junit.xml`): each test they name gets the state they measured; a failure
@@ -821,18 +820,9 @@ fn run(cli: Cli) -> Result<bool, String> {
             println!("{}", geom_test::miri::cargo_args(&packages));
             Ok(true)
         }
-        Command::MiriFilter {
-            partition,
-            of,
-            list,
-        } => {
+        Command::MiriPlan { list, out } => {
             let rows = geom_test::miri::parse_table(geom_test::miri::TIMES)?;
-            let text =
-                std::fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?;
-            let listing: serde_json::Value =
-                serde_json::from_str(&text).map_err(|e| format!("{}: {e}", list.display()))?;
-            let missing =
-                geom_test::miri::unlisted(&rows, &geom_test::miri::listed_tests(&listing)?);
+            let missing = geom_test::miri::unlisted(&rows, &read_listing(&list)?);
             if !missing.is_empty() {
                 eprintln!(
                     "{} tests have no row in Miri's table; measure them under Miri and write \
@@ -844,10 +834,34 @@ fn run(cli: Cli) -> Result<bool, String> {
                 }
                 return Ok(false);
             }
-            let tests = geom_test::miri::finishing(&rows);
+            let gate = geom_test::miri::gate_plan(&rows)?;
+            std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+            let count = gate.parts.len();
+            let mut tests = 0_usize;
+            for k in 1..=count {
+                let file = out.join(format!("part-{k}.txt"));
+                std::fs::write(&file, gate.parts.filterset(k)?)
+                    .map_err(|e| format!("{}: {e}", file.display()))?;
+                tests = tests.saturating_add(gate.parts.tests_of(k).len());
+                eprintln!(
+                    "partition {k}: {} tests, at most {} s",
+                    gate.parts.tests_of(k).len(),
+                    gate.parts.part_seconds(k)
+                );
+            }
+            let file = out.join("pool.txt");
+            std::fs::write(&file, gate.pool.filterset(1)?)
+                .map_err(|e| format!("{}: {e}", file.display()))?;
+            let pool = gate.pool.tests_of(1).len();
+            eprintln!(
+                "{}: {pool} tests, at most {} s",
+                geom_test::miri::TREE_BORROWS_CRATE,
+                gate.pool.part_seconds(1)
+            );
+            let parts: Vec<usize> = (1..=count).collect();
             println!(
                 "{}",
-                geom_test::miri::plan(&tests, of)?.filterset(partition)?
+                serde_json::json!({"count": count, "parts": parts, "tests": tests, "pool": pool})
             );
             Ok(true)
         }
@@ -898,20 +912,27 @@ fn run(cli: Cli) -> Result<bool, String> {
                 std::fs::write(&path, &text).map_err(|e| format!("{}: {e}", path.display()))?;
             }
             let rows = geom_test::miri::parse_table(&text)?;
-            let tests = geom_test::miri::finishing(&rows);
-            let finish = tests.len();
+            let finish = geom_test::miri::finishing(&rows).len();
             println!(
                 "{} rows from {} reported tests: {finish} finish under Miri, {} native-only",
                 rows.len(),
                 reported.len(),
                 rows.len().saturating_sub(finish)
             );
-            match geom_test::miri::fewest(&tests) {
-                Some(n) => println!(
-                    "the fewest partitions within {} s: {n} (the workflow's PARTITIONS)",
-                    geom_test::miri::PART_SECONDS
+            match geom_test::miri::gate_plan(&rows) {
+                Ok(gate) => println!(
+                    "the gate's plan, its tests at {}/{} of their seconds and never over the stop: \
+                     {} partitions within {} s, the slowest {} s, and {}'s {} tests in {} s",
+                    geom_test::miri::SLOWER.0,
+                    geom_test::miri::SLOWER.1,
+                    gate.parts.len(),
+                    geom_test::miri::PART_SECONDS,
+                    gate.parts.longest(),
+                    geom_test::miri::TREE_BORROWS_CRATE,
+                    gate.pool.tests_of(1).len(),
+                    gate.pool.longest()
                 ),
-                None => println!("a test alone takes longer than a partition may"),
+                Err(why) => println!("the gate cannot be planned: {why}"),
             }
             Ok(true)
         }

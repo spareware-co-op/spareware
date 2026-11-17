@@ -21,7 +21,12 @@
 //!   for later runs (a build cache saved, an artifact uploaded, a release, a cache entry or a
 //!   repository written through `gh` or `git push`) does so only on a push to main or in the merge
 //!   queue, by `&&` terms of its condition with no `||` beside them, so a run by hand, on main or
-//!   on any branch, writes nothing another run trusts.
+//!   on any branch, writes nothing another run trusts. The one upload let through is an in-run
+//!   hand-over of [`HAND_OVERS`].
+//! - `an_in_run_hand_over_is_kept_a_day_and_read_in_its_run`: each of [`HAND_OVERS`] (`kernel.yml`'s
+//!   wasm archive, `kernel-quality.yml`'s Miri plan) is uploaded by exactly its job under exactly
+//!   its name, kept one day, and downloaded under that name by exactly its jobs of the same run;
+//!   no other upload of either workflow is kept one day, and none other uses a hand-over's name.
 //! - `the_queue_and_the_pull_request_cover_every_leg`: the goldens' matrix (`test`) and the
 //!   pull request's Linux job (`linux`) together cover every native runner in release and debug,
 //!   once each; the suites run optimised with overflow checks and debug assertions on, on Linux
@@ -79,6 +84,38 @@ use yaml_rust2::{Yaml, YamlLoader};
 
 const WORKFLOWS: &str = ".github/workflows";
 const RULESET: &str = ".github/rulesets/protect-main.json";
+
+/// An upload that hands something to jobs of the same run, not to later runs: its workflow, the
+/// job that uploads it, its name there, the jobs that download it and the name they download.
+struct HandOver {
+    workflow: &'static str,
+    job: &'static str,
+    name: &'static str,
+    readers: &'static [&'static str],
+    read_as: &'static str,
+}
+
+/// Every in-run hand-over: `kernel.yml`'s wasm build archive for its suite's parts, and
+/// `kernel-quality.yml`'s Miri plan (filtersets, crates and cargo-nextest) for its Miri jobs.
+const HAND_OVERS: [HandOver; 2] = [
+    HandOver {
+        workflow: "kernel.yml",
+        job: "wasm-build",
+        name: "wasm-${{ matrix.build }}",
+        readers: &["wasm-suite"],
+        read_as: "wasm-${{ matrix.part.build }}",
+    },
+    HandOver {
+        workflow: "kernel-quality.yml",
+        job: "miri-plan",
+        name: "miri-plan",
+        readers: &["miri", "miri-pool"],
+        read_as: "miri-plan",
+    },
+];
+
+/// The one day an in-run hand-over is kept.
+const HAND_OVER_DAYS: i64 = 1;
 
 /// The checks main's ruleset requires: each workflow's last job, by its name.
 const REQUIRED: [(&str, &str, &str); 3] = [
@@ -400,19 +437,10 @@ fn writer_problems(kernel: &str) -> Vec<String> {
             let run = text(&step["run"]);
             // A hand-over inside one run (`wasm-build`'s archive for `wasm-suite`'s parts) is not
             // for later runs: it is named by its build, kept one day, and downloaded under the
-            // same name by a job of the same run. Anything else that uploads is held to the rule.
+            // same name by a job of the same run (`hand_over_problems`). Anything else that
+            // uploads is held to the rule.
             if uses.starts_with("actions/upload-artifact@")
-                && job == "wasm-build"
-                && text(&step["with"]["name"]) == "wasm-${{ matrix.build }}"
-                && step["with"]["retention-days"].as_i64() == Some(1)
-                && w["jobs"]["wasm-suite"]["steps"]
-                    .as_vec()
-                    .into_iter()
-                    .flatten()
-                    .any(|d| {
-                        text(&d["uses"]).starts_with("actions/download-artifact@")
-                            && text(&d["with"]["name"]) == "wasm-${{ matrix.part.build }}"
-                    })
+                && is_hand_over(&w, "kernel.yml", &job, step)
             {
                 continue;
             }
@@ -443,6 +471,84 @@ fn writer_problems(kernel: &str) -> Vec<String> {
                      the queue alone: {condition:?}"
                 ));
             }
+        }
+    }
+    found
+}
+
+/// Whether `step` of `job` in `workflow` is one of [`HAND_OVERS`], exactly: its job, its name, kept
+/// [`HAND_OVER_DAYS`], and downloaded under its reading name by each of its readers.
+fn is_hand_over(w: &Yaml, workflow: &str, job: &str, step: &Yaml) -> bool {
+    HAND_OVERS.iter().any(|h| {
+        h.workflow == workflow
+            && h.job == job
+            && text(&step["with"]["name"]) == h.name
+            && step["with"]["retention-days"].as_i64() == Some(HAND_OVER_DAYS)
+            && h.readers.iter().all(|r| {
+                w["jobs"][*r]["steps"]
+                    .as_vec()
+                    .into_iter()
+                    .flatten()
+                    .any(|d| {
+                        text(&d["uses"]).starts_with("actions/download-artifact@")
+                            && text(&d["with"]["name"]) == h.read_as
+                    })
+            })
+    })
+}
+
+/// What is wrong with the in-run hand-overs of `workflow` (its text): each of [`HAND_OVERS`] there
+/// is uploaded once, by its job, exactly ([`is_hand_over`]); no other upload is kept
+/// [`HAND_OVER_DAYS`] or uses a hand-over's name; and only a hand-over's readers download it.
+fn hand_over_problems(workflow: &str, source: &str) -> Vec<String> {
+    let w = parse(source);
+    let mut found = Vec::new();
+    let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
+    let ours: Vec<&HandOver> = HAND_OVERS
+        .iter()
+        .filter(|h| h.workflow == workflow)
+        .collect();
+    for job in keys(&w["jobs"]) {
+        for (i, step) in w["jobs"][job.as_str()]["steps"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let uses = text(&step["uses"]);
+            let name = text(&step["with"]["name"]);
+            let said = format!("{workflow}: {job}'s step {}", i + 1);
+            if uses.starts_with("actions/upload-artifact@") {
+                let named = ours.iter().find(|h| h.name == name || h.read_as == name);
+                if is_hand_over(&w, workflow, &job, step) {
+                    *seen.entry(named.map_or("", |h| h.name)).or_default() += 1;
+                } else if let Some(h) = named {
+                    found.push(format!(
+                        "{said} uploads {name}, a hand-over's name, but is not {}'s hand-over of                          it, kept {HAND_OVER_DAYS} day and read by {:?}",
+                        h.job, h.readers
+                    ));
+                } else if step["with"]["retention-days"].as_i64() == Some(HAND_OVER_DAYS) {
+                    found.push(format!(
+                        "{said} uploads {name} for one day, an in-run hand-over that is not listed"
+                    ));
+                }
+            }
+            if uses.starts_with("actions/download-artifact@")
+                && let Some(h) = ours.iter().find(|h| h.read_as == name)
+                && !h.readers.contains(&job.as_str())
+            {
+                found.push(format!(
+                    "{said} downloads {name}, which is not handed to it"
+                ));
+            }
+        }
+    }
+    for h in ours {
+        if seen.get(h.name).copied() != Some(1) {
+            found.push(format!(
+                "{workflow}: {} does not hand {} over once, kept {HAND_OVER_DAYS} day and read by                  {:?}",
+                h.job, h.name, h.readers
+            ));
         }
     }
     found
@@ -1567,6 +1673,75 @@ fn a_run_by_hand_writes_nothing_later_runs_read() {
         let found = writer_problems(&k);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn an_in_run_hand_over_is_kept_a_day_and_read_in_its_run() {
+    let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
+    let quality = read(&format!("{WORKFLOWS}/kernel-quality.yml"));
+    assert_eq!(
+        hand_over_problems("kernel.yml", &kernel),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        hand_over_problems("kernel-quality.yml", &quality),
+        Vec::<String>::new()
+    );
+
+    // Seeded violations, each a widening of the rule: each must be reported.
+    let plan_upload = "          name: miri-plan\n          path: ${{ runner.temp }}/miri-plan\n          \
+                       retention-days: 1\n";
+    for (from, to, said) in [
+        // The Miri plan kept a month, for later runs to find.
+        (
+            plan_upload,
+            "          name: miri-plan\n          path: ${{ runner.temp }}/miri-plan\n          \
+             retention-days: 30\n",
+            "miri-plan's step 9 uploads miri-plan, a hand-over's name",
+        ),
+        // The plan uploaded under another name, which no Miri job downloads.
+        (
+            plan_upload,
+            "          name: miri-tools\n          path: ${{ runner.temp }}/miri-plan\n          \
+             retention-days: 1\n",
+            "an in-run hand-over that is not listed",
+        ),
+        // A second job's upload kept one day beside it.
+        (
+            "          name: miri-pool\n",
+            "          name: miri-pool\n          retention-days: 1\n",
+            "miri-pool's step 9 uploads miri-pool for one day",
+        ),
+        // Another job downloading the plan.
+        (
+            "          name: miri-measure-plan\n          path: ${{ runner.temp }}/measure\n      - name: Measure",
+            "          name: miri-plan\n          path: ${{ runner.temp }}/measure\n      - name: Measure",
+            "downloads miri-plan, which is not handed to it",
+        ),
+    ] {
+        let planted = quality.replacen(from, to, 1);
+        assert_ne!(planted, quality, "the planted edit {from:?} applies");
+        let found = hand_over_problems("kernel-quality.yml", &planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+    // The wasm archive renamed: the rule lets nothing else through.
+    let planted = kernel.replacen(
+        "          name: wasm-${{ matrix.build }}\n          path:",
+        "          name: kernel-archive-${{ matrix.build }}\n          path:",
+        1,
+    );
+    assert_ne!(planted, kernel);
+    let found = hand_over_problems("kernel.yml", &planted);
+    assert!(
+        found
+            .iter()
+            .any(|p| p.contains("wasm-build does not hand wasm-${{ matrix.build }} over once")),
+        "{found:#?}"
+    );
 }
 
 #[cfg_attr(
