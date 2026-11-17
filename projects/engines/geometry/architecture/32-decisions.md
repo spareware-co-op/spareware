@@ -855,6 +855,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-oracles.yml` | `scope` | Not a gate: added after the gate, it decides which crates' tests the change reaches (`kernel-quality test-scope`, as `kernel.yml`'s `scope`), so which of this workflow's jobs run: its output `crates` for every other job, empty on a pull request, and `reached` for the mesh jobs |
 | `kernel-oracles.yml` | `slow-fixtures` | Not a gate: added after the gate, it runs on a push to main, by hand and on a release tag; on a pull request `scope` gives it no crate, so its condition skips it |
 | `kernel-oracles.yml` | `corpora` | Not a gate: as `slow-fixtures` |
+| `kernel-oracles.yml` | `ssi-acceptance` | Not a gate: added after the gate (G160, 12.17), as `slow-fixtures`; the intersection acceptance harness on the ssi-corpus, scored by the corpus's own scorer and held to 12.17's gate |
 | `kernel-oracles.yml` | `ember-corpus` | Not a gate: added after the gate (Gate 4, G156), as `slow-fixtures`; it fetches EMBER's cleared pairs' corpus once a run, or restores it from the Actions cache, for `corpora` and `ember-pairs` |
 | `kernel-oracles.yml` | `ember-pairs` | Not a gate: added after the gate (Gate 4, G156), as `slow-fixtures`; EMBER's cleared pairs to the exact reference, a group of pairs a job |
 | `kernel-oracles.yml` | `ember-build` | Not a gate: added after the gate (Gate 4, G156), as `slow-fixtures`; it builds the pairs' test once for every `ember-pairs` job |
