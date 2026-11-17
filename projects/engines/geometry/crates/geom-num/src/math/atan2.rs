@@ -1856,14 +1856,24 @@ mod proofs {
     /// `agreed` answers exactly when the lower and upper ends, each rounded once as the enclosure
     /// is, are the same double, and it answers that double. For the fast paths' values: an angle,
     /// its low part and a small positive bound.
+    ///
+    /// The SAT solver is kissat, and an answer's two claims (the ends agree; the answer is that
+    /// double) are two assertions. The claim is one solve, which took `CaDiCaL` (Kani's default)
+    /// 22 to 29 minutes on a hosted runner (runs 44020080291 and 44052487978). Under kissat it
+    /// takes 9 minutes with the two assertions apart (run 44077877942) and took 15.4 with them
+    /// joined by `&&` in one (run 44083788360): the same claim either way, since both must hold.
     #[kani::proof]
+    #[kani::solver(kissat)]
     fn agreed_answers_exactly_when_both_ends_round_alike() {
         let (fh, fl, eps): (f64, f64, f64) = (kani::any(), kani::any(), kani::any());
         kani::assume(fh.abs() <= 4.0 && fl.abs() <= 1.0 && eps > 0.0 && eps <= 1.0);
         let lower = fh + (fl - eps);
         let upper = fh + (fl + eps);
         match agreed(fh, fl, eps) {
-            Some(r) => assert!(lower == upper && r.to_bits() == upper.to_bits()),
+            Some(r) => {
+                assert!(lower == upper);
+                assert!(r.to_bits() == upper.to_bits());
+            }
             None => assert!(lower != upper),
         }
     }

@@ -1,0 +1,140 @@
+# Each test unit of geom-test, geom-fuzz and geom-gen with its seconds under wasmtime on
+# wasm32-wasip1, in debug: the most that `cargo test` took to run it (wasmtime compiling the binary
+# included) in kernel-dev.yml's wasm job on main's pushes 79dd48d74, baaea2828, e792e882e and
+# 907247b27 (runs 44000736810, 44020082540, 44043473629 and 44052487974; the slowest runner's
+# whole run 1,327 s). `kernel-quality wasm-dev-parts` shares the units out among the job's parts by
+# these seconds, and geom-test's tests/wasm_dev_parts.rs holds the job to that plan and every unit
+# to exactly one part. A unit is `lib` (the library's unit tests), `doc` (its doctests), `bin <name>`
+# or `test <name>`; a unit not listed here is planned at the slowest listed time. Two units of one
+# name in two crates (`test naming`, `test orient2d`) cannot be told apart in the logs, so both carry
+# the larger.
+# `test certificates_workflow` came after those pushes: its seconds are the same job's on the head
+# of the pull request that added it (run 44086231115).
+# crate unit<TAB>seconds
+geom-fuzz bin replay-hashes	1
+geom-fuzz doc	1
+geom-fuzz lib	10
+geom-fuzz test adversarial	6
+geom-fuzz test arenas	5
+geom-fuzz test attack_g14	10
+geom-fuzz test attributes	4
+geom-fuzz test batch	4
+geom-fuzz test bodies	8
+geom-fuzz test booleans	10
+geom-fuzz test boxtree	4
+geom-fuzz test cache	5
+geom-fuzz test cbor	3
+geom-fuzz test cdt	1
+geom-fuzz test contract	9
+geom-fuzz test curve_offsets	25
+geom-fuzz test curves	4
+geom-fuzz test encoder	3
+geom-fuzz test euler	30
+geom-fuzz test exact	2
+geom-fuzz test linalg	2
+geom-fuzz test make	11
+geom-fuzz test maths	1
+geom-fuzz test names	3
+geom-fuzz test naming	14
+geom-fuzz test nurbs	2
+geom-fuzz test open	4
+geom-fuzz test operations	2
+geom-fuzz test orient2d	3
+geom-fuzz test p21	30
+geom-fuzz test planes	5
+geom-fuzz test predicates	6
+geom-fuzz test prune	3
+geom-fuzz test records	4
+geom-fuzz test references	12
+geom-fuzz test roots	4
+geom-fuzz test sequence	53
+geom-fuzz test solids	4
+geom-fuzz test surface_offsets	38
+geom-fuzz test surfaces	8
+geom-fuzz test transforms	2
+geom-fuzz test variants	2
+geom-fuzz test wide	3
+geom-gen bin geom-gen	1
+geom-gen doc	1
+geom-gen lib	8
+geom-gen test attack_g27	2
+geom-gen test certificate_problems	2
+geom-gen test drift	1
+geom-gen test facade	1
+geom-gen test predicate_checker	3
+geom-gen test predicate_rounded	1
+geom-gen test purity	1
+geom-gen test verus_twin	6
+geom-gen test write_check	2
+geom-test bin corpus	1
+geom-test bin fixture	1
+geom-test bin golden	1
+geom-test bin guard	1
+geom-test bin kernel-quality	1
+geom-test bin map	1
+geom-test bin oracle	1
+geom-test bin provenance	1
+geom-test bin recursion	1
+geom-test bin source-scan	1
+geom-test bin trip	1
+geom-test doc	9
+geom-test lib	16
+geom-test test attack_g10	1
+geom-test test attack_g11	2
+geom-test test attack_g110	4
+geom-test test attack_g13	23
+geom-test test attack_g135	25
+geom-test test attack_g15	2
+geom-test test attack_g16	3
+geom-test test attack_g17	1
+geom-test test attack_g19	2
+geom-test test attack_g20	1
+geom-test test attack_g43	2
+geom-test test canonical	2
+geom-test test certificates_workflow	1
+geom-test test completeness	1
+geom-test test contract_kit	1
+geom-test test corpus	1
+geom-test test corpus_polyhedral	218
+geom-test test corpus_runs	2
+geom-test test dependency_rule	1
+geom-test test determinism	6
+geom-test test ember_pairs	3
+geom-test test fixture_tool	1
+geom-test test fixtures	5
+geom-test test flat_reference	39
+geom-test test fuzz_scope	2
+geom-test test kernel_quality_workflow	2
+geom-test test laws_booleans	97
+geom-test test laws_curves	14
+geom-test test laws_formats	5
+geom-test test laws_mass	8
+geom-test test laws_names	7
+geom-test test laws_numbers	7
+geom-test test laws_nurbs	6
+geom-test test laws_surfaces	350
+geom-test test ledger_repo	1
+geom-test test ledger_seeded	2
+geom-test test licences	1
+geom-test test manifold_rust_oracle	34
+geom-test test map_files	1
+geom-test test map_repo	1
+geom-test test map_seeded	2
+geom-test test museum	5
+geom-test test naming	14
+geom-test test nurbs_reference	3
+geom-test test oracle	5
+geom-test test oracle_meshes	35
+geom-test test oracle_tool	1
+geom-test test oracles_workflow	1
+geom-test test orient2d	3
+geom-test test quality_gates	2
+geom-test test queue_wiring	1
+geom-test test replay	4
+geom-test test scan_repo	1
+geom-test test scan_seeded	1
+geom-test test second_mesh	1
+geom-test test seed_replay	1
+geom-test test seeded_gates	1
+geom-test test shipped	10
+geom-test test test_scope	1

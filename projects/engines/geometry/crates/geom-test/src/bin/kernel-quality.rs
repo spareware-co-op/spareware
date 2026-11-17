@@ -374,6 +374,17 @@ enum Command {
         #[command(flatten)]
         since: SinceArgs,
     },
+    /// Prints the `part:` lines of `kernel-dev.yml`'s `wasm` job's matrix: the development crates'
+    /// test units shared out among this many parts by their measured seconds
+    /// (`geom_test::test_scope::wasm_dev_matrix`).
+    WasmDevParts {
+        /// How many parts.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u16).range(1..))]
+        parts: u16,
+        /// The repository root.
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+    },
     /// Prints which fuzz targets and Kani proofs a change can affect, and why.
     FuzzScope {
         /// Every target and proof: a push to main, a release tag.
@@ -1146,6 +1157,19 @@ fn run(cli: Cli) -> Result<bool, String> {
             for file in geom_test::increment::coverage(&since(&args, &root)?) {
                 println!("{file}");
             }
+            Ok(true)
+        }
+        Command::WasmDevParts { parts, repo } => {
+            let units = test_scope::wasm_dev_units(
+                &metadata(&canonical(&repo)?)?,
+                &test_scope::WASM_DEV_CRATES,
+            );
+            let times = coverage::parse_times(test_scope::WASM_DEV_TIMES)
+                .map_err(|e| format!("wasm-dev-times.tsv: {e}"))?;
+            print!(
+                "{}",
+                test_scope::wasm_dev_matrix(&units, &times, usize::from(parts))
+            );
             Ok(true)
         }
         Command::FuzzScope {

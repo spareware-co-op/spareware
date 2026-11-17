@@ -44,6 +44,15 @@ name: Kernel fuzzing and proofs
 # (--locked). Every action is pinned to a full commit, checked against its tag when it was pinned,
 # as in kernel.yml.
 #
+# By hand (`workflow_dispatch`): only the harnesses the run names, to read a proof's minutes on a
+# hosted runner without the whole workflow's jobs. `-f kani_num=` names geom-num's harnesses and
+# `-f kani=` geom-fuzz's, each a list separated by spaces; the job `named` checks the names and
+# hands them on, and `kani-num-named` and `kani-named` prove each with the steps of `kani-num` and
+# `kani`, word for word but for the planted violation, which those jobs have already shown fails.
+# No other job runs: `cheap` and `select` are skipped, and with them every job that needs them. A
+# push, a pull request and the release's call never reach these jobs, and run as they did.
+# geom-test's tests/fuzz_scope.rs holds all of this to the text below.
+#
 # --locked: every cargo command that resolves dependencies runs with --locked, or after a
 # `cargo metadata --locked`, which fails if Cargo.lock is not the reviewed one, for the tool
 # (cargo kani) that takes no such flag.
@@ -132,14 +141,28 @@ on:
       - "rust-toolchain.toml"
       - "rust-toolchain"
       - ".github/workflows/kernel-fuzz.yml"
+  workflow_dispatch:
+    inputs:
+      kani_num:
+        description: "geom-num's Kani harnesses to prove alone, separated by spaces, e.g. eft::proofs::two_sum_of_any_and_three"
+        required: false
+        default: ""
+        type: string
+      kani:
+        description: "geom-fuzz's Kani harnesses to prove alone, separated by spaces, e.g. orient2d_proof_filter"
+        required: false
+        default: ""
+        type: string
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
 
 permissions:
   contents: read
 
+# A run by hand has a group of its own, so two of them on one branch never wait for each other;
+# every other run's group is as it was (the second term is empty).
 concurrency:
-  group: kernel-fuzz-${{ github.ref }}
+  group: kernel-fuzz-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && format('-by-hand-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -151,14 +174,18 @@ jobs:
   cheap:
     name: Cheap checks first
     # Waits for format, lints, the scaffold and the sign-off (cheap-checks.yml), so a push that
-    # fails one of them stops here; every heavy job below lists this job under `needs`.
+    # fails one of them stops here; every heavy job below lists this job under `needs`. A run by
+    # hand proves only the harnesses it names (the job `named`), so it skips this job.
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/cheap-checks.yml
 
   # Which proofs the change can affect (the paragraph above): on a pull request, the files of its
   # merge commit's diff against its base; on any other run, everything. Its outputs are each job's
-  # `if`. It runs beside `cheap`, so it adds no wait.
+  # `if`. It runs beside `cheap`, so it adds no wait. A run by hand skips it, and so every job
+  # that needs it.
   select:
     name: Which proofs the change can affect
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -200,6 +227,50 @@ jobs:
         run: >-
           cargo run --locked -q -p geom-test --bin kernel-quality -- fuzz-scope $SCOPE
           --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # A run by hand only: the harnesses it names, checked and handed on as the two lists the jobs
+  # `kani-named` and `kani-num-named` prove. A name is letters, digits, `_` and `:` only, and a run
+  # that names none fails here, so a run by hand is never the whole workflow.
+  named:
+    name: The harnesses named by hand
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      kani: ${{ steps.lists.outputs.kani }}
+      kani_num: ${{ steps.lists.outputs.kani_num }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: The two lists
+        id: lists
+        env:
+          INPUT_KANI: ${{ inputs.kani }}
+          INPUT_KANI_NUM: ${{ inputs.kani_num }}
+        run: |
+          list() {
+            local json="[" sep="" name
+            for name in $1; do
+              if [[ ! "$name" =~ ^[A-Za-z0-9_:]+$ ]]; then
+                echo "::error::Not a harness's name: $name"
+                exit 1
+              fi
+              json="$json$sep\"$name\""
+              sep=","
+            done
+            echo "$json]"
+          }
+          kani=$(list "$INPUT_KANI")
+          kani_num=$(list "$INPUT_KANI_NUM")
+          if [ "$kani$kani_num" = "[][]" ]; then
+            echo "::error::Name at least one harness: -f kani_num='<names>' or -f kani='<names>'."
+            exit 1
+          fi
+          {
+            echo "kani=$kani"
+            echo "kani_num=$kani_num"
+          } | tee -a "$GITHUB_OUTPUT"
 
   kani:
     name: Kani (${{ matrix.harness }})
@@ -325,6 +396,49 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
+  # A run by hand only: each of geom-fuzz's harnesses the run names (`-f kani=`), proved with
+  # kani's steps, word for word but for the planted violation, so its minutes are a part's of
+  # that job.
+  kani-named:
+    name: Kani by hand (${{ matrix.harness }})
+    needs: named
+    if: github.event_name == 'workflow_dispatch' && needs.named.outputs.kani != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        harness: ${{ fromJSON(needs.named.outputs.kani || '[""]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          # setup downloads Kani's bundle from a GitHub release, which now and then answers HTTP 504
+          # under load; a failed try leaves no bundle, so clear ~/.kani and try again.
+          for attempt in 1 2 3 4 5; do
+            cargo kani setup && break
+            [ "$attempt" = 5 ] && exit 1
+            rm -rf "$HOME/.kani"; sleep 30
+          done
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Prove ${{ matrix.harness }}
+        run: |
+          start=$(date +%s)
+          cargo kani --tests -p geom-fuzz -Z stubbing --harness "${{ matrix.harness }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
   # Bounded proofs beside geom-num's own code (chapter 28.7; piece G41): each harness of a module's
   # `#[cfg(kani)] mod proofs`, proven by Kani for every case of its domain, with Kani's overflow,
   # bounds and panic checks on. A harness that cannot finish within the budget is narrowed, and
@@ -333,6 +447,19 @@ jobs:
   # in WSL on 2026-10-28, with up to thirteen proofs sharing twelve cores, the slowest took 57
   # minutes (exact_sum's cancellation in the subnormals), eft's full-width two_prod with the
   # splitter 54 and dd's from_i128 46; 120 minutes is the margin the orient2d proof's job kept before it was split by claim.
+  # two_sum's law against 3, −0.1, 2^53 and the smallest subnormal is two harnesses a value, one
+  # for each order of its operands, which together prove what one harness of both orders did: as
+  # one they took 16 to 25 minutes on a hosted runner (run 44020080291), apart 1 to 8 (run
+  # 44051779140). A cut by claim is measured before it is kept: interval's mul alone ran past an
+  # hour where add, sub and mul in one harness take 46 minutes (run 44046765712).
+  # dd's from_i128 (18 to 20 minutes as one harness of every i128) is one harness for each of
+  # eight classes of the value, its sign and its magnitude's width in four bands, with a cover
+  # harness that proves every i128 is in one of the eight, so the nine together prove what the
+  # one did.
+  # atan2's proof of `agreed` (22 to 29 minutes under CaDiCaL, Kani's default SAT solver) names
+  # kissat as its solver, with an answer's two claims as two assertions: one harness with the
+  # same claim, 9 minutes (run 44077877942); with the two joined in one assertion kissat took
+  # 15.4 (run 44083788360).
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
@@ -344,7 +471,15 @@ jobs:
       matrix:
         proof:
           - dd::proofs::exponent_reads_the_leading_bit
-          - dd::proofs::from_i128_accepts_exactly_below_2_106
+          - dd::proofs::from_i128_classes_cover_every_value
+          - dd::proofs::from_i128_of_a_negative_of_54_to_64_bits
+          - dd::proofs::from_i128_of_a_negative_of_65_to_106_bits
+          - dd::proofs::from_i128_of_a_negative_of_at_most_53_bits
+          - dd::proofs::from_i128_of_a_negative_of_over_106_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_54_to_64_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_65_to_106_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_at_most_53_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_over_106_bits
           - dd::proofs::pow2_is_exact_over_its_range
           - dd::proofs::scale_pow2_never_reports_a_defect
           - dd::proofs::whole_reads_what_it_accepts_exactly
@@ -359,11 +494,15 @@ jobs:
           - eft::proofs::two_prod_with_the_splitter
           - eft::proofs::two_prod_with_three
           - eft::proofs::two_prod_with_two_pow_996
-          - eft::proofs::two_sum_with_minus_a_tenth
+          - eft::proofs::two_sum_of_any_and_minus_a_tenth
+          - eft::proofs::two_sum_of_any_and_the_smallest_subnormal
+          - eft::proofs::two_sum_of_any_and_three
+          - eft::proofs::two_sum_of_any_and_two_pow_53
+          - eft::proofs::two_sum_of_minus_a_tenth_and_any
+          - eft::proofs::two_sum_of_the_smallest_subnormal_and_any
+          - eft::proofs::two_sum_of_three_and_any
+          - eft::proofs::two_sum_of_two_pow_53_and_any
           - eft::proofs::two_sum_with_the_largest_double
-          - eft::proofs::two_sum_with_the_smallest_subnormal
-          - eft::proofs::two_sum_with_three
-          - eft::proofs::two_sum_with_two_pow_53
           - exact_sum::proofs::a_non_finite_term_is_reported
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_31
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_32
@@ -458,6 +597,49 @@ jobs:
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-num --
           cargo kani -p geom-num --harness sign::proofs::signs_follow_the_integers --exact
+      - name: Prove ${{ matrix.proof }}
+        run: |
+          start=$(date +%s)
+          cargo kani -p geom-num --harness "${{ matrix.proof }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
+  # A run by hand only: each of geom-num's harnesses the run names (`-f kani_num=`), proved with
+  # kani-num's steps, word for word but for the planted violation, so its minutes are a part's
+  # of that job.
+  kani-num-named:
+    name: Kani by hand, geom-num (${{ matrix.proof }})
+    needs: named
+    if: github.event_name == 'workflow_dispatch' && needs.named.outputs.kani_num != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        proof: ${{ fromJSON(needs.named.outputs.kani_num || '[""]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          # setup downloads Kani's bundle from a GitHub release, which now and then answers HTTP 504
+          # under load; a failed try leaves no bundle, so clear ~/.kani and try again.
+          for attempt in 1 2 3 4 5; do
+            cargo kani setup && break
+            [ "$attempt" = 5 ] && exit 1
+            rm -rf "$HOME/.kani"; sleep 30
+          done
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)

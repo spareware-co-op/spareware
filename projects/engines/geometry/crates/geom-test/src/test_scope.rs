@@ -12,6 +12,9 @@
 //! [`Selection::report`] writes the decision for the job's log.
 //! [`Scope::build_reached`] says whether a change reaches what one crate's tests and benchmarks
 //! build, for `kernel-bench.yml`'s count gates. `kernel-quality test-scope` is the command line.
+//! [`wasm_dev_matrix`] shares the development crates' test units ([`wasm_dev_units`]) out among
+//! the parts of `kernel-dev.yml`'s `wasm` job by their measured seconds ([`WASM_DEV_TIMES`]), and
+//! [`wasm_dev_parts`] reads a written matrix back; `kernel-quality wasm-dev-parts` prints it.
 //!
 //! A crate Y's tests run when a changed file is:
 //!
@@ -555,4 +558,163 @@ pub fn reads_outside(folder: &Path) -> Result<bool, String> {
 #[must_use]
 pub fn text_reads_outside(text: &str) -> bool {
     READS_OUTSIDE.iter().any(|w| text.contains(w))
+}
+
+/// The development crates whose tests `kernel-dev.yml`'s `wasm` job runs on wasm32-wasip1.
+pub const WASM_DEV_CRATES: [&str; 3] = ["geom-test", "geom-fuzz", "geom-gen"];
+
+/// Each test unit of [`WASM_DEV_CRATES`] with its measured seconds under wasmtime
+/// (`wasm-dev-times.tsv`, read by [`crate::coverage::parse_times`]), which [`wasm_dev_matrix`]
+/// balances the `wasm` job's parts by.
+pub const WASM_DEV_TIMES: &str = include_str!("wasm-dev-times.tsv");
+
+/// The test units `cargo test` runs for `crates`, from `cargo metadata`'s packages: `<crate> lib`
+/// (the library's unit tests), `<crate> doc` (its doctests), `<crate> bin <name>` and
+/// `<crate> test <name>`, each target whose `test` (or, for doctests, `doctest`) is on; sorted.
+#[must_use]
+pub fn wasm_dev_units(metadata: &Value, crates: &[&str]) -> Vec<String> {
+    let mut out = BTreeSet::new();
+    let on = |t: &Value, key: &str| t.get(key).and_then(Value::as_bool).unwrap_or(true);
+    let list = |v: &Value, key: &str| {
+        v.get(key)
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    for package in list(metadata, "packages") {
+        let Some(krate) = package
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|n| crates.contains(n))
+        else {
+            continue;
+        };
+        for target in list(&package, "targets") {
+            let name = target
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let kinds_of = list(&target, "kind");
+            let kinds: Vec<&str> = kinds_of.iter().filter_map(Value::as_str).collect();
+            let library = kinds
+                .iter()
+                .any(|k| matches!(*k, "lib" | "rlib" | "dylib" | "cdylib" | "staticlib"));
+            if library {
+                if on(&target, "test") {
+                    out.insert(format!("{krate} lib"));
+                }
+                if on(&target, "doctest") {
+                    out.insert(format!("{krate} doc"));
+                }
+            } else if kinds.contains(&"bin") && on(&target, "test") {
+                out.insert(format!("{krate} bin {name}"));
+            } else if kinds.contains(&"test") {
+                out.insert(format!("{krate} test {name}"));
+            }
+        }
+    }
+    out.into_iter().collect()
+}
+
+/// The `cargo test` arguments of a part's `units`, one group to a crate and a kind of run: each
+/// crate's library, binaries and test targets in one group (`-p <crate> --lib --bin <b> --test
+/// <t>`), and its doctests in a group of their own (`-p <crate> --doc`, which cargo runs alone),
+/// groups joined by `; `. Units of no known form are left out; [`wasm_dev_parts`] reads the
+/// result back.
+#[must_use]
+pub fn wasm_dev_args(units: &[String]) -> String {
+    let mut targets: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    let mut docs: BTreeSet<&str> = BTreeSet::new();
+    for unit in units {
+        let mut words = unit.split(' ');
+        let (Some(krate), Some(kind)) = (words.next(), words.next()) else {
+            continue;
+        };
+        match (kind, words.next()) {
+            ("lib", None) => targets.entry(krate).or_default().push("--lib".to_owned()),
+            ("doc", None) => {
+                docs.insert(krate);
+            }
+            ("bin" | "test", Some(name)) => targets
+                .entry(krate)
+                .or_default()
+                .push(format!("--{kind} {name}")),
+            _ => {}
+        }
+    }
+    let mut groups: Vec<String> = targets
+        .into_iter()
+        .map(|(krate, flags)| format!("-p {krate} {}", flags.join(" ")))
+        .collect();
+    groups.extend(docs.into_iter().map(|krate| format!("-p {krate} --doc")));
+    groups.join("; ")
+}
+
+/// The `part:` lines of `kernel-dev.yml`'s `wasm` job's matrix: `units` shared out among `n`
+/// parts by their measured `times` ([`crate::coverage::balance`]), one line a part with its
+/// number, the count, its planned seconds and its `cargo test` arguments ([`wasm_dev_args`]).
+#[must_use]
+pub fn wasm_dev_matrix(units: &[String], times: &BTreeMap<String, u64>, n: usize) -> String {
+    let parts = crate::coverage::balance(units, times, n);
+    let count = parts.len();
+    let mut out = String::new();
+    for (k, (planned, mut part)) in parts.into_iter().enumerate() {
+        part.sort();
+        let _ = writeln!(
+            out,
+            "          - {{ k: {}, n: {count}, planned: {planned}, run: \"{}\" }}",
+            k.saturating_add(1),
+            wasm_dev_args(&part)
+        );
+    }
+    out
+}
+
+/// The units of each part of a `wasm` job's matrix, read back from the workflow's `text`: each
+/// `- { k: ..., run: "..." }` line in order.
+///
+/// # Errors
+///
+/// An argument of no form [`wasm_dev_args`] writes, naming the part.
+pub fn wasm_dev_parts(text: &str) -> Result<Vec<Vec<String>>, String> {
+    let mut parts = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if !line.starts_with("- { k: ") {
+            continue;
+        }
+        let Some(run) = line
+            .split_once("run: \"")
+            .and_then(|(_, rest)| rest.split_once('"'))
+            .map(|(run, _)| run)
+        else {
+            continue;
+        };
+        let k = parts.len().saturating_add(1);
+        let mut units = Vec::new();
+        for group in run.split("; ") {
+            let mut words = group.split_whitespace();
+            let (Some("-p"), Some(krate)) = (words.next(), words.next()) else {
+                return Err(format!(
+                    "part {k}: {group:?} does not start with `-p <crate>`"
+                ));
+            };
+            while let Some(flag) = words.next() {
+                let unit = match flag {
+                    "--lib" => format!("{krate} lib"),
+                    "--doc" => format!("{krate} doc"),
+                    "--bin" | "--test" => {
+                        let name = words
+                            .next()
+                            .ok_or_else(|| format!("part {k}: {flag} names no target"))?;
+                        format!("{krate} {} {name}", flag.trim_start_matches('-'))
+                    }
+                    other => return Err(format!("part {k}: {other:?} is not a unit's flag")),
+                };
+                units.push(unit);
+            }
+        }
+        parts.push(units);
+    }
+    Ok(parts)
 }
