@@ -47,6 +47,13 @@
 //!   artifact, each bounded to a few minutes, so a stalled upload cannot hold the job to its limit;
 //!   the first's failure only starts the second, and the second's fails the job. Each shown by a
 //!   planted change (a try unbounded, the second run every time or hidden, another name, none).
+//! - **A test nobody saw finish is not a pass (32.68).** Each Miri gate job reads its report,
+//!   right after its tests and whatever they did, with the plan's kernel-quality, names in its
+//!   summary every test stopped with no verdict, and fails on one not on the list of tests that may
+//!   stop; the list is what the tool writes from the table, its rows over 375 s, and may only
+//!   shrink. Shown by planted changes to the workflow (no reading, read only on success, its
+//!   failure hidden, another stop) and by the tool on planted reports (a test off the list
+//!   stopped fails its job; one on the list does not, and is named as stopped).
 //! - **A later push judges what it can reach.** `geom_test::increment` judges again every file of
 //!   the change whose crate's tests what changed since the last clean head reaches, held here to
 //!   planted changes that must be judged (a changed line, a changed test, a removed ledger entry,
@@ -2389,4 +2396,359 @@ fn a_dispatch_alone_can_run_miris_gate_alone() {
         let found = gate_input_problems(&planted);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
+}
+
+/// The lines the step of a Miri gate job that reads its report for stopped tests must hold: the
+/// gate's stop and profile, a pull request's, the tool's run on that profile's report, and its
+/// Markdown into the job's summary.
+const STOPPED_LINES: [&str; 4] = [
+    "stop=600 profile=default-miri",
+    "stop=60 profile=miri-smoke",
+    "kernel-quality miri-stopped --stop \"$stop\" --report \"target/nextest/$profile/junit.xml\"",
+    "| tee -a \"$GITHUB_STEP_SUMMARY\"",
+];
+
+/// The plan's hand-over of the tool, and the line that puts it in place in a Miri job.
+const TOOL_HANDOVER: &str =
+    "cp target/debug/kernel-quality \"$RUNNER_TEMP/miri-plan/kernel-quality\"";
+const TOOL_INSTALL: &str =
+    "install -m 755 \"$RUNNER_TEMP/miri-plan/kernel-quality\" \"$HOME/.cargo/bin/kernel-quality\"";
+
+/// Each Miri gate job and the command of its tests' step.
+const STOPPED_JOBS: [(&str, &str); 2] = [
+    ("miri", "cargo miri nextest run --locked $PACKAGES"),
+    ("miri-pool", "cargo miri nextest run --locked -p geom-pool"),
+];
+
+/// What is wrong with how the Miri gate's jobs treat a test nextest stopped with no verdict (32.68),
+/// given the workflow's and nextest's configuration: the plan hands on the tool; each gate job puts
+/// it in place and, in the step right after its tests, whatever they did, reads the report of the
+/// profile it ran, at that profile's stop, into its summary, and nothing hides that step's failure.
+fn miri_stop_problems(text: &str, nextest: &str) -> Vec<String> {
+    let w = YamlLoader::load_from_str(text).unwrap().remove(0);
+    let n = nextest.parse::<toml::Table>().unwrap();
+    let mut found = Vec::new();
+    if !joined(&runs(&w, "miri-plan"))
+        .iter()
+        .any(|c| c == TOOL_HANDOVER)
+    {
+        found.push("miri-plan does not hand on kernel-quality".to_owned());
+    }
+    for (job, tests) in STOPPED_JOBS {
+        if !joined(&runs(&w, job))
+            .iter()
+            .any(|c| c.trim() == TOOL_INSTALL)
+        {
+            found.push(format!(
+                "{job} does not put the plan's kernel-quality in place"
+            ));
+        }
+        let steps: Vec<Yaml> = w["jobs"][job]["steps"]
+            .as_vec()
+            .cloned()
+            .unwrap_or_default();
+        let run_of = |s: &Yaml| joined(s["run"].as_str().unwrap_or("")).join("\n");
+        let at_tests = steps.iter().position(|s| run_of(s).contains(tests));
+        let at_check = steps
+            .iter()
+            .position(|s| run_of(s).contains("kernel-quality miri-stopped"));
+        let (Some(t), Some(c)) = (at_tests, at_check) else {
+            found.push(format!(
+                "{job} does not read its report for tests stopped with no verdict"
+            ));
+            continue;
+        };
+        if c != t + 1 {
+            found.push(format!(
+                "{job} does not read its report right after its tests"
+            ));
+        }
+        let check = &steps[c];
+        if !check["if"]
+            .as_str()
+            .is_some_and(|i| i.starts_with("${{ !cancelled()"))
+        {
+            found.push(format!(
+                "{job} does not read its report whatever its tests did"
+            ));
+        }
+        let script = run_of(check);
+        for line in STOPPED_LINES {
+            if !script.contains(line) {
+                found.push(format!("{job}'s report is not read as {line:?}"));
+            }
+        }
+        if !check["continue-on-error"].is_badvalue()
+            || script.contains("||")
+            || script.contains("set +e")
+        {
+            found.push(format!("{job}'s reading of its report cannot fail the job"));
+        }
+    }
+    // The stops the step names are the profiles' own, and both count a stopped test as passing,
+    // which is why the step reads the report at all.
+    for (profile, stop) in [("default-miri", 600), ("miri-smoke", 60)] {
+        if profile_stop(&n, profile) != Some((stop, true)) {
+            found.push(format!(
+                "nextest's {profile} profile does not stop a test at {stop} s as the step reads it"
+            ));
+        }
+    }
+    if i64::try_from(miri::BUDGET).ok() != Some(600) {
+        found.push("the budget is not the default-miri profile's stop".to_owned());
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_miri_job_names_every_test_stopped_with_no_verdict_and_fails_on_one_that_may_not_stop() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let nextest = read(".config/nextest.toml");
+    let found = miri_stop_problems(&text, &nextest);
+    assert!(found.is_empty(), "{found:#?}");
+    let check = "      - name: Tests stopped with no verdict (partition ${{ matrix.partition }})\n        \
+                 if: ${{ !cancelled() }}\n";
+    let hidden = format!("{check}        continue-on-error: true\n");
+    // Seeded violations: each must be reported.
+    for (from, to, said, in_nextest) in [
+        // The plan does not hand the tool on.
+        (
+            TOOL_HANDOVER,
+            "true",
+            "does not hand on kernel-quality",
+            false,
+        ),
+        // A partition without the tool.
+        (
+            "          install -m 755 \"$RUNNER_TEMP/miri-plan/kernel-quality\" \"$HOME/.cargo/bin/kernel-quality\"\n          packages",
+            "          packages",
+            "miri does not put the plan's kernel-quality in place",
+            false,
+        ),
+        // A partition that never reads its report.
+        (
+            "          kernel-quality miri-stopped --stop \"$stop\" --report \"target/nextest/$profile/junit.xml\" \\\n            --title \"Partition",
+            "          echo \"Partition",
+            "miri does not read its report for tests stopped",
+            false,
+        ),
+        // Read only when the tests passed.
+        (
+            check,
+            "      - name: Tests stopped with no verdict (partition ${{ matrix.partition }})\n        \
+             if: ${{ success() }}\n",
+            "miri does not read its report whatever its tests did",
+            false,
+        ),
+        // Its failure hidden, two ways.
+        (
+            check,
+            hidden.as_str(),
+            "miri's reading of its report cannot fail the job",
+            false,
+        ),
+        (
+            "--title \"Partition ${{ matrix.partition }}\" | tee -a \"$GITHUB_STEP_SUMMARY\"",
+            "--title \"Partition ${{ matrix.partition }}\" | tee -a \"$GITHUB_STEP_SUMMARY\" || true",
+            "miri's reading of its report cannot fail the job",
+            false,
+        ),
+        // The gate's report read at another stop than its profile's.
+        (
+            "          stop=600 profile=default-miri\n",
+            "          stop=900 profile=default-miri\n",
+            "miri's report is not read as \"stop=600 profile=default-miri\"",
+            false,
+        ),
+        // geom-pool's job without the reading.
+        (
+            "          kernel-quality miri-stopped --stop \"$stop\" --report \"target/nextest/$profile/junit.xml\" \\\n            --title \"geom-pool",
+            "          echo \"geom-pool",
+            "miri-pool does not read its report for tests stopped",
+            false,
+        ),
+        // The gate's profile stopping a test as a failure, or later, than the step reads.
+        (
+            "slow-timeout = { period = \"300s\", terminate-after = 2, on-timeout = \"pass\" }",
+            "slow-timeout = { period = \"300s\", terminate-after = 3, on-timeout = \"pass\" }",
+            "default-miri profile does not stop a test at 600 s",
+            true,
+        ),
+    ] {
+        let (t, n) = if in_nextest {
+            (text.clone(), nextest.replacen(from, to, 1))
+        } else {
+            (text.replacen(from, to, 1), nextest.clone())
+        };
+        assert!(
+            t != text || n != nextest,
+            "the planted edit {from:?} applies"
+        );
+        let found = miri_stop_problems(&t, &n);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// A nextest report of one test of `binary` and `test` that passed after `seconds`, as nextest
+/// writes one for a test its `on-timeout = "pass"` stopped (a plain pass at the stop).
+fn one_test_report(binary: &str, test: &str, seconds: &str) -> String {
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites name=\"nextest-run\" tests=\"1\" \
+         failures=\"0\" errors=\"0\"><testsuite name=\"{binary}\" tests=\"1\" disabled=\"0\" \
+         errors=\"0\" failures=\"0\"><testcase name=\"{test}\" classname=\"{binary}\" \
+         timestamp=\"2026-11-18T00:00:00.000+00:00\" time=\"{seconds}\"></testcase></testsuite>\
+         </testsuites>\n"
+    )
+}
+
+/// `kernel-quality miri-stopped` on a report of one test: its exit code and what it printed.
+fn stopped_tool(binary: &str, test: &str, seconds: &str, stop: u64) -> (i32, String) {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("miri-stopped-{stop}-{test}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join(format!("{test}.xml"));
+    std::fs::write(&file, one_test_report(binary, test, seconds)).unwrap();
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_kernel-quality"))
+        .args([
+            "miri-stopped",
+            "--stop",
+            &stop.to_string(),
+            "--title",
+            "Planted",
+            "--report",
+        ])
+        .arg(&file)
+        .output()
+        .unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    (
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "runs the kernel-quality binary, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_test_off_the_list_stopped_at_the_budget_turns_its_job_red() {
+    let rows = miri::parse_table(miri::TIMES).unwrap();
+    // Planted faults: a test with no place on the list, and one whose row is well within the
+    // budget, each stopped at the budget, fail the job and are named as stopped.
+    let sure = miri::finishing(&rows)
+        .into_iter()
+        .find(|t| t.seconds <= 100)
+        .unwrap();
+    for (binary, test) in [
+        ("geom-num::planted", "a_test_no_table_holds"),
+        (sure.binary.as_str(), sure.test.as_str()),
+    ] {
+        let (code, said) = stopped_tool(binary, test, "600.019", miri::BUDGET);
+        assert_eq!(code, 1, "{binary} {test}: {said}");
+        assert!(
+            said.contains(
+                "1 tests stopped at 600 s with no verdict that may not stop: this job fails"
+            ) && said.contains(&format!("`{binary} {test}`")),
+            "{said}"
+        );
+    }
+    // A test on the list, stopped at the budget, does not fail its job, and is named as stopped,
+    // never as a pass. With the list empty, the same holds at a pull request's short stop for a
+    // test whose row a slow runner takes past it.
+    let listed = miri::parse_may_stop(miri::MAY_STOP).unwrap();
+    let long = miri::may_stop_at(&rows, 60).remove(0);
+    let mut cases = vec![(long.binary.clone(), long.test.clone(), "60.004", 60)];
+    if let Some((b, t)) = listed.first() {
+        cases.push((b.clone(), t.clone(), "600.019", miri::BUDGET));
+    }
+    for (binary, test, seconds, stop) in cases {
+        let (code, said) = stopped_tool(&binary, &test, seconds, stop);
+        assert_eq!(code, 0, "{binary} {test}: {said}");
+        assert!(
+            said.contains(&format!("1 tests stopped at {stop} s with no verdict**"))
+                && said.contains(&format!("`{binary} {test}`"))
+                && !said.contains("this job fails"),
+            "{said}"
+        );
+    }
+    // A test that finished under the stop is a plain verdict, even one on the list; and the
+    // same report read at the budget fails a test off the list but not at the short stop.
+    let (code, said) = stopped_tool(&sure.binary, &sure.test, "599.990", miri::BUDGET);
+    assert_eq!(code, 0, "{said}");
+    assert!(said.contains("No test stopped at 600 s"), "{said}");
+    let (code, _) = stopped_tool(&long.binary, &long.test, "600.019", miri::BUDGET);
+    assert_eq!(
+        code,
+        i32::from(!listed.contains(&(long.binary.clone(), long.test.clone())))
+    );
+    // A stop past the budget is refused.
+    let (code, _) = stopped_tool(&sure.binary, &sure.test, "1.0", miri::BUDGET + 1);
+    assert_eq!(code, 2);
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_tests_that_may_stop_are_the_tables_rows_over_375_s_and_never_more() {
+    let rows = miri::parse_table(miri::TIMES).unwrap();
+    // The list is what the tool writes from the table, never edited by hand.
+    assert_eq!(
+        miri::MAY_STOP.replace("\r\n", "\n"),
+        miri::render_may_stop(&rows),
+        "{} is not what `kernel-quality miri-may-stop` writes from Miri's table",
+        miri::MAY_STOP_PATH
+    );
+    let listed = miri::parse_may_stop(miri::MAY_STOP).unwrap();
+    // 375 s is the budget over the plan's headroom: a row over it, on a runner 1.6 times
+    // slower, reaches the stop, and a row at it does not.
+    assert_eq!(
+        miri::SURE_WITHIN * miri::SLOWER.0,
+        miri::BUDGET * miri::SLOWER.1
+    );
+    assert_eq!(miri::planned(miri::SURE_WITHIN), miri::BUDGET);
+    let over = |s: u64| {
+        let row = format!("{s}\tgeom-num::planted\tplanted\n");
+        !miri::may_stop_at(&miri::parse_table(&row).unwrap(), miri::BUDGET).is_empty()
+    };
+    assert!(!over(miri::SURE_WITHIN) && over(miri::SURE_WITHIN + 1));
+    // The list may only shrink: more than MAY_STOP_MOST fails, and so does fewer, until the
+    // change that shrank it lowers MAY_STOP_MOST to match.
+    assert!(
+        listed.len() <= miri::MAY_STOP_MOST,
+        "the list of tests that may stop at the budget grew to {}, over {}: resize each new one \
+         under cfg(miri) so Miri finishes it within {} s",
+        listed.len(),
+        miri::MAY_STOP_MOST,
+        miri::SURE_WITHIN
+    );
+    assert_eq!(
+        listed.len(),
+        miri::MAY_STOP_MOST,
+        "the list shrank to {}: lower geom_test::miri::MAY_STOP_MOST to it",
+        listed.len()
+    );
+    // Planted faults: a row added by hand, and a list written from another table, are refused.
+    let mut planted = miri::MAY_STOP.replace("\r\n", "\n");
+    planted.push_str("400\tgeom-num::planted\tplanted\n");
+    assert!(miri::allowed_stops(&rows, &planted, miri::BUDGET).is_err());
+    let mut grown = rows.clone();
+    grown.push(miri::Row {
+        binary: "geom-num::planted".into(),
+        test: "planted".into(),
+        state: miri::State::Finishes(400),
+    });
+    let grown_list = miri::render_may_stop(&grown);
+    assert_eq!(
+        miri::parse_may_stop(&grown_list).unwrap().len(),
+        listed.len() + 1
+    );
+    assert!(miri::allowed_stops(&rows, &grown_list, miri::BUDGET).is_err());
+    assert!(miri::allowed_stops(&rows, miri::MAY_STOP, miri::BUDGET).is_ok());
+    assert!(miri::parse_may_stop("375\tgeom-num::planted\tplanted\n").is_err());
 }

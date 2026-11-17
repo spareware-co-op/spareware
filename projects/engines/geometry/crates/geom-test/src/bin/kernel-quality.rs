@@ -30,6 +30,11 @@
 //! - `miri-times` writes Miri's table from a measuring run's nextest reports (`junit.xml`)
 //!   ([`geom_test::miri::write_table`]), the only way its rows change (32.58); with `--dry-run`
 //!   it writes nothing and only says what the reports measured, failing on a test that failed.
+//!   It writes the list of tests that may stop ([`geom_test::miri::render_may_stop`]) with it, and
+//!   `miri-may-stop` writes that list alone from the table in the repository.
+//! - `miri-stopped` reads a Miri gate job's nextest reports and names in Markdown, for its
+//!   summary, each test nextest stopped with no verdict; it fails when one of them may not stop
+//!   ([`geom_test::miri::stops`], [`geom_test::miri::allowed_stops`]).
 //! - `miri-measure` plans a measuring run on GitHub's runners (the workflow's dispatch input
 //!   `miri_measure`): the tests with no row, or every test, of a Miri listing, packed into parts
 //!   that each end within the stop ([`geom_test::miri::measure_plan`]), each part's filterset
@@ -265,6 +270,32 @@ enum Command {
         /// The repository root.
         #[arg(long, default_value = ".")]
         repo: PathBuf,
+    },
+    /// Writes the list of the tests a gate job may see stopped at the budget (geom-test's
+    /// `src/miri-may-stop.tsv`, 32.68) from Miri's table as it is in the repository.
+    MiriMayStop {
+        /// Prints the list, writing nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// The repository root.
+        #[arg(long, default_value = ".")]
+        repo: PathBuf,
+    },
+    /// Reads a Miri gate job's nextest reports and names, as Markdown for the job's summary, every
+    /// test nextest stopped at `--stop` with no verdict: fails (exit 1) when one of them may not
+    /// be stopped (32.68). At the budget only the list `src/miri-may-stop.tsv` may be; at a
+    /// shorter stop (the `miri-smoke` profile's) every test whose row a slow runner can take past
+    /// it.
+    MiriStopped {
+        /// The reports (`target/nextest/<profile>/junit.xml`).
+        #[arg(long, value_name = "JUNIT.xml", required = true)]
+        report: Vec<PathBuf>,
+        /// The job's stop for one test, in seconds (its profile's slow timeout).
+        #[arg(long)]
+        stop: u64,
+        /// What the summary calls the job.
+        #[arg(long)]
+        title: String,
     },
     /// Plans a measuring run of Miri's table on GitHub's runners: picks the tests, packs them into
     /// parts that each end within the stop, writes each part's nextest filterset to
@@ -895,12 +926,28 @@ fn run(cli: Cli) -> Result<bool, String> {
                 of_report.len(),
                 of_report.len().saturating_sub(report_finish)
             );
+            let rows = geom_test::miri::parse_table(&text)?;
+            let may_path = canonical(&repo)?.join(geom_test::miri::MAY_STOP_PATH);
+            let may = geom_test::miri::render_may_stop(&rows);
             if dry_run {
-                println!("a dry run: {} is not written", path.display());
+                println!(
+                    "a dry run: {} and {} are not written",
+                    path.display(),
+                    may_path.display()
+                );
             } else {
                 std::fs::write(&path, &text).map_err(|e| format!("{}: {e}", path.display()))?;
+                std::fs::write(&may_path, &may)
+                    .map_err(|e| format!("{}: {e}", may_path.display()))?;
             }
-            let rows = geom_test::miri::parse_table(&text)?;
+            println!(
+                "{} tests may be stopped at the {} s budget with no verdict (over {} s), at most {} \
+                 allowed",
+                geom_test::miri::parse_may_stop(&may)?.len(),
+                geom_test::miri::BUDGET,
+                geom_test::miri::SURE_WITHIN,
+                geom_test::miri::MAY_STOP_MOST
+            );
             let finish = geom_test::miri::finishing(&rows).len();
             println!(
                 "{} rows from {} reported tests: {finish} finish under Miri, {} native-only",
@@ -924,6 +971,95 @@ fn run(cli: Cli) -> Result<bool, String> {
                 Err(why) => println!("the gate cannot be planned: {why}"),
             }
             Ok(true)
+        }
+        Command::MiriMayStop { dry_run, repo } => {
+            let root = canonical(&repo)?;
+            let table = root.join(geom_test::miri::TABLE_PATH);
+            let text =
+                std::fs::read_to_string(&table).map_err(|e| format!("{}: {e}", table.display()))?;
+            let may = geom_test::miri::render_may_stop(&geom_test::miri::parse_table(&text)?);
+            if dry_run {
+                print!("{may}");
+            } else {
+                let path = root.join(geom_test::miri::MAY_STOP_PATH);
+                std::fs::write(&path, &may).map_err(|e| format!("{}: {e}", path.display()))?;
+            }
+            Ok(true)
+        }
+        Command::MiriStopped {
+            report,
+            stop,
+            title,
+        } => {
+            let rows = geom_test::miri::parse_table(geom_test::miri::TIMES)?;
+            let budget = geom_test::miri::BUDGET;
+            let may = geom_test::miri::allowed_stops(&rows, geom_test::miri::MAY_STOP, stop)?;
+            let mut reported = Vec::new();
+            for file in &report {
+                let xml = std::fs::read_to_string(file)
+                    .map_err(|e| format!("{}: {e}", file.display()))?;
+                reported.extend(
+                    geom_test::miri::read_junit(&xml)
+                        .map_err(|e| format!("{}: {e}", file.display()))?,
+                );
+            }
+            let stops = geom_test::miri::stops(&reported, stop, &may);
+            let seconds = |name: &str| {
+                rows.iter()
+                    .find(|r| format!("{} {}", r.binary, r.test) == name)
+                    .map_or_else(
+                        || "no row".to_owned(),
+                        |r| match r.state {
+                            geom_test::miri::State::Finishes(s) => format!("its row {s} s"),
+                            geom_test::miri::State::NativeOnly(_) => "native-only".to_owned(),
+                        },
+                    )
+            };
+            let mut out = vec![
+                format!("### {title}: tests stopped with no verdict"),
+                String::new(),
+            ];
+            if stops.allowed.is_empty() && stops.refused.is_empty() {
+                out.push(format!(
+                    "No test stopped at {stop} s: each of the {} tests reported ran to its verdict.",
+                    stops.reported
+                ));
+            }
+            let which = if stop == budget {
+                "on the list of tests that may stop (geom-test's src/miri-may-stop.tsv)".to_owned()
+            } else {
+                format!("each a test this short run's stop may end (its row over {stop} s / 1.6)")
+            };
+            if !stops.allowed.is_empty() {
+                out.push(format!(
+                    "**{} tests stopped at {stop} s with no verdict**, {which}: not passes; Miri \
+                     did not see them finish.",
+                    stops.allowed.len()
+                ));
+                out.push(String::new());
+                for name in &stops.allowed {
+                    out.push(format!("- `{name}` ({})", seconds(name)));
+                }
+                out.push(String::new());
+            }
+            if !stops.refused.is_empty() {
+                out.push(format!(
+                    "**{} tests stopped at {stop} s with no verdict that may not stop: this job \
+                     fails.** Each is to be resized under `cfg(miri)` so Miri finishes it, and \
+                     measured again.",
+                    stops.refused.len()
+                ));
+                out.push(String::new());
+                for name in &stops.refused {
+                    out.push(format!("- `{name}` ({})", seconds(name)));
+                    eprintln!(
+                        "::error::{name} was stopped at {stop} s with no verdict, and is not a test \
+                         that may stop"
+                    );
+                }
+            }
+            println!("{}", out.join("\n"));
+            Ok(stops.refused.is_empty())
         }
         Command::MiriMeasure {
             which,

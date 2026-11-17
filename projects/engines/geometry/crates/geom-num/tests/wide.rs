@@ -51,8 +51,13 @@ use proptest::test_runner::{Config, TestCaseError};
 type TestResult = Result<(), TestCaseError>;
 
 /// Cases per property. Each case is compared with the exact oracle; the exhaustive edge tests
-/// cover the fixed corners, so the random cases search the space between them.
-const CASES: u32 = 1024;
+/// cover the fixed corners, so the random cases search the space between them. Under Miri each
+/// property runs a quarter of them, 256 cases, the same law on fewer inputs: at 1,024 cases
+/// nineteen of this file's properties took Miri 420 to 597 s on GitHub's runners (measuring run
+/// 44004974529), over the 375 s a runner 1.6 times slower can take within the 600 s stop (32.68),
+/// and Miri is here to find undefined behaviour in the code the cases run, which each case runs
+/// alike. Natively the count is unchanged.
+const CASES: u32 = if cfg!(miri) { 256 } else { 1024 };
 
 /// The configuration every property in this file runs with.
 fn config() -> Config {

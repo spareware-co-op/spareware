@@ -1549,13 +1549,17 @@ fn to_grid_around_plus_minus_2_pow_127() {
 }
 
 /// The near ties again with planes 1 and 2 scaled by about 2^38 each: |w| = `m_1` `m_2` D, about
-/// 2^192, still deciding points 2^-116 from a half step exactly.
+/// 2^192, still deciding points 2^-116 from a half step exactly. Under Miri three of the eight
+/// ties, the same law on fewer inputs: an even half step (the exact case and the side test), and
+/// the frame's edge just inside and just outside; all eight took Miri 599 s on GitHub's runners
+/// (measuring run 44004974529), over the 375 s a runner 1.6 times slower can take within the
+/// 600 s stop (32.68). Natively all eight.
 #[test]
 fn to_grid_near_ties_with_w_near_2_pow_192() {
     let d = d_of(P_NEAR, [1, 1, EZ_NEAR]);
     let mw = BigInt::from(SCALE[0]) * BigInt::from(SCALE[1]) * &d;
     assert_eq!(mw.bits(), 192);
-    for (ax, x2) in [
+    let all = [
         (0, 1),
         (0, -1),
         (5, 11),
@@ -1564,7 +1568,10 @@ fn to_grid_near_ties_with_w_near_2_pow_192() {
         (123_456_789_012, 246_913_578_025),
         (-M, -2 * M + 1),
         (-M, -2 * M - 1),
-    ] {
+    ];
+    let under_miri = [all[4], all[6], all[7]];
+    let ties: &[_] = if cfg!(miri) { &under_miri } else { &all };
+    for &(ax, x2) in ties {
         for delta in [-1i64, 0, 1] {
             for swap in [false, true] {
                 let j = x2 - 2 * ax;

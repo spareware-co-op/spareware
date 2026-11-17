@@ -1077,6 +1077,8 @@ jobs:
           echo "Miri's plan: $(jq -r .tests <<<"$plan") tests in $(jq -r .count <<<"$plan") partitions, and geom-pool's $(jq -r .pool <<<"$plan")." >> "$GITHUB_STEP_SUMMARY"
           echo "$PACKAGES" > "$RUNNER_TEMP/miri-plan/packages.txt"
           cp "$(command -v cargo-nextest)" "$RUNNER_TEMP/miri-plan/cargo-nextest"
+          # The tool each Miri job reads its report with (`miri-stopped`), as built here.
+          cp target/debug/kernel-quality "$RUNNER_TEMP/miri-plan/kernel-quality"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: miri-plan
@@ -1137,6 +1139,7 @@ jobs:
           # pinned version from crates.io, checked here before it runs anything.
           install -m 755 "$RUNNER_TEMP/miri-plan/cargo-nextest" "$HOME/.cargo/bin/cargo-nextest"
           cargo nextest --version | grep -qxF "release: $CARGO_NEXTEST_VERSION"
+          install -m 755 "$RUNNER_TEMP/miri-plan/kernel-quality" "$HOME/.cargo/bin/kernel-quality"
           packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
           echo "$packages"
           echo "PACKAGES=$packages" >> "$GITHUB_ENV"
@@ -1160,6 +1163,22 @@ jobs:
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
           cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
             -E "not package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/part-${{ matrix.partition }}.txt"))"
+      # A test nextest stops at the budget is counted as passing (the profiles' `on-timeout =
+      # "pass"`), and its report shows a plain pass; a test nobody saw finish is not one (32.68).
+      # This step reads the report, names every test stopped as stopped with no verdict in the
+      # job's summary, and fails the job on any not on the list of tests that may stop (geom-test's
+      # src/miri-may-stop.tsv, the table's rows over 375 s). A pull request's short stop may end
+      # every test whose row a 1.6 times slower runner takes past it. It runs whatever the tests
+      # did.
+      - name: Tests stopped with no verdict (partition ${{ matrix.partition }})
+        if: ${{ !cancelled() }}
+        run: |
+          stop=600 profile=default-miri
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            stop=60 profile=miri-smoke
+          fi
+          kernel-quality miri-stopped --stop "$stop" --report "target/nextest/$profile/junit.xml" \
+            --title "Partition ${{ matrix.partition }}" | tee -a "$GITHUB_STEP_SUMMARY"
       # The partition's report, in two tries. GitHub's storage can stall an upload until the
       # job's limit (run 44075531453: partition 31's tests passed in 466 s, then its upload hung
       # for 22 minutes), so each try is bounded; a first try that fails or runs out of time does
@@ -1231,6 +1250,7 @@ jobs:
           # pinned version from crates.io, checked here before it runs anything.
           install -m 755 "$RUNNER_TEMP/miri-plan/cargo-nextest" "$HOME/.cargo/bin/cargo-nextest"
           cargo nextest --version | grep -qxF "release: $CARGO_NEXTEST_VERSION"
+          install -m 755 "$RUNNER_TEMP/miri-plan/kernel-quality" "$HOME/.cargo/bin/kernel-quality"
           packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
           echo "$packages"
           echo "PACKAGES=$packages" >> "$GITHUB_ENV"
@@ -1268,6 +1288,17 @@ jobs:
           fi
           cargo miri nextest run --locked -p geom-pool "${profile[@]}" \
             -E "package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/pool.txt"))"
+      # As in each partition: every geom-pool test stopped is named as stopped with no verdict,
+      # and one not on the list of tests that may stop fails the job (32.68).
+      - name: geom-pool's tests stopped with no verdict
+        if: ${{ !cancelled() && (env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')) }}
+        run: |
+          stop=600 profile=default-miri
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            stop=60 profile=miri-smoke
+          fi
+          kernel-quality miri-stopped --stop "$stop" --report "target/nextest/$profile/junit.xml" \
+            --title "geom-pool under Tree Borrows" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: The kernel's doctests under Miri
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}

@@ -52,6 +52,12 @@
 //!   geom-pool's finishing tests, which run under Tree
 //!   Borrows, are one part of their own, held to the same rule. `kernel_quality_workflow.rs` holds
 //!   the table's plan to all of it.
+//! - **A test nobody saw finish is not a pass (32.68).** The gate's profiles count a test nextest
+//!   stops at [`BUDGET`] as passing, so [`stops`] reads each gate job's report for the tests
+//!   stopped there and the job names them in its summary as stopped with no verdict. Only a test
+//!   whose row is over [`SURE_WITHIN`], which a runner [`SLOWER`] can take to the stop, may be:
+//!   [`MAY_STOP`] lists them, written from the table ([`render_may_stop`]) and held to at most
+//!   [`MAY_STOP_MOST`]; any other test stopped fails its job ([`allowed_stops`]).
 //! - **A measuring part ends within the stop.** Each test of a measuring run is planned at its
 //!   finishing row's seconds, or at [`BUDGET`], the stop of a measuring run on a CI runner, when
 //!   its row is native-only or it has none, so a part's tests take at most [`BUDGET`] at
@@ -149,6 +155,27 @@ fn on_a_slower_runner(seconds: u64) -> u64 {
 pub fn planned(seconds: u64) -> u64 {
     on_a_slower_runner(seconds).min(BUDGET)
 }
+
+/// The most seconds a finishing row may hold and its test still be planned to end within
+/// [`BUDGET`] on a runner [`SLOWER`]: 600 s over 1.6, 375 s (32.68). A test whose row is over it
+/// can reach the stop on a slow runner, so only such a test may be stopped there with no verdict,
+/// and only while it is on [`MAY_STOP`].
+pub const SURE_WITHIN: u64 = 375;
+
+/// The tests a gate job may see stopped at [`BUDGET`] with no verdict (32.68): every finishing row
+/// over [`SURE_WITHIN`], `seconds<TAB>binary id<TAB>test name` a line, `#` lines comments, written
+/// by `kernel-quality miri-may-stop` (and `miri-times`) from [`TIMES`] with
+/// [`render_may_stop`], never by hand.
+pub const MAY_STOP: &str = include_str!("miri-may-stop.tsv");
+
+/// [`MAY_STOP`]'s path from the repository root.
+pub const MAY_STOP_PATH: &str = "projects/engines/geometry/crates/geom-test/src/miri-may-stop.tsv";
+
+/// How many tests [`MAY_STOP`] may hold. It may only be lowered: `kernel_quality_workflow.rs`
+/// fails when the list holds more (a test newly measured over [`SURE_WITHIN`] is resized under
+/// `cfg(miri)` before it lands) and when it holds fewer (the change that shrank it lowers this
+/// too, so the list can never grow back). The aim is none.
+pub const MAY_STOP_MOST: usize = 115;
 
 /// The one crate Miri runs under Tree Borrows (the workflow's job `miri-pool` says why): its
 /// finishing tests run in that job, and no partition holds them.
@@ -454,6 +481,145 @@ pub fn render(comments: &[&str], rows: &[Row]) -> String {
         out.push('\t');
         out.push_str(&r.test);
         out.push('\n');
+    }
+    out
+}
+
+/// Each finishing row whose test may reach `stop` on a runner [`SLOWER`]: its seconds on that
+/// runner, rounded up, over `stop`. At [`BUDGET`] these are the rows over [`SURE_WITHIN`]
+/// ([`MAY_STOP`]); at a shorter stop (the `miri-smoke` profile's) more. Longest first, then by
+/// binary and name.
+#[must_use]
+pub fn may_stop_at(rows: &[Row], stop: u64) -> Vec<Timed> {
+    let mut out: Vec<Timed> = finishing(rows)
+        .into_iter()
+        .filter(|t| on_a_slower_runner(t.seconds) > stop)
+        .collect();
+    out.sort_by(|x, y| {
+        y.seconds
+            .cmp(&x.seconds)
+            .then_with(|| (&x.binary, &x.test).cmp(&(&y.binary, &y.test)))
+    });
+    out
+}
+
+/// [`MAY_STOP`]'s text from the table's rows: its header, then each row [`may_stop_at`] gives at
+/// [`BUDGET`], one a line.
+#[must_use]
+pub fn render_may_stop(rows: &[Row]) -> String {
+    let mut out = String::from(
+        "# The Miri tests a gate job may see stopped at the 600 s budget with no verdict (decision \
+         32.68):\n\
+         # every finishing row of Miri's table (miri-times.tsv) over 375 s, 600 s over the 1.6 \
+         times slower\n\
+         # runner the plan allows, whose test such a runner can take to the stop. Written by\n\
+         # `kernel-quality miri-may-stop` (and `miri-times`) from the table, never by hand. A \
+         test on it that\n\
+         # is stopped is named in its job's summary as stopped, not passed; any other test \
+         stopped fails its\n\
+         # job. It may only shrink (`geom_test::miri::MAY_STOP_MOST`): each test on it is to be \
+         resized under\n\
+         # cfg(miri), the same law on a smaller input, until Miri finishes it within 375 s.\n\
+         # `seconds<TAB>binary<TAB>test`, the longest first.\n",
+    );
+    for t in may_stop_at(rows, BUDGET) {
+        out.push_str(&t.seconds.to_string());
+        out.push('\t');
+        out.push_str(&t.binary);
+        out.push('\t');
+        out.push_str(&t.test);
+        out.push('\n');
+    }
+    out
+}
+
+/// The tests of a [`MAY_STOP`] text, as (binary, test).
+///
+/// # Errors
+///
+/// As [`parse_table`]; also for a row that is not finishing over [`SURE_WITHIN`], which never
+/// belongs on the list.
+pub fn parse_may_stop(text: &str) -> Result<Vec<(String, String)>, String> {
+    parse_table(text)?
+        .into_iter()
+        .map(|r| match r.state {
+            State::Finishes(s) if s > SURE_WITHIN => Ok((r.binary, r.test)),
+            _ => Err(format!(
+                "{} {}: not a finishing row over {SURE_WITHIN} s",
+                r.binary, r.test
+            )),
+        })
+        .collect()
+}
+
+/// The tests a gate job at `stop` seconds may see stopped with no verdict, as (binary, test): at
+/// [`BUDGET`], those of `list` (the text of [`MAY_STOP`]); at a shorter stop, a short run's (the
+/// `miri-smoke` profile's), each [`may_stop_at`] gives.
+///
+/// # Errors
+///
+/// For a stop past [`BUDGET`], and at [`BUDGET`] for a `list` that [`parse_may_stop`] refuses or
+/// that is not what [`render_may_stop`] writes from `rows`.
+pub fn allowed_stops(
+    rows: &[Row],
+    list: &str,
+    stop: u64,
+) -> Result<BTreeSet<(String, String)>, String> {
+    if stop > BUDGET {
+        return Err(format!("a stop of {stop} s is past the {BUDGET} s budget"));
+    }
+    if stop < BUDGET {
+        return Ok(may_stop_at(rows, stop)
+            .into_iter()
+            .map(|t| (t.binary, t.test))
+            .collect());
+    }
+    let listed = parse_may_stop(list)?;
+    if list != render_may_stop(rows) {
+        return Err(format!(
+            "{MAY_STOP_PATH} is not what `kernel-quality miri-may-stop` writes from Miri's table"
+        ));
+    }
+    Ok(listed.into_iter().collect())
+}
+
+/// What a gate job's reports say of the tests nextest stopped ([`stops`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Stops {
+    /// The tests the reports name.
+    pub reported: usize,
+    /// The stopped tests that may be, as `binary test`.
+    pub allowed: Vec<String>,
+    /// The stopped tests that may not be, as `binary test`: each fails the job.
+    pub refused: Vec<String>,
+}
+
+/// Which of a gate job's reported tests nextest stopped at `stop` seconds with no verdict, split
+/// by whether `may` (as (binary, test)) holds them. A stopped test is one timed out, or one passed
+/// at `stop` or later: the gate's profiles count a test stopped as passing (`on-timeout =
+/// "pass"`), and nothing passes later than the stop that ends it, as [`measured`] reads a
+/// measuring run.
+#[must_use]
+pub fn stops(report: &[Reported], stop: u64, may: &BTreeSet<(String, String)>) -> Stops {
+    let stop_ms = stop.saturating_mul(1000);
+    let mut out = Stops {
+        reported: report.len(),
+        ..Stops::default()
+    };
+    for r in report {
+        let stopped = match r.outcome {
+            Outcome::Passed(ms) => ms >= stop_ms,
+            Outcome::TimedOut(_) => true,
+            Outcome::Failed(_) => false,
+        };
+        if stopped {
+            let name = format!("{} {}", r.binary, r.test);
+            if may.contains(&(r.binary.clone(), r.test.clone())) {
+                out.allowed.push(name);
+            } else {
+                out.refused.push(name);
+            }
+        }
     }
     out
 }

@@ -55,8 +55,12 @@ use proptest::test_runner::{Config, TestCaseError};
 /// The outcome of one check: `Err` carries the first disagreement.
 type TestResult = Result<(), TestCaseError>;
 
-/// Cases per property.
-const CASES: u32 = 512;
+/// Cases per property. Under Miri a quarter of them, 128 cases, the same law on fewer inputs: at
+/// 512 cases twelve of this file's properties took Miri 398 to 582 s on GitHub's runners
+/// (measuring run 44004974529), over the 375 s a runner 1.6 times slower can take within the
+/// 600 s stop (32.68), and Miri is here to find undefined behaviour in the code the cases run,
+/// which each case runs alike. Natively the count is unchanged.
+const CASES: u32 = if cfg!(miri) { 128 } else { 512 };
 
 /// The grid's extreme coordinate, 2^40 − 1 grid steps.
 const C: i64 = (1 << 40) - 1;
@@ -1307,7 +1311,7 @@ mod kernel_extremes {
     }
 
     proptest! {
-        #![proptest_config(Config { cases: 256, ..cfg() })]
+        #![proptest_config(Config { cases: if cfg!(miri) { 64 } else { 256 }, ..cfg() })]
 
         #[test]
         fn insphere_near_the_extremes(p in prop::array::uniform5(prop::array::uniform3(coordinate()))) {
