@@ -15,6 +15,10 @@
 //!   branch not taken, a run without branch data, a mark without a proof, and more.
 //! - **The binary.** `kernel-quality` itself is run on fixtures: exit 0 to pass, 1 to fail, 2 for
 //!   input it cannot use.
+//! - **Miri's plan.** `miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan`
+//!   packs drawn sets of tests for Miri's gate jobs and holds every part, in every order an oracle
+//!   written here starts its tests, within what 15 minutes leave on a runner a fifth slower, and
+//!   runs `kernel-quality miri-plan` on the real table, which fails on a test with no row.
 
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them, and std's reductions, to build their oracles.
@@ -2354,4 +2358,161 @@ fn the_repository_ledger_reads_and_every_mark_in_the_kernel_has_its_proof() {
         assert!(text.lines().any(|l| l.trim() == s.line_text), "{s:?}");
     }
     assert_eq!(check_marks(&root, &ledger).unwrap(), Vec::<String>::new());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Miri's plan
+// ---------------------------------------------------------------------------------------------
+
+/// The latest a list schedule of `seconds` on four slots ends, tests started in `order`: each
+/// starts on the slot that frees first, as nextest starts the next test whenever one ends. An
+/// oracle written here, sharing no code with `geom_test::miri`.
+fn list_schedule(seconds: &[u64], order: &[usize]) -> u64 {
+    let mut slots = [0_u64; 4];
+    for &i in order {
+        let first = (0..4).min_by_key(|&s| slots[s]).unwrap();
+        slots[first] += seconds[i];
+    }
+    slots.into_iter().max().unwrap()
+}
+
+/// Miri's partitions: drawn sets of tests packed for a gate job, each test in exactly one part,
+/// and each part's listing (a second a binary) and its tests, in every order the oracle tries,
+/// within what 15 minutes leave on a runner a fifth slower after the set-up; and the binary's
+/// plan of the real table, which fails on a test with no row.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "runs the binary as a child process and writes files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan() {
+    use geom_test::miri::{self, Rule, Timed};
+    let seed = resolve(
+        "quality gates: Miri's partitions",
+        Seed(0x6d69_7269_7061_7274),
+    )
+    .unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
+    // What a job leaves its listing and tests: (900 x 5/6) - 120 s.
+    let room = 900 * 5 / 6 - 120;
+    for trial in 0..200 {
+        let count = 1 + below(&mut rng, 300) as usize;
+        let binaries = 1 + below(&mut rng, 60);
+        let tests: Vec<Timed> = (0..count)
+            .map(|i| {
+                // Mostly quick tests, some slow ones, a few near the budget.
+                let seconds = match below(&mut rng, 10) {
+                    0 => 400 + below(&mut rng, 200),
+                    1 | 2 => 30 + below(&mut rng, 300),
+                    _ => 1 + below(&mut rng, 20),
+                };
+                Timed {
+                    seconds,
+                    binary: format!("geom-x::b{}", below(&mut rng, binaries)),
+                    test: format!("t{i}"),
+                }
+            })
+            .collect();
+        let plan = miri::pack(&tests, Rule::Job).unwrap();
+        let by_name: BTreeMap<(&str, &str), u64> = tests
+            .iter()
+            .map(|t| ((t.binary.as_str(), t.test.as_str()), t.seconds))
+            .collect();
+        let mut placed = 0;
+        for k in 1..=plan.len() {
+            let names = plan.tests_of(k);
+            placed += names.len();
+            let seconds: Vec<u64> = names.iter().map(|n| by_name[n]).collect();
+            let listing = names
+                .iter()
+                .map(|(b, _)| *b)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len() as u64;
+            assert_eq!(listing, plan.binaries(k) as u64, "trial {trial} part {k}");
+            let mut order: Vec<usize> = (0..seconds.len()).collect();
+            for _ in 0..20 {
+                // Fisher and Yates' shuffle, one order nextest might start the tests in.
+                for i in (1..order.len()).rev() {
+                    order.swap(i, below(&mut rng, i as u64 + 1) as usize);
+                }
+                let ends = list_schedule(&seconds, &order);
+                assert!(
+                    ends <= plan.part_seconds(k) && listing + ends <= room,
+                    "trial {trial} part {k}: {ends} s of tests and {listing} binaries, over \
+                     {room} s ({seed:?})"
+                );
+            }
+        }
+        assert_eq!(
+            placed, count,
+            "trial {trial}: a test left out or placed twice"
+        );
+    }
+
+    // The binary plans the real table: the partitions and geom-pool's part as the library plans
+    // them, one filterset a file.
+    let rows = miri::parse_table(miri::TIMES).unwrap();
+    let mut suites = serde_json::Map::new();
+    for r in &rows {
+        let suite = suites
+            .entry(r.binary.clone())
+            .or_insert_with(|| json!({"testcases": {}}));
+        suite["testcases"][r.test.as_str()] =
+            json!({"ignored": false, "filter-match": {"status": "matches"}});
+    }
+    let repo = Repo::new("miri-plan");
+    // Exit status, standard output, both streams, and the folder the plan wrote.
+    let run = |listing: &Value| -> (i32, String, String, PathBuf) {
+        let list = repo.path("miri-list.json");
+        std::fs::write(&list, listing.to_string()).unwrap();
+        let out_dir = repo.path("plan");
+        let _ = std::fs::remove_dir_all(&out_dir);
+        let out = Command::new(env!("CARGO_BIN_EXE_kernel-quality"))
+            .args(["miri-plan", "--list"])
+            .arg(&list)
+            .arg("--out")
+            .arg(&out_dir)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let text = format!("{stdout}{}", String::from_utf8_lossy(&out.stderr));
+        (out.status.code().unwrap(), stdout, text, out_dir)
+    };
+    let listing = json!({"rust-suites": Value::Object(suites.clone())});
+    let (code, stdout, text, out_dir) = run(&listing);
+    assert_eq!(code, 0, "{text}");
+    let gate = miri::gate_plan(&rows).unwrap();
+    let printed: Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(printed["count"], json!(gate.parts.len()), "{text}");
+    assert_eq!(
+        printed["parts"],
+        json!((1..=gate.parts.len()).collect::<Vec<_>>())
+    );
+    for k in 1..=gate.parts.len() {
+        let file = std::fs::read_to_string(out_dir.join(format!("part-{k}.txt"))).unwrap();
+        assert_eq!(file, gate.parts.filterset(k).unwrap(), "partition {k}");
+    }
+    assert!(
+        !out_dir
+            .join(format!("part-{}.txt", gate.parts.len() + 1))
+            .exists()
+    );
+    let pool = std::fs::read_to_string(out_dir.join("pool.txt")).unwrap();
+    assert_eq!(pool, gate.pool.filterset(1).unwrap());
+    assert!(pool.contains("geom-pool::attack_g33"), "{pool}");
+
+    // Seeded faults: a test with no row fails the plan, named, and writes no partition; a listing
+    // the plan cannot read is input it cannot use.
+    let mut unmeasured = suites;
+    unmeasured
+        .entry("geom-num".to_owned())
+        .or_insert_with(|| json!({"testcases": {}}))["testcases"]["a_test_nobody_measured"] =
+        json!({"ignored": false});
+    let (code, _, text, out_dir) = run(&json!({"rust-suites": Value::Object(unmeasured)}));
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("geom-num a_test_nobody_measured"), "{text}");
+    assert!(!out_dir.join("part-1.txt").exists());
+    let (code, _, text, _) = run(&json!({"not": "a listing"}));
+    assert_eq!(code, 2, "{text}");
 }

@@ -66,33 +66,40 @@ name: Kernel quality
 # - The gates' own proof: geom-test's seeded_gates test runs the real cargo-mutants and
 #   cargo-llvm-cov on a seeded crate and shows each gate fails on a seeded survivor, an uncovered
 #   line, an untaken branch and an uncited coverage(off) mark.
-# - Miri over every kernel test it finishes (28.8, 32.58). Every kernel crate forbids unsafe code,
-#   so Miri looks for undefined behaviour inside the libraries the kernel drives and the standard
-#   library, which `forbid(unsafe_code)` does not reach, and for leaks and results that differ
-#   between machines. nextest runs each test in its own Miri process, in partitions, and stops a
-#   test at its budget, the default-miri profile in .config/nextest.toml. Miri's table
-#   (geom-test's src/miri-times.tsv) gives each test's measured time, or marks it native-only when
-#   a measuring run found Miri does not finish it; the filter leaves those out, and fails on a
-#   test with no row. A pull request that changes how Miri runs gets one partition at a short
-#   budget, the miri-smoke profile. geom-pool's tests run under Tree Borrows, every other crate's
-#   under Stacked Borrows, while crossbeam-epoch 0.9.21 is in the lock (the step says why).
+# - Miri over every kernel test it finishes (28.8, 32.58, 32.NN). Every kernel crate forbids unsafe
+#   code, so Miri looks for undefined behaviour inside the libraries the kernel drives and the
+#   standard library, which `forbid(unsafe_code)` does not reach, and for leaks and results that
+#   differ between machines. nextest runs each test in its own Miri process and stops a test at its
+#   budget, the default-miri profile in .config/nextest.toml. Miri's table (geom-test's
+#   src/miri-times.tsv) gives each test's measured time, or marks it native-only when a measuring
+#   run found Miri does not finish it. One plan job (`miri-plan`) lists the run's tests under Miri
+#   once, fails on a test with no row, writes each partition's filterset of finishing tests and
+#   geom-pool's, and hands them on with the cargo-nextest it built, for one day; the partitions
+#   (`miri`) and geom-pool's job (`miri-pool`, with the doctests) run from that hand-over, so none
+#   lists every test or builds a tool. The plan packs the partitions so each job ends within 15
+#   minutes, its set-up counted, on a cold cache and a runner a fifth slower
+#   (`geom_test::miri::PART_SECONDS`). A pull request that changes how Miri runs gets the plan,
+#   partition 1 and geom-pool's job at a short budget, the miri-smoke profile. geom-pool's tests
+#   run under Tree Borrows, every other crate's under Stacked Borrows, while crossbeam-epoch 0.9.21
+#   is in the lock (the step says why).
 #
 # Miri's measuring run, by hand only (`-f miri_measure=new` or `all`; not a gate): it measures the
 # tests for Miri's table on these runners instead of a development machine, and runs no gate. Its
 # plan lists the ref's tests under Miri and takes those with no row in the table (`new`) or every
 # one (`all`, to measure the whole table again), only those a nextest filterset selects when
-# `miri_measure_tests` gives one; `kernel-quality miri-measure` packs them into the fewest parts
-# whose tests end within the stop at four at once, each planned at its finishing row's seconds or
+# `miri_measure_tests` gives one; `kernel-quality miri-measure` packs them into parts whose tests
+# end within the stop at four at once in any order, each planned at its finishing row's seconds or
 # at the stop, so a part's job ends in about a quarter of an hour with its build. Each part runs
-# the miri-measure-ci profile (the miri-measure profile with the budget, 600 s, as its stop),
-# uploads its nextest report for three days, and fails, naming it, on any test that failed under
+# the miri-measure-ci profile (the miri-measure profile with the budget, 600 s, as its stop), its
+# geom-pool tests under Tree Borrows as the gate runs them and the rest under Stacked Borrows,
+# uploads its nextest reports for three days, and fails, naming it, on any test that failed under
 # Miri: a fault is read, never recorded as slow. It saves no cache and writes no table; the rows
 # are written afterwards on a development computer, from the reports, by the table's one writer:
 #
 #   gh workflow run kernel-quality.yml --ref <branch> -f miri_measure=new
 #   gh run download <run id> -n miri-measure-plan -D measure/plan
 #   gh run download <run id> -p 'miri-measure-[0-9]*' -D measure/parts
-#   reports=(); for f in measure/parts/*/junit.xml; do reports+=(--report "$f"); done
+#   reports=(); for f in measure/parts/*/junit-*.xml; do reports+=(--report "$f"); done
 #   cargo run -p geom-test --bin kernel-quality -- miri-times "${reports[@]}" \
 #     --scale 1 --stop 600 --list measure/plan/miri-list.json --note "<the run, its ref and commit>"
 #
@@ -109,8 +116,9 @@ name: Kernel quality
 # ships. It is at least two weeks old when pinned; change it in its own pull request.
 #
 # Tools: cargo-mutants (MIT), cargo-llvm-cov (Apache-2.0 OR MIT) and cargo-nextest (Apache-2.0 OR
-# MIT), each built from crates.io at a pinned version with --locked. Miri (MIT OR Apache-2.0) is a
-# component of the pinned nightly compiler.
+# MIT), each built from crates.io at a pinned version with --locked; Miri's plan job builds
+# cargo-nextest so and hands that binary to the Miri jobs of the same run, which check its version.
+# Miri (MIT OR Apache-2.0) is a component of the pinned nightly compiler.
 #
 # Supply chain: every action is pinned to a full commit; checkout, rust-toolchain and rust-cache to
 # the same commits as kernel.yml, and upload-artifact and download-artifact to the commits of their
@@ -974,29 +982,102 @@ jobs:
           SPAREKIT_COVERAGE_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
         run: cargo test --locked -p geom-test --test seeded_gates -- --ignored --test-threads 1
 
-  miri:
-    name: Miri (partition ${{ matrix.partition }})
+  # Miri's plan, once for the run's Miri jobs (32.NN): it lists the run's tests under Miri, fails on
+  # any test Miri's table has no row for (32.58), writes each partition's filterset of finishing
+  # tests and geom-pool's (`kernel-quality miri-plan`), and hands them on, with the crates and the
+  # cargo-nextest it built, as one artifact of this run kept one day. No partition lists every
+  # test, builds cargo-nextest or builds kernel-quality (each cost every partition 0.6 to 5.4
+  # minutes, main's run 44000736866). It saves the Miri cache the other Miri jobs restore.
+  miri-plan:
+    name: Miri, the plan
     needs: [when, cheap]
     if: needs.when.outputs.miri == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 345
+    timeout-minutes: 30
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+    env:
+      # A push to main's crates (empty: every kernel crate).
+      REACHED: ${{ needs.when.outputs.miri_packages }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with Miri
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component miri,rust-src
+          cargo "+$RUST_NIGHTLY" miri setup
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved). Named by its
+          # key alone, not this job's id, so every Miri job restores this one.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: miri
+          add-job-id-key: false
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        run: cargo install --locked cargo-nextest --version "$CARGO_NEXTEST_VERSION"
+      - name: The kernel crates
+        run: |
+          packages="$REACHED"
+          if [ -z "$packages" ]; then
+            packages=$(cargo run --locked -p geom-test --bin kernel-quality -- miri-packages)
+          fi
+          echo "$packages"
+          echo "PACKAGES=$packages" >> "$GITHUB_ENV"
+      - name: The run's tests
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          mkdir -p "$RUNNER_TEMP/miri-plan"
+          # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
+          cargo miri nextest list --locked $PACKAGES \
+            --message-format json > "$RUNNER_TEMP/miri-plan/miri-list.json"
+      - name: Every partition's tests, and geom-pool's
+        id: plan
+        run: |
+          # Fails on any test of the run that Miri's table has no row for (32.58).
+          plan=$(cargo run --locked -q -p geom-test --bin kernel-quality -- miri-plan \
+            --list "$RUNNER_TEMP/miri-plan/miri-list.json" --out "$RUNNER_TEMP/miri-plan")
+          echo "$plan"
+          echo "parts=$(jq -c .parts <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "Miri's plan: $(jq -r .tests <<<"$plan") tests in $(jq -r .count <<<"$plan") partitions, and geom-pool's $(jq -r .pool <<<"$plan")." >> "$GITHUB_STEP_SUMMARY"
+          echo "$PACKAGES" > "$RUNNER_TEMP/miri-plan/packages.txt"
+          cp "$(command -v cargo-nextest)" "$RUNNER_TEMP/miri-plan/cargo-nextest"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: miri-plan
+          path: ${{ runner.temp }}/miri-plan
+          retention-days: 1
+          if-no-files-found: error
+
+  miri:
+    name: Miri (partition ${{ matrix.partition }})
+    needs: [when, cheap, miri-plan]
+    if: needs.when.outputs.miri == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        # A push to main, by hand or on a release: every partition. A pull request that changes
-        # how Miri runs: partition 1 (the job `when` decides).
-        partition: ${{ fromJSON(github.event_name == 'pull_request' && '[1]' || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42]') }}
+        # A push to main, by hand or on a release: every partition of the plan. A pull request
+        # that changes how Miri runs: partition 1 (the job `when` decides).
+        partition: ${{ fromJSON(github.event_name == 'pull_request' && '[1]' || needs.miri-plan.outputs.parts) }}
     env:
-      # The number of partitions: the length of the full matrix above. Each test has a budget of
-      # 10 minutes under Miri (.config/nextest.toml) and a runner runs four at once. The tests Miri
-      # finishes are split by their measured times (geom-test's src/miri-times.tsv, `kernel-quality
-      # miri-filter`), so that no partition's tests take more than 15 minutes (principle 8), in the
-      # fewest partitions that do: geom-test's kernel_quality_workflow.rs holds the count to both.
-      # Hashed into 16, every test took 1.7 to 3.4 hours a partition (run 43696026626), 823 of them
-      # stopped at their budget; such tests are native-only now (32.58).
-      PARTITIONS: 42
-      # A push to main's crates (empty: every kernel crate).
-      REACHED: ${{ needs.when.outputs.miri_packages }}
+      # The plan packs the tests Miri finishes (geom-test's src/miri-times.tsv) into the
+      # partitions, so that each partition's listing and tests end within what is left of 15
+      # minutes (principle 8) after its set-up on a runner a fifth slower
+      # (`geom_test::miri::PART_SECONDS`), in whatever order nextest starts them: geom-test's
+      # kernel_quality_workflow.rs holds the plan to it. Hashed into 16, every test took 1.7 to 3.4
+      # hours a partition (run 43696026626), 823 of them stopped at their budget; such tests are
+      # native-only now (32.58).
       # A partition a push's crates leave without a test passes.
       NEXTEST_NO_TESTS: pass
     defaults:
@@ -1015,35 +1096,23 @@ jobs:
           cargo "+$RUST_NIGHTLY" miri setup
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Restores the cache the plan saves, and saves none.
+          save-if: false
           key: miri
-      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
-        run: cargo install --locked cargo-nextest --version "$CARGO_NEXTEST_VERSION"
-      - name: The kernel crates
+          add-job-id-key: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: miri-plan
+          path: ${{ runner.temp }}/miri-plan
+      - name: The plan's cargo-nextest and crates
         run: |
-          packages="$REACHED"
-          if [ -z "$packages" ]; then
-            packages=$(cargo run --locked -p geom-test --bin kernel-quality -- miri-packages)
-          fi
+          # The artifact keeps no file modes. The binary is the plan's own locked build of the
+          # pinned version from crates.io, checked here before it runs anything.
+          install -m 755 "$RUNNER_TEMP/miri-plan/cargo-nextest" "$HOME/.cargo/bin/cargo-nextest"
+          cargo nextest --version | grep -qxF "cargo-nextest $CARGO_NEXTEST_VERSION"
+          packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
           echo "$packages"
           echo "PACKAGES=$packages" >> "$GITHUB_ENV"
-      - name: The run's tests
-        env:
-          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
-          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
-        run: |
-          # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
-          cargo miri nextest list --locked $PACKAGES -E "not package(geom-pool)" \
-            --message-format json > "$RUNNER_TEMP/miri-list.json"
-      - name: This partition's tests
-        run: |
-          # Fails on any test of the run that Miri's table has no row for (32.58).
-          cargo run --locked -q -p geom-test --bin kernel-quality -- miri-filter \
-            --partition "${{ matrix.partition }}" --of "$PARTITIONS" \
-            --list "$RUNNER_TEMP/miri-list.json" > "$RUNNER_TEMP/miri-filter.txt"
-          wc -c "$RUNNER_TEMP/miri-filter.txt"
       - name: Every kernel test Miri finishes (partition ${{ matrix.partition }})
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
@@ -1063,7 +1132,60 @@ jobs:
           fi
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
           cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
-            -E "not package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-filter.txt"))"
+            -E "not package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/part-${{ matrix.partition }}.txt"))"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: miri-${{ matrix.partition }}
+          path: target/nextest/*/junit*.xml
+          if-no-files-found: ignore
+
+  # geom-pool's finishing tests under Tree Borrows, and the kernel's doctests, in a job of their
+  # own beside the partitions, from the plan's hand-over.
+  miri-pool:
+    name: Miri (geom-pool under Tree Borrows, and the doctests)
+    needs: [when, cheap, miri-plan]
+    if: needs.when.outputs.miri == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # A push to main's crates (empty: every kernel crate).
+      REACHED: ${{ needs.when.outputs.miri_packages }}
+      # A table with no finishing geom-pool test runs none, and passes.
+      NEXTEST_NO_TESTS: pass
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with Miri
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component miri,rust-src
+          cargo "+$RUST_NIGHTLY" miri setup
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Restores the cache the plan saves, and saves none.
+          save-if: false
+          key: miri
+          add-job-id-key: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: miri-plan
+          path: ${{ runner.temp }}/miri-plan
+      - name: The plan's cargo-nextest and crates
+        run: |
+          # The artifact keeps no file modes. The binary is the plan's own locked build of the
+          # pinned version from crates.io, checked here before it runs anything.
+          install -m 755 "$RUNNER_TEMP/miri-plan/cargo-nextest" "$HOME/.cargo/bin/cargo-nextest"
+          cargo nextest --version | grep -qxF "cargo-nextest $CARGO_NEXTEST_VERSION"
+          packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
+          echo "$packages"
+          echo "PACKAGES=$packages" >> "$GITHUB_ENV"
       # geom-pool, the one crate that may name rayon (29.4), under Tree Borrows instead of Stacked
       # Borrows. crossbeam-epoch 0.9.21, which rayon's queues use, turns a reference to a list
       # entry into one to the whole thread record around it (`IsElement::element_of`); Stacked
@@ -1084,41 +1206,38 @@ jobs:
       # old scope code failed 4 of 16 Miri seeds (`-Zmiri-many-seeds=0..16`) on both e7dd9a41 and
       # 96e349a7, so the earlier green runs were a lucky schedule, not a fix; the join code is clean
       # on 32 seeds of the tests that nest and panic.
+      # Like every partition, it runs the tests Miri's table says finish (its rows are measured
+      # under Tree Borrows); a test measured over the stop is native-only, never run to the stop.
       - name: geom-pool's tests under Miri with Tree Borrows
-        if: matrix.partition == 1 && (env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool '))
+        if: env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
           MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks
         run: |
           profile=()
-          dir=target/nextest/default-miri
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             profile=(--profile miri-smoke)
-            dir=target/nextest/miri-smoke
           fi
-          # The run above wrote its report to the same file: keep it beside this one.
-          if [ -f "$dir/junit.xml" ]; then mv "$dir/junit.xml" "$dir/junit-stacked-borrows.xml"; fi
-          cargo miri nextest run --locked -p geom-pool "${profile[@]}"
-          mv "$dir/junit.xml" "$dir/junit-tree-borrows.xml"
+          cargo miri nextest run --locked -p geom-pool "${profile[@]}" \
+            -E "package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/pool.txt"))"
       - name: The kernel's doctests under Miri
-        if: matrix.partition == 1
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
           MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
         run: |
-          # nextest does not run doctests, so partition 1 runs them, every one.
+          # nextest does not run doctests, so this job runs them, every one.
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
           cargo miri test --locked $PACKAGES --doc
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
-          name: miri-${{ matrix.partition }}
+          name: miri-pool
           path: target/nextest/*/junit*.xml
           if-no-files-found: ignore
 
   # Miri's measuring run (the header says what it is for and how its reports become rows): only on
-  # a dispatch that asks for it, and never a gate. Every job below restores main's Miri cache and
-  # saves none, and none writes the table.
+  # a dispatch that asks for it, and never a gate. Every job below restores main's Miri cache (the
+  # one `miri-plan` saves) and saves none, and none writes the table.
   miri-measure-plan:
     name: Miri's measuring run, the plan
     needs: when
@@ -1149,11 +1268,10 @@ jobs:
           cargo "+$RUST_NIGHTLY" miri setup
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Restores the cache main's job `miri` saves and saves nothing: a measuring run leaves
-          # nothing another run reads. rust-cache names a job's cache by its key and then its job
-          # id (`v0-rust-miri-miri-...` for that job), so this job asks for that name whole.
+          # Restores the cache main's job `miri-plan` saves and saves nothing: a measuring run
+          # leaves nothing another run reads.
           save-if: false
-          key: miri-miri
+          key: miri
           add-job-id-key: false
       - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
         run: cargo install --locked cargo-nextest --version "$CARGO_NEXTEST_VERSION"
@@ -1167,15 +1285,15 @@ jobs:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
           MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
         run: |
-          # The whole listing, as Miri's run lists it: the table's rows are written against it.
+          # The whole listing, as Miri's plan lists it: the table's rows are written against it.
           mkdir -p "$RUNNER_TEMP/measure"
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
-          cargo miri nextest list --locked $PACKAGES -E "not package(geom-pool)" \
+          cargo miri nextest list --locked $PACKAGES \
             --message-format json > "$RUNNER_TEMP/measure/miri-list.json"
           # Only the tests the dispatch's filterset selects, when it gives one.
           if [ -n "$MEASURE_TESTS" ]; then
             # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
-            cargo miri nextest list --locked $PACKAGES -E "not package(geom-pool) & ($MEASURE_TESTS)" \
+            cargo miri nextest list --locked $PACKAGES -E "$MEASURE_TESTS" \
               --message-format json > "$RUNNER_TEMP/measure/only-list.json"
           fi
       - name: The parts
@@ -1209,6 +1327,9 @@ jobs:
     if: needs.miri-measure-plan.outputs.count != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # A part with no test of one kind (geom-pool's, or the rest) runs none of that kind.
+      NEXTEST_NO_TESTS: pass
     strategy:
       # Every part reports, so one failure does not lose the others' times.
       fail-fast: false
@@ -1230,11 +1351,10 @@ jobs:
           cargo "+$RUST_NIGHTLY" miri setup
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Restores the cache main's job `miri` saves and saves nothing: a measuring run leaves
-          # nothing another run reads. rust-cache names a job's cache by its key and then its job
-          # id (`v0-rust-miri-miri-...` for that job), so this job asks for that name whole.
+          # Restores the cache main's job `miri-plan` saves and saves nothing: a measuring run
+          # leaves nothing another run reads.
           save-if: false
-          key: miri-miri
+          key: miri
           add-job-id-key: false
       - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
         run: cargo install --locked cargo-nextest --version "$CARGO_NEXTEST_VERSION"
@@ -1255,27 +1375,44 @@ jobs:
         run: |
           # The miri-measure-ci profile stops a test at the budget and counts it as timed out, so
           # nextest's exit status is 100 when any test was stopped or failed: the report says
-          # which, and the next step reads it. Any other status (a build that failed) fails here.
+          # which, and the last step reads it. Any other status (a build that failed) fails here.
           status=0
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
           cargo miri nextest run --locked $PACKAGES --profile miri-measure-ci \
-            -E "$(cat "$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt")" || status=$?
+            -E "not package(geom-pool) & ($(cat "$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt"))" || status=$?
           case "$status" in 0|100) ;; *) exit "$status" ;; esac
-          test -f target/nextest/miri-measure-ci/junit.xml
-      # nextest writes the report under the workspace's own target/nextest/<profile>/.
+          # Each run's report beside the other's (a run with no test may write none).
+          dir=target/nextest/miri-measure-ci
+          if [ -f "$dir/junit.xml" ]; then mv "$dir/junit.xml" "$dir/junit-stacked-borrows.xml"; fi
+      - name: Measure this part's geom-pool tests under Miri with Tree Borrows (part ${{ matrix.part }})
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          # The flags of the job `miri-pool`, so the times are that run's.
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks
+        run: |
+          status=0
+          cargo miri nextest run --locked -p geom-pool --profile miri-measure-ci \
+            -E "package(geom-pool) & ($(cat "$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt"))" || status=$?
+          case "$status" in 0|100) ;; *) exit "$status" ;; esac
+          dir=target/nextest/miri-measure-ci
+          if [ -f "$dir/junit.xml" ]; then mv "$dir/junit.xml" "$dir/junit-tree-borrows.xml"; fi
+      # nextest writes each report under the workspace's own target/nextest/<profile>/.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
           name: miri-measure-${{ matrix.part }}
-          path: target/nextest/miri-measure-ci/junit.xml
+          path: target/nextest/miri-measure-ci/junit-*.xml
           retention-days: 3
           if-no-files-found: error
       - name: Every test finished or was stopped, none failed
         run: |
-          # The table's one writer reads the report and writes nothing (--dry-run): it fails,
-          # naming each, on a test that failed or was killed under Miri.
+          # The table's one writer reads the reports and writes nothing (--dry-run): it fails,
+          # naming each, on a test that failed or was killed under Miri, and on a part that
+          # reported nothing.
+          reports=()
+          for f in target/nextest/miri-measure-ci/junit-*.xml; do reports+=(--report "$f"); done
           cargo run --locked -q -p geom-test --bin kernel-quality -- miri-times \
-            --report target/nextest/miri-measure-ci/junit.xml --scale 1 --stop 600 --dry-run
+            "${reports[@]}" --scale 1 --stop 600 --dry-run
 
   miri-measure-2:
     name: Miri's measuring run (part ${{ matrix.part }})
@@ -1286,6 +1423,9 @@ jobs:
     if: needs.miri-measure-plan.outputs.count_2 != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # A part with no test of one kind (geom-pool's, or the rest) runs none of that kind.
+      NEXTEST_NO_TESTS: pass
     strategy:
       # Every part reports, so one failure does not lose the others' times.
       fail-fast: false
@@ -1307,11 +1447,10 @@ jobs:
           cargo "+$RUST_NIGHTLY" miri setup
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Restores the cache main's job `miri` saves and saves nothing: a measuring run leaves
-          # nothing another run reads. rust-cache names a job's cache by its key and then its job
-          # id (`v0-rust-miri-miri-...` for that job), so this job asks for that name whole.
+          # Restores the cache main's job `miri-plan` saves and saves nothing: a measuring run
+          # leaves nothing another run reads.
           save-if: false
-          key: miri-miri
+          key: miri
           add-job-id-key: false
       - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
         run: cargo install --locked cargo-nextest --version "$CARGO_NEXTEST_VERSION"
@@ -1332,34 +1471,51 @@ jobs:
         run: |
           # The miri-measure-ci profile stops a test at the budget and counts it as timed out, so
           # nextest's exit status is 100 when any test was stopped or failed: the report says
-          # which, and the next step reads it. Any other status (a build that failed) fails here.
+          # which, and the last step reads it. Any other status (a build that failed) fails here.
           status=0
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
           cargo miri nextest run --locked $PACKAGES --profile miri-measure-ci \
-            -E "$(cat "$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt")" || status=$?
+            -E "not package(geom-pool) & ($(cat "$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt"))" || status=$?
           case "$status" in 0|100) ;; *) exit "$status" ;; esac
-          test -f target/nextest/miri-measure-ci/junit.xml
-      # nextest writes the report under the workspace's own target/nextest/<profile>/.
+          # Each run's report beside the other's (a run with no test may write none).
+          dir=target/nextest/miri-measure-ci
+          if [ -f "$dir/junit.xml" ]; then mv "$dir/junit.xml" "$dir/junit-stacked-borrows.xml"; fi
+      - name: Measure this part's geom-pool tests under Miri with Tree Borrows (part ${{ matrix.part }})
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          # The flags of the job `miri-pool`, so the times are that run's.
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks
+        run: |
+          status=0
+          cargo miri nextest run --locked -p geom-pool --profile miri-measure-ci \
+            -E "package(geom-pool) & ($(cat "$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt"))" || status=$?
+          case "$status" in 0|100) ;; *) exit "$status" ;; esac
+          dir=target/nextest/miri-measure-ci
+          if [ -f "$dir/junit.xml" ]; then mv "$dir/junit.xml" "$dir/junit-tree-borrows.xml"; fi
+      # nextest writes each report under the workspace's own target/nextest/<profile>/.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
           name: miri-measure-${{ matrix.part }}
-          path: target/nextest/miri-measure-ci/junit.xml
+          path: target/nextest/miri-measure-ci/junit-*.xml
           retention-days: 3
           if-no-files-found: error
       - name: Every test finished or was stopped, none failed
         run: |
-          # The table's one writer reads the report and writes nothing (--dry-run): it fails,
-          # naming each, on a test that failed or was killed under Miri.
+          # The table's one writer reads the reports and writes nothing (--dry-run): it fails,
+          # naming each, on a test that failed or was killed under Miri, and on a part that
+          # reported nothing.
+          reports=()
+          for f in target/nextest/miri-measure-ci/junit-*.xml; do reports+=(--report "$f"); done
           cargo run --locked -q -p geom-test --bin kernel-quality -- miri-times \
-            --report target/nextest/miri-measure-ci/junit.xml --scale 1 --stop 600 --dry-run
+            "${reports[@]}" --scale 1 --stop 600 --dry-run
 
   # The one check main's ruleset requires of this workflow: it fails if any job failed or was
   # cancelled, or if a gate `when` chose did not run, and when mutation and coverage both passed on
   # a change it leaves the mark that spares the same tree a second run.
   done:
     name: Kernel quality checks pass
-    needs: [when, cheap, mutants-plan, mutants, mutants-2, mutants-judge, coverage-plan, coverage-parts, coverage, gates-seeded, miri, miri-measure-plan, miri-measure, miri-measure-2]
+    needs: [when, cheap, mutants-plan, mutants, mutants-2, mutants-judge, coverage-plan, coverage-parts, coverage, gates-seeded, miri-plan, miri, miri-pool, miri-measure-plan, miri-measure, miri-measure-2]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1384,7 +1540,7 @@ jobs:
           must=""
           if [ "$MUTANTS" = true ]; then must="$must mutants-plan mutants-judge"; fi
           if [ "$COVERAGE" = true ]; then must="$must coverage-plan coverage-parts coverage gates-seeded"; fi
-          if [ "$MIRI" = true ]; then must="$must miri"; fi
+          if [ "$MIRI" = true ]; then must="$must miri-plan miri miri-pool"; fi
           for job in $must; do
             result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")
             if [ "$result" != success ]; then

@@ -24,7 +24,7 @@
 //!   `--locked`, and nothing installed another way.
 //! - **Shards and partitions.** The mutation shards come from the plan, in as many jobs as
 //!   `geom_test::mutants::SHARD_JOBS`, each with the same steps, and each shard runs `--shard k/n`
-//!   with the plan's count of the whole run; Miri's partitions are 1 to n for its `PARTITIONS: n`.
+//!   with the plan's count of the whole run; Miri's partitions are its plan's.
 //! - **Every gate is judged.** The judge reads the plan's list; cargo-mutants' exit status is passed
 //!   on unless it is one the judge decides (2, survivors; 3, timeouts); coverage keeps each run's
 //!   log for the judge.
@@ -34,6 +34,15 @@
 //! - **One aliasing exception.** Miri runs geom-pool, the only crate that names rayon, under Tree
 //!   Borrows and every other crate under Stacked Borrows, and only while `Cargo.lock` holds
 //!   crossbeam-epoch 0.9.21, whose `IsElement::element_of` Stacked Borrows refuses.
+//! - **Miri's jobs run from one plan, each within 15 minutes.** One plan job lists the tests under
+//!   Miri, fails on a test with no row, and hands every partition and geom-pool's job its
+//!   filterset, the crates and the cargo-nextest it built, for one day; no other Miri job lists
+//!   every test or builds a tool, and each checks the binary's version. The partitions are the
+//!   plan's, each ending within what is left of 15 minutes on a runner a fifth slower after the
+//!   measured set-up (`geom_test::miri::PART_SECONDS`), and geom-pool's tests run by the table
+//!   like any other's. Each shown to be checked by a planted change (a partition that lists every
+//!   test or builds cargo-nextest, a matrix not the plan's, the hand-over kept a month or not
+//!   checked, geom-pool run whole).
 //! - **A later push judges what it can reach.** `geom_test::increment` judges again every file of
 //!   the change whose crate's tests what changed since the last clean head reaches, held here to
 //!   planted changes that must be judged (a changed line, a changed test, a removed ledger entry,
@@ -46,7 +55,8 @@
 //!   runs the measuring profile at the budget, uploads its report for a few days, and fails on a
 //!   test that failed; the second part job is the first word for word. Each shown to be checked by
 //!   a planted change (the plan running without the input, a measuring run that runs the gates, a
-//!   cache saved, the table written, a part with no report upload, a stop other than the budget).
+//!   cache saved, the table written, a part with no report upload, a stop other than the budget,
+//!   geom-pool measured under Stacked Borrows).
 
 // The crate denies native arithmetic in kernel code (Cargo.toml); tests may use it.
 #![allow(
@@ -251,6 +261,27 @@ fn the_coverage_judge_reads_every_part() {
     );
 }
 
+/// The workflow's jobs, in file order.
+const JOBS: [&str; 17] = [
+    "when",
+    "cheap",
+    "mutants-plan",
+    "mutants",
+    "mutants-2",
+    "mutants-judge",
+    "coverage-plan",
+    "coverage-parts",
+    "coverage",
+    "gates-seeded",
+    "miri-plan",
+    "miri",
+    "miri-pool",
+    "miri-measure-plan",
+    "miri-measure",
+    "miri-measure-2",
+    "done",
+];
+
 #[cfg_attr(
     target_family = "wasm",
     ignore = "reads the repository's files, which a WebAssembly test run cannot"
@@ -259,26 +290,7 @@ fn the_coverage_judge_reads_every_part() {
 fn each_job_runs_on_the_events_its_gate_names() {
     let w = workflow();
     let jobs = &w["jobs"];
-    assert_eq!(
-        keys(jobs),
-        [
-            "when",
-            "cheap",
-            "mutants-plan",
-            "mutants",
-            "mutants-2",
-            "mutants-judge",
-            "coverage-plan",
-            "coverage-parts",
-            "coverage",
-            "gates-seeded",
-            "miri",
-            "miri-measure-plan",
-            "miri-measure",
-            "miri-measure-2",
-            "done",
-        ]
-    );
+    assert_eq!(keys(jobs), JOBS);
     // Each gate runs when `when` chose it; each shard job only when the plan gives it shards, and
     // the judge even when a shard failed, so a lost shard is reported, not skipped.
     for (job, gate) in [
@@ -286,7 +298,9 @@ fn each_job_runs_on_the_events_its_gate_names() {
         ("coverage-plan", "coverage"),
         ("coverage-parts", "coverage"),
         ("gates-seeded", "coverage"),
+        ("miri-plan", "miri"),
         ("miri", "miri"),
+        ("miri-pool", "miri"),
     ] {
         assert_eq!(
             text(&jobs[job]["if"]),
@@ -500,9 +514,15 @@ fn toolchains_and_tools_are_pinned() {
             .map(str::trim)
             .filter(|l| l.contains(tool) && l.contains("install"))
             .collect();
-        assert!(!lines.is_empty(), "{tool} is never installed");
+        assert!(
+            lines.contains(&install.as_str()),
+            "{tool} is never installed"
+        );
         for l in lines {
-            assert_eq!(l, install, "{tool}");
+            // Miri's jobs put the plan's own build in place, and check its version
+            // (`miris_jobs_run_from_one_plan_each_within_fifteen_minutes`).
+            let handed = tool == "cargo-nextest" && l == HANDOVER_INSTALL;
+            assert!(l == install || handed, "{tool}: {l}");
         }
     }
     // The workflow's nextest is new enough for the configuration it reads.
@@ -518,11 +538,17 @@ fn toolchains_and_tools_are_pinned() {
         .map(|p| p.parse().unwrap())
         .collect();
     assert!(nextest >= required, "{nextest:?} < {required:?}");
-    // Nothing installs a tool another way.
+    // Nothing installs a tool another way, and only Miri's jobs that run from the plan take its
+    // cargo-nextest.
     assert_eq!(
         all_runs.matches("cargo install").count(),
         all_runs.matches("cargo install --locked").count()
     );
+    let taking: Vec<String> = keys(&w["jobs"])
+        .into_iter()
+        .filter(|j| runs(&w, j).contains("install -m"))
+        .collect();
+    assert_eq!(taking, FROM_THE_PLAN);
     assert!(!all_runs.contains("curl ") && !all_runs.contains("wget "));
 }
 
@@ -655,55 +681,7 @@ fn every_shard_and_partition_runs_once() {
             "{plan_run}"
         );
     }
-    // Miri: the full matrix lists partitions 1 to PARTITIONS, and each runs its own.
-    let miri = &w["jobs"]["miri"];
-    let n = miri["env"]["PARTITIONS"].as_i64().unwrap();
-    let matrix = text(&miri["strategy"]["matrix"]["partition"]);
-    let full = matrix
-        .split("|| '")
-        .nth(1)
-        .and_then(|rest| rest.split('\'').next())
-        .unwrap();
-    let listed: Vec<i64> = serde_json::from_str(full).unwrap();
-    assert_eq!(listed, (1..=n).collect::<Vec<_>>());
-    assert!(
-        matrix.contains("github.event_name == 'pull_request' && '[1]'"),
-        "{matrix}"
-    );
-    assert_eq!(miri["strategy"]["fail-fast"].as_bool(), Some(false));
-    // Each partition runs its finishing tests; a test of the run with no row fails it (32.58).
-    let run = runs(&w, "miri");
-    for needle in [
-        "cargo miri nextest list --locked $PACKAGES -E \"not package(geom-pool)\"",
-        "--message-format json > \"$RUNNER_TEMP/miri-list.json\"",
-        "kernel-quality -- miri-filter",
-        "--partition \"${{ matrix.partition }}\" --of \"$PARTITIONS\"",
-        "--list \"$RUNNER_TEMP/miri-list.json\" > \"$RUNNER_TEMP/miri-filter.txt\"",
-        "-E \"not package(geom-pool) & ($(cat \"$RUNNER_TEMP/miri-filter.txt\"))\"",
-    ] {
-        assert!(run.contains(needle), "{needle}\n{run}");
-    }
-    assert!(!run.contains("--partition \"hash:"), "{run}");
-    // The finishing tests split into that many partitions keep each one's tests within
-    // `PART_SECONDS` at four at once (principle 8), in the fewest partitions that do, and each
-    // filterset fits in one command-line argument (Linux takes at most 128 KiB in one).
-    let times = miri::finishing(&miri::parse_table(miri::TIMES).unwrap());
-    let parts = usize::try_from(n).unwrap();
-    let plan = miri::plan(&times, parts).unwrap();
-    let slowest = plan.longest();
-    assert!(
-        slowest <= miri::PART_SECONDS,
-        "{slowest} s in the slowest of {parts}"
-    );
-    assert_eq!(
-        miri::fewest(&times),
-        Some(parts),
-        "not the fewest within the bound"
-    );
-    for k in 1..=parts {
-        let filter = plan.filterset(k).unwrap();
-        assert!(filter.len() < 100_000, "partition {k}: {}", filter.len());
-    }
+    // (Miri's partitions are its plan's: `miris_jobs_run_from_one_plan_each_within_fifteen_minutes`.)
 }
 
 #[cfg_attr(
@@ -723,8 +701,8 @@ fn miris_table_is_measured_and_every_unsafe_library_has_a_finishing_test() {
         "miri-times.tsv is not as `kernel-quality miri-times` writes it"
     );
     // Each library with unsafe code the kernel uses is driven by a test Miri finishes; geom-pool's
-    // tests have no rows, because Miri runs all of them, under Tree Borrows.
-    let problems = miri::undriven(&rows, miri::UNSAFE_LIBRARIES, TREE_BORROWS_CRATE);
+    // tests have rows too, measured under Tree Borrows, as they run.
+    let problems = miri::undriven(&rows, miri::UNSAFE_LIBRARIES);
     assert!(problems.is_empty(), "{problems:#?}");
     // Every library of the lock with unsafe code that the kernel uses is named, and nothing else.
     let named: BTreeSet<&str> = geom_test::miri::UNSAFE_LIBRARIES
@@ -981,15 +959,16 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
         "{seeded}"
     );
     // Miri: every kernel crate's tests under nextest, and its doctests.
-    let miri = runs(&w, "miri");
+    let miri = [runs(&w, "miri-plan"), runs(&w, "miri")].concat();
     for needle in [
         "kernel-quality -- miri-packages",
         "cargo miri nextest run --locked $PACKAGES",
-        "cargo miri test --locked $PACKAGES --doc",
         "profile=(--profile miri-smoke)",
     ] {
         assert!(miri.contains(needle), "Miri does not run {needle:?}");
     }
+    // The doctests, in geom-pool's job.
+    assert!(runs(&w, "miri-pool").contains("cargo miri test --locked $PACKAGES --doc"));
 }
 
 /// The one crate Miri runs under Tree Borrows, and the crossbeam-epoch release that is why.
@@ -1003,41 +982,56 @@ const CROSSBEAM_EPOCH_WITH_THE_VIOLATION: &str = "0.9.21";
 #[test]
 fn only_geom_pool_runs_under_tree_borrows_and_only_while_crossbeam_needs_it() {
     let w = workflow();
-    let steps = w["jobs"]["miri"]["steps"].as_vec().unwrap();
-    let with_flags: Vec<(&str, &str)> = steps
-        .iter()
-        .filter_map(|s| Some((s["env"]["MIRIFLAGS"].as_str()?, s["run"].as_str()?)))
-        .collect();
-    // Every Miri run but one keeps Stacked Borrows, and that run's crate leaves the main run.
-    let tree: Vec<&&str> = with_flags
-        .iter()
-        .filter(|(flags, _)| flags.contains("-Zmiri-tree-borrows"))
-        .map(|(_, run)| run)
-        .collect();
-    assert_eq!(tree.len(), 1, "one step runs Tree Borrows");
-    // Only that step turns Miri's leak check off (rayon's pools stop their threads without
-    // joining them); every other run keeps it.
-    for (flags, run) in &with_flags {
-        if flags.contains("-Zmiri-ignore-leaks") {
-            assert!(flags.contains("-Zmiri-tree-borrows"), "{run}");
+    // Every Miri run of the gate's jobs, and of each measuring part job, as (job, flags, run).
+    let mut with_flags: Vec<(String, String, String)> = Vec::new();
+    for (job, step) in steps(&w) {
+        if let (Some(flags), Some(run)) = (step["env"]["MIRIFLAGS"].as_str(), step["run"].as_str())
+        {
+            with_flags.push((job, flags.to_owned(), run.to_owned()));
         }
     }
-    assert!(
-        tree[0].contains(&format!(
-            "cargo miri nextest run --locked -p {TREE_BORROWS_CRATE} "
-        )),
-        "{}",
-        tree[0]
-    );
-    let main = with_flags
-        .iter()
-        .find(|(_, run)| run.contains("cargo miri nextest run --locked $PACKAGES"))
-        .unwrap()
-        .1;
-    assert!(
-        main.contains(&format!("-E \"not package({TREE_BORROWS_CRATE}) & (")),
-        "{main}"
-    );
+    // Only a Tree Borrows run turns Miri's leak check off (rayon's pools stop their threads
+    // without joining them); every other run keeps it.
+    for (job, flags, run) in &with_flags {
+        if flags.contains("-Zmiri-ignore-leaks") {
+            assert!(flags.contains("-Zmiri-tree-borrows"), "{job}: {run}");
+        }
+    }
+    // In the gate's jobs one run is Tree Borrows, geom-pool's job's, of that crate alone; in each
+    // measuring part job one, the same. Every other nextest run leaves the crate out.
+    for (jobs, want) in [
+        (vec!["miri-plan", "miri", "miri-pool"], "miri-pool"),
+        (vec!["miri-measure"], "miri-measure"),
+        (vec!["miri-measure-2"], "miri-measure-2"),
+    ] {
+        let tree: Vec<&(String, String, String)> = with_flags
+            .iter()
+            .filter(|(job, flags, _)| {
+                jobs.contains(&job.as_str()) && flags.contains("-Zmiri-tree-borrows")
+            })
+            .collect();
+        assert_eq!(tree.len(), 1, "one step of {jobs:?} runs Tree Borrows");
+        assert_eq!(tree[0].0, want);
+        let run = joined(&tree[0].2).join("\n");
+        assert!(
+            run.contains(&format!(
+                "cargo miri nextest run --locked -p {TREE_BORROWS_CRATE} "
+            )) && run.contains(&format!("-E \"package({TREE_BORROWS_CRATE}) & (")),
+            "{run}"
+        );
+    }
+    for (job, flags, run) in &with_flags {
+        if flags.contains("-Zmiri-tree-borrows") {
+            continue;
+        }
+        let run = joined(run).join("\n");
+        if run.contains("cargo miri nextest run --locked $PACKAGES") {
+            assert!(
+                run.contains(&format!("-E \"not package({TREE_BORROWS_CRATE}) & (")),
+                "{job}: {run}"
+            );
+        }
+    }
     // The crate is the one that may name rayon, and the exception lasts only while the lock
     // holds the crossbeam-epoch release whose `element_of` Stacked Borrows refuses
     // (crossbeam-rs/crossbeam#871 fixes it upstream, for 0.10). Once the lock moves, run
@@ -1062,8 +1056,255 @@ fn only_geom_pool_runs_under_tree_borrows_and_only_while_crossbeam_needs_it() {
     assert_eq!(
         epochs,
         [CROSSBEAM_EPOCH_WITH_THE_VIOLATION],
-        "crossbeam-epoch moved: look at kernel-quality.yml's Tree Borrows step again"
+        "crossbeam-epoch moved: look at kernel-quality.yml's Tree Borrows steps again"
     );
+}
+
+/// The line that puts the plan's cargo-nextest in place in a Miri job (the artifact keeps no file
+/// modes), and the check of its version that must follow it.
+const HANDOVER_INSTALL: &str =
+    "install -m 755 \"$RUNNER_TEMP/miri-plan/cargo-nextest\" \"$HOME/.cargo/bin/cargo-nextest\"";
+const HANDOVER_CHECK: &str =
+    "cargo nextest --version | grep -qxF \"cargo-nextest $CARGO_NEXTEST_VERSION\"";
+
+/// The Miri jobs that run from the plan's hand-over.
+const FROM_THE_PLAN: [&str; 2] = ["miri", "miri-pool"];
+
+/// What is wrong with Miri's plan and the jobs that run from it, given the workflow's text: one plan
+/// lists the tests and builds the tools, and hands them on for a day; the partitions are its own,
+/// each within its job's time; geom-pool's job runs geom-pool's finishing tests.
+fn miri_plan_problems(text: &str) -> Vec<String> {
+    let w = YamlLoader::load_from_str(text).unwrap().remove(0);
+    let jobs = &w["jobs"];
+    let mut found = Vec::new();
+    let plan = &jobs["miri-plan"];
+    let needs = |job: &str| -> Vec<String> {
+        jobs[job]["needs"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .filter_map(|n| n.as_str().map(str::to_owned))
+            .collect()
+    };
+    if needs("miri-plan") != ["when", "cheap"]
+        || plan["outputs"]["parts"].as_str() != Some("${{ steps.plan.outputs.parts }}")
+    {
+        found.push("miri-plan does not hand on its partitions".to_owned());
+    }
+    let plan_runs = joined(&runs(&w, "miri-plan")).join("\n");
+    for needle in [
+        "cargo install --locked cargo-nextest --version \"$CARGO_NEXTEST_VERSION\"",
+        "cargo miri nextest list --locked $PACKAGES --message-format json > \
+         \"$RUNNER_TEMP/miri-plan/miri-list.json\"",
+        "kernel-quality -- miri-plan --list \"$RUNNER_TEMP/miri-plan/miri-list.json\" --out \
+         \"$RUNNER_TEMP/miri-plan\")",
+        "echo \"parts=$(jq -c .parts <<<\"$plan\")\" >> \"$GITHUB_OUTPUT\"",
+        "echo \"$PACKAGES\" > \"$RUNNER_TEMP/miri-plan/packages.txt\"",
+        "cp \"$(command -v cargo-nextest)\" \"$RUNNER_TEMP/miri-plan/cargo-nextest\"",
+    ] {
+        if !plan_runs.contains(needle) {
+            found.push(format!("miri-plan does not run {needle:?}"));
+        }
+    }
+    // The hand-over: one artifact of this run, kept one day, under the name the jobs download.
+    let uploads: Vec<&Yaml> = plan["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter(|s| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
+        })
+        .collect();
+    let handed = uploads.len() == 1
+        && uploads[0]["with"]["name"].as_str() == Some("miri-plan")
+        && uploads[0]["with"]["path"].as_str() == Some("${{ runner.temp }}/miri-plan")
+        && uploads[0]["with"]["retention-days"].as_i64() == Some(1);
+    if !handed {
+        found.push("miri-plan does not hand on one artifact kept one day".to_owned());
+    }
+    found.extend(from_the_plan_problems(&w));
+    // The partitions are the plan's; a pull request runs the first.
+    let miri = &jobs["miri"];
+    if miri["strategy"]["matrix"]["partition"].as_str()
+        != Some(
+            "${{ fromJSON(github.event_name == 'pull_request' && '[1]' || \
+             needs.miri-plan.outputs.parts) }}",
+        )
+        || miri["strategy"]["fail-fast"].as_bool() != Some(false)
+    {
+        found.push("miri does not run the plan's partitions".to_owned());
+    }
+    let partition = joined(&runs(&w, "miri")).join("\n");
+    if !partition.contains(
+        "cargo miri nextest run --locked $PACKAGES \"${profile[@]}\" -E \"not package(geom-pool) \
+         & ($(cat \"$RUNNER_TEMP/miri-plan/part-${{ matrix.partition }}.txt\"))\"",
+    ) {
+        found.push("miri does not run its partition's tests".to_owned());
+    }
+    let pool = joined(&runs(&w, "miri-pool")).join("\n");
+    if !pool.contains(
+        "cargo miri nextest run --locked -p geom-pool \"${profile[@]}\" -E \"package(geom-pool) & \
+         ($(cat \"$RUNNER_TEMP/miri-plan/pool.txt\"))\"",
+    ) {
+        found.push("geom-pool's job does not run the table's finishing tests".to_owned());
+    }
+    found
+}
+
+/// What is wrong with the Miri jobs that run from the plan's hand-over: each downloads it, puts
+/// its cargo-nextest in place and checks its version, and builds, lists and saves nothing itself.
+fn from_the_plan_problems(w: &Yaml) -> Vec<String> {
+    let jobs = &w["jobs"];
+    let mut found = Vec::new();
+    let needs = |job: &str| -> Vec<String> {
+        jobs[job]["needs"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .filter_map(|n| n.as_str().map(str::to_owned))
+            .collect()
+    };
+    for job in FROM_THE_PLAN {
+        let steps = jobs[job]["steps"].as_vec().cloned().unwrap_or_default();
+        let downloads = steps.iter().any(|s| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("actions/download-artifact@"))
+                && s["with"]["name"].as_str() == Some("miri-plan")
+                && s["with"]["path"].as_str() == Some("${{ runner.temp }}/miri-plan")
+        });
+        if !needs(job).iter().any(|n| n == "miri-plan") || !downloads {
+            found.push(format!("{job} does not run from the plan's hand-over"));
+        }
+        let commands = joined(&runs(w, job));
+        let install = commands.iter().position(|c| c.trim() == HANDOVER_INSTALL);
+        let check = commands.iter().position(|c| c.trim() == HANDOVER_CHECK);
+        if !matches!((install, check), (Some(i), Some(c)) if i < c) {
+            found.push(format!(
+                "{job} does not put the plan's cargo-nextest in place and check its version"
+            ));
+        }
+        let all = commands.join("\n");
+        for (what, said) in [
+            ("cargo install", "builds a tool"),
+            ("nextest list", "lists every test"),
+            ("-p geom-test", "builds kernel-quality"),
+        ] {
+            if all.contains(what) {
+                found.push(format!("{job} {said}"));
+            }
+        }
+        let saves = steps.iter().any(|s| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("Swatinem/rust-cache@"))
+                && s["with"]["save-if"].as_bool() != Some(false)
+        });
+        if saves {
+            found.push(format!("{job} saves a cache"));
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn miris_jobs_run_from_one_plan_each_within_fifteen_minutes() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let found = miri_plan_problems(&text);
+    assert!(found.is_empty(), "{found:#?}");
+    // The table's plan: every finishing test in one part, each partition's listing and tests
+    // within PART_SECONDS in any order, geom-pool's tests in a part of their own within it, and
+    // each filterset within one command-line argument (Linux takes at most 128 KiB in one).
+    let rows = miri::parse_table(miri::TIMES).unwrap();
+    let gate = miri::gate_plan(&rows).unwrap();
+    for k in 1..=gate.parts.len() {
+        assert!(gate.parts.ends_within(k, miri::Rule::Job), "partition {k}");
+        let filter = gate.parts.filterset(k).unwrap();
+        assert!(filter.len() < 100_000, "partition {k}: {}", filter.len());
+    }
+    assert!(gate.pool.ends_within(1, miri::Rule::Job));
+    let placed = (1..=gate.parts.len())
+        .map(|k| gate.parts.tests_of(k).len())
+        .fold(gate.pool.tests_of(1).len(), |a, n| a + n);
+    assert_eq!(
+        placed,
+        miri::finishing(&rows).len(),
+        "a finishing test left out"
+    );
+    // The arithmetic: a part's set-up and its listing and tests fill 15 minutes on a runner a
+    // fifth slower, and the longest test that finishes fits a part alone.
+    assert_eq!(
+        (miri::FIXED_SECONDS + miri::PART_SECONDS) * miri::SLOWER.0,
+        miri::JOB_SECONDS * miri::SLOWER.1
+    );
+    assert_eq!(miri::JOB_SECONDS, 15 * 60);
+    const { assert!(miri::BUDGET + miri::LIST_SECONDS <= miri::PART_SECONDS) };
+    assert_eq!(miri::TREE_BORROWS_CRATE, TREE_BORROWS_CRATE);
+    // Seeded violations: each must be reported.
+    for (from, to, said) in [
+        // A partition that builds cargo-nextest again.
+        (
+            HANDOVER_INSTALL,
+            "cargo install --locked cargo-nextest --version \"$CARGO_NEXTEST_VERSION\"",
+            "miri builds a tool",
+        ),
+        // A partition that lists every test again.
+        (
+            "          cargo miri nextest run --locked $PACKAGES \"${profile[@]}\" \\\n",
+            "          cargo miri nextest list --locked $PACKAGES > \"$RUNNER_TEMP/all.json\"\n          \
+             cargo miri nextest run --locked $PACKAGES \"${profile[@]}\" \\\n",
+            "miri lists every test",
+        ),
+        // A partition that builds kernel-quality to plan itself.
+        (
+            "          packages=$(cat \"$RUNNER_TEMP/miri-plan/packages.txt\")\n",
+            "          packages=$(cargo run --locked -p geom-test --bin kernel-quality -- miri-packages)\n",
+            "miri builds kernel-quality",
+        ),
+        // The hand-over's binary run unchecked.
+        (
+            HANDOVER_CHECK,
+            "true",
+            "miri does not put the plan's cargo-nextest in place and check its version",
+        ),
+        // A matrix of its own instead of the plan's.
+        (
+            "needs.miri-plan.outputs.parts) }}",
+            "'[1, 2, 3]') }}",
+            "miri does not run the plan's partitions",
+        ),
+        // The hand-over kept for a month, for later runs to find.
+        (
+            "          name: miri-plan\n          path: ${{ runner.temp }}/miri-plan\n          \
+             retention-days: 1\n",
+            "          name: miri-plan\n          path: ${{ runner.temp }}/miri-plan\n          \
+             retention-days: 30\n",
+            "miri-plan does not hand on one artifact kept one day",
+        ),
+        // geom-pool run whole, its stopped test to the stop again.
+        (
+            " \\\n            -E \"package(geom-pool) & ($(cat \"$RUNNER_TEMP/miri-plan/pool.txt\"))\"",
+            "",
+            "geom-pool's job does not run the table's finishing tests",
+        ),
+        // A partition that saves a cache of its own.
+        (
+            "          # Restores the cache the plan saves, and saves none.\n          save-if: false\n",
+            "          # Restores the cache the plan saves, and saves none.\n          save-if: true\n",
+            "miri saves a cache",
+        ),
+    ] {
+        let planted = text.replacen(from, to, 1);
+        assert_ne!(planted, text, "the planted edit {from:?} applies");
+        let found = miri_plan_problems(&planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
 }
 
 #[cfg_attr(
@@ -1389,8 +1630,9 @@ const MEASURE_PARTS: [(&str, &str, &str); 2] = [
     ("miri-measure-2", "parts_2", "count_2"),
 ];
 
-/// Where nextest writes a measuring part's report: the workspace's own target folder.
-const MEASURE_REPORT: &str = "target/nextest/miri-measure-ci/junit.xml";
+/// Where a measuring part keeps its reports, one a run: nextest writes each under the workspace's
+/// own target folder, and the part renames it for its borrow model.
+const MEASURE_REPORTS: &str = "target/nextest/miri-measure-ci/junit-*.xml";
 
 /// A script's commands with continued lines joined and runs of spaces made one, comments left out.
 fn joined(script: &str) -> Vec<String> {
@@ -1506,9 +1748,10 @@ fn measure_job_problems(w: &Yaml) -> Vec<String> {
     }
     let plan_runs = joined(&runs(w, "miri-measure-plan")).join("\n");
     for needle in [
-        "cargo miri nextest list --locked $PACKAGES -E \"not package(geom-pool)\" \
-         --message-format json > \"$RUNNER_TEMP/measure/miri-list.json\"",
-        "-E \"not package(geom-pool) & ($MEASURE_TESTS)\"",
+        "cargo miri nextest list --locked $PACKAGES --message-format json > \
+         \"$RUNNER_TEMP/measure/miri-list.json\"",
+        "cargo miri nextest list --locked $PACKAGES -E \"$MEASURE_TESTS\" --message-format json \
+         > \"$RUNNER_TEMP/measure/only-list.json\"",
         "kernel-quality -- miri-measure --which \"$MEASURE\" --list \
          \"$RUNNER_TEMP/measure/miri-list.json\" \"${only[@]}\"",
     ] {
@@ -1558,7 +1801,7 @@ fn measure_job_problems(w: &Yaml) -> Vec<String> {
 
 /// What the measuring run's jobs leave that another run could read: a cache saved, the table
 /// written, anything pushed, an artifact kept more than a few days. The cache they restore is the
-/// one the job `miri` saves, named whole: its key, then its job id.
+/// one the job `miri-plan` saves, named by its key alone.
 fn measure_leaves_problems(w: &Yaml) -> Vec<String> {
     let jobs = &w["jobs"];
     let mut found = Vec::new();
@@ -1567,11 +1810,11 @@ fn measure_leaves_problems(w: &Yaml) -> Vec<String> {
             .as_str()
             .is_some_and(|u| u.starts_with("Swatinem/rust-cache@"))
     };
-    let miri_cache = jobs["miri"]["steps"]
+    let plan_cache = jobs["miri-plan"]["steps"]
         .as_vec()
         .and_then(|v| v.iter().find(is_cache))
-        .and_then(|s| s["with"]["key"].as_str())
-        .map(|key| format!("{key}-miri"));
+        .filter(|s| s["with"]["add-job-id-key"].as_bool() == Some(false));
+    let miri_cache = plan_cache.and_then(|s| s["with"]["key"].as_str());
     for job in MEASURE_JOBS {
         for step in jobs[job]["steps"].as_vec().into_iter().flatten() {
             let uses = step["uses"].as_str().unwrap_or("");
@@ -1581,10 +1824,11 @@ fn measure_leaves_problems(w: &Yaml) -> Vec<String> {
                 found.push(format!("{job} saves a cache"));
             }
             if is_cache(&step)
-                && (step["with"]["key"].as_str() != miri_cache.as_deref()
+                && (step["with"]["key"].as_str() != miri_cache
+                    || miri_cache.is_none()
                     || step["with"]["add-job-id-key"].as_bool() != Some(false))
             {
-                found.push(format!("{job} does not restore the job miri's cache"));
+                found.push(format!("{job} does not restore the job miri-plan's cache"));
             }
             if uses.starts_with("actions/upload-artifact@")
                 && step["with"]["retention-days"]
@@ -1606,8 +1850,9 @@ fn measure_leaves_problems(w: &Yaml) -> Vec<String> {
     found
 }
 
-/// What is wrong with a measuring part: the measuring profile at the budget on its own tests, any
-/// failure but a test's passed on, its report uploaded whatever happened, then every test read,
+/// What is wrong with a measuring part: the measuring profile at the budget on its own tests,
+/// geom-pool's under Tree Borrows as the gate runs them and the rest under Stacked Borrows, any
+/// failure but a test's passed on, its reports uploaded whatever happened, then every test read,
 /// so one that failed under Miri fails the part, named.
 fn measure_part_problems(w: &Yaml, n: &toml::Table) -> Vec<String> {
     let mut found = Vec::new();
@@ -1644,33 +1889,64 @@ fn measure_part_problems(w: &Yaml, n: &toml::Table) -> Vec<String> {
     let running = |s: &&Yaml, what: &str| s["run"].as_str().is_some_and(|r| r.contains(what));
     let run_at = steps
         .iter()
-        .position(|s| running(&s, "cargo miri nextest run"));
+        .position(|s| running(&s, "cargo miri nextest run --locked $PACKAGES"));
+    let pool_at = steps
+        .iter()
+        .position(|s| running(&s, "cargo miri nextest run --locked -p geom-pool"));
     let check_at = steps.iter().position(|s| running(&s, "miri-times"));
     let upload_at = steps.iter().position(|s| {
         s["uses"]
             .as_str()
             .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
-            && s["with"]["path"].as_str() == Some(MEASURE_REPORT)
+            && s["with"]["path"].as_str() == Some(MEASURE_REPORTS)
             && s["with"]["name"].as_str() == Some("miri-measure-${{ matrix.part }}")
             && s["if"].as_str() == Some("${{ !cancelled() }}")
     });
-    match (run_at, upload_at, check_at) {
-        (Some(run), Some(upload), Some(check)) if run < upload && upload < check => {}
+    match (run_at, pool_at, upload_at, check_at) {
+        (Some(run), Some(pool), Some(upload), Some(check))
+            if run < upload && pool < upload && upload < check => {}
         _ => found.push(format!(
-            "a part uploads no report of {MEASURE_REPORT} between its run and its check: \
-             {run_at:?} {upload_at:?} {check_at:?}"
+            "a part uploads no report of {MEASURE_REPORTS} between its runs and its check: \
+             {run_at:?} {pool_at:?} {upload_at:?} {check_at:?}"
         )),
     }
+    // geom-pool's tests are measured as the gate's job `miri-pool` runs them.
+    let pool_flags = w["jobs"]["miri-pool"]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .find(|s| running(s, "cargo miri nextest run --locked -p geom-pool"))
+        .and_then(|s| s["env"]["MIRIFLAGS"].as_str());
+    let measured_flags = pool_at
+        .and_then(|i| steps.get(i))
+        .and_then(|s| s["env"]["MIRIFLAGS"].as_str());
+    if pool_flags.is_none() || measured_flags != pool_flags {
+        found.push(format!(
+            "a part does not measure geom-pool under Tree Borrows as miri-pool runs it: \
+             {measured_flags:?} against {pool_flags:?}"
+        ));
+    }
     let commands = joined(&runs(w, "miri-measure")).join("\n");
+    let status = "case \"$status\" in 0|100) ;; *) exit \"$status\" ;; esac";
+    if commands.matches(status).count() != 2 {
+        found.push(format!("a part does not run {status:?} after each run"));
+    }
     for needle in [
-        "cargo miri nextest run --locked $PACKAGES --profile miri-measure-ci -E \
-         \"$(cat \"$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt\")\" || status=$?"
+        "cargo miri nextest run --locked $PACKAGES --profile miri-measure-ci -E \"not \
+         package(geom-pool) & ($(cat \"$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt\"))\" || \
+         status=$?"
             .to_owned(),
-        "case \"$status\" in 0|100) ;; *) exit \"$status\" ;; esac".to_owned(),
-        format!("test -f {MEASURE_REPORT}"),
+        "cargo miri nextest run --locked -p geom-pool --profile miri-measure-ci -E \
+         \"package(geom-pool) & ($(cat \"$RUNNER_TEMP/measure/part-${{ matrix.part }}.txt\"))\" || \
+         status=$?"
+            .to_owned(),
+        "if [ -f \"$dir/junit.xml\" ]; then mv \"$dir/junit.xml\" \"$dir/junit-stacked-borrows.xml\"; fi"
+            .to_owned(),
+        "if [ -f \"$dir/junit.xml\" ]; then mv \"$dir/junit.xml\" \"$dir/junit-tree-borrows.xml\"; fi"
+            .to_owned(),
+        format!("for f in {MEASURE_REPORTS}; do reports+=(--report \"$f\"); done"),
         format!(
-            "kernel-quality -- miri-times --report {MEASURE_REPORT} --scale 1 --stop {budget} \
-             --dry-run"
+            "kernel-quality -- miri-times \"${{reports[@]}}\" --scale 1 --stop {budget} --dry-run"
         ),
     ] {
         if !commands.contains(&needle) {
@@ -1725,14 +2001,14 @@ fn a_measuring_run_runs_only_when_asked_and_leaves_nothing_behind() {
         ),
         // A measuring job saving a cache.
         (
-            "          save-if: false\n          key: miri-miri\n",
-            "          save-if: ${{ github.ref == 'refs/heads/main' }}\n          key: miri-miri\n",
+            "          # leaves nothing another run reads.\n          save-if: false\n",
+            "          # leaves nothing another run reads.\n          save-if: ${{ github.ref == 'refs/heads/main' }}\n",
             "miri-measure-plan saves a cache",
         ),
         (
-            "          key: miri-miri\n",
-            "          key: miri\n",
-            "miri-measure-plan does not restore the job miri's cache",
+            "          # leaves nothing another run reads.\n          save-if: false\n          key: miri\n",
+            "          # leaves nothing another run reads.\n          save-if: false\n          key: miri-miri\n",
+            "miri-measure-plan does not restore the job miri-plan's cache",
         ),
         // The table written.
         (
@@ -1742,14 +2018,28 @@ fn a_measuring_run_runs_only_when_asked_and_leaves_nothing_behind() {
         ),
         // A part with no report upload, and one kept for months.
         (
-            "          path: target/nextest/miri-measure-ci/junit.xml\n",
+            "          path: target/nextest/miri-measure-ci/junit-*.xml\n",
             "          path: target/nextest/miri-measure/junit.xml\n",
             "a part uploads no report",
         ),
         (
-            "          path: target/nextest/miri-measure-ci/junit.xml\n          retention-days: 3\n",
-            "          path: target/nextest/miri-measure-ci/junit.xml\n          retention-days: 90\n",
+            "          path: target/nextest/miri-measure-ci/junit-*.xml\n          retention-days: 3\n",
+            "          path: target/nextest/miri-measure-ci/junit-*.xml\n          retention-days: 90\n",
             "miri-measure keeps an artifact more than a few days",
+        ),
+        // geom-pool measured under Stacked Borrows, not as the gate runs it.
+        (
+            "          # The flags of the job `miri-pool`, so the times are that run's.\n          \
+             MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks\n",
+            "          # The flags of the job `miri-pool`, so the times are that run's.\n          \
+             MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace\n",
+            "does not measure geom-pool under Tree Borrows",
+        ),
+        // geom-pool's tests left out of the measuring run.
+        (
+            "          cargo miri nextest run --locked -p geom-pool --profile miri-measure-ci",
+            "          true --locked -p geom-pool --profile miri-measure-ci",
+            "a part uploads no report",
         ),
         // A build that failed, read as a measured run.
         (
