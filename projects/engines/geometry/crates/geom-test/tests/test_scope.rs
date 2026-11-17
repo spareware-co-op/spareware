@@ -396,7 +396,7 @@ fn workflow_problems(kernel: &str, bench: &str) -> Vec<String> {
     if text(&scope["outputs"]["crates"]) != "${{ steps.scope.outputs.crates }}" {
         found.push("kernel.yml's job scope does not hand on its crates".to_owned());
     }
-    for job in ["linux", "suite", "wasm-suite"] {
+    for job in ["linux", "suite", "wasm-build", "wasm-suite"] {
         let y = &k["jobs"][job];
         let needs: Vec<String> = y["needs"]
             .as_vec()
