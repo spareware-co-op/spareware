@@ -595,10 +595,12 @@ impl<const L: usize> Chain<L> {
         let at_infinity = |negative: bool| {
             changes(self.elements().map(|p| {
                 let s = p.lead().map_or(Sign::Zero, |c| c.signum());
-                if negative && p.degree % 2 == 1 {
-                    s.mul(Sign::Negative)
-                } else {
-                    s
+                // Written as a match on the parity: flipping the even degrees instead of the odd
+                // ones negates every sign at once, which leaves the count of changes the same, so a
+                // comparison here could be reversed with no answer changing.
+                match (negative, p.degree % 2) {
+                    (true, 1) => s.mul(Sign::Negative),
+                    _ => s,
                 }
             }))
         };

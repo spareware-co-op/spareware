@@ -16,8 +16,10 @@
 //!   `filter` and of `value`, each group maximum, the call to `decide`, the result, and `exact`'s
 //!   body, each laid out as rustfmt lays it out: a signature or a call too long for one line over
 //!   several), except the run-time scale, which it reads and evaluates: it must compute exactly the
-//!   result's scale, with the roundings the constant counts (a scale computed over several lines,
-//!   one term per line, is read as the one expression its lines compute together);
+//!   result's scale without the monomials that are the average of others of the set (the
+//!   checker's own search for them; they are never the largest alone), with the roundings the
+//!   constant counts (a scale computed over several lines, one term per line, is read as the one
+//!   expression its lines compute together);
 //! - the plain-`i128` variant `plain.rs` (piece G42), line for line outside comments and
 //!   attributes: for each registered predicate, in their order, `<predicate>_value` with the same
 //!   steps, each held in `i128` or in its certificate's wide type, both operands widened to it and
@@ -980,6 +982,46 @@ fn scale_expr(s: &str, groups: &[String]) -> Result<Scale, String> {
     Ok(r)
 }
 
+/// The monomials of a scale set the run-time scale must compute the largest of: all but those
+/// that are the average of two or more of the set's other monomials (`predicate_derive.rs`'s
+/// written rule, tried here on every choice of the others, one bit of `choice` each). Leaving
+/// those out changes no value: with k monomials chosen and exponents summing to k times m's in
+/// every group, m's value to the power k is the product of their values, so it is at most the
+/// largest of them; and the lexicographically last of the monomials that reach the set's largest
+/// value is the average of no others that reach it (they all come before it), so it is kept.
+fn needed(scale: &BTreeSet<Vec<u32>>) -> Result<BTreeSet<Vec<u32>>, String> {
+    if scale.len() > 16 {
+        return Err(format!(
+            "{} monomials are more than this checker tries every choice of",
+            scale.len()
+        ));
+    }
+    let all: Vec<&Vec<u32>> = scale.iter().collect();
+    let mut out = BTreeSet::new();
+    for (i, m) in all.iter().enumerate() {
+        let mut average = false;
+        for choice in 1u32..(1 << all.len()) {
+            if choice & (1 << i) != 0 {
+                continue;
+            }
+            let chosen: Vec<&Vec<u32>> = (0..all.len())
+                .filter(|j| choice & (1 << j) != 0)
+                .map(|j| all[j])
+                .collect();
+            let k = chosen.len() as u64;
+            if (0..m.len())
+                .all(|g| chosen.iter().map(|e| u64::from(e[g])).sum::<u64>() == k * u64::from(m[g]))
+            {
+                average = true;
+            }
+        }
+        if !average {
+            out.insert((*m).clone());
+        }
+    }
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------------------------
 // The code, as the checker writes it.
 // ---------------------------------------------------------------------------------------------
@@ -1693,9 +1735,17 @@ fn verify(text: &str, module: &str) -> Vec<String> {
             return bad;
         }
     };
-    if computed != root.scale {
+    let needed = match needed(&root.scale) {
+        Ok(s) => s,
+        Err(e) => {
+            bad.push(format!("the result's scale: {e}"));
+            return bad;
+        }
+    };
+    if computed != needed {
         bad.push(format!(
-            "the run-time scale computes {computed:?}, not the result's scale {:?}",
+            "the run-time scale computes {computed:?}, not the result's scale {:?} without the \
+             averages of its other monomials, {needed:?}",
             root.scale
         ));
     }
@@ -1967,6 +2017,14 @@ fn the_checker_agrees_with_the_generator() {
             assert_eq!(cert.unit_error.to_string(), row.e.text(), "{}", row.name);
         }
         assert_eq!(g.result, c.result);
+        // The monomials the generator's run-time scale computes are the ones the checker's own
+        // search keeps.
+        assert_eq!(
+            g.scale_expr.monomials(c.groups.len()),
+            needed(&c.rows[c.result].scale).unwrap(),
+            "{}",
+            p.generator
+        );
         let mut constant = c.rows[c.result].e.clone();
         for _ in 0..g.roundings {
             constant = constant.mul(&Poly(vec![Big::small(1), Big::small(2)]));
@@ -2009,6 +2067,56 @@ fn the_checkers_arithmetic_on_hand_worked_cases() {
     // m_x · m_y rounds once, the larger square once, and their product once: the operands'
     // roundings multiply, so three, not the two on the longest path.
     assert_eq!(k, 3);
+}
+
+/// The checker's own search for the monomials a run-time scale may leave out, on sets worked by
+/// hand, and on the committed cone filters: a module that computes a left-out monomial as well is
+/// refused, as is one that leaves out a monomial the search keeps.
+#[test]
+fn the_checker_finds_the_averages_itself() {
+    let set = |s: &[&[u32]]| -> BTreeSet<Vec<u32>> { s.iter().map(|m| m.to_vec()).collect() };
+    let kept = |s: &[&[u32]]| needed(&set(s)).unwrap();
+    assert_eq!(kept(&[&[4, 0], &[2, 2], &[0, 4]]), set(&[&[4, 0], &[0, 4]]));
+    assert_eq!(
+        kept(&[&[3, 0, 0], &[0, 3, 0], &[0, 0, 3], &[1, 1, 1]]),
+        set(&[&[3, 0, 0], &[0, 3, 0], &[0, 0, 3]])
+    );
+    assert_eq!(
+        kept(&[&[4, 0], &[3, 1], &[2, 2], &[0, 4]]),
+        set(&[&[4, 0], &[0, 4]])
+    );
+    assert_eq!(
+        kept(&[&[4, 0], &[3, 1], &[0, 4]]),
+        set(&[&[4, 0], &[3, 1], &[0, 4]])
+    );
+    assert_eq!(kept(&[&[1, 0], &[1, 1]]), set(&[&[1, 0], &[1, 1]]));
+    assert_eq!(kept(&[&[3, 1], &[1, 3]]), set(&[&[3, 1], &[1, 3]]));
+    assert_eq!(kept(&[&[2, 1]]), set(&[&[2, 1]]));
+    let many: BTreeSet<Vec<u32>> = (0..17).map(|e| vec![e]).collect();
+    assert!(needed(&many).unwrap_err().contains("17 monomials"));
+
+    let (name, module) = COMMITTED
+        .iter()
+        .find(|(n, _)| *n == "line_cone_lead")
+        .unwrap();
+    let p = predicate(name);
+    assert_eq!(verify(p.text, module), Vec::<String>::new());
+    let last = "    let scale = larger(scale, m_x * m_x * m_x * m_x);\n";
+    let with_average = format!("    let scale = larger(scale, m_x * m_x * m_y * m_y);\n{last}");
+    let edited = module.replacen(last, &with_average, 1);
+    assert_ne!(&edited, module);
+    let bad = verify(p.text, &edited);
+    assert!(
+        bad.iter().any(|b| b.contains("without the averages")),
+        "{bad:?}"
+    );
+    let edited = module.replacen(last, "", 1);
+    assert_ne!(&edited, module);
+    let bad = verify(p.text, &edited);
+    assert!(
+        bad.iter().any(|b| b.contains("without the averages")),
+        "{bad:?}"
+    );
 }
 
 /// A description whose `let` takes a coordinate's name is refused by the checker's own

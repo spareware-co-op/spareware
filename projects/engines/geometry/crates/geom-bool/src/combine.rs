@@ -434,6 +434,11 @@ fn arranged(ctx: &OpContext<'_>, error: RunError<TraceError>, meter: &WorkMeter<
     }
 }
 
+/// `error`, from a trace run on the caller after the arrangement, as the operation's.
+pub(crate) fn traced(ctx: &OpContext<'_>, error: TraceError, meter: &WorkMeter<'_>) -> OpError {
+    arranged(ctx, RunError::Failed(error), meter)
+}
+
 /// Whether the caller takes a result of class `would`: anything Exact, and otherwise a class at
 /// least as loose and a bound at least its own, `ε_fit` unless the caller said (11.1).
 fn accepted(would: Exactness, accept: Option<Exactness>) -> bool {

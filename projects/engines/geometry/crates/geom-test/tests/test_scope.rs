@@ -24,6 +24,11 @@
 //! - `the_crates_that_read_a_shared_file_whole_are_found`: every crate whose Rust sources hold a
 //!   string naming `MAP.json` or `quality-ledger.json`, found here by plain text, is among the
 //!   readers `geom_test::shared` finds, and `geom-test` reads both.
+//! - `the_release_suite_shares_run_every_crate_once`: the release suite's shares of every crate
+//!   (`Selection::parts`, by `suite-times.tsv`) hold each crate but those set apart in exactly one
+//!   share, for any number of shares, and the step output `parts` is those shares numbered from 1;
+//!   `suite-times.tsv` names only workspace crates. Planted: a crate dropped, a crate in two shares,
+//!   the crate set apart left in.
 //! - `the_selections_read_the_shared_files_against_the_base`: `kernel.yml`'s scope, the Kani
 //!   selection and the count gates' reach each pass the change's base (`--base`). Planted: each
 //!   `--base` taken out.
@@ -42,9 +47,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use geom_test::coverage::parse_times;
 use geom_test::deps::cargo_metadata;
 use geom_test::shared::{self, Changes, Reach};
-use geom_test::test_scope::{Scope, Selection, text_reads_outside};
+use geom_test::test_scope::{SUITE_TIMES, Scope, Selection, text_reads_outside};
 use serde_json::Value;
 use yaml_rust2::{Yaml, YamlLoader};
 
@@ -827,4 +833,90 @@ fn the_selections_read_the_shared_files_against_the_base() {
         let found = base_problems(&texts[0], &texts[1], &texts[2]);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
+}
+
+/// What is wrong with the release suite's `parts` of `crates`: a crate in no part or in two, or a
+/// part with a crate not in the run.
+fn share_problems(crates: &[String], parts: &[Vec<String>]) -> Vec<String> {
+    let mut found = Vec::new();
+    for (k, part) in parts.iter().enumerate() {
+        for c in part.iter().filter(|c| !crates.contains(c)) {
+            found.push(format!("part {}: {c} is not in the run", k + 1));
+        }
+    }
+    for c in crates {
+        let times = parts.iter().flatten().filter(|p| *p == c).count();
+        if times != 1 {
+            found.push(format!("{c}'s tests run in {times} parts"));
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_release_suite_shares_run_every_crate_once() {
+    let scope = Scope::read(&metadata()).unwrap();
+    let folders = scope.folders();
+    let selection = scope.select(None);
+    // The kernel's crates, read here from their folder.
+    let all: Vec<String> = selection
+        .running()
+        .iter()
+        .filter(|c| folders[**c].starts_with("projects/engines/geometry/crates/"))
+        .map(|c| (*c).to_owned())
+        .collect();
+    assert!(
+        all.len() > 40 && all.len() < selection.running().len(),
+        "{all:?}"
+    );
+    let times = parse_times(SUITE_TIMES).unwrap();
+    for krate in times.keys() {
+        assert!(
+            all.contains(krate),
+            "suite-times.tsv names {krate}, no kernel crate"
+        );
+    }
+    let apart = vec!["geom-num".to_owned(), "geom-test".to_owned()];
+    let want: Vec<String> = all.iter().filter(|c| !apart.contains(c)).cloned().collect();
+    for n in [1, 2, 7, all.len() + 3] {
+        let parts = selection.parts(n, &apart, &times, folders);
+        assert_eq!(parts.len(), n);
+        assert_eq!(share_problems(&want, &parts), Vec::<String>::new(), "{n}");
+    }
+    // The step output is the same parts, numbered from 1, each its crates separated by spaces.
+    let parts = selection.parts(7, &apart, &times, folders);
+    let (key, json) = selection.parts_output(7, &apart, &times, folders);
+    assert_eq!(key, "parts");
+    assert!(!json.contains('\n'), "one line");
+    let read: BTreeMap<String, String> = serde_json::from_str(&json).unwrap();
+    let wanted: BTreeMap<String, String> = parts
+        .iter()
+        .enumerate()
+        .map(|(k, p)| ((k + 1).to_string(), p.join(" ")))
+        .collect();
+    assert_eq!(read, wanted);
+    // Planted: a crate no part runs, a crate run twice, and the crate set apart in a share.
+    let mut dropped = parts.clone();
+    let gone = dropped[0].pop().unwrap();
+    assert!(
+        share_problems(&want, &dropped).contains(&format!("{gone}'s tests run in 0 parts")),
+        "dropped"
+    );
+    let mut twice = parts.clone();
+    twice[1].push(parts[0][0].clone());
+    assert!(
+        share_problems(&want, &twice).contains(&format!("{}'s tests run in 2 parts", parts[0][0])),
+        "twice"
+    );
+    let kept = selection.parts(7, &[], &times, folders);
+    assert!(
+        share_problems(&want, &kept)
+            .iter()
+            .any(|p| p.ends_with("geom-test is not in the run")),
+        "kept"
+    );
 }
