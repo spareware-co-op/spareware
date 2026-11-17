@@ -418,21 +418,23 @@ jobs:
           else
             echo "SCOPE=--all" >> "$GITHUB_ENV"
           fi
-      # With the release suite's shares: every kernel crate but geom-num and geom-test, whose tests
-      # have parts of their own, shared out among the suite's eight share parts by its measured
-      # seconds (geom-test's src/suite-times.tsv).
+      # With the release suite's shares: every kernel crate but geom-num, geom-test, geom-bench,
+      # geom-format and geom-fuzz, whose tests have parts of their own, shared out among the
+      # suite's eight share parts by its measured seconds (geom-test's src/suite-times.tsv).
       - name: The crates whose tests it can reach, and why
         id: scope
         run: >-
           cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope $SCOPE
-          --parts 8 --apart geom-num --apart geom-test
+          --parts 8 --apart geom-num --apart geom-test --apart geom-bench --apart geom-format
+          --apart geom-fuzz
           --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
   # On each push to a pull request: the goldens of Linux x86-64 in release and the tests the change
   # can reach, once, optimised with overflow checks and debug assertions on (principle 3), in
   # sixteen parts side by side, each one build. Parts 1 to 8 run the crates of the release suite's
-  # shares (the job `scope`'s `parts`, as `suite` runs them), part 9 geom-num's and geom-test's
-  # tests, each with its crates' doctests, which nextest does not run. Parts 10 to 16 are the
+  # shares (the job `scope`'s `parts`, as `suite` runs them), part 9 the tests of the crates with
+  # parts of their own in `suite` (geom-num, geom-test, geom-bench, geom-format, geom-fuzz), each
+  # with its crates' doctests, which nextest does not run. Parts 10 to 16 are the
   # `test` job's release steps for Linux x86-64, each golden run in two shares (`golden run --part
   # k/2`, whole crates to a share): 10 and 11 the goldens with checks on, 12 and 13 as shipped (13
   # also the shipped checker's corpus), 14 geom-num's vectors as shipped, 15 and 16 the goldens for
@@ -472,12 +474,12 @@ jobs:
         uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
-      # Of the crates the change can reach, this part's own: share k's for parts 1 to 8, geom-num and
-      # geom-test for part 9, none for the goldens' parts.
+      # Of the crates the change can reach, this part's own: share k's for parts 1 to 8, the crates
+      # the scope sets apart for part 9, none for the goldens' parts.
       - name: List the kernel's crates the change can reach
         env:
           SELECTED: ${{ needs.scope.outputs.crates }}
-          SHARE: ${{ matrix.k == 9 && 'geom-num geom-test' || fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.k)] }}
+          SHARE: ${{ matrix.k == 9 && 'geom-num geom-test geom-bench geom-format geom-fuzz' || fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.k)] }}
         run: |
           list=""
           for d in projects/engines/geometry/crates/*/; do
@@ -548,18 +550,21 @@ jobs:
     # side. Debug is four parts, each running the tests `--partition count:k/4` gives it (part 1
     # also the doctests, which nextest does not run).
     #
-    # Release is fourteen parts, each building only what it runs. On main's push 79dd48d74 (run
+    # Release is twenty-five parts, each building only what it runs. On main's push 79dd48d74 (run
     # 44000736713) each of its two parts built the whole suite and ran half of it: the build was 75
     # to 85% of each part (macOS x86-64: 25.5 and 33.6 minutes of 32 and 41; the tests 5.6 and 5.5),
     # so more `count:` parts would each still have built everything. Parts 1 to 8 each run whole
     # crates, the share the job `scope` gives them (`--parts 8`: every reachable kernel crate but
-    # geom-num and geom-test in exactly one share, balanced by its measured seconds, geom-test's
-    # src/suite-times.tsv), with their doctests. geom-num's and geom-test's tests, each longer than
-    # a share (`--apart`), run in parts of their own by the names of their test targets (cargo's
-    # `--test` globs, as `test` runs geom-num's): parts 9 to 11 geom-num's, 12 to 14 geom-test's,
-    # the library, binaries and doctests in the first of each. Run 44025893276 measured the
-    # shares (macOS x86-64 parts 6.4 to 13.1 minutes, from seven shares and geom-num in two parts).
-    # On that run's times the shares are eight and geom-num's attack tests two parts. geom-test's tests/queue_wiring.rs holds every share and
+    # those set apart in exactly one share, balanced by its measured seconds, geom-test's
+    # src/suite-times.tsv), with their doctests. The crates longer than a share (`--apart`) run in
+    # parts of their own by the names of their test targets (cargo's `--test` globs, as `test`
+    # runs geom-num's): parts 9 to 13 geom-num's, 14 to 19 geom-test's, 20 and 21 geom-bench's, 22
+    # and 23 geom-format's, 24 and 25 geom-fuzz's, the library, binaries and doctests in the first
+    # of each. Sized for macOS x86-64's slow runners: parts of one size there took from 5.7 to 18.8
+    # minutes in run 44031862090, about twice as long on the slowest runner. So each part is planned
+    # from that run's times at no more than 7.5 minutes (a minute of set-up, about 3.7 of the
+    # libraries every part builds, and at most 2.6 of its own crates' tests), and a part twice as
+    # slow as planned still ends within 15. geom-test's tests/queue_wiring.rs holds every share and
     # every test target to exactly one part, and `done` checks the shares the run was given.
     timeout-minutes: 120
     strategy:
@@ -567,20 +572,31 @@ jobs:
       fail-fast: false
       matrix:
         part:
-          - { mode: release, k: 1, n: 14, doc: true }
-          - { mode: release, k: 2, n: 14, doc: true }
-          - { mode: release, k: 3, n: 14, doc: true }
-          - { mode: release, k: 4, n: 14, doc: true }
-          - { mode: release, k: 5, n: 14, doc: true }
-          - { mode: release, k: 6, n: 14, doc: true }
-          - { mode: release, k: 7, n: 14, doc: true }
-          - { mode: release, k: 8, n: 14, doc: true }
-          - { mode: release, k: 9, n: 14, doc: true, crate: geom-num, targets: "--lib --bins --test 'attack_[a-g]*'" }
-          - { mode: release, k: 10, n: 14, crate: geom-num, targets: "--test 'attack2*' --test 'attack_[h-z]*'" }
-          - { mode: release, k: 11, n: 14, crate: geom-num, targets: "--test '[b-z]*'" }
-          - { mode: release, k: 12, n: 14, doc: true, crate: geom-test, targets: "--lib --bins --test '[a-b]*'" }
-          - { mode: release, k: 13, n: 14, crate: geom-test, targets: "--test '[c-k]*'" }
-          - { mode: release, k: 14, n: 14, crate: geom-test, targets: "--test '[l-z]*'" }
+          - { mode: release, k: 1, n: 25, doc: true }
+          - { mode: release, k: 2, n: 25, doc: true }
+          - { mode: release, k: 3, n: 25, doc: true }
+          - { mode: release, k: 4, n: 25, doc: true }
+          - { mode: release, k: 5, n: 25, doc: true }
+          - { mode: release, k: 6, n: 25, doc: true }
+          - { mode: release, k: 7, n: 25, doc: true }
+          - { mode: release, k: 8, n: 25, doc: true }
+          - { mode: release, k: 9, n: 25, doc: true, crate: geom-num, targets: "--lib --bins --test 'attack_[a-g]*'" }
+          - { mode: release, k: 10, n: 25, crate: geom-num, targets: "--test 'attack2_[e-i]*'" }
+          - { mode: release, k: 11, n: 25, crate: geom-num, targets: "--test 'attack2_[p-z]*' --test 'attack_[s-z]*'" }
+          - { mode: release, k: 12, n: 25, crate: geom-num, targets: "--test 'attack_[h-r]*'" }
+          - { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 14, n: 25, doc: true, crate: geom-test, targets: "--lib --bins --test 'attack_g11*'" }
+          - { mode: release, k: 15, n: 25, crate: geom-test, targets: "--test 'attack_g10*' --test 'attack_g13*' --test 'attack_g15*' --test 'attack_g16*' --test 'attack_g17*' --test 'attack_g19*' --test 'attack_g2*' --test 'attack_g4*'" }
+          - { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test '[c-k]*'" }
+          - { mode: release, k: 17, n: 25, crate: geom-test, targets: "--test 'l*'" }
+          - { mode: release, k: 18, n: 25, crate: geom-test, targets: "--test '[m-r]*'" }
+          - { mode: release, k: 19, n: 25, crate: geom-test, targets: "--test '[s-z]*'" }
+          - { mode: release, k: 20, n: 25, doc: true, crate: geom-bench, targets: "--lib --bins --test 'a*'" }
+          - { mode: release, k: 21, n: 25, crate: geom-bench, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 22, n: 25, doc: true, crate: geom-format, targets: "--lib --bins --test '[a-c]*'" }
+          - { mode: release, k: 23, n: 25, crate: geom-format, targets: "--test '[d-z]*'" }
+          - { mode: release, k: 24, n: 25, doc: true, crate: geom-fuzz, targets: "--lib --bins --test '[a-l]*'" }
+          - { mode: release, k: 25, n: 25, crate: geom-fuzz, targets: "--test '[m-z]*'" }
         # The targets of the job `test` but Linux x86-64, whose optimised run is `linux`'s.
         target:
           - name: Linux arm64
@@ -1308,7 +1324,7 @@ jobs:
                 and ($shared | length) == ($shared | unique | length)
                 and all($shared[]; . as $c | $reached | index($c))
                 and all($shared[]; . as $c | $own | index($c) | not)'
-            if ! jq -e --argjson n 8 --arg apart "geom-num geom-test" "$shares" <<< "$NEEDS" > /dev/null; then
+            if ! jq -e --argjson n 8 --arg apart "geom-num geom-test geom-bench geom-format geom-fuzz" "$shares" <<< "$NEEDS" > /dev/null; then
               echo "::error::The release suite's shares are not shares 1 to 8 of the reachable crates, each once."
               exit 1
             fi

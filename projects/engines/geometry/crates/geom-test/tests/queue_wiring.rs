@@ -1625,7 +1625,7 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A release part of the suite dropped: its share's crates run nowhere on any platform.
         (
-            "          - { mode: release, k: 8, n: 14, doc: true }\n",
+            "          - { mode: release, k: 8, n: 25, doc: true }\n",
             "",
             "take a share, not the scope's shares 1 to 8",
         ),
@@ -1649,15 +1649,21 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A test target of geom-test that no part runs: its first letter in no share.
         (
-            "targets: \"--test '[l-z]*'\"",
-            "targets: \"--test '[m-z]*'\"",
-            "geom-test's tests/laws_booleans.rs runs 0 times",
+            "targets: \"--test '[s-z]*'\"",
+            "targets: \"--test '[t-z]*'\"",
+            "geom-test's tests/scan_repo.rs runs 0 times",
+        ),
+        // A test target of another crate set apart (geom-fuzz) that no part runs.
+        (
+            "crate: geom-fuzz, targets: \"--test '[m-z]*'\"",
+            "crate: geom-fuzz, targets: \"--test '[n-z]*'\"",
+            "geom-fuzz's tests/make.rs runs 0 times in `suite's geom-fuzz parts`",
         ),
         // A test target of geom-num that no suite part runs: an attack test whose name is in no
         // share of the suite's geom-num parts.
         (
-            "--test 'attack2*' --test 'attack_[h-z]*'",
-            "--test 'attack2*' --test 'attack_[q-z]*'",
+            "targets: \"--test 'attack_[h-r]*'\"",
+            "targets: \"--test 'attack_[q-r]*'\"",
             "geom-num's tests/attack_plane.rs runs 0 times in `suite's geom-num parts`",
         ),
         // A test target of geom-num that two suite parts run: two shares that overlap.
@@ -1668,21 +1674,21 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A share in a form the reading does not know is looked at, not passed.
         (
-            "--test 'attack2*' --test",
+            "--test 'attack2_[p-z]*' --test",
             "--test 'attack?*' --test",
             "geom-num's share --test 'attack?*' in `suite's geom-num parts` is not read",
         ),
         // geom-test's doctests in two of its parts.
         (
-            "{ mode: release, k: 13, n: 14, crate: geom-test,",
-            "{ mode: release, k: 13, n: 14, doc: true, crate: geom-test,",
+            "{ mode: release, k: 16, n: 25, crate: geom-test,",
+            "{ mode: release, k: 16, n: 25, doc: true, crate: geom-test,",
             "geom-test's --doc runs 2 times",
         ),
         // geom-test kept in the shares as well as in parts of its own: run twice.
         (
             "--parts 8 --apart geom-num --apart geom-test",
             "--parts 8 --apart geom-num",
-            "the scope sets apart [\"geom-num\"]",
+            "the scope sets apart [\"geom-num\", \"geom-bench\", \"geom-format\", \"geom-fuzz\"]",
         ),
         // A release part runs a selection of its crates' targets.
         (

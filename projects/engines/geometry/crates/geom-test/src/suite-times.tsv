@@ -5,59 +5,62 @@
 # (four threads; 26.4 minutes there against the runner's 33.6), times 1.27, plus its tests' run
 # seconds summed from the two release suite parts of main's push run 44000736713 on 79dd48d74, the
 # sum over four threads; then each share's crates scaled by what that share's part took on macOS
-# x86-64 in the run by hand 44025893276 (its job's minutes less a minute of set-up and four of the
-# libraries every part builds) against what it was planned at. At least 1. The libraries and the
-# set-up are the same in every part and are not counted. `geom_test::test_scope::Selection::parts`
-# balances `kernel.yml`'s release suite shares by them (`kernel-quality test-scope --parts`); a
-# crate not listed is planned at the slowest listed time. geom-num and geom-test have parts of their
-# own (`--apart`), so their rows balance nothing.
-geom-2d	1
-geom-3dm	1
+# x86-64 against what it was planned at, in the runs by hand 44025893276 and then 44031862090 (a
+# part's build and test minutes less 220 seconds for the libraries every part builds; the set-up
+# is not counted). In 44031862090 share 8's part ran on a runner about twice as slow as the
+# others (its first libraries took two to three times as long to reach as on the other parts), so
+# its crates keep their earlier seconds. At least 1. The libraries and the set-up are the same in
+# every part and are not counted. `geom_test::test_scope::Selection::parts` balances `kernel.yml`'s
+# release suite shares by them (`kernel-quality test-scope --parts`); a crate not listed is planned
+# at the slowest listed time. geom-num, geom-test, geom-bench, geom-format and geom-fuzz have parts
+# of their own (`--apart`), so their rows balance nothing.
+geom-2d	2
+geom-3dm	2
 geom-align	1
-geom-analysis	7
-geom-bench	238
-geom-blend	1
-geom-bool	114
-geom-bvh	40
+geom-analysis	5
+geom-bench	170
+geom-blend	2
+geom-bool	100
+geom-bvh	35
 geom-check	50
 geom-cloud	1
-geom-combine	1
+geom-combine	2
 geom-convert	1
 geom-curve	84
-geom-draw	1
+geom-draw	2
 geom-dxf	1
 geom-exchange	1
 geom-field	1
-geom-format	152
-geom-fuzz	199
-geom-gen	72
+geom-format	246
+geom-fuzz	243
+geom-gen	63
 geom-heal	1
-geom-ifc	1
+geom-ifc	2
 geom-intersect	1
 geom-landxml	1
-geom-linalg	9
-geom-make	29
+geom-linalg	6
+geom-make	35
 geom-math	89
-geom-mesh	78
+geom-mesh	36
 geom-meshio	1
-geom-name	30
+geom-name	7
 geom-num	264
-geom-nurbs	194
+geom-nurbs	48
 geom-offset	1
-geom-op	61
-geom-p21	2
-geom-panel	1
-geom-poly	51
-geom-pool	4
+geom-op	99
+geom-p21	3
+geom-panel	2
+geom-poly	23
+geom-pool	6
 geom-profile	1
-geom-run	135
+geom-run	87
 geom-skeleton	1
 geom-sketch	1
 geom-spatial	1
-geom-step	1
+geom-step	2
 geom-subd	1
-geom-surface	67
+geom-surface	43
 geom-sweep	1
-geom-terrain	2
+geom-terrain	1
 geom-test	522
-geom-topo	94
+geom-topo	43
