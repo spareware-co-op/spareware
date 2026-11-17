@@ -56,7 +56,7 @@ use geom_num::generated::{
 use geom_num::grid::{COORD_MAX, P3};
 use geom_num::{Sign, Wide};
 use num_bigint::BigInt;
-use num_traits::{FromPrimitive, One, Signed, ToPrimitive, Zero};
+use num_traits::{One, Signed, ToPrimitive, Zero};
 
 // ---------------------------------------------------------------------------------------------
 // Seeds and the generator.
@@ -405,16 +405,25 @@ fn exceeds(v: &BigInt, bound: f64) -> bool {
     }
 }
 
+/// A whole number above zero as an `f64`, if it is one exactly: its odd part, below 2^53, times
+/// its power of two, the power built from its bits, so no step rounds. Not num-bigint's `to_f64`:
+/// that multiplies by `2f64.powi(e)`, Rust promises no exact `powi`, and Miri varies its last
+/// digits on purpose, so a scale that is an `f64` would not come back as itself there.
+fn exact_f64(v: &BigInt) -> Option<f64> {
+    let twos = v.trailing_zeros()?;
+    let odd = (v >> twos).to_u64().filter(|odd| *odd < 1 << 53)?;
+    let exponent = twos.checked_add(1023).filter(|e| *e <= 2046)?;
+    let product = odd as f64 * f64::from_bits(exponent << 52);
+    product.is_finite().then_some(product)
+}
+
 /// The bound as the filter computes it on an input whose steps are exact in `f64`: the constant
 /// times the exact scale, rounded once. The scale must be an `f64` exactly.
 fn bound_of(input: &Input) -> f64 {
     let scale = input.scale();
-    let as_f64 = scale.to_f64().unwrap();
-    assert_eq!(
-        BigInt::from_f64(as_f64).unwrap(),
-        scale,
-        "{input:?}: the scale is not an f64"
-    );
+    let Some(as_f64) = exact_f64(&scale) else {
+        panic!("{input:?}: the scale {scale} is not an f64");
+    };
     error_of(input.module()) * as_f64
 }
 
@@ -687,6 +696,7 @@ fn any(rng: &mut Rng, bits: u64, limit: i64) -> i64 {
     rng.range(0, reach).min(limit)
 }
 
+/// A whole number as a nearby `f64`, for sizes only: where the last digit matters, `exact_f64`.
 fn real(v: &BigInt) -> f64 {
     v.to_f64().unwrap()
 }
