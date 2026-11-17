@@ -12,9 +12,16 @@
 //!   (`always()`) and needs every other job.
 //! - `each_event_runs_the_jobs_the_last_job_expects`: every job of `kernel.yml` but `changes` and
 //!   `done` runs only when `changes` found kernel files and the queue had not passed the tree, and
-//!   on the events its condition admits; for a pull request, the merge queue and any other event
-//!   (a push to main the queue did not test, a release), that set of jobs is exactly the list
-//!   `done` holds the run to, so a job the event must run cannot be skipped unseen.
+//!   on the events its condition admits; for a pull request, the merge queue, a push (to main, or
+//!   a release tag's) and a run by hand (`workflow_dispatch`), that set of jobs is exactly the list
+//!   `done` holds the run to, by the first arm of its `case` the event matches, so a job the event
+//!   must run cannot be skipped unseen. A run by hand runs exactly what a push runs, and it takes
+//!   no inputs, so nothing can leave a job out of it.
+//! - `a_run_by_hand_writes_nothing_later_runs_read`: in `kernel.yml` a step that leaves something
+//!   for later runs (a build cache saved, an artifact uploaded, a release, a cache entry or a
+//!   repository written through `gh` or `git push`) does so only on a push to main or in the merge
+//!   queue, by `&&` terms of its condition with no `||` beside them, so a run by hand, on main or
+//!   on any branch, writes nothing another run trusts.
 //! - `the_queue_and_the_pull_request_cover_every_leg`: the goldens' matrix (`test`) and the
 //!   pull request's Linux job (`linux`) together cover every native runner in release and debug,
 //!   once each; the suites run optimised with overflow checks and debug assertions on, on Linux
@@ -25,7 +32,7 @@
 //! - `each_change_is_measured_against_its_base_and_marked_once`: `changes` measures a pull request
 //!   against its merge commit's first parent, the queue against the queue's base and a push against
 //!   the commit main was at; only the merge queue's last job marks a tree as tested, under the name
-//!   the push looks for; `kernel-quality.yml` marks a tree only when mutation and coverage both ran
+//!   the push looks for, and only a push to main looks for it; `kernel-quality.yml` marks a tree only when mutation and coverage both ran
 //!   on a pull request or in the queue, under the name it looks for.
 //! - `the_count_gates_measure_one_kind_a_push_and_the_base_once`: `kernel-bench.yml` runs in the
 //!   merge queue too; its instruction legs are the job `scope`'s list, x86-64 on a pull request,
@@ -74,8 +81,16 @@ const REQUIRED: [(&str, &str, &str); 3] = [
     ("pieces.yml", "checked-out", "Piece is checked out"),
 ];
 
-/// The events the last job of `kernel.yml` tells apart, as its `case` names them.
-const EVENTS: [&str; 3] = ["pull_request", "merge_group", "*"];
+/// The events `kernel.yml` runs on, by the name its conditions read (`github.event_name`): a pull
+/// request, the merge queue, a push (to main, or a release tag's, which kernel-release.yml calls
+/// it for) and a run by hand.
+const EVENTS: [&str; 4] = ["pull_request", "merge_group", "push", "workflow_dispatch"];
+
+/// A run by hand, which must run what [`PUSH`] runs.
+const BY_HAND: &str = "workflow_dispatch";
+
+/// A push.
+const PUSH: &str = "push";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -252,18 +267,24 @@ fn admitted(condition: &str) -> Result<BTreeSet<&'static str>, String> {
     Ok(events)
 }
 
-/// The jobs `done` requires for each event, from its `case`.
+/// The jobs `done` requires for each event of [`EVENTS`], from its `case`: the list of the first
+/// arm whose patterns (`a|b`, or `*`) the event matches, as the shell picks it.
 fn expected(script: &str) -> BTreeMap<String, BTreeSet<String>> {
     let mut out = BTreeMap::new();
     for line in script.lines() {
-        let line = line.trim();
+        let Some((patterns, rest)) = line.trim().split_once(") must=\"") else {
+            continue;
+        };
+        let list: BTreeSet<String> = rest
+            .split('"')
+            .next()
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect();
         for event in EVENTS {
-            if let Some(rest) = line.strip_prefix(&format!("{event}) must=\"")) {
-                let list = rest.split('"').next().unwrap_or_default();
-                out.insert(
-                    event.to_owned(),
-                    list.split_whitespace().map(str::to_owned).collect(),
-                );
+            if patterns.split('|').any(|p| p == event || p == "*") {
+                out.entry(event.to_owned()).or_insert_with(|| list.clone());
             }
         }
     }
@@ -274,6 +295,16 @@ fn expected(script: &str) -> BTreeMap<String, BTreeSet<String>> {
 fn event_problems(kernel: &str) -> Vec<String> {
     let mut found = Vec::new();
     let w = parse(kernel);
+    let by_hand = &w["on"][BY_HAND];
+    if by_hand.is_badvalue() {
+        found.push(format!(
+            "kernel.yml has no {BY_HAND}, so a branch cannot be given a push's run"
+        ));
+    } else if !by_hand["inputs"].is_badvalue() {
+        found.push(format!(
+            "kernel.yml's {BY_HAND} takes inputs, which could leave a job out of the run"
+        ));
+    }
     let lists = expected(&runs(&w, "done"));
     if lists.len() != EVENTS.len() {
         found.push(format!("done lists the jobs of {:?} only", lists.keys()));
@@ -299,6 +330,95 @@ fn event_problems(kernel: &str) -> Vec<String> {
             found.push(format!(
                 "on {event} the jobs {runs:?} run, but done requires {listed:?}"
             ));
+        }
+    }
+    let push = running.get(PUSH).cloned().unwrap_or_default();
+    let by_hand = running.get(BY_HAND).cloned().unwrap_or_default();
+    if by_hand != push {
+        found.push(format!(
+            "a run by hand runs {by_hand:?}, but a push runs {push:?}"
+        ));
+    }
+    if lists.get(BY_HAND) != lists.get(PUSH) {
+        found.push(format!(
+            "done requires {:?} of a run by hand, but {:?} of a push",
+            lists.get(BY_HAND),
+            lists.get(PUSH)
+        ));
+    }
+    found
+}
+
+/// Whether a condition, without its `${{ }}`, has `||` outside every bracket, so its `&&` terms
+/// do not each hold.
+fn or_outside_brackets(condition: &str) -> bool {
+    let mut depth = 0_i32;
+    let mut last = ' ';
+    for c in condition.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '|' if last == '|' && depth == 0 => return true,
+            _ => {}
+        }
+        last = c;
+    }
+    false
+}
+
+/// The commands of a `run:` script that write something a later run can read.
+const WRITES: [&str; 5] = [
+    "git push",
+    "gh release",
+    "gh cache",
+    "gh api -X",
+    "gh api --method",
+];
+
+/// What is wrong with the steps of `kernel.yml` that leave something for later runs: each must
+/// write only on a push to main (its condition's terms `github.event_name == 'push'` and
+/// `github.ref == 'refs/heads/main'`) or in the merge queue (`github.event_name ==
+/// 'merge_group'`), never on a run by hand. The condition is a build cache's `save-if` (the cache
+/// saves when it has none) or the step's `if`.
+fn writer_problems(kernel: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let w = parse(kernel);
+    for job in keys(&w["jobs"]) {
+        for (i, step) in w["jobs"][job.as_str()]["steps"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let uses = text(&step["uses"]);
+            let run = text(&step["run"]);
+            let condition = if uses.starts_with("Swatinem/rust-cache@") {
+                text(&step["with"]["save-if"])
+            } else if uses.starts_with("actions/upload-artifact@")
+                || uses.starts_with("actions/cache@")
+                || uses.starts_with("actions/cache/save@")
+                || WRITES.iter().any(|c| run.contains(c))
+            {
+                text(&step["if"])
+            } else {
+                continue;
+            };
+            let said = format!("{job}'s step {} ({})", i + 1, text(&step["name"]));
+            let t = terms(&condition);
+            let has = |term: &str| t.iter().any(|x| x == term);
+            let push = has("github.event_name == 'push'") && has("github.ref == 'refs/heads/main'");
+            let queue = has("github.event_name == 'merge_group'");
+            let bare = condition
+                .trim()
+                .strip_prefix("${{")
+                .and_then(|c| c.strip_suffix("}}"))
+                .unwrap_or(&condition);
+            if !(push || queue) || or_outside_brackets(bare) {
+                found.push(format!(
+                    "{said} writes for later runs on a run by hand, not on a push to main or in \
+                     the queue alone: {condition:?}"
+                ));
+            }
         }
     }
     found
@@ -652,6 +772,10 @@ fn mark_problems(kernel: &str, quality: &str) -> Vec<String> {
         ),
         ("base=\"$BEFORE\"", "a push against the commit main was at"),
         ("name=kernel-tested-$tree", "the queue's mark by its tree"),
+        (
+            "if [ \"$EVENT\" = push ] && [ \"$GITHUB_REF\" = refs/heads/main ]; then\n  if marks=",
+            "the queue's mark on a push to main alone, so a run by hand skips nothing",
+        ),
     ] {
         if !decide.contains(needle) {
             found.push(format!("changes does not measure {why}"));
@@ -818,10 +942,95 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
             "    # The merge queue's: the tests the change can reach on the other platforms, optimised with\n    # overflow checks and debug assertions on, and one plain debug run on Linux x86-64.\n    if: github.actor != 'someone' && github.event_name != 'pull_request'",
             "a term this test cannot read",
         ),
+        // A job a push runs left out of a run by hand.
+        (
+            "    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'\n    runs-on: ubuntu-24.04\n",
+            "    if: github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'\n    runs-on: ubuntu-24.04\n",
+            "a run by hand runs",
+        ),
+        // The last job asking less of a run by hand than of a push.
+        (
+            "              *) must=",
+            "              workflow_dispatch) must=\"lint scope linux guard\" ;;\n              *) must=",
+            "of a run by hand, but",
+        ),
+        // No run by hand at all.
+        (
+            "  # By hand, on any branch: what a push to main runs (the paragraph at the top). No inputs.\n  workflow_dispatch:\n",
+            "",
+            "kernel.yml has no workflow_dispatch",
+        ),
+        // A run by hand given an input that could choose what runs.
+        (
+            "  workflow_dispatch:\n",
+            "  workflow_dispatch:\n    inputs:\n      jobs:\n        type: string\n",
+            "takes inputs",
+        ),
     ] {
         let k = kernel.replacen(from, to, 1);
         assert_ne!(k, kernel, "the planted edit {from:?} applies");
         let found = event_problems(&k);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+
+    // An arm naming a push and a run by hand together is read as both, and asks the same.
+    let full = "lint scope linux guard test suite wasm wasm-suite big-endian large-models";
+    let both = kernel.replacen(
+        "              *) must=",
+        &format!(
+            "              push|workflow_dispatch) must=\"{full}\" ;;\n              *) must="
+        ),
+        1,
+    );
+    assert_ne!(both, kernel);
+    assert_eq!(event_problems(&both), Vec::<String>::new());
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_run_by_hand_writes_nothing_later_runs_read() {
+    let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
+    assert_eq!(writer_problems(&kernel), Vec::<String>::new());
+
+    // Seeded violations: each must be reported.
+    for (from, to, said) in [
+        // A cache saved by any run of main, a run by hand on main among them.
+        (
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.k == 1 }}",
+            "save-if: ${{ github.ref == 'refs/heads/main' && matrix.k == 1 }}",
+            "linux's step 3",
+        ),
+        // A cache with no `save-if`, which saves on every run.
+        (
+            "          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: guard\n",
+            "          key: guard\n",
+            "guard's step 3",
+        ),
+        // A run by hand let in beside the terms.
+        (
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: large-models",
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}\n          key: large-models",
+            "large-models's step 3",
+        ),
+        // The queue's mark uploaded on every event.
+        (
+            "        if: github.event_name == 'merge_group' && needs.changes.outputs.kernel == 'true'\n        with:",
+            "        if: needs.changes.outputs.kernel == 'true'\n        with:",
+            "done's step 3",
+        ),
+        // A timing record written through `gh` on every run.
+        (
+            "      - name: The merge queue's mark for this tree\n",
+            "      - name: A timing record for later runs\n        run: gh api -X PUT \"repos/$GITHUB_REPOSITORY/actions/variables/TIMES\" -f value=1\n      - name: The merge queue's mark for this tree\n",
+            "(A timing record for later runs)",
+        ),
+    ] {
+        let k = kernel.replacen(from, to, 1);
+        assert_ne!(k, kernel, "the planted edit {from:?} applies");
+        let found = writer_problems(&k);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }
@@ -965,6 +1174,15 @@ fn each_change_is_measured_against_its_base_and_marked_once() {
             ),
             quality.clone(),
             "only the merge queue may mark",
+        ),
+        (
+            kernel.replacen(
+                "if [ \"$EVENT\" = push ] && [ \"$GITHUB_REF\" = refs/heads/main ]; then",
+                "if [ \"$EVENT\" != pull_request ]; then",
+                1,
+            ),
+            quality.clone(),
+            "the queue's mark on a push to main alone",
         ),
         (
             kernel.clone(),

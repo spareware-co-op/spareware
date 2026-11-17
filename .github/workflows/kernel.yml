@@ -36,6 +36,11 @@ name: Kernel
 #   last job leaves a mark named for the tree it passed (an artifact, `kernel-tested-<tree>`), and
 #   the job `changes` looks for it; a push that did not come through the queue runs both sets.
 # - On a release tag (kernel-release.yml calls this workflow): both sets, every crate.
+# - By hand on any branch (`gh workflow run kernel.yml --ref <branch>`), so a change to the legs
+#   that run only after a pull request is proved before it lands: every job a push to main runs,
+#   under the same conditions, every crate (a run by hand has no base), never skipped by the
+#   queue's mark. It takes no inputs, so nothing can leave a job out, and it writes nothing a later
+#   run reads: only a push to main saves the build caches.
 #
 # The job `changes` decides first, in seconds: which files the change touches (a pull request's
 # merge commit against its first parent, the queue's commit against the queue's base, a push
@@ -78,6 +83,8 @@ on:
     branches: [main]
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
+  # By hand, on any branch: what a push to main runs (the paragraph at the top). No inputs.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -85,9 +92,10 @@ permissions:
 # A newer push to the same pull request cancels the runs it supersedes. A newer push to main
 # does not cancel a run in progress, but at most one run waits behind it (GitHub's default
 # `queue: single`), so a run on main that is still waiting is cancelled by a newer push. Each
-# merge queue entry has a ref of its own.
+# merge queue entry has a ref of its own. A run by hand waits in a group of its own, so it never
+# takes a waiting push's place.
 concurrency:
-  group: kernel-${{ github.ref }}
+  group: kernel-${{ github.event_name == 'workflow_dispatch' && 'by-hand-' || '' }}${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -145,7 +153,7 @@ jobs:
         run: |
           # The change's base: a pull request's merge commit's first parent, the merge queue's
           # base, or the commit main was at before a push. None (every file counts) for a release
-          # tag, a first push, or a base that cannot be fetched.
+          # tag, a run by hand, a first push, or a base that cannot be fetched.
           base=""
           case "$EVENT" in
             pull_request)
@@ -274,10 +282,10 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved). One part of
           # each build saves it: the parts of a build restore and would save the same cache.
-          save-if: ${{ github.ref == 'refs/heads/main' && (matrix.k == 1 || matrix.k == 3) }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && (matrix.k == 1 || matrix.k == 3) }}
           # Debug, release with overflow checks on (parts 1 and 2) and release as shipped (parts
           # 3 to 6) are cached apart, so no part restores another build's. Parts 7 to 10 build in
           # their own folder, which no cache holds.
@@ -391,9 +399,9 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # The diff between the base and this commit is the change, renames as a removed and an added
       # file.
       - name: The files the change touches
@@ -446,8 +454,8 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's. One part saves it.
-          save-if: ${{ github.ref == 'refs/heads/main' && matrix.k == 1 }}
+          # Only a push to main saves the cache; a pull request restores main's. One part saves it.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.k == 1 }}
           key: linux
       - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
         uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
@@ -558,10 +566,10 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           # One part per leg saves it: all of a leg's parts restore and would save the same cache.
-          save-if: ${{ github.ref == 'refs/heads/main' && matrix.part.k == 1 }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.part.k == 1 }}
           # Release and debug builds are cached apart, so neither leg restores the other's.
           key: suite-${{ matrix.part.mode }}
       # The pre-built cargo-nextest of this version, its checksum checked by the action (a source
@@ -649,9 +657,9 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           key: guard
       - name: A one-bit change to libm's sin fails a golden
         run: cargo run --locked --release -p geom-test --bin guard -- prove
@@ -685,9 +693,9 @@ jobs:
           targets: wasm32-wasip1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # Every kernel crate in the kernel's folder; the development crates (chapter 27) need
       # processes and files that WASI test runs do not have, and run natively above.
       - name: List the kernel's crates
@@ -805,9 +813,9 @@ jobs:
           targets: wasm32-wasip1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           key: wasm-suite
       # Every kernel crate in the kernel's folder that the change can reach (the job `scope`); the
       # development crates (chapter 27) need processes and files that WASI test runs do not have,
@@ -932,9 +940,9 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           key: large-models
       - name: The models of more than 1,500 faces named here, united alone and with a moved copy
         if: ${{ contains(format(' {0} ', needs.scope.outputs.crates), ' geom-poly ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-bool ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-mesh ') }}
@@ -963,9 +971,9 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # Every crate in the kernel's folder is checked here, so a new crate is covered the day it
       # lands (chapter 27: one folder per crate, folder name = crate name).
       - name: List the kernel's crates
@@ -1012,7 +1020,7 @@ jobs:
           test "$(jq -r '.changes.result' <<< "$NEEDS")" = success
           if [ "$KERNEL" = true ] && [ "$TESTED" != true ]; then
             # What each event runs (the paragraph at the top; tests/queue_wiring.rs holds these
-            # lists to each job's condition).
+            # lists to each job's condition). A run by hand must run what a push runs.
             case "$EVENT" in
               pull_request) must="lint scope linux guard" ;;
               merge_group) must="lint scope test suite wasm wasm-suite big-endian large-models" ;;
