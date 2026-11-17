@@ -330,26 +330,50 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
 fn kernel_yml_runs_every_golden_on_wasm32_in_every_build_mode() {
     let yml = KERNEL_YML.replace("\r\n", "\n");
     assert!(yml.contains("runtime: [wasmtime, node]"));
+    // Each build's goldens in shares, one to a part (queue_wiring.rs holds every share once).
     for step in [
         "        env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1 --release
-",
-        "      - name: Every golden on wasm32 in release as shipped, without overflow checks
-        if: ${{ !cancelled() }}
-        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1 --release
-",
-        "      - name: Every golden on wasm32 in debug
-        if: ${{ !cancelled() }}
-        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1
-",
-        "      - name: geom-num's every test vector on wasm32 in release as shipped
-        if: ${{ !cancelled() && contains(format(' {0} ', needs.scope.outputs.crates), ' geom-num ') }}
-        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --target wasm32-wasip1 --release
 ",
         "        env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --target wasm32-wasip1 --release
+",
+        "      - name: Every golden on wasm32 in release as shipped, without overflow checks (part 1 of 2)
+        if: ${{ !cancelled() && matrix.k == 4 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --target wasm32-wasip1 --release
+",
+        "      - name: Every golden on wasm32 in release as shipped, without overflow checks (part 2 of 2)
+        if: ${{ !cancelled() && matrix.k == 5 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --target wasm32-wasip1 --release
+",
+        "      - name: Every golden on wasm32 in debug (part 1 of 3)
+        if: ${{ !cancelled() && matrix.k == 6 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/3 --target wasm32-wasip1
+",
+        "      - name: Every golden on wasm32 in debug (part 2 of 3)
+        if: ${{ !cancelled() && matrix.k == 7 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/3 --target wasm32-wasip1
+",
+        "      - name: Every golden on wasm32 in debug (part 3 of 3)
+        if: ${{ !cancelled() && matrix.k == 8 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 3/3 --target wasm32-wasip1
+",
+        // geom-num's every test vector as shipped and the whole suite with overflow checks on, each
+        // built once into an archive (queue_wiring.rs holds the parts that run it), with their
+        // doctests beside the build.
+        "      - name: Build the suite's tests on wasm32 in release, with overflow checks on
+        if: ${{ matrix.build == 'checked' && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked --archive-file \"$RUNNER_TEMP/wasm-checked.tar.zst\"
+",
+        "      - name: Build geom-num's every test vector on wasm32 in release as shipped
+        if: ${{ matrix.build == 'shipped' && env.KERNEL_CRATES != '' }}
+        run: cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked --archive-file \"$RUNNER_TEMP/wasm-shipped.tar.zst\"
+",
+        "            if [ \"$BUILD\" = shipped ] && [ \"$c\" != geom-num ]; then continue; fi
 ",
     ] {
         assert!(yml.contains(step), "kernel.yml lacks the step:\n{step}");
@@ -360,31 +384,43 @@ fn kernel_yml_runs_every_golden_on_wasm32_in_every_build_mode() {
 
 /// A test that fails on wasm32 tells why. wasm32-wasip1 aborts on a panic, so libtest never prints
 /// what it captured: every `cargo test` for wasm32 passes `--nocapture` (the golden runner passes
-/// it too, `golden::matrix`), and both of Node's runners print the seed of every random byte a
-/// failing binary drew, which `WASI_RUN_SEED` replays.
+/// it too, `golden::matrix`); nextest runs each test of an archive in a process of its own with
+/// `--nocapture` and keeps that process's whole output, which it prints when the test fails, so
+/// its wasm32 runs add no capture of their own (no `--no-capture`, which would also run one test at
+/// a time); and each of Node's runners prints the seed of every random byte a failing binary drew,
+/// which `WASI_RUN_SEED` replays.
 #[test]
 fn a_wasm32_failure_reaches_the_log_with_its_message_and_its_seed() {
     let yml = KERNEL_YML.replace("\r\n", "\n");
     let mut runs = 0;
+    let mut archives = 0;
     for line in yml.lines() {
         let run = line.trim_start().trim_start_matches("run: ");
         if run.starts_with("cargo test ") && run.contains("--target wasm32-wasip1") {
             assert!(run.ends_with(" -- --nocapture"), "{run}");
             runs += 1;
         }
+        if run.starts_with("cargo nextest run --archive-file \"$RUNNER_TEMP/wasm-") {
+            assert!(!run.contains("capture") && !run.contains(" -- "), "{run}");
+            archives += 1;
+        }
     }
-    assert_eq!(runs, 3, "the shipped leg, geom-num's vectors and the suite");
+    assert_eq!(
+        runs, 5,
+        "the shipped leg, and the doctests of both builds under both runtimes"
+    );
+    assert_eq!(archives, 1, "the wasm32 suite's parts");
     let draws = "imports.wasi_snapshot_preview1.random_get = ";
     let replays = "failed; WASI_RUN_SEED=${seed} replays its random bytes";
     assert_eq!(
         yml.matches(draws).count(),
-        2,
-        "both of Node's runners draw from a seed"
+        3,
+        "each of Node's runners draws from a seed (the goldens', the build's doctests', the suite's)"
     );
     assert_eq!(
         yml.matches(replays).count(),
-        2,
-        "and print it when a run fails"
+        3,
+        "and prints it when a run fails"
     );
 }
 
