@@ -192,9 +192,18 @@ if [ -n "$state_out" ]; then
     sleep 5
   done
   port=$(cat "$work/port")
-  # `-bc` waits for the checkpoint to be written. (v4.2.0's dmtcp_command reads the long form,
-  # `--bcheckpoint`, as `b`, which it does not know, and then a checkpoint it does not wait for.)
+  # v4.2.0's coordinator starts the checkpoint `-bc` asks for but does not wait for it (its log:
+  # "unhandled user command; (cmd = b)"), so, as HOL Light's make-checkpoint.sh does, the state is
+  # taken as written once the coordinator has written its restart script, which it does after
+  # every image; only then is HOL Light stopped.
   "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" -bc
+  for _ in $(seq 360); do
+    [ ! -e "$work/checkpoint/dmtcp_restart_script.sh" ] || break
+    kill -0 "$hol" 2>/dev/null || break
+    sleep 5
+  done
+  [ -e "$work/checkpoint/dmtcp_restart_script.sh" ] ||
+    { echo "DMTCP wrote no restart script: the state was not saved"; exit 1; }
   "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" --quit
   exec 3>&-
   wait "$hol" || true

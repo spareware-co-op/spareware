@@ -5,10 +5,12 @@
 //! - **Made by this run.** The job `hol-light-states` saves the states (fptaylor.sh's
 //!   `FPTAYLOR_STATE_OUT`), gives each one's sha256 as its output `sha256`, and hands them on as
 //!   the artifact `hol-light-states`, kept a day at most. No job of the workflow uses a cache.
+//!   Its saving step fails when a container fails (`set -o pipefail`: the default shell has none)
+//!   or when a problem it kept has no state.
 //! - **Restored from this run only.** Every job that restores a state (`FPTAYLOR_STATE=`), and the
-//!   job `fptaylor-shards` is one, needs `hol-light-states` and downloads the artifact by its name
-//!   alone: a download that names another run, repository or token could fetch a state this run
-//!   did not make.
+//!   job `fptaylor-shards` is one, needs `hol-light-states`, starts only once it has passed, so
+//!   never without the state, and downloads the artifact by its name alone: a download that names
+//!   another run, repository or token could fetch a state this run did not make.
 //! - **Checked before it is restored.** The step that restores a state is given the sha256 from
 //!   `hol-light-states`' output and passes it into the container, and fptaylor.sh refuses a state
 //!   without a full sha256, and compares the file's digest with it before it unpacks or restores
@@ -32,6 +34,11 @@ const SCRIPT: &str = "projects/engines/geometry/crates/geom-gen/certificates/fpt
 const STATES_JOB: &str = "hol-light-states";
 const SHARDS_JOB: &str = "fptaylor-shards";
 const ARTIFACT: &str = "hol-light-states";
+/// A restoring job starts only once the states job has passed.
+const STATES_PASSED: &str = "needs.hol-light-states.result == 'success'";
+/// The states job's saving step fails when a container fails, or a problem it kept has no state.
+const PIPEFAIL: &str = "set -o pipefail\n";
+const NO_STATE: &str = r#"echo "$problem: no saved state"; exit 1"#;
 /// Where a restoring step's digest comes from: the states job's output.
 const SHA256_FROM: &str = "needs.hol-light-states.outputs.sha256";
 /// fptaylor.sh's checks: a state needs a full sha256, and the file's digest must be it.
@@ -148,6 +155,17 @@ fn states_problems(states: &Yaml) -> Vec<String> {
         {
             found.push(format!("{STATES_JOB} saves no state"));
         }
+        let held = all.iter().any(|s| {
+            let run = text(&s["run"]);
+            run.contains("FPTAYLOR_STATE_OUT=")
+                && run.starts_with(PIPEFAIL)
+                && run.contains(NO_STATE)
+        });
+        if !held {
+            found.push(format!(
+                "{STATES_JOB} can pass without a state for every problem it kept"
+            ));
+        }
         let output = text(&states["outputs"]["sha256"]);
         let from_a_step = all.iter().any(|s| {
             let id = text(&s["id"]);
@@ -186,6 +204,11 @@ fn restoring_problems(name: &str, job: &Yaml) -> Option<Vec<String>> {
     if !needs(job).iter().any(|n| n == STATES_JOB) {
         found.push(format!(
             "{name} restores a state without needing {STATES_JOB}"
+        ));
+    }
+    if !text(&job["if"]).contains(STATES_PASSED) {
+        found.push(format!(
+            "{name} can start without the state: it does not wait for {STATES_JOB} to pass"
         ));
     }
     let downloads: Vec<&Yaml> = all
@@ -293,6 +316,28 @@ fn the_shards_restore_only_a_state_their_run_made_and_checked() {
         ),
         &script,
         "gives no sha256",
+    );
+
+    // Planted: a shard that can start without the state (run 44012975257: the states job passed
+    // with no state, and every shard then failed to find the artifact).
+    finds(
+        &planted(
+            &workflow,
+            " && needs.hol-light-states.result == 'success' }}",
+            " }}",
+        ),
+        &script,
+        "can start without the state",
+    );
+    finds(
+        &planted(&workflow, "          set -o pipefail\n", ""),
+        &script,
+        "can pass without a state",
+    );
+    finds(
+        &planted(&workflow, NO_STATE, r#"echo "$problem: no saved state""#),
+        &script,
+        "can pass without a state",
     );
 
     // Planted: the digest check skipped, in the workflow or in the script.
