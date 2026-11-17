@@ -1809,6 +1809,25 @@ pub mod bvh {
     }
 }
 
+/// `geom-bool`'s broad phase (piece G242, decision 32.46): the pairs of padded point boxes that
+/// meet, from the box tree, under an unlimited budget on the serial executor.
+pub mod curved {
+    use geom_bool::broad::candidate_pairs;
+    use geom_bvh::{BvhError, Entry};
+    use geom_run::{Budget, Exec, WorkMeter};
+
+    use super::run;
+
+    /// `candidate_pairs` on each scene.
+    #[inline(never)]
+    pub fn broad_pairs(batch: &[Vec<Entry<3>>], out: &mut Vec<Result<Vec<(u64, u64)>, BvhError>>) {
+        run(batch, out, |entries| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            candidate_pairs(entries, &Exec::serial(), &mut meter).map_err(|_| BvhError::Defect)
+        });
+    }
+}
+
 /// The attribute step's hot path (piece G90, decision 32.46).
 pub mod attributes {
     use geom_name::{AttrError, Step, apply as step};
@@ -1965,6 +1984,9 @@ pub mod mesh {
     use geom_mesh::envelope::TriangleEnvelope;
     use geom_mesh::exact::build::{Polygons, build};
     use geom_mesh::exact::{ExactMesh, MeshError};
+    use geom_mesh::hull::{Hull, HullError};
+    use geom_mesh::model::{Decimate, ModelError, Modelled, Remesh};
+    use geom_mesh::slice::{Contour, slice as cut};
     use geom_mesh::{Cdt, CdtError, contact, triangulate};
     use geom_num::grid::P3;
     use geom_num::{NumError, Sign, distance};
@@ -2020,6 +2042,38 @@ pub mod mesh {
     pub fn envelope(batch: &[([P3; 3], P3)], out: &mut Vec<Result<bool, NumError>>) {
         run(batch, out, |&(t, p)| {
             TriangleEnvelope::new(t, 1 << 16)?.contains(p)
+        });
+    }
+
+    /// `geom_mesh::model::decimate` on each sheet, to no triangle count, within 4 steps, serially,
+    /// under an unlimited budget.
+    #[inline(never)]
+    pub fn decimate(
+        batch: &[(Vec<P3>, Vec<[u32; 3]>)],
+        out: &mut Vec<Result<Modelled, ModelError>>,
+    ) {
+        run(batch, out, |(points, triangles)| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let settings = Decimate {
+                epsilon: 4,
+                target: 0,
+            };
+            geom_mesh::model::decimate(points, triangles, settings, &Exec::serial(), &mut meter)
+        });
+    }
+
+    /// `geom_mesh::model::remesh` on each sheet, toward edges of 64 steps within 4, one round,
+    /// serially, under an unlimited budget.
+    #[inline(never)]
+    pub fn remesh(batch: &[(Vec<P3>, Vec<[u32; 3]>)], out: &mut Vec<Result<Modelled, ModelError>>) {
+        run(batch, out, |(points, triangles)| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let settings = Remesh {
+                epsilon: 4,
+                length: 64,
+                iterations: 1,
+            };
+            geom_mesh::model::remesh(points, triangles, settings, &Exec::serial(), &mut meter)
         });
     }
 
@@ -2079,6 +2133,27 @@ pub mod mesh {
                 &Exec::serial(),
                 &mut meter,
             )
+        });
+    }
+
+    /// `geom_mesh::hull::Hull::of` on each set of points, under an unlimited budget.
+    #[inline(never)]
+    pub fn hull(batch: &[Vec<P3>], out: &mut Vec<Result<Hull, HullError>>) {
+        run(batch, out, |points| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            Hull::of(points, &mut meter)
+        });
+    }
+
+    /// `geom_mesh::slice::slice` on each solid's planes, serially, under an unlimited budget.
+    #[inline(never)]
+    pub fn slice(
+        batch: &[crate::inputs::mesh::Layers],
+        out: &mut Vec<Result<Vec<Vec<Contour>>, MeshError>>,
+    ) {
+        run(batch, out, |layers| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            cut(&layers.solid, &layers.planes, &Exec::serial(), &mut meter)
         });
     }
 

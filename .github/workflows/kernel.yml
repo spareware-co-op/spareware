@@ -15,79 +15,211 @@ name: Kernel
 # unrun. geom-num's whole test suite, every one of its test vectors, also runs in every native
 # configuration and in both release modes on wasm32 (its debug suite there takes well over an
 # hour, so wasm32's debug leg runs the goldens). A target that disagrees is a bug, never a reason
-# to change a golden: a golden changes only by an approved edit of the store (kernel-golden.yml).
+# to change a golden: a golden changes only by a recorded edit of the store (kernel-golden.yml).
 #
 # The goldens run first, in every configuration, and every step runs even when an earlier one
 # failed (`if: !cancelled()`), so a failing suite never hides the digests of a target.
 #
-# Time to a result: the cheap job `lint` (format and lints, a minute or two) goes first and every
-# other job waits for it, so a push that fails it stops there. The whole suite is the job `suite`,
-# in parts that run side by side (cargo-nextest's `--partition count:k/n`, the way kernel-quality.yml
-# partitions Miri), release in two parts and debug in four, so no leg runs for hours; the debug
-# parts hold every test the single `cargo test` run held. nextest does not run doctests, so part 1
-# of each leg runs them with `cargo test --doc`. The wasm32 legs split the same way: the job `wasm`
-# runs the goldens, the job `wasm-suite` the test vectors and the suite.
+# When each part runs (chapter 28.17; the owner's testing principles 2 and 3, decision 32.53):
+#
+# - On each push to a pull request: format and lints (`lint`), then the tests the change can reach,
+#   once, optimised with overflow checks and debug assertions on, on Linux x86-64 (`linux`, in four
+#   parts: two of tests, two of goldens), with the goldens there, and the toolchain guard's proof
+#   (`guard`).
+# - In GitHub's merge queue for main (`merge_group`), once per change just before it lands: the
+#   same tests on the other platforms (the job `suite` on Linux arm64, Windows on both chips and
+#   macOS on both chips; `wasm-build` and `wasm-suite` on wasm32; `big-endian` on s390x), the
+#   other legs of the determinism matrix (`test`, `wasm`), one plain debug run of the reachable
+#   tests on Linux x86-64 (the `suite` parts in debug), and Manifold's large models, a test the
+#   suite leaves out for its minutes (`large-models`).
+# - On a push to main: nothing the merge queue already tested on the identical tree. The queue's
+#   last job leaves a mark named for the tree it passed (an artifact, `kernel-tested-<tree>`), and
+#   the job `changes` looks for it; a push that did not come through the queue runs both sets.
+# - On a release tag (kernel-release.yml calls this workflow): both sets, every crate.
+# - By hand on any branch (`gh workflow run kernel.yml --ref <branch>`), so a change to the legs
+#   that run only after a pull request is proved before it lands: every job a push to main runs,
+#   under the same conditions, every crate (a run by hand has no base), never skipped by the
+#   queue's mark. It takes no inputs, so nothing can leave a job out, and it writes nothing a later
+#   run reads: only a push to main saves the build caches.
+#
+# The job `changes` decides first, in seconds: which files the change touches (a pull request's
+# merge commit against its first parent, the queue's commit against the queue's base, a push
+# against the commit main was at before it), and whether any is one the kernel's tests can read
+# (`KERNEL_PATHS` below); a change that touches none runs nothing here and passes. Every pull
+# request and every queued change runs this workflow, so its last job, `done` ("Kernel checks
+# pass"), always reports: it is the check main's ruleset requires, and it fails unless every job
+# that ran passed and every job this event must run did run (.github/rulesets/protect-main.json;
+# geom-test's tests/queue_wiring.rs holds the two lists together with planted mistakes).
+#
+# What a change tests: only the crates it can reach. The job `scope` runs geom-test's
+# `kernel-quality test-scope` on the changed files: a crate's tests run when a changed file is in
+# what its test binaries link (the crate, its normal and build dependencies' closure, and its
+# development dependencies' closure), among its own tests, or anywhere when its sources read files
+# outside its folder; a changed file in no crate (a workflow, Cargo.lock, .cargo, the toolchain
+# file, an architecture chapter) runs every crate's, but MAP.json and the quality ledger are read
+# against the base by their changed entries (`--base`): a change to one runs the tests of the crates
+# its changed entries name and of the crates that read it whole (geom-test's src/shared.rs), and
+# everything when it cannot be placed so. geom-test's src/test_scope.rs gives the whole
+# rule, its tests/test_scope.rs holds it to the crate graph, and the job's summary names every
+# crate and why it runs or not. The suites (`linux`, `suite`, `wasm-suite`) test only the crates
+# it names, and a part left with nothing to test passes. A release tag tests every crate. The
+# goldens, the guard and the lints run whole on every change that runs them.
+#
+# A failure on wasm32 tells its cause. wasm32-wasip1's standard library is built to abort on a
+# panic, so a panicking test ends the whole binary before libtest prints what it captured and
+# before proptest can shrink or save its case. Every wasm32 test run is therefore given
+# `--nocapture` (the golden runs pass it already), so a panic's message and place reach the log
+# before the abort, with whatever the test printed; under Node, the runner draws every random byte
+# from one seed and a failing run prints it, so the run replays with the same proptest cases
+# (`WASI_RUN_SEED`, in the runner below).
 #
 # Every action is pinned to a full commit, checked against its tag when it was pinned; update a
 # pin only after reviewing the new commit.
-#
-# If this workflow becomes a required check, note that a pull request outside the paths below
-# never runs it, so it would never report: then drop the pull_request path filter and skip inside
-# the jobs, or require a small summary job that always runs.
 
 on:
   pull_request:
-    paths:
-      - "projects/engines/geometry/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".cargo/**"
-      - "rust-toolchain.toml"
-      - "rust-toolchain"
-      - "clippy.toml"
-      - ".clippy.toml"
-      - "rustfmt.toml"
-      - ".rustfmt.toml"
-      - ".github/workflows/kernel.yml"
+  merge_group:
   push:
     branches: [main]
-    paths:
-      - "projects/engines/geometry/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".cargo/**"
-      - "rust-toolchain.toml"
-      - "rust-toolchain"
-      - "clippy.toml"
-      - ".clippy.toml"
-      - "rustfmt.toml"
-      - ".rustfmt.toml"
-      - ".github/workflows/kernel.yml"
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
+  # By hand, on any branch: what a push to main runs (the paragraph at the top). No inputs.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 # A newer push to the same pull request cancels the runs it supersedes. A newer push to main
 # does not cancel a run in progress, but at most one run waits behind it (GitHub's default
-# `queue: single`), so a run on main that is still waiting is cancelled by a newer push.
+# `queue: single`), so a run on main that is still waiting is cancelled by a newer push. Each
+# merge queue entry has a ref of its own. A run by hand waits in a group of its own, so it never
+# takes a waiting push's place.
 concurrency:
-  group: kernel-${{ github.ref }}
+  group: kernel-${{ github.event_name == 'workflow_dispatch' && 'by-hand-' || '' }}${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # One pinned compiler for every job, so a golden digest never moves because the compiler did
   # (chapter 28.13, the toolchain guard). Change it only in a pull request that reruns every
   # golden. Chapter 28.13 asks for the pin in a committed rust-toolchain.toml at the repository
-  # root; until an owner adds one, it is held here, and the path filters above already watch it.
+  # root; until an owner adds one, it is held here, and the paths below already watch it.
   RUST_TOOLCHAIN: "1.99.0"
+  # The files a change must touch for this workflow to test anything: the kernel, the workspace's
+  # manifest and lock file, Cargo's and nextest's configuration, the toolchain and the lint and
+  # format settings, and every workflow and ruleset (geom-test's tests read them). A pattern is a
+  # path, or a folder followed by `/**` for everything below it.
+  KERNEL_PATHS: |
+    projects/engines/geometry/**
+    Cargo.toml
+    Cargo.lock
+    .cargo/**
+    .config/**
+    rust-toolchain.toml
+    rust-toolchain
+    clippy.toml
+    .clippy.toml
+    rustfmt.toml
+    .rustfmt.toml
+    .github/**
 
 jobs:
+  # What this run must check: `kernel`, whether the change touches a file of KERNEL_PATHS; `base`,
+  # the commit the change is measured against (empty: every file); `tested`, on a push to main,
+  # whether the merge queue passed this very tree; `tree`, the tree's hash.
+  changes:
+    name: What the change touches
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      kernel: ${{ steps.changes.outputs.kernel }}
+      base: ${{ steps.changes.outputs.base }}
+      tested: ${{ steps.changes.outputs.tested }}
+      tree: ${{ steps.changes.outputs.tree }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: The kernel files the change touches, and whether the merge queue tested this tree
+        id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # The change's base: a pull request's merge commit's first parent, the merge queue's
+          # base, or the commit main was at before a push. None (every file counts) for a release
+          # tag, a run by hand, a first push, or a base that cannot be fetched.
+          base=""
+          case "$EVENT" in
+            pull_request)
+              test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+              base=$(git rev-parse HEAD^1)
+              ;;
+            merge_group) base="$QUEUE_BASE" ;;
+            push) if [ "$GITHUB_REF" = refs/heads/main ]; then base="$BEFORE"; fi ;;
+          esac
+          case "$base" in 0000000000000000000000000000000000000000) base="" ;; esac
+          if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null \
+            && ! git fetch -q --no-tags --depth 1 origin "$base"; then
+            echo "The base $base cannot be fetched, so every file counts as changed."
+            base=""
+          fi
+          kernel=true
+          if [ -n "$base" ]; then
+            kernel=false
+            while IFS= read -r file; do
+              while IFS= read -r pattern; do
+                [ -n "$pattern" ] || continue
+                case "$pattern" in
+                  */\*\*) if [[ "$file" == "${pattern%\*\*}"* ]]; then kernel=true; fi ;;
+                  *) if [ "$file" = "$pattern" ]; then kernel=true; fi ;;
+                esac
+              done <<< "$KERNEL_PATHS"
+            done < <(git diff --no-ext-diff --no-renames --name-only "$base" HEAD)
+          fi
+          tree=$(git rev-parse "HEAD^{tree}")
+          # A push to main the merge queue passed on this very tree: the queue's mark is there. A
+          # call that fails counts as no mark, so the push then tests everything it reaches.
+          tested=false
+          if [ "$EVENT" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            if marks=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=kernel-tested-$tree" \
+              --jq '[.artifacts[] | select(.expired | not)] | length') && [ "$marks" -gt 0 ]; then
+              tested=true
+            fi
+          fi
+          {
+            echo "kernel=$kernel"
+            echo "base=$base"
+            echo "tested=$tested"
+            echo "tree=$tree"
+          } | tee -a "$GITHUB_OUTPUT"
+          {
+            echo "Event: $EVENT; base: ${base:-none, so every file counts}."
+            echo "Touches the kernel's files: $kernel. The merge queue passed this tree: $tested."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # A release leg is ten parts side by side, each one build (chapter 28.17; the owner's rule of 15
+  # minutes a job). On main's run 43829666754 the macOS x86-64 leg took 88 minutes in one job, and
+  # nearly all of it was building: each golden step 16 to 26 minutes, its tests running in seconds.
+  # So each golden step is two parts (`golden run --part k/2`, whole crates to a part, every golden
+  # in exactly one), and geom-num's every test vector is two parts in each build (its test targets
+  # by first letter, `[a-d]*` and `[e-z]*`; the library, its binaries and doctests in the first).
+  # Parts: 1, 2 the goldens with overflow checks on; 3, 4 the goldens as shipped (4 also the
+  # shipped checker's corpus); 5, 6 geom-num as shipped; 7, 8 the goldens for the runner's own CPU;
+  # 9, 10 geom-num for the runner's own CPU. A debug leg is one part. geom-test's
+  # tests/queue_wiring.rs holds every step to exactly one part and every share to a whole.
   test:
-    name: Test (${{ matrix.target.name }}, ${{ matrix.mode }})
+    name: Test (${{ matrix.target.name }}, ${{ matrix.mode }}${{ matrix.mode == 'release' && format(', part {0} of 10', matrix.k) || '' }})
     # The cheap job goes first: when format or lints fail, no runner starts on the matrix.
-    needs: lint
+    needs: [changes, lint]
+    # The merge queue's legs of the determinism matrix (and a release's, and a push that skipped
+    # the queue); Linux x86-64 in release runs on every push to a pull request, in `linux`.
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ matrix.target.os }}
     # The goldens of every target and mode, and geom-num's test vectors in release. The whole
     # suite, which took up to two hours a leg, is the job `suite` below, in parts; this job holds
@@ -101,6 +233,7 @@ jobs:
         # runner's own CPU) and geom-num's test vectors; the debug legs run the golden digest in
         # debug. The whole suite, in release with overflow checks on and in debug, is `suite`.
         mode: [release, debug]
+        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         target:
           - name: Linux x86-64
             os: ubuntu-latest
@@ -120,6 +253,22 @@ jobs:
             # lists both, so when Intel images end is not settled. When they end, this leg needs a
             # self-hosted runner or an owner's decision to drop the target (chapter 32.4).
             os: macos-15-intel
+        exclude:
+          # The job `linux` runs these steps for Linux x86-64 in release.
+          - mode: release
+            target:
+              name: Linux x86-64
+              os: ubuntu-latest
+          # A debug leg is one part.
+          - { mode: debug, k: 2 }
+          - { mode: debug, k: 3 }
+          - { mode: debug, k: 4 }
+          - { mode: debug, k: 5 }
+          - { mode: debug, k: 6 }
+          - { mode: debug, k: 7 }
+          - { mode: debug, k: 8 }
+          - { mode: debug, k: 9 }
+          - { mode: debug, k: 10 }
     defaults:
       run:
         # bash with -eo pipefail on every runner, Windows included.
@@ -133,50 +282,87 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          # Release and debug builds are cached apart, so neither leg restores the other's.
-          key: ${{ matrix.mode }}
-      - name: Every golden in release, with overflow checks on
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved). One part of
+          # each build saves it: the parts of a build restore and would save the same cache.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && (matrix.k == 1 || matrix.k == 3) }}
+          # Debug, release with overflow checks on (parts 1 and 2) and release as shipped (parts
+          # 3 to 6) are cached apart, so no part restores another build's. Parts 7 to 10 build in
+          # their own folder, which no cache holds.
+          key: ${{ matrix.mode == 'release' && (matrix.k <= 2 && 'release-checked' || 'release-shipped') || 'debug' }}
+      - name: Every golden in release, with overflow checks on (part 1 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo run --locked -p geom-test --bin golden -- run --release
-      - name: Every golden in release as shipped, without overflow checks
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
-        run: cargo run --locked -p geom-test --bin golden -- run --release
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
+      - name: Every golden in release, with overflow checks on (part 2 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 2 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
+      - name: Every golden in release as shipped, without overflow checks (part 1 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 3 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
+      - name: Every golden in release as shipped, without overflow checks (part 2 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 4 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
       # The shipped-checker leg (chapters 8.3 and 28.4; decision 32.48). Every other test build
       # turns the full checker on (geom-test's default feature `full-checker`), the golden steps
       # above included. This one builds geom-test alone without it, so operations check their
       # results with the cheap groups, as a shipped build does, and must answer as the full-checker
       # legs do: the replay corpus's digest, and tests/shipped.rs's sweep of transforms.
       - name: The replay corpus and the transform sweep with the checker as shipped
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 4 }}
         run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
-      - name: geom-num's every test vector in release as shipped
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast
+      # geom-num's whole suite as `cargo test -p geom-num` runs it (its library, binaries and every
+      # test target, then its doctests), in two shares of its test targets.
+      - name: geom-num's every test vector in release as shipped (part 1 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 5 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins --test '[a-d]*'
+      - name: geom-num's doctests in release as shipped
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 5 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --doc
+      - name: geom-num's every test vector in release as shipped (part 2 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 6 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[e-z]*'
       - name: Show this machine's CPU features
         if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: rustc -vV && rustc --print cfg -C target-cpu=native
-      - name: Every golden in release for this machine's own CPU
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
+      - name: Every golden in release for this machine's own CPU (part 1 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 7 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           # Its own build folder, which the build cache never saves or restores: the cache's key
           # does not name the processor, so a restored native build from another machine's CPU
           # can hold instructions this one lacks (SIGILL). Built fresh here, it is this CPU's.
           CARGO_TARGET_DIR: target-native
-        run: cargo run --locked -p geom-test --bin golden -- run --release
-      - name: geom-num's every test vector in release for this machine's own CPU
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
+      - name: Every golden in release for this machine's own CPU (part 2 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 8 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
+      - name: geom-num's every test vector in release for this machine's own CPU (part 1 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 9 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins --test '[a-d]*'
+      - name: geom-num's doctests in release for this machine's own CPU
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 9 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --doc
+      - name: geom-num's every test vector in release for this machine's own CPU (part 2 of 2)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 10 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[e-z]*'
       - name: Every golden in debug
-        if: ${{ !cancelled() && matrix.mode == 'debug' }}
+        if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 1 }}
         # The runner calls `cargo test -p geom-test`, and cargo builds a package's binaries for its
         # integration tests: in this same debug folder that can mean replacing the running golden
         # binary, which Windows refuses ("failed to remove file ... golden.exe: Access is denied",
@@ -189,43 +375,73 @@ jobs:
           cp "target/debug/golden$exe" "$RUNNER_TEMP/golden$exe"
           "$RUNNER_TEMP/golden$exe" run
 
-  suite:
-    name: Test suite (${{ matrix.target.name }}, ${{ matrix.part.mode }}, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
-    needs: lint
-    runs-on: ${{ matrix.target.os }}
-    # Every test of every kernel crate, once per target and mode, split into parts that run side
-    # by side: each part runs the tests `--partition count:k/n` gives it. The release legs took
-    # 20 to 35 minutes in one piece and the debug legs 80 to 125, so release is two parts and debug
-    # four, each about a quarter of a leg's tests (part 1 also runs the doctests, which nextest does
-    # not). Every part builds what it runs from the same cache.
+  # Which crates' tests the change can reach (the paragraph above): the files of the change against
+  # the base `changes` found, or every crate when it found none. It runs beside `lint`, so it adds
+  # no wait.
+  scope:
+    name: Which crates' tests the change can reach
+    needs: changes
+    if: needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      crates: ${{ steps.scope.outputs.crates }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      # The diff between the base and this commit is the change, renames as a removed and an added
+      # file.
+      - name: The files the change touches
+        env:
+          BASE: ${{ needs.changes.outputs.base }}
+        run: |
+          if [ -n "$BASE" ]; then
+            git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch -q --no-tags --depth 1 origin "$BASE"
+            git diff --no-ext-diff --no-renames --name-only "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt --base $BASE" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: The crates whose tests it can reach, and why
+        id: scope
+        run: >-
+          cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope $SCOPE
+          --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # On each push to a pull request: the goldens of Linux x86-64 in release and the tests the change
+  # can reach, once, optimised with overflow checks and debug assertions on (principle 3), in four
+  # parts side by side: parts 1 and 2 the tests (`--partition count:k/2`), part 1 also the
+  # doctests, which nextest does not run; part 3 the goldens with checks on and as shipped, part 4
+  # the shipped checker's corpus, geom-num's vectors as shipped and the goldens for the runner's
+  # own CPU. On main's run 43809830554 part 1 took 32 minutes with every golden in it (goldens 20,
+  # tests 8) and part 2 took 11; each part is now one of those builds.
+  linux:
+    name: Tests (Linux x86-64, optimised with checks on, part ${{ matrix.k }} of 4)
+    needs: [changes, lint, scope]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
-      # Every part reports, so a failing test shows on which target and mode it fails.
       fail-fast: false
       matrix:
-        part:
-          - { mode: release, k: 1, n: 2 }
-          - { mode: release, k: 2, n: 2 }
-          - { mode: debug, k: 1, n: 4 }
-          - { mode: debug, k: 2, n: 4 }
-          - { mode: debug, k: 3, n: 4 }
-          - { mode: debug, k: 4, n: 4 }
-        # The targets of the job `test`, in the same order; the note on the Intel leg is there.
-        target:
-          - name: Linux x86-64
-            os: ubuntu-latest
-          - name: Linux arm64
-            os: ubuntu-24.04-arm
-          - name: Windows x86-64
-            os: windows-latest
-          - name: Windows arm64
-            os: windows-11-arm
-          - name: macOS arm64
-            os: macos-latest
-          - name: macOS x86-64
-            os: macos-15-intel
+        k: [1, 2, 3, 4]
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"
+      # A part the selection leaves without a test passes (nextest's `--no-tests`).
+      NEXTEST_NO_TESTS: pass
     defaults:
       run:
         shell: bash
@@ -238,10 +454,122 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's. One part saves it.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.k == 1 }}
+          key: linux
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case " $SELECTED " in *" $c "*) list="$list -p $c" ;; esac
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none}"
+      # The same build as the suite below, so the two share it.
+      - name: Every golden in release, with overflow checks and debug assertions on
+        if: ${{ !cancelled() && matrix.k == 3 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: Every golden in release as shipped, without overflow checks
+        if: ${{ !cancelled() && matrix.k == 3 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: The replay corpus and the transform sweep with the checker as shipped
+        if: ${{ !cancelled() && matrix.k == 4 }}
+        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
+      - name: geom-num's every test vector in release as shipped
+        if: ${{ !cancelled() && matrix.k == 4 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast
+      - name: Every golden in release for this machine's own CPU
+        if: ${{ !cancelled() && matrix.k == 4 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo run --locked -p geom-test --bin golden -- run --release
+      - name: The tests the change can reach, optimised with overflow checks and debug assertions on (part ${{ matrix.k }} of 2)
+        if: ${{ !cancelled() && matrix.k <= 2 && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.k }}/2
+      - name: Doctests, optimised with overflow checks and debug assertions on
+        if: ${{ !cancelled() && matrix.k == 1 && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+        run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
+
+  suite:
+    name: Test suite (${{ matrix.target.name }}, ${{ matrix.part.mode }}, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
+    needs: [changes, lint, scope]
+    # The merge queue's: the tests the change can reach on the other platforms, optimised with
+    # overflow checks and debug assertions on, and one plain debug run on Linux x86-64.
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ${{ matrix.target.os }}
+    # The tests the change reaches, once per target and mode, split into parts that run side by
+    # side: each part runs the tests `--partition count:k/n` gives it. Release is two parts and
+    # debug four, each about a quarter of a leg's tests (part 1 also runs the doctests, which
+    # nextest does not). Every part builds what it runs from the same cache.
+    timeout-minutes: 120
+    strategy:
+      # Every part reports, so a failing test shows on which target and mode it fails.
+      fail-fast: false
+      matrix:
+        part:
+          - { mode: release, k: 1, n: 2 }
+          - { mode: release, k: 2, n: 2 }
+        # The targets of the job `test` but Linux x86-64, whose optimised run is `linux`'s.
+        target:
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+          - name: Windows x86-64
+            os: windows-latest
+          - name: Windows arm64
+            os: windows-11-arm
+          - name: macOS arm64
+            os: macos-latest
+          - name: macOS x86-64
+            os: macos-15-intel
+        # The one plain debug run, on Linux x86-64.
+        include:
+          - part: { mode: debug, k: 1, n: 4 }
+            target: { name: Linux x86-64, os: ubuntu-latest }
+          - part: { mode: debug, k: 2, n: 4 }
+            target: { name: Linux x86-64, os: ubuntu-latest }
+          - part: { mode: debug, k: 3, n: 4 }
+            target: { name: Linux x86-64, os: ubuntu-latest }
+          - part: { mode: debug, k: 4, n: 4 }
+            target: { name: Linux x86-64, os: ubuntu-latest }
+    env:
+      CARGO_NEXTEST_VERSION: "0.9.146"
+      # A part the selection leaves without a test passes (nextest's `--no-tests`).
+      NEXTEST_NO_TESTS: pass
+      # Debug assertions on in the release legs too (the release steps add overflow checks).
+      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           # One part per leg saves it: all of a leg's parts restore and would save the same cache.
-          save-if: ${{ github.ref == 'refs/heads/main' && matrix.part.k == 1 }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.part.k == 1 }}
           # Release and debug builds are cached apart, so neither leg restores the other's.
           key: suite-${{ matrix.part.mode }}
       # The pre-built cargo-nextest of this version, its checksum checked by the action (a source
@@ -251,33 +579,45 @@ jobs:
         uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
-      # Every crate in the kernel's folder is run here, so a new crate is covered the day it lands
-      # (chapter 27: one folder per crate, folder name = crate name).
-      - name: List the kernel's crates
-        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do printf -- '-p %s ' "$(basename "$d")"; done)" >> "$GITHUB_ENV"
+      # Every crate in the kernel's folder that the change can reach (the job `scope`) is run here,
+      # so a new crate is covered the day it lands (chapter 27: one folder per crate, folder name =
+      # crate name). With none, the steps below are skipped and the part passes.
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case " $SELECTED " in *" $c "*) list="$list -p $c" ;; esac
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none}"
       - name: Test suite in release, with overflow checks on (part ${{ matrix.part.k }} of ${{ matrix.part.n }})
-        if: ${{ !cancelled() && matrix.part.mode == 'release' }}
+        if: ${{ !cancelled() && matrix.part.mode == 'release' && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
       - name: Test suite in debug (part ${{ matrix.part.k }} of ${{ matrix.part.n }})
-        if: ${{ !cancelled() && matrix.part.mode == 'debug' }}
+        if: ${{ !cancelled() && matrix.part.mode == 'debug' && env.KERNEL_CRATES != '' }}
         run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
       # nextest does not run doctests, so part 1 of each mode runs them, every one.
       - name: Doctests in release, with overflow checks on
-        if: ${{ !cancelled() && matrix.part.mode == 'release' && matrix.part.k == 1 }}
+        if: ${{ !cancelled() && matrix.part.mode == 'release' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
       - name: Doctests in debug
-        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 }}
+        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast
 
   big-endian:
     # The file format must not depend on byte order (chapter 28.13): geom-format's own tests and
     # the format museum, on s390x under QEMU's user mode. Pinned by the runner image's packages;
-    # the toolchain is the workspace's.
+    # the toolchain is the workspace's. Another platform, so the merge queue's.
     name: Format round trips on big-endian (s390x under QEMU)
+    needs: changes
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-24.04
     env:
       CARGO_TARGET_S390X_UNKNOWN_LINUX_GNU_LINKER: s390x-linux-gnu-gcc
@@ -297,16 +637,17 @@ jobs:
 
   guard:
     name: The toolchain guard trips
-    needs: lint
+    needs: [changes, lint]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # The proof of the toolchain and dependency guard (chapter 28.13; piece G20). This workflow
     # reruns every golden on every target whenever the toolchain pin, Cargo.lock, the workspace
-    # manifest or anything under the kernel changes (the path filters above), so a change there
-    # that moves a result fails the test job. This job shows that it would: `guard prove` patches
-    # in a copy of libm whose sin flips the last bit of every result, one ulp, and requires
-    # geom-num's determinism golden to report a digest that differs from the store's. A run that
-    # passes, builds the real libm, or fails for another reason fails this job.
+    # manifest or anything under the kernel changes (KERNEL_PATHS above), so a change there that
+    # moves a result fails the goldens. This job shows that it would: `guard prove` patches in a
+    # copy of libm whose sin flips the last bit of every result, one ulp, and requires geom-num's
+    # determinism golden to report a digest that differs from the store's. A run that passes,
+    # builds the real libm, or fails for another reason fails this job.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -316,25 +657,36 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           key: guard
       - name: A one-bit change to libm's sin fails a golden
         run: cargo run --locked --release -p geom-test --bin guard -- prove
 
+  # The goldens on wasm32 and the proof of the guard through them, eight parts to a runtime, a
+  # build each (the owner's rule of 15 minutes a job). On main's run 43953631233 the leg under
+  # wasmtime took 48 minutes in one job and nearly all of it was building, four builds one after
+  # another: the guard's run with the changed libm 12, the goldens with overflow checks on 11, as
+  # shipped 11 (the shipped checker's corpus 1 more), in debug 14 (8 of them running, geom-test's
+  # polyhedral corpus 3.3 alone). Parts: 1 the guard's proof; 2, 3 the goldens with overflow checks on
+  # (`golden run --part k/2`, whole crates to a part, every golden in exactly one); 4, 5 the goldens
+  # as shipped, 5 also the shipped checker's corpus; 6 to 8 the goldens in debug (`--part k/3`).
+  # geom-test's tests/queue_wiring.rs holds every step to exactly one part and every share whole.
   wasm:
-    name: Test (wasm32-wasip1 under ${{ matrix.runtime }})
-    needs: lint
+    name: Test (wasm32-wasip1 under ${{ matrix.runtime }}, part ${{ matrix.k }} of 8)
+    needs: [changes, lint]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
-    # The goldens on wasm32 and the proof of the guard through them; the test vectors and the whole
-    # suite are the job `wasm-suite`, side by side with this one.
-    timeout-minutes: 90
+    # The test vectors and the whole suite are the jobs `wasm-build` and `wasm-suite`, side by side
+    # with this one.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         # Chapter 21: wasm32 under wasmtime and under Node.
         runtime: [wasmtime, node]
+        k: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       WASMTIME_VERSION: "50.0.0"
       NODE_VERSION: "24"
@@ -351,9 +703,13 @@ jobs:
           targets: wasm32-wasip1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved). One part of
+          # each build saves it, under wasmtime: the parts of a build restore the same cache.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.runtime == 'wasmtime' && (matrix.k == 1 || matrix.k == 2 || matrix.k == 4 || matrix.k == 6) }}
+          # The guard's build (part 1), with overflow checks on (2, 3), as shipped (4, 5) and in
+          # debug (6 to 8) are cached apart, so no part restores another build's.
+          key: wasm-${{ matrix.k == 1 && 'guard' || matrix.k <= 3 && 'checked' || matrix.k <= 5 && 'shipped' || 'debug' }}
       # Every kernel crate in the kernel's folder; the development crates (chapter 27) need
       # processes and files that WASI test runs do not have, and run natively above.
       - name: List the kernel's crates
@@ -380,56 +736,110 @@ jobs:
           cat > "$RUNNER_TEMP/wasi-run.mjs" <<'EOF'
           // Runs a wasm32-wasip1 test binary under Node's WASI: cargo's runner for that target.
           // A failing test traps or exits non-zero, and either makes this process exit non-zero.
+          // A panic on wasm32 aborts the binary before proptest can shrink or save its case, so every random
+          // byte the binary draws (proptest's seeds, a hash map's keys) comes from one seed: SHA-256 of the
+          // seed and a block number, block after block. A failing run prints the seed, and the same binary
+          // run with the same arguments and WASI_RUN_SEED set to it draws the same bytes again.
+          import { createHash, randomBytes } from 'node:crypto';
           import { readFile } from 'node:fs/promises';
           import { WASI } from 'node:wasi';
-          import { argv, env, exit } from 'node:process';
+          import { argv, env, exit, stderr } from 'node:process';
 
           const [file, ...args] = argv.slice(2);
+          const seed = env.WASI_RUN_SEED || randomBytes(16).toString('hex');
           const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const imports = wasi.getImportObject();
+          let instance;
+          let block = 0;
+          imports.wasi_snapshot_preview1.random_get = (at, length) => {
+            const out = new Uint8Array(instance.exports.memory.buffer, at, length);
+            for (let done = 0; done < length; done += 32) {
+              const bytes = createHash('sha256').update(`${seed} ${block}`).digest();
+              block += 1;
+              out.set(bytes.subarray(0, length - done), done);
+            }
+            return 0;
+          };
+          const replay = () => stderr.write(`wasi-run: ${file} failed; WASI_RUN_SEED=${seed} replays its random bytes\n`);
           const module = await WebAssembly.compile(await readFile(file));
-          const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
-          exit(wasi.start(instance));
+          instance = await WebAssembly.instantiate(module, imports);
+          let code;
+          try {
+            code = wasi.start(instance);
+          } catch (error) {
+            replay();
+            throw error;
+          }
+          if (code !== 0) replay();
+          exit(code);
           EOF
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
       # Gate 1 (piece G43): the job `guard`'s proof, through this leg's own tool and runtime.
       # `libm`'s `sin` changed by one bit must make `golden run` fail on wasm32 too, with the golden
       # geom-num/determinism reporting a digest that differs from the store's (geom-test's `guard`).
+      # Its run is the whole of the shares parts 2 and 3 run, one build with the changed libm.
       - name: A one-bit change to libm's sin fails a golden on wasm32
+        if: ${{ matrix.k == 1 }}
         run: cargo run --locked --release -p geom-test --bin guard -- prove --golden-run --target wasm32-wasip1 --release
       # Every golden of the store, geom-test's included (its library's goldens are pure
       # computation, which WASI runs); the golden tool itself runs natively and builds and runs the
       # tests for wasm32-wasip1 through the runner set above.
-      - name: Every golden on wasm32 in release, with overflow checks on
-        if: ${{ !cancelled() }}
+      - name: Every golden on wasm32 in release, with overflow checks on (part 1 of 2)
+        if: ${{ !cancelled() && matrix.k == 2 }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1 --release
-      - name: Every golden on wasm32 in release as shipped, without overflow checks
-        if: ${{ !cancelled() }}
-        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1 --release
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --target wasm32-wasip1 --release
+      - name: Every golden on wasm32 in release, with overflow checks on (part 2 of 2)
+        if: ${{ !cancelled() && matrix.k == 3 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --target wasm32-wasip1 --release
+      - name: Every golden on wasm32 in release as shipped, without overflow checks (part 1 of 2)
+        if: ${{ !cancelled() && matrix.k == 4 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --target wasm32-wasip1 --release
+      - name: Every golden on wasm32 in release as shipped, without overflow checks (part 2 of 2)
+        if: ${{ !cancelled() && matrix.k == 5 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --target wasm32-wasip1 --release
       # The shipped-checker leg on wasm32, the build a browser runs (the job `test` says what it is).
       - name: The replay corpus and the transform sweep on wasm32 with the checker as shipped
-        if: ${{ !cancelled() }}
-        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism --target wasm32-wasip1
-      - name: Every golden on wasm32 in debug
-        if: ${{ !cancelled() }}
-        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1
+        if: ${{ !cancelled() && matrix.k == 5 }}
+        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism --target wasm32-wasip1 -- --nocapture
+      - name: Every golden on wasm32 in debug (part 1 of 3)
+        if: ${{ !cancelled() && matrix.k == 6 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/3 --target wasm32-wasip1
+      - name: Every golden on wasm32 in debug (part 2 of 3)
+        if: ${{ !cancelled() && matrix.k == 7 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/3 --target wasm32-wasip1
+      - name: Every golden on wasm32 in debug (part 3 of 3)
+        if: ${{ !cancelled() && matrix.k == 8 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 3/3 --target wasm32-wasip1
 
-  wasm-suite:
-    name: Test suite (wasm32-wasip1 under ${{ matrix.runtime }})
-    needs: lint
+  # The whole suite on wasm32 and geom-num's every test vector as shipped, each built once and run
+  # in parts (the owner's rule of 15 minutes a job). On main's run 43953631233 the suite under wasmtime
+  # took 41 minutes in one job, and most of it was running, not building: geom-num as shipped built
+  # in 3 and ran 10, the whole suite built in 7 and ran 21. wasm32-wasip1 has no threads, and `cargo
+  # test` ran the 365 test binaries one after another on one core. The binaries are the same under
+  # both runtimes, so `wasm-build` builds each of the two once, into a nextest archive its parts
+  # download, and runs their doctests, which nextest does not run, under each runtime; `wasm-suite`
+  # runs each archive's tests in parts under each runtime (`--partition count:k/n`), every test in
+  # its own process and the processes side by side on the runner's cores, so each test runs once a
+  # runtime with the build's own flags. geom-test's tests/queue_wiring.rs holds every build to its
+  # parts, 1 to n once under each runtime, and its doctests to once a runtime.
+  wasm-build:
+    name: Test suite build (wasm32-wasip1, ${{ matrix.build }})
+    needs: [changes, lint, scope]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
-    # geom-num's test vectors and the whole suite in release on wasm32, the other half of what the job
-    # `wasm` used to run in one piece.
-    timeout-minutes: 120
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        # Chapter 21: wasm32 under wasmtime and under Node.
-        runtime: [wasmtime, node]
+        # The whole suite in release with overflow checks on, and geom-num as shipped.
+        build: [checked, shipped]
     env:
       WASMTIME_VERSION: "50.0.0"
       NODE_VERSION: "24"
+      CARGO_NEXTEST_VERSION: "0.9.146"
     defaults:
       run:
         shell: bash
@@ -443,14 +853,190 @@ jobs:
           targets: wasm32-wasip1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          key: wasm-suite
-      # Every kernel crate in the kernel's folder; the development crates (chapter 27) need
-      # processes and files that WASI test runs do not have, and run natively above.
-      - name: List the kernel's crates
-        run: echo "KERNEL_CRATES=$(for d in projects/engines/geometry/crates/*/; do c="$(basename "$d")"; case "$c" in geom-test|geom-fuzz|geom-gen|geom-bench) ;; *) printf -- '-p %s ' "$c" ;; esac; done)" >> "$GITHUB_ENV"
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          key: wasm-build-${{ matrix.build }}
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
+      # Every kernel crate in the kernel's folder that the change can reach (the job `scope`); the
+      # development crates (chapter 27) need processes and files that WASI test runs do not have,
+      # and run natively above. The shipped build is geom-num's alone. With none, the build's steps
+      # are skipped, and so are its parts' runs.
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+          BUILD: ${{ matrix.build }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case "$c" in geom-test|geom-fuzz|geom-gen|geom-bench) continue ;; esac
+            if [ "$BUILD" = shipped ] && [ "$c" != geom-num ]; then continue; fi
+            case " $SELECTED " in *" $c "*) list="$list -p $c" ;; esac
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none}"
+      - name: Build the suite's tests on wasm32 in release, with overflow checks on
+        if: ${{ matrix.build == 'checked' && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked --archive-file "$RUNNER_TEMP/wasm-checked.tar.zst"
+      - name: Build geom-num's every test vector on wasm32 in release as shipped
+        if: ${{ matrix.build == 'shipped' && env.KERNEL_CRATES != '' }}
+        run: cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked --archive-file "$RUNNER_TEMP/wasm-shipped.tar.zst"
+      # Kept for a day: the parts of this run download it within minutes.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ env.KERNEL_CRATES != '' }}
+        with:
+          name: wasm-${{ matrix.build }}
+          path: ${{ runner.temp }}/wasm-${{ matrix.build }}.tar.zst
+          retention-days: 1
+          # The archive is compressed already.
+          compression-level: 0
+          if-no-files-found: error
+      - name: Install wasmtime ${{ env.WASMTIME_VERSION }}
+        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
+        uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1.1.3
+        with:
+          version: ${{ env.WASMTIME_VERSION }}
+      - name: Install Node ${{ env.NODE_VERSION }}
+        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Write the runner for Node's WASI (preview1)
+        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
+        run: |
+          wasmtime --version
+          cat > "$RUNNER_TEMP/wasi-run.mjs" <<'EOF'
+          // Runs a wasm32-wasip1 test binary under Node's WASI: cargo's runner for that target.
+          // A failing test traps or exits non-zero, and either makes this process exit non-zero.
+          // A panic on wasm32 aborts the binary before proptest can shrink or save its case, so every random
+          // byte the binary draws (proptest's seeds, a hash map's keys) comes from one seed: SHA-256 of the
+          // seed and a block number, block after block. A failing run prints the seed, and the same binary
+          // run with the same arguments and WASI_RUN_SEED set to it draws the same bytes again.
+          import { createHash, randomBytes } from 'node:crypto';
+          import { readFile } from 'node:fs/promises';
+          import { WASI } from 'node:wasi';
+          import { argv, env, exit, stderr } from 'node:process';
+
+          const [file, ...args] = argv.slice(2);
+          const seed = env.WASI_RUN_SEED || randomBytes(16).toString('hex');
+          const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const imports = wasi.getImportObject();
+          let instance;
+          let block = 0;
+          imports.wasi_snapshot_preview1.random_get = (at, length) => {
+            const out = new Uint8Array(instance.exports.memory.buffer, at, length);
+            for (let done = 0; done < length; done += 32) {
+              const bytes = createHash('sha256').update(`${seed} ${block}`).digest();
+              block += 1;
+              out.set(bytes.subarray(0, length - done), done);
+            }
+            return 0;
+          };
+          const replay = () => stderr.write(`wasi-run: ${file} failed; WASI_RUN_SEED=${seed} replays its random bytes\n`);
+          const module = await WebAssembly.compile(await readFile(file));
+          instance = await WebAssembly.instantiate(module, imports);
+          let code;
+          try {
+            code = wasi.start(instance);
+          } catch (error) {
+            replay();
+            throw error;
+          }
+          if (code !== 0) replay();
+          exit(code);
+          EOF
+      # The doctests, once under each runtime, from the build above (cargo builds no library
+      # again). The shipped build's are geom-num's as shipped, which `cargo test -p geom-num` ran.
+      - name: Doctests on wasm32 in release, with overflow checks on, under wasmtime
+        if: ${{ !cancelled() && matrix.build == 'checked' && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+        run: cargo test $KERNEL_CRATES --doc --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
+      - name: Doctests on wasm32 in release, with overflow checks on, under Node
+        if: ${{ !cancelled() && matrix.build == 'checked' && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: node --no-warnings ${{ runner.temp }}/wasi-run.mjs
+        run: cargo test $KERNEL_CRATES --doc --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
+      - name: geom-num's doctests on wasm32 in release as shipped, under wasmtime
+        if: ${{ !cancelled() && matrix.build == 'shipped' && env.KERNEL_CRATES != '' }}
+        env:
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+        run: cargo test $KERNEL_CRATES --doc --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
+      - name: geom-num's doctests on wasm32 in release as shipped, under Node
+        if: ${{ !cancelled() && matrix.build == 'shipped' && env.KERNEL_CRATES != '' }}
+        env:
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: node --no-warnings ${{ runner.temp }}/wasi-run.mjs
+        run: cargo test $KERNEL_CRATES --doc --target wasm32-wasip1 --release --locked --no-fail-fast -- --nocapture
+
+  wasm-suite:
+    name: Test suite (wasm32-wasip1 under ${{ matrix.runtime }}, ${{ matrix.part.build }}, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
+    needs: [changes, lint, scope, wasm-build]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # Chapter 21: wasm32 under wasmtime and under Node.
+        runtime: [wasmtime, node]
+        # Each build's parts, sized by the measured run (above). The suite ran 21 minutes on one
+        # core under wasmtime and its longest binary 3.2, so three parts on a runner's four cores;
+        # geom-num as shipped ran 10, so one (its 1,068 tests run from such an archive under
+        # wasmtime on a development machine, two at a time, all passing). Each part also lists every
+        # binary of its build, which compiles each once.
+        part:
+          - { build: checked, k: 1, n: 3 }
+          - { build: checked, k: 2, n: 3 }
+          - { build: checked, k: 3, n: 3 }
+          - { build: shipped, k: 1, n: 1 }
+    env:
+      WASMTIME_VERSION: "50.0.0"
+      NODE_VERSION: "24"
+      CARGO_NEXTEST_VERSION: "0.9.146"
+      # A part the selection leaves without a test passes (nextest's `--no-tests`).
+      NEXTEST_NO_TESTS: pass
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
+      # The same list as the build's: with none, the build archived nothing and the part passes.
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+          BUILD: ${{ matrix.part.build }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case "$c" in geom-test|geom-fuzz|geom-gen|geom-bench) continue ;; esac
+            if [ "$BUILD" = shipped ] && [ "$c" != geom-num ]; then continue; fi
+            case " $SELECTED " in *" $c "*) list="$list -p $c" ;; esac
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none}"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: ${{ env.KERNEL_CRATES != '' }}
+        with:
+          name: wasm-${{ matrix.part.build }}
+          path: ${{ runner.temp }}
       - name: Install wasmtime ${{ env.WASMTIME_VERSION }}
         if: matrix.runtime == 'wasmtime'
         uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1.1.3
@@ -473,32 +1059,101 @@ jobs:
           cat > "$RUNNER_TEMP/wasi-run.mjs" <<'EOF'
           // Runs a wasm32-wasip1 test binary under Node's WASI: cargo's runner for that target.
           // A failing test traps or exits non-zero, and either makes this process exit non-zero.
+          // A panic on wasm32 aborts the binary before proptest can shrink or save its case, so every random
+          // byte the binary draws (proptest's seeds, a hash map's keys) comes from one seed: SHA-256 of the
+          // seed and a block number, block after block. A failing run prints the seed, and the same binary
+          // run with the same arguments and WASI_RUN_SEED set to it draws the same bytes again.
+          import { createHash, randomBytes } from 'node:crypto';
           import { readFile } from 'node:fs/promises';
           import { WASI } from 'node:wasi';
-          import { argv, env, exit } from 'node:process';
+          import { argv, env, exit, stderr } from 'node:process';
 
           const [file, ...args] = argv.slice(2);
+          const seed = env.WASI_RUN_SEED || randomBytes(16).toString('hex');
           const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const imports = wasi.getImportObject();
+          let instance;
+          let block = 0;
+          imports.wasi_snapshot_preview1.random_get = (at, length) => {
+            const out = new Uint8Array(instance.exports.memory.buffer, at, length);
+            for (let done = 0; done < length; done += 32) {
+              const bytes = createHash('sha256').update(`${seed} ${block}`).digest();
+              block += 1;
+              out.set(bytes.subarray(0, length - done), done);
+            }
+            return 0;
+          };
+          const replay = () => stderr.write(`wasi-run: ${file} failed; WASI_RUN_SEED=${seed} replays its random bytes\n`);
           const module = await WebAssembly.compile(await readFile(file));
-          const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
-          exit(wasi.start(instance));
+          instance = await WebAssembly.instantiate(module, imports);
+          let code;
+          try {
+            code = wasi.start(instance);
+          } catch (error) {
+            replay();
+            throw error;
+          }
+          if (code !== 0) replay();
+          exit(code);
           EOF
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
-      - name: geom-num's every test vector on wasm32 in release as shipped
-        if: ${{ !cancelled() }}
-        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
-      # The whole suite in release. In debug, wasm32-wasip1 runs every test on one thread with no
-      # optimisation, which takes well over an hour, so the debug leg here is every golden of the
-      # store above (chapter 21 asks for the corpus in debug and release); the native jobs run the
-      # whole suite in debug.
-      - name: Test suite in release, with overflow checks on
-        if: ${{ !cancelled() }}
+      # The build's tests in this part's share, from the archive: the same binaries, flags and
+      # runtime `cargo test` ran them with, each test in a process of its own.
+      - name: Test suite on wasm32 in release (${{ matrix.part.build }}, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
+        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
+        run: cargo nextest run --archive-file "$RUNNER_TEMP/wasm-${{ matrix.part.build }}.tar.zst" --workspace-remap . --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
+
+  large-models:
+    # Gate 4 (G156): Manifold's seven models of more than 1,500 faces, each united alone and with a
+    # moved copy within its work budget, its exact volume inside the kernel's own (geom-test's
+    # tests/corpus_polyhedral.rs, `the_large_models_unite_within_their_work`, ignored in the
+    # suite). The merge queue's, when the change reaches a crate the unions run on (geom-poly,
+    # geom-bool or geom-mesh, as the job `scope` names them); otherwise its step is skipped and the
+    # job passes. The models are split over a few jobs by the test's own filter (SPAREKIT_MODELS),
+    # so each takes minutes: measured on the reference machine (15 Nov 2026), the two
+    # Generic_Twin_7081 models took 177 s and 107 s and the other five 2 to 15 s each, about
+    # five minutes in all, after a build.
+    name: Manifold's large models within their work (${{ matrix.models }})
+    needs: [changes, lint, scope]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every model of more than 1,500 faces, once; the test stops on a name that is not one.
+        models:
+          - Generic_Twin_7081.1.t0_left
+          - Generic_Twin_7081.1.t0_right
+          - Offset1,hull-body,hull-mask,self_intersectA,self_intersectB
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          key: large-models
+      - name: The models of more than 1,500 faces named here, united alone and with a moved copy
+        if: ${{ contains(format(' {0} ', needs.scope.outputs.crates), ' geom-poly ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-bool ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-mesh ') }}
         env:
-          RUSTFLAGS: -C overflow-checks=on
-        run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast
+          SPAREKIT_MODELS: ${{ matrix.models }}
+        run: >-
+          cargo test --locked --release -p geom-test --test corpus_polyhedral --
+          --ignored --exact the_large_models_unite_within_their_work
 
   lint:
     name: Format and lints
+    needs: changes
+    if: needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -514,9 +1169,9 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # Every crate in the kernel's folder is checked here, so a new crate is covered the day it
       # lands (chapter 27: one folder per crate, folder name = crate name).
       - name: List the kernel's crates
@@ -533,3 +1188,60 @@ jobs:
       - name: Clippy with the kernel lints
         if: ${{ !cancelled() }}
         run: cargo clippy $KERNEL_CRATES --all-targets --locked -- -D warnings
+
+  # The one check main's ruleset requires of this workflow (.github/rulesets/protect-main.json): it
+  # fails if any job failed or was cancelled, or if a job this event must run did not run, and in
+  # the merge queue it leaves the mark that lets the push to main skip the same tree.
+  done:
+    name: Kernel checks pass
+    needs: [changes, lint, scope, linux, guard, test, suite, wasm, wasm-build, wasm-suite, big-endian, large-models]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Every job that ran passed, and every job this event must run ran
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+          KERNEL: ${{ needs.changes.outputs.kernel }}
+          TESTED: ${{ needs.changes.outputs.tested }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          bad=$(jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key' <<< "$NEEDS")
+          if [ -n "$bad" ]; then
+            echo "::error::These jobs did not pass: $(echo $bad)"
+            exit 1
+          fi
+          test "$(jq -r '.changes.result' <<< "$NEEDS")" = success
+          if [ "$KERNEL" = true ] && [ "$TESTED" != true ]; then
+            # What each event runs (the paragraph at the top; tests/queue_wiring.rs holds these
+            # lists to each job's condition). A run by hand must run what a push runs.
+            case "$EVENT" in
+              pull_request) must="lint scope linux guard" ;;
+              merge_group) must="lint scope test suite wasm wasm-build wasm-suite big-endian large-models" ;;
+              *) must="lint scope linux guard test suite wasm wasm-build wasm-suite big-endian large-models" ;;
+            esac
+            for job in $must; do
+              result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")
+              if [ "$result" != success ]; then
+                echo "::error::$job must run on this $EVENT and its result is $result."
+                exit 1
+              fi
+            done
+          fi
+          echo "Every kernel check this $EVENT needs has passed."
+      - name: The merge queue's mark for this tree
+        if: github.event_name == 'merge_group' && needs.changes.outputs.kernel == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/mark"
+          echo "$GITHUB_SHA" > "$RUNNER_TEMP/mark/commit.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name == 'merge_group' && needs.changes.outputs.kernel == 'true'
+        with:
+          name: kernel-tested-${{ needs.changes.outputs.tree }}
+          path: ${{ runner.temp }}/mark
+          retention-days: 30
+          if-no-files-found: error

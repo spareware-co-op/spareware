@@ -1,0 +1,25 @@
+# Each kernel crate's seconds measuring its coverage with its own tests (`cargo llvm-cov -p
+# <crate> --release --branch`), from the log of the coverage job of main's run 43809830443 on
+# a5859e2a1: the span of each crate's group, the crates one after another on one runner, so a
+# crate's span holds the build of what it shares with the crates before it only the first time.
+# `geom_test::coverage::plan_parts` balances the coverage run's parts by them.
+geom-analysis	138
+geom-bool	108
+geom-bvh	114
+geom-check	30
+geom-curve	270
+geom-format	144
+geom-linalg	126
+geom-make	90
+geom-math	198
+geom-mesh	360
+geom-name	108
+geom-num	342
+geom-nurbs	186
+geom-op	168
+geom-p21	18
+geom-poly	168
+geom-pool	84
+geom-run	192
+geom-surface	258
+geom-topo	180

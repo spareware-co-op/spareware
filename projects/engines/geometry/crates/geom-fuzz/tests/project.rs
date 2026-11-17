@@ -3,8 +3,7 @@
 //!
 //! - `project_fuzz` wraps `geom_fuzz::project::harness` in `bolero::check!`: the crate's corpus and
 //!   crash files, then [`ITERATIONS`] random byte strings; a failing one's seed is printed as
-//!   `BOLERO_RANDOM_SEED=<seed>`. Under `cargo bolero test project_fuzz --package geom-fuzz` it is
-//!   a libFuzzer target.
+//!   `BOLERO_RANDOM_SEED=<seed>`.
 //! - `project_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly, the cases reach every kind and every shape of answer, and

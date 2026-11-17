@@ -110,7 +110,8 @@ fn off(s: &SurfaceKind, p: [f64; 3]) -> f64 {
         SurfaceKind::Cone(x) => {
             let (r0, k) = x.radius_and_slope();
             let (rho, z) = radial(x.center(), x.frame().normal());
-            (rho - (r0 + k * z * x.axial_sign()).abs()).abs()
+            // The point at v stands s·v high: its radius at height z is r₀ + (k/s)·z.
+            (rho - (r0 + k / x.axial_sign() * z).abs()).abs()
         }
         SurfaceKind::Torus(x) => {
             let (major, minor) = x.radii();

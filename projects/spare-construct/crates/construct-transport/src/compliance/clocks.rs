@@ -8,6 +8,7 @@ use super::data::c as table;
 use super::dates::{DAY, date_utc, iso_utc, long_date, parse_day, parts, valid_day, weekday};
 use super::jv::{Jx, V, jobj, st};
 use super::record::state;
+use crate::jsnum::i64_to_f64;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -16,33 +17,39 @@ thread_local! {
 }
 
 /// `easter(y)`: Easter Sunday of a year as a moment (UTC midnight).
+#[must_use]
 pub fn easter(y: i64) -> f64 {
-    let a = y % 19;
-    let b = y.div_euclid(100);
-    let c = y % 100;
-    let d = b.div_euclid(4);
-    let e = b % 4;
-    let f = (b + 8).div_euclid(25);
-    let g = (b - f + 1).div_euclid(3);
-    let h = (19 * a + b - d - g + 15) % 30;
-    let i = c.div_euclid(4);
-    let k = c % 4;
-    let l = (32 + 2 * e + 2 * i - h - k) % 7;
-    let m = (a + 11 * h + 22 * l).div_euclid(451);
-    let mo = (h + l - 7 * m + 114).div_euclid(31);
-    let da = ((h + l - 7 * m + 114) % 31) + 1;
-    date_utc(y as f64, (mo - 1) as f64, da as f64)
+    // The anonymous Gregorian algorithm (Meeus/Jones/Butcher), its a to m named. Bound: every step is small for any
+    // real year; the saturating steps only keep an absurd year from overflowing
+    let golden = y % 19;
+    let century = y.div_euclid(100);
+    let year_of_century = y % 100;
+    let century_quarter = century.div_euclid(4);
+    let century_rem = century % 4;
+    let lunar_corr = century.saturating_add(8).div_euclid(25);
+    let solar_corr = century.saturating_sub(lunar_corr).saturating_add(1).div_euclid(3);
+    let epact = golden.saturating_mul(19).saturating_add(century).saturating_sub(century_quarter).saturating_sub(solar_corr).saturating_add(15) % 30;
+    let yoc_quarter = year_of_century.div_euclid(4);
+    let yoc_rem = year_of_century % 4;
+    let to_sunday = (century_rem.saturating_mul(2).saturating_add(32).saturating_add(yoc_quarter.saturating_mul(2)).saturating_sub(epact).saturating_sub(yoc_rem)) % 7;
+    let march_corr = golden.saturating_add(epact.saturating_mul(11)).saturating_add(to_sunday.saturating_mul(22)).div_euclid(451);
+    let base = epact.saturating_add(to_sunday).saturating_sub(march_corr.saturating_mul(7)).saturating_add(114);
+    let mo = base.div_euclid(31);
+    let da = (base % 31).saturating_add(1);
+    date_utc(i64_to_f64(y), i64_to_f64(mo.saturating_sub(1)), i64_to_f64(da))
 }
 
 /// `nthMonday(y, m0, n)`: the nth Monday of a month (month 0 to 11) as a moment.
+#[must_use]
 pub fn nth_monday(y: i64, m0: f64, n: f64) -> f64 {
-    let first = weekday(date_utc(y as f64, m0, 1.0)) as f64;
+    let first = f64::from(weekday(date_utc(i64_to_f64(y), m0, 1.0)));
     let off = (8.0 - first) % 7.0;
-    date_utc(y as f64, m0, 1.0 + off + 7.0 * (n - 1.0))
+    date_utc(i64_to_f64(y), m0, 1.0 + off + 7.0 * (n - 1.0))
 }
 
 /// `holidays(y)`: the public holidays of a year as (YYYY-MM-DD, name) in the order they are added; a year with no Matariki date in the
 /// Act's schedule has the entry ("matariki-unknown", year).
+#[must_use]
 pub fn holidays(y: i64) -> Vec<(String, String)> {
     if let Some(h) = HOL.with(|c| c.borrow().get(&y).cloned()) {
         return h;
@@ -55,7 +62,7 @@ pub fn holidays(y: i64) -> Vec<(String, String)> {
             h.push((key, name));
         }
     };
-    let yf = y as f64;
+    let yf = i64_to_f64(y);
     let mond = |t: f64, n: &str, put: &mut dyn FnMut(String, String)| {
         put(iso_utc(t), n.to_string());
         let w = weekday(t);
@@ -91,9 +98,11 @@ fn holiday_name(y: i64, key: &str) -> Option<String> {
 
 /// `excluded(t, kind)`: why a day is not a working day ("Saturday", a holiday's name, the Christmas period ...), None for a working day.
 /// `kind` is "rma" (the default) or "ftaa".
+#[must_use]
 pub fn excluded(t: f64, kind: &str) -> Option<String> {
     let (y, m0, day, w) = parts(t)?;
-    let m = m0 + 1;
+    // m0 is in 0..12
+    let m = m0.saturating_add(1);
     let wd = table("WD").g(if table("WD").has(kind) { kind } else { "rma" });
     if w == 0 || w == 6 {
         return Some(if w == 0 { "Sunday" } else { "Saturday" }.to_string());
@@ -102,12 +111,12 @@ pub fn excluded(t: f64, kind: &str) -> Option<String> {
         return Some(h);
     }
     let (from, to) = (wd.g("from"), wd.g("to"));
-    if (m as f64 == from.ix(0).n() && day as f64 >= from.ix(1).n()) || (m as f64 == to.ix(0).n() && day as f64 <= to.ix(1).n()) {
+    if (f64::from(m) == from.ix(0).n() && f64::from(day) >= from.ix(1).n()) || (f64::from(m) == to.ix(0).n() && f64::from(day) <= to.ix(1).n()) {
         return Some(if kind == "ftaa" { "Christmas and New Year period (25 Dec \u{2013} 2 Jan)" } else { "Christmas period (20 Dec \u{2013} 10 Jan)" }.to_string());
     }
     if wd.g("newYear").t() && m == 1 {
         // Legislation Act s13: if 1 Jan is a Friday, the following Monday; if a Saturday or Sunday, the following Monday and Tuesday
-        let j1 = weekday(date_utc(y as f64, 0.0, 1.0));
+        let j1 = weekday(date_utc(i64_to_f64(y), 0.0, 1.0));
         if j1 == 5 && day == 4 {
             return Some("New Year (1 Jan fell on a Friday)".to_string());
         }
@@ -119,18 +128,21 @@ pub fn excluded(t: f64, kind: &str) -> Option<String> {
 }
 
 /// `isWorkingDay(s, kind)`.
+#[must_use]
 pub fn is_working_day(s: &str, kind: &str) -> bool {
     parse_day(s).is_some_and(|t| excluded(t, kind).is_none())
 }
 
 /// `addWorkingDays(s, n, kind)`: the day n working days after (or, for a negative n, before) a day, as YYYY-MM-DD; None when s is not a day.
+#[must_use]
 pub fn add_working_days(s: &str, n: f64, kind: &str) -> Option<String> {
     let mut t = parse_day(s)?;
     let step = if n >= 0.0 { 1.0 } else { -1.0 };
     let mut left = n.abs();
-    let mut guard = 0;
+    let mut guard = 0_u32;
     while left > 0.0 && guard < 2000 {
-        guard += 1;
+        // Bound: below 2000
+        guard = guard.saturating_add(1);
         t += step * DAY;
         if excluded(t, kind).is_none() {
             left -= 1.0;
@@ -140,30 +152,33 @@ pub fn add_working_days(s: &str, n: f64, kind: &str) -> Option<String> {
 }
 
 /// `workingDaysBetween(a, b, kind)`: the working days from a to b (negative when b is before a); None when either is not a day.
+#[must_use]
 pub fn working_days_between(a: &str, b: &str, kind: &str) -> Option<f64> {
-    let (mut t, e) = (parse_day(a)?, parse_day(b)?);
-    let s = if e >= t { 1.0 } else { -1.0 };
+    let (mut cur, end) = (parse_day(a)?, parse_day(b)?);
+    let step = if end >= cur { 1.0 } else { -1.0 };
     let mut n = 0.0;
-    while t != e {
-        t += s * DAY;
-        if excluded(t, kind).is_none() {
-            n += s;
+    while cur != end {
+        cur += step * DAY;
+        if excluded(cur, kind).is_none() {
+            n += step;
         }
     }
     Some(n)
 }
 
 /// `addMonths(s, n)`: the same day n months on, or the last day of a shorter month, as YYYY-MM-DD.
+#[must_use]
 pub fn add_months(s: &str, n: f64) -> Option<String> {
     let t = parse_day(s)?;
     let (y, m0, day, _) = parts(t)?;
-    let m = m0 as f64 + n;
-    let last = parts(date_utc(y as f64, m + 1.0, 0.0))?.2;
-    Some(iso_utc(date_utc(y as f64, m, (day.min(last)) as f64)))
+    let month = f64::from(m0) + n;
+    let last = parts(date_utc(i64_to_f64(y), month + 1.0, 0.0))?.2;
+    Some(iso_utc(date_utc(i64_to_f64(y), month, f64::from(day.min(last)))))
 }
 
 /// `clockFor(ev)`: the dates a statutory clock gives for an event (`{ kind, date, ... }`): the rows due, with warnings. None for an unknown
 /// kind or an event without a date.
+#[must_use]
 pub fn clock_for(ev: &V) -> Option<V> {
     let def = table("CLOCKS").g(&ev.g("kind").s());
     if !def.t() || !valid_day(ev.g("date")) {
@@ -174,7 +189,7 @@ pub fn clock_for(ev: &V) -> Option<V> {
     let mut out: Vec<V> = Vec::new();
     let mut warns: Vec<V> = Vec::new();
     let year: i64 = date.chars().take(4).collect::<String>().parse().unwrap_or(0);
-    if holidays(year).iter().any(|e| e.0 == "matariki-unknown") || holidays(year + 1).iter().any(|e| e.0 == "matariki-unknown") {
+    if holidays(year).iter().any(|e| e.0 == "matariki-unknown") || holidays(year.saturating_add(1)).iter().any(|e| e.0 == "matariki-unknown") {
         warns.push(st("Matariki is not in the Act's schedule for this year: check the dates by hand."));
     }
     for r in def.g("rules").items() {
@@ -226,6 +241,7 @@ pub fn clocks(p: &V) -> V {
 }
 
 /// `rfiTemplate(P)`: the response to a request for further information.
+#[must_use]
 pub fn rfi_template(p: &V) -> String {
     let r = super::record::regime(p);
     let c = state(p);

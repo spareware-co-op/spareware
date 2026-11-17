@@ -1,7 +1,7 @@
 //! Junction tools: junction sites, SIDRA-style volumes and the junction panel's calculations (port of features/junctions.js).
 //!
 //! The prototype's junctions workspace builds the junction summary, the SIDRA-style Movement Summary, the comparison across
-//! scenarios, the +10% flow-scale test and the SIDRA hand-off, and the exports (junction_movements.csv, turning_movements.csv,
+//! scenarios, the +10% flow-scale test and the SIDRA hand-off, and the exports (`junction_movements.csv`, `turning_movements.csv`,
 //! the SIDRA volumes CSV, the SIDRA 11 loader script and the printable volume grids), the turning diagram and the report's
 //! junction sections. This module ports every calculation and every piece of exported text; the interface wiring (click
 //! handlers, inspector sections, the map layer and tool) is left out.
@@ -33,7 +33,7 @@ pub use text::*;
 
 use crate::edit::json::JsonValue;
 use crate::graph::{js_sort_by, js_str_lt};
-use crate::jsnum::{to_precision, value_to_js_string};
+use crate::jsnum::{to_precision, usize_to_f64, value_to_js_string};
 use crate::project::{Project, Scenario, Settings};
 use crate::results::{Approach, NodeRes, Res, Results, SiteResult, export_ready};
 use crate::standards::STANDARDS as ENGINE_STANDARDS;
@@ -41,6 +41,12 @@ use crate::turns::{Arm, arms, code_arms, junction_name, site_rows};
 use crate::util::LatLng;
 use serde_json::Value;
 use std::collections::HashSet;
+use std::sync::LazyLock;
+
+/// The scenario [`Tools::sc`] gives for an index past the project's scenarios.
+static NO_SCENARIO: LazyLock<Scenario> = LazyLock::new(|| crate::project::new_scenario("", ""));
+/// The results [`Tools::sc`] gives for an index past the stored results.
+static NO_RESULTS: LazyLock<Results> = LazyLock::new(Results::new);
 
 /* ---------------- the junctions feature's data ---------------- */
 
@@ -140,13 +146,13 @@ pub const SIDRA: Standard = Standard {
 };
 
 /// SIDRA site type by control (`siteType`), None for other controls.
+#[must_use]
 pub fn sidra_site_type(control: &str) -> Option<f64> {
     match control {
         "signals" => Some(0.0),
         "roundabout" => Some(1.0),
-        "priority" => Some(2.0),
+        "priority" | "none" => Some(2.0),
         "stop" => Some(3.0),
-        "none" => Some(2.0),
         _ => None,
     }
 }
@@ -204,14 +210,17 @@ pub struct Sc<'a> {
 
 impl<'a> Sc<'a> {
     /// `resOf(sc, p)`: the stored result of a period.
+    #[must_use]
     pub fn res_of(&self, p: &str) -> Option<&'a Res> {
         self.res.get(p)
     }
     /// `periodsOf(sc)`: the periods with results, in the time-periods order, then any others in text order.
+    #[must_use]
     pub fn periods(&self) -> Vec<String> {
         periods_of(self.res)
     }
     /// The scenario's name, or its id when it has none (`sc.name || sc.id`).
+    #[must_use]
     pub fn name_or_id(&self) -> String {
         match self.sc.name.as_str() {
             Some(n) if !n.is_empty() => n.to_string(),
@@ -219,6 +228,7 @@ impl<'a> Sc<'a> {
         }
     }
     /// The scenario's name as the prototype prints it (`esc(sc.name)`: a missing name is empty).
+    #[must_use]
     pub fn name(&self) -> &'a str {
         self.sc.name.as_str().unwrap_or("")
     }
@@ -249,31 +259,39 @@ impl<'a> Tools<'a> {
         }
     }
     /// The same tools reading the untyped parts of the project from its JSON.
+    #[must_use]
     pub fn with_raw(mut self, raw: &'a JsonValue) -> Tools<'a> {
         self.raw = Some(raw);
         self
     }
     /// `Store.S`: the project's settings.
+    #[must_use]
     pub fn st(&self) -> &'a Settings {
         &self.project.settings
     }
     /// Scenario i with its results.
+    #[must_use]
     pub fn sc(&self, i: usize) -> Sc<'a> {
+        // Callers pass the index of a scenario in the project; one out of range (which the prototype would crash on) reads as
+        // an empty scenario with no results.
         Sc {
-            sc: &self.project.scenarios[i],
-            res: &self.results[i],
+            sc: self.project.scenarios.get(i).unwrap_or_else(|| LazyLock::force(&NO_SCENARIO)),
+            res: self.results.get(i).unwrap_or_else(|| LazyLock::force(&NO_RESULTS)),
             idx: i,
         }
     }
     /// Every scenario with its results (`P.scenarios`).
+    #[must_use]
     pub fn scs(&self) -> Vec<Sc<'a>> {
         (0..self.project.scenarios.len()).map(|i| self.sc(i)).collect()
     }
     /// `suppText(P)`: the E27 tier 1 marker the compliance feature gives, or an empty text.
+    #[must_use]
     pub fn supp_text(&self) -> String {
         self.host.supplementary(self.project)
     }
     /// `suppNote(P)`: the marker as a note above a table, or nothing.
+    #[must_use]
     pub fn supp_note(&self) -> String {
         let t = self.supp_text();
         if t.is_empty() {
@@ -303,17 +321,18 @@ pub(crate) fn js_sort_strings(v: &mut [String]) {
 }
 
 /// `periodsOf(sc)`: the periods that have results, in the time-periods order (AM, IP, PM, SAT), then the others sorted.
+#[must_use]
 pub fn periods_of(res: &Results) -> Vec<String> {
     let ks: Vec<&str> = res.keys().collect();
     let mut out: Vec<String> = ORDER
         .iter()
         .filter(|p| ks.contains(p))
-        .map(|p| p.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     let mut rest: Vec<String> = ks
         .iter()
         .filter(|p| !ORDER.contains(p))
-        .map(|p| p.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     js_sort_strings(&mut rest);
     out.extend(rest);
@@ -321,6 +340,7 @@ pub fn periods_of(res: &Results) -> Vec<String> {
 }
 
 /// `periodsOfAll(scs)`: the periods that any of the scenarios has results for.
+#[must_use]
 pub fn periods_of_all(scs: &[Sc]) -> Vec<String> {
     let mut seen: Vec<String> = Vec::new();
     for s in scs {
@@ -333,7 +353,7 @@ pub fn periods_of_all(scs: &[Sc]) -> Vec<String> {
     let mut out: Vec<String> = ORDER
         .iter()
         .filter(|p| seen.iter().any(|q| q == *p))
-        .map(|p| p.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     let mut rest: Vec<String> = seen
         .iter()
@@ -351,11 +371,12 @@ pub(crate) fn norm(b: f64) -> f64 {
 }
 
 /// `hash(s)`: FNV-1a over the UTF-16 code units, as base 36 text.
+#[must_use]
 pub fn hash(s: &str) -> String {
-    let mut h: u32 = 0x811c9dc5;
+    let mut h: u32 = 0x811c_9dc5;
     for u in s.encode_utf16() {
-        h ^= u as u32;
-        h = h.wrapping_mul(0x01000193);
+        h ^= u32::from(u);
+        h = h.wrapping_mul(0x0100_0193);
     }
     to_base36(h)
 }
@@ -364,17 +385,17 @@ fn to_base36(mut n: u32) -> String {
     if n == 0 {
         return "0".to_string();
     }
-    let mut d = Vec::new();
+    let mut d: Vec<char> = Vec::new();
     while n > 0 {
-        let r = (n % 36) as u8;
-        d.push(if r < 10 { b'0' + r } else { b'a' + r - 10 });
+        // n % 36 is below 36, so from_digit always gives a digit or a lowercase letter
+        d.extend(char::from_digit(n % 36, 36));
         n /= 36;
     }
-    d.reverse();
-    String::from_utf8(d).expect("ASCII")
+    d.iter().rev().collect()
 }
 
 /// `ncText(res)`: the convergence marker for exports forced past the gate, or an empty text.
+#[must_use]
 pub fn nc_text(res: &Res) -> String {
     if export_ready(Some(res)).ok {
         String::new()
@@ -489,6 +510,7 @@ pub struct Entry<'a> {
 
 impl Entry<'_> {
     /// `kind`: "site" or "node".
+    #[must_use]
     pub fn kind_name(&self) -> &'static str {
         if self.is_site { "site" } else { "node" }
     }
@@ -500,7 +522,7 @@ pub(crate) fn centre(sc: &Scenario, ids: &[String]) -> Option<LatLng> {
     if ns.is_empty() {
         return None;
     }
-    let n = ns.len() as f64;
+    let n = usize_to_f64(ns.len());
     let lat = ns.iter().fold(0.0, |s, x| s + x.lat.num()) / n;
     let lng = ns.iter().fold(0.0, |s, x| s + x.lng.num()) / n;
     Some([lat, lng])
@@ -512,6 +534,32 @@ fn node_at_site_no(sc: &Scenario, id: &str) -> Value {
         .and_then(|n| n.extra.get("atSiteNo"))
         .cloned()
         .unwrap_or(Value::Null)
+}
+
+/// The uncontrolled junctions with turning traffic that `entries(sc, res, { all: true })` adds.
+fn push_uncontrolled<'a>(sc: &Scenario, res: &'a Res, in_site: &HashSet<&str>, out: &mut Vec<Entry<'a>>) {
+    for id in res.turns.keys() {
+        if res.nodes.contains_key(id) || in_site.contains(id) || !sc.nodes.contains_key(id) {
+            continue;
+        }
+        let Some(n) = sc.nodes.get(id) else {
+            continue;
+        };
+        out.push(Entry {
+            id: id.to_string(),
+            is_site: false,
+            name: junction_name(sc, id, None),
+            nr: None,
+            node: id.to_string(),
+            nodes: vec![id.to_string()],
+            kind: match n.control.as_str() {
+                Some(c) if !c.is_empty() => c.to_string(),
+                _ => "none".to_string(),
+            },
+            at_site_no: Value::Null,
+            ll: Some(n.ll()),
+        });
+    }
 }
 
 /// `entries(sc, res, opts)`: the junctions in a result, sorted by name then id. `all` adds uncontrolled junctions with turning traffic.
@@ -570,7 +618,9 @@ pub fn entries<'a>(sc: &Scenario, res: &'a Res, all: bool) -> Vec<Entry<'a>> {
         if in_a_site || in_site.contains(id) || !sc.nodes.contains_key(id) {
             continue;
         }
-        let n = &sc.nodes[id];
+        let Some(n) = sc.nodes.get(id) else {
+            continue;
+        };
         out.push(Entry {
             id: id.to_string(),
             is_site: false,
@@ -584,26 +634,7 @@ pub fn entries<'a>(sc: &Scenario, res: &'a Res, all: bool) -> Vec<Entry<'a>> {
         });
     }
     if all {
-        for id in res.turns.keys() {
-            if res.nodes.contains_key(id) || in_site.contains(id) || !sc.nodes.contains_key(id) {
-                continue;
-            }
-            let n = &sc.nodes[id];
-            out.push(Entry {
-                id: id.to_string(),
-                is_site: false,
-                name: junction_name(sc, id, None),
-                nr: None,
-                node: id.to_string(),
-                nodes: vec![id.to_string()],
-                kind: match n.control.as_str() {
-                    Some(c) if !c.is_empty() => c.to_string(),
-                    _ => "none".to_string(),
-                },
-                at_site_no: Value::Null,
-                ll: Some(n.ll()),
-            });
-        }
+        push_uncontrolled(sc, res, &in_site, &mut out);
     }
     js_sort_by(&mut out, |p, q| {
         let c = crate::edit::collate::locale_compare_f64(&p.name, &q.name);
@@ -619,6 +650,7 @@ pub fn entries<'a>(sc: &Scenario, res: &'a Res, all: bool) -> Vec<Entry<'a>> {
 }
 
 /// `entryFor(sc, res, id)`: the entry that shows a node: its site when it belongs to one in this result, else the node itself.
+#[must_use]
 pub fn entry_for<'a>(sc: &Scenario, res: &'a Res, id: &str) -> Option<Entry<'a>> {
     let all = entries(sc, res, true);
     if let Some(i) = all.iter().position(|e| e.id == id) {
@@ -642,6 +674,7 @@ pub struct Leg {
 }
 
 /// `nodeLegs(sc, res, nodeId)`: the arms of a node coded with NZ / SIDRA legs.
+#[must_use]
 pub fn node_legs(sc: &Scenario, res: Option<&Res>, node_id: &str) -> Vec<Leg> {
     let empty: Vec<crate::results::TurnRow> = Vec::new();
     let list = res.and_then(|r| r.turns.get(node_id)).unwrap_or(&empty);
@@ -657,6 +690,7 @@ pub fn node_legs(sc: &Scenario, res: Option<&Res>, node_id: &str) -> Vec<Leg> {
 }
 
 /// `legsOf(sc, res, e)`: a site's legs, or a node's arms.
+#[must_use]
 pub fn legs_of(sc: &Scenario, st: &Settings, res: &Res, e: &Entry) -> Vec<Leg> {
     if e.is_site && res.sites.as_ref().is_some_and(|m| m.contains_key(&e.id)) {
         return site_rows(sc, Some(res), st, &e.id)
@@ -673,6 +707,7 @@ pub fn legs_of(sc: &Scenario, st: &Settings, res: &Res, e: &Entry) -> Vec<Leg> {
 }
 
 /// `movesOf(sc, res, e)`: the movement rows of a site, or of a node.
+#[must_use]
 pub fn moves_of(
     sc: &Scenario,
     st: &Settings,
@@ -687,6 +722,7 @@ pub fn moves_of(
 }
 
 /// `xid(e)`: the stable junction id for files that leave Spare Construct: a node keeps its id; a site is 'J' and a hash of its sorted member nodes.
+#[must_use]
 pub fn xid(e: &Entry) -> String {
     if e.is_site {
         let mut ns = e.nodes.clone();

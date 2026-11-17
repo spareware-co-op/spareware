@@ -2405,6 +2405,23 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .iter()
                 .map(|&(t, p)| geom_mesh::envelope::TriangleEnvelope::new(t, 1 << 16)?.contains(p)),
         ),
+        ("mesh", "decimate") => fold(inputs::mesh::decimate(class).iter().map(|(p, t)| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let settings = geom_mesh::model::Decimate {
+                epsilon: 4,
+                target: 0,
+            };
+            geom_mesh::model::decimate(p, t, settings, &geom_run::Exec::serial(), &mut meter)
+        })),
+        ("mesh", "remesh") => fold(inputs::mesh::remesh(class).iter().map(|(p, t)| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let settings = geom_mesh::model::Remesh {
+                epsilon: 4,
+                length: 64,
+                iterations: 1,
+            };
+            geom_mesh::model::remesh(p, t, settings, &geom_run::Exec::serial(), &mut meter)
+        })),
         ("mesh", "boolean") => fold(inputs::mesh::boolean(class).iter().map(|pair| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::boolean::boolean(
@@ -2414,6 +2431,15 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 &geom_run::Exec::serial(),
                 &mut meter,
             )
+        })),
+        ("mesh", "hull") => fold(inputs::mesh::hull(class).iter().map(|points| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::hull::Hull::of(points, &mut meter)
+        })),
+        ("mesh", "slice") => fold(inputs::mesh::slice(class).iter().map(|layers| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let exec = geom_run::Exec::serial();
+            geom_mesh::slice::slice(&layers.solid, &layers.planes, &exec, &mut meter)
         })),
         ("mesh", "cdt") => fold(inputs::mesh::cdt(class).iter().map(|t| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
@@ -2439,6 +2465,15 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 index.within(*center, *radius, &mut meter)
             },
         )),
+        // The broad phase's pairs, recomputed from the box tree directly.
+        ("curved", "broad_pairs") => {
+            fold(inputs::curved::broad_scenes(class).iter().map(|entries| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let tree =
+                    geom_bvh::BoxTree::build(entries, &geom_run::Exec::serial(), &mut meter)?;
+                tree.pairs(&mut meter)
+            }))
+        }
         // The pool's results must be the serial executor's, so both are recomputed serially.
         ("helper", "lone_serial" | "lone_pool") => {
             let lists = if name == "lone_serial" {
@@ -5683,8 +5718,9 @@ fn the_pull_request_cannot_loosen_its_own_gate() {
 fn a_removed_benchmark_fails_the_gate() {
     // Renaming a benchmark drops it from the comparison, so a workflow that only warned would let
     // a rename hide a regression. The step must fail on an unretired removal.
-    let step = workflow_step("List changes over 1% and benchmarks not compared");
-    let fails = step.contains("::error::") || !step.trim_end().ends_with("exit 0");
+    let step = workflow_step("Benchmarks of the merge base the change no longer has");
+    assert!(step.contains("geom-bench-counts\" removed"), "{step}");
+    let fails = step.contains("::error::") && !step.trim_end().ends_with("exit 0");
     assert!(fails, "a removed benchmark only raises a warning:\n{step}");
 }
 

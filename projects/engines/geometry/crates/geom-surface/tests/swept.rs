@@ -191,3 +191,32 @@ fn swept_kinds_convert_within_their_error() {
     let (l, rr) = r.split(Direction::V, 0.5, m).unwrap();
     assert_eq!((l.deviation, rr.deviation), (0.0, 0.0));
 }
+
+/// A surface of revolution knows its axis while it has only been moved along: the axis point and
+/// frame it was built with, the point carried by a translation, and none once a quarter turn has
+/// made its placement's linear part other than the identity.
+#[test]
+fn a_revolution_knows_its_axis_until_it_is_turned() {
+    let m = &mut meter();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let r = Revolution::new(
+        line([3.0, 0.0, 0.0], [0.0, 0.0, 2.0]),
+        [1.0, -2.0, 0.5],
+        frame,
+        (0.0, 2.0),
+    )
+    .unwrap();
+    assert_eq!(r.axis(), Some(([1.0, -2.0, 0.5], frame)));
+    let shift = TypedTransform::from(
+        RationalTransform::new([[1, 0, 0], [0, 1, 0], [0, 0, 1]], [5, -7, 11], 1).unwrap(),
+    );
+    let SurfaceKind::Revolution(moved) = r.transformed(&shift, m).unwrap().value else {
+        panic!("a translation keeps the kind")
+    };
+    assert_eq!(moved.axis(), Some(([6.0, -9.0, 11.5], frame)));
+    let turn = TypedTransform::Exact(GridTransform::quarter_turns(Axis::X, 1));
+    let SurfaceKind::Revolution(turned) = r.transformed(&turn, m).unwrap().value else {
+        panic!("a turn keeps the kind")
+    };
+    assert_eq!(turned.axis(), None);
+}

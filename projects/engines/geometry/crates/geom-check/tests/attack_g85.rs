@@ -21,10 +21,10 @@ use common::{
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_curve::{Axes, Basis, CurveKind, Ellipse, Frame, Line, Trimmed};
-use geom_math::Box3;
+use geom_math::{Box3, RationalTransform, TypedTransform};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_run::BudgetKind;
-use geom_surface::Cone;
+use geom_surface::{Cone, Cylinder, ParamSurface};
 use geom_surface::{Extrusion, Plane, SurfaceKind, Torus};
 use geom_topo::BodyKind;
 
@@ -189,6 +189,89 @@ fn a_vertex_off_a_cone_is_judged_by_its_perpendicular_distance() {
     let mut r = cone();
     r.points[1] = P3::new(0, 0, 14).unwrap();
     assert!(off(&at(&r, 64), 1, 1));
+}
+
+/// `surface` under the whole-number similarity x ↦ `scale`·x, with no deviation.
+fn similar(surface: &SurfaceKind, scale: [[i64; 3]; 3]) -> SurfaceKind {
+    let t = TypedTransform::from(RationalTransform::new(scale, [0; 3], 1).unwrap());
+    let moved = surface.transformed(&t, &mut meter()).unwrap();
+    assert_eq!(moved.deviation, 0.0);
+    moved.value
+}
+
+/// x ↦ 2x, and the mirror x ↦ (−2x, 2y, 2z), with the axial factor each leaves a round kind of
+/// factor 1 about the z axis: the same image of a kind turned about z.
+const TWICE: [([[i64; 3]; 3], f64); 2] = [
+    ([[2, 0, 0], [0, 2, 0], [0, 0, 2]], 2.0),
+    ([[-2, 0, 0], [0, 2, 0], [0, 0, 2]], -2.0),
+];
+
+#[test]
+fn a_scaled_cone_is_measured_per_unit_of_height() {
+    // The cone of `cone()` (radius 6 at z = 0, apex at z = 12, radius 1/2 less per unit of height)
+    // as the image of one half its size, radius 3 − v/2 at height v, under each of `TWICE`: r₀ = 6,
+    // k = −1 and s = ±2, the point at v at height 2v. Its radius per unit of height along the
+    // frame's axis is k/s; k·s (∓2) gave the apex's height a radius of −18, never certified.
+    let half = SurfaceKind::Cone(
+        Cone::new(
+            [0.0; 3],
+            3.0,
+            -0.5,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 6.0)),
+        )
+        .unwrap(),
+    );
+    for (scale, factor) in TWICE {
+        let side = similar(&half, scale);
+        let SurfaceKind::Cone(c) = &side else {
+            panic!("a similarity keeps a cone")
+        };
+        assert_eq!(c.axial_sign(), factor);
+        assert_eq!(c.radius_and_slope(), (6.0, -1.0));
+        let mut r = cone();
+        r.surfaces[1] = side.clone();
+        // Its apex and seam lie on it.
+        let faults = at(&r, 1);
+        assert!(faults.is_empty(), "{factor}: {faults:?}");
+        // The base vertex moved out 3 steps is 3 / √(1 + 1/4) ≈ 2.68 steps from it, as from the
+        // cone built at its size (k·s made it 3 / √5 ≈ 1.34).
+        r.points[0] = P3::new(9, 0, 0).unwrap();
+        assert!(off(&at(&r, 2), 0, 1), "{factor}");
+        assert!(!off(&at(&r, 3), 0, 1), "{factor}");
+    }
+}
+
+#[test]
+fn a_scaled_cylinder_is_measured_from_its_points() {
+    // The cylinder of `seamed_cylinder()` (radius 5, heights 0 to 10) as the image of one half its
+    // size under each of `TWICE`: s = ±2. Group 2 reads a cylinder's height from the point,
+    // h = w · n̂, never from its parameter v, so the factor does not enter and the verdicts are the
+    // built cylinder's. This pins that it stays so.
+    let half = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [0.0; 3],
+            2.5,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 5.0)),
+        )
+        .unwrap(),
+    );
+    for (scale, factor) in TWICE {
+        let side = similar(&half, scale);
+        let SurfaceKind::Cylinder(c) = &side else {
+            panic!("a similarity keeps a cylinder")
+        };
+        assert_eq!(c.axial_sign(), factor);
+        let mut r = seamed_cylinder();
+        r.surfaces[2] = side.clone();
+        let faults = at(&r, 1);
+        assert!(faults.is_empty(), "{factor}: {faults:?}");
+        // The top vertex moved out 2 steps: off at a bound of 1, on at 2.
+        r.points[1] = P3::new(7, 0, 10).unwrap();
+        assert!(off(&at(&r, 1), 1, 2), "{factor}");
+        assert!(!off(&at(&r, 2), 1, 2), "{factor}");
+    }
 }
 
 #[test]

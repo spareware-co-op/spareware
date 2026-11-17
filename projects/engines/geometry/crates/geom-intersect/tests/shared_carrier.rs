@@ -245,3 +245,24 @@ fn analysis_claims_no_overlap_for_patches_that_only_touch_or_wrap() {
         );
     }
 }
+
+#[test]
+fn nothing_is_claimed_for_tori_that_differ_in_any_one_datum() {
+    let domain = ((0.0, 1.0), (0.0, 1.0));
+    let base = torus(domain);
+    let turned = Frame::new([0.0, 1.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let others = [
+        // Another frame: the same axis, u counted from another direction.
+        Torus::new([0.0; 3], 3.0 * UNIT, UNIT, turned, domain).unwrap(),
+        // Other radii.
+        Torus::new([0.0; 3], 3.0 * UNIT, 2.0 * UNIT, frame(), domain).unwrap(),
+        Torus::new([0.0; 3], 2.0 * UNIT, UNIT, frame(), domain).unwrap(),
+        // Another centre.
+        Torus::new([0.0, 0.0, UNIT], 3.0 * UNIT, UNIT, frame(), domain).unwrap(),
+    ];
+    for other in others {
+        let other = SurfaceKind::Torus(other);
+        assert_eq!(shortcut(&base, &other), None, "{other:?}");
+        assert_eq!(shortcut(&other, &base), None, "{other:?}");
+    }
+}

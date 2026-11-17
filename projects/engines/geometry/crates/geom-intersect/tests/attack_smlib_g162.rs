@@ -32,6 +32,8 @@
     reason = "tests: native arithmetic, casts and indexing, platform maths on an independent oracle (the formula as it is written), prose that names defect files, and a failure stops the test"
 )]
 
+mod miri;
+
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -48,10 +50,19 @@ use geom_intersect::{
 use geom_nurbs::{Basis, Curve, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Plane, Sphere, SurfaceKind};
+use miri::{case, rounds};
 
 /// A meter above what any case here takes, so a search that loses its way fails, not hangs.
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 22))
+}
+
+/// A meter of 2^`bits` natively, and under Miri of 2^`miri`, for a call the test holds to a
+/// refusal by the budget: it is refused there too, after a fraction of the work, which at the full
+/// meter is hours under Miri.
+fn short_meter(bits: u32, miri: u32) -> WorkMeter<'static> {
+    assert!(miri <= bits, "a Miri meter is at most the native one");
+    WorkMeter::new(Budget::of_work(1 << case(bits, miri)))
 }
 
 /// A meter for the surface with four stacked runs, whose search is longer.
@@ -147,8 +158,10 @@ fn near_centre(rho: f64, a: f64) -> [f64; 2] {
 fn wr_740_a_point_near_an_arcs_centre_has_its_foot_at_the_points_angle() {
     let quarter = arc([1.0, 2.0], 5.0, (0.0, 0.5));
     let mut bad: Vec<String> = Vec::new();
-    for rho in [0.1, 0.05, 1e-2, 1e-3, 1e-4] {
-        for a in [0.05, 0.25, 0.45] {
+    // Under Miri one test point a fifth of a unit from the centre, at the first angle: the cost
+    // grows as the radius over the gap, and the nearer points are minutes each there.
+    for &rho in case(&[0.1, 0.05, 1e-2, 1e-3, 1e-4][..], &[0.2][..]) {
+        for &a in rounds(&[0.05, 0.25, 0.45], &[0.05]) {
             let p = near_centre(rho, a);
             let found = match project_curve(&quarter, &p, 1e-9, &mut meter()) {
                 Ok(found) => found,
@@ -190,7 +203,7 @@ fn wr_740_a_point_near_an_arcs_centre_has_its_foot_at_the_points_angle() {
         }
     }
     // A test point whose angle is past the arc's start: the start is nearest, on the boundary.
-    for rho in [1e-2, 1e-3, 1e-4] {
+    for &rho in case(&[1e-2, 1e-3, 1e-4][..], &[0.2][..]) {
         let p = near_centre(rho, -0.5);
         let want = (25.0_f64 + rho * rho).sqrt();
         match project_curve(&quarter, &p, 1e-9, &mut meter()) {
@@ -236,7 +249,7 @@ fn wr_740_a_point_a_millionth_of_the_radius_from_the_centre_is_stopped_by_the_bu
     let quarter = arc([1.0, 2.0], 5.0, (0.0, 0.5));
     for a in [0.05, 0.25, 0.45] {
         let p = near_centre(1e-6, a);
-        let found = project_curve(&quarter, &p, 1e-9, &mut meter());
+        let found = project_curve(&quarter, &p, 1e-9, &mut short_meter(22, 9));
         assert!(
             matches!(found, Err(IntersectError::BudgetExceeded)),
             "a {a}: {}",
@@ -254,7 +267,14 @@ fn wr_740_the_cost_near_a_centre_grows_as_the_radius_over_the_gap() {
         let mut m = WorkMeter::new(Budget::of_work(1u64 << bits));
         project_curve(&quarter, &near_centre(rho, 0.25), 1e-9, &mut m)
     };
-    for (rho, enough, short_of) in [(1e-2, 15, 13), (1e-3, 20, 16)] {
+    // Under Miri the same law a half and a fifth of a unit from the centre, with their own measured
+    // budgets (the least that answers is 755 and 1,803 units): each step nearer costs more there
+    // too, and the native decades are minutes each.
+    let steps = case(
+        &[(1e-2, 15, 13), (1e-3, 20, 16)][..],
+        &[(0.5, 10, 8), (0.2, 11, 9)][..],
+    );
+    for &(rho, enough, short_of) in steps {
         let found = run(rho, enough);
         let Ok(Projection::Points(points)) = &found else {
             panic!("rho {rho} at 2^{enough}: {}", short(&found));
@@ -326,7 +346,8 @@ fn spline_foot_failures(rho: f64, a: f64, bad: &mut Vec<String>) {
 #[test]
 fn wr_740_the_same_on_a_rational_spline_arc() {
     let mut bad: Vec<String> = Vec::new();
-    for rho in [0.1, 1e-2, 1e-3] {
+    // Under Miri the farthest of the points: the cost grows as the radius over the gap.
+    for &rho in rounds(&[0.1, 1e-2, 1e-3], &[0.1]) {
         for a in [PI / 8.0, 3.0 * PI / 8.0] {
             spline_foot_failures(rho, a, &mut bad);
         }
@@ -350,7 +371,8 @@ fn wr_740_the_same_on_a_rational_spline_arc() {
 #[test]
 fn wr_740_a_foot_at_the_middle_of_a_rational_spline_arc_is_one_point() {
     let mut bad: Vec<String> = Vec::new();
-    for rho in [0.1, 1e-2, 1e-3] {
+    // Under Miri the farthest of the points, as in the test above.
+    for &rho in rounds(&[0.1, 1e-2, 1e-3], &[0.1]) {
         spline_foot_failures(rho, PI / 4.0, &mut bad);
     }
     assert!(
@@ -413,7 +435,7 @@ fn wr_740_a_foot_on_a_cut_of_a_parabola_spline_is_one_point() {
 fn wr_740_a_spline_arc_at_a_hundred_thousandth_of_the_radius_is_stopped_by_the_budget() {
     for a in [PI / 8.0, 3.0 * PI / 8.0] {
         let p = [1e-5 * a.cos(), 1e-5 * a.sin()];
-        let found = project_curve(&spline_quarter(), &p, 1e-9, &mut meter());
+        let found = project_curve(&spline_quarter(), &p, 1e-9, &mut short_meter(22, 11));
         assert!(
             matches!(found, Err(IntersectError::BudgetExceeded)),
             "a {a}: {}",
@@ -536,7 +558,9 @@ fn hang_50_huge_weights_on_a_tiny_net_end_with_the_right_distance_or_a_refusal()
         [f64::MAX; 4],
         [f64::MAX, 1.0, 1.0, 1.0],
     ];
-    for w in sets {
+    // Under Miri the defect's weights without the unit control, whose search to a floor of 1e-12
+    // outlasts the time limit there (Miri's clock counts the steps it interprets).
+    for &w in rounds(&sets, &sets[1..]) {
         let found = within(120, move || {
             let surface = square(1e-6, 0.0, w)?;
             Some(project_surface(
@@ -574,7 +598,8 @@ fn hang_20_a_coordinate_in_the_top_decade_ends_with_the_right_distance_or_a_refu
         f64::MAX,
         f64::MIN,
     ];
-    for z in zs {
+    // Under Miri two of them: the first value SMLib never returned at, and the largest double.
+    for &z in rounds(&zs, &[-8e307, f64::MAX]) {
         let found = within(120, move || {
             square(1.0, z, [1.0; 4])
                 .map(|s| project_surface(&s, &[0.2, 0.3, 0.0], FLOOR, &mut meter()))
@@ -678,6 +703,12 @@ fn hang_32_a_subnormal_or_extreme_floor_ends_and_a_bad_one_is_refused() {
             )
         });
         right_or_refused(&found, 4.0, 1e-6, &format!("line, floor {floor:e}"));
+        // Under Miri the sphere patch only at the two largest floors: a search of it to a finer
+        // floor outlasts the time limit there (Miri's clock counts the steps it interprets), and
+        // the arc and the segment above take every floor.
+        if !rounds(&floors, &floors[6..]).contains(&floor) {
+            continue;
+        }
         let found = within(120, move || {
             let frame = Frame::standard().unwrap();
             let sphere = Sphere::new([0.0; 3], 4.0, frame, ((0.1, 1.9), (-0.3, 0.3))).unwrap();
@@ -734,6 +765,10 @@ fn hang_32_a_subnormal_or_extreme_floor_ends_and_a_bad_one_is_refused() {
 /// the far point must not claim the point is on the kind.
 #[test]
 fn ub_169_a_gap_whose_square_overflows_gives_the_distance_or_a_refusal() {
+    // Under Miri the plane is the square of half-side 1/16 searched to a floor of a tenth, and
+    // the sphere, which the meter stops at 1e150, has a meter of 2^7: each of those searches is
+    // minutes there at the native size, for the same answer.
+    let (half, flat) = case((1.0, FLOOR), (0.0625, 0.1));
     for scale in [1e150, 1e155, 1e300, f64::MAX] {
         let slack = scale * 1e-6;
         let found = project_curve(
@@ -762,13 +797,13 @@ fn ub_169_a_gap_whose_square_overflows_gives_the_distance_or_a_refusal() {
                 [0.0; 3],
                 [1.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0],
-                ((-1.0, 1.0), (-1.0, 1.0)),
+                ((-half, half), (-half, half)),
             )
             .unwrap(),
         );
-        let found = project_surface(&plane, &[0.0, 0.0, scale], FLOOR, &mut meter());
+        let found = project_surface(&plane, &[0.0, 0.0, scale], flat, &mut meter());
         right_or_refused(&found, scale, slack, &format!("plane, {scale:e}"));
-        let inverted = invert_surface(&plane, &[0.0, 0.0, scale], 1e-5, FLOOR, &mut meter());
+        let inverted = invert_surface(&plane, &[0.0, 0.0, scale], 1e-5, flat, &mut meter());
         assert!(
             !matches!(inverted, Ok(Some(_))),
             "plane, {scale:e}: {inverted:?}"
@@ -777,7 +812,7 @@ fn ub_169_a_gap_whose_square_overflows_gives_the_distance_or_a_refusal() {
         let sphere = SurfaceKind::Sphere(
             Sphere::new([0.0; 3], 4.0, frame, ((0.0, 2.0), (-0.5, 0.5))).unwrap(),
         );
-        let found = project_surface(&sphere, &[0.0, scale, 0.0], FLOOR, &mut meter());
+        let found = project_surface(&sphere, &[0.0, scale, 0.0], FLOOR, &mut short_meter(22, 7));
         right_or_refused(&found, scale, slack, &format!("sphere, {scale:e}"));
     }
 }

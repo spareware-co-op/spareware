@@ -456,16 +456,26 @@ fn oracle_decimal(text: &str) -> Result<BigRational, DecimalError> {
     if value.is_zero() {
         return Ok(value);
     }
-    // The exponent in lowest terms: value = m·10^e with m not divisible by 10.
+    // The exponent in lowest terms: value = m·10^e with m not divisible by 10. The value is n/d in
+    // lowest terms (a rational is kept reduced). A whole number loses a factor 10 while it has one;
+    // otherwise e = −k for the least k with n·10^k whole, that is d | 10^k, n and d being coprime.
+    // Integer steps, not a rational divided or multiplied by 10 and reduced by a gcd at each step:
+    // those gcds of numbers of up to 1,400 bits were nearly all of this test's time.
+    let ten = BigInt::from(10);
     let mut e = 0i64;
-    let mut v = value.clone();
-    while v.is_integer() && (v.to_integer() % BigInt::from(10)).is_zero() {
-        v /= int(10);
-        e += 1;
-    }
-    while !v.is_integer() {
-        v *= int(10);
-        e -= 1;
+    if value.is_integer() {
+        let mut m = value.to_integer();
+        while m.is_multiple_of(&ten) {
+            m /= &ten;
+            e += 1;
+        }
+    } else {
+        let d = value.denom();
+        let mut p = BigInt::one();
+        while !p.is_multiple_of(d) {
+            p *= &ten;
+            e -= 1;
+        }
     }
     if !(-340..=340).contains(&e) {
         return Err(DecimalError::ExponentRange);

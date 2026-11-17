@@ -17,6 +17,16 @@
 //! - **The same numbers however the boxes fell.** Faces, edges and vertices are numbered by exact
 //!   keys that depend on the shape alone: not on the boxes, the leaf size, the threads, or the order
 //!   the pieces came in (11.3; tested).
+//! - **A point's name is its own.** A vertex on the grid is named by its three axis planes. One off
+//!   the grid is named by the lowest three planes of the faces that meet at it, in plane order and
+//!   canonical form, that meet in one point: 11.3's lowest valid triple, of planes the body holds.
+//!   Its faces are the shape's, so its name is too, whatever planes the boxes' cuts ran through
+//!   it; the planes through its corners, which the name was once read from, are not (#908). Its
+//!   exact coordinates in lowest terms would be its own as well, but they pass a plane's budget,
+//!   and a vertex is a meeting of three planes its body holds (24.3). Where the faces at a point
+//!   lie on fewer than three such planes, as at a seam's vertex, a sheet's rim or the end of a
+//!   section's curve, the bounds of its edges' fins come next and then the other planes through
+//!   its corners, and that part of the name is as the pieces were cut (tested).
 //! - **Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by
 //!   their Plücker coordinates, in at most 576 bits, and nothing is rounded.
 //! - **Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has
@@ -25,7 +35,9 @@
 //!   [`Outward::polygon`] names where it came from, for a caller's history.
 //! - **Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a
 //!   seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut
-//!   that ends inside a face leaves it whole, with no slit.
+//!   that ends inside a face leaves it whole, with no slit. A cut lying in a face's own plane
+//!   holds a seam only along its outline: its pieces on both sides of a line, as the boxes and
+//!   the convex split part it, cancel, so a result has no vertex where the boxes fell.
 //! - **No recursion.** Disjoint sets and rings are walked in loops (principle 13).
 //!
 //! Method: chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), which
@@ -91,7 +103,7 @@ const RADIAL: Phase = Phase::new("merge: radial order");
 /// Each face's rings.
 const RINGS: Phase = Phase::new("merge: rings");
 
-/// Each vertex's name, its lowest three planes.
+/// Each vertex's name: its axis planes, or the lowest three planes of its faces.
 const NAMES: Phase = Phase::new("merge: vertex names");
 
 /// Runs or edges, a few dozen a task.
@@ -344,6 +356,9 @@ struct Held<'p> {
     given: usize,
     /// Its face in canonical form, reduced once, which [`nest`]'s tracing reads.
     face: Canonical,
+    /// Its plane, either way it faces, among the sheets' planes in their order; for a cut on
+    /// none of them, [`NO_SHEET`].
+    plane: usize,
 }
 
 /// A corner of a piece: the point where its face and two of its bounds meet, which holds those
@@ -358,7 +373,8 @@ struct Corner {
 }
 
 /// One point of the merge: the first of its corners in the sorted order, and where the run of its
-/// corners lies in that order, whose planes [`named`] reads where it is off the grid.
+/// corners lies in that order, whose planes [`named`] reads last, where it is off the grid and its
+/// faces and its fins' bounds do not name it.
 struct Place<'c> {
     corner: &'c Corner,
     run: (usize, usize),
@@ -919,6 +935,10 @@ struct Side {
     sheet: usize,
     /// The piece, an index into the held pieces.
     held: usize,
+    /// Its piece's plane among the sheets' planes, as [`Held::plane`].
+    plane: usize,
+    /// Whether its piece faces the other way from its plane's canonical form.
+    flipped: bool,
     /// The bound the side lies on, positive inside the piece.
     bound: Plane,
 }
@@ -995,6 +1015,9 @@ fn join(parents: &mut [usize], a: usize, b: usize) {
 /// The sheet of a side no face owns: a cut's, which only holds seams open.
 const CUT: usize = usize::MAX;
 
+/// The plane of a cut that lies on no sheet's plane.
+const NO_SHEET: usize = usize::MAX;
+
 /// What one stretch of a line holds of one sheet: the net of its sides, and a side each way.
 type Holding<'s> = (i32, Option<&'s Side>, Option<&'s Side>);
 
@@ -1060,12 +1083,21 @@ fn stretch<'s, I>(
 where
     I: Iterator<Item = &'s Side>,
 {
-    let mut cut = false;
+    // The cuts along the stretch, each plane and facing with the net of its sides, in that order.
+    let mut cuts: Vec<((usize, bool), i32)> = Vec::new();
     // Each sheet's holding, in sheet order: a stretch holds few sheets, so a sorted list.
     let mut held: Vec<(usize, Holding<'s>)> = Vec::with_capacity(2);
     for side in active {
         if side.sheet == CUT {
-            cut = true;
+            let (key, way) = ((side.plane, side.flipped), if side.rising { 1 } else { -1 });
+            match cuts.binary_search_by_key(&key, |(on, _)| *on) {
+                Ok(at) => {
+                    for (_, net) in cuts.iter_mut().skip(at).take(1) {
+                        *net = net.saturating_add(way);
+                    }
+                }
+                Err(at) => cuts.insert(at, (key, way)),
+            }
             continue;
         }
         let at = match held.binary_search_by_key(&side.sheet, |(sheet, _)| *sheet) {
@@ -1083,6 +1115,12 @@ where
             }
         }
     }
+    // A cut holds a sheet's seam open unless it lies in the sheet's own plane with pieces of it on
+    // both sides, facing one way: one cut the boxes or the convex split parted, which cancels.
+    let holds_open = |a: &Side| {
+        cuts.iter()
+            .any(|((plane, _), net)| *plane != a.plane || *net != 0)
+    };
     let mut fins = Vec::with_capacity(held.len());
     for (sheet, (net, up, down)) in held {
         let fin = |side: &Side, rising: bool| RunFin {
@@ -1092,7 +1130,7 @@ where
             bound: side.bound,
         };
         match (net, up, down) {
-            (0, Some(a), Some(b)) if cut => {
+            (0, Some(a), Some(b)) if holds_open(a) => {
                 fins.push(fin(a, true));
                 fins.push(fin(b, false));
             }
@@ -1132,6 +1170,11 @@ fn whole_runs(runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
         }
     }
     whole
+}
+
+/// A canonical plane's coefficients, either way it faces: what the sheets are sorted by first.
+fn plane_key(face: &Canonical) -> (i128, [i128; 3]) {
+    (face.plane.d(), face.plane.n())
 }
 
 /// A piece's place among the sheets: its canonical plane, which way it faces, and with seams kept
@@ -1196,9 +1239,15 @@ fn sheets_of<'p>(
     let mut sheets: Vec<Sheet> = Vec::new();
     let mut held = Vec::with_capacity(order.len());
     let mut last: Option<&SheetKey> = None;
+    // How many planes the sheets so far lie on: the keys start with the plane, so one plane's
+    // sheets come together.
+    let mut planes = 0usize;
     for at in order {
         let outward = pieces.get(at).ok_or(MergeError::Open)?;
         let (key, face) = keys.get(at).ok_or(MergeError::Open)?;
+        if last.map(|k| k.0) != Some(key.0) {
+            planes = planes.saturating_add(1);
+        }
         if last != Some(key) {
             sheets.push(Sheet {
                 face: outward.piece.face,
@@ -1212,6 +1261,7 @@ fn sheets_of<'p>(
             piece: &outward.piece,
             given: at,
             face: *face,
+            plane: planes.saturating_sub(1),
         });
     }
     Ok((sheets, held))
@@ -1540,40 +1590,155 @@ fn splits_boxes(plane: &Plane) -> bool {
         && plane.d() & 1 != 0
 }
 
-/// Place `id`'s point under a name the boxes cannot change. A grid point is named by its three
-/// axis planes: which corners it has, and so which planes reach it, depends on how far each box's
-/// cuts run (a face that only touches a corner of another solid is cut there in one box and not
-/// in a smaller one). A point off the grid takes the first three planes through its corners, in
-/// plane order and leaving out the boxes' own, that meet in one point; one with no such three,
-/// which only a seam has, keeps its first corner's.
-fn named(points: &Points<'_>, id: usize, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
-    let place = points.places.get(id).ok_or(MergeError::Open)?;
-    if let Some(at) = grid_point(place.corner)? {
-        return Ok(at);
+/// What the edges that end at one point bring it, which name it where it is off the grid: the
+/// planes of the faces they bound, in canonical form, and the bounds their fins stand on, as the
+/// pieces write them.
+#[derive(Debug, Default)]
+struct Brought {
+    faces: Vec<Plane>,
+    bounds: Vec<Plane>,
+}
+
+/// For each place of `used`, the runs that end there, as places in `runs`; none for a place whose
+/// cells say it is a grid point, which its axis planes name, so a merge of grid points gathers
+/// nothing.
+fn runs_at(runs: &[Run], used: &[usize], points: &Points<'_>) -> Vec<Vec<usize>> {
+    let on_grid = |id: usize| {
+        let place = points.places.get(id);
+        let cells = place.and_then(|place| place.corner.cells.as_ref());
+        cells.is_some_and(|cells| cells.iter().all(|cell| cell.rest == 0))
+    };
+    let mut at: Vec<Vec<usize>> = alloc::vec![Vec::new(); used.len()];
+    for (e, run) in runs.iter().enumerate() {
+        for id in [run.low, run.high] {
+            if on_grid(id) {
+                continue;
+            }
+            // `used` is the runs' ends, so each has its place there; one past the end has no list.
+            let place = used.binary_search(&id).unwrap_or(used.len());
+            at.iter_mut()
+                .skip(place)
+                .take(1)
+                .for_each(|list| list.push(e));
+        }
     }
-    let (start, end) = place.run;
-    let run = points.order.get(start..end).ok_or(MergeError::Open)?;
-    let mut list: Vec<Plane> = Vec::with_capacity(run.len().saturating_mul(3));
-    for at in run {
-        let corner = points.corners.get(*at).ok_or(MergeError::Open)?;
-        let planes = corner.point.planes().iter();
-        list.extend(planes.filter(|plane| !splits_boxes(plane)));
+    at
+}
+
+/// What the runs `here`, places in `runs`, bring the point they end at.
+fn brought(here: &[usize], runs: &[Run], held: &[Held<'_>]) -> Result<Brought, MergeError> {
+    let mut out = Brought::default();
+    for run in here.iter().filter_map(|e| runs.get(*e)) {
+        for fin in &run.fins {
+            let piece = held.get(fin.held).ok_or(MergeError::Open)?;
+            out.faces.push(piece.face.plane);
+            out.bounds.push(fin.bound);
+        }
     }
-    list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
-    list.dedup();
-    let mut found = None;
-    'search: for (i, a) in list.iter().enumerate() {
+    Ok(out)
+}
+
+/// A plane's place in plane order: its normal, then its offset.
+fn plane_order(plane: &Plane) -> ([i128; 3], i128) {
+    (plane.n(), plane.d())
+}
+
+/// Puts after `list` the planes of `more` it does not hold, each in canonical form and once, in
+/// plane order, leaving out the boxes' splits.
+fn then_in_plane_order(list: &mut Vec<Plane>, more: &[Plane]) -> Result<(), NumError> {
+    let mut next = Vec::with_capacity(more.len());
+    for plane in more.iter().filter(|plane| !splits_boxes(plane)) {
+        let plane = canonical(plane)?.plane;
+        if !list.contains(&plane) {
+            next.push(plane);
+        }
+    }
+    next.sort_unstable_by_key(plane_order);
+    next.dedup();
+    list.append(&mut next);
+    Ok(())
+}
+
+/// The first three of `list`, in its order, that meet in one point, as that point.
+fn first_meeting(list: &[Plane], meter: &mut WorkMeter<'_>) -> Result<Option<Tpi>, MergeError> {
+    for (i, a) in list.iter().enumerate() {
         for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
             for c in list.iter().skip(j.saturating_add(1)) {
                 meter.charge(1)?;
                 if normals_sign(a, b, c)? != Sign::Zero {
-                    found = Some(Tpi::meeting(*a, *b, *c)?);
-                    break 'search;
+                    return Ok(Some(Tpi::meeting(*a, *b, *c)?));
                 }
             }
         }
     }
-    Ok(found.unwrap_or(place.corner.point))
+    Ok(None)
+}
+
+/// Place `id`'s point under a name the boxes cannot change, `ends` holding what the edges that
+/// end there bring it.
+///
+/// A grid point is named by its three axis planes. A point off the grid is named by the lowest
+/// three planes of the faces that meet at it, in plane order, that meet in one point: 11.3's
+/// lowest valid triple, of planes the body holds, as 24.3 stores a vertex. The faces that meet at
+/// a point are the shape's: they are the faces of the edges that end there, which the sweep finds
+/// the same however the boxes fell. So the name is the point's own.
+///
+/// The planes through the point's corners are not the shape's, and the name once took its three
+/// from them (#908). A local cut runs a polygon's plane across the whole of a piece, past the
+/// polygon's own outline, so in one box a plane reaches a point that its polygon never touches,
+/// and in smaller boxes, where the polygon and the point are apart, it does not: an edge of one
+/// solid lying in the plane of another's face, crossed by a third face outside that face's
+/// outline, was named by that plane at one leaf size and not at another. No rule that reads
+/// corners can tell such a plane from the point's own.
+///
+/// The other way to a name that is the point's own, its exact coordinates in lowest terms, was
+/// not taken: a point off the grid has a weight of up to 252 bits, so three axis planes through
+/// it pass a plane's budget (6.2), and a vertex would no longer be a meeting of three planes its
+/// body holds.
+///
+/// Every vertex of a closed result has faces on three planes that meet only there: its edges lie
+/// on two lines at least, or the sweep would have run them into one, and each edge's faces lie
+/// on two planes through its line. A seam's vertex, a sheet's rim and the end of a section's
+/// curve can have fewer. There the bounds the edges' fins stand on come after the faces' planes,
+/// and after them the other planes through the point's corners, each in canonical form and in
+/// plane order, leaving out the boxes' splits; a point with no three even then keeps its first
+/// corner's. Those planes are the pieces', so that part of such a name is as the pieces were
+/// cut.
+///
+/// A plane is read in canonical form because one plane reaches a point written either way, as a
+/// face and as a bound of the face beside it, and at more than one scale: `geom-bool` makes a
+/// face's plane through three points of its surface and a side stood on an edge's two ends, each
+/// as long as those points make it, two operands' faces on one plane are one sheet, and a local
+/// cut or a carve puts another polygon's planes, as written, among a piece's bounds.
+fn named(
+    points: &Points<'_>,
+    id: usize,
+    ends: &Brought,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Tpi, MergeError> {
+    let place = points.places.get(id).ok_or(MergeError::Open)?;
+    if let Some(at) = grid_point(place.corner)? {
+        return Ok(at);
+    }
+    let mut list = ends.faces.clone();
+    list.sort_unstable_by_key(plane_order);
+    list.dedup();
+    if let Some(at) = first_meeting(&list, meter)? {
+        return Ok(at);
+    }
+    then_in_plane_order(&mut list, &ends.bounds)?;
+    if let Some(at) = first_meeting(&list, meter)? {
+        return Ok(at);
+    }
+    let (start, end) = place.run;
+    let run = points.order.get(start..end).ok_or(MergeError::Open)?;
+    let mut through: Vec<Plane> = Vec::with_capacity(run.len().saturating_mul(3));
+    for at in run {
+        let corner = points.corners.get(*at).ok_or(MergeError::Open)?;
+        through.extend(corner.point.planes());
+    }
+    then_in_plane_order(&mut list, &through)?;
+    Ok(first_meeting(&list, meter)?.unwrap_or(place.corner.point))
 }
 
 /// A corner's point named by its three axis planes, when it is a grid point: read from its cells,
@@ -1645,6 +1810,8 @@ fn sides_of(
                     rising: from < to,
                     sheet: entry.sheet,
                     held: at,
+                    plane: entry.plane,
+                    flipped: entry.face.flipped,
                     bound: *bound,
                 });
             }
@@ -2368,6 +2535,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
             piece,
             given,
             face: canonical(&piece.face)?,
+            plane: NO_SHEET,
         });
     }
     let made = corners_of(&held, &[], &Exec::serial(), meter)?;
@@ -2392,9 +2560,11 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
         edges.push((vertex(run.low)?, vertex(run.high)?));
         meets.push(run.fins.iter().map(|fin| fin.held).collect());
     }
+    let ending = runs_at(&runs, &used, &points);
     let mut vertices = Vec::with_capacity(used.len());
-    for id in &used {
-        vertices.push(named(&points, *id, meter)?);
+    for (id, here) in used.iter().zip(&ending) {
+        let ends = brought(here, &runs, &held)?;
+        vertices.push(named(&points, *id, &ends, meter)?);
     }
     Ok(Curves {
         vertices,
@@ -2483,13 +2653,22 @@ fn merged(
 ) -> Result<(Merged, Option<Memo>), MergeError> {
     let (sheets, mut held) = sheets_of(pieces, mode, exec, meter)?;
     let kept = held.len();
-    for piece in rules.cuts {
-        held.push(Held {
-            sheet: CUT,
-            piece,
-            given: CUT,
-            face: canonical(&piece.face)?,
-        });
+    if !rules.cuts.is_empty() {
+        // The sheets' planes, in the held pieces' order, which is theirs: a cut on one of them
+        // takes its number.
+        let mut on: Vec<(i128, [i128; 3])> =
+            held.iter().map(|entry| plane_key(&entry.face)).collect();
+        on.dedup();
+        for piece in rules.cuts {
+            let face = canonical(&piece.face)?;
+            held.push(Held {
+                sheet: CUT,
+                piece,
+                given: CUT,
+                plane: on.binary_search(&plane_key(&face)).unwrap_or(NO_SHEET),
+                face,
+            });
+        }
     }
     // With a memo to keep: each piece's key, its parts where the last memo holds them, and the
     // orders to start the sorts from.
@@ -2726,7 +2905,12 @@ fn merged(
             .take(1)
             .for_each(|s| s.faces.push(at));
     }
-    let vertices = exec.try_map(meter, NAMES, RUNS, &used, |_, id, m| named(&points, *id, m));
+    // Each vertex's name, from the faces of the runs that end at it.
+    let ending = runs_at(&runs, &used, &points);
+    let vertices = exec.try_map(meter, NAMES, RUNS, &used, |at, id, m| {
+        let here = ending.get(at).ok_or(MergeError::Open)?;
+        named(&points, *id, &brought(here, &runs, &held)?, m)
+    });
     let vertices = vertices.map_err(|e| phase_error(e, meter))?;
     // The memo: each piece's parts under its key, a last merge's as they came and this merge's
     // made of its corners and its sides' lines, now that nothing reads them here.

@@ -20,7 +20,7 @@
 //!
 //! - **One record per signature**, and every record names its fixture.
 //! - **"Theirs" names its report**, and "ours" its fix: neither can be recorded empty.
-//! - **The nightly run fails only on a new signature**, so a known difference never hides a new one
+//! - **An oracle run fails only on a new signature**, so a known difference never hides a new one
 //!   and is never argued twice.
 //!
 //! Method: chapter 28.10's triage (`projects/engines/geometry/architecture/28-testing.md`).

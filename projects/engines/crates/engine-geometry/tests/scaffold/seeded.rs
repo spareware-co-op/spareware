@@ -253,7 +253,7 @@ fn package(dir: &[&str], header: Header, attributes: Attributes, deps: Vec<Dep>)
         lib: Some(vec!["src".to_owned(), "lib.rs".to_owned()]),
         header,
         attributes,
-        manifest_forbids_unsafe: false,
+        manifest_forbids_unsafe: true,
         lints: kernel_lints(dir),
         deps,
         features: BTreeMap::new(),
@@ -744,15 +744,16 @@ fn kernel_crate_with_std() {
 
 #[test]
 fn unsafe_code_not_forbidden() {
+    // The crate root forbids unsafe code and its manifest does not: the attribute reaches the
+    // library only, so the crate's integration tests, which Miri runs, could hold unsafe code
+    // (32.58).
     let mut observed = good();
-    package_mut(&mut observed, "geom-a")
-        .attributes
-        .forbids_unsafe = false;
+    let a = package_mut(&mut observed, "geom-a");
+    assert!(a.attributes.forbids_unsafe);
+    a.manifest_forbids_unsafe = false;
     expect_rules(&TABLE, &observed, &[Rule::UnsafeNotForbidden]);
     let mut observed = good();
-    package_mut(&mut observed, "engine-geometry")
-        .attributes
-        .forbids_unsafe = false;
+    package_mut(&mut observed, "engine-geometry").manifest_forbids_unsafe = false;
     expect_rules(&TABLE, &observed, &[Rule::UnsafeNotForbidden]);
 }
 

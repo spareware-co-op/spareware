@@ -13,6 +13,9 @@ use construct_transport::project::{Project, Scenario};
 use construct_transport::results::{AssignOpts, Res};
 use serde_json::{Map, Value, json};
 
+/// A caller's weight for a counted site in a period, for a recorded fit that has its own weights.
+pub type WeightFn = dyn Fn(&construct_transport::datahub::Count, &str) -> f64;
+
 /// A number the way the generator writes it (non-finite as text).
 pub fn pn(x: f64) -> Value {
     plain_number(x)
@@ -195,9 +198,9 @@ impl RecOpts {
             date: rec["date"].as_str().expect("date").to_string(),
         }
     }
-    pub fn fit_opts<'a>(&'a self, weight: Option<&'a dyn Fn(&construct_transport::datahub::Count, &str) -> f64>) -> FitOpts<'a> {
+    pub fn fit_opts<'a>(&'a self, weight: Option<&'a WeightFn>) -> FitOpts<'a> {
         let o = &self.opts;
-        let f = |k: &str| o.get(k).and_then(|v| v.as_f64());
+        let f = |k: &str| o.get(k).and_then(serde_json::Value::as_f64);
         FitOpts {
             period: Some(&self.period),
             iters: f("iters"),
@@ -205,9 +208,9 @@ impl RecOpts {
             max_factor: f("maxFactor"),
             max_step: f("maxStep"),
             min_vol: f("minVol"),
-            constrain: o.get("constrain").and_then(|v| v.as_bool()),
-            freeze_gg: o.get("freezeGG").and_then(|v| v.as_bool()).unwrap_or(false),
-            weights: o.get("weights").and_then(|v| v.as_bool()).unwrap_or(false),
+            constrain: o.get("constrain").and_then(serde_json::Value::as_bool),
+            freeze_gg: o.get("freezeGG").and_then(serde_json::Value::as_bool).unwrap_or(false),
+            weights: o.get("weights").and_then(serde_json::Value::as_bool).unwrap_or(false),
             weight,
             count_ids: self.count_ids.as_deref(),
             groups: self.groups.as_deref(),
@@ -217,7 +220,7 @@ impl RecOpts {
 }
 
 /// The prior run of a recorded fit: the base-year view assigned without this period's factors, its counted sites, statistics, units and the parallel check.
-pub fn prior_block(p: &Project, sc_id: &str, ro: &RecOpts, weight: Option<&dyn Fn(&construct_transport::datahub::Count, &str) -> f64>) -> Value {
+pub fn prior_block(p: &Project, sc_id: &str, ro: &RecOpts, weight: Option<&WeightFn>) -> Value {
     let sc = p.scenario(sc_id).expect("scenario");
     let period = ro.period.as_str();
     let bv = base_view(sc, &p.settings);
@@ -261,7 +264,7 @@ pub fn prior_block(p: &Project, sc_id: &str, ro: &RecOpts, weight: Option<&dyn F
 }
 
 /// Replays one recorded fit and compares everything the generator recorded. `weight` is the caller's weights, for a case that has them.
-pub fn replay_fit(rec: &Value, project_text: &str, weight: Option<&dyn Fn(&construct_transport::datahub::Count, &str) -> f64>) {
+pub fn replay_fit(rec: &Value, project_text: &str, weight: Option<&WeightFn>) {
     use crate::support::assert_close;
     let name = format!("{}:{}", rec["fixture"].as_str().unwrap_or("?"), rec["name"].as_str().unwrap_or("?"));
     let mut p = Project::from_json(project_text).expect("project reads");

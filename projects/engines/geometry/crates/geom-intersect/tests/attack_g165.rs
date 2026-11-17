@@ -29,6 +29,13 @@ use geom_test::{Seed, SplitMix64};
 const ROUND: (f64, f64) = (0.0, 2.0);
 const TALL: (f64, f64) = (-500.0, 500.0);
 
+/// 2^e exactly, for |e| up to 63. Not `f64::powi`: its last digit is not the same everywhere (Miri
+/// varies it), so data meant to be whole numbers or exact scales would not be.
+fn two_to(e: i32) -> f64 {
+    let p = (1u64 << e.unsigned_abs()) as f64;
+    if e < 0 { 1.0 / p } else { p }
+}
+
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
@@ -75,7 +82,8 @@ fn off(s: &SurfaceKind, p: [f64; 3]) -> f64 {
         SurfaceKind::Cone(x) => {
             let (r0, k) = x.radius_and_slope();
             let (rho, z) = radial(sub(p, x.center()), x.frame().normal());
-            (rho - (r0 + k * z * x.axial_sign()).abs()).abs()
+            // The point at v stands s·v high: its radius at height z is r₀ + (k/s)·z.
+            (rho - (r0 + k / x.axial_sign() * z).abs()).abs()
         }
         _ => 0.0,
     }
@@ -839,7 +847,7 @@ fn trims(whole: &Intersection, part: &Intersection, a: &SurfaceKind, b: &Surface
 }
 
 fn span(rng: &mut SplitMix64, lo: f64, hi: f64) -> f64 {
-    lo + (hi - lo) * ((rng.next_u64() >> 11) as f64 / 2.0_f64.powi(53))
+    lo + (hi - lo) * ((rng.next_u64() >> 11) as f64 / two_to(53))
 }
 
 /// Part of a turn, within [0, 2], and a range of heights from `height`.

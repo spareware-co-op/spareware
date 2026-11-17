@@ -62,9 +62,9 @@ pub enum Run {
     OutOfProcess,
     /// A permissive Rust crate, a development dependency of `geom-test` only.
     DevDependency,
-    /// A permissive program with its script in this repository, run by `kernel-nightly.yml` in a
+    /// A permissive program with its script in this repository, run by `kernel-oracles.yml` in a
     /// container pinned by digest (G63, G86).
-    KernelNightly,
+    KernelOracles,
 }
 
 /// Whether an oracle runs yet.
