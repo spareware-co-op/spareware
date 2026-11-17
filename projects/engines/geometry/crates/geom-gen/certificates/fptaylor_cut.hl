@@ -1,8 +1,10 @@
 (* Inserted by fptaylor.sh into FPTaylor's checker (formal/build_tform2.hl), after
    prove_bound_cond: what each term of prove_opt_approx's loop does in a shard (geom-gen's
-   SHARDED). The session defines shard_whole (no shard: every term proved), shard_terms (the
+   SHARDED). The session sets shard_whole (no shard: every term proved), shard_terms (the
    terms this shard proves whole) and shard_cuts (each term cut into pieces of which this shard
-   proves some: the term, its depth, the pieces). Any other term is assumed.
+   proves some: the term, its depth, the pieces). Any other term is assumed. They are set once
+   the checker is loaded, not before, because a shard may start from a saved state that holds
+   the checker loaded (fptaylor.sh's cut state).
 
    A term HOL Light cannot check inside one job is cut into 2^depth pieces: its box is halved
    depth times, each time along the variable the verifier's own search would split first (the
@@ -12,6 +14,12 @@
    prove_bound_cond as a whole term is, or assumed when another shard proves it; the halves of
    each box give the box by x <= t \/ t <= x (REAL_LE_TOTAL), so the term is proved from its
    pieces. The theorem is the term's, under the pieces assumed. *)
+
+let shard_whole = ref true;;
+let shard_terms = ref ([] : int list);;
+let shard_cuts = ref ([] : (int * int * int list) list);;
+(* The run that saves a cut state: each term of shard_cuts gets cut_setup and is assumed. *)
+let shard_setup = ref false;;
 
 let cut_le = `(<=):real->real->bool`;;
 
@@ -96,13 +104,37 @@ let cut_prove pp term total depth pieces tm =
 		    term total count (length pieces)) in
     th;;
 
+(* The verifier's Taylor theorems for a cut term's function, built ahead of its pieces: the
+   verifier builds them when it is first given the function, whatever the box, and keeps them
+   (fptaylor_cache.hl), so it is given the term's inequality on one small corner of its box,
+   the lower half taken depth + 6 times, by the same call that proves a piece. The corner's
+   theorem is not used: no term and no piece is proved here. *)
+let cut_setup pp term total depth tm =
+  let vars, body = strip_forall tm in
+  let cond, f = dest_imp body in
+  let fvars = List.sort compare (frees f) in
+  let rec corner level cond1 =
+    if level = 0 then cond1 else
+      let x, lo, t, _ = cut_split fvars cond1 in
+	corner (level - 1) (cut_replace x lo t cond1) in
+  let goal = list_mk_forall (vars, mk_imp (corner (depth + 6) cond, f)) in
+  let start = Unix.gettimeofday () in
+  let _ = prove_bound_cond pp goal in
+    report (sprintf "Built: %d/%d Taylor theorems in %.0f s"
+	      term total (Unix.gettimeofday () -. start));;
+
 (* One term of the loop: proved whole, proved from its pieces, or assumed. *)
 let shard_prove pp counter total tm =
-  if shard_whole || mem counter shard_terms then
+  if !shard_whole || mem counter !shard_terms then
     let th = prove_bound_cond pp tm in
     let _ = report (sprintf "Proved: %d/%d" counter total) in
       th
   else
-    match filter (fun (t, _, _) -> t = counter) shard_cuts with
-      | [(_, depth, pieces)] -> cut_prove pp counter total depth pieces tm
+    match filter (fun (t, _, _) -> t = counter) !shard_cuts with
+      | [(_, depth, pieces)] ->
+	  if !shard_setup then
+	    let _ = cut_setup pp counter total depth tm in
+	      ASSUME tm
+	  else
+	    cut_prove pp counter total depth pieces tm
       | _ -> ASSUME tm;;

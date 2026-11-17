@@ -35,6 +35,14 @@
 # with the shard's terms, and the certificate's check. The saved state holds no theorem the check
 # relies on: every term the shard names is still proved after the restore. Both runs work in one
 # fixed folder, so that the paths the saved process holds are the shard's.
+# A cut term's pieces are one function on different boxes, and the verifier builds the function's
+# Taylor theorems before it checks any box (for line_cone's term 38, longer than a piece takes).
+# FPTAYLOR_CUT_STATE_OUT=<dir>, with FPTAYLOR_STATE, its sha256 and FPTAYLOR_CERTIFICATES, restores
+# the loaded state, loads the checker, has the verifier build the Taylor theorems of each term the
+# problem cuts (fptaylor_cache.hl keeps them; fptaylor_cut.hl's cut_setup), proving no term and no
+# piece, and saves the process again, to <dir>/hol-light-state.tar, printing its sha256. A shard
+# with pieces restores that state as it would the first, and proves its pieces as before: what the
+# state adds is the function's theorems, which HOL Light's kernel proved in the saving run.
 # Usage: fptaylor.sh <problem.fpt>...  (geom-gen writes the problems: generated/fptaylor-*.fpt)
 #
 # OCaml 4.11: FPTaylor saves certificates as marshalled `Num` values, and HOL Light uses the Num
@@ -55,15 +63,20 @@ out=${FPTAYLOR_OUT:-}
 certificates=${FPTAYLOR_CERTIFICATES:-}
 shard=${FPTAYLOR_SHARD:-}
 state_out=${FPTAYLOR_STATE_OUT:-}
+cut_state_out=${FPTAYLOR_CUT_STATE_OUT:-}
 state=${FPTAYLOR_STATE:-}
 state_sha256=${FPTAYLOR_STATE_SHA256:-}
 shards=1
 if [ -n "$state_out" ]; then
-  [ $# -eq 1 ] && [ -z "$out$certificates$shard$state" ] ||
+  [ $# -eq 1 ] && [ -z "$out$certificates$shard$state$cut_state_out" ] ||
     { echo "FPTAYLOR_STATE_OUT saves the state for one problem, and does nothing else"; exit 1; }
 fi
+if [ -n "$cut_state_out" ]; then
+  [ $# -eq 1 ] && [ -n "$certificates" ] && [ -n "$state" ] && [ -z "$out$shard" ] ||
+    { echo "FPTAYLOR_CUT_STATE_OUT builds one problem's cut terms from FPTAYLOR_STATE and FPTAYLOR_CERTIFICATES"; exit 1; }
+fi
 if [ -n "$state" ]; then
-  [ -n "$shard" ] && [[ $state_sha256 =~ ^[0-9a-f]{64}$ ]] ||
+  [ -n "$shard$cut_state_out" ] && [[ $state_sha256 =~ ^[0-9a-f]{64}$ ]] ||
     { echo "FPTAYLOR_STATE is for a shard, with the FPTAYLOR_STATE_SHA256 its making job printed"; exit 1; }
 fi
 # A saved state holds its folder's paths, so the run that saves it and the shards that restore it
@@ -76,8 +89,10 @@ else
   work=$(mktemp -d)
 fi
 # What this run proves, for the session: every term (no shard), or the terms the shard proves
-# whole, as an OCaml list, and each term it proves pieces of, as `(term, depth, [pieces]); `.
+# whole, as an OCaml list, and each term it proves pieces of, as `(term, depth, [pieces]); `. The
+# run that saves a cut state proves nothing: it names each cut term with no pieces (shard_setup).
 shard_whole=true
+shard_setup=false
 shard_terms=
 shard_cuts=
 if [ -n "$shard" ]; then
@@ -114,6 +129,15 @@ if [ -n "$shard" ]; then
   for p in $pieces; do
     grep -q "^// hol-light-cut ${p%%.*}: " "$1" || { echo "$1: piece $p of a term not cut"; exit 1; }
   done
+elif [ -n "$cut_state_out" ]; then
+  shard_whole=false
+  shard_setup=true
+  cut_terms=
+  while read -r t d; do
+    shard_cuts+="($t, $d, []); "
+    cut_terms+="$t "
+  done < <(sed -n 's|^// hol-light-cut \([1-9][0-9]*\): \([1-9][0-9]*\)$|\1 \2|p' "$1")
+  [ -n "$cut_terms" ] || { echo "$1: no term cut into pieces"; exit 1; }
 elif [ -n "$certificates" ]; then
   echo "FPTAYLOR_CERTIFICATES is for a shard"; exit 1
 fi
@@ -210,6 +234,38 @@ cpu_flags() {
   done
 }
 
+# Saves the HOL Light process `hol_pid`, which runs under the DMTCP coordinator whose port is in
+# $work/port and reads the pipe open as descriptor 3, with $work/manifest, to
+# <dir>/hol-light-state.tar, and prints the file's sha256.
+save_state() {
+  local port images
+  port=$(cat "$work/port")
+  # v4.2.0's coordinator starts the checkpoint `-bc` asks for but does not wait for it (its log:
+  # "unhandled user command; (cmd = b)"), so, as HOL Light's make-checkpoint.sh does, the state is
+  # taken as written once the coordinator has written its restart script, which it does after
+  # every image; only then is HOL Light stopped.
+  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" -bc
+  for _ in $(seq 360); do
+    [ ! -e "$work/checkpoint/dmtcp_restart_script.sh" ] || break
+    kill -0 "$hol_pid" 2>/dev/null || break
+    sleep 5
+  done
+  [ -e "$work/checkpoint/dmtcp_restart_script.sh" ] ||
+    { echo "DMTCP wrote no restart script: the state was not saved"; exit 1; }
+  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" --quit
+  exec 3>&-
+  wait "$hol_pid" || true
+  wait
+  images=("$work"/checkpoint/ckpt_*.dmtcp)
+  [ ${#images[@]} -eq 1 ] && [ -f "${images[0]}" ] || { echo "DMTCP saved no single image"; exit 1; }
+  mv "${images[0]}" "$work/hol.dmtcp"
+  cat "$work/manifest"
+  echo "saved on: $(sed -n 's/^model name\s*: //p' /proc/cpuinfo | head -n 1)"
+  tar -C "$work" -cf "$1/hol-light-state.tar" hol.dmtcp dmtcp manifest
+  ls -l "$1/hol-light-state.tar"
+  echo "HOL Light state sha256 $(sha256sum <"$1/hol-light-state.tar" | cut -d' ' -f1)"
+}
+
 if [ -n "$state_out" ]; then
   echo "::group::Build HOL Light and DMTCP"
   make -C "$work/hol-light" >/dev/null
@@ -229,45 +285,21 @@ if [ -n "$state_out" ]; then
     --port-file "$work/port" --ckptdir "$work/checkpoint" --no-gzip \
     "$work/hol-light/ocaml-hol" -I "$(camlp5 -where)" -safe-string -I "$work/hol-light" \
     <"$work/input" >"$work/hol.log" 2>&1 &
-  hol=$!
+  hol_pid=$!
   exec 3>"$work/input"
   cat "$work/load.ml" >&3
-  tail -n +1 -f --pid="$hol" "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
+  tail -n +1 -f --pid="$hol_pid" "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
   until grep -q '^\(# \)*HOL Light state: loaded$' "$work/hol.log"; do
-    kill -0 "$hol" 2>/dev/null || { echo "HOL Light stopped before it was loaded"; exit 1; }
+    kill -0 "$hol_pid" 2>/dev/null || { echo "HOL Light stopped before it was loaded"; exit 1; }
     sleep 5
   done
-  port=$(cat "$work/port")
-  # v4.2.0's coordinator starts the checkpoint `-bc` asks for but does not wait for it (its log:
-  # "unhandled user command; (cmd = b)"), so, as HOL Light's make-checkpoint.sh does, the state is
-  # taken as written once the coordinator has written its restart script, which it does after
-  # every image; only then is HOL Light stopped.
-  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" -bc
-  for _ in $(seq 360); do
-    [ ! -e "$work/checkpoint/dmtcp_restart_script.sh" ] || break
-    kill -0 "$hol" 2>/dev/null || break
-    sleep 5
-  done
-  [ -e "$work/checkpoint/dmtcp_restart_script.sh" ] ||
-    { echo "DMTCP wrote no restart script: the state was not saved"; exit 1; }
-  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" --quit
-  exec 3>&-
-  wait "$hol" || true
-  wait
-  images=("$work"/checkpoint/ckpt_*.dmtcp)
-  [ ${#images[@]} -eq 1 ] && [ -f "${images[0]}" ] || { echo "DMTCP saved no single image"; exit 1; }
-  mv "${images[0]}" "$work/hol.dmtcp"
   {
     echo "hol-light $HOL_LIGHT_COMMIT"
     echo "dmtcp $DMTCP_COMMIT"
     echo "max_dim $most"
     echo "cpu-flags $(cpu_flags)"
   } >"$work/manifest"
-  cat "$work/manifest"
-  echo "saved on: $(sed -n 's/^model name\s*: //p' /proc/cpuinfo | head -n 1)"
-  tar -C "$work" -cf "$state_out/hol-light-state.tar" hol.dmtcp dmtcp manifest
-  ls -l "$state_out/hol-light-state.tar"
-  echo "HOL Light state sha256 $(sha256sum <"$state_out/hol-light-state.tar" | cut -d' ' -f1)"
+  save_state "$state_out"
   exit 0
 fi
 
@@ -347,11 +379,14 @@ fi
 # The rest of the HOL Light session: FPTaylor's checker (FPTaylor's formal/load.hl, with this
 # machine's paths), then each certificate checked against its bound.
 {
-  echo "let shard_whole = $shard_whole;;"
-  echo "let shard_terms : int list = [$shard_terms];;"
-  echo "let shard_cuts : (int * int * int list) list = [$shard_cuts];;"
   echo 'needs "build_tform2.hl";;'
   echo 'needs "tests/utils.hl";;'
+  # What this run proves (fptaylor_cut.hl), set once the checker is loaded: a cut state holds the
+  # checker loaded, and the two lines above then load nothing.
+  echo "Build_tform2.shard_whole := $shard_whole;;"
+  echo "Build_tform2.shard_setup := $shard_setup;;"
+  echo "Build_tform2.shard_terms := [$shard_terms];;"
+  echo "Build_tform2.shard_cuts := [$shard_cuts];;"
   # A shard's theorems hold under the terms it assumed: their conclusions are printed, with how
   # many terms they assume.
   echo 'let print_bound th = if hyp th = [] then print_thm th else (print_term (concl th); Printf.printf "\n(assuming %d terms)" (length (hyp th)));;'
@@ -370,6 +405,37 @@ fi
     echo "(try let th = trans_bound bound_th \`$bound\` in print_bound th; print_newline (); print_endline \"$name: within K\" with Failure _ -> print_endline \"$name: above K\");;"
   done
 } >>"$session"
+
+if [ -n "$cut_state_out" ]; then
+  # The restored HOL Light reads the session from a pipe held open until the state is saved again,
+  # as the run that saved the loaded state does. The coordinator of a restored process writes its
+  # restart script where it runs, so it runs in the folder the image goes to.
+  echo 'print_endline "HOL Light state: cut terms built";;' >>"$session"
+  cat "$session"
+  mkfifo "$work/input"
+  mkdir "$work/checkpoint"
+  (cd "$work/checkpoint" && exec "$work/dmtcp/bin/dmtcp_restart" --new-coordinator --coord-port 0 \
+    --port-file "$work/port" --ckptdir "$work/checkpoint" "$work/hol.dmtcp") \
+    <"$work/input" >"$work/hol.log" 2>&1 &
+  hol_pid=$!
+  exec 3>"$work/input"
+  cat "$session" >&3
+  tail -n +1 -f --pid="$hol_pid" "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
+  until grep -q '^\(# \)*HOL Light state: cut terms built$' "$work/hol.log"; do
+    kill -0 "$hol_pid" 2>/dev/null || { echo "HOL Light stopped before the cut terms were built"; exit 1; }
+    sleep 5
+  done
+  # Each cut term's theorems were built here, and nothing was proved: every term is assumed.
+  built=$(sed -n 's|^\(# \)*Built: \([0-9][0-9]*\)/[0-9]* Taylor theorems in [0-9]* s$|\2|p' "$work/hol.log" | tr '\n' ' ')
+  [ "$built" = "$cut_terms" ] || { echo "built the Taylor theorems of terms '$built', not '$cut_terms'"; exit 1; }
+  ! grep -q '^\(# \)*Proved: ' "$work/hol.log" || { echo "the run that saves a cut state proved a term"; exit 1; }
+  {
+    echo "cpu-flags $(cpu_flags)"
+    echo "cut-terms $cut_terms"
+  } >>"$work/manifest"
+  save_state "$cut_state_out"
+  exit 0
+fi
 cat "$session"
 
 "${hol[@]}" <"$session" | tee "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' || true
