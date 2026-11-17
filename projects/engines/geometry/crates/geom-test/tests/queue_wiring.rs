@@ -398,6 +398,24 @@ fn writer_problems(kernel: &str) -> Vec<String> {
         {
             let uses = text(&step["uses"]);
             let run = text(&step["run"]);
+            // A hand-over inside one run (`wasm-build`'s archive for `wasm-suite`'s parts) is not
+            // for later runs: it is named by its build, kept one day, and downloaded under the
+            // same name by a job of the same run. Anything else that uploads is held to the rule.
+            if uses.starts_with("actions/upload-artifact@")
+                && job == "wasm-build"
+                && text(&step["with"]["name"]) == "wasm-${{ matrix.build }}"
+                && step["with"]["retention-days"].as_i64() == Some(1)
+                && w["jobs"]["wasm-suite"]["steps"]
+                    .as_vec()
+                    .into_iter()
+                    .flatten()
+                    .any(|d| {
+                        text(&d["uses"]).starts_with("actions/download-artifact@")
+                            && text(&d["with"]["name"]) == "wasm-${{ matrix.part.build }}"
+                    })
+            {
+                continue;
+            }
             let condition = if uses.starts_with("Swatinem/rust-cache@") {
                 text(&step["with"]["save-if"])
             } else if uses.starts_with("actions/upload-artifact@")
@@ -1210,7 +1228,8 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
     }
 
     // An arm naming a push and a run by hand together is read as both, and asks the same.
-    let full = "lint scope linux guard test suite wasm wasm-suite big-endian large-models";
+    let full =
+        "lint scope linux guard test suite wasm wasm-build wasm-suite big-endian large-models";
     let both = kernel.replacen(
         "              *) must=",
         &format!(
@@ -1256,6 +1275,22 @@ fn a_run_by_hand_writes_nothing_later_runs_read() {
             "        if: github.event_name == 'merge_group' && needs.changes.outputs.kernel == 'true'\n        with:",
             "        if: needs.changes.outputs.kernel == 'true'\n        with:",
             "done's step 3",
+        ),
+        // The in-run archive hand-over kept for a month, for later runs to find.
+        (
+            "          retention-days: 1
+          # The archive is compressed already.",
+            "          retention-days: 30
+          # The archive is compressed already.",
+            "wasm-build's step 8",
+        ),
+        // The same upload under another name, which no part of this run downloads.
+        (
+            "          name: wasm-${{ matrix.build }}
+          path:",
+            "          name: kernel-archive-${{ matrix.build }}
+          path:",
+            "wasm-build's step 8",
         ),
         // A timing record written through `gh` on every run.
         (
