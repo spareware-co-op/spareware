@@ -1145,6 +1145,11 @@ fn check_shards(name: &str, file: &str, fptaylor: &str, exact: bool) {
         Ok(()),
         "{name}, {file}: the shards' terms"
     );
+    assert_eq!(
+        one_state_a_shard(&shards),
+        Ok(()),
+        "{name}, {file}: the state each shard restores"
+    );
 }
 
 /// The most halvings a cut term's box takes: 2^12 pieces is far more than any job needs.
@@ -1208,6 +1213,46 @@ fn every_term_once(shards: &Shards) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Whether each shard of `shards` has whole terms only or pieces only. A shard with pieces
+/// restores the saved state that holds its cut term's Taylor theorems, in a job of its own kind
+/// (`kernel-certificates.yml`'s `fptaylor-pieces`), and a shard of whole terms the loaded state
+/// (`fptaylor-shards`): the workflow sends a shard to one job or the other by whether its line
+/// names a piece, so a shard with both would have its whole terms checked from the wrong state.
+fn one_state_a_shard(shards: &Shards) -> Result<(), String> {
+    for (k, parts) in (1..).zip(shards.shards) {
+        let pieces = parts
+            .iter()
+            .filter(|p| matches!(p, Part::Piece(..)))
+            .count();
+        if pieces != 0 && pieces != parts.len() {
+            return Err(format!("shard {k} has pieces and whole terms"));
+        }
+    }
+    Ok(())
+}
+
+/// A shard with both pieces and whole terms is refused, and one with either alone is not.
+#[test]
+fn a_shard_of_pieces_and_whole_terms_is_refused() {
+    use Part::{Piece as P, Term as T};
+    assert_eq!(
+        one_state_a_shard(&Shards {
+            terms: 4,
+            cuts: &[(2, 1)],
+            shards: &[&[T(1), T(3), T(4)], &[P(2, 1)], &[P(2, 2)]],
+        }),
+        Ok(())
+    );
+    assert_eq!(
+        one_state_a_shard(&Shards {
+            terms: 4,
+            cuts: &[(2, 1)],
+            shards: &[&[T(1), T(3)], &[P(2, 1), P(2, 2), T(4)]],
+        }),
+        Err("shard 2 has pieces and whole terms".to_owned())
+    );
 }
 
 /// The check of the shards' terms refuses a term left out, a term twice, a term past the count,

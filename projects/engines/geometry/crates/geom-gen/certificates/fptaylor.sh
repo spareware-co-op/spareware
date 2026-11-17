@@ -274,6 +274,11 @@ if [ -n "$state_out" ]; then
     make install >/dev/null)
   echo "::endgroup::"
   load_session >"$work/load.ml"
+  # The load leaves most of OCaml's heap free: on a development machine line_cone's process held
+  # 10.4 GB when it was saved, and 3.95 GB once OCaml had compacted its heap after a restore. So
+  # the heap is compacted before the save, which changes no value: a smaller state to save, hand
+  # on and restore.
+  echo 'Gc.compact ();;' >>"$work/load.ml"
   echo 'print_endline "HOL Light state: loaded";;' >>"$work/load.ml"
   cat "$work/load.ml"
   # HOL Light reads the session from a pipe held open until the state is saved: at the end of its
