@@ -16,7 +16,9 @@
 //!   of 1, 2, 3 and 8 threads, at chunk sizes 1, 7, 64 and 4,096, exactly the serial executor's
 //!   answer, failures and the meter left behind included. `geom-run`'s own golden test holds the
 //!   helper's answers to one SHA-256 digest at the same thread counts and chunk sizes with pools
-//!   that start threads directly; this holds the rayon pool to the same answers.
+//!   that start threads directly; this holds the rayon pool to the same answers. Under Miri the
+//!   sweep is smaller (pools of 2 and 3 threads, chunk sizes 7 and 4,096), so Miri finishes it;
+//!   `MIRI_THREADS` says why and what it keeps.
 //!
 //! Native targets only: WebAssembly has no threads here, so the pool does not exist there and the
 //! kernel runs serially, with the same answer.
@@ -257,22 +259,46 @@ fn every_helper(exec: Exec<'_>, size: usize, items: &[Item], cap: u64, total: u6
     out
 }
 
+/// Under Miri, the sweep of the rayon test is smaller: Miri runs each thread's every step in its
+/// interpreter, and neither the native sweep (four pools, four chunk sizes, eight rounds of up to
+/// 600 items) nor a sweep of pools of 2 and 3 threads at chunk sizes 1, 7 and 64 over six rounds
+/// of up to 48 items finished inside Miri's 600-second stop on GitHub's runners (each chunk a
+/// pool hands to a thread costs Miri tens of seconds). Miri's sweep keeps what it is there to
+/// check, the rayon pools' threads handing work and answers to each other: pools of 2 and 3
+/// threads (two that run in parallel, one an odd count), and two of the chunk sizes chapter 23.4
+/// forces, 7 (an uneven chunk) and 4,096 (every item in one chunk), over three rounds of up to 14
+/// items, so each of the three outcomes (passing, out of budget, an item's own error) comes up,
+/// and the round with failing items is split into chunks of 7 on both pools. Failing items are
+/// as common for the size: one in a quarter of the round's largest size, the native sweep's one
+/// in 150 of 600.
+const MIRI_THREADS: [usize; 2] = [2, 3];
+const MIRI_SIZES: [usize; 2] = [7, 4_096];
+const MIRI_ROUNDS: usize = 3;
+const MIRI_MOST_ITEMS: u64 = 14;
+
 /// Every helper gives the serial answer on rayon pools of 1, 2, 3 and 8 threads, at every forced
-/// chunk size, on seeded inputs whose budgets make every outcome happen.
+/// chunk size, on seeded inputs whose budgets make every outcome happen (under Miri, the smaller
+/// sweep `MIRI_THREADS` says why).
 #[test]
 fn attack_rayon_pools_give_the_serial_answer_at_every_thread_count_and_chunk_size() {
     let mut rng =
         SplitMix64::new(resolve("rayon against serial", Seed(0x6733_0000_5eed_0253)).unwrap());
-    let pools: Vec<(usize, Rayon)> = THREADS.iter().map(|&n| (n, pool(n))).collect();
-    let rounds = if cfg!(debug_assertions) { 8 } else { 48 };
+    let (threads, sizes, rounds, most): (&[usize], &[usize], usize, u64) = if cfg!(miri) {
+        (&MIRI_THREADS, &MIRI_SIZES, MIRI_ROUNDS, MIRI_MOST_ITEMS)
+    } else if cfg!(debug_assertions) {
+        (&THREADS, &SIZES, 8, 600)
+    } else {
+        (&THREADS, &SIZES, 48, 600)
+    };
+    let pools: Vec<(usize, Rayon)> = threads.iter().map(|&n| (n, pool(n))).collect();
     let mut outcomes = [0_u32; 3];
     for round in 0..rounds {
-        let n = below(&mut rng, 600) as usize;
+        let n = below(&mut rng, most) as usize;
         let items: Vec<Item> = (0..n)
             .map(|_| Item {
                 work: below(&mut rng, 10),
                 // Failing items only in odd rounds, so even rounds can pass or run out of budget.
-                fails: round % 2 == 1 && below(&mut rng, 150) == 0,
+                fails: round % 2 == 1 && below(&mut rng, most / 4) == 0,
                 key: below(&mut rng, 40),
             })
             .collect();
@@ -292,7 +318,7 @@ fn attack_rayon_pools_give_the_serial_answer_at_every_thread_count_and_chunk_siz
             2
         }] += 1;
         for (threads, pool) in &pools {
-            for size in SIZES {
+            for &size in sizes {
                 let got = every_helper(Exec::with_pool(pool), size, &items, cap, total);
                 assert_eq!(
                     got, serial,
