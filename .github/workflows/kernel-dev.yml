@@ -189,6 +189,15 @@ jobs:
       - name: No banned-source marker in the kernel's crates
         run: cargo run --locked -p geom-test --bin source-scan -- check
 
+  # The tests run under cargo-nextest, each test in its own wasmtime process and the processes side
+  # by side on the runner's four cores (the owner's rule of 15 minutes a job). On main's pushes
+  # e792e882e and 907247b27 (runs 44043473629 and 44052487974) this job took 17 and 23 minutes, and
+  # most of it was running, not building: the build took 3.2 and 3.7 minutes, and `cargo test` ran
+  # the 126 test binaries one after another for 13.4 and 18.9. wasm32-wasip1 has no threads, so each
+  # binary ran its tests one at a time too, the whole run on one core, and the runner's speed went
+  # straight into the job's minutes (no kernel code changed between those two pushes). kernel.yml's
+  # `wasm-suite` runs the kernel's own wasm32 suite the same way. nextest does not run doctests, so
+  # `cargo test --doc` runs them, under wasmtime as before.
   wasm:
     name: Development crates (wasm32-wasip1 under wasmtime)
     runs-on: ubuntu-latest
@@ -197,6 +206,8 @@ jobs:
       # GitHub's digest of the release asset wasmtime-v50.0.0-x86_64-linux.tar.xz.
       WASMTIME_SHA256: 77c19ee0437991f9ac7837b9c269d9c7076744f85dad263fea5214cc2723c7ff
       CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+      # The same pinned cargo-nextest (Apache-2.0 OR MIT) as kernel.yml.
+      CARGO_NEXTEST_VERSION: "0.9.146"
     defaults:
       run:
         shell: bash
@@ -222,8 +233,17 @@ jobs:
           echo "${WASMTIME_SHA256}  $name.tar.xz" | sha256sum --check --strict
           tar -xJf "$name.tar.xz"
           echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
+      # Every test runs (`--no-fail-fast`), so one run reports every failure; a failing test's
+      # output, its seed among it, is printed with the failure.
       - name: geom-test, geom-fuzz (the seeded leg) and geom-gen on a 32-bit target
-        run: cargo test --locked -p geom-test -p geom-fuzz -p geom-gen --target wasm32-wasip1 -- --nocapture
+        run: cargo nextest run --locked -p geom-test -p geom-fuzz -p geom-gen --target wasm32-wasip1 --no-fail-fast
+      - name: Their doctests on a 32-bit target
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p geom-test -p geom-fuzz -p geom-gen --doc --target wasm32-wasip1 -- --nocapture
 
   verus:
     name: Verus proves the twins
