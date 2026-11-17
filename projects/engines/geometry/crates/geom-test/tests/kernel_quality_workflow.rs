@@ -2100,7 +2100,9 @@ fn gate_input_problems(text: &str) -> Vec<String> {
     for line in text.lines().filter(|l| l.contains("inputs.gate")) {
         let line = line.trim();
         if line != "INPUT_GATE: ${{ inputs.gate }}" && !line.starts_with("group: kernel-quality-") {
-            found.push(format!("the input gate is read outside `when`'s choice: {line}"));
+            found.push(format!(
+                "the input gate is read outside `when`'s choice: {line}"
+            ));
         }
     }
     let decide = w["jobs"]["when"]["steps"]
@@ -2118,7 +2120,10 @@ fn gate_input_problems(text: &str) -> Vec<String> {
     // that case starts its lines and its branches are indented once).
     let dispatch = script.find("\n  workflow_dispatch)\n");
     let end = dispatch.and_then(|d| script[d..].find("\nesac\n").map(|e| d + e));
-    let reads: Vec<usize> = script.match_indices("$INPUT_GATE").map(|(at, _)| at).collect();
+    let reads: Vec<usize> = script
+        .match_indices("$INPUT_GATE")
+        .map(|(at, _)| at)
+        .collect();
     let inside = |at: usize| matches!((dispatch, end), (Some(d), Some(e)) if d < at && at < e);
     if reads.is_empty() || !reads.iter().all(|&at| inside(at)) {
         found.push("`when` reads the input gate outside a dispatch".to_owned());

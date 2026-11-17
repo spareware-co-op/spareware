@@ -9,6 +9,7 @@
 # their own.
 # Sources: every row but geom-pool's is the measuring run 44004974529 on GitHub's runners (miri_measure=all on 2aef58c85, main 79dd48d74 with the measuring mode), in its own seconds, stopped at 600 s.
 # Sources: geom-pool's rows are main's push run 44000736866 (79dd48d74), partition 1's Tree Borrows report under the default-miri profile, in its own seconds, stopped at 600 s.
+# GitHub measuring run 44032408206, land/miri-bool at 96f3b42ac
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -45,12 +46,16 @@ native-only over 601	geom-bool::attack_g144	an_apex_cut_off_centre_splits_along_
 220	geom-bool::attack_g144	only_the_fast_path_records_its_skip
 native-only over 601	geom-bool::attack_g144	the_fast_and_full_paths_give_one_body
 181	geom-bool::attack_g144	the_fast_path_refuses_what_its_proof_does_not_cover
+196	geom-bool::batch	a_cutter_that_holds_the_host_takes_nothing_of_it
 native-only over 601	geom-bool::batch	a_moved_door_is_cut_again_from_the_last_cut_as_a_fresh_cut_would_be
 125	geom-bool::batch	a_tool_that_cannot_enter_fails_the_call_or_is_listed
+198	geom-bool::batch	a_tool_that_holds_the_whole_host_cuts_it
 278	geom-bool::batch	a_tool_that_misses_or_only_touches_is_named
+native-only over 601	geom-bool::batch	a_tool_whose_box_misses_or_only_touches_the_hosts_charges_no_trace
 native-only over 601	geom-bool::batch	a_wall_takes_its_openings_in_one_call
 native-only over 601	geom-bool::batch	a_winding_vector_stays_two_entries_long
 native-only over 601	geom-bool::batch	any_run_of_changes_cuts_again_as_fresh_cuts_would
+158	geom-bool::batch	each_tool_is_judged_against_the_host_itself
 native-only over 601	geom-bool::batch	many_hosts_come_back_in_input_order_on_any_threads
 450	geom-bool::batch	openings_that_share_a_jamb_or_overlap_need_no_union
 native-only over 601	geom-bool::batch	the_work_grows_in_step_with_the_openings

@@ -68,7 +68,7 @@ name: Kernel quality
 # - The gates' own proof: geom-test's seeded_gates test runs the real cargo-mutants and
 #   cargo-llvm-cov on a seeded crate and shows each gate fails on a seeded survivor, an uncovered
 #   line, an untaken branch and an uncited coverage(off) mark.
-# - Miri over every kernel test it finishes (28.8, 32.58, 32.NN). Every kernel crate forbids unsafe
+# - Miri over every kernel test it finishes (28.8, 32.58, 32.60). Every kernel crate forbids unsafe
 #   code, so Miri looks for undefined behaviour inside the libraries the kernel drives and the
 #   standard library, which `forbid(unsafe_code)` does not reach, and for leaks and results that
 #   differ between machines. nextest runs each test in its own Miri process and stops a test at its
@@ -1008,7 +1008,7 @@ jobs:
           SPAREKIT_COVERAGE_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
         run: cargo test --locked -p geom-test --test seeded_gates -- --ignored --test-threads 1
 
-  # Miri's plan, once for the run's Miri jobs (32.NN): it lists the run's tests under Miri, fails on
+  # Miri's plan, once for the run's Miri jobs (32.60): it lists the run's tests under Miri, fails on
   # any test Miri's table has no row for (32.58), writes each partition's filterset of finishing
   # tests and geom-pool's (`kernel-quality miri-plan`), and hands them on, with the crates and the
   # cargo-nextest it built, as one artifact of this run kept one day. No partition lists every

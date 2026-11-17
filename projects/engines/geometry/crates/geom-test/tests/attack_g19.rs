@@ -288,12 +288,13 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
           cp \"target/debug/golden$exe\" \"$RUNNER_TEMP/golden$exe\"
           \"$RUNNER_TEMP/golden$exe\" run
 ",
-        // The whole suite, in parts that run side by side (the job `suite`): every part runs the
-        // tests of `--partition count:k/n`, and the doctests, which nextest does not run, run in
-        // part 1.
+        // The whole suite, in parts that run side by side (the job `suite`): in release every part
+        // runs its own crates' tests (a share of the crates, or a crate's share of its targets),
+        // with its crates' doctests, which nextest does not run; in debug every part runs the tests
+        // of `--partition count:k/n`, and part 1 the doctests.
         "        env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
+        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast ${{ matrix.part.targets }}
 ",
         "        if: ${{ !cancelled() && matrix.part.mode == 'debug' && env.KERNEL_CRATES != '' }}
         run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}

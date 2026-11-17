@@ -1041,6 +1041,31 @@ pub fn parse_times(text: &str) -> Result<BTreeMap<String, u64>, String> {
     Ok(out)
 }
 
+/// `crates` shared out among `n` parts (one at least) by their measured `times`, each part with
+/// its planned seconds: each crate, longest first (then by name), given to the part with the least
+/// so far (the lowest on a tie). A crate no run has measured is planned at the slowest measured
+/// time. [`plan_parts`] and the release suite's parts (`crate::test_scope::Selection::parts`)
+/// share out by it.
+#[must_use]
+pub fn balance(
+    crates: &[String],
+    times: &BTreeMap<String, u64>,
+    n: usize,
+) -> Vec<(u64, Vec<String>)> {
+    let slowest = times.values().copied().max().unwrap_or(PART_SECONDS);
+    let time = |k: &String| times.get(k).copied().unwrap_or(slowest);
+    let mut order: Vec<&String> = crates.iter().collect();
+    order.sort_by(|a, b| time(b).cmp(&time(a)).then_with(|| a.cmp(b)));
+    let mut parts: Vec<(u64, Vec<String>)> = vec![(0, Vec::new()); n.max(1)];
+    for krate in order {
+        if let Some(part) = parts.iter_mut().min_by_key(|(load, _)| *load) {
+            part.0 = part.0.saturating_add(time(krate));
+            part.1.push(krate.clone());
+        }
+    }
+    parts
+}
+
 /// The parts of a coverage run over `crates`, balanced by their measured `times`: as many parts as
 /// the times need at [`PART_SECONDS`] each (one at least, no more than there are crates), each
 /// crate, longest first, given to the part with the least so far (the lowest on a tie). A crate no
@@ -1054,17 +1079,9 @@ pub fn plan_parts(crates: &[String], times: &BTreeMap<String, u64>) -> Vec<Vec<S
     let mut n = usize::try_from(total.div_ceil(PART_SECONDS))
         .unwrap_or(usize::MAX)
         .clamp(1, most);
-    let mut order: Vec<&String> = crates.iter().collect();
-    order.sort_by(|a, b| time(b).cmp(&time(a)).then_with(|| a.cmp(b)));
     // One part more until every part fits the budget or holds a single crate.
     loop {
-        let mut parts: Vec<(u64, Vec<String>)> = vec![(0, Vec::new()); n];
-        for krate in &order {
-            if let Some(part) = parts.iter_mut().min_by_key(|(load, _)| *load) {
-                part.0 = part.0.saturating_add(time(krate));
-                part.1.push((*krate).clone());
-            }
-        }
+        let parts = balance(crates, times, n);
         let fits = parts
             .iter()
             .all(|(load, p)| *load <= PART_SECONDS || p.len() <= 1);
