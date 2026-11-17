@@ -29,7 +29,9 @@ name: Kernel quality
 #   stale by the change fails; Miri over the crates whose tests the push reaches; coverage and the
 #   gates' proof only when no mark shows they passed on this tree.
 # - By hand (`workflow_dispatch`, every mutant, or `-f files=<regex>` for some files) and on a
-#   release tag (kernel-release.yml calls this workflow): everything, whole.
+#   release tag (kernel-release.yml calls this workflow): everything, whole. A run by hand may ask
+#   for Miri's gate alone (`-f gate=miri`), so proving Miri's jobs costs its own jobs and not every
+#   gate's; only a dispatch reads that input, and its default (`all`) runs everything.
 #
 # The gates:
 #
@@ -138,6 +140,12 @@ on:
         required: false
         default: ""
         type: string
+      gate:
+        description: "The gates to run: all (every gate) or miri (Miri's gate alone)"
+        required: false
+        default: all
+        type: choice
+        options: [all, miri]
       miri_measure:
         description: "Miri's measuring run instead of the gates: new (the tests with no row in Miri's table) or all (every test); none runs the gates"
         required: false
@@ -157,10 +165,10 @@ permissions:
 
 # A newer push to the same pull request cancels the runs it supersedes. Dispatches on one branch
 # queue behind each other only when they narrow to the same files, so a narrowed run never waits
-# hours behind a whole one; a measuring run has a group of its own (every other run's group is
-# as it was: the second term is empty).
+# hours behind a whole one; a measuring run and a run of Miri's gate alone each have a group of
+# their own (every other run's group is as it was: the last two terms are empty).
 concurrency:
-  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}${{ (inputs.miri_measure == 'new' || inputs.miri_measure == 'all') && format('-miri-measure-{0}', inputs.miri_measure) || '' }}
+  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}${{ (inputs.miri_measure == 'new' || inputs.miri_measure == 'all') && format('-miri-measure-{0}', inputs.miri_measure) || '' }}${{ inputs.gate == 'miri' && '-miri-alone' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -230,6 +238,7 @@ jobs:
           QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
           BEFORE: ${{ github.event.before }}
           INPUT_FILES: ${{ inputs.files }}
+          INPUT_GATE: ${{ inputs.gate }}
           INPUT_MIRI_MEASURE: ${{ inputs.miri_measure }}
           INPUT_MIRI_MEASURE_TESTS: ${{ inputs.miri_measure_tests }}
         run: |
@@ -307,6 +316,23 @@ jobs:
                 coverage=false miri=false
                 why="the full mutation run narrowed to $files"
               fi
+              # Miri's gate alone, asked for by hand: Miri's jobs run as on any dispatch, and no
+              # other gate runs. Only this branch reads the input.
+              case "$INPUT_GATE" in
+                all) ;;
+                miri)
+                  if [ -n "$files" ] || [ "$INPUT_MIRI_MEASURE" != none ]; then
+                    echo "::error::Ask for Miri's gate alone, the narrowed mutation run or Miri's measuring run, one at a time."
+                    exit 1
+                  fi
+                  mutants=false coverage=false
+                  why="Miri's gate alone"
+                  ;;
+                *)
+                  echo "::error::The input gate is all or miri, not $INPUT_GATE."
+                  exit 1
+                  ;;
+              esac
               # Miri's measuring run, asked for by hand: it alone runs, never a gate.
               case "$INPUT_MIRI_MEASURE" in
                 new | all)

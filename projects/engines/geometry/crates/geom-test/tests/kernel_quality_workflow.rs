@@ -568,21 +568,24 @@ fn only_a_dispatch_narrows_the_full_run() {
     assert_eq!(files["required"].as_bool(), Some(false));
     assert_eq!(text(&files["default"]), "");
     assert_eq!(text(&files["type"]), "string");
-    // (The other two inputs ask for Miri's measuring run instead of the gates:
+    // (`gate` asks for Miri's gate alone: `a_dispatch_alone_can_run_miris_gate_alone`; the other
+    // two ask for Miri's measuring run instead of the gates:
     // `a_measuring_run_runs_only_when_asked_and_leaves_nothing_behind`.)
     assert_eq!(
         keys(&w["on"]["workflow_dispatch"]["inputs"]),
-        ["files", "miri_measure", "miri_measure_tests"]
+        ["files", "gate", "miri_measure", "miri_measure_tests"]
     );
     // ... that no caller can set (kernel-release.yml's run is whole) ...
     assert!(w["on"]["workflow_call"].is_null() || w["on"]["workflow_call"]["inputs"].is_badvalue());
-    // ... with a concurrency group of its own, so it never queues behind a whole run (the second
-    // term is empty on every run but a measuring one, so every other run's group is the files') ...
+    // ... with a concurrency group of its own, so it never queues behind a whole run (the last two
+    // terms are empty on every run but a measuring one and one of Miri's gate alone, so every
+    // other run's group is the files') ...
     assert_eq!(
         text(&w["concurrency"]["group"]),
         "kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}${{ \
          (inputs.miri_measure == 'new' || inputs.miri_measure == 'all') && \
-         format('-miri-measure-{0}', inputs.miri_measure) || '' }}"
+         format('-miri-measure-{0}', inputs.miri_measure) || '' }}${{ inputs.gate == 'miri' && \
+         '-miri-alone' || '' }}"
     );
     // ... reaching the steps only through the environment, never pasted into a script: `when`
     // reads it, and every job that narrows reads `when`'s choice.
@@ -2071,5 +2074,136 @@ fn a_measuring_run_runs_only_when_asked_and_leaves_nothing_behind() {
                 .any(|p| p.contains("does not stop a test at the budget")),
             "{to}: {found:#?}"
         );
+    }
+}
+
+/// What is wrong with how a dispatch asks for Miri's gate alone (`-f gate=miri`): only a dispatch
+/// reads the input, through `when`'s environment, its default runs every gate, and `miri` turns
+/// every other gate off and leaves Miri's on.
+fn gate_input_problems(text: &str) -> Vec<String> {
+    let w = YamlLoader::load_from_str(text).unwrap().remove(0);
+    let mut found = Vec::new();
+    let gate = &w["on"]["workflow_dispatch"]["inputs"]["gate"];
+    let options: Vec<&str> = gate["options"]
+        .as_vec()
+        .map(|v| v.iter().filter_map(Yaml::as_str).collect())
+        .unwrap_or_default();
+    if gate["type"].as_str() != Some("choice")
+        || gate["default"].as_str() != Some("all")
+        || gate["required"].as_bool() != Some(false)
+        || options != ["all", "miri"]
+    {
+        found.push("the input gate is not a choice of all and miri, all by default".to_owned());
+    }
+    // The input reaches the run in two places only: the concurrency group (a group of its own)
+    // and `when`'s environment.
+    for line in text.lines().filter(|l| l.contains("inputs.gate")) {
+        let line = line.trim();
+        if line != "INPUT_GATE: ${{ inputs.gate }}" && !line.starts_with("group: kernel-quality-") {
+            found.push(format!("the input gate is read outside `when`'s choice: {line}"));
+        }
+    }
+    let decide = w["jobs"]["when"]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .find(|s| s["id"].as_str() == Some("when"))
+        .cloned()
+        .unwrap_or(Yaml::BadValue);
+    if decide["env"]["INPUT_GATE"].as_str() != Some("${{ inputs.gate }}") {
+        found.push("`when` does not read the input gate from its environment".to_owned());
+    }
+    let script = decide["run"].as_str().unwrap_or("");
+    // The dispatch's branch of `when`'s case on the event (YAML strips the script's indent, so
+    // that case starts its lines and its branches are indented once).
+    let dispatch = script.find("\n  workflow_dispatch)\n");
+    let end = dispatch.and_then(|d| script[d..].find("\nesac\n").map(|e| d + e));
+    let reads: Vec<usize> = script.match_indices("$INPUT_GATE").map(|(at, _)| at).collect();
+    let inside = |at: usize| matches!((dispatch, end), (Some(d), Some(e)) if d < at && at < e);
+    if reads.is_empty() || !reads.iter().all(|&at| inside(at)) {
+        found.push("`when` reads the input gate outside a dispatch".to_owned());
+    }
+    if !script.contains("case \"$INPUT_GATE\" in\n      all) ;;\n") {
+        found.push("the default, all, does not run every gate as a dispatch runs them".to_owned());
+    }
+    let alone = script.find("\n      miri)\n").map(|at| {
+        let rest = &script[at..];
+        rest[..rest.find(";;").unwrap_or(0)].to_owned()
+    });
+    match alone {
+        Some(branch) if reads.first().is_some_and(|&r| inside(r)) => {
+            if !branch.contains("mutants=false coverage=false") {
+                found.push("Miri's gate alone runs another gate".to_owned());
+            }
+            if branch.contains("miri=false") {
+                found.push("Miri's gate alone does not run Miri".to_owned());
+            }
+        }
+        _ => found.push("`when` has no branch for Miri's gate alone".to_owned()),
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_dispatch_alone_can_run_miris_gate_alone() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let found = gate_input_problems(&text);
+    assert!(found.is_empty(), "{found:#?}");
+    for (from, to, said) in [
+        // A default other than every gate, and a choice that is not the two.
+        (
+            "        default: all\n        type: choice\n        options: [all, miri]\n",
+            "        default: miri\n        type: choice\n        options: [all, miri]\n",
+            "not a choice of all and miri, all by default",
+        ),
+        (
+            "        options: [all, miri]\n",
+            "        options: [all, miri, coverage]\n",
+            "not a choice of all and miri, all by default",
+        ),
+        // The input read by another event: in `when`'s script before the case on the event, and
+        // in another step's environment.
+        (
+            "          why=\"every gate runs whole\"\n",
+            "          why=\"every gate runs whole\"\n          \
+             if [ \"$INPUT_GATE\" = miri ]; then mutants=false coverage=false; fi\n",
+            "reads the input gate outside a dispatch",
+        ),
+        (
+            "          BASE: ${{ steps.when.outputs.base }}\n",
+            "          BASE: ${{ steps.when.outputs.base }}\n          GATE: ${{ inputs.gate }}\n",
+            "read outside `when`'s choice",
+        ),
+        (
+            "          INPUT_GATE: ${{ inputs.gate }}\n",
+            "          INPUT_GATE: ${{ inputs.gate || 'miri' }}\n",
+            "does not read the input gate from its environment",
+        ),
+        // The default changing what a dispatch runs.
+        (
+            "                all) ;;\n",
+            "                all) coverage=false ;;\n",
+            "the default, all, does not run every gate",
+        ),
+        // Miri's gate alone running another gate, or not Miri.
+        (
+            "                  mutants=false coverage=false\n                  why=\"Miri's gate alone\"",
+            "                  mutants=false\n                  why=\"Miri's gate alone\"",
+            "Miri's gate alone runs another gate",
+        ),
+        (
+            "                  mutants=false coverage=false\n                  why=\"Miri's gate alone\"",
+            "                  mutants=false coverage=false miri=false\n                  why=\"Miri's gate alone\"",
+            "Miri's gate alone does not run Miri",
+        ),
+    ] {
+        let planted = text.replacen(from, to, 1);
+        assert_ne!(planted, text, "the planted edit {from:?} applies");
+        let found = gate_input_problems(&planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }
