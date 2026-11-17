@@ -92,7 +92,8 @@ name: Kernel quality
 #   gh workflow run kernel-quality.yml --ref <branch> -f miri_measure=new
 #   gh run download <run id> -n miri-measure-plan -D measure/plan
 #   gh run download <run id> -p 'miri-measure-[0-9]*' -D measure/parts
-#   cargo run -p geom-test --bin kernel-quality -- miri-times --report measure/parts/*/junit.xml \
+#   reports=(); for f in measure/parts/*/junit.xml; do reports+=(--report "$f"); done
+#   cargo run -p geom-test --bin kernel-quality -- miri-times "${reports[@]}" \
 #     --scale 1 --stop 600 --list measure/plan/miri-list.json --note "<the run, its ref and commit>"
 #
 # Every pull request and queued change runs this workflow, so its last job, `done` ("Kernel quality
