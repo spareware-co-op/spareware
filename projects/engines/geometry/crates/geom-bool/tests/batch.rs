@@ -165,6 +165,52 @@ fn a_tool_that_misses_or_only_touches_is_named() {
     assert_eq!(misses, 2);
 }
 
+#[test]
+fn a_tool_that_holds_the_whole_host_cuts_it() {
+    // No face of the cube reaches the host inside it, yet it takes the whole host out (#967).
+    let host = cuboid([2, 2, 2], [2, 2, 2]);
+    let cube = cuboid([0, 0, 0], [6, 6, 6]);
+    let column = cuboid([2, 2, 0], [2, 2, 8]);
+    let reports = |tools: Vec<Operand<'_>>| {
+        let one = Cut {
+            host: solid(5, &host),
+            tools,
+            reuse: None,
+        };
+        let out = cut(&ctx(), &SERIAL, &[one], BatchRule::Atomic).unwrap();
+        assert!(
+            out.diagnostics
+                .iter()
+                .all(|d| d.code != "bool.tool_misses_host"),
+            "{:?}",
+            out.diagnostics
+        );
+        out.result[0].tools.clone()
+    };
+    // Alone, keyed below the host.
+    assert_eq!(
+        reports(vec![solid(2, &cube)]),
+        [ToolReport {
+            key: key(2),
+            cut: true
+        }]
+    );
+    // Beside a column through the host that takes it all too: each took the host out.
+    assert_eq!(
+        reports(vec![solid(6, &column), solid(7, &cube)]),
+        [
+            ToolReport {
+                key: key(6),
+                cut: true
+            },
+            ToolReport {
+                key: key(7),
+                cut: true
+            },
+        ]
+    );
+}
+
 fn round() -> Body {
     let input = RoundInput {
         base: P3::new(50, 5, 10).unwrap(),

@@ -1864,12 +1864,12 @@
       "layer": "6",
       "modules": [
         {
-          "cost": "one arrangement per host, linear in its faces plus local work around each tool.",
+          "cost": "one arrangement per host, linear in its faces plus local work around each tool. A tool none of whose pieces has the host behind it, and whose box meets the host's, adds one trace of the host's polygons against that tool's alone, stopping at the first the tool holds.",
           "does": "[`cut`] subtracts each [`Cut`]'s tools from its host in one arrangement, with the tools summed into one entry, so a winding vector stays two entries long however many tools there are, and tools that overlap or share a jamb need no union first. Each host gives one [`CutResult`], in input order, which accounts for every tool.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
           "guarantees": [
-            "**Every tool is accounted for.** Each is reported, and one that touched nothing inside the host is marked and named in `bool.tool_misses_host`. A subtraction cannot go missing silently.",
+            "**Every tool is accounted for.** Each is reported, and one that touched nothing inside the host is marked and named in `bool.tool_misses_host`. A subtraction cannot go missing silently. A tool cuts exactly when its inside meets the host's, so a tool that holds a whole part of the host, with none of its faces reaching it, cuts too (issue #967).",
             "**Atomic by default.** A tool that cannot enter fails the call and names itself. Under [`BatchRule::SkipFailedTools`] it is left out and listed beside the result, and which tools are left out depends only on the inputs.",
             "**A cut again is a cut afresh.** A [`Cut`] may carry the last cut's [`CutResult::cache`]: operands it holds the same bodies for are not prepared again, boxes it holds the same polygons for are not solved again, and the result, its report, the cache and the work are what a cut without it gives (11.6, and G139's incremental re-cut, `projects/kit/notes/G139-incremental-rebuild.md`; tested on a moved door).",
             "**Hosts run in parallel, and the threads do not show.** Results come in input order, and one host alone has the threads for its boxes."
