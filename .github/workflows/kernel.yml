@@ -24,7 +24,7 @@ name: Kernel
 #
 # - On each push to a pull request: format and lints (`lint`), then the tests the change can reach,
 #   once, optimised with overflow checks and debug assertions on, on Linux x86-64 (`linux`, in
-#   fifteen parts: eight of tests, seven of goldens), with the goldens there, and the toolchain
+#   sixteen parts: nine of tests, seven of goldens), with the goldens there, and the toolchain
 #   guard's proof (`guard`).
 # - In GitHub's merge queue for main (`merge_group`), once per change just before it lands: the
 #   same tests on the other platforms (the job `suite` on Linux arm64, Windows on both chips and
@@ -419,28 +419,28 @@ jobs:
             echo "SCOPE=--all" >> "$GITHUB_ENV"
           fi
       # With the release suite's shares: every kernel crate but geom-num and geom-test, whose tests
-      # have parts of their own, shared out among the suite's seven share parts by its measured
+      # have parts of their own, shared out among the suite's eight share parts by its measured
       # seconds (geom-test's src/suite-times.tsv).
       - name: The crates whose tests it can reach, and why
         id: scope
         run: >-
           cargo run --locked -q -p geom-test --bin kernel-quality -- test-scope $SCOPE
-          --parts 7 --apart geom-num --apart geom-test
+          --parts 8 --apart geom-num --apart geom-test
           --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
   # On each push to a pull request: the goldens of Linux x86-64 in release and the tests the change
   # can reach, once, optimised with overflow checks and debug assertions on (principle 3), in
-  # fifteen parts side by side, each one build. Parts 1 to 7 run the crates of the release suite's
-  # shares (the job `scope`'s `parts`, as `suite` runs them), part 8 geom-num's and geom-test's
-  # tests, each with its crates' doctests, which nextest does not run. Parts 9 to 15 are the `test`
-  # job's release steps for Linux x86-64, each golden run in two shares (`golden run --part k/2`,
-  # whole crates to a share): 9 and 10 the goldens with checks on, 11 and 12 as shipped (12 also the
-  # shipped checker's corpus), 13 geom-num's vectors as shipped, 14 and 15 the goldens for the
-  # runner's own CPU. On main's push 79dd48d74 (run 44000736713) the four parts took 16, 12, 23 and 23 minutes:
+  # sixteen parts side by side, each one build. Parts 1 to 8 run the crates of the release suite's
+  # shares (the job `scope`'s `parts`, as `suite` runs them), part 9 geom-num's and geom-test's
+  # tests, each with its crates' doctests, which nextest does not run. Parts 10 to 16 are the
+  # `test` job's release steps for Linux x86-64, each golden run in two shares (`golden run --part
+  # k/2`, whole crates to a share): 10 and 11 the goldens with checks on, 12 and 13 as shipped (13
+  # also the shipped checker's corpus), 14 geom-num's vectors as shipped, 15 and 16 the goldens for
+  # the runner's own CPU. On main's push 79dd48d74 (run 44000736713) the four parts took 16, 12, 23 and 23 minutes:
   # parts 1 and 2 each built the whole suite (12.5 and 9.6 minutes) to run half of it, and parts 3
   # and 4 ran whole golden runs one after another (10.8 and 10.1; 2.0, 6.3 and 13.7).
   linux:
-    name: Tests (Linux x86-64, optimised with checks on, part ${{ matrix.k }} of 15)
+    name: Tests (Linux x86-64, optimised with checks on, part ${{ matrix.k }} of 16)
     needs: [changes, lint, scope]
     if: github.event_name != 'merge_group' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ubuntu-latest
@@ -448,7 +448,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"
       # A part the selection leaves without a test passes (nextest's `--no-tests`).
@@ -472,12 +472,12 @@ jobs:
         uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
-      # Of the crates the change can reach, this part's own: share k's for parts 1 to 7, geom-num and
-      # geom-test for part 8, none for the goldens' parts.
+      # Of the crates the change can reach, this part's own: share k's for parts 1 to 8, geom-num and
+      # geom-test for part 9, none for the goldens' parts.
       - name: List the kernel's crates the change can reach
         env:
           SELECTED: ${{ needs.scope.outputs.crates }}
-          SHARE: ${{ matrix.k == 8 && 'geom-num geom-test' || fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.k)] }}
+          SHARE: ${{ matrix.k == 9 && 'geom-num geom-test' || fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.k)] }}
         run: |
           list=""
           for d in projects/engines/geometry/crates/*/; do
@@ -489,49 +489,49 @@ jobs:
           echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
           echo "Testing:${list:- no crate, as the change reaches none in this part}"
       - name: The tests the change can reach, optimised with overflow checks and debug assertions on
-        if: ${{ !cancelled() && matrix.k <= 8 && env.KERNEL_CRATES != '' }}
+        if: ${{ !cancelled() && matrix.k <= 9 && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
         run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast
       - name: Doctests, optimised with overflow checks and debug assertions on
-        if: ${{ !cancelled() && matrix.k <= 8 && env.KERNEL_CRATES != '' }}
+        if: ${{ !cancelled() && matrix.k <= 9 && env.KERNEL_CRATES != '' }}
         env:
           RUSTFLAGS: -C overflow-checks=on
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
         run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
       - name: Every golden in release, with overflow checks and debug assertions on (part 1 of 2)
-        if: ${{ !cancelled() && matrix.k == 9 }}
+        if: ${{ !cancelled() && matrix.k == 10 }}
         env:
           RUSTFLAGS: -C overflow-checks=on
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
         run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
       - name: Every golden in release, with overflow checks and debug assertions on (part 2 of 2)
-        if: ${{ !cancelled() && matrix.k == 10 }}
+        if: ${{ !cancelled() && matrix.k == 11 }}
         env:
           RUSTFLAGS: -C overflow-checks=on
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
         run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
       - name: Every golden in release as shipped, without overflow checks (part 1 of 2)
-        if: ${{ !cancelled() && matrix.k == 11 }}
+        if: ${{ !cancelled() && matrix.k == 12 }}
         run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
       - name: Every golden in release as shipped, without overflow checks (part 2 of 2)
-        if: ${{ !cancelled() && matrix.k == 12 }}
+        if: ${{ !cancelled() && matrix.k == 13 }}
         run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --release
       - name: The replay corpus and the transform sweep with the checker as shipped
-        if: ${{ !cancelled() && matrix.k == 12 }}
+        if: ${{ !cancelled() && matrix.k == 13 }}
         run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
       - name: geom-num's every test vector in release as shipped
-        if: ${{ !cancelled() && matrix.k == 13 }}
+        if: ${{ !cancelled() && matrix.k == 14 }}
         run: cargo test -p geom-num --release --locked --no-fail-fast
       - name: Every golden in release for this machine's own CPU (part 1 of 2)
-        if: ${{ !cancelled() && matrix.k == 14 }}
+        if: ${{ !cancelled() && matrix.k == 15 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --release
       - name: Every golden in release for this machine's own CPU (part 2 of 2)
-        if: ${{ !cancelled() && matrix.k == 15 }}
+        if: ${{ !cancelled() && matrix.k == 16 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
@@ -548,16 +548,18 @@ jobs:
     # side. Debug is four parts, each running the tests `--partition count:k/4` gives it (part 1
     # also the doctests, which nextest does not run).
     #
-    # Release is twelve parts, each building only what it runs. On main's push 79dd48d74 (run
+    # Release is fourteen parts, each building only what it runs. On main's push 79dd48d74 (run
     # 44000736713) each of its two parts built the whole suite and ran half of it: the build was 75
     # to 85% of each part (macOS x86-64: 25.5 and 33.6 minutes of 32 and 41; the tests 5.6 and 5.5),
-    # so more `count:` parts would each still have built everything. Parts 1 to 7 each run whole
-    # crates, the share the job `scope` gives them (`--parts 7`: every reachable kernel crate but
+    # so more `count:` parts would each still have built everything. Parts 1 to 8 each run whole
+    # crates, the share the job `scope` gives them (`--parts 8`: every reachable kernel crate but
     # geom-num and geom-test in exactly one share, balanced by its measured seconds, geom-test's
     # src/suite-times.tsv), with their doctests. geom-num's and geom-test's tests, each longer than
-    # a share (`--apart`), run in parts of their own by the first letter of their test targets, as
-    # `test` runs geom-num's: parts 8 and 9 geom-num's, 10 to 12 geom-test's, the library, binaries
-    # and doctests in the first of each. geom-test's tests/queue_wiring.rs holds every share and
+    # a share (`--apart`), run in parts of their own by the names of their test targets (cargo's
+    # `--test` globs, as `test` runs geom-num's): parts 9 to 11 geom-num's, 12 to 14 geom-test's,
+    # the library, binaries and doctests in the first of each. Run 44025893276 measured the
+    # shares (macOS x86-64 parts 6.4 to 13.1 minutes, from seven shares and geom-num in two parts).
+    # On that run's times the shares are eight and geom-num's attack tests two parts. geom-test's tests/queue_wiring.rs holds every share and
     # every test target to exactly one part, and `done` checks the shares the run was given.
     timeout-minutes: 120
     strategy:
@@ -565,18 +567,20 @@ jobs:
       fail-fast: false
       matrix:
         part:
-          - { mode: release, k: 1, n: 12, doc: true }
-          - { mode: release, k: 2, n: 12, doc: true }
-          - { mode: release, k: 3, n: 12, doc: true }
-          - { mode: release, k: 4, n: 12, doc: true }
-          - { mode: release, k: 5, n: 12, doc: true }
-          - { mode: release, k: 6, n: 12, doc: true }
-          - { mode: release, k: 7, n: 12, doc: true }
-          - { mode: release, k: 8, n: 12, doc: true, crate: geom-num, targets: "--lib --bins --test '[a-d]*'" }
-          - { mode: release, k: 9, n: 12, crate: geom-num, targets: "--test '[e-z]*'" }
-          - { mode: release, k: 10, n: 12, doc: true, crate: geom-test, targets: "--lib --bins --test '[a-b]*'" }
-          - { mode: release, k: 11, n: 12, crate: geom-test, targets: "--test '[c-k]*'" }
-          - { mode: release, k: 12, n: 12, crate: geom-test, targets: "--test '[l-z]*'" }
+          - { mode: release, k: 1, n: 14, doc: true }
+          - { mode: release, k: 2, n: 14, doc: true }
+          - { mode: release, k: 3, n: 14, doc: true }
+          - { mode: release, k: 4, n: 14, doc: true }
+          - { mode: release, k: 5, n: 14, doc: true }
+          - { mode: release, k: 6, n: 14, doc: true }
+          - { mode: release, k: 7, n: 14, doc: true }
+          - { mode: release, k: 8, n: 14, doc: true }
+          - { mode: release, k: 9, n: 14, doc: true, crate: geom-num, targets: "--lib --bins --test 'attack_[a-g]*'" }
+          - { mode: release, k: 10, n: 14, crate: geom-num, targets: "--test 'attack2*' --test 'attack_[h-z]*'" }
+          - { mode: release, k: 11, n: 14, crate: geom-num, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 12, n: 14, doc: true, crate: geom-test, targets: "--lib --bins --test '[a-b]*'" }
+          - { mode: release, k: 13, n: 14, crate: geom-test, targets: "--test '[c-k]*'" }
+          - { mode: release, k: 14, n: 14, crate: geom-test, targets: "--test '[l-z]*'" }
         # The targets of the job `test` but Linux x86-64, whose optimised run is `linux`'s.
         target:
           - name: Linux arm64
@@ -1292,7 +1296,7 @@ jobs:
             done
           fi
           # The release suite's shares (the job `scope`'s `parts`), which `suite` and `linux` run one
-          # to a part: exactly shares 1 to 7, no crate in two of them and every one a crate the change
+          # to a part: exactly shares 1 to 8, no crate in two of them and every one a crate the change
           # reaches, and the crates with parts of their own in none, so the parts run every share.
           if [ "$(jq -r '.scope.result' <<< "$NEEDS")" = success ]; then
             shares='.scope.outputs
@@ -1304,8 +1308,8 @@ jobs:
                 and ($shared | length) == ($shared | unique | length)
                 and all($shared[]; . as $c | $reached | index($c))
                 and all($shared[]; . as $c | $own | index($c) | not)'
-            if ! jq -e --argjson n 7 --arg apart "geom-num geom-test" "$shares" <<< "$NEEDS" > /dev/null; then
-              echo "::error::The release suite's shares are not shares 1 to 7 of the reachable crates, each once."
+            if ! jq -e --argjson n 8 --arg apart "geom-num geom-test" "$shares" <<< "$NEEDS" > /dev/null; then
+              echo "::error::The release suite's shares are not shares 1 to 8 of the reachable crates, each once."
               exit 1
             fi
           fi

@@ -1,60 +1,63 @@
 # Each kernel crate's seconds in a release suite part, building and running its own tests (its
 # library's unit tests, binaries and test targets) with overflow checks and debug assertions on, on
-# the slowest native leg, macOS x86-64 (four threads): its test units' build seconds from a cargo
-# `--timings` report of the whole release suite on a development machine (four threads; 26.4
-# minutes there against the runner's 33.6), times 1.27, plus its tests' run seconds summed from the
-# two release suite parts of main's push run 44000736713 on 79dd48d74, the sum over four threads,
-# at least 1. The libraries a part builds for every crate (about four minutes) and its set-up are
-# the same in every part and are not counted. `geom_test::test_scope::Selection::parts` balances
-# `kernel.yml`'s release suite shares by them (`kernel-quality test-scope --parts`); a crate not
-# listed is planned at the slowest listed time.
+# the slowest native leg, macOS x86-64 (four threads). First measured as its test units' build
+# seconds from a cargo `--timings` report of the whole release suite on a development machine
+# (four threads; 26.4 minutes there against the runner's 33.6), times 1.27, plus its tests' run
+# seconds summed from the two release suite parts of main's push run 44000736713 on 79dd48d74, the
+# sum over four threads; then each share's crates scaled by what that share's part took on macOS
+# x86-64 in the run by hand 44025893276 (its job's minutes less a minute of set-up and four of the
+# libraries every part builds) against what it was planned at. At least 1. The libraries and the
+# set-up are the same in every part and are not counted. `geom_test::test_scope::Selection::parts`
+# balances `kernel.yml`'s release suite shares by them (`kernel-quality test-scope --parts`); a
+# crate not listed is planned at the slowest listed time. geom-num and geom-test have parts of their
+# own (`--apart`), so their rows balance nothing.
 geom-2d	1
 geom-3dm	1
 geom-align	1
-geom-analysis	5
-geom-bench	164
+geom-analysis	7
+geom-bench	238
 geom-blend	1
-geom-bool	43
-geom-bvh	15
-geom-check	33
+geom-bool	114
+geom-bvh	40
+geom-check	50
 geom-cloud	1
 geom-combine	1
 geom-convert	1
-geom-curve	173
+geom-curve	84
 geom-draw	1
 geom-dxf	1
 geom-exchange	1
 geom-field	1
-geom-format	101
-geom-fuzz	152
-geom-gen	48
+geom-format	152
+geom-fuzz	199
+geom-gen	72
 geom-heal	1
 geom-ifc	1
 geom-intersect	1
 geom-landxml	1
-geom-linalg	8
-geom-make	20
-geom-math	60
-geom-mesh	69
+geom-linalg	9
+geom-make	29
+geom-math	89
+geom-mesh	78
 geom-meshio	1
-geom-name	23
+geom-name	30
 geom-num	264
-geom-nurbs	73
+geom-nurbs	194
 geom-offset	1
-geom-op	54
-geom-p21	5
+geom-op	61
+geom-p21	2
 geom-panel	1
-geom-poly	45
-geom-pool	3
+geom-poly	51
+geom-pool	4
 geom-profile	1
-geom-run	51
+geom-run	135
 geom-skeleton	1
 geom-sketch	1
 geom-spatial	1
 geom-step	1
 geom-subd	1
-geom-surface	45
+geom-surface	67
 geom-sweep	1
-geom-terrain	1
+geom-terrain	2
 geom-test	522
-geom-topo	63
+geom-topo	94

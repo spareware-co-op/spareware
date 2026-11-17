@@ -859,14 +859,37 @@ fn suite_part_problems(w: &Yaml) -> Vec<String> {
     found
 }
 
-/// The first letters a test-target share `[x-y]*` takes, or `None` for any other form, so a new
-/// form is looked at, not passed.
-fn letters(share: &str) -> Option<core::ops::RangeInclusive<char>> {
-    let inner = share.strip_prefix("'[")?.strip_suffix("]*'")?;
-    let mut chars = inner.chars();
+/// A test-target share as cargo's `--test` glob takes it, `'<prefix>[x-y]*'` (the targets whose
+/// name starts with the prefix, then a letter from x to y; the prefix may be empty) or
+/// `'<prefix>*'` (a prefix of at least one character), read as the prefix and the letters; `None`
+/// for any other form, so a new form is looked at, not passed.
+fn letters(share: &str) -> Option<(String, Option<core::ops::RangeInclusive<char>>)> {
+    let inner = share.strip_prefix('\'')?.strip_suffix("*'")?;
+    let plain = |p: &str| {
+        p.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    };
+    let Some((prefix, range)) = inner.strip_suffix(']').and_then(|r| r.split_once('[')) else {
+        return (!inner.is_empty() && plain(inner)).then(|| (inner.to_owned(), None));
+    };
+    let mut chars = range.chars();
     let (from, dash, to) = (chars.next()?, chars.next()?, chars.next()?);
-    (chars.next().is_none() && dash == '-' && from.is_ascii_lowercase() && to.is_ascii_lowercase())
-        .then_some(from..=to)
+    (plain(prefix)
+        && chars.next().is_none()
+        && dash == '-'
+        && from.is_ascii_lowercase()
+        && to.is_ascii_lowercase())
+    .then(|| (prefix.to_owned(), Some(from..=to)))
+}
+
+/// Whether the share [`letters`] read takes the test target `name`.
+fn takes(share: &(String, Option<core::ops::RangeInclusive<char>>), name: &str) -> bool {
+    let (prefix, range) = share;
+    name.strip_prefix(prefix.as_str()).is_some_and(|rest| {
+        range
+            .as_ref()
+            .is_none_or(|r| rest.chars().next().is_some_and(|c| r.contains(&c)))
+    })
 }
 
 /// What is wrong with how `test` shares a release leg among its parts: parts not 1 to n or a name
@@ -992,8 +1015,7 @@ fn vector_problems(build: &str, runs: &[String], tests: &[String]) -> Vec<String
         }
     }
     for t in tests {
-        let first = t.chars().next().unwrap_or(' ');
-        let times = shares.iter().filter(|l| l.contains(&first)).count();
+        let times = shares.iter().filter(|l| takes(l, t)).count();
         if times != 1 {
             found.push(format!(
                 "geom-num's tests/{t}.rs runs {times} times in `{build}`"
@@ -1567,27 +1589,27 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // The excluded leg's job moved off Linux x86-64.
         (
-            "    runs-on: ubuntu-latest\n    timeout-minutes: 120\n    strategy:\n      fail-fast: false\n      matrix:\n        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]",
-            "    runs-on: ubuntu-24.04-arm\n    timeout-minutes: 120\n    strategy:\n      fail-fast: false\n      matrix:\n        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]",
+            "    runs-on: ubuntu-latest\n    timeout-minutes: 120\n    strategy:\n      fail-fast: false\n      matrix:\n        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]",
+            "    runs-on: ubuntu-24.04-arm\n    timeout-minutes: 120\n    strategy:\n      fail-fast: false\n      matrix:\n        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]",
             "the goldens run 0 times on ubuntu-latest in release",
         ),
         // A part of the pull request's Linux job dropped: its goldens run nowhere.
         (
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]",
             "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]",
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]",
             "Every golden in release for this machine's own CPU (part 2 of 2): runs on parts [], not exactly one",
         ),
         // A golden step on two parts: run twice.
         (
-            "      - name: Every golden in release as shipped, without overflow checks (part 1 of 2)\n        if: ${{ !cancelled() && matrix.k == 11 }}",
-            "      - name: Every golden in release as shipped, without overflow checks (part 1 of 2)\n        if: ${{ !cancelled() && matrix.k <= 11 }}",
-            "Every golden in release as shipped, without overflow checks (part 1 of 2): runs on parts [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], not exactly one",
+            "      - name: Every golden in release as shipped, without overflow checks (part 1 of 2)\n        if: ${{ !cancelled() && matrix.k == 12 }}",
+            "      - name: Every golden in release as shipped, without overflow checks (part 1 of 2)\n        if: ${{ !cancelled() && matrix.k <= 12 }}",
+            "Every golden in release as shipped, without overflow checks (part 1 of 2): runs on parts [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], not exactly one",
         ),
         // The tests on fewer parts than there are shares: the last share's crates run nowhere.
         (
+            "        if: ${{ !cancelled() && matrix.k <= 9 && env.KERNEL_CRATES != '' }}",
             "        if: ${{ !cancelled() && matrix.k <= 8 && env.KERNEL_CRATES != '' }}",
-            "        if: ${{ !cancelled() && matrix.k <= 7 && env.KERNEL_CRATES != '' }}",
-            "runs on parts [1, 2, 3, 4, 5, 6, 7], not the shares' and the crate apart's",
+            "runs on parts [1, 2, 3, 4, 5, 6, 7, 8], not the shares' and the crate apart's",
         ),
         // A Linux part runs only a partition of its share: the rest of its tests run nowhere.
         (
@@ -1603,21 +1625,21 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A release part of the suite dropped: its share's crates run nowhere on any platform.
         (
-            "          - { mode: release, k: 7, n: 12, doc: true }\n",
+            "          - { mode: release, k: 8, n: 14, doc: true }\n",
             "",
-            "take a share, not the scope's shares 1 to 7",
+            "take a share, not the scope's shares 1 to 8",
         ),
         // The scope gives one share more than there are parts to run it.
         (
-            "--parts 7 --apart geom-num",
             "--parts 8 --apart geom-num",
-            "take a share, not the scope's shares 1 to 8",
+            "--parts 9 --apart geom-num",
+            "take a share, not the scope's shares 1 to 9",
         ),
         // `done` checks a different number of shares than the parts run.
         (
+            "jq -e --argjson n 8",
             "jq -e --argjson n 7",
-            "jq -e --argjson n 6",
-            "done does not check the scope's 7 shares",
+            "done does not check the scope's 8 shares",
         ),
         // A suite part takes another part's share.
         (
@@ -1631,23 +1653,35 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
             "targets: \"--test '[m-z]*'\"",
             "geom-test's tests/laws_booleans.rs runs 0 times",
         ),
-        // A test target of geom-num that no suite part runs (the `test` job's own split is
-        // `[a-d]*` too, so this edit is on the suite's entry alone).
+        // A test target of geom-num that no suite part runs: an attack test whose name is in no
+        // share of the suite's geom-num parts.
         (
-            "crate: geom-num, targets: \"--lib --bins --test '[a-d]*'\"",
-            "crate: geom-num, targets: \"--lib --bins --test '[a-c]*'\"",
-            "geom-num's tests/dd.rs runs 0 times in `suite's geom-num parts`",
+            "--test 'attack2*' --test 'attack_[h-z]*'",
+            "--test 'attack2*' --test 'attack_[q-z]*'",
+            "geom-num's tests/attack_plane.rs runs 0 times in `suite's geom-num parts`",
+        ),
+        // A test target of geom-num that two suite parts run: two shares that overlap.
+        (
+            "crate: geom-num, targets: \"--test '[b-z]*'\"",
+            "crate: geom-num, targets: \"--test '[a-z]*'\"",
+            "geom-num's tests/attack_plane.rs runs 2 times in `suite's geom-num parts`",
+        ),
+        // A share in a form the reading does not know is looked at, not passed.
+        (
+            "--test 'attack2*' --test",
+            "--test 'attack?*' --test",
+            "geom-num's share --test 'attack?*' in `suite's geom-num parts` is not read",
         ),
         // geom-test's doctests in two of its parts.
         (
-            "{ mode: release, k: 11, n: 12, crate: geom-test,",
-            "{ mode: release, k: 11, n: 12, doc: true, crate: geom-test,",
+            "{ mode: release, k: 13, n: 14, crate: geom-test,",
+            "{ mode: release, k: 13, n: 14, doc: true, crate: geom-test,",
             "geom-test's --doc runs 2 times",
         ),
         // geom-test kept in the shares as well as in parts of its own: run twice.
         (
-            "--parts 7 --apart geom-num --apart geom-test",
-            "--parts 7 --apart geom-num",
+            "--parts 8 --apart geom-num --apart geom-test",
+            "--parts 8 --apart geom-num",
             "the scope sets apart [\"geom-num\"]",
         ),
         // A release part runs a selection of its crates' targets.
@@ -1658,9 +1692,9 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A part added without its name counting it.
         (
+            "optimised with checks on, part ${{ matrix.k }} of 16)",
             "optimised with checks on, part ${{ matrix.k }} of 15)",
-            "optimised with checks on, part ${{ matrix.k }} of 14)",
-            "linux's name does not count its 15 parts",
+            "linux's name does not count its 16 parts",
         ),
         // The pull request's tests without debug assertions.
         (
