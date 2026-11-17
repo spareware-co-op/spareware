@@ -47,7 +47,9 @@
 //! surface that no closed form takes costs the engine boxes in proportion to its length over the
 //! resolution floor, each flagged: a circle of radius 207 lying in a plane cost 1,164,603 work
 //! units (46,647 boxes) before its closed form, and one on an axis off the coordinate axes still
-//! does, bounded by the work budget (issue 974). Recursion: none.
+//! does, bounded by the work budget (issue 974). A circle of radius 600 in a plane whose domain
+//! holds an arc of it cost 1,252,043 units before decision 32.69; now the signs of at most four
+//! sides and eight crossings, and one box of the circle for each arc. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,

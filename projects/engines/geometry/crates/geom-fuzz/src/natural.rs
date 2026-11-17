@@ -23,7 +23,8 @@
 //! to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read. An edge that lies on the other surface is a
 //! closed form where exact signs place it, and otherwise costs the engine boxes all along it: an
 //! end circle on the frame off the grid, and a sphere's edge (issue 974). [`work_of`] reads a
-//! case's count, which the target's tests hold for the issue's four inputs.
+//! case's count, which the target's tests hold for the issue's four inputs, for the end circles
+//! a plane's domain holds a part of (decision 32.69), and for what is still the engine's.
 
 #![allow(
     clippy::many_single_char_names,

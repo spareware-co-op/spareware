@@ -115,11 +115,6 @@ fn an_edge_lying_on_the_other_surface_costs_a_closed_form() {
 ///
 /// - a sphere against a cylinder about a line through its centre, whose end circle is a great
 ///   circle of the sphere: no closed form places a circle on a sphere (19,090 of 19,133);
-/// - a cylinder whose end circle lies in a plane whose domain holds half of it (136,698 of
-///   136,758);
-/// - the same with a cone, as a search of this target found it eleven times in 55 minutes: the
-///   cone's end circle of radius 600 lies in a plane whose domain holds an arc of it (1,252,043
-///   of 1,252,098, the cheapest of the eleven; the dearest, at radius 856, takes 3,046,840);
 /// - a cone against a plane that holds its axis, an edge of the plane passing through the apex,
 ///   where the line meets the cone at one point that is no simple root (483,244 of 484,099);
 /// - two cones about one line on the axis off the grid, no edge of either on the other: an end
@@ -132,20 +127,13 @@ fn an_edge_lying_on_the_other_surface_costs_a_closed_form() {
 /// Not stored: an end circle on the axis off the grid that lies in a plane. `quadrics::edges`
 /// rounds its centre off the plane, the engine runs round it, and the call stops on the budget. A
 /// stop's count is the budget's own, which no test can hold tighter.
-const STILL_THE_ENGINES: [(&[u8], u128); 6] = [
+const STILL_THE_ENGINES: [(&[u8], u128); 4] = [
     (
         &[
             0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00,
         ],
         19_133,
     ),
-    (
-        &[
-            0x02, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ],
-        136_758,
-    ),
-    (&[0xf7, 0xff, 0x83, 0xb5, 0x06, 0x60, 0xce, 0x60], 1_252_098),
     (
         &[
             0x03, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
@@ -164,9 +152,31 @@ const STILL_THE_ENGINES: [(&[u8], u128); 6] = [
     ),
 ];
 
+/// Issue 974's inputs whose end circle lies in a plane whose domain holds a part of it, stored
+/// in the target's `crashes` folder, each with the work one call of `natural` takes on it now
+/// that the arcs the domain holds have a closed form (decision 32.69): a cylinder's end circle
+/// of radius 5, half held (136,758 units before); a cone's of radius 600, the cheapest of the
+/// eleven a search of this target found in 55 minutes (1,252,098 before); and a cone's of
+/// radius 856, the dearest of them (3,046,840 before).
+const ARCS_A_PLANE_HOLDS: [(&[u8], u128); 3] = [
+    (
+        &[
+            0x02, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+        70,
+    ),
+    (&[0xf7, 0xff, 0x83, 0xb5, 0x06, 0x60, 0xce, 0x60], 62),
+    (
+        &[
+            0x63, 0x33, 0xb7, 0xb4, 0xff, 0xb4, 0xff, 0xfc, 0xfc, 0x6b, 0xff,
+        ],
+        62,
+    ),
+];
+
 #[test]
 fn what_the_closed_form_leaves_costs_no_more_than_today() {
-    for (data, most) in STILL_THE_ENGINES {
+    for (data, most) in STILL_THE_ENGINES.into_iter().chain(ARCS_A_PLANE_HOLDS) {
         let (case, _) = decode(data);
         let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
         assert!(work <= most, "{work} units, over {most}, on {data:02x?}");

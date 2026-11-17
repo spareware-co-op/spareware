@@ -36,8 +36,11 @@
 //! trimmed domain has, once a call whatever the count of its pieces. An edge that crosses the
 //! other surface costs the engine 13 to 2,481 work units in the stored cases. An edge that lies on
 //! the other surface is a closed form, a few predicates, where exact signs place it (decision
-//! 32.64); where they cannot (an end circle whose centre the frame rounds, as on an axis off the
-//! coordinate axes; a sphere's latitude; a domain that holds only part of the edge) it costs the
+//! 32.64), and so is each arc of an end circle that a plane's domain holds a part of (decision
+//! 32.69: 62 to 105 units a call where the engine took 1,252,098 to 3,046,840); where they
+//! cannot (an end circle whose centre the frame rounds, as on an axis off the coordinate axes; a
+//! sphere's latitude; a round domain short of a whole turn; a plane whose vectors run off the
+//! coordinate axes, or whose domain holds a lone point of the circle) it costs the
 //! engine boxes all along it, about a million units for a circle of radius 200, bounded by the work
 //! budget (issue 974). Recursion: none.
 

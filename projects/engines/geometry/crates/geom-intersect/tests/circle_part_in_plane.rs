@@ -80,15 +80,14 @@ fn overlaps(curve: &CurveKind<3>, surface: &SurfaceKind) -> Option<Vec<[(f64, f6
 
 /// The pair's answer is these arcs of the circle, in order: each enclosed, and no wider than
 /// [`CLOSE`] past either end. The spans in u and v of each are returned.
-fn arcs(
-    curve: &CurveKind<3>,
-    surface: &SurfaceKind,
-    want: &[(f64, f64)],
-) -> Vec<[(f64, f64); 2]> {
+fn arcs(curve: &CurveKind<3>, surface: &SurfaceKind, want: &[(f64, f64)]) -> Vec<[(f64, f64); 2]> {
     let got = overlaps(curve, surface).unwrap_or_else(|| panic!("not overlaps alone"));
     assert_eq!(got.len(), want.len(), "{got:?}");
     for ([t, _, _], (from, to)) in got.iter().zip(want) {
-        assert!(t.0 <= *from && *from - t.0 <= CLOSE, "start {t:?} of {want:?}");
+        assert!(
+            t.0 <= *from && *from - t.0 <= CLOSE,
+            "start {t:?} of {want:?}"
+        );
         assert!(t.1 >= *to && t.1 - *to <= CLOSE, "end {t:?} of {want:?}");
     }
     got.iter().map(|[_, u, v]| [*u, *v]).collect()
@@ -146,7 +145,11 @@ fn two_sides_at_a_corner_hold_the_arc_between_them() {
 #[test]
 fn a_touch_from_inside_cuts_nothing() {
     // x at most 17 touches the circle at (17, 8): all of it is held.
-    arcs(&ring(), &plane(ORIGIN, X, Y, (-300.0, 17.0), SIDE), &[ROUND]);
+    arcs(
+        &ring(),
+        &plane(ORIGIN, X, Y, (-300.0, 17.0), SIDE),
+        &[ROUND],
+    );
     // y at least 3 touches it at (12, 3), inside the arc that x at most 15 leaves.
     arcs(
         &ring(),
@@ -253,7 +256,13 @@ fn what_the_signs_cannot_place_is_the_engines() {
     // The plane's vectors off the coordinate axes: u = 16 is the line through the centre.
     engine(
         &small,
-        &plane(ORIGIN, [0.6, 0.8, 0.0], [-0.8, 0.6, 0.0], (-300.0, 13.6), SIDE),
+        &plane(
+            ORIGIN,
+            [0.6, 0.8, 0.0],
+            [-0.8, 0.6, 0.0],
+            (-300.0, 13.6),
+            SIDE,
+        ),
     );
     // An arc of a circle, not a whole turn.
     let frame = Frame::new(X, Z).unwrap();
