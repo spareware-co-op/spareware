@@ -536,6 +536,7 @@ fn leg_problems(kernel: &str) -> Vec<String> {
         ));
     }
     found.extend(linux_part_problems(&w));
+    found.extend(suite_part_problems(&w));
     found.extend(test_part_problems(&w, &geom_num_tests()));
     found.extend(wasm_part_problems(&w));
     found.extend(wasm_suite_part_problems(&w));
@@ -566,10 +567,77 @@ fn parts_of(condition: &str, parts: &[i64]) -> Option<Vec<i64>> {
     }
 }
 
-/// What is wrong with how `linux` shares its work among its parts: a step that runs on no part
-/// (a part dropped from the matrix, or a condition naming none), a golden or test step on more
-/// than one part (run twice), the tests' `--partition count:k/n` not run on exactly parts 1 to n,
-/// the doctests not on exactly one part, or a part's name that does not count every part.
+/// The release suite's shares the job `scope` writes: the `--parts n` of its `test-scope` step and
+/// the crates `--apart` leaves out of them, or `None` when the step gives no `--parts`.
+fn scope_shares(w: &Yaml) -> Option<(i64, Vec<String>)> {
+    let run = w["jobs"]["scope"]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .map(|s| text(&s["run"]).replace('\n', " "))
+        .find(|r| r.contains("kernel-quality -- test-scope"))?;
+    let words: Vec<&str> = run.split_whitespace().collect();
+    let n = words
+        .iter()
+        .position(|w| *w == "--parts")
+        .and_then(|at| words.get(at + 1))
+        .and_then(|n| n.parse().ok())?;
+    let apart = words
+        .windows(2)
+        .filter(|p| p[0] == "--apart")
+        .map(|p| p[1].to_owned())
+        .collect();
+    Some((n, apart))
+}
+
+/// The expression with which a part of `job` takes its share of the crates: the crate its matrix
+/// entry or number names, else share k of the job `scope`'s `parts`.
+fn share_expression(job: &str, apart: &str, own_part: i64) -> String {
+    let parts = "fromJSON(needs.scope.outputs.parts)";
+    if job == "suite" {
+        format!(
+            "${{{{ matrix.part.mode == 'release' && (matrix.part.crate || {parts}[format('{{0}}', \
+             matrix.part.k)]) || '' }}}}"
+        )
+    } else {
+        format!(
+            "${{{{ matrix.k == {own_part} && '{apart}' || {parts}[format('{{0}}', matrix.k)] }}}}"
+        )
+    }
+}
+
+/// What is wrong with how a job's listing step narrows the crates to its part's share: the share
+/// not taken by `expected`, or the script not narrowing by it.
+fn share_step_problems(job: &str, steps: &Yaml, expected: &str) -> Vec<String> {
+    let listing = steps
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .find(|s| text(&s["run"]).contains("KERNEL_CRATES="));
+    let Some(listing) = listing else {
+        return vec![format!("{job} does not list its crates")];
+    };
+    let mut found = Vec::new();
+    if text(&listing["env"]["SHARE"]) != expected {
+        found.push(format!(
+            "{job}'s parts do not take their own share: SHARE is {:?}",
+            text(&listing["env"]["SHARE"])
+        ));
+    }
+    if !text(&listing["run"]).contains("case \" $SHARE \" in *\" $c \"*) ;; *) continue ;; esac") {
+        found.push(format!(
+            "{job}'s listing does not narrow the crates to the share"
+        ));
+    }
+    found
+}
+
+/// What is wrong with how `linux` shares its work among its parts: parts not 1 to n or a name
+/// that does not count them; the tests and doctests not on exactly the parts of the job `scope`'s
+/// shares and of the crates it sets apart (one part each), or run on a partition or a selection of
+/// their share; a part's share not its own; a golden step on no part or on more than one (run
+/// twice), or a golden build's `--part j/m` shares not exactly 1 to m; another step on no part or
+/// more than one.
 fn linux_part_problems(w: &Yaml) -> Vec<String> {
     let mut found = Vec::new();
     let linux = &w["jobs"]["linux"];
@@ -589,12 +657,26 @@ fn linux_part_problems(w: &Yaml) -> Vec<String> {
             text(&linux["name"])
         ));
     }
+    let Some((shares, apart)) = scope_shares(w) else {
+        found.push("the job scope gives the suites no shares (--parts)".to_owned());
+        return found;
+    };
+    if apart.is_empty() {
+        found.push("the scope sets no crate apart for linux's part of its own".to_owned());
+    }
+    // Shares 1 to n, then one part for the crates set apart.
+    let tested: Vec<i64> = (1..=shares + 1).collect();
+    found.extend(share_step_problems(
+        "linux",
+        &linux["steps"],
+        &share_expression("linux", &apart.join(" "), shares + 1),
+    ));
+    let mut goldens: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for step in linux["steps"].as_vec().into_iter().flatten() {
         let run = text(&step["run"]);
         let name = text(&step["name"]);
-        let heavy = run.starts_with("cargo run --locked -p geom-test --bin golden")
-            || run.starts_with("cargo test")
-            || run.starts_with("cargo nextest");
+        let golden = run.starts_with("cargo run --locked -p geom-test --bin golden");
+        let heavy = golden || run.starts_with("cargo test") || run.starts_with("cargo nextest");
         if !heavy {
             continue;
         }
@@ -605,20 +687,174 @@ fn linux_part_problems(w: &Yaml) -> Vec<String> {
             ));
             continue;
         };
-        if let Some(of) = run
-            .split("--partition count:${{ matrix.k }}/")
-            .nth(1)
-            .and_then(|r| r.split_whitespace().next())
-        {
-            let of: i64 = of.parse().unwrap_or(0);
-            if on != (1..=of).collect::<Vec<_>>() {
+        if run.contains("$KERNEL_CRATES") {
+            let whole = [
+                "cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast",
+                "cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast",
+            ];
+            if !whole.contains(&run.as_str()) {
                 found.push(format!(
-                    "{name}: --partition count:k/{of} runs on parts {on:?}, not 1 to {of}"
+                    "{name}: runs a partition or a selection of its share: {run}"
                 ));
             }
-        } else if on.len() != 1 {
+            if on != tested {
+                found.push(format!(
+                    "{name}: runs on parts {on:?}, not the shares' and the crate apart's {tested:?}"
+                ));
+            }
+            continue;
+        }
+        if on.len() != 1 {
             found.push(format!("{name}: runs on parts {on:?}, not exactly one"));
         }
+        if golden {
+            let words: Vec<&str> = run.split_whitespace().collect();
+            let share = words
+                .iter()
+                .position(|w| *w == "--part")
+                .and_then(|at| words.get(at + 1))
+                .map_or_else(|| "1/1".to_owned(), |s| (*s).to_owned());
+            let build = format!(
+                "{} {} {} {}",
+                text(&step["env"]["RUSTFLAGS"]),
+                text(&step["env"]["CARGO_TARGET_DIR"]),
+                text(&step["env"]["CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS"]),
+                run.replacen(&format!("--part {share} "), "", 1)
+            );
+            goldens.entry(build).or_default().push(share);
+        }
+    }
+    for (build, got) in &goldens {
+        let m = got.len();
+        let wanted: BTreeSet<String> = (1..=m).map(|j| format!("{j}/{m}")).collect();
+        if got.iter().cloned().collect::<BTreeSet<_>>() != wanted {
+            found.push(format!(
+                "linux's goldens of `{build}` run shares {got:?}, not each of {wanted:?} once"
+            ));
+        }
+    }
+    found
+}
+
+/// What is wrong with the suite's release parts of a crate set apart (`entries` whose `crate` is
+/// `krate`): its library, binaries and doctests not once, or a file of its `tests` folder in no
+/// share `[x-y]*` or in two.
+fn own_part_problems(entries: &[&Yaml], krate: &str) -> Vec<String> {
+    let mut selected: Vec<String> = Vec::new();
+    for p in entries.iter().filter(|p| text(&p["crate"]) == krate) {
+        if p["doc"].as_bool() == Some(true) {
+            selected.push("doc".to_owned());
+        }
+        selected.extend(
+            text(&p["targets"])
+                .split(" --")
+                .map(|s| s.trim().trim_start_matches("--").to_owned())
+                .filter(|s| !s.is_empty()),
+        );
+    }
+    vector_problems(
+        &format!("suite's {krate} parts"),
+        &selected,
+        &crate_tests(krate),
+    )
+    .into_iter()
+    .map(|p| p.replace("geom-num's", &format!("{krate}'s")))
+    .collect()
+}
+
+/// What is wrong with how `suite`'s release parts share the tests: parts not 1 to n of one n; the
+/// parts that take a share of the job `scope` not exactly 1 to its `--parts`, each with its
+/// doctests; a crate set apart without parts of its own, or one with parts the scope does not
+/// set apart; a crate's own parts not running its library, binaries and doctests once and every
+/// file of its `tests` folder in exactly one share `[x-y]*`; the run or the doctests not those of
+/// the part's own crates and targets; `done` not checking the same shares.
+fn suite_part_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let suite = &w["jobs"]["suite"];
+    let entries: Vec<&Yaml> = suite["strategy"]["matrix"]["part"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter(|p| text(&p["mode"]) == "release")
+        .collect();
+    let ks: Vec<i64> = entries.iter().filter_map(|p| p["k"].as_i64()).collect();
+    let n = i64::try_from(entries.len()).unwrap();
+    if ks != (1..=n).collect::<Vec<_>>() || entries.iter().any(|p| p["n"].as_i64() != Some(n)) {
+        found.push(format!(
+            "suite's release parts are {ks:?}, not 1 to {n} of {n}"
+        ));
+    }
+    let Some((shares, apart)) = scope_shares(w) else {
+        found.push("the job scope gives the suites no shares (--parts)".to_owned());
+        return found;
+    };
+    let taking: Vec<i64> = entries
+        .iter()
+        .filter(|p| p["crate"].is_badvalue())
+        .filter_map(|p| p["k"].as_i64())
+        .collect();
+    if taking != (1..=shares).collect::<Vec<_>>() {
+        found.push(format!(
+            "suite's parts {taking:?} take a share, not the scope's shares 1 to {shares}"
+        ));
+    }
+    for p in entries.iter().filter(|p| p["crate"].is_badvalue()) {
+        if p["doc"].as_bool() != Some(true) || !p["targets"].is_badvalue() {
+            found.push(format!(
+                "suite's share part {} does not run its crates' every target and doctest",
+                p["k"].as_i64().unwrap_or(0)
+            ));
+        }
+    }
+    let own: BTreeSet<String> = entries
+        .iter()
+        .filter(|p| !p["crate"].is_badvalue())
+        .map(|p| text(&p["crate"]))
+        .collect();
+    if own != apart.iter().cloned().collect::<BTreeSet<_>>() {
+        found.push(format!(
+            "suite runs {own:?} in parts of their own, the scope sets apart {apart:?}"
+        ));
+    }
+    for krate in &own {
+        found.extend(own_part_problems(&entries, krate));
+    }
+    found.extend(share_step_problems(
+        "suite",
+        &suite["steps"],
+        &share_expression("suite", "", 0),
+    ));
+    let steps: Vec<&Yaml> = suite["steps"].as_vec().into_iter().flatten().collect();
+    let release = |s: &&Yaml| text(&s["if"]).contains("matrix.part.mode == 'release'");
+    let commands: Vec<String> = steps
+        .iter()
+        .filter(|s| release(s))
+        .filter(|s| text(&s["run"]).starts_with("cargo"))
+        .map(|s| text(&s["run"]))
+        .collect();
+    let wanted = [
+        "cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast ${{ matrix.part.targets }}",
+        "cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast",
+    ];
+    if commands != wanted {
+        found.push(format!(
+            "suite's release parts do not run their own crates and targets: {commands:#?}"
+        ));
+    }
+    if !steps.iter().filter(|s| release(s)).any(|s| {
+        text(&s["run"]).contains("--doc") && text(&s["if"]).contains("&& matrix.part.doc &&")
+    }) {
+        found.push("suite's release doctests do not run on the parts that say `doc`".to_owned());
+    }
+    let done = runs(w, "done");
+    let check = format!(
+        "jq -e --argjson n {shares} --arg apart \"{}\"",
+        apart.join(" ")
+    );
+    if !done.contains(&check) {
+        found.push(format!(
+            "done does not check the scope's {shares} shares: {check}"
+        ));
     }
     found
 }
@@ -981,7 +1217,12 @@ fn wasm_build_problems(steps: &[&Yaml], builds: &[String]) -> Vec<String> {
 
 /// geom-num's test targets: the files of its `tests` folder.
 fn geom_num_tests() -> Vec<String> {
-    let dir = root().join("projects/engines/geometry/crates/geom-num/tests");
+    crate_tests("geom-num")
+}
+
+/// A kernel crate's test targets: the files of its `tests` folder.
+fn crate_tests(krate: &str) -> Vec<String> {
+    let dir = root().join(format!("projects/engines/geometry/crates/{krate}/tests"));
     let mut out: Vec<String> = std::fs::read_dir(dir)
         .unwrap()
         .filter_map(|e| {
@@ -1311,6 +1552,7 @@ fn a_run_by_hand_writes_nothing_later_runs_read() {
     ignore = "reads the repository's files, which a WebAssembly test run cannot"
 )]
 #[test]
+#[allow(clippy::too_many_lines, reason = "the cases are written out in full")]
 fn the_queue_and_the_pull_request_cover_every_leg() {
     let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
     assert_eq!(leg_problems(&kernel), Vec::<String>::new());
@@ -1325,38 +1567,105 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // The excluded leg's job moved off Linux x86-64.
         (
-            "    runs-on: ubuntu-latest\n    timeout-minutes: 120\n    strategy:\n      fail-fast: false\n      matrix:\n        k: [1, 2, 3, 4]",
-            "    runs-on: ubuntu-24.04-arm\n    timeout-minutes: 120\n    strategy:\n      fail-fast: false\n      matrix:\n        k: [1, 2, 3, 4]",
+            "    runs-on: ubuntu-latest\n    timeout-minutes: 120\n    strategy:\n      fail-fast: false\n      matrix:\n        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]",
+            "    runs-on: ubuntu-24.04-arm\n    timeout-minutes: 120\n    strategy:\n      fail-fast: false\n      matrix:\n        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]",
             "the goldens run 0 times on ubuntu-latest in release",
         ),
         // A part of the pull request's Linux job dropped: its goldens run nowhere.
         (
-            "        k: [1, 2, 3, 4]",
-            "        k: [1, 2, 3]",
-            "Every golden in release for this machine's own CPU: runs on parts [], not exactly one",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]",
+            "Every golden in release for this machine's own CPU (part 2 of 2): runs on parts [], not exactly one",
         ),
         // A golden step on two parts: run twice.
         (
-            "      - name: Every golden in release as shipped, without overflow checks\n        if: ${{ !cancelled() && matrix.k == 3 }}",
-            "      - name: Every golden in release as shipped, without overflow checks\n        if: ${{ !cancelled() && matrix.k <= 3 }}",
-            "Every golden in release as shipped, without overflow checks: runs on parts [1, 2, 3], not exactly one",
+            "      - name: Every golden in release as shipped, without overflow checks (part 1 of 2)\n        if: ${{ !cancelled() && matrix.k == 11 }}",
+            "      - name: Every golden in release as shipped, without overflow checks (part 1 of 2)\n        if: ${{ !cancelled() && matrix.k <= 11 }}",
+            "Every golden in release as shipped, without overflow checks (part 1 of 2): runs on parts [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], not exactly one",
         ),
-        // The tests' partition on fewer parts than it counts: half the tests run nowhere.
+        // The tests on fewer parts than there are shares: the last share's crates run nowhere.
         (
-            "        if: ${{ !cancelled() && matrix.k <= 2 && env.KERNEL_CRATES != '' }}",
-            "        if: ${{ !cancelled() && matrix.k == 1 && env.KERNEL_CRATES != '' }}",
-            "runs on parts [1], not 1 to 2",
+            "        if: ${{ !cancelled() && matrix.k <= 8 && env.KERNEL_CRATES != '' }}",
+            "        if: ${{ !cancelled() && matrix.k <= 7 && env.KERNEL_CRATES != '' }}",
+            "runs on parts [1, 2, 3, 4, 5, 6, 7], not the shares' and the crate apart's",
+        ),
+        // A Linux part runs only a partition of its share: the rest of its tests run nowhere.
+        (
+            "          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast\n",
+            "          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.k }}/2\n",
+            "runs a partition or a selection of its share",
+        ),
+        // A Linux part takes another part's share: its own share runs nowhere.
+        (
+            "|| fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.k)] }}",
+            "|| fromJSON(needs.scope.outputs.parts)[format('{0}', 1)] }}",
+            "linux's parts do not take their own share",
+        ),
+        // A release part of the suite dropped: its share's crates run nowhere on any platform.
+        (
+            "          - { mode: release, k: 7, n: 12, doc: true }\n",
+            "",
+            "take a share, not the scope's shares 1 to 7",
+        ),
+        // The scope gives one share more than there are parts to run it.
+        (
+            "--parts 7 --apart geom-num",
+            "--parts 8 --apart geom-num",
+            "take a share, not the scope's shares 1 to 8",
+        ),
+        // `done` checks a different number of shares than the parts run.
+        (
+            "jq -e --argjson n 7",
+            "jq -e --argjson n 6",
+            "done does not check the scope's 7 shares",
+        ),
+        // A suite part takes another part's share.
+        (
+            "matrix.part.crate || fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.part.k)]",
+            "matrix.part.crate || fromJSON(needs.scope.outputs.parts)[format('{0}', 1)]",
+            "suite's parts do not take their own share",
+        ),
+        // A test target of geom-test that no part runs: its first letter in no share.
+        (
+            "targets: \"--test '[l-z]*'\"",
+            "targets: \"--test '[m-z]*'\"",
+            "geom-test's tests/laws_booleans.rs runs 0 times",
+        ),
+        // A test target of geom-num that no suite part runs (the `test` job's own split is
+        // `[a-d]*` too, so this edit is on the suite's entry alone).
+        (
+            "crate: geom-num, targets: \"--lib --bins --test '[a-d]*'\"",
+            "crate: geom-num, targets: \"--lib --bins --test '[a-c]*'\"",
+            "geom-num's tests/dd.rs runs 0 times in `suite's geom-num parts`",
+        ),
+        // geom-test's doctests in two of its parts.
+        (
+            "{ mode: release, k: 11, n: 12, crate: geom-test,",
+            "{ mode: release, k: 11, n: 12, doc: true, crate: geom-test,",
+            "geom-test's --doc runs 2 times",
+        ),
+        // geom-test kept in the shares as well as in parts of its own: run twice.
+        (
+            "--parts 7 --apart geom-num --apart geom-test",
+            "--parts 7 --apart geom-num",
+            "the scope sets apart [\"geom-num\"]",
+        ),
+        // A release part runs a selection of its crates' targets.
+        (
+            "--no-fail-fast ${{ matrix.part.targets }}",
+            "--no-fail-fast --lib ${{ matrix.part.targets }}",
+            "suite's release parts do not run their own crates and targets",
         ),
         // A part added without its name counting it.
         (
-            "optimised with checks on, part ${{ matrix.k }} of 4)",
-            "optimised with checks on, part ${{ matrix.k }} of 3)",
-            "linux's name does not count its 4 parts",
+            "optimised with checks on, part ${{ matrix.k }} of 15)",
+            "optimised with checks on, part ${{ matrix.k }} of 14)",
+            "linux's name does not count its 15 parts",
         ),
         // The pull request's tests without debug assertions.
         (
-            "          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.k }}/2",
-            "        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.k }}/2",
+            "          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast\n",
+            "        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast\n",
             "the pull request's tests are not optimised",
         ),
         // The queue's suite without debug assertions.

@@ -43,7 +43,8 @@
 //!   ([`geom_test::fuzz_scope`]); `.github/workflows/kernel-fuzz.yml`'s job `select` runs it.
 //!
 //! - `test-scope` prints which crates' tests a change can reach, and why, and writes the step
-//!   outputs `kernel.yml`'s suites read ([`geom_test::test_scope`]); with `--build-of <crate>` it
+//!   outputs `kernel.yml`'s suites read ([`geom_test::test_scope`]), with `--parts <n>` also the
+//!   release suite's n shares of the crates by their measured seconds; with `--build-of <crate>` it
 //!   says instead whether the change reaches what that crate's tests and benchmarks build, for
 //!   `kernel-bench.yml`'s count gates. With `--base <commit>`, `test-scope` and `fuzz-scope` read
 //!   `MAP.json` and `quality-ledger.json` by their changed entries ([`geom_test::shared`]).
@@ -311,6 +312,14 @@ enum Command {
         /// `reached`, instead of the crates whose tests run.
         #[arg(long, value_name = "CRATE")]
         build_of: Option<String>,
+        /// Also the output `parts`: the selected crates but `--apart`'s shared out among this many
+        /// parts of the release suite by their measured seconds
+        /// (`geom_test::test_scope::Selection::parts`).
+        #[arg(long, value_name = "N", conflicts_with = "build_of", value_parser = clap::value_parser!(u16).range(1..))]
+        parts: Option<u16>,
+        /// A crate the workflow runs in parts of its own, left out of `--parts`'s shares.
+        #[arg(long, value_name = "CRATE", requires = "parts")]
+        apart: Vec<String>,
         /// Appends the step outputs to this file (GitHub's `$GITHUB_OUTPUT`) instead of printing
         /// them.
         #[arg(long, value_name = "FILE")]
@@ -574,6 +583,7 @@ fn test_scope(
     changed: Option<&Path>,
     base: Option<&str>,
     build_of: Option<&str>,
+    parts: Option<(usize, &[String])>,
     github_output: Option<&Path>,
     repo: &Path,
 ) -> Result<bool, String> {
@@ -601,7 +611,18 @@ fn test_scope(
     } else {
         let selection = scope.select_with(files.as_deref(), &shared);
         print!("{}", selection.report());
-        selection.outputs()
+        let mut outputs = selection.outputs();
+        if let Some((n, apart)) = parts {
+            if let Some(c) = apart.iter().find(|c| !scope.folders().contains_key(*c)) {
+                return Err(format!("--apart {c}: not a workspace crate"));
+            }
+            let times = geom_test::coverage::parse_times(test_scope::SUITE_TIMES)
+                .map_err(|e| format!("suite-times.tsv: {e}"))?;
+            let output = selection.parts_output(n, apart, &times, scope.folders());
+            println!("The release suite's parts: {}", output.1);
+            outputs.push(output);
+        }
+        outputs
     };
     let mut lines = String::new();
     for (key, value) in outputs {
@@ -950,12 +971,15 @@ fn run(cli: Cli) -> Result<bool, String> {
             changed,
             base,
             build_of,
+            parts,
+            apart,
             github_output,
             repo,
         } => test_scope(
             changed.as_deref().filter(|_| !all),
             base.as_deref(),
             build_of.as_deref(),
+            parts.map(|n| (usize::from(n), apart.as_slice())),
             github_output.as_deref(),
             &repo,
         ),

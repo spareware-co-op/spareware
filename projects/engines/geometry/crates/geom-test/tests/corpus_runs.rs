@@ -615,7 +615,7 @@ fn a_planted_skip_is_found() {
     // The pull request's leg built unoptimised, or told it is: every gated test there.
     let step = "        env:\n          RUSTFLAGS: -C overflow-checks=on\n          \
                 CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n        run: cargo nextest run \
-                $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.k }}/2";
+                $KERNEL_CRATES --release --locked --no-fail-fast\n";
     for (from, to) in [
         (
             "        run: cargo",

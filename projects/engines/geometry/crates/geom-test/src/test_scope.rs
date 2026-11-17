@@ -7,7 +7,9 @@
 //! [`Scope::select`] takes the files a change touches (`git diff --name-only`, one path from the
 //! repository root each) and decides, for every workspace crate, whether its tests run, with the
 //! changed file that selected it and why. [`Selection::outputs`] writes the decision as the step
-//! outputs `kernel.yml`'s suites read, and [`Selection::report`] writes it for the job's log.
+//! outputs `kernel.yml`'s suites read, [`Selection::parts`] shares the selected crates out among
+//! the release suite's parts by their measured seconds ([`SUITE_TIMES`]), and
+//! [`Selection::report`] writes the decision for the job's log.
 //! [`Scope::build_reached`] says whether a change reaches what one crate's tests and benchmarks
 //! build, for `kernel-bench.yml`'s count gates. `kernel-quality test-scope` is the command line.
 //!
@@ -387,6 +389,11 @@ impl Scope {
     }
 }
 
+/// Each kernel crate's measured seconds in the release suite (`suite-times.tsv`, read by
+/// [`crate::coverage::parse_times`]), which [`Selection::parts`] balances `kernel.yml`'s release
+/// suite parts by.
+pub const SUITE_TIMES: &str = include_str!("suite-times.tsv");
+
 /// A changed file's path as `git diff` writes it, `/` between its parts, without `./`.
 fn normal(file: &str) -> String {
     let f = file.trim().replace('\\', "/");
@@ -417,6 +424,60 @@ impl Selection {
                 (running.len() == self.crates.len()).to_string(),
             ),
         ]
+    }
+
+    /// The kernel's crates whose tests run (those whose folder, in `folders`, is in the kernel's
+    /// crates folder, which `kernel.yml`'s suites test), but those `apart` names (which the
+    /// workflow runs in parts of their own), shared out among `n` parts of a suite by their
+    /// measured `times` ([`crate::coverage::balance`], as the coverage run shares its parts), each
+    /// part in name order. Every such crate is in exactly one part; a part is empty when there are
+    /// fewer crates than parts.
+    #[must_use]
+    pub fn parts(
+        &self,
+        n: usize,
+        apart: &[String],
+        times: &BTreeMap<String, u64>,
+        folders: &BTreeMap<String, String>,
+    ) -> Vec<Vec<String>> {
+        let crates: Vec<String> = self
+            .running()
+            .into_iter()
+            .filter(|c| {
+                folders
+                    .get(*c)
+                    .is_some_and(|f| f.starts_with(crate::mutants::KERNEL_FOLDER))
+            })
+            .filter(|c| !apart.iter().any(|a| a == c))
+            .map(str::to_owned)
+            .collect();
+        crate::coverage::balance(&crates, times, n)
+            .into_iter()
+            .map(|(_, mut part)| {
+                part.sort();
+                part
+            })
+            .collect()
+    }
+
+    /// [`Selection::parts`] as the step output `parts`: one line of JSON, an object from each
+    /// part's number (`"1"` to `"n"`) to its crates separated by spaces, which a workflow's part k
+    /// reads as `fromJSON(needs.scope.outputs.parts)['k']`.
+    #[must_use]
+    pub fn parts_output(
+        &self,
+        n: usize,
+        apart: &[String],
+        times: &BTreeMap<String, u64>,
+        folders: &BTreeMap<String, String>,
+    ) -> (String, String) {
+        let object: serde_json::Map<String, Value> = self
+            .parts(n, apart, times, folders)
+            .into_iter()
+            .enumerate()
+            .map(|(k, part)| (k.saturating_add(1).to_string(), Value::from(part.join(" "))))
+            .collect();
+        ("parts".to_owned(), Value::Object(object).to_string())
     }
 
     /// The decision, for the job's log and summary: the changed files, then every crate, each
