@@ -790,6 +790,117 @@ mod proofs {
         }
     }
 
+    /// TRIAL (measuring only, removed before the pull request lands): the claim of
+    /// `add_sub_mul_enclose_the_rounded_result` for one operation `op` (0 add, 1 sub, 2 mul), one
+    /// part `claim` of it (0 the whole, 1 the bounds are ordered, 2 the rounded result is inside,
+    /// 3 it is not under the lower bound, 4 it is not over the upper bound) and only the inputs of
+    /// class `class` of the candidate split `kind`.
+    fn trial_2(op: u8, claim: u8, kind: u8, class: u64) {
+        let (x, y) = (finite(), finite());
+        let (xb, yb) = (x.to_bits(), y.to_bits());
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // The top two bits of each exponent field: 16 classes.
+            1 => ((xb >> 61) & 3) | (((yb >> 61) & 3) << 2),
+            // Which operands are zero: 4 classes.
+            2 => u64::from(x == 0.0) | (u64::from(y == 0.0) << 1),
+            // The top three bits of each exponent field: 64 classes.
+            _ => ((xb >> 60) & 7) | (((yb >> 60) & 7) << 3),
+        };
+        if part != class {
+            return;
+        }
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        let (got, rounded) = match op {
+            0 => (a.add(b), x + y),
+            1 => (a.sub(b), x - y),
+            _ => (a.mul(b), x * y),
+        };
+        if let Ok(r) = got {
+            if claim == 0 || claim == 1 {
+                assert!(r.lo() <= r.hi());
+            }
+            if rounded.is_finite() {
+                if claim == 0 || claim == 2 {
+                    assert!(r.contains(rounded));
+                }
+                if claim == 3 {
+                    assert!(r.lo() <= rounded);
+                }
+                if claim == 4 {
+                    assert!(rounded <= r.hi());
+                }
+            }
+        }
+    }
+
+    macro_rules! trial {
+        ($($(#[$attr:meta])* $name:ident: $op:expr, $claim:expr, $kind:expr, $class:expr;)*) => {
+            $(
+                #[kani::proof]
+                $(#[$attr])*
+                fn $name() {
+                    trial_2($op, $claim, $kind, $class);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        #[kani::solver(kissat)] t2_add_whole_k: 0, 0, 0, 0;
+        #[kani::solver(kissat)] t2_sub_whole_k: 1, 0, 0, 0;
+        #[kani::solver(kissat)] t2_mul_whole_k: 2, 0, 0, 0;
+        #[kani::solver(minisat)] t2_mul_whole_m: 2, 0, 0, 0;
+        t2_mul_ordered_c: 2, 1, 0, 0;
+        t2_mul_inside_c: 2, 2, 0, 0;
+        t2_mul_lower_c: 2, 3, 0, 0;
+        t2_mul_upper_c: 2, 4, 0, 0;
+        #[kani::solver(kissat)] t2_mul_ordered_k: 2, 1, 0, 0;
+        #[kani::solver(kissat)] t2_mul_inside_k: 2, 2, 0, 0;
+        #[kani::solver(kissat)] t2_mul_lower_k: 2, 3, 0, 0;
+        #[kani::solver(kissat)] t2_mul_upper_k: 2, 4, 0, 0;
+        t2_mul_nonzero_c: 2, 0, 2, 0;
+        #[kani::solver(kissat)] t2_mul_nonzero_k: 2, 0, 2, 0;
+        t2_mul_zero_3_c: 2, 0, 2, 3;
+        t2_mul_exp_0_c: 2, 0, 1, 0;
+        t2_mul_exp_1_c: 2, 0, 1, 1;
+        t2_mul_exp_2_c: 2, 0, 1, 2;
+        t2_mul_exp_3_c: 2, 0, 1, 3;
+        t2_mul_exp_4_c: 2, 0, 1, 4;
+        t2_mul_exp_5_c: 2, 0, 1, 5;
+        t2_mul_exp_6_c: 2, 0, 1, 6;
+        t2_mul_exp_7_c: 2, 0, 1, 7;
+        t2_mul_exp_8_c: 2, 0, 1, 8;
+        t2_mul_exp_9_c: 2, 0, 1, 9;
+        t2_mul_exp_10_c: 2, 0, 1, 10;
+        t2_mul_exp_11_c: 2, 0, 1, 11;
+        t2_mul_exp_12_c: 2, 0, 1, 12;
+        t2_mul_exp_13_c: 2, 0, 1, 13;
+        t2_mul_exp_14_c: 2, 0, 1, 14;
+        t2_mul_exp_15_c: 2, 0, 1, 15;
+        #[kani::solver(kissat)] t2_mul_exp_0_k: 2, 0, 1, 0;
+        #[kani::solver(kissat)] t2_mul_exp_1_k: 2, 0, 1, 1;
+        #[kani::solver(kissat)] t2_mul_exp_2_k: 2, 0, 1, 2;
+        #[kani::solver(kissat)] t2_mul_exp_3_k: 2, 0, 1, 3;
+        #[kani::solver(kissat)] t2_mul_exp_4_k: 2, 0, 1, 4;
+        #[kani::solver(kissat)] t2_mul_exp_5_k: 2, 0, 1, 5;
+        #[kani::solver(kissat)] t2_mul_exp_6_k: 2, 0, 1, 6;
+        #[kani::solver(kissat)] t2_mul_exp_7_k: 2, 0, 1, 7;
+        #[kani::solver(kissat)] t2_mul_exp_8_k: 2, 0, 1, 8;
+        #[kani::solver(kissat)] t2_mul_exp_9_k: 2, 0, 1, 9;
+        #[kani::solver(kissat)] t2_mul_exp_10_k: 2, 0, 1, 10;
+        #[kani::solver(kissat)] t2_mul_exp_11_k: 2, 0, 1, 11;
+        #[kani::solver(kissat)] t2_mul_exp_12_k: 2, 0, 1, 12;
+        #[kani::solver(kissat)] t2_mul_exp_13_k: 2, 0, 1, 13;
+        #[kani::solver(kissat)] t2_mul_exp_14_k: 2, 0, 1, 14;
+        #[kani::solver(kissat)] t2_mul_exp_15_k: 2, 0, 1, 15;
+        t2_mul_exp3_0_c: 2, 0, 3, 0;
+        t2_mul_exp3_27_c: 2, 0, 3, 27;
+        t2_mul_exp3_36_c: 2, 0, 3, 36;
+        t2_mul_exp3_28_c: 2, 0, 3, 28;
+    }
+
     /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
     /// refuses when it does, for every finite dividend and the divisor `y`; proven for the six
     /// divisors the module header names, one harness each (kissat as the SAT solver).
