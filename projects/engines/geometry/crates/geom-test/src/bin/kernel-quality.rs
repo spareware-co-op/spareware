@@ -1026,6 +1026,13 @@ fn run(cli: Cli) -> Result<bool, String> {
                         },
                     )
             };
+            let tests = |n: usize| {
+                if n == 1 {
+                    "1 test".to_owned()
+                } else {
+                    format!("{n} tests")
+                }
+            };
             let mut out = vec![
                 format!("### {title}: tests stopped with no verdict"),
                 String::new(),
@@ -1043,9 +1050,9 @@ fn run(cli: Cli) -> Result<bool, String> {
             };
             if !stops.allowed.is_empty() {
                 out.push(format!(
-                    "**{} tests stopped at {stop} s with no verdict**, {which}: not passes; Miri \
-                     did not see them finish.",
-                    stops.allowed.len()
+                    "**{} stopped at {stop} s with no verdict**, {which}: not passes; Miri did \
+                     not see them finish.",
+                    tests(stops.allowed.len())
                 ));
                 out.push(String::new());
                 for name in &stops.allowed {
@@ -1055,10 +1062,10 @@ fn run(cli: Cli) -> Result<bool, String> {
             }
             if !stops.refused.is_empty() {
                 out.push(format!(
-                    "**{} tests stopped at {stop} s with no verdict that may not stop: this job \
+                    "**{} stopped at {stop} s with no verdict that may not stop: this job \
                      fails.** Each is to be resized under `cfg(miri)` so Miri finishes it, and \
                      measured again.",
-                    stops.refused.len()
+                    tests(stops.refused.len())
                 ));
                 out.push(String::new());
                 for name in &stops.refused {

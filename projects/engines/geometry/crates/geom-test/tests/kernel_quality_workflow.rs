@@ -2651,7 +2651,7 @@ fn a_test_off_the_list_stopped_at_the_budget_turns_its_job_red() {
         assert_eq!(code, 1, "{binary} {test}: {said}");
         assert!(
             said.contains(
-                "1 tests stopped at 600 s with no verdict that may not stop: this job fails"
+                "1 test stopped at 600 s with no verdict that may not stop: this job fails"
             ) && said.contains(&format!("`{binary} {test}`")),
             "{said}"
         );
@@ -2669,7 +2669,7 @@ fn a_test_off_the_list_stopped_at_the_budget_turns_its_job_red() {
         let (code, said) = stopped_tool(&binary, &test, seconds, stop);
         assert_eq!(code, 0, "{binary} {test}: {said}");
         assert!(
-            said.contains(&format!("1 tests stopped at {stop} s with no verdict**"))
+            said.contains(&format!("1 test stopped at {stop} s with no verdict**"))
                 && said.contains(&format!("`{binary} {test}`"))
                 && !said.contains("this job fails"),
             "{said}"
