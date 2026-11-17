@@ -190,6 +190,479 @@ fn orient2d_proof_filter() {
         .for_each(|draw| holds(prove(PROOF_BOUND, draw, Claim::Filter)));
 }
 
+/// Trial, for measuring only (removed before this is ready): the six flags as bits, coordinate i
+/// (a.x, a.y, b.x, b.y, c.x, c.y) at bit i.
+fn trial_six(f: [bool; 6]) -> u16 {
+    u16::from(f[0])
+        | u16::from(f[1]) << 1
+        | u16::from(f[2]) << 2
+        | u16::from(f[3]) << 3
+        | u16::from(f[4]) << 4
+        | u16::from(f[5]) << 5
+}
+
+/// Trial, for measuring only: the bits of `draw` that one candidate split of the proof's domain
+/// fixes. `e`: the near-edge flags; `n`: the negative flags; `o`: the offsets; `x` and `p`: the x
+/// coordinates' negative flags and offsets; `a`: all of point a; `d`: which of b.x - a.x,
+/// c.x - a.x, b.y - a.y and c.y - a.y are negative; anything else: the near-edge and negative
+/// flags together.
+fn trial_bits(draw: &ProofDraw, family: u8) -> u16 {
+    let e = trial_six(draw.near_edge);
+    let n = trial_six(draw.negative);
+    let o = trial_six([
+        draw.offset[0] != 0,
+        draw.offset[1] != 0,
+        draw.offset[2] != 0,
+        draw.offset[3] != 0,
+        draw.offset[4] != 0,
+        draw.offset[5] != 0,
+    ]);
+    match family {
+        b'e' => e,
+        b'n' => n,
+        b'o' => o,
+        b'x' => n & 0b01_0101,
+        b'p' => o & 0b01_0101,
+        b'a' => (e & 3) | (n & 3) << 2 | (o & 3) << 4,
+        b'd' => {
+            let c = |i: usize| {
+                orient2d::proof_coord(
+                    PROOF_BOUND,
+                    draw.near_edge[i],
+                    draw.negative[i],
+                    draw.offset[i],
+                )
+                .unwrap_or(0)
+            };
+            u16::from(c(2) < c(0))
+                | u16::from(c(4) < c(0)) << 1
+                | u16::from(c(3) < c(1)) << 2
+                | u16::from(c(5) < c(1)) << 3
+        }
+        _ => e | n << 6,
+    }
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_e6_111111() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'e') == 63 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_e6_010101() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'e') == 21 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_n3_000() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'x') == 0 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_n3_010() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'x') == 4 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_n6_000000() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'n') == 0 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_n6_000100() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'n') == 4 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_n6_011001() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'n') == 25 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_n6_111111() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'n') == 63 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_o3_000() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'p') == 0 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_o3_111() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'p') == 21 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_o6_000000() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'o') == 0 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_o6_011001() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'o') == 25 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_o6_111111() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'o') == 63 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_a6_edge_edge() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'a') == 3 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_a6_zero_zero() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'a') == 0 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_a6_mixed() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'a') == 53 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_d4_0000() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'd') == 0 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_d4_0110() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'd') == 6 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_d4_1111() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b'd') == 15 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
+/// Trial, for measuring only: the predicate's claim on one class of one candidate split.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_trial_en12_floor() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| {
+            if trial_bits(draw, b't') == 1663 {
+                holds(prove(PROOF_BOUND, draw, Claim::Predicate));
+            }
+        });
+}
+
 /// The three proofs' claims are every claim of `check`, each once: a fourth claim added to
 /// `geom_fuzz::orient2d::CLAIMS` needs its harness here.
 #[test]

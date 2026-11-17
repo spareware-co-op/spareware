@@ -220,6 +220,26 @@ jobs:
           - orient2d_proof_predicate
           - orient2d_proof_exact_path
           - orient2d_proof_filter
+          - orient2d_trial_e6_111111
+          - orient2d_trial_e6_010101
+          - orient2d_trial_n3_000
+          - orient2d_trial_n3_010
+          - orient2d_trial_n6_000000
+          - orient2d_trial_n6_000100
+          - orient2d_trial_n6_011001
+          - orient2d_trial_n6_111111
+          - orient2d_trial_o3_000
+          - orient2d_trial_o3_111
+          - orient2d_trial_o6_000000
+          - orient2d_trial_o6_011001
+          - orient2d_trial_o6_111111
+          - orient2d_trial_a6_edge_edge
+          - orient2d_trial_a6_zero_zero
+          - orient2d_trial_a6_mixed
+          - orient2d_trial_d4_0000
+          - orient2d_trial_d4_0110
+          - orient2d_trial_d4_1111
+          - orient2d_trial_en12_floor
     defaults:
       run:
         shell: bash
