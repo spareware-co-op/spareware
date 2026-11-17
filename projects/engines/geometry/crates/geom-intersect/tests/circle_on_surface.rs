@@ -198,18 +198,6 @@ fn a_plane_whose_domain_holds_none_of_the_circle_misses_it() {
 }
 
 #[test]
-fn a_plane_whose_domain_holds_part_of_the_circle_is_the_engines() {
-    // A small circle, at u in [11.5, 12.5] and v in [7.5, 8.5], so the engine's run round it is
-    // short.
-    let ring = circle([12.0, 8.0, 0.0], 0.5, X, Z);
-    let origin = [0.0; 3];
-    engine(&ring, &plane(origin, X, Y, (12.0, 300.0), SIDE));
-    engine(&ring, &plane(origin, X, Y, (-300.0, 12.0), SIDE));
-    engine(&ring, &plane(origin, X, Y, SIDE, (8.0, 300.0)));
-    engine(&ring, &plane(origin, X, Y, SIDE, (-300.0, 8.0)));
-}
-
-#[test]
 fn a_circle_on_a_coaxial_cylinder_is_an_overlap() {
     let tube = SurfaceKind::Cylinder(cylinder([1.0, 2.0, 3.0], 5.0, X, Z));
     let spans = lies(&circle([1.0, 2.0, 10.0], 5.0, X, Z), &tube, 1.0, 7.0);

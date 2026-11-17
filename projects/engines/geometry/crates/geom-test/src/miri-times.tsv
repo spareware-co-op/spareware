@@ -1394,7 +1394,6 @@ native-only over 601	geom-intersect::circle_on_surface	a_circle_off_a_cylinder_i
 4	geom-intersect::circle_on_surface	a_circle_on_a_coaxial_cone_is_an_overlap
 3	geom-intersect::circle_on_surface	a_circle_on_a_coaxial_cylinder_is_an_overlap
 3	geom-intersect::circle_on_surface	a_plane_whose_domain_holds_none_of_the_circle_misses_it
-native-only over 601	geom-intersect::circle_on_surface	a_plane_whose_domain_holds_part_of_the_circle_is_the_engines
 native-only over 601	geom-intersect::circle_on_surface	an_axis_off_the_coordinate_axes_is_placed_by_enclosures_alone
 91	geom-intersect::edge_end	a_zero_inside_the_other_patch_is_proven_as_before
 native-only over 601	geom-intersect::edge_end	a_zero_on_the_end_of_a_nurbs_patch_is_proven_there

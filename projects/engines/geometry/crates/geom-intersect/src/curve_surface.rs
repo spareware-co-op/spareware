@@ -4,8 +4,8 @@
 //! equation, a line with a sphere, cylinder or cone a quadratic in the surface's own coordinates, and
 //! a line with a torus a quartic, isolated by [`crate::solve`], each with its count from an exact sign
 //! or a Sturm chain where the data are whole. A helix on a coaxial cylinder of its radius is an
-//! overlap, and so is a circle lying in a plane, or about the axis of a cylinder or cone at its
-//! radius there. Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval
+//! overlap, and so is each arc of a circle lying in a plane that the plane's domain holds, and a
+//! circle about the axis of a cylinder or cone at its radius there. Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval
 //! Projected Polyhedron step narrowing the boxes of NURBS pieces.
 //!
 //! Guarantees:
@@ -25,8 +25,12 @@
 //!   [`Item::Overlap`]s with [`Coincidence::Identical`]. Whether a circle lies on the surface is
 //!   decided by exact signs of sums of products of the stored doubles, never by an enclosure. A
 //!   circle the signs cannot place goes to the engine as before: on a cone, or at an end of a
-//!   round kind's domain, where the axis is off the coordinate axes; where a domain holds only a
-//!   part of the circle; and on a sphere (decision 32.64).
+//!   round kind's domain, where the axis is off the coordinate axes; where a round kind's domain
+//!   is short of a whole turn; and on a sphere (decision 32.64). A plane's domain that holds a
+//!   part of a whole circle holds arcs of it: which arcs is decided by exact signs where the
+//!   plane's vectors run along coordinate axes, each arc is an overlap over an enclosure of its
+//!   stretch of the circle, and a lone point of the circle in the domain, or a plane on other
+//!   vectors, is the engine's (decision 32.69).
 //! - **A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's
 //!   v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a
 //!   [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands
@@ -52,17 +56,19 @@
 )]
 
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use geom_curve::tight::{self, larger, smaller};
 use geom_curve::{
     Circle, CurveError, CurveKind, DerivativeBound, Frame, HelixAxes, Line, ParamCurve,
 };
 use geom_num::Sign;
+use geom_num::eft::two_prod;
 use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::RESOLUTION_FLOOR;
 use geom_num::sturm::Roots;
-use geom_num::{predicate, quadric};
+use geom_num::{math, predicate, quadric};
 use geom_nurbs::{BernsteinCurve, BernsteinPatch, Bounds, Direction, Limit, NurbsError};
 use geom_run::WorkMeter;
 use geom_surface::{
@@ -1291,9 +1297,28 @@ fn lying(
     proven(alloc::vec![overlap], meter)
 }
 
-/// A circle lying in a plane: an overlap where the plane's domain holds all of it, nothing where
-/// it holds none of it, and `None`, the engine's, where it holds a part or the circle stands off
-/// the plane.
+/// The plane's parameters over the stretch `t` of `curve`, enclosed: its box there, read in the
+/// plane's own vectors.
+fn in_parameters(
+    curve: &CurveKind<3>,
+    plane: &Plane,
+    t: (f64, f64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Interval, Interval), IntersectError> {
+    let (c, a, b) = plane.vectors();
+    let w = minus(sides(&curve.bound(t, meter)?)?, lift(c)?)?;
+    let (a, b) = (lift(a)?, lift(b)?);
+    let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
+    let (wa, wb) = (dot(w, a)?, dot(w, b)?);
+    let det = aa.mul(bb)?.sub(ab.mul(ab)?)?;
+    let u = wa.mul(bb)?.sub(wb.mul(ab)?)?.div(det)?;
+    let v = wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?;
+    Ok((u, v))
+}
+
+/// A circle lying in a plane: an overlap for each part of it the plane's domain holds, nothing
+/// where it holds none of it, and `None`, the engine's, where the circle stands off the plane or
+/// [`arcs_in_plane`] cannot decide.
 ///
 /// Theorem. A circle of positive radius (a circle kind has no other) holds three points not on one
 /// line, so exactly one plane holds it: the plane through its centre across its frame's stored
@@ -1318,21 +1343,412 @@ fn circle_in_plane(
         return Ok(None);
     }
     // The circle's box, read in the plane's parameters, holds every (u, v) of the circle.
-    let w = minus(sides(&curve.bound(curve.domain(), meter)?)?, lift(c)?)?;
-    let (a, b) = (lift(a)?, lift(b)?);
-    let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
-    let (wa, wb) = (dot(w, a)?, dot(w, b)?);
-    let det = aa.mul(bb)?.sub(ab.mul(ab)?)?;
-    let u = wa.mul(bb)?.sub(wb.mul(ab)?)?.div(det)?;
-    let v = wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?;
+    let (u, v) = in_parameters(curve, plane, curve.domain(), meter)?;
     let ((u0, u1), (v0, v1)) = ParamSurface::domain(plane);
     if u.hi() < u0 || u.lo() > u1 || v.hi() < v0 || v.lo() > v1 {
         return proven(Vec::new(), meter).map(Some);
     }
     if u.lo() < u0 || u.hi() > u1 || v.lo() < v0 || v.hi() > v1 {
-        return Ok(None);
+        return arcs_in_plane(curve, circle, plane, meter);
     }
     lying(curve, u, v, meter).map(Some)
+}
+
+/// A coordinate of a point of a circle, measured from the circle's centre: its sign, its square as
+/// a sum of products of doubles (exact), and an enclosure of it.
+#[derive(Clone)]
+struct Coord {
+    sign: Sign,
+    square: Vec<(f64, f64)>,
+    near: Interval,
+}
+
+/// The sign of `a − b`, exactly: the signs where they differ, the squares where they agree.
+fn order(a: &Coord, b: &Coord) -> Sign {
+    let squares = |p: &Coord, q: &Coord| {
+        let mut terms = p.square.clone();
+        terms.extend(q.square.iter().map(|&(x, y)| (-x, y)));
+        sign_of(&terms)
+    };
+    match (a.sign, b.sign) {
+        (Sign::Positive, Sign::Positive) => squares(a, b),
+        (Sign::Negative, Sign::Negative) => squares(b, a),
+        (Sign::Zero, Sign::Zero) => Sign::Zero,
+        (Sign::Positive, _) | (Sign::Zero, Sign::Negative) => Sign::Positive,
+        (Sign::Negative, _) | (Sign::Zero, Sign::Positive) => Sign::Negative,
+    }
+}
+
+/// Whether products of pairs of doubles this size are exact: zero, or far from both ends of the
+/// doubles' range.
+fn tame(x: f64) -> bool {
+    x == 0.0 || (1e-75..=1e75).contains(&x) || (-1e75..=-1e-75).contains(&x)
+}
+
+/// The coordinate `from + end·along − at` as a [`Coord`]: four doubles whose sum is it exactly
+/// (the product is a double and its error), so its sign is an exact sum and its square sixteen
+/// products. `None` where a product of the doubles would not be exact.
+fn offset(from: f64, end: f64, along: f64, at: f64) -> Result<Option<Coord>, IntersectError> {
+    let (p, e) = two_prod(end, along);
+    let sum = [from, p, e, -at];
+    if !(tame(end) && tame(along) && sum.iter().all(|x| tame(*x))) {
+        return Ok(None);
+    }
+    let sign = sign_of(&sum.map(|x| (1.0, x)));
+    let mut square = Vec::new();
+    let mut near = Interval::point(0.0)?;
+    for x in sum {
+        square.extend(sum.map(|y| (x, y)));
+        near = near.add(Interval::point(x)?)?;
+    }
+    Ok(Some(Coord { sign, square, near }))
+}
+
+/// The other coordinate of the circle's point whose one coordinate is `b`, on the side `sign`:
+/// its square is r² − b².
+fn across(b: &Coord, r: f64, sign: Sign) -> Result<Coord, IntersectError> {
+    let mut square = alloc::vec![(r, r)];
+    square.extend(b.square.iter().map(|&(x, y)| (-x, y)));
+    let r = Interval::point(r)?;
+    let d = r.mul(r)?.sub(b.near.mul(b.near)?)?;
+    // The square is positive where this is called; its enclosure may reach below zero.
+    let root = Interval::new(larger(d.lo(), 0.0), larger(d.hi(), 0.0))?.sqrt()?;
+    let near = if sign == Sign::Negative {
+        root.neg()
+    } else {
+        root
+    };
+    Ok(Coord { sign, square, near })
+}
+
+/// A point of the circle, from its centre, in the two coordinates of its plane.
+#[derive(Clone)]
+struct Spot {
+    x: Coord,
+    y: Coord,
+}
+
+/// The order of two points of the circle going round it from (r, 0) towards (0, r): the upper
+/// half (y ≥ 0) first, by falling x, then the lower half by rising x. Exact, and equal only for
+/// one point.
+fn round(p: &Spot, q: &Spot) -> Ordering {
+    let upper = |s: &Spot| s.y.sign != Sign::Negative;
+    let by = |s: Sign| match s {
+        Sign::Negative => Ordering::Less,
+        Sign::Zero => Ordering::Equal,
+        Sign::Positive => Ordering::Greater,
+    };
+    match (upper(p), upper(q)) {
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        (true, true) => by(order(&q.x, &p.x)),
+        (false, false) => by(order(&p.x, &q.x)),
+    }
+}
+
+/// The angle of `s` from (r, 0) towards (0, r), in half-turns on [0, 2), enclosed.
+fn angle(s: &Spot) -> Result<Interval, IntersectError> {
+    let at = turn_of(s.x.near, s.y.near)?;
+    // A point of the lower half is past a half-turn; `turn_of` may write it a turn back.
+    if s.y.sign == Sign::Negative && at.lo() < 0.5 {
+        Ok(at.add(Interval::point(2.0)?)?)
+    } else {
+        Ok(at)
+    }
+}
+
+/// One side of a rectangle: the half-plane where the coordinate `axis` (0 or 1) is at least `at`
+/// (`keep` positive) or at most `at` (`keep` negative).
+struct Half {
+    axis: usize,
+    at: Coord,
+    keep: Sign,
+}
+
+impl Half {
+    /// Whether `s` is in the half-plane, its line included.
+    fn holds(&self, s: &Spot) -> bool {
+        let side = order(if self.axis == 0 { &s.x } else { &s.y }, &self.at);
+        side == Sign::Zero || side == self.keep
+    }
+}
+
+/// What a rectangle holds of a circle.
+enum Held {
+    /// None of it.
+    Nothing,
+    /// All of it.
+    Whole,
+    /// These arcs of it, each from its first point round to its second in [`round`]'s direction.
+    Arcs(Vec<(Spot, Spot)>),
+}
+
+/// What the rectangle of `sides` holds of the circle of radius `r` about the origin of their
+/// coordinates, by exact signs. `None` where it holds a lone point: a touch from outside, at a
+/// side or a corner.
+///
+/// Theorem. A half-plane whose line crosses the circle holds one closed arc of it, from the
+/// crossing where the circle enters to the one where it leaves, and both crossings are
+/// transversal. One whose line misses or touches the circle holds all of it, none of it, or the
+/// one point of a touch from outside. The rectangle is the intersection of its half-planes, so the
+/// points where the circle meets the rectangle's edge are among the crossings that every other
+/// half-plane holds, and between two such points next to each other round the circle the open arc
+/// meets no edge: it is all inside or all outside. It is inside exactly when no half-plane's
+/// leaving crossing lies on it or at its start, since both its ends are in every half-plane and
+/// each half-plane's part is one arc. A touch from inside is no crossing and cuts nothing.
+fn held_of(r: f64, sides: &[Half]) -> Result<Option<Held>, IntersectError> {
+    match crossed_by(r, sides)? {
+        None => Ok(None),
+        Some(Err(all)) => Ok(Some(if all { Held::Whole } else { Held::Nothing })),
+        Some(Ok(crossed)) => between(r, &crossed),
+    }
+}
+
+/// The sides whose lines the circle crosses, where every other side holds all of it; `Err` where
+/// that settles the answer, all of the circle (`true`) or none of it; `None` for a touch from
+/// outside.
+#[allow(
+    clippy::type_complexity,
+    reason = "three outcomes of one private step, read at once by its one caller"
+)]
+fn crossed_by(r: f64, sides: &[Half]) -> Result<Option<Result<Vec<&Half>, bool>>, IntersectError> {
+    let reach = |sign: Sign| -> Result<Coord, IntersectError> {
+        let r = Interval::point(r)?;
+        Ok(Coord {
+            sign,
+            square: alloc::vec![(r.lo(), r.lo())],
+            near: if sign == Sign::Negative { r.neg() } else { r },
+        })
+    };
+    let (far, back) = (reach(Sign::Positive)?, reach(Sign::Negative)?);
+    let mut crossed = Vec::new();
+    let mut touched = false;
+    for half in sides {
+        // The circle's coordinate runs over [−r, r].
+        let (low, high) = (order(&half.at, &back), order(&half.at, &far));
+        let (whole, none, touch) = if half.keep == Sign::Positive {
+            (
+                low != Sign::Positive,
+                high == Sign::Positive,
+                high == Sign::Zero,
+            )
+        } else {
+            (
+                high != Sign::Negative,
+                low == Sign::Negative,
+                low == Sign::Zero,
+            )
+        };
+        if none {
+            return Ok(Some(Err(false)));
+        }
+        touched |= touch;
+        if !whole && !touch {
+            crossed.push(half);
+        }
+    }
+    if touched {
+        return Ok(None);
+    }
+    Ok(Some(if crossed.is_empty() {
+        Err(true)
+    } else {
+        Ok(crossed)
+    }))
+}
+
+/// The arcs of the circle inside every half-plane of `crossed`, each crossed by it: the second
+/// half of [`held_of`].
+fn between(r: f64, crossed: &[&Half]) -> Result<Option<Held>, IntersectError> {
+    let mut spots = Vec::new();
+    let mut leaving = Vec::new();
+    for (k, half) in crossed.iter().enumerate() {
+        for sign in [Sign::Positive, Sign::Negative] {
+            let other = across(&half.at, r, sign)?;
+            let (spot, leaves) = if half.axis == 0 {
+                (
+                    Spot {
+                        x: half.at.clone(),
+                        y: other,
+                    },
+                    sign == half.keep,
+                )
+            } else {
+                (
+                    Spot {
+                        x: other,
+                        y: half.at.clone(),
+                    },
+                    sign != half.keep,
+                )
+            };
+            if leaves {
+                leaving.push(spot.clone());
+            }
+            if crossed
+                .iter()
+                .enumerate()
+                .all(|(j, g)| j == k || g.holds(&spot))
+            {
+                spots.push(spot);
+            }
+        }
+    }
+    spots.sort_by(round);
+    spots.dedup_by(|p, q| round(p, q) == Ordering::Equal);
+    let count = spots.len();
+    if count == 0 {
+        return Ok(Some(Held::Nothing));
+    }
+    let mut arcs = Vec::new();
+    let mut inside = Vec::new();
+    for (from, to) in spots.iter().zip(spots.iter().cycle().skip(1)) {
+        let wraps = round(from, to) != Ordering::Less;
+        let leaves = leaving.iter().any(|e| {
+            let (after, before) = (
+                round(from, e) != Ordering::Greater,
+                round(e, to) == Ordering::Less,
+            );
+            if wraps {
+                after || before
+            } else {
+                after && before
+            }
+        });
+        inside.push(!leaves);
+        if !leaves {
+            arcs.push((from.clone(), to.clone()));
+        }
+    }
+    // A point with no arc at either hand is a lone point of the circle in the rectangle.
+    let lone = inside
+        .iter()
+        .zip(inside.iter().cycle().skip(count.saturating_sub(1)))
+        .any(|(next, last)| !next && !last);
+    Ok(if lone { None } else { Some(Held::Arcs(arcs)) })
+}
+
+/// The coordinate axis `v` runs along, if it runs along one.
+fn axis_of(v: [f64; 3]) -> Option<usize> {
+    match v.map(|x| x != 0.0) {
+        [true, false, false] => Some(0),
+        [false, true, false] => Some(1),
+        [false, false, true] => Some(2),
+        _ => None,
+    }
+}
+
+/// Entry `k` of `v`; the last for any `k` past it.
+fn pick<T: Copy>(v: [T; 3], k: usize) -> T {
+    let [a, b, c] = v;
+    match k {
+        0 => a,
+        1 => b,
+        _ => c,
+    }
+}
+
+/// The parts of a whole circle lying in `plane` that the plane's domain holds, each an overlap
+/// over its own stretch of the circle; `None`, the engine's, where the plane's vectors run off the
+/// coordinate axes, the circle is not a whole turn, a product of the stored doubles would not be
+/// exact, or the domain holds a lone point of the circle ([`held_of`]).
+///
+/// With the plane's vectors a and b along two coordinate axes, an end `e` of the domain in u is
+/// the line where that coordinate is c + e·a, and its distance from the circle's centre is
+/// c + e·a − centre: a sum of four doubles, exact ([`offset`]). Every question [`held_of`] asks is
+/// then the sign of a sum of products of doubles. The parameters of the ends of each arc are
+/// enclosures; which arcs there are is exact.
+fn arcs_in_plane(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    plane: &Plane,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (c, a, b) = plane.vectors();
+    let (Some(i), Some(j)) = (axis_of(a), axis_of(b)) else {
+        return Ok(None);
+    };
+    let (lo, hi) = curve.domain();
+    let (q, r) = (circle.center(), circle.radius());
+    if hi - lo < 2.0 || !tame(r) {
+        return Ok(None);
+    }
+    let (du, dv) = ParamSurface::domain(plane);
+    let mut sides = Vec::new();
+    for (axis, k, along, end, first) in [
+        (0, i, pick(a, i), du.0, true),
+        (0, i, pick(a, i), du.1, false),
+        (1, j, pick(b, j), dv.0, true),
+        (1, j, pick(b, j), dv.1, false),
+    ] {
+        if !end.is_finite() {
+            continue;
+        }
+        let Some(at) = offset(pick(c, k), end, along, pick(q, k))? else {
+            return Ok(None);
+        };
+        let keep = if (along > 0.0) == first {
+            Sign::Positive
+        } else {
+            Sign::Negative
+        };
+        sides.push(Half { axis, at, keep });
+    }
+    let arcs = match held_of(r, &sides)? {
+        None => return Ok(None),
+        Some(Held::Nothing) => return proven(Vec::new(), meter).map(Some),
+        Some(Held::Whole) => {
+            let (u, v) = in_parameters(curve, plane, (lo, hi), meter)?;
+            return lying(curve, held(u, du)?, held(v, dv)?, meter).map(Some);
+        }
+        Some(Held::Arcs(arcs)) => arcs,
+    };
+    // The circle's parameter is the angle from its frame's x̂ towards n̂ × x̂, in half-turns: the
+    // angle of [`round`] less x̂'s own where the plane's axes turn the same way as the frame,
+    // and x̂'s less it where they turn the other way.
+    let (_, [x, _, _]) = circle.frame().unit_vectors()?;
+    let zero = turn_of(pick(x, i), pick(x, j))?;
+    let (third, cyclic) = match (i, j) {
+        (0, 1) => (2, true),
+        (1, 2) => (0, true),
+        (2, 0) => (1, true),
+        (1, 0) => (2, false),
+        (2, 1) => (0, false),
+        (0, 2) => (1, false),
+        _ => return Ok(None),
+    };
+    let same = cyclic == (pick(circle.frame().normal(), third) > 0.0);
+    let seam = seam_of(curve, finite(curve)?);
+    let turn = Interval::point(2.0)?;
+    let mut items = Vec::new();
+    for (from, to) in &arcs {
+        let start = angle(from)?;
+        let end = if round(from, to) == Ordering::Less {
+            angle(to)?
+        } else {
+            angle(to)?.add(turn)?
+        };
+        let (first, last) = if same {
+            (start.sub(zero)?, end.sub(zero)?)
+        } else {
+            (zero.sub(end)?, zero.sub(start)?)
+        };
+        // Whole turns bring the arc's start onto the domain; the join then cuts it in two.
+        let back = Interval::point(2.0 * math::floor((first.lo() - lo) / 2.0)?.get())?;
+        let span = Interval::new(first.sub(back)?.lo(), last.sub(back)?.hi())?;
+        for (t0, t1) in seam.spans(span).into_iter().flatten() {
+            let (u, v) = in_parameters(curve, plane, (t0, t1), meter)?;
+            items.push(Item::Overlap {
+                at: ParamBox::new(&[Interval::new(t0, t1)?, held(u, du)?, held(v, dv)?])?,
+                region: OverlapRegion {
+                    boundary: Vec::new(),
+                },
+                proof: Coincidence::Identical,
+                class: certified(),
+            });
+        }
+    }
+    proven(items, meter).map(Some)
 }
 
 /// A circle about a round kind's axis and of its radius there: an overlap at the v of its height,
