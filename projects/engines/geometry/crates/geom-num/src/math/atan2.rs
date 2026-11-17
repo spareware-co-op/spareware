@@ -2180,6 +2180,12 @@ mod proofs {
         #[kani::solver(kissat)] t3_k_middle: trial_3, 4, 0, 0;
         #[kani::solver(kissat)] t3_k_high: trial_3, 8, 0, 0;
         #[kani::solver(minisat)] t3_m_whole: trial_3, 15, 0, 0;
+        #[kani::solver(z3)] ts_carry_z: trial_3, 15, 0, 0;
+        #[kani::solver(bitwuzla)] ts_carry_b: trial_3, 15, 0, 0;
+        #[kani::solver(cvc5)] ts_carry_v: trial_3, 15, 0, 0;
+        #[kani::solver(z3)] ts_agreed_z: trial_5, 3, 0, 0;
+        #[kani::solver(bitwuzla)] ts_agreed_b: trial_5, 3, 0, 0;
+        #[kani::solver(cvc5)] ts_agreed_v: trial_5, 3, 0, 0;
     }
 
     /// A non-negative integer below 2^448, as seven 64-bit words, least significant first.

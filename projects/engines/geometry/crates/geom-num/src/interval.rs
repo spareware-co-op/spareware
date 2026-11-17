@@ -790,6 +790,72 @@ mod proofs {
         }
     }
 
+    /// TRIAL (measuring only, removed before the pull request lands): the claim of
+    /// `add_sub_mul_enclose_the_rounded_result` for one operation `op` (0 add, 1 sub, 2 mul), one
+    /// part `claim` of it (0 the whole, 1 the bounds are ordered, 2 the rounded result is inside,
+    /// 3 it is not under the lower bound, 4 it is not over the upper bound) and only the inputs of
+    /// class `class` of the candidate split `kind`.
+    fn trial_2(op: u8, claim: u8, kind: u8, class: u64) {
+        let (x, y) = (finite(), finite());
+        let (xb, yb) = (x.to_bits(), y.to_bits());
+        let part = match kind {
+            // The whole domain.
+            0 => 0,
+            // The top two bits of each exponent field: 16 classes.
+            1 => ((xb >> 61) & 3) | (((yb >> 61) & 3) << 2),
+            // Which operands are zero: 4 classes.
+            2 => u64::from(x == 0.0) | (u64::from(y == 0.0) << 1),
+            // The top three bits of each exponent field: 64 classes.
+            _ => ((xb >> 60) & 7) | (((yb >> 60) & 7) << 3),
+        };
+        if part != class {
+            return;
+        }
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        let (got, rounded) = match op {
+            0 => (a.add(b), x + y),
+            1 => (a.sub(b), x - y),
+            _ => (a.mul(b), x * y),
+        };
+        if let Ok(r) = got {
+            if claim == 0 || claim == 1 {
+                assert!(r.lo() <= r.hi());
+            }
+            if rounded.is_finite() {
+                if claim == 0 || claim == 2 {
+                    assert!(r.contains(rounded));
+                }
+                if claim == 3 {
+                    assert!(r.lo() <= rounded);
+                }
+                if claim == 4 {
+                    assert!(rounded <= r.hi());
+                }
+            }
+        }
+    }
+
+    macro_rules! trial {
+        ($($(#[$attr:meta])* $name:ident: $op:expr, $claim:expr, $kind:expr, $class:expr;)*) => {
+            $(
+                #[kani::proof]
+                $(#[$attr])*
+                fn $name() {
+                    trial_2($op, $claim, $kind, $class);
+                }
+            )*
+        };
+    }
+
+    trial! {
+        #[kani::solver(z3)] ts_mul_z: 2, 0, 0, 0;
+        #[kani::solver(bitwuzla)] ts_mul_b: 2, 0, 0, 0;
+        #[kani::solver(cvc5)] ts_mul_v: 2, 0, 0, 0;
+        #[kani::solver(z3)] ts_add_z: 0, 0, 0, 0;
+        #[kani::solver(bitwuzla)] ts_add_b: 0, 0, 0, 0;
+        #[kani::solver(cvc5)] ts_add_v: 0, 0, 0, 0;
+    }
+
     /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
     /// refuses when it does, for every finite dividend and the divisor `y`; proven for the six
     /// divisors the module header names, one harness each (kissat as the SAT solver).

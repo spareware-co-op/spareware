@@ -636,6 +636,25 @@ jobs:
           done
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
+      # TRIAL (measuring only, never on the pull request's branch): the three SMT solvers Kani
+      # can hand a proof to, each from its own project's release, by version.
+      - name: Trial solvers
+        run: |
+          mkdir -p "$HOME/solvers/bin" /tmp/solvers
+          cd /tmp/solvers
+          curl -fsSL -o z3.zip https://github.com/Z3Prover/z3/releases/download/z3-5.3.3/z3-5.3.3-x64-glibc-2.39.zip
+          curl -fsSL -o bitwuzla.zip https://github.com/bitwuzla/bitwuzla/releases/download/0.10.0/Bitwuzla-Linux-x86_64-static.zip
+          curl -fsSL -o cvc5.zip https://github.com/cvc5/cvc5/releases/download/cvc5-1.4.2/cvc5-Linux-x86_64-static.zip
+          sha256sum z3.zip bitwuzla.zip cvc5.zip
+          for s in z3 bitwuzla cvc5; do
+            unzip -q "$s.zip" -d "$s"
+            cp "$(find "$s" -type f -name "$s" | head -1)" "$HOME/solvers/bin/$s"
+            chmod +x "$HOME/solvers/bin/$s"
+          done
+          echo "$HOME/solvers/bin" >> "$GITHUB_PATH"
+          "$HOME/solvers/bin/z3" --version
+          "$HOME/solvers/bin/bitwuzla" --version
+          "$HOME/solvers/bin/cvc5" --version | head -2
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)

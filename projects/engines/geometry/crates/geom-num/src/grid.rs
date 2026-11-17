@@ -845,6 +845,9 @@ mod proofs {
         #[kani::solver(kissat)] t2_k_nearest_up_2: 1, 6, 2;
         #[kani::solver(kissat)] t2_k_nearest_up_3: 1, 6, 3;
         #[kani::solver(minisat)] t2_m_whole: 7, 0, 0;
+        #[kani::solver(z3)] ts_coarsen_z: 7, 0, 0;
+        #[kani::solver(bitwuzla)] ts_coarsen_b: 7, 0, 0;
+        #[kani::solver(cvc5)] ts_coarsen_v: 7, 0, 0;
     }
 
     /// `Steps::refine` never panics: the exact product, or `None` on overflow or towards a coarser
