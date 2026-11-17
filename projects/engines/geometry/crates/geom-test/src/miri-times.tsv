@@ -11,6 +11,7 @@
 # machine's seconds x 2.3.
 # The rows main's table had at the budget, and the tests it had no row for: one measuring run on 870022ada on a development machine (profile miri-measure, a 120 s stop), x 2.3, and geom-op's new JSON round trip there; rows of tests Miri's listing lacks dropped (32.58).
 # Miri's measuring run 44018105828 on GitHub's runners (miri_measure=new), on the Phase 5 train at d29286c64
+# Miri's measuring run 44040144910 on GitHub's runners (miri_measure=new), on the quadric filters' bound tests at 5e41301d1
 70	geom-analysis::attack_g346	a_capped_run_is_still_certified
 5	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 277	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -2856,6 +2857,14 @@ native-only over 277	geom-num::generated_predicates	exact_paths_match_the_oracle
 native-only over 277	geom-num::generated_predicates	filters_never_give_a_wrong_sign_near_degeneracies
 native-only over 277	geom-num::generated_predicates	filters_never_give_a_wrong_sign_on_random_points
 36	geom-num::generated_predicates	the_public_predicates_route_through_the_generated_code
+71	geom-num::generated_quadrics	axis_gap_decides_exactly_at_its_bound_for_each_monomial
+6	geom-num::generated_quadrics	cone_filters_count_one_monomial_at_unit_maxima
+38	geom-num::generated_quadrics	cross_norm_decides_exactly_at_its_bound_for_each_monomial
+native-only over 601	geom-num::generated_quadrics	filters_decide_what_is_clear_and_never_give_a_wrong_sign
+50	geom-num::generated_quadrics	line_cone_decides_exactly_at_its_bound_for_each_monomial
+23	geom-num::generated_quadrics	line_cone_lead_decides_exactly_at_its_bound_for_each_monomial
+75	geom-num::generated_quadrics	line_cylinder_decides_exactly_at_its_bound_for_each_monomial
+46	geom-num::generated_quadrics	line_sphere_decides_exactly_at_its_bound_for_each_monomial
 native-only over 277	geom-num::isolate_determinism	root_isolation_golden_hash_is_the_same_on_every_target
 1	geom-num::kani_harnesses	the_scan_reads_marks_and_attributes
 native-only over 277	geom-num::libm_regression	libm_misrounds_exactly_as_recorded
