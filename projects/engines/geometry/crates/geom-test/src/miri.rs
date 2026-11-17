@@ -175,7 +175,7 @@ pub const MAY_STOP_PATH: &str = "projects/engines/geometry/crates/geom-test/src/
 /// fails when the list holds more (a test newly measured over [`SURE_WITHIN`] is resized under
 /// `cfg(miri)` before it lands) and when it holds fewer (the change that shrank it lowers this
 /// too, so the list can never grow back). The aim is none.
-pub const MAY_STOP_MOST: usize = 115;
+pub const MAY_STOP_MOST: usize = 110;
 
 /// The one crate Miri runs under Tree Borrows (the workflow's job `miri-pool` says why): its
 /// finishing tests run in that job, and no partition holds them.

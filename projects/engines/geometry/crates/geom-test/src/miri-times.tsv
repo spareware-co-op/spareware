@@ -11,6 +11,7 @@
 # Sources: geom-pool's rows are main's push run 44000736866 (79dd48d74), partition 1's Tree Borrows report under the default-miri profile, in its own seconds, stopped at 600 s.
 # GitHub measuring run 44032408206, land/miri-bool at 96f3b42ac
 # GitHub measuring run 44071252392, ci/miri-plan at a0123c23b (geom-pool attack_g33 attack_rayon_pools, Tree Borrows)
+# GitHub measuring run 44162729953, ci/miri-stop at 76afb6d0d (geom-num wide, attack_wide_tests, attack_plane to_grid_near_ties resized under cfg(miri))
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1865,7 +1866,7 @@ native-only over 601	geom-num::attack_plane	to_grid_around_plus_minus_2_pow_127
 native-only over 601	geom-num::attack_plane	to_grid_exact_ties_with_huge_w_of_both_signs
 193	geom-num::attack_plane	to_grid_integral_points_at_frame_and_i128_edges
 native-only over 601	geom-num::attack_plane	to_grid_integral_points_with_huge_w_are_exact
-599	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192
+474	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192
 44	geom-num::attack_plane	to_grid_reports_the_first_out_of_range_axis
 native-only over 601	geom-num::attack_plane	to_grid_within_2_pow_minus_116_of_a_half_step
 native-only over 601	geom-num::attack_plane	tpi_degenerate_configurations_at_the_extremes
@@ -1918,69 +1919,69 @@ native-only over 601	geom-num::attack_predicate	wide_step_is_exact_where_its_int
 2	geom-num::attack_wide_tests	kernel_extremes::i128_products_fill_i256_exactly
 native-only over 601	geom-num::attack_wide_tests	kernel_extremes::insphere_at_every_extreme_corner
 native-only over 601	geom-num::attack_wide_tests	kernel_extremes::insphere_near_the_extremes
-141	geom-num::attack_wide_tests	native_i128::every_pair_of_edge_values_matches_i128
+214	geom-num::attack_wide_tests	native_i128::every_pair_of_edge_values_matches_i128
 2	geom-num::attack_wide_tests	native_i128::i128_extremes_by_hand
-118	geom-num::attack_wide_tests	native_i128::products_at_the_i128_threshold
-114	geom-num::attack_wide_tests	native_i128::random_pairs_match_i128
-569	geom-num::attack_wide_tests	native_i128::raw_limbs_match_i128
-174	geom-num::attack_wide_tests	native_i128::short_pairs_match_i128
+41	geom-num::attack_wide_tests	native_i128::products_at_the_i128_threshold
+38	geom-num::attack_wide_tests	native_i128::random_pairs_match_i128
+205	geom-num::attack_wide_tests	native_i128::raw_limbs_match_i128
+31	geom-num::attack_wide_tests	native_i128::short_pairs_match_i128
 2	geom-num::attack_wide_tests	sweeps::constants_usable_in_const_context
 native-only over 601	geom-num::attack_wide_tests	sweeps::every_i256_limb_pattern_and_pair
 native-only over 601	geom-num::attack_wide_tests	sweeps::every_wide2_limb_pattern_and_pair
 native-only over 601	geom-num::attack_wide_tests	sweeps::every_wide3_limb_pattern_and_pair
 2	geom-num::attack_wide_tests	sweeps::oracle_reads_and_writes_hand_written_limbs
-24	geom-num::attack_wide_tests	sweeps::resize_chains_through_odd_widths
-19	geom-num::attack_wide_tests	sweeps::sorting_by_ord_sorts_by_value
-native-only over 601	geom-num::attack_wide_tests	w16::binary_matches_oracle
+5	geom-num::attack_wide_tests	sweeps::resize_chains_through_odd_widths
+20	geom-num::attack_wide_tests	sweeps::sorting_by_ord_sorts_by_value
+415	geom-num::attack_wide_tests	w16::binary_matches_oracle
 native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits
-native-only over 601	geom-num::attack_wide_tests	w16::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide
-native-only over 601	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold
-native-only over 601	geom-num::attack_wide_tests	w16::products_at_the_threshold
-203	geom-num::attack_wide_tests	w16::small_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w16::sums_and_differences_at_the_limits
-native-only over 601	geom-num::attack_wide_tests	w16::three_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w16::unary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w2::binary_matches_oracle
-542	geom-num::attack_wide_tests	w2::constants_and_threshold_splits
-538	geom-num::attack_wide_tests	w2::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide
-289	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold
-495	geom-num::attack_wide_tests	w2::products_at_the_threshold
-113	geom-num::attack_wide_tests	w2::small_operand_laws
-331	geom-num::attack_wide_tests	w2::sums_and_differences_at_the_limits
-556	geom-num::attack_wide_tests	w2::three_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w2::unary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w3::binary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w3::constants_and_threshold_splits
-native-only over 601	geom-num::attack_wide_tests	w3::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide
-520	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold
-554	geom-num::attack_wide_tests	w3::products_at_the_threshold
-125	geom-num::attack_wide_tests	w3::small_operand_laws
-539	geom-num::attack_wide_tests	w3::sums_and_differences_at_the_limits
-native-only over 601	geom-num::attack_wide_tests	w3::three_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w3::unary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w4::binary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w4::constants_and_threshold_splits
-native-only over 601	geom-num::attack_wide_tests	w4::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide
-native-only over 601	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold
-398	geom-num::attack_wide_tests	w4::products_at_the_threshold
-127	geom-num::attack_wide_tests	w4::small_operand_laws
-421	geom-num::attack_wide_tests	w4::sums_and_differences_at_the_limits
-native-only over 601	geom-num::attack_wide_tests	w4::three_operand_laws
-582	geom-num::attack_wide_tests	w4::unary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w7::binary_matches_oracle
+179	geom-num::attack_wide_tests	w16::multiplication_is_repeated_addition
+523	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide
+427	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold
+442	geom-num::attack_wide_tests	w16::products_at_the_threshold
+53	geom-num::attack_wide_tests	w16::small_operand_laws
+374	geom-num::attack_wide_tests	w16::sums_and_differences_at_the_limits
+546	geom-num::attack_wide_tests	w16::three_operand_laws
+367	geom-num::attack_wide_tests	w16::unary_matches_oracle
+174	geom-num::attack_wide_tests	w2::binary_matches_oracle
+291	geom-num::attack_wide_tests	w2::constants_and_threshold_splits
+73	geom-num::attack_wide_tests	w2::multiplication_is_repeated_addition
+167	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide
+114	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold
+153	geom-num::attack_wide_tests	w2::products_at_the_threshold
+39	geom-num::attack_wide_tests	w2::small_operand_laws
+103	geom-num::attack_wide_tests	w2::sums_and_differences_at_the_limits
+159	geom-num::attack_wide_tests	w2::three_operand_laws
+137	geom-num::attack_wide_tests	w2::unary_matches_oracle
+176	geom-num::attack_wide_tests	w3::binary_matches_oracle
+584	geom-num::attack_wide_tests	w3::constants_and_threshold_splits
+111	geom-num::attack_wide_tests	w3::multiplication_is_repeated_addition
+182	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide
+134	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold
+138	geom-num::attack_wide_tests	w3::products_at_the_threshold
+40	geom-num::attack_wide_tests	w3::small_operand_laws
+94	geom-num::attack_wide_tests	w3::sums_and_differences_at_the_limits
+214	geom-num::attack_wide_tests	w3::three_operand_laws
+177	geom-num::attack_wide_tests	w3::unary_matches_oracle
+210	geom-num::attack_wide_tests	w4::binary_matches_oracle
+562	geom-num::attack_wide_tests	w4::constants_and_threshold_splits
+70	geom-num::attack_wide_tests	w4::multiplication_is_repeated_addition
+107	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide
+89	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold
+236	geom-num::attack_wide_tests	w4::products_at_the_threshold
+33	geom-num::attack_wide_tests	w4::small_operand_laws
+229	geom-num::attack_wide_tests	w4::sums_and_differences_at_the_limits
+421	geom-num::attack_wide_tests	w4::three_operand_laws
+170	geom-num::attack_wide_tests	w4::unary_matches_oracle
+447	geom-num::attack_wide_tests	w7::binary_matches_oracle
 native-only over 601	geom-num::attack_wide_tests	w7::constants_and_threshold_splits
-420	geom-num::attack_wide_tests	w7::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide
-native-only over 601	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold
-native-only over 601	geom-num::attack_wide_tests	w7::products_at_the_threshold
-219	geom-num::attack_wide_tests	w7::small_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w7::sums_and_differences_at_the_limits
-native-only over 601	geom-num::attack_wide_tests	w7::three_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w7::unary_matches_oracle
+231	geom-num::attack_wide_tests	w7::multiplication_is_repeated_addition
+436	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide
+328	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold
+306	geom-num::attack_wide_tests	w7::products_at_the_threshold
+38	geom-num::attack_wide_tests	w7::small_operand_laws
+303	geom-num::attack_wide_tests	w7::sums_and_differences_at_the_limits
+492	geom-num::attack_wide_tests	w7::three_operand_laws
+260	geom-num::attack_wide_tests	w7::unary_matches_oracle
 2	geom-num::brent	bad_inputs_are_refused
 2	geom-num::brent	caps_are_errors_never_guesses
 2	geom-num::brent	minimum_finds_smooth_minima_inside_the_interval
@@ -2277,144 +2278,144 @@ native-only over 601	geom-num::verification	perturbed_ties_match_a_symbolic_orac
 23	geom-num::verification	ssi_orient2d_filter_boundary_crossed_both_ways
 3	geom-num::verification	the_matrix_reader_finds_methods_and_free_functions
 native-only over 601	geom-num::verification	the_matrix_refuses_a_test_that_does_not_reach_its_predicate
-517	geom-num::wide	extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner
+380	geom-num::wide	extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner
 native-only over 601	geom-num::wide	extreme_corners::orient3d_fits_wide2_at_every_corner
-5	geom-num::wide	extreme_corners::powers_of_the_extreme_coordinate
-native-only over 601	geom-num::wide	i256::add_at_the_limits
-native-only over 601	geom-num::wide	i256::add_matches_oracle
-3	geom-num::wide	i256::constants
+6	geom-num::wide	extreme_corners::powers_of_the_extreme_coordinate
+215	geom-num::wide	i256::add_at_the_limits
+318	geom-num::wide	i256::add_matches_oracle
+2	geom-num::wide	i256::constants
 native-only over 601	geom-num::wide	i256::edge_values_exhaustively
-262	geom-num::wide	i256::exact_factorisations_of_the_largest_value
-313	geom-num::wide	i256::from_i128_is_exact
-218	geom-num::wide	i256::from_i64_is_exact
+243	geom-num::wide	i256::exact_factorisations_of_the_largest_value
+64	geom-num::wide	i256::from_i128_is_exact
+56	geom-num::wide	i256::from_i64_is_exact
 native-only over 601	geom-num::wide	i256::incircle_at_extreme_coordinates
-334	geom-num::wide	i256::limbs_round_trip
-native-only over 601	geom-num::wide	i256::mul_at_the_overflow_threshold
-native-only over 601	geom-num::wide	i256::mul_matches_oracle
-native-only over 601	geom-num::wide	i256::mul_units
-native-only over 601	geom-num::wide	i256::neg_matches_oracle
-native-only over 601	geom-num::wide	i256::order_is_transitive
-native-only over 601	geom-num::wide	i256::order_matches_oracle
-native-only over 601	geom-num::wide	i256::order_of_close_values
-556	geom-num::wide	i256::order_of_values_one_limb_apart
+80	geom-num::wide	i256::limbs_round_trip
+233	geom-num::wide	i256::mul_at_the_overflow_threshold
+295	geom-num::wide	i256::mul_matches_oracle
+276	geom-num::wide	i256::mul_units
+267	geom-num::wide	i256::neg_matches_oracle
+488	geom-num::wide	i256::order_is_transitive
+375	geom-num::wide	i256::order_matches_oracle
+230	geom-num::wide	i256::order_of_close_values
+93	geom-num::wide	i256::order_of_values_one_limb_apart
 native-only over 601	geom-num::wide	i256::orient3d_at_extreme_coordinates
 native-only over 601	geom-num::wide	i256::products_at_every_split_of_the_threshold
 native-only over 601	geom-num::wide	i256::products_of_extreme_coordinates
-native-only over 601	geom-num::wide	i256::resize_to_every_width
-native-only over 601	geom-num::wide	i256::ring_laws
-560	geom-num::wide	i256::signs_match_oracle
-native-only over 601	geom-num::wide	i256::sub_at_the_limits
-native-only over 601	geom-num::wide	i256::sub_matches_oracle
-native-only over 601	geom-num::wide	i256::to_i128_matches_oracle
-535	geom-num::wide	i320::add_at_the_limits
-native-only over 601	geom-num::wide	i320::add_matches_oracle
-3	geom-num::wide	i320::constants
+224	geom-num::wide	i256::resize_to_every_width
+346	geom-num::wide	i256::ring_laws
+155	geom-num::wide	i256::signs_match_oracle
+206	geom-num::wide	i256::sub_at_the_limits
+288	geom-num::wide	i256::sub_matches_oracle
+189	geom-num::wide	i256::to_i128_matches_oracle
+214	geom-num::wide	i320::add_at_the_limits
+508	geom-num::wide	i320::add_matches_oracle
+2	geom-num::wide	i320::constants
 native-only over 601	geom-num::wide	i320::edge_values_exhaustively
-186	geom-num::wide	i320::exact_factorisations_of_the_largest_value
-255	geom-num::wide	i320::from_i128_is_exact
-331	geom-num::wide	i320::from_i64_is_exact
+146	geom-num::wide	i320::exact_factorisations_of_the_largest_value
+95	geom-num::wide	i320::from_i128_is_exact
+58	geom-num::wide	i320::from_i64_is_exact
 native-only over 601	geom-num::wide	i320::incircle_at_extreme_coordinates
-265	geom-num::wide	i320::limbs_round_trip
-native-only over 601	geom-num::wide	i320::mul_at_the_overflow_threshold
-native-only over 601	geom-num::wide	i320::mul_matches_oracle
-native-only over 601	geom-num::wide	i320::mul_units
-548	geom-num::wide	i320::neg_matches_oracle
-native-only over 601	geom-num::wide	i320::order_is_transitive
-native-only over 601	geom-num::wide	i320::order_matches_oracle
-native-only over 601	geom-num::wide	i320::order_of_close_values
-431	geom-num::wide	i320::order_of_values_one_limb_apart
+88	geom-num::wide	i320::limbs_round_trip
+233	geom-num::wide	i320::mul_at_the_overflow_threshold
+301	geom-num::wide	i320::mul_matches_oracle
+202	geom-num::wide	i320::mul_units
+116	geom-num::wide	i320::neg_matches_oracle
+420	geom-num::wide	i320::order_is_transitive
+327	geom-num::wide	i320::order_matches_oracle
+255	geom-num::wide	i320::order_of_close_values
+127	geom-num::wide	i320::order_of_values_one_limb_apart
 native-only over 601	geom-num::wide	i320::orient3d_at_extreme_coordinates
 native-only over 601	geom-num::wide	i320::products_at_every_split_of_the_threshold
 native-only over 601	geom-num::wide	i320::products_of_extreme_coordinates
-native-only over 601	geom-num::wide	i320::resize_to_every_width
-native-only over 601	geom-num::wide	i320::ring_laws
-527	geom-num::wide	i320::signs_match_oracle
-native-only over 601	geom-num::wide	i320::sub_at_the_limits
-native-only over 601	geom-num::wide	i320::sub_matches_oracle
-597	geom-num::wide	i320::to_i128_matches_oracle
-native-only over 601	geom-num::wide	i384::add_at_the_limits
-native-only over 601	geom-num::wide	i384::add_matches_oracle
+308	geom-num::wide	i320::resize_to_every_width
+501	geom-num::wide	i320::ring_laws
+168	geom-num::wide	i320::signs_match_oracle
+322	geom-num::wide	i320::sub_at_the_limits
+377	geom-num::wide	i320::sub_matches_oracle
+204	geom-num::wide	i320::to_i128_matches_oracle
+265	geom-num::wide	i384::add_at_the_limits
+395	geom-num::wide	i384::add_matches_oracle
 2	geom-num::wide	i384::constants
 native-only over 601	geom-num::wide	i384::edge_values_exhaustively
-202	geom-num::wide	i384::exact_factorisations_of_the_largest_value
-369	geom-num::wide	i384::from_i128_is_exact
-240	geom-num::wide	i384::from_i64_is_exact
+158	geom-num::wide	i384::exact_factorisations_of_the_largest_value
+70	geom-num::wide	i384::from_i128_is_exact
+87	geom-num::wide	i384::from_i64_is_exact
 native-only over 601	geom-num::wide	i384::incircle_at_extreme_coordinates
-235	geom-num::wide	i384::limbs_round_trip
-native-only over 601	geom-num::wide	i384::mul_at_the_overflow_threshold
-native-only over 601	geom-num::wide	i384::mul_matches_oracle
-native-only over 601	geom-num::wide	i384::mul_units
-native-only over 601	geom-num::wide	i384::neg_matches_oracle
-native-only over 601	geom-num::wide	i384::order_is_transitive
-native-only over 601	geom-num::wide	i384::order_matches_oracle
-native-only over 601	geom-num::wide	i384::order_of_close_values
-499	geom-num::wide	i384::order_of_values_one_limb_apart
+135	geom-num::wide	i384::limbs_round_trip
+300	geom-num::wide	i384::mul_at_the_overflow_threshold
+375	geom-num::wide	i384::mul_matches_oracle
+265	geom-num::wide	i384::mul_units
+224	geom-num::wide	i384::neg_matches_oracle
+422	geom-num::wide	i384::order_is_transitive
+315	geom-num::wide	i384::order_matches_oracle
+249	geom-num::wide	i384::order_of_close_values
+137	geom-num::wide	i384::order_of_values_one_limb_apart
 native-only over 601	geom-num::wide	i384::orient3d_at_extreme_coordinates
 native-only over 601	geom-num::wide	i384::products_at_every_split_of_the_threshold
 native-only over 601	geom-num::wide	i384::products_of_extreme_coordinates
-native-only over 601	geom-num::wide	i384::resize_to_every_width
-native-only over 601	geom-num::wide	i384::ring_laws
-native-only over 601	geom-num::wide	i384::signs_match_oracle
-native-only over 601	geom-num::wide	i384::sub_at_the_limits
-native-only over 601	geom-num::wide	i384::sub_matches_oracle
-583	geom-num::wide	i384::to_i128_matches_oracle
-native-only over 601	geom-num::wide	i512::add_at_the_limits
+311	geom-num::wide	i384::resize_to_every_width
+411	geom-num::wide	i384::ring_laws
+218	geom-num::wide	i384::signs_match_oracle
+237	geom-num::wide	i384::sub_at_the_limits
+339	geom-num::wide	i384::sub_matches_oracle
+226	geom-num::wide	i384::to_i128_matches_oracle
+399	geom-num::wide	i512::add_at_the_limits
 native-only over 601	geom-num::wide	i512::add_matches_oracle
 2	geom-num::wide	i512::constants
 native-only over 601	geom-num::wide	i512::edge_values_exhaustively
-294	geom-num::wide	i512::exact_factorisations_of_the_largest_value
-264	geom-num::wide	i512::from_i128_is_exact
-226	geom-num::wide	i512::from_i64_is_exact
+190	geom-num::wide	i512::exact_factorisations_of_the_largest_value
+68	geom-num::wide	i512::from_i128_is_exact
+89	geom-num::wide	i512::from_i64_is_exact
 native-only over 601	geom-num::wide	i512::incircle_at_extreme_coordinates
-420	geom-num::wide	i512::limbs_round_trip
-594	geom-num::wide	i512::mul_at_the_overflow_threshold
-native-only over 601	geom-num::wide	i512::mul_matches_oracle
-572	geom-num::wide	i512::mul_units
-native-only over 601	geom-num::wide	i512::neg_matches_oracle
-native-only over 601	geom-num::wide	i512::order_is_transitive
-native-only over 601	geom-num::wide	i512::order_matches_oracle
-native-only over 601	geom-num::wide	i512::order_of_close_values
-583	geom-num::wide	i512::order_of_values_one_limb_apart
-native-only over 601	geom-num::wide	i512::orient3d_at_extreme_coordinates
+157	geom-num::wide	i512::limbs_round_trip
+342	geom-num::wide	i512::mul_at_the_overflow_threshold
+282	geom-num::wide	i512::mul_matches_oracle
+213	geom-num::wide	i512::mul_units
+190	geom-num::wide	i512::neg_matches_oracle
+435	geom-num::wide	i512::order_is_transitive
+300	geom-num::wide	i512::order_matches_oracle
+185	geom-num::wide	i512::order_of_close_values
+116	geom-num::wide	i512::order_of_values_one_limb_apart
+551	geom-num::wide	i512::orient3d_at_extreme_coordinates
 native-only over 601	geom-num::wide	i512::products_at_every_split_of_the_threshold
-native-only over 601	geom-num::wide	i512::products_of_extreme_coordinates
-native-only over 601	geom-num::wide	i512::resize_to_every_width
-native-only over 601	geom-num::wide	i512::ring_laws
-native-only over 601	geom-num::wide	i512::signs_match_oracle
-native-only over 601	geom-num::wide	i512::sub_at_the_limits
-native-only over 601	geom-num::wide	i512::sub_matches_oracle
-351	geom-num::wide	i512::to_i128_matches_oracle
-226	geom-num::wide	oracle_self_test::agrees_with_i128_twos_complement
+350	geom-num::wide	i512::products_of_extreme_coordinates
+225	geom-num::wide	i512::resize_to_every_width
+417	geom-num::wide	i512::ring_laws
+248	geom-num::wide	i512::signs_match_oracle
+248	geom-num::wide	i512::sub_at_the_limits
+412	geom-num::wide	i512::sub_matches_oracle
+124	geom-num::wide	i512::to_i128_matches_oracle
+63	geom-num::wide	oracle_self_test::agrees_with_i128_twos_complement
 3	geom-num::wide	oracle_self_test::ranges_match_the_widths
-423	geom-num::wide	oracle_self_test::reading_then_writing_limbs_round_trips
-3	geom-num::wide	oracle_self_test::reads_hand_written_limbs
+106	geom-num::wide	oracle_self_test::reading_then_writing_limbs_round_trips
+2	geom-num::wide	oracle_self_test::reads_hand_written_limbs
 2	geom-num::wide	oracle_self_test::writes_hand_written_limbs
-463	geom-num::wide	wide2::add_at_the_limits
-449	geom-num::wide	wide2::add_matches_oracle
-3	geom-num::wide	wide2::constants
+194	geom-num::wide	wide2::add_at_the_limits
+269	geom-num::wide	wide2::add_matches_oracle
+2	geom-num::wide	wide2::constants
 native-only over 601	geom-num::wide	wide2::edge_values_exhaustively
-128	geom-num::wide	wide2::exact_factorisations_of_the_largest_value
-348	geom-num::wide	wide2::from_i128_is_exact
-214	geom-num::wide	wide2::from_i64_is_exact
+102	geom-num::wide	wide2::exact_factorisations_of_the_largest_value
+65	geom-num::wide	wide2::from_i128_is_exact
+52	geom-num::wide	wide2::from_i64_is_exact
 native-only over 601	geom-num::wide	wide2::incircle_at_extreme_coordinates
-270	geom-num::wide	wide2::limbs_round_trip
-454	geom-num::wide	wide2::mul_at_the_overflow_threshold
-native-only over 601	geom-num::wide	wide2::mul_matches_oracle
-native-only over 601	geom-num::wide	wide2::mul_units
-native-only over 601	geom-num::wide	wide2::neg_matches_oracle
-native-only over 601	geom-num::wide	wide2::order_is_transitive
-native-only over 601	geom-num::wide	wide2::order_matches_oracle
-native-only over 601	geom-num::wide	wide2::order_of_close_values
-198	geom-num::wide	wide2::order_of_values_one_limb_apart
+51	geom-num::wide	wide2::limbs_round_trip
+199	geom-num::wide	wide2::mul_at_the_overflow_threshold
+279	geom-num::wide	wide2::mul_matches_oracle
+199	geom-num::wide	wide2::mul_units
+211	geom-num::wide	wide2::neg_matches_oracle
+353	geom-num::wide	wide2::order_is_transitive
+291	geom-num::wide	wide2::order_matches_oracle
+279	geom-num::wide	wide2::order_of_close_values
+67	geom-num::wide	wide2::order_of_values_one_limb_apart
 native-only over 601	geom-num::wide	wide2::orient3d_at_extreme_coordinates
-499	geom-num::wide	wide2::products_at_every_split_of_the_threshold
+393	geom-num::wide	wide2::products_at_every_split_of_the_threshold
 native-only over 601	geom-num::wide	wide2::products_of_extreme_coordinates
-native-only over 601	geom-num::wide	wide2::resize_to_every_width
-native-only over 601	geom-num::wide	wide2::ring_laws
-native-only over 601	geom-num::wide	wide2::signs_match_oracle
-native-only over 601	geom-num::wide	wide2::sub_at_the_limits
-native-only over 601	geom-num::wide	wide2::sub_matches_oracle
-347	geom-num::wide	wide2::to_i128_matches_oracle
+287	geom-num::wide	wide2::resize_to_every_width
+260	geom-num::wide	wide2::ring_laws
+157	geom-num::wide	wide2::signs_match_oracle
+180	geom-num::wide	wide2::sub_at_the_limits
+223	geom-num::wide	wide2::sub_matches_oracle
+107	geom-num::wide	wide2::to_i128_matches_oracle
 2	geom-nurbs::attack_g56	a_candidate_weight_of_exactly_zero_is_refused
 2	geom-nurbs::attack_g56	a_rational_surface_is_the_weighted_average_of_its_points
 5	geom-nurbs::attack_g56	a_tolerance_equal_to_the_deviation_is_met
