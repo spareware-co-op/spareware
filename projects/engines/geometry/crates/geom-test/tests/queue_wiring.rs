@@ -1724,9 +1724,9 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A release part dropped from `test`: its step runs nowhere.
         (
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]",
-            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]",
-            "geom-num's every test vector in release for this machine's own CPU (part 5 of 5): runs on parts [], not exactly one",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]",
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]",
+            "geom-num's every test vector in release for this machine's own CPU (part 6 of 6): runs on parts [], not exactly one",
         ),
         // A golden step on two parts.
         (
@@ -1742,7 +1742,7 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A debug leg on a part past its last.
         (
-            "          - { mode: debug, k: 29 }\n",
+            "          - { mode: debug, k: 31 }\n",
             "",
             "the debug legs' parts are not 1 to 5",
         ),
@@ -1754,9 +1754,9 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A part added without the name counting it.
         (
-            "matrix.mode == 'release' && 29 || 4)",
-            "matrix.mode == 'release' && 28 || 4)",
-            "test's name does not count its 29 release and 4 debug parts",
+            "matrix.mode == 'release' && 31 || 4)",
+            "matrix.mode == 'release' && 30 || 4)",
+            "test's name does not count its 31 release and 4 debug parts",
         ),
         // geom-num's test targets of one first letter in no share.
         (

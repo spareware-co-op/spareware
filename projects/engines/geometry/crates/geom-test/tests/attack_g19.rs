@@ -274,28 +274,32 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 13 }}
         run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
 ",
-        "      - name: geom-num's every test vector in release as shipped (part 1 of 5)
+        "      - name: geom-num's every test vector in release as shipped (part 1 of 6)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 14 }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins --test 'attack_[a-g]*'
+        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins
 ",
         "      - name: geom-num's doctests in release as shipped
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 14 }}
         run: cargo test -p geom-num --release --locked --no-fail-fast --doc
 ",
-        "      - name: geom-num's every test vector in release as shipped (part 2 of 5)
+        "      - name: geom-num's every test vector in release as shipped (part 2 of 6)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 15 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[a-g]*'
+",
+        "      - name: geom-num's every test vector in release as shipped (part 3 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 16 }}
         run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[e-i]*'
 ",
-        "      - name: geom-num's every test vector in release as shipped (part 3 of 5)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 16 }}
+        "      - name: geom-num's every test vector in release as shipped (part 4 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 17 }}
         run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[p-z]*' --test 'attack_[s-z]*'
 ",
-        "      - name: geom-num's every test vector in release as shipped (part 4 of 5)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 17 }}
+        "      - name: geom-num's every test vector in release as shipped (part 5 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 18 }}
         run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[h-r]*'
 ",
-        "      - name: geom-num's every test vector in release as shipped (part 5 of 5)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 18 }}
+        "      - name: geom-num's every test vector in release as shipped (part 6 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 19 }}
         run: cargo test -p geom-num --release --locked --no-fail-fast --test '[b-z]*'
 ",
         "      - name: Show this machine's CPU features
@@ -303,7 +307,7 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
         run: rustc -vV && rustc --print cfg -C target-cpu=native
 ",
         "      - name: Every golden in release for this machine's own CPU (part 1 of 6)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 19 }}
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 20 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           # Its own build folder, which the build cache never saves or restores: the cache's key
@@ -313,77 +317,84 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
         run: cargo run --locked -p geom-test --bin golden -- run --part 1/6 --release
 ",
         "      - name: Every golden in release for this machine's own CPU (part 2 of 6)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 20 }}
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 21 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo run --locked -p geom-test --bin golden -- run --part 2/6 --release
 ",
         "      - name: Every golden in release for this machine's own CPU (part 3 of 6)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 21 }}
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 22 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo run --locked -p geom-test --bin golden -- run --part 3/6 --release
 ",
         "      - name: Every golden in release for this machine's own CPU (part 4 of 6)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 22 }}
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 23 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo run --locked -p geom-test --bin golden -- run --part 4/6 --release
 ",
         "      - name: Every golden in release for this machine's own CPU (part 5 of 6)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 23 }}
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 24 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo run --locked -p geom-test --bin golden -- run --part 5/6 --release
 ",
         "      - name: Every golden in release for this machine's own CPU (part 6 of 6)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 24 }}
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 25 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo run --locked -p geom-test --bin golden -- run --part 6/6 --release
 ",
-        "      - name: geom-num's every test vector in release for this machine's own CPU (part 1 of 5)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 25 }}
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 1 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 26 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins --test 'attack_[a-g]*'
+        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins
 ",
         "      - name: geom-num's doctests in release for this machine's own CPU
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 25 }}
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 26 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo test -p geom-num --release --locked --no-fail-fast --doc
 ",
-        "      - name: geom-num's every test vector in release for this machine's own CPU (part 2 of 5)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 26 }}
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 2 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 27 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[a-g]*'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 3 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 28 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[e-i]*'
 ",
-        "      - name: geom-num's every test vector in release for this machine's own CPU (part 3 of 5)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 27 }}
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 4 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 29 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[p-z]*' --test 'attack_[s-z]*'
 ",
-        "      - name: geom-num's every test vector in release for this machine's own CPU (part 4 of 5)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 28 }}
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 5 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 30 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
         run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[h-r]*'
 ",
-        "      - name: geom-num's every test vector in release for this machine's own CPU (part 5 of 5)
-        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 29 }}
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 6 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 31 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native

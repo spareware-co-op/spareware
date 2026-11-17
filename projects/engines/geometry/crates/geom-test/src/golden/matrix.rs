@@ -8,8 +8,9 @@
 //! checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and
 //! requires that libtest ran exactly the planned functions, all passed, and that every planned
 //! golden printed its `golden <id> ... agrees with the store` line ([`super::check`]);
-//! [`build_args`] gives the one `cargo test --no-run` that builds every group's binary side by side
-//! before the groups run, and [`part`] shares the groups out among CI jobs, whole crates to each
+//! [`build_args`] gives one `cargo test --no-run` per crate, selecting that crate alone as its
+//! groups' runs do (so cargo resolves the same features and nothing is built twice), that builds
+//! its groups' binaries before they run, and [`part`] shares the groups out among CI jobs, whole crates to each
 //! part, balanced by measured seconds, each group in exactly one part. The binary
 //! `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build
 //! mode: debug, release with overflow checks on and as shipped, natively with
@@ -86,46 +87,44 @@ impl Group {
     }
 }
 
-/// The `cargo` invocations that build every group's test target at once, before any group runs:
-/// one for the integration tests (every group's crate and test name), one for the crates whose
-/// unit tests hold goldens (`--lib`), each with the leg's own arguments. One cargo invocation
-/// builds its targets side by side; a group's own `cargo test` then finds its binary built in the
-/// same configuration and only runs it. Cargo builds a named test in every selected crate that has
-/// one, so a test name two crates share is built in both: more than the plan runs, never less.
+/// The `cargo` invocations that build every group's test target before any group runs: one per
+/// crate, in plan order, naming that crate alone (`-p <crate>`) with its groups' targets (`--lib`
+/// and each `--test`) and the leg's own arguments. Each selects the same one package that crate's
+/// groups' own `cargo test` runs select, so cargo resolves the same features for both and a
+/// group's run finds its binary built and only runs it. One invocation naming several crates would
+/// not do: cargo unifies the features of every package an invocation selects, so its build is in
+/// another configuration than each crate's own run, and each crate's first run would build the
+/// libraries again.
 #[must_use]
 pub fn build_args(groups: &[Group], extra: &[String]) -> Vec<Vec<String>> {
-    let mut out = Vec::new();
-    for lib in [false, true] {
-        let mut crates: Vec<&str> = Vec::new();
-        let mut tests: Vec<&str> = Vec::new();
-        for g in groups.iter().filter(|g| (g.test == "lib") == lib) {
-            if !crates.contains(&g.krate.as_str()) {
-                crates.push(&g.krate);
-            }
-            if !lib && !tests.contains(&g.test.as_str()) {
-                tests.push(&g.test);
-            }
+    let mut crates: Vec<&str> = Vec::new();
+    for g in groups {
+        if !crates.contains(&g.krate.as_str()) {
+            crates.push(&g.krate);
         }
-        if crates.is_empty() {
-            continue;
-        }
-        let mut args: Vec<String> = vec!["test".to_owned(), "--locked".to_owned()];
-        args.push("--no-run".to_owned());
-        for c in crates {
-            args.push("-p".to_owned());
-            args.push(c.to_owned());
-        }
-        if lib {
-            args.push("--lib".to_owned());
-        }
-        for t in tests {
-            args.push("--test".to_owned());
-            args.push(t.to_owned());
-        }
-        args.extend(extra.iter().cloned());
-        out.push(args);
     }
-    out
+    crates
+        .into_iter()
+        .map(|c| {
+            let mut args: Vec<String> = vec![
+                "test".to_owned(),
+                "--locked".to_owned(),
+                "--no-run".to_owned(),
+                "-p".to_owned(),
+                c.to_owned(),
+            ];
+            let own = groups.iter().filter(|g| g.krate == c);
+            if own.clone().any(|g| g.test == "lib") {
+                args.push("--lib".to_owned());
+            }
+            for g in own.filter(|g| g.test != "lib") {
+                args.push("--test".to_owned());
+                args.push(g.test.clone());
+            }
+            args.extend(extra.iter().cloned());
+            args
+        })
+        .collect()
 }
 
 /// Seconds each crate's golden groups took to run in release on macOS x86-64, the slowest native
@@ -536,15 +535,19 @@ mod tests {
         }
     }
 
-    /// The build before the runs names every group's crate and test once, unit tests apart, with
-    /// the leg's arguments; a plan without unit-test goldens builds no `--lib`.
+    /// The builds before the runs: one per crate in plan order, each selecting that crate alone
+    /// (as its groups' runs do, so cargo resolves the same features), naming its unit tests and
+    /// each of its test targets once, with the leg's arguments; a crate without unit-test goldens
+    /// builds no `--lib`. On the real store, every build selects exactly one package and the same
+    /// one its groups' runs select, and every group's target is in its crate's build.
     #[test]
-    fn one_build_names_every_group() {
+    fn each_crate_builds_alone_what_its_runs_run() {
         let s = store(&[
             golden("geom-a/one", "det", "f1"),
             golden("geom-b/two", "lib", "m::tests::f2"),
             golden("geom-c/three", "det", "f3"),
             golden("geom-c/four", "other", "f4"),
+            golden("geom-c/five", "lib", "m::tests::f5"),
         ]);
         let args = build_args(&plan(&s), &["--release".to_owned()]);
         let words = |v: &[&str]| v.iter().map(|w| (*w).to_owned()).collect::<Vec<String>>();
@@ -557,12 +560,8 @@ mod tests {
                     "--no-run",
                     "-p",
                     "geom-a",
-                    "-p",
-                    "geom-c",
                     "--test",
                     "det",
-                    "--test",
-                    "other",
                     "--release"
                 ]),
                 words(&[
@@ -574,12 +573,62 @@ mod tests {
                     "--lib",
                     "--release"
                 ]),
+                words(&[
+                    "test",
+                    "--locked",
+                    "--no-run",
+                    "-p",
+                    "geom-c",
+                    "--lib",
+                    "--test",
+                    "det",
+                    "--test",
+                    "other",
+                    "--release"
+                ]),
             ]
         );
-        let only = build_args(&plan(&store(&[golden("geom-a/one", "det", "f1")])), &[]);
-        assert_eq!(only.len(), 1);
-        assert!(!only[0].contains(&"--lib".to_owned()));
         assert_eq!(build_args(&[], &[]), Vec::<Vec<String>>::new());
+        let real = plan(&Store::embedded().unwrap());
+        let builds = build_args(&real, &[]);
+        let selected = |a: &[String]| -> Vec<String> {
+            a.windows(2)
+                .filter(|w| w[0] == "-p")
+                .map(|w| w[1].clone())
+                .collect()
+        };
+        for b in &builds {
+            assert_eq!(selected(b).len(), 1, "{b:?} selects more than one package");
+        }
+        for g in &real {
+            let run = g.cargo_args(&[]);
+            let target: Vec<String> = run
+                .iter()
+                .skip(4)
+                .take_while(|w| *w != "--")
+                .cloned()
+                .collect();
+            let home: Vec<&Vec<String>> = builds
+                .iter()
+                .filter(|b| selected(b) == selected(&run))
+                .collect();
+            assert_eq!(
+                home.len(),
+                1,
+                "{}::{} built {} times",
+                g.krate,
+                g.test,
+                home.len()
+            );
+            assert!(
+                home[0]
+                    .windows(target.len())
+                    .any(|w| w == target.as_slice()),
+                "{}::{} not in its crate's build",
+                g.krate,
+                g.test
+            );
+        }
     }
 
     #[test]

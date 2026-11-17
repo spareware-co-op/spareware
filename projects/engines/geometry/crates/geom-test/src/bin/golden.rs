@@ -18,8 +18,8 @@
 //!   (`--release`, `--target wasm32-wasip1`, ...) and the environment as it is (`RUSTFLAGS`,
 //!   `CARGO_TARGET_DIR`, a target runner), one invocation per crate and test target, prints each
 //!   run's output, and requires that each ran exactly its goldens and that each agreed with the
-//!   store ([`geom_test::golden::matrix`]). It first builds every group's test binary in one
-//!   `cargo test --no-run`, side by side. `--part k/n` runs part `k` of `n` alone, whole crates to
+//!   store ([`geom_test::golden::matrix`]). It first builds each crate's group binaries in one
+//!   `cargo test --no-run` per crate, selecting that crate alone as its runs do. `--part k/n` runs part `k` of `n` alone, whole crates to
 //!   a part, so `n` jobs run every golden once between them; a part with no golden fails.
 //! - `diff` compares the store at `<commit>` (read with `git show`; none there is an empty base)
 //!   with the working tree's and prints what changed ([`geom_test::golden::diff`]): each moved
@@ -35,8 +35,8 @@
 //! Method: none; it parses its arguments and calls [`geom_test::golden`], whose module headers
 //! carry the methods.
 //!
-//! Cost: `run` costs one `cargo test --no-run` that builds, then one `cargo test` per crate and
-//! test target; the other commands read the store
+//! Cost: `run` costs one `cargo test --no-run` per crate that builds, then one `cargo test` per
+//! crate and test target; the other commands read the store
 //! and, for `check`, the kernel's sources once.
 
 #![forbid(unsafe_code)]
@@ -227,13 +227,16 @@ fn run(extra: &[String]) -> ExitCode {
         eprintln!("golden run: no golden to run{of}");
         return ExitCode::from(1);
     }
-    // Every group's binary at once, side by side; a build that fails here fails again, with its
-    // message, in the group's own run below, which is what is judged.
+    // Each crate's group binaries, one build per crate selecting that crate alone as its runs do;
+    // a build that fails here fails again, with its message, in the group's own run below, which
+    // is what is judged.
     for args in build_args(&groups, extra) {
         println!("golden run: cargo {}", args.join(" "));
         match Command::new(&cargo).args(&args).current_dir(&root).status() {
             Ok(s) if s.success() => {}
-            Ok(s) => println!("golden run: the build of every group failed ({s}); each runs alone"),
+            Ok(s) => {
+                println!("golden run: the build of a crate's groups failed ({s}); each runs alone")
+            }
             Err(e) => return fail(&format!("cannot run cargo: {e}")),
         }
     }
