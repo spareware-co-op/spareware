@@ -8,7 +8,9 @@
 //! Guarantees:
 //!
 //! - **Every tool is accounted for.** Each is reported, and one that touched nothing inside the host
-//!   is marked and named in `bool.tool_misses_host`. A subtraction cannot go missing silently.
+//!   is marked and named in `bool.tool_misses_host`. A subtraction cannot go missing silently. A
+//!   tool cuts exactly when its inside meets the host's, so a tool that holds a whole part of the
+//!   host, with none of its faces reaching it, cuts too (issue #967).
 //! - **Atomic by default.** A tool that cannot enter fails the call and names itself. Under
 //!   [`BatchRule::SkipFailedTools`] it is left out and listed beside the result, and which tools
 //!   are left out depends only on the inputs.
@@ -43,17 +45,21 @@
 //!   under 290.
 //!   Test: `parallel_phases_nest_at_most_twice`.
 //!
-//! Cost: one arrangement per host, linear in its faces plus local work around each tool.
+//! Cost: one arrangement per host, linear in its faces plus local work around each tool. A tool
+//! none of whose pieces has the host behind it, and whose box meets the host's, adds one trace of
+//! the host's polygons against that tool's alone, stopping at the first the tool holds.
 
 use alloc::vec::Vec;
 
 use geom_op::{CombineDetail, Diagnostic, OpContext, OpError, OpOutput, RunDetail};
+use geom_poly::convex::Piece;
 use geom_poly::merge::{Memo, Merge};
-use geom_poly::subdivide::Solved;
-use geom_poly::trace::Classified;
+use geom_poly::subdivide::{Solved, around};
+use geom_poly::trace::{Classified, Polygon, TraceError, classify};
+use geom_poly::winding::Winding;
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
-use crate::combine::{Combined, arranged_input, fail, prepared, selected};
+use crate::combine::{Combined, arranged_input, fail, prepared, selected, traced};
 use crate::names::NameIds;
 use crate::operand::{
     BooleanInput, Operand, OperandKey, Operands, PrepareError, Prepared, Selection, prepare_reusing,
@@ -146,12 +152,106 @@ pub struct CutResult {
     pub cache: Recut,
 }
 
-/// Whether the tool at `owner` took anything out: a piece of it with the host behind it. A tool
-/// that only touches the host has the host in front of it, and one that misses has it nowhere.
-fn cuts(ready: &Prepared, classified: &[Classified], owner: usize) -> bool {
-    classified
+/// Whether the tool at `owner` took anything out of the host at `host`, both places in `keys`.
+///
+/// A tool takes some of the host exactly when the two insides meet, and that happens in one of two
+/// ways. Either the tool's boundary runs through the host's inside, or on a face of it looking the
+/// same way (11.5), and then a piece of the tool has the host behind it, which the arrangement
+/// gives. Or no piece of the tool does, so the tool's boundary meets the host's inside nowhere,
+/// and every part of the host's inside lies wholly inside the tool or wholly outside it; then a
+/// part inside it has the tool just behind each of its polygons, which [`holds_host`] reads. A
+/// tool that only touches the host has the host in front of it, and one that misses has it
+/// nowhere. The first way alone missed a tool that holds a whole part of the host with none of its
+/// faces reaching it, and reported it as taking nothing (issue #967).
+fn cuts(
+    ready: &Prepared,
+    classified: &[Classified],
+    (host, owner): (usize, usize),
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, TraceError> {
+    let through = classified
         .iter()
-        .any(|c| ready.owners.get(c.polygon) == Some(&owner) && c.back.count(0) > 0)
+        .any(|c| ready.owners.get(c.polygon) == Some(&owner) && c.back.count(0) > 0);
+    if through {
+        return Ok(true);
+    }
+    holds_host(ready, (host, owner), meter)
+}
+
+/// Whether the solid at `owner` holds some of the host at `host` inside it: whether, against that
+/// tool's polygons alone, some polygon of the host has the tool behind it, just behind a corner of
+/// the polygon, where the host's material is. The trace is the arrangement's own (11.3), so the
+/// answer is exact. A cutter bounds no material and holds none, and a tool whose box misses the
+/// host's holds none of it; neither is traced.
+fn holds_host(
+    ready: &Prepared,
+    (host, owner): (usize, usize),
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, TraceError> {
+    let solid = ready
+        .keys
+        .get(owner)
+        .is_some_and(|(_, entry)| entry.is_some());
+    let boxes = |at: usize| {
+        ready
+            .cells
+            .get(at)
+            .copied()
+            .transpose()
+            .map(Option::flatten)
+    };
+    let (Some(tool_box), Some(host_box)) = (boxes(owner)?, boxes(host)?) else {
+        return Ok(false);
+    };
+    let meet = (0..3).all(|axis| {
+        let (Some(a), Some(b), Some(c), Some(d)) = (
+            tool_box.low.get(axis),
+            host_box.high.get(axis),
+            host_box.low.get(axis),
+            tool_box.high.get(axis),
+        ) else {
+            return false;
+        };
+        a < b && c < d
+    });
+    if !solid || !meet {
+        return Ok(false);
+    }
+    let of = |at: usize| {
+        ready
+            .polygons
+            .iter()
+            .zip(&ready.owners)
+            .filter(move |(_, o)| **o == at)
+            .map(|(polygon, _)| polygon)
+    };
+    // The tool's polygons on one entry of their own, then the host's polygon in turn, which counts
+    // no crossing: the trace reads the tool alone.
+    let mut polygons: Vec<Polygon> = of(owner)
+        .map(|polygon| Polygon {
+            piece: polygon.piece.clone(),
+            entry: Some(0),
+        })
+        .collect();
+    let tool = polygons.len();
+    let mut every = polygons.clone();
+    every.extend(of(host).cloned());
+    let cell = around(&every)?;
+    let mut pieces: Vec<Vec<Piece>> = alloc::vec![Vec::new(); tool];
+    for polygon in of(host) {
+        polygons.truncate(tool);
+        polygons.push(Polygon {
+            piece: polygon.piece.clone(),
+            entry: None,
+        });
+        pieces.truncate(tool);
+        pieces.push(alloc::vec![polygon.piece.clone()]);
+        let read = classify(&cell, &Winding::new(), &polygons, &pieces, meter)?;
+        if read.iter().any(|c| c.back.count(0) > 0) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// The tools of `cut` that can enter, prepared with them.
@@ -226,9 +326,15 @@ fn one_cut(
         .ok_or_else(|| fail(ctx, CombineDetail::ResultInvalid))?;
     let mut tools = Vec::with_capacity(ready.keys.len());
     let mut notes = core::mem::take(&mut out.diagnostics);
+    let host = ready
+        .keys
+        .iter()
+        .position(|(key, _)| *key == cut.host.key)
+        .ok_or_else(|| fail(ctx, CombineDetail::ResultInvalid))?;
     for (owner, (key, _)) in ready.keys.iter().enumerate() {
         if *key != cut.host.key {
-            let took = cuts(&ready, &classified, owner);
+            let took = cuts(&ready, &classified, (host, owner), meter)
+                .map_err(|e| traced(ctx, e, meter))?;
             if !took {
                 notes.extend(Diagnostic::new(
                     "bool.tool_misses_host",

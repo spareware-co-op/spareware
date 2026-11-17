@@ -163,8 +163,8 @@ pub const UNSAFE_LIBRARIES: &[Library] = &[
     lib(
         "proptest",
         "proptest",
-        "geom-format::names_history",
-        "generated_histories_round_trip",
+        "geom-op::attack_g82",
+        "ids_and_names_order_as_their_bytes",
     ),
     // The counting allocator of the memory tests.
     lib(
