@@ -43,6 +43,10 @@
 # piece, and saves the process again, to <dir>/hol-light-state.tar, printing its sha256. A shard
 # with pieces restores that state as it would the first, and proves its pieces as before: what the
 # state adds is the function's theorems, which HOL Light's kernel proved in the saving run.
+# A restored HOL Light is known by its output alone, never by `dmtcp_restart`'s process: DMTCP
+# restores a process whose parent was process 1 when it was saved (HOL Light's is, when this
+# script is its container's first process) in a process of its own, and `dmtcp_restart` ends at
+# once. A saving run that gives up shows the end of HOL Light's output and of DMTCP's log.
 # Usage: fptaylor.sh <problem.fpt>...  (geom-gen writes the problems: generated/fptaylor-*.fpt)
 #
 # OCaml 4.11: FPTaylor saves certificates as marshalled `Num` values, and HOL Light uses the Num
@@ -234,9 +238,21 @@ cpu_flags() {
   done
 }
 
-# Saves the HOL Light process `hol_pid`, which runs under the DMTCP coordinator whose port is in
-# $work/port and reads the pipe open as descriptor 3, with $work/manifest, to
-# <dir>/hol-light-state.tar, and prints the file's sha256.
+# A saving run that gives up says why and shows the end of what HOL Light printed, where DMTCP's
+# programs write their errors too, and of the DMTCP coordinator's log where there is one, so that
+# the job's log names the cause.
+stopped() {
+  local log
+  echo "$1"
+  for log in "$work/hol.log" "$work/coordinator.log"; do
+    [ ! -f "$log" ] || { echo "the end of $(basename "$log"):"; tail -n 40 "$log" | cut -c 1-1000; }
+  done
+  exit 1
+}
+
+# Saves the HOL Light process, which runs under the DMTCP coordinator whose port is in $work/port
+# and reads the pipe open as descriptor 3, with $work/manifest, to <dir>/hol-light-state.tar, and
+# prints the file's sha256. `hol_ends` is a process that ends when HOL Light does.
 save_state() {
   local port images
   port=$(cat "$work/port")
@@ -247,17 +263,17 @@ save_state() {
   "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" -bc
   for _ in $(seq 360); do
     [ ! -e "$work/checkpoint/dmtcp_restart_script.sh" ] || break
-    kill -0 "$hol_pid" 2>/dev/null || break
+    kill -0 "$hol_ends" 2>/dev/null || break
     sleep 5
   done
   [ -e "$work/checkpoint/dmtcp_restart_script.sh" ] ||
-    { echo "DMTCP wrote no restart script: the state was not saved"; exit 1; }
+    stopped "DMTCP wrote no restart script: the state was not saved"
   "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" --quit
   exec 3>&-
-  wait "$hol_pid" || true
+  wait "$hol_ends" || true
   wait
   images=("$work"/checkpoint/ckpt_*.dmtcp)
-  [ ${#images[@]} -eq 1 ] && [ -f "${images[0]}" ] || { echo "DMTCP saved no single image"; exit 1; }
+  [ ${#images[@]} -eq 1 ] && [ -f "${images[0]}" ] || stopped "DMTCP saved no single image"
   mv "${images[0]}" "$work/hol.dmtcp"
   cat "$work/manifest"
   echo "saved on: $(sed -n 's/^model name\s*: //p' /proc/cpuinfo | head -n 1)"
@@ -290,12 +306,13 @@ if [ -n "$state_out" ]; then
     --port-file "$work/port" --ckptdir "$work/checkpoint" --no-gzip \
     "$work/hol-light/ocaml-hol" -I "$(camlp5 -where)" -safe-string -I "$work/hol-light" \
     <"$work/input" >"$work/hol.log" 2>&1 &
-  hol_pid=$!
+  # `dmtcp_launch` runs HOL Light in its own process, so this one is HOL Light's.
+  hol_ends=$!
   exec 3>"$work/input"
   cat "$work/load.ml" >&3
-  tail -n +1 -f --pid="$hol_pid" "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
+  tail -n +1 -f --pid="$hol_ends" "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
   until grep -q '^\(# \)*HOL Light state: loaded$' "$work/hol.log"; do
-    kill -0 "$hol_pid" 2>/dev/null || { echo "HOL Light stopped before it was loaded"; exit 1; }
+    kill -0 "$hol_ends" 2>/dev/null || stopped "HOL Light stopped before it was loaded"
     sleep 5
   done
   {
@@ -415,19 +432,27 @@ if [ -n "$cut_state_out" ]; then
   # The restored HOL Light reads the session from a pipe held open until the state is saved again,
   # as the run that saved the loaded state does. The coordinator of a restored process writes its
   # restart script where it runs, so it runs in the folder the image goes to.
+  # `dmtcp_restart`'s process is not HOL Light's and says nothing of it. HOL Light's parent was
+  # process 1 when the loaded state was saved wherever this script is its container's first
+  # process, and DMTCP restores such a process in a grandchild of `dmtcp_restart`, which itself
+  # ends at once with success. (Run 44076902825 failed so: this path watched `dmtcp_restart`,
+  # found it gone within seconds and gave up, with HOL Light restored and running.) So HOL Light
+  # is held as a shard's restore holds it, by its output: it writes into a pipe, and the pipe's
+  # last reader, `hol_ends`, ends when HOL Light does, whichever process DMTCP made it.
   echo 'print_endline "HOL Light state: cut terms built";;' >>"$session"
   cat "$session"
   mkfifo "$work/input"
   mkdir "$work/checkpoint"
+  : >"$work/hol.log"
   (cd "$work/checkpoint" && exec "$work/dmtcp/bin/dmtcp_restart" --new-coordinator --coord-port 0 \
-    --port-file "$work/port" --ckptdir "$work/checkpoint" "$work/hol.dmtcp") \
-    <"$work/input" >"$work/hol.log" 2>&1 &
-  hol_pid=$!
+    --port-file "$work/port" --ckptdir "$work/checkpoint" --coord-logfile "$work/coordinator.log" \
+    "$work/hol.dmtcp") <"$work/input" 2>&1 |
+    tee "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
+  hol_ends=$!
   exec 3>"$work/input"
   cat "$session" >&3
-  tail -n +1 -f --pid="$hol_pid" "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
   until grep -q '^\(# \)*HOL Light state: cut terms built$' "$work/hol.log"; do
-    kill -0 "$hol_pid" 2>/dev/null || { echo "HOL Light stopped before the cut terms were built"; exit 1; }
+    kill -0 "$hol_ends" 2>/dev/null || stopped "HOL Light stopped before the cut terms were built"
     sleep 5
   done
   # Each cut term's theorems were built here, and nothing was proved: every term is assumed.

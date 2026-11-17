@@ -26,6 +26,14 @@
 //!   run or skip its check for a problem the base did not prove. In the committed problems every
 //!   piece of a cut term is in exactly one shard, and no shard has pieces and whole terms. So
 //!   what one shard's theorem assumes, another job of the same run proves.
+//! - **A restored HOL Light is known by its output alone.** The run that saves a second state
+//!   restarts HOL Light in the background and waits on it. fptaylor.sh never takes
+//!   `dmtcp_restart`'s process for HOL Light's: DMTCP restores a process whose parent was process
+//!   1 when it was saved, as HOL Light's is where the script is its container's first process, in
+//!   a grandchild of `dmtcp_restart`, which ends at once with success (run 44076902825: the saving
+//!   run watched that process and gave up within seconds of a good restore). What the script
+//!   holds instead reads HOL Light's output from a pipe, so it ends when HOL Light does; and a
+//!   saving run that gives up shows the end of that output and of DMTCP's coordinator's log.
 //!
 //! Each rule is also shown to fail on a planted violation.
 
@@ -87,6 +95,20 @@ const RESTORED: &str = r#""$work/dmtcp/bin/dmtcp_restart""#;
 /// and nothing proved.
 const CUT_BUILT: &str = r#"[ "$built" = "$cut_terms" ] ||"#;
 const CUT_PROVED_NOTHING: &str = r#"! grep -q '^\(# \)*Proved: ' "$work/hol.log" ||"#;
+/// fptaylor.sh's restart that saves again: HOL Light's output goes into a pipe, and the process
+/// the script holds, `hol_ends`, is the pipe's last reader.
+const HELD_BY_ITS_OUTPUT: &str = "\"$work/hol.dmtcp\") <\"$work/input\" 2>&1 |\n    tee \"$work/hol.log\" | grep --line-buffered -v '^val \\|^- : ' &\n  hol_ends=$!\n";
+/// How a saving run of fptaylor.sh gives up: through `stopped`, which shows the end of HOL
+/// Light's output and of the DMTCP coordinator's log, which the restart is told to write.
+const STOP_SHOWS: &str = r#"tail -n 40 "$log" | cut -c 1-1000;"#;
+const STOP_LOGS: &str = r#"for log in "$work/hol.log" "$work/coordinator.log"; do"#;
+const COORDINATOR_LOG: &str = r#"--coord-logfile "$work/coordinator.log""#;
+const STOPS: [&str; 4] = [
+    r#"kill -0 "$hol_ends" 2>/dev/null || stopped "HOL Light stopped before it was loaded""#,
+    r#"kill -0 "$hol_ends" 2>/dev/null || stopped "HOL Light stopped before the cut terms were built""#,
+    r#"stopped "DMTCP wrote no restart script: the state was not saved""#,
+    r#"stopped "DMTCP saved no single image""#,
+];
 
 /// How `fptaylor-problems` sends each shard to one of its two lists, and fails otherwise.
 const ROUTING: [&str; 5] = [
@@ -205,6 +227,57 @@ fn problems(workflow: &str, script: &str) -> Vec<String> {
     if !script.contains(CUT_BUILT) || !script.contains(CUT_PROVED_NOTHING) {
         found.push(
             "fptaylor.sh can save a cut state without each cut term's theorems, or one that proved a term"
+                .to_owned(),
+        );
+    }
+    found.extend(held_problems(script));
+    found
+}
+
+/// What is wrong with how the script `script` knows that a HOL Light it restored in the
+/// background runs, and with what it shows when a saving run gives up.
+fn held_problems(script: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let lines: Vec<&str> = script.lines().collect();
+    for (at, line) in lines.iter().enumerate() {
+        if !line.trim_end().ends_with("=$!") {
+            continue;
+        }
+        // The command put in the background before it: back over comments to its last line,
+        // then over each line a backslash or a pipe continues.
+        let mut before = lines[..at]
+            .iter()
+            .rev()
+            .skip_while(|l| l.trim_start().starts_with('#'));
+        let mut command: Vec<&str> = before.next().into_iter().copied().collect();
+        command.extend(
+            before
+                .take_while(|l| [" \\", " |"].iter().any(|more| l.ends_with(more)))
+                .copied(),
+        );
+        command.reverse();
+        // `$!` is the last process of that command's pipeline.
+        let command = command.join("\n");
+        let last = command
+            .rsplit_once(" |")
+            .map_or(command.as_str(), |(_, last)| last);
+        if last.contains("dmtcp_restart") {
+            found.push("fptaylor.sh takes dmtcp_restart's process for HOL Light's".to_owned());
+        }
+    }
+    if !script.contains(HELD_BY_ITS_OUTPUT) {
+        found.push(
+            "fptaylor.sh does not hold the HOL Light it restores to save again by its output"
+                .to_owned(),
+        );
+    }
+    if !script.contains(STOP_SHOWS)
+        || !script.contains(STOP_LOGS)
+        || !script.contains(COORDINATOR_LOG)
+        || !STOPS.iter().all(|stop| script.contains(stop))
+    {
+        found.push(
+            "fptaylor.sh's saving run can give up without showing the end of HOL Light's output and of DMTCP's log"
                 .to_owned(),
         );
     }
@@ -735,6 +808,76 @@ fn a_shard_of_pieces_never_starts_without_its_state() {
         &workflow,
         &planted(&script, CUT_BUILT, r#"[ -n "$built" ] ||"#),
         "can save a cut state",
+    );
+}
+
+/// The run that saves a second state knows the HOL Light it restored by its output, never by
+/// `dmtcp_restart`'s process, and shows what HOL Light and DMTCP last said when it gives up.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_restored_hol_light_is_known_by_its_output_alone() {
+    let workflow = read(WORKFLOW);
+    let script = read(SCRIPT);
+    let found = problems(&workflow, &script);
+    assert!(found.is_empty(), "{found:#?}");
+
+    // Planted: the restart as run 44076902825 had it, its output in a file and `dmtcp_restart`'s
+    // process watched. In a container that process ends at once, HOL Light restored and running
+    // in another, and the saving run gave up after five seconds.
+    let piped = "\"$work/hol.dmtcp\") <\"$work/input\" 2>&1 |\n    tee \"$work/hol.log\" | grep --line-buffered -v '^val \\|^- : ' &\n";
+    finds(
+        &workflow,
+        &planted(
+            &script,
+            piped,
+            "\"$work/hol.dmtcp\") \\\n    <\"$work/input\" >\"$work/hol.log\" 2>&1 &\n",
+        ),
+        "takes dmtcp_restart's process for HOL Light's",
+    );
+    // Planted: the output still read by `tee`, but `$!` again `dmtcp_restart`'s; and HOL Light
+    // looked for by name instead of held by its output.
+    finds(
+        &workflow,
+        &planted(
+            &script,
+            piped,
+            "\"$work/hol.dmtcp\") <\"$work/input\" > >(tee \"$work/hol.log\" | grep --line-buffered -v '^val \\|^- : ') 2>&1 &\n",
+        ),
+        "does not hold the HOL Light it restores to save again by its output",
+    );
+    finds(
+        &workflow,
+        &planted(
+            &script,
+            "'^val \\|^- : ' &\n  hol_ends=$!\n  exec 3>\"$work/input\"\n  cat \"$session\" >&3\n",
+            "'^val \\|^- : ' &\n  hol_ends=$(pgrep -n ocaml-hol)\n  exec 3>\"$work/input\"\n  cat \"$session\" >&3\n",
+        ),
+        "does not hold the HOL Light it restores to save again by its output",
+    );
+
+    // Planted: a saving run that gives up and shows nothing of HOL Light or DMTCP, as that run did.
+    let silent = "can give up without showing the end of HOL Light's output and of DMTCP's log";
+    finds(
+        &workflow,
+        &planted(
+            &script,
+            STOPS[1],
+            r#"kill -0 "$hol_ends" 2>/dev/null || { echo "HOL Light stopped before the cut terms were built"; exit 1; }"#,
+        ),
+        silent,
+    );
+    finds(&workflow, &planted(&script, STOP_SHOWS, "true;"), silent);
+    finds(
+        &workflow,
+        &planted(
+            &script,
+            "--coord-logfile \"$work/coordinator.log\" \\\n    ",
+            "",
+        ),
+        silent,
     );
 }
 
