@@ -10,6 +10,7 @@
 # GitHub measuring run 44032408206, land/miri-bool at 96f3b42ac
 # GitHub measuring run 44018105828, the Phase 5 train at d29286c64
 # GitHub measuring run 44040144910, join/p5-gen-prune at 5e41301d1 (#892's generated_quadrics)
+# GitHub measuring run 44085710191, fix/natural-slow at bae076419 (#974's circle_on_surface)
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1385,6 +1386,16 @@ native-only over 601	geom-intersect::boundary_branch	two_patches_meeting_along_a
 native-only over 601	geom-intersect::boundary_units	a_planes_edge_along_a_cylinders_line_is_proven_in_pieces_of_half_a_unit
 native-only over 601	geom-intersect::boundary_units	a_strip_has_the_same_branch_however_its_parameters_are_written
 native-only over 601	geom-intersect::boundary_units	an_edge_along_a_plane_whose_vectors_lean_is_proven_where_it_lies
+42	geom-intersect::circle_on_surface	a_circle_at_an_end_of_a_round_domain_is_placed_exactly
+4	geom-intersect::circle_on_surface	a_circle_in_a_plane_is_an_overlap
+native-only over 601	geom-intersect::circle_on_surface	a_circle_off_a_cone_is_the_engines
+native-only over 601	geom-intersect::circle_on_surface	a_circle_off_a_cylinder_is_the_engines
+378	geom-intersect::circle_on_surface	a_circle_off_a_plane_is_the_engines
+4	geom-intersect::circle_on_surface	a_circle_on_a_coaxial_cone_is_an_overlap
+3	geom-intersect::circle_on_surface	a_circle_on_a_coaxial_cylinder_is_an_overlap
+3	geom-intersect::circle_on_surface	a_plane_whose_domain_holds_none_of_the_circle_misses_it
+native-only over 601	geom-intersect::circle_on_surface	a_plane_whose_domain_holds_part_of_the_circle_is_the_engines
+native-only over 601	geom-intersect::circle_on_surface	an_axis_off_the_coordinate_axes_is_placed_by_enclosures_alone
 91	geom-intersect::edge_end	a_zero_inside_the_other_patch_is_proven_as_before
 native-only over 601	geom-intersect::edge_end	a_zero_on_the_end_of_a_nurbs_patch_is_proven_there
 native-only over 601	geom-intersect::fit_refined	a_closed_loop_of_three_vertices_is_refined_and_closes
