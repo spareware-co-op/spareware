@@ -29,6 +29,12 @@
 //!   run on Linux x86-64; and each release leg of `test` shares its work among its parts with every
 //!   golden and test step on exactly one part, each golden build's `--part j/m` shares whole, and
 //!   geom-num's library, binaries, doctests and every test target once in each build.
+//! - `the_wasm32_legs_run_every_golden_and_test_once_in_parts`: each runtime's goldens on wasm32
+//!   (`wasm`) are parts 1 to n, every golden and test step and the guard's proof on exactly one,
+//!   each build's `--part j/m` shares whole; the suite on wasm32 is built once per build
+//!   (`wasm-build`, its nextest archive uploaded and its doctests once under each runtime) and run
+//!   from that archive in parts (`wasm-suite`, `--partition count:k/n` for k = 1 to n once under
+//!   each runtime), the parts waiting for the build.
 //! - `each_change_is_measured_against_its_base_and_marked_once`: `changes` measures a pull request
 //!   against its merge commit's first parent, the queue against the queue's base and a push against
 //!   the commit main was at; only the merge queue's last job marks a tree as tested, under the name
@@ -513,6 +519,8 @@ fn leg_problems(kernel: &str) -> Vec<String> {
     }
     found.extend(linux_part_problems(&w));
     found.extend(test_part_problems(&w, &geom_num_tests()));
+    found.extend(wasm_part_problems(&w));
+    found.extend(wasm_suite_part_problems(&w));
     found
 }
 
@@ -741,6 +749,218 @@ fn vector_problems(build: &str, runs: &[String], tests: &[String]) -> Vec<String
     found
 }
 
+/// The parts of a matrix's `k`, checked to be 1 to n, and the problem when they are not.
+fn numbered(job: &str, k: &Yaml, found: &mut Vec<String>) -> Vec<i64> {
+    let parts: Vec<i64> = k
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter_map(Yaml::as_i64)
+        .collect();
+    let n = i64::try_from(parts.len()).unwrap();
+    if n == 0 || parts != (1..=n).collect::<Vec<_>>() {
+        found.push(format!("{job}'s parts are {parts:?}, not 1 to {n}"));
+    }
+    parts
+}
+
+/// What is wrong with how `wasm` shares a runtime's leg among its parts: parts not 1 to n or a
+/// name that does not count them, a golden, test or guard step on no part or on more than one,
+/// and a golden build's `--part j/m` shares not exactly 1 to m (one dropped from every part, or
+/// run twice). A golden build is its flags, whether it is in release, and its command without
+/// `--part`; the guard's proof runs one whole golden run, which the shares of its build make up.
+fn wasm_part_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let wasm = &w["jobs"]["wasm"];
+    let parts = numbered("wasm", &wasm["strategy"]["matrix"]["k"], &mut found);
+    let n = parts.len();
+    if !text(&wasm["name"]).ends_with(&format!("part ${{{{ matrix.k }}}} of {n})")) {
+        found.push(format!("wasm's name does not count its {n} parts"));
+    }
+    let mut goldens: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut guarded = Vec::new();
+    for step in wasm["steps"].as_vec().into_iter().flatten() {
+        let run = text(&step["run"]);
+        let name = text(&step["name"]);
+        let golden = run.starts_with("cargo run --locked -p geom-test --bin golden");
+        let guard = run.contains("--bin guard -- prove");
+        if !(golden || guard || run.starts_with("cargo test")) {
+            continue;
+        }
+        match parts_of(&text(&step["if"]), &parts) {
+            Some(on) if on.len() == 1 => {}
+            Some(on) => found.push(format!("{name}: runs on parts {on:?}, not exactly one")),
+            None => found.push(format!("{name}: its condition on the part is not read")),
+        }
+        if guard {
+            guarded.push(
+                run.split("--golden-run")
+                    .nth(1)
+                    .unwrap_or("")
+                    .trim()
+                    .to_owned(),
+            );
+        }
+        if golden {
+            let words: Vec<&str> = run.split_whitespace().collect();
+            let share = words
+                .iter()
+                .position(|w| *w == "--part")
+                .and_then(|at| words.get(at + 1))
+                .map_or_else(|| "1/1".to_owned(), |s| (*s).to_owned());
+            let whole = run.replacen(&format!("--part {share} "), "", 1);
+            goldens
+                .entry(format!("{} | {whole}", text(&step["env"]["RUSTFLAGS"])))
+                .or_default()
+                .push(share);
+        }
+    }
+    for (build, shares) in &goldens {
+        let m = shares.len();
+        let wanted: BTreeSet<String> = (1..=m).map(|j| format!("{j}/{m}")).collect();
+        let got: BTreeSet<String> = shares.iter().cloned().collect();
+        if got != wanted || shares.len() != got.len() {
+            found.push(format!(
+                "wasm's goldens of `{build}` run shares {shares:?}, not each of {wanted:?} once"
+            ));
+        }
+    }
+    if goldens.len() != 3 {
+        found.push(format!(
+            "wasm runs the goldens in {} builds, not with overflow checks on, as shipped and in \
+             debug",
+            goldens.len()
+        ));
+    }
+    if guarded.len() != 1 {
+        found.push(format!(
+            "wasm proves the guard {} times, not once",
+            guarded.len()
+        ));
+    }
+    found
+}
+
+/// What is wrong with how the wasm32 suite is built once and run in parts: `wasm-build`'s builds
+/// are not the two of `wasm-suite`'s parts, a build does not archive what its parts run or does
+/// not upload it under the name its parts download, its doctests (which nextest does not run) not
+/// once under each runtime, a build's parts not `--partition count:k/n` for exactly k = 1 to n
+/// under each runtime (a part dropped, or run twice), or the parts not waiting for the build.
+fn wasm_suite_part_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let build = &w["jobs"]["wasm-build"];
+    let suite = &w["jobs"]["wasm-suite"];
+    let needs: Vec<String> = suite["needs"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .map(text)
+        .collect();
+    if !needs.contains(&"wasm-build".to_owned()) {
+        found.push("wasm-suite's parts do not wait for wasm-build".to_owned());
+    }
+    let builds = strings(&build["strategy"]["matrix"]["build"]);
+    let runtimes = strings(&suite["strategy"]["matrix"]["runtime"]);
+    if runtimes != ["wasmtime", "node"] {
+        found.push(format!(
+            "wasm-suite runs under {runtimes:?}, not wasmtime and node"
+        ));
+    }
+    let steps: Vec<&Yaml> = build["steps"].as_vec().into_iter().flatten().collect();
+    let mut parts: BTreeMap<String, Vec<(i64, i64)>> = BTreeMap::new();
+    for p in suite["strategy"]["matrix"]["part"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+    {
+        let (Some(k), Some(n)) = (p["k"].as_i64(), p["n"].as_i64()) else {
+            found.push(format!("a wasm-suite part is not read: {p:?}"));
+            continue;
+        };
+        parts.entry(text(&p["build"])).or_default().push((k, n));
+    }
+    let wanted: BTreeSet<String> = builds.iter().cloned().collect();
+    if parts.keys().cloned().collect::<BTreeSet<_>>() != wanted {
+        found.push(format!(
+            "wasm-suite's parts run the builds {:?}, but wasm-build makes {wanted:?}",
+            parts.keys()
+        ));
+    }
+    for (b, ks) in &parts {
+        let n = ks.first().map_or(0, |(_, n)| *n);
+        let mut got: Vec<i64> = ks.iter().map(|(k, _)| *k).collect();
+        got.sort_unstable();
+        if ks.iter().any(|(_, m)| *m != n) || got != (1..=n).collect::<Vec<_>>() {
+            found.push(format!(
+                "wasm-suite runs the {b} build's parts {ks:?}, not each of 1 to {n} once"
+            ));
+        }
+    }
+    found.extend(wasm_build_problems(&steps, &builds));
+    let suite_steps: Vec<&Yaml> = suite["steps"].as_vec().into_iter().flatten().collect();
+    let downloads = suite_steps.iter().any(|s| {
+        text(&s["uses"]).starts_with("actions/download-artifact@")
+            && text(&s["with"]["name"]) == "wasm-${{ matrix.part.build }}"
+    });
+    let runs = suite_steps.iter().any(|s| {
+        text(&s["run"])
+            == "cargo nextest run --archive-file \"$RUNNER_TEMP/wasm-${{ matrix.part.build }}.tar.zst\" \
+                --workspace-remap . --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}"
+    });
+    if !(downloads && runs) {
+        found.push(
+            "a wasm-suite part does not run its share of the archive its build uploaded".to_owned(),
+        );
+    }
+    found
+}
+
+/// What is wrong with `wasm-build`'s steps (`steps`) for its builds (`builds`): a build that does
+/// not archive its tests, its doctests not once under each runtime, or its archive not uploaded
+/// under the name its parts download.
+fn wasm_build_problems(steps: &[&Yaml], builds: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    for b in builds {
+        let of_build: Vec<&&Yaml> = steps
+            .iter()
+            .filter(|s| text(&s["if"]).contains(&format!("matrix.build == '{b}'")))
+            .collect();
+        let archived = of_build.iter().any(|s| {
+            text(&s["run"]).starts_with(&format!(
+                "cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked \
+                 --archive-file \"$RUNNER_TEMP/wasm-{b}.tar.zst\""
+            ))
+        });
+        if !archived {
+            found.push(format!("wasm-build does not archive the {b} build's tests"));
+        }
+        for runtime in ["wasmtime", "node"] {
+            let doctests = of_build
+                .iter()
+                .filter(|s| {
+                    text(&s["run"])
+                        .starts_with("cargo test $KERNEL_CRATES --doc --target wasm32-wasip1")
+                        && text(&s["env"]["CARGO_TARGET_WASM32_WASIP1_RUNNER"]).starts_with(runtime)
+                })
+                .count();
+            if doctests != 1 {
+                found.push(format!(
+                    "the {b} build's doctests run {doctests} times under {runtime}"
+                ));
+            }
+        }
+    }
+    let uploads = steps.iter().any(|s| {
+        text(&s["uses"]).starts_with("actions/upload-artifact@")
+            && text(&s["with"]["name"]) == "wasm-${{ matrix.build }}"
+            && text(&s["with"]["path"]) == "${{ runner.temp }}/wasm-${{ matrix.build }}.tar.zst"
+    });
+    if !uploads {
+        found.push("wasm-build does not upload its archive as wasm-<build>".to_owned());
+    }
+    found
+}
+
 /// geom-num's test targets: the files of its `tests` folder.
 fn geom_num_tests() -> Vec<String> {
     let dir = root().join("projects/engines/geometry/crates/geom-num/tests");
@@ -889,11 +1109,21 @@ fn the_ruleset_requires_checks_that_always_report() {
     assert!(
         seeded(
             "kernel.yml",
-            " wasm, wasm-suite, big-endian, large-models]",
-            " wasm, wasm-suite, large-models]"
+            " wasm, wasm-build, wasm-suite, big-endian, large-models]",
+            " wasm, wasm-build, wasm-suite, large-models]"
         )
         .iter()
         .any(|p| p.contains("does not judge [\"big-endian\"]"))
+    );
+    // The wasm32 suite's one build left out of the last job: a failed build would go unjudged.
+    assert!(
+        seeded(
+            "kernel.yml",
+            " wasm, wasm-build, wasm-suite, big-endian, large-models]",
+            " wasm, wasm-suite, big-endian, large-models]"
+        )
+        .iter()
+        .any(|p| p.contains("does not judge [\"wasm-build\"]"))
     );
     assert!(
         seeded(
@@ -926,8 +1156,14 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
         ),
         // A job dropped from what the queue must run.
         (
+            "merge_group) must=\"lint scope test suite wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope test suite wasm-build wasm-suite big-endian large-models\"",
+            "on merge_group the jobs",
+        ),
+        // The wasm32 suite's build dropped from what the queue must run.
+        (
+            "merge_group) must=\"lint scope test suite wasm wasm-build wasm-suite big-endian large-models\"",
             "merge_group) must=\"lint scope test suite wasm wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope test suite wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // A job that would run again on a tree the queue passed.
@@ -1135,6 +1371,91 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
             "          - name: Windows arm64\n            os: windows-11-arm\n          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The one plain debug run",
             "          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The one plain debug run",
             "not every other runner",
+        ),
+    ] {
+        let k = kernel.replacen(from, to, 1);
+        assert_ne!(k, kernel, "the planted edit {from:?} applies");
+        let found = leg_problems(&k);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_wasm32_legs_run_every_golden_and_test_once_in_parts() {
+    let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
+    assert_eq!(leg_problems(&kernel), Vec::<String>::new());
+
+    // Seeded violations: each must be reported.
+    for (from, to, said) in [
+        // A part of the wasm32 goldens dropped from the matrix: its share runs nowhere.
+        (
+            "        k: [1, 2, 3, 4, 5, 6, 7, 8]",
+            "        k: [1, 2, 3, 4, 5, 6, 7]",
+            "Every golden on wasm32 in debug (part 3 of 3): runs on parts [], not exactly one",
+        ),
+        // A wasm32 golden step on two parts: run twice.
+        (
+            "        if: ${{ !cancelled() && matrix.k == 3 }}\n        env:\n          RUSTFLAGS: -C overflow-checks=on\n        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2",
+            "        if: ${{ !cancelled() && matrix.k <= 3 }}\n        env:\n          RUSTFLAGS: -C overflow-checks=on\n        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2",
+            "(part 2 of 2): runs on parts [1, 2, 3], not exactly one",
+        ),
+        // A wasm32 golden share in no part: the second debug share run as the first again.
+        (
+            "run --part 2/3 --target wasm32-wasip1\n",
+            "run --part 1/3 --target wasm32-wasip1\n",
+            "run shares [\"1/3\", \"1/3\", \"3/3\"]",
+        ),
+        // The wasm32 guard's proof on every part.
+        (
+            "        if: ${{ matrix.k == 1 }}\n        run: cargo run --locked --release -p geom-test --bin guard",
+            "        run: cargo run --locked --release -p geom-test --bin guard",
+            "A one-bit change to libm's sin fails a golden on wasm32: runs on parts [1, 2, 3, 4, 5, 6, 7, 8]",
+        ),
+        // A part added to the wasm32 goldens without its name counting it.
+        (
+            "    name: Test (wasm32-wasip1 under ${{ matrix.runtime }}, part ${{ matrix.k }} of 8)",
+            "    name: Test (wasm32-wasip1 under ${{ matrix.runtime }}, part ${{ matrix.k }} of 7)",
+            "wasm's name does not count its 8 parts",
+        ),
+        // A part of the wasm32 suite dropped: its share of the tests runs nowhere.
+        (
+            "          - { build: checked, k: 2, n: ",
+            "          - { build: checked, k: 1, n: ",
+            "wasm-suite runs the checked build's parts",
+        ),
+        // The shipped build's parts dropped: geom-num's vectors as shipped run nowhere.
+        (
+            "          - { build: shipped, k: 1, n: ",
+            "          - { build: checked, k: 9, n: ",
+            "wasm-suite's parts run the builds",
+        ),
+        // The parts no longer waiting for the build.
+        (
+            "    needs: [changes, lint, scope, wasm-build]\n",
+            "    needs: [changes, lint, scope]\n",
+            "do not wait for wasm-build",
+        ),
+        // A build's doctests dropped under one runtime.
+        (
+            "      - name: geom-num's doctests on wasm32 in release as shipped, under Node\n        if: ${{ !cancelled() && matrix.build == 'shipped'",
+            "      - name: geom-num's doctests on wasm32 in release as shipped, under Node\n        if: ${{ !cancelled() && matrix.build == 'checked'",
+            "the shipped build's doctests run 0 times under node",
+        ),
+        // The archive uploaded under a name no part downloads.
+        (
+            "          name: wasm-${{ matrix.build }}\n",
+            "          name: wasm-suite-${{ matrix.build }}\n",
+            "does not upload its archive",
+        ),
+        // A part that runs the whole archive, not its share.
+        (
+            "--workspace-remap . --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}\n",
+            "--workspace-remap . --no-fail-fast\n",
+            "does not run its share",
         ),
     ] {
         let k = kernel.replacen(from, to, 1);
