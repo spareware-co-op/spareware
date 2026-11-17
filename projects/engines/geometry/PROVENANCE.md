@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 18 | 28 |
-| PORT METHOD | 50 | 54 |
+| PORT METHOD | 51 | 55 |
 | DEPEND | 5 | 4 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -77,6 +77,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | `libm` 0.2.16 | MIT | allowed | <https://github.com/rust-lang/compiler-builtins/tree/dfd2203a4d6110820ad7bb65cafe1bf331a03a3d/libm/src/math> | none | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for which instruction or routine its square root and fused multiply-add use on each target, as the guarantees above state. |
 | libmalloc's xzone malloc | MIT | allowed | <https://github.com/apple-oss-distributions/libmalloc/blob/c49dafa25f1efe8607701ae6014a663ad2ee437f/src/xzone_malloc/xzone_malloc.c> | none | `projects/engines/geometry/crates/geom-test/src/golden/perturb.rs`: with `src/xzone_malloc/xzone_malloc.h` (MIT) at the same commit, for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists, its four pools per size class and its keyed choice of pool), to explain what CI measured. No code copied. |
 | LLVM's llvm-cov | Apache-2.0 WITH LLVM-exception | allowed | <https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageExporterLcov.cpp> | none | `projects/engines/geometry/crates/geom-test/src/coverage.rs`: with `CoverageSummaryInfo.cpp` and `CodeCoverage.cpp` beside it at the same commit (the LLVM 23.1.1 the pinned nightly ships), for how its LCOV export counts `BRF` and writes `BRDA`. No code copied. |
+| Manifold | Apache-2.0 | allowed | <https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests/man_bench.cpp> | none | `projects/engines/geometry/crates/geom-test/src/ember.rs`: for how EMBER moves and combines a pair. No code copied. |
 | Manifold | Apache-2.0 | allowed | <https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/shared.h> | none | `projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs`: for half-edges as parallel arrays, and <https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/include/manifold/mesh.h>, for property vertices and runs; its data model, not its code. |
 | Manifold | Apache-2.0 | allowed | <https://github.com/elalish/manifold/tree/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/test/models> | none | `projects/engines/geometry/crates/geom-test/src/polyhedral.rs`: for its regression models, stored unmodified as the corpus `manifold-models`. No code copied. |
 | npm `hosted-git-info` 10.1.1 | ISC | allowed | <https://github.com/npm/hosted-git-info/blob/8c3bebb5e42142b7bce06b085b4c1bd1adba7371/lib/hosts.js> | none | `projects/engines/geometry/crates/geom-test/src/map/links.rs`: for the address layouts of GitHub, Bitbucket, GitLab, gists and sourcehut and where each puts its revision. No code copied. |
