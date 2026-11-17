@@ -58,7 +58,9 @@
 //!   that `two_prod` gives the rounded product and its error for every finite first factor
 //!   against 3, the splitter, 2^996 and the smallest subnormal, and for every first factor whose
 //!   significand has at most 14 bits (every sign and exponent) against −0.1 and the largest
-//!   double: one factor for each of its paths. The proofs module has one harness per value, with
+//!   double: one factor for each of its paths. The proofs module has one harness per value (for
+//!   `two_sum` against 3, −0.1, 2^53 and the smallest subnormal, one for each order of the two
+//!   operands, which together are both orders), with
 //!   kissat as the SAT solver; the `two_prod` harnesses unwind `scale`'s loop at most three times
 //!   (its callers pass at most 1074, so it steps at most twice), and Kani checks that bound is
 //!   enough. In WSL (2026-10-28, sharing the machine) the full-width harnesses took 4 to 54
@@ -579,130 +581,97 @@ mod proofs {
     }
 
     /// `two_sum` and `fast_two_sum` agree bit for bit, the sum is the rounded sum, and the error
-    /// is below half a unit of it (adding it back rounds to the sum), for every finite first
-    /// operand and the second operand `y`, in either order. It is proven for five second operands,
-    /// one harness each (kissat as the SAT solver): 3 and −0.1 (inexact sums of either sign), 2^53
-    /// (sums whose error is a whole number), the smallest subnormal (errors at the bottom of the
-    /// range) and the largest double (overflow). Over every pair at once, or the five in one
-    /// harness, the solver ran past CI's hour.
-    fn two_sum_law(y: f64) {
-        let x = finite();
-        for (a, b) in [(x, y), (y, x)] {
-            let (s, e) = two_sum(a, b);
-            let (fs, fe) = fast_two_sum(a, b);
-            assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
-            assert!(s.to_bits() == (a + b).to_bits());
-            if s.is_finite() {
-                assert!(e.is_finite() && s + e == s);
-            }
+    /// is below half a unit of it (adding it back rounds to the sum), for the operands `a` and `b`
+    /// in that order.
+    ///
+    /// The law is this claim for every finite operand `x` and a second operand `y`, in either
+    /// order: `x` then `y`, and `y` then `x`. It is proven for five second operands (kissat as the
+    /// SAT solver): 3 and −0.1 (inexact sums of either sign), 2^53 (sums whose error is a whole
+    /// number), the smallest subnormal (errors at the bottom of the range) and the largest double
+    /// (overflow). Over every pair at once, or the five in one harness, the solver ran past CI's
+    /// hour. For the first four the two orders are two harnesses, [`two_sum_of_any_and`] and
+    /// [`two_sum_of_it_and_any`], which together are the law for that operand: every `x`, both
+    /// orders. In one harness the two orders shared one solve of 16 to 25 minutes on a hosted
+    /// runner (run 44020080291); apart, −0.1's took 5 and 8 (run 44046765712), where halving
+    /// the operands by sign left a half at 12.
+    fn two_sum_claim(a: f64, b: f64) {
+        let (s, e) = two_sum(a, b);
+        let (fs, fe) = fast_two_sum(a, b);
+        assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
+        assert!(s.to_bits() == (a + b).to_bits());
+        if s.is_finite() {
+            assert!(e.is_finite() && s + e == s);
         }
     }
 
-    /// TRIAL (measuring only, removed before the pull request): [`two_sum_law`]'s claim for the
-    /// operand `y`, in one order (`order` 0: x then y; 1: y then x; 2: both), and only the first
-    /// operands of class `class` of the candidate split `kind`.
-    fn trial_ts(y: f64, order: u8, kind: u8, class: u64) {
-        let x = finite();
-        let xb = x.to_bits();
-        let mag = u64::MAX >> 1;
-        let part = match kind {
-            // The whole domain.
-            0 => 0,
-            // x's sign: 2 classes.
-            1 => xb >> 63,
-            // x's sign and which magnitude is larger: 4 classes.
-            2 => (xb >> 63) | (u64::from((xb & mag) >= (y.to_bits() & mag)) << 1),
-            // x's sign and the top two bits of its exponent field: 8 classes.
-            3 => xb >> 61,
-            // The low three fraction bits of x: 8 classes.
-            4 => xb & 7,
-            // The floor: x's sign and exponent field fixed.
-            _ => xb >> 52,
-        };
-        if part != class {
-            return;
-        }
-        let claim = |a: f64, b: f64| {
-            let (s, e) = two_sum(a, b);
-            let (fs, fe) = fast_two_sum(a, b);
-            assert!(s.to_bits() == fs.to_bits() && e.to_bits() == fe.to_bits());
-            assert!(s.to_bits() == (a + b).to_bits());
-            if s.is_finite() {
-                assert!(e.is_finite() && s + e == s);
-            }
-        };
-        if order != 1 {
-            claim(x, y);
-        }
-        if order != 0 {
-            claim(y, x);
-        }
+    /// [`two_sum_claim`] for every finite first operand and the second operand `y`.
+    fn two_sum_of_any_and(y: f64) {
+        two_sum_claim(finite(), y);
     }
 
-    macro_rules! trial {
-        ($($name:ident: $y:expr, $order:expr, $kind:expr, $class:expr;)*) => {
-            $(
-                #[kani::proof]
-                #[kani::solver(kissat)]
-                fn $name() {
-                    trial_ts($y, $order, $kind, $class);
-                }
-            )*
-        };
+    /// [`two_sum_claim`] for the first operand `y` and every finite second operand.
+    fn two_sum_of_it_and_any(y: f64) {
+        two_sum_claim(y, finite());
     }
 
-    trial! {
-        trial_ts_tenth_xy_whole: -0.1, 0, 0, 0;
-        trial_ts_tenth_yx_whole: -0.1, 1, 0, 0;
-        trial_ts_tenth_both_sign_0: -0.1, 2, 1, 0;
-        trial_ts_tenth_both_sign_1: -0.1, 2, 1, 1;
-        trial_ts_tenth_xy_sign_0: -0.1, 0, 1, 0;
-        trial_ts_tenth_xy_sign_1: -0.1, 0, 1, 1;
-        trial_ts_tenth_both_order_0: -0.1, 2, 2, 0;
-        trial_ts_tenth_both_order_2: -0.1, 2, 2, 2;
-        trial_ts_tenth_both_order_3: -0.1, 2, 2, 3;
-        trial_ts_tenth_xy_order_2: -0.1, 0, 2, 2;
-        trial_ts_tenth_both_exp_1: -0.1, 2, 3, 1;
-        trial_ts_tenth_both_exp_2: -0.1, 2, 3, 2;
-        trial_ts_tenth_xy_exp_1: -0.1, 0, 3, 1;
-        trial_ts_tenth_both_low_5: -0.1, 2, 4, 5;
-        trial_ts_tenth_both_floor: -0.1, 2, 5, 0x3fb;
-        trial_ts_pow53_xy_whole: 9_007_199_254_740_992.0, 0, 0, 0;
-        trial_ts_pow53_both_sign_0: 9_007_199_254_740_992.0, 2, 1, 0;
-        trial_ts_pow53_both_order_2: 9_007_199_254_740_992.0, 2, 2, 2;
-        trial_ts_three_xy_whole: 3.0, 0, 0, 0;
-        trial_ts_tiny_xy_whole: f64::from_bits(1), 0, 0, 0;
-    }
-
-    /// [`two_sum_law`] with 3: an inexact positive sum.
+    /// [`two_sum_of_any_and`] 3: an inexact positive sum.
     #[kani::proof]
     #[kani::solver(kissat)]
-    fn two_sum_with_three() {
-        two_sum_law(3.0);
+    fn two_sum_of_any_and_three() {
+        two_sum_of_any_and(3.0);
     }
 
-    /// [`two_sum_law`] with −0.1: an inexact negative sum.
+    /// [`two_sum_of_it_and_any`] with 3 first.
     #[kani::proof]
     #[kani::solver(kissat)]
-    fn two_sum_with_minus_a_tenth() {
-        two_sum_law(-0.1);
+    fn two_sum_of_three_and_any() {
+        two_sum_of_it_and_any(3.0);
     }
 
-    /// [`two_sum_law`] with 2^53: sums whose error is a whole number.
+    /// [`two_sum_of_any_and`] −0.1: an inexact negative sum.
     #[kani::proof]
     #[kani::solver(kissat)]
-    fn two_sum_with_two_pow_53() {
-        two_sum_law(9_007_199_254_740_992.0);
+    fn two_sum_of_any_and_minus_a_tenth() {
+        two_sum_of_any_and(-0.1);
     }
 
-    /// [`two_sum_law`] with the smallest subnormal: errors at the bottom of the range.
+    /// [`two_sum_of_it_and_any`] with −0.1 first.
     #[kani::proof]
     #[kani::solver(kissat)]
-    fn two_sum_with_the_smallest_subnormal() {
-        two_sum_law(f64::from_bits(1));
+    fn two_sum_of_minus_a_tenth_and_any() {
+        two_sum_of_it_and_any(-0.1);
     }
 
-    /// [`two_sum_law`] with the largest double, for every first operand below 2^969 in magnitude:
+    /// [`two_sum_of_any_and`] 2^53: sums whose error is a whole number.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn two_sum_of_any_and_two_pow_53() {
+        two_sum_of_any_and(9_007_199_254_740_992.0);
+    }
+
+    /// [`two_sum_of_it_and_any`] with 2^53 first.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn two_sum_of_two_pow_53_and_any() {
+        two_sum_of_it_and_any(9_007_199_254_740_992.0);
+    }
+
+    /// [`two_sum_of_any_and`] the smallest subnormal: errors at the bottom of the range.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn two_sum_of_any_and_the_smallest_subnormal() {
+        two_sum_of_any_and(f64::from_bits(1));
+    }
+
+    /// [`two_sum_of_it_and_any`] with the smallest subnormal first.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn two_sum_of_the_smallest_subnormal_and_any() {
+        two_sum_of_it_and_any(f64::from_bits(1));
+    }
+
+    /// [`two_sum_claim`] with the largest double, in either order, for every other operand below
+    /// 2^969 in magnitude:
     /// sums up to the edge of overflow, where no step overflows (Ω + 2^969 is below the midpoint
     /// Ω + 2^970, so every sum and difference rounds to at most Ω). Beyond that an intermediate
     /// overflows by design and the fallback returns [`fast_two_sum`]'s pair; Kani's NaN check

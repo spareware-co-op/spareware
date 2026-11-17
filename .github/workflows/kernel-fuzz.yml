@@ -144,7 +144,7 @@ on:
   workflow_dispatch:
     inputs:
       kani_num:
-        description: "geom-num's Kani harnesses to prove alone, separated by spaces, e.g. eft::proofs::two_sum_with_three"
+        description: "geom-num's Kani harnesses to prove alone, separated by spaces, e.g. eft::proofs::two_sum_of_any_and_three"
         required: false
         default: ""
         type: string
@@ -447,6 +447,10 @@ jobs:
   # in WSL on 2026-10-28, with up to thirteen proofs sharing twelve cores, the slowest took 57
   # minutes (exact_sum's cancellation in the subnormals), eft's full-width two_prod with the
   # splitter 54 and dd's from_i128 46; 120 minutes is the margin the orient2d proof's job kept before it was split by claim.
+  # A proof of several claims that took over 15 minutes on a hosted runner as one harness is one
+  # harness a claim, which together prove what the one did: two_sum against 3, −0.1, 2^53 and the
+  # smallest subnormal in each order of its operands (16 to 25 minutes as one, run 44020080291),
+  # and interval's add, sub and mul (46 as one).
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
@@ -473,11 +477,15 @@ jobs:
           - eft::proofs::two_prod_with_the_splitter
           - eft::proofs::two_prod_with_three
           - eft::proofs::two_prod_with_two_pow_996
-          - eft::proofs::two_sum_with_minus_a_tenth
+          - eft::proofs::two_sum_of_any_and_minus_a_tenth
+          - eft::proofs::two_sum_of_any_and_the_smallest_subnormal
+          - eft::proofs::two_sum_of_any_and_three
+          - eft::proofs::two_sum_of_any_and_two_pow_53
+          - eft::proofs::two_sum_of_minus_a_tenth_and_any
+          - eft::proofs::two_sum_of_the_smallest_subnormal_and_any
+          - eft::proofs::two_sum_of_three_and_any
+          - eft::proofs::two_sum_of_two_pow_53_and_any
           - eft::proofs::two_sum_with_the_largest_double
-          - eft::proofs::two_sum_with_the_smallest_subnormal
-          - eft::proofs::two_sum_with_three
-          - eft::proofs::two_sum_with_two_pow_53
           - exact_sum::proofs::a_non_finite_term_is_reported
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_31
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_32
@@ -499,15 +507,17 @@ jobs:
           - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
           - grid::proofs::refine_is_exact_or_refused
           - grid::proofs::steps_refine_is_exact_or_none
-          - interval::proofs::add_sub_mul_enclose_the_rounded_result
+          - interval::proofs::add_encloses_the_rounded_result
           - interval::proofs::div_by_minus_a_tenth
           - interval::proofs::div_by_minus_zero_is_refused
           - interval::proofs::div_by_the_largest_double
           - interval::proofs::div_by_the_smallest_subnormal
           - interval::proofs::div_by_three
           - interval::proofs::div_by_zero_is_refused
+          - interval::proofs::mul_encloses_the_rounded_result
           - interval::proofs::new_accepts_exactly_ordered_finite_bounds
           - interval::proofs::square_is_never_negative_and_encloses
+          - interval::proofs::sub_encloses_the_rounded_result
           - ladder::proofs::quarter_nm_always_answers_exactly
           - math::atan2::proofs::add_of_like_signs_is_within_two_ulps
           - math::atan2::proofs::add_of_unlike_signs_at_equal_exponents_is_within_two_ulps

@@ -774,54 +774,14 @@ mod proofs {
         }
     }
 
-    /// `add`, `sub` and `mul` of two points enclose the rounded result of the same operation,
-    /// with ordered finite bounds, or refuse; never a panic.
-    #[kani::proof]
-    fn add_sub_mul_enclose_the_rounded_result() {
-        let (x, y) = (finite(), finite());
-        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
-        for (got, rounded) in [(a.add(b), x + y), (a.sub(b), x - y), (a.mul(b), x * y)] {
-            if let Ok(r) = got {
-                assert!(r.lo() <= r.hi());
-                if rounded.is_finite() {
-                    assert!(r.contains(rounded));
-                }
-            }
-        }
-    }
-
-    /// TRIAL (measuring only, removed before the pull request): the claim of
-    /// `add_sub_mul_enclose_the_rounded_result` for one operation `op` (0 add, 1 sub, 2 mul) and
-    /// only the inputs of class `class` of the candidate split `kind`.
-    fn trial_1(op: u8, kind: u8, class: u64) {
-        let (x, y) = (finite(), finite());
-        let (xb, yb) = (x.to_bits(), y.to_bits());
-        let mag = u64::MAX >> 1;
-        let part = match kind {
-            // The whole domain.
-            0 => 0,
-            // The two signs: 4 classes.
-            1 => (xb >> 63) | ((yb >> 63) << 1),
-            // The top three fraction bits of x: 8 classes.
-            2 => (xb >> 49) & 7,
-            // The top two bits of each exponent field: 16 classes.
-            3 => ((xb >> 61) & 3) | (((yb >> 61) & 3) << 2),
-            // The signs and which magnitude is larger: 8 classes.
-            4 => (xb >> 63) | ((yb >> 63) << 1) | (u64::from((xb & mag) >= (yb & mag)) << 2),
-            // The low three fraction bits of x and of y: 64 classes.
-            5 => (xb & 7) | ((yb & 7) << 3),
-            // The floor: both signs and both exponent fields fixed.
-            _ => (xb >> 52) | ((yb >> 52) << 12),
-        };
-        if part != class {
-            return;
-        }
-        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
-        let (got, rounded) = match op {
-            0 => (a.add(b), x + y),
-            1 => (a.sub(b), x - y),
-            _ => (a.mul(b), x * y),
-        };
+    /// An operation of two points, `got`, encloses the rounded result of the same operation on
+    /// the doubles, `rounded`, with ordered finite bounds, or refuses.
+    ///
+    /// `add`, `sub` and `mul` each have a harness of this claim, for every pair of finite doubles
+    /// and never a panic. As one harness of the three operations the claims shared one solve of
+    /// 46 minutes on a hosted runner (run 44020080291); apart, `add`'s took 9 and `sub`'s 8
+    /// (run 44046765712).
+    fn encloses(got: Result<Interval, NumError>, rounded: f64) {
         if let Ok(r) = got {
             assert!(r.lo() <= r.hi());
             if rounded.is_finite() {
@@ -830,40 +790,28 @@ mod proofs {
         }
     }
 
-    macro_rules! trial {
-        ($($name:ident: $op:expr, $kind:expr, $class:expr;)*) => {
-            $(
-                #[kani::proof]
-                fn $name() {
-                    trial_1($op, $kind, $class);
-                }
-            )*
-        };
+    /// `add` of two points [`encloses`] the rounded sum, or refuses; never a panic.
+    #[kani::proof]
+    fn add_encloses_the_rounded_result() {
+        let (x, y) = (finite(), finite());
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        encloses(a.add(b), x + y);
     }
 
-    trial! {
-        trial_1_add_whole: 0, 0, 0;
-        trial_1_sub_whole: 1, 0, 0;
-        trial_1_mul_whole: 2, 0, 0;
-        trial_1_add_signs_0: 0, 1, 0;
-        trial_1_add_signs_1: 0, 1, 1;
-        trial_1_sub_signs_0: 1, 1, 0;
-        trial_1_mul_signs_0: 2, 1, 0;
-        trial_1_mul_signs_1: 2, 1, 1;
-        trial_1_add_frac_5: 0, 2, 5;
-        trial_1_mul_frac_0: 2, 2, 0;
-        trial_1_mul_frac_5: 2, 2, 5;
-        trial_1_add_exp_6: 0, 3, 6;
-        trial_1_mul_exp_6: 2, 3, 6;
-        trial_1_mul_exp_5: 2, 3, 5;
-        trial_1_add_order_1: 0, 4, 1;
-        trial_1_add_order_5: 0, 4, 5;
-        trial_1_mul_order_5: 2, 4, 5;
-        trial_1_add_low_42: 0, 5, 42;
-        trial_1_mul_low_0: 2, 5, 0;
-        trial_1_mul_low_42: 2, 5, 42;
-        trial_1_add_floor: 0, 6, 0x3ff | (0x400 << 12);
-        trial_1_mul_floor: 2, 6, 0x3ff | (0x400 << 12);
+    /// `sub` of two points [`encloses`] the rounded difference, or refuses; never a panic.
+    #[kani::proof]
+    fn sub_encloses_the_rounded_result() {
+        let (x, y) = (finite(), finite());
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        encloses(a.sub(b), x - y);
+    }
+
+    /// `mul` of two points [`encloses`] the rounded product, or refuses; never a panic.
+    #[kani::proof]
+    fn mul_encloses_the_rounded_result() {
+        let (x, y) = (finite(), finite());
+        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
+        encloses(a.mul(b), x * y);
     }
 
     /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
