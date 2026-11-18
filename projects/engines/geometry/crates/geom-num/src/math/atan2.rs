@@ -2018,6 +2018,114 @@ mod proofs {
         }
     }
 
+    /// The six products `mul` keeps, of the operands' words, in `mul`'s order: `ah·bh`, `ah·bm`,
+    /// `am·bh`, `ah·bl`, `am·bm`, `al·bh`.
+    fn six_products(a: &Tint, b: &Tint) -> [u128; 6] {
+        let (ah, am, al) = (u128::from(a.h), u128::from(a.m), u128::from(a.l));
+        let (bh, bm, bl) = (u128::from(b.h), u128::from(b.m), u128::from(b.l));
+        [
+            ah.checked_mul(bh).unwrap(),
+            ah.checked_mul(bm).unwrap(),
+            am.checked_mul(bh).unwrap(),
+            ah.checked_mul(bl).unwrap(),
+            am.checked_mul(bm).unwrap(),
+            al.checked_mul(bh).unwrap(),
+        ]
+    }
+
+    /// `mul`'s own steps after its six products, word for word, on six products it is given.
+    fn mul_steps(a: &Tint, b: &Tint, [rh, rm1, rm2, rl1, rl2, rl3]: [u128; 6]) -> Option<Tint> {
+        let (mut m, mut h) = halves(rh);
+        let (mut l, c) = halves(rm1);
+        m = m.wrapping_add(c);
+        h = h.checked_add(u64::from(m < c))?;
+        let (lo2, c) = halves(rm2);
+        l = l.wrapping_add(lo2);
+        let mut cm = u64::from(l < lo2);
+        m = m.wrapping_add(c);
+        h = h.checked_add(u64::from(m < c))?;
+        let s = u128::from(hi64(rl1))
+            .checked_add(u128::from(hi64(rl2)))?
+            .checked_add(u128::from(hi64(rl3)))?;
+        let (lo3, s_hi) = halves(s);
+        cm = cm.checked_add(s_hi)?;
+        l = l.wrapping_add(lo3);
+        cm = cm.checked_add(u64::from(l < lo3))?;
+        m = m.wrapping_add(cm);
+        h = h.checked_add(u64::from(m < cm))?;
+        let mut r = Tint {
+            h,
+            m,
+            l,
+            ex: a.ex.checked_add(b.ex)?,
+            sgn: a.sgn ^ b.sgn,
+        };
+        if r.h >> 63 == 0 {
+            r.h = (r.h << 1) | (r.m >> 63);
+            r.m = (r.m << 1) | (r.l >> 63);
+            r.l <<= 1;
+            r.ex = r.ex.checked_sub(1)?;
+        }
+        Some(r)
+    }
+
+    /// What `mul_keeps_every_carry` asserts of an answer `r`, against the six products `p`.
+    fn keeps_every_carry(a: &Tint, b: &Tint, r: &Tint, [rh, rm1, rm2, rl1, rl2, rl3]: [u128; 6]) {
+        let w = |x: u64| u128::from(x);
+        // Each column is a sum of at most five 64-bit numbers: below 2^67.
+        let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
+        let c1 = w(hi64(c0)) + w(lo64(rh)) + w(hi64(rm1)) + w(hi64(rm2));
+        let c2 = w(hi64(rh)) + w(hi64(c1));
+        assert!(c2 >> 64 == 0, "K is below 2^192");
+        let (kh, km, kl) = (lo64(c2), lo64(c1), lo64(c0));
+        let ex = a.ex + b.ex;
+        assert_eq!(r.sgn, a.sgn ^ b.sgn);
+        if kh >> 63 == 1 {
+            assert_eq!((r.h, r.m, r.l, r.ex), (kh, km, kl, ex));
+        } else {
+            let shifted = ((kh << 1) | (km >> 63), (km << 1) | (kl >> 63), kl << 1);
+            assert_eq!((r.h, r.m, r.l), shifted);
+            assert!(
+                r.h >> 63 == 1 || (r.h, r.m, r.l) == (0, 0, 0),
+                "normalised or zero"
+            );
+            if r.h != 0 {
+                assert_eq!(r.ex, ex - 1);
+            }
+        }
+    }
+
+    /// `mul` is its own steps on the six products, for every pair of operands: it answers, and
+    /// its answer is `mul_steps`' on `six_products`, field for field.
+    #[kani::proof]
+    fn mul_is_its_steps_on_the_six_products() {
+        let (a, b) = (any_tint(), any_tint());
+        let r = a.mul(&b).unwrap();
+        let s = mul_steps(&a, &b, six_products(&a, &b)).unwrap();
+        assert!((r.h, r.m, r.l, r.ex, r.sgn) == (s.h, s.m, s.l, s.ex, s.sgn));
+    }
+
+    /// `mul`'s steps keep every carry, for every pair of operands: on the six products they
+    /// answer, and the answer is the contract's.
+    #[kani::proof]
+    fn the_steps_of_mul_keep_every_carry() {
+        let (a, b) = (any_tint(), any_tint());
+        let p = six_products(&a, &b);
+        let r = mul_steps(&a, &b, p).unwrap();
+        keeps_every_carry(&a, &b, &r, p);
+    }
+
+    // TRIAL-BEGIN (measuring only, never in a pull request)
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7m_k_steps() {
+        let (a, b) = (any_tint(), any_tint());
+        let r = a.mul(&b).unwrap();
+        let s = mul_steps(&a, &b, six_products(&a, &b)).unwrap();
+        assert!((r.h, r.m, r.l, r.ex, r.sgn) == (s.h, s.m, s.l, s.ex, s.sgn));
+    }
+    // TRIAL-END
+
     /// A non-negative integer below 2^448, as seven 64-bit words, least significant first.
     type Big = [u64; 7];
 

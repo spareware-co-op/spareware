@@ -767,6 +767,63 @@ mod proofs {
         two_prod_law(finite(), SPLITTER);
     }
 
+    // TRIAL-BEGIN (measuring only, never in a pull request)
+    /// [`two_prod_law`]'s two claims, each apart (1 the rounded product, 2 the error adds back),
+    /// for the first factors of the sign `sign` (0 any, 1 sign bit clear, 2 sign bit set).
+    fn two_prod_part(b: f64, claims: u8, sign: u8) {
+        let a = finite();
+        if (sign == 1 && a.is_sign_negative()) || (sign == 2 && !a.is_sign_negative()) {
+            return;
+        }
+        let (p, e) = two_prod(a, b);
+        if claims & 1 != 0 {
+            assert!(p.to_bits() == (a * b).to_bits());
+        }
+        if claims & 2 != 0 && p.is_finite() && e.is_finite() {
+            assert!(p + e == p);
+        }
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn t7e_k_rounded() {
+        two_prod_part(SPLITTER, 1, 0);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn t7e_k_adds_back() {
+        two_prod_part(SPLITTER, 2, 0);
+    }
+    #[kani::proof]
+    #[kani::unwind(3)]
+    fn t7e_c_rounded() {
+        two_prod_part(SPLITTER, 1, 0);
+    }
+    #[kani::proof]
+    #[kani::unwind(3)]
+    fn t7e_c_adds_back() {
+        two_prod_part(SPLITTER, 2, 0);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn t7e_k_plus() {
+        two_prod_part(SPLITTER, 3, 1);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    #[kani::unwind(3)]
+    fn t7e_k_minus() {
+        two_prod_part(SPLITTER, 3, 2);
+    }
+    #[kani::proof]
+    #[kani::unwind(3)]
+    fn t7e_c_whole() {
+        two_prod_law(finite(), SPLITTER);
+    }
+    // TRIAL-END
+
     /// [`two_prod_law`] with 2^996, for every finite first factor: the scaled path for a large
     /// factor.
     #[kani::proof]

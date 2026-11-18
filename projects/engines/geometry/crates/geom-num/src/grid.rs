@@ -804,6 +804,9 @@ mod proofs {
     const NEAREST: u8 = 1;
     const NO_LARGER: u8 = 2;
     const EXACTNESS: u8 = 4;
+    /// Nearest's two sides, each a claim: `2·moved < d`, and `2·moved > −d`.
+    const SIDE_A: u8 = 8;
+    const SIDE_B: u8 = 16;
 
     /// `coarsen`'s law from one step to another, for every coordinate of the class `sign` and the
     /// claims of the mask `claims`.
@@ -831,14 +834,30 @@ mod proofs {
                 match got {
                     Ok(r) => {
                         let (q, v) = (r.value().get(), c.get());
-                        if claims & NEAREST != 0 {
+                        if claims & (NEAREST | SIDE_A | SIDE_B) != 0 {
                             if sign == BELOW_ZERO {
                                 let moved = (-q) * d - (-v);
-                                assert!(2 * moved.abs() < d);
+                                if claims & NEAREST != 0 {
+                                    assert!(2 * moved.abs() < d);
+                                }
+                                if claims & SIDE_A != 0 {
+                                    assert!(2 * moved < d);
+                                }
+                                if claims & SIDE_B != 0 {
+                                    assert!(2 * moved > -d);
+                                }
                             } else {
                                 let (q, v, d) = (i128::from(q), i128::from(v), i128::from(d));
                                 let moved = q * d - v;
-                                assert!(2 * moved.abs() < d);
+                                if claims & NEAREST != 0 {
+                                    assert!(2 * moved.abs() < d);
+                                }
+                                if claims & SIDE_A != 0 {
+                                    assert!(2 * moved < d);
+                                }
+                                if claims & SIDE_B != 0 {
+                                    assert!(2 * moved > -d);
+                                }
                             }
                         }
                         let (q, v, d) = (i128::from(q), i128::from(v), i128::from(d));
@@ -869,6 +888,90 @@ mod proofs {
             assert!((2 * negated.abs() < d) == (2 * direct.abs() < i128::from(d)));
         }
     }
+
+    /// The tie of the cut by side: for every answer `q` and value `v` of the frame and each
+    /// divisor, nearest holds exactly when both its sides do, in each of the two ways
+    /// `coarsen_law` writes it.
+    #[kani::proof]
+    fn nearest_is_its_two_sides() {
+        let (q, v) = (coord().get(), coord().get());
+        for d in [1_i64, 25, 625] {
+            let negated = (-q) * d - (-v);
+            assert!((2 * negated.abs() < d) == (2 * negated < d && 2 * negated > -d));
+            let (q, v, d) = (i128::from(q), i128::from(v), i128::from(d));
+            let direct = q * d - v;
+            assert!((2 * direct.abs() < d) == (2 * direct < d && 2 * direct > -d));
+        }
+    }
+
+    // TRIAL-BEGIN (measuring only, never in a pull request)
+    #[kani::proof]
+    fn t7g_c_neg_a() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, BELOW_ZERO, SIDE_A);
+    }
+    #[kani::proof]
+    fn t7g_c_neg_b() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, BELOW_ZERO, SIDE_B);
+    }
+    #[kani::proof]
+    fn t7g_c_neg_near() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, BELOW_ZERO, NEAREST);
+    }
+    #[kani::proof]
+    fn t7g_c_pos_a() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, AT_OR_ABOVE_ZERO, SIDE_A);
+    }
+    #[kani::proof]
+    fn t7g_c_pos_b() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, AT_OR_ABOVE_ZERO, SIDE_B);
+    }
+    #[kani::proof]
+    fn t7g_c_pos_near() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, AT_OR_ABOVE_ZERO, NEAREST);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_neg_a() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, BELOW_ZERO, SIDE_A);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_neg_b() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, BELOW_ZERO, SIDE_B);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_neg_near() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, BELOW_ZERO, NEAREST);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_pos_a() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, AT_OR_ABOVE_ZERO, SIDE_A);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_pos_b() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, AT_OR_ABOVE_ZERO, SIDE_B);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_pos_near() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, AT_OR_ABOVE_ZERO, NEAREST);
+    }
+    // TRIAL-END
 
     /// Where `coarsen` does not divide, for every coordinate: between the same step the value is
     /// kept and exact, and towards a finer step it refuses.

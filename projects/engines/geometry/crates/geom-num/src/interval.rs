@@ -774,21 +774,102 @@ mod proofs {
         }
     }
 
-    /// `add`, `sub` and `mul` of two points enclose the rounded result of the same operation,
-    /// with ordered finite bounds, or refuse; never a panic.
-    #[kani::proof]
-    fn add_sub_mul_enclose_the_rounded_result() {
+    /// The two points of every pair of finite doubles, with the doubles.
+    fn two_points() -> (f64, f64, Interval, Interval) {
         let (x, y) = (finite(), finite());
-        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
-        for (got, rounded) in [(a.add(b), x + y), (a.sub(b), x - y), (a.mul(b), x * y)] {
-            if let Ok(r) = got {
-                assert!(r.lo() <= r.hi());
-                if rounded.is_finite() {
-                    assert!(r.contains(rounded));
-                }
+        (
+            x,
+            y,
+            Interval::point(x).unwrap(),
+            Interval::point(y).unwrap(),
+        )
+    }
+
+    /// What an operation's answer owes its rounded result: ordered bounds, and the rounded result
+    /// inside them when it is finite; a refusal owes nothing.
+    fn encloses(got: Result<Interval, NumError>, rounded: f64) {
+        if let Ok(r) = got {
+            assert!(r.lo() <= r.hi());
+            if rounded.is_finite() {
+                assert!(r.contains(rounded));
             }
         }
     }
+
+    /// `add` of two points encloses the rounded sum, with ordered finite bounds, or refuses;
+    /// never a panic.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn add_encloses_the_rounded_result() {
+        let (x, y, a, b) = two_points();
+        encloses(a.add(b), x + y);
+    }
+
+    /// `sub` of two points encloses the rounded difference, with ordered finite bounds, or
+    /// refuses; never a panic.
+    #[kani::proof]
+    fn sub_encloses_the_rounded_result() {
+        let (x, y, a, b) = two_points();
+        encloses(a.sub(b), x - y);
+    }
+
+    /// `mul` of two points encloses the rounded product of the two bounds it was given, with
+    /// ordered finite bounds, or refuses; never a panic.
+    #[kani::proof]
+    fn mul_encloses_the_product_of_its_bounds() {
+        let (_, _, a, b) = two_points();
+        encloses(a.mul(b), a.lo() * b.lo());
+    }
+
+    /// The tie, first half: the product of the two points' bounds is the product of the two
+    /// doubles, for every pair of finite doubles (a point's bound is its double with −0 stored
+    /// as +0, and the two products are then equal, a zero of either sign being one value).
+    #[kani::proof]
+    fn the_product_of_two_points_bounds_is_the_product() {
+        let (x, y, a, b) = two_points();
+        assert!(a.lo() * b.lo() == x * y);
+    }
+
+    /// The tie, second half: two equal doubles are finite alike and inside the same intervals,
+    /// for every pair of doubles and every pair of bounds, whatever their order.
+    #[kani::proof]
+    fn equal_doubles_are_enclosed_alike() {
+        let (p, w) = (f64::from_bits(kani::any()), f64::from_bits(kani::any()));
+        let r = Interval {
+            lo: f64::from_bits(kani::any()),
+            hi: f64::from_bits(kani::any()),
+        };
+        if p == w {
+            assert!(p.is_finite() == w.is_finite());
+            assert!(r.contains(p) == r.contains(w));
+        }
+    }
+
+    // TRIAL-BEGIN (measuring only, never in a pull request)
+    #[kani::proof]
+    fn t7i_c_add() {
+        let (x, y, a, b) = two_points();
+        encloses(a.add(b), x + y);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7i_k_sub() {
+        let (x, y, a, b) = two_points();
+        encloses(a.sub(b), x - y);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7i_k_mul() {
+        let (_, _, a, b) = two_points();
+        encloses(a.mul(b), a.lo() * b.lo());
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7i_k_tie() {
+        let (x, y, a, b) = two_points();
+        assert!(a.lo() * b.lo() == x * y);
+    }
+    // TRIAL-END
 
     /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
     /// refuses when it does, for every finite dividend and the divisor `y`; proven for the six
