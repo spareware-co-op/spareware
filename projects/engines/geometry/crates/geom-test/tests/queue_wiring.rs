@@ -2492,6 +2492,44 @@ fn bench_problems(bench: &str) -> Vec<String> {
     found
 }
 
+/// What is wrong with how each part of the instruction gate reads parts.tsv's units and keeps the
+/// Gungraun runner (see [`bench_part_problems`]).
+fn split_and_cache_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let jobs = &w["jobs"];
+    // Each part reads parts.tsv's units, a group or `group/op` for a group the plan splits by
+    // operation (mesh), and keeps the Gungraun runner in a cache of its own, so no part compiles it
+    // again when the Rust cache's key moves with Cargo.lock; only main saves that cache.
+    for job in ["instructions-base", "instructions-parts"] {
+        if !runs(w, job).contains("by_op[substr($1, 1, i - 1)] = 1")
+            || !runs(w, job).contains("sub(\"/\", \"::\", u); print u")
+        {
+            found.push(format!(
+                "{job} does not read parts.tsv's split groups by operation"
+            ));
+        }
+        let steps = || jobs[job]["steps"].as_vec().into_iter().flatten();
+        let key = "gungraun-runner-${{ matrix.target }}-";
+        let uses = |action: &str| {
+            steps().any(|s| {
+                text(&s["uses"]).starts_with(action)
+                    && text(&s["with"]["path"]) == "~/.gungraun-runner"
+                    && text(&s["with"]["key"]).starts_with(key)
+            })
+        };
+        let saves_on_main = steps().any(|s| {
+            text(&s["uses"]).starts_with("actions/cache/save@")
+                && text(&s["if"]).contains("github.ref == 'refs/heads/main'")
+        });
+        if !uses("actions/cache/restore@") || !uses("actions/cache/save@") || !saves_on_main {
+            found.push(format!(
+                "{job} does not keep the Gungraun runner in a cache of its own"
+            ));
+        }
+    }
+    found
+}
+
 /// What is wrong with the instruction gate's parts: each leg's parts are the scope's list, read
 /// from geom-bench/parts.tsv; the change's parts wait for the merge base's; the judge waits for
 /// both, judges when a part failed, and checks every part of both sides by the artifact names the
@@ -2525,36 +2563,7 @@ fn bench_part_problems(w: &Yaml) -> Vec<String> {
             found.push(format!("the scope's parts are not parts.tsv's: {needle}"));
         }
     }
-    // Each part reads parts.tsv's units, a group or `group/op` for a group the plan splits by
-    // operation (mesh), and keeps the Gungraun runner in a cache of its own, so no part compiles it
-    // again when the Rust cache's key moves with Cargo.lock; only main saves that cache.
-    for job in ["instructions-base", "instructions-parts"] {
-        if !runs(job).contains("by_op[substr($1, 1, i - 1)] = 1")
-            || !runs(job).contains("sub(\"/\", \"::\", u); print u")
-        {
-            found.push(format!(
-                "{job} does not read parts.tsv's split groups by operation"
-            ));
-        }
-        let steps = || jobs[job]["steps"].as_vec().into_iter().flatten();
-        let key = "gungraun-runner-${{ matrix.target }}-";
-        let uses = |action: &str| {
-            steps().any(|s| {
-                text(&s["uses"]).starts_with(action)
-                    && text(&s["with"]["path"]) == "~/.gungraun-runner"
-                    && text(&s["with"]["key"]).starts_with(key)
-            })
-        };
-        let saves_on_main = steps().any(|s| {
-            text(&s["uses"]).starts_with("actions/cache/save@")
-                && text(&s["if"]).contains("github.ref == 'refs/heads/main'")
-        });
-        if !uses("actions/cache/restore@") || !uses("actions/cache/save@") || !saves_on_main {
-            found.push(format!(
-                "{job} does not keep the Gungraun runner in a cache of its own"
-            ));
-        }
-    }
+    found.extend(split_and_cache_problems(w));
     let needs = |job: &str| {
         jobs[job]["needs"]
             .as_vec()
