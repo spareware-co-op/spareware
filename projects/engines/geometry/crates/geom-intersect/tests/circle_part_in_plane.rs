@@ -435,3 +435,126 @@ fn a_centre_on_a_corner_of_the_domain_gives_the_quarter_circle_between_exact_qua
     assert!(t.1 >= 0.5 && t.1 - 0.5 <= CLOSE, "{t:?}");
     assert_eq!(end_circle_domains(-300.0, -300.0), [(1.5, 2.0)]);
 }
+
+#[test]
+fn a_number_whose_products_would_not_be_exact_is_the_engines() {
+    // The plane's centre is 1e-80 off the origin along x, either way: smaller than the numbers
+    // whose products are exact. A small circle, so the engine's run round it is short.
+    let small = circle([12.0, 8.0, 0.0], 0.5, X, Z);
+    for tiny in [1e-80, -1e-80] {
+        engine(&small, &plane([tiny, 0.0, 0.0], X, Y, (-300.0, 12.0), SIDE));
+    }
+}
+
+#[test]
+fn a_plane_on_each_pair_of_axes_either_way_round_is_placed() {
+    // u is y and v is x, in the plane z = 0: v at most 12 is the half round the far side.
+    arcs(
+        &ring(),
+        &plane(ORIGIN, Y, X, SIDE, (-300.0, 12.0)),
+        &[(0.5, 1.5)],
+    );
+    // u is x and v is z, in the plane y = 0: the circle about (12, 0, 8), from x.
+    let level = circle([12.0, 0.0, 8.0], 5.0, X, Y);
+    arcs(
+        &level,
+        &plane(ORIGIN, X, Z, (-300.0, 12.0), SIDE),
+        &[(0.5, 1.5)],
+    );
+}
+
+/// The pair's answer is overlaps alone, with these spans in t, lowest first, each end within
+/// [`CLOSE`].
+fn spans_are(curve: &CurveKind<3>, surface: &SurfaceKind, want: &[(f64, f64)], case: &str) {
+    let mut got: Vec<(f64, f64)> = overlaps(curve, surface)
+        .unwrap_or_else(|| panic!("not overlaps alone: {case}"))
+        .iter()
+        .map(|[t, _, _]| *t)
+        .collect();
+    got.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    assert_eq!(got.len(), want.len(), "{got:?}: {case}");
+    for (t, w) in got.iter().zip(want) {
+        assert!(
+            (t.0 - w.0).abs() <= CLOSE && (t.1 - w.1).abs() <= CLOSE,
+            "{got:?} for {want:?}: {case}"
+        );
+    }
+}
+
+/// A side one double off the line through the centre along the frame's x̂ (`step` doubles on from
+/// it), keeping what is over it or under it, against the circle of that frame whose domain
+/// starts at `lo`. The side cuts the circle beside its join and half a turn on. Where it keeps
+/// the line, the arc is a half-turn and a sliver more at each end, through the join at one of
+/// them: two overlaps. Where it does not, the arc is a sliver short at each end: one overlap.
+fn beside_the_join(lo: f64, x: [f64; 3], n: [f64; 3], over: bool, step: i64) {
+    let frame = Frame::new(x, n).unwrap();
+    let round = (lo, lo + 2.0);
+    let ring = CurveKind::Circle(Circle::new([12.0, 8.0, 0.0], 5.0, frame, round).unwrap());
+    // ŷ = n̂ × x̂, in x and y.
+    let y_hat = [-n[2] * x[1], n[2] * x[0]];
+    let (surface, towards) = if x[0] == 0.0 {
+        let at = beside(12.0, step);
+        let u = if over { (at, 300.0) } else { (-300.0, at) };
+        (plane(ORIGIN, X, Y, u, SIDE), y_hat[0])
+    } else {
+        let at = beside(8.0, step);
+        let v = if over { (at, 300.0) } else { (-300.0, at) };
+        (plane(ORIGIN, X, Y, SIDE, v), y_hat[1])
+    };
+    // The half on ŷ's side is the first half-turn from x̂: the first half of a domain that
+    // starts at 0, the second of one that starts at 1.
+    let first_half = ((towards > 0.0) == over) == (lo == 0.0);
+    let keeps_the_line = over == (step < 0);
+    let want = match (first_half, keeps_the_line) {
+        (true, true) => [(lo, lo + 1.0), (lo + 2.0, lo + 2.0)].to_vec(),
+        (true, false) => [(lo, lo + 1.0)].to_vec(),
+        (false, true) => [(lo, lo), (lo + 1.0, lo + 2.0)].to_vec(),
+        (false, false) => [(lo + 1.0, lo + 2.0)].to_vec(),
+    };
+    let case = format!("from {lo}, x {x:?}, n {n:?}, over {over}, step {step}");
+    spans_are(&ring, &surface, &want, &case);
+}
+
+#[test]
+fn a_side_a_double_off_the_join_is_placed_on_every_frame_along_the_planes_axes() {
+    // Every frame along the plane's axes, turning either way, with the join along x̂ (a domain
+    // from 0) and against it (from 1); each side of the line, a double either way off it.
+    for lo in [0.0, 1.0] {
+        for x in [X, [-1.0, 0.0, 0.0], Y, [0.0, -1.0, 0.0]] {
+            for n in [Z, [0.0, 0.0, -1.0]] {
+                for over in [true, false] {
+                    for step in [-1, 1] {
+                        beside_the_join(lo, x, n, over, step);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn an_end_whose_enclosure_reaches_a_join_that_no_sign_places_is_the_engines() {
+    // A small circle, so the engine's run round it is short. The side x = 12 through its centre
+    // cuts it at a quarter turn and at three quarters.
+    let frame = Frame::new(X, Z).unwrap();
+    let on = |domain: (f64, f64)| {
+        CurveKind::Circle(Circle::new([12.0, 8.0, 0.0], 0.5, frame, domain).unwrap())
+    };
+    let (far, near) = (
+        plane(ORIGIN, X, Y, (-300.0, 12.0), SIDE),
+        plane(ORIGIN, X, Y, (12.0, 300.0), SIDE),
+    );
+    // With the join well clear, the far half is one overlap that ends at the upper end of the
+    // enclosure of three quarters, and the near half one that starts at its lower end.
+    let upper = one(&on((0.25, 2.25)), &far).1;
+    let lower = one(&on((0.75, 2.75)), &near).0;
+    assert!(
+        lower < 1.5 && 1.5 < upper && upper - lower <= CLOSE,
+        "{lower} {upper}"
+    );
+    // A whole turn that ends on either end of that enclosure has its join off x̂'s line, where no
+    // exact sign places the far half's end against it, and the enclosure reaches the join: it
+    // does not say which side of the join the end is on.
+    engine(&on((upper - 2.0, upper)), &far);
+    engine(&on((lower - 2.0, lower)), &far);
+}

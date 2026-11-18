@@ -417,3 +417,106 @@ fn a_circle_on_a_sphere_or_about_another_line_is_the_engines() {
         Said::Other
     );
 }
+
+/// The pair is not decided by a closed form: no overlap is claimed, and either something is said
+/// or nothing is, for more work than a closed form takes.
+fn undecided(curve: &CurveKind<3>, surface: &SurfaceKind) {
+    let (what, work) = said(curve, surface);
+    assert!(!matches!(what, Said::Lying(_)), "an overlap: {what:?}");
+    assert!(
+        what == Said::Other || work > FEW,
+        "nothing, for {work} units"
+    );
+}
+
+/// A small circle in the plane z = 0.
+fn speck() -> CurveKind<3> {
+    circle([12.0, 8.0, 0.0], 1.0 / 1024.0, X, Z)
+}
+
+/// The plane z = 0 on vectors turned off the coordinate axes, where no exact sign places a part
+/// of a circle, over `u` and `v`.
+fn turned(u: (f64, f64), v: (f64, f64)) -> SurfaceKind {
+    plane([0.0; 3], [0.6, 0.8, 0.0], [-0.8, 0.6, 0.0], u, v)
+}
+
+/// The enclosures in u and v of the speck in the turned plane, read from the answer over a
+/// domain far wider than it.
+fn enclosed() -> [(f64, f64); 2] {
+    let (what, _) = said(&speck(), &turned(SIDE, SIDE));
+    let Said::Lying([_, u, v]) = what else {
+        panic!("no overlap: {what:?}");
+    };
+    [u, v]
+}
+
+#[test]
+fn an_enclosure_that_fills_the_planes_domain_exactly_is_wholly_held() {
+    // A domain whose four ends are the enclosure's own holds all of it: the same overlap, by the
+    // closed form. An end of the domain on an end of the enclosure cuts nothing off.
+    let [u, v] = enclosed();
+    let (what, work) = said(&speck(), &turned(u, v));
+    assert_eq!(what, Said::Lying([ROUND, u, v]));
+    assert!(work <= FEW, "{work} units");
+}
+
+#[test]
+fn an_enclosure_clear_of_the_planes_domain_misses_it_on_each_side() {
+    // Each side of the domain in turn, one double clear of the enclosure and no other side near:
+    // nothing, by the closed form.
+    let [u, v] = enclosed();
+    misses(&speck(), &turned((u.1.next_up(), 300.0), SIDE));
+    misses(&speck(), &turned((-300.0, u.0.next_down()), SIDE));
+    misses(&speck(), &turned(SIDE, (v.1.next_up(), 300.0)));
+    misses(&speck(), &turned(SIDE, (-300.0, v.0.next_down())));
+}
+
+#[test]
+fn an_enclosure_that_reaches_the_planes_domain_is_not_proven_clear_of_it() {
+    // Each side of the domain in turn, on the enclosure's own end: the enclosure and the domain
+    // share that end, so the enclosure alone does not prove the circle clear.
+    let [u, v] = enclosed();
+    undecided(&speck(), &turned((u.1, 300.0), SIDE));
+    undecided(&speck(), &turned((-300.0, u.0), SIDE));
+    undecided(&speck(), &turned(SIDE, (v.1, 300.0)));
+    undecided(&speck(), &turned(SIDE, (-300.0, v.0)));
+}
+
+#[test]
+fn a_round_domain_short_of_a_turn_is_the_engines_wherever_it_starts() {
+    // From 1 to 2.5 is short of a whole turn, though its two ends sum to more than one.
+    let part = Cylinder::new(
+        [1.0, 2.0, 3.0],
+        0.5,
+        Frame::new(X, Z).unwrap(),
+        ((1.0, 2.5), SIDE),
+    );
+    engine(
+        &circle([1.0, 2.0, 10.0], 0.5, X, Z),
+        &SurfaceKind::Cylinder(part.unwrap()),
+    );
+}
+
+#[test]
+fn a_height_off_the_coordinate_axes_is_placed_only_where_its_enclosure_is_clear_of_an_end() {
+    // The axis (0.6, 0.8, 0) and a small circle about it at height 4, as above. Its enclosure in
+    // v is read from the answer over a wide domain.
+    let n = [0.6, 0.8, 0.0];
+    let frame = Frame::new(Z, n).unwrap();
+    let ring = circle([2.4, 3.2, 0.0], 0.5, Z, n);
+    let tube = |v: (f64, f64)| {
+        SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 0.5, frame, (ROUND, v)).unwrap())
+    };
+    let (what, _) = said(&ring, &tube(SIDE));
+    let Said::Lying([_, _, v]) = what else {
+        panic!("no overlap: {what:?}");
+    };
+    // A domain one double clear of the enclosure, above it and below it: nothing, by the closed
+    // form.
+    misses(&ring, &tube((v.1.next_up(), 300.0)));
+    misses(&ring, &tube((-300.0, v.0.next_down())));
+    // A domain that ends on the enclosure's own end: the enclosure does not place the circle
+    // against that end, and off the coordinate axes no exact sign does.
+    undecided(&ring, &tube((v.1, 300.0)));
+    undecided(&ring, &tube((-300.0, v.0)));
+}
