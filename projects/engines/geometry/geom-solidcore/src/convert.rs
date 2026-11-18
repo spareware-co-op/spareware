@@ -578,6 +578,62 @@ pub fn empty() -> Result<Body, Unconverted> {
         .map_err(|_| no("the empty body"))
 }
 
+/// One fin of the kernel's body, as the test of its kind reads it.
+#[derive(Clone, Copy, Debug)]
+struct Use {
+    /// The shell of its face.
+    shell: usize,
+    /// Its edge's row.
+    edge: usize,
+    /// Whether it runs along its edge, from the edge's start to its end.
+    along: bool,
+    /// The row of the fin after it in its loop.
+    next: usize,
+}
+
+fn root(of: &mut [usize], mut i: usize) -> usize {
+    while of[i] != i {
+        of[i] = of[of[i]];
+        i = of[i];
+    }
+    i
+}
+
+/// Whether the body of these fins is non-manifold, so of the kernel's kind General (chapter 8.1:
+/// "mixed and non-manifold"), not Solid: an edge with more than two fins (`ring`, each edge's
+/// fins), or a vertex the faces round which do not make one fan. A loop's corner at a vertex is
+/// where one fin ends and the next begins; two corners at a vertex are of one fan when a chain of
+/// edges at that vertex, each used by both of two corners in the chain, joins them. A vertex with
+/// corners in two shells, or in two fans of one shell, is one where solids or parts of one touch.
+/// `ends` is each edge's start and end vertex, none for a closed edge without one.
+fn non_manifold(uses: &[Use], ends: &[[Option<usize>; 2]], ring: &[Vec<usize>]) -> bool {
+    if ring.iter().any(|fins| fins.len() > 2) {
+        return true;
+    }
+    let mut of: Vec<usize> = (0..uses.len()).collect();
+    let mut by_edge: BTreeMap<(usize, usize), usize> = BTreeMap::new();
+    let mut corners = Vec::new();
+    for (i, u) in uses.iter().enumerate() {
+        let Some(v) = ends[u.edge][usize::from(u.along)] else {
+            continue;
+        };
+        corners.push((v, i));
+        for e in [u.edge, uses[u.next].edge] {
+            let first = *by_edge.entry((v, e)).or_insert(i);
+            let (a, b) = (root(&mut of, first), root(&mut of, i));
+            of[a] = b;
+        }
+    }
+    let mut first: BTreeMap<usize, usize> = BTreeMap::new();
+    for (v, i) in corners {
+        let f = *first.entry(v).or_insert(i);
+        if root(&mut of, f) != root(&mut of, i) || uses[f].shell != uses[i].shell {
+            return true;
+        }
+    }
+    false
+}
+
 /// The record `rec` as the kernel's solid on `step`, unchecked, and its record of exactness.
 /// `order` is the order `solidcore-convert` wrote the record with: the copies it names as one
 /// solidcore edge or vertex are one row of the kernel's body.
@@ -736,6 +792,7 @@ pub fn body_of(
     let mut surfaces = Vec::new();
     let mut loops = Vec::new();
     let mut fins: Vec<Fin> = Vec::new();
+    let mut uses: Vec<Use> = Vec::new();
     let mut ring: Vec<Vec<usize>> = vec![Vec::new(); edges.len()];
     for (f, (face, face_loops)) in rec.faces.iter().zip(&form.loops).enumerate() {
         let (shell, forward) = face_use[f].ok_or_else(|| no("a face in no shell"))?;
@@ -786,6 +843,12 @@ pub fn body_of(
                     .ok_or_else(|| no("a loop naming an edge the record lacks"))?;
                 bx = Some(bx.map_or(eb, |b| join(b, eb)));
                 ring[e].push(at);
+                uses.push(Use {
+                    shell,
+                    edge: e,
+                    along: oe.forward == forward,
+                    next: first + (k + 1) % n,
+                });
                 fins.push(Fin {
                     loop_: ix(here)?,
                     next: ix(first + (k + 1) % n)?,
@@ -813,6 +876,7 @@ pub fn body_of(
             fins[fin].radial = ix(members[(k + 1) % members.len()])?;
         }
     }
+    let edges_ends = edges.clone();
     let edges: Vec<Edge> = edges
         .iter()
         .enumerate()
@@ -842,9 +906,9 @@ pub fn body_of(
     a.surfaces.extend(surfaces).map_err(broke)?;
     a.curves.extend(curves).map_err(broke)?;
     a.points.extend(points).map_err(broke)?;
-    // A body with an edge of more than two fins, where solids touch along it, is non-manifold:
-    // the kernel's kind for it is General (chapter 8.1), and a solid's edges have two fins each.
-    let kind = if ring.iter().any(|fins| fins.len() > 2) {
+    // A body where solids touch along an edge or at a vertex is non-manifold: the kernel's kind
+    // for it is General (chapter 8.1).
+    let kind = if non_manifold(&uses, &edges_ends, &ring) {
         BodyKind::General
     } else {
         BodyKind::Solid
@@ -918,18 +982,19 @@ mod tests {
     /// that vertex, shared by its two shells. solidcore's record writes what solids touch along once
     /// for each solid, and its order names the one entity each copy is. The kernel's body keeps
     /// that one entity, shared, by the order's identity, never by where the copies lie, and the
-    /// checker passes it. The edge of four fins makes the body non-manifold, of the kernel's kind
-    /// General; a vertex shared by two shells leaves it a solid.
+    /// checker passes it. Both bodies are non-manifold, the edge of four fins and the vertex two
+    /// shells share alike, so both are of the kernel's kind General (chapter 8.1), as is a body
+    /// with a vertex where the faces of one shell make two fans.
     #[test]
     fn what_two_solids_touch_along_stays_one() {
-        for (at, record, kernel, kind) in [
-            ([1.0, 1.0, 0.0], (24, 16), (23, 14), BodyKind::General),
-            ([1.0, 1.0, 1.0], (24, 16), (24, 15), BodyKind::Solid),
+        for (at, record, kernel) in [
+            ([1.0, 1.0, 0.0], (24, 16), (23, 14)),
+            ([1.0, 1.0, 1.0], (24, 16), (24, 15)),
         ] {
             let (rec, order) = touching(at);
             assert_eq!((rec.edges.len(), rec.vertices.len()), record, "{at:?}");
             let (body, exactness) = body_of(&rec, &order, GridStep::Q1).expect("the rows");
-            assert_eq!(body.kind(), kind, "{at:?}");
+            assert_eq!(body.kind(), BodyKind::General, "{at:?}");
             let a = body.arenas();
             assert_eq!(
                 (a.shells.len(), a.edges.len(), a.vertices.len()),
@@ -939,6 +1004,56 @@ mod tests {
             let found = checked(body, exactness);
             assert!(found.is_ok(), "{at:?}: {found:?}");
         }
+        // A vertex where the faces of one shell make two fans is non-manifold too, as one two
+        // shells share is; one fan is not. Four edges leave vertex 0: corners at it join edges 0
+        // and 1 in one fan, and 2 and 3 in another.
+        let ends = [
+            [Some(0), Some(1)],
+            [Some(0), Some(2)],
+            [Some(0), Some(3)],
+            [Some(0), Some(4)],
+        ];
+        let fan = |at: usize, a: usize, b: usize, shell: usize| {
+            [
+                Use {
+                    shell,
+                    edge: a,
+                    along: false,
+                    next: at + 1,
+                },
+                Use {
+                    shell,
+                    edge: b,
+                    along: true,
+                    next: at,
+                },
+                Use {
+                    shell,
+                    edge: b,
+                    along: false,
+                    next: at + 3,
+                },
+                Use {
+                    shell,
+                    edge: a,
+                    along: true,
+                    next: at + 2,
+                },
+            ]
+        };
+        let one: Vec<Use> = fan(0, 0, 1, 0).to_vec();
+        let ring = |uses: &[Use]| {
+            let mut r = vec![Vec::new(); ends.len()];
+            for (i, u) in uses.iter().enumerate() {
+                r[u.edge].push(i);
+            }
+            r
+        };
+        assert!(!non_manifold(&one, &ends, &ring(&one)));
+        let two: Vec<Use> = fan(0, 0, 1, 0).into_iter().chain(fan(4, 2, 3, 0)).collect();
+        assert!(non_manifold(&two, &ends, &ring(&two)));
+        let shells: Vec<Use> = fan(0, 0, 1, 0).into_iter().chain(fan(4, 2, 3, 1)).collect();
+        assert!(non_manifold(&shells, &ends, &ring(&shells)));
     }
 
     /// isect-28's cone passes on Q0 as on Q1: a metre is exactly 6.4e6 steps of Q0, so its unit
