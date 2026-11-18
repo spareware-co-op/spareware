@@ -63,7 +63,7 @@ jobs:
         run: |
           set -uo pipefail
           verus_dir=$(dirname "$(command -v verus)")
-          echo "== image"; grep -E '^(VERSION|NAME)=' /etc/os-release; ldd --version | head -n 1; nproc
+          echo "== image"; grep -E '^(VERSION|NAME)=' /etc/os-release; ldd --version 2>/dev/null | sed -n 1p; nproc
           echo "== z3"; which -a z3 || true; echo "VERUS_Z3_PATH=${VERUS_Z3_PATH:-unset}"
           file "$verus_dir/z3"; ldd "$verus_dir/z3" || true; "$verus_dir/z3" --version
           for lib in $(ldd "$verus_dir/z3" | awk '$3 ~ /^\// {print $3}'); do readlink -f "$lib"; done
@@ -85,6 +85,6 @@ jobs:
           gh api -H "Accept: application/vnd.github.raw"             "repos/$GITHUB_REPOSITORY/contents/projects/engines/geometry/crates/geom-num/verus/plane.rs?ref=9163b4cdcefa24c84c278ec184d8cf0e4c20e4c4"             > "$RUNNER_TEMP/old/verus/plane.rs"
           grep -c "nonlinear_arith" "$RUNNER_TEMP/old/verus/plane.rs"
           verus --crate-type=lib "$RUNNER_TEMP/old/verus/lib.rs" --verify-module plane             --time-expanded --output-json > "$RUNNER_TEMP/old.json" 2> "$RUNNER_TEMP/old.err" || true
-          grep -A 3 "^error" "$RUNNER_TEMP/old.err" | head -n 20
+          { grep -A 3 "^error" "$RUNNER_TEMP/old.err" || echo "no error on this image"; } | head -n 20
           jq -c '."verification-results", {"rlimit-run": ."times-ms".smt."rlimit-run", "smt-run-ms": ."times-ms".smt."smt-run"}' "$RUNNER_TEMP/old.json"
           jq -r '."times-ms".smt."smt-run-module-times"[] | ."function-breakdown"[]? | [.rlimit, .time, .function, .success] | @tsv'             "$RUNNER_TEMP/old.json" | sort -rn | head -n 12
