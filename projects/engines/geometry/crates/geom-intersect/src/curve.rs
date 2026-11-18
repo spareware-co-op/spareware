@@ -1217,15 +1217,28 @@ fn conic_of<const D: usize>(
 /// The roots of a·s² + 2b·s + c, in order, by the count `exact` gives or the discriminant's sign.
 /// `None` where an interval cannot tell.
 pub(crate) fn quadratic(
+    terms: [Interval; 3],
+    exact: Option<Meeting>,
+) -> Result<Option<Vec<Interval>>, IntersectError> {
+    quadratic_with(terms, exact, None)
+}
+
+/// As [`quadratic`], with `known` for the discriminant where an exact sum encloses it more
+/// tightly than the coefficients' enclosures do (decision 32.87).
+pub(crate) fn quadratic_with(
     [a, b, c]: [Interval; 3],
     exact: Option<Meeting>,
+    known: Option<Interval>,
 ) -> Result<Option<Vec<Interval>>, IntersectError> {
     // A leading coefficient that may be zero, a line along a parabola's axis or a hyperbola's
     // asymptote, is the engine's: its enclosure is never exactly zero, being rounded outward.
     if a.contains(0.0) {
         return Ok(None);
     }
-    let d = b.square()?.sub(a.mul(c)?)?;
+    let d = match known {
+        Some(d) => d,
+        None => b.square()?.sub(a.mul(c)?)?,
+    };
     let meeting = match exact {
         Some(known) => known,
         None if d.hi() < 0.0 => Meeting::Nowhere,

@@ -115,8 +115,6 @@ fn an_edge_lying_on_the_other_surface_costs_a_closed_form() {
 ///
 /// - a sphere against a cylinder about a line through its centre, whose end circle is a great
 ///   circle of the sphere: no closed form places a circle on a sphere (19,090 of 19,133);
-/// - a cone against a plane that holds its axis, an edge of the plane passing through the apex,
-///   where the line meets the cone at one point that is no simple root (483,244 of 484,099);
 /// - two cones about one line on the axis off the grid, no edge of either on the other: an end
 ///   circle in the plane of the other's apex is clear of that cone by 150, and the engine takes
 ///   353,774 and 441,124 units to say so (800,571 in all).
@@ -124,18 +122,12 @@ fn an_edge_lying_on_the_other_surface_costs_a_closed_form() {
 /// Not stored: an end circle on the axis off the grid that lies in a plane. `quadrics::edges`
 /// rounds its centre off the plane, the engine runs round it, and the call stops on the budget. A
 /// stop's count is the budget's own, which no test can hold tighter.
-const STILL_THE_ENGINES: [(&[u8], u128); 3] = [
+const STILL_THE_ENGINES: [(&[u8], u128); 2] = [
     (
         &[
             0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00,
         ],
         19_133,
-    ),
-    (
-        &[
-            0x03, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
-        ],
-        484_099,
     ),
     (
         &[
@@ -190,13 +182,65 @@ const AN_EDGE_IN_A_PLANE_OFF_THE_GRID: [(&[u8], u128); 1] = [(
     60,
 )];
 
+/// Issue 995's inputs of a plane's edge through a cone's apex or tangent to a cylinder, stored in
+/// the target's `crashes` folder (the first was issue 974's, held at 484,099 before), with the
+/// work one call of `natural` takes on each now that the sign of the edge's discriminant is
+/// decided exactly where its enclosure reaches zero (decision 32.87). Before, the engine bisected
+/// round the touching point and flagged it:
+///
+/// - the edge through the apex of a cone on the z axis, on the grid: 484,099 units each, 483,244
+///   of them on that edge; the answer is the same in every field but the work;
+/// - the same on the frame off the grid: 3,991,888 and 4,149,800; the two rulings the answer holds
+///   now run to the apex, where before they stopped 0.157 and 0.031 short of it, at the flagged
+///   box;
+/// - the edge tangent to a cylinder of radius 232 on the frame off the grid: 3,322,070; the
+///   answer is the same in every field but the work.
+///
+/// Not stored: the same input's edge tangent to a cone off the grid (`00deffceffffffffff030463ffff`,
+/// 3,843,784 units), which the exact sums do not take (decision 32.87): its cone's radius at
+/// v = 0 is not zero.
+const AN_EDGE_THROUGH_AN_APEX_OR_TANGENT: [(&[u8], u128); 6] = [
+    (
+        &[
+            0x03, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+        ],
+        859,
+    ),
+    (
+        &[
+            0x13, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x63, 0x01, 0x00,
+        ],
+        859,
+    ),
+    (
+        &[
+            0x03, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+        ],
+        859,
+    ),
+    (&[0x93, 0x03, 0x4b, 0x00, 0x00, 0x03], 23_544),
+    (
+        &[
+            0x57, 0x00, 0xb5, 0xff, 0xff, 0xff, 0x00, 0x00, 0xb5, 0xff, 0xff, 0xff, 0x00,
+        ],
+        2_045,
+    ),
+    (
+        &[
+            0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x2a, 0x00, 0xff, 0xef, 0xe7, 0x03, 0x3a,
+        ],
+        20_937,
+    ),
+];
+
 #[test]
 fn what_the_closed_form_leaves_costs_no_more_than_today() {
     let held = STILL_THE_ENGINES
         .into_iter()
         .chain(ARCS_A_PLANE_HOLDS)
         .chain(AN_END_CIRCLE_OFF_A_SPHERE)
-        .chain(AN_EDGE_IN_A_PLANE_OFF_THE_GRID);
+        .chain(AN_EDGE_IN_A_PLANE_OFF_THE_GRID)
+        .chain(AN_EDGE_THROUGH_AN_APEX_OR_TANGENT);
     for (data, most) in held {
         let (case, _) = decode(data);
         let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
