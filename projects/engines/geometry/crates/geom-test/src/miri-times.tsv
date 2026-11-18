@@ -12,6 +12,8 @@
 # GitHub measuring run 44032408206, land/miri-bool at 96f3b42ac
 # GitHub measuring run 44071252392, ci/miri-plan at a0123c23b (geom-pool attack_g33 attack_rayon_pools, Tree Borrows)
 # GitHub measuring run 44162729953, ci/miri-stop at 76afb6d0d (geom-num wide, attack_wide_tests, attack_plane to_grid_near_ties resized under cfg(miri))
+# GitHub gate run 44168015168 (gate=miri), partition 65 rerun (attempt 2), ci/miri-stop at f898695ac: its six tests
+# GitHub measuring run 44246900378, ci/miri-stop at 64a8704a4 (crossing side_is_exact_in_both_widths_at_the_extremes_of_i128 makes each product once)
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -45,7 +47,7 @@ native-only over 601	geom-bool::attack_g144	an_apex_cut_off_centre_splits_along_
 154	geom-bool::attack_g144	cutting_off_a_corner_of_three_faces_adds_a_face_and_splits_no_vertex
 588	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex
 2	geom-bool::attack_g144	every_class_is_found_by_some_test_here
-220	geom-bool::attack_g144	only_the_fast_path_records_its_skip
+229	geom-bool::attack_g144	only_the_fast_path_records_its_skip
 native-only over 601	geom-bool::attack_g144	the_fast_and_full_paths_give_one_body
 181	geom-bool::attack_g144	the_fast_path_refuses_what_its_proof_does_not_cover
 196	geom-bool::batch	a_cutter_that_holds_the_host_takes_nothing_of_it
@@ -70,7 +72,7 @@ native-only over 601	geom-bool::cells	a_leak_is_reported_where_it_is_narrowest
 259	geom-bool::cells	a_wall_makes_two_rooms_each_named_by_its_seed
 242	geom-bool::cells	clash_volumes_are_cells_labelled_by_what_overlaps
 110	geom-bool::cells	seeds_must_lie_in_a_cell_and_on_no_face
-220	geom-bool::cells	three_rooms_see_their_neighbours_and_share_the_faces_they_split
+300	geom-bool::cells	three_rooms_see_their_neighbours_and_share_the_faces_they_split
 16	geom-bool::certificate	a_face_without_a_loop_is_caught
 73	geom-bool::certificate	a_failed_call_leaves_its_operands_as_they_were
 42	geom-bool::certificate	a_good_result_shows_everything
@@ -328,7 +330,7 @@ native-only over 601	geom-check::attack_g134	the_planes_through_the_grid_points_
 19	geom-check::attack_g85	a_scaled_cylinder_is_measured_from_its_points
 5	geom-check::attack_g85	a_vertex_off_a_cone_is_judged_by_its_perpendicular_distance
 12	geom-check::attack_g85	a_vertex_off_a_cylinder_sphere_or_torus_is_caught_exactly_at_the_bound
-146	geom-check::attack_g85	a_vertex_off_its_plane_and_its_line_ends_is_caught_exactly_at_the_bound
+217	geom-check::attack_g85	a_vertex_off_its_plane_and_its_line_ends_is_caught_exactly_at_the_bound
 31	geom-check::attack_g85	an_edge_off_its_face_is_caught
 27	geom-check::attack_g85	carriers_without_a_certified_check_are_reported_never_passed
 3	geom-check::attack_g85	group_2_runs_only_on_a_body_group_1_passed
@@ -1352,7 +1354,7 @@ native-only over 601	geom-name::prune	pruning_again_prunes_only_what_is_new
 541	geom-name::prune_determinism	prune_golden_hash_is_the_same_on_every_target
 9	geom-num	crossing::tests::a_crossing_of_points_outside_the_frame_reports_every_step_that_does_not_fit
 10	geom-num	crossing::tests::a_crossing_without_weight_goes_to_the_total_commit_and_is_reported
-223	geom-num	crossing::tests::side_is_exact_in_both_widths_at_the_extremes_of_i128
+94	geom-num	crossing::tests::side_is_exact_in_both_widths_at_the_extremes_of_i128
 native-only over 601	geom-num	crossing::tests::the_hand_written_side_of_a_crossing_point_is_exact
 7	geom-num	crossing::tests::the_rational_oracle_finds_a_crossing_known_by_eye
 8	geom-num	dd::tests::helpers_on_their_edges
@@ -2345,7 +2347,7 @@ native-only over 601	geom-num::wide	i384::incircle_at_extreme_coordinates
 300	geom-num::wide	i384::mul_at_the_overflow_threshold
 375	geom-num::wide	i384::mul_matches_oracle
 265	geom-num::wide	i384::mul_units
-224	geom-num::wide	i384::neg_matches_oracle
+284	geom-num::wide	i384::neg_matches_oracle
 422	geom-num::wide	i384::order_is_transitive
 315	geom-num::wide	i384::order_matches_oracle
 249	geom-num::wide	i384::order_of_close_values
@@ -2414,7 +2416,7 @@ native-only over 601	geom-num::wide	wide2::products_of_extreme_coordinates
 260	geom-num::wide	wide2::ring_laws
 157	geom-num::wide	wide2::signs_match_oracle
 180	geom-num::wide	wide2::sub_at_the_limits
-223	geom-num::wide	wide2::sub_matches_oracle
+317	geom-num::wide	wide2::sub_matches_oracle
 107	geom-num::wide	wide2::to_i128_matches_oracle
 2	geom-nurbs::attack_g56	a_candidate_weight_of_exactly_zero_is_refused
 2	geom-nurbs::attack_g56	a_rational_surface_is_the_weighted_average_of_its_points
