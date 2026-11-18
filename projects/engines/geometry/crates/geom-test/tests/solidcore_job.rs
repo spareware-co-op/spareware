@@ -11,6 +11,13 @@
 //!
 //! Each check is also shown to fail on a seeded violation.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+
 use std::path::{Path, PathBuf};
 
 use yaml_rust2::YamlLoader;

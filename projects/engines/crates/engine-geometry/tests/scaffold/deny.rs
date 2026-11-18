@@ -2073,7 +2073,10 @@ mod tests {
                     "allow-git = [\"https://github.com/spareware-co-op/solidcore\"]",
                     "allow-git = [\"https://github.com/x/y\"]",
                 ),
-                vec!["allow-git"],
+                vec![
+                    "allow-git lists https://github.com/x/y",
+                    "allow-git lacks https://github.com/spareware-co-op/solidcore",
+                ],
             ),
             (
                 "a second git repository allowed",
