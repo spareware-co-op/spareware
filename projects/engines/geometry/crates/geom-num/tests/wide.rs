@@ -107,6 +107,21 @@ where
     }
 }
 
+/// The split exponents `k` of `checks::threshold_splits` at `l` limbs, 0 to 64l − 1, cut into
+/// [`SLICES`] ranges: slice `part` of them.
+fn split_exponents(l: usize, part: u32) -> std::ops::Range<usize> {
+    let all = oracle::top(l) + 1;
+    let at = |k: u32| all * usize::try_from(k).unwrap() / usize::try_from(SLICES).unwrap();
+    at(part)..at(part + 1)
+}
+
+/// The corner patterns of `extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner`,
+/// 0 to 2^8 − 1, cut into [`SLICES`] ranges: slice `part` of them.
+fn corner_patterns(part: u32) -> std::ops::Range<u32> {
+    let each = (1 << 8) / SLICES;
+    each * part..each * (part + 1)
+}
+
 /// A long property as [`SLICES`] tests, one a quarter of its cases (`quarter_1` to `quarter_4`).
 macro_rules! sliced {
     ($name:ident, $strategy:expr, |$value:pat_param| $check:expr) => {
@@ -156,6 +171,39 @@ fn the_slices_join_to_every_case_once() {
         next = cases.end;
     }
     assert_eq!(next, CASES, "the slices end at the last case");
+    // The split exponents of every width, 0 to 64L − 1, each once.
+    for l in oracle::WIDTHS {
+        let mut next = 0;
+        for part in 0..SLICES {
+            let ks = split_exponents(l, part);
+            assert_eq!(
+                ks.start,
+                next,
+                "{l} limbs: part {} starts where the one before ends",
+                part + 1
+            );
+            assert!(
+                ks.end > ks.start,
+                "{l} limbs: part {} holds exponents",
+                part + 1
+            );
+            next = ks.end;
+        }
+        assert_eq!(next, oracle::top(l) + 1, "{l} limbs: every split exponent");
+    }
+    // The corner patterns, 0 to 2^8 − 1, each once.
+    let mut next = 0;
+    for part in 0..SLICES {
+        let bits = corner_patterns(part);
+        assert_eq!(
+            bits.start,
+            next,
+            "corner part {} starts where the one before ends",
+            part + 1
+        );
+        next = bits.end;
+    }
+    assert_eq!(next, 1 << 8, "every corner pattern");
 }
 
 /// The exact model: limbs read as integers, integers written as limbs, the range of each width.
@@ -803,11 +851,12 @@ mod checks {
         Ok(())
     }
 
-    /// Every split 2^k × 2^(64L−1−k) of the threshold, each factor moved by −1, 0 or +1, with every
-    /// sign: the products land on, just below and just above the range limits.
-    pub fn threshold_splits<const L: usize>() -> TestResult {
+    /// Every split 2^k × 2^(64L−1−k) of the threshold for the split exponents `k` of slice `part`
+    /// (`crate::split_exponents`), each factor moved by −1, 0 or +1, with every sign: the products
+    /// land on, just below and just above the range limits.
+    pub fn threshold_splits<const L: usize>(part: u32) -> TestResult {
         let p = top(L);
-        for k in 0..=p {
+        for k in crate::split_exponents(L, part) {
             for da in -1i32..=1 {
                 for db in -1i32..=1 {
                     let (ma, mb) = (pow2(k) + da, pow2(p - k) + db);
@@ -1155,9 +1204,29 @@ macro_rules! width_suite {
                 run(checks::edges::<L>());
             }
 
-            #[test]
-            fn products_at_every_split_of_the_threshold() {
-                run(checks::threshold_splits::<L>());
+            /// Every split of the threshold product, in quarters of the split exponents.
+            mod products_at_every_split_of_the_threshold {
+                use super::*;
+
+                #[test]
+                fn quarter_1() {
+                    run(checks::threshold_splits::<L>(0));
+                }
+
+                #[test]
+                fn quarter_2() {
+                    run(checks::threshold_splits::<L>(1));
+                }
+
+                #[test]
+                fn quarter_3() {
+                    run(checks::threshold_splits::<L>(2));
+                }
+
+                #[test]
+                fn quarter_4() {
+                    run(checks::threshold_splits::<L>(3));
+                }
             }
 
             #[test]
@@ -1285,11 +1354,12 @@ mod extreme_corners {
         }
     }
 
-    #[test]
-    fn incircle_overflow_is_reported_exactly_at_every_corner() {
+    /// Every corner pattern of `part` (`crate::corner_patterns`): incircle's narrow evaluation
+    /// against the oracle, and the wide ones agreeing; how many fitted and how many overflowed.
+    fn incircle_at_corners(part: u32) -> (u32, u32) {
         assert!(oracle::top(2) < INCIRCLE_BITS && oracle::top(4) >= INCIRCLE_BITS);
         let (mut fitted, mut overflowed) = (0, 0);
-        for bits in 0u32..1 << 8 {
+        for bits in crate::corner_patterns(part) {
             let c = |i| corner(bits, i);
             let p = [[c(0), c(1)], [c(2), c(3)], [c(4), c(5)], [c(6), c(7)]];
             // Every step of the narrow evaluation is checked against the oracle inside `Tracked`.
@@ -1301,11 +1371,42 @@ mod extreme_corners {
             let wider = kernel_use::incircle::<8>(&p).expect("incircle fits I512");
             assert_eq!(wide.value(), wider.value());
         }
-        // Both outcomes occur, so both paths of the narrow evaluation were exercised.
-        assert!(
-            fitted > 0 && overflowed > 0,
-            "fitted {fitted}, overflowed {overflowed}"
-        );
+        (fitted, overflowed)
+    }
+
+    /// The corners, in quarters of the corner patterns (`crate::corner_patterns`). Each quarter
+    /// holds a corner that fits and one that overflows (both outcomes occur in each, so both paths
+    /// of the narrow evaluation are exercised in each), which over the whole is the old test's
+    /// check that both occur.
+    mod incircle_overflow_is_reported_exactly_at_every_corner {
+        fn quarter(part: u32) {
+            let (fitted, overflowed) = super::incircle_at_corners(part);
+            assert!(
+                fitted > 0 && overflowed > 0,
+                "part {}: fitted {fitted}, overflowed {overflowed}",
+                part + 1
+            );
+        }
+
+        #[test]
+        fn quarter_1() {
+            quarter(0);
+        }
+
+        #[test]
+        fn quarter_2() {
+            quarter(1);
+        }
+
+        #[test]
+        fn quarter_3() {
+            quarter(2);
+        }
+
+        #[test]
+        fn quarter_4() {
+            quarter(3);
+        }
     }
 
     #[test]
