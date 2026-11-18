@@ -9,6 +9,8 @@
 
 use std::sync::OnceLock;
 
+use geom_num::{GridStep, P3, Steps};
+use geom_solidcore::convert::metres;
 use geom_solidcore::{Error, Modeller, Piece, Solid};
 use serde_json::Value;
 
@@ -43,6 +45,34 @@ fn p3(v: &Value) -> [f64; 3] {
     [num(&v[0]), num(&v[1]), num(&v[2])]
 }
 
+/// The grid step every case is built on: 6.25 nm, on which every length of the table is a
+/// whole number of steps (`steps` refuses one that is not, so no case is rounded).
+const STEP: GridStep = GridStep::Q1;
+
+/// The length `x` metres as a whole number of steps of [`STEP`].
+fn steps(x: f64) -> i64 {
+    let n = (x / metres(STEP)).round();
+    assert!(
+        (n * metres(STEP) - x).abs() <= x.abs() * 1e-15,
+        "{x} m is not a whole number of steps"
+    );
+    n as i64
+}
+
+fn grid(v: &Value) -> P3 {
+    let [x, y, z] = p3(v).map(steps);
+    P3::new(x, y, z).expect("a point of the grid")
+}
+
+fn length(v: &Value) -> Steps {
+    Steps(u64::try_from(steps(num(v))).expect("a length not below zero"))
+}
+
+/// A point in grid steps, in metres.
+fn in_metres(q: [f64; 3]) -> [f64; 3] {
+    q.map(|c| c * metres(STEP))
+}
+
 fn from_bits(v: &Value) -> Option<f64> {
     v.as_str()
         .map(|s| f64::from_bits(u64::from_str_radix(s, 16).expect("hex bits")))
@@ -58,14 +88,20 @@ fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
         }
     }
     match v["shape"].as_str().expect("shape") {
-        "cuboid" => m.cuboid(p3(&v["corner"]), p3(&v["size"])),
-        "sphere" => m.sphere(p3(&v["centre"]), num(&v["radius"])),
-        "cylinder" => m.cylinder(p3(&v["base"]), num(&v["radius"]), num(&v["height"])),
+        "cuboid" => {
+            let size = &v["size"];
+            m.cuboid(
+                grid(&v["corner"]),
+                [length(&size[0]), length(&size[1]), length(&size[2])],
+            )
+        }
+        "sphere" => m.sphere(grid(&v["centre"]), length(&v["radius"])),
+        "cylinder" => m.cylinder(grid(&v["base"]), length(&v["radius"]), length(&v["height"])),
         "cone" => m.cone(
-            p3(&v["base"]),
-            num(&v["base_radius"]),
-            num(&v["top_radius"]),
-            num(&v["height"]),
+            grid(&v["base"]),
+            length(&v["base_radius"]),
+            length(&v["top_radius"]),
+            length(&v["height"]),
         ),
         s => panic!("unknown shape {s}"),
     }
@@ -140,7 +176,7 @@ fn sample(m: &Modeller, pieces: &[Piece], surfaces: &Value) -> (f64, f64) {
         let mut prev: Option<[f64; 3]> = None;
         for i in 0..=n {
             let t = t0 + (t1 - t0) * (i as f64) / (n as f64);
-            let q = piece.point_at(m, t).expect("a point on the piece");
+            let q = in_metres(piece.point_at(m, t).expect("a point on the piece"));
             worst = worst
                 .max(residual(&surfaces[0], q))
                 .max(residual(&surfaces[1], q));
@@ -154,7 +190,7 @@ fn sample(m: &Modeller, pieces: &[Piece], surfaces: &Value) -> (f64, f64) {
 }
 
 fn run_intersection(c: &Value) {
-    let mut m = Modeller::new();
+    let mut m = Modeller::new(STEP);
     let operands: Vec<Solid> = c["operands"]
         .as_array()
         .expect("operands")
@@ -165,7 +201,7 @@ fn run_intersection(c: &Value) {
         Some("plane_section") => m
             .plane_section(
                 &operands[0],
-                p3(&c["plane"]["at"]),
+                grid(&c["plane"]["at"]),
                 p3(&c["plane"]["normal"]),
             )
             .expect("plane_section"),
@@ -201,7 +237,7 @@ fn run_intersection(c: &Value) {
 }
 
 fn run_boolean(c: &Value) {
-    let mut m = Modeller::new();
+    let mut m = Modeller::new(STEP);
     let a = solid(&mut m, &c["operands"][0]).expect("first operand");
     let b = solid(&mut m, &c["operands"][1]).expect("second operand");
     let r =
@@ -214,7 +250,7 @@ fn run_boolean(c: &Value) {
     if exact == 0.0 && faces == 0 {
         return;
     }
-    let v = m.volume(&r).expect("the volume");
+    let v = m.volume(&r).expect("the volume") * metres(STEP).powi(3);
     let rel = if exact == 0.0 {
         v.abs()
     } else {
@@ -244,14 +280,33 @@ fn run(id: &str) {
 /// the same volume, and each operand's own volume is the same after it.
 #[test]
 fn operands_are_not_consumed() {
-    let mut m = Modeller::new();
-    let a = m.cuboid([0.0; 3], [1.0; 3]).expect("a");
-    let b = m.cuboid([0.5; 3], [1.0; 3]).expect("b");
+    let mut m = Modeller::new(STEP);
+    let (zero, half, one) = (steps(0.0), steps(0.5), Steps(steps(1.0) as u64));
+    let corner = |c: i64| P3::new(c, c, c).expect("a grid point");
+    let a = m.cuboid(corner(zero), [one; 3]).expect("a");
+    let b = m.cuboid(corner(half), [one; 3]).expect("b");
+    let (va, vb) = (m.volume(&a).expect("a's volume"), m.volume(&b).expect("b's"));
+    // One cubic metre, in cubic steps: solidcore's 1.0 over the step cubed.
+    assert_eq!(va, 1.0 / metres(STEP) / metres(STEP) / metres(STEP));
     let first = m.union(&a, &b).expect("union");
     let second = m.union(&a, &b).expect("union again");
     assert_eq!(m.volume(&first), m.volume(&second));
-    assert_eq!(m.volume(&a), Ok(1.0));
-    assert_eq!(m.volume(&b), Ok(1.0));
+    assert_eq!(m.volume(&a), Ok(va));
+    assert_eq!(m.volume(&b), Ok(vb));
+    assert_eq!(a.body().arenas().faces.len(), 6);
+}
+
+/// What solidcore returns is the kernel's body, passed by the kernel's checker: a sphere's is one
+/// face, a cylinder's three.
+#[test]
+fn results_are_the_kernels_bodies() {
+    let mut m = Modeller::new(STEP);
+    let o = P3::new(0, 0, 0).expect("the origin");
+    let r = Steps(steps(0.5) as u64);
+    let ball = m.sphere(o, r).expect("a sphere");
+    assert_eq!(ball.body().arenas().faces.len(), 1);
+    let can = m.cylinder(o, r, r).expect("a cylinder");
+    assert_eq!(can.body().arenas().faces.len(), 3);
 }
 
 /// Every case of the table has its test below, under its own name, and no test names a case the
