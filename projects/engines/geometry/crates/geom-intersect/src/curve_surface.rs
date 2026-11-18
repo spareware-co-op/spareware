@@ -1258,8 +1258,8 @@ fn helix_on_cylinder(
 /// one coordinate axis: there the unit vector is that axis, signed, and the height is a difference
 /// of two stored doubles. `None` for any other direction: its unit vector is no vector of doubles
 /// (the only ones of length exactly one are the signed axes), so the height is no sum of products
-/// of stored doubles.
-fn height_terms(n: [f64; 3], p: [f64; 3], c: [f64; 3]) -> Option<[(f64, f64); 2]> {
+/// of stored doubles. With the terms, whether that axis is taken positive (`true`) or negative.
+fn height_terms(n: [f64; 3], p: [f64; 3], c: [f64; 3]) -> Option<(bool, [(f64, f64); 2])> {
     let [a, b, e] = n;
     let [p0, p1, p2] = p;
     let [c0, c1, c2] = c;
@@ -1269,8 +1269,16 @@ fn height_terms(n: [f64; 3], p: [f64; 3], c: [f64; 3]) -> Option<[(f64, f64); 2]
         (false, false, true) => (e, p2, c2),
         _ => return None,
     };
-    let sigma = if along > 0.0 { 1.0 } else { -1.0 };
-    Some([(sigma, at), (-sigma, from)])
+    // The match picked the one component that is not zero.
+    let up = positive(along);
+    let sigma = if up { 1.0 } else { -1.0 };
+    Some((up, [(sigma, at), (-sigma, from)]))
+}
+
+/// Whether `x` is positive, where its caller knows it is neither zero nor NaN: read from its sign
+/// bit, so no comparison with a zero that cannot occur is written.
+fn positive(x: f64) -> bool {
+    x.is_sign_positive()
 }
 
 /// The sign of `(p − c) · n`, exactly: a sum of six products of stored doubles.
@@ -1373,14 +1381,24 @@ struct Coord {
     near: Interval,
 }
 
+impl Coord {
+    /// What [`order`] reads of it: its sign and its square.
+    fn exact(&self) -> Exact<'_> {
+        (self.sign, &self.square)
+    }
+}
+
+/// A coordinate's sign and its square as a sum of products of doubles: all that [`order`] reads.
+type Exact<'a> = (Sign, &'a [(f64, f64)]);
+
 /// The sign of `a − b`, exactly: the signs where they differ, the squares where they agree.
-fn order(a: &Coord, b: &Coord) -> Sign {
-    let squares = |p: &Coord, q: &Coord| {
-        let mut terms = p.square.clone();
-        terms.extend(q.square.iter().map(|&(x, y)| (-x, y)));
+fn order(a: Exact<'_>, b: Exact<'_>) -> Sign {
+    let squares = |p: Exact<'_>, q: Exact<'_>| {
+        let mut terms = p.1.to_vec();
+        terms.extend(q.1.iter().map(|&(x, y)| (-x, y)));
         sign_of(&terms)
     };
-    match (a.sign, b.sign) {
+    match (a.0, b.0) {
         (Sign::Positive, Sign::Positive) => squares(a, b),
         (Sign::Negative, Sign::Negative) => squares(b, a),
         (Sign::Zero, Sign::Zero) => Sign::Zero,
@@ -1451,16 +1469,28 @@ fn round(p: &Spot, q: &Spot) -> Ordering {
     match (upper(p), upper(q)) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
-        (true, true) => by(order(&q.x, &p.x)),
-        (false, false) => by(order(&p.x, &q.x)),
+        (true, true) => by(order(q.x.exact(), p.x.exact())),
+        (false, false) => by(order(p.x.exact(), q.x.exact())),
     }
 }
 
 /// The angle of `s` from (r, 0) towards (0, r), in half-turns on [0, 2), enclosed.
 fn angle(s: &Spot) -> Result<Interval, IntersectError> {
     let at = turn_of(s.x.near, s.y.near)?;
-    // A point of the lower half is past a half-turn; `turn_of` may write it a turn back.
-    if s.y.sign == Sign::Negative && at.lo() < 0.5 {
+    if s.y.sign == Sign::Negative {
+        lower_half(at)
+    } else {
+        Ok(at)
+    }
+}
+
+/// The angle of a point of the lower half (strictly between one and two half-turns) from
+/// `turn_of`'s enclosure `at` of it, which writes such a point either there or a turn back, in
+/// (−1, 0). An enclosure written a turn back holds a number below zero, so its lower end is below
+/// zero; one written in place holds a number over one, so its lower end is below a half-turn only
+/// where it is over half a turn wide. Exactly at a half-turn it is in place.
+fn lower_half(at: Interval) -> Result<Interval, IntersectError> {
+    if at.lo() < 0.5 {
         Ok(at.add(Interval::point(2.0)?)?)
     } else {
         Ok(at)
@@ -1478,7 +1508,10 @@ struct Half {
 impl Half {
     /// Whether `s` is in the half-plane, its line included.
     fn holds(&self, s: &Spot) -> bool {
-        let side = order(if self.axis == 0 { &s.x } else { &s.y }, &self.at);
+        let side = order(
+            if self.axis == 0 { &s.x } else { &s.y }.exact(),
+            self.at.exact(),
+        );
         side == Sign::Zero || side == self.keep
     }
 }
@@ -1522,20 +1555,13 @@ fn held_of(r: f64, sides: &[Half]) -> Result<Option<Held>, IntersectError> {
     reason = "three outcomes of one private step, read at once by its one caller"
 )]
 fn crossed_by(r: f64, sides: &[Half]) -> Result<Option<Result<Vec<&Half>, bool>>, IntersectError> {
-    let reach = |sign: Sign| -> Result<Coord, IntersectError> {
-        let r = Interval::point(r)?;
-        Ok(Coord {
-            sign,
-            square: alloc::vec![(r.lo(), r.lo())],
-            near: if sign == Sign::Negative { r.neg() } else { r },
-        })
-    };
-    let (far, back) = (reach(Sign::Positive)?, reach(Sign::Negative)?);
+    // The circle's coordinate runs over [−r, r]: its ends' signs, and their square r².
+    let square = [(r, r)];
+    let (far, back) = ((Sign::Positive, &square[..]), (Sign::Negative, &square[..]));
     let mut crossed = Vec::new();
     let mut touched = false;
     for half in sides {
-        // The circle's coordinate runs over [−r, r].
-        let (low, high) = (order(&half.at, &back), order(&half.at, &far));
+        let (low, high) = (order(half.at.exact(), back), order(half.at.exact(), far));
         let (whole, none, touch) = if half.keep == Sign::Positive {
             (
                 low != Sign::Positive,
@@ -1681,9 +1707,9 @@ fn past_join(
     let half = lo / 2.0;
     let even = half == math::floor(half)?.get();
     let up = match (ahead.0 != 0.0, ahead.1 != 0.0) {
-        (true, false) if (ahead.0 > 0.0) == same => spot.y.sign,
+        (true, false) if positive(ahead.0) == same => spot.y.sign,
         (true, false) => spot.y.sign.negate(),
-        (false, true) if (ahead.1 > 0.0) == same => spot.x.sign.negate(),
+        (false, true) if positive(ahead.1) == same => spot.x.sign.negate(),
         (false, true) => spot.x.sign,
         _ => return Ok(None),
     };
@@ -1787,7 +1813,8 @@ fn arcs_in_plane(
         let Some(at) = offset(pick(c, k), end, along, pick(q, k))? else {
             return Ok(None);
         };
-        let keep = if (along > 0.0) == first {
+        // `along` is the one component of the plane's vector that is not zero.
+        let keep = if positive(along) == first {
             Sign::Positive
         } else {
             Sign::Negative
@@ -1817,7 +1844,9 @@ fn arcs_in_plane(
         (0, 2) => (1, false),
         _ => return Ok(None),
     };
-    let same = cyclic == (pick(circle.frame().normal(), third) > 0.0);
+    // The circle lies in the plane, so its normal runs along the third axis: that component is
+    // the one that is not zero.
+    let same = cyclic == positive(pick(circle.frame().normal(), third));
     let stored = circle.frame().x();
     let ahead = (pick(stored, i), pick(stored, j));
     let turn = Interval::point(2.0)?;
@@ -1886,11 +1915,16 @@ fn ring_overlap(
         if inside {
             continue;
         }
-        let Some([p, q]) = exact else {
+        let Some((_, [p, q])) = exact else {
             return Ok(None);
         };
         let side = sign_of(&[p, q, (-factor, end)]);
-        let side = if factor < 0.0 { side.negate() } else { side };
+        // `factor` is the kind's axial sign, 1 or -1.
+        let side = if positive(factor) {
+            side
+        } else {
+            side.negate()
+        };
         if side == outward {
             return proven(Vec::new(), meter).map(Some);
         }
@@ -1951,16 +1985,17 @@ fn circle_on_cone(
     if !same_line(center, frame.normal(), at, circle.frame().normal()) {
         return Ok(None);
     }
-    let Some([(sigma, p), (_, c)]) = height_terms(frame.normal(), at, center) else {
+    let Some((up, [(_, p), (_, c)])) = height_terms(frame.normal(), at, center) else {
         return Ok(None);
     };
     let (r0, k) = cone.radius_and_slope();
     let (s, r) = (cone.axial_sign(), circle.radius());
-    // k·sigma is k or −k, exactly.
-    let rise = k * sigma;
+    // The slope along the axis as the height is taken: k, or −k where the axis runs negative.
+    let rise = if up { k } else { -k };
+    // The two equations r₀·s + k·h = r·s and = −r·s, as r₀·s + k·h + q·s = 0 for q = −r and r.
     let on_it = [r, -r]
         .iter()
-        .any(|q| sign_of(&[(r0, s), (rise, p), (-rise, c), (-*q, s)]) == Sign::Zero);
+        .any(|&q| sign_of(&[(r0, s), (rise, p), (-rise, c), (q, s)]) == Sign::Zero);
     if !on_it {
         return Ok(None);
     }
@@ -2070,4 +2105,36 @@ pub fn curve_surface(
     let domain = [seam_t.side()?, seam_u.side()?, seam_v.side()?];
     let solved = solve(&field, domain, |_, _| Ok(true), meter)?;
     finished(&field, solved, meter)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::float_cmp,
+        reason = "test code: a failure should stop loudly, and the doubles compared are exact"
+    )]
+
+    use super::*;
+
+    #[test]
+    fn a_lower_half_enclosure_from_half_a_turn_up_is_in_place_and_below_it_a_turn_back() {
+        let hi = 1.75;
+        let at_half = Interval::new(0.5, hi).unwrap();
+        assert_eq!(lower_half(at_half).unwrap().lo(), 0.5);
+        let above = Interval::new(0.5_f64.next_up(), hi).unwrap();
+        assert_eq!(lower_half(above).unwrap().lo(), 0.5_f64.next_up());
+        let below = Interval::new(0.5_f64.next_down(), hi).unwrap();
+        let moved = lower_half(below).unwrap();
+        assert!(moved.lo() >= 2.0 && moved.lo() <= 2.5);
+        assert!(moved.hi() >= 3.75);
+    }
+
+    #[test]
+    fn the_sign_of_a_number_known_not_to_be_zero_is_its_sign_bit() {
+        assert!(positive(1.0));
+        assert!(positive(f64::MIN_POSITIVE));
+        assert!(!positive(-1.0));
+        assert!(!positive(-f64::MIN_POSITIVE));
+    }
 }
