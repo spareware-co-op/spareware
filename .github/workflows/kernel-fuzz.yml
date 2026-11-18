@@ -489,14 +489,15 @@ jobs:
   # the two sides together are nearest for every pair of values of the frame. Whole job minutes
   # on the text that was proven (runs 44251477765 and 44255063848): nearest by 25 takes 1.2 to
   # 2.0 minutes, and a side by 625 3.9 to 10.6.
-  # One proof is still over 15 minutes: atan2's `mul_keeps_every_carry`, 27.5, 27.6 and 28.2
-  # (runs 44222245211, 44244068917 and 44255063848). `mul` forms its six products inside and the
-  # proof forms them again, and the solver must find the two copies equal. A cut by the word of
-  # the answer does not shorten it (the exponent alone took 18.7, and each of the three words
-  # ran to the job's 120-minute limit, run 44248734972), nor does a copy of mul's steps fed the
-  # proof's products: the steps took 5.2 minutes, and tying them to `mul` ran to the limit (run
-  # 44246797569). Nor do the SMT solvers z3 and cvc5 in place of SAT: both ran to the limit (run
-  # 44251931865).
+  # atan2's `mul_keeps_every_carry` took 27.6 to 35.9 minutes (main's push runs 44244068917,
+  # 44299434285, 44312155060 and 44322372914) while `mul` formed its six products inside and the
+  # proof formed them again, so the solver had to find the two copies equal. `mul` is now its two
+  # steps, `partial_products` and then `sum_partial_products`, and the proof runs the two steps
+  # on the one set of products, so there is no second copy. The same steps fed the products once
+  # took 5.2 minutes (run 44246797569). What did not shorten it: a cut by the word of the answer
+  # (the exponent alone took 18.7, each of the three words ran to the job's 120-minute limit, run
+  # 44248734972), tying a copy of the steps to the old `mul` (ran to the limit, run 44246797569),
+  # and the SMT solvers z3 and cvc5 in place of SAT (both ran to the limit, run 44251931865).
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
