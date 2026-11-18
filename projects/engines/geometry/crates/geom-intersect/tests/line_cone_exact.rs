@@ -286,17 +286,21 @@ fn a_tangent_whose_data_pass_the_exact_range_is_the_engines() {
 
 #[test]
 fn a_line_across_a_sphere_or_a_circle_is_two_points_in_closed_form() {
-    // Through the centre along x: the sphere's quadratic, and the circle's in its plane, each
+    // Through the centre along x: the sphere's quadratic, and a circle's in the plane, each
     // counted by the enclosures, as before.
     let across = line([-2.5, 0.25, 0.125], [1.0, 0.0, 0.0]);
     let ball = Sphere::new(APEX, 1.5, frame(ON_Z), ((0.0, 2.0), (-0.5, 0.5))).unwrap();
     let (found, work) = meet(&across, &SurfaceKind::Sphere(ball));
     two_crossings(&found, 3.0);
-    let ring = CurveKind::Circle(Circle::new(APEX, 1.5, frame(ON_Z), (0.0, 2.0)).unwrap());
+    // In the plane, where a line and a circle are the conics' quadratic.
+    let flat = CurveKind::Line(Line::new([-2.5, 0.25], [1.0, 0.0], (-300.0, 300.0)).unwrap());
+    let ring = CurveKind::Circle(
+        Circle::new([0.5, 0.25], 1.5, Frame::standard().unwrap(), (0.0, 2.0)).unwrap(),
+    );
     let mut meter = WorkMeter::new(Budget::of_work(BUDGET));
-    let found = curves(&across, &ring, &mut meter).unwrap();
+    let found = curves(&flat, &ring, &mut meter).unwrap();
     assert_eq!(found.items().len(), 2, "{:?}", found.items());
-    assert_eq!((work, meter.used().work), (8, 392));
+    assert_eq!((work, meter.used().work), (8, 6));
 }
 
 #[test]
