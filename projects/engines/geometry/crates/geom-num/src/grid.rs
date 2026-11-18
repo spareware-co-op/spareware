@@ -735,7 +735,7 @@ mod proofs {
     // towards a finer step it refuses. As one harness of every coordinate and every pair of steps
     // the proof took 32 to 44 minutes on a hosted runner (runs 44052487978 and main's push of
     // 07ce8f43b): with the steps drawn, the divisor (1, 25 or 625) was unknown to the solver in
-    // every division and product. It is cut three ways, and the harnesses below together prove
+    // every division and product. It is cut four ways, and the harnesses below together prove
     // what the one did:
     //
     // - by the pair of steps. Each harness names its pairs, so its divisor is a constant. The
@@ -747,7 +747,11 @@ mod proofs {
     // - for nearest, by the coordinate's sign: one harness for the coordinates at or above zero,
     //   one for those below, and `every_coordinate_is_below_zero_or_not` proves that the two take
     //   in every coordinate. Below zero the claim is asserted on the negated pair, and
-    //   `nearest_on_the_negated_pair_is_nearest` proves that this is the same claim.
+    //   `nearest_on_the_negated_pair_is_nearest` proves that this is the same claim;
+    // - from Q2 to Q0, where nearest by 625 for one sign was still over 15 minutes, by its two
+    //   sides: one harness asserts that the answer is less than half a step above the value, one
+    //   that it is less than half a step below, each for one sign, and
+    //   `nearest_is_its_two_sides` proves that the two sides together are nearest.
     //
     // Every harness also asserts, for its coordinates, that `coarsen` answers, and Kani checks
     // every one for panics and overflow. Whole job minutes on a hosted runner are in
@@ -804,6 +808,10 @@ mod proofs {
     const NEAREST: u8 = 1;
     const NO_LARGER: u8 = 2;
     const EXACTNESS: u8 = 4;
+    /// Nearest's two sides, each a claim: the answer is less than half a step above the value,
+    /// `2·(q·d − v) < d`, and less than half a step below it, `2·(q·d − v) > −d`.
+    const NOT_HIGH: u8 = 8;
+    const NOT_LOW: u8 = 16;
 
     /// `coarsen`'s law from one step to another, for every coordinate of the class `sign` and the
     /// claims of the mask `claims`.
@@ -812,8 +820,11 @@ mod proofs {
     /// pair, `2·|(−q)·d − (−v)| < d`, in `i64`: the same integers (Kani checks each operation for
     /// overflow, so each is exact), written the way the solver ends soonest, since a division of
     /// a negative value is a division of its magnitude. Why that is the same claim is argued on
-    /// `coarsen_from_q2_to_q0_is_nearest_below_zero` and proven by
+    /// `coarsen_from_q1_to_q0_is_nearest_below_zero` and proven by
     /// `nearest_on_the_negated_pair_is_nearest`.
+    ///
+    /// The two sides of nearest are asserted on the pair itself in `i128`, for either sign, and
+    /// `nearest_is_its_two_sides` proves that the two together are `2·|q·d − v| < d`.
     fn coarsen_law(from: GridStep, to: GridStep, sign: u8, claims: u8) {
         let c = coord();
         if !has_sign(c, sign) {
@@ -842,6 +853,15 @@ mod proofs {
                             }
                         }
                         let (q, v, d) = (i128::from(q), i128::from(v), i128::from(d));
+                        if claims & (NOT_HIGH | NOT_LOW) != 0 {
+                            let moved = q * d - v;
+                            if claims & NOT_HIGH != 0 {
+                                assert!(2 * moved < d);
+                            }
+                            if claims & NOT_LOW != 0 {
+                                assert!(2 * moved > -d);
+                            }
+                        }
                         if claims & NO_LARGER != 0 {
                             assert!(q.abs() <= v.abs());
                         }
@@ -870,6 +890,19 @@ mod proofs {
         }
     }
 
+    /// The tie of the cut by side: for every answer `q` and every value `v` of the frame, and each
+    /// of the three divisors, nearest as the one harness asserted it, `2·|q·d − v| < d` in `i128`,
+    /// holds exactly when both its sides do. So a harness for each side, over the same
+    /// coordinates, proves what a harness of nearest does, no less and no more.
+    #[kani::proof]
+    fn nearest_is_its_two_sides() {
+        let (q, v) = (i128::from(coord().get()), i128::from(coord().get()));
+        for d in [1_i128, 25, 625] {
+            let moved = q * d - v;
+            assert!((2 * moved.abs() < d) == (2 * moved < d && 2 * moved > -d));
+        }
+    }
+
     /// Where `coarsen` does not divide, for every coordinate: between the same step the value is
     /// kept and exact, and towards a finer step it refuses.
     #[kani::proof]
@@ -887,6 +920,24 @@ mod proofs {
     }
 
     /// From Q1 to Q0 (by 25), every coordinate below zero: the nearest step.
+    ///
+    /// The same claim as the one harness made, which asserted `2·|q·d − v| < d` in `i128` for
+    /// every coordinate. For this harness and the one from Q2 to Q1 below zero alike:
+    ///
+    /// - the same verdict. `(−q)·d − (−v)` is `−(q·d − v)`, so the two forms have one magnitude,
+    ///   and each compares it with `d` strictly. A value exactly half-way, `2·|q·d − v| = d`,
+    ///   would fail both alike; none exists, since 25 and 625 are odd.
+    ///   `nearest_on_the_negated_pair_is_nearest` proves the equal magnitudes for every `q` and
+    ///   `v` of the frame and each divisor;
+    /// - no overflow excused. Kani checks each negation, product, difference, magnitude and
+    ///   doubling in `i64` and fails the harness on an overflow: it does not assume there is
+    ///   none;
+    /// - no coordinate left out. Nothing is assumed of the coordinate but the frame; its sign
+    ///   only chooses which harness asserts, and `every_coordinate_is_below_zero_or_not` proves
+    ///   that the two classes take in every coordinate (zero is with those above);
+    /// - no pair of steps left out. `d` is worked out from the two steps as the one harness did,
+    ///   and `the_nine_pairs_are_every_pair_of_steps` proves that the two steps it drew are
+    ///   always one of the nine pairs the harnesses name.
     #[kani::proof]
     #[kani::solver(kissat)]
     fn coarsen_from_q1_to_q0_is_nearest_below_zero() {
@@ -925,43 +976,47 @@ mod proofs {
         coarsen_law(from, to, ANY_SIGN, NO_LARGER | EXACTNESS);
     }
 
-    /// From Q2 to Q0 (by 625), every coordinate at or above zero: the nearest step.
+    /// From Q2 to Q0 (by 625), every coordinate at or above zero: the answer is less than half a
+    /// step above the value.
+    ///
+    /// Nearest from Q2 to Q0 is proven a side at a time, for each sign. As one harness for a sign
+    /// it was still over 15 minutes on a hosted runner, and no cut of it by the value shortens
+    /// it: one band of the magnitude takes as long as all of them, and so does one direction of
+    /// rounding. The four harnesses assert the sides on the pair itself in `i128`, as the one
+    /// harness wrote nearest, and `nearest_is_its_two_sides` proves that the two sides together
+    /// are that claim; `every_coordinate_is_below_zero_or_not` proves that the two signs take in
+    /// every coordinate.
     #[kani::proof]
-    fn coarsen_from_q2_to_q0_is_nearest_at_or_above_zero() {
+    fn coarsen_from_q2_to_q0_is_not_high_at_or_above_zero() {
         let (from, to) = DIVIDING[2];
-        coarsen_law(from, to, AT_OR_ABOVE_ZERO, NEAREST);
+        coarsen_law(from, to, AT_OR_ABOVE_ZERO, NOT_HIGH);
     }
 
-    /// From Q2 to Q0 (by 625), every coordinate below zero: the nearest step.
-    ///
-    /// The same claim as the one harness made, which asserted `2·|q·d − v| < d` in `i128` for
-    /// every coordinate. For this harness and the two others below zero alike:
-    ///
-    /// - the same verdict. `(−q)·d − (−v)` is `−(q·d − v)`, so the two forms have one magnitude,
-    ///   and each compares it with `d` strictly. A value exactly half-way, `2·|q·d − v| = d`,
-    ///   would fail both alike; none exists, since 25 and 625 are odd.
-    ///   `nearest_on_the_negated_pair_is_nearest` proves the equal magnitudes for every `q` and
-    ///   `v` of the frame and each divisor;
-    /// - no overflow excused. Kani checks each negation, product, difference, magnitude and
-    ///   doubling in `i64` and fails the harness on an overflow: it does not assume there is
-    ///   none;
-    /// - no coordinate left out. Nothing is assumed of the coordinate but the frame; its sign
-    ///   only chooses which harness asserts, and `every_coordinate_is_below_zero_or_not` proves
-    ///   that the two classes take in every coordinate (zero is with those above);
-    /// - no pair of steps left out. `d` is worked out from the two steps as the one harness did,
-    ///   and `the_nine_pairs_are_every_pair_of_steps` proves that the two steps it drew are
-    ///   always one of the nine pairs the harnesses name.
-    ///
-    /// This part is still over 15 minutes: 23.5 under kissat on a hosted runner, where the same
-    /// claim at or above zero took 10.5 (run 44175923704). No cut of it is known: with the claim
-    /// written as for the other sign it took 17.6 and 19.1 when measured, bands of the magnitude
-    /// do not shorten it (one band takes as long as all of them), nor does a cut by the
-    /// direction of rounding.
+    /// From Q2 to Q0 (by 625), every coordinate at or above zero: the answer is less than half a
+    /// step below the value.
     #[kani::proof]
     #[kani::solver(kissat)]
-    fn coarsen_from_q2_to_q0_is_nearest_below_zero() {
+    fn coarsen_from_q2_to_q0_is_not_low_at_or_above_zero() {
         let (from, to) = DIVIDING[2];
-        coarsen_law(from, to, BELOW_ZERO, NEAREST);
+        coarsen_law(from, to, AT_OR_ABOVE_ZERO, NOT_LOW);
+    }
+
+    /// From Q2 to Q0 (by 625), every coordinate below zero: the answer is less than half a step
+    /// above the value.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn coarsen_from_q2_to_q0_is_not_high_below_zero() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, BELOW_ZERO, NOT_HIGH);
+    }
+
+    /// From Q2 to Q0 (by 625), every coordinate below zero: the answer is less than half a step
+    /// below the value.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn coarsen_from_q2_to_q0_is_not_low_below_zero() {
+        let (from, to) = DIVIDING[2];
+        coarsen_law(from, to, BELOW_ZERO, NOT_LOW);
     }
 
     /// From Q2 to Q0 (by 625), every coordinate: no larger in magnitude, exact exactly when the
