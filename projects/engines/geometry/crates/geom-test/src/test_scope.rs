@@ -20,6 +20,10 @@
 //!
 //! - in no workspace crate's folder (a workflow, `Cargo.lock`, `.cargo/`, the toolchain file, an
 //!   architecture chapter): every crate's tests run;
+//! - in a folder the root Cargo.toml's `workspace.exclude` names and that holds no package of the
+//!   workspace's graph (geom-solidcore, its own workspace, decision 32.70): no crate's build reads
+//!   it, so only the crates that read files outside their folder run (the rule below), and the
+//!   folder's own jobs test it;
 //! - `MAP.json` or `quality-ledger.json`, when the change's base is given: Y's tests run when one of
 //!   the file's changed entries names Y, or Y's sources read the file whole ([`crate::shared`]); a
 //!   change that cannot be placed so, or one given without its base, runs every crate's tests;
@@ -58,7 +62,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::fuzz_scope::{TEST_FOLDERS, packages};
+use crate::fuzz_scope::{TEST_FOLDERS, forward, packages};
 use crate::shared::{Changes, Reach, Readers};
 
 /// What in a crate's source says it reads files outside its own folder: a relative path that
@@ -89,12 +93,17 @@ pub struct Scope {
     readers: BTreeSet<String>,
     /// The crates that read each shared file whole ([`crate::shared`]).
     whole: Readers,
+    /// The folders, from the workspace root and ending in `/`, that the workspace excludes and
+    /// that hold no package of its graph ([`Scope::apart`]).
+    apart: Vec<String>,
 }
 
 /// Where a changed file is.
 enum Place {
     /// In no crate's folder.
     Outside,
+    /// In a folder the workspace excludes and no workspace crate builds.
+    Apart,
     /// In a crate's `tests/`, `benches/` or `examples/` folder.
     OwnTests(String),
     /// In a crate, where its library's build reads it.
@@ -147,13 +156,28 @@ impl Scope {
         }
         let scope = Self::new(metadata, readers)?;
         let whole = Readers::read(Path::new(root), &scope.folders, &libs)?;
-        Ok(scope.with_whole_readers(whole))
+        let manifest = std::fs::read_to_string(Path::new(root).join("Cargo.toml"))
+            .map_err(|e| format!("the workspace's Cargo.toml: {e}"))?;
+        let apart = apart(&manifest, metadata)?;
+        Ok(scope.with_whole_readers(whole).with_apart(apart))
     }
 
     /// The same scope, with `whole` the crates that read each shared file whole.
     #[must_use]
     pub fn with_whole_readers(self, whole: Readers) -> Self {
         Self { whole, ..self }
+    }
+
+    /// The same scope, with `apart` the folders no workspace crate builds ([`apart`]).
+    #[must_use]
+    pub fn with_apart(self, apart: Vec<String>) -> Self {
+        Self { apart, ..self }
+    }
+
+    /// The folders no workspace crate builds, each ending in `/`.
+    #[must_use]
+    pub fn apart(&self) -> &[String] {
+        &self.apart
     }
 
     /// The crates that read each shared file whole.
@@ -240,6 +264,7 @@ impl Scope {
             links,
             readers,
             whole: Readers::default(),
+            apart: Vec::new(),
         })
     }
 
@@ -257,6 +282,13 @@ impl Scope {
 
     /// Where `file` is.
     fn place(&self, file: &str) -> Place {
+        if self
+            .apart
+            .iter()
+            .any(|folder| file.starts_with(folder.as_str()))
+        {
+            return Place::Apart;
+        }
         let owner = self
             .folders
             .iter()
@@ -306,6 +338,7 @@ impl Scope {
         }
         match self.place(file) {
             Place::Outside => Some(format!("{file} is in no crate, so it may change any build")),
+            Place::Apart => None,
             Place::OwnTests(c) => (c == krate).then(|| format!("{file} is among {krate}'s tests")),
             Place::Crate(c) => {
                 let links = self.links.get(krate)?;
@@ -349,6 +382,7 @@ impl Scope {
             }
             match self.place(&f) {
                 Place::Outside => Some(format!("{f} is in no crate, so it may change any build")),
+                Place::Apart => None,
                 Place::OwnTests(c) => (c == krate).then(|| format!("{f} is among {krate}'s own")),
                 Place::Crate(c) => links
                     .contains(&c)
@@ -521,6 +555,52 @@ impl Selection {
         }
         out
     }
+}
+
+/// The folders, from the workspace root and each ending in `/`, that the workspace's Cargo.toml
+/// (`manifest`) excludes (`workspace.exclude`) and that hold no package of `metadata`'s graph,
+/// member or not: no workspace crate's build reads a file in one, so a change there reaches no
+/// crate's tests but those of the crates that read outside their folder. An excluded folder that
+/// does hold a package of the graph (a path dependency of a workspace crate) is not apart.
+///
+/// # Errors
+///
+/// The manifest is not TOML, its exclude list is not a list of strings, or the metadata has no
+/// workspace root or packages.
+pub fn apart(manifest: &str, metadata: &Value) -> Result<Vec<String>, String> {
+    let table: toml::Table =
+        toml::from_str(manifest).map_err(|e| format!("the workspace's Cargo.toml: {e}"))?;
+    let root = metadata
+        .get("workspace_root")
+        .and_then(Value::as_str)
+        .ok_or("cargo metadata has no workspace root")?;
+    let root = format!("{}/", forward(root).trim_end_matches('/'));
+    let manifests: Vec<String> = metadata
+        .get("packages")
+        .and_then(Value::as_array)
+        .ok_or("cargo metadata has no packages")?
+        .iter()
+        .filter_map(|p| p.get("manifest_path").and_then(Value::as_str))
+        .filter_map(|m| forward(m).strip_prefix(&root).map(str::to_owned))
+        .collect();
+    let excluded = table
+        .get("workspace")
+        .and_then(|w| w.get("exclude"))
+        .map_or(Ok(Vec::new()), |e| {
+            e.as_array()
+                .ok_or("the workspace's exclude is not a list")?
+                .iter()
+                .map(|f| {
+                    f.as_str()
+                        .map(|f| format!("{}/", forward(f).trim_end_matches('/')))
+                        .ok_or("an excluded folder that is not a string")
+                })
+                .collect::<Result<Vec<String>, &str>>()
+        })?;
+    Ok(excluded
+        .into_iter()
+        .filter(|folder| !manifests.iter().any(|m| m.starts_with(folder.as_str())))
+        .collect())
 }
 
 /// Whether the Rust sources of the crate in `folder` (its `src/`, `tests/`, `benches/`,

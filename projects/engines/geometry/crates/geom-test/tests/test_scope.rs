@@ -8,6 +8,10 @@
 //!   reads files outside its folder; a change to X's tests runs X's and the readers'.
 //! - `a_file_outside_every_crate_runs_everything`: a workflow, `Cargo.lock`, `.cargo/`, the toolchain
 //!   file and an architecture chapter each run every crate's tests, and so does no change list.
+//! - `a_file_no_crate_builds_runs_only_the_readers`: a file of geom-solidcore, the one folder the
+//!   root Cargo.toml excludes, runs only the crates that read outside their folder, and reaches
+//!   nothing `geom-bench` builds. Planted: no folder set apart (every crate runs), and an excluded
+//!   folder that holds a workspace crate (it is not set apart).
 //! - `a_crate_that_reads_outside_its_folder_is_found`: the words that mark a read outside a
 //!   crate's folder are found in planted sources, and the repository's readers include
 //!   `geom-test`.
@@ -57,7 +61,7 @@ use geom_test::coverage::plan_problems;
 use geom_test::deps::cargo_metadata;
 use geom_test::shared::{self, Changes, Reach};
 use geom_test::test_scope::{
-    SUITE_TIMES, Scope, Selection, WASM_DEV_CRATES, WASM_DEV_TIMES, text_reads_outside,
+    SUITE_TIMES, Scope, Selection, WASM_DEV_CRATES, WASM_DEV_TIMES, apart, text_reads_outside,
     wasm_dev_matrix, wasm_dev_parts, wasm_dev_units,
 };
 use serde_json::Value;
@@ -349,6 +353,39 @@ fn a_file_outside_every_crate_runs_everything() {
         scope.select(Some(&kept))
     });
     assert!(found.contains(&"Cargo.lock".to_owned()), "{found:?}");
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository and runs cargo metadata, which a WebAssembly test cannot"
+)]
+#[test]
+fn a_file_no_crate_builds_runs_only_the_readers() {
+    let metadata = metadata();
+    let scope = Scope::read(&metadata).unwrap();
+    let all: BTreeSet<String> = members(&metadata).into_keys().collect();
+    let folder = "projects/engines/geometry/geom-solidcore/";
+    assert_eq!(scope.apart(), [folder.to_owned()]);
+    let file = [format!("{folder}tests/cases.rs")];
+    let readers: BTreeSet<String> = scope.readers().iter().cloned().collect();
+    assert!(
+        readers.contains("geom-test") && readers != all,
+        "{readers:?}"
+    );
+    assert_eq!(running(&scope.select(Some(&file))), readers);
+    assert!(scope.build_reached(Some(&file), "geom-bench").is_none());
+    // Planted: the same scope with no folder set apart runs every crate.
+    let unset = scope.clone().with_apart(Vec::new());
+    assert_eq!(running(&unset.select(Some(&file))), all);
+    // Planted: an excluded folder that holds a workspace crate is not apart.
+    let manifest = read("Cargo.toml");
+    let planted = manifest.replacen(
+        "exclude = [\"projects/engines/geometry/geom-solidcore\"]",
+        "exclude = [\"projects/engines/geometry/geom-solidcore\", \"projects/engines/geometry/crates/geom-num\"]",
+        1,
+    );
+    assert_ne!(planted, manifest, "the planted edit applies");
+    assert_eq!(apart(&planted, &metadata).unwrap(), [folder.to_owned()]);
 }
 
 #[cfg_attr(
