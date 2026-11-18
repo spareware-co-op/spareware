@@ -134,9 +134,11 @@ impl Field<1> for Against<'_> {
             clippy::default_trait_access,
             reason = "the side is geom-nurbs' Limit, which this crate's dependencies do not name; its default is the usual limit from the right"
         )]
-        let jet = self.curve.enclose(t, Default::default(), 0, meter)?;
-        let p = jet.first().ok_or(IntersectError::Internal)?;
-        Ok([self.plane.value(p)?])
+        let p = self
+            .curve
+            .enclose_point(t, Default::default(), meter)?
+            .ok_or(IntersectError::Internal)?;
+        Ok([self.plane.value(&p)?])
     }
 
     fn over(

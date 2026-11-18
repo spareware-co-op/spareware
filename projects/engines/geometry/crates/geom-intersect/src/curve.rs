@@ -415,14 +415,17 @@ impl<const D: usize> Field<2> for Gap<'_, D> {
         let [first, second] = self.seams;
         let x = self
             .a
-            .enclose(first.wrapped(s), Limit::FromRight, 0, meter)?;
+            .enclose_point(first.wrapped(s), Limit::FromRight, meter)?
+            .ok_or(IntersectError::Internal)?;
         let y = self
             .b
-            .enclose(second.wrapped(t), Limit::FromRight, 0, meter)?;
+            .enclose_point(second.wrapped(t), Limit::FromRight, meter)?
+            .ok_or(IntersectError::Internal)?;
+        let (x, y) = (core::slice::from_ref(&x), core::slice::from_ref(&y));
         let [i, j] = self.axes;
         Ok([
-            coordinate(&x, 0, i)?.sub(coordinate(&y, 0, i)?)?,
-            coordinate(&x, 0, j)?.sub(coordinate(&y, 0, j)?)?,
+            coordinate(x, 0, i)?.sub(coordinate(y, 0, i)?)?,
+            coordinate(x, 0, j)?.sub(coordinate(y, 0, j)?)?,
         ])
     }
 

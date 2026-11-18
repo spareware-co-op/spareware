@@ -1606,8 +1606,9 @@ fn at_parameter(
     t: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vector, IntersectError> {
-    let list = curve.enclose(t, Limit::FromRight, 0, meter)?;
-    list.first().copied().ok_or(IntersectError::Internal)
+    curve
+        .enclose_point(t, Limit::FromRight, meter)?
+        .ok_or(IntersectError::Internal)
 }
 
 /// Whether the point at `t` lies on both surfaces.

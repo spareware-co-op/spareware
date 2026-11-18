@@ -959,13 +959,12 @@ impl Field<3> for Contact<'_> {
     ) -> Result<[Interval; 3], IntersectError> {
         let [seam_t, seam_u, seam_v] = self.seams;
         let (t, u, v) = (seam_t.wrapped(t), seam_u.wrapped(u), seam_v.wrapped(v));
-        let c = self.curve.enclose(t, Limit::FromRight, 0, meter)?;
-        let [c] = c.as_slice() else {
+        let Some(c) = self.curve.enclose_point(t, Limit::FromRight, meter)? else {
             return Err(IntersectError::Internal);
         };
         let sides = (Limit::FromRight, Limit::FromRight);
         let [s, ..] = self.surface.enclose(u, v, sides, meter)?;
-        minus(*c, s)
+        minus(c, s)
     }
 
     fn over(
