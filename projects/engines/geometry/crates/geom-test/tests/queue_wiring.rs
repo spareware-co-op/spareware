@@ -24,7 +24,7 @@
 //!   on any branch, writes nothing another run trusts. The one upload let through is an in-run
 //!   hand-over of [`HAND_OVERS`].
 //! - `an_in_run_hand_over_is_kept_a_day_and_read_in_its_run`: each of [`HAND_OVERS`] (`kernel.yml`'s
-//!   wasm archive and goldens' runner, `kernel-quality.yml`'s Miri plan) is uploaded by exactly its job under exactly
+//!   wasm archive, goldens' runner and macOS x86-64 archive, `kernel-quality.yml`'s Miri plan) is uploaded by exactly its job under exactly
 //!   its name, kept one day, and downloaded under that name by exactly its jobs of the same run;
 //!   no other upload of either workflow is kept one day, and none other uses a hand-over's name.
 //! - `the_queue_and_the_pull_request_cover_every_leg`: the goldens' matrix (`test`) and the
@@ -46,6 +46,13 @@
 //!   (`wasm-build`, its nextest archive uploaded and its doctests once under each runtime) and run
 //!   from that archive in parts (`wasm-suite`, `--partition count:k/n` for k = 1 to n once under
 //!   each runtime), the parts waiting for the build.
+//! - `a_cross_built_part_runs_every_test_of_the_part_it_replaces`: the parts of macOS x86-64's
+//!   release suite that `suite` leaves out (decision 32.82) are entries of its own release parts,
+//!   on macOS x86-64 alone and without doctests; `suite-cross-build` builds exactly those parts on
+//!   macOS arm64 for x86_64-apple-darwin, listing the crates as `suite` does and archiving their
+//!   crates and targets with `suite`'s flags (the build overrides' overflow checks from the
+//!   profile, which RUSTFLAGS no longer reach once `--target` is given), and `suite-cross` runs
+//!   every test of each archive on macOS x86-64's runner, after the build, none filtered.
 //! - `each_change_is_measured_against_its_base_and_marked_once`: `changes` measures a pull request
 //!   against its merge commit's first parent, the queue against the queue's base and a push against
 //!   the commit main was at; only the merge queue's last job marks a tree as tested, under the name
@@ -101,10 +108,11 @@ struct HandOver {
     read_as: &'static str,
 }
 
-/// Every in-run hand-over: `kernel.yml`'s wasm build archive for its suite's parts and its
-/// goldens' runner for each system's `test` parts, and `kernel-quality.yml`'s Miri plan
-/// (filtersets, crates and cargo-nextest) for its Miri jobs.
-const HAND_OVERS: [HandOver; 3] = [
+/// Every in-run hand-over: `kernel.yml`'s wasm build archive for its suite's parts, its
+/// goldens' runner for each system's `test` parts and the archive of each macOS x86-64 suite part
+/// built on macOS arm64 for its run, and `kernel-quality.yml`'s Miri plan (filtersets, crates and
+/// cargo-nextest) for its Miri jobs.
+const HAND_OVERS: [HandOver; 4] = [
     HandOver {
         workflow: "kernel.yml",
         job: "wasm-build",
@@ -120,6 +128,13 @@ const HAND_OVERS: [HandOver; 3] = [
         read_as: RUNNER_ARTIFACT,
     },
     HandOver {
+        workflow: "kernel.yml",
+        job: "suite-cross-build",
+        name: CROSS_ARCHIVE,
+        readers: &["suite-cross"],
+        read_as: CROSS_ARCHIVE,
+    },
+    HandOver {
         workflow: "kernel-quality.yml",
         job: "miri-plan",
         name: "miri-plan",
@@ -127,6 +142,9 @@ const HAND_OVERS: [HandOver; 3] = [
         read_as: "miri-plan",
     },
 ];
+
+/// The archive a macOS x86-64 suite part built on macOS arm64 hands to its run, by its number.
+const CROSS_ARCHIVE: &str = "suite-macos-x86-64-${{ matrix.part.k }}";
 
 /// The one day an in-run hand-over is kept.
 const HAND_OVER_DAYS: i64 = 1;
@@ -660,6 +678,7 @@ fn leg_problems(kernel: &str) -> Vec<String> {
     found.extend(test_part_problems(&w, &geom_num_tests()));
     found.extend(wasm_part_problems(&w));
     found.extend(wasm_suite_part_problems(&w));
+    found.extend(cross_part_problems(&w));
     found
 }
 
@@ -1365,6 +1384,188 @@ fn wasm_build_problems(steps: &[&Yaml], builds: &[String]) -> Vec<String> {
     found
 }
 
+/// The steps of `job` in `w`.
+fn steps_of<'a>(w: &'a Yaml, job: &str) -> Vec<&'a Yaml> {
+    w["jobs"][job]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+/// The step of `job` that lists its crates (`KERNEL_CRATES=`), if any.
+fn listing_of<'a>(w: &'a Yaml, job: &str) -> Option<&'a Yaml> {
+    steps_of(w, job)
+        .into_iter()
+        .find(|s| text(&s["run"]).contains("KERNEL_CRATES="))
+}
+
+/// What is wrong with the parts of macOS x86-64's release suite built on macOS arm64 and run from
+/// their archive on the Intel runner (decision 32.82): an exclusion of `suite` on another target
+/// than macOS x86-64, or not one of its release parts, or a part with doctests (an archive holds
+/// none); `suite-cross-build`'s or `suite-cross`'s parts not exactly those exclusions, in order, or
+/// their crates not listed as `suite` lists them; the build not on macOS arm64, without
+/// x86_64-apple-darwin, without debug assertions, or not archiving its part's own crates and
+/// targets for that target with `suite`'s RUSTFLAGS and the build overrides' overflow checks; the
+/// run not on macOS x86-64's runner, not waiting for the build, or not running every test of the
+/// archive.
+#[allow(clippy::too_many_lines, reason = "one rule after another")]
+fn cross_part_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let suite = &w["jobs"]["suite"];
+    let matrix = &suite["strategy"]["matrix"];
+    let targets: Vec<&Yaml> = matrix["target"].as_vec().into_iter().flatten().collect();
+    let named = |name: &str| targets.iter().find(|t| text(&t["name"]) == name).copied();
+    let (Some(intel), Some(arm)) = (named("macOS x86-64"), named("macOS arm64")) else {
+        found.push("suite has no macOS x86-64 or no macOS arm64 target".to_owned());
+        return found;
+    };
+    let release: Vec<&Yaml> = matrix["part"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter(|p| text(&p["mode"]) == "release")
+        .collect();
+    let mut excluded: Vec<&Yaml> = Vec::new();
+    for x in matrix["exclude"].as_vec().into_iter().flatten() {
+        let part = &x["part"];
+        if &x["target"] != intel {
+            found.push(format!(
+                "suite leaves out part {} on {:?}, not on macOS x86-64 alone",
+                part["k"].as_i64().unwrap_or(0),
+                text(&x["target"]["name"])
+            ));
+        }
+        if !release.contains(&part) {
+            found.push(format!(
+                "suite leaves out {part:?}, which is none of its release parts"
+            ));
+        }
+        if part["doc"].as_bool() == Some(true) {
+            found.push(format!(
+                "suite's part {} is built on macOS arm64 with doctests, which an archive does not \
+                 hold",
+                part["k"].as_i64().unwrap_or(0)
+            ));
+        }
+        excluded.push(part);
+    }
+    let build_job = "suite-cross-build";
+    let run_job = "suite-cross";
+    for job in [build_job, run_job] {
+        let parts: Vec<&Yaml> = w["jobs"][job]["strategy"]["matrix"]["part"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .collect();
+        if parts != excluded {
+            found.push(format!(
+                "{job}'s parts {parts:?} are not the parts suite leaves out on macOS x86-64 \
+                 {excluded:?}"
+            ));
+        }
+        if listing_of(w, job).is_none() || listing_of(w, job) != listing_of(w, "suite") {
+            found.push(format!(
+                "{job} does not list its part's crates as suite does"
+            ));
+        }
+    }
+    if excluded.is_empty() {
+        return found;
+    }
+    let build = &w["jobs"][build_job];
+    if text(&build["runs-on"]) != os(arm) {
+        found.push(format!(
+            "{build_job} runs on {:?}, not macOS arm64's {:?}",
+            text(&build["runs-on"]),
+            os(arm)
+        ));
+    }
+    if build["env"]["CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS"]
+        != suite["env"]["CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS"]
+    {
+        found.push(format!(
+            "{build_job} builds without suite's debug assertions"
+        ));
+    }
+    let build_steps = steps_of(w, build_job);
+    if !build_steps.iter().any(|s| {
+        text(&s["uses"]).starts_with("dtolnay/rust-toolchain@")
+            && text(&s["with"]["targets"]) == "x86_64-apple-darwin"
+    }) {
+        found.push(format!(
+            "{build_job} does not install the x86_64-apple-darwin target"
+        ));
+    }
+    let flags = steps_of(w, "suite")
+        .into_iter()
+        .find(|s| text(&s["run"]).starts_with("cargo nextest run $KERNEL_CRATES --release"))
+        .map(|s| s["env"]["RUSTFLAGS"].clone());
+    let archive = format!(
+        "cargo nextest archive $KERNEL_CRATES --target x86_64-apple-darwin --release --locked \
+         ${{{{ matrix.part.targets }}}} --archive-file \"$RUNNER_TEMP/{CROSS_ARCHIVE}.tar.zst\""
+    );
+    let archives: Vec<&&Yaml> = build_steps
+        .iter()
+        .filter(|s| text(&s["run"]).starts_with("cargo nextest archive"))
+        .collect();
+    match archives.as_slice() {
+        [s] => {
+            if text(&s["run"]) != archive {
+                found.push(format!(
+                    "{build_job} does not archive its part's own crates and targets for \
+                     x86_64-apple-darwin: {:?}",
+                    text(&s["run"])
+                ));
+            }
+            if flags.is_none() || Some(&s["env"]["RUSTFLAGS"]) != flags.as_ref() {
+                found.push(format!(
+                    "{build_job} archives with other RUSTFLAGS than suite's release run"
+                ));
+            }
+            if text(&s["env"]["CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OVERFLOW_CHECKS"]) != "true" {
+                found.push(format!(
+                    "{build_job} builds its build scripts and proc macros without overflow checks"
+                ));
+            }
+            if !text(&s["if"]).contains("env.KERNEL_CRATES != ''") {
+                found.push(format!("{build_job} archives with no crate selected"));
+            }
+        }
+        _ => found.push(format!(
+            "{build_job} does not archive its part once: {} archive steps",
+            archives.len()
+        )),
+    }
+    let run = &w["jobs"][run_job];
+    if text(&run["runs-on"]) != os(intel) {
+        found.push(format!(
+            "{run_job} runs on {:?}, not macOS x86-64's {:?}",
+            text(&run["runs-on"]),
+            os(intel)
+        ));
+    }
+    if !strings(&run["needs"]).iter().any(|n| n == build_job) {
+        found.push(format!("{run_job} does not wait for {build_job}"));
+    }
+    let every = format!(
+        "cargo nextest run --archive-file \"$RUNNER_TEMP/{CROSS_ARCHIVE}.tar.zst\" \
+         --workspace-remap . --no-fail-fast"
+    );
+    let runs: Vec<String> = steps_of(w, run_job)
+        .into_iter()
+        .map(|s| text(&s["run"]))
+        .filter(|r| r.starts_with("cargo"))
+        .collect();
+    if runs != [every.as_str()] {
+        found.push(format!(
+            "{run_job} does not run every test of its archive, and only that: {runs:#?}, not \
+             {every:?}"
+        ));
+    }
+    found
+}
+
 /// geom-num's test targets: the files of its `tests` folder.
 fn geom_num_tests() -> Vec<String> {
     crate_tests("geom-num")
@@ -1534,6 +1735,16 @@ fn the_ruleset_requires_checks_that_always_report() {
         .iter()
         .any(|p| p.contains("does not judge [\"wasm-build\"]"))
     );
+    // The cross-built part's run left out of the last job: its failed tests would go unjudged.
+    assert!(
+        seeded(
+            "kernel.yml",
+            " suite, suite-cross-build, suite-cross, wasm,",
+            " suite, suite-cross-build, wasm,"
+        )
+        .iter()
+        .any(|p| p.contains("does not judge [\"suite-cross\"]"))
+    );
     assert!(
         seeded(
             "kernel-quality.yml",
@@ -1565,20 +1776,26 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
         ),
         // A job dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope golden-runner test suite wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // The goldens' runner's build dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope test suite wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // The wasm32 suite's build dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-suite big-endian large-models\"",
+            "on merge_group the jobs",
+        ),
+        // The cross-built part's run dropped from what the queue must run (decision 32.82).
+        (
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build wasm wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // A job that would run again on a tree the queue passed.
@@ -1625,8 +1842,8 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
     }
 
     // An arm naming a push and a run by hand together is read as both, and asks the same.
-    let full = "lint scope linux guard solidcore solidcore-wasm golden-runner test suite wasm \
-                wasm-build wasm-suite big-endian large-models";
+    let full = "lint scope linux guard solidcore solidcore-wasm golden-runner test suite \
+                suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models";
     let both = kernel.replacen(
         "              *) must=",
         &format!(
@@ -1796,6 +2013,220 @@ fn an_in_run_hand_over_is_kept_a_day_and_read_in_its_run() {
         ))),
         "{found:#?}"
     );
+    // The macOS x86-64 archive kept a month: no longer a hand-over, and it is refused both as a
+    // hand-over not made and as a write for later runs.
+    let cross = "          name: suite-macos-x86-64-${{ matrix.part.k }}\n          path: ${{ runner.temp }}/suite-macos-x86-64-${{ matrix.part.k }}.tar.zst\n          retention-days: 1\n";
+    let planted = kernel.replacen(
+        cross,
+        &cross.replace("retention-days: 1", "retention-days: 30"),
+        1,
+    );
+    assert_ne!(planted, kernel);
+    let found = hand_over_problems("kernel.yml", &planted);
+    assert!(
+        found.iter().any(|p| p.contains(&format!(
+            "suite-cross-build does not hand {CROSS_ARCHIVE} over once"
+        ))),
+        "{found:#?}"
+    );
+    assert!(
+        writer_problems(&planted)
+            .iter()
+            .any(|p| p.contains("suite-cross-build's step 7")),
+        "{:#?}",
+        writer_problems(&planted)
+    );
+    // The archive downloaded by another job than its run.
+    let planted = kernel.replacen(
+        "          name: wasm-${{ matrix.part.build }}\n          path: ${{ runner.temp }}\n",
+        "          name: suite-macos-x86-64-${{ matrix.part.k }}\n          path: ${{ runner.temp }}\n",
+        1,
+    );
+    assert_ne!(planted, kernel);
+    let found = hand_over_problems("kernel.yml", &planted);
+    assert!(
+        found.iter().any(|p| p
+            .contains("wasm-suite's step 5 downloads suite-macos-x86-64-${{ matrix.part.k }}, which is not handed to it")),
+        "{found:#?}"
+    );
+}
+
+/// A planted edit of `kernel.yml`: `from` replaced by `to` once, after the first `after` (a job's
+/// header), so a line several jobs share is changed in that job alone.
+fn planted_after(kernel: &str, after: &str, from: &str, to: &str) -> String {
+    let at = kernel.find(after).unwrap_or_else(|| panic!("no {after:?}"));
+    let (head, tail) = kernel.split_at(at);
+    assert!(tail.contains(from), "{after:?} lacks {from:?}");
+    format!("{head}{}", tail.replacen(from, to, 1))
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+#[allow(clippy::too_many_lines, reason = "the cases are written out in full")]
+fn a_cross_built_part_runs_every_test_of_the_part_it_replaces() {
+    let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
+    let w = parse(&kernel);
+    assert_eq!(cross_part_problems(&w), Vec::<String>::new());
+    // The trial's one part (decision 32.82): part 21, geom-bench's tests from b to z.
+    let parts = &w["jobs"]["suite"]["strategy"]["matrix"]["exclude"];
+    assert_eq!(parts.as_vec().map(Vec::len), Some(1));
+    assert_eq!(parts[0]["part"]["k"].as_i64(), Some(21));
+
+    let build = "  suite-cross-build:\n";
+    let run = "  suite-cross:\n";
+    let entry = "          - { mode: release, k: 21, n: 25, crate: geom-bench, targets: \"--test '[b-z]*'\" }\n";
+    // Seeded violations: each must be reported.
+    for (planted, said) in [
+        // A second part left out of `suite` on macOS x86-64 that no cross job runs: it runs nowhere.
+        (
+            kernel.replacen(
+                "            target: { name: macOS x86-64, os: macos-15-intel }\n",
+                "            target: { name: macOS x86-64, os: macos-15-intel }\n          - part: { mode: release, k: 23, n: 25, crate: geom-format, targets: \"--test '[d-z]*'\" }\n            target: { name: macOS x86-64, os: macos-15-intel }\n",
+                1,
+            ),
+            "suite-cross-build's parts",
+        ),
+        // The part left out on Windows x86-64, where nothing runs it.
+        (
+            kernel.replacen(
+                "            target: { name: macOS x86-64, os: macos-15-intel }\n",
+                "            target: { name: Windows x86-64, os: windows-latest }\n",
+                1,
+            ),
+            "not on macOS x86-64 alone",
+        ),
+        // A part left out that is none of suite's own: the real part 21 still runs natively.
+        (
+            kernel.replacen(
+                "          - part: { mode: release, k: 21, n: 25, crate: geom-bench, targets: \"--test '[b-z]*'\" }\n",
+                "          - part: { mode: release, k: 21, n: 25, crate: geom-bench, targets: \"--test '[c-z]*'\" }\n",
+                1,
+            ),
+            "which is none of its release parts",
+        ),
+        // The build archives other targets than the part it replaces: geom-bench's `b` tests lost.
+        (
+            planted_after(&kernel, build, entry, &entry.replace("[b-z]", "[c-z]")),
+            "suite-cross-build's parts",
+        ),
+        // The run's part another than the build's.
+        (
+            planted_after(&kernel, run, entry, &entry.replace("k: 21", "k: 20")),
+            "suite-cross's parts",
+        ),
+        // A part with doctests moved: an archive holds no doctest, so they would run nowhere.
+        (
+            kernel.replace(
+                "{ mode: release, k: 21, n: 25, crate: geom-bench,",
+                "{ mode: release, k: 21, n: 25, doc: true, crate: geom-bench,",
+            ),
+            "with doctests, which an archive does not hold",
+        ),
+        // The build's crates listed otherwise than suite's.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "(matrix.part.crate || fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.part.k)])",
+                "(fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.part.k)])",
+            ),
+            "suite-cross-build does not list its part's crates as suite does",
+        ),
+        // The run's crates listed otherwise: it would skip its archive.
+        (
+            planted_after(&kernel, run, "case \" $SELECTED \" in", "case \" $SHARE \" in"),
+            "suite-cross does not list its part's crates as suite does",
+        ),
+        // Built on the Intel runner: the trial's point lost, and not what was measured.
+        (
+            planted_after(&kernel, build, "    runs-on: macos-latest\n", "    runs-on: macos-15-intel\n"),
+            "suite-cross-build runs on \"macos-15-intel\"",
+        ),
+        // Built without debug assertions, which suite's release legs have.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n",
+                "",
+            ),
+            "builds without suite's debug assertions",
+        ),
+        // No x86_64-apple-darwin installed.
+        (
+            planted_after(&kernel, build, "          targets: x86_64-apple-darwin\n", ""),
+            "does not install the x86_64-apple-darwin target",
+        ),
+        // Built for the arm64 runner's own target: binaries the Intel runner cannot run as tested.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "archive $KERNEL_CRATES --target x86_64-apple-darwin --release",
+                "archive $KERNEL_CRATES --release",
+            ),
+            "does not archive its part's own crates and targets for x86_64-apple-darwin",
+        ),
+        // Built without overflow checks in the tested code.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "          RUSTFLAGS: -C overflow-checks=on\n          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE",
+                "          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE",
+            ),
+            "archives with other RUSTFLAGS than suite's release run",
+        ),
+        // Build scripts and proc macros without the overflow checks RUSTFLAGS gave them natively.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OVERFLOW_CHECKS: \"true\"\n",
+                "",
+            ),
+            "builds its build scripts and proc macros without overflow checks",
+        ),
+        // Run on the arm64 runner, under no Intel processor.
+        (
+            planted_after(&kernel, run, "    runs-on: macos-15-intel\n", "    runs-on: macos-latest\n"),
+            "suite-cross runs on \"macos-latest\"",
+        ),
+        // The run started before its archive exists.
+        (
+            kernel.replacen(
+                "    needs: [changes, lint, scope, suite-cross-build]\n",
+                "    needs: [changes, lint, scope]\n",
+                1,
+            ),
+            "suite-cross does not wait for suite-cross-build",
+        ),
+        // A test filtered out of the run to make a time.
+        (
+            kernel.replacen(
+                "--workspace-remap . --no-fail-fast\n",
+                "--workspace-remap . --no-fail-fast -E 'not test(=every_digest_matches_its_recorded_value)'\n",
+                1,
+            ),
+            "suite-cross does not run every test of its archive",
+        ),
+        // Half the archive's tests run.
+        (
+            kernel.replacen(
+                "--workspace-remap . --no-fail-fast\n",
+                "--workspace-remap . --no-fail-fast --partition count:1/2\n",
+                1,
+            ),
+            "suite-cross does not run every test of its archive",
+        ),
+    ] {
+        assert_ne!(planted, kernel, "{said}: the planted edit applies");
+        let found = cross_part_problems(&parse(&planted));
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
 }
 
 #[cfg_attr(
@@ -1993,8 +2424,8 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A platform left out of the queue.
         (
-            "          - name: Windows arm64\n            os: windows-11-arm\n          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The one plain debug run",
-            "          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The one plain debug run",
+            "          - name: Windows arm64\n            os: windows-11-arm\n          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The parts of macOS x86-64 built",
+            "          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The parts of macOS x86-64 built",
             "not every other runner",
         ),
     ] {
