@@ -25,8 +25,8 @@ name: Kernel
 # - On each push to a pull request: format and lints (`lint`), then the tests the change can reach,
 #   once, optimised with overflow checks and debug assertions on, on Linux x86-64 (`linux`, in
 #   sixteen parts: nine of tests, seven of goldens), with the goldens there, the toolchain
-#   guard's proof (`guard`), and solidcore's stored cases through geom-solidcore (`solidcore`,
-#   decision 32.70).
+#   guard's proof (`guard`), and solidcore's stored cases through geom-solidcore, natively
+#   (`solidcore`) and under WebAssembly (`solidcore-wasm`), decision 32.70.
 # - In GitHub's merge queue for main (`merge_group`), once per change just before it lands: the
 #   same tests on the other platforms (the job `suite` on Linux arm64, Windows on both chips and
 #   macOS on both chips; `wasm-build` and `wasm-suite` on wasm32; `big-endian` on s390x), the
@@ -1143,7 +1143,98 @@ jobs:
             echo "::error::The tests that fail are not exactly the named faults of tests/named-faults.json."
             exit 1
           fi
-          test "$ran" -ge 74
+          test "$ran" -ge 102
+
+  solidcore-wasm:
+    # The same tests of geom-solidcore as the job `solidcore`, built for wasm32-wasip1 and run under
+    # wasmtime (decision 32.70: an operation counts as done by solidcore only when every one of the
+    # kernel's cases for it passes on Linux and under WebAssembly). The cases' expected answers are
+    # IEEE bit patterns, so the one table judges both targets, and the job passes only when the
+    # tests that fail are exactly the named faults of tests/named-faults.json, the same list the
+    # native job holds to. wasm32-wasip1 aborts on a panic and has no threads, so each test runs in
+    # its own wasmtime process from the module compiled once; a test that neither passes nor
+    # panics (a trap, a stack overflow) fails the job, never counts as a named fault. The module's
+    # 8 MiB stack is set where it is linked (geom-solidcore's .cargo/config.toml). The cache is the
+    # native job's rule with a key of its own; the owner's rule of 15 minutes a job holds with an
+    # empty cache (32.70 records the minutes).
+    name: solidcore's cases through geom-solidcore under WebAssembly
+    needs: changes
+    if: github.event_name != 'merge_group' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # wasmtime (Apache-2.0 WITH LLVM-exception), the release the kernel's other wasm32 jobs pin.
+      WASMTIME_VERSION: "50.0.0"
+      CARGO_INCREMENTAL: "0"
+    defaults:
+      run:
+        shell: bash
+        working-directory: projects/engines/geometry/geom-solidcore
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # The pinned commit of solidcore (geom-solidcore's Cargo.toml); the cache adds the
+          # toolchain and the lock file's hash.
+          key: solidcore-wasm-cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3
+          workspaces: projects/engines/geometry/geom-solidcore -> target
+      - name: Install wasmtime ${{ env.WASMTIME_VERSION }}
+        uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1.1.3
+        with:
+          version: ${{ env.WASMTIME_VERSION }}
+      - name: Build geom-solidcore's tests for wasm32-wasip1
+        run: |
+          set -euo pipefail
+          cargo test --locked --target wasm32-wasip1 --no-run --message-format=json > "$RUNNER_TEMP/build.json"
+          jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable' "$RUNNER_TEMP/build.json" > "$RUNNER_TEMP/modules.txt"
+          cat "$RUNNER_TEMP/modules.txt"
+          test -s "$RUNNER_TEMP/modules.txt"
+      - name: The stored cases fail exactly at the named faults, under wasmtime
+        run: |
+          set -euo pipefail
+          wasmtime --version
+          log="$RUNNER_TEMP/cases.log"
+          : > "$log"
+          while read -r module; do
+            wasmtime compile -o "$module.cwasm" "$module"
+            wasmtime run --allow-precompiled "$module.cwasm" --list --format terse > "$module.list"
+            for t in $(sed -n 's/: test$//p' "$module.list"); do
+              # A named fault fails by design, so a test's exit status is read, not obeyed. The
+              # panic aborts the module, so the test's output is not captured: it would be lost.
+              rc=0
+              out=$(wasmtime run --allow-precompiled "$module.cwasm" --exact "$t" --nocapture 2>&1) || rc=$?
+              if [ "$rc" -eq 0 ] && grep -q '^test result: ok. 1 passed' <<< "$out"; then
+                echo "test $t ... ok" | tee -a "$log"
+              elif [ "$rc" -ne 0 ] && grep -q 'panicked at' <<< "$out"; then
+                echo "test $t ... FAILED" | tee -a "$log"
+                echo "$out"
+              else
+                echo "$out"
+                echo "::error::$t neither passed nor failed by a panic under wasmtime (exit status $rc)."
+                exit 1
+              fi
+            done
+          done < "$RUNNER_TEMP/modules.txt"
+          failed=$(sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' "$log" | sort)
+          named=$(jq -r '.faults[].test' tests/named-faults.json | sort)
+          echo "Failed: $(echo $failed)"
+          echo "Named faults: $(echo $named)"
+          ran=$(grep -c '^test .* \.\.\. \(ok\|FAILED\)$' "$log")
+          echo "Tests run: $ran"
+          if [ "$failed" != "$named" ]; then
+            echo "::error::The tests that fail under wasmtime are not exactly the named faults of tests/named-faults.json."
+            exit 1
+          fi
+          test "$ran" -ge 102
 
   # The goldens on wasm32 and the proof of the guard through them, eight parts to a runtime, a
   # build each (the owner's rule of 15 minutes a job). On main's run 43953631233 the leg under
@@ -1675,7 +1766,7 @@ jobs:
   # the merge queue it leaves the mark that lets the push to main skip the same tree.
   done:
     name: Kernel checks pass
-    needs: [changes, lint, scope, linux, guard, solidcore, golden-runner, test, suite, wasm, wasm-build, wasm-suite, big-endian, large-models]
+    needs: [changes, lint, scope, linux, guard, solidcore, solidcore-wasm, golden-runner, test, suite, wasm, wasm-build, wasm-suite, big-endian, large-models]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1701,9 +1792,9 @@ jobs:
             # What each event runs (the paragraph at the top; tests/queue_wiring.rs holds these
             # lists to each job's condition). A run by hand must run what a push runs.
             case "$EVENT" in
-              pull_request) must="lint scope linux guard solidcore" ;;
+              pull_request) must="lint scope linux guard solidcore solidcore-wasm" ;;
               merge_group) must="lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models" ;;
-              *) must="lint scope linux guard solidcore golden-runner test suite wasm wasm-build wasm-suite big-endian large-models" ;;
+              *) must="lint scope linux guard solidcore solidcore-wasm golden-runner test suite wasm wasm-build wasm-suite big-endian large-models" ;;
             esac
             for job in $must; do
               result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")

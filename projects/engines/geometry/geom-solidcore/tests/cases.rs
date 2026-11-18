@@ -1,4 +1,4 @@
-//! The 71 stored cases, run through geom-solidcore (decision 32.70): one test per case, each
+//! The 99 stored cases, run through geom-solidcore (decision 32.70): one test per case, each
 //! holding solidcore's answer to the expected answer in `tests/cases.json`, with no case left out
 //! and no check loosened.
 //!
@@ -270,7 +270,7 @@ fn every_case_has_its_test() {
         .map(|l| l.split(' ').next().expect("id"))
         .collect();
     assert_eq!(ids, listed);
-    assert_eq!(ids.len(), 71);
+    assert_eq!(ids.len(), 99);
     let source = include_str!("cases.rs");
     for line in names.lines() {
         let mut parts = line.split(' ');
@@ -388,4 +388,32 @@ cases! {
     bool_26_sphere_minus_concentric_sphere => "bool-26",
     bool_27_column_minus_internally_tangent_cylinder_fail_3665 => "bool-27",
     bool_28_box_union_cylinder_with_coplanar_caps => "bool-28",
+    bldg_00_l_corner_butt_and_overlap => "bldg-00",
+    bldg_01_t_overlapping => "bldg-01",
+    bldg_02_t_wall_ending_flush_on_the_other_s_face => "bldg-02",
+    bldg_03_cross => "bldg-03",
+    bldg_08_walls_of_different_thickness_and_height => "bldg-08",
+    bldg_09_two_walls_in_line_end_to_end => "bldg-09",
+    bldg_10_wall_1e_7_away_from_another_two_solids => "bldg-10",
+    bldg_11_wall_1e_4_away_from_another_two_solids => "bldg-11",
+    bldg_12_curved_wall_alone_cylindrical_box => "bldg-12",
+    bldg_14_curved_wall_meeting_a_straight_wall_flush_at_its_end => "bldg-14",
+    bldg_15_curved_wall_overlapping_a_straight_wall => "bldg-15",
+    bldg_16_window_through_a_straight_wall => "bldg-16",
+    bldg_17_door_void_running_below_the_floor => "bldg-17",
+    bldg_18_door_void_flush_with_the_wall_bottom => "bldg-18",
+    bldg_19_window_and_door_in_one_wall => "bldg-19",
+    bldg_20_niche_void_flush_with_one_face_only => "bldg-20",
+    bldg_21_window_leaving_a_1e_3_sliver_of_head => "bldg-21",
+    bldg_22_window_leaving_a_1e_6_sliver_of_head => "bldg-22",
+    bldg_24_rectangular_opening_through_a_curved_wall => "bldg-24",
+    bldg_25_round_opening_through_a_wall => "bldg-25",
+    bldg_26_round_opening_flush_with_both_wall_faces => "bldg-26",
+    bldg_27_slab_with_a_rectangular_opening => "bldg-27",
+    bldg_28_slab_with_a_round_opening => "bldg-28",
+    bldg_29_slab_with_a_rectangular_and_a_round_opening => "bldg-29",
+    bldg_30_slab_cut_right_through_by_a_wall_two_pieces => "bldg-30",
+    bldg_31_slab_notched_by_a_wall_along_its_edge => "bldg-31",
+    bldg_34_slab_edge_shared_with_a_wall_face => "bldg-34",
+    bldg_35_slab_sitting_on_a_wall_top => "bldg-35",
 }
