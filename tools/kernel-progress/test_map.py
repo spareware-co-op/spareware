@@ -38,6 +38,7 @@ FILES = {"plan/features.json": json.dumps({"name": "Spare Construct"}), "plan/A.
 DATA = {
     "apps": {"program": "plan/features.json", "note": "One program.",
              "items": [{"name": "Civil", "for": "The site", "source": "plan/A.md", "find": "**02 Civil**"}]},
+    "placement": {"interface": "13", "formats": "12"},
     "layers": {"13": "What programs call", "12": "Files", "1": "Numbers", "Development": "Testing tools"},
     "crates": {"engine-geometry": "The door", "geom-num": "Exact numbers", "geom-format": "Our file", "geom-test": "Tests"},
     "interface": {"Make": "G1", "Query": "G1"},
@@ -128,6 +129,11 @@ class SeededWrongInputs(unittest.TestCase):
         m = copy.deepcopy(MAP)
         m["crates"][1]["layer"] = "7"
         self.fails("layer '7', which chapter 27's layer table does not name", map_json=m)
+
+    def test_a_placement_at_a_layer_chapter_27_does_not_name_fails(self):
+        d = copy.deepcopy(DATA)
+        d["placement"]["formats"] = "14"
+        self.fails("places the formats at layer '14'", data=d)
 
     def test_an_operation_of_our_core_with_no_class_fails(self):
         d = copy.deepcopy(DATA)

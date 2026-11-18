@@ -43,7 +43,9 @@ TOOLS = "projects/engines/crates/engine-geometry/generated/mcp-tools.json"
 WRAPPER_TOML = KERNEL + "/geom-solidcore/Cargo.toml"
 MAP_DATA = os.path.join(build.HERE, "map.json")
 
-INTERFACE_LAYER, FORMAT_LAYER, DEV_LAYER = "13", "12", "Development"
+# Where map.json's `placement` puts a layer: the interface tier, the formats tier, or (every other
+# layer) the crates' tier. The development crates' layer is the one MAP.json gives no number.
+DEV_LAYER = "Development"
 CORE, SOLIDCORE, NONE = "core", "solidcore", "none"
 
 
@@ -106,7 +108,7 @@ def read_solidcore(cargo_toml, cases_json, faults_json):
 # ---- the tree ------------------------------------------------------------------------------------
 
 def layer_key(layer):
-    return (1, 0) if layer == DEV_LAYER else (0, -int(layer))
+    return (1, 0) if not layer.isdigit() else (0, -int(layer))
 
 
 def kernel_map(map_json, layer_names, tools, ops, data, classes, solidcore, files):
@@ -221,19 +223,24 @@ def kernel_map(map_json, layer_names, tools, ops, data, classes, solidcore, file
     if sum(len(v) for v in engines.values()) != len(ops["rows"]):
         problems.append("an operation was placed under no engine, or under two")
 
-    tiers = [lay for lay in sorted(layers, key=layer_key) if lay not in (INTERFACE_LAYER, FORMAT_LAYER)]
+    place = data.get("placement", {})
+    iface_layer, format_layer = place.get("interface", ""), place.get("formats", "")
+    for tier, lay in (("interface", iface_layer), ("formats", format_layer)):
+        if lay not in layer_names:
+            problems.append(f"map.json places the {tier} at layer {lay!r}, which chapter 27's layer table does not name")
+    tiers = [lay for lay in sorted(layers, key=layer_key) if lay not in (iface_layer, format_layer)]
     tree = {
         "program": program, "apps": apps.get("items", []), "apps_note": apps.get("note", ""),
-        "interface": {"layer": INTERFACE_LAYER, "title": data.get("layers", {}).get(INTERFACE_LAYER, ""),
-                      "crates": layers.get(INTERFACE_LAYER, []),
+        "interface": {"layer": iface_layer, "title": data.get("layers", {}).get(iface_layer, ""),
+                      "crates": layers.get(iface_layer, []),
                       "families": {f: sorted(t["name"] for t in ts) for f, ts in sorted(families.items())},
                       "count": len(tools)},
         "layers": [{"layer": lay, "name": layer_names.get(lay, ""), "plain": data.get("layers", {}).get(lay, ""),
                     "crates": layers[lay]} for lay in tiers],
         "engines": engines, "engine_words": data.get("engines", {}),
         "solidcore": dict(solidcore, tolerance_words=tolerances),
-        "formats": {"layer": FORMAT_LAYER, "name": layer_names.get(FORMAT_LAYER, ""),
-                    "plain": data.get("layers", {}).get(FORMAT_LAYER, ""), "crates": layers.get(FORMAT_LAYER, [])},
+        "formats": {"layer": format_layer, "name": layer_names.get(format_layer, ""),
+                    "plain": data.get("layers", {}).get(format_layer, ""), "crates": layers.get(format_layer, [])},
         "classes": [{"name": c, "kernel": d, "plain": gloss.get(c, "")} for c, d in classes],
     }
     placed = [c["name"] for c in tree["interface"]["crates"] + tree["formats"]["crates"]]
