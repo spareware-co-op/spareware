@@ -70,40 +70,31 @@ fn run(result: TestResult) {
 }
 
 /// The slices a long property's cases are cut into (`sliced!`), so that each slice ends within a
-/// Miri gate part (decision 32.78: a row of at most 486 yardstick seconds); natively and under
-/// Miri the property runs the same `CASES` cases as one `proptest!` test did.
+/// Miri gate part (decision 32.78: a row of at most 486 yardstick seconds).
 const SLICES: u32 = 4;
 
-/// The cases slice `k` of [`SLICES`] runs: one range of the property's one stream of cases.
+/// The share of the `CASES` cases slice `k` of [`SLICES`] runs.
 fn slice(k: u32) -> std::ops::Range<u32> {
     let each = CASES / SLICES;
     each * k..each * (k + 1)
 }
 
-/// Runs slice `k` of a property: proptest's runner, made as `proptest!` makes it (the same
-/// configuration, so the same seeding: Miri's fixed one under Miri), draws the stream's cases from
-/// the first up to the slice's end, every one of them, and checks those in the slice.
+/// Runs slice `k` of a property. The file's `Config` draws from a random seed, so a property draws
+/// new cases on every run, natively and under Miri alike, and its cases are not a fixed set (the
+/// main session's ruling of 19 Nov 2026): each slice is a runner of the same strategy and `Config`,
+/// seed still random, that draws and checks its own share of the cases, never fewer.
 fn run_slice<S>(strategy: S, k: u32, check: impl Fn(S::Value) -> TestResult)
 where
     S: proptest::strategy::Strategy,
 {
     let cases = slice(k);
+    let share = cases.end - cases.start;
     let mut runner = proptest::test_runner::TestRunner::new(Config {
-        cases: cases.end,
+        cases: share,
         ..config()
     });
-    let drawn = std::cell::Cell::new(0_u32);
-    let outcome = runner.run(&strategy, |value| {
-        let at = drawn.get();
-        drawn.set(at + 1);
-        if at < cases.start {
-            Ok(())
-        } else {
-            check(value)
-        }
-    });
-    if let Err(e) = outcome {
-        panic!("slice {} of {SLICES}, cases {cases:?}: {e}", k + 1);
+    if let Err(e) = runner.run(&strategy, check) {
+        panic!("slice {} of {SLICES}, {share} cases: {e}", k + 1);
     }
 }
 
@@ -151,6 +142,11 @@ macro_rules! sliced {
     };
 }
 
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
 #[test]
 fn the_slices_join_to_every_case_once() {
     assert_eq!(

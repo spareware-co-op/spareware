@@ -934,6 +934,11 @@ sliced!(
     }
 );
 
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
 #[test]
 fn the_slices_join_to_every_case_once() {
     slices::assert_joins(
