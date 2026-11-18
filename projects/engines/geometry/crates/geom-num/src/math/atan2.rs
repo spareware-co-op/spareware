@@ -2008,7 +2008,7 @@ mod proofs {
     /// the one `partial_products` the sum is given. They are the same six products the reference
     /// formed for itself before the steps were split, in the same text, so the claim is the same;
     /// what the split takes away is a second copy of six 64 × 64-bit products that the prover had
-    /// to find equal to the first, which made this one proof take 23 to 36 minutes on a hosted
+    /// to find equal to the first, which made this one proof take 27.6 to 35.9 minutes on a hosted
     /// runner (runs 44244068917, 44299434285, 44312155060 and 44322372914). The same steps fed
     /// the products once took 5.2 minutes (run 44246797569).
     #[kani::proof]
