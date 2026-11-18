@@ -17,6 +17,11 @@
 //!   for as many tests as the native job; geom-solidcore's `.cargo/config.toml` links the module
 //!   with the 8 MiB stack solidcore asks for.
 //!
+//! - `the_jobs_ask_for_every_test_of_geom_solidcore`: the least number of tests the job
+//!   `solidcore` asks to have run (and with it `solidcore-wasm`, which asks for as many) is the
+//!   number of tests geom-solidcore has, counted from its sources: the true count, so a test lost
+//!   from a build fails the job.
+//!
 //! Each check is also shown to fail on a seeded violation.
 
 #![allow(
@@ -179,6 +184,69 @@ fn the_solidcore_job_runs_the_cases_against_the_named_faults() {
         problems(&kernel, &manifest, &included)
             .iter()
             .any(|p| p.contains("does not exclude"))
+    );
+}
+
+/// How many tests geom-solidcore has: every `#[test]` of its sources and tests, the one in
+/// `tests/cases.rs`'s macro read as one test for each case it is given (a line of
+/// `tests/case_names.txt` each).
+fn tests_of_geom_solidcore() -> u32 {
+    let dir = root().join("projects/engines/geometry/geom-solidcore");
+    let mut count = 0;
+    for sub in ["src", "tests"] {
+        for entry in std::fs::read_dir(dir.join(sub)).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "rs") {
+                let text = std::fs::read_to_string(&path).unwrap();
+                count += text.lines().filter(|l| l.trim() == "#[test]").count();
+                if text.contains("macro_rules! cases") {
+                    count -= 1;
+                }
+            }
+        }
+    }
+    count += read("projects/engines/geometry/geom-solidcore/tests/case_names.txt")
+        .lines()
+        .count();
+    u32::try_from(count).unwrap()
+}
+
+/// What is wrong with the least number of tests the job `solidcore` asks to have run, given the
+/// workflow's text and how many tests geom-solidcore has: it must be exactly that many, so a
+/// test lost from a build fails the job and the number says the true count.
+fn count_problems(kernel: &str, tests: u32) -> Vec<String> {
+    let docs = YamlLoader::load_from_str(kernel).unwrap();
+    let asked = docs[0]["jobs"]["solidcore"]["steps"]
+        .as_vec()
+        .and_then(|v| v.iter().filter_map(|s| s["run"].as_str()).find_map(ran));
+    if asked == Some(tests) {
+        Vec::new()
+    } else {
+        vec![format!(
+            "solidcore asks for {asked:?} tests, and geom-solidcore has {tests}"
+        )]
+    }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_jobs_ask_for_every_test_of_geom_solidcore() {
+    let kernel = read(".github/workflows/kernel.yml");
+    let tests = tests_of_geom_solidcore();
+    assert_eq!(count_problems(&kernel, tests), Vec::<String>::new());
+    let fewer = kernel.replacen(
+        &format!("test \"$ran\" -ge {tests}\n"),
+        &format!("test \"$ran\" -ge {}\n", tests - 1),
+        1,
+    );
+    assert_ne!(fewer, kernel, "the planted edit applies");
+    assert!(
+        count_problems(&fewer, tests)
+            .iter()
+            .any(|p| p.contains("geom-solidcore has"))
     );
 }
 
@@ -372,7 +440,7 @@ fn the_webassembly_job_runs_the_same_cases_against_the_same_named_faults() {
             "counts a trap as a named fault",
         ),
         (
-            "named faults of tests/named-faults.json.\"\n            exit 1\n          fi\n          test \"$ran\" -ge 102\n\n  # The goldens",
+            "named faults of tests/named-faults.json.\"\n            exit 1\n          fi\n          test \"$ran\" -ge 111\n\n  # The goldens",
             "named faults of tests/named-faults.json.\"\n            exit 1\n          fi\n          test \"$ran\" -ge 3\n\n  # The goldens",
             "as many tests as solidcore",
         ),

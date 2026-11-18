@@ -2,7 +2,8 @@
 //! holding solidcore's answer to the expected answer in `tests/cases.json`, with no case left out
 //! and no check loosened.
 //!
-//! A case solidcore answers wrongly is a named fault in `tests/named-faults.json`: its test still
+//! A case solidcore answers wrongly, or one the kernel's checker or this crate's interface cannot
+//! yet judge (an entry marked ours), is a named fault in `tests/named-faults.json`: its test still
 //! expects the kernel's answer and so fails, by design, and `kernel.yml`'s job `solidcore` passes
 //! only when the tests that fail are exactly the named faults. A named fault that starts to pass,
 //! or a case that fails without being named, turns the job red.
@@ -45,32 +46,77 @@ fn p3(v: &Value) -> [f64; 3] {
     [num(&v[0]), num(&v[1]), num(&v[2])]
 }
 
-/// The grid step every case is built on: 6.25 nm, on which every length of the table is a
-/// whole number of steps (`steps` refuses one that is not, so no case is rounded).
+/// The grid step the table was written for, and of the tests that are not cases: 6.25 nm, on
+/// which every length of the table but those of seven cases is a whole number of steps.
 const STEP: GridStep = GridStep::Q1;
 
-/// The length `x` metres as a whole number of steps of [`STEP`].
-fn steps(x: f64) -> i64 {
-    let n = (x / metres(STEP)).round();
-    assert!(
-        (n * metres(STEP) - x).abs() <= x.abs() * 1e-15,
-        "{x} m is not a whole number of steps"
-    );
-    n as i64
+/// The grids, coarsest first, for a case whose lengths are not all whole numbers of [`STEP`].
+const GRIDS: [GridStep; 3] = [GridStep::Q0, GridStep::Q1, GridStep::Q2];
+
+/// The length `x` metres as a whole number of steps of `step`, if it is one on the grid's range:
+/// `x` is that many steps as the table writes it, to the last digit or two of its f64 (the
+/// table's lengths are decimals, `0.2 + 1e-7` among them), never a length a step or any part of
+/// one away.
+fn whole(x: f64, step: GridStep) -> Option<i64> {
+    let n = (x / metres(step)).round();
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "the range is checked by P3::new"
+    )]
+    let k = n as i64;
+    ((n * metres(step) - x).abs() <= x.abs() * 1e-15 && P3::new(k, 0, 0).is_ok()).then_some(k)
 }
 
-fn grid(v: &Value) -> P3 {
-    let [x, y, z] = p3(v).map(steps);
+/// The length `x` metres as a whole number of steps of `step`; a length that is not one is
+/// refused, never rounded.
+fn steps(x: f64, step: GridStep) -> i64 {
+    whole(x, step).unwrap_or_else(|| panic!("{x} m is not a whole number of steps of {step:?}"))
+}
+
+/// Every length of `v`: each number under it, but a plane's normal, which is a direction.
+fn lengths(v: &Value, out: &mut Vec<f64>) {
+    match v {
+        Value::Number(x) => out.push(x.as_f64().expect("a number")),
+        Value::Array(xs) => xs.iter().for_each(|x| lengths(x, out)),
+        Value::Object(o) => o
+            .iter()
+            .filter(|(k, _)| k.as_str() != "normal")
+            .for_each(|(_, x)| lengths(x, out)),
+        _ => {}
+    }
+}
+
+/// The grid of the case `c` (the grid is the modeller's parameter): [`STEP`], if every length of
+/// the case, its operands' and its plane's point, is a whole number of its steps on its range;
+/// otherwise the coarsest grid on which every one is. bool-19, a metre from 1e5 m, is past the
+/// range of [`STEP`] and runs on Q0. A case with no such grid, isect-15 to isect-20, whose plane
+/// holds no point of any grid (`diagonal_planes_hold_no_point_of_any_grid`), is run on the
+/// finest, where `steps` refuses the length that is not whole: nothing is rounded.
+fn grid_of(c: &Value) -> GridStep {
+    let mut all = Vec::new();
+    lengths(&c["operands"], &mut all);
+    if let Some(at) = c.get("plane").map(|p| &p["at"]) {
+        lengths(at, &mut all);
+    }
+    let fits = |g: GridStep| all.iter().all(|&x| whole(x, g).is_some());
+    if fits(STEP) {
+        return STEP;
+    }
+    GRIDS.into_iter().find(|&g| fits(g)).unwrap_or(GridStep::Q2)
+}
+
+fn grid(v: &Value, step: GridStep) -> P3 {
+    let [x, y, z] = p3(v).map(|c| steps(c, step));
     P3::new(x, y, z).expect("a point of the grid")
 }
 
-fn length(v: &Value) -> Steps {
-    Steps(u64::try_from(steps(num(v))).expect("a length not below zero"))
+fn length(v: &Value, step: GridStep) -> Steps {
+    Steps(u64::try_from(steps(num(v), step)).expect("a length not below zero"))
 }
 
-/// A point in grid steps, in metres.
-fn in_metres(q: [f64; 3]) -> [f64; 3] {
-    q.map(|c| c * metres(STEP))
+/// A point in grid steps of `step`, in metres.
+fn in_metres(q: [f64; 3], step: GridStep) -> [f64; 3] {
+    q.map(|c| c * metres(step))
 }
 
 fn from_bits(v: &Value) -> Option<f64> {
@@ -87,6 +133,9 @@ fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
             return boolean(m, op, &a, &b);
         }
     }
+    let g = m.step();
+    let grid = |v: &Value| grid(v, g);
+    let length = |v: &Value| length(v, g);
     match v["shape"].as_str().expect("shape") {
         "cuboid" => {
             let size = &v["size"];
@@ -176,7 +225,10 @@ fn sample(m: &Modeller, pieces: &[Piece], surfaces: &Value) -> (f64, f64) {
         let mut prev: Option<[f64; 3]> = None;
         for i in 0..=n {
             let t = t0 + (t1 - t0) * (i as f64) / (n as f64);
-            let q = in_metres(piece.point_at(m, t).expect("a point on the piece"));
+            let q = in_metres(
+                piece.point_at(m, t).expect("a point on the piece"),
+                m.step(),
+            );
             worst = worst
                 .max(residual(&surfaces[0], q))
                 .max(residual(&surfaces[1], q));
@@ -190,7 +242,8 @@ fn sample(m: &Modeller, pieces: &[Piece], surfaces: &Value) -> (f64, f64) {
 }
 
 fn run_intersection(c: &Value) {
-    let mut m = Modeller::new(STEP);
+    let step = grid_of(c);
+    let mut m = Modeller::new(step);
     let operands: Vec<Solid> = c["operands"]
         .as_array()
         .expect("operands")
@@ -201,7 +254,7 @@ fn run_intersection(c: &Value) {
         Some("plane_section") => m
             .plane_section(
                 &operands[0],
-                grid(&c["plane"]["at"]),
+                grid(&c["plane"]["at"], step),
                 p3(&c["plane"]["normal"]),
             )
             .expect("plane_section"),
@@ -237,7 +290,8 @@ fn run_intersection(c: &Value) {
 }
 
 fn run_boolean(c: &Value) {
-    let mut m = Modeller::new(STEP);
+    let step = grid_of(c);
+    let mut m = Modeller::new(step);
     let a = solid(&mut m, &c["operands"][0]).expect("first operand");
     let b = solid(&mut m, &c["operands"][1]).expect("second operand");
     let r =
@@ -250,7 +304,7 @@ fn run_boolean(c: &Value) {
     if exact == 0.0 && faces == 0 {
         return;
     }
-    let v = m.volume(&r).expect("the volume") * metres(STEP).powi(3);
+    let v = m.volume(&r).expect("the volume") * metres(step).powi(3);
     let rel = if exact == 0.0 {
         v.abs()
     } else {
@@ -281,11 +335,18 @@ fn run(id: &str) {
 #[test]
 fn operands_are_not_consumed() {
     let mut m = Modeller::new(STEP);
-    let (zero, half, one) = (steps(0.0), steps(0.5), Steps(steps(1.0) as u64));
+    let (zero, half, one) = (
+        steps(0.0, STEP),
+        steps(0.5, STEP),
+        Steps(steps(1.0, STEP) as u64),
+    );
     let corner = |c: i64| P3::new(c, c, c).expect("a grid point");
     let a = m.cuboid(corner(zero), [one; 3]).expect("a");
     let b = m.cuboid(corner(half), [one; 3]).expect("b");
-    let (va, vb) = (m.volume(&a).expect("a's volume"), m.volume(&b).expect("b's"));
+    let (va, vb) = (
+        m.volume(&a).expect("a's volume"),
+        m.volume(&b).expect("b's"),
+    );
     // One cubic metre, in cubic steps: solidcore's 1.0 over the step cubed.
     assert_eq!(va, 1.0 / metres(STEP) / metres(STEP) / metres(STEP));
     let first = m.union(&a, &b).expect("union");
@@ -302,11 +363,39 @@ fn operands_are_not_consumed() {
 fn results_are_the_kernels_bodies() {
     let mut m = Modeller::new(STEP);
     let o = P3::new(0, 0, 0).expect("the origin");
-    let r = Steps(steps(0.5) as u64);
+    let r = Steps(steps(0.5, STEP) as u64);
     let ball = m.sphere(o, r).expect("a sphere");
     assert_eq!(ball.body().arenas().faces.len(), 1);
     let can = m.cylinder(o, r, r).expect("a cylinder");
     assert_eq!(can.body().arenas().faces.len(), 3);
+}
+
+/// Why isect-15 to isect-20 run on no grid, by exact arithmetic: each plane is `x + y + z = 3a`,
+/// with `a` the f64 the table gives for every coordinate of its point, and a point of any grid is
+/// a point of Q2's (each step a whole number of quarter-nanometres), whose coordinates' sum is
+/// `k / 4e9` m for a whole `k`. So the plane holds a point of a grid only if `3a * 4e9` is whole,
+/// and for `a = m * 2^e` exactly (its bits) it is not: `3 * m * 4e9` has fewer factors of two
+/// than `-e`. Neither the point the table gives nor any other point of its plane can be written on
+/// a grid without rounding, and these cases are WR-1 of tests/named-faults.json.
+#[test]
+fn diagonal_planes_hold_no_point_of_any_grid() {
+    for id in [
+        "isect-15", "isect-16", "isect-17", "isect-18", "isect-19", "isect-20",
+    ] {
+        let c = case(id);
+        let at = p3(&c["plane"]["at"]);
+        assert_eq!(p3(&c["plane"]["normal"]), [1.0; 3], "{id}");
+        assert!(at[0] == at[1] && at[1] == at[2] && at[0] > 0.0, "{id}");
+        let bits = at[0].to_bits();
+        let (m, e) = (
+            u128::from((bits & ((1 << 52) - 1)) | (1 << 52)),
+            i64::try_from((bits >> 52) & 0x7ff).expect("an exponent") - 1075,
+        );
+        assert_eq!(f64::from_bits(bits), at[0]);
+        let k = 3 * m * 4_000_000_000;
+        assert!(e < 0 && i64::from(k.trailing_zeros()) < -e, "{id}");
+        assert!(GRIDS.iter().all(|&g| whole(at[0], g).is_none()), "{id}");
+    }
 }
 
 /// Every case of the table has its test below, under its own name, and no test names a case the
@@ -337,20 +426,43 @@ fn every_case_has_its_test() {
     }
 }
 
-/// Every named fault names a case of the table and its test, with a fault name and what it
-/// blocks.
+/// Every named fault names a case of the table and its test, or, with no case, a test of this
+/// file that is not a case's, with a fault name and what it blocks. A fault of solidcore is
+/// named SC; one marked ours, a test the kernel's checker lacks (CK) or a limit of this crate's
+/// interface (WR), says so in its name, and no test is named twice.
 #[test]
 fn named_faults_name_their_cases() {
     let faults: Value =
         serde_json::from_str(include_str!("named-faults.json")).expect("named-faults.json");
     let names = include_str!("case_names.txt");
+    let source = include_str!("cases.rs");
+    let mut tests = Vec::new();
     for f in faults["faults"].as_array().expect("faults") {
-        let id = f["case"].as_str().expect("case");
         let test = f["test"].as_str().expect("test");
-        assert!(
-            names.lines().any(|l| l == format!("{id} {test}")),
-            "{id} {test}"
-        );
+        let id = f["case"].as_str().unwrap_or("none");
+        if f["case"].is_null() {
+            assert!(source.contains(&format!("\nfn {test}() {{")), "{test}");
+            assert!(
+                !names.lines().any(|l| l.ends_with(&format!(" {test}"))),
+                "{test}"
+            );
+        } else {
+            assert!(
+                names.lines().any(|l| l == format!("{id} {test}")),
+                "{id} {test}"
+            );
+        }
+        let fault = f["fault"].as_str().unwrap_or("");
+        if f["ours"].as_bool() == Some(true) {
+            assert!(
+                ["CK-", "WR-"].iter().any(|p| fault.starts_with(p)) && fault.contains("(ours: "),
+                "{id}: {fault}"
+            );
+        } else {
+            assert!(f.get("ours").is_none() && fault.starts_with("SC-"), "{id}");
+        }
+        assert!(!tests.contains(&test), "{test} is named twice");
+        tests.push(test);
         for key in ["fault", "solidcore_gives", "expected", "blocks"] {
             assert!(
                 f[key].as_str().is_some_and(|s| !s.is_empty()),

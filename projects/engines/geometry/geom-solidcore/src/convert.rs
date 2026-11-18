@@ -6,7 +6,10 @@
 //! and writes one `geom-topo` row for each, with every list linked, each edge's fins in one radial
 //! ring in the order the loops use them; each vertex is the grid point nearest solidcore's point;
 //! each surface and curve is the `geom-surface` or `geom-curve` kind of the same shape, in grid
-//! steps, on the parameters `geom-surface` and `geom-curve` fix (angles in half-turns). The body
+//! steps, on the parameters `geom-surface` and `geom-curve` fix (angles in half-turns). A seam,
+//! where solidcore cuts a face that runs the whole way round a cylinder, cone or sphere, is left
+//! out as the kernel's own bodies have none, and a circle's vertex with it when nothing else
+//! meets there (`form`): no point, curve or surface moves. The body
 //! is recorded Certified, with a bound of solidcore's own largest tolerance in whole steps, rounded
 //! up, and one step more for the rounding of its vertices onto the grid. [`checked`] runs every
 //! group of the checker on it, in every build, and refuses a body the checker does not pass.
@@ -130,7 +133,13 @@ fn less(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
 /// The eight corners of the box `[lo, hi]`.
 fn corners([lo, hi]: [[f64; 3]; 2]) -> [[f64; 3]; 8] {
     core::array::from_fn(|k| {
-        let pick = |axis: usize| if (k >> axis) & 1 == 0 { lo[axis] } else { hi[axis] };
+        let pick = |axis: usize| {
+            if (k >> axis) & 1 == 0 {
+                lo[axis]
+            } else {
+                hi[axis]
+            }
+        };
         [pick(0), pick(1), pick(2)]
     })
 }
@@ -304,9 +313,166 @@ fn widened([lo, hi]: [[f64; 3]; 2], by: f64) -> Result<Box3, Unconverted> {
 
 fn join(a: [[f64; 3]; 2], b: [[f64; 3]; 2]) -> [[f64; 3]; 2] {
     [
-        [a[0][0].min(b[0][0]), a[0][1].min(b[0][1]), a[0][2].min(b[0][2])],
-        [a[1][0].max(b[1][0]), a[1][1].max(b[1][1]), a[1][2].max(b[1][2])],
+        [
+            a[0][0].min(b[0][0]),
+            a[0][1].min(b[0][1]),
+            a[0][2].min(b[0][2]),
+        ],
+        [
+            a[1][0].max(b[1][0]),
+            a[1][1].max(b[1][1]),
+            a[1][2].max(b[1][2]),
+        ],
     ]
+}
+
+/// Whether the record's surface closes round its own axis, so that a face on it may run the
+/// whole way round: a cylinder, cone or sphere.
+fn wraps(k: &r::Surface) -> bool {
+    matches!(
+        k,
+        r::Surface::Cylinder { .. } | r::Surface::Cone { .. } | r::Surface::Sphere { .. }
+    )
+}
+
+/// A face's loops in the kernel's form, and which edges and vertices are left out of it.
+struct Form<'a> {
+    /// Each face's loops, in the record's order and the record's direction.
+    loops: Vec<Vec<Vec<&'a r::OrientedEdge>>>,
+    /// Each record edge's row in the kernel's body, or none for a seam.
+    edge: Vec<Option<usize>>,
+    /// Each record vertex's row in the kernel's body, or none for a seam's end.
+    vertex: Vec<Option<usize>>,
+}
+
+/// `l` with every seam taken out: at each seam the loop parts in two, the run between its two
+/// uses and the run round the rest, and a part with no edge left is no loop.
+fn split<'a>(l: Vec<&'a r::OrientedEdge>, seam: &[bool]) -> Vec<Vec<&'a r::OrientedEdge>> {
+    let mut out = Vec::new();
+    let mut todo = vec![l];
+    while let Some(l) = todo.pop() {
+        let at = l
+            .iter()
+            .position(|oe| seam.get(oe.edge as usize).copied().unwrap_or(false));
+        match at {
+            None if l.is_empty() => {}
+            None => out.push(l),
+            Some(i) => {
+                let e = l[i].edge;
+                // A seam is used twice in one loop (see `form`), so its last use is after `i`.
+                let j = l.iter().rposition(|oe| oe.edge == e).unwrap_or(i);
+                let inner = l[i + 1..j].to_vec();
+                let outer: Vec<_> = l[j + 1..].iter().chain(&l[..i]).copied().collect();
+                todo.push(inner);
+                todo.push(outer);
+            }
+        }
+    }
+    out
+}
+
+/// The record's faces, edges and vertices as the kernel writes the same body.
+///
+/// solidcore cuts a face that runs the whole way round a cylinder, cone or sphere along a seam:
+/// an edge the one face uses twice, once each way, in one loop, and used by nothing else, with a
+/// vertex at each end on the circles it joins. The kernel's own bodies have no seam (`geom-make`'s
+/// cylinder is two closed circles with no vertex, its side one loop on each; its sphere one face
+/// with no edge). So a seam is left out, its loop parted where it ran, and each of its two
+/// vertices with it when nothing but one closed circle is left at it; that circle is then the full
+/// turn with no vertex. No point, curve or surface is moved: the same faces, on the same
+/// surfaces, bounded by the same circles.
+fn form(rec: &r::Brep) -> Result<Form<'_>, Unconverted> {
+    let mut uses = vec![0_u32; rec.edges.len()];
+    let mut record_loops = Vec::with_capacity(rec.faces.len());
+    for face in &rec.faces {
+        let mut loops = Vec::with_capacity(face.loops.len());
+        for l in &face.loops {
+            let r::Loop::Edges { edges } = l else {
+                return Err(no("a loop of one vertex"));
+            };
+            if edges.is_empty() {
+                return Err(no("a loop of no edges"));
+            }
+            for oe in edges {
+                *uses
+                    .get_mut(row(oe.edge)?)
+                    .ok_or_else(|| no("a loop naming an edge the record lacks"))? += 1;
+            }
+            loops.push(edges.iter().collect::<Vec<_>>());
+        }
+        record_loops.push(loops);
+    }
+    let mut seam = vec![false; rec.edges.len()];
+    for (face, loops) in rec.faces.iter().zip(&record_loops) {
+        if !wraps(&face.surface) {
+            continue;
+        }
+        for l in loops {
+            for oe in l {
+                let e = row(oe.edge)?;
+                let twin = l.iter().filter(|x| x.edge == oe.edge).collect::<Vec<_>>();
+                if uses[e] == 2 && twin.len() == 2 && twin[0].forward != twin[1].forward {
+                    seam[e] = true;
+                }
+            }
+        }
+    }
+    let loops: Vec<_> = record_loops
+        .into_iter()
+        .map(|ls| ls.into_iter().flat_map(|l| split(l, &seam)).collect())
+        .collect();
+    // A seam's end goes when what is left at it is one closed circle.
+    let mut at_vertex: Vec<Vec<usize>> = vec![Vec::new(); rec.vertices.len()];
+    let mut seam_end = vec![false; rec.vertices.len()];
+    for (e, edge) in rec.edges.iter().enumerate() {
+        for v in edge.vertices {
+            let v = row(v)?;
+            if v >= rec.vertices.len() {
+                return Err(no("an edge naming a vertex the record lacks"));
+            }
+            if seam[e] {
+                seam_end[v] = true;
+            } else if !at_vertex[v].contains(&e) {
+                at_vertex[v].push(e);
+            }
+        }
+    }
+    let gone = |v: usize| {
+        seam_end[v]
+            && match at_vertex[v].as_slice() {
+                [] => true,
+                [e] => {
+                    let edge = &rec.edges[*e];
+                    edge.vertices[0] == edge.vertices[1]
+                        && matches!(edge.curve, r::Curve::Circle { .. })
+                }
+                _ => false,
+            }
+    };
+    let mut kept = 0;
+    let vertex = (0..rec.vertices.len())
+        .map(|v| {
+            (!gone(v)).then(|| {
+                kept += 1;
+                kept - 1
+            })
+        })
+        .collect();
+    let mut kept = 0;
+    let edge = seam
+        .iter()
+        .map(|&s| {
+            (!s).then(|| {
+                kept += 1;
+                kept - 1
+            })
+        })
+        .collect();
+    Ok(Form {
+        loops,
+        edge,
+        vertex,
+    })
 }
 
 /// The certified record of the body of `rec` on `step`: solidcore's largest tolerance in whole
@@ -427,7 +593,10 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
             .and_then(|at| owned[g].get(at + 1))
             .map(|&x| ix(x))
             .transpose()?;
-        let first_face = faces.first().map(|f| row(f.face).and_then(ix)).transpose()?;
+        let first_face = faces
+            .first()
+            .map(|f| row(f.face).and_then(ix))
+            .transpose()?;
         shells.push(Shell {
             region: ix(g)?,
             next,
@@ -451,10 +620,16 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
         }
     }
 
-    // Edges first: their curves and boxes.
+    let form = form(rec)?;
+
+    // Edges first: their curves and boxes, by the kernel's row.
     let mut curves = Vec::new();
     let mut edge_boxes = Vec::new();
-    for e in &rec.edges {
+    let mut edges = Vec::new();
+    for (k, e) in rec.edges.iter().enumerate() {
+        if form.edge[k].is_none() {
+            continue;
+        }
         let end = |v: u32| {
             rec.vertices
                 .get(row(v)?)
@@ -462,13 +637,30 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
                 .ok_or_else(|| no("an edge naming a vertex the record lacks"))
         };
         let [a, b] = e.vertices;
-        let (c, bx) = curve(&s, &e.curve, end(a)?, end(b)?, a == b)?;
+        let ends = [row(a)?, row(b)?].map(|v| form.vertex[v]);
+        let (c, bx) = match (ends, &e.curve) {
+            // A circle left with no vertex (see `form`): the full turn.
+            ([None, None], r::Curve::Circle { frame: f, radius }) => {
+                let (c, rr) = (s.p(f.origin), s.len(*radius));
+                let circle =
+                    Circle::full(c, rr, frame(f)?).map_err(|_| no("a curve its kind refuses"))?;
+                (
+                    CurveKind::Circle(circle),
+                    [c.map(|x| x - rr), c.map(|x| x + rr)],
+                )
+            }
+            ([Some(_), Some(_)], _) => curve(&s, &e.curve, end(a)?, end(b)?, a == b)?,
+            _ => return Err(no("an edge with one end left out")),
+        };
         curves.push(c);
         edge_boxes.push(bx);
+        edges.push(ends);
     }
     let mut points = Vec::new();
-    for v in &rec.vertices {
-        points.push(PointKind::Grid(s.grid(v.point)?));
+    for (k, v) in rec.vertices.iter().enumerate() {
+        if form.vertex[k].is_some() {
+            points.push(PointKind::Grid(s.grid(v.point)?));
+        }
     }
 
     // Faces, loops and fins, each edge's fins kept for its radial ring.
@@ -476,8 +668,8 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
     let mut surfaces = Vec::new();
     let mut loops = Vec::new();
     let mut fins: Vec<Fin> = Vec::new();
-    let mut ring: Vec<Vec<usize>> = vec![Vec::new(); rec.edges.len()];
-    for (f, face) in rec.faces.iter().enumerate() {
+    let mut ring: Vec<Vec<usize>> = vec![Vec::new(); edges.len()];
+    for (f, (face, face_loops)) in rec.faces.iter().zip(&form.loops).enumerate() {
         let (shell, forward) = face_use[f].ok_or_else(|| no("a face in no shell"))?;
         let mut bx: Option<[[f64; 3]; 2]> = match &face.surface {
             r::Surface::Sphere { frame: fr, radius } => {
@@ -486,16 +678,13 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
             }
             _ => None,
         };
-        let first_loop = if face.loops.is_empty() {
+        let first_loop = if face_loops.is_empty() {
             None
         } else {
             Some(ix(loops.len())?)
         };
-        let n_loops = face.loops.len();
-        for (li, l) in face.loops.iter().enumerate() {
-            let r::Loop::Edges { edges } = l else {
-                return Err(no("a loop of one vertex"));
-            };
+        let n_loops = face_loops.len();
+        for (li, l) in face_loops.iter().enumerate() {
             let here = loops.len();
             let next = if li + 1 < n_loops {
                 Some(ix(here + 1)?)
@@ -503,10 +692,7 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
                 None
             };
             let first = fins.len();
-            let n = edges.len();
-            if n == 0 {
-                return Err(no("a loop of no edges"));
-            }
+            let n = l.len();
             loops.push(Loop {
                 face: ix(f)?,
                 next,
@@ -515,13 +701,18 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
             // The record runs a loop round its surface's natural normal; a face the shell uses
             // reversed runs, in the kernel's rows, the other way round its outward normal.
             let ordered: Vec<&r::OrientedEdge> = if forward {
-                edges.iter().collect()
+                l.clone()
             } else {
-                edges.iter().rev().collect()
+                l.iter().rev().copied().collect()
             };
             for (k, oe) in ordered.into_iter().enumerate() {
                 let at = first + k;
-                let e = row(oe.edge)?;
+                let e = form
+                    .edge
+                    .get(row(oe.edge)?)
+                    .copied()
+                    .flatten()
+                    .ok_or_else(|| no("a loop naming an edge the record lacks"))?;
                 let eb = *edge_boxes
                     .get(e)
                     .ok_or_else(|| no("a loop naming an edge the record lacks"))?;
@@ -554,21 +745,19 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
             fins[fin].radial = ix(members[(k + 1) % members.len()])?;
         }
     }
-    let edges: Vec<Edge> = rec
-        .edges
+    let edges: Vec<Edge> = edges
         .iter()
         .enumerate()
-        .map(|(e, edge)| {
-            let [a, b] = edge.vertices;
+        .map(|(e, [a, b])| {
             Ok(Edge {
                 first_fin: ring[e].first().map(|&x| ix(x)).transpose()?,
-                start: Some(ix(row(a)?)?),
-                end: Some(ix(row(b)?)?),
+                start: a.map(ix).transpose()?,
+                end: b.map(ix).transpose()?,
                 curve: ix(e)?,
             })
         })
         .collect::<Result<_, Unconverted>>()?;
-    let vertices: Vec<Vertex> = (0..rec.vertices.len())
+    let vertices: Vec<Vertex> = (0..points.len())
         .map(|v| Ok(Vertex { point: ix(v)? }))
         .collect::<Result<_, Unconverted>>()?;
 
@@ -666,6 +855,78 @@ mod tests {
         let b = bound.0 as f64;
         assert!(b - 1.0 >= tol / metres(GridStep::Q0));
         assert!(b - 2.0 < tol / metres(GridStep::Q0));
+    }
+
+    /// The record of solidcore's cylinder of radius 0.5 and height 1 on the origin.
+    fn can() -> r::Brep {
+        let mut k = Kernel::new(&KernelOptions::default());
+        let mut c = solidcore::primitive::api_primitives::create_cylinder(
+            &mut k,
+            Point3::new(0.0, 0.0, 0.0),
+            0.5,
+            1.0,
+        )
+        .expect("a cylinder");
+        solidcore_convert::brep::to_record(&mut k, &mut c)
+            .expect("its record")
+            .0
+    }
+
+    /// solidcore's cylinder, with its seam and a vertex on each circle, is written as the kernel
+    /// writes its own: three faces, two closed circles with no vertex, the side one loop on each.
+    #[test]
+    fn a_cylinder_has_no_seam() {
+        let rec = can();
+        assert_eq!((rec.edges.len(), rec.vertices.len()), (3, 2));
+        let (body, _) = body_of(&rec, GridStep::Q1).expect("the rows");
+        let a = body.arenas();
+        assert_eq!(
+            (
+                a.faces.len(),
+                a.loops.len(),
+                a.edges.len(),
+                a.vertices.len()
+            ),
+            (3, 4, 2, 0)
+        );
+        for k in 0..a.edges.len() {
+            let e = a.edges.get(Ix::new(k).expect("a row")).expect("an edge");
+            assert!(e.start.is_none() && e.end.is_none());
+        }
+    }
+
+    /// The one cause of SC-5 (tests/named-faults.json): solidcore writes its cylinder's top cap
+    /// on a plane 2.1e-16 off square to the axis, which the checker's test of a plane and a
+    /// cylinder (they meet in one circle only when the plane is exactly square to the axis) cannot
+    /// certify, and so refuses. The same rows with that one plane written square to the axis, at
+    /// the height of the circle it holds, pass: nothing else in the body is in the way.
+    #[test]
+    fn a_cylinder_fails_on_its_top_cap_alone() {
+        let mut rec = can();
+        let (body, exactness) = body_of(&rec, GridStep::Q1).expect("the rows");
+        let found = checked(body, exactness);
+        assert!(
+            matches!(&found, Err(Refusal::Failed { first, .. })
+                if first.ends_with("no certified test of this pair exists yet (face 1)")),
+            "{found:?}"
+        );
+        let mut tilted = 0;
+        for f in &mut rec.faces {
+            if let r::Surface::Plane { v_axis, .. } = &f.surface
+                && v_axis[2] != 0.0
+            {
+                tilted += 1;
+                f.surface = r::Surface::Plane {
+                    origin: [0.0, 0.0, 1.0],
+                    u_axis: [0.0, 1.0, 0.0],
+                    v_axis: [-1.0, 0.0, 0.0],
+                };
+            }
+        }
+        assert_eq!(tilted, 1);
+        let (body, exactness) = body_of(&rec, GridStep::Q1).expect("the rows");
+        let found = checked(body, exactness);
+        assert!(found.is_ok(), "{found:?}");
     }
 
     #[test]

@@ -107,7 +107,10 @@ impl fmt::Display for Error {
                 write!(f, "{operation}: the result failed its check: {report}")
             }
             Error::Unconverted { operation, what } => {
-                write!(f, "{operation}: the result holds {what}, which the kernel has no kind for")
+                write!(
+                    f,
+                    "{operation}: the result holds {what}, which the kernel has no kind for"
+                )
             }
         }
     }
@@ -275,8 +278,7 @@ impl Modeller {
     pub fn cuboid(&mut self, corner: P3, size: [Steps; 3]) -> Result<Solid, Error> {
         let [x, y, z] = size.map(|l| self.length(l));
         let c = self.point(corner);
-        let b = create_box(&mut self.kernel, c, x, y, z)
-            .map_err(|e| refused("cuboid", &e))?;
+        let b = create_box(&mut self.kernel, c, x, y, z).map_err(|e| refused("cuboid", &e))?;
         self.checked("cuboid", b)
     }
 
