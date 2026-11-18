@@ -11,30 +11,6 @@
       "blocks": "flat-faced booleans: they stay on the kernel's exact geom-bool"
     },
     {
-      "case": "isect-36",
-      "test": "isect_36_sphere_sphere_r2_1_d_2_5",
-      "fault": "SC-2, solids that do not meet are an error: intersect_breps reports a failed status, not an empty answer",
-      "solidcore_gives": "the error \"the B-reps do not intersect\", for two spheres apart",
-      "expected": "no meeting curve and no point",
-      "blocks": "meeting two solids (geom-solidcore's meet) for solids apart, nested or concentric"
-    },
-    {
-      "case": "isect-38",
-      "test": "isect_38_sphere_sphere_r2_0_5_d_0_25",
-      "fault": "SC-2, solids that do not meet are an error: intersect_breps reports a failed status, not an empty answer",
-      "solidcore_gives": "the error \"the B-reps do not intersect\", for one sphere inside the other",
-      "expected": "no meeting curve and no point",
-      "blocks": "meeting two solids (geom-solidcore's meet) for solids apart, nested or concentric"
-    },
-    {
-      "case": "isect-39",
-      "test": "isect_39_sphere_sphere_r2_0_5_d_0",
-      "fault": "SC-2, solids that do not meet are an error: intersect_breps reports a failed status, not an empty answer",
-      "solidcore_gives": "the error \"the B-reps do not intersect\", for concentric spheres",
-      "expected": "no meeting curve and no point",
-      "blocks": "meeting two solids (geom-solidcore's meet) for solids apart, nested or concentric"
-    },
-    {
       "case": "bldg-10",
       "test": "bldg_10_wall_1e_7_away_from_another_two_solids",
       "ours": true,

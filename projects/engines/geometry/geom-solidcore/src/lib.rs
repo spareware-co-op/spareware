@@ -123,6 +123,8 @@ impl std::error::Error for Error {}
 pub struct Solid {
     brep: Brep,
     body: Body,
+    /// The centre and radius the modeller made the solid with, when it is a ball.
+    ball: Option<(P3, Steps)>,
 }
 
 impl Solid {
@@ -131,6 +133,29 @@ impl Solid {
     pub fn body(&self) -> &Body {
         &self.body
     }
+}
+
+/// Whether the balls of centre `a` and `b` and radius `ra` and `rb` (grid points and steps) have
+/// spheres that meet nowhere, decided exactly in whole numbers: the centres' squared distance is
+/// past the squared sum of the radii (apart), or short of the squared difference (one inside the
+/// other, concentric included). Touching, crossing and one sphere twice are not apart. Every
+/// coordinate is under 2^40 steps and a radius under 2^41, so each square and sum fits an i128;
+/// past that the answer is `false`, never a guess.
+fn spheres_apart((a, ra): (P3, Steps), (b, rb): (P3, Steps)) -> bool {
+    let apart = || -> Option<bool> {
+        let d = |p: geom_num::Coord, q: geom_num::Coord| {
+            let t = i128::from(p.get()).checked_sub(i128::from(q.get()))?;
+            t.checked_mul(t)
+        };
+        let dd = d(a.x, b.x)?
+            .checked_add(d(a.y, b.y)?)?
+            .checked_add(d(a.z, b.z)?)?;
+        let (ra, rb) = (i128::from(ra.0), i128::from(rb.0));
+        let sum = ra.checked_add(rb)?;
+        let diff = ra.checked_sub(rb)?;
+        Some(dd > sum.checked_mul(sum)? || dd < diff.checked_mul(diff)?)
+    };
+    apart().unwrap_or(false)
 }
 
 /// One piece of a meeting curve, held privately, read by its parameter.
@@ -266,7 +291,11 @@ impl Modeller {
                 },
             })?
         };
-        Ok(Solid { brep, body })
+        Ok(Solid {
+            brep,
+            body,
+            ball: None,
+        })
     }
 
     /// The box with its least corner at `corner` and sides `size` along x, y and z.
@@ -290,7 +319,8 @@ impl Modeller {
     pub fn sphere(&mut self, centre: P3, radius: Steps) -> Result<Solid, Error> {
         let (c, r) = (self.point(centre), self.length(radius));
         let b = create_sphere(&mut self.kernel, c, r).map_err(|e| refused("sphere", &e))?;
-        self.checked("sphere", b)
+        let ball = Some((centre, radius));
+        self.checked("sphere", b).map(|s| Solid { ball, ..s })
     }
 
     /// The solid cylinder of `radius` whose base circle is centred at `base`, rising `height`
@@ -407,12 +437,23 @@ impl Modeller {
     ///
     /// # Errors
     ///
-    /// [`Error::Refused`] if solidcore reports a failure, whatever it found before it.
+    /// [`Error::Refused`] if solidcore reports a failure, whatever it found before it, but for two
+    /// balls whose spheres the kernel's own exact decision finds apart (decision 32.71): solidcore
+    /// reports two solids that do not meet as a failure (SC-2), and for those the answer is that
+    /// they meet nowhere.
     pub fn meet(&mut self, a: &Solid, b: &Solid, with_points: bool) -> Result<Meeting, Error> {
         let (mut x, mut y) = (self.copy("meet", a)?, self.copy("meet", b)?);
         let (found, status) =
             intersect_breps(&self.kernel, BrepOperands::Two(&mut x, &mut y), with_points);
-        status.map_err(|e| refused("meet", &e))?;
+        if let Err(e) = status {
+            return match (a.ball, b.ball) {
+                (Some(p), Some(q)) if spheres_apart(p, q) => Ok(Meeting {
+                    pieces: Vec::new(),
+                    points: Vec::new(),
+                }),
+                _ => Err(refused("meet", &e)),
+            };
+        }
         Ok(Meeting {
             pieces: found
                 .curves
