@@ -502,7 +502,8 @@ jobs:
           - distance::proofs::point_line_has_the_sign_of_its_gap
           - distance::proofs::point_point_has_the_sign_of_its_gap
           - distance::proofs::triple_has_the_sign_of_its_gap
-          - eft::proofs::two_prod_with_the_splitter
+          - eft::proofs::two_prod_with_the_splitter_adds_back
+          - eft::proofs::two_prod_with_the_splitter_is_the_rounded_product
           - eft::proofs::two_prod_with_three
           - eft::proofs::two_prod_with_two_pow_996
           - eft::proofs::two_sum_of_any_and_minus_a_tenth
@@ -532,9 +533,11 @@ jobs:
           - grid::proofs::coarsen_from_q1_to_q0_is_nearest_at_or_above_zero
           - grid::proofs::coarsen_from_q1_to_q0_is_nearest_below_zero
           - grid::proofs::coarsen_from_q1_to_q0_is_no_larger_and_reported
-          - grid::proofs::coarsen_from_q2_to_q0_is_nearest_at_or_above_zero
-          - grid::proofs::coarsen_from_q2_to_q0_is_nearest_below_zero
           - grid::proofs::coarsen_from_q2_to_q0_is_no_larger_and_reported
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_high_at_or_above_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_high_below_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_low_at_or_above_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_low_below_zero
           - grid::proofs::coarsen_from_q2_to_q1_is_nearest_at_or_above_zero
           - grid::proofs::coarsen_from_q2_to_q1_is_nearest_below_zero
           - grid::proofs::coarsen_from_q2_to_q1_is_no_larger_and_reported
@@ -542,20 +545,25 @@ jobs:
           - grid::proofs::coord_from_i128_accepts_exactly_the_frame
           - grid::proofs::coord_new_accepts_exactly_the_frame
           - grid::proofs::every_coordinate_is_below_zero_or_not
+          - grid::proofs::nearest_is_its_two_sides
           - grid::proofs::nearest_on_the_negated_pair_is_nearest
           - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
           - grid::proofs::refine_is_exact_or_refused
           - grid::proofs::steps_refine_is_exact_or_none
           - grid::proofs::the_nine_pairs_are_every_pair_of_steps
-          - interval::proofs::add_sub_mul_enclose_the_rounded_result
+          - interval::proofs::add_encloses_the_rounded_result
           - interval::proofs::div_by_minus_a_tenth
           - interval::proofs::div_by_minus_zero_is_refused
           - interval::proofs::div_by_the_largest_double
           - interval::proofs::div_by_the_smallest_subnormal
           - interval::proofs::div_by_three
           - interval::proofs::div_by_zero_is_refused
+          - interval::proofs::equal_doubles_are_enclosed_alike
+          - interval::proofs::mul_encloses_the_product_of_its_bounds
           - interval::proofs::new_accepts_exactly_ordered_finite_bounds
           - interval::proofs::square_is_never_negative_and_encloses
+          - interval::proofs::sub_encloses_the_rounded_result
+          - interval::proofs::the_product_of_two_points_bounds_is_the_product
           - ladder::proofs::quarter_nm_always_answers_exactly
           - math::atan2::proofs::add_of_like_signs_is_within_two_ulps
           - math::atan2::proofs::add_of_unlike_signs_at_equal_exponents_is_within_two_ulps

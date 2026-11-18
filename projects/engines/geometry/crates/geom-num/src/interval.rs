@@ -797,7 +797,11 @@ mod proofs {
     }
 
     /// `add` of two points encloses the rounded sum, with ordered finite bounds, or refuses;
-    /// never a panic.
+    /// never a panic. For every pair of finite doubles.
+    ///
+    /// `add`, `sub` and `mul` were one harness of the three, 43 to 48 minutes on a hosted
+    /// runner. They are one harness each: the same two points ([`two_points`]) and the same
+    /// claim ([`encloses`]) in each, so the three together prove what the one did.
     #[kani::proof]
     #[kani::solver(kissat)]
     fn add_encloses_the_rounded_result() {
@@ -806,15 +810,24 @@ mod proofs {
     }
 
     /// `sub` of two points encloses the rounded difference, with ordered finite bounds, or
-    /// refuses; never a panic.
+    /// refuses; never a panic. For every pair of finite doubles.
     #[kani::proof]
     fn sub_encloses_the_rounded_result() {
         let (x, y, a, b) = two_points();
         encloses(a.sub(b), x - y);
     }
 
-    /// `mul` of two points encloses the rounded product of the two bounds it was given, with
-    /// ordered finite bounds, or refuses; never a panic.
+    /// `mul` of two points encloses the rounded product, with ordered finite bounds, or refuses;
+    /// never a panic. For every pair of finite doubles.
+    ///
+    /// The claim is that `mul` encloses `x * y`, the rounded product of the two doubles. It is
+    /// asserted on `a.lo() * b.lo()`, the product of the two points' bounds, which is the first
+    /// product `mul` itself forms: the solver then compares one multiplication with itself. With
+    /// `x * y` it compared two multiplications of different bits (a point stores −0 as +0, by an
+    /// addition), and `mul` alone ran past an hour. Why it is the same claim:
+    /// `the_product_of_two_points_bounds_is_the_product` proves the two products equal for every
+    /// pair, and `equal_doubles_are_enclosed_alike` that equal doubles are finite alike and
+    /// inside the same intervals, so [`encloses`] gives one verdict for both.
     #[kani::proof]
     fn mul_encloses_the_product_of_its_bounds() {
         let (_, _, a, b) = two_points();
@@ -822,12 +835,20 @@ mod proofs {
     }
 
     /// The tie, first half: the product of the two points' bounds is the product of the two
-    /// doubles, for every pair of finite doubles (a point's bound is its double with −0 stored
-    /// as +0, and the two products are then equal, a zero of either sign being one value).
+    /// doubles, for every pair of finite doubles. Where a double is a zero, both products are
+    /// zeros, which are equal. Where neither is, each bound is first shown to have its double's
+    /// bits (the first assertion), and the products are then compared knowing it: asserted in
+    /// one step, with the bits left for the solver to find, the comparison did not end in 35
+    /// minutes on a hosted runner.
     #[kani::proof]
     fn the_product_of_two_points_bounds_is_the_product() {
         let (x, y, a, b) = two_points();
-        assert!(a.lo() * b.lo() == x * y);
+        if x == 0.0 || y == 0.0 {
+            assert!(a.lo() * b.lo() == x * y);
+        } else {
+            assert!(a.lo().to_bits() == x.to_bits() && b.lo().to_bits() == y.to_bits());
+            assert!(a.lo() * b.lo() == x * y);
+        }
     }
 
     /// The tie, second half: two equal doubles are finite alike and inside the same intervals,
@@ -844,57 +865,6 @@ mod proofs {
             assert!(r.contains(p) == r.contains(w));
         }
     }
-
-    // TRIAL-BEGIN (measuring only, never in a pull request)
-    #[kani::proof]
-    fn t7i_c_tie2() {
-        let (x, y, a, b) = two_points();
-        if x == 0.0 || y == 0.0 {
-            assert!(a.lo() * b.lo() == x * y);
-        } else {
-            assert!(a.lo().to_bits() == x.to_bits() && b.lo().to_bits() == y.to_bits());
-        }
-    }
-    #[kani::proof]
-    fn t7i_c_tie3() {
-        let (x, y, a, b) = two_points();
-        if x == 0.0 || y == 0.0 {
-            assert!(a.lo() * b.lo() == x * y);
-        } else {
-            assert!(a.lo().to_bits() == x.to_bits() && b.lo().to_bits() == y.to_bits());
-            assert!(a.lo() * b.lo() == x * y);
-        }
-    }
-    #[kani::proof]
-    fn t7i_c_mul2() {
-        let (p, q) = (finite(), finite());
-        let (a, b) = (Interval { lo: p, hi: p }, Interval { lo: q, hi: q });
-        encloses(a.mul(b), p * q);
-    }
-    #[kani::proof]
-    fn t7i_c_add() {
-        let (x, y, a, b) = two_points();
-        encloses(a.add(b), x + y);
-    }
-    #[kani::proof]
-    #[kani::solver(kissat)]
-    fn t7i_k_sub() {
-        let (x, y, a, b) = two_points();
-        encloses(a.sub(b), x - y);
-    }
-    #[kani::proof]
-    #[kani::solver(kissat)]
-    fn t7i_k_mul() {
-        let (_, _, a, b) = two_points();
-        encloses(a.mul(b), a.lo() * b.lo());
-    }
-    #[kani::proof]
-    #[kani::solver(kissat)]
-    fn t7i_k_tie() {
-        let (x, y, a, b) = two_points();
-        assert!(a.lo() * b.lo() == x * y);
-    }
-    // TRIAL-END
 
     /// `div` encloses the rounded quotient whenever the divisor does not contain zero, and
     /// refuses when it does, for every finite dividend and the divisor `y`; proven for the six

@@ -720,10 +720,24 @@ mod proofs {
     /// on 2026-10-28, with up to ten proofs sharing twelve cores: 45, 54, 4 and 11 minutes);
     /// against −0.1 and the largest double, every `a` whose significand has at most 14 bits
     /// ([`two_prod_law_narrow`]), because with all 53 free each ran past four hours there.
+    /// Against the splitter the law's two claims are one harness each ([`two_prod_claims`]).
     fn two_prod_law(a: f64, b: f64) {
+        two_prod_claims(a, b, ROUNDED | ADDS_BACK);
+    }
+
+    /// The two claims of [`two_prod_law`], as a mask: the first answer is the rounded product,
+    /// and the error, when both are finite, adds back to it without changing it.
+    const ROUNDED: u8 = 1;
+    const ADDS_BACK: u8 = 2;
+
+    /// [`two_prod_law`] for the claims of the mask `claims`. Each claim is asserted exactly when
+    /// its bit is set, so the harnesses of the two bits together prove what the law does.
+    fn two_prod_claims(a: f64, b: f64, claims: u8) {
         let (p, e) = two_prod(a, b);
-        assert!(p.to_bits() == (a * b).to_bits());
-        if p.is_finite() && e.is_finite() {
+        if claims & ROUNDED != 0 {
+            assert!(p.to_bits() == (a * b).to_bits());
+        }
+        if claims & ADDS_BACK != 0 && p.is_finite() && e.is_finite() {
             assert!(p + e == p);
         }
     }
@@ -759,70 +773,23 @@ mod proofs {
     }
 
     /// [`two_prod_law`] with [`SPLITTER`], for every finite first factor: a factor that splits
-    /// exactly.
+    /// exactly. As one harness of both claims it took 12 to 14 minutes on a hosted runner, so
+    /// each claim is its own harness: here, that the first answer is the rounded product.
     #[kani::proof]
     #[kani::solver(kissat)]
     #[kani::unwind(3)]
-    fn two_prod_with_the_splitter() {
-        two_prod_law(finite(), SPLITTER);
+    fn two_prod_with_the_splitter_is_the_rounded_product() {
+        two_prod_claims(finite(), SPLITTER, ROUNDED);
     }
 
-    // TRIAL-BEGIN (measuring only, never in a pull request)
-    /// [`two_prod_law`]'s two claims, each apart (1 the rounded product, 2 the error adds back),
-    /// for the first factors of the sign `sign` (0 any, 1 sign bit clear, 2 sign bit set).
-    fn two_prod_part(b: f64, claims: u8, sign: u8) {
-        let a = finite();
-        if (sign == 1 && a.is_sign_negative()) || (sign == 2 && !a.is_sign_negative()) {
-            return;
-        }
-        let (p, e) = two_prod(a, b);
-        if claims & 1 != 0 {
-            assert!(p.to_bits() == (a * b).to_bits());
-        }
-        if claims & 2 != 0 && p.is_finite() && e.is_finite() {
-            assert!(p + e == p);
-        }
-    }
+    /// [`two_prod_law`] with [`SPLITTER`], for every finite first factor: the law's other claim,
+    /// that the error, when finite, adds back to the product without changing it.
     #[kani::proof]
     #[kani::solver(kissat)]
     #[kani::unwind(3)]
-    fn t7e_k_rounded() {
-        two_prod_part(SPLITTER, 1, 0);
+    fn two_prod_with_the_splitter_adds_back() {
+        two_prod_claims(finite(), SPLITTER, ADDS_BACK);
     }
-    #[kani::proof]
-    #[kani::solver(kissat)]
-    #[kani::unwind(3)]
-    fn t7e_k_adds_back() {
-        two_prod_part(SPLITTER, 2, 0);
-    }
-    #[kani::proof]
-    #[kani::unwind(3)]
-    fn t7e_c_rounded() {
-        two_prod_part(SPLITTER, 1, 0);
-    }
-    #[kani::proof]
-    #[kani::unwind(3)]
-    fn t7e_c_adds_back() {
-        two_prod_part(SPLITTER, 2, 0);
-    }
-    #[kani::proof]
-    #[kani::solver(kissat)]
-    #[kani::unwind(3)]
-    fn t7e_k_plus() {
-        two_prod_part(SPLITTER, 3, 1);
-    }
-    #[kani::proof]
-    #[kani::solver(kissat)]
-    #[kani::unwind(3)]
-    fn t7e_k_minus() {
-        two_prod_part(SPLITTER, 3, 2);
-    }
-    #[kani::proof]
-    #[kani::unwind(3)]
-    fn t7e_c_whole() {
-        two_prod_law(finite(), SPLITTER);
-    }
-    // TRIAL-END
 
     /// [`two_prod_law`] with 2^996, for every finite first factor: the scaled path for a large
     /// factor.
