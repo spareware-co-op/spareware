@@ -336,8 +336,31 @@ jobs:
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && (matrix.k == 1 || (matrix.mode == 'release' && matrix.k == 12)) }}
           # Debug, release with overflow checks on (parts 1 to 11) and release as shipped
           # (parts 12 to 29) are cached apart, so no part restores another
-          # build's. Parts 30 to 46 build in their own folder, which no cache holds.
+          # build's. Parts 30 to 46 build in their own folder, `target-native`, cached below.
           key: ${{ matrix.mode == 'release' && (matrix.k <= 11 && 'release-checked' || 'release-shipped') || 'debug' }}
+      # The native parts (30 to 46) build for this runner's own CPU, so their cache is named by
+      # that CPU: the digest of what rustc reads as `-C target-cpu=native` here (its every target
+      # feature, and the processor it resolves to, named in its list of processors). Only a runner
+      # whose processor gives the same digest restores it, so no restored build can hold an
+      # instruction this one lacks. macOS
+      # x86-64 alone: with no cache each of its native parts built about 90 third-party crates
+      # (part 40 took 18.7 minutes in run 44163945620), where every other system's parts took
+      # 12.4 minutes at most, so a cache for another system would take room in the repository's
+      # limit for no job over 15 minutes. Two caches, the goldens' (parts 30 to 40) and
+      # geom-num's (41 to 46), since their builds differ; as above, one part of each saves it,
+      # on a push to main alone.
+      - name: Name this machine's CPU for the native build cache
+        id: cpu
+        if: ${{ matrix.mode == 'release' && matrix.k >= 30 && matrix.target.name == 'macOS x86-64' }}
+        run: |
+          digest=$( { rustc --print cfg -C target-cpu=native; rustc --print target-cpus; } | shasum -a 256 | cut -c1-16)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: ${{ steps.cpu.outputs.digest != '' }}
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && (matrix.k == 30 || matrix.k == 41) }}
+          workspaces: ". -> target-native"
+          key: ${{ format('native-{0}-{1}', matrix.k <= 40 && 'goldens' || 'num', steps.cpu.outputs.digest) }}
       # This run's own runner for this system: an artifact named here with no other run or
       # repository is this run's, and a part that finds none fails here.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -499,9 +522,10 @@ jobs:
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 30 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
-          # Its own build folder, which the build cache never saves or restores: the cache's key
-          # does not name the processor, so a restored native build from another machine's CPU
-          # can hold instructions this one lacks (SIGILL). Built fresh here, it is this CPU's.
+          # Its own build folder, which the main build cache never saves or restores: that key
+          # does not name the processor, so a native build restored from another machine's CPU
+          # could hold instructions this one lacks (SIGILL). Only the native cache, named by
+          # this CPU's digest, fills it on macOS x86-64; otherwise it is built fresh here.
           CARGO_TARGET_DIR: target-native
         run: '"$GOLDEN" run --part 1/11 --release'
       - name: Every golden in release for this machine's own CPU (part 2 of 11)

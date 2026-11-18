@@ -174,8 +174,12 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # caches filled the repository's cache limit and evicted what main saved). And only
+          # macOS x86-64's: the repository's caches were over GitHub's 10 GB, so the least used
+          # were thrown out all the time, and these six (about 190 MB each) saved this job little
+          # elsewhere. In main's run 44175516389, Linux arm64 found none and took 4.2 minutes,
+          # Linux x86-64 restored its own and took 2.8, and every system took under 10.
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.os == 'macos-15-intel' }}
       - name: The development-dependency rule, and CI's reruns of it
         run: cargo test --locked -p geom-test --test dependency_rule
       - name: The predicates fuzz target, in bolero's test mode and the seeded leg
