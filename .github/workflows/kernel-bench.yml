@@ -371,7 +371,12 @@ jobs:
   # `geom-bench-counts plan` from the seconds of a run, never by hand; a group the file does not
   # list goes to the part its `*` line names), and the judge refuses the parts unless every
   # benchmark was measured in exactly one part on each side (geom_bench::parts::check), so a part
-  # that dropped out, or a benchmark no part measured, fails the gate. Each benchmark runs under
+  # that dropped out, or a benchmark no part measured, fails the gate. A part's job takes about
+  # 255 s of setup and compiling plus 1.45 times its planned seconds on x86-64 at its slowest
+  # (385 s plus them on aarch64): the plan's limit (geom_bench::parts::PART_SECONDS) keeps every
+  # job under 13 minutes at the slowest of the last five runs of main, and the group `mesh` is
+  # shared by operation, its `decimate` (one benchmark of 337 to 388 s) being the part of its own.
+  # Each benchmark runs under
   # Valgrind in a process of its own, with arguments of one length whatever is filtered
   # (gungraun-runner's `bench_args`), so a part measures each of its benchmarks exactly as one run
   # of the whole catalogue did; base and change are measured on runners of one image, which give
@@ -437,7 +442,6 @@ jobs:
           workspaces: |
             base -> ../target-base
           key: ${{ matrix.target }}-base-${{ needs.scope.outputs.base_toolchain }}
-          cache-directories: ~/.gungraun-runner
 
       - name: Install Valgrind
         run: |
@@ -445,7 +449,12 @@ jobs:
           sudo apt-get install --yes --no-install-recommends valgrind
           valgrind --version
 
-      - name: Install the Gungraun runner the merge base needs
+      # The runner is kept by its own cache, named for its version and toolchain, not by the Rust
+      # cache above, whose key changes with every Cargo.lock: a part that missed that cache
+      # compiled the runner for 50 to 80 seconds (main's run 44322373006), and every part of the
+      # run paid it.
+      - name: Read the Gungraun runner version the merge base needs
+        id: runner
         run: |
           set -euo pipefail
           # gungraun-runner must have exactly the version of the gungraun library the tree locks.
@@ -458,9 +467,31 @@ jobs:
               exit 1
               ;;
           esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Gungraun runner
+        id: kept_runner
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gungraun-runner
+          key: gungraun-runner-${{ matrix.target }}-${{ env.BASE_TOOLCHAIN }}-${{ steps.runner.outputs.version }}
+
+      - name: Install the Gungraun runner the merge base needs
+        env:
+          version: ${{ steps.runner.outputs.version }}
+        run: |
+          set -euo pipefail
           cargo "+$BASE_TOOLCHAIN" install --locked gungraun-runner --version "$version" \
             --root "$HOME/.gungraun-runner/$version"
           echo "BASE_RUNNER=$HOME/.gungraun-runner/$version/bin/gungraun-runner" >> "$GITHUB_ENV"
+
+      # Only main saves it, as it alone saves the Rust cache (one part, the same runner everywhere).
+      - name: Save the Gungraun runner
+        if: ${{ github.ref == 'refs/heads/main' && matrix.part == 1 && steps.kept_runner.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gungraun-runner
+          key: gungraun-runner-${{ matrix.target }}-${{ env.BASE_TOOLCHAIN }}-${{ steps.runner.outputs.version }}
 
       # This part's counts of the merge base, kept by an earlier run (the paragraph at the top):
       # found by their name among the repository's artifacts, from a run of main or an earlier run
@@ -558,10 +589,14 @@ jobs:
             groups=$(cut -d/ -f1 "$RUNNER_TEMP/ember.names" | uniq)
           else
             bench=instructions
+            # A unit is a group, or `group::op` for a group the plan splits by operation (a line
+            # `group/op` in parts.tsv: mesh, whose `decimate` is most of its seconds).
             groups=$(awk -F'\t' -v k="$PART" '
-              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
-              { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
-                if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
+              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else {
+                  part[$1] = $2; i = index($1, "/"); if (i) by_op[substr($1, 1, i - 1)] = 1 } } next }
+              { split($0, n, "/"); u = (n[1] in by_op) ? n[1] "/" n[2] : n[1]
+                p = (u in part) ? part[u] : rest
+                if (p == k && !(u in seen)) { seen[u] = 1; sub("/", "::", u); print u } }
             ' "$GITHUB_WORKSPACE/head/$BENCH/parts.tsv" "$RUNNER_TEMP/instructions.names")
           fi
           echo "Part $PART measures: $(echo $groups)"
@@ -636,7 +671,6 @@ jobs:
           workspaces: |
             head -> ../target
           key: ${{ matrix.target }}-head-${{ needs.scope.outputs.head_toolchain }}
-          cache-directories: ~/.gungraun-runner
 
       - name: Install Valgrind
         run: |
@@ -644,7 +678,9 @@ jobs:
           sudo apt-get install --yes --no-install-recommends valgrind
           valgrind --version
 
-      - name: Install the Gungraun runner the change needs
+      # Kept by its own cache, as in the merge base's job.
+      - name: Read the Gungraun runner version the change needs
+        id: runner
         run: |
           set -euo pipefail
           version=$(cargo "+$HEAD_TOOLCHAIN" metadata --locked --format-version 1 \
@@ -656,9 +692,31 @@ jobs:
               exit 1
               ;;
           esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Gungraun runner
+        id: kept_runner
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gungraun-runner
+          key: gungraun-runner-${{ matrix.target }}-${{ env.HEAD_TOOLCHAIN }}-${{ steps.runner.outputs.version }}
+
+      - name: Install the Gungraun runner the change needs
+        env:
+          version: ${{ steps.runner.outputs.version }}
+        run: |
+          set -euo pipefail
           cargo "+$HEAD_TOOLCHAIN" install --locked gungraun-runner --version "$version" \
             --root "$HOME/.gungraun-runner/$version"
           echo "HEAD_RUNNER=$HOME/.gungraun-runner/$version/bin/gungraun-runner" >> "$GITHUB_ENV"
+
+      # Only main saves it, as it alone saves the Rust cache (one part, the same runner everywhere).
+      - name: Save the Gungraun runner
+        if: ${{ github.ref == 'refs/heads/main' && matrix.part == 1 && steps.kept_runner.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gungraun-runner
+          key: gungraun-runner-${{ matrix.target }}-${{ env.HEAD_TOOLCHAIN }}-${{ steps.runner.outputs.version }}
 
       # This part's counts of the merge base, from this run's part of the merge base with the same
       # number: the saved run `base` of the same groups. GitHub's storage can refuse a download for
@@ -745,10 +803,14 @@ jobs:
             groups=$(cut -d/ -f1 "$RUNNER_TEMP/ember.names" | uniq)
           else
             bench=instructions
+            # A unit is a group, or `group::op` for a group the plan splits by operation (a line
+            # `group/op` in parts.tsv: mesh, whose `decimate` is most of its seconds).
             groups=$(awk -F'\t' -v k="$PART" '
-              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
-              { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
-                if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
+              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else {
+                  part[$1] = $2; i = index($1, "/"); if (i) by_op[substr($1, 1, i - 1)] = 1 } } next }
+              { split($0, n, "/"); u = (n[1] in by_op) ? n[1] "/" n[2] : n[1]
+                p = (u in part) ? part[u] : rest
+                if (p == k && !(u in seen)) { seen[u] = 1; sub("/", "::", u); print u } }
             ' "$BENCH/parts.tsv" "$RUNNER_TEMP/instructions.names")
           fi
           echo "Part $PART measures: $(echo $groups)"

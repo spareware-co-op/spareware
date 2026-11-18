@@ -2525,6 +2525,36 @@ fn bench_part_problems(w: &Yaml) -> Vec<String> {
             found.push(format!("the scope's parts are not parts.tsv's: {needle}"));
         }
     }
+    // Each part reads parts.tsv's units, a group or `group/op` for a group the plan splits by
+    // operation (mesh), and keeps the Gungraun runner in a cache of its own, so no part compiles it
+    // again when the Rust cache's key moves with Cargo.lock; only main saves that cache.
+    for job in ["instructions-base", "instructions-parts"] {
+        if !runs(job).contains("by_op[substr($1, 1, i - 1)] = 1")
+            || !runs(job).contains("sub(\"/\", \"::\", u); print u")
+        {
+            found.push(format!(
+                "{job} does not read parts.tsv's split groups by operation"
+            ));
+        }
+        let steps = || jobs[job]["steps"].as_vec().into_iter().flatten();
+        let key = "gungraun-runner-${{ matrix.target }}-";
+        let uses = |action: &str| {
+            steps().any(|s| {
+                text(&s["uses"]).starts_with(action)
+                    && text(&s["with"]["path"]) == "~/.gungraun-runner"
+                    && text(&s["with"]["key"]).starts_with(key)
+            })
+        };
+        let saves_on_main = steps().any(|s| {
+            text(&s["uses"]).starts_with("actions/cache/save@")
+                && text(&s["if"]).contains("github.ref == 'refs/heads/main'")
+        });
+        if !uses("actions/cache/restore@") || !uses("actions/cache/save@") || !saves_on_main {
+            found.push(format!(
+                "{job} does not keep the Gungraun runner in a cache of its own"
+            ));
+        }
+    }
     let needs = |job: &str| {
         jobs[job]["needs"]
             .as_vec()
@@ -2634,6 +2664,21 @@ fn the_count_gate_parts_measure_everything_once_and_a_lost_part_fails() {
             "name: count-head-${{ matrix.target }}-${{ matrix.part }}",
             "name: count-head-${{ matrix.target }}",
             "does not upload its counts",
+        ),
+        (
+            "by_op[substr($1, 1, i - 1)] = 1",
+            "by_op[substr($1, 1, i - 1)] = 0",
+            "split groups by operation",
+        ),
+        (
+            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0\n        with:\n          path: ~/.gungraun-runner\n",
+            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0\n        with:\n          path: ~/.cargo\n",
+            "cache of its own",
+        ),
+        (
+            "github.ref == 'refs/heads/main' && matrix.part == 1 && steps.kept_runner",
+            "github.ref != 'refs/heads/main' && matrix.part == 1 && steps.kept_runner",
+            "cache of its own",
         ),
         (
             "        if: matrix.trip\n",
