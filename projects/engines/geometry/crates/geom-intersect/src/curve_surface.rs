@@ -30,7 +30,10 @@
 //!   part of a whole circle holds arcs of it: which arcs is decided by exact signs where the
 //!   plane's vectors run along coordinate axes, each arc is an overlap over an enclosure of its
 //!   stretch of the circle, and a lone point of the circle in the domain, or a plane on other
-//!   vectors, is the engine's (decision 32.69).
+//!   vectors, is the engine's (decision 32.69). An arc's end on the circle's own join is placed
+//!   by an exact sign, so it is the domain's own end exactly and no stretch stands past the join
+//!   unless the arc passes it; where an end's enclosure reaches the join and the frame's x runs
+//!   off the plane's axes, or the join is off x's line, the circle is the engine's.
 //! - **A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's
 //!   v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a
 //!   [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands
@@ -1650,16 +1653,106 @@ fn pick<T: Copy>(v: [T; 3], k: usize) -> T {
     }
 }
 
+/// Which side of the circle's own join a point of the circle near the join is on: positive past
+/// it (its parameter just over the domain's start `lo`), negative before it (just under the
+/// domain's end), zero on it. `None` where no exact sign says so.
+///
+/// The join is the point at parameter `lo`. Where `lo` is a whole number it lies along the
+/// frame's x̂ (even) or against it (odd), and a point near it is past it exactly when it stands on
+/// the ŷ side of x̂'s line (even) or the other side (odd). `ahead` holds the frame's stored x
+/// along the plane's two axes (the frame's normal runs along the third, so these two are all of
+/// x̂'s direction). Where one of them is zero, x̂ is the other axis, signed, and ŷ = n̂ × x̂ is the
+/// first one, signed: the side is the sign of one coordinate of the point, which a [`Spot`] holds
+/// exactly. For any other `lo` or x the side is no sign of a sum of products of stored doubles.
+fn past_join(
+    spot: &Spot,
+    ahead: (f64, f64),
+    same: bool,
+    lo: f64,
+) -> Result<Option<Sign>, IntersectError> {
+    if lo != math::floor(lo)?.get() {
+        return Ok(None);
+    }
+    let half = lo / 2.0;
+    let even = half == math::floor(half)?.get();
+    let up = match (ahead.0 != 0.0, ahead.1 != 0.0) {
+        (true, false) if (ahead.0 > 0.0) == same => spot.y.sign,
+        (true, false) => spot.y.sign.negate(),
+        (false, true) if (ahead.1 > 0.0) == same => spot.x.sign.negate(),
+        (false, true) => spot.x.sign,
+        _ => return Ok(None),
+    };
+    Ok(Some(if even { up } else { up.negate() }))
+}
+
+/// The stretches of the circle's domain `(lo, hi)`, one turn long, that an arc covers: one, or
+/// one each side of the join where the arc passes it. `first` and `last` enclose the parameters
+/// of the arc's ends `enter` and `leave`, written on any turn, `last` over `first` by the arc's
+/// length; `ahead` and `same` are [`past_join`]'s. `None` where an end's enclosure reaches the
+/// join and no exact sign places the end against it.
+///
+/// Whole turns bring the upper end of the start's enclosure onto the domain, short of its last
+/// end, so the enclosure reaches the join only by its lower end, at the domain's first end. There
+/// it cannot say which end of the domain the start is at, and the exact side of the join does: a
+/// start before the join is a turn on, at the domain's last end; one on the join or past it is
+/// at the first end. The arc has a stretch past the join only where its end is truly past it: an
+/// end on the join is the domain's last end, and no enclosure's overhang makes a stretch.
+#[allow(
+    clippy::type_complexity,
+    reason = "one or two stretches, or none placed: read at once by its one caller"
+)]
+fn stretches_of(
+    (first, last): (Interval, Interval),
+    (enter, leave): (&Spot, &Spot),
+    (ahead, same): ((f64, f64), bool),
+    (lo, hi): (f64, f64),
+) -> Result<Option<[Option<(f64, f64)>; 2]>, IntersectError> {
+    let turn = Interval::point(2.0)?;
+    let back = Interval::point(2.0 * math::floor((first.hi() - lo) / 2.0)?.get())?;
+    let (mut first, mut last) = (first.sub(back)?, last.sub(back)?);
+    if first.lo() <= lo {
+        let Some(side) = past_join(enter, ahead, same, lo)? else {
+            return Ok(None);
+        };
+        if side == Sign::Negative {
+            (first, last) = (first.add(turn)?, last.add(turn)?);
+        }
+    }
+    let t0 = larger(first.lo(), lo);
+    let through = if last.hi() < hi {
+        false
+    } else if last.lo() > hi {
+        true
+    } else {
+        let Some(side) = past_join(leave, ahead, same, lo)? else {
+            return Ok(None);
+        };
+        side == Sign::Positive
+    };
+    Ok(Some(if through {
+        [
+            Some((t0, hi)),
+            Some((lo, smaller(last.sub(turn)?.hi(), hi))),
+        ]
+    } else {
+        [Some((t0, smaller(last.hi(), hi))), None]
+    }))
+}
+
 /// The parts of a whole circle lying in `plane` that the plane's domain holds, each an overlap
 /// over its own stretch of the circle; `None`, the engine's, where the plane's vectors run off the
 /// coordinate axes, the circle is not a whole turn, a product of the stored doubles would not be
-/// exact, or the domain holds a lone point of the circle ([`held_of`]).
+/// exact, the domain holds a lone point of the circle ([`held_of`]), or an end of an arc has an
+/// enclosure that reaches the circle's own join and no exact sign places it ([`past_join`]).
 ///
 /// With the plane's vectors a and b along two coordinate axes, an end `e` of the domain in u is
 /// the line where that coordinate is c + e·a, and its distance from the circle's centre is
 /// c + e·a − centre: a sum of four doubles, exact ([`offset`]). Every question [`held_of`] asks is
 /// then the sign of a sum of products of doubles. The parameters of the ends of each arc are
-/// enclosures; which arcs there are is exact.
+/// enclosures; which arcs there are is exact, and so is each arc's place against the join: an arc
+/// that starts on the join starts at the domain's first end exactly, one that ends on it ends at
+/// the domain's last end exactly, and there is a stretch past the join only where the arc passes
+/// it. (A circle kind's domain is at most one turn long, so a whole one is exactly one turn.)
 fn arcs_in_plane(
     curve: &CurveKind<3>,
     circle: &Circle<3>,
@@ -1720,7 +1813,8 @@ fn arcs_in_plane(
         _ => return Ok(None),
     };
     let same = cyclic == (pick(circle.frame().normal(), third) > 0.0);
-    let seam = seam_of(curve, finite(curve)?);
+    let stored = circle.frame().x();
+    let ahead = (pick(stored, i), pick(stored, j));
     let turn = Interval::point(2.0)?;
     let mut items = Vec::new();
     for (from, to) in &arcs {
@@ -1730,15 +1824,17 @@ fn arcs_in_plane(
         } else {
             angle(to)?.add(turn)?
         };
-        let (first, last) = if same {
-            (start.sub(zero)?, end.sub(zero)?)
+        // In the circle's own parameter the arc runs from `enter` to `leave`.
+        let (first, last, enter, leave) = if same {
+            (start.sub(zero)?, end.sub(zero)?, from, to)
         } else {
-            (zero.sub(end)?, zero.sub(start)?)
+            (zero.sub(end)?, zero.sub(start)?, to, from)
         };
-        // Whole turns bring the arc's start onto the domain; the join then cuts it in two.
-        let back = Interval::point(2.0 * math::floor((first.lo() - lo) / 2.0)?.get())?;
-        let span = Interval::new(first.sub(back)?.lo(), last.sub(back)?.hi())?;
-        for (t0, t1) in seam.spans(span).into_iter().flatten() {
+        let Some(stretches) = stretches_of((first, last), (enter, leave), (ahead, same), (lo, hi))?
+        else {
+            return Ok(None);
+        };
+        for (t0, t1) in stretches.into_iter().flatten() {
             let (u, v) = in_parameters(curve, plane, (t0, t1), meter)?;
             items.push(Item::Overlap {
                 at: ParamBox::new(&[Interval::new(t0, t1)?, held(u, du)?, held(v, dv)?])?,
