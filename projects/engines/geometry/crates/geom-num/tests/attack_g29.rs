@@ -525,7 +525,7 @@ mod one_step_from_degenerate_is_decided_exactly {
         );
         let build = usize::from(!cfg!(debug_assertions));
         if std::env::var_os("SPAREKIT_SEED").is_none() {
-            assert_eq!(decided, PINNED[build].iter().sum::<u32>());
+            assert_eq!(decided, PINNED[build].iter().fold(0, |all, n| all + n));
         }
     }
 }

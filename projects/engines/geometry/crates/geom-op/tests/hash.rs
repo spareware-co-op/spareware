@@ -208,7 +208,7 @@ mod the_vector_files_are_as_published {
             .flat_map(|k| messages(long_part(k)))
             .collect();
         assert_eq!(parts, whole);
-        assert_eq!(LONG_PARTS.iter().map(|p| p.2).sum::<usize>(), 64);
+        assert_eq!(LONG_PARTS.iter().fold(0, |all, p| all + p.2), 64);
     }
 }
 
