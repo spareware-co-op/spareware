@@ -10,8 +10,8 @@
 //! - `orient2d_proof_predicate`, `orient2d_proof_exact_path` and `orient2d_proof_filter` are the
 //!   bounded proof, one claim of `check` each: `bolero::check!` over draws of the proof's domain
 //!   (`geom_fuzz::orient2d::proof_case` with `PROOF_BOUND`), each checked by `check_claim` for its
-//!   claim. Under `cargo kani --tests -p geom-fuzz --harness orient2d_proof_filter --exact` (and
-//!   the others) bolero's Kani engine makes every draw symbolic, so Kani proves the claim for
+//!   claim. Under `cargo kani --tests -p geom-fuzz --harness orient2d_proof_exact_path --exact`
+//!   (and the others) bolero's Kani engine makes every draw symbolic, so Kani proves the claim for
 //!   every case of the domain, and the three together prove `check`'s claims. Under `cargo test`
 //!   each is a property test over the same domain, so the proof's statement is also tested on
 //!   stable Rust on every operating system.
@@ -21,6 +21,11 @@
 //!   `orient2d_proof_predicate_cover` proves that every draw of the domain is in one of those
 //!   classes, so together they prove it for the whole domain. `orient2d_proof_predicate` itself
 //!   is the same claim over the whole domain as a test, on every operating system.
+//! - Kani proves the filter's claim one step at a time, one job each:
+//!   `orient2d_proof_filter_exact_stand_in`, `orient2d_proof_filter_predicate_stand_in` and
+//!   `orient2d_proof_filter_answer` prove each step of `check_with` after the one reference
+//!   (`geom_fuzz::orient2d::check_filter_step`), so together they prove the claim.
+//!   `orient2d_proof_filter` itself is the claim whole as a test, on every operating system.
 //! - `orient2d_seeded` runs the harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same cases on every target, WebAssembly included.
 
@@ -50,8 +55,8 @@ use bolero::{ValueGenerator, check, produce};
 use common::holds;
 use geom_fuzz::Finding;
 use geom_fuzz::orient2d::{
-    self, Claim, MAX_INPUT_BYTES, PREDICATE_PARTS, PROOF_BOUND, ProofDraw, harness, predicate_part,
-    proof_case,
+    self, Claim, FilterStep, MAX_INPUT_BYTES, PREDICATE_PARTS, PROOF_BOUND, ProofDraw, harness,
+    predicate_part, proof_case,
 };
 use geom_fuzz::seeded;
 use geom_test::Seed;
@@ -1386,8 +1391,50 @@ fn orient2d_proof_exact_path() {
         .for_each(|draw| holds(prove(PROOF_BOUND, draw, Claim::ExactPath)));
 }
 
-/// The filter's claim of the bounded proof ([`orient2d_proof_predicate`] says how the three
-/// harnesses share it).
+/// The filter's claim over the whole domain, as a test on every operating system; Kani proves it
+/// one step at a time ([`orient2d_proof_filter_answer`]).
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+fn orient2d_proof_filter() {
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| holds(prove(PROOF_BOUND, draw, Claim::Filter)));
+}
+
+/// One step of the filter's claim, for one draw: the case it names, its reference, and then that
+/// step alone (`geom_fuzz::orient2d::check_filter_step`; the three steps together are the claim).
+fn prove_filter_step(bound: u64, draw: &ProofDraw, step: FilterStep) -> Result<(), Finding> {
+    let case = proof_case(bound, draw).ok_or_else(|| {
+        Finding::new("every draw of the proof's domain names a grid case", || {
+            format!("{draw:?}")
+        })
+    })?;
+    orient2d::check_filter_step(&case, step)
+}
+
+/// The filter's claim in Kani, its last step: the generated filter declines or gives the
+/// reference's sign, for every case of the domain.
+///
+/// `orient2d_proof_filter_answer`, `orient2d_proof_filter_exact_stand_in` and
+/// `orient2d_proof_filter_predicate_stand_in` prove `check_filter_step` for each of
+/// `geom_fuzz::orient2d::FILTER_STEPS`, over the whole domain, each after the one reference
+/// `check_with` takes first. The filter's claim is `check_with` on the reference's two stand-ins
+/// and the filter, and `check_with` is that reference and then those three steps, so the three
+/// prove what [`orient2d_proof_filter`] proved as one harness. The domain, the bound, the solver,
+/// the unwinding and Kani's checks are that harness's, in every step.
+///
+/// Why in steps: as one harness the claim took 570 to 943 seconds of job time on the hosted
+/// runner, nine tenths of it kissat's last solve (723 of 801 seconds of verification in job
+/// 134967462570). The claim computes the reference three times, for itself and for the two
+/// stand-ins, so that solve held the copies equal and the filter's bound at once. On a
+/// development machine the stand-ins alone took 1213 seconds and the filter's step alone 564,
+/// where one eighth of the domain under the whole claim took 1026: cutting the domain does not
+/// separate the two, and cutting the steps does.
 #[cfg_attr(
     target_family = "wasm",
     ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
@@ -1397,11 +1444,63 @@ fn orient2d_proof_exact_path() {
 #[cfg_attr(kani, kani::proof)]
 #[cfg_attr(kani, kani::solver(kissat))]
 #[cfg_attr(kani, kani::unwind(10))]
-fn orient2d_proof_filter() {
+fn orient2d_proof_filter_answer() {
     check!()
         .with_generator(proof_draws(PROOF_BOUND))
         .with_iterations(PROOF_ITERATIONS)
-        .for_each(|draw| holds(prove(PROOF_BOUND, draw, Claim::Filter)));
+        .for_each(|draw| holds(prove_filter_step(PROOF_BOUND, draw, FilterStep::Answer)));
+}
+
+/// The filter's claim, its exact path's stand-in: the reference, computed again, returns its own
+/// value ([`orient2d_proof_filter_answer`] says how the steps share the claim).
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_proof_filter_exact_stand_in() {
+    let step = FilterStep::ExactStandIn;
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| holds(prove_filter_step(PROOF_BOUND, draw, step)));
+}
+
+/// The filter's claim, its predicate's stand-in: the reference's sign, computed again, is its own
+/// sign ([`orient2d_proof_filter_answer`] says how the steps share the claim).
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode catches panics, which WASI cannot; the seeded leg runs the \
+              same law there"
+)]
+#[test]
+#[cfg_attr(kani, kani::proof)]
+#[cfg_attr(kani, kani::solver(kissat))]
+#[cfg_attr(kani, kani::unwind(10))]
+fn orient2d_proof_filter_predicate_stand_in() {
+    let step = FilterStep::PredicateStandIn;
+    check!()
+        .with_generator(proof_draws(PROOF_BOUND))
+        .with_iterations(PROOF_ITERATIONS)
+        .for_each(|draw| holds(prove_filter_step(PROOF_BOUND, draw, step)));
+}
+
+/// The three step harnesses are every step of the filter's claim, each once: a fourth step added
+/// to `geom_fuzz::orient2d::FILTER_STEPS` needs its harness here.
+#[test]
+fn the_filter_proofs_cover_every_step() {
+    assert_eq!(
+        orient2d::FILTER_STEPS,
+        [
+            FilterStep::ExactStandIn,
+            FilterStep::PredicateStandIn,
+            FilterStep::Answer
+        ]
+    );
 }
 
 /// The three proofs' claims are every claim of `check`, each once: a fourth claim added to
