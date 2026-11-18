@@ -182,6 +182,42 @@ fn the_solidcore_job_runs_the_cases_against_the_named_faults() {
     );
 }
 
+/// The least number of tests a step asks to have run (its `test "$ran" -ge` line).
+fn ran(text: &str) -> Option<u32> {
+    text.lines()
+        .find_map(|l| l.trim().strip_prefix("test \"$ran\" -ge "))
+        .and_then(|n| n.parse::<u32>().ok())
+}
+
+/// Everything wrong with the WebAssembly job's step that runs the tests and compares, given its
+/// text (as YAML gives it, its block's indentation removed) and the native job's least number of
+/// tests.
+fn compare_problems(step: Option<&str>, native_ran: Option<u32>) -> Vec<String> {
+    let Some(r) = step else {
+        return vec![
+            "solidcore-wasm does not compare the failed tests with the named faults".to_owned(),
+        ];
+    };
+    let mut found = Vec::new();
+    if !r.contains("wasmtime run --allow-precompiled \"$module.cwasm\" --exact \"$t\" --nocapture")
+        || !r.contains("--list --format terse")
+    {
+        found.push("solidcore-wasm does not run every test in its own process".to_owned());
+    }
+    if !r.contains("if [ \"$failed\" != \"$named\" ]; then") {
+        found.push("solidcore-wasm's comparison does not fail on a difference".to_owned());
+    }
+    if !r.contains(
+        "neither passed nor failed by a panic under wasmtime (exit status $rc).\"\n      exit 1\n",
+    ) {
+        found.push("solidcore-wasm counts a trap as a named fault".to_owned());
+    }
+    if ran(r).is_none() || ran(r) != native_ran {
+        found.push("solidcore-wasm does not ask for as many tests as solidcore".to_owned());
+    }
+    found
+}
+
 /// Everything wrong with the WebAssembly job, given the workflow's text, geom-solidcore's
 /// manifest and its `.cargo/config.toml`.
 fn wasm_problems(kernel: &str, manifest: &str, cargo_config: &str) -> Vec<String> {
@@ -253,42 +289,15 @@ fn wasm_problems(kernel: &str, manifest: &str, cargo_config: &str) -> Vec<String
     {
         found.push("solidcore-wasm does not build the tests for wasm32-wasip1".to_owned());
     }
-    let ran = |text: &str| {
-        text.lines()
-            .find_map(|l| l.trim().strip_prefix("test \"$ran\" -ge "))
-            .and_then(|n| n.parse::<u32>().ok())
-    };
     let native_ran = native["steps"]
         .as_vec()
         .and_then(|v| v.iter().filter_map(|s| s["run"].as_str()).find_map(ran));
-    match runs
-        .iter()
-        .find(|r| r.contains("jq -r '.faults[].test' tests/named-faults.json"))
-    {
-        None => found.push(
-            "solidcore-wasm does not compare the failed tests with the named faults".to_owned(),
-        ),
-        Some(r) => {
-            if !r.contains(
-                "wasmtime run --allow-precompiled \"$module.cwasm\" --exact \"$t\" --nocapture",
-            ) || !r.contains("--list --format terse")
-            {
-                found.push("solidcore-wasm does not run every test in its own process".to_owned());
-            }
-            if !r.contains("if [ \"$failed\" != \"$named\" ]; then") {
-                found.push("solidcore-wasm's comparison does not fail on a difference".to_owned());
-            }
-            // The step's text as YAML gives it, its block's indentation removed.
-            if !r.contains(
-                "neither passed nor failed by a panic under wasmtime (exit status $rc).\"\n      exit 1\n",
-            ) {
-                found.push("solidcore-wasm counts a trap as a named fault".to_owned());
-            }
-            if ran(r).is_none() || ran(r) != native_ran {
-                found.push("solidcore-wasm does not ask for as many tests as solidcore".to_owned());
-            }
-        }
-    }
+    found.extend(compare_problems(
+        runs.iter()
+            .find(|r| r.contains("jq -r '.faults[].test' tests/named-faults.json"))
+            .copied(),
+        native_ran,
+    ));
     if !cargo_config
         .contains("[target.wasm32-wasip1]\nrustflags = [\"-C\", \"link-arg=-zstack-size=8388608\"]")
     {
