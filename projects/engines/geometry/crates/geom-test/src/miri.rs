@@ -197,7 +197,8 @@ pub const SCALE_MOST: (u64, u64) = (3, 1);
 
 /// Whether `a` is less than `b`, two fractions (num, den) with nonzero denominators.
 fn less((an, ad): (u64, u64), (bn, bd): (u64, u64)) -> bool {
-    u128::from(an) * u128::from(bd) < u128::from(bn) * u128::from(ad)
+    // Two u64s' product always fits a u128, so neither side saturates.
+    u128::from(an).saturating_mul(u128::from(bd)) < u128::from(bn).saturating_mul(u128::from(ad))
 }
 
 /// A job's scale from its yardstick's run (32.78): the yardstick's seconds in `report` (its run's
@@ -267,12 +268,18 @@ pub fn scale_text((num, den): (u64, u64)) -> String {
 }
 
 /// A finishing test's stop in a job at `scale`, in milliseconds (32.78): its row's `seconds`
-/// times 1.6 ([`SLOWER`]) times the scale, rounded up.
+/// times 1.6 ([`SLOWER`]) times the scale, rounded up; a stop past `u64::MAX` milliseconds is
+/// `u64::MAX`.
 #[must_use]
 pub fn stop_ms(seconds: u64, (num, den): (u64, u64)) -> u64 {
-    let top = u128::from(seconds) * 1000 * u128::from(SLOWER.0) * u128::from(num);
-    let bottom = u128::from(SLOWER.1) * u128::from(den.max(1));
-    u64::try_from(top.div_ceil(bottom)).unwrap_or(u64::MAX)
+    let top = u128::from(seconds)
+        .checked_mul(1000)
+        .and_then(|t| t.checked_mul(u128::from(SLOWER.0)))
+        .and_then(|t| t.checked_mul(u128::from(num)));
+    // Two u64s' product always fits a u128.
+    let bottom = u128::from(SLOWER.1).saturating_mul(u128::from(den.max(1)));
+    top.and_then(|t| u64::try_from(t.div_ceil(bottom)).ok())
+        .unwrap_or(u64::MAX)
 }
 
 /// What a gate job's report says of its tests' stops at its scale ([`over_stops`]).
