@@ -1463,16 +1463,11 @@ fn orient2d_proof_filter_answer() {
 #[cfg_attr(kani, kani::solver(kissat))]
 #[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_proof_filter_exact_stand_in() {
+    let step = FilterStep::ExactStandIn;
     check!()
         .with_generator(proof_draws(PROOF_BOUND))
         .with_iterations(PROOF_ITERATIONS)
-        .for_each(|draw| {
-            holds(prove_filter_step(
-                PROOF_BOUND,
-                draw,
-                FilterStep::ExactStandIn,
-            ))
-        });
+        .for_each(|draw| holds(prove_filter_step(PROOF_BOUND, draw, step)));
 }
 
 /// The filter's claim, its predicate's stand-in: the reference's sign, computed again, is its own
@@ -1487,16 +1482,11 @@ fn orient2d_proof_filter_exact_stand_in() {
 #[cfg_attr(kani, kani::solver(kissat))]
 #[cfg_attr(kani, kani::unwind(10))]
 fn orient2d_proof_filter_predicate_stand_in() {
+    let step = FilterStep::PredicateStandIn;
     check!()
         .with_generator(proof_draws(PROOF_BOUND))
         .with_iterations(PROOF_ITERATIONS)
-        .for_each(|draw| {
-            holds(prove_filter_step(
-                PROOF_BOUND,
-                draw,
-                FilterStep::PredicateStandIn,
-            ))
-        });
+        .for_each(|draw| holds(prove_filter_step(PROOF_BOUND, draw, step)));
 }
 
 /// The three step harnesses are every step of the filter's claim, each once: a fourth step added
