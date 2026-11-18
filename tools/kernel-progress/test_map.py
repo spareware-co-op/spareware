@@ -95,6 +95,10 @@ class Tree(unittest.TestCase):
         self.assertEqual(ops["G1"]["classes"], ["Exact", "Certified"])  # the union, in chapter 9's order
         self.assertEqual(ops["G1"]["calls"], ["make.box", "query.volume"])
         self.assertEqual(ops["G2"]["classes"], ["Exact"])
+        d = copy.deepcopy(DATA)
+        d["classes"]["ours"]["G2"] = {"classes": ["Certified", "Exact"], "from": "chapter 12"}
+        several = {op["piece"]: op for ops in make(data=d)["engines"].values() for op in ops}
+        self.assertEqual(several["G2"]["classes"], ["Exact", "Certified"])  # several, in chapter 9's order
         self.assertEqual(ops["G3"]["classes"], ["Approximate"])
         self.assertEqual(ops["G4"]["classes"], [])
         self.assertIn("SC-1", ops["G4"]["why"])
@@ -149,6 +153,9 @@ class SeededWrongInputs(unittest.TestCase):
         d = copy.deepcopy(DATA)
         d["classes"]["ours"]["G2"]["class"] = "Exactish"
         self.fails("the class 'Exactish'", data=d)
+        d = copy.deepcopy(DATA)
+        d["classes"]["ours"]["G2"] = {"classes": ["Certified", "Roughly"], "from": "chapter 12"}
+        self.fails("the class 'Roughly'", data=d)
         d = copy.deepcopy(DATA)
         d["engines"]["solidcore"]["class"] = "Close enough"
         self.fails("solidcore's answers the class 'Close enough'", data=d)
