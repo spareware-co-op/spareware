@@ -443,19 +443,35 @@ fn a_body_united_with_its_own_copy_qualifies_the_names_and_says_so() {
     }
 }
 
-#[test]
-fn names_do_not_care_about_the_order_of_the_operands_or_where_the_shape_is() {
-    let run = |dx: i64, turned: bool| {
-        let a = cuboid(1, [dx, 0, 0], [40, 40, 40]);
-        let b = cuboid(2, [dx + 20, 20, 20], [40, 40, 40]);
-        let (one, two) = (solid(1, &a), solid(2, &b));
-        let operands = if turned { [two, one] } else { [one, two] };
-        let out: OpOutput<Combined> = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap();
-        out.result.body.names().unwrap().clone()
-    };
-    let first = run(0, false);
-    assert_eq!(first, run(0, true));
-    assert_eq!(first, run(1000, false));
+/// Names do not care about the order of the operands or where the shape is: one test for the
+/// order and one for the place, each against the same first subtraction (decision 32.78: the
+/// three together were too long for one Miri gate part).
+mod names_do_not_care_about_the_order_of_the_operands_or_where_the_shape_is {
+    #[test]
+    fn the_order_of_the_operands() {
+        assert_eq!(
+            super::names_of_a_cut(0, false),
+            super::names_of_a_cut(0, true)
+        );
+    }
+
+    #[test]
+    fn where_the_shape_is() {
+        assert_eq!(
+            super::names_of_a_cut(0, false),
+            super::names_of_a_cut(1000, false)
+        );
+    }
+}
+
+/// The names of one box less another, both moved `dx` along x, the operands `turned` or not.
+fn names_of_a_cut(dx: i64, turned: bool) -> geom_topo::order::Names {
+    let a = cuboid(1, [dx, 0, 0], [40, 40, 40]);
+    let b = cuboid(2, [dx.checked_add(20).unwrap(), 20, 20], [40, 40, 40]);
+    let (one, two) = (solid(1, &a), solid(2, &b));
+    let operands = if turned { [two, one] } else { [one, two] };
+    let out: OpOutput<Combined> = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap();
+    out.result.body.names().unwrap().clone()
 }
 
 #[test]
@@ -688,20 +704,36 @@ fn cuboid_named(op: u8, low: [i64; 3], size: [u64; 3]) -> (Body, Vec<TopoName>) 
     (made.body, made.names)
 }
 
-#[test]
-fn a_boolean_reports_every_name_it_made_after_those_it_refers_to() {
+/// A boolean reports every name it made after those it refers to: for a wall less two doors, and
+/// less three, one test each (decision 32.78: the two together were too long for one Miri gate
+/// part).
+mod a_boolean_reports_every_name_it_made_after_those_it_refers_to {
+    #[test]
+    fn two_doors() {
+        super::names_reported_after_their_parents(2);
+    }
+
+    #[test]
+    fn three_doors() {
+        super::names_reported_after_their_parents(3);
+    }
+}
+
+/// The check of `a_boolean_reports_every_name_it_made_after_those_it_refers_to` for a wall less
+/// its first `doors` doors.
+fn names_reported_after_their_parents(doors: usize) {
     let (wall, wall_names) = cuboid_named(1, [0, 0, 0], [300, 10, 60]);
     let door = |x: i64| cuboid_named(2, [x, -5, 0], [20, 20, 40]);
     let ((one, one_names), (two, two_names), (three, _)) = (door(20), door(120), door(220));
-    for operands in [
-        vec![solid(1, &wall), solid(2, &one), solid(3, &two)],
-        vec![
-            solid(1, &wall),
-            solid(2, &one),
-            solid(3, &two),
-            solid(4, &three),
-        ],
-    ] {
+    let mut all = vec![
+        solid(1, &wall),
+        solid(2, &one),
+        solid(3, &two),
+        solid(4, &three),
+    ];
+    all.truncate(doors.checked_add(1).unwrap());
+    {
+        let operands = all;
         let result = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
         // The operands' names first (a door's twice over is one), then the boolean's, in order.
         let mut graph = geom_name::NameGraph::new();

@@ -145,27 +145,44 @@ fn clustered_points_are_certified_or_refused() {
 
 /// Claim: a fit to a stated error is within it however loose the tolerance, down to p + 1 control
 /// points, and the certificate stays true.
-#[test]
-fn a_loose_tolerance_leaves_the_fewest_control_points() {
-    let data: Vec<[f64; 2]> = (0..50)
-        .map(|k| {
-            let x = f64::from(k) / 49.0;
-            [x, x * x]
-        })
-        .collect();
-    for mode in [KnotMode::Single, KnotMode::Multiple] {
+/// A loose tolerance leaves the fewest control points: a parabola in each knot mode, and a line,
+/// one test each (decision 32.78: the three fits together were too long for one Miri gate part).
+mod a_loose_tolerance_leaves_the_fewest_control_points {
+    use super::*;
+
+    fn parabola(mode: KnotMode) {
+        let data: Vec<[f64; 2]> = (0..50)
+            .map(|k| {
+                let x = f64::from(k) / 49.0;
+                [x, x * x]
+            })
+            .collect();
         let fit = Curve::approximate(&data, 3, 10.0, mode, V, &mut meter()).unwrap();
         assert_eq!(fit.curve.homogeneous().len(), 4, "{mode:?}");
         assert!(fit.error <= 10.0);
         holds(&fit, &data);
     }
-    // Collinear data: a line, whatever degree is asked for.
-    let line: Vec<[f64; 3]> = (0..40)
-        .map(|k| [f64::from(k), 2.0 * f64::from(k), -1.0])
-        .collect();
-    let fit = Curve::approximate(&line, 2, 1e-9, KnotMode::Single, V, &mut meter()).unwrap();
-    assert_eq!(fit.curve.homogeneous().len(), 3);
-    holds(&fit, &line);
+
+    #[test]
+    fn a_parabola_with_single_knots() {
+        parabola(KnotMode::Single);
+    }
+
+    #[test]
+    fn a_parabola_with_multiple_knots() {
+        parabola(KnotMode::Multiple);
+    }
+
+    /// Collinear data: a line, whatever degree is asked for.
+    #[test]
+    fn a_line() {
+        let line: Vec<[f64; 3]> = (0..40)
+            .map(|k| [f64::from(k), 2.0 * f64::from(k), -1.0])
+            .collect();
+        let fit = Curve::approximate(&line, 2, 1e-9, KnotMode::Single, V, &mut meter()).unwrap();
+        assert_eq!(fit.curve.homogeneous().len(), 3);
+        holds(&fit, &line);
+    }
 }
 
 /// Claim: a fit to a stated error never returns a curve beyond it. At zero tolerance even an exact

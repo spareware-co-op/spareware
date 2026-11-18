@@ -1074,8 +1074,33 @@ mod tests {
         assert_eq!(run(dd(5.0, 0.0), |_| None), Err(NumError::BudgetExceeded));
     }
 
-    #[test]
-    fn the_exact_path_agrees_with_the_fast_path() {
+    /// The exact path agrees with the fast path: one test a quarter turn of the frame (decision
+    /// 32.78: the four together were too long for one Miri gate part).
+    mod the_exact_path_agrees_with_the_fast_path {
+        #[test]
+        fn turned_0() {
+            super::exact_agrees_with_fast(0);
+        }
+
+        #[test]
+        fn turned_1() {
+            super::exact_agrees_with_fast(1);
+        }
+
+        #[test]
+        fn turned_2() {
+            super::exact_agrees_with_fast(2);
+        }
+
+        #[test]
+        fn turned_3() {
+            super::exact_agrees_with_fast(3);
+        }
+    }
+
+    /// The check of `the_exact_path_agrees_with_the_fast_path` in the frame turned `turns`
+    /// quarter turns.
+    fn exact_agrees_with_fast(turns: i32) {
         // A Map frame and a quarter-turned one in metres: the exact path must give the fast
         // path's bits, ties and exactness included.
         let values = [
@@ -1088,7 +1113,7 @@ mod tests {
             f64::from_bits(1),
             1.0e-300,
         ];
-        for turns in 0..4 {
+        {
             let f = FrameRecord::new(
                 CrsId::Epsg(2193),
                 GridStep::Q0,
