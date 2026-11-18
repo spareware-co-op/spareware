@@ -234,6 +234,17 @@ pub enum FaultKind {
     /// An edge's two fins lie in different shells, so neither shell closes along it. `at` is the
     /// edge.
     PartnerShells,
+    /// A vertex of a solid body has corners in two shells: the solids those shells bound touch
+    /// there, so the body is non-manifold, of the kind General (chapter 8.1). A corner is where a
+    /// fin ends and the next fin of its loop starts. `at` is the vertex, `with` the first fin
+    /// whose corner there lies in a shell other than the vertex's first corner's.
+    VertexShells,
+    /// The faces of one shell round a vertex of a solid body make more than one fan, so the shell
+    /// pinches there, non-manifold, as the kind General may be (chapter 8.1) and a solid may not.
+    /// Two corners at a vertex are of one fan when a chain of edges at the vertex, each used by
+    /// both of two corners in the chain, joins them. `at` is the vertex, `with` the first fin
+    /// whose corner there is of a fan other than the vertex's first corner's.
+    VertexFans,
     /// A shell's faces are not one connected set. `at` is the shell, `with` a face not connected
     /// to its first.
     ShellDisconnected,
@@ -360,6 +371,8 @@ impl FaultKind {
             FaultKind::FinCount => "the edge has a number of fins its body kind does not allow",
             FaultKind::PartnerSense => "the edge's two fins run the same way along it",
             FaultKind::PartnerShells => "the edge's two fins lie in different shells",
+            FaultKind::VertexShells => "the vertex of a solid has corners in two shells",
+            FaultKind::VertexFans => "the faces round the vertex of a solid make more than one fan",
             FaultKind::ShellDisconnected => "the shell's faces are not one connected set",
             FaultKind::EmptyShell => "the shell has no faces",
             FaultKind::EmptyRegion => "the solid region has no shell",
