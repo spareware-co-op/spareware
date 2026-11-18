@@ -938,15 +938,15 @@ fn length(x: Interval, y: Interval) -> Result<Interval, IntersectError> {
 }
 
 /// Where two circles' crossings lie, measured from the smaller circle's centre.
-struct Crossing {
+pub(crate) struct Crossing {
     /// From the smaller circle's centre to the larger's.
     run: [Interval; 2],
     /// `run` as a unit vector.
     unit: [Interval; 2],
     /// How far along `unit` the crossings lie.
     foot: Interval,
-    /// How far across it.
-    height: Interval,
+    /// How far across it: zero for a touch.
+    pub(crate) height: Interval,
 }
 
 impl Crossing {
@@ -967,8 +967,21 @@ impl Crossing {
             tight::sub(tight::point(u)?, tight::point(p)?)?,
             tight::sub(tight::point(v)?, tight::point(q)?)?,
         );
-        let d = length(dx, dy)?;
         let (s, l) = (tight::point(small)?, tight::point(large)?);
+        Crossing::between([dx, dy], s, l, tangent)
+    }
+
+    /// The crossings of circles of radii `s` and `l` whose centres are `run` apart, measured from
+    /// the first's centre, from enclosures of each: [`Crossing::of`]'s method, which takes the
+    /// smaller first.
+    pub(crate) fn between(
+        run: [Interval; 2],
+        s: Interval,
+        l: Interval,
+        tangent: bool,
+    ) -> Result<Crossing, IntersectError> {
+        let [dx, dy] = run;
+        let d = length(dx, dy)?;
         let twice = tight::mul(d, tight::point(2.0)?)?;
         let foot = tight::add(
             tight::square(s)?,
@@ -996,7 +1009,10 @@ impl Crossing {
     }
 
     /// The crossing at height `h` from each circle's centre: the smaller's, then the larger's.
-    fn point(&self, h: Interval) -> Result<([Interval; 2], [Interval; 2]), IntersectError> {
+    pub(crate) fn point(
+        &self,
+        h: Interval,
+    ) -> Result<([Interval; 2], [Interval; 2]), IntersectError> {
         let [ux, uy] = self.unit;
         let [dx, dy] = self.run;
         let x = self.foot.mul(ux)?.sub(h.mul(uy)?)?;
