@@ -492,9 +492,10 @@ jobs:
   # atan2's `mul_keeps_every_carry` took 27.6 to 35.9 minutes (main's push runs 44244068917,
   # 44299434285, 44312155060 and 44322372914) while `mul` formed its six products inside and the
   # proof formed them again, so the solver had to find the two copies equal. `mul` is now its two
-  # steps, `partial_products` and then `sum_partial_products`, and the proof runs the two steps
-  # on the one set of products, so there is no second copy. The same steps fed the products once
-  # took 5.2 minutes (run 44246797569). What did not shorten it: a cut by the word of the answer
+  # steps, `partial_products` and then `sum_partial_products`, each with its own proof:
+  # `mul_keeps_every_carry` runs the two steps on the one set of products and proves the sum
+  # (7.6 minutes, run 44342665715), and `partial_products_are_the_six_products` proves that the
+  # products are the six written out in it. What did not shorten it: a cut by the word of the answer
   # (the exponent alone took 18.7, each of the three words ran to the job's 120-minute limit, run
   # 44248734972), tying a copy of the steps to the old `mul` (ran to the limit, run 44246797569),
   # and the SMT solvers z3 and cvc5 in place of SAT (both ran to the limit, run 44251931865).
@@ -598,6 +599,7 @@ jobs:
           - math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike
           - math::atan2::proofs::is_zero_holds_exactly_for_zero
           - math::atan2::proofs::mul_keeps_every_carry
+          - math::atan2::proofs::partial_products_are_the_six_products
           - math::atan2::proofs::shl_moves_every_bit_up
           - math::atan2::proofs::to_f64_rounds_to_nearest
           - math::log::proofs::is_zero_reads_both_words
