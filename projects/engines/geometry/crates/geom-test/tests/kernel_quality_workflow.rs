@@ -3004,9 +3004,9 @@ fn a_tests_stop_is_its_row_times_1_6_times_the_scale_and_reaching_it_fails() {
         .over
     };
     // A planted slow test is red at scale 1 and at 2.45 once it reaches its stop, and only then.
-    assert!(one(159_999, (1, 1)).is_empty());
+    assert_eq!(one(159_999, (1, 1)), Vec::<String>::new());
     assert_eq!(one(160_000, (1, 1)).len(), 1);
-    assert!(one(391_999, (245, 100)).is_empty());
+    assert_eq!(one(391_999, (245, 100)), Vec::<String>::new());
     assert_eq!(one(392_000, (245, 100)).len(), 1);
     // A test nextest stopped is red whatever its time; one that failed is nextest's own red.
     let stopped = miri::over_stops(
@@ -3042,7 +3042,7 @@ fn a_tests_stop_is_its_row_times_1_6_times_the_scale_and_reaching_it_fails() {
         )
         .over
     };
-    assert!(long(599_999).is_empty());
+    assert_eq!(long(599_999), Vec::<String>::new());
     assert_eq!(long(600_000).len(), 1);
     // A short run's stop (the pull request's 60 s) that ends a test before its own stop leaves it
     // with no verdict: named as cut, not a pass and not over; one that reached its own is over.
@@ -3056,7 +3056,7 @@ fn a_tests_stop_is_its_row_times_1_6_times_the_scale_and_reaching_it_fails() {
     };
     let cut = short("planted::long", 60_000);
     assert!(cut.over.is_empty() && cut.cut.len() == 1, "{cut:?}");
-    assert!(short("planted::long", 59_999) == miri::Judged::default());
+    assert_eq!(short("planted::long", 59_999), miri::Judged::default());
     let quick = miri::parse_table("10\tgeom-num\tplanted::quick\n").unwrap();
     let over = miri::over_stops(
         &[reported(
@@ -3151,18 +3151,24 @@ fn every_miri_gate_job_prints_its_processor_and_judges_each_test_at_its_scale() 
         docs.remove(0)
     };
     let no_cpu = plant("grep -m1 '^model name' /proc/cpuinfo", "true");
-    assert!(!yardstick_faults(&no_cpu, "miri").is_empty());
+    assert_ne!(yardstick_faults(&no_cpu, "miri"), Vec::<String>::new());
     let no_judge = plant("--yardstick target/nextest/miri-yardstick/junit.xml", "");
-    assert!(!yardstick_faults(&no_judge, "miri").is_empty());
+    assert_ne!(yardstick_faults(&no_judge, "miri"), Vec::<String>::new());
     let mut late: Vec<String> = w["jobs"]["miri-pool"]["steps"]
         .as_vec()
         .into_iter()
         .flatten()
         .map(|s| s["run"].as_str().unwrap_or("").to_owned())
         .collect();
-    assert!(yardstick_faults_in("miri-pool", &late).is_empty());
+    assert_eq!(
+        yardstick_faults_in("miri-pool", &late),
+        Vec::<String>::new()
+    );
     let at = late.iter().position(|r| r.contains("miri-scale")).unwrap();
     let step = late.remove(at);
     late.push(step);
-    assert!(!yardstick_faults_in("miri-pool", &late).is_empty());
+    assert_ne!(
+        yardstick_faults_in("miri-pool", &late),
+        Vec::<String>::new()
+    );
 }
