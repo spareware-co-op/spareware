@@ -69,6 +69,95 @@ fn run(result: TestResult) {
     }
 }
 
+/// The slices a long property's cases are cut into (`sliced!`), so that each slice ends within a
+/// Miri gate part (decision 32.78: a row of at most 486 yardstick seconds); natively and under
+/// Miri the property runs the same `CASES` cases as one `proptest!` test did.
+const SLICES: u32 = 4;
+
+/// The cases slice `k` of [`SLICES`] runs: one range of the property's one stream of cases.
+fn slice(k: u32) -> std::ops::Range<u32> {
+    let each = CASES / SLICES;
+    each * k..each * (k + 1)
+}
+
+/// Runs slice `k` of a property: proptest's runner, made as `proptest!` makes it (the same
+/// configuration, so the same seeding: Miri's fixed one under Miri), draws the stream's cases from
+/// the first up to the slice's end, every one of them, and checks those in the slice.
+fn run_slice<S>(strategy: S, k: u32, check: impl Fn(S::Value) -> TestResult)
+where
+    S: proptest::strategy::Strategy,
+{
+    let cases = slice(k);
+    let mut runner = proptest::test_runner::TestRunner::new(Config {
+        cases: cases.end,
+        ..config()
+    });
+    let drawn = std::cell::Cell::new(0_u32);
+    let outcome = runner.run(&strategy, |value| {
+        let at = drawn.get();
+        drawn.set(at + 1);
+        if at < cases.start {
+            Ok(())
+        } else {
+            check(value)
+        }
+    });
+    if let Err(e) = outcome {
+        panic!("slice {} of {SLICES}, cases {cases:?}: {e}", k + 1);
+    }
+}
+
+/// A long property as [`SLICES`] tests, one a quarter of its cases (`quarter_1` to `quarter_4`).
+macro_rules! sliced {
+    ($name:ident, $strategy:expr, |$value:pat_param| $check:expr) => {
+        mod $name {
+            use super::*;
+
+            #[test]
+            fn quarter_1() {
+                crate::run_slice($strategy, 0, |$value| $check);
+            }
+
+            #[test]
+            fn quarter_2() {
+                crate::run_slice($strategy, 1, |$value| $check);
+            }
+
+            #[test]
+            fn quarter_3() {
+                crate::run_slice($strategy, 2, |$value| $check);
+            }
+
+            #[test]
+            fn quarter_4() {
+                crate::run_slice($strategy, 3, |$value| $check);
+            }
+        }
+    };
+}
+
+#[test]
+fn the_slices_join_to_every_case_once() {
+    assert_eq!(
+        CASES % SLICES,
+        0,
+        "every slice holds the same number of cases"
+    );
+    let mut next = 0;
+    for k in 0..SLICES {
+        let cases = slice(k);
+        assert_eq!(
+            cases.start,
+            next,
+            "slice {} starts where the one before ends",
+            k + 1
+        );
+        assert!(cases.end > cases.start, "slice {} holds cases", k + 1);
+        next = cases.end;
+    }
+    assert_eq!(next, CASES, "the slices end at the last case");
+}
+
 /// The exact model: limbs read as integers, integers written as limbs, the range of each width.
 /// None of it calls the arithmetic under test.
 mod oracle {
@@ -947,18 +1036,8 @@ macro_rules! width_suite {
                 }
 
                 #[test]
-                fn add_matches_oracle(a in s::value(L), b in s::value(L)) {
-                    checks::add::<L>(&a, &b)?;
-                }
-
-                #[test]
                 fn add_at_the_limits((a, b) in s::sum_at_limit(L)) {
                     checks::add::<L>(&a, &b)?;
-                }
-
-                #[test]
-                fn sub_matches_oracle(a in s::value(L), b in s::value(L)) {
-                    checks::sub::<L>(&a, &b)?;
                 }
 
                 #[test]
@@ -987,11 +1066,6 @@ macro_rules! width_suite {
                 }
 
                 #[test]
-                fn ring_laws(a in s::law_operand(L), b in s::law_operand(L), c in s::law_operand(L)) {
-                    checks::ring_laws::<L>(&a, &b, &c)?;
-                }
-
-                #[test]
                 fn signs_match_oracle(a in s::value(L)) {
                     checks::signs::<L>(&a)?;
                 }
@@ -1012,11 +1086,6 @@ macro_rules! width_suite {
                 }
 
                 #[test]
-                fn order_is_transitive(a in s::value(L), b in s::value(L), c in s::value(L)) {
-                    checks::order_transitive::<L>(&a, &b, &c)?;
-                }
-
-                #[test]
                 fn to_i128_matches_oracle(a in s::near_i128_limits(L)) {
                     checks::to_i128::<L>(&a)?;
                 }
@@ -1024,20 +1093,6 @@ macro_rules! width_suite {
                 #[test]
                 fn resize_to_every_width(a in s::near_every_width_limit(L)) {
                     checks::resize_all::<L>(&a)?;
-                }
-
-                #[test]
-                fn products_of_extreme_coordinates(factors in vec(coordinate(), 1..=16)) {
-                    kernel_use::coordinate_product::<L>(&factors)?;
-                }
-
-                #[test]
-                fn orient3d_at_extreme_coordinates(
-                    p in prop::array::uniform4(prop::array::uniform3(coordinate()))
-                ) {
-                    let det = kernel_use::orient3d::<L>(&p);
-                    prop_assert!(oracle::top(L) >= ORIENT3D_BITS);
-                    prop_assert!(det.is_some(), "orient3d fits Wide<{}> at {:?}", L, p);
                 }
 
                 #[test]
@@ -1050,6 +1105,45 @@ macro_rules! width_suite {
                     }
                 }
             }
+
+            // The longest properties under Miri, each cut into quarters of its one stream of
+            // cases (`sliced!`): the same cases, from the same strategies, drawn in the same order.
+            sliced!(add_matches_oracle, (s::value(L), s::value(L)), |(a, b)| {
+                checks::add::<L>(&a, &b)
+            });
+
+            sliced!(sub_matches_oracle, (s::value(L), s::value(L)), |(a, b)| {
+                checks::sub::<L>(&a, &b)
+            });
+
+            sliced!(
+                ring_laws,
+                (s::law_operand(L), s::law_operand(L), s::law_operand(L)),
+                |(a, b, c)| checks::ring_laws::<L>(&a, &b, &c)
+            );
+
+            sliced!(
+                order_is_transitive,
+                (s::value(L), s::value(L), s::value(L)),
+                |(a, b, c)| checks::order_transitive::<L>(&a, &b, &c)
+            );
+
+            sliced!(
+                products_of_extreme_coordinates,
+                (vec(coordinate(), 1..=16),),
+                |(factors,)| kernel_use::coordinate_product::<L>(&factors)
+            );
+
+            sliced!(
+                orient3d_at_extreme_coordinates,
+                (prop::array::uniform4(prop::array::uniform3(coordinate())),),
+                |(p,)| {
+                    let det = kernel_use::orient3d::<L>(&p);
+                    prop_assert!(oracle::top(L) >= ORIENT3D_BITS);
+                    prop_assert!(det.is_some(), "orient3d fits Wide<{}> at {:?}", L, p);
+                    Ok(())
+                }
+            );
 
             #[test]
             fn constants() {
