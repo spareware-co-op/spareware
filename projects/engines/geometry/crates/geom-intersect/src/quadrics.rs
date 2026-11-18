@@ -69,7 +69,9 @@ use geom_run::WorkMeter;
 use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 
 use crate::closed::{self, Natural, Position};
-use crate::curve::{exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole};
+use crate::curve::{
+    enclosed_sum, exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole,
+};
 use crate::curve_surface::{cross, curve_surface, dot, lift, minus, sides};
 use crate::error::IntersectError;
 use crate::reduced;
@@ -838,6 +840,16 @@ fn parallel_cylinders(a: &Cylinder, b: &Cylinder) -> Result<Vec<Piece>, Intersec
     let run = minus(w, scale(first.along, dot(w, first.along)?)?)?;
     let [p, u, v] = run;
     let d = tight::norm(&[p, u, v])?;
+    // On axes a hair apart, rounding on numbers the size of the centres swallows
+    // the offset, whose enclosure then holds zero: it is taken from its exact sums instead.
+    let lost = d.lo() <= 0.0;
+    let (run, d) = if lost {
+        let run = exact_run(a, b)?;
+        let [p, u, v] = run;
+        (run, tight::norm(&[p, u, v])?)
+    } else {
+        (run, d)
+    };
     let (one, two) = (point(r)?, point(q)?);
     let sum = one.add(two)?;
     let gap = one.sub(two)?;
@@ -847,10 +859,17 @@ fn parallel_cylinders(a: &Cylinder, b: &Cylinder) -> Result<Vec<Piece>, Intersec
         return Ok(Vec::new());
     }
     let along = unit(run)?;
-    let foot = one
-        .square()?
-        .add(d.sub(two)?.mul(d.add(two)?)?)?
-        .div(d.mul(point(2.0)?)?)?;
+    let twice = d.mul(point(2.0)?)?;
+    // The foot (r² + d² − q²)/2d: over an offset that small, r² − q² rounded at the size of r²
+    // would swamp d², so the exact route takes r² − q² exactly too.
+    let foot = if lost {
+        let squares = enclosed_sum(&[(r, r), (-q, q)])?;
+        d.div(point(2.0)?)?.add(squares.div(twice)?)?
+    } else {
+        one.square()?
+            .add(d.sub(two)?.mul(d.add(two)?)?)?
+            .div(twice)?
+    };
     let at = plus(first.at, scale(along, foot)?)?;
     if outer == Some(Sign::Zero) || inner == Some(Sign::Zero) {
         return Ok(alloc::vec![line(at, first.along, true)?]);
@@ -866,6 +885,25 @@ fn parallel_cylinders(a: &Cylinder, b: &Cylinder) -> Result<Vec<Piece>, Intersec
         line(plus(at, side)?, first.along, false)?,
         line(minus(at, side)?, first.along, false)?,
     ])
+}
+
+/// The offset, square to the axes, from the axis of `a` to the parallel axis of `b`, from exact
+/// sums: n = (c_b − c_a) × e is a sum of products of the stored doubles, so each of its parts is
+/// enclosed to a step of its exact value however small, and the offset is e × n over e · e.
+fn exact_run(a: &Cylinder, b: &Cylinder) -> Result<Vector, IntersectError> {
+    let [p0, p1, p2] = b.center();
+    let [c0, c1, c2] = a.center();
+    let e = a.frame().normal();
+    let [e0, e1, e2] = e;
+    let n = [
+        enclosed_sum(&[(p1, e2), (-c1, e2), (-p2, e1), (c2, e1)])?,
+        enclosed_sum(&[(p2, e0), (-c2, e0), (-p0, e2), (c0, e2)])?,
+        enclosed_sum(&[(p0, e1), (-c0, e1), (-p1, e0), (c1, e0)])?,
+    ];
+    let e = lift(e)?;
+    let size = dot(e, e)?;
+    let [x, y, z] = cross(e, n)?;
+    Ok([x.div(size)?, y.div(size)?, z.div(size)?])
 }
 
 /// A surface of revolution with a sphere tangent about the meeting of two axes.
@@ -2062,4 +2100,125 @@ pub fn natural(
     let items = items_of(found, x, y, meter)?;
     let answer = Intersection::new(items, Coverage::TopologyCertified, Vec::new(), meter)?;
     Ok(Some(if turned { answer.swapped(2) } else { answer }))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::panic,
+        clippy::indexing_slicing,
+        clippy::arithmetic_side_effects,
+        reason = "test code: a failure should stop loudly"
+    )]
+
+    use super::*;
+
+    /// The frame of an axis along (0.6, 0.8, 0): neither number is a double, so a centre 300
+    /// along it in decimals, (180, 240, 0), stands a hair (about 1.3e-14) off the stored axis.
+    fn slanted() -> Frame<3> {
+        Frame::new([0.0, 0.0, 1.0], [0.6, 0.8, 0.0]).unwrap()
+    }
+
+    fn tube_at(centre: [f64; 3], radius: f64) -> Cylinder {
+        Cylinder::new(centre, radius, slanted(), ((0.0, 2.0), (-300.0, 300.0))).unwrap()
+    }
+
+    /// How far `p` stands from the axis of `c`, in doubles.
+    fn off_axis(p: [f64; 3], c: &Cylinder) -> f64 {
+        let [x, y, z] = c.frame().normal();
+        let size = (x * x + y * y + z * z).sqrt();
+        let [a, b, e] = c.center();
+        let w = [p[0] - a, p[1] - b, p[2] - e];
+        let n = [
+            (w[1] * z - w[2] * y) / size,
+            (w[2] * x - w[0] * z) / size,
+            (w[0] * y - w[1] * x) / size,
+        ];
+        (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()
+    }
+
+    /// The lines `pieces` holds, each checked to lie along the axes and on both cylinders.
+    fn lines_on_both(pieces: &[Piece], a: &Cylinder, b: &Cylinder) -> Vec<[f64; 3]> {
+        let mut at = Vec::new();
+        for piece in pieces {
+            let Piece::Curve {
+                curve,
+                tangent,
+                reach,
+            } = piece
+            else {
+                panic!("not a curve");
+            };
+            let CurveKind::Line(l) = curve.as_ref() else {
+                panic!("not a line");
+            };
+            assert!(!tangent);
+            assert!(*reach < 1e-12, "an enclosure {reach} wide");
+            let [p, q, r] = l.direction();
+            let [x, y, z] = a.frame().normal();
+            let skew = (q * z - r * y).abs() + (r * x - p * z).abs() + (p * y - q * x).abs();
+            assert!(skew < 1e-12, "{skew}");
+            for c in [a, b] {
+                let off = off_axis(l.origin(), c) - c.radius();
+                assert!(
+                    off.abs() < 1e-9,
+                    "{off} off a cylinder of radius {}",
+                    c.radius()
+                );
+            }
+            at.push(l.origin());
+        }
+        at
+    }
+
+    /// The search's input `022d3c0009030002000000090305` (natural target): two cylinders of radius
+    /// 10 on parallel axes a hair apart meet in two lines, one each side of the plane of the axes.
+    #[test]
+    fn equal_cylinders_on_parallel_axes_a_hair_apart_meet_in_two_lines() {
+        let (a, b) = (tube_at([180.0, 240.0, 0.0], 10.0), tube_at([0.0; 3], 10.0));
+        assert!(parallel(a.frame().normal(), b.frame().normal()));
+        assert!(!same_line(
+            a.center(),
+            a.frame().normal(),
+            b.center(),
+            b.frame().normal()
+        ));
+        for (p, q) in [(&a, &b), (&b, &a)] {
+            let found = parallel_cylinders(p, q).unwrap();
+            assert_eq!(found.len(), 2);
+            let at = lines_on_both(&found, p, q);
+            // About 20 apart: one each side.
+            let gap: f64 = (0..3)
+                .map(|i| (at[0][i] - at[1][i]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            assert!(gap > 19.0 && gap < 21.0, "{gap}");
+        }
+    }
+
+    /// The same axes, with radii two steps apart at 10: less than the hair between the axes, so
+    /// neither cylinder lies inside the other and they still cross in two lines.
+    #[test]
+    fn cylinders_whose_radii_differ_by_less_than_the_hair_between_their_axes_meet_in_two_lines() {
+        let smaller = 10.0_f64.next_down().next_down();
+        let (a, b) = (
+            tube_at([180.0, 240.0, 0.0], 10.0),
+            tube_at([0.0; 3], smaller),
+        );
+        for (p, q) in [(&a, &b), (&b, &a)] {
+            let found = parallel_cylinders(p, q).unwrap();
+            assert_eq!(found.len(), 2);
+            lines_on_both(&found, p, q);
+        }
+    }
+
+    /// The same axes, with radii 10 and 5: one inside the other, so they meet nowhere.
+    #[test]
+    fn unequal_cylinders_on_parallel_axes_a_hair_apart_meet_nowhere() {
+        let (a, b) = (tube_at([180.0, 240.0, 0.0], 10.0), tube_at([0.0; 3], 5.0));
+        for (p, q) in [(&a, &b), (&b, &a)] {
+            assert!(parallel_cylinders(p, q).unwrap().is_empty());
+        }
+    }
 }

@@ -97,7 +97,7 @@ fn sum_of(terms: &[(f64, f64)]) -> f64 {
 
 /// An enclosure of Σ aᵢ·bᵢ two steps wide: the doubles either side of its exact sum rounded to
 /// nearest, which is within half a step of the sum.
-fn enclosed_sum(terms: &[(f64, f64)]) -> Result<Interval, IntersectError> {
+pub(crate) fn enclosed_sum(terms: &[(f64, f64)]) -> Result<Interval, IntersectError> {
     let v = sum_of(terms);
     Ok(Interval::new(v.next_down(), v.next_up())?)
 }
