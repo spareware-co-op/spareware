@@ -360,9 +360,10 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 30 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
-          # Its own build folder, which the build cache never saves or restores: the cache's key
-          # does not name the processor, so a restored native build from another machine's CPU
-          # can hold instructions this one lacks (SIGILL). Built fresh here, it is this CPU's.
+          # Its own build folder, which the main build cache never saves or restores: that key
+          # does not name the processor, so a native build restored from another machine's CPU
+          # could hold instructions this one lacks (SIGILL). Only the native cache, named by
+          # this CPU's digest, fills it on macOS x86-64; otherwise it is built fresh here.
           CARGO_TARGET_DIR: target-native
         run: '\"$GOLDEN\" run --part 1/11 --release'
 ",
