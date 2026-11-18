@@ -971,6 +971,72 @@ mod proofs {
         let (from, to) = DIVIDING[2];
         coarsen_law(from, to, AT_OR_ABOVE_ZERO, NEAREST);
     }
+    /// Below zero, q2 to q0, one side, written on the pair itself: form 0 in i64, 1 in i128.
+    fn t7g_neg(form: u8, side: u8) {
+        let c = coord();
+        if c.get() >= 0 {
+            return;
+        }
+        let (from, to) = DIVIDING[2];
+        match coarsen(c, from, to) {
+            Ok(r) => {
+                let (q, v) = (r.value().get(), c.get());
+                if form == 0 {
+                    let moved = q * 625 - v;
+                    if side == 0 {
+                        assert!(2 * moved < 625);
+                    } else {
+                        assert!(2 * moved > -625);
+                    }
+                } else {
+                    let (q, v) = (i128::from(q), i128::from(v));
+                    let moved = q * 625 - v;
+                    if side == 0 {
+                        assert!(2 * moved < 625);
+                    } else {
+                        assert!(2 * moved > -625);
+                    }
+                }
+            }
+            Err(_) => assert!(false, "coarsening towards a coarser step always answers"),
+        }
+    }
+    #[kani::proof]
+    fn t7g_c_neg64_a() {
+        t7g_neg(0, 0);
+    }
+    #[kani::proof]
+    fn t7g_c_neg64_b() {
+        t7g_neg(0, 1);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_neg64_a() {
+        t7g_neg(0, 0);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_neg64_b() {
+        t7g_neg(0, 1);
+    }
+    #[kani::proof]
+    fn t7g_c_neg128_a() {
+        t7g_neg(1, 0);
+    }
+    #[kani::proof]
+    fn t7g_c_neg128_b() {
+        t7g_neg(1, 1);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_neg128_a() {
+        t7g_neg(1, 0);
+    }
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn t7g_k_neg128_b() {
+        t7g_neg(1, 1);
+    }
     // TRIAL-END
 
     /// Where `coarsen` does not divide, for every coordinate: between the same step the value is

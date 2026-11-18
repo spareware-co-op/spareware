@@ -2124,6 +2124,33 @@ mod proofs {
         let s = mul_steps(&a, &b, six_products(&a, &b)).unwrap();
         assert!((r.h, r.m, r.l, r.ex, r.sgn) == (s.h, s.m, s.l, s.ex, s.sgn));
     }
+    fn t7m_field(which: u8) {
+        let (a, b) = (any_tint(), any_tint());
+        let r = a.mul(&b).unwrap();
+        let s = mul_steps(&a, &b, six_products(&a, &b)).unwrap();
+        match which {
+            0 => assert!(r.h == s.h),
+            1 => assert!(r.m == s.m),
+            2 => assert!(r.l == s.l),
+            _ => assert!((r.ex, r.sgn) == (s.ex, s.sgn)),
+        }
+    }
+    #[kani::proof]
+    fn t7m_c_h() {
+        t7m_field(0);
+    }
+    #[kani::proof]
+    fn t7m_c_m() {
+        t7m_field(1);
+    }
+    #[kani::proof]
+    fn t7m_c_l() {
+        t7m_field(2);
+    }
+    #[kani::proof]
+    fn t7m_c_ex() {
+        t7m_field(3);
+    }
     // TRIAL-END
 
     /// A non-negative integer below 2^448, as seven 64-bit words, least significant first.
