@@ -53,7 +53,13 @@
 //!   stop; the list is what the tool writes from the table, its rows over 375 s, and may only
 //!   shrink. Shown by planted changes to the workflow (no reading, read only on success, its
 //!   failure hidden, another stop) and by the tool on planted reports (a test off the list
-//!   stopped fails its job; one on the list does not, and is named as stopped).
+//!   stopped fails its job; one on the list does not, and is named as stopped; a missing report
+//!   fails it, named in the summary).
+//! - **A partition that overruns keeps its log.** A partition's tests' step has its own limit,
+//!   `geom_test::miri::TESTS_STEP_MINUTES`, over what the plan gives a partition and under the
+//!   job's limit by the set-up and the first upload's bound, so an overrun fails in that step and
+//!   the reading of its report and the upload still run. Shown by planted changes (no limit, the
+//!   job's limit, a limit under the plan's).
 //! - **A later push judges what it can reach.** `geom_test::increment` judges again every file of
 //!   the change whose crate's tests what changed since the last clean head reaches, held here to
 //!   planted changes that must be judged (a changed line, a changed test, a removed ledger entry,
@@ -2593,6 +2599,87 @@ fn a_miri_job_names_every_test_stopped_with_no_verdict_and_fails_on_one_that_may
     }
 }
 
+/// What is wrong with the limit of `miri`'s tests' step: it must be
+/// [`miri::TESTS_STEP_MINUTES`], over the [`miri::PART_SECONDS`] the plan gives a partition's
+/// listing and tests, and with the set-up ([`miri::FIXED_SECONDS`]) and the first try of the
+/// report's upload within the job's limit, so an overrun ends in that step and what comes after
+/// it still runs.
+fn miri_tests_limit_problems(text: &str) -> Vec<String> {
+    let w = YamlLoader::load_from_str(text).unwrap().remove(0);
+    let job = &w["jobs"]["miri"];
+    let steps = job["steps"].as_vec().cloned().unwrap_or_default();
+    let run_of = |s: &Yaml| joined(s["run"].as_str().unwrap_or("")).join("\n");
+    let Some(tests) = steps.iter().find(|s| run_of(s).contains(STOPPED_JOBS[0].1)) else {
+        return vec!["miri has no tests' step".to_owned()];
+    };
+    let mut found = Vec::new();
+    let step = tests["timeout-minutes"].as_i64();
+    if step != i64::try_from(miri::TESTS_STEP_MINUTES).ok() {
+        found.push(format!(
+            "miri's tests' step is not limited to {} minutes ({step:?})",
+            miri::TESTS_STEP_MINUTES
+        ));
+    }
+    let upload = steps
+        .iter()
+        .find(|s| s["id"].as_str() == Some("report"))
+        .and_then(|s| s["timeout-minutes"].as_i64())
+        .unwrap_or(i64::MAX);
+    let (Some(step), Some(whole)) = (step, job["timeout-minutes"].as_i64()) else {
+        found.push("miri's tests' step or job has no limit".to_owned());
+        return found;
+    };
+    if step.saturating_mul(60) <= i64::try_from(miri::PART_SECONDS).unwrap_or(i64::MAX) {
+        found.push("miri's tests' step may stop a partition the plan holds".to_owned());
+    }
+    let fixed = i64::try_from(miri::FIXED_SECONDS).unwrap_or(i64::MAX);
+    if step
+        .saturating_add(upload)
+        .saturating_mul(60)
+        .saturating_add(fixed)
+        > whole.saturating_mul(60)
+    {
+        found.push(
+            "miri's tests' step, set-up and first upload do not fit the job's limit".to_owned(),
+        );
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_partition_that_overruns_fails_in_its_tests_step_with_its_log_kept() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let found = miri_tests_limit_problems(&text);
+    assert!(found.is_empty(), "{found:#?}");
+    let limited = "      - name: Every kernel test Miri finishes (partition ${{ matrix.partition }})\n        \
+                   timeout-minutes: 24\n";
+    let named =
+        "      - name: Every kernel test Miri finishes (partition ${{ matrix.partition }})\n";
+    // Seeded violations: each must be reported.
+    for (from, to, said) in [
+        (limited, named, "not limited to 24 minutes"),
+        (
+            limited,
+            &limited.replace("24", "30") as &str,
+            "do not fit the job's limit",
+        ),
+        (
+            limited,
+            &limited.replace("24", "13") as &str,
+            "may stop a partition the plan holds",
+        ),
+    ] {
+        let planted = text.replacen(from, to, 1);
+        assert_ne!(planted, text, "the planted edit {to:?} applies");
+        let found = miri_tests_limit_problems(&planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
 /// A nextest report of one test of `binary` and `test` that passed after `seconds`, as nextest
 /// writes one for a test its `on-timeout = "pass"` stopped (a plain pass at the stop).
 fn one_test_report(binary: &str, test: &str, seconds: &str) -> String {
@@ -2688,6 +2775,29 @@ fn a_test_off_the_list_stopped_at_the_budget_turns_its_job_red() {
     // A stop past the budget is refused.
     let (code, _) = stopped_tool(&sure.binary, &sure.test, "1.0", miri::BUDGET + 1);
     assert_eq!(code, 2);
+    // A tests' step that ran out of its time limit before nextest wrote the report: the job
+    // fails, and its summary says there is no report.
+    let none = Path::new(env!("CARGO_TARGET_TMPDIR")).join("miri-stopped-no-report/junit.xml");
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_kernel-quality"))
+        .args([
+            "miri-stopped",
+            "--stop",
+            "600",
+            "--title",
+            "Planted",
+            "--report",
+        ])
+        .arg(&none)
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{said}");
+    assert!(
+        said.contains("### Planted: tests stopped with no verdict")
+            && said.contains("**No report: this job fails.**")
+            && said.contains("is not there"),
+        "{said}"
+    );
 }
 
 #[cfg_attr(

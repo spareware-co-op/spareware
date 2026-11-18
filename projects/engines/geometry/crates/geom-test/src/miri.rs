@@ -144,6 +144,13 @@ pub const PART_SECONDS: u64 = 780;
 /// `.config/nextest.toml` stops a test still running then. A finishing row is always under it.
 pub const BUDGET: u64 = 600;
 
+/// The limit of a partition's tests' step, in minutes: over [`PART_SECONDS`], so a partition the
+/// plan holds is never stopped by it, and under the job's 30 minutes by [`FIXED_SECONDS`] and the
+/// first try of its report's upload, so a partition that overruns fails in that step with its
+/// log, the summary of its stopped tests and its report kept (run 44168015168's partition 65 ran
+/// out the job's limit inside the step, and nothing of it was kept).
+pub const TESTS_STEP_MINUTES: u64 = 24;
+
 /// `seconds` on a runner [`SLOWER`], rounded up.
 fn on_a_slower_runner(seconds: u64) -> u64 {
     seconds.saturating_mul(SLOWER.0).div_ceil(SLOWER.1)

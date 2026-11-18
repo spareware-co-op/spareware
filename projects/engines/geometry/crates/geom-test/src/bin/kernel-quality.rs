@@ -34,7 +34,8 @@
 //!   `miri-may-stop` writes that list alone from the table in the repository.
 //! - `miri-stopped` reads a Miri gate job's nextest reports and names in Markdown, for its
 //!   summary, each test nextest stopped with no verdict; it fails when one of them may not stop
-//!   ([`geom_test::miri::stops`], [`geom_test::miri::allowed_stops`]).
+//!   ([`geom_test::miri::stops`], [`geom_test::miri::allowed_stops`]), and when a report is
+//!   missing (the tests' step ran out of its time before nextest wrote it), saying so there.
 //! - `miri-measure` plans a measuring run on GitHub's runners (the workflow's dispatch input
 //!   `miri_measure`): the tests with no row, or every test, of a Miri listing, packed into parts
 //!   that each end within the stop ([`geom_test::miri::measure_plan`]), each part's filterset
@@ -285,7 +286,8 @@ enum Command {
     /// test nextest stopped at `--stop` with no verdict: fails (exit 1) when one of them may not
     /// be stopped (32.68). At the budget only the list `src/miri-may-stop.tsv` may be; at a
     /// shorter stop (the `miri-smoke` profile's) every test whose row a slow runner can take past
-    /// it.
+    /// it. A report that is not there fails it too, named in the summary, since that job's tests
+    /// then have no report to read.
     MiriStopped {
         /// The reports (`target/nextest/<profile>/junit.xml`).
         #[arg(long, value_name = "JUNIT.xml", required = true)]
@@ -1005,6 +1007,29 @@ fn run(cli: Cli) -> Result<bool, String> {
             let rows = geom_test::miri::parse_table(geom_test::miri::TIMES)?;
             let budget = geom_test::miri::BUDGET;
             let may = geom_test::miri::allowed_stops(&rows, geom_test::miri::MAY_STOP, stop)?;
+            // A tests' step stopped at its own time limit may leave no report: the job fails, and
+            // its summary says why instead of staying empty.
+            let missing: Vec<&PathBuf> = report.iter().filter(|f| !f.is_file()).collect();
+            if !missing.is_empty() {
+                let mut out = vec![
+                    format!("### {title}: tests stopped with no verdict"),
+                    String::new(),
+                    "**No report: this job fails.** The tests' step ended before nextest wrote \
+                     its report (it ran out of its time limit, or was stopped); its log names \
+                     the tests still running."
+                        .to_owned(),
+                    String::new(),
+                ];
+                for f in &missing {
+                    out.push(format!("- `{}` is not there", f.display()));
+                    eprintln!(
+                        "::error::{} is not there: this job's tests have no report to read",
+                        f.display()
+                    );
+                }
+                println!("{}", out.join("\n"));
+                return Ok(false);
+            }
             let mut reported = Vec::new();
             for file in &report {
                 let xml = std::fs::read_to_string(file)

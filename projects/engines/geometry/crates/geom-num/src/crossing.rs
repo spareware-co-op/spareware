@@ -425,6 +425,11 @@ mod tests {
     /// combination of the extremes of `i128`. Even the narrow width holds every one: each
     /// product is at most 2^254 in magnitude and of the two only one can be 2^254, so the
     /// difference stays within ±(2^255 − 2^127).
+    ///
+    /// Every one of the 9^4 combinations is checked, natively and under Miri alike. The 81
+    /// products are made in `num-bigint` once each, and a combination's message is written only
+    /// if it fails: the checks are the same, and Miri, which made four products and a message
+    /// for each combination, took 455 s of its 600 s stop on GitHub's runners (run 44168015168).
     #[test]
     fn side_is_exact_in_both_widths_at_the_extremes_of_i128() {
         let levels = [
@@ -438,17 +443,25 @@ mod tests {
             i128::MAX - 1,
             i128::MAX,
         ];
+        // products[i][j] is levels[i] · levels[j], exactly.
+        let products = levels.map(|x| levels.map(|y| BigInt::from(x) * BigInt::from(y)));
         let mut tally = [0usize; 3];
-        for oa in levels {
-            for ob2 in levels {
-                for ob in levels {
-                    for oa2 in levels {
-                        let exact = BigInt::from(oa) * BigInt::from(ob2)
-                            - BigInt::from(ob) * BigInt::from(oa2);
+        for (i, oa) in levels.into_iter().enumerate() {
+            for (j, ob2) in levels.into_iter().enumerate() {
+                for (k, ob) in levels.into_iter().enumerate() {
+                    for (l, oa2) in levels.into_iter().enumerate() {
+                        let exact = &products[i][j] - &products[k][l];
                         let expected = sign_of(&exact);
-                        let what = format!("{oa} {ob2} {ob} {oa2}");
-                        assert_eq!(side::<4>(oa, ob2, ob, oa2), Some(expected), "{what}");
-                        assert_eq!(side::<5>(oa, ob2, ob, oa2), Some(expected), "{what}");
+                        assert_eq!(
+                            side::<4>(oa, ob2, ob, oa2),
+                            Some(expected),
+                            "{oa} {ob2} {ob} {oa2}"
+                        );
+                        assert_eq!(
+                            side::<5>(oa, ob2, ob, oa2),
+                            Some(expected),
+                            "{oa} {ob2} {ob} {oa2}"
+                        );
                         count(&mut tally, expected);
                     }
                 }

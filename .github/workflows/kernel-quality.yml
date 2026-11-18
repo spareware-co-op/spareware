@@ -1143,7 +1143,14 @@ jobs:
           packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
           echo "$packages"
           echo "PACKAGES=$packages" >> "$GITHUB_ENV"
+      # The tests have a limit of their own, under the job's: a partition planned within 13
+      # minutes that overruns is stopped here, red, and the steps after it still run, so its log,
+      # the summary of its stopped tests and its report are kept. Run 44168015168's partition 65
+      # overran inside this step until the job's 30 minutes, and GitHub kept nothing of it.
+      # `geom_test::miri::TESTS_STEP_MINUTES`, with the set-up and the first upload's bound,
+      # fits the job's limit (kernel_quality_workflow.rs).
       - name: Every kernel test Miri finishes (partition ${{ matrix.partition }})
+        timeout-minutes: 24
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
           # Miri's defaults stay: isolation from the host (no clock but Miri's own, no outside
