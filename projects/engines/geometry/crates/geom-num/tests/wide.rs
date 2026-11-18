@@ -69,9 +69,15 @@ fn run(result: TestResult) {
     }
 }
 
-/// The slices a long property's cases are cut into (`sliced!`), so that each slice ends within a
-/// Miri gate part (decision 32.78: a row of at most 486 yardstick seconds).
-const SLICES: u32 = 4;
+/// The slices a long property's cases, and a list of split exponents, are cut into (`sliced!`,
+/// `parts!`), so that each slice ends within a Miri gate part (decision 32.78: a row of at most
+/// 486 yardstick seconds). Quarters were not enough: measuring run 44412249410 stopped many
+/// quarters at its 600 s stop.
+const SLICES: u32 = 32;
+
+/// The slices the corner patterns of `extreme_corners` are cut into: quarters, each well within a
+/// Miri gate part.
+const CORNER_SLICES: u32 = 4;
 
 /// The share of the `CASES` cases slice `k` of [`SLICES`] runs.
 fn slice(k: u32) -> std::ops::Range<u32> {
@@ -107,37 +113,69 @@ fn split_exponents(l: usize, part: u32) -> std::ops::Range<usize> {
 }
 
 /// The corner patterns of `extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner`,
-/// 0 to 2^8 − 1, cut into [`SLICES`] ranges: slice `part` of them.
+/// 0 to 2^8 − 1, cut into [`CORNER_SLICES`] ranges: slice `part` of them.
 fn corner_patterns(part: u32) -> std::ops::Range<u32> {
-    let each = (1 << 8) / SLICES;
+    let each = (1 << 8) / CORNER_SLICES;
     each * part..each * (part + 1)
 }
 
-/// A long property as [`SLICES`] tests, one a quarter of its cases (`quarter_1` to `quarter_4`).
+/// [`SLICES`] tests, `part_01` to `part_32`, each running `body` with its slice `k` (from 0):
+/// `parts!(|k| body)`.
+macro_rules! parts {
+    (|$k:ident| $body:expr) => {
+        parts!(@each |$k| $body;
+            part_01 0,
+            part_02 1,
+            part_03 2,
+            part_04 3,
+            part_05 4,
+            part_06 5,
+            part_07 6,
+            part_08 7,
+            part_09 8,
+            part_10 9,
+            part_11 10,
+            part_12 11,
+            part_13 12,
+            part_14 13,
+            part_15 14,
+            part_16 15,
+            part_17 16,
+            part_18 17,
+            part_19 18,
+            part_20 19,
+            part_21 20,
+            part_22 21,
+            part_23 22,
+            part_24 23,
+            part_25 24,
+            part_26 25,
+            part_27 26,
+            part_28 27,
+            part_29 28,
+            part_30 29,
+            part_31 30,
+            part_32 31
+        );
+    };
+    (@each |$k:ident| $body:expr; $($test:ident $n:literal),*) => {
+        $(
+            #[test]
+            fn $test() {
+                let $k: u32 = $n;
+                $body;
+            }
+        )*
+    };
+}
+
+/// A long property as [`SLICES`] tests, each its share of the cases (`part_01` to `part_32`).
 macro_rules! sliced {
     ($name:ident, $strategy:expr, |$value:pat_param| $check:expr) => {
         mod $name {
             use super::*;
 
-            #[test]
-            fn quarter_1() {
-                crate::run_slice($strategy, 0, |$value| $check);
-            }
-
-            #[test]
-            fn quarter_2() {
-                crate::run_slice($strategy, 1, |$value| $check);
-            }
-
-            #[test]
-            fn quarter_3() {
-                crate::run_slice($strategy, 2, |$value| $check);
-            }
-
-            #[test]
-            fn quarter_4() {
-                crate::run_slice($strategy, 3, |$value| $check);
-            }
+            parts!(|k| crate::run_slice($strategy, k, |$value| $check));
         }
     };
 }
@@ -189,7 +227,7 @@ fn the_slices_join_to_every_case_once() {
     }
     // The corner patterns, 0 to 2^8 − 1, each once.
     let mut next = 0;
-    for part in 0..SLICES {
+    for part in 0..CORNER_SLICES {
         let bits = corner_patterns(part);
         assert_eq!(
             bits.start,
@@ -1151,7 +1189,7 @@ macro_rules! width_suite {
                 }
             }
 
-            // The longest properties under Miri, each cut into quarters of its one stream of
+            // The longest properties under Miri, each cut into slices of its one stream of
             // cases (`sliced!`): the same cases, from the same strategies, drawn in the same order.
             sliced!(add_matches_oracle, (s::value(L), s::value(L)), |(a, b)| {
                 checks::add::<L>(&a, &b)
@@ -1200,29 +1238,11 @@ macro_rules! width_suite {
                 run(checks::edges::<L>());
             }
 
-            /// Every split of the threshold product, in quarters of the split exponents.
+            /// Every split of the threshold product, in slices of the split exponents.
             mod products_at_every_split_of_the_threshold {
                 use super::*;
 
-                #[test]
-                fn quarter_1() {
-                    run(checks::threshold_splits::<L>(0));
-                }
-
-                #[test]
-                fn quarter_2() {
-                    run(checks::threshold_splits::<L>(1));
-                }
-
-                #[test]
-                fn quarter_3() {
-                    run(checks::threshold_splits::<L>(2));
-                }
-
-                #[test]
-                fn quarter_4() {
-                    run(checks::threshold_splits::<L>(3));
-                }
+                parts!(|part| run(checks::threshold_splits::<L>(part)));
             }
 
             #[test]
