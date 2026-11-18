@@ -35,7 +35,9 @@
 //!   vectors, is the engine's (decision 32.69). An arc's end on the circle's own join is placed
 //!   by an exact sign, so it is the domain's own end exactly and no stretch stands past the join
 //!   unless the arc passes it; where an end's enclosure reaches the join and the frame's x runs
-//!   off the plane's axes, or the join is off x's line, the circle is the engine's.
+//!   off the plane's axes, or the join is off x's line, the circle is the engine's. So is a
+//!   circle whose stretches would meet, as where a side stands within a rounding of touching it
+//!   and the enclosures of its two crossings cannot tell them apart (decision 32.80).
 //! - **A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's
 //!   v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a
 //!   [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands
@@ -1879,6 +1881,15 @@ fn arcs_in_plane(
                 class: certified(),
             });
         }
+    }
+    // Two stretches whose enclosures meet hold crossings the enclosures cannot tell apart, as
+    // where a side stands within a rounding of touching the circle: the engine's (32.80).
+    let apart = items.iter().enumerate().all(|(k, a)| {
+        let later = items.get(k.saturating_add(1)..).unwrap_or_default();
+        later.iter().all(|b| !a.at().meets(b.at()))
+    });
+    if !apart {
+        return Ok(None);
     }
     proven(items, meter).map(Some)
 }
