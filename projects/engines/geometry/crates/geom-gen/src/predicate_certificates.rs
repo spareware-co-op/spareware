@@ -114,59 +114,277 @@ pub const EXACT_OPTIMISATION: [&str; 2] = ["insphere", "tpi_side"];
 /// of its own that checks it, proving the terms its list names and assuming the others, and fails
 /// unless the certificate has [`Shards::terms`] terms and it proved exactly its own, so the shards
 /// together prove every term of the one certificate (`certificates/fptaylor.sh`,
-/// `kernel-certificates.yml`; `tests/certificate_problems.rs` holds each term to exactly one
-/// shard). The bound HOL Light proves is still `FPTaylor`'s own, term by term (`opt-approx`).
+/// `kernel-certificates.yml`; `tests/certificate_problems.rs` holds each term, or each piece of a
+/// term [`Shards::cuts`] cuts, to exactly one shard). The bound HOL Light proves is still
+/// `FPTaylor`'s own, term by term (`opt-approx`): a cut term's pieces are its inequality on the
+/// parts of its box, and the shard that has some of them proves the inequality on the whole box
+/// from them.
 pub const SHARDED: [(&str, Shards); 2] = [
     ("lpi_side", LPI_SIDE_SHARDS),
     ("line_cone", LINE_CONE_SHARDS),
 ];
 
 /// The shards of one problem's terms: how many terms HOL Light's check of its certificate has,
-/// and the terms of each shard, by their place in that check's list (1 to `terms`).
+/// the terms cut into pieces, and what each shard proves, terms by their place in that check's
+/// list (1 to `terms`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Shards {
     /// The terms of the certificate: HOL Light's `Bounds:` count.
     pub terms: u32,
-    /// Each shard's terms, in increasing order.
-    pub shards: &'static [&'static [u32]],
+    /// The terms too costly for one job, each with its depth d: HOL Light checks the term as
+    /// 2^d pieces, its box halved d times where its own search would first halve it (the widest
+    /// variable, at its midpoint), and a shard with pieces of the term proves the term from them,
+    /// assuming the pieces other shards prove (`certificates/fptaylor_cut.hl`). In increasing
+    /// order of term.
+    pub cuts: &'static [(u32, u32)],
+    /// Each shard's parts, in increasing order of term and piece.
+    pub shards: &'static [&'static [Part]],
+}
+
+/// What a shard proves: a term whole, or one piece of a term [`Shards::cuts`] cuts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Part {
+    /// A term, by its place in the check's list.
+    Term(u32),
+    /// A term and one of its pieces, 1 to 2^depth.
+    Piece(u32, u32),
+}
+
+impl Part {
+    /// The term and the piece (0 for a whole term): the order a shard lists its parts in.
+    #[must_use]
+    pub fn key(self) -> (u32, u32) {
+        match self {
+            Self::Term(t) => (t, 0),
+            Self::Piece(t, p) => (t, p),
+        }
+    }
+}
+
+impl std::fmt::Display for Part {
+    /// `t` for a term, `t.p` for a piece, as the problem's shard lines name them.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Term(t) => write!(f, "{t}"),
+            Self::Piece(t, p) => write!(f, "{t}.{p}"),
+        }
+    }
 }
 
 /// `lpi_side`'s 68 terms, shared out by what each took to check on a hosted runner (run
 /// 43604320155, 157 minutes whole: 94 of them the 68 terms, 0.2 to 9.8 minutes each, after 4
 /// minutes of setup, 5 of `FPTaylor`, 27 of loading HOL Light and 22 of its Taylor tables for 24
-/// variables). Longest first, each to the shard with the least so far: four shards of about 23
-/// minutes of terms each. Every shard still pays the 53 minutes of setup, loading and tables,
-/// which sharding cannot cut.
-pub const LPI_SIDE_SHARDS: Shards = Shards {
-    terms: 68,
-    shards: &[
-        &[1, 8, 12, 13, 15, 24, 25, 27, 32, 34, 38, 39, 40, 42, 58, 64],
-        &[
-            2, 3, 6, 14, 18, 23, 26, 29, 35, 44, 47, 48, 52, 55, 60, 61, 65, 66, 68,
+/// variables). Each shard now restores the loaded state, and the terms are shared out again by
+/// the minutes each took in runs 44076902825 and 44161231205 (the slower of the two; four shards
+/// took 27 to 50 minutes there): a shard is planned as 5.6 minutes before its terms, 1.8 for the
+/// first term's start, and its terms. A term over 5.6 minutes is a shard alone; the rest, longest
+/// first, each go to the first shard they fit, filled to 13 minutes. Two shards are still planned
+/// over 15 minutes, terms 15 and 16 alone (17.0 and 11.3 minutes): a term is the least a shard
+/// can prove unless it is cut into pieces as `line_cone`'s term 38 is
+/// (`tests/certificate_problems.rs` holds that no shard of several parts is planned over 15).
+pub const LPI_SIDE_SHARDS: Shards = {
+    use Part::Term as T;
+    Shards {
+        terms: 68,
+        cuts: &[],
+        shards: &[
+            &[T(1)],
+            &[T(2), T(13), T(14)],
+            &[T(3), T(12)],
+            &[T(4), T(23)],
+            &[T(5), T(21), T(48)],
+            &[T(6), T(20)],
+            &[T(7), T(59)],
+            &[T(8), T(17)],
+            &[T(9), T(32)],
+            &[T(10), T(44)],
+            &[T(11), T(34), T(60)],
+            &[T(15)],
+            &[T(16)],
+            &[T(18), T(24), T(42)],
+            &[T(19), T(46)],
+            &[T(22), T(36), T(58)],
+            &[T(25), T(26), T(27), T(38), T(40), T(52)],
+            &[T(28), T(35), T(39), T(41), T(49), T(50), T(51), T(64)],
+            &[T(29), T(31)],
+            &[T(30), T(47)],
+            &[T(33), T(55)],
+            &[
+                T(37),
+                T(45),
+                T(53),
+                T(54),
+                T(56),
+                T(61),
+                T(63),
+                T(65),
+                T(66),
+            ],
+            &[T(43), T(57)],
+            &[T(62), T(67), T(68)],
         ],
-        &[
-            4, 5, 10, 17, 21, 22, 30, 33, 37, 43, 45, 46, 50, 51, 53, 56, 63, 67,
-        ],
-        &[7, 9, 11, 16, 19, 20, 28, 31, 36, 41, 49, 54, 57, 59, 62],
-    ],
+    }
 };
 
-/// `line_cone`'s 70 terms (35 error terms, each bounded above and below) took 3 to 50 minutes
-/// each, 17 of them in five hours (run 43474945047), so about 14 hours whole, past a hosted
-/// runner's six. Seven shards of 10 terms, shard k the k-th term and every 7th after it, take
-/// about two hours each, three at most, beside the hour `FPTaylor` and HOL Light's loading take;
-/// and seven, being odd, sends the slow even terms up to the 10th to five shards.
-pub const LINE_CONE_SHARDS: Shards = Shards {
-    terms: 70,
-    shards: &[
-        &[1, 8, 15, 22, 29, 36, 43, 50, 57, 64],
-        &[2, 9, 16, 23, 30, 37, 44, 51, 58, 65],
-        &[3, 10, 17, 24, 31, 38, 45, 52, 59, 66],
-        &[4, 11, 18, 25, 32, 39, 46, 53, 60, 67],
-        &[5, 12, 19, 26, 33, 40, 47, 54, 61, 68],
-        &[6, 13, 20, 27, 34, 41, 48, 55, 62, 69],
-        &[7, 14, 21, 28, 35, 42, 49, 56, 63, 70],
-    ],
+/// `line_cone`'s 70 terms (35 error terms, each bounded above and below), shared out by what each
+/// took to check on GitHub's hosted runners: runs 43474945047, 43550180189, 43568172080 (in order,
+/// whole) and 43610612443 (seven shards, every 7th term), the slower time where a term ran twice;
+/// terms 45, 52, 59 and 66, which no run reached, alone on a development machine, times 1.4 (that
+/// machine loads HOL Light 1.4 times as fast as a runner). The 69 terms other than term 38,
+/// longest first, each to the shard with the least so far, made ten shards of about 111 minutes of
+/// terms, each restoring the loaded state: they took 99 to 226 minutes in run 44076902825 and 94
+/// to 191 in run 44161231205. They are shared out again by the minutes each term took in those
+/// two runs (the slower of the two), planned as `lpi_side`'s are: shards 1 to 60, of which 41
+/// are one term over 9.4 minutes, still planned over 15 minutes (15.1 to 143.5; terms 70, 4, 66,
+/// 68, 10, 2, 6, 53, 8, 45 and 64 over 50). A term is the least a shard can prove unless it is
+/// cut as term 38 is, and each cut term needs its Taylor theorems built once in the saved state.
+///
+/// Term 38 alone searched 206,720 cells for over five hours on a runner and stopped at the
+/// six-hour limit, twice (run 43797413012). It is cut six times, into 64 pieces of 3230 cells
+/// each: shards 61 to 124, one piece a shard, in order. Before any cell the
+/// verifier builds the term's Taylor theorems, which takes longer than a piece (55 minutes on a
+/// development machine, where a piece took 14 to 22; on a slow runner about 245 and 44 to 62), so
+/// one job of the run builds them once and saves the process, and each of these shards restores
+/// that state (decision 32.63; `kernel-certificates.yml`'s `hol-light-cut-states` and
+/// `fptaylor-pieces`). No shard has both pieces and whole terms: a shard restores one state. In
+/// run 44161231205 the pieces ran three a shard: 3.7 to 9.1 minutes a piece by the runner (10.9
+/// for the first of a shard), 4.4 to 5.4 minutes of a shard outside its pieces, so 16.7 to 34.5
+/// minutes a shard of three. One piece a shard is 9 to 16.3 minutes by the runner (11.7 measured
+/// for the one shard that had one piece): over 15 only on the slowest runner seen, where a piece
+/// alone takes 10.9. Cutting term 38 a seventh time would halve that, and needs the cut proved
+/// again first.
+pub const LINE_CONE_SHARDS: Shards = {
+    use Part::{Piece as P, Term as T};
+    Shards {
+        terms: 70,
+        cuts: &[(38, 6)],
+        shards: &[
+            &[T(1)],
+            &[T(2)],
+            &[T(3)],
+            &[T(4)],
+            &[T(5)],
+            &[T(6)],
+            &[T(7), T(57)],
+            &[T(8)],
+            &[T(9)],
+            &[T(10)],
+            &[T(11)],
+            &[T(12)],
+            &[T(13)],
+            &[T(14)],
+            &[T(15)],
+            &[T(16)],
+            &[T(17)],
+            &[T(18)],
+            &[T(19)],
+            &[T(20)],
+            &[T(21)],
+            &[T(22)],
+            &[T(23)],
+            &[T(24)],
+            &[T(25)],
+            &[T(26)],
+            &[T(27)],
+            &[T(28)],
+            &[T(29)],
+            &[T(30)],
+            &[T(31)],
+            &[T(32)],
+            &[T(33)],
+            &[T(34)],
+            &[T(35), T(36), T(55)],
+            &[T(37)],
+            &[T(39)],
+            &[T(40)],
+            &[T(41)],
+            &[T(42)],
+            &[T(43)],
+            &[T(44)],
+            &[T(45)],
+            &[T(46)],
+            &[T(47)],
+            &[T(48), T(52), T(61), T(62)],
+            &[T(49)],
+            &[T(50), T(69)],
+            &[T(51)],
+            &[T(53)],
+            &[T(54)],
+            &[T(56)],
+            &[T(58), T(59), T(60)],
+            &[T(63)],
+            &[T(64)],
+            &[T(65)],
+            &[T(66)],
+            &[T(67)],
+            &[T(68)],
+            &[T(70)],
+            &[P(38, 1)],
+            &[P(38, 2)],
+            &[P(38, 3)],
+            &[P(38, 4)],
+            &[P(38, 5)],
+            &[P(38, 6)],
+            &[P(38, 7)],
+            &[P(38, 8)],
+            &[P(38, 9)],
+            &[P(38, 10)],
+            &[P(38, 11)],
+            &[P(38, 12)],
+            &[P(38, 13)],
+            &[P(38, 14)],
+            &[P(38, 15)],
+            &[P(38, 16)],
+            &[P(38, 17)],
+            &[P(38, 18)],
+            &[P(38, 19)],
+            &[P(38, 20)],
+            &[P(38, 21)],
+            &[P(38, 22)],
+            &[P(38, 23)],
+            &[P(38, 24)],
+            &[P(38, 25)],
+            &[P(38, 26)],
+            &[P(38, 27)],
+            &[P(38, 28)],
+            &[P(38, 29)],
+            &[P(38, 30)],
+            &[P(38, 31)],
+            &[P(38, 32)],
+            &[P(38, 33)],
+            &[P(38, 34)],
+            &[P(38, 35)],
+            &[P(38, 36)],
+            &[P(38, 37)],
+            &[P(38, 38)],
+            &[P(38, 39)],
+            &[P(38, 40)],
+            &[P(38, 41)],
+            &[P(38, 42)],
+            &[P(38, 43)],
+            &[P(38, 44)],
+            &[P(38, 45)],
+            &[P(38, 46)],
+            &[P(38, 47)],
+            &[P(38, 48)],
+            &[P(38, 49)],
+            &[P(38, 50)],
+            &[P(38, 51)],
+            &[P(38, 52)],
+            &[P(38, 53)],
+            &[P(38, 54)],
+            &[P(38, 55)],
+            &[P(38, 56)],
+            &[P(38, 57)],
+            &[P(38, 58)],
+            &[P(38, 59)],
+            &[P(38, 60)],
+            &[P(38, 61)],
+            &[P(38, 62)],
+            &[P(38, 63)],
+            &[P(38, 64)],
+        ],
+    }
 };
 
 fn fail<T>(message: impl Into<String>) -> Result<T, EmitError> {
@@ -1141,8 +1359,11 @@ pub fn fptaylor_problem(d: &Derivation, generator: &str) -> Result<String, EmitE
             &format!("// hol-light-shards: {}", shards.shards.len()),
         );
         line(&mut out, &format!("// hol-light-terms: {}", shards.terms));
+        for (term, depth) in shards.cuts {
+            line(&mut out, &format!("// hol-light-cut {term}: {depth}"));
+        }
         for (k, terms) in (1..).zip(shards.shards) {
-            let terms: Vec<String> = terms.iter().map(u32::to_string).collect();
+            let terms: Vec<String> = terms.iter().map(Part::to_string).collect();
             line(
                 &mut out,
                 &format!("// hol-light-shard {k}: {}", terms.join(" ")),
@@ -1256,6 +1477,17 @@ fn fptaylor_about(d: &Derivation, ratios: &[Ratio]) -> Vec<String> {
                 .to_owned(),
             "prove every term.".to_owned(),
         ]);
+        for (term, depth) in shards.cuts {
+            about.extend([
+                format!(
+                    "Term {term} is cut into {} pieces (hol-light-cut below), its box halved {depth}",
+                    1u32 << depth
+                ),
+                "times where HOL Light's search would first halve it; a shard with pieces of it"
+                    .to_owned(),
+                format!("proves them, assumes the rest, and proves term {term} from them."),
+            ]);
+        }
     }
     if rounded_inputs(d) {
         about.extend([

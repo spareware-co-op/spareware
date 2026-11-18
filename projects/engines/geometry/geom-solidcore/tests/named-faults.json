@@ -1,0 +1,54 @@
+{
+  "format": 1,
+  "about": "The named faults of solidcore at the pinned commit (decision 32.70): each a case of tests/cases.json that solidcore answers wrongly through geom-solidcore. Its test still expects the kernel's answer and fails by design; kernel.yml's job solidcore passes only when the tests that fail are exactly the ones listed here. A fault is fixed on the fork's branch, or the operation it blocks stays the kernel's own.",
+  "faults": [
+    {
+      "case": "bool-20",
+      "test": "bool_20_gap_of_1e_7_two_lumps",
+      "fault": "SC-1, two solids 1e-7 apart joined: solidcore's zone tolerance (1e-5) merges faces closer than it",
+      "solidcore_gives": "one solid of 6 faces and volume 2.0000001000000003",
+      "expected": "two lumps of 12 faces and volume 2, as the closed form and the kernel's exact geom-bool give",
+      "blocks": "flat-faced booleans: they stay on the kernel's exact geom-bool"
+    },
+    {
+      "case": "isect-36",
+      "test": "isect_36_sphere_sphere_r2_1_d_2_5",
+      "fault": "SC-2, solids that do not meet are an error: intersect_breps reports a failed status, not an empty answer",
+      "solidcore_gives": "the error \"the B-reps do not intersect\", for two spheres apart",
+      "expected": "no meeting curve and no point",
+      "blocks": "meeting two solids (geom-solidcore's meet) for solids apart, nested or concentric"
+    },
+    {
+      "case": "isect-38",
+      "test": "isect_38_sphere_sphere_r2_0_5_d_0_25",
+      "fault": "SC-2, solids that do not meet are an error: intersect_breps reports a failed status, not an empty answer",
+      "solidcore_gives": "the error \"the B-reps do not intersect\", for one sphere inside the other",
+      "expected": "no meeting curve and no point",
+      "blocks": "meeting two solids (geom-solidcore's meet) for solids apart, nested or concentric"
+    },
+    {
+      "case": "isect-39",
+      "test": "isect_39_sphere_sphere_r2_0_5_d_0",
+      "fault": "SC-2, solids that do not meet are an error: intersect_breps reports a failed status, not an empty answer",
+      "solidcore_gives": "the error \"the B-reps do not intersect\", for concentric spheres",
+      "expected": "no meeting curve and no point",
+      "blocks": "meeting two solids (geom-solidcore's meet) for solids apart, nested or concentric"
+    },
+    {
+      "case": "bldg-10",
+      "test": "bldg_10_wall_1e_7_away_from_another_two_solids",
+      "fault": "SC-3, a wall 1e-7 from another joined into one solid: solidcore's zone tolerance (1e-5) closes the gap between the two walls",
+      "solidcore_gives": "one solid of volume 4.20000006 (the gap of 1e-7 x 0.2 x 3 filled), 10 faces",
+      "expected": "two solids of 12 faces and volume 4.2, as the closed form gives",
+      "blocks": "the union of two solids (geom-solidcore's union) whose faces come closer than 1e-5 without touching: walls, slabs and every flat-faced union stay on the kernel's exact geom-bool"
+    },
+    {
+      "case": "bldg-22",
+      "test": "bldg_22_window_leaving_a_1e_6_sliver_of_head",
+      "fault": "SC-4, a window leaving a sliver of 1e-6 above it loses the sliver: solidcore takes the cutter's top, 1e-6 below the wall's, as the wall's top",
+      "solidcore_gives": "volume 2.0 exactly, one solid: the 1e-6 head over the window is gone",
+      "expected": "volume 2.0000002 (2.4 - 0.2 x 1 x (2 - 1e-6)), one solid with the sliver kept",
+      "blocks": "the difference of two solids (geom-solidcore's difference) where a face of the cutter comes within 1e-5 of a face of the body: openings in walls and slabs stay on the kernel's exact geom-bool"
+    }
+  ]
+}

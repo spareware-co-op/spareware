@@ -4,12 +4,15 @@
 # `native-only over N`, a measuring run stopped it after N s with no verdict; or `native-only N`,
 # it finished in N s, at or over the budget. A native-only test runs natively only. Seconds are a
 # CI runner's; a development machine's run is scaled to them. `geom_test::miri::plan` balances the
-# partitions by the finishing rows, and Miri's filter fails on a test with no row. geom-pool has
-# no row: Miri runs every test of it, under Tree Borrows.
-# Sources: every row is the measuring run 44004974529 on GitHub's runners (miri_measure=all on 2aef58c85, main 79dd48d74 with the measuring mode), in its own seconds, stopped at 600 s.
+# partitions by the finishing rows, and Miri's plan fails on a test with no row. geom-pool's rows
+# are measured under Tree Borrows, as Miri runs geom-pool, and its finishing tests run in a job of
+# their own.
+# Sources: every row but geom-pool's is the measuring run 44004974529 on GitHub's runners (miri_measure=all on 2aef58c85, main 79dd48d74 with the measuring mode), in its own seconds, stopped at 600 s.
+# Sources: geom-pool's rows are main's push run 44000736866 (79dd48d74), partition 1's Tree Borrows report under the default-miri profile, in its own seconds, stopped at 600 s.
 # GitHub measuring run 44032408206, land/miri-bool at 96f3b42ac
 # GitHub measuring run 44018105828, the Phase 5 train at d29286c64
 # GitHub measuring run 44040144910, join/p5-gen-prune at 5e41301d1 (#892's generated_quadrics)
+# GitHub measuring run 44071252392, ci/miri-plan at a0123c23b (geom-pool attack_g33 attack_rayon_pools, Tree Borrows)
 # GitHub measuring run 44085710191, fix/natural-slow at bae076419 (#974's circle_on_surface)
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
@@ -3808,6 +3811,14 @@ native-only over 601	geom-poly::trace	polygons_inside_their_box_are_classified_b
 2	geom-poly::winding	pairs_stay_sorted_and_zeros_leave
 2	geom-poly::winding	the_outside_is_the_empty_list
 2	geom-poly::winding	the_selections_read_as_they_should
+2	geom-pool::attack_g33	a_failure_to_start_threads_says_so
+22	geom-pool::attack_g33	attack_a_tasks_panic_is_passed_on_after_the_others_finish
+129	geom-pool::attack_g33	attack_every_task_runs_exactly_once
+28	geom-pool::attack_g33	attack_rayon_pools_give_the_serial_answer_at_every_thread_count_and_chunk_size
+4	geom-pool::attack_g33	attack_the_pool_has_the_threads_it_was_built_with
+96	geom-pool::attack_g33	attack_the_pool_is_reentrant
+36	geom-pool::recursion	halving_on_rayon_pools_reaches_every_task_of_a_large_wave
+5	geom-pool::recursion	halving_reaches_every_task_of_a_large_wave
 1	geom-run	budget::tests::what_is_left_never_goes_below_zero_and_sums_never_wrap
 2	geom-run	budget::tests::work_is_checked_before_logical_bytes
 2	geom-run	meter::tests::a_settled_total_over_the_cap_stops_the_meter
