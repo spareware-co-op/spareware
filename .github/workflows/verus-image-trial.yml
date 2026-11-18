@@ -1,0 +1,90 @@
+# TRIAL ONLY, never merged: runs kernel-dev.yml's Verus job, step for step, on the two named
+# runner images, to show geom-num's Verus crate verifies on both. It runs only on a push to its
+# own branch, which is deleted once the two results are read.
+name: Verus image trial
+
+on:
+  push:
+    branches: [ci/verus-image-trial]
+
+permissions:
+  contents: read
+
+env:
+  # The same pinned compiler as kernel-dev.yml.
+  RUST_TOOLCHAIN: "1.99.0"
+
+jobs:
+  verus:
+    name: Verus proves the twins (${{ matrix.image }})
+    runs-on: ${{ matrix.image }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu-24.04, ubuntu-26.04]
+    env:
+      VERUS_RELEASE: "release/0.2026.10.18.7d82994"
+      VERUS_ARCHIVE: "verus-0.2026.10.18.7d82994-x86-linux.zip"
+      VERUS_SHA256: "e9af03732d4bdd32b93a8fcf471706739c24c1473fa5086618d96c47237845dd"
+      VERUS_RUST: "1.99.1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Verus release, checked against its SHA-256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$VERUS_RELEASE" --repo verus-lang/verus \
+            --pattern "$VERUS_ARCHIVE" --dir "$RUNNER_TEMP"
+          echo "$VERUS_SHA256  $RUNNER_TEMP/$VERUS_ARCHIVE" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/$VERUS_ARCHIVE" -d "$RUNNER_TEMP/verus"
+          verus=$(find "$RUNNER_TEMP/verus" -type f -name verus -perm -u+x | head -n 1)
+          test -n "$verus"
+          rustup toolchain install "$VERUS_RUST" --profile minimal
+          dirname "$verus" >> "$GITHUB_PATH"
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Verus fails on a planted violation
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- verus --
+          verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs
+      - name: Verus verifies geom-num's twins (the wide integers and the four explicit-point predicates)
+        run: verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs
+      - name: Verus verifies geom-topo's model of the Euler operators
+        run: verus --crate-type=lib projects/engines/geometry/crates/geom-topo/verus/lib.rs
+      # Not steps of the real job: what the solver is on this image, the work each function used,
+      # and the work the proof on main used, read after the real steps so they cannot change them.
+      - name: (trial) the solver on this image, and each function's work
+        if: always()
+        run: |
+          set -uo pipefail
+          verus_dir=$(dirname "$(command -v verus)")
+          echo "== image"; grep -E '^(VERSION|NAME)=' /etc/os-release; ldd --version | head -n 1; nproc
+          echo "== z3"; which -a z3 || true; echo "VERUS_Z3_PATH=${VERUS_Z3_PATH:-unset}"
+          file "$verus_dir/z3"; ldd "$verus_dir/z3" || true; "$verus_dir/z3" --version
+          for lib in $(ldd "$verus_dir/z3" | awk '$3 ~ /^\// {print $3}'); do readlink -f "$lib"; done
+          dpkg -l libstdc++6 libc6 libgcc-s1 | tail -n 3
+          sha256sum "$verus_dir/z3" "$verus_dir/verus" "$verus_dir/rust_verify"
+          echo "== verus"; verus --version
+          echo "== each function's work (geom-num, this branch): work, milliseconds, function, passed"
+          verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs             --time-expanded --output-json > "$RUNNER_TEMP/work.json" 2> "$RUNNER_TEMP/work.err" || true
+          jq -c '."verification-results", {"rlimit-run": ."times-ms".smt."rlimit-run", "smt-run-ms": ."times-ms".smt."smt-run", "threads": ."times-ms"."num-threads"}' "$RUNNER_TEMP/work.json"
+          jq -r '."times-ms".smt."smt-run-module-times"[] | ."function-breakdown"[]? | [.rlimit, .time, .function, .success] | @tsv'             "$RUNNER_TEMP/work.json" | sort -rn | head -n 40
+      - name: (trial) the work the proof on main used (module plane only)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/old"
+          cp -r projects/engines/geometry/crates/geom-num/verus "$RUNNER_TEMP/old/verus"
+          gh api -H "Accept: application/vnd.github.raw"             "repos/$GITHUB_REPOSITORY/contents/projects/engines/geometry/crates/geom-num/verus/plane.rs?ref=9163b4cdcefa24c84c278ec184d8cf0e4c20e4c4"             > "$RUNNER_TEMP/old/verus/plane.rs"
+          grep -c "nonlinear_arith" "$RUNNER_TEMP/old/verus/plane.rs"
+          verus --crate-type=lib "$RUNNER_TEMP/old/verus/lib.rs" --verify-module plane             --time-expanded --output-json > "$RUNNER_TEMP/old.json" 2> "$RUNNER_TEMP/old.err" || true
+          grep -A 3 "^error" "$RUNNER_TEMP/old.err" | head -n 20
+          jq -c '."verification-results", {"rlimit-run": ."times-ms".smt."rlimit-run", "smt-run-ms": ."times-ms".smt."smt-run"}' "$RUNNER_TEMP/old.json"
+          jq -r '."times-ms".smt."smt-run-module-times"[] | ."function-breakdown"[]? | [.rlimit, .time, .function, .success] | @tsv'             "$RUNNER_TEMP/old.json" | sort -rn | head -n 12
