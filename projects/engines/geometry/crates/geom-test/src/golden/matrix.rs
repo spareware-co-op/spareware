@@ -8,8 +8,9 @@
 //! checks off, `CARGO_TARGET_DIR`), which cargo inherits; [`verify`] reads a run's output and
 //! requires that libtest ran exactly the planned functions, all passed, and that every planned
 //! golden printed its `golden <id> ... agrees with the store` line ([`super::check`]);
-//! [`build_args`] gives the one `cargo test --no-run` that builds every group's binary side by side
-//! before the groups run, and [`part`] shares the groups out among CI jobs, whole crates to each
+//! [`build_args`] gives one `cargo test --no-run` per crate, selecting that crate alone as its
+//! groups' runs do (so cargo resolves the same features and nothing is built twice), that builds
+//! its groups' binaries before they run, and [`part`] shares the groups out among CI jobs, whole crates to each
 //! part, balanced by measured seconds, each group in exactly one part. The binary
 //! `golden run` drives it, and `.github/workflows/kernel.yml` runs it on every target and build
 //! mode: debug, release with overflow checks on and as shipped, natively with
@@ -86,86 +87,116 @@ impl Group {
     }
 }
 
-/// The `cargo` invocations that build every group's test target at once, before any group runs:
-/// one for the integration tests (every group's crate and test name), one for the crates whose
-/// unit tests hold goldens (`--lib`), each with the leg's own arguments. One cargo invocation
-/// builds its targets side by side; a group's own `cargo test` then finds its binary built in the
-/// same configuration and only runs it. Cargo builds a named test in every selected crate that has
-/// one, so a test name two crates share is built in both: more than the plan runs, never less.
+/// The `cargo` invocations that build every group's test target before any group runs: one per
+/// crate, in plan order, naming that crate alone (`-p <crate>`) with its groups' targets (`--lib`
+/// and each `--test`) and the leg's own arguments. Each selects the same one package that crate's
+/// groups' own `cargo test` runs select, so cargo resolves the same features for both and a
+/// group's run finds its binary built and only runs it. One invocation naming several crates would
+/// not do: cargo unifies the features of every package an invocation selects, so its build is in
+/// another configuration than each crate's own run, and each crate's first run would build the
+/// libraries again.
 #[must_use]
 pub fn build_args(groups: &[Group], extra: &[String]) -> Vec<Vec<String>> {
-    let mut out = Vec::new();
-    for lib in [false, true] {
-        let mut crates: Vec<&str> = Vec::new();
-        let mut tests: Vec<&str> = Vec::new();
-        for g in groups.iter().filter(|g| (g.test == "lib") == lib) {
-            if !crates.contains(&g.krate.as_str()) {
-                crates.push(&g.krate);
-            }
-            if !lib && !tests.contains(&g.test.as_str()) {
-                tests.push(&g.test);
-            }
+    let mut crates: Vec<&str> = Vec::new();
+    for g in groups {
+        if !crates.contains(&g.krate.as_str()) {
+            crates.push(&g.krate);
         }
-        if crates.is_empty() {
-            continue;
-        }
-        let mut args: Vec<String> = vec!["test".to_owned(), "--locked".to_owned()];
-        args.push("--no-run".to_owned());
-        for c in crates {
-            args.push("-p".to_owned());
-            args.push(c.to_owned());
-        }
-        if lib {
-            args.push("--lib".to_owned());
-        }
-        for t in tests {
-            args.push("--test".to_owned());
-            args.push(t.to_owned());
-        }
-        args.extend(extra.iter().cloned());
-        out.push(args);
     }
-    out
+    crates
+        .into_iter()
+        .map(|c| {
+            let mut args: Vec<String> = vec![
+                "test".to_owned(),
+                "--locked".to_owned(),
+                "--no-run".to_owned(),
+                "-p".to_owned(),
+                c.to_owned(),
+            ];
+            let own = groups.iter().filter(|g| g.krate == c);
+            if own.clone().any(|g| g.test == "lib") {
+                args.push("--lib".to_owned());
+            }
+            for g in own.filter(|g| g.test != "lib") {
+                args.push("--test".to_owned());
+                args.push(g.test.clone());
+            }
+            args.extend(extra.iter().cloned());
+            args
+        })
+        .collect()
 }
 
-/// Seconds each crate's golden groups took to build and run on the slowest native leg, macOS
-/// x86-64 in release with overflow checks on (main's run 43829666754 of 16 November 2026, from each
-/// group's `golden run: cargo` line to the next). They only balance [`part`]: a crate not listed
-/// counts [`UNMEASURED_SECONDS`] and still runs in exactly one part.
-const CRATE_SECONDS: [(&str, u64); 16] = [
-    ("geom-num", 466),
-    ("geom-test", 312),
-    ("geom-run", 155),
-    ("geom-format", 106),
-    ("geom-poly", 88),
-    ("geom-curve", 29),
-    ("geom-math", 26),
-    ("geom-nurbs", 12),
-    ("geom-surface", 9),
-    ("geom-mesh", 6),
-    ("geom-op", 5),
-    ("geom-bvh", 4),
-    ("geom-topo", 3),
+/// Seconds each crate's goldens took in release on macOS x86-64, the slowest native leg, its own
+/// build included: from its `golden run: cargo test --no-run` line through its groups' runs, the
+/// median over the checked, shipped and native legs of the by-hand run 44079334701 of 17 November
+/// 2026 (written by the lane's `tables.py` from the job logs). A part's first crate builds the
+/// libraries in full (five to fifteen minutes there), and a later crate builds them again only when
+/// its own features differ, so the eleven crates of 100 seconds or more are the ones that build
+/// the libraries, and a leg of eleven parts gives each of them a part of its own. The table only
+/// balances [`part`]: a crate not listed counts [`UNMEASURED_SECONDS`] and still runs in exactly
+/// one part.
+const RELEASE_SECONDS: [(&str, u64); 16] = [
+    ("geom-test", 629),
+    ("geom-curve", 531),
+    ("geom-math", 502),
+    ("geom-num", 455),
+    ("geom-nurbs", 444),
+    ("geom-run", 329),
+    ("geom-op", 251),
+    ("geom-format", 178),
+    ("geom-topo", 144),
+    ("geom-poly", 129),
+    ("geom-bvh", 100),
+    ("geom-surface", 11),
+    ("geom-mesh", 9),
+    ("geom-make", 3),
     ("geom-name", 3),
-    ("geom-make", 2),
     ("geom-linalg", 2),
 ];
 
-/// What [`part`] counts for a crate [`CRATE_SECONDS`] does not list.
+/// The same in debug (the same run's `Test (macOS x86-64, debug, part k of 4)`), where geom-test's
+/// polyhedral corpus is the longest and geom-run's golden is short.
+const DEBUG_SECONDS: [(&str, u64); 16] = [
+    ("geom-test", 371),
+    ("geom-math", 98),
+    ("geom-format", 89),
+    ("geom-topo", 88),
+    ("geom-num", 82),
+    ("geom-poly", 81),
+    ("geom-curve", 69),
+    ("geom-mesh", 40),
+    ("geom-surface", 38),
+    ("geom-nurbs", 12),
+    ("geom-bvh", 10),
+    ("geom-run", 8),
+    ("geom-op", 7),
+    ("geom-linalg", 4),
+    ("geom-make", 4),
+    ("geom-name", 2),
+];
+
+/// What [`part`] counts for a crate its table does not list.
 const UNMEASURED_SECONDS: u64 = 30;
 
 /// The groups of part `k` of `n` (1 to `n`), so that `n` CI jobs side by side run every group
 /// exactly once between them. Whole crates are shared out, so a crate's groups build their crate
-/// once: the longest first ([`CRATE_SECONDS`], then the name), each to the part with the fewest
-/// seconds so far (the lowest part on a tie). The groups keep their plan order. `None` when `k`
+/// once: the longest first ([`RELEASE_SECONDS`] when `release`, else [`DEBUG_SECONDS`], then the
+/// name), each to the part with the fewest seconds so far (the lowest part on a tie). The groups
+/// keep their plan order. `None` when `k`
 /// is not in 1 to `n`.
 #[must_use]
-pub fn part(groups: &[Group], k: usize, n: usize) -> Option<Vec<Group>> {
+pub fn part(groups: &[Group], k: usize, n: usize, release: bool) -> Option<Vec<Group>> {
     if k == 0 || k > n {
         return None;
     }
+    let table: &[(&str, u64)] = if release {
+        &RELEASE_SECONDS
+    } else {
+        &DEBUG_SECONDS
+    };
     let seconds = |c: &str| {
-        CRATE_SECONDS
+        table
             .iter()
             .find(|(name, _)| *name == c)
             .map_or(UNMEASURED_SECONDS, |(_, s)| *s)
@@ -446,7 +477,7 @@ mod tests {
         plan(&store(&[golden("geom-a/one", "det", "f1")])).remove(0)
     }
 
-    /// The real store's plan, shared out among 1 to 6 parts: every group lands in exactly one part,
+    /// The real store's plan, shared out among 1 to 11 parts: every group lands in exactly one part,
     /// whole crates stay together, and a part outside 1 to `n` is refused. Planted: a golden of a
     /// crate no table lists still lands in exactly one part.
     #[test]
@@ -460,8 +491,10 @@ mod tests {
             ids: vec!["geom-new/det".to_owned()],
         });
         for groups in [&real, &planted] {
-            for n in 1..=6 {
-                let parts: Vec<Vec<Group>> = (1..=n).map(|k| part(groups, k, n).unwrap()).collect();
+            for (n, release) in (1..=11).flat_map(|n| [(n, true), (n, false)]) {
+                let parts: Vec<Vec<Group>> = (1..=n)
+                    .map(|k| part(groups, k, n, release).unwrap())
+                    .collect();
                 for g in groups {
                     let homes = parts.iter().filter(|p| p.contains(g)).count();
                     assert_eq!(homes, 1, "{}::{} in {homes} of {n} parts", g.krate, g.test);
@@ -477,24 +510,47 @@ mod tests {
                 }
                 assert_eq!(parts.iter().fold(0, |all, p| all + p.len()), groups.len());
             }
-            assert_eq!(part(groups, 0, 2), None);
-            assert_eq!(part(groups, 3, 2), None);
+            assert_eq!(part(groups, 0, 2, true), None);
+            assert_eq!(part(groups, 3, 2, false), None);
         }
-        // The two slowest crates go to different parts of two.
-        let one = part(&real, 1, 2).unwrap();
-        assert!(one.iter().any(|g| g.krate == "geom-num"));
-        assert!(!one.iter().any(|g| g.krate == "geom-test"));
+        // The two slowest crates go to different parts of two, by each mode's own table.
+        let one = part(&real, 1, 2, true).unwrap();
+        assert!(one.iter().any(|g| g.krate == "geom-test"));
+        assert!(!one.iter().any(|g| g.krate == "geom-curve"));
+        let one = part(&real, 1, 2, false).unwrap();
+        assert!(one.iter().any(|g| g.krate == "geom-test"));
+        assert!(!one.iter().any(|g| g.krate == "geom-math"));
+        // In release, eleven parts give each of the eleven crates that build the libraries a part
+        // of its own.
+        let long: Vec<&str> = RELEASE_SECONDS
+            .iter()
+            .filter(|(_, s)| *s >= 100)
+            .map(|(c, _)| *c)
+            .collect();
+        assert_eq!(long.len(), 11);
+        for k in 1..=11 {
+            let p = part(&real, k, 11, true).unwrap();
+            let held = long
+                .iter()
+                .filter(|c| p.iter().any(|g| g.krate == **c))
+                .count();
+            assert_eq!(held, 1, "release part {k} of 11 holds {held} long crates");
+        }
     }
 
-    /// The build before the runs names every group's crate and test once, unit tests apart, with
-    /// the leg's arguments; a plan without unit-test goldens builds no `--lib`.
+    /// The builds before the runs: one per crate in plan order, each selecting that crate alone
+    /// (as its groups' runs do, so cargo resolves the same features), naming its unit tests and
+    /// each of its test targets once, with the leg's arguments; a crate without unit-test goldens
+    /// builds no `--lib`. On the real store, every build selects exactly one package and the same
+    /// one its groups' runs select, and every group's target is in its crate's build.
     #[test]
-    fn one_build_names_every_group() {
+    fn each_crate_builds_alone_what_its_runs_run() {
         let s = store(&[
             golden("geom-a/one", "det", "f1"),
             golden("geom-b/two", "lib", "m::tests::f2"),
             golden("geom-c/three", "det", "f3"),
             golden("geom-c/four", "other", "f4"),
+            golden("geom-c/five", "lib", "m::tests::f5"),
         ]);
         let args = build_args(&plan(&s), &["--release".to_owned()]);
         let words = |v: &[&str]| v.iter().map(|w| (*w).to_owned()).collect::<Vec<String>>();
@@ -507,12 +563,8 @@ mod tests {
                     "--no-run",
                     "-p",
                     "geom-a",
-                    "-p",
-                    "geom-c",
                     "--test",
                     "det",
-                    "--test",
-                    "other",
                     "--release"
                 ]),
                 words(&[
@@ -524,12 +576,62 @@ mod tests {
                     "--lib",
                     "--release"
                 ]),
+                words(&[
+                    "test",
+                    "--locked",
+                    "--no-run",
+                    "-p",
+                    "geom-c",
+                    "--lib",
+                    "--test",
+                    "det",
+                    "--test",
+                    "other",
+                    "--release"
+                ]),
             ]
         );
-        let only = build_args(&plan(&store(&[golden("geom-a/one", "det", "f1")])), &[]);
-        assert_eq!(only.len(), 1);
-        assert!(!only[0].contains(&"--lib".to_owned()));
         assert_eq!(build_args(&[], &[]), Vec::<Vec<String>>::new());
+        let real = plan(&Store::embedded().unwrap());
+        let builds = build_args(&real, &[]);
+        let selected = |a: &[String]| -> Vec<String> {
+            a.windows(2)
+                .filter(|w| w[0] == "-p")
+                .map(|w| w[1].clone())
+                .collect()
+        };
+        for b in &builds {
+            assert_eq!(selected(b).len(), 1, "{b:?} selects more than one package");
+        }
+        for g in &real {
+            let run = g.cargo_args(&[]);
+            let target: Vec<String> = run
+                .iter()
+                .skip(4)
+                .take_while(|w| *w != "--")
+                .cloned()
+                .collect();
+            let home: Vec<&Vec<String>> = builds
+                .iter()
+                .filter(|b| selected(b) == selected(&run))
+                .collect();
+            assert_eq!(
+                home.len(),
+                1,
+                "{}::{} built {} times",
+                g.krate,
+                g.test,
+                home.len()
+            );
+            assert!(
+                home[0]
+                    .windows(target.len())
+                    .any(|w| w == target.as_slice()),
+                "{}::{} not in its crate's build",
+                g.krate,
+                g.test
+            );
+        }
     }
 
     #[test]

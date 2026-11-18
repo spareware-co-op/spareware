@@ -32,6 +32,11 @@
 //! - `the_selections_read_the_shared_files_against_the_base`: `kernel.yml`'s scope, the Kani
 //!   selection and the count gates' reach each pass the change's base (`--base`). Planted: each
 //!   `--base` taken out.
+//! - `the_wasm_dev_parts_run_every_unit_once`: `kernel-dev.yml`'s `wasm` job's matrix is exactly
+//!   what `wasm_dev_matrix` writes for the development crates' test units (from `cargo metadata`)
+//!   by `wasm-dev-times.tsv`, every unit is in exactly one part, the table lists exactly those
+//!   units, and the job's step runs each part's arguments under wasmtime. Planted: a unit dropped
+//!   from a part, a unit in two parts, a flag of no unit's form.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -48,9 +53,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use geom_test::coverage::parse_times;
+use geom_test::coverage::plan_problems;
 use geom_test::deps::cargo_metadata;
 use geom_test::shared::{self, Changes, Reach};
-use geom_test::test_scope::{SUITE_TIMES, Scope, Selection, text_reads_outside};
+use geom_test::test_scope::{
+    SUITE_TIMES, Scope, Selection, WASM_DEV_CRATES, WASM_DEV_TIMES, text_reads_outside,
+    wasm_dev_matrix, wasm_dev_parts, wasm_dev_units,
+};
 use serde_json::Value;
 use yaml_rust2::{Yaml, YamlLoader};
 
@@ -919,4 +928,96 @@ fn the_release_suite_shares_run_every_crate_once() {
             .any(|p| p.ends_with("geom-test is not in the run")),
         "kept"
     );
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository and runs cargo metadata, which a WebAssembly test cannot"
+)]
+#[test]
+fn the_wasm_dev_parts_run_every_unit_once() {
+    let workflow = read(".github/workflows/kernel-dev.yml");
+    let units = wasm_dev_units(&metadata(), &WASM_DEV_CRATES);
+    assert!(
+        units.iter().any(|u| u == "geom-test test laws_surfaces")
+            && units.iter().any(|u| u == "geom-fuzz lib")
+            && units.iter().any(|u| u == "geom-gen doc"),
+        "{units:?}"
+    );
+    let times = parse_times(WASM_DEV_TIMES).unwrap();
+    let listed: BTreeSet<&String> = times.keys().collect();
+    let found: BTreeSet<&String> = units.iter().collect();
+    assert_eq!(
+        listed, found,
+        "wasm-dev-times.tsv does not list exactly the development crates' test units"
+    );
+
+    // The matrix is the one the tool writes, and every unit is in exactly one part.
+    let parts = wasm_dev_parts(&workflow).unwrap();
+    assert!(parts.len() > 1, "the wasm job has no parts");
+    let written = wasm_dev_matrix(&units, &times, parts.len());
+    assert!(
+        workflow.contains(&written),
+        "kernel-dev.yml's wasm matrix is not what `kernel-quality wasm-dev-parts --parts {}`          writes:
+{written}",
+        parts.len()
+    );
+    let problems = plan_problems(&units, &parts);
+    assert!(problems.is_empty(), "{problems:#?}");
+
+    // The job runs each part's arguments under wasmtime, and nothing else of them.
+    let yaml = parse(&workflow);
+    let job = &yaml["jobs"]["wasm"];
+    assert_eq!(
+        job["strategy"]["matrix"]["part"].as_vec().map(Vec::len),
+        Some(parts.len())
+    );
+    assert_eq!(
+        job["env"]["CARGO_TARGET_WASM32_WASIP1_RUNNER"].as_str(),
+        Some("wasmtime")
+    );
+    let steps: Vec<&Yaml> = job["steps"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .filter(|s| s["run"].as_str().is_some_and(|r| r.contains("cargo ")))
+        .collect();
+    assert_eq!(steps.len(), 1, "the wasm job runs cargo in one step");
+    assert_eq!(
+        steps[0]["env"]["RUN"].as_str(),
+        Some("${{ matrix.part.run }}")
+    );
+    let run = steps[0]["run"].as_str().unwrap();
+    for words in [
+        "<<< \"$RUN\"",
+        "cargo test --locked $group --target wasm32-wasip1",
+        "|| status=1",
+        "exit \"$status\"",
+    ] {
+        assert!(run.contains(words), "the wasm step lacks {words}");
+    }
+
+    // Planted: a unit dropped, a unit in two parts, a flag of no unit's form.
+    let dropped = workflow.replacen(" --test laws_surfaces", "", 1);
+    let problems = plan_problems(&units, &wasm_dev_parts(&dropped).unwrap());
+    assert!(
+        problems
+            .iter()
+            .any(|p| p == "geom-test test laws_surfaces is in no part"),
+        "{problems:?}"
+    );
+    let twice = workflow.replacen(
+        "--test laws_surfaces",
+        "--test laws_surfaces --test laws_surfaces",
+        1,
+    );
+    let problems = plan_problems(&units, &wasm_dev_parts(&twice).unwrap());
+    assert!(
+        problems
+            .iter()
+            .any(|p| p == "geom-test test laws_surfaces is in 2 parts"),
+        "{problems:?}"
+    );
+    let unread = workflow.replacen("--test laws_surfaces", "--tests laws_surfaces", 1);
+    assert!(wasm_dev_parts(&unread).is_err());
 }

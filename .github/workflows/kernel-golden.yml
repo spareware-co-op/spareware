@@ -188,6 +188,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache, as in the job above: each pull request saved its own copy
+          # (199 MB for pull request 980), in the repository's 10 GB with main's.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Every fixture holds its rules
         run: cargo run --locked -p geom-test --bin fixture -- check
       # The intersection harness (12.17; piece G160): the ceilings keep 12.17's rules, and every case
