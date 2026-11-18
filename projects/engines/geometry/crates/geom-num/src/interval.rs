@@ -847,6 +847,31 @@ mod proofs {
 
     // TRIAL-BEGIN (measuring only, never in a pull request)
     #[kani::proof]
+    fn t7i_c_tie2() {
+        let (x, y, a, b) = two_points();
+        if x == 0.0 || y == 0.0 {
+            assert!(a.lo() * b.lo() == x * y);
+        } else {
+            assert!(a.lo().to_bits() == x.to_bits() && b.lo().to_bits() == y.to_bits());
+        }
+    }
+    #[kani::proof]
+    fn t7i_c_tie3() {
+        let (x, y, a, b) = two_points();
+        if x == 0.0 || y == 0.0 {
+            assert!(a.lo() * b.lo() == x * y);
+        } else {
+            assert!(a.lo().to_bits() == x.to_bits() && b.lo().to_bits() == y.to_bits());
+            assert!(a.lo() * b.lo() == x * y);
+        }
+    }
+    #[kani::proof]
+    fn t7i_c_mul2() {
+        let (p, q) = (finite(), finite());
+        let (a, b) = (Interval { lo: p, hi: p }, Interval { lo: q, hi: q });
+        encloses(a.mul(b), p * q);
+    }
+    #[kani::proof]
     fn t7i_c_add() {
         let (x, y, a, b) = two_points();
         encloses(a.add(b), x + y);
