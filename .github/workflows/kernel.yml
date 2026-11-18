@@ -1128,7 +1128,9 @@ jobs:
         run: cargo test --locked --no-run
       - name: The stored cases fail exactly at the named faults
         run: |
-          set -uo pipefail
+          # The shell stops at the first failure (-e), and the named faults fail by design, so the
+          # tests run with it off and their outcome is read from the log below.
+          set +e -uo pipefail
           cargo test --locked --no-fail-fast -- --test-threads 4 2>&1 | tee "$RUNNER_TEMP/cases.log"
           set -e
           failed=$(sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' "$RUNNER_TEMP/cases.log" | sort)
