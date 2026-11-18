@@ -781,7 +781,9 @@ fn past_words(plane: &Plane) -> bool {
 /// gate part): every quarter draws every case up to its last from the one seed, as `prop::run`
 /// draws them, and checks its own. The whole asked that inputs be found on both sides of the
 /// filter's bound and of the word rung: each quarter's counts are pinned, for the default seed in
-/// each build, and the join test holds the pins to the whole.
+/// each build, and the join test holds the pins to the whole. The pins hold for the default seed
+/// only, so a native test runs the whole stream once for whatever seed is set and asks it of the
+/// whole.
 mod side_of_tpi_filter_boundary_crossed_both_ways {
     /// Each quarter's (inside, outside) of the filter's bound and (inside, outside) of the word
     /// rung, from the default seed: in a debug build (6 cases, as Miri runs it) and in a release
@@ -802,7 +804,9 @@ mod side_of_tpi_filter_boundary_crossed_both_ways {
     ];
 
     fn quarter(part: usize) {
-        let counts = super::side_of_tpi_cases(part);
+        let all = super::cases(128);
+        let index = u32::try_from(part).unwrap();
+        let counts = super::side_of_tpi_cases(all * index / 4..all * (index + 1) / 4);
         let build = usize::from(!cfg!(debug_assertions));
         if std::env::var_os("SPAREKIT_SEED").is_none() {
             assert_eq!(counts, PINNED[build][part], "quarter {}", part + 1);
@@ -849,27 +853,54 @@ mod side_of_tpi_filter_boundary_crossed_both_ways {
             );
         }
     }
+
+    /// For whatever seed is set (`SPAREKIT_SEED`, or the default), the whole stream run once
+    /// finds inputs on both sides of the filter's bound and of `determinant_sign`'s word rung, as
+    /// the whole asked; from the default seed its counts are exactly the quarters' pins together.
+    #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "the whole stream, too long for one Miri gate part; Miri runs it in its quarters"
+    )]
+    fn the_whole_crosses_both_ways_for_any_seed() {
+        let [inside, outside, word_inside, word_outside] =
+            super::side_of_tpi_cases(0..super::cases(128));
+        assert!(
+            inside > 0 && outside > 0,
+            "inside {inside} outside {outside}"
+        );
+        assert!(
+            word_inside > 0 && word_outside > 0,
+            "determinant_sign past its word rung: inside {word_inside} outside {word_outside}"
+        );
+        let build = usize::from(!cfg!(debug_assertions));
+        if std::env::var_os("SPAREKIT_SEED").is_none() {
+            let total = |k: usize| PINNED[build].iter().map(|p| p[k]).sum::<usize>();
+            assert_eq!(
+                [inside, outside, word_inside, word_outside],
+                [total(0), total(1), total(2), total(3)]
+            );
+        }
+    }
 }
 
-/// Quarter `part` of `side_of_tpi_filter_boundary_crossed_both_ways`: every case up to the
-/// quarter's end drawn, those in it checked; its counts (inside, outside) of the filter's bound
+/// The cases `run` of `side_of_tpi_filter_boundary_crossed_both_ways`'s one stream: every case up
+/// to the last drawn, those in `run` checked; their counts (inside, outside) of the filter's bound
 /// and (inside, outside) of the word rung.
-fn side_of_tpi_cases(part: usize) -> [usize; 4] {
+fn side_of_tpi_cases(run: std::ops::Range<u32>) -> [usize; 4] {
     let kinds = RefCell::new(Kinds::default());
     let routed = Cell::new((0usize, 0usize));
     let strategy = (cassini3(), scaled3());
-    let all = cases(128);
-    let (start, end) = (all * part as u32 / 4, all * (part as u32 + 1) / 4);
     let drawn = Cell::new(0_u32);
     prop::run(
         "side_of_tpi_filter_boundary_crossed_both_ways",
         Seed(0x6734_0000_0000_0002),
-        end,
+        run.end,
         &strategy,
         |((x0, e, bb, cc), (_, pts))| {
             let at = drawn.get();
             drawn.set(at + 1);
-            if at < start {
+            if !run.contains(&at) {
                 return Ok(());
             }
             let planes = planes_through(x0, &pts);
