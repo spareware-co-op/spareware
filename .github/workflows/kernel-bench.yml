@@ -442,6 +442,7 @@ jobs:
           workspaces: |
             base -> ../target-base
           key: ${{ matrix.target }}-base-${{ needs.scope.outputs.base_toolchain }}
+          cache-directories: ~/.gungraun-runner
 
       - name: Install Valgrind
         run: |
@@ -449,12 +450,7 @@ jobs:
           sudo apt-get install --yes --no-install-recommends valgrind
           valgrind --version
 
-      # The runner is kept by its own cache, named for its version and toolchain, not by the Rust
-      # cache above, whose key changes with every Cargo.lock: a part that missed that cache
-      # compiled the runner for 50 to 80 seconds (main's run 44322373006), and every part of the
-      # run paid it.
-      - name: Read the Gungraun runner version the merge base needs
-        id: runner
+      - name: Install the Gungraun runner the merge base needs
         run: |
           set -euo pipefail
           # gungraun-runner must have exactly the version of the gungraun library the tree locks.
@@ -467,31 +463,9 @@ jobs:
               exit 1
               ;;
           esac
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Restore the Gungraun runner
-        id: kept_runner
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.gungraun-runner
-          key: gungraun-runner-${{ matrix.target }}-${{ env.BASE_TOOLCHAIN }}-${{ steps.runner.outputs.version }}
-
-      - name: Install the Gungraun runner the merge base needs
-        env:
-          version: ${{ steps.runner.outputs.version }}
-        run: |
-          set -euo pipefail
           cargo "+$BASE_TOOLCHAIN" install --locked gungraun-runner --version "$version" \
             --root "$HOME/.gungraun-runner/$version"
           echo "BASE_RUNNER=$HOME/.gungraun-runner/$version/bin/gungraun-runner" >> "$GITHUB_ENV"
-
-      # Only main saves it, as it alone saves the Rust cache (one part, the same runner everywhere).
-      - name: Save the Gungraun runner
-        if: ${{ github.ref == 'refs/heads/main' && matrix.part == 1 && steps.kept_runner.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.gungraun-runner
-          key: gungraun-runner-${{ matrix.target }}-${{ env.BASE_TOOLCHAIN }}-${{ steps.runner.outputs.version }}
 
       # This part's counts of the merge base, kept by an earlier run (the paragraph at the top):
       # found by their name among the repository's artifacts, from a run of main or an earlier run
@@ -671,6 +645,7 @@ jobs:
           workspaces: |
             head -> ../target
           key: ${{ matrix.target }}-head-${{ needs.scope.outputs.head_toolchain }}
+          cache-directories: ~/.gungraun-runner
 
       - name: Install Valgrind
         run: |
@@ -678,9 +653,7 @@ jobs:
           sudo apt-get install --yes --no-install-recommends valgrind
           valgrind --version
 
-      # Kept by its own cache, as in the merge base's job.
-      - name: Read the Gungraun runner version the change needs
-        id: runner
+      - name: Install the Gungraun runner the change needs
         run: |
           set -euo pipefail
           version=$(cargo "+$HEAD_TOOLCHAIN" metadata --locked --format-version 1 \
@@ -692,31 +665,9 @@ jobs:
               exit 1
               ;;
           esac
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Restore the Gungraun runner
-        id: kept_runner
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.gungraun-runner
-          key: gungraun-runner-${{ matrix.target }}-${{ env.HEAD_TOOLCHAIN }}-${{ steps.runner.outputs.version }}
-
-      - name: Install the Gungraun runner the change needs
-        env:
-          version: ${{ steps.runner.outputs.version }}
-        run: |
-          set -euo pipefail
           cargo "+$HEAD_TOOLCHAIN" install --locked gungraun-runner --version "$version" \
             --root "$HOME/.gungraun-runner/$version"
           echo "HEAD_RUNNER=$HOME/.gungraun-runner/$version/bin/gungraun-runner" >> "$GITHUB_ENV"
-
-      # Only main saves it, as it alone saves the Rust cache (one part, the same runner everywhere).
-      - name: Save the Gungraun runner
-        if: ${{ github.ref == 'refs/heads/main' && matrix.part == 1 && steps.kept_runner.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.gungraun-runner
-          key: gungraun-runner-${{ matrix.target }}-${{ env.HEAD_TOOLCHAIN }}-${{ steps.runner.outputs.version }}
 
       # This part's counts of the merge base, from this run's part of the merge base with the same
       # number: the saved run `base` of the same groups. GitHub's storage can refuse a download for

@@ -2498,8 +2498,8 @@ fn split_and_cache_problems(w: &Yaml) -> Vec<String> {
     let mut found = Vec::new();
     let jobs = &w["jobs"];
     // Each part reads parts.tsv's units, a group or `group/op` for a group the plan splits by
-    // operation (mesh), and keeps the Gungraun runner in a cache of its own, so no part compiles it
-    // again when the Rust cache's key moves with Cargo.lock; only main saves that cache.
+    // operation (mesh), and keeps the Gungraun runner in the Rust cache (cache-directories), whose `save-if`
+    // lets only main's part 1 save it.
     for job in ["instructions-base", "instructions-parts"] {
         if !runs(w, job).contains("by_op[substr($1, 1, i - 1)] = 1")
             || !runs(w, job).contains("sub(\"/\", \"::\", u); print u")
@@ -2508,22 +2508,15 @@ fn split_and_cache_problems(w: &Yaml) -> Vec<String> {
                 "{job} does not read parts.tsv's split groups by operation"
             ));
         }
-        let steps = || jobs[job]["steps"].as_vec().into_iter().flatten();
-        let key = "gungraun-runner-${{ matrix.target }}-";
-        let uses = |action: &str| {
-            steps().any(|s| {
-                text(&s["uses"]).starts_with(action)
-                    && text(&s["with"]["path"]) == "~/.gungraun-runner"
-                    && text(&s["with"]["key"]).starts_with(key)
-            })
-        };
-        let saves_on_main = steps().any(|s| {
-            text(&s["uses"]).starts_with("actions/cache/save@")
-                && text(&s["if"]).contains("github.ref == 'refs/heads/main'")
+        let kept = jobs[job]["steps"].as_vec().into_iter().flatten().any(|s| {
+            text(&s["uses"]).starts_with("Swatinem/rust-cache@")
+                && text(&s["with"]["cache-directories"])
+                    .lines()
+                    .any(|d| d == "~/.gungraun-runner")
         });
-        if !uses("actions/cache/restore@") || !uses("actions/cache/save@") || !saves_on_main {
+        if !kept {
             found.push(format!(
-                "{job} does not keep the Gungraun runner in a cache of its own"
+                "{job} does not keep the Gungraun runner in its Rust cache"
             ));
         }
     }
@@ -2680,14 +2673,11 @@ fn the_count_gate_parts_measure_everything_once_and_a_lost_part_fails() {
             "split groups by operation",
         ),
         (
-            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0\n        with:\n          path: ~/.gungraun-runner\n",
-            "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0\n        with:\n          path: ~/.cargo\n",
-            "cache of its own",
-        ),
-        (
-            "github.ref == 'refs/heads/main' && matrix.part == 1 && steps.kept_runner",
-            "github.ref != 'refs/heads/main' && matrix.part == 1 && steps.kept_runner",
-            "cache of its own",
+            "cache-directories: ~/.gungraun-runner
+",
+            "cache-directories: ~/.cargo
+",
+            "in its Rust cache",
         ),
         (
             "        if: matrix.trip\n",
