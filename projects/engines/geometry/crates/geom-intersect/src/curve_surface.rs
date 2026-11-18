@@ -1540,7 +1540,7 @@ enum Held {
 /// leaving crossing lies on it or at its start, since both its ends are in every half-plane and
 /// each half-plane's part is one arc. A touch from inside is no crossing and cuts nothing.
 fn held_of(r: f64, sides: &[Half]) -> Result<Option<Held>, IntersectError> {
-    match crossed_by(r, sides)? {
+    match crossed_by(r, sides) {
         None => Ok(None),
         Some(Err(all)) => Ok(Some(if all { Held::Whole } else { Held::Nothing })),
         Some(Ok(crossed)) => between(r, &crossed),
@@ -1554,7 +1554,7 @@ fn held_of(r: f64, sides: &[Half]) -> Result<Option<Held>, IntersectError> {
     clippy::type_complexity,
     reason = "three outcomes of one private step, read at once by its one caller"
 )]
-fn crossed_by(r: f64, sides: &[Half]) -> Result<Option<Result<Vec<&Half>, bool>>, IntersectError> {
+fn crossed_by(r: f64, sides: &[Half]) -> Option<Result<Vec<&Half>, bool>> {
     // The circle's coordinate runs over [−r, r]: its ends' signs, and their square r².
     let square = [(r, r)];
     let (far, back) = ((Sign::Positive, &square[..]), (Sign::Negative, &square[..]));
@@ -1576,7 +1576,7 @@ fn crossed_by(r: f64, sides: &[Half]) -> Result<Option<Result<Vec<&Half>, bool>>
             )
         };
         if none {
-            return Ok(Some(Err(false)));
+            return Some(Err(false));
         }
         touched |= touch;
         if !whole && !touch {
@@ -1584,13 +1584,13 @@ fn crossed_by(r: f64, sides: &[Half]) -> Result<Option<Result<Vec<&Half>, bool>>
         }
     }
     if touched {
-        return Ok(None);
+        return None;
     }
-    Ok(Some(if crossed.is_empty() {
+    Some(if crossed.is_empty() {
         Err(true)
     } else {
         Ok(crossed)
-    }))
+    })
 }
 
 /// The arcs of the circle inside every half-plane of `crossed`, each crossed by it: the second
