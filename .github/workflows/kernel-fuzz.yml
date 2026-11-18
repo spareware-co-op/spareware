@@ -671,6 +671,8 @@ jobs:
           done
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Install z3 and cvc5 (trial, measuring only)
+        run: sudo apt-get update -q && sudo apt-get install -y -q z3 cvc5 && z3 --version && cvc5 --version | head -1
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)

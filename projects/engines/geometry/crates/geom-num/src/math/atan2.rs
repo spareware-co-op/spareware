@@ -2018,6 +2018,19 @@ mod proofs {
         }
     }
 
+    // TRIAL-BEGIN (measuring only: the same harness under an SMT solver)
+    #[kani::proof]
+    #[kani::solver(z3)]
+    fn t7m_z3() {
+        mul_keeps_every_carry();
+    }
+    #[kani::proof]
+    #[kani::solver(cvc5)]
+    fn t7m_cvc5() {
+        mul_keeps_every_carry();
+    }
+    // TRIAL-END
+
     /// A non-negative integer below 2^448, as seven 64-bit words, least significant first.
     type Big = [u64; 7];
 
