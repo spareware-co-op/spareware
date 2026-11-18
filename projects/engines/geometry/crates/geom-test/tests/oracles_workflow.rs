@@ -11,7 +11,9 @@
 //!   (`geom_test::oracle::meshes::CASE_SETS`), so a set cannot be added to one and not the other.
 //! - **Pinned and cached by source.** The oracle repository is checked out at `ORACLES_COMMIT`, a
 //!   full commit, by every step that checks it out; an image's cache key is its oracle's folder's
-//!   tree at that commit, and `meshes` fails when the cache does not hold it rather than build.
+//!   tree at that commit. Only a run on main saves it (one copy for every pull request); a run that
+//!   built it hands it to `meshes` as an artifact kept one day, and `meshes` fails when it gets no
+//!   image from the cache or from that artifact, rather than build.
 //! - **Judged, not swallowed.** `meshes` audits the oracle checkout, runs the container with no
 //!   network, and runs `oracle compare` under `set -euo pipefail` with nothing that hides its exit,
 //!   naming the leg's case set, so the refusals it records are held; nothing in the workflow can
@@ -95,6 +97,38 @@ fn live_mesh_oracles() -> Vec<String> {
         .collect()
 }
 
+/// What is wrong with the job `meshes-images`, whose steps are `steps`: only main saves the cache,
+/// and a built image goes to this run's `meshes` as an artifact kept one day.
+fn image_problems(steps: &[Yaml]) -> Vec<String> {
+    let mut found = Vec::new();
+    let saves: Vec<&Yaml> = steps
+        .iter()
+        .filter(|s| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("actions/cache/save@"))
+        })
+        .collect();
+    if saves.len() != 1
+        || !saves[0]["if"]
+            .as_str()
+            .is_some_and(|c| c.contains("github.ref == 'refs/heads/main'"))
+    {
+        found.push("meshes-images saves the cache on more than main".to_owned());
+    }
+    let kept = steps.iter().any(|s| {
+        s["uses"]
+            .as_str()
+            .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
+            && s["if"].as_str() == Some("steps.kept.outputs.cache-hit != 'true'")
+            && s["with"]["retention-days"].as_i64() == Some(1)
+    });
+    if !kept {
+        found.push("meshes-images does not keep a built image one day as an artifact".to_owned());
+    }
+    found
+}
+
 /// What is wrong with the job `meshes`, `j`, whose steps are `steps` and scripts `runs`.
 fn leg_problems(j: &Yaml, steps: &[Yaml], runs: &str) -> Vec<String> {
     let mut found = Vec::new();
@@ -104,14 +138,29 @@ fn leg_problems(j: &Yaml, steps: &[Yaml], runs: &str) -> Vec<String> {
             strings(&j["strategy"]["matrix"]["cases"])
         ));
     }
-    let missing = steps.iter().any(|s| {
-        s["uses"]
-            .as_str()
-            .is_some_and(|u| u.starts_with("actions/cache/restore@"))
-            && s["with"]["fail-on-cache-miss"].as_bool() == Some(true)
+    let uses = |s: &Yaml, what: &str| s["uses"].as_str().is_some_and(|u| u.starts_with(what));
+    let restores = steps
+        .iter()
+        .any(|s| uses(s, "actions/cache/restore@") && s["id"].as_str() == Some("kept"));
+    if !restores {
+        found.push("meshes does not restore the image from the cache".to_owned());
+    }
+    let fallback = steps.iter().any(|s| {
+        uses(s, "actions/download-artifact@")
+            && s["if"].as_str() == Some("steps.kept.outputs.cache-hit != 'true'")
+            && s["with"]["name"].as_str() == Some("oracle-image-${{ matrix.oracle }}")
     });
-    if !missing {
-        found.push("meshes does not fail when the cache lacks the image".to_owned());
+    if !fallback {
+        found.push("meshes does not take the image from this run's artifact on a miss".to_owned());
+    }
+    let checked = steps.iter().filter_map(|s| s["run"].as_str()).any(|r| {
+        r.contains("set -euo pipefail")
+            && r.contains(r#"[ -s "$RUNNER_TEMP/image/image.tar" ] ||"#)
+            && r.contains("exit 1")
+            && r.contains("docker load")
+    });
+    if !checked {
+        found.push("meshes does not fail when it has no image".to_owned());
     }
     if !runs.contains("--bin oracle -- check --repository") {
         found.push("meshes does not audit the oracle repository".to_owned());
@@ -213,6 +262,8 @@ fn problems(text: &str) -> Vec<String> {
         }
         if job == "meshes" {
             found.extend(leg_problems(j, &steps, &runs));
+        } else {
+            found.extend(image_problems(&steps));
         }
     }
     for word in PUBLISHING {
@@ -293,10 +344,34 @@ fn the_mesh_jobs_run_what_reaches_them_on_every_case_set() {
     finds(
         &planted(
             &text,
-            "          key: ${{ steps.key.outputs.key }}\n          fail-on-cache-miss: true\n",
-            "          key: ${{ steps.key.outputs.key }}\n",
+            "        if: steps.kept.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'\n",
+            "        if: steps.kept.outputs.cache-hit != 'true'\n",
         ),
-        "lacks the image",
+        "saves the cache on more than main",
+    );
+    finds(
+        &planted(
+            &text,
+            "          retention-days: 1\n          compression",
+            "          retention-days: 90\n          compression",
+        ),
+        "one day as an artifact",
+    );
+    finds(
+        &planted(
+            &text,
+            "        if: steps.kept.outputs.cache-hit != 'true'\n        with:\n          name: oracle-image-${{ matrix.oracle }}\n          path: ${{ runner.temp }}/image\n",
+            "        if: false\n        with:\n          name: oracle-image-${{ matrix.oracle }}\n          path: ${{ runner.temp }}/image\n",
+        ),
+        "this run's artifact on a miss",
+    );
+    finds(
+        &planted(
+            &text,
+            "exit 1; }\n          docker load",
+            "true; }\n          docker load",
+        ),
+        "when it has no image",
     );
     finds(&planted(&text, "--network none ", ""), "with a network");
     finds(
