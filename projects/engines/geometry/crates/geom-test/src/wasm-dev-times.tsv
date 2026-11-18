@@ -12,6 +12,11 @@
 # of the pull request that added it (run 44086231115).
 # `test solidcore_job` is not measured yet: it carries the slowest listed time, as the rule above
 # plans an unlisted unit, until the wasm job has run on it.
+# The sixteen units that came with Phase 5 (geom-fuzz's `test crossings`, `general`, `intersect`,
+# `level`, `natural`, `pencils`, `piercing`, `project`, `quadric` and `reductions`; geom-test's
+# `bin ssi`, `bin ssi-runner`, `test laws_intersections`, `test ssi`, `test ssi_tool` and
+# `test truth_corpus`) are measured once only: the wasm job's seconds on the Phase 5 branch's head
+# ac23963a5 (run 44068113586), when that branch still ran the job in one piece.
 # crate unit<TAB>seconds
 geom-fuzz bin replay-hashes	1
 geom-fuzz doc	1
@@ -28,25 +33,35 @@ geom-fuzz test cache	5
 geom-fuzz test cbor	3
 geom-fuzz test cdt	1
 geom-fuzz test contract	9
+geom-fuzz test crossings	3
 geom-fuzz test curve_offsets	25
 geom-fuzz test curves	4
 geom-fuzz test encoder	3
 geom-fuzz test euler	30
 geom-fuzz test exact	2
+geom-fuzz test general	104
+geom-fuzz test intersect	2
+geom-fuzz test level	74
 geom-fuzz test linalg	2
 geom-fuzz test make	11
 geom-fuzz test maths	1
 geom-fuzz test names	3
 geom-fuzz test naming	14
+geom-fuzz test natural	6
 geom-fuzz test nurbs	2
 geom-fuzz test open	4
 geom-fuzz test operations	2
 geom-fuzz test orient2d	3
 geom-fuzz test p21	30
+geom-fuzz test pencils	30
+geom-fuzz test piercing	2
 geom-fuzz test planes	5
 geom-fuzz test predicates	6
+geom-fuzz test project	97
 geom-fuzz test prune	3
+geom-fuzz test quadric	2
 geom-fuzz test records	4
+geom-fuzz test reductions	2
 geom-fuzz test references	12
 geom-fuzz test roots	4
 geom-fuzz test sequence	53
@@ -78,6 +93,8 @@ geom-test bin oracle	1
 geom-test bin provenance	1
 geom-test bin recursion	1
 geom-test bin source-scan	1
+geom-test bin ssi	1
+geom-test bin ssi-runner	1
 geom-test bin trip	1
 geom-test doc	9
 geom-test lib	16
@@ -110,6 +127,7 @@ geom-test test kernel_quality_workflow	2
 geom-test test laws_booleans	97
 geom-test test laws_curves	14
 geom-test test laws_formats	5
+geom-test test laws_intersections	6
 geom-test test laws_mass	8
 geom-test test laws_names	7
 geom-test test laws_numbers	7
@@ -140,4 +158,7 @@ geom-test test seed_replay	1
 geom-test test seeded_gates	1
 geom-test test shipped	10
 geom-test test solidcore_job	350
+geom-test test ssi	233
+geom-test test ssi_tool	1
 geom-test test test_scope	1
+geom-test test truth_corpus	3
