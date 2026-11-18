@@ -454,15 +454,18 @@ jobs:
   # the product of the two doubles, ran past an hour where add, sub and mul in one harness took
   # 43 to 48 minutes (runs 44046765712 and 44244068917).
   # interval's add, sub and mul are one harness each, on the same two points and with the same
-  # claim: add takes 8.5 minutes and sub 6.5. mul (9.4) has its claim on the product of the two
-  # points' bounds, the first product mul itself forms, and two more harnesses prove that this
-  # is the same claim: that the product of the bounds is the product of the doubles for every
-  # pair (2.5), and that equal doubles are finite alike and inside the same intervals (0.7). So
-  # the five together prove what the one did (run 44251477765, on the text that was proven).
-  # eft's two_prod with the splitter (12.3 and 14.3 minutes, runs 44244068917 and 44222245211)
-  # is left as one harness. Cut by its law's two claims the parts took 1.1 and 9.4 minutes, but
-  # the law is shared: with its claims under a mask, two_prod with 3 took 12.2 where it takes
-  # 7.0 to 8.2 (run 44251477765).
+  # claim: add takes 8.5 to 8.8 minutes and sub 6.5 to 10.0. mul (8.2 to 9.4) has its claim on
+  # the product of the two points' bounds, the first product mul itself forms, and two more
+  # harnesses prove that this is the same claim: that the product of the bounds is the product
+  # of the doubles for every pair (2.5 to 3.4), and that equal doubles are finite alike and
+  # inside the same intervals (0.6 to 0.7). So the five together prove what the one did (runs
+  # 44251477765 and 44255063848, on the text that was proven).
+  # eft's two_prod with the splitter took 12.3, 14.3 and 18.2 minutes as one harness, on one
+  # text (runs 44244068917, 44222245211 and 44255063848): a job's minutes move by half again
+  # from run to run. Its law's two claims are one harness each, under a mask that asserts each
+  # claim exactly when its bit is set, so the two together prove what the one did: that the
+  # first answer is the rounded product takes 1.1 minutes, and that the error adds back 9.4
+  # (run 44251477765).
   # dd's from_i128 (18 to 20 minutes as one harness of every i128) is one harness for each of
   # eight classes of the value, its sign and its magnitude's width in four bands, with a cover
   # harness that proves every i128 is in one of the eight, so the nine together prove what the
@@ -484,14 +487,16 @@ jobs:
   # rounding shorten it: a side is its own harness, that the answer is less than half a step
   # above the value or that it is less than half a step below, and one more harness proves that
   # the two sides together are nearest for every pair of values of the frame. Whole job minutes
-  # on the text that was proven (run 44251477765): nearest by 25 takes 1.2 to 1.9 minutes, and
-  # a side by 625 4.8 to 10.6.
-  # One proof is still over 15 minutes: atan2's `mul_keeps_every_carry`, 27.5 and 27.6 (runs
-  # 44222245211 and 44244068917). `mul` forms its six products inside and the proof forms them
-  # again, and the solver must find the two copies equal. A cut by the word of the answer does
-  # not shorten it (the exponent alone took 18.7, run 44248734972), nor does a copy of mul's
-  # steps fed the proof's products: the steps took 5.2 minutes, and tying them to `mul` did not
-  # end in 50 (run 44246797569).
+  # on the text that was proven (runs 44251477765 and 44255063848): nearest by 25 takes 1.2 to
+  # 2.0 minutes, and a side by 625 3.9 to 10.6.
+  # One proof is still over 15 minutes: atan2's `mul_keeps_every_carry`, 27.5, 27.6 and 28.2
+  # (runs 44222245211, 44244068917 and 44255063848). `mul` forms its six products inside and the
+  # proof forms them again, and the solver must find the two copies equal. A cut by the word of
+  # the answer does not shorten it (the exponent alone took 18.7, and each of the three words
+  # ran to the job's 120-minute limit, run 44248734972), nor does a copy of mul's steps fed the
+  # proof's products: the steps took 5.2 minutes, and tying them to `mul` ran to the limit (run
+  # 44246797569). Nor do the SMT solvers z3 and cvc5 in place of SAT: both ran to the limit (run
+  # 44251931865).
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
@@ -523,7 +528,8 @@ jobs:
           - distance::proofs::point_line_has_the_sign_of_its_gap
           - distance::proofs::point_point_has_the_sign_of_its_gap
           - distance::proofs::triple_has_the_sign_of_its_gap
-          - eft::proofs::two_prod_with_the_splitter
+          - eft::proofs::two_prod_with_the_splitter_adds_back
+          - eft::proofs::two_prod_with_the_splitter_is_the_rounded_product
           - eft::proofs::two_prod_with_three
           - eft::proofs::two_prod_with_two_pow_996
           - eft::proofs::two_sum_of_any_and_minus_a_tenth
