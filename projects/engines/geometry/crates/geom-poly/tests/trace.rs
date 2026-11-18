@@ -941,3 +941,22 @@ fn the_slices_join_to_every_case_once() {
         "a property's 160 cases",
     );
 }
+
+proptest! {
+    // The failures this file's regressions file records, replayed against the sliced property as
+    // `proptest!` replayed them before its new cases: the slices draw the new cases alone.
+    #![proptest_config(ProptestConfig::with_cases(0))]
+
+    #[test]
+    fn every_box_agrees_with_the_blocks_at_its_recorded_failures(
+        blocks in prop::collection::vec(any_block(), 1..4),
+        low in [-6i64..6, -6i64..6, -6i64..6],
+        size in [1i64..7, 1i64..7, 1i64..7],
+    ) {
+        let cell = Cell {
+            low,
+            high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
+        };
+        agrees(&blocks, &in_cell(&blocks, &cell));
+    }
+}
