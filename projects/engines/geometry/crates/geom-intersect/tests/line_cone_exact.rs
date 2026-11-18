@@ -14,15 +14,20 @@
     reason = "test code: a failure should stop loudly, and the names are a point's coordinates"
 )]
 
-use geom_curve::{CurveKind, Frame, Line};
+use geom_curve::{Circle, CurveKind, Frame, Line};
+use geom_intersect::IntersectError;
+use geom_intersect::curve::curves;
 use geom_intersect::curve_surface::curve_surface;
 use geom_intersect::result::{Intersection, Item, PointContact};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Cylinder, SurfaceKind};
+use geom_surface::{Cone, Cylinder, Sphere, SurfaceKind};
 
 /// Far past what a closed form spends, and far short of the engine's half a million units and more
 /// on these pairs: a pair the closed form leaves stops here instead of running on.
 const BUDGET: u64 = 100_000;
+
+/// The frame on an axis none of whose coordinates is zero, (1, 2, 2), three long.
+const SLANT: ([f64; 3], [f64; 3]) = ([1.0, 0.0, 0.0], [1.0, 2.0, 2.0]);
 
 /// The frame on the z axis.
 const ON_Z: ([f64; 3], [f64; 3]) = ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
@@ -52,6 +57,9 @@ fn line(o: [f64; 3], d: [f64; 3]) -> CurveKind<3> {
 
 /// A line and the surface it meets.
 type Pair = (CurveKind<3>, SurfaceKind);
+
+/// A pair made from one size: a radius or a slope.
+type Maker = fn(f64) -> Pair;
 
 /// The answer and the work it took.
 fn meet(c: &CurveKind<3>, s: &SurfaceKind) -> (Intersection, u128) {
@@ -233,6 +241,21 @@ fn a_line_tangent_off_the_grid_is_one_exact_point() {
             let (e, s) = the_issue_cylinder(232.0);
             (e, s, 2.4)
         },
+        // On the slant axis, the line along (2, −2, 1), square to it, stands 4.5 from it, so
+        // every product of the cross product d × n counts.
+        (
+            line([-8.5, 4.75, 0.125], [2.0, -2.0, 1.0]),
+            cylinder(APEX, 4.5, SLANT),
+            3.0,
+        ),
+        // The cone of slope 1 on the slant axis, and a line along (1, 1, −1) in the plane of
+        // normal (1, 0, 1) through its apex, which touches it: no coordinate of the line or the
+        // apex is zero but the line's offset in y.
+        (
+            line([1.5, 0.25, -0.875], [1.0, 1.0, -1.0]),
+            cone(APEX, 0.0, 1.0, SLANT),
+            -0.8,
+        ),
     ] {
         let (found, _) = meet(&edge, &surface);
         one_touch(&found, t);
@@ -240,9 +263,46 @@ fn a_line_tangent_off_the_grid_is_one_exact_point() {
 }
 
 #[test]
+fn a_tangent_whose_data_pass_the_exact_range_is_the_engines() {
+    // The cylinder's centre moved along its axis by 1e-30: the same cylinder, but a product of
+    // eight such doubles could fall below what a double holds, so no exact sum is taken, and the
+    // engine flags the touching point or stops on the budget.
+    let (edge, _) = tangent_to_a_cylinder(1.5);
+    let moved = cylinder([0.5, 0.25, 1e-30], 1.5, ON_Z);
+    let mut meter = WorkMeter::new(Budget::of_work(BUDGET));
+    match curve_surface(&edge, &moved, &mut meter) {
+        Err(IntersectError::BudgetExceeded) => {}
+        Ok(found) => assert!(
+            found
+                .items()
+                .iter()
+                .all(|i| matches!(i, Item::Flagged { .. })),
+            "{:?}",
+            found.items()
+        ),
+        Err(other) => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_line_across_a_sphere_or_a_circle_is_two_points_in_closed_form() {
+    // Through the centre along x: the sphere's quadratic, and the circle's in its plane, each
+    // counted by the enclosures, as before.
+    let across = line([-2.5, 0.25, 0.125], [1.0, 0.0, 0.0]);
+    let ball = Sphere::new(APEX, 1.5, frame(ON_Z), ((0.0, 2.0), (-0.5, 0.5))).unwrap();
+    let (found, work) = meet(&across, &SurfaceKind::Sphere(ball));
+    two_crossings(&found, 3.0);
+    let ring = CurveKind::Circle(Circle::new(APEX, 1.5, frame(ON_Z), (0.0, 2.0)).unwrap());
+    let mut meter = WorkMeter::new(Budget::of_work(BUDGET));
+    let found = curves(&across, &ring, &mut meter).unwrap();
+    assert_eq!(found.items().len(), 2, "{:?}", found.items());
+    assert_eq!((work, meter.used().work), (8, 392));
+}
+
+#[test]
 fn a_line_a_step_from_tangent_is_two_points_or_none() {
     // A step of the radius or the slope out from the line crosses it twice, a step in misses.
-    let pairs: [(fn(f64) -> Pair, f64, f64); 3] = [
+    let pairs: [(Maker, f64, f64); 3] = [
         (tangent_to_a_cylinder, 1.5, 3.0),
         (tangent_to_a_cone, 1.0, 3.0),
         (the_issue_cylinder, 232.0, 2.4),
