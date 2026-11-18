@@ -1255,6 +1255,141 @@ fn a_shard_of_pieces_and_whole_terms_is_refused() {
     );
 }
 
+/// What a shard takes outside its parts, in tenths of a minute: the most any shard took in run
+/// 44161231205 (5.6 minutes: its container, and the saved state's download and restore).
+const SETUP_TENTHS: u32 = 56;
+/// What the first part of a shard takes over the same part later in one: 1.8 minutes at most.
+const FIRST_TENTHS: u32 = 18;
+/// What a job is planned under: 15 minutes.
+const LIMIT_TENTHS: u32 = 150;
+/// A piece of `line_cone`'s term 38 on most runners of run 44161231205 (3.7 to 9.1 by the runner).
+const PIECE_TENTHS: u32 = 55;
+/// Each term's tenths of a minute on a hosted runner, the slower of runs 44076902825 and
+/// 44161231205, by the term's place less one; 0 for a term proved within the second, and for a
+/// term that is cut.
+const LPI_SIDE_TENTHS: [u32; 68] = [
+    61, 56, 28, 47, 19, 25, 41, 27, 20, 20, 19, 28, 0, 0, 170, 113, 28, 41, 27, 31, 17, 20, 9, 11,
+    10, 10, 8, 7, 35, 32, 21, 35, 13, 19, 7, 6, 5, 8, 7, 8, 3, 4, 32, 35, 5, 27, 23, 20, 8, 7, 8,
+    10, 7, 6, 43, 5, 23, 30, 13, 16, 7, 5, 6, 8, 7, 6, 3, 3,
+];
+const LINE_CONE_TENTHS: [u32; 70] = [
+    107, 683, 52, 1054, 89, 651, 37, 582, 78, 779, 141, 133, 226, 95, 102, 70, 89, 70, 153, 149,
+    106, 68, 108, 112, 273, 86, 114, 115, 182, 70, 296, 215, 258, 330, 0, 0, 289, 0, 353, 100, 157,
+    88, 125, 59, 555, 57, 271, 12, 271, 15, 192, 11, 595, 103, 56, 59, 17, 20, 17, 14, 9, 11, 90,
+    529, 134, 864, 134, 807, 40, 1379,
+];
+/// The measured terms of each sharded problem.
+const MEASURED: [(&str, &[u32]); 2] = [
+    ("lpi_side", &LPI_SIDE_TENTHS),
+    ("line_cone", &LINE_CONE_TENTHS),
+];
+
+/// Whether no shard of `shards` that could be cut is planned over the limit, by its terms'
+/// measured `tenths`: a shard of several parts planned over 15 minutes can be made shards under
+/// it, so it is refused. A shard of one part cannot be cut here, whatever it takes.
+fn no_shard_to_cut(shards: &Shards, tenths: &[u32]) -> Result<(), String> {
+    for (k, parts) in (1..).zip(shards.shards) {
+        let mut own = 0;
+        for part in *parts {
+            own += match part {
+                Part::Term(t) => tenths[*t as usize - 1],
+                Part::Piece(..) => PIECE_TENTHS,
+            };
+        }
+        let planned = SETUP_TENTHS + FIRST_TENTHS + own;
+        if parts.len() > 1 && planned > LIMIT_TENTHS {
+            return Err(format!(
+                "shard {k} is planned at {planned} tenths of a minute and can be cut"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// No committed shard of several parts is planned over 15 minutes, from the minutes each term
+/// and piece took on the hosted runners; and the grouping before this one is refused: three
+/// pieces a shard, two, and one of the ten shards of whole terms (it took 190 minutes).
+#[test]
+fn no_shard_that_can_be_under_fifteen_minutes_is_planned_over_it() {
+    use Part::{Piece as P, Term as T};
+    const BEFORE: [(&[&[Part]], &str); 3] = [
+        (
+            &[&[T(1)], &[P(38, 1), P(38, 2), P(38, 3)]],
+            "shard 2 is planned at 239 tenths of a minute and can be cut",
+        ),
+        (
+            &[&[P(38, 63), P(38, 64)]],
+            "shard 1 is planned at 184 tenths of a minute and can be cut",
+        ),
+        (
+            &[&[T(20), T(29), T(40), T(69), T(70)]],
+            "shard 1 is planned at 1924 tenths of a minute and can be cut",
+        ),
+    ];
+    assert_eq!(MEASURED.map(|(n, _)| n), SHARDED.map(|(n, _)| n));
+    for ((name, shards), (_, tenths)) in SHARDED.into_iter().zip(MEASURED) {
+        assert_eq!(tenths.len(), shards.terms as usize, "{name}: every term");
+        assert_eq!(no_shard_to_cut(&shards, tenths), Ok(()), "{name}");
+    }
+    for (shards, why) in BEFORE {
+        let before = Shards {
+            terms: 70,
+            cuts: &[(38, 6)],
+            shards,
+        };
+        assert_eq!(
+            no_shard_to_cut(&before, &LINE_CONE_TENTHS),
+            Err(why.to_owned())
+        );
+    }
+}
+
+/// The committed shards with any one left out, or any one twice, are refused, naming the part
+/// no job or two jobs would prove; and each of term 38's 64 pieces is a shard of its own.
+#[test]
+fn a_shard_list_that_drops_or_doubles_a_part_is_refused() {
+    for (name, shards) in SHARDED {
+        for (k, parts) in shards.shards.iter().enumerate() {
+            let what = match parts[0] {
+                Part::Term(t) => format!("term {t}"),
+                piece @ Part::Piece(..) => format!("piece {piece}"),
+            };
+            let mut dropped = shards.shards.to_vec();
+            dropped.remove(k);
+            let mut doubled = shards.shards.to_vec();
+            doubled.insert(k, parts);
+            for (list, jobs) in [(dropped, 0), (doubled, 2)] {
+                let broken = Shards {
+                    shards: list.leak(),
+                    ..shards
+                };
+                assert_eq!(
+                    every_term_once(&broken),
+                    Err(format!("{what} is in {jobs} shards")),
+                    "{name}, shard {}",
+                    k + 1
+                );
+            }
+        }
+    }
+    let line_cone = SHARDED
+        .iter()
+        .find(|(name, _)| *name == "line_cone")
+        .map(|(_, shards)| *shards)
+        .unwrap();
+    let alone: Vec<Part> = line_cone
+        .shards
+        .iter()
+        .filter(|parts| matches!(parts[0], Part::Piece(..)))
+        .map(|parts| {
+            assert_eq!(parts.len(), 1, "a piece is a shard of its own");
+            parts[0]
+        })
+        .collect();
+    let every: Vec<Part> = (1..=64).map(|p| Part::Piece(38, p)).collect();
+    assert_eq!(alone, every);
+}
+
 /// The check of the shards' terms refuses a term left out, a term twice, a term past the count,
 /// an empty shard, a shard out of order, a piece left out or twice, a cut term named whole, a
 /// piece of a term not cut or past its count, and a cut out of order or of no depth.

@@ -521,8 +521,8 @@ jobs:
     needs: [fptaylor-problems, fptaylor-certificates, hol-light-cut-states]
     if: ${{ !cancelled() && needs.fptaylor-problems.result == 'success' && needs.fptaylor-problems.outputs.cut != '' && needs.hol-light-cut-states.result == 'success' }}
     runs-on: ubuntu-24.04
-    # GitHub stops a hosted runner's job at six hours. Three pieces of line_cone's term 38 took
-    # 42 to 66 minutes on a development machine: by the runners' loads about 60 to 190 on a runner.
+    # GitHub stops a hosted runner's job at six hours. A shard is one piece of line_cone's term 38:
+    # 9 to 16.3 minutes by the runner, from run 44161231205, where three pieces took 16.7 to 34.5.
     timeout-minutes: 350
     strategy:
       fail-fast: false

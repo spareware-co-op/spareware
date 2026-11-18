@@ -919,19 +919,19 @@ fn every_piece_is_checked_in_exactly_one_job_of_the_same_run() {
         assert!(found.iter().any(|p| p.contains(what)), "{what}: {found:#?}");
     };
     finds_in(
-        &planted(&fpt, ": 38.4 38.5 38.6\n", ": 38.4 38.6\n"),
+        &planted(&fpt, "\n// hol-light-shard 65: 38.5\n", "\n"),
         "piece 38.5 is in 0 jobs",
     );
     finds_in(
-        &planted(&fpt, ": 38.4 38.5 38.6\n", ": 38.4 38.5 38.6 38.7\n"),
+        &planted(&fpt, ": 38.5\n", ": 38.5 38.7\n"),
         "piece 38.7 is in 2 jobs",
     );
     finds_in(
-        &planted(&fpt, ": 38.4 38.5 38.6\n", ": 37 38.4 38.5 38.6\n"),
+        &planted(&fpt, ": 38.5\n", ": 37 38.5\n"),
         "has pieces and whole terms",
     );
     finds_in(
-        &planted(&fpt, ": 38.4 38.5 38.6\n", ": 38.4 38.5 38.6 38.65\n"),
+        &planted(&fpt, ": 38.5\n", ": 38.5 38.65\n"),
         "names 38.65, no piece of a cut term",
     );
 
@@ -941,7 +941,7 @@ fn every_piece_is_checked_in_exactly_one_job_of_the_same_run() {
         &planted(
             &workflow,
             "select(.pieces == true)",
-            "select(.pieces == true and .shard < 20)",
+            "select(.pieces == true and .shard < 100)",
         ),
         &script,
         "fptaylor-problems does not send every shard to exactly one job",
@@ -986,7 +986,7 @@ fn every_piece_is_checked_in_exactly_one_job_of_the_same_run() {
         &planted(
             &workflow,
             "      - name: Check this shard's pieces of the certificate\n        if: steps.base.outputs.same != 'true'\n",
-            "      - name: Check this shard's pieces of the certificate\n        if: steps.base.outputs.same != 'true' && matrix.shard < 20\n",
+            "      - name: Check this shard's pieces of the certificate\n        if: steps.base.outputs.same != 'true' && matrix.shard < 100\n",
         ),
         &script,
         "fptaylor-pieces can skip its check",
