@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "about": "The 71 stored cases that geom-solidcore runs solidcore through (decision 32.70): 42 intersections of planes, spheres, cylinders and cones and 29 booleans, each with its expected answer, where that answer comes from, and the bits of every expected number (length_bits, volume_bits: the IEEE 754 bits of the closed form as computed in binary64). tests/cases.rs reads it. An intersection is the same when every sampled point of every curve is within max_residual of both surfaces and the total length within length_relerr of the closed form (the sampling's own bias is about 5e-8); a boolean when the volume is within volume_relerr (flat or curved) of the closed form, the face count where given is equal, and the result passes the check.",
+  "about": "The 99 stored cases that geom-solidcore runs solidcore through (decision 32.70): 42 intersections of planes, spheres, cylinders and cones, 29 booleans, and 28 building cases (walls, openings and slabs of a building, ids bldg-NN), each with its expected answer, where that answer comes from, and the bits of every expected number (length_bits, volume_bits: the IEEE 754 bits of the closed form as computed in binary64). tests/cases.rs reads it. An intersection is the same when every sampled point of every curve is within max_residual of both surfaces and the total length within length_relerr of the closed form (the sampling's own bias is about 5e-8); a boolean when the volume is within volume_relerr (flat or curved) of the closed form, the face count where given is equal, and the result passes the check.",
   "tolerances": {
     "samples_per_piece": 4000,
     "max_residual": 1e-09,
@@ -3369,6 +3369,1134 @@
       "volume_bits": "4010000000000000",
       "curved": true,
       "source": "closed form: 4"
+    },
+    {
+      "id": "bldg-00",
+      "name": "walls: L corner, butt and overlap",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4012b851eb851eb8",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(4t + 4t - t^2) = 3*1.56"
+    },
+    {
+      "id": "bldg-01",
+      "name": "walls: T, overlapping",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.9,
+            0.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            3.2,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4010cccccccccccd",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(0.8 + 0.64 - 0.04) = 3*1.4"
+    },
+    {
+      "id": "bldg-02",
+      "name": "walls: T, wall ending flush on the other's face",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.2,
+            0.0
+          ],
+          "size": [
+            0.2,
+            3.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4010cccccccccccd",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 0.2*3*3"
+    },
+    {
+      "id": "bldg-03",
+      "name": "walls: cross",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -2.0,
+            -0.1,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            -0.1,
+            -2.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4012b851eb851eb8",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(0.8+0.8-0.04); also 4 arms 1.9*0.2 + 0.04"
+    },
+    {
+      "id": "bldg-08",
+      "name": "walls: walls of different thickness and height",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.3,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.0,
+            2.5
+          ]
+        }
+      ],
+      "volume_bits": "4015cccccccccccd",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 4*0.3*3 + 0.2*4*2.5 - 0.2*0.3*2.5; also 3.6 + 0.2*3.7*2.5"
+    },
+    {
+      "id": "bldg-09",
+      "name": "walls: two walls in line, end to end",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            4.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4013333333333333",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2 * 4*0.2*3"
+    },
+    {
+      "id": "bldg-10",
+      "name": "walls: wall 1e-7 away from another (two solids)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.20000010000000001,
+            0.0
+          ],
+          "size": [
+            0.2,
+            3.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4010cccccccccccd",
+      "curved": false,
+      "faces": 12,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 1.8, gap adds nothing; two lumps, 12 faces"
+    },
+    {
+      "id": "bldg-11",
+      "name": "walls: wall 1e-4 away from another (two solids)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.2001,
+            0.0
+          ],
+          "size": [
+            0.2,
+            3.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4010cccccccccccd",
+      "curved": false,
+      "faces": 12,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 1.8; two lumps, 12 faces"
+    },
+    {
+      "id": "bldg-12",
+      "name": "walls: curved wall alone (cylindrical box)",
+      "operation": "intersection",
+      "operands": [
+        {
+          "difference": [
+            {
+              "shape": "cylinder",
+              "base": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "radius": 5.0,
+              "height": 3.0
+            },
+            {
+              "shape": "cylinder",
+              "base": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "radius": 4.8,
+              "height": 5.0
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            6.0,
+            6.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "401278fa01c696ea",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: h*(pi/4)(5^2-4.8^2) = 1.47 pi; the curved wall made as cylinder r5 minus cylinder r4.8 cut to the first quadrant by a box (the table builds it with solidcore's cylindrical_box)"
+    },
+    {
+      "id": "bldg-14",
+      "name": "walls: curved wall meeting a straight wall flush at its end",
+      "operation": "union",
+      "operands": [
+        {
+          "intersection": [
+            {
+              "difference": [
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "radius": 5.0,
+                  "height": 3.0
+                },
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    -1.0
+                  ],
+                  "radius": 4.8,
+                  "height": 5.0
+                }
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                6.0,
+                6.0,
+                3.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            4.8,
+            -4.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "401c12939b603084",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 1.47 pi + 0.2*4*3; the curved wall made as cylinder r5 minus cylinder r4.8 cut to the first quadrant by a box (the table builds it with solidcore's cylindrical_box)"
+    },
+    {
+      "id": "bldg-15",
+      "name": "walls: curved wall overlapping a straight wall",
+      "operation": "union",
+      "operands": [
+        {
+          "intersection": [
+            {
+              "difference": [
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "radius": 5.0,
+                  "height": 3.0
+                },
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    -1.0
+                  ],
+                  "radius": 4.8,
+                  "height": 5.0
+                }
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                6.0,
+                6.0,
+                3.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            4.8,
+            -4.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.5,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "401c1f6556fb9959",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 1.47pi + 0.2*4.5*3 - 3*(F(5,0.5) - 2.4), F(a,y)=int_0^y sqrt(a^2-s^2); the curved wall made as cylinder r5 minus cylinder r4.8 cut to the first quadrant by a box (the table builds it with solidcore's cylindrical_box)"
+    },
+    {
+      "id": "bldg-16",
+      "name": "openings: window through a straight wall",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            -0.1,
+            1.0
+          ],
+          "size": [
+            1.2,
+            0.4,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "400147ae147ae148",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 1.2*0.2*1"
+    },
+    {
+      "id": "bldg-17",
+      "name": "openings: door void running below the floor",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.5,
+            -0.1,
+            -0.1
+          ],
+          "size": [
+            0.9,
+            0.4,
+            2.2
+          ]
+        }
+      ],
+      "volume_bits": "40002d0e56041893",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.9*0.2*2.1"
+    },
+    {
+      "id": "bldg-18",
+      "name": "openings: door void flush with the wall bottom",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.5,
+            -0.1,
+            0.0
+          ],
+          "size": [
+            0.9,
+            0.4,
+            2.1
+          ]
+        }
+      ],
+      "volume_bits": "40002d0e56041893",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.9*0.2*2.1"
+    },
+    {
+      "id": "bldg-19",
+      "name": "openings: window and door in one wall",
+      "operation": "difference",
+      "operands": [
+        {
+          "difference": [
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                4.0,
+                0.2,
+                3.0
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.5,
+                -0.1,
+                1.0
+              ],
+              "size": [
+                1.2,
+                0.4,
+                1.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.5,
+            -0.1,
+            -0.1
+          ],
+          "size": [
+            0.9,
+            0.4,
+            2.2
+          ]
+        }
+      ],
+      "volume_bits": "3ffc83126e978d50",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.24 - 0.378"
+    },
+    {
+      "id": "bldg-20",
+      "name": "openings: niche: void flush with one face only",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.1,
+            1.0
+          ],
+          "size": [
+            1.0,
+            0.1,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4002666666666666",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 1*0.1*1"
+    },
+    {
+      "id": "bldg-21",
+      "name": "openings: window leaving a 1e-3 sliver of head",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            -0.1,
+            1.0
+          ],
+          "size": [
+            1.0,
+            0.4,
+            1.999
+          ]
+        }
+      ],
+      "volume_bits": "40000068db8bac71",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.2*1*1.999"
+    },
+    {
+      "id": "bldg-22",
+      "name": "openings: window leaving a 1e-6 sliver of head",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            -0.1,
+            1.0
+          ],
+          "size": [
+            1.0,
+            0.4,
+            1.999999
+          ]
+        }
+      ],
+      "volume_bits": "400000001ad7f29a",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.2*1*(2-1e-6)"
+    },
+    {
+      "id": "bldg-24",
+      "name": "openings: rectangular opening through a curved wall",
+      "operation": "difference",
+      "operands": [
+        {
+          "intersection": [
+            {
+              "difference": [
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "radius": 5.0,
+                  "height": 3.0
+                },
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    -1.0
+                  ],
+                  "radius": 4.8,
+                  "height": 5.0
+                }
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                6.0,
+                6.0,
+                3.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            4.0,
+            1.0,
+            1.0
+          ],
+          "size": [
+            1.5,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4011a14c7de3c184",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 1.47pi - [F(5,y)-F(4.8,y)]_1^2 * 1; the curved wall made as cylinder r5 minus cylinder r4.8 cut to the first quadrant by a box (the table builds it with solidcore's cylindrical_box)"
+    },
+    {
+      "id": "bldg-25",
+      "name": "openings: round opening through a wall",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            3.0,
+            0.2
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            2.0,
+            1.5,
+            -0.1
+          ],
+          "radius": 0.4,
+          "height": 0.4
+        }
+      ],
+      "volume_bits": "40026550057ed7a5",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - pi 0.4^2 0.2; the wall laid on its side (y and z swapped) so the opening's axis is the cylinder primitive's z (the table sweeps a circle along y)"
+    },
+    {
+      "id": "bldg-26",
+      "name": "openings: round opening flush with both wall faces",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            3.0,
+            0.2
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            2.0,
+            1.5,
+            0.0
+          ],
+          "radius": 0.4,
+          "height": 0.2
+        }
+      ],
+      "volume_bits": "40026550057ed7a5",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - pi 0.4^2 0.2; the wall laid on its side (y and z swapped) so the opening's axis is the cylinder primitive's z (the table sweeps a circle along y)"
+    },
+    {
+      "id": "bldg-27",
+      "name": "slabs: slab with a rectangular opening",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            6.0,
+            4.0,
+            0.25
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            1.0,
+            -0.1
+          ],
+          "size": [
+            1.0,
+            1.0,
+            0.45
+          ]
+        }
+      ],
+      "volume_bits": "4017000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 6*4*0.25 - 1*1*0.25"
+    },
+    {
+      "id": "bldg-28",
+      "name": "slabs: slab with a round opening",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            6.0,
+            4.0,
+            0.25
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            4.0,
+            2.0,
+            -0.1
+          ],
+          "radius": 0.5,
+          "height": 0.45
+        }
+      ],
+      "volume_bits": "401736f0255dde97",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 6 - pi 0.5^2 0.25"
+    },
+    {
+      "id": "bldg-29",
+      "name": "slabs: slab with a rectangular and a round opening",
+      "operation": "difference",
+      "operands": [
+        {
+          "difference": [
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                6.0,
+                4.0,
+                0.25
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                1.0,
+                1.0,
+                -0.1
+              ],
+              "size": [
+                1.0,
+                1.0,
+                0.45
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            4.0,
+            2.0,
+            -0.1
+          ],
+          "radius": 0.5,
+          "height": 0.45
+        }
+      ],
+      "volume_bits": "401636f0255dde97",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 6 - 0.25 - 0.0625 pi"
+    },
+    {
+      "id": "bldg-30",
+      "name": "slabs: slab cut right through by a wall (two pieces)",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            3.0
+          ],
+          "size": [
+            6.0,
+            4.0,
+            0.25
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.9,
+            -1.0,
+            2.5
+          ],
+          "size": [
+            0.2,
+            6.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4017333333333333",
+      "curved": false,
+      "faces": 12,
+      "source": "closed form, worked by hand and checked a second way: 6 - 0.2*4*0.25; two lumps, 12 faces"
+    },
+    {
+      "id": "bldg-31",
+      "name": "slabs: slab notched by a wall along its edge",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            3.0
+          ],
+          "size": [
+            6.0,
+            4.0,
+            0.25
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            2.5
+          ],
+          "size": [
+            6.0,
+            0.2,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4016cccccccccccd",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 6 - 6*0.2*0.25"
+    },
+    {
+      "id": "bldg-34",
+      "name": "slabs: slab edge shared with a wall face",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.2,
+            2.75
+          ],
+          "size": [
+            4.0,
+            3.0,
+            0.25
+          ]
+        }
+      ],
+      "volume_bits": "401599999999999a",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 4*3*0.25"
+    },
+    {
+      "id": "bldg-35",
+      "name": "slabs: slab sitting on a wall top",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            3.0
+          ],
+          "size": [
+            4.0,
+            3.0,
+            0.25
+          ]
+        }
+      ],
+      "volume_bits": "401599999999999a",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 4*3*0.25"
     }
   ]
 }

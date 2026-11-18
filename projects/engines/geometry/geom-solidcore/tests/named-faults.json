@@ -33,6 +33,22 @@
       "solidcore_gives": "the error \"the B-reps do not intersect\", for concentric spheres",
       "expected": "no meeting curve and no point",
       "blocks": "meeting two solids (geom-solidcore's meet) for solids apart, nested or concentric"
+    },
+    {
+      "case": "bldg-10",
+      "test": "bldg_10_wall_1e_7_away_from_another_two_solids",
+      "fault": "SC-3, a wall 1e-7 from another joined into one solid: solidcore's zone tolerance (1e-5) closes the gap between the two walls",
+      "solidcore_gives": "one solid of volume 4.20000006 (the gap of 1e-7 x 0.2 x 3 filled), 10 faces",
+      "expected": "two solids of 12 faces and volume 4.2, as the closed form gives",
+      "blocks": "the union of two solids (geom-solidcore's union) whose faces come closer than 1e-5 without touching: walls, slabs and every flat-faced union stay on the kernel's exact geom-bool"
+    },
+    {
+      "case": "bldg-22",
+      "test": "bldg_22_window_leaving_a_1e_6_sliver_of_head",
+      "fault": "SC-4, a window leaving a sliver of 1e-6 above it loses the sliver: solidcore takes the cutter's top, 1e-6 below the wall's, as the wall's top",
+      "solidcore_gives": "volume 2.0 exactly, one solid: the 1e-6 head over the window is gone",
+      "expected": "volume 2.0000002 (2.4 - 0.2 x 1 x (2 - 1e-6)), one solid with the sliver kept",
+      "blocks": "the difference of two solids (geom-solidcore's difference) where a face of the cutter comes within 1e-5 of a face of the body: openings in walls and slabs stay on the kernel's exact geom-bool"
     }
   ]
 }
