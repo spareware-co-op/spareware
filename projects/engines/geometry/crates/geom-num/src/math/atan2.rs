@@ -701,20 +701,42 @@ impl Tint {
 
     /// `self · b` with error below 10 ulps, `2^−187.67·|result|` (C: `mul_tint`). `None` only if
     /// a step overflowed, which none does (each says why).
+    ///
+    /// It is its two steps and nothing else, and must stay so: the six partial products, then
+    /// their sum. Each step has its own proof (`partial_products_are_the_six_products` and
+    /// `mul_keeps_every_carry`), and the two together are `mul`'s contract only while this body
+    /// is those two calls. They are two functions so that no one proof has to form the products
+    /// twice and find the two copies equal.
+    fn mul(&self, b: &Tint) -> Option<Tint> {
+        self.sum_partial_products(b, self.partial_products(b)?)
+    }
+
+    /// The six 64 × 64-bit partial products `mul` keeps, in the C's order: `ah·bh`, `ah·bm`,
+    /// `am·bh`, `ah·bl`, `am·bm`, `al·bh`. `None` only if a product overflowed, which none does.
+    fn partial_products(&self, b: &Tint) -> Option<[u128; 6]> {
+        let (ah, am, al) = (u128::from(self.h), u128::from(self.m), u128::from(self.l));
+        let (bh, bm, bl) = (u128::from(b.h), u128::from(b.m), u128::from(b.l));
+        // Each 64 × 64-bit product is below (2^64 − 1)² < 2^128: no checked product fails.
+        Some([
+            ah.checked_mul(bh)?,
+            ah.checked_mul(bm)?,
+            am.checked_mul(bh)?,
+            ah.checked_mul(bl)?,
+            am.checked_mul(bm)?,
+            al.checked_mul(bh)?,
+        ])
+    }
+
+    /// `self · b` from its six partial products `p`, as [`Tint::partial_products`] forms them:
+    /// their sum with every carry kept, normalised, with the signs' exclusive or and the
+    /// exponents' sum. `None` only if a step overflowed, which none does on those products (each
+    /// says why).
     #[allow(
         clippy::many_single_char_names,
         reason = "the names of the C source's variables, so the two can be read side by side"
     )]
-    fn mul(&self, b: &Tint) -> Option<Tint> {
-        let (ah, am, al) = (u128::from(self.h), u128::from(self.m), u128::from(self.l));
-        let (bh, bm, bl) = (u128::from(b.h), u128::from(b.m), u128::from(b.l));
-        // Each 64 × 64-bit product is below (2^64 − 1)² < 2^128: no checked product fails.
-        let rh = ah.checked_mul(bh)?;
-        let rm1 = ah.checked_mul(bm)?;
-        let rm2 = am.checked_mul(bh)?;
-        let rl1 = ah.checked_mul(bl)?;
-        let rl2 = am.checked_mul(bm)?;
-        let rl3 = al.checked_mul(bh)?;
+    fn sum_partial_products(&self, b: &Tint, p: [u128; 6]) -> Option<Tint> {
+        let [rh, rm1, rm2, rl1, rl2, rl3] = p;
         let (mut m, mut h) = halves(rh);
         // Accumulate rm1. The limb sums are C's unsigned arithmetic modulo 2^64 with the carry
         // kept by comparison, as the C does; the carry into h cannot overflow it (h is the high
@@ -1981,19 +2003,24 @@ mod proofs {
     /// (the low halves of the last three products, `am·bl + al·bm` and `al·bl`) is below
     /// `3·2^192 + 2·(2^64 − 1)^2·2^64 + 2^128 < 5·2^192`, so `K` is within 5 of its units of the
     /// exact product, and after the shift within 10 ulps: the bound `mul` documents.
+    ///
+    /// This is one of the two proofs of that contract. `mul`'s body is `sum_partial_products` on
+    /// `partial_products` and nothing else, and it must stay so. This proof runs those two steps
+    /// as `mul` runs them and proves the sum: whatever six products `partial_products` answers,
+    /// `sum_partial_products` on them answers, and its answer is the reference's on those same
+    /// six. Which six products they are is proved by `partial_products_are_the_six_products`,
+    /// against the six written out there. The two together are the claim the one proof made
+    /// before the split, when it wrote the six products out for itself and the prover had to find
+    /// them equal to `mul`'s own: that took 27.6 to 35.9 minutes on a hosted runner (runs
+    /// 44244068917, 44299434285, 44312155060 and 44322372914), and this proof 7.6 (run
+    /// 44342665715).
     #[kani::proof]
     fn mul_keeps_every_carry() {
         let a = any_tint();
         let b = any_tint();
-        let r = a.mul(&b).unwrap();
-        let (ah, am, al) = (u128::from(a.h), u128::from(a.m), u128::from(a.l));
-        let (bh, bm, bl) = (u128::from(b.h), u128::from(b.m), u128::from(b.l));
-        let rh = ah.checked_mul(bh).unwrap();
-        let rm1 = ah.checked_mul(bm).unwrap();
-        let rm2 = am.checked_mul(bh).unwrap();
-        let rl1 = ah.checked_mul(bl).unwrap();
-        let rl2 = am.checked_mul(bm).unwrap();
-        let rl3 = al.checked_mul(bh).unwrap();
+        let p = a.partial_products(&b).unwrap();
+        let r = a.sum_partial_products(&b, p).unwrap();
+        let [rh, rm1, rm2, rl1, rl2, rl3] = p;
         let w = |x: u64| u128::from(x);
         // Each column is a sum of at most five 64-bit numbers: below 2^67.
         let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
@@ -2016,6 +2043,32 @@ mod proofs {
                 assert_eq!(r.ex, ex - 1);
             }
         }
+    }
+
+    /// `partial_products` forms exactly the six products `mul_keeps_every_carry`'s reference adds,
+    /// for every pair of operands: `ah·bh`, `ah·bm`, `am·bh`, `ah·bl`, `am·bm`, `al·bh`, in that
+    /// order, each written out here, and `None` exactly when one of them overflows (none does).
+    #[kani::proof]
+    fn partial_products_are_the_six_products() {
+        let a = any_tint();
+        let b = any_tint();
+        let (ah, am, al) = (u128::from(a.h), u128::from(a.m), u128::from(a.l));
+        let (bh, bm, bl) = (u128::from(b.h), u128::from(b.m), u128::from(b.l));
+        let six = [
+            ah.checked_mul(bh),
+            ah.checked_mul(bm),
+            am.checked_mul(bh),
+            ah.checked_mul(bl),
+            am.checked_mul(bm),
+            al.checked_mul(bh),
+        ];
+        let want = match six {
+            [Some(p0), Some(p1), Some(p2), Some(p3), Some(p4), Some(p5)] => {
+                Some([p0, p1, p2, p3, p4, p5])
+            }
+            _ => None,
+        };
+        assert!(a.partial_products(&b) == want);
     }
 
     /// A non-negative integer below 2^448, as seven 64-bit words, least significant first.

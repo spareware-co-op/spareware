@@ -2817,7 +2817,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace | with ^ in Tint::mul",
+      "mutant": "replace | with ^ in Tint::sum_partial_products",
       "line_text": "r.h = (r.h << 1) | (r.m >> 63);",
       "occurrences": 1,
       "kind": "equivalent",
@@ -2825,7 +2825,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace | with ^ in Tint::mul",
+      "mutant": "replace | with ^ in Tint::sum_partial_products",
       "line_text": "r.m = (r.m << 1) | (r.l >> 63);",
       "occurrences": 1,
       "kind": "equivalent",
@@ -4468,7 +4468,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with <= in Tint::mul",
+      "mutant": "replace < with <= in Tint::sum_partial_products",
       "line_text": "h = h.checked_add(u64::from(m < c))?;",
       "occurrences": 2,
       "kind": "proved",
@@ -4477,7 +4477,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with <= in Tint::mul",
+      "mutant": "replace < with <= in Tint::sum_partial_products",
       "line_text": "let mut cm = u64::from(l < lo2); // carry into m",
       "occurrences": 1,
       "kind": "proved",
@@ -4486,7 +4486,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with <= in Tint::mul",
+      "mutant": "replace < with <= in Tint::sum_partial_products",
       "line_text": "cm = cm.checked_add(u64::from(l < lo3))?;",
       "occurrences": 1,
       "kind": "proved",
@@ -4495,7 +4495,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with <= in Tint::mul",
+      "mutant": "replace < with <= in Tint::sum_partial_products",
       "line_text": "h = h.checked_add(u64::from(m < cm))?;",
       "occurrences": 1,
       "kind": "proved",
@@ -4504,7 +4504,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with == in Tint::mul",
+      "mutant": "replace < with == in Tint::sum_partial_products",
       "line_text": "h = h.checked_add(u64::from(m < cm))?;",
       "occurrences": 1,
       "kind": "proved",
