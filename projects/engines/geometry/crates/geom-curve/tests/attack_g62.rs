@@ -166,16 +166,69 @@ fn bulge_enclosures_hold_the_exact_point() {
     }
 }
 
-/// Claim: an offset of a circle by d lies on the circle of radius r − d about the same centre,
-/// every enclosure meeting that circle.
-#[test]
-fn an_offset_circle_stays_on_its_circle() {
+/// The 50 circles of `an_offset_circle_stays_on_its_circle`, (centre, radius, offset distance),
+/// drawn from its generator in its order.
+fn offset_circles() -> Vec<([f64; 2], f64, f64)> {
     let mut rng = Lcg(627);
+    (0..50)
+        .map(|_| {
+            let c = [rng.range(-20.0, 20.0), rng.range(-20.0, 20.0)];
+            let r = rng.range(2.0, 30.0);
+            let d = rng.range(-r * 0.9, r * 0.9);
+            (c, r, d)
+        })
+        .collect()
+}
+
+/// Quarter `part` (from 0) of a list of `len` cases.
+fn quarter(len: usize, part: usize) -> std::ops::Range<usize> {
+    len * part / 4..len * (part + 1) / 4
+}
+
+/// Claim: an offset of a circle by d lies on the circle of radius r − d about the same centre,
+/// every enclosure meeting that circle. In quarters of its 50 circles (decision 32.78: whole, it
+/// was too long for one Miri gate part).
+mod an_offset_circle_stays_on_its_circle {
+    #[test]
+    fn quarter_1() {
+        super::offset_circle(0);
+    }
+
+    #[test]
+    fn quarter_2() {
+        super::offset_circle(1);
+    }
+
+    #[test]
+    fn quarter_3() {
+        super::offset_circle(2);
+    }
+
+    #[test]
+    fn quarter_4() {
+        super::offset_circle(3);
+    }
+
+    /// The quarters hold every circle once.
+    #[test]
+    fn the_quarters_join_to_every_circle() {
+        let len = super::offset_circles().len();
+        let mut next = 0;
+        for part in 0..4 {
+            let r = super::quarter(len, part);
+            assert_eq!(r.start, next);
+            assert!(r.end > r.start);
+            next = r.end;
+        }
+        assert_eq!(next, len);
+    }
+}
+
+/// The check of `an_offset_circle_stays_on_its_circle` on quarter `part` of its circles.
+fn offset_circle(part: usize) {
+    let circles = offset_circles();
     let m = &mut meter();
-    for _ in 0..50 {
-        let c = [rng.range(-20.0, 20.0), rng.range(-20.0, 20.0)];
-        let r = rng.range(2.0, 30.0);
-        let d = rng.range(-r * 0.9, r * 0.9);
+    for &(c, r, d) in &circles[quarter(circles.len(), part)] {
         let circle = Circle::new(c, r, Frame::standard().unwrap(), (0.0, 2.0)).unwrap();
         let o = Offset::new(
             Trimmed::whole(Basis::Circle(circle)).unwrap(),

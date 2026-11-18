@@ -247,25 +247,54 @@ fn run(fault: Fault) -> Result<(), ContractError> {
 }
 
 /// Claim: a conversion within its stated deviation passes, whichever way it is off; one off by
-/// more fails.
-#[test]
-fn a_conversion_passes_within_its_deviation_either_way_and_fails_beyond() {
-    assert_eq!(run(Fault::None), Ok(()));
-    for dx in [1e-3, -1e-3] {
+/// more fails. One test for the conversion unmoved and one for each way it is moved (decision
+/// 32.78: whole, it was too long for one Miri gate part).
+mod a_conversion_passes_within_its_deviation_either_way_and_fails_beyond {
+    use super::*;
+
+    /// A conversion moved by `dx` within its deviation passes, and fails with a smaller one.
+    fn moved(dx: f64) {
         assert_eq!(run(Fault::Nurbs(dx, 1e-3)), Ok(()), "moved {dx}");
         let e = run(Fault::Nurbs(dx, 1e-4)).unwrap_err();
         assert_eq!(e.law, Law::NurbsWithinItsError, "moved {dx}: {e}");
     }
+
+    #[test]
+    fn unmoved() {
+        assert_eq!(run(Fault::None), Ok(()));
+    }
+
+    #[test]
+    fn moved_up() {
+        moved(1e-3);
+    }
+
+    #[test]
+    fn moved_down() {
+        moved(-1e-3);
+    }
 }
 
 /// Claim: doubles may lie up to slack·(1 + the largest value + |x| + |lo| + |hi|) outside the
-/// enclosure, on either side, and not further.
-#[test]
-fn evaluation_in_doubles_has_exactly_its_slack() {
-    for above in [true, false] {
+/// enclosure, on either side, and not further. One test a side (decision 32.78).
+mod evaluation_in_doubles_has_exactly_its_slack {
+    use super::*;
+
+    /// Doubles on one side, `above` or below, just within the slack and just past it.
+    fn side(above: bool) {
         assert_eq!(run(Fault::Evaluate(0.999, above)), Ok(()), "above {above}");
         let e = run(Fault::Evaluate(1.001, above)).unwrap_err();
         assert_eq!(e.law, Law::EvaluationIsEnclosed, "above {above}: {e}");
+    }
+
+    #[test]
+    fn above() {
+        side(true);
+    }
+
+    #[test]
+    fn below() {
+        side(false);
     }
 }
 

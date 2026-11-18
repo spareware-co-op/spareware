@@ -856,18 +856,45 @@ fn a_ring_too_thin_for_its_enclosures_fails_closed() {
     assert_eq!(kinds(&found), [FaultKind::Unchecked], "{found:?}");
 }
 
-#[test]
-fn a_small_tilted_box_far_from_the_origin_keeps_its_sign() {
+/// A small tilted box far from the origin keeps its sign, at each of five tilts: one test a tilt
+/// (decision 32.78: the five together were too long for one Miri gate part).
+mod a_small_tilted_box_far_from_the_origin_keeps_its_sign {
+    #[test]
+    fn tilt_1() {
+        super::far_tilted_box(0);
+    }
+
+    #[test]
+    fn tilt_2() {
+        super::far_tilted_box(1);
+    }
+
+    #[test]
+    fn tilt_3() {
+        super::far_tilted_box(2);
+    }
+
+    #[test]
+    fn tilt_4() {
+        super::far_tilted_box(3);
+    }
+
+    #[test]
+    fn tilt_5() {
+        super::far_tilted_box(4);
+    }
+}
+
+/// The small box far from the origin at tilt `k` of five (`jog(31 + k)`).
+fn far_tilted_box(k: u64) {
     let far = 1_099_511_627_000_i64;
     let points = corners([far, far, far], [100, 100, 100]);
     let spec = Spec {
         points: &points,
         regions: &[&[&BOX_SHELL]],
     };
-    for k in 0..5 {
-        let found = faults(&tilted(spec, &jog(31 + k)));
-        assert!(found.is_empty(), "{found:?}");
-    }
+    let found = faults(&tilted(spec, &jog(31 + k)));
+    assert!(found.is_empty(), "{found:?}");
 }
 
 #[test]
@@ -898,31 +925,39 @@ fn two_faces_back_to_back_on_one_plane_are_found() {
     assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
 }
 
-#[test]
-fn coplanar_faces_apart_pass_and_overlapping_ones_are_found() {
-    // Two lumps whose tops lie on one plane: apart, then overlapping, then one inside the other's
-    // box in plan, each on a body whose faces are not all convex.
-    let lump = |x: i64, side: i64| corners([x, 0, 0], [side, side, 100]);
-    let apart = [lump(0, 100), lump(200, 100)].concat();
-    let spec = Spec {
-        points: &apart,
-        regions: TWO.regions,
-    };
-    assert_eq!(faults(&tilted(spec, &still)), []);
-    let overlapping = [lump(0, 100), lump(50, 100)].concat();
-    let spec = Spec {
-        points: &overlapping,
-        regions: TWO.regions,
-    };
-    let found = faults(&tilted(spec, &still));
-    assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
-    let within = [lump(0, 300), lump(100, 100)].concat();
-    let spec = Spec {
-        points: &within,
-        regions: TWO.regions,
-    };
-    let found = faults(&tilted(spec, &still));
-    assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
+/// Two lumps whose tops lie on one plane: apart, then overlapping, then one inside the other's box
+/// in plan, each on a body whose faces are not all convex. One test a placing (decision 32.78:
+/// the three together were too long for one Miri gate part).
+mod coplanar_faces_apart_pass_and_overlapping_ones_are_found {
+    use super::*;
+
+    /// Two lumps at `x` along of sides `side`, and the faults of the body they make.
+    fn two_lumps(a: (i64, i64), b: (i64, i64)) -> Vec<Fault> {
+        let lump = |x: i64, side: i64| corners([x, 0, 0], [side, side, 100]);
+        let points = [lump(a.0, a.1), lump(b.0, b.1)].concat();
+        let spec = Spec {
+            points: &points,
+            regions: TWO.regions,
+        };
+        faults(&tilted(spec, &still))
+    }
+
+    #[test]
+    fn apart() {
+        assert_eq!(two_lumps((0, 100), (200, 100)), []);
+    }
+
+    #[test]
+    fn overlapping() {
+        let found = two_lumps((0, 100), (50, 100));
+        assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
+    }
+
+    #[test]
+    fn one_inside_the_others_box() {
+        let found = two_lumps((0, 300), (100, 100));
+        assert!(kinds(&found).contains(&FaultKind::FacesCross), "{found:?}");
+    }
 }
 
 #[test]
@@ -1437,8 +1472,38 @@ fn add_cavity(r: &mut Rows, region: u32, points: &[[i64; 3]; 8]) {
     faces_into(r, s, &refs);
 }
 
-#[test]
-fn a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts() {
+/// One test for each of the floor's four starts, and one for the box a step lower and the floor
+/// recorded exact (decision 32.78: whole, it was too long for one Miri gate part).
+mod a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts {
+    #[test]
+    fn start_1() {
+        super::small_box_over_a_bent_floor(0);
+    }
+
+    #[test]
+    fn start_2() {
+        super::small_box_over_a_bent_floor(1);
+    }
+
+    #[test]
+    fn start_3() {
+        super::small_box_over_a_bent_floor(2);
+    }
+
+    #[test]
+    fn start_4() {
+        super::small_box_over_a_bent_floor(3);
+    }
+
+    #[test]
+    fn a_step_lower_and_recorded_exact() {
+        super::small_box_in_a_bent_floor_and_exact();
+    }
+}
+
+/// The small box just above the bent floor whose rings start `start` corners on, as a cavity and
+/// as a lump.
+fn small_box_over_a_bent_floor(start: usize) {
     // The floor's star rises from its hub, (10, 10, 2), to 2.6 under the small box, which stands
     // on z = 3: clear of the star and inside the big box. A fan from the floor's first corner is
     // somewhere else. From (0, 0, 0) or (20, 20, 8) its fold runs between them, 3.6 high under
@@ -1447,16 +1512,18 @@ fn a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts() {
     // every start: a cavity there is where a cavity may be, and a lump there is inside another
     // lump's material.
     let small = corners([9, 9, 3], [2, 2, 2]);
-    for start in 0..4 {
-        let mut hollow = box_with_a_bent_floor(start);
-        add_cavity(&mut hollow, 1, &small);
-        let found = report(&hollow, BodyKind::Solid, within(8));
-        assert_eq!(found.faults(), [], "{start}");
-        let mut lumps = box_with_a_bent_floor(start);
-        add_lump(&mut lumps, &small);
-        let found = report(&lumps, BodyKind::Solid, within(8));
-        assert_eq!(kinds(found.faults()), [FaultKind::ShellNesting], "{start}");
-    }
+    let mut hollow = box_with_a_bent_floor(start);
+    add_cavity(&mut hollow, 1, &small);
+    let found = report(&hollow, BodyKind::Solid, within(8));
+    assert_eq!(found.faults(), [], "{start}");
+    let mut lumps = box_with_a_bent_floor(start);
+    add_lump(&mut lumps, &small);
+    let found = report(&lumps, BodyKind::Solid, within(8));
+    assert_eq!(kinds(found.faults()), [FaultKind::ShellNesting], "{start}");
+}
+
+/// The small box a step lower, standing in the bent floor's star, and the floor recorded exact.
+fn small_box_in_a_bent_floor_and_exact() {
     // A step lower the small box stands in the star, and is found crossing it, not nested.
     let mut sunk = box_with_a_bent_floor(0);
     add_cavity(&mut sunk, 1, &corners([9, 9, 2], [2, 2, 2]));
