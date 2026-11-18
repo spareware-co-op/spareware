@@ -24,8 +24,9 @@ name: Kernel
 #
 # - On each push to a pull request: format and lints (`lint`), then the tests the change can reach,
 #   once, optimised with overflow checks and debug assertions on, on Linux x86-64 (`linux`, in
-#   sixteen parts: nine of tests, seven of goldens), with the goldens there, and the toolchain
-#   guard's proof (`guard`).
+#   sixteen parts: nine of tests, seven of goldens), with the goldens there, the toolchain
+#   guard's proof (`guard`), and solidcore's stored cases through geom-solidcore (`solidcore`,
+#   decision 32.70).
 # - In GitHub's merge queue for main (`merge_group`), once per change just before it lands: the
 #   same tests on the other platforms (the job `suite` on Linux arm64, Windows on both chips and
 #   macOS on both chips; `wasm-build` and `wasm-suite` on wasm32; `big-endian` on s390x), the
@@ -1068,6 +1069,80 @@ jobs:
       - name: A one-bit change to libm's sin fails a golden
         run: cargo run --locked --release -p geom-test --bin guard -- prove
 
+  solidcore:
+    # solidcore, taken whole at one commit behind geom-solidcore (decision 32.70): its own
+    # workspace beside the kernel's crates, with its own Cargo.lock, which no other job builds. It
+    # runs the stored cases (geom-solidcore's tests/cases.json), natively on Linux x86-64, and
+    # passes only when the tests that fail are exactly the named faults of
+    # tests/named-faults.json: a named fault that starts to pass, or a case that fails without a
+    # name, fails the job. cargo-deny checks its workspace against the kernel's deny.toml, whose
+    # one allowed git repository is the project's fork of solidcore. The build cache is keyed on
+    # the pinned commit, and the toolchain is part of every cache key; only a push to main saves
+    # it. The owner's rule of 15 minutes a job holds with an empty cache too (32.70 records the
+    # minutes).
+    name: solidcore's cases through geom-solidcore
+    needs: changes
+    if: github.event_name != 'merge_group' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # cargo-deny 0.20.2 (MIT OR Apache-2.0), as kernel-gate.yml pins it.
+      CARGO_DENY_VERSION: "0.20.2"
+      CARGO_DENY_SHA256: "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+      # solidcore's README asks for an 8 MiB stack; geom-solidcore's .cargo/config.toml sets it too.
+      RUST_MIN_STACK: "8388608"
+      CARGO_INCREMENTAL: "0"
+    defaults:
+      run:
+        shell: bash
+        working-directory: projects/engines/geometry/geom-solidcore
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # The pinned commit of solidcore (geom-solidcore's Cargo.toml); the cache adds the
+          # toolchain and the lock file's hash.
+          key: solidcore-cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3
+          workspaces: projects/engines/geometry/geom-solidcore -> target
+      - name: Install cargo-deny ${{ env.CARGO_DENY_VERSION }}, checked against its SHA-256
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          name="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl"
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-delay 10 --retry-connrefused -o "$name.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/$name.tar.gz"
+          echo "${CARGO_DENY_SHA256}  $name.tar.gz" | sha256sum --check --strict
+          tar -xzf "$name.tar.gz"
+          echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      - name: Licences, advisories, sources and bans of geom-solidcore's workspace
+        run: cargo deny --locked --config ../deny.toml check
+      - name: Build geom-solidcore and its tests
+        run: cargo test --locked --no-run
+      - name: The stored cases fail exactly at the named faults
+        run: |
+          set -uo pipefail
+          cargo test --locked --no-fail-fast -- --test-threads 4 2>&1 | tee "$RUNNER_TEMP/cases.log"
+          set -e
+          failed=$(sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' "$RUNNER_TEMP/cases.log" | sort)
+          named=$(jq -r '.faults[].test' tests/named-faults.json | sort)
+          echo "Failed: $(echo $failed)"
+          echo "Named faults: $(echo $named)"
+          ran=$(grep -c '^test .* \.\.\. \(ok\|FAILED\)$' "$RUNNER_TEMP/cases.log")
+          echo "Tests run: $ran"
+          if [ "$failed" != "$named" ]; then
+            echo "::error::The tests that fail are not exactly the named faults of tests/named-faults.json."
+            exit 1
+          fi
+          test "$ran" -ge 74
+
   # The goldens on wasm32 and the proof of the guard through them, eight parts to a runtime, a
   # build each (the owner's rule of 15 minutes a job). On main's run 43953631233 the leg under
   # wasmtime took 48 minutes in one job and nearly all of it was building, four builds one after
@@ -1598,7 +1673,7 @@ jobs:
   # the merge queue it leaves the mark that lets the push to main skip the same tree.
   done:
     name: Kernel checks pass
-    needs: [changes, lint, scope, linux, guard, golden-runner, test, suite, wasm, wasm-build, wasm-suite, big-endian, large-models]
+    needs: [changes, lint, scope, linux, guard, solidcore, golden-runner, test, suite, wasm, wasm-build, wasm-suite, big-endian, large-models]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1624,9 +1699,9 @@ jobs:
             # What each event runs (the paragraph at the top; tests/queue_wiring.rs holds these
             # lists to each job's condition). A run by hand must run what a push runs.
             case "$EVENT" in
-              pull_request) must="lint scope linux guard" ;;
+              pull_request) must="lint scope linux guard solidcore" ;;
               merge_group) must="lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models" ;;
-              *) must="lint scope linux guard golden-runner test suite wasm wasm-build wasm-suite big-endian large-models" ;;
+              *) must="lint scope linux guard solidcore golden-runner test suite wasm wasm-build wasm-suite big-endian large-models" ;;
             esac
             for job in $must; do
               result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")

@@ -9,6 +9,9 @@ members = [
   "projects/spare-construct/crates/*",
   "projects/spare-office/crates/*",
 ]
+# geom-solidcore is its own workspace, with its own Cargo.lock, kept out of this one and out of
+# every kernel job but its own (decision 32.70).
+exclude = ["projects/engines/geometry/geom-solidcore"]
 
 [workspace.package]
 edition = "2024"

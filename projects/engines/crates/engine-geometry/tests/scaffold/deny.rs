@@ -126,6 +126,10 @@ pub const ALLOW_LIST_29_2: [&str; 15] = [
 /// crates.io's index, the one registry crates may come from.
 pub const CRATES_IO_INDEX: &str = "https://github.com/rust-lang/crates.io-index";
 
+/// The one git repository a dependency may come from: the project's fork of solidcore, which
+/// geom-solidcore pins to one commit (decision 32.70).
+pub const SOLIDCORE_FORK: &str = "https://github.com/spareware-co-op/solidcore";
+
 /// The rayon bans: each crate, and the only crates that may depend on it directly (29.4, 23.4).
 pub const RAYON_BANS: [(&str, &[&str]); 3] = [
     ("rayon", &["geom-pool", "wasm-bindgen-rayon"]),
@@ -326,15 +330,13 @@ fn family_advisories_and_sources(keys: &Keys, wrong: &mut Vec<String>) {
         &[CRATES_IO_INDEX],
         "crates come from crates.io only",
     );
-    if keys
-        .get("sources.allow-git")
-        .and_then(strings)
-        .is_none_or(|l| !l.is_empty())
-    {
-        wrong.push(
-            "sources.allow-git must be an empty list: git dependencies are refused".to_owned(),
-        );
-    }
+    exact_list(
+        keys,
+        wrong,
+        "sources.allow-git",
+        &[SOLIDCORE_FORK],
+        "the one git repository allowed is the project's fork of solidcore (decision 32.70)",
+    );
     forbid_keys(
         keys,
         wrong,
@@ -1879,7 +1881,8 @@ mod tests {
         include-dev = true\nconfidence-threshold = 0.93\nprivate = { ignore = true }\n\
         [advisories]\nyanked = \"deny\"\nunmaintained = \"all\"\nunsound = \"all\"\n\
         [sources]\nunknown-registry = \"deny\"\nunknown-git = \"deny\"\n\
-        allow-registry = [\"https://github.com/rust-lang/crates.io-index\"]\nallow-git = []\n\
+        allow-registry = [\"https://github.com/rust-lang/crates.io-index\"]\n\
+        allow-git = [\"https://github.com/spareware-co-op/solidcore\"]\n\
         [bans]\nwildcards = \"deny\"\nallow-wildcard-paths = true\n";
 
     /// A `no_std` configuration that holds every rule: one vetted entry, pinned, with its record.
@@ -2065,8 +2068,27 @@ mod tests {
                 vec!["advisories.ignore"],
             ),
             (
-                "git allowed",
-                swap("allow-git = []", "allow-git = [\"https://github.com/x/y\"]"),
+                "another git repository allowed",
+                swap(
+                    "allow-git = [\"https://github.com/spareware-co-op/solidcore\"]",
+                    "allow-git = [\"https://github.com/x/y\"]",
+                ),
+                vec!["allow-git"],
+            ),
+            (
+                "a second git repository allowed",
+                swap(
+                    "allow-git = [\"https://github.com/spareware-co-op/solidcore\"]",
+                    "allow-git = [\"https://github.com/spareware-co-op/solidcore\", \"https://github.com/x/y\"]",
+                ),
+                vec!["allow-git"],
+            ),
+            (
+                "no git repository allowed",
+                swap(
+                    "allow-git = [\"https://github.com/spareware-co-op/solidcore\"]",
+                    "allow-git = []",
+                ),
                 vec!["allow-git"],
             ),
             (
