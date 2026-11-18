@@ -450,8 +450,19 @@ jobs:
   # two_sum's law against 3, −0.1, 2^53 and the smallest subnormal is two harnesses a value, one
   # for each order of its operands, which together prove what one harness of both orders did: as
   # one they took 16 to 25 minutes on a hosted runner (run 44020080291), apart 1 to 8 (run
-  # 44051779140). A cut by claim is measured before it is kept: interval's mul alone ran past an
-  # hour where add, sub and mul in one harness take 46 minutes (run 44046765712).
+  # 44051779140). A cut is measured before it is kept: interval's mul alone, with its claim on
+  # the product of the two doubles, ran past an hour where add, sub and mul in one harness took
+  # 43 to 48 minutes (runs 44046765712 and 44244068917).
+  # interval's add, sub and mul are one harness each, on the same two points and with the same
+  # claim: add takes 8.5 minutes and sub 6.5. mul (9.4) has its claim on the product of the two
+  # points' bounds, the first product mul itself forms, and two more harnesses prove that this
+  # is the same claim: that the product of the bounds is the product of the doubles for every
+  # pair (2.5), and that equal doubles are finite alike and inside the same intervals (0.7). So
+  # the five together prove what the one did (run 44251477765, on the text that was proven).
+  # eft's two_prod with the splitter (12.3 and 14.3 minutes, runs 44244068917 and 44222245211)
+  # is left as one harness. Cut by its law's two claims the parts took 1.1 and 9.4 minutes, but
+  # the law is shared: with its claims under a mask, two_prod with 3 took 12.2 where it takes
+  # 7.0 to 8.2 (run 44251477765).
   # dd's from_i128 (18 to 20 minutes as one harness of every i128) is one harness for each of
   # eight classes of the value, its sign and its magnitude's width in four bands, with a cover
   # harness that proves every i128 is in one of the eight, so the nine together prove what the
@@ -463,14 +474,24 @@ jobs:
   # grid's law of `coarsen` (32 to 44 minutes as one harness of every coordinate and every pair
   # of steps) is cut by the pair of steps, each harness naming its pairs so that the divisor is a
   # constant: one harness for the six pairs that do not divide (0.8 minutes), and for each of the
-  # three that do, one for no larger and exactness (0.7 to 2.0) and two for nearest, by the
-  # coordinate's sign. Two cover harnesses prove that the pairs are every pair and the two signs
-  # every coordinate, so the twelve together prove what the one did. Below zero, nearest is
-  # asserted on the negated pair, and one more harness proves that the two ways of writing it
-  # give one verdict for every pair of values of the frame. Whole job minutes on the head that
-  # was proven (run 44175923704): nearest takes 1.4 to 2.1 minutes by 25, and by 625 at or
-  # above zero 10.5. One part is still over 15 minutes: nearest by 625 below zero, 23.5 under
-  # kissat. Bands of the magnitude do not shorten it, nor the direction of rounding.
+  # three that do, one for no larger and exactness (0.7 to 2.0) and, for nearest, one for each
+  # sign of the coordinate by 25, and by 625 one for each sign and each of nearest's two sides.
+  # Two cover harnesses prove that the pairs are every pair and the two signs every coordinate,
+  # so the fourteen together prove what the one did. Below zero, nearest by 25 is asserted on
+  # the negated pair, and one more harness proves that the two ways of writing it give one
+  # verdict for every pair of values of the frame. By 625, nearest for one sign took 15.7 and
+  # 19.4 minutes (run 44244068917), and neither bands of the magnitude nor the direction of
+  # rounding shorten it: a side is its own harness, that the answer is less than half a step
+  # above the value or that it is less than half a step below, and one more harness proves that
+  # the two sides together are nearest for every pair of values of the frame. Whole job minutes
+  # on the text that was proven (run 44251477765): nearest by 25 takes 1.2 to 1.9 minutes, and
+  # a side by 625 4.8 to 10.6.
+  # One proof is still over 15 minutes: atan2's `mul_keeps_every_carry`, 27.5 and 27.6 (runs
+  # 44222245211 and 44244068917). `mul` forms its six products inside and the proof forms them
+  # again, and the solver must find the two copies equal. A cut by the word of the answer does
+  # not shorten it (the exponent alone took 18.7, run 44248734972), nor does a copy of mul's
+  # steps fed the proof's products: the steps took 5.2 minutes, and tying them to `mul` did not
+  # end in 50 (run 44246797569).
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
@@ -532,9 +553,11 @@ jobs:
           - grid::proofs::coarsen_from_q1_to_q0_is_nearest_at_or_above_zero
           - grid::proofs::coarsen_from_q1_to_q0_is_nearest_below_zero
           - grid::proofs::coarsen_from_q1_to_q0_is_no_larger_and_reported
-          - grid::proofs::coarsen_from_q2_to_q0_is_nearest_at_or_above_zero
-          - grid::proofs::coarsen_from_q2_to_q0_is_nearest_below_zero
           - grid::proofs::coarsen_from_q2_to_q0_is_no_larger_and_reported
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_high_at_or_above_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_high_below_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_low_at_or_above_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_low_below_zero
           - grid::proofs::coarsen_from_q2_to_q1_is_nearest_at_or_above_zero
           - grid::proofs::coarsen_from_q2_to_q1_is_nearest_below_zero
           - grid::proofs::coarsen_from_q2_to_q1_is_no_larger_and_reported
@@ -542,20 +565,25 @@ jobs:
           - grid::proofs::coord_from_i128_accepts_exactly_the_frame
           - grid::proofs::coord_new_accepts_exactly_the_frame
           - grid::proofs::every_coordinate_is_below_zero_or_not
+          - grid::proofs::nearest_is_its_two_sides
           - grid::proofs::nearest_on_the_negated_pair_is_nearest
           - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
           - grid::proofs::refine_is_exact_or_refused
           - grid::proofs::steps_refine_is_exact_or_none
           - grid::proofs::the_nine_pairs_are_every_pair_of_steps
-          - interval::proofs::add_sub_mul_enclose_the_rounded_result
+          - interval::proofs::add_encloses_the_rounded_result
           - interval::proofs::div_by_minus_a_tenth
           - interval::proofs::div_by_minus_zero_is_refused
           - interval::proofs::div_by_the_largest_double
           - interval::proofs::div_by_the_smallest_subnormal
           - interval::proofs::div_by_three
           - interval::proofs::div_by_zero_is_refused
+          - interval::proofs::equal_doubles_are_enclosed_alike
+          - interval::proofs::mul_encloses_the_product_of_its_bounds
           - interval::proofs::new_accepts_exactly_ordered_finite_bounds
           - interval::proofs::square_is_never_negative_and_encloses
+          - interval::proofs::sub_encloses_the_rounded_result
+          - interval::proofs::the_product_of_two_points_bounds_is_the_product
           - ladder::proofs::quarter_nm_always_answers_exactly
           - math::atan2::proofs::add_of_like_signs_is_within_two_ulps
           - math::atan2::proofs::add_of_unlike_signs_at_equal_exponents_is_within_two_ulps
