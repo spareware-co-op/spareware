@@ -2540,7 +2540,7 @@ fn a_miri_job_names_every_test_stopped_with_no_verdict_and_fails_on_one_that_may
         ),
         // A partition that never reads its report.
         (
-            "          kernel-quality miri-stopped --stop \"$stop\" --report \"target/nextest/$profile/junit.xml\" \\\n            --title \"Partition",
+            "          kernel-quality miri-stopped --stop \"$stop\" --report \"target/nextest/$profile/junit.xml\" \\\n            --yardstick target/nextest/miri-yardstick/junit.xml \\\n            --title \"Partition",
             "          echo \"Partition",
             "miri does not read its report for tests stopped",
             false,
@@ -2575,7 +2575,7 @@ fn a_miri_job_names_every_test_stopped_with_no_verdict_and_fails_on_one_that_may
         ),
         // geom-pool's job without the reading.
         (
-            "          kernel-quality miri-stopped --stop \"$stop\" --report \"target/nextest/$profile/junit.xml\" \\\n            --title \"geom-pool",
+            "          kernel-quality miri-stopped --stop \"$stop\" --report \"target/nextest/$profile/junit.xml\" \\\n            --yardstick target/nextest/miri-yardstick/junit.xml \\\n            --title \"geom-pool",
             "          echo \"geom-pool",
             "miri-pool does not read its report for tests stopped",
             false,

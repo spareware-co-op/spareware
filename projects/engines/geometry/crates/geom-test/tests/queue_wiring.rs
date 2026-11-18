@@ -1754,7 +1754,7 @@ fn an_in_run_hand_over_is_kept_a_day_and_read_in_its_run() {
         (
             "          name: miri-pool\n",
             "          name: miri-pool\n          retention-days: 1\n",
-            "miri-pool's step 10 uploads miri-pool for one day",
+            "miri-pool's step 11 uploads miri-pool for one day",
         ),
         // Another job downloading the plan.
         (
