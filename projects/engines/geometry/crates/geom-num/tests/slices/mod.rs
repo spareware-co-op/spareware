@@ -18,6 +18,7 @@
 
 #![allow(
     dead_code,
+    unused_macros,
     reason = "each test binary uses the pieces it needs; the others are for its neighbours"
 )]
 #![allow(

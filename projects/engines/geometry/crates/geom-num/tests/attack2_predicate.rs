@@ -53,6 +53,9 @@
     clippy::too_many_arguments
 )]
 
+#[macro_use]
+mod slices;
+
 use std::fmt::Debug;
 use std::sync::OnceLock;
 
@@ -1947,24 +1950,35 @@ fn direction<const D: usize>() -> impl Strategy<Value = [i64; D]> {
     uniform::<_, D>(-(1i64 << 20)..=1 << 20)
 }
 
-proptest! {
-    #![proptest_config(cfg(256))]
-
-    /// incircle with a, b, c on one line is exactly orient2d's determinant of (a, b, d) times
-    /// (c − a) · (c − b), as the documentation derives, at `i64` scale on the total path.
-    #[test]
-    fn incircle_with_collinear_a_b_c_keeps_the_documented_identity(
-        base in uniform::<_, 2>(wild()),
-        w in direction::<2>(),
-        d in uniform::<_, 2>(wild()),
-        seed in any::<u64>(),
-    ) {
+// incircle with a, b, c on one line is exactly orient2d's determinant of (a, b, d) times
+// (c − a) · (c − b), as the documentation derives, at `i64` scale on the total path. In quarters
+// of its one stream of cases, the longest of these under Miri (decision 32.78, `slices`).
+sliced!(
+    incircle_with_collinear_a_b_c_keeps_the_documented_identity,
+    cfg(256),
+    (
+        uniform::<_, 2>(wild()),
+        direction::<2>(),
+        uniform::<_, 2>(wild()),
+        any::<u64>(),
+    ),
+    |(base, w, d, seed)| {
         let [a, b, c] = collinear(base, w, seed);
         let p = [a, b, c, d];
         let expected = o2_exact([a, b, d]) * power_on_line(a, b, c);
         prop_assert_eq!(ic_total(p), expected.clone(), "incircle {:?}", p);
         prop_assert_eq!(copy::ic_routed(p), sign_of(&expected), "incircle {:?}", p);
+        Ok(())
     }
+);
+
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(cfg(256).cases, "a property's 256 cases");
+}
+
+proptest! {
+    #![proptest_config(cfg(256))]
 
     /// insphere with a, b, c on one line is exactly minus orient3d's determinant of (a, b, d, e)
     /// times (c − a) · (c − b), as the documentation derives, at `i64` scale on the total path.

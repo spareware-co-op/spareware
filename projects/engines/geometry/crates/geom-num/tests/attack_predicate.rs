@@ -50,6 +50,9 @@
     clippy::too_many_arguments
 )]
 
+#[macro_use]
+mod slices;
+
 use std::collections::BTreeSet;
 
 use geom_num::grid::{COORD_MAX, P2, P3};
@@ -1437,6 +1440,70 @@ fn insphere_zero_by_doc_when_abc_collinear([a, b, c, d, e]: [Pt3; 5]) -> bool {
     orient3d_det([a, b, d, e]).is_zero()
 }
 
+// The doc's subtle case: a, b, c collinear and distinct with d in their plane off their line.
+// They lie on no single circle or line, so zero means exactly that e is in their plane. Checked
+// in a tilted plane and in an axis plane, at up to half the grid. In quarters of its one stream
+// of cases, among the longest of these under Miri (decision 32.78, `slices`).
+sliced!(
+    three_collinear_points_and_a_fourth_in_their_plane,
+    cfg(384),
+    (
+        uniform::<_, 3>(any::<u64>()),
+        1i64..=M / 8,
+        -M / 8..=M / 8,
+        1i64..=M / 8,
+        any::<bool>(),
+        uniform::<_, 2>(-M / 8..=M / 8),
+        -3i64..=3,
+        any::<bool>(),
+    ),
+    |(oc, k, xd, yd, flip, qe, j, tilted)| {
+        let yd = if flip { -yd } else { yd };
+        let plane = [[-k, 0], [0, 0], [k, 0], [xd, yd], qe];
+        let margin = (if tilted { reach(&plane) } else { M / 8 }) + 8;
+        let o: Pt3 = oc.map(|s| pick(-(M - margin), M - margin, s));
+        let embed = |q: Pt2| {
+            if tilted {
+                tilt(o, q)
+            } else {
+                [o[0] + q[0], o[1] + q[1], o[2]]
+            }
+        };
+        let normal: Pt3 = if tilted { NRM } else { [0, 0, 1] };
+        let [a, b, c, d, e0] = plane.map(embed);
+        let e = add(e0, normal.map(|v| v * j));
+        prop_assert_eq!(o3([a, b, c, d]), Sign::Zero);
+        prop_assert_eq!(o2([[-k, 0], [0, 0], [k, 0]]), Sign::Zero);
+        let v = check_ins([a, b, c, d, e]);
+        prop_assert_eq!(v.is_zero(), j == 0, "{:?}", [a, b, c, d, e]);
+        Ok(())
+    }
+);
+
+// incircle's documented value when a, b, c are collinear: orient2d's determinant of (a, b, d)
+// times (c − a) · (c − b), exactly, for d anywhere. In quarters of its one stream of cases.
+sliced!(
+    incircle_with_collinear_a_b_c_is_orient2d_of_a_b_d_times_the_power_of_c,
+    cfg(384),
+    (
+        pt2(),
+        direction::<2>(),
+        uniform::<_, 3>(any::<u64>()),
+        pt2()
+    ),
+    |(base, w, ks, d)| {
+        let [a, b, c] = on_line(base, w, ks);
+        let expected = orient2d_det([a, b, d]) * power_on_line(c, a, b);
+        prop_assert_eq!(check_ic([a, b, c, d]), expected, "{:?}", [a, b, c, d]);
+        Ok(())
+    }
+);
+
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(cfg(384).cases, "a property's 384 cases");
+}
+
 proptest! {
     #![proptest_config(cfg(384))]
 
@@ -1520,28 +1587,6 @@ proptest! {
         }
     }
 
-    /// The doc's subtle case: a, b, c collinear and distinct with d in their plane off their line.
-    /// They lie on no single circle or line, so zero means exactly that e is in their plane.
-    /// Checked in a tilted plane and in an axis plane, at up to half the grid.
-    #[test]
-    fn three_collinear_points_and_a_fourth_in_their_plane(
-        oc in uniform::<_, 3>(any::<u64>()), k in 1i64..=M / 8, xd in -M / 8..=M / 8,
-        yd in 1i64..=M / 8, flip in any::<bool>(), qe in uniform::<_, 2>(-M / 8..=M / 8),
-        j in -3i64..=3, tilted in any::<bool>(),
-    ) {
-        let yd = if flip { -yd } else { yd };
-        let plane = [[-k, 0], [0, 0], [k, 0], [xd, yd], qe];
-        let margin = (if tilted { reach(&plane) } else { M / 8 }) + 8;
-        let o: Pt3 = oc.map(|s| pick(-(M - margin), M - margin, s));
-        let embed = |q: Pt2| if tilted { tilt(o, q) } else { [o[0] + q[0], o[1] + q[1], o[2]] };
-        let normal: Pt3 = if tilted { NRM } else { [0, 0, 1] };
-        let [a, b, c, d, e0] = plane.map(embed);
-        let e = add(e0, normal.map(|v| v * j));
-        prop_assert_eq!(o3([a, b, c, d]), Sign::Zero);
-        prop_assert_eq!(o2([[-k, 0], [0, 0], [k, 0]]), Sign::Zero);
-        let v = check_ins([a, b, c, d, e]);
-        prop_assert_eq!(v.is_zero(), j == 0, "{:?}", [a, b, c, d, e]);
-    }
 
     /// Collinear points at full scale: incircle with three distinct collinear points is zero
     /// exactly when d is on their line; orient3d with a, b, c collinear is zero for every d.
@@ -1667,17 +1712,6 @@ fn degenerate_signs_follow_the_documented_rules_at_full_scale() {
 
 proptest! {
     #![proptest_config(cfg(384))]
-
-    /// incircle's documented value when a, b, c are collinear: orient2d's determinant of
-    /// (a, b, d) times (c − a) · (c − b), exactly, for d anywhere.
-    #[test]
-    fn incircle_with_collinear_a_b_c_is_orient2d_of_a_b_d_times_the_power_of_c(
-        base in pt2(), w in direction::<2>(), ks in uniform::<_, 3>(any::<u64>()), d in pt2(),
-    ) {
-        let [a, b, c] = on_line(base, w, ks);
-        let expected = orient2d_det([a, b, d]) * power_on_line(c, a, b);
-        prop_assert_eq!(check_ic([a, b, c, d]), expected, "{:?}", [a, b, c, d]);
-    }
 
     /// insphere's documented value when a, b, c are collinear: minus orient3d's determinant of
     /// (a, b, d, e) times (c − a) · (c − b), exactly, for d and e anywhere.
