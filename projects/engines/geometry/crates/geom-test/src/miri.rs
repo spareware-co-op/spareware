@@ -1393,17 +1393,40 @@ pub fn to_measure(rows: &[Row], listed: &[(String, String)], which: Measuring) -
 }
 
 /// The parts of a measuring run: its tests packed ([`pack`]) into parts whose tests each end
-/// within [`BUDGET`] at [`AT_ONCE`] a time ([`Rule::Stop`]). No tests give one empty part.
+/// within [`BUDGET`] at [`AT_ONCE`] a time ([`Rule::Stop`]), and [`TREE_BORROWS_CRATE`]'s tests
+/// all in one part of their own, the last, so they are measured together at [`AT_ONCE`] a time as
+/// the gate's job `miri-pool` runs them (32.78: measured one or two to a part, they ran nearly
+/// alone, and in `miri-pool` 1.25 to 1.73 times their rows). No tests give one empty part.
 ///
 /// # Errors
 ///
 /// For more parts than the workflow's part jobs hold ([`crate::mutants::MAX_SHARDS`]): the run is
 /// to be narrowed by a filterset. Also for a test planned over the stop, which [`to_measure`]
-/// never gives.
+/// never gives, and for [`TREE_BORROWS_CRATE`]'s tests not fitting one part.
 pub fn measure_plan(tests: &[Timed]) -> Result<Plan, String> {
-    let plan = pack(tests, Rule::Stop).ok_or_else(|| {
+    let (pool, rest): (Vec<Timed>, Vec<Timed>) = tests
+        .iter()
+        .cloned()
+        .partition(|t| crate_of(&t.binary) == TREE_BORROWS_CRATE);
+    let mut plan = pack(&rest, Rule::Stop).ok_or_else(|| {
         format!("a test is planned over the {BUDGET} s stop, which no part can hold")
     })?;
+    if !pool.is_empty() {
+        let together = pack(&pool, Rule::Stop)
+            .filter(|p| p.parts.len() == 1)
+            .ok_or_else(|| {
+                format!(
+                    "{TREE_BORROWS_CRATE}'s {} tests do not fit one measuring part within the \
+                     {BUDGET} s stop",
+                    pool.len()
+                )
+            })?;
+        if rest.is_empty() {
+            plan = together;
+        } else {
+            plan.parts.extend(together.parts);
+        }
+    }
     let n = plan.len();
     let most = usize::try_from(crate::mutants::MAX_SHARDS).unwrap_or(usize::MAX);
     if n > most {

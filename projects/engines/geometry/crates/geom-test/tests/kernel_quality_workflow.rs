@@ -3258,6 +3258,45 @@ fn every_miri_gate_job_prints_its_processor_and_judges_each_test_at_its_scale() 
 }
 
 #[test]
+fn a_measuring_run_measures_geom_pools_tests_together_in_one_part_of_their_own() {
+    let timed = |seconds: u64, binary: &str, test: &str| miri::Timed {
+        seconds,
+        binary: binary.to_owned(),
+        test: test.to_owned(),
+    };
+    // Eight of geom-pool's tests, which alone would pack beside the others, and long tests of
+    // another crate that fill parts of their own.
+    let mut tests: Vec<miri::Timed> = (0..8)
+        .map(|k| timed(10 + k, "geom-pool::attack_g33", &format!("pool_{k}")))
+        .collect();
+    tests.extend((0..9).map(|k| timed(500, "geom-num::wide", &format!("long_{k}"))));
+    tests.push(timed(5, "geom-num", "short"));
+    let plan = miri::measure_plan(&tests).unwrap();
+    let last = plan.tests_of(plan.len());
+    assert_eq!(last.len(), 8, "{last:?}");
+    assert!(last.iter().all(|(b, _)| b.starts_with("geom-pool")));
+    for k in 1..plan.len() {
+        assert!(
+            plan.tests_of(k)
+                .iter()
+                .all(|(b, _)| !b.starts_with("geom-pool")),
+            "part {k} holds a geom-pool test"
+        );
+    }
+    let all: usize = (1..=plan.len()).map(|k| plan.tests_of(k).len()).sum();
+    assert_eq!(all, tests.len());
+    // geom-pool alone is one part; no tests is one empty part.
+    let pool_only = miri::measure_plan(&tests[..8]).unwrap();
+    assert_eq!(pool_only.len(), 1);
+    assert_eq!(miri::measure_plan(&[]).unwrap().len(), 1);
+    // geom-pool's tests that cannot share one part are refused, never split.
+    let too_long: Vec<miri::Timed> = (0..8)
+        .map(|k| timed(590, "geom-pool::attack_g33", &format!("pool_{k}")))
+        .collect();
+    assert!(miri::measure_plan(&too_long).is_err());
+}
+
+#[test]
 fn a_measuring_report_is_stored_in_yardstick_seconds_by_its_own_jobs_scale() {
     let (yb, yt) = miri::YARDSTICK;
     // The table before the run: the yardstick's row, 36 s, and one planted test.
