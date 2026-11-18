@@ -1831,6 +1831,9 @@ const MEASURE_PARTS: [(&str, &str, &str); 2] = [
 /// own target folder, and the part renames it for its borrow model.
 const MEASURE_REPORTS: &str = "target/nextest/miri-measure-ci/junit-*.xml";
 
+/// The report of a measuring part's yardstick run, beside its own reports (32.78).
+const MEASURE_YARDSTICK: &str = "target/nextest/miri-measure-ci/yardstick.xml";
+
 /// A script's commands with continued lines joined and runs of spaces made one, comments left out.
 fn joined(script: &str) -> Vec<String> {
     script
@@ -2095,7 +2098,8 @@ fn measure_part_problems(w: &Yaml, n: &toml::Table) -> Vec<String> {
         s["uses"]
             .as_str()
             .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
-            && s["with"]["path"].as_str() == Some(MEASURE_REPORTS)
+            && s["with"]["path"].as_str()
+                == Some(format!("{MEASURE_REPORTS}\n{MEASURE_YARDSTICK}\n").as_str())
             && s["with"]["name"].as_str() == Some("miri-measure-${{ matrix.part }}")
             && s["if"].as_str() == Some("${{ !cancelled() }}")
     });
@@ -2106,6 +2110,28 @@ fn measure_part_problems(w: &Yaml, n: &toml::Table) -> Vec<String> {
             "a part uploads no report of {MEASURE_REPORTS} between its runs and its check: \
              {run_at:?} {pool_at:?} {upload_at:?} {check_at:?}"
         )),
+    }
+    // The yardstick first (32.78): the processor and the part's scale, its report kept beside
+    // the part's own for `miri-times --yardstick`.
+    let (yb, yt) = miri::YARDSTICK;
+    let yard_at = steps.iter().position(|s| {
+        running(&s, "/proc/cpuinfo")
+            && running(
+                &s,
+                &format!("cargo miri nextest run --locked -p {yb} --profile miri-yardstick"),
+            )
+            && running(&s, &format!("-E 'test(={yt})'"))
+            && running(
+                &s,
+                &format!("mv target/nextest/miri-yardstick/junit.xml {MEASURE_YARDSTICK}"),
+            )
+            && running(&s, "kernel-quality -- miri-scale")
+            && running(&s, &format!("--report {MEASURE_YARDSTICK}"))
+    });
+    if !matches!((yard_at, run_at, pool_at), (Some(y), Some(r), Some(p)) if y < r && y < p) {
+        found.push(format!(
+            "a part does not run the yardstick before its tests: {yard_at:?} {run_at:?} {pool_at:?}"
+        ));
     }
     // geom-pool's tests are measured as the gate's job `miri-pool` runs them.
     let pool_flags = w["jobs"]["miri-pool"]["steps"]
@@ -2143,7 +2169,7 @@ fn measure_part_problems(w: &Yaml, n: &toml::Table) -> Vec<String> {
             .to_owned(),
         format!("for f in {MEASURE_REPORTS}; do reports+=(--report \"$f\"); done"),
         format!(
-            "kernel-quality -- miri-times \"${{reports[@]}}\" --scale 1 --stop {budget} --dry-run"
+            "kernel-quality -- miri-times \"${{reports[@]}}\" --yardstick --stop {budget} --dry-run"
         ),
     ] {
         if !commands.contains(&needle) {
@@ -2209,20 +2235,37 @@ fn a_measuring_run_runs_only_when_asked_and_leaves_nothing_behind() {
         ),
         // The table written.
         (
-            "--scale 1 --stop 600 --dry-run",
-            "--scale 1 --stop 600",
+            "--yardstick --stop 600 --dry-run",
+            "--yardstick --stop 600",
             "miri-measure writes the table",
         ),
-        // A part with no report upload, and one kept for months.
+        // A part's rows read at one scale for every report, not at its own yardstick's.
         (
-            "          path: target/nextest/miri-measure-ci/junit-*.xml\n",
-            "          path: target/nextest/miri-measure/junit.xml\n",
+            "--yardstick --stop 600 --dry-run",
+            "--scale 1 --stop 600 --dry-run",
+            "a part does not run",
+        ),
+        // A part with no report upload, one without its yardstick's, and one kept for months.
+        (
+            "            target/nextest/miri-measure-ci/junit-*.xml\n",
+            "            target/nextest/miri-measure/junit.xml\n",
             "a part uploads no report",
         ),
         (
-            "          path: target/nextest/miri-measure-ci/junit-*.xml\n          retention-days: 3\n",
-            "          path: target/nextest/miri-measure-ci/junit-*.xml\n          retention-days: 90\n",
+            "            target/nextest/miri-measure-ci/yardstick.xml\n",
+            "            target/nextest/miri-measure-ci/other.xml\n",
+            "a part uploads no report",
+        ),
+        (
+            "            target/nextest/miri-measure-ci/yardstick.xml\n          retention-days: 3\n",
+            "            target/nextest/miri-measure-ci/yardstick.xml\n          retention-days: 90\n",
             "miri-measure keeps an artifact more than a few days",
+        ),
+        // A part that measures with no yardstick first.
+        (
+            "          grep -m1 '^model name' /proc/cpuinfo\n          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \\\n            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'\n          mkdir",
+            "          mkdir",
+            "a part does not run the yardstick before its tests",
         ),
         // geom-pool measured under Stacked Borrows, not as the gate runs it.
         (

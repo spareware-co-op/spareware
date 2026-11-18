@@ -1021,7 +1021,9 @@ fn run(cli: Cli) -> Result<bool, String> {
             println!(
                 "{} rows from {} reported tests: {finish} finish under Miri, {} native-only",
                 rows.len(),
-                parts.iter().map(|(t, _)| t.len()).sum::<usize>(),
+                parts
+                    .iter()
+                    .fold(0_usize, |n, (t, _)| n.saturating_add(t.len())),
                 rows.len().saturating_sub(finish)
             );
             match geom_test::miri::gate_plan(&rows) {
