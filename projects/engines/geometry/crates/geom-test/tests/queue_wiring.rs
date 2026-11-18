@@ -1758,8 +1758,8 @@ fn an_in_run_hand_over_is_kept_a_day_and_read_in_its_run() {
         ),
         // Another job downloading the plan.
         (
-            "          name: miri-measure-plan\n          path: ${{ runner.temp }}/measure\n      - name: Measure",
-            "          name: miri-plan\n          path: ${{ runner.temp }}/measure\n      - name: Measure",
+            "          name: miri-measure-plan\n          path: ${{ runner.temp }}/measure\n      # The yardstick",
+            "          name: miri-plan\n          path: ${{ runner.temp }}/measure\n      # The yardstick",
             "downloads miri-plan, which is not handed to it",
         ),
     ] {
