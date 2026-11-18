@@ -10,6 +10,8 @@
 # the larger.
 # `test certificates_workflow` came after those pushes: its seconds are the same job's on the head
 # of the pull request that added it (run 44086231115).
+# `test solidcore_job` is not measured yet: it carries the slowest listed time, as the rule above
+# plans an unlisted unit, until the wasm job has run on it.
 # crate unit<TAB>seconds
 geom-fuzz bin replay-hashes	1
 geom-fuzz doc	1
@@ -137,4 +139,5 @@ geom-test test second_mesh	1
 geom-test test seed_replay	1
 geom-test test seeded_gates	1
 geom-test test shipped	10
+geom-test test solidcore_job	350
 geom-test test test_scope	1
