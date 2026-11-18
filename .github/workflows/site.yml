@@ -5,7 +5,8 @@ name: Site
 
 on:
   # Every merge to main: the contributor map (/contributors.html) counts merged pull requests,
-  # and the kernel progress page (/kernel-progress.html) counts the board's pieces.
+  # the kernel progress page (/kernel-progress.html) counts the board's pieces, and the kernel map
+  # (/kernel-map.html) draws how the kernel fits together.
   push:
     branches: [main]
   # A pull request that changes the site or its page builders builds the site to check it; only main deploys.
@@ -15,6 +16,18 @@ on:
       - 'tools/contributor-map/**'
       - 'tools/kernel-progress/**'
       - '.github/workflows/site.yml'
+      # What the kernel map reads besides its own folder: a pull request that adds a crate, a layer,
+      # an interface operation, a class or a tolerance without its plain words in map.json fails here,
+      # before main.
+      - 'projects/engines/geometry/MAP.json'
+      - 'projects/engines/geometry/architecture/09-representations.md'
+      - 'projects/engines/geometry/architecture/27-crates-folders.md'
+      - 'projects/engines/crates/engine-geometry/generated/mcp-tools.json'
+      - 'projects/engines/geometry/geom-solidcore/Cargo.toml'
+      - 'projects/engines/geometry/geom-solidcore/tests/**'
+      - 'projects/spare-construct/ARCHITECTURE.md'
+      - 'projects/spare-construct/FEATURES.md'
+      - 'projects/spare-construct/features.json'
   workflow_dispatch:
 
 permissions:
@@ -57,13 +70,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/contributor-map/build.py _site/contributors.html
-      - name: Build the kernel progress page
+      - name: Build the kernel progress page and the kernel map
         env:
           # Read-only: branches, the merge trains' MAP.json and open pull requests.
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 tools/kernel-progress/test_build.py
+          python3 tools/kernel-progress/test_map.py
           python3 tools/kernel-progress/build.py _site/kernel-progress.html
+          python3 tools/kernel-progress/build_map.py _site/kernel-map.html
           find _site -maxdepth 2 | sort
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

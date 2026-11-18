@@ -1,0 +1,118 @@
+{
+  "format": 1,
+  "about": "The plain words the kernel map (kernel-map.html, built by build_map.py) needs that the kernel's own files do not hold. Every name, count, layer, operation, state, class definition, tolerance and pin on the map is read from the repository: MAP.json (the crates and their layers), chapter 27's layer table, engine-geometry's generated/mcp-tools.json (what programs call), operations.json beside this file and the progress page's states (which engine answers each operation), chapter 9's exactness classes, and geom-solidcore's Cargo.toml and tests. This file adds only: (1) apps: the three uses of the kernel at the top of the map, in the order site, building, things that go in it, each with the plan file and text that names it, which the build checks are still there; (2) layers and crates: a few plain words for what each is for (every crate of MAP.json must have its line, and a line for a crate MAP.json does not list fails the build); (3) interface: the operation piece each family of the interface's operations belongs to; (4) classes: a plain gloss of each of chapter 9's classes, and the class of each operation our own core answers that the interface does not list yet, with where the repository says so; (5) engines: the words for the two engines, the class solidcore's answers have, and what each of its stored tolerances measures.",
+  "apps": {
+    "program": "projects/spare-construct/features.json",
+    "note": "All three are one program on one model; the plan calls Civil and Workshop its disciplines.",
+    "items": [
+      {"name": "Civil", "for": "The site: ground, roads, drainage and pipes", "source": "projects/spare-construct/ARCHITECTURE.md", "find": "**02 Civil**"},
+      {"name": "Construct", "for": "The building: walls, floors, roofs, frames and services", "source": "projects/spare-construct/ARCHITECTURE.md", "find": "**04 Architecture**"},
+      {"name": "Workshop", "for": "The things that go in it: parts, fittings and furniture", "source": "projects/spare-construct/FEATURES.md", "find": "## CON-A27 Workshop"}
+    ]
+  },
+  "layers": {
+    "13": "What the programs call",
+    "12": "Files in and out",
+    "11": "Kits for one kind of work",
+    "10": "The modelling tools",
+    "9": "Tools the modelling tools share",
+    "8": "Other kinds of shape",
+    "7": "Meshes and finding things in space",
+    "6": "Cutting and joining flat shapes",
+    "5": "Checking every shape",
+    "4": "Where shapes meet",
+    "3": "How a shape's faces connect",
+    "2": "Points, lines and surfaces",
+    "1": "Exact numbers and the rules every tool keeps",
+    "Development": "Our testing tools"
+  },
+  "crates": {
+    "engine-geometry": "The one door every program uses",
+    "geom-pool": "Shares work across the computer's cores",
+    "geom-align": "Road and rail centre lines",
+    "geom-analysis": "Checks how smooth a surface is",
+    "geom-blend": "Rounds and bevels edges",
+    "geom-combine": "One join or cut for every kind of shape",
+    "geom-convert": "Turns one kind of shape into another",
+    "geom-draw": "Sections, plans and hidden lines for drawings",
+    "geom-offset": "Thickens, hollows and moves faces",
+    "geom-panel": "Splits surfaces into panels and unrolls them",
+    "geom-profile": "Carries sketches into the model",
+    "geom-sketch": "Solves sketches with rules on them",
+    "geom-terrain": "Ground surfaces, contours and earth volumes",
+    "geom-make": "Makes boxes, cylinders and spheres; moves them",
+    "geom-skeleton": "Roofs from floor plans",
+    "geom-sweep": "Extrudes, revolves and sweeps profiles",
+    "geom-cloud": "Laser scan points, for reference",
+    "geom-field": "Shapes made from a formula",
+    "geom-subd": "Smooth shapes from a rough cage",
+    "geom-mesh": "Shapes made of triangles",
+    "geom-spatial": "Distance, clearance and clashes",
+    "geom-2d": "Drafting lines and 2D shapes",
+    "geom-bool": "Joins and cuts solids exactly",
+    "geom-poly": "Exact flat-faced solids",
+    "geom-check": "Proves a shape is sound",
+    "geom-intersect": "Where curves and surfaces cross",
+    "geom-name": "Keeps a face's name through every change",
+    "geom-topo": "Faces, edges and corners of a solid",
+    "geom-bvh": "Quick search by boxes around shapes",
+    "geom-curve": "Lines, arcs and free curves",
+    "geom-math": "Points, directions and moves",
+    "geom-nurbs": "The maths of free curves and surfaces",
+    "geom-surface": "Flat, round and free surfaces",
+    "geom-linalg": "Solves sets of equations",
+    "geom-num": "Exact numbers and yes-or-no tests",
+    "geom-op": "The rules every operation keeps",
+    "geom-run": "Runs work side by side, within set limits",
+    "geom-format": "Our own file, saved exactly",
+    "geom-exchange": "What every file reader shares",
+    "geom-p21": "The text inside part and building files",
+    "geom-heal": "Mends shapes that come in from files",
+    "geom-ifc": "Open building model files",
+    "geom-step": "Engineering part files",
+    "geom-dxf": "Drawing files from other programs",
+    "geom-3dm": "Rhino model files",
+    "geom-meshio": "Mesh files for printing and viewing",
+    "geom-landxml": "Land survey and road design files",
+    "geom-bench": "Times every operation",
+    "geom-fuzz": "Throws random shapes at the kernel",
+    "geom-gen": "Writes the files other files are made from",
+    "geom-test": "The shared tests and their checks"
+  },
+  "interface": {
+    "Make": "G101",
+    "Transform": "G101",
+    "Query": "G102"
+  },
+  "classes": {
+    "gloss": {
+      "Exact": "Exactly right, with no rounding",
+      "Certified": "Within a stated distance, and proven",
+      "Approximate": "Within a stated distance, measured but not proven"
+    },
+    "ours": {
+      "G131": {"class": "Exact", "from": "architecture/11-booleans.md, its first table: the polyhedral builder is Exact, the arrangement adds no error"},
+      "G137": {"class": "Exact", "from": "architecture/11-booleans.md: rooms are cells of the same exact arrangement as the flat booleans"},
+      "G138": {"class": "Exact", "from": "architecture/11-booleans.md: batch cuts are one exact arrangement of the host and its tools"},
+      "G147": {"class": "Exact", "from": "architecture/30-build-order.json, G147: exact point classification on meshes"},
+      "G148": {"class": "Exact", "from": "architecture/11-booleans.md, 11.8's table: the exact mesh boolean, plane-based operands as the flat builder"},
+      "G149": {"class": "Exact", "from": "architecture/30-build-order.json, G149: plane slices and an exact hull"},
+      "G150": {"class": "Exact", "from": "architecture/30-build-order.json, G150: exact hulls of pairwise sums, exact against a rational oracle"},
+      "G153": {"class": "Exact", "from": "architecture/30-build-order.json, G153: exact constrained Delaunay triangulation"},
+      "G300": {"class": "Certified", "from": "architecture/30-build-order.json, G300: results Certified(eps)"}
+    }
+  },
+  "engines": {
+    "core": {"name": "Our exact core", "for": "Our own crates: exact where it can be, proven where it cannot"},
+    "solidcore": {"name": "solidcore", "for": "An outside modelling engine for curved work, taken in whole", "class": "Approximate",
+                  "why": "Its answers are compared with ours on every stored case and must fall within the stated tolerances; that is measured, not proven."},
+    "none": {"name": "Not answered yet", "for": "No engine answers these today"},
+    "tolerances": {
+      "max_residual": "every point of a meeting curve within {} of both surfaces",
+      "length_relerr": "the curve's length within {} of the true length, as a share of it",
+      "volume_relerr_flat": "a flat-faced volume within {} of the true volume, as a share of it",
+      "volume_relerr_curved": "a curved volume within {} of the true volume, as a share of it",
+      "samples_per_piece": "checked at {} points along each piece of curve"
+    }
+  }
+}
