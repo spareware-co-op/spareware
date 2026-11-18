@@ -1476,26 +1476,18 @@ fn round(p: &Spot, q: &Spot) -> Ordering {
     }
 }
 
-/// The angle of `s` from (r, 0) towards (0, r), in half-turns on [0, 2), enclosed.
+/// The angle of `s` from (r, 0) towards (0, r), in half-turns on [0, 2), enclosed. `turn_of`
+/// writes a point of the upper half in place; a point of the lower half is the mirror of one of
+/// the upper half in the first axis, so its angle is two half-turns less the mirror's. No
+/// threshold on an enclosure decides it (decision 32.80). Its cost: where x is surely negative,
+/// the enclosure is up to two units in the last place wider at its lower end, and one at its
+/// upper, than `turn_of`'s own moved a turn on; it holds the true angle everywhere.
 fn angle(s: &Spot) -> Result<Interval, IntersectError> {
-    let at = turn_of(s.x.near, s.y.near)?;
     if s.y.sign == Sign::Negative {
-        lower_half(at)
+        let mirror = turn_of(s.x.near, s.y.near.neg())?;
+        Ok(Interval::point(2.0)?.sub(mirror)?)
     } else {
-        Ok(at)
-    }
-}
-
-/// The angle of a point of the lower half (strictly between one and two half-turns) from
-/// `turn_of`'s enclosure `at` of it, which writes such a point either there or a turn back, in
-/// (−1, 0). An enclosure written a turn back holds a number below zero, so its lower end is below
-/// zero; one written in place holds a number over one, so its lower end is below a half-turn only
-/// where it is over half a turn wide. Exactly at a half-turn it is in place.
-fn lower_half(at: Interval) -> Result<Interval, IntersectError> {
-    if at.lo() < 0.5 {
-        Ok(at.add(Interval::point(2.0)?)?)
-    } else {
-        Ok(at)
+        Ok(turn_of(s.x.near, s.y.near)?)
     }
 }
 
@@ -2128,17 +2120,81 @@ mod tests {
 
     use super::*;
 
+    /// A point of the circle whose coordinates have the exact signs `sx`, `sy` and the enclosures
+    /// `x`, `y`.
+    fn spot(sx: Sign, x: Interval, sy: Sign, y: Interval) -> Spot {
+        let coord = |sign, near| Coord {
+            sign,
+            square: Vec::new(),
+            near,
+        };
+        Spot {
+            x: coord(sx, x),
+            y: coord(sy, y),
+        }
+    }
+
+    fn exactly(x: f64) -> Interval {
+        Interval::point(x).unwrap()
+    }
+
     #[test]
-    fn a_lower_half_enclosure_from_half_a_turn_up_is_in_place_and_below_it_a_turn_back() {
-        let hi = 1.75;
-        let at_half = Interval::new(0.5, hi).unwrap();
-        assert_eq!(lower_half(at_half).unwrap().lo(), 0.5);
-        let above = Interval::new(0.5_f64.next_up(), hi).unwrap();
-        assert_eq!(lower_half(above).unwrap().lo(), 0.5_f64.next_up());
-        let below = Interval::new(0.5_f64.next_down(), hi).unwrap();
-        let moved = lower_half(below).unwrap();
-        assert!(moved.lo() >= 2.0 && moved.lo() <= 2.5);
-        assert!(moved.hi() >= 3.75);
+    fn a_lower_half_point_whose_x_is_not_surely_negative_is_its_mirror_a_turn_on() {
+        // Lower right: two half-turns less its mirror's 0.25, about 1.75.
+        let right = angle(&spot(
+            Sign::Positive,
+            exactly(1.0),
+            Sign::Negative,
+            exactly(-1.0),
+        ))
+        .unwrap();
+        assert!(right.lo() > 1.74 && right.hi() < 1.76, "{right:?}");
+        // Straight down, x's enclosure ending exactly at zero: 1.5.
+        let down = angle(&spot(
+            Sign::Zero,
+            exactly(0.0),
+            Sign::Negative,
+            exactly(-1.0),
+        ))
+        .unwrap();
+        assert!(down.lo() > 1.49 && down.hi() < 1.51, "{down:?}");
+    }
+
+    #[test]
+    fn a_lower_half_point_whose_x_is_surely_negative_is_its_mirror_a_turn_on() {
+        // Lower left: two half-turns less its mirror's 0.75, about 1.25.
+        let left = angle(&spot(
+            Sign::Negative,
+            exactly(-1.0),
+            Sign::Negative,
+            exactly(-1.0),
+        ))
+        .unwrap();
+        assert!(left.lo() > 1.24 && left.hi() < 1.26, "{left:?}");
+        // x surely negative by one step below zero: about 1.5.
+        let edge = Interval::new(-1e-300, 0.0_f64.next_down()).unwrap();
+        let near = angle(&spot(Sign::Negative, edge, Sign::Negative, exactly(-1.0))).unwrap();
+        assert!(near.lo() > 1.49 && near.hi() < 1.51, "{near:?}");
+    }
+
+    #[test]
+    fn an_upper_half_point_is_kept_on_either_side() {
+        let left = angle(&spot(
+            Sign::Negative,
+            exactly(-1.0),
+            Sign::Positive,
+            exactly(1.0),
+        ))
+        .unwrap();
+        assert!(left.lo() > 0.74 && left.hi() < 0.76, "{left:?}");
+        let right = angle(&spot(
+            Sign::Positive,
+            exactly(1.0),
+            Sign::Positive,
+            exactly(1.0),
+        ))
+        .unwrap();
+        assert!(right.lo() > 0.24 && right.hi() < 0.26, "{right:?}");
     }
 
     #[test]
