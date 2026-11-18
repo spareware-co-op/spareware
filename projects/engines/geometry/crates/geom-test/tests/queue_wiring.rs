@@ -1625,7 +1625,7 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
     }
 
     // An arm naming a push and a run by hand together is read as both, and asks the same.
-    let full = "lint scope linux guard golden-runner test suite wasm wasm-build wasm-suite \
+    let full = "lint scope linux guard solidcore golden-runner test suite wasm wasm-build wasm-suite \
                 big-endian large-models";
     let both = kernel.replacen(
         "              *) must=",

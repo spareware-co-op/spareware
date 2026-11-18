@@ -1,0 +1,5 @@
+# solidcore's own README asks for an 8 MiB stack: some of its methods recurse, and a test thread's
+# default 2 MiB is too little for them in an unoptimised build. This sets it for every test thread
+# of this workspace (cargo's [env] table), the way solidcore's own .cargo/config.toml does.
+[env]
+RUST_MIN_STACK = "8388608"

@@ -93,13 +93,14 @@ unmaintained = "all"
 unsound = "all"
 
 [sources]
-# Crates come from crates.io and nowhere else: no other registry and no git repository. A git
-# dependency is refused whatever its URL, because none is allowed (allow-git is empty). A crate
-# from a folder outside the workspace, which this check does not read, the gate's rules refuse.
+# Crates come from crates.io and from one git repository only: the project's own fork of
+# solidcore, which geom-solidcore pins to one commit (decision 32.70). Any other git dependency is
+# refused whatever its URL. A crate from a folder outside the workspace, which this check does not
+# read, the gate's rules refuse.
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+allow-git = ["https://github.com/spareware-co-op/solidcore"]
 
 [bans]
 # A registry dependency must name a version; a path dependency of our own (unpublished) crates
