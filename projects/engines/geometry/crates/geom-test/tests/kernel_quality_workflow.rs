@@ -3283,7 +3283,7 @@ fn a_measuring_run_measures_geom_pools_tests_together_in_one_part_of_their_own()
             "part {k} holds a geom-pool test"
         );
     }
-    let all: usize = (1..=plan.len()).map(|k| plan.tests_of(k).len()).sum();
+    let all = (1..=plan.len()).fold(0, |n, k| n + plan.tests_of(k).len());
     assert_eq!(all, tests.len());
     // geom-pool alone is one part; no tests is one empty part.
     let pool_only = miri::measure_plan(&tests[..8]).unwrap();
