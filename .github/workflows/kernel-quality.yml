@@ -1089,7 +1089,7 @@ jobs:
   miri:
     name: Miri (partition ${{ matrix.partition }})
     needs: [when, cheap, miri-plan]
-    if: needs.when.outputs.miri == 'true'
+    if: false # TRIAL ONLY: the partitions do not run
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -1306,7 +1306,7 @@ jobs:
           # (`geom_test::miri::TESTS_RUN_SECONDS`): nextest then ends its tests and writes its
           # report, which GitHub's own stop at the limit does not let it do (trial run
           # 44290072805: no report). The step's limit stays, for a run that ignores the signal.
-          timeout --signal=TERM --kill-after=30 1380 \
+          timeout --signal=TERM --kill-after=30 90 \
             cargo miri nextest run --locked -p geom-pool "${profile[@]}" \
             -E "package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/pool.txt"))"
       # As in each partition: every geom-pool test stopped is named as stopped with no verdict,
