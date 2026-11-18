@@ -371,7 +371,12 @@ jobs:
   # `geom-bench-counts plan` from the seconds of a run, never by hand; a group the file does not
   # list goes to the part its `*` line names), and the judge refuses the parts unless every
   # benchmark was measured in exactly one part on each side (geom_bench::parts::check), so a part
-  # that dropped out, or a benchmark no part measured, fails the gate. Each benchmark runs under
+  # that dropped out, or a benchmark no part measured, fails the gate. A part's job takes about
+  # 255 s of setup and compiling plus 1.45 times its planned seconds on x86-64 at its slowest
+  # (385 s plus them on aarch64): the plan's limit (geom_bench::parts::PART_SECONDS) keeps every
+  # job under 13 minutes at the slowest of the last five runs of main, and the group `mesh` is
+  # shared by operation, its `decimate` (one benchmark of 337 to 388 s) being the part of its own.
+  # Each benchmark runs under
   # Valgrind in a process of its own, with arguments of one length whatever is filtered
   # (gungraun-runner's `bench_args`), so a part measures each of its benchmarks exactly as one run
   # of the whole catalogue did; base and change are measured on runners of one image, which give
@@ -558,10 +563,14 @@ jobs:
             groups=$(cut -d/ -f1 "$RUNNER_TEMP/ember.names" | uniq)
           else
             bench=instructions
+            # A unit is a group, or `group::op` for a group the plan splits by operation (a line
+            # `group/op` in parts.tsv: mesh, whose `decimate` is most of its seconds).
             groups=$(awk -F'\t' -v k="$PART" '
-              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
-              { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
-                if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
+              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else {
+                  part[$1] = $2; i = index($1, "/"); if (i) by_op[substr($1, 1, i - 1)] = 1 } } next }
+              { split($0, n, "/"); u = (n[1] in by_op) ? n[1] "/" n[2] : n[1]
+                p = (u in part) ? part[u] : rest
+                if (p == k && !(u in seen)) { seen[u] = 1; sub("/", "::", u); print u } }
             ' "$GITHUB_WORKSPACE/head/$BENCH/parts.tsv" "$RUNNER_TEMP/instructions.names")
           fi
           echo "Part $PART measures: $(echo $groups)"
@@ -745,10 +754,14 @@ jobs:
             groups=$(cut -d/ -f1 "$RUNNER_TEMP/ember.names" | uniq)
           else
             bench=instructions
+            # A unit is a group, or `group::op` for a group the plan splits by operation (a line
+            # `group/op` in parts.tsv: mesh, whose `decimate` is most of its seconds).
             groups=$(awk -F'\t' -v k="$PART" '
-              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else part[$1] = $2 } next }
-              { split($0, n, "/"); p = (n[1] in part) ? part[n[1]] : rest
-                if (p == k && !(n[1] in seen)) { seen[n[1]] = 1; print n[1] } }
+              FNR == NR { if ($0 !~ /^#/ && NF == 3) { if ($1 == "*") rest = $2; else {
+                  part[$1] = $2; i = index($1, "/"); if (i) by_op[substr($1, 1, i - 1)] = 1 } } next }
+              { split($0, n, "/"); u = (n[1] in by_op) ? n[1] "/" n[2] : n[1]
+                p = (u in part) ? part[u] : rest
+                if (p == k && !(u in seen)) { seen[u] = 1; sub("/", "::", u); print u } }
             ' "$BENCH/parts.tsv" "$RUNNER_TEMP/instructions.names")
           fi
           echo "Part $PART measures: $(echo $groups)"

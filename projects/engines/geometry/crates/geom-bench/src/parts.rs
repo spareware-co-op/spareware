@@ -22,9 +22,14 @@
 //! `parts.tsv`, line by line (lines starting with `#` are comments):
 //!
 //! ```text
-//! <group><TAB><part><TAB><seconds>     one per group, in name order
-//! *<TAB><part><TAB>-                   the part that measures every group not listed
+//! <unit><TAB><part><TAB><seconds>      one per unit, in name order
+//! *<TAB><part><TAB>-                   the part that measures every unit not listed
 //! ```
+//!
+//! A unit is a group (`dd`), except for the groups of [`SPLIT_GROUPS`], whose units are their
+//! operations (`mesh/decimate`): one operation of `mesh` is more than three quarters of the group's
+//! seconds, so a plan by groups could not give it a part of its own and keep the other operations
+//! apart from it. A split group is listed only by its operations, never as a whole.
 //!
 //! Guarantees:
 //!
@@ -53,24 +58,33 @@ use gungraun_runner::summary::model::BenchmarkSummary;
 
 use crate::callgrind::benchmark_name;
 
-/// The most seconds of measuring a part is planned for: 7 minutes. A part also sets up its runner
-/// and builds its tree (4 minutes 19 seconds at most on the runs `parts.tsv` names), so a part of
-/// this much measuring ends well within the 15 minutes a job may take.
-pub const PART_SECONDS: u64 = 420;
+/// The most seconds of measuring a part is planned for: 5 minutes 40 seconds. A part also sets up
+/// its runner and builds its tree before it measures, which took at most 262 seconds on Linux
+/// x86-64 (the slowest of five runs of main, 44322373006, ran a part that measured 463 seconds in
+/// 15.3 minutes) and 385 seconds on aarch64, and the measuring itself ran 1.45 times its planned
+/// seconds on x86-64 at the slowest. So a part of this much measuring ends within
+/// 262 + 1.45 x 340 = 755 seconds on x86-64 and 385 + 340 = 725 seconds on aarch64, under the 13
+/// minutes (780 seconds) a job may take. A unit longer than this (`mesh/decimate`) is a part of its
+/// own, and so is the part with the planted slowdown ([`TRIP_SECONDS`]).
+pub const PART_SECONDS: u64 = 340;
+
+/// The groups the plan shares by operation: see the module documentation.
+pub const SPLIT_GROUPS: [&str; 1] = ["mesh"];
 
 /// The seconds the planted slowdown adds to the part that runs it: its rebuild of the benchmark
-/// with the planted code and its one measured benchmark, 4 minutes 54 seconds on the slower leg of
-/// main's run 43868715590 (aarch64).
-pub const TRIP_SECONDS: u64 = 294;
+/// with the planted code and its one measured benchmark, 327 seconds at most in the part of
+/// `sign` on aarch64 (runs 44299434413 and 44312155122), which made that job 13.5 minutes with 75
+/// seconds of measuring: 385 + 75 + 350 = 810. So the part holds `sign` alone.
+pub const TRIP_SECONDS: u64 = 350;
 
 /// The group whose part runs the planted slowdown: it compares `sign/of_i128` with the change's own
 /// run of it, so it runs where that group was measured.
 pub const TRIP_GROUP: &str = "sign";
 
-/// Which part measures which group.
+/// Which part measures which unit (a group, or an operation of a [`SPLIT_GROUPS`] group).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Plan {
-    /// Each group's part (1 to [`Plan::parts`]) and its measured seconds.
+    /// Each unit's part (1 to [`Plan::parts`]) and its measured seconds.
     pub groups: BTreeMap<String, (usize, u64)>,
     /// The part that also measures every group the plan does not list.
     pub rest: usize,
@@ -148,7 +162,7 @@ impl Plan {
         load
     }
 
-    /// The part that measures `group`.
+    /// The part that measures `group` (a unit: see the module documentation).
     #[must_use]
     pub fn part_of(&self, group: &str) -> usize {
         self.groups.get(group).map_or(self.rest, |&(part, _)| part)
@@ -198,10 +212,16 @@ impl Plan {
                 }
                 continue;
             }
-            let good = !group.is_empty()
-                && group
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+            let word = |w: &str| {
+                !w.is_empty()
+                    && w.chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            };
+            // A group, or `group/op` for a split group, and a split group is never whole.
+            let good = match group.split_once('/') {
+                None => word(group) && !SPLIT_GROUPS.contains(group),
+                Some((g, op)) => SPLIT_GROUPS.contains(&g) && word(op),
+            };
             let s: u64 = s
                 .parse()
                 .map_err(|_| format!("line {n}: not whole seconds: {s:?}"))?;
@@ -225,14 +245,23 @@ impl Plan {
     }
 }
 
-/// Each group's whole seconds (rounded up) from each benchmark's nanoseconds, by the benchmark's
-/// name `group/op/class`.
+/// The unit a benchmark `group/op/class` belongs to: its group, or `group/op` for a split group.
+fn unit_of(name: &str) -> String {
+    let mut path = name.split('/');
+    let group = path.next().unwrap_or(name);
+    match (SPLIT_GROUPS.contains(&group), path.next()) {
+        (true, Some(op)) => format!("{group}/{op}"),
+        _ => group.to_owned(),
+    }
+}
+
+/// Each unit's whole seconds (rounded up) from each benchmark's nanoseconds, by the benchmark's
+/// name `group/op/class`: the unit is the group, or `group/op` for a [`SPLIT_GROUPS`] group.
 #[must_use]
 pub fn group_seconds(durations: &[(String, u64)]) -> BTreeMap<String, u64> {
     let mut ns: BTreeMap<String, u64> = BTreeMap::new();
     for (name, d) in durations {
-        let group = name.split('/').next().unwrap_or(name);
-        let total = ns.entry(group.to_owned()).or_insert(0);
+        let total = ns.entry(unit_of(name)).or_insert(0);
         *total = total.saturating_add(*d);
     }
     ns.into_iter()
@@ -372,16 +401,24 @@ mod tests {
     #[test]
     fn the_plan_fits_the_limit_with_the_fewest_parts() {
         let s = secs(&[
-            ("mesh", 420),
+            ("mesh/decimate", 420),
             ("a", 200),
             ("b", 200),
             ("c", 100),
             ("sign", 1),
         ]);
         let p = plan(&s, 420);
-        // One part over 420 holds mesh alone; the others fit, sign weighed with the trip.
-        assert_eq!(p.parts, 3, "{p:?}");
-        assert_eq!(p.part_of("mesh"), 1);
+        // One part over 420 holds mesh/decimate alone, and sign, weighed with the trip, has a
+        // part of its own too; the others fit.
+        assert_eq!(p.parts, 4, "{p:?}");
+        assert_eq!(p.part_of("mesh/decimate"), 1);
+        assert_eq!(
+            p.groups
+                .values()
+                .filter(|&&(part, _)| part == p.part_of("sign"))
+                .count(),
+            1
+        );
         assert!(p.load().iter().all(|&l| l <= 420), "{:?}", p.load());
         // A group the plan does not list goes to the part with the least.
         let least = p.load().iter().copied().min().unwrap();
@@ -395,7 +432,15 @@ mod tests {
 
     #[test]
     fn a_plan_reads_back_as_written_and_bad_files_are_refused() {
-        let p = plan(&secs(&[("mesh", 400), ("a", 300), ("b", 200)]), 420);
+        let p = plan(
+            &secs(&[
+                ("mesh/decimate", 400),
+                ("mesh/hull", 3),
+                ("a", 300),
+                ("b", 200),
+            ]),
+            420,
+        );
         let text = p.text(&["from run 1".to_owned()]);
         assert!(text.starts_with("# from run 1\n"));
         assert_eq!(Plan::parse(&text).unwrap(), p);
@@ -408,6 +453,9 @@ mod tests {
             "a\t1\tx\n*\t1\t-\n",          // not seconds
             "A b\t1\t3\n*\t1\t-\n",        // a bad name
             "a 1 3\n*\t1\t-\n",            // not tabs
+            "mesh\t1\t3\n*\t1\t-\n",       // a split group whole
+            "dd/x\t1\t3\n*\t1\t-\n",       // an operation of a group that is not split
+            "mesh/\t1\t3\n*\t1\t-\n",      // no operation
         ] {
             assert!(Plan::parse(bad).is_err(), "{bad:?}");
         }
@@ -433,22 +481,28 @@ mod tests {
             &format!("*\t{other}\t-"),
             1,
         );
-        assert_ne!(plan(&seconds, PART_SECONDS), Plan::parse(&moved).unwrap());
+        assert_ne!(Some(plan(&seconds, PART_SECONDS)), Plan::parse(&moved).ok());
         let sign = committed.part_of("sign");
         let to = if sign == committed.parts { 1 } else { sign + 1 };
         let moved = text.replacen(&format!("\nsign\t{sign}\t"), &format!("\nsign\t{to}\t"), 1);
         assert_ne!(moved, text);
-        assert_ne!(plan(&seconds, PART_SECONDS), Plan::parse(&moved).unwrap());
+        assert_ne!(Some(plan(&seconds, PART_SECONDS)), Plan::parse(&moved).ok());
     }
 
     #[test]
-    fn seconds_are_summed_by_group_and_rounded_up() {
+    fn seconds_are_summed_by_unit_and_rounded_up() {
         let d = [
             ("mesh/envelope/typical".to_owned(), 1_500_000_000),
+            ("mesh/envelope/extreme".to_owned(), 600_000_000),
             ("mesh/hull/typical".to_owned(), 600_000_000),
             ("sign/of_i128/typical".to_owned(), 1),
+            ("sign/of_i64/typical".to_owned(), 1),
         ];
-        assert_eq!(group_seconds(&d), secs(&[("mesh", 3), ("sign", 1)]));
+        // A split group is summed by operation, any other group whole.
+        assert_eq!(
+            group_seconds(&d),
+            secs(&[("mesh/envelope", 3), ("mesh/hull", 1), ("sign", 1)])
+        );
     }
 
     const LISTING: &str = "./\n./geom-bench/\n./geom-bench/instructions/\n\
