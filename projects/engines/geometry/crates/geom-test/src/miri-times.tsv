@@ -12,6 +12,7 @@
 # GitHub measuring run 44032408206, land/miri-bool at 96f3b42ac
 # GitHub measuring run 44071252392, ci/miri-plan at a0123c23b (geom-pool attack_g33 attack_rayon_pools, Tree Borrows)
 # GitHub measuring run 44412249410 (miri_measure=new on test/miri-slices-2 at 7667269d6), in its own seconds, stopped at 600 s; listing: #1007's tests, from the run's listing with #1011's cut tests put back whole.
+# GitHub measuring run 44412249410 (miri_measure=new on test/miri-slices-2 at 7667269d6), in its own seconds, stopped at 600 s; listing: its own listing.
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -20,7 +21,9 @@ native-only over 601	geom-analysis::attack_g346	an_edge_into_a_pole_is_unresolve
 native-only over 601	geom-analysis::attack_g346	far_from_the_origin_the_maximum_is_the_same
 native-only over 601	geom-analysis::attack_g346	runs_repeat_bit_for_bit_and_ignore_turning_both_faces
 75	geom-analysis::continuity	a_crease_opening_along_the_edge_peaks_at_its_end
-395	geom-analysis::continuity	a_g1_join_s_curvature_jump_peaks_mid_edge
+284	geom-analysis::continuity	a_g1_join_s_curvature_jump_peaks_mid_edge::its_curvature
+8	geom-analysis::continuity	a_g1_join_s_curvature_jump_peaks_mid_edge::its_gap
+13	geom-analysis::continuity	a_g1_join_s_curvature_jump_peaks_mid_edge::its_normal_angle
 22	geom-analysis::continuity	a_g2_join_s_curvature_change_peaks_mid_edge
 41	geom-analysis::continuity	a_g3_join_measures_nothing_up_to_g3
 3	geom-analysis::continuity	a_gap_that_bulges_mid_edge_peaks_there
@@ -43,7 +46,8 @@ native-only over 601	geom-analysis::rounds	pinned_rounds
 native-only over 601	geom-bool::attack_g144	an_apex_cut_off_centre_splits_along_the_cut_edges_alone
 111	geom-bool::attack_g144	an_extrusion_adds_its_far_face_and_merges_its_sides
 154	geom-bool::attack_g144	cutting_off_a_corner_of_three_faces_adds_a_face_and_splits_no_vertex
-588	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex
+365	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex::by_a_box
+358	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex::by_a_half_space
 2	geom-bool::attack_g144	every_class_is_found_by_some_test_here
 220	geom-bool::attack_g144	only_the_fast_path_records_its_skip
 native-only over 601	geom-bool::attack_g144	the_fast_and_full_paths_give_one_body
@@ -130,7 +134,8 @@ native-only over 601	geom-bool::combine	many_tools_cut_in_one_call
 484	geom-bool::combine	seams_stay_and_come_back_in
 199	geom-bool::combine	the_order_of_the_operands_does_not_count
 2	geom-bool::combine	the_schema_says_what_the_entry_does
-532	geom-bool::combine	three_boxes_whose_union_pinches_at_a_corner_give_a_general_body
+311	geom-bool::combine	three_boxes_whose_union_pinches_at_a_corner_give_a_general_body::united_at_once
+380	geom-bool::combine	three_boxes_whose_union_pinches_at_a_corner_give_a_general_body::united_one_after_another
 26	geom-bool::combine	trim_keeps_the_pieces_that_hold_the_seeds
 84	geom-bool::combine	trim_keeps_the_runs_of_a_wire_that_hold_the_seeds
 native-only over 601	geom-bool::combine	two_boxes_unite_cut_and_meet
@@ -140,7 +145,8 @@ native-only over 601	geom-bool::laws	every_selection_holds_the_cells_it_keeps_an
 native-only over 601	geom-bool::laws	every_selection_turns_with_its_operands
 87	geom-bool::names	a_body_united_with_its_copy_alongside_qualifies_the_faces_they_both_bring
 198	geom-bool::names	a_body_united_with_its_own_copy_qualifies_the_names_and_says_so
-591	geom-bool::names	a_boolean_reports_every_name_it_made_after_those_it_refers_to
+294	geom-bool::names	a_boolean_reports_every_name_it_made_after_those_it_refers_to::three_doors
+255	geom-bool::names	a_boolean_reports_every_name_it_made_after_those_it_refers_to::two_doors
 56	geom-bool::names	a_half_space_has_names_and_a_section_has_a_history
 2	geom-bool::names	a_naming_error_says_what_failed
 2	geom-bool::names	a_naming_failure_says_what_failed
@@ -157,7 +163,8 @@ native-only over 601	geom-bool::laws	every_selection_turns_with_its_operands
 361	geom-bool::names	edges_a_cut_leaves_alone_keep_their_names_and_one_it_shortens_is_modified
 native-only over 601	geom-bool::names	every_selection_of_one_call_has_its_history
 174	geom-bool::names	flush_faces_merge_their_names
-416	geom-bool::names	names_do_not_care_about_the_order_of_the_operands_or_where_the_shape_is
+242	geom-bool::names	names_do_not_care_about_the_order_of_the_operands_or_where_the_shape_is::the_order_of_the_operands
+245	geom-bool::names	names_do_not_care_about_the_order_of_the_operands_or_where_the_shape_is::where_the_shape_is
 489	geom-bool::names	two_doors_of_one_type_differ_and_a_third_renames_nothing
 351	geom-bool::names	two_doors_of_one_type_rename_none_of_the_walls_own_edges_and_corners
 20	geom-bool::passage	a_block_reached_first_through_a_sliver_takes_the_wider_way_that_follows
@@ -184,7 +191,8 @@ native-only over 601	geom-bool::rebuild	the_same_body_comes_out_however_the_boxe
 native-only over 601	geom-bool::rebuild	tilted_solids_meet_where_three_planes_do
 native-only over 601	geom-bool::recursion	parallel_phases_nest_at_most_twice
 native-only over 601	geom-bvh	build::tests::a_tree_built_past_the_grain_is_one_tree
-311	geom-bvh::attack_smlib1	ub_221_the_box_tree_never_has_links_that_disagree
+227	geom-bvh::attack_smlib1	ub_221_the_box_tree_never_has_links_that_disagree::many_identical_boxes
+1	geom-bvh::attack_smlib1	ub_221_the_box_tree_never_has_links_that_disagree::small_and_refused_trees
 1	geom-bvh::attack_smlib1	ub_35_points_below_the_range_stay_below_and_non_numbers_are_refused
 3	geom-bvh::attack_smlib1	ub_36_an_empty_cell_index_answers_every_search_with_nothing
 130	geom-bvh::attack_smlib1	ub_41_flat_boxes_are_held_and_found_exactly
@@ -410,7 +418,9 @@ native-only over 601	geom-check::ring_start	shells_thin_or_close_enough_to_turn_
 5	geom-curve	transition::tests::the_cap_is_the_last_count_tried
 6	geom-curve	transition::tests::the_ellipse_size_bounds_the_integrand_on_the_rectangle
 4	geom-curve	transition::tests::the_powers_of_an_affine_term_are_binomial
-503	geom-curve	transition::tests::the_remainder_bounds_a_visible_rule_error
+219	geom-curve	transition::tests::the_remainder_bounds_a_visible_rule_error::at_c_1_5
+150	geom-curve	transition::tests::the_remainder_bounds_a_visible_rule_error::at_c_3
+146	geom-curve	transition::tests::the_remainder_bounds_a_visible_rule_error::at_c_6
 7	geom-curve	transition::tests::the_remainders_widen_the_enclosures
 27	geom-curve::accuracy_of_fresnel	panels_answer_between_the_series_and_the_expansion
 2	geom-curve::analytic	a_domain_too_long_to_cut_is_stopped_before_it_is_allocated
@@ -936,7 +946,10 @@ native-only over 601	geom-make::placed	every_query_on_an_exact_instance_equals_i
 native-only over 601	geom-make::query_determinism	queries_golden_hash_is_the_same_on_every_target
 26	geom-math	convert::tests::far_coordinates_saturate_at_the_ends_of_i128
 2	geom-math	convert::tests::settle_trusts_exact_signs_over_the_double_double
-584	geom-math	convert::tests::the_exact_path_agrees_with_the_fast_path
+133	geom-math	convert::tests::the_exact_path_agrees_with_the_fast_path::turned_0
+175	geom-math	convert::tests::the_exact_path_agrees_with_the_fast_path::turned_1
+211	geom-math	convert::tests::the_exact_path_agrees_with_the_fast_path::turned_2
+208	geom-math	convert::tests::the_exact_path_agrees_with_the_fast_path::turned_3
 2	geom-math	decimal::tests::display_covers_every_notation
 3	geom-math	transform::tests::exact_rows_round_half_to_even
 2	geom-math	transform::tests::huge_cancelling_entries_round_exactly
@@ -1001,7 +1014,11 @@ native-only over 601	geom-math::attack_g48	out_of_range_coordinates_carry_their_
 native-only over 601	geom-math::attack_g48	round_trips_at_nztm_extremes_and_the_frame_range
 native-only over 601	geom-math::attack_g48	shifts_decide_the_lattice_before_the_range_and_report_exact_offsets
 63	geom-math::attack_g48	the_exact_path_at_its_own_edges
-394	geom-math::attack_g48	values_at_the_ends_of_i128_saturate_exactly_as_documented
+63	geom-math::attack_g48	values_at_the_ends_of_i128_saturate_exactly_as_documented::at_the_bottom
+58	geom-math::attack_g48	values_at_the_ends_of_i128_saturate_exactly_as_documented::at_the_frames_edge_in_metres
+77	geom-math::attack_g48	values_at_the_ends_of_i128_saturate_exactly_as_documented::at_the_frames_edge_in_steps
+103	geom-math::attack_g48	values_at_the_ends_of_i128_saturate_exactly_as_documented::at_the_frames_edge_in_us_survey_feet
+88	geom-math::attack_g48	values_at_the_ends_of_i128_saturate_exactly_as_documented::at_the_top
 2	geom-math::attack_smlib1	ub_35_negative_and_degenerate_coordinates_round_outward_not_wrap
 1	geom-math::attack_smlib1	ub_41_the_box_of_no_points_is_none_and_of_a_flat_set_is_flat
 2	geom-math::attack_smlib1	wr_159_overflowing_squared_length_still_normalises
@@ -1061,7 +1078,11 @@ native-only over 601	geom-math::grid_transform	vectors_use_the_linear_part
 2	geom-math::interface	every_error_prints_its_own_sentence
 2	geom-math::interface	float_vectors_negate_and_measure_componentwise
 67	geom-math::interface	frame_to_map_rounds_a_value_far_below_its_own_error_bound
-470	geom-math::interface	frame_to_map_rounds_values_just_past_a_midpoint
+69	geom-math::interface	frame_to_map_rounds_values_just_past_a_midpoint::quarter_1
+76	geom-math::interface	frame_to_map_rounds_values_just_past_a_midpoint::quarter_2
+78	geom-math::interface	frame_to_map_rounds_values_just_past_a_midpoint::quarter_3
+58	geom-math::interface	frame_to_map_rounds_values_just_past_a_midpoint::quarter_4
+2	geom-math::interface	frame_to_map_rounds_values_just_past_a_midpoint::the_quarters_join_to_the_whole
 8	geom-math::interface	grid_images_round_rows_whose_double_double_sums_mislead
 14	geom-math::interface	grid_images_round_rows_whose_float_sums_mislead
 8	geom-math::rational	bounds_and_errors
@@ -1131,7 +1152,8 @@ native-only over 601	geom-mesh::boolean	solids_give_what_their_arrays_give
 native-only over 601	geom-mesh::boolean	solids_of_many_faces_give_what_their_arrays_give
 11	geom-mesh::boolean	the_meter_stops_a_boolean
 212	geom-mesh::boolean	the_soup_is_what_the_merge_takes
-585	geom-mesh::boolean	the_threads_and_the_order_do_not_show
+166	geom-mesh::boolean	the_threads_and_the_order_do_not_show::the_order
+234	geom-mesh::boolean	the_threads_and_the_order_do_not_show::the_threads
 421	geom-mesh::boolean	ties_on_a_small_lattice_hold_up
 415	geom-mesh::boolean	two_faces_of_one_sheet_meet_at_a_point_on_an_edge
 164	geom-mesh::boolean	two_overlapping_boxes
@@ -1282,7 +1304,8 @@ native-only over 601	geom-mesh::model	a_coarse_sheet_remeshes_toward_the_target_
 native-only over 601	geom-mesh::model	a_fine_ball_remeshes_coarser_within_epsilon
 native-only over 601	geom-mesh::model	a_flat_sheet_decimates_to_few_triangles_on_the_same_plane
 53	geom-mesh::model	a_long_diagonal_is_split_at_its_middle
-580	geom-mesh::model	a_narrow_strip_is_not_pinched
+225	geom-mesh::model	a_narrow_strip_is_not_pinched::decimated
+302	geom-mesh::model	a_narrow_strip_is_not_pinched::remeshed
 8	geom-mesh::model	a_side_at_four_fifths_of_the_target_is_not_collapsed
 native-only over 601	geom-mesh::model	a_thin_spike_is_kept_by_the_backward_test
 4	geom-mesh::model	a_triangle_across_two_coplanar_bodies_is_covered_and_one_past_them_is_not
@@ -1591,7 +1614,11 @@ native-only over 601	geom-num::attack2_interval	zeros_and_signs::every_operation
 3	geom-num::attack2_interval	zeros_and_signs::new_with_signed_zeros_and_non_finite_bounds
 native-only over 601	geom-num::attack2_plane	commits_move_at_most_half_a_step
 100	geom-num::attack2_plane	const_and_runtime_evaluations_agree
-344	geom-num::attack2_plane	corner_planes_reach_both_documented_maxima_at_once
+125	geom-num::attack2_plane	corner_planes_reach_both_documented_maxima_at_once::quarter_1
+81	geom-num::attack2_plane	corner_planes_reach_both_documented_maxima_at_once::quarter_2
+98	geom-num::attack2_plane	corner_planes_reach_both_documented_maxima_at_once::quarter_3
+92	geom-num::attack2_plane	corner_planes_reach_both_documented_maxima_at_once::quarter_4
+3	geom-num::attack2_plane	corner_planes_reach_both_documented_maxima_at_once::the_quarters_join_to_the_whole
 native-only over 601	geom-num::attack2_plane	corner_tpis_reach_the_largest_w_x_and_classification_exactly
 115	geom-num::attack2_plane	degenerate_triples_at_the_extremes_in_every_order
 161	geom-num::attack2_plane	exact_flag_needs_every_coordinate_on_the_grid
@@ -1793,7 +1820,11 @@ native-only over 601	geom-num::attack_g28	the_largest_lifted_values_over_minus_m
 2	geom-num::attack_g29	a_crossing_outside_the_frame_is_classified_and_refuses_to_commit
 2	geom-num::attack_g29	degenerate_inputs_are_refused_never_answered
 71	geom-num::attack_g29	maximal_term_corners_never_fail_and_match_the_oracle
-433	geom-num::attack_g29	one_step_from_degenerate_is_decided_exactly
+61	geom-num::attack_g29	one_step_from_degenerate_is_decided_exactly::quarter_1
+77	geom-num::attack_g29	one_step_from_degenerate_is_decided_exactly::quarter_2
+112	geom-num::attack_g29	one_step_from_degenerate_is_decided_exactly::quarter_3
+109	geom-num::attack_g29	one_step_from_degenerate_is_decided_exactly::quarter_4
+2	geom-num::attack_g29	one_step_from_degenerate_is_decided_exactly::the_quarters_join_to_the_whole
 104	geom-num::attack_g29	random_inputs_at_every_scale_against_the_oracle
 23	geom-num::attack_g29	the_cube_and_square_diagonals_reach_the_budgets_without_failing
 native-only over 601	geom-num::attack_g30	coincident_points_with_distinct_keys_are_decided
@@ -2441,7 +2472,11 @@ native-only over 601	geom-num::verification	every_predicate_is_verified_in_every
 native-only over 601	geom-num::verification	perturbed_predicates_at_the_sign_corners
 native-only over 601	geom-num::verification	perturbed_ties_match_a_symbolic_oracle
 93	geom-num::verification	side_of_lpi_filter_boundary_crossed_both_ways
-228	geom-num::verification	side_of_tpi_filter_boundary_crossed_both_ways
+51	geom-num::verification	side_of_tpi_filter_boundary_crossed_both_ways::quarter_1
+98	geom-num::verification	side_of_tpi_filter_boundary_crossed_both_ways::quarter_2
+15	geom-num::verification	side_of_tpi_filter_boundary_crossed_both_ways::quarter_3
+122	geom-num::verification	side_of_tpi_filter_boundary_crossed_both_ways::quarter_4
+2	geom-num::verification	side_of_tpi_filter_boundary_crossed_both_ways::the_quarters_join_to_the_whole
 23	geom-num::verification	ssi_orient2d_filter_boundary_crossed_both_ways
 3	geom-num::verification	the_matrix_reader_finds_methods_and_free_functions
 native-only over 601	geom-num::verification	the_matrix_refuses_a_test_that_does_not_reach_its_predicate
@@ -2703,7 +2738,9 @@ native-only over 601	geom-nurbs::attack_g56	derivatives_of_every_order_up_to_the
 1	geom-nurbs::attack_g58	a_decreasing_parameter_is_refused_where_it_falls
 2	geom-nurbs::attack_g58	a_grid_of_the_wrong_size_is_refused_by_its_size_first
 2	geom-nurbs::attack_g58	a_last_function_without_data_is_undetermined
-439	geom-nurbs::attack_g58	a_loose_tolerance_leaves_the_fewest_control_points
+125	geom-nurbs::attack_g58	a_loose_tolerance_leaves_the_fewest_control_points::a_line
+179	geom-nurbs::attack_g58	a_loose_tolerance_leaves_the_fewest_control_points::a_parabola_with_multiple_knots
+211	geom-nurbs::attack_g58	a_loose_tolerance_leaves_the_fewest_control_points::a_parabola_with_single_knots
 12	geom-nurbs::attack_g58	a_pole_in_the_grid_is_certified
 26	geom-nurbs::attack_g58	a_removal_widens_the_bounds_in_its_window_and_no_others
 30	geom-nurbs::attack_g58	an_error_equal_to_the_tolerance_is_within_it
@@ -3154,7 +3191,12 @@ native-only over 601	geom-poly::merge	a_point_on_a_split_is_not_named_by_it
 native-only over 601	geom-poly::merge	a_point_where_four_planes_meet_is_named_the_same_whichever_way_they_reach_it
 native-only over 601	geom-poly::merge	a_rim_on_a_block_s_face_takes_the_block_s_bounds_however_they_are_written
 177	geom-poly::merge	a_ring_stays_in_its_corner_of_the_face_where_two_holes_touch
-528	geom-poly::merge	a_section_runs_where_two_owners_meet
+15	geom-poly::merge	a_section_runs_where_two_owners_meet::a_small_budget_stops_it
+15	geom-poly::merge	a_section_runs_where_two_owners_meet::blocks_apart_meet_nowhere
+18	geom-poly::merge	a_section_runs_where_two_owners_meet::flush_blocks_meet_around_their_contact
+75	geom-poly::merge	a_section_runs_where_two_owners_meet::two_bars_over_one_block
+235	geom-poly::merge	a_section_runs_where_two_owners_meet::two_blocks_at_a_leaf_of_one_polygon
+34	geom-poly::merge	a_section_runs_where_two_owners_meet::two_blocks_at_the_usual_leaf
 35	geom-poly::merge	a_shared_face_disappears_and_flush_faces_merge
 native-only over 601	geom-poly::merge	a_sheet_s_rim_is_named_by_its_face_and_then_the_bounds_of_its_fins
 7	geom-poly::merge	a_shell_turned_inside_out_is_refused
@@ -3178,7 +3220,8 @@ native-only over 601	geom-poly::merge	every_union_closes_and_the_boxes_do_not_sh
 10	geom-poly::merge	faces_of_an_open_merge_that_share_an_edge_are_one_shell
 native-only over 601	geom-poly::merge	faces_that_look_like_splits_name_the_points_on_them
 native-only over 601	geom-poly::merge	far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show
-574	geom-poly::merge	lines_whose_marked_cells_pass_the_reach_keep_their_order
+284	geom-poly::merge	lines_whose_marked_cells_pass_the_reach_keep_their_order::at_a_leaf_of_one_polygon
+61	geom-poly::merge	lines_whose_marked_cells_pass_the_reach_keep_their_order::at_the_usual_leaf
 19	geom-poly::merge	nothing_kept_is_nothing
 18	geom-poly::merge	one_block_is_a_block_again_with_its_vertices_in_order
 29	geom-poly::merge	overlapping_blocks_unite_into_one_shell
@@ -3528,7 +3571,9 @@ native-only over 601	geom-surface::attack_g69	the_contract_kit_steps_past_huge_d
 5	geom-surface::attack_smlib1	ub_231_and_ub_282_empty_and_hair_thin_domains
 32	geom-surface::attack_smlib1	ub_80_an_extrusion_of_a_b_spline_evaluates_to_order_five_exactly
 native-only over 601	geom-surface::attack_smlib1	ub_84_and_ub_173_nested_offsets_bound_without_recursing_forever
-native-only over 601	geom-surface::attack_smlib1	wr_160_161_162_the_offset_of_a_twisted_surface_has_the_right_higher_partials
+207	geom-surface::attack_smlib1	wr_160_161_162_the_offset_of_a_twisted_surface_has_the_right_higher_partials::at_0_31_0_47
+152	geom-surface::attack_smlib1	wr_160_161_162_the_offset_of_a_twisted_surface_has_the_right_higher_partials::at_0_5_0_73
+155	geom-surface::attack_smlib1	wr_160_161_162_the_offset_of_a_twisted_surface_has_the_right_higher_partials::at_0_62_0_21
 92	geom-surface::attack_smlib1	wr_164_the_offset_of_a_reversed_surface_stays_on_the_side_its_normal_says
 22	geom-surface::attack_smlib1	wr_471_a_revolved_arc_centred_next_to_the_axis_keeps_its_ends_and_its_pole
 70	geom-surface::attack_smlib2	ub_172_the_partials_of_a_plane_to_any_order_are_its_vectors_and_zeros
@@ -3578,7 +3623,11 @@ native-only over 601	geom-surface::frame_rule	a_certified_test_examines_exactly_
 7	geom-surface::frame_rule	asking_for_no_twist_refuses_a_closing_angle_only_beyond_the_tolerance
 2	geom-surface::frame_rule	every_error_says_what_went_wrong_and_where
 45	geom-surface::frame_rule	every_placed_step_meets_the_tolerance_on_any_domain
-583	geom-surface::frame_rule	every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path
+169	geom-surface::frame_rule	every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path::quarter_1
+192	geom-surface::frame_rule	every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path::quarter_2
+209	geom-surface::frame_rule	every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path::quarter_3
+319	geom-surface::frame_rule	every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path::quarter_4
+2	geom-surface::frame_rule	every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path::the_quarters_join_to_every_round
 33	geom-surface::frame_rule	fixed_references_steer_their_axis_and_refuse_a_tangent_along_them
 87	geom-surface::frame_rule	frenet_frames_are_certified_or_refused_where_the_curvature_may_vanish
 11	geom-surface::frame_rule	laws_are_exact_where_given_exactly
@@ -3606,7 +3655,8 @@ native-only over 601	geom-surface::offset_determinism	offset_golden_hash_is_the_
 7	geom-surface::offset_work	a_budget_one_unit_short_stops_an_evaluation
 native-only over 601	geom-surface::offset_work	a_cache_met_by_its_first_sampling_stops_there
 262	geom-surface::offset_work	an_offsets_partials_cost_its_bases_and_its_jets
-415	geom-surface::offset_work	an_order_the_jets_cannot_hold_is_refused_before_any_work
+250	geom-surface::offset_work	an_order_the_jets_cannot_hold_is_refused_before_any_work::at_a_point
+448	geom-surface::offset_work	an_order_the_jets_cannot_hold_is_refused_before_any_work::over_a_box
 native-only over 601	geom-surface::offset_work	an_ordinary_offsets_whole_contract_fits_the_fuzz_budget
 2	geom-surface::offset_work	the_jets_work_is_their_terms
 native-only over 601	geom-surface::offset_work	the_slow_offset_of_issue_765_stops_on_the_fuzz_budget
