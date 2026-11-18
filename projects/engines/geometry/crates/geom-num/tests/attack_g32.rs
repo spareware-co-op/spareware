@@ -57,6 +57,9 @@
     clippy::indexing_slicing
 )]
 
+#[macro_use]
+mod slices;
+
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
@@ -381,14 +384,20 @@ fn philox4x32_10_matches_the_oracle_on_edge_inputs() {
     }
 }
 
+// Generated counters and keys, in quarters of the one stream of cases from the fixed seed
+// (decision 32.78, `slices`).
+sliced!(
+    philox4x32_10_matches_the_oracle,
+    config(4096),
+    (any::<[u32; 4]>(), any::<[u32; 2]>()),
+    |(counter, key)| {
+        prop_assert_eq!(philox4x32_10(counter, key), oracle(10, counter, key));
+        Ok(())
+    }
+);
+
 proptest! {
     #![proptest_config(config(4096))]
-
-    /// Generated counters and keys.
-    #[test]
-    fn philox4x32_10_matches_the_oracle(counter in any::<[u32; 4]>(), key in any::<[u32; 2]>()) {
-        prop_assert_eq!(philox4x32_10(counter, key), oracle(10, counter, key));
-    }
 
     /// The layout: key = the seed's halves, counter = the block's halves then the stream's.
     #[test]
@@ -676,19 +685,23 @@ fn every_seed_block_and_stream_bit_reaches_every_output_bit() {
 
 /// Consecutive seeds, the way callers will number them, give unrelated first blocks: the mean
 /// Hamming distance between the first blocks of seeds k and k + 1 is 64 of 128 bits.
-#[test]
-fn consecutive_seeds_and_streams_give_unrelated_blocks() {
+///
+/// It runs as three tests, one for each of the three numberings (decision 32.78: together they
+/// were too long for one Miri gate part), each with the whole check of its numbering.
+fn consecutive_give_unrelated_blocks(which: &str) {
     let n = 1u64 << 14;
-    for (name, f) in [
-        (
-            "seed",
-            (|k: u64| Philox::new(Seed(k), StreamId(0)).block(0)) as fn(u64) -> [u32; 4],
-        ),
+    let numberings: [(&str, fn(u64) -> [u32; 4]); 3] = [
+        ("seed", |k: u64| Philox::new(Seed(k), StreamId(0)).block(0)),
         ("stream", |k: u64| {
             Philox::new(Seed(0), StreamId(k)).block(0)
         }),
         ("block", |k: u64| Philox::new(Seed(0), StreamId(0)).block(k)),
-    ] {
+    ];
+    assert!(
+        numberings.iter().any(|(name, _)| *name == which),
+        "no numbering {which}"
+    );
+    for (name, f) in numberings.into_iter().filter(|(name, _)| *name == which) {
         let mut total = 0u64;
         for k in 0..n {
             let (a, b) = (f(k), f(k + 1));
@@ -705,6 +718,29 @@ fn consecutive_seeds_and_streams_give_unrelated_blocks() {
             "consecutive {name}s: mean Hamming distance {mean}, expected 64 ± 0.3"
         );
     }
+}
+
+/// [`consecutive_give_unrelated_blocks`] for each numbering, one test each.
+mod consecutive_seeds_and_streams_give_unrelated_blocks {
+    #[test]
+    fn seeds() {
+        super::consecutive_give_unrelated_blocks("seed");
+    }
+
+    #[test]
+    fn streams() {
+        super::consecutive_give_unrelated_blocks("stream");
+    }
+
+    #[test]
+    fn blocks() {
+        super::consecutive_give_unrelated_blocks("block");
+    }
+}
+
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(config(4096).cases, "philox4x32_10's cases");
 }
 
 // ------------------------------------------------------------------------------------------------
