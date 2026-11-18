@@ -689,8 +689,10 @@ fn every_seed_block_and_stream_bit_reaches_every_output_bit() {
 /// It runs as three tests, one for each of the three numberings (decision 32.78: together they
 /// were too long for one Miri gate part), each with the whole check of its numbering.
 fn consecutive_give_unrelated_blocks(which: &str) {
+    /// A numbering: its name and the first block of number k.
+    type Numbering = (&'static str, fn(u64) -> [u32; 4]);
     let n = 1u64 << 14;
-    let numberings: [(&str, fn(u64) -> [u32; 4]); 3] = [
+    let numberings: [Numbering; 3] = [
         ("seed", |k: u64| Philox::new(Seed(k), StreamId(0)).block(0)),
         ("stream", |k: u64| {
             Philox::new(Seed(0), StreamId(k)).block(0)
