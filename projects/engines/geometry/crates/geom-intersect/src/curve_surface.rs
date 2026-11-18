@@ -5,8 +5,10 @@
 //! a line with a torus a quartic, isolated by [`crate::solve`], each with its count from an exact sign
 //! or a Sturm chain where the data are whole. A helix on a coaxial cylinder of its radius is an
 //! overlap, and so is each arc of a circle lying in a plane that the plane's domain holds, and a
-//! circle about the axis of a cylinder or cone at its radius there. Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval
-//! Projected Polyhedron step narrowing the boxes of NURBS pieces.
+//! circle about the axis of a cylinder or cone at its radius there. A circle about a line through
+//! a sphere's centre that stands off the sphere meets nothing, by one exact sign (decision
+//! 32.74). Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval Projected
+//! Polyhedron step narrowing the boxes of NURBS pieces.
 //!
 //! Guarantees:
 //!
@@ -52,7 +54,10 @@
 //! units (46,647 boxes) before its closed form, and one on an axis off the coordinate axes still
 //! does, bounded by the work budget (issue 974). A circle of radius 600 in a plane whose domain
 //! holds an arc of it cost 1,252,043 units before decision 32.69; now the signs of at most four
-//! sides and eight crossings, and one box of the circle for each arc. Recursion: none.
+//! sides and eight crossings, and one box of the circle for each arc. A circle of radius 1 about
+//! a line through the centre of a sphere of radius 256, standing 0.002 off it all the way round,
+//! cost 782,639 units before decision 32.74: the engine's boxes under that gap in three
+//! variables. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -86,7 +91,7 @@ use crate::curve::{
     onto, proven, quadratic, seam_of, sign_of, slope_over, span, turn_of, whole, widest,
 };
 use crate::error::IntersectError;
-use crate::quadrics::same_line;
+use crate::quadrics::{off_line, same_line};
 use crate::result::{
     Coincidence, Coverage, Degeneracy, Intersection, Item, OverlapRegion, ParamBox, PointContact,
     StepsInterval, Test, Unresolved,
@@ -1968,6 +1973,38 @@ fn circle_on_cone(
     )
 }
 
+/// A circle about a line through a sphere's centre that stands off the sphere: nothing (decision
+/// 32.74).
+///
+/// Theorem. Every point p of a circle of centre q and radius r is the same distance from any
+/// point s of its axis, the line through q along its normal: |p − s|² = r² + |q − s|². So with
+/// the sphere's centre s on that axis the whole circle lies on the sphere of radius R where
+/// r² + |q − s|² = R², and no point of it is on the sphere otherwise, whatever the two domains.
+/// Whether s is on the axis, and whether the two sides are equal, are each the sign of a sum of
+/// products of stored doubles, exact. A circle that lies on the sphere, one whose axis misses
+/// the centre, and one with a number whose products would not be exact stay the engine's.
+fn circle_about_sphere(
+    circle: &Circle<3>,
+    sphere: &Sphere,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (q, r) = (circle.center(), circle.radius());
+    let (s, big) = (sphere.center(), sphere.radius());
+    let exact = [r, big].iter().chain(&q).chain(&s).all(|x| tame(*x));
+    if !exact || off_line(s, q, circle.frame().normal()) {
+        return Ok(None);
+    }
+    // r² − R² + |q − s|², a product at a time.
+    let mut terms = alloc::vec![(r, r), (-big, big)];
+    for (a, b) in q.into_iter().zip(s) {
+        terms.extend([(a, a), (b, b), (-a, b), (-b, a)]);
+    }
+    if sign_of(&terms) == Sign::Zero {
+        return Ok(None);
+    }
+    proven(Vec::new(), meter).map(Some)
+}
+
 /// The closed form for the pair, if one decides.
 fn closed_form(
     curve: &CurveKind<3>,
@@ -1984,6 +2021,7 @@ fn closed_form(
         (CurveKind::Circle(k), SurfaceKind::Plane(p)) => circle_in_plane(curve, k, p, meter),
         (CurveKind::Circle(k), SurfaceKind::Cylinder(c)) => circle_on_cylinder(curve, k, c, meter),
         (CurveKind::Circle(k), SurfaceKind::Cone(c)) => circle_on_cone(curve, k, c, meter),
+        (CurveKind::Circle(k), SurfaceKind::Sphere(s)) => circle_about_sphere(k, s, meter),
         (_, SurfaceKind::Cylinder(c)) => helix_on_cylinder(curve, c, meter),
         _ => Ok(None),
     }

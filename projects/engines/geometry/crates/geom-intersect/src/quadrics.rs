@@ -37,8 +37,11 @@
 //! other surface costs the engine 13 to 2,481 work units in the stored cases. An edge that lies on
 //! the other surface is a closed form, a few predicates, where exact signs place it (decision
 //! 32.64), and so is each arc of an end circle that a plane's domain holds a part of (decision
-//! 32.69: 62 to 105 units a call where the engine took 1,252,098 to 3,046,840); where they
-//! cannot (an end circle whose centre the frame rounds, as on an axis off the coordinate axes; a
+//! 32.69: 62 to 105 units a call where the engine took 1,252,098 to 3,046,840). An end circle
+//! about a line through a sphere's centre that stands off the sphere meets nothing by one exact
+//! sign (decision 32.74: 23 units a call where the engine took 782,683 for a gap of 0.002).
+//! Where the signs
+//! cannot place an edge (an end circle whose centre the frame rounds, as on an axis off the coordinate axes; a
 //! sphere's latitude; a round domain short of a whole turn; a plane whose vectors run off the
 //! coordinate axes, or whose domain holds a lone point of the circle) it costs the
 //! engine boxes all along it, about a million units for a circle of radius 200, bounded by the work
@@ -311,7 +314,7 @@ pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
 
 /// Which of the two sides of a sum of products of doubles, exactly: (p − c) × e, for whether `p` lies
 /// on the line through `c` along `e`.
-fn off_line(p: [f64; 3], c: [f64; 3], e: [f64; 3]) -> bool {
+pub(crate) fn off_line(p: [f64; 3], c: [f64; 3], e: [f64; 3]) -> bool {
     let [p0, p1, p2] = p;
     let [c0, c1, c2] = c;
     let [e0, e1, e2] = e;

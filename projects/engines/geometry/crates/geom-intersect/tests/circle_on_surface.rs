@@ -2,7 +2,9 @@
 //! it as an overlap by identity from exact signs, a few predicates, where before the engine
 //! bisected round the whole circle to the resolution floor and flagged it. Each test here pins one
 //! branch of that closed form: the surface's kind, lying on it and not, coaxial and not, every end
-//! of a domain either way, and the cases the signs cannot place, which stay the engine's.
+//! of a domain either way, and the cases the signs cannot place, which stay the engine's. A circle
+//! about a line through a sphere's centre that stands off the sphere meets nothing, by one exact
+//! sign (decision 32.74); on the sphere, or about another line, it is the engine's.
 //!
 //! A closed form's answer is told from the engine's two ways: by what it says (one overlap, proven
 //! identical, with no flag) and by its work, held to a count. A circle of radius 5 lying on a
@@ -22,7 +24,7 @@ use geom_curve::{Circle, CurveKind, Frame};
 use geom_intersect::curve_surface::curve_surface;
 use geom_intersect::result::{Coincidence, Item};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Cylinder, Plane, SurfaceKind};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
 
 const ROUND: (f64, f64) = (0.0, 2.0);
 const SIDE: (f64, f64) = (-300.0, 300.0);
@@ -65,6 +67,11 @@ fn cone(center: [f64; 3], start: f64, slope: f64, x: [f64; 3], n: [f64; 3]) -> C
         (ROUND, SIDE),
     )
     .unwrap()
+}
+
+fn sphere(center: [f64; 3], radius: f64) -> SurfaceKind {
+    let whole = (ROUND, (-0.5, 0.5));
+    SurfaceKind::Sphere(Sphere::new(center, radius, Frame::new(X, Z).unwrap(), whole).unwrap())
 }
 
 /// What the pair's answer is, and the work it took.
@@ -373,4 +380,40 @@ fn a_circle_off_a_cone_is_the_engines() {
     // A small circle a quarter below the centre, where the radius is 0.5 - 0.1875.
     let leaning = SurfaceKind::Cone(cone([0.0; 3], 0.5, 0.75, Z, n));
     engine(&circle([-0.15, -0.2, 0.0], 0.3125, Z, n), &leaning);
+}
+
+#[test]
+fn a_circle_about_a_spheres_centre_line_that_stands_off_it_misses_it() {
+    // The stored fuzz case: a circle of radius 1 at 256 along z from the centre of a sphere of
+    // radius 256 stands 0.002 outside it all the way round, which cost the engine 782,639 units.
+    let ball = sphere([-136.0, 0.0, -44.0], 256.0);
+    misses(&circle([-136.0, 0.0, -300.0], 1.0, X, Z), &ball);
+    // Inside the sphere, and about its own centre, either way.
+    misses(&circle([-136.0, 0.0, -299.0], 1.0, X, Z), &ball);
+    misses(&circle([-136.0, 0.0, -44.0], 255.0, X, Z), &ball);
+    misses(
+        &circle([-136.0, 0.0, -44.0], 257.0, X, [0.0, 0.0, -3.0]),
+        &ball,
+    );
+    // An axis off the coordinate axes: (3, 4, 0) from (1, 2, 3) reaches (4, 6, 3).
+    let n = [3.0, 4.0, 0.0];
+    misses(
+        &circle([4.0, 6.0, 3.0], 2.0, Z, n),
+        &sphere([1.0, 2.0, 3.0], 5.0),
+    );
+}
+
+#[test]
+fn a_circle_on_a_sphere_or_about_another_line_is_the_engines() {
+    // On the sphere: 4² + 3² = 5², with the centres' dot product not zero.
+    let ball = sphere([1.0, 2.0, 3.0], 5.0);
+    assert_eq!(
+        engine(&circle([1.0, 2.0, 6.0], 4.0, X, Z), &ball),
+        Said::Other
+    );
+    // An axis that misses the centre, through the sphere: the circle crosses it twice.
+    assert_eq!(
+        engine(&circle([6.0, 2.0, 3.0], 1.0, X, Z), &ball),
+        Said::Other
+    );
 }
