@@ -633,7 +633,10 @@ fn a_wasm32_failure_reaches_the_log_with_its_message_and_its_seed() {
         "the shipped leg, and the doctests of both builds under both runtimes"
     );
     assert_eq!(archives, 1, "the wasm32 suite's parts");
-    assert_eq!(builds, 1, "geom-solidcore's test modules, built and not run");
+    assert_eq!(
+        builds, 1,
+        "geom-solidcore's test modules, built and not run"
+    );
     let one_test = "out=$(wasmtime run --allow-precompiled \"$module.cwasm\" --exact \"$t\" \
                     --nocapture 2>&1) || rc=$?";
     assert_eq!(
