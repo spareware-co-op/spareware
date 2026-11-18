@@ -1283,8 +1283,12 @@ jobs:
       # on 32 seeds of the tests that nest and panic.
       # Like every partition, it runs the tests Miri's table says finish (its rows are measured
       # under Tree Borrows); a test measured over the stop is native-only, never run to the stop.
+      # Its tests have a partition's limit of their own, `geom_test::miri::TESTS_STEP_MINUTES`, for
+      # the plan holds them to a partition's seconds: an overrun is stopped here, red, and the
+      # reading of the report and its upload still run (kernel_quality_workflow.rs).
       - name: geom-pool's tests under Miri with Tree Borrows
         if: env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')
+        timeout-minutes: 24
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
           MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks
@@ -1314,8 +1318,12 @@ jobs:
           # nextest does not run doctests, so this job runs them, every one.
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
           cargo miri test --locked $PACKAGES --doc
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      # Bounded like a partition's first try, so the tests' limit, the set-up and the upload fit
+      # the job's limit.
+      - id: report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
+        timeout-minutes: 3
         with:
           name: miri-pool
           path: target/nextest/*/junit*.xml

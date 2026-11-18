@@ -55,11 +55,12 @@
 //!   failure hidden, another stop) and by the tool on planted reports (a test off the list
 //!   stopped fails its job; one on the list does not, and is named as stopped; a missing report
 //!   fails it, named in the summary).
-//! - **A partition that overruns keeps its log.** A partition's tests' step has its own limit,
+//! - **A partition that overruns keeps its log.** A partition's tests' step, and geom-pool's
+//!   (the plan holds its tests to a partition's seconds), has its own limit,
 //!   `geom_test::miri::TESTS_STEP_MINUTES`, over what the plan gives a partition and under the
 //!   job's limit by the set-up and the first upload's bound, so an overrun fails in that step and
 //!   the reading of its report and the upload still run. Shown by planted changes (no limit, the
-//!   job's limit, a limit under the plan's).
+//!   job's limit, a limit under the plan's, an unbounded upload).
 //! - **A later push judges what it can reach.** `geom_test::increment` judges again every file of
 //!   the change whose crate's tests what changed since the last clean head reaches, held here to
 //!   planted changes that must be judged (a changed line, a changed test, a removed ledger entry,
@@ -2599,49 +2600,55 @@ fn a_miri_job_names_every_test_stopped_with_no_verdict_and_fails_on_one_that_may
     }
 }
 
-/// What is wrong with the limit of `miri`'s tests' step: it must be
+/// What is wrong with the limit of each Miri gate job's tests' step (`miri`'s partitions and
+/// `miri-pool`, whose tests the plan holds to a partition's seconds): it must be
 /// [`miri::TESTS_STEP_MINUTES`], over the [`miri::PART_SECONDS`] the plan gives a partition's
 /// listing and tests, and with the set-up ([`miri::FIXED_SECONDS`]) and the first try of the
 /// report's upload within the job's limit, so an overrun ends in that step and what comes after
 /// it still runs.
 fn miri_tests_limit_problems(text: &str) -> Vec<String> {
     let w = YamlLoader::load_from_str(text).unwrap().remove(0);
-    let job = &w["jobs"]["miri"];
-    let steps = job["steps"].as_vec().cloned().unwrap_or_default();
     let run_of = |s: &Yaml| joined(s["run"].as_str().unwrap_or("")).join("\n");
-    let Some(tests) = steps.iter().find(|s| run_of(s).contains(STOPPED_JOBS[0].1)) else {
-        return vec!["miri has no tests' step".to_owned()];
-    };
     let mut found = Vec::new();
-    let step = tests["timeout-minutes"].as_i64();
-    if step != i64::try_from(miri::TESTS_STEP_MINUTES).ok() {
-        found.push(format!(
-            "miri's tests' step is not limited to {} minutes ({step:?})",
-            miri::TESTS_STEP_MINUTES
-        ));
-    }
-    let upload = steps
-        .iter()
-        .find(|s| s["id"].as_str() == Some("report"))
-        .and_then(|s| s["timeout-minutes"].as_i64())
-        .unwrap_or(i64::MAX);
-    let (Some(step), Some(whole)) = (step, job["timeout-minutes"].as_i64()) else {
-        found.push("miri's tests' step or job has no limit".to_owned());
-        return found;
-    };
-    if step.saturating_mul(60) <= i64::try_from(miri::PART_SECONDS).unwrap_or(i64::MAX) {
-        found.push("miri's tests' step may stop a partition the plan holds".to_owned());
-    }
-    let fixed = i64::try_from(miri::FIXED_SECONDS).unwrap_or(i64::MAX);
-    if step
-        .saturating_add(upload)
-        .saturating_mul(60)
-        .saturating_add(fixed)
-        > whole.saturating_mul(60)
-    {
-        found.push(
-            "miri's tests' step, set-up and first upload do not fit the job's limit".to_owned(),
-        );
+    for (name, command) in STOPPED_JOBS {
+        let job = &w["jobs"][name];
+        let steps = job["steps"].as_vec().cloned().unwrap_or_default();
+        let Some(tests) = steps.iter().find(|s| run_of(s).contains(command)) else {
+            found.push(format!("{name} has no tests' step"));
+            continue;
+        };
+        let step = tests["timeout-minutes"].as_i64();
+        if step != i64::try_from(miri::TESTS_STEP_MINUTES).ok() {
+            found.push(format!(
+                "{name}'s tests' step is not limited to {} minutes ({step:?})",
+                miri::TESTS_STEP_MINUTES
+            ));
+        }
+        let upload = steps
+            .iter()
+            .find(|s| s["id"].as_str() == Some("report"))
+            .and_then(|s| s["timeout-minutes"].as_i64())
+            .unwrap_or(i64::MAX);
+        let (Some(step), Some(whole)) = (step, job["timeout-minutes"].as_i64()) else {
+            found.push(format!("{name}'s tests' step or job has no limit"));
+            continue;
+        };
+        if step.saturating_mul(60) <= i64::try_from(miri::PART_SECONDS).unwrap_or(i64::MAX) {
+            found.push(format!(
+                "{name}'s tests' step may stop a partition the plan holds"
+            ));
+        }
+        let fixed = i64::try_from(miri::FIXED_SECONDS).unwrap_or(i64::MAX);
+        if step
+            .saturating_add(upload)
+            .saturating_mul(60)
+            .saturating_add(fixed)
+            > whole.saturating_mul(60)
+        {
+            found.push(format!(
+                "{name}'s tests' step, set-up and first upload do not fit the job's limit"
+            ));
+        }
     }
     found
 }
@@ -2659,18 +2666,44 @@ fn a_partition_that_overruns_fails_in_its_tests_step_with_its_log_kept() {
                    timeout-minutes: 24\n";
     let named =
         "      - name: Every kernel test Miri finishes (partition ${{ matrix.partition }})\n";
+    let pool_if = "      - name: geom-pool's tests under Miri with Tree Borrows\n        if: env.REACHED \
+                   == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')\n";
+    let pool = format!("{pool_if}        timeout-minutes: 24\n");
+    let bound = "        timeout-minutes: 3\n";
+    let pool_upload = format!(
+        "        if: ${{{{ !cancelled() }}}}\n{bound}        with:\n          name: miri-pool\n"
+    );
     // Seeded violations: each must be reported.
     for (from, to, said) in [
-        (limited, named, "not limited to 24 minutes"),
+        (
+            limited,
+            named,
+            "miri's tests' step is not limited to 24 minutes",
+        ),
         (
             limited,
             &limited.replace("24", "30") as &str,
-            "do not fit the job's limit",
+            "miri's tests' step, set-up and first upload do not fit the job's limit",
         ),
         (
             limited,
             &limited.replace("24", "13") as &str,
-            "may stop a partition the plan holds",
+            "miri's tests' step may stop a partition the plan holds",
+        ),
+        (
+            &pool as &str,
+            pool_if,
+            "miri-pool's tests' step is not limited to 24 minutes",
+        ),
+        (
+            &pool,
+            &pool.replace("24", "13") as &str,
+            "miri-pool's tests' step may stop a partition the plan holds",
+        ),
+        (
+            &pool_upload,
+            &pool_upload.replace(bound, "") as &str,
+            "miri-pool's tests' step, set-up and first upload do not fit the job's limit",
         ),
     ] {
         let planted = text.replacen(from, to, 1);
