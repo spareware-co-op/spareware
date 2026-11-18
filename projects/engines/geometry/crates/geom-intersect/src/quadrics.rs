@@ -2190,10 +2190,8 @@ mod tests {
             assert_eq!(found.len(), 2);
             let at = lines_on_both(&found, p, q);
             // About 20 apart: one each side.
-            let gap: f64 = (0..3)
-                .map(|i| (at[0][i] - at[1][i]).powi(2))
-                .sum::<f64>()
-                .sqrt();
+            let [x, y, z] = [0, 1, 2].map(|i| at[0][i] - at[1][i]);
+            let gap = (x * x + y * y + z * z).sqrt();
             assert!(gap > 19.0 && gap < 21.0, "{gap}");
         }
     }
