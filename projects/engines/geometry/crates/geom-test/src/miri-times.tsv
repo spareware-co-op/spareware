@@ -14,6 +14,7 @@
 # GitHub measuring run 44162729953, ci/miri-stop at 76afb6d0d (geom-num wide, attack_wide_tests, attack_plane to_grid_near_ties resized under cfg(miri))
 # GitHub gate run 44168015168 (gate=miri), partition 65 rerun (attempt 2), ci/miri-stop at f898695ac: its six tests
 # GitHub measuring run 44246900378, ci/miri-stop at 64a8704a4 (crossing side_is_exact_in_both_widths_at_the_extremes_of_i128 makes each product once)
+# GitHub measuring run 44376600612 (miri_measure=all, miri_measure_tests=package(geom-pool), on ci/miri-stop at 470616710): geom-pool's 8 tests in one part as miri-pool runs them, in yardstick seconds (decision 32.78), stopped at 600 s.
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -3039,14 +3040,14 @@ native-only over 601	geom-poly::trace	polygons_inside_their_box_are_classified_b
 2	geom-poly::winding	pairs_stay_sorted_and_zeros_leave
 2	geom-poly::winding	the_outside_is_the_empty_list
 2	geom-poly::winding	the_selections_read_as_they_should
-2	geom-pool::attack_g33	a_failure_to_start_threads_says_so
-22	geom-pool::attack_g33	attack_a_tasks_panic_is_passed_on_after_the_others_finish
-129	geom-pool::attack_g33	attack_every_task_runs_exactly_once
-28	geom-pool::attack_g33	attack_rayon_pools_give_the_serial_answer_at_every_thread_count_and_chunk_size
-4	geom-pool::attack_g33	attack_the_pool_has_the_threads_it_was_built_with
-96	geom-pool::attack_g33	attack_the_pool_is_reentrant
-36	geom-pool::recursion	halving_on_rayon_pools_reaches_every_task_of_a_large_wave
-5	geom-pool::recursion	halving_reaches_every_task_of_a_large_wave
+3	geom-pool::attack_g33	a_failure_to_start_threads_says_so
+30	geom-pool::attack_g33	attack_a_tasks_panic_is_passed_on_after_the_others_finish
+144	geom-pool::attack_g33	attack_every_task_runs_exactly_once
+61	geom-pool::attack_g33	attack_rayon_pools_give_the_serial_answer_at_every_thread_count_and_chunk_size
+5	geom-pool::attack_g33	attack_the_pool_has_the_threads_it_was_built_with
+124	geom-pool::attack_g33	attack_the_pool_is_reentrant
+50	geom-pool::recursion	halving_on_rayon_pools_reaches_every_task_of_a_large_wave
+6	geom-pool::recursion	halving_reaches_every_task_of_a_large_wave
 1	geom-run	budget::tests::what_is_left_never_goes_below_zero_and_sums_never_wrap
 2	geom-run	budget::tests::work_is_checked_before_logical_bytes
 2	geom-run	meter::tests::a_settled_total_over_the_cap_stops_the_meter
