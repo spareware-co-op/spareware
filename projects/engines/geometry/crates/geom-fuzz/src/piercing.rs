@@ -19,7 +19,10 @@
 //! 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): the sides are read
 //! from the graph's Bernstein sum, which shares nothing with the solver it judges.
 //!
-//! Cost: a closed form, or the engine up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.
+//! Cost: a closed form, or the engine up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read. A
+//! segment lying in or along a plane whose vectors are not whole is a closed form (decision
+//! 32.85): before it, the engine ran the whole segment, to the budget on the three stored
+//! timeouts. [`answer_of`] reads a case's answer and count, which the target's tests hold.
 
 #![allow(
     clippy::many_single_char_names,
@@ -359,6 +362,19 @@ pub fn check(case: &Case) -> Result<(), Finding> {
             || format!("{e:?}, {case:?}"),
         )),
     }
+}
+
+/// What one call of `curve_surface` answers on the case at [`WORK`], `None` for a stop on the
+/// budget, and the work its meter counts: held by count (never by a clock) in the target's tests.
+///
+/// # Errors
+///
+/// A [`Finding`] if a drawn shape is not valid, or the pair is refused.
+pub fn answer_of(case: &Case) -> Result<(Option<Intersection>, u128), Finding> {
+    let (a, b) = (curve(case.curve)?, surface(case.surface)?);
+    let mut work = meter();
+    let found = answer(curve_surface(&a, &b, &mut work), case)?;
+    Ok((found, work.used().work))
 }
 
 /// [`decode`] then [`check`].

@@ -15,8 +15,10 @@
 //! - **Every root found or flagged.** A box is discarded only on a proof, so a meeting no item reports
 //!   does not exist.
 //! - **Exact where the data are.** On whole-number data the count, and whether a root is double, come
-//!   from exact signs, within the budgets of chapter 6.2. Elsewhere an interval decides, and what it
-//!   cannot tell goes to the engine.
+//!   from exact signs, within the budgets of chapter 6.2. Whether a line runs along a plane, and
+//!   whether it lies in it, are exact signs of the stored doubles on any data whose products of
+//!   three are exact (decision 32.85). Elsewhere an interval decides, and what it cannot tell goes
+//!   to the engine.
 //! - **Grazing is read, not guessed.** Where the tangent cannot be excluded from the surface's
 //!   tangent plane the box is a candidate, and the second order test compares the curve's normal
 //!   curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ,
@@ -59,7 +61,10 @@
 //! sides and eight crossings, and one box of the circle for each arc. A circle of radius 1 about
 //! a line through the centre of a sphere of radius 256, standing 0.002 off it all the way round,
 //! cost 782,639 units before decision 32.74: the engine's boxes under that gap in three
-//! variables. Recursion: none.
+//! variables. A segment lying in a plane whose vectors hold a half ran the engine past 2^20 units,
+//! and one along it 0.48 to 8.3 off it took 720,686 to 919,038 to say nothing, before decision
+//! 32.85; now two exact sums of 6 and 12 products of three doubles, at most 1 unit. Recursion:
+//! none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -76,6 +81,7 @@ use geom_curve::{
 };
 use geom_num::Sign;
 use geom_num::eft::two_prod;
+use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::RESOLUTION_FLOOR;
@@ -201,8 +207,9 @@ fn within(x: Interval, domain: (f64, f64)) -> Result<Option<Interval>, Intersect
     held(x, domain).map(Some)
 }
 
-/// A line with a plane. Parallel, and lying in it, are exact signs on whole-number data, and
-/// otherwise a determinant proven apart from zero. `None` where neither tells.
+/// A line with a plane. Parallel, and lying in it, are exact signs, on whole-number data and on
+/// any stored doubles whose products of three are exact (decision 32.85); a line that is neither
+/// meets it where a determinant proven apart from zero puts it. `None` where neither tells.
 fn line_plane(
     line: &Line<3>,
     plane: &Plane,
@@ -269,8 +276,73 @@ fn plane_parameters(
     ))
 }
 
-/// A line's direction against a plane and which side its origin lies on, on whole-number data.
+/// A line's direction against a plane and which side its origin lies on, exactly: on whole-number
+/// data by `orient3d` on the stored points, and otherwise by the signs of the stored doubles
+/// (decision 32.85). `None` where a product of three of the doubles would not be exact.
 fn plane_signs(line: &Line<3>, plane: &Plane) -> Result<Option<(Sign, Sign)>, IntersectError> {
+    if let Some(signs) = grid_signs(line, plane)? {
+        return Ok(Some(signs));
+    }
+    Ok(stored_signs(line, plane))
+}
+
+/// The six products of three whose sum is `w · (a × b)`, each a triple of stored doubles.
+fn triple_terms(w: [f64; 3], a: [f64; 3], b: [f64; 3]) -> [[f64; 3]; 6] {
+    let ([w0, w1, w2], [a0, a1, a2], [b0, b1, b2]) = (w, a, b);
+    [
+        [w0, a1, b2],
+        [-w0, a2, b1],
+        [w1, a2, b0],
+        [-w1, a0, b2],
+        [w2, a0, b1],
+        [-w2, a1, b0],
+    ]
+}
+
+/// The sign of Σ aᵢ·bᵢ·cᵢ, exactly: a·b is a double and its error, each times c a double and its
+/// error, and the sum of the four is exact. `None` where a factor is far enough toward either end
+/// of the doubles' range that a product of three would not be exact.
+fn sign_of_triples(terms: &[[f64; 3]]) -> Option<Sign> {
+    if !terms.iter().flatten().all(|x| tame(*x)) {
+        return None;
+    }
+    let mut sum = ExactSum::new();
+    for &[a, b, c] in terms {
+        let (p, e) = two_prod(a, b);
+        let (pp, pe) = two_prod(p, c);
+        let (ep, ee) = two_prod(e, c);
+        sum.add_slice(&[pp, pe, ep, ee]);
+    }
+    let v = sum.round_ieee();
+    Some(if v > 0.0 {
+        Sign::Positive
+    } else if v < 0.0 {
+        Sign::Negative
+    } else {
+        Sign::Zero
+    })
+}
+
+/// A line's direction against a plane, n·d with n = a × b, and the side its origin lies on,
+/// n·(c − o), each the sign of a sum of products of three stored doubles. The plane is
+/// c + u·a + v·b and the line o + t·d, so these doubles are the two kinds exactly, whether or
+/// not they are whole numbers.
+fn stored_signs(line: &Line<3>, plane: &Plane) -> Option<(Sign, Sign)> {
+    let (c, a, b) = plane.vectors();
+    let (o, d) = (line.origin(), line.direction());
+    let along = sign_of_triples(&triple_terms(d, a, b))?;
+    let [o0, o1, o2] = o;
+    let [ahead, behind] = [triple_terms(c, a, b), triple_terms([-o0, -o1, -o2], a, b)];
+    let mut terms = [[0.0; 3]; 12];
+    for (slot, term) in terms.iter_mut().zip(ahead.iter().chain(&behind)) {
+        *slot = *term;
+    }
+    let side = sign_of_triples(&terms)?;
+    Some((along, side))
+}
+
+/// A line's direction against a plane and which side its origin lies on, on whole-number data.
+fn grid_signs(line: &Line<3>, plane: &Plane) -> Result<Option<(Sign, Sign)>, IntersectError> {
     let (c, a, b) = plane.vectors();
     let (Some(g), Some(x), Some(y), Some(d), Some(l)) = (
         grid_point(&c),
