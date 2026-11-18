@@ -45,5 +45,9 @@ debug = false
 debug = false
 
 [dev-dependencies]
-# The case table's reader (MIT OR Apache-2.0), the version the kernel's own workspace uses.
-serde_json = "=1.0.154"
+# The case table's reader (MIT OR Apache-2.0), the version the kernel's own workspace uses, with
+# `arbitrary_precision` so that each number keeps the decimal text the table writes.
+serde_json = { version = "=1.0.154", features = ["arbitrary_precision"] }
+# Reads that text as an exact decimal (MIT OR Apache-2.0), so that a case's length is a whole
+# number of grid steps exactly or the case is refused, never rounded through an f64.
+bigdecimal = "=0.4.8"

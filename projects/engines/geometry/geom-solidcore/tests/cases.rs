@@ -8,8 +8,10 @@
 //! only when the tests that fail are exactly the named faults. A named fault that starts to pass,
 //! or a case that fails without being named, turns the job red.
 
+use std::str::FromStr;
 use std::sync::OnceLock;
 
+use bigdecimal::{BigDecimal, Signed, ToPrimitive};
 use geom_num::{GridStep, P3, Steps};
 use geom_solidcore::convert::metres;
 use geom_solidcore::{Error, Modeller, Piece, Solid};
@@ -53,30 +55,40 @@ const STEP: GridStep = GridStep::Q1;
 /// The grids, coarsest first, for a case whose lengths are not all whole numbers of [`STEP`].
 const GRIDS: [GridStep; 3] = [GridStep::Q0, GridStep::Q1, GridStep::Q2];
 
-/// The length `x` metres as a whole number of steps of `step`, if it is one on the grid's range:
-/// `x` is that many steps as the table writes it, to the last digit or two of its f64 (the
-/// table's lengths are decimals, `0.2 + 1e-7` among them), never a length a step or any part of
-/// one away.
-fn whole(x: f64, step: GridStep) -> Option<i64> {
-    let n = (x / metres(step)).round();
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "the range is checked by P3::new"
-    )]
-    let k = n as i64;
-    ((n * metres(step) - x).abs() <= x.abs() * 1e-15 && P3::new(k, 0, 0).is_ok()).then_some(k)
+/// The length written `x` metres, read as the exact decimal the table writes (serde_json keeps
+/// each number's text, and bigdecimal reads it), as a whole number of steps of `step` if it is
+/// exactly one on the grid's range: never a length any part of a step away, and never through an
+/// f64.
+fn whole(x: &str, step: GridStep) -> Option<i64> {
+    let metres = BigDecimal::from_str(x).unwrap_or_else(|e| panic!("{x} is not a decimal: {e}"));
+    // A step is `quarter_nm` quarter-nanometres, so a metre is 4e9 / quarter_nm steps: 6.4e6,
+    // 1.6e8 or 4e9, each a whole number.
+    let per_metre = 4_000_000_000_u64
+        .checked_div(u64::from(step.quarter_nm()))
+        .expect("a step of at least a quarter-nanometre");
+    let n = metres * BigDecimal::from(per_metre);
+    let k = n.is_integer().then(|| n.to_i64()).flatten()?;
+    P3::new(k, 0, 0).is_ok().then_some(k)
 }
 
-/// The length `x` metres as a whole number of steps of `step`; a length that is not one is
-/// refused, never rounded.
-fn steps(x: f64, step: GridStep) -> i64 {
+/// The length written `x` metres as a whole number of steps of `step`; a length that is not one is
+/// refused by name, never rounded.
+fn steps(x: &str, step: GridStep) -> i64 {
     whole(x, step).unwrap_or_else(|| panic!("{x} m is not a whole number of steps of {step:?}"))
 }
 
-/// Every length of `v`: each number under it, but a plane's normal, which is a direction.
-fn lengths(v: &Value, out: &mut Vec<f64>) {
+/// The decimal text of the table's number `v`.
+fn text(v: &Value) -> String {
     match v {
-        Value::Number(x) => out.push(x.as_f64().expect("a number")),
+        Value::Number(x) => x.to_string(),
+        _ => panic!("not a number: {v}"),
+    }
+}
+
+/// Every length of `v`: each number under it, but a plane's normal, which is a direction.
+fn lengths(v: &Value, out: &mut Vec<String>) {
+    match v {
+        Value::Number(_) => out.push(text(v)),
         Value::Array(xs) => xs.iter().for_each(|x| lengths(x, out)),
         Value::Object(o) => o
             .iter()
@@ -89,16 +101,17 @@ fn lengths(v: &Value, out: &mut Vec<f64>) {
 /// The grid of the case `c` (the grid is the modeller's parameter): [`STEP`], if every length of
 /// the case, its operands' and its plane's point, is a whole number of its steps on its range;
 /// otherwise the coarsest grid on which every one is. bool-19, a metre from 1e5 m, is past the
-/// range of [`STEP`] and runs on Q0. A case with no such grid, isect-15 to isect-20, whose plane
-/// holds no point of any grid (`diagonal_planes_hold_no_point_of_any_grid`), is run on the
-/// finest, where `steps` refuses the length that is not whole: nothing is rounded.
+/// range of [`STEP`] and runs on Q0. A case with no such grid is run on the finest, where `steps`
+/// refuses by name the length that is not whole: nothing is rounded. Those are isect-15 to
+/// isect-20, whose plane holds no point of any grid (`diagonal_planes_hold_no_point_of_any_grid`),
+/// and bldg-10, whose wall the table puts at 0.20000010000000001 m.
 fn grid_of(c: &Value) -> GridStep {
     let mut all = Vec::new();
     lengths(&c["operands"], &mut all);
     if let Some(at) = c.get("plane").map(|p| &p["at"]) {
         lengths(at, &mut all);
     }
-    let fits = |g: GridStep| all.iter().all(|&x| whole(x, g).is_some());
+    let fits = |g: GridStep| all.iter().all(|x| whole(x, g).is_some());
     if fits(STEP) {
         return STEP;
     }
@@ -106,12 +119,12 @@ fn grid_of(c: &Value) -> GridStep {
 }
 
 fn grid(v: &Value, step: GridStep) -> P3 {
-    let [x, y, z] = p3(v).map(|c| steps(c, step));
+    let [x, y, z] = [&v[0], &v[1], &v[2]].map(|c| steps(&text(c), step));
     P3::new(x, y, z).expect("a point of the grid")
 }
 
 fn length(v: &Value, step: GridStep) -> Steps {
-    Steps(u64::try_from(steps(num(v), step)).expect("a length not below zero"))
+    Steps(u64::try_from(steps(&text(v), step)).expect("a length not below zero"))
 }
 
 /// A point in grid steps of `step`, in metres.
@@ -336,9 +349,9 @@ fn run(id: &str) {
 fn operands_are_not_consumed() {
     let mut m = Modeller::new(STEP);
     let (zero, half, one) = (
-        steps(0.0, STEP),
-        steps(0.5, STEP),
-        Steps(steps(1.0, STEP) as u64),
+        steps("0", STEP),
+        steps("0.5", STEP),
+        Steps(steps("1", STEP) as u64),
     );
     let corner = |c: i64| P3::new(c, c, c).expect("a grid point");
     let a = m.cuboid(corner(zero), [one; 3]).expect("a");
@@ -363,38 +376,38 @@ fn operands_are_not_consumed() {
 fn results_are_the_kernels_bodies() {
     let mut m = Modeller::new(STEP);
     let o = P3::new(0, 0, 0).expect("the origin");
-    let r = Steps(steps(0.5, STEP) as u64);
+    let r = Steps(steps("0.5", STEP) as u64);
     let ball = m.sphere(o, r).expect("a sphere");
     assert_eq!(ball.body().arenas().faces.len(), 1);
     let can = m.cylinder(o, r, r).expect("a cylinder");
     assert_eq!(can.body().arenas().faces.len(), 3);
 }
 
-/// Why isect-15 to isect-20 run on no grid, by exact arithmetic: each plane is `x + y + z = 3a`,
-/// with `a` the f64 the table gives for every coordinate of its point, and a point of any grid is
-/// a point of Q2's (each step a whole number of quarter-nanometres), whose coordinates' sum is
-/// `k / 4e9` m for a whole `k`. So the plane holds a point of a grid only if `3a * 4e9` is whole,
-/// and for `a = m * 2^e` exactly (its bits) it is not: `3 * m * 4e9` has fewer factors of two
-/// than `-e`. Neither the point the table gives nor any other point of its plane can be written on
-/// a grid without rounding, and these cases are WR-1 of tests/named-faults.json.
+/// Why isect-15 to isect-20 run on no grid, by exact arithmetic on the table's decimals: each
+/// plane is `x + y + z = 3a`, with `a` the decimal the table writes for every coordinate of its
+/// point (the plane's distance `d` along the diagonal, `d / sqrt(3)`, cut at 16 or 17 digits).
+/// The plane passes through `(a, a, a)`, but a point of any grid is a point of Q2's (each step a
+/// whole number of quarter-nanometres), whose coordinates' sum is `k / 4e9` m for a whole `k`, so
+/// the plane holds a point of a grid only if `3a * 4e9` is whole, and it is not. Neither the point
+/// the table gives nor any other point of its plane is on a grid, and these cases are WR-1 of
+/// tests/named-faults.json.
 #[test]
 fn diagonal_planes_hold_no_point_of_any_grid() {
     for id in [
         "isect-15", "isect-16", "isect-17", "isect-18", "isect-19", "isect-20",
     ] {
         let c = case(id);
-        let at = p3(&c["plane"]["at"]);
+        let at = &c["plane"]["at"];
         assert_eq!(p3(&c["plane"]["normal"]), [1.0; 3], "{id}");
-        assert!(at[0] == at[1] && at[1] == at[2] && at[0] > 0.0, "{id}");
-        let bits = at[0].to_bits();
-        let (m, e) = (
-            u128::from((bits & ((1 << 52) - 1)) | (1 << 52)),
-            i64::try_from((bits >> 52) & 0x7ff).expect("an exponent") - 1075,
+        let a = text(&at[0]);
+        assert!(text(&at[1]) == a && text(&at[2]) == a, "{id}");
+        let sum =
+            BigDecimal::from_str(&a).expect("a decimal") * BigDecimal::from(12_000_000_000_u64);
+        assert!(
+            sum.is_positive() && !sum.is_integer(),
+            "{id}: 3a * 4e9 = {sum}"
         );
-        assert_eq!(f64::from_bits(bits), at[0]);
-        let k = 3 * m * 4_000_000_000;
-        assert!(e < 0 && i64::from(k.trailing_zeros()) < -e, "{id}");
-        assert!(GRIDS.iter().all(|&g| whole(at[0], g).is_none()), "{id}");
+        assert!(GRIDS.iter().all(|&g| whole(&a, g).is_none()), "{id}");
     }
 }
 

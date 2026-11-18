@@ -192,23 +192,24 @@ fn the_solidcore_job_runs_the_cases_against_the_named_faults() {
 /// `tests/case_names.txt` each).
 fn tests_of_geom_solidcore() -> u32 {
     let dir = root().join("projects/engines/geometry/geom-solidcore");
-    let mut count = 0;
+    let mut count: usize = 0;
     for sub in ["src", "tests"] {
         for entry in std::fs::read_dir(dir.join(sub)).unwrap() {
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|e| e == "rs") {
                 let text = std::fs::read_to_string(&path).unwrap();
-                count += text.lines().filter(|l| l.trim() == "#[test]").count();
+                let tests = text.lines().filter(|l| l.trim() == "#[test]").count();
+                count = count.checked_add(tests).unwrap();
                 if text.contains("macro_rules! cases") {
-                    count -= 1;
+                    count = count.checked_sub(1).unwrap();
                 }
             }
         }
     }
-    count += read("projects/engines/geometry/geom-solidcore/tests/case_names.txt")
+    let cases = read("projects/engines/geometry/geom-solidcore/tests/case_names.txt")
         .lines()
         .count();
-    u32::try_from(count).unwrap()
+    u32::try_from(count.checked_add(cases).unwrap()).unwrap()
 }
 
 /// What is wrong with the least number of tests the job `solidcore` asks to have run, given the

@@ -1167,7 +1167,7 @@ jobs:
             echo "::error::The tests that fail are not exactly the named faults of tests/named-faults.json."
             exit 1
           fi
-          test "$ran" -ge 111
+          test "$ran" -ge 112
 
   solidcore-wasm:
     # The same tests of geom-solidcore as the job `solidcore`, built for wasm32-wasip1 and run under
@@ -1258,7 +1258,7 @@ jobs:
             echo "::error::The tests that fail under wasmtime are not exactly the named faults of tests/named-faults.json."
             exit 1
           fi
-          test "$ran" -ge 111
+          test "$ran" -ge 112
 
   # The goldens on wasm32 and the proof of the guard through them, eight parts to a runtime, a
   # build each (the owner's rule of 15 minutes a job). On main's run 43953631233 the leg under

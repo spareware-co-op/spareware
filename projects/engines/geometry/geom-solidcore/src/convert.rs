@@ -88,16 +88,26 @@ pub fn to_metres(steps: i64, step: GridStep) -> f64 {
     (steps * i64::from(step.quarter_nm())) as f64 / 4e9
 }
 
-/// The record's geometry in steps of `s` metres.
+/// How many steps of `step` make a metre: 4e9 quarter-nanometres over the step's count of them,
+/// 6.4e6, 1.6e8 or 4e9, each a whole number and exact in an f64.
+#[must_use]
+pub fn per_metre(step: GridStep) -> f64 {
+    4e9 / f64::from(step.quarter_nm())
+}
+
+/// The record's geometry in steps, `.0` steps to the metre. A length is multiplied by that exact
+/// whole number and so rounded once. Dividing by [`metres`] instead rounds twice, the step itself
+/// not being a binary fraction: on Q0 a metre then came to 6399999.999999999 steps, and every
+/// cone and cylinder failed the check there for it.
 struct Scale(f64);
 
 impl Scale {
     fn len(&self, x: f64) -> f64 {
-        x / self.0
+        x * self.0
     }
 
     fn p(&self, p: [f64; 3]) -> [f64; 3] {
-        p.map(|x| x / self.0)
+        p.map(|x| x * self.0)
     }
 
     #[allow(
@@ -526,7 +536,7 @@ pub fn empty() -> Result<Body, Unconverted> {
     reason = "one pass over the record writes every arena's rows; split, each piece would need the others' counts"
 )]
 pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Unconverted> {
-    let s = Scale(metres(step));
+    let s = Scale(per_metre(step));
     let exactness = exactness(rec, step)?;
     let Exactness::Certified { bound, .. } = exactness else {
         return Err(no("an exactness that is not certified"));
@@ -825,6 +835,31 @@ mod tests {
         for step in [GridStep::Q0, GridStep::Q1, GridStep::Q2] {
             let (body, exactness) = body_of(&cube(), step).expect("the cube's rows");
             assert!(checked(body, exactness).is_ok(), "{step:?}");
+        }
+    }
+
+    /// isect-28's cone passes on Q0 as on Q1: a metre is exactly 6.4e6 steps of Q0, so its unit
+    /// axes and its caps' come over whole (they came over as 6399999.999999999 when the record was
+    /// divided by Q0's step in metres, and the check refused the cone on Q0 alone).
+    #[test]
+    fn a_cone_passes_on_q0_and_q1() {
+        assert_eq!(per_metre(GridStep::Q0), 6.4e6);
+        let mut k = Kernel::new(&KernelOptions::default());
+        let mut c = solidcore::primitive::api_primitives::create_cone(
+            &mut k,
+            Point3::new(0.0, 0.0, 0.0),
+            1.0,
+            0.25,
+            2.0,
+        )
+        .expect("a cone");
+        let rec = solidcore_convert::brep::to_record(&mut k, &mut c)
+            .expect("its record")
+            .0;
+        for step in [GridStep::Q0, GridStep::Q1] {
+            let (body, exactness) = body_of(&rec, step).expect("the cone's rows");
+            let found = checked(body, exactness);
+            assert!(found.is_ok(), "{step:?}: {found:?}");
         }
     }
 
