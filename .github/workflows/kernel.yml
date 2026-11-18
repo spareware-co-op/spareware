@@ -955,7 +955,55 @@ jobs:
         # (`suite-cross-build` and `suite-cross`, decision 32.82): the same entries as their matrix,
         # in the same order. geom-test's tests/queue_wiring.rs holds the two lists to each other.
         exclude:
+          - part: { mode: release, k: 1, n: 25, doc: true }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 2, n: 25, doc: true }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 3, n: 25, doc: true }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 4, n: 25, doc: true }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 5, n: 25, doc: true }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 6, n: 25, doc: true }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 7, n: 25, doc: true }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 8, n: 25, doc: true }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 9, n: 25, doc: true, crate: geom-num, targets: "--lib --bins --test 'attack_[a-g]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 10, n: 25, crate: geom-num, targets: "--test 'attack2_[e-i]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 11, n: 25, crate: geom-num, targets: "--test 'attack2_[p-z]*' --test 'attack_[s-z]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 12, n: 25, crate: geom-num, targets: "--test 'attack_[h-r]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test '[b-z]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 14, n: 25, doc: true, crate: geom-test, targets: "--lib --bins --test 'attack_g11*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 15, n: 25, crate: geom-test, targets: "--test 'attack_g10*' --test 'attack_g13*' --test 'attack_g15*' --test 'attack_g16*' --test 'attack_g17*' --test 'attack_g19*' --test 'attack_g2*' --test 'attack_g4*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test '[c-k]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 17, n: 25, crate: geom-test, targets: "--test 'l*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 18, n: 25, crate: geom-test, targets: "--test '[m-r]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 19, n: 25, crate: geom-test, targets: "--test '[s-z]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 20, n: 25, doc: true, crate: geom-bench, targets: "--lib --bins --test 'a*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
           - part: { mode: release, k: 21, n: 25, crate: geom-bench, targets: "--test '[b-z]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 22, n: 25, doc: true, crate: geom-format, targets: "--lib --bins --test '[a-c]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 23, n: 25, crate: geom-format, targets: "--test '[d-z]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 24, n: 25, doc: true, crate: geom-fuzz, targets: "--lib --bins --test '[a-l]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
+          - part: { mode: release, k: 25, n: 25, crate: geom-fuzz, targets: "--test '[m-z]*'" }
             target: { name: macOS x86-64, os: macos-15-intel }
         # The one plain debug run, on Linux x86-64.
         include:
@@ -1054,7 +1102,7 @@ jobs:
   # profile and flags as `suite`'s part: RUSTFLAGS reach only the target's code once `--target` is
   # given, so the build overrides (build scripts, proc macros) get their overflow checks from the
   # profile, as RUSTFLAGS gave them natively. The parts here are `suite`'s exclusions, entry for
-  # entry; none has doctests (`doc`), which an archive does not hold.
+  # entry. An archive holds no doctest: the moved parts' doctests run in `suite-cross-doc`.
   suite-cross-build:
     name: Test suite build (macOS x86-64 on macOS arm64, release, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
     needs: [changes, lint, scope]
@@ -1065,7 +1113,31 @@ jobs:
       fail-fast: false
       matrix:
         part:
+          - { mode: release, k: 1, n: 25, doc: true }
+          - { mode: release, k: 2, n: 25, doc: true }
+          - { mode: release, k: 3, n: 25, doc: true }
+          - { mode: release, k: 4, n: 25, doc: true }
+          - { mode: release, k: 5, n: 25, doc: true }
+          - { mode: release, k: 6, n: 25, doc: true }
+          - { mode: release, k: 7, n: 25, doc: true }
+          - { mode: release, k: 8, n: 25, doc: true }
+          - { mode: release, k: 9, n: 25, doc: true, crate: geom-num, targets: "--lib --bins --test 'attack_[a-g]*'" }
+          - { mode: release, k: 10, n: 25, crate: geom-num, targets: "--test 'attack2_[e-i]*'" }
+          - { mode: release, k: 11, n: 25, crate: geom-num, targets: "--test 'attack2_[p-z]*' --test 'attack_[s-z]*'" }
+          - { mode: release, k: 12, n: 25, crate: geom-num, targets: "--test 'attack_[h-r]*'" }
+          - { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 14, n: 25, doc: true, crate: geom-test, targets: "--lib --bins --test 'attack_g11*'" }
+          - { mode: release, k: 15, n: 25, crate: geom-test, targets: "--test 'attack_g10*' --test 'attack_g13*' --test 'attack_g15*' --test 'attack_g16*' --test 'attack_g17*' --test 'attack_g19*' --test 'attack_g2*' --test 'attack_g4*'" }
+          - { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test '[c-k]*'" }
+          - { mode: release, k: 17, n: 25, crate: geom-test, targets: "--test 'l*'" }
+          - { mode: release, k: 18, n: 25, crate: geom-test, targets: "--test '[m-r]*'" }
+          - { mode: release, k: 19, n: 25, crate: geom-test, targets: "--test '[s-z]*'" }
+          - { mode: release, k: 20, n: 25, doc: true, crate: geom-bench, targets: "--lib --bins --test 'a*'" }
           - { mode: release, k: 21, n: 25, crate: geom-bench, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 22, n: 25, doc: true, crate: geom-format, targets: "--lib --bins --test '[a-c]*'" }
+          - { mode: release, k: 23, n: 25, crate: geom-format, targets: "--test '[d-z]*'" }
+          - { mode: release, k: 24, n: 25, doc: true, crate: geom-fuzz, targets: "--lib --bins --test '[a-l]*'" }
+          - { mode: release, k: 25, n: 25, crate: geom-fuzz, targets: "--test '[m-z]*'" }
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"
       # As `suite`: debug assertions on in the release legs too.
@@ -1134,7 +1206,31 @@ jobs:
       fail-fast: false
       matrix:
         part:
+          - { mode: release, k: 1, n: 25, doc: true }
+          - { mode: release, k: 2, n: 25, doc: true }
+          - { mode: release, k: 3, n: 25, doc: true }
+          - { mode: release, k: 4, n: 25, doc: true }
+          - { mode: release, k: 5, n: 25, doc: true }
+          - { mode: release, k: 6, n: 25, doc: true }
+          - { mode: release, k: 7, n: 25, doc: true }
+          - { mode: release, k: 8, n: 25, doc: true }
+          - { mode: release, k: 9, n: 25, doc: true, crate: geom-num, targets: "--lib --bins --test 'attack_[a-g]*'" }
+          - { mode: release, k: 10, n: 25, crate: geom-num, targets: "--test 'attack2_[e-i]*'" }
+          - { mode: release, k: 11, n: 25, crate: geom-num, targets: "--test 'attack2_[p-z]*' --test 'attack_[s-z]*'" }
+          - { mode: release, k: 12, n: 25, crate: geom-num, targets: "--test 'attack_[h-r]*'" }
+          - { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 14, n: 25, doc: true, crate: geom-test, targets: "--lib --bins --test 'attack_g11*'" }
+          - { mode: release, k: 15, n: 25, crate: geom-test, targets: "--test 'attack_g10*' --test 'attack_g13*' --test 'attack_g15*' --test 'attack_g16*' --test 'attack_g17*' --test 'attack_g19*' --test 'attack_g2*' --test 'attack_g4*'" }
+          - { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test '[c-k]*'" }
+          - { mode: release, k: 17, n: 25, crate: geom-test, targets: "--test 'l*'" }
+          - { mode: release, k: 18, n: 25, crate: geom-test, targets: "--test '[m-r]*'" }
+          - { mode: release, k: 19, n: 25, crate: geom-test, targets: "--test '[s-z]*'" }
+          - { mode: release, k: 20, n: 25, doc: true, crate: geom-bench, targets: "--lib --bins --test 'a*'" }
           - { mode: release, k: 21, n: 25, crate: geom-bench, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 22, n: 25, doc: true, crate: geom-format, targets: "--lib --bins --test '[a-c]*'" }
+          - { mode: release, k: 23, n: 25, crate: geom-format, targets: "--test '[d-z]*'" }
+          - { mode: release, k: 24, n: 25, doc: true, crate: geom-fuzz, targets: "--lib --bins --test '[a-l]*'" }
+          - { mode: release, k: 25, n: 25, crate: geom-fuzz, targets: "--test '[m-z]*'" }
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"
       # A part the selection leaves without a test passes (nextest's `--no-tests`).
@@ -1178,10 +1274,83 @@ jobs:
         with:
           name: suite-macos-x86-64-${{ matrix.part.k }}
           path: ${{ runner.temp }}
-      # Every test of the archive, none filtered: the tests `suite`'s part runs natively.
+      # The crates' sources in cargo's registry, for the tests that run cargo offline at test time
+      # (geom-test's attack_g11), as the native part's build left them.
+      - name: Fetch the locked dependencies
+        if: ${{ env.KERNEL_CRATES != '' }}
+        run: cargo fetch --locked
+      # Every test of the archive, none filtered: the tests `suite`'s part runs natively. The
+      # archive is unpacked into the checkout, so its binaries sit at the path the arm64 build gave
+      # them (both runners check out at the same path) and `env!("CARGO_BIN_EXE_*")` finds them.
       - name: Test suite in release, with overflow checks on (part ${{ matrix.part.k }} of ${{ matrix.part.n }}, from the archive)
         if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
-        run: cargo nextest run --archive-file "$RUNNER_TEMP/suite-macos-x86-64-${{ matrix.part.k }}.tar.zst" --workspace-remap . --no-fail-fast
+        run: cargo nextest run --archive-file "$RUNNER_TEMP/suite-macos-x86-64-${{ matrix.part.k }}.tar.zst" --workspace-remap . --extract-to . --extract-overwrite --no-fail-fast
+
+  # The doctests of every moved part that has them (`doc`), which an archive does not hold: one job
+  # on the Intel runner, `suite`'s own release doctest step with its flags, over the crates of all
+  # those parts at once, so the libraries they share compile once (decision 32.82). SHARE is each
+  # such part's crates, in the parts' order: a share's from the job `scope`, a crate set apart by
+  # its name; geom-test's tests/queue_wiring.rs holds it to the cross jobs' parts.
+  suite-cross-doc:
+    name: Doctests (macOS x86-64, release, the parts built on macOS arm64)
+    needs: [changes, lint, scope]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    env:
+      # As `suite`: debug assertions on in the release legs too.
+      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only a push to main saves the cache; a pull request restores main's, so on main it
+          # compiles the workspace crates alone.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          key: suite-cross-doc
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+          MODE: release
+          SHARE: >-
+            ${{ fromJSON(needs.scope.outputs.parts)['1'] }}
+            ${{ fromJSON(needs.scope.outputs.parts)['2'] }}
+            ${{ fromJSON(needs.scope.outputs.parts)['3'] }}
+            ${{ fromJSON(needs.scope.outputs.parts)['4'] }}
+            ${{ fromJSON(needs.scope.outputs.parts)['5'] }}
+            ${{ fromJSON(needs.scope.outputs.parts)['6'] }}
+            ${{ fromJSON(needs.scope.outputs.parts)['7'] }}
+            ${{ fromJSON(needs.scope.outputs.parts)['8'] }}
+            geom-num
+            geom-test
+            geom-bench
+            geom-format
+            geom-fuzz
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case " $SELECTED " in *" $c "*) ;; *) continue ;; esac
+            if [ "$MODE" = release ]; then
+              case " $SHARE " in *" $c "*) ;; *) continue ;; esac
+            fi
+            list="$list -p $c"
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none in this part}"
+      - name: Doctests in release, with overflow checks on
+        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
 
   big-endian:
     # The file format must not depend on byte order (chapter 28.13): geom-format's own tests and
@@ -1933,7 +2102,7 @@ jobs:
   # the merge queue it leaves the mark that lets the push to main skip the same tree.
   done:
     name: Kernel checks pass
-    needs: [changes, lint, scope, linux, guard, solidcore, solidcore-wasm, golden-runner, test, suite, suite-cross-build, suite-cross, wasm, wasm-build, wasm-suite, big-endian, large-models]
+    needs: [changes, lint, scope, linux, guard, solidcore, solidcore-wasm, golden-runner, test, suite, suite-cross-build, suite-cross, suite-cross-doc, wasm, wasm-build, wasm-suite, big-endian, large-models]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1960,8 +2129,8 @@ jobs:
             # lists to each job's condition). A run by hand must run what a push runs.
             case "$EVENT" in
               pull_request) must="lint scope linux guard solidcore solidcore-wasm" ;;
-              merge_group) must="lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models" ;;
-              *) must="lint scope linux guard solidcore solidcore-wasm golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models" ;;
+              merge_group) must="lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models" ;;
+              *) must="lint scope linux guard solidcore solidcore-wasm golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models" ;;
             esac
             for job in $must; do
               result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")

@@ -1441,15 +1441,16 @@ fn cross_part_problems(w: &Yaml) -> Vec<String> {
                 "suite leaves out {part:?}, which is none of its release parts"
             ));
         }
-        if part["doc"].as_bool() == Some(true) {
-            found.push(format!(
-                "suite's part {} is built on macOS arm64 with doctests, which an archive does not \
-                 hold",
-                part["k"].as_i64().unwrap_or(0)
-            ));
-        }
         excluded.push(part);
     }
+    // An archive holds no doctest: the moved parts with doctests run them in one job of their own
+    // on the Intel runner, as `suite`'s parts run them.
+    let with_doc: Vec<&Yaml> = excluded
+        .iter()
+        .copied()
+        .filter(|p| p["doc"].as_bool() == Some(true))
+        .collect();
+    found.extend(cross_doc_problems(w, &with_doc, intel));
     let build_job = "suite-cross-build";
     let run_job = "suite-cross";
     for job in [build_job, run_job] {
@@ -1548,20 +1549,111 @@ fn cross_part_problems(w: &Yaml) -> Vec<String> {
     if !strings(&run["needs"]).iter().any(|n| n == build_job) {
         found.push(format!("{run_job} does not wait for {build_job}"));
     }
+    // Unpacked into the checkout, at the build's own path, so baked binary paths resolve; the
+    // registry fetched first for the tests that run cargo offline.
     let every = format!(
         "cargo nextest run --archive-file \"$RUNNER_TEMP/{CROSS_ARCHIVE}.tar.zst\" \
-         --workspace-remap . --no-fail-fast"
+         --workspace-remap . --extract-to . --extract-overwrite --no-fail-fast"
     );
     let runs: Vec<String> = steps_of(w, run_job)
         .into_iter()
         .map(|s| text(&s["run"]))
         .filter(|r| r.starts_with("cargo"))
         .collect();
-    if runs != [every.as_str()] {
+    if runs != ["cargo fetch --locked", every.as_str()] {
         found.push(format!(
             "{run_job} does not run every test of its archive, and only that: {runs:#?}, not \
              {every:?}"
         ));
+    }
+    found
+}
+
+/// The crates `suite-cross-doc` must take, from the moved parts with doctests (`with_doc`), in
+/// their order: a crate set apart by its name, a share by the job `scope`'s share of its number.
+fn cross_doc_share(with_doc: &[&Yaml]) -> String {
+    with_doc
+        .iter()
+        .map(|p| {
+            if p["crate"].is_badvalue() {
+                format!(
+                    "${{{{ fromJSON(needs.scope.outputs.parts)['{}'] }}}}",
+                    p["k"].as_i64().unwrap_or(0)
+                )
+            } else {
+                text(&p["crate"])
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// What is wrong with `suite-cross-doc`, the one job that runs the doctests of every moved part
+/// that has them (`with_doc`): its crates not exactly those parts' ([`cross_doc_share`]) or not
+/// narrowed as `suite` narrows them; not on macOS x86-64's runner (`intel`); without `suite`'s debug
+/// assertions; or its doctests not `suite`'s release doctest step with its flags.
+fn cross_doc_problems(w: &Yaml, with_doc: &[&Yaml], intel: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let job = "suite-cross-doc";
+    let j = &w["jobs"][job];
+    if with_doc.is_empty() {
+        if !j.is_badvalue() {
+            found.push(format!("{job} runs, but no moved part has doctests"));
+        }
+        return found;
+    }
+    let wanted = cross_doc_share(with_doc);
+    match (listing_of(w, job), listing_of(w, "suite")) {
+        (Some(ours), Some(theirs)) => {
+            if text(&ours["env"]["SHARE"]) != wanted {
+                found.push(format!(
+                    "{job}'s crates are {:?}, not the moved parts' with doctests {wanted:?}",
+                    text(&ours["env"]["SHARE"])
+                ));
+            }
+            if ours["run"] != theirs["run"]
+                || ours["env"]["SELECTED"] != theirs["env"]["SELECTED"]
+                || text(&ours["env"]["MODE"]) != "release"
+            {
+                found.push(format!(
+                    "{job} does not narrow its crates as suite's release parts do"
+                ));
+            }
+        }
+        _ => found.push(format!("{job} does not list its crates")),
+    }
+    if text(&j["runs-on"]) != os(intel) {
+        found.push(format!(
+            "{job} runs on {:?}, not macOS x86-64's {:?}",
+            text(&j["runs-on"]),
+            os(intel)
+        ));
+    }
+    let suite = &w["jobs"]["suite"];
+    if j["env"]["CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS"]
+        != suite["env"]["CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS"]
+    {
+        found.push(format!("{job} builds without suite's debug assertions"));
+    }
+    let doc = |s: &&Yaml| text(&s["run"]).starts_with("cargo test $KERNEL_CRATES --doc");
+    let theirs: Vec<&Yaml> = steps_of(w, "suite")
+        .into_iter()
+        .filter(doc)
+        .filter(|s| text(&s["if"]).contains("matrix.part.mode == 'release'"))
+        .collect();
+    let ours: Vec<&Yaml> = steps_of(w, job).into_iter().filter(doc).collect();
+    match (theirs.as_slice(), ours.as_slice()) {
+        ([t], [o]) => {
+            if o["run"] != t["run"] || o["env"] != t["env"] {
+                found.push(format!(
+                    "{job} does not run suite's release doctests with its flags"
+                ));
+            }
+            if !text(&o["if"]).contains("env.KERNEL_CRATES != ''") {
+                found.push(format!("{job} runs its doctests with no crate selected"));
+            }
+        }
+        _ => found.push(format!("{job} does not run the doctests once")),
     }
     found
 }
@@ -1739,11 +1831,11 @@ fn the_ruleset_requires_checks_that_always_report() {
     assert!(
         seeded(
             "kernel.yml",
-            " suite, suite-cross-build, suite-cross, wasm,",
-            " suite, suite-cross-build, wasm,"
+            " suite, suite-cross-build, suite-cross, suite-cross-doc, wasm,",
+            " suite, suite-cross-build, suite-cross, wasm,"
         )
         .iter()
-        .any(|p| p.contains("does not judge [\"suite-cross\"]"))
+        .any(|p| p.contains("does not judge [\"suite-cross-doc\"]"))
     );
     assert!(
         seeded(
@@ -1776,26 +1868,26 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
         ),
         // A job dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // The goldens' runner's build dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // The wasm32 suite's build dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // The cross-built part's run dropped from what the queue must run (decision 32.82).
         (
-            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // A job that would run again on a tree the queue passed.
@@ -1843,7 +1935,8 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
 
     // An arm naming a push and a run by hand together is read as both, and asks the same.
     let full = "lint scope linux guard solidcore solidcore-wasm golden-runner test suite \
-                suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models";
+                suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian \
+                large-models";
     let both = kernel.replacen(
         "              *) must=",
         &format!(
@@ -2070,10 +2163,9 @@ fn a_cross_built_part_runs_every_test_of_the_part_it_replaces() {
     let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
     let w = parse(&kernel);
     assert_eq!(cross_part_problems(&w), Vec::<String>::new());
-    // The trial's one part (decision 32.82): part 21, geom-bench's tests from b to z.
+    // Every release part of macOS x86-64 (decision 32.82).
     let parts = &w["jobs"]["suite"]["strategy"]["matrix"]["exclude"];
-    assert_eq!(parts.as_vec().map(Vec::len), Some(1));
-    assert_eq!(parts[0]["part"]["k"].as_i64(), Some(21));
+    assert_eq!(parts.as_vec().map(Vec::len), Some(25));
 
     let build = "  suite-cross-build:\n";
     let run = "  suite-cross:\n";
@@ -2123,7 +2215,7 @@ fn a_cross_built_part_runs_every_test_of_the_part_it_replaces() {
                 "{ mode: release, k: 21, n: 25, crate: geom-bench,",
                 "{ mode: release, k: 21, n: 25, doc: true, crate: geom-bench,",
             ),
-            "with doctests, which an archive does not hold",
+            "suite-cross-doc's crates are",
         ),
         // The build's crates listed otherwise than suite's.
         (
@@ -2207,17 +2299,90 @@ fn a_cross_built_part_runs_every_test_of_the_part_it_replaces() {
         // A test filtered out of the run to make a time.
         (
             kernel.replacen(
-                "--workspace-remap . --no-fail-fast\n",
-                "--workspace-remap . --no-fail-fast -E 'not test(=every_digest_matches_its_recorded_value)'\n",
+                "--workspace-remap . --extract-to . --extract-overwrite --no-fail-fast\n",
+                "--workspace-remap . --extract-to . --extract-overwrite --no-fail-fast -E 'not test(=every_digest_matches_its_recorded_value)'\n",
                 1,
             ),
             "suite-cross does not run every test of its archive",
         ),
+        // Unpacked in a temporary folder: a test's baked binary path would name nothing.
+        (
+            kernel.replacen(
+                " --extract-to . --extract-overwrite --no-fail-fast\n",
+                " --no-fail-fast\n",
+                1,
+            ),
+            "suite-cross does not run every test of its archive",
+        ),
+        // The registry not fetched: attack_g11's offline cargo would find no sources.
+        (
+            kernel.replacen(
+                "      - name: Fetch the locked dependencies\n        if: ${{ env.KERNEL_CRATES != '' }}\n        run: cargo fetch --locked\n",
+                "",
+                1,
+            ),
+            "suite-cross does not run every test of its archive",
+        ),
+        // A crate set apart dropped from the doctest job: its doctests would run nowhere.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "            geom-test\n", ""),
+            "suite-cross-doc's crates are",
+        ),
+        // A share dropped from the doctest job.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "            ${{ fromJSON(needs.scope.outputs.parts)['3'] }}\n",
+                "",
+            ),
+            "suite-cross-doc's crates are",
+        ),
+        // The doctest job's crates narrowed otherwise.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "case \" $SELECTED \" in", "case \" $SHARE \" in"),
+            "suite-cross-doc does not narrow its crates",
+        ),
+        // The doctests run on the arm64 runner.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "    runs-on: macos-15-intel\n",
+                "    runs-on: macos-latest\n",
+            ),
+            "suite-cross-doc runs on \"macos-latest\"",
+        ),
+        // The doctests without overflow checks.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "          RUSTFLAGS: -C overflow-checks=on\n", ""),
+            "suite-cross-doc does not run suite's release doctests with its flags",
+        ),
+        // A doctest skipped.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "--doc --release --locked --no-fail-fast\n",
+                "--doc --release --locked --no-fail-fast -- --skip geom_num\n",
+            ),
+            "suite-cross-doc does not run suite's release doctests with its flags",
+        ),
+        // The doctests without debug assertions.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n",
+                "",
+            ),
+            "suite-cross-doc builds without suite's debug assertions",
+        ),
         // Half the archive's tests run.
         (
             kernel.replacen(
-                "--workspace-remap . --no-fail-fast\n",
-                "--workspace-remap . --no-fail-fast --partition count:1/2\n",
+                "--workspace-remap . --extract-to . --extract-overwrite --no-fail-fast\n",
+                "--workspace-remap . --extract-to . --extract-overwrite --no-fail-fast --partition count:1/2\n",
                 1,
             ),
             "suite-cross does not run every test of its archive",
