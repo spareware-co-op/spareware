@@ -265,8 +265,13 @@ fn normal_terms(which: Which, r: &Round) -> Result<Terms, CurveError> {
     })
 }
 
-/// The pieces a direction of a box is cut into: eighths of a turn for an angle, else one.
-pub(crate) fn cuts((lo, hi): (f64, f64), angular: bool) -> Result<Vec<(f64, f64)>, CurveError> {
+/// The pieces a direction of a box is cut into: eighths of a turn for an angle, else one. At most
+/// eight, in order from `lo`, held in a fixed array with no heap block (a surface is bounded on
+/// every box the engine looks at); the slots after the last piece are `None`.
+pub(crate) fn cuts(
+    (lo, hi): (f64, f64),
+    angular: bool,
+) -> Result<[Option<(f64, f64)>; 8], CurveError> {
     let n: u32 = if angular {
         let x = geom_num::math::ceil((hi - lo) * 4.0)?.get();
         if x >= 8.0 {
@@ -285,9 +290,10 @@ pub(crate) fn cuts((lo, hi): (f64, f64), angular: bool) -> Result<Vec<(f64, f64)
     } else {
         1
     };
-    let mut out = Vec::with_capacity(8);
+    let mut out = [None; 8];
     let mut start = lo;
-    for i in 1..=n {
+    // n is at most 8, so every piece has its slot.
+    for (i, slot) in (1..=n).zip(&mut out) {
         let end = if i == n {
             hi
         } else {
@@ -295,7 +301,7 @@ pub(crate) fn cuts((lo, hi): (f64, f64), angular: bool) -> Result<Vec<(f64, f64)
         };
         // Rounding may step past either end; the piece stays in [start, hi].
         let end = tight::larger(tight::smaller(end, hi), start);
-        out.push((start, end));
+        *slot = Some((start, end));
         start = end;
     }
     Ok(out)
@@ -312,8 +318,8 @@ fn hull(
         lo: [f64::INFINITY; 3],
         hi: [f64::NEG_INFINITY; 3],
     };
-    for (u0, u1) in cuts(region.0, angular.0)? {
-        for (v0, v1) in cuts(region.1, angular.1)? {
+    for (u0, u1) in cuts(region.0, angular.0)?.into_iter().flatten() {
+        for (v0, v1) in cuts(region.1, angular.1)?.into_iter().flatten() {
             meter.charge(1)?;
             let e = f(Interval::new(u0, u1)?, Interval::new(v0, v1)?)?;
             for ((l, h), x) in out.lo.iter_mut().zip(out.hi.iter_mut()).zip(&e) {
