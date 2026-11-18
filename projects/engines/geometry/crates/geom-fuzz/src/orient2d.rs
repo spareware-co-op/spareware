@@ -559,7 +559,7 @@ mod tests {
     }
 
     /// The filter's claim is its steps: on every case each step passes as the claim does, and
-    /// each step function fails on a wrong answer of its own, as check_with does.
+    /// each step function fails on a wrong answer of its own, as `check_with` does.
     #[test]
     fn the_filter_steps_are_its_claim() {
         let mut rng = SplitMix64::new(fixed("orient2d filter steps", Seed(0x0f11)));
