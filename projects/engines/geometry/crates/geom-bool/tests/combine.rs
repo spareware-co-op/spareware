@@ -1003,12 +1003,13 @@ fn a_walls_end_on_anothers_side_follows_the_shared_face_table() {
 fn boxes_that_share_only_an_edge_or_a_corner_are_not_nudged_apart() {
     // 11.5: boxes touching at an edge unite into a shape non-manifold there, a general body, with
     // the edge shared by four fins; nothing is nudged apart. At a corner every edge still has two
-    // fins, so the union is a solid of two shells sharing that vertex, which the checker passes.
-    // Either way the difference leaves the first box whole, and the intersection is empty.
+    // fins, but the vertex is on both shells: non-manifold there too (8.1, decision 32.84), so a
+    // general body. Either way the difference leaves the first box whole, and the intersection is
+    // empty.
     let a = cuboid([0, 0, 0], [10, 10, 10]);
     for (low, kind, edges, vertices) in [
         ([10, 10, 0], BodyKind::General, 23, 14),
-        ([10, 10, 10], BodyKind::Solid, 24, 15),
+        ([10, 10, 10], BodyKind::General, 24, 15),
     ] {
         let b = cuboid(low, [10, 10, 10]);
         let both = [solid(1, &a), solid(2, &b)];
