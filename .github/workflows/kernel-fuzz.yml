@@ -462,13 +462,15 @@ jobs:
   # the two joined in one assertion kissat took 15.4 (run 44083788360).
   # grid's law of `coarsen` (32 to 44 minutes as one harness of every coordinate and every pair
   # of steps) is cut by the pair of steps, each harness naming its pairs so that the divisor is a
-  # constant: one harness for the six pairs that do not divide (0.7 minutes), and for each of the
-  # three that do, one for no larger and exactness (0.7 to 2.3) and two for nearest, by the
+  # constant: one harness for the six pairs that do not divide (0.8 minutes), and for each of the
+  # three that do, one for no larger and exactness (0.7 to 2.0) and two for nearest, by the
   # coordinate's sign. Two cover harnesses prove that the pairs are every pair and the two signs
-  # every coordinate, so the twelve together prove what the one did. Nearest takes 1 to 2
-  # minutes by 25, and by 625 at or above zero 8.1 to 8.6 (runs 44077877942 and 44116895472).
-  # One part is not within the plan: nearest by 625 below zero, 13.4 minutes under kissat (run
-  # 44162487086). Bands of the magnitude do not shorten it, nor the direction of rounding.
+  # every coordinate, so the twelve together prove what the one did. Below zero, nearest is
+  # asserted on the negated pair, and one more harness proves that the two ways of writing it
+  # give one verdict for every pair of values of the frame. Whole job minutes on the head that
+  # was proven (run 44175923704): nearest takes 1.4 to 2.1 minutes by 25, and by 625 at or
+  # above zero 10.5. One part is still over 15 minutes: nearest by 625 below zero, 23.5 under
+  # kissat. Bands of the magnitude do not shorten it, nor the direction of rounding.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
@@ -540,6 +542,7 @@ jobs:
           - grid::proofs::coord_from_i128_accepts_exactly_the_frame
           - grid::proofs::coord_new_accepts_exactly_the_frame
           - grid::proofs::every_coordinate_is_below_zero_or_not
+          - grid::proofs::nearest_on_the_negated_pair_is_nearest
           - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
           - grid::proofs::refine_is_exact_or_refused
           - grid::proofs::steps_refine_is_exact_or_none
