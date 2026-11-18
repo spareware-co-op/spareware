@@ -175,6 +175,163 @@ pub fn planned(seconds: u64) -> u64 {
 /// and only while it is on [`MAY_STOP`].
 pub const SURE_WITHIN: u64 = 375;
 
+/// The yardstick (32.78): one fixed small test every Miri job runs alone under Miri before its
+/// own tests, as (binary id, test). Its row in [`TIMES`] is its time on the runner the table's
+/// seconds are counted in, so the job's [`job_scale`] is the speed of the runner it got, and each
+/// test's stop ([`stop_ms`]) is counted in that runner's own seconds. GitHub's runners come in
+/// two speeds (run 44248913106's partition 33 ran 1.4 times its proving run's seconds; a row
+/// measured on the fast one stopped its test on the slow one), and a stop fixed in one runner's
+/// seconds goes red by the luck of the runner.
+pub const YARDSTICK: (&str, &str) = (
+    "geom-num",
+    "plane::tests::the_largest_denominators_of_both_widths",
+);
+
+/// The least a job's scale is held at, as a fraction (num, den): 0.5. A faster runner is judged
+/// as one at 0.5, so a stop never falls under half its row's planned time.
+pub const SCALE_LEAST: (u64, u64) = (1, 2);
+
+/// The most a job's scale may be, as a fraction (num, den): 3. Over it the job fails as a runner
+/// too slow to judge, the runner's red and not a test's.
+pub const SCALE_MOST: (u64, u64) = (3, 1);
+
+/// Whether `a` is less than `b`, two fractions (num, den) with nonzero denominators.
+fn less((an, ad): (u64, u64), (bn, bd): (u64, u64)) -> bool {
+    u128::from(an) * u128::from(bd) < u128::from(bn) * u128::from(ad)
+}
+
+/// A job's scale from its yardstick's run (32.78): the yardstick's seconds in `report` (its run's
+/// nextest report) over its row in `rows`, as a fraction (num, den), held at [`SCALE_LEAST`] from
+/// below.
+///
+/// # Errors
+///
+/// When the yardstick has no finishing row in `rows`, or `report` does not show it passing: a
+/// missing time is an error, never a default. When the scale is over [`SCALE_MOST`]: the runner
+/// is too slow to judge.
+pub fn job_scale(rows: &[Row], report: &[Reported]) -> Result<(u64, u64), String> {
+    let (binary, test) = YARDSTICK;
+    let row = rows
+        .iter()
+        .find(|r| r.binary == binary && r.test == test)
+        .ok_or_else(|| format!("the yardstick {binary} {test} has no row in Miri's table"))?;
+    let State::Finishes(seconds) = row.state else {
+        return Err(format!(
+            "the yardstick {binary} {test} is native-only: it has no time to scale by"
+        ));
+    };
+    if seconds == 0 {
+        return Err(format!(
+            "the yardstick {binary} {test}'s row is 0 s: it has no time to scale by"
+        ));
+    }
+    let ran = report
+        .iter()
+        .find(|r| r.binary == binary && r.test == test)
+        .ok_or_else(|| format!("the yardstick {binary} {test} is not in its report"))?;
+    let ms = match &ran.outcome {
+        Outcome::Passed(ms) => *ms,
+        Outcome::TimedOut(ms) => {
+            return Err(format!(
+                "the yardstick {binary} {test} was stopped after {ms} ms: no time to scale by"
+            ));
+        }
+        Outcome::Failed(words) => {
+            return Err(format!("the yardstick {binary} {test} failed: {words}"));
+        }
+    };
+    let den = seconds
+        .checked_mul(1000)
+        .ok_or("the yardstick's row overflows")?;
+    let scale = (ms, den);
+    if less(SCALE_MOST, scale) {
+        return Err(format!(
+            "runner too slow to judge: the yardstick took {} times its row (over {}), the \
+             runner's red and not a test's",
+            scale_text(scale),
+            scale_text(SCALE_MOST)
+        ));
+    }
+    Ok(if less(scale, SCALE_LEAST) {
+        SCALE_LEAST
+    } else {
+        scale
+    })
+}
+
+/// A scale as a decimal of three places, rounded up (`1.400`).
+#[must_use]
+pub fn scale_text((num, den): (u64, u64)) -> String {
+    let milli = (u128::from(num) * 1000).div_ceil(u128::from(den.max(1)));
+    format!("{}.{:03}", milli / 1000, milli % 1000)
+}
+
+/// A finishing test's stop in a job at `scale`, in milliseconds (32.78): its row's `seconds`
+/// times 1.6 ([`SLOWER`]) times the scale, rounded up.
+#[must_use]
+pub fn stop_ms(seconds: u64, (num, den): (u64, u64)) -> u64 {
+    let top = u128::from(seconds) * 1000 * u128::from(SLOWER.0) * u128::from(num);
+    let bottom = u128::from(SLOWER.1) * u128::from(den.max(1));
+    u64::try_from(top.div_ceil(bottom)).unwrap_or(u64::MAX)
+}
+
+/// What a gate job's report says of its tests' stops at its scale ([`over_stops`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Judged {
+    /// Each test that reached its own stop, as `binary test: why`: each fails the job.
+    pub over: Vec<String>,
+    /// Each test a short run's stop (the `miri-smoke` profile's, under [`BUDGET`]) ended before
+    /// its own: no verdict and not a pass, named, as `binary test: why`.
+    pub cut: Vec<String>,
+}
+
+/// Every test of a gate job's `report` that ran to its stop at `scale` (32.78). A test's own stop
+/// is [`stop_ms`] of its row; `ceiling` is the profile's stop in seconds, where nextest ends any
+/// test. A test that passed at or after its own stop, or that nextest stopped with its own stop
+/// at or under `ceiling`, is over: a test stopped at its budget is a failure, never a pass. So is
+/// a test that ran with no finishing row. At [`BUDGET`] a test nextest stopped is over whatever
+/// its own stop, since no stop is widened past the budget; under it (a short run) a test ended
+/// before its own stop is cut, named and not passed.
+#[must_use]
+pub fn over_stops(report: &[Reported], rows: &[Row], scale: (u64, u64), ceiling: u64) -> Judged {
+    let ceiling_ms = ceiling.saturating_mul(1000);
+    let mut out = Judged::default();
+    for r in report {
+        let row = rows
+            .iter()
+            .find(|x| x.binary == r.binary && x.test == r.test);
+        let Some(State::Finishes(seconds)) = row.map(|x| x.state) else {
+            if !matches!(r.outcome, Outcome::Failed(_)) {
+                out.over
+                    .push(format!("{} {}: no finishing row", r.binary, r.test));
+            }
+            continue;
+        };
+        let own = stop_ms(seconds, scale);
+        let (ms, by_nextest) = match r.outcome {
+            Outcome::TimedOut(ms) => (ms, true),
+            Outcome::Passed(ms) => (ms, ms >= ceiling_ms),
+            Outcome::Failed(_) => continue,
+        };
+        if ms < own && !by_nextest {
+            continue;
+        }
+        let why = format!(
+            "{} {}: {ms} ms, its stop {own} ms (row {seconds} s x 1.6 x {})",
+            r.binary,
+            r.test,
+            scale_text(scale)
+        );
+        if ms < own && ceiling < BUDGET {
+            out.cut
+                .push(format!("{why}, ended at the short run's {ceiling} s"));
+        } else {
+            out.over.push(why);
+        }
+    }
+    out
+}
+
 /// The tests a gate job may see stopped at [`BUDGET`] with no verdict (32.68): every finishing row
 /// over [`SURE_WITHIN`], `seconds<TAB>binary id<TAB>test name` a line, `#` lines comments, written
 /// by `kernel-quality miri-may-stop` (and `miri-times`) from [`TIMES`] with

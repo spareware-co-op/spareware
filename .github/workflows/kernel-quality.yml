@@ -1149,6 +1149,20 @@ jobs:
       # overran inside this step until the job's 30 minutes, and GitHub kept nothing of it.
       # `geom_test::miri::TESTS_STEP_MINUTES`, with the set-up and the first upload's bound,
       # fits the job's limit (kernel_quality_workflow.rs).
+      # The yardstick (32.78): the runner's processor, then one fixed small test alone under Miri;
+      # its seconds over its row are this job's scale, held at 0.5 from below, and each test's stop
+      # is its row times 1.6 times the scale. Over 3 the job fails here, a runner too slow to judge.
+      - name: The runner's processor and Miri's scale (partition ${{ matrix.partition }})
+        timeout-minutes: 12
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          grep -m1 '^model name' /proc/cpuinfo
+          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \
+            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'
+          kernel-quality miri-scale --report target/nextest/miri-yardstick/junit.xml \
+            | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Every kernel test Miri finishes (partition ${{ matrix.partition }})
         timeout-minutes: 24
         env:
@@ -1190,6 +1204,7 @@ jobs:
             stop=60 profile=miri-smoke
           fi
           kernel-quality miri-stopped --stop "$stop" --report "target/nextest/$profile/junit.xml" \
+            --yardstick target/nextest/miri-yardstick/junit.xml \
             --title "Partition ${{ matrix.partition }}" | tee -a "$GITHUB_STEP_SUMMARY"
       # The partition's report, in two tries. GitHub's storage can stall an upload until the
       # job's limit (run 44075531453: partition 31's tests passed in 466 s, then its upload hung
@@ -1291,6 +1306,20 @@ jobs:
       # Its tests have a partition's limit of their own, `geom_test::miri::TESTS_STEP_MINUTES`, for
       # the plan holds them to a partition's seconds: an overrun is stopped here, red, and the
       # reading of the report and its upload still run (kernel_quality_workflow.rs).
+      # The yardstick, as in each partition (32.78): the runner's processor and this job's scale,
+      # measured under the partitions' own flags so every job's scale is counted the same way.
+      - name: The runner's processor and Miri's scale (geom-pool)
+        if: env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')
+        timeout-minutes: 12
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          grep -m1 '^model name' /proc/cpuinfo
+          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \
+            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'
+          kernel-quality miri-scale --report target/nextest/miri-yardstick/junit.xml \
+            | tee -a "$GITHUB_STEP_SUMMARY"
       - name: geom-pool's tests under Miri with Tree Borrows
         if: env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')
         timeout-minutes: 24
@@ -1319,6 +1348,7 @@ jobs:
             stop=60 profile=miri-smoke
           fi
           kernel-quality miri-stopped --stop "$stop" --report "target/nextest/$profile/junit.xml" \
+            --yardstick target/nextest/miri-yardstick/junit.xml \
             --title "geom-pool under Tree Borrows" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: The kernel's doctests under Miri
         env:

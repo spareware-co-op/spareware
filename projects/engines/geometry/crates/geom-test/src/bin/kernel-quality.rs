@@ -32,6 +32,8 @@
 //!   it writes nothing and only says what the reports measured, failing on a test that failed.
 //!   It writes the list of tests that may stop ([`geom_test::miri::render_may_stop`]) with it, and
 //!   `miri-may-stop` writes that list alone from the table in the repository.
+//! - `miri-scale` reads a Miri job's yardstick report and prints the job's scale, failing on a
+//!   missing time and on a runner too slow to judge (32.78).
 //! - `miri-stopped` reads a Miri gate job's nextest reports and names in Markdown, for its
 //!   summary, each test nextest stopped with no verdict; it fails when one of them may not stop
 //!   ([`geom_test::miri::stops`], [`geom_test::miri::allowed_stops`]), and when a report is
@@ -298,6 +300,19 @@ enum Command {
         /// What the summary calls the job.
         #[arg(long)]
         title: String,
+        /// The report of the job's yardstick run (32.78). With it, each test is judged at its own
+        /// stop, its row times 1.6 times the job's scale and never past `--stop`, and every test
+        /// that reached it fails the job: none is excused.
+        #[arg(long, value_name = "JUNIT.xml")]
+        yardstick: Option<PathBuf>,
+    },
+    /// Reads the report of a Miri job's yardstick run and prints the job's scale (32.78): the
+    /// yardstick's seconds over its row, held at 0.5 from below. Fails when the yardstick's time
+    /// is missing, and when the scale is over 3, a runner too slow to judge.
+    MiriScale {
+        /// The yardstick run's report (`target/nextest/<profile>/junit.xml`).
+        #[arg(long, value_name = "JUNIT.xml")]
+        report: PathBuf,
     },
     /// Plans a measuring run of Miri's table on GitHub's runners: picks the tests, packs them into
     /// parts that each end within the stop, writes each part's nextest filterset to
@@ -417,6 +432,12 @@ fn read_lines(file: &Path) -> Result<Vec<String>, String> {
 }
 
 /// The tests a `cargo nextest list --message-format json` file lists to run.
+/// Every test case of a nextest report file, named in the error when it cannot be read.
+fn read_report(file: &Path) -> Result<Vec<geom_test::miri::Reported>, String> {
+    let xml = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    geom_test::miri::read_junit(&xml).map_err(|e| format!("{}: {e}", file.display()))
+}
+
 fn read_listing(file: &Path) -> Result<Vec<(String, String)>, String> {
     let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let listing: serde_json::Value =
@@ -999,10 +1020,91 @@ fn run(cli: Cli) -> Result<bool, String> {
             }
             Ok(true)
         }
+        Command::MiriScale { report } => {
+            let rows = geom_test::miri::parse_table(geom_test::miri::TIMES)?;
+            let scale = geom_test::miri::job_scale(&rows, &read_report(&report)?)?;
+            let (binary, test) = geom_test::miri::YARDSTICK;
+            println!(
+                "Miri's scale on this runner: {} (the yardstick {binary} {test} over its row)",
+                geom_test::miri::scale_text(scale)
+            );
+            Ok(true)
+        }
         Command::MiriStopped {
             report,
             stop,
             title,
+            yardstick: Some(yardstick),
+        } => {
+            let rows = geom_test::miri::parse_table(geom_test::miri::TIMES)?;
+            let scale = geom_test::miri::job_scale(&rows, &read_report(&yardstick)?)?;
+            let mut out = vec![
+                format!("### {title}: tests stopped at their stops"),
+                String::new(),
+            ];
+            let missing: Vec<&PathBuf> = report.iter().filter(|f| !f.is_file()).collect();
+            if !missing.is_empty() {
+                out.push(
+                    "**No report: this job fails.** The tests' step ended before nextest wrote \
+                     its report (it ran out of its time limit, or was stopped); its log names \
+                     the tests still running."
+                        .to_owned(),
+                );
+                for f in &missing {
+                    eprintln!(
+                        "::error::{} is not there: this job's tests have no report to read",
+                        f.display()
+                    );
+                }
+                println!("{}", out.join("\n"));
+                return Ok(false);
+            }
+            let mut reported = Vec::new();
+            for file in &report {
+                reported.extend(read_report(file)?);
+            }
+            let judged = geom_test::miri::over_stops(&reported, &rows, scale, stop);
+            let over = judged.over;
+            let scale = geom_test::miri::scale_text(scale);
+            if over.is_empty() && judged.cut.is_empty() {
+                out.push(format!(
+                    "At scale {scale}, each of the {} tests reported ran to its verdict within its \
+                     stop (its row x 1.6 x {scale}).",
+                    reported.len()
+                ));
+            }
+            if !judged.cut.is_empty() {
+                out.push(format!(
+                    "**{} ended by this short run's {stop} s stop before their own, with no \
+                     verdict**: not passes; Miri did not see them finish.",
+                    judged.cut.len()
+                ));
+                out.push(String::new());
+                for name in &judged.cut {
+                    out.push(format!("- `{name}`"));
+                }
+                out.push(String::new());
+            }
+            if !over.is_empty() {
+                out.push(format!(
+                    "**{} reached their stops at scale {scale}: this job fails.** A test stopped \
+                     at its stop is a failure, never a pass.",
+                    over.len()
+                ));
+                out.push(String::new());
+                for name in &over {
+                    out.push(format!("- `{name}`"));
+                    eprintln!("::error::{name}");
+                }
+            }
+            println!("{}", out.join("\n"));
+            Ok(over.is_empty())
+        }
+        Command::MiriStopped {
+            report,
+            stop,
+            title,
+            yardstick: None,
         } => {
             let rows = geom_test::miri::parse_table(geom_test::miri::TIMES)?;
             let budget = geom_test::miri::BUDGET;

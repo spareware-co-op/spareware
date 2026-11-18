@@ -2919,3 +2919,250 @@ fn the_tests_that_may_stop_are_the_tables_rows_over_375_s_and_never_more() {
     assert!(miri::allowed_stops(&rows, miri::MAY_STOP, miri::BUDGET).is_ok());
     assert!(miri::parse_may_stop("375\tgeom-num::planted\tplanted\n").is_err());
 }
+
+/// A Reported of `binary test` with `outcome`, for the yardstick's tests (32.78).
+fn reported(binary: &str, test: &str, outcome: miri::Outcome) -> miri::Reported {
+    miri::Reported {
+        binary: binary.to_owned(),
+        test: test.to_owned(),
+        outcome,
+    }
+}
+
+#[test]
+fn a_jobs_scale_is_its_yardstick_over_its_row_held_between_half_and_three() {
+    let rows = miri::parse_table(miri::TIMES).unwrap();
+    let (yb, yt) = miri::YARDSTICK;
+    // The yardstick has its own finishing row, which every scale is counted against.
+    let row = rows
+        .iter()
+        .find(|r| r.binary == yb && r.test == yt)
+        .expect("the yardstick has a row in Miri's table");
+    let miri::State::Finishes(seconds) = row.state else {
+        panic!("the yardstick's row is native-only");
+    };
+    let ms = seconds * 1000;
+    let scale_at =
+        |took: u64| miri::job_scale(&rows, &[reported(yb, yt, miri::Outcome::Passed(took))]);
+    let as_number = |s: (u64, u64)| miri::scale_text(s);
+    // At its row's time the scale is 1; at 2.45 times it, 2.45; exactly 3 and exactly 0.5 stand.
+    assert_eq!(as_number(scale_at(ms).unwrap()), "1.000");
+    assert_eq!(as_number(scale_at(ms * 245 / 100).unwrap()), "2.450");
+    assert_eq!(as_number(scale_at(ms * 3).unwrap()), "3.000");
+    assert_eq!(as_number(scale_at(ms / 2).unwrap()), "0.500");
+    // Faster than half: held at 0.5, never under it.
+    assert_eq!(scale_at(ms / 2 - 1).unwrap(), miri::SCALE_LEAST);
+    assert_eq!(scale_at(1).unwrap(), miri::SCALE_LEAST);
+    // Past 3, by a millisecond: the runner is too slow to judge, an error and no scale.
+    let slow = scale_at(ms * 3 + 1).unwrap_err();
+    assert!(slow.contains("runner too slow to judge"), "{slow}");
+    // A missing yardstick time is an error, never a default: not in the report, stopped, failed,
+    // or no row in the table.
+    assert!(miri::job_scale(&rows, &[]).is_err());
+    assert!(miri::job_scale(&rows, &[reported(yb, "another", miri::Outcome::Passed(ms))]).is_err());
+    assert!(miri::job_scale(&rows, &[reported(yb, yt, miri::Outcome::TimedOut(ms))]).is_err());
+    assert!(
+        miri::job_scale(
+            &rows,
+            &[reported(yb, yt, miri::Outcome::Failed("panic".into()))]
+        )
+        .is_err()
+    );
+    let without: Vec<miri::Row> = rows
+        .iter()
+        .filter(|r| !(r.binary == yb && r.test == yt))
+        .cloned()
+        .collect();
+    assert!(miri::job_scale(&without, &[reported(yb, yt, miri::Outcome::Passed(ms))]).is_err());
+    let native = miri::parse_table(&format!("native-only over 600\t{yb}\t{yt}\n")).unwrap();
+    assert!(miri::job_scale(&native, &[reported(yb, yt, miri::Outcome::Passed(ms))]).is_err());
+    let zero = miri::parse_table(&format!("0\t{yb}\t{yt}\n")).unwrap();
+    assert!(miri::job_scale(&zero, &[reported(yb, yt, miri::Outcome::Passed(ms))]).is_err());
+}
+
+#[test]
+fn a_tests_stop_is_its_row_times_1_6_times_the_scale_and_reaching_it_fails() {
+    // The stop's arithmetic at the scales 0.5, 1, 2.45 and 3, in milliseconds, rounded up.
+    assert_eq!(miri::stop_ms(100, (1, 2)), 80_000);
+    assert_eq!(miri::stop_ms(100, (1, 1)), 160_000);
+    assert_eq!(miri::stop_ms(100, (245, 100)), 392_000);
+    assert_eq!(miri::stop_ms(100, (3, 1)), 480_000);
+    assert_eq!(miri::stop_ms(1, (1, 3)), 534);
+    let rows =
+        miri::parse_table("100\tgeom-num\tplanted::slow\n500\tgeom-num\tplanted::long\n").unwrap();
+    let one = |ms: u64, scale: (u64, u64)| {
+        miri::over_stops(
+            &[reported(
+                "geom-num",
+                "planted::slow",
+                miri::Outcome::Passed(ms),
+            )],
+            &rows,
+            scale,
+            miri::BUDGET,
+        )
+        .over
+    };
+    // A planted slow test is red at scale 1 and at 2.45 once it reaches its stop, and only then.
+    assert!(one(159_999, (1, 1)).is_empty());
+    assert_eq!(one(160_000, (1, 1)).len(), 1);
+    assert!(one(391_999, (245, 100)).is_empty());
+    assert_eq!(one(392_000, (245, 100)).len(), 1);
+    // A test nextest stopped is red whatever its time; one that failed is nextest's own red.
+    let stopped = miri::over_stops(
+        &[
+            reported("geom-num", "planted::slow", miri::Outcome::TimedOut(1)),
+            reported(
+                "geom-num",
+                "planted::long",
+                miri::Outcome::Failed("panic".into()),
+            ),
+        ],
+        &rows,
+        (1, 1),
+        miri::BUDGET,
+    )
+    .over;
+    assert_eq!(stopped.len(), 1, "{stopped:?}");
+    assert!(
+        stopped[0].starts_with("geom-num planted::slow: 1 ms"),
+        "{stopped:?}"
+    );
+    // A stop over the profile's own is cut to it: row 500 at scale 1 is 800 s, judged at 600.
+    let long = |ms: u64| {
+        miri::over_stops(
+            &[reported(
+                "geom-num",
+                "planted::long",
+                miri::Outcome::Passed(ms),
+            )],
+            &rows,
+            (1, 1),
+            miri::BUDGET,
+        )
+        .over
+    };
+    assert!(long(599_999).is_empty());
+    assert_eq!(long(600_000).len(), 1);
+    // A short run's stop (the pull request's 60 s) that ends a test before its own stop leaves it
+    // with no verdict: named as cut, not a pass and not over; one that reached its own is over.
+    let short = |test: &str, ms: u64| {
+        miri::over_stops(
+            &[reported("geom-num", test, miri::Outcome::Passed(ms))],
+            &rows,
+            (1, 1),
+            60,
+        )
+    };
+    let cut = short("planted::long", 60_000);
+    assert!(cut.over.is_empty() && cut.cut.len() == 1, "{cut:?}");
+    assert!(short("planted::long", 59_999) == miri::Judged::default());
+    let quick = miri::parse_table("10\tgeom-num\tplanted::quick\n").unwrap();
+    let over = miri::over_stops(
+        &[reported(
+            "geom-num",
+            "planted::quick",
+            miri::Outcome::Passed(16_000),
+        )],
+        &quick,
+        (1, 1),
+        60,
+    );
+    assert!(over.over.len() == 1 && over.cut.is_empty(), "{over:?}");
+    // A test with no finishing row that ran is red: nothing runs under Miri without a row.
+    let unknown = miri::over_stops(
+        &[reported(
+            "geom-num",
+            "planted::none",
+            miri::Outcome::Passed(1),
+        )],
+        &rows,
+        (1, 1),
+        miri::BUDGET,
+    )
+    .over;
+    assert_eq!(unknown, ["geom-num planted::none: no finishing row"]);
+}
+
+/// What a Miri gate job's steps lack of the yardstick (32.78), one line a fault.
+fn yardstick_faults(w: &Yaml, job: &str) -> Vec<String> {
+    let runs: Vec<String> = w["jobs"][job]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .map(|s| s["run"].as_str().unwrap_or("").to_owned())
+        .collect();
+    yardstick_faults_in(job, &runs)
+}
+
+/// [`yardstick_faults`] of a job's steps' `run:` scripts, in order (a step with none is empty).
+fn yardstick_faults_in(job: &str, runs: &[String]) -> Vec<String> {
+    let (yb, yt) = miri::YARDSTICK;
+    let at = |needle: &str| runs.iter().position(|r| r.contains(needle));
+    let mut out = Vec::new();
+    let (Some(scale), Some(tests)) = (at("kernel-quality miri-scale"), at("timeout --signal=TERM"))
+    else {
+        return vec![format!("{job}: no yardstick step, or no tests' step")];
+    };
+    if scale >= tests {
+        out.push(format!("{job}: the yardstick runs after the tests"));
+    }
+    let step = &runs[scale];
+    for needle in [
+        "/proc/cpuinfo".to_owned(),
+        format!("cargo miri nextest run --locked -p {yb} --profile miri-yardstick"),
+        format!("-E 'test(={yt})'"),
+        "--report target/nextest/miri-yardstick/junit.xml".to_owned(),
+    ] {
+        if !step.contains(&needle) {
+            out.push(format!("{job}: the yardstick step lacks {needle}"));
+        }
+    }
+    let judged = runs.iter().any(|r| {
+        r.contains("kernel-quality miri-stopped")
+            && r.contains("--yardstick target/nextest/miri-yardstick/junit.xml")
+    });
+    if !judged {
+        out.push(format!("{job}: its stops are not judged at its scale"));
+    }
+    out
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn every_miri_gate_job_prints_its_processor_and_judges_each_test_at_its_scale() {
+    let w = workflow();
+    for job in ["miri", "miri-pool"] {
+        assert_eq!(yardstick_faults(&w, job), Vec::<String>::new());
+    }
+    // The yardstick's profile reports to its own file and counts a stopped yardstick as timed out.
+    let profile = &toml_file(".config/nextest.toml")["profile"]["miri-yardstick"];
+    assert_eq!(profile["junit"]["path"].as_str(), Some("junit.xml"));
+    assert!(profile["slow-timeout"].get("on-timeout").is_none());
+    // Planted: a job without the processor's name, one without its scale's judge, one whose
+    // yardstick runs after its tests.
+    let text = read(".github/workflows/kernel-quality.yml");
+    let plant = |from: &str, to: &str| {
+        assert!(text.contains(from), "{from}");
+        let mut docs = YamlLoader::load_from_str(&text.replacen(from, to, 1)).unwrap();
+        docs.remove(0)
+    };
+    let no_cpu = plant("grep -m1 '^model name' /proc/cpuinfo", "true");
+    assert!(!yardstick_faults(&no_cpu, "miri").is_empty());
+    let no_judge = plant("--yardstick target/nextest/miri-yardstick/junit.xml", "");
+    assert!(!yardstick_faults(&no_judge, "miri").is_empty());
+    let mut late: Vec<String> = w["jobs"]["miri-pool"]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .map(|s| s["run"].as_str().unwrap_or("").to_owned())
+        .collect();
+    assert!(yardstick_faults_in("miri-pool", &late).is_empty());
+    let at = late.iter().position(|r| r.contains("miri-scale")).unwrap();
+    let step = late.remove(at);
+    late.push(step);
+    assert!(!yardstick_faults_in("miri-pool", &late).is_empty());
+}
