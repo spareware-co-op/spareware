@@ -441,7 +441,10 @@ fn the_webassembly_job_runs_the_same_cases_against_the_same_named_faults() {
             "counts a trap as a named fault",
         ),
         (
-            "named faults of tests/named-faults.json.\"\n            exit 1\n          fi\n          test \"$ran\" -ge 111\n\n  # The goldens",
+            &format!(
+                "named faults of tests/named-faults.json.\"\n            exit 1\n          fi\n          test \"$ran\" -ge {}\n\n  # The goldens",
+                tests_of_geom_solidcore()
+            ),
             "named faults of tests/named-faults.json.\"\n            exit 1\n          fi\n          test \"$ran\" -ge 3\n\n  # The goldens",
             "as many tests as solidcore",
         ),
