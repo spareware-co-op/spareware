@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Spare Kit geometry kernel: the map</title>
+<link rel="stylesheet" href="./tokens.css">
+<style>
+/* The kernel map in the progress page's look: one tree, top to bottom, from the shared tokens. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #ECEAE6; --ink-2: #B4B0A8; --page: #141312; --panel: #1E1C1A; --panel-alt: #262422;
+    --sink: #2E2B28; --hairline: #3A3734; --rule: #55514C;
+    --spare-red: #F0566C; --spare-red-tint: #3A1C22;
+    --info: #7FA6FF; --info-tint: #1C2640; --success: #5BC47E; --success-tint: #17301F;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.5;
+  padding: 20px max(16px, env(safe-area-inset-right, 0px)) 32px max(16px, env(safe-area-inset-left, 0px)); }
+a { color: var(--spare-red); }
+.wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 0; }
+header { margin-bottom: 16px; }
+h1 { font-size: clamp(24px, 4vw, 34px); margin: 0; text-wrap: balance; }
+h1 a { color: inherit; text-decoration: none; }
+.sub { color: var(--ink-2); margin: 2px 0 0; max-width: 64ch; }
+.tier { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.tier > h2 { font-size: 17px; margin: 0; text-wrap: balance; }
+.tier > h2 .step { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); font-weight: 400; margin-right: 6px; }
+.link { height: 28px; position: relative; display: flex; justify-content: center; }
+.link::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; border-left: 2px solid var(--rule); }
+.link span { position: relative; align-self: center; background: var(--page); color: var(--ink-2); font-size: 12px; padding: 0 8px; }
+.boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 8px; }
+.box { background: var(--panel-alt); border: 1px solid var(--hairline); border-left: 3px solid var(--rule); border-radius: var(--radius);
+  padding: 8px 10px; display: grid; gap: 2px; min-width: 0; }
+.box .for { font-size: 14px; }
+.box .nm { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
+.box.app { border-left-color: var(--spare-red); }
+.box.app .nm.big { font-family: var(--font-ui); font-size: 18px; font-weight: 700; color: var(--ink); order: -1; }
+.layer { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+.layer:first-of-type { border-top: 0; padding-top: 0; }
+.layer h3 { font-size: 15px; margin: 0; font-weight: 600; }
+.pn { color: var(--ink-2); font-weight: 400; margin-right: 4px; font-size: 13px; }
+.why { color: var(--ink-2); font-size: 13px; margin: 0; }
+.src { display: block; font-size: 12px; }
+.engines { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 10px; }
+.engine { border: 1px solid var(--hairline); border-top: 4px solid var(--rule); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 6px; align-content: start; min-width: 0; background: var(--panel-alt); }
+.engine.core { border-top-color: var(--spare-red); }
+.engine.sc { border-top-color: var(--info); }
+.engine h3 { font-size: 16px; margin: 0; }
+.engine .count { font-size: 13px; color: var(--ink-2); }
+.facts { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-2); display: grid; gap: 2px; }
+.facts code, .why code { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+ul.ops { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+ul.ops li { overflow-wrap: anywhere; }
+.opn { font-weight: 500; }
+.id { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
+.badges { display: inline-flex; gap: 3px; flex-wrap: wrap; vertical-align: 1px; }
+.cls { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .02em; padding: 0 6px; border-radius: 9px; border: 1px solid; white-space: nowrap; }
+.c-exact { color: var(--success); background: var(--success-tint); border-color: var(--success); }
+.c-certified { color: var(--info); background: var(--info-tint); border-color: var(--info); }
+.c-approximate { color: var(--spare-red); background: var(--spare-red-tint); border-color: var(--spare-red); }
+.c-none { color: var(--ink-2); background: var(--sink); border-color: var(--rule); }
+ul.classes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+details summary { cursor: pointer; font-size: 13px; color: var(--spare-red); width: max-content; max-width: 100%; }
+details h4 { font-size: 12px; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); font-weight: 600; }
+details > ul:not(.ops) { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+:focus-visible { outline: 2px solid var(--spare-red); outline-offset: 2px; }
+footer { font-size: 12px; color: var(--ink-2); display: grid; gap: 4px; margin-top: 16px; }
+footer p { margin: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><a href="./">Spareware</a> · The kernel map</h1>
+    <p class="sub">How the geometry kernel fits together, from the programs at the top down to the files at the bottom. Each box says what that part is for. The page is drawn from the kernel's own files on every change to main, so it shows what is there today.</p>
+    <p class="sub"><a href="./kernel-progress.html">The progress page: how far each part has come</a></p>
+  </header>
+
+  <section class="tier" aria-labelledby="t-apps">
+    <h2 id="t-apps"><span class="step">1</span> The programs that use it: {{PROGRAM}}</h2>
+    <div class="boxes">{{APPS}}</div>
+    <p class="why">{{APPS_NOTE}}</p>
+  </section>
+  <div class="link" aria-hidden="true"><span>they call</span></div>
+
+  <section class="tier" aria-labelledby="t-iface">
+    <h2 id="t-iface"><span class="step">2</span> {{IFACE_TITLE}}</h2>
+    <p class="why">The kernel's one front door. Programs never reach past it, so what is behind it can change without them changing.</p>
+    <div class="boxes">{{IFACE_CRATES}}</div>
+    <details><summary>The {{IFACE_COUNT}} operations programs can call today</summary><ul>{{IFACE_FAMILIES}}</ul></details>
+  </section>
+  <div class="link" aria-hidden="true"><span>built on</span></div>
+
+  <section class="tier" aria-labelledby="t-crates">
+    <h2 id="t-crates"><span class="step">3</span> Our parts, in layers</h2>
+    <p class="why">Each part leans only on the layers below it. Hold a finger on a box, or point at it, to see its job in the kernel's own words.</p>
+    {{LAYERS}}
+  </section>
+  <div class="link" aria-hidden="true"><span>answered by</span></div>
+
+  <section class="tier" aria-labelledby="t-engines">
+    <h2 id="t-engines"><span class="step">4</span> The two engines underneath</h2>
+    <p class="why">Every operation is listed once, under the engine that answers it today, with the class of its answer.</p>
+    <div class="engines">
+      <div class="engine core">
+        <h3>{{CORE_NAME}}</h3>
+        <p class="why">{{CORE_FOR}}</p>
+        <p class="count">Answers {{CORE_COUNT}} operations.</p>
+        {{CORE_OPS}}
+      </div>
+      <div class="engine sc">
+        <h3>{{SC_NAME}}</h3>
+        <p class="why">{{SC_FOR}}</p>
+        <ul class="facts">
+          <li>Behind our wrapper, <code>{{SC_WRAPPER}}</code>: no part of it reaches a program.</li>
+          <li>Taken whole at one pinned commit, <code title="{{SC_PIN_FULL}}">{{SC_PIN}}</code>, of our own copy (<code>{{SC_FORK}}</code>, licence {{SC_LICENCE}}).</li>
+          <li>Our tests are the judge: {{SC_CASES}} stored cases, of which {{SC_FAULT_CASES}} fail by {{SC_FAULTS}} named faults. An operation counts as done only when every one of our cases for it passes, on Linux and in the browser.</li>
+          <li>Its answers are <span class="cls c-{{SC_CLASS_KEY}}">{{SC_CLASS}}</span>: {{SC_WHY}} The stated tolerances: {{SC_TOLERANCES}}.</li>
+        </ul>
+        <p class="count">Answers {{SC_COUNT}} operations.</p>
+        {{SC_OPS}}
+      </div>
+    </div>
+    <div class="engine">
+      <h3>{{NONE_NAME}}</h3>
+      <p class="why">{{NONE_FOR}}: {{NONE_COUNT}} operations.</p>
+      <details><summary>Held back by our tests ({{HELD_COUNT}})</summary>{{HELD_OPS}}</details>
+      <details><summary>Not working yet ({{NOT_YET_COUNT}})</summary>{{NOT_YET_OPS}}</details>
+    </div>
+    <details><summary>What the classes mean</summary><ul class="classes">{{CLASSES}}</ul></details>
+  </section>
+  <div class="link" aria-hidden="true"><span>saved and shared as</span></div>
+
+  <section class="tier" aria-labelledby="t-files">
+    <h2 id="t-files"><span class="step">5</span> {{FORMATS_TITLE}}</h2>
+    <p class="why">{{FORMATS_NAME}}: our own file, and the files of other programs.</p>
+    <div class="boxes">{{FORMATS}}</div>
+  </section>
+
+  <footer>
+    <p>Drawn from <code>MAP.json</code> (every part and its layer), chapter 27's layer table, the interface's own list of operations (<code>engine-geometry/generated/mcp-tools.json</code>), <code>tools/kernel-progress/operations.json</code> and the progress page's states, chapter 9's classes, and the wrapper's <code>Cargo.toml</code> and tests. The plain words are in <code>tools/kernel-progress/map.json</code>; the build stops if any part, operation or class has none.</p>
+    <p>Last built {{BUILT}}, by <code>tools/kernel-progress/build_map.py</code> on every push to main.</p>
+  </footer>
+</div>
+</body>
+</html>
