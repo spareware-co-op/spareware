@@ -1398,3 +1398,18 @@ Guarded by planted cases (`geom-test`'s `tests/oracle_meshes.rs`): a solid that 
 4. The quality ledger's seven mutants of the moved lines name `Tint::sum_partial_products`, where cargo-mutants now finds them; their line texts and reasons are unchanged.
 
 **Changes:** this record; geom-num's `math/atan2.rs` (`Tint::mul`, `Tint::partial_products`, `Tint::sum_partial_products`, `proofs::mul_keeps_every_carry`, `proofs::partial_products_are_the_six_products`); `quality-ledger.json` (seven mutant names); `kernel-fuzz.yml`'s comment on the proofs and the new proof's row in its matrix.
+
+## 32.84 A solid's vertex is one fan of one shell (issue #1005)
+
+**Decided by the main session, 19 Nov 2026** (its brief to the lane `checker-vertex`), from chapter 8.1 (General is "mixed and non-manifold") and chapter 16 (faces that share only a vertex are non-manifold).
+
+**What it was.** The checker refused a solid with an edge of more than two fins (group 1, `FinCount`), but passed a solid whose vertex two shells share, or where the faces of one shell make two fans: two cubes touching at a corner, united, were a solid that passed the full check (found by the work on #1001).
+
+**What it decides.**
+1. A corner is where a fin ends and the next fin of its loop starts. Two corners at a vertex are of one fan when a chain of edges at the vertex, each used by both of two corners in the chain, joins them. In a body of kind Solid every vertex's corners are of one fan and one shell; a vertex with corners in two shells, or in two fans of one shell, makes the body General, never Solid. It is the rule geom-solidcore's conversion gives a body its kind by (#1001's `non_manifold`), so the two agree, an edge that starts and ends at one vertex having one end there in both.
+2. Group 1 holds the rule beside the fin partners it already judges against the body's kind (`geom-check/src/combinatorial.rs`, `fans`), with two fault kinds, `VertexShells` and `VertexFans`, each at the vertex and naming the first fin whose corner differs from the vertex's first. Its cost is linear in the corners plus the set operations with path halving, and its scratch two words per edge and two per vertex, which is now the cube's largest need (40 words, not 36).
+3. The checker's work units rise by two per fin and one per vertex of a solid. On decision 32.48's 30 bodies less than exact the full set is now 4,737 units against the cheap groups' 2,550, and the largest of each kind are a box 578 (cheap 283), a prism 578 (283), a cylinder 88 (56), a cone 50 (31), a sphere 12 (6) and a torus 63 (49); `geom-test/tests/shipped.rs` holds them in place of 32.48's "With G134" numbers.
+
+**Found, not changed here.** geom-bool's unions of boxes that touch only at a corner are published as solids of two shells sharing that vertex (geom-poly's `publish_with` reads a pinch within one shell only), and the checker now refuses them: geom-bool's `boxes_that_share_only_an_edge_or_a_corner_are_not_nudged_apart`, `any_boxes_keep_their_volumes` and `many_at_once_is_one_after_another_in_any_order`, and geom-test's `laws_booleans` tests that build such unions. Each is that operation's fault, for its own issue.
+
+**Changes:** this record; geom-check's `combinatorial.rs` (`fans`, `corner`, `slot`, `words`), `report.rs` (`VertexShells`, `VertexFans`), `run.rs` (its cost), tests `faults.rs`, `memory.rs`, `attack_g102.rs`, `attack_g134.rs`; geom-test's `tests/shipped.rs`; chapter 8.3's group 1 text; MAP.json.
