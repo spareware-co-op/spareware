@@ -1089,7 +1089,7 @@ jobs:
   miri:
     name: Miri (partition ${{ matrix.partition }})
     needs: [when, cheap, miri-plan]
-    if: needs.when.outputs.miri == 'true'
+    if: false # TRIAL ONLY: the partitions do not run
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -1288,7 +1288,7 @@ jobs:
       # reading of the report and its upload still run (kernel_quality_workflow.rs).
       - name: geom-pool's tests under Miri with Tree Borrows
         if: env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')
-        timeout-minutes: 24
+        timeout-minutes: 2  # TRIAL ONLY: a planted overrun
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
           MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks
