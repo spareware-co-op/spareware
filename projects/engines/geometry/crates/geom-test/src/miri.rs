@@ -998,11 +998,63 @@ pub fn write_table(
     listed: Option<&[(String, String)]>,
     note: Option<&str>,
 ) -> Result<String, String> {
+    write_table_parts(old, &[(report, scale)], stop, listed, note)
+}
+
+/// The scale that turns a measuring job's seconds into yardstick seconds (32.78): the inverse of
+/// the job's [`job_scale`] from its yardstick run's report, `yardstick`, against the yardstick's
+/// row in `rows`. A test of `s` seconds in such a job is stored as `s` over the job's scale.
+///
+/// # Errors
+///
+/// As [`job_scale`]: a missing yardstick time is an error, never a default, and a runner over
+/// [`SCALE_MOST`] is too slow to judge.
+pub fn to_yardstick_seconds(rows: &[Row], yardstick: &[Reported]) -> Result<(u64, u64), String> {
+    let (num, den) = job_scale(rows, yardstick)?;
+    Ok((den, num))
+}
+
+/// One measuring report made ready for [`write_table_parts`] in yardstick seconds (32.78,
+/// `kernel-quality miri-times --yardstick`): its tests, with the scale of its own job's yardstick
+/// report `yardstick` ([`to_yardstick_seconds`] against `rows`, the table before the run), so the
+/// same work measured on a slow runner and on a fast one gives the same row. The yardstick's own
+/// row is the unit and stays as it is: the yardstick in `report` is left out.
+///
+/// # Errors
+///
+/// As [`to_yardstick_seconds`].
+pub fn in_yardstick_seconds(
+    rows: &[Row],
+    report: &[Reported],
+    yardstick: &[Reported],
+) -> Result<(Vec<Reported>, (u64, u64)), String> {
+    let scale = to_yardstick_seconds(rows, yardstick)?;
+    let (yb, yt) = YARDSTICK;
+    let tests = report
+        .iter()
+        .filter(|r| !(r.binary == yb && r.test == yt))
+        .cloned()
+        .collect();
+    Ok((tests, scale))
+}
+
+/// [`write_table`] of several reports, each at its own scale.
+///
+/// # Errors
+///
+/// As [`write_table`].
+pub fn write_table_parts(
+    old: &str,
+    parts: &[(&[Reported], (u64, u64))],
+    stop: u64,
+    listed: Option<&[(String, String)]>,
+    note: Option<&str>,
+) -> Result<String, String> {
     let (mut comments, rows, pending) = parse_old(old)?;
     if let Some(note) = note {
         comments.push(format!("# {note}"));
     }
-    let rows = measured(&rows, report, scale, stop)?;
+    let rows = measured_parts(&rows, parts, stop)?;
     let known: BTreeSet<(&str, &str)> = rows
         .iter()
         .map(|r| (r.binary.as_str(), r.test.as_str()))
@@ -1040,6 +1092,19 @@ pub fn measured(
     scale: (u64, u64),
     stop: u64,
 ) -> Result<Vec<Row>, String> {
+    measured_parts(rows, &[(report, scale)], stop)
+}
+
+/// [`measured`] of several reports, each at its own scale; a test two reports name is an error.
+///
+/// # Errors
+///
+/// As [`write_table`].
+pub fn measured_parts(
+    rows: &[Row],
+    parts: &[(&[Reported], (u64, u64))],
+    stop: u64,
+) -> Result<Vec<Row>, String> {
     let stop_ms = stop.checked_mul(1000).ok_or("stop overflows")?;
     let mut table: BTreeMap<(String, String), State> = rows
         .iter()
@@ -1047,7 +1112,10 @@ pub fn measured(
         .collect();
     let mut failed = Vec::new();
     let mut seen = BTreeSet::new();
-    for r in report {
+    for (r, scale) in parts
+        .iter()
+        .flat_map(|(report, scale)| report.iter().map(move |r| (r, *scale)))
+    {
         if !plain(&r.binary) || !plain(&r.test) {
             return Err(format!("a name a filterset could misread: {r:?}"));
         }

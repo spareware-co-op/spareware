@@ -253,9 +253,19 @@ enum Command {
         /// The reports (`target/nextest/<profile>/junit.xml`).
         #[arg(long, value_name = "JUNIT.xml", required = true)]
         report: Vec<PathBuf>,
-        /// CI seconds for one of the run's seconds, as a decimal: 1 for a CI run's own reports.
+        /// CI seconds for one of the run's seconds, as a decimal, for every report alike: a
+        /// development machine's run measured against a CI runner. Not with `--yardstick`.
+        #[arg(
+            long,
+            required_unless_present = "yardstick",
+            conflicts_with = "yardstick"
+        )]
+        scale: Option<String>,
+        /// Stores each report's tests in yardstick seconds (32.78): each report's own job scale
+        /// is read from the `yardstick.xml` beside it (its job's yardstick run, as each measuring
+        /// part uploads it). A report with none beside it is an error, never a default.
         #[arg(long)]
-        scale: String,
+        yardstick: bool,
         /// The run's stop for one test, in its own seconds (its profile's slow timeout).
         #[arg(long)]
         stop: u64,
@@ -922,6 +932,7 @@ fn run(cli: Cli) -> Result<bool, String> {
         Command::MiriTimes {
             report,
             scale,
+            yardstick,
             stop,
             note,
             list,
@@ -935,25 +946,49 @@ fn run(cli: Cli) -> Result<bool, String> {
                 Some(file) => Some(read_listing(file)?),
                 None => None,
             };
-            let mut reported = Vec::new();
+            // Each report with the scale that turns its seconds into the table's: its own job's
+            // yardstick (32.78), or one scale given for every report.
+            let table_rows = geom_test::miri::parse_old(&old)?.1;
+            let mut parts = Vec::new();
             for file in &report {
-                let xml = std::fs::read_to_string(file)
-                    .map_err(|e| format!("{}: {e}", file.display()))?;
-                reported.extend(
-                    geom_test::miri::read_junit(&xml)
-                        .map_err(|e| format!("{}: {e}", file.display()))?,
-                );
+                let tests = read_report(file)?;
+                if yardstick {
+                    let beside = file.with_file_name("yardstick.xml");
+                    if !beside.is_file() {
+                        return Err(format!(
+                            "{}: no yardstick.xml beside it, so no scale for its tests",
+                            file.display()
+                        ));
+                    }
+                    let part = geom_test::miri::in_yardstick_seconds(
+                        &table_rows,
+                        &tests,
+                        &read_report(&beside)?,
+                    )
+                    .map_err(|e| format!("{}: {e}", beside.display()))?;
+                    // The part's scale is the inverse of its job's: (the job's den, its num).
+                    let (job_den, job_num) = part.1;
+                    println!(
+                        "{}: its job's scale {}",
+                        file.display(),
+                        geom_test::miri::scale_text((job_num, job_den))
+                    );
+                    parts.push(part);
+                } else {
+                    let text = scale.as_deref().ok_or("--scale or --yardstick is needed")?;
+                    parts.push((tests, geom_test::miri::parse_scale(text)?));
+                }
             }
-            let scale = geom_test::miri::parse_scale(&scale)?;
-            let text = geom_test::miri::write_table(
+            let parts: Vec<(&[geom_test::miri::Reported], (u64, u64))> =
+                parts.iter().map(|(t, s)| (t.as_slice(), *s)).collect();
+            let text = geom_test::miri::write_table_parts(
                 &old,
-                &reported,
-                scale,
+                &parts,
                 stop,
                 listed.as_deref(),
                 note.as_deref(),
             )?;
-            let of_report = geom_test::miri::measured(&[], &reported, scale, stop)?;
+            let of_report = geom_test::miri::measured_parts(&[], &parts, stop)?;
             let report_finish = geom_test::miri::finishing(&of_report).len();
             println!(
                 "the reports measured {} tests: {report_finish} finish under Miri, {} native-only",

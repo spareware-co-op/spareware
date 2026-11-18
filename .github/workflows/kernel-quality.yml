@@ -103,7 +103,10 @@ name: Kernel quality
 #   gh run download <run id> -p 'miri-measure-[0-9]*' -D measure/parts
 #   reports=(); for f in measure/parts/*/junit-*.xml; do reports+=(--report "$f"); done
 #   cargo run -p geom-test --bin kernel-quality -- miri-times "${reports[@]}" \
-#     --scale 1 --stop 600 --list measure/plan/miri-list.json --note "<the run, its ref and commit>"
+#     --yardstick --stop 600 --list measure/plan/miri-list.json --note "<the run, its ref and commit>"
+#
+# Each part runs the yardstick first (32.78) and uploads its report as yardstick.xml beside its
+# own, so `--yardstick` stores each part's rows in yardstick seconds, over that part's own scale.
 #
 # Every pull request and queued change runs this workflow, so its last job, `done` ("Kernel quality
 # checks pass"), always reports: main's ruleset requires it (.github/rulesets/protect-main.json).
@@ -1501,6 +1504,22 @@ jobs:
         with:
           name: miri-measure-plan
           path: ${{ runner.temp }}/measure
+      # The yardstick, as in each gate job (32.78): the runner's processor and this part's scale,
+      # its report kept as yardstick.xml beside the part's reports, so `kernel-quality miri-times
+      # --yardstick` stores this part's rows in yardstick seconds, each over this part's own scale.
+      - name: The runner's processor and Miri's scale (part ${{ matrix.part }})
+        timeout-minutes: 12
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          grep -m1 '^model name' /proc/cpuinfo
+          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \
+            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'
+          mkdir -p target/nextest/miri-measure-ci
+          mv target/nextest/miri-yardstick/junit.xml target/nextest/miri-measure-ci/yardstick.xml
+          cargo run --locked -q -p geom-test --bin kernel-quality -- miri-scale \
+            --report target/nextest/miri-measure-ci/yardstick.xml | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Measure this part's tests under Miri (part ${{ matrix.part }})
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
@@ -1535,7 +1554,9 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: miri-measure-${{ matrix.part }}
-          path: target/nextest/miri-measure-ci/junit-*.xml
+          path: |
+            target/nextest/miri-measure-ci/junit-*.xml
+            target/nextest/miri-measure-ci/yardstick.xml
           retention-days: 3
           if-no-files-found: error
       - name: Every test finished or was stopped, none failed
@@ -1546,7 +1567,7 @@ jobs:
           reports=()
           for f in target/nextest/miri-measure-ci/junit-*.xml; do reports+=(--report "$f"); done
           cargo run --locked -q -p geom-test --bin kernel-quality -- miri-times \
-            "${reports[@]}" --scale 1 --stop 600 --dry-run
+            "${reports[@]}" --yardstick --stop 600 --dry-run
 
   miri-measure-2:
     name: Miri's measuring run (part ${{ matrix.part }})
@@ -1597,6 +1618,22 @@ jobs:
         with:
           name: miri-measure-plan
           path: ${{ runner.temp }}/measure
+      # The yardstick, as in each gate job (32.78): the runner's processor and this part's scale,
+      # its report kept as yardstick.xml beside the part's reports, so `kernel-quality miri-times
+      # --yardstick` stores this part's rows in yardstick seconds, each over this part's own scale.
+      - name: The runner's processor and Miri's scale (part ${{ matrix.part }})
+        timeout-minutes: 12
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          grep -m1 '^model name' /proc/cpuinfo
+          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \
+            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'
+          mkdir -p target/nextest/miri-measure-ci
+          mv target/nextest/miri-yardstick/junit.xml target/nextest/miri-measure-ci/yardstick.xml
+          cargo run --locked -q -p geom-test --bin kernel-quality -- miri-scale \
+            --report target/nextest/miri-measure-ci/yardstick.xml | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Measure this part's tests under Miri (part ${{ matrix.part }})
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
@@ -1631,7 +1668,9 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: miri-measure-${{ matrix.part }}
-          path: target/nextest/miri-measure-ci/junit-*.xml
+          path: |
+            target/nextest/miri-measure-ci/junit-*.xml
+            target/nextest/miri-measure-ci/yardstick.xml
           retention-days: 3
           if-no-files-found: error
       - name: Every test finished or was stopped, none failed
@@ -1642,7 +1681,7 @@ jobs:
           reports=()
           for f in target/nextest/miri-measure-ci/junit-*.xml; do reports+=(--report "$f"); done
           cargo run --locked -q -p geom-test --bin kernel-quality -- miri-times \
-            "${reports[@]}" --scale 1 --stop 600 --dry-run
+            "${reports[@]}" --yardstick --stop 600 --dry-run
 
   # The one check main's ruleset requires of this workflow: it fails if any job failed or was
   # cancelled, or if a gate `when` chose did not run, and when mutation and coverage both passed on

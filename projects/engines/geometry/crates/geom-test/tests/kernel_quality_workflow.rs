@@ -3172,3 +3172,85 @@ fn every_miri_gate_job_prints_its_processor_and_judges_each_test_at_its_scale() 
         Vec::<String>::new()
     );
 }
+
+#[test]
+fn a_measuring_report_is_stored_in_yardstick_seconds_by_its_own_jobs_scale() {
+    let (yb, yt) = miri::YARDSTICK;
+    // The table before the run: the yardstick's row, 36 s, and one planted test.
+    let old = format!("36\t{yb}\t{yt}\n100\tgeom-num\tplanted::work\n");
+    let rows = miri::parse_old(&old).unwrap().1;
+    let yard = |ms: u64| vec![reported(yb, yt, miri::Outcome::Passed(ms))];
+    let work = |test: &str, ms: u64| reported("geom-num", test, miri::Outcome::Passed(ms));
+    let stored = |text: &str, test: &str| {
+        miri::parse_table(text)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.test == test)
+            .map(|r| r.state)
+    };
+    // The same real work on a runner twice as slow (its yardstick 72 s) and on one twice as fast
+    // (18 s) is stored as the same row, 100 yardstick seconds.
+    let slow = miri::in_yardstick_seconds(&rows, &[work("planted::work", 200_000)], &yard(72_000))
+        .unwrap();
+    let fast =
+        miri::in_yardstick_seconds(&rows, &[work("planted::work", 50_000)], &yard(18_000)).unwrap();
+    let on_slow = miri::write_table_parts(&old, &[(&slow.0, slow.1)], 600, None, None).unwrap();
+    let on_fast = miri::write_table_parts(&old, &[(&fast.0, fast.1)], 600, None, None).unwrap();
+    assert_eq!(on_slow, on_fast);
+    assert_eq!(
+        stored(&on_slow, "planted::work"),
+        Some(miri::State::Finishes(100))
+    );
+    // Two reports of one run, each at its own job's scale, applied to its own rows only.
+    let a =
+        miri::in_yardstick_seconds(&rows, &[work("planted::a", 120_000)], &yard(72_000)).unwrap();
+    let b =
+        miri::in_yardstick_seconds(&rows, &[work("planted::b", 120_000)], &yard(18_000)).unwrap();
+    let both = miri::write_table_parts(&old, &[(&a.0, a.1), (&b.0, b.1)], 600, None, None).unwrap();
+    assert_eq!(stored(&both, "planted::a"), Some(miri::State::Finishes(60)));
+    assert_eq!(
+        stored(&both, "planted::b"),
+        Some(miri::State::Finishes(240))
+    );
+    // The yardstick's own row is the unit: its time in a report leaves it as it was.
+    let with_yard = miri::in_yardstick_seconds(
+        &rows,
+        &[
+            work("planted::work", 200_000),
+            reported(yb, yt, miri::Outcome::Passed(80_000)),
+        ],
+        &yard(72_000),
+    )
+    .unwrap();
+    assert_eq!(with_yard.0.len(), 1);
+    let kept =
+        miri::write_table_parts(&old, &[(&with_yard.0, with_yard.1)], 600, None, None).unwrap();
+    assert_eq!(stored(&kept, yt), Some(miri::State::Finishes(36)));
+    // A missing scale is an error, never a default: no yardstick in its report, the yardstick
+    // stopped or failed, no yardstick row in the table, or a runner too slow to judge.
+    let tests = [work("planted::work", 1)];
+    assert!(miri::in_yardstick_seconds(&rows, &tests, &[]).is_err());
+    assert!(
+        miri::in_yardstick_seconds(
+            &rows,
+            &tests,
+            &[reported(yb, yt, miri::Outcome::TimedOut(600_000))]
+        )
+        .is_err()
+    );
+    assert!(
+        miri::in_yardstick_seconds(
+            &rows,
+            &tests,
+            &[reported(yb, yt, miri::Outcome::Failed("panic".into()))]
+        )
+        .is_err()
+    );
+    let no_row = miri::parse_old("100\tgeom-num\tplanted::work\n").unwrap().1;
+    assert!(miri::in_yardstick_seconds(&no_row, &tests, &yard(36_000)).is_err());
+    assert!(miri::in_yardstick_seconds(&rows, &tests, &yard(108_001)).is_err());
+    assert_eq!(
+        miri::to_yardstick_seconds(&rows, &yard(108_000)),
+        Ok((36_000, 108_000))
+    );
+}
