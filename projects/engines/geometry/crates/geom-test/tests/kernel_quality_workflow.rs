@@ -59,8 +59,10 @@
 //!   (the plan holds its tests to a partition's seconds), has its own limit,
 //!   `geom_test::miri::TESTS_STEP_MINUTES`, over what the plan gives a partition and under the
 //!   job's limit by the set-up and the first upload's bound, so an overrun fails in that step and
-//!   the reading of its report and the upload still run. Shown by planted changes (no limit, the
-//!   job's limit, a limit under the plan's, an unbounded upload).
+//!   the reading of its report and the upload still run; its tests are stopped with SIGTERM a
+//!   minute before that limit (`TESTS_RUN_SECONDS`), so nextest writes the report they read.
+//!   Shown by planted changes (no limit, the job's limit, a limit under the plan's, an unbounded
+//!   upload, no SIGTERM or a later one).
 //! - **A later push judges what it can reach.** `geom_test::increment` judges again every file of
 //!   the change whose crate's tests what changed since the last clean head reaches, held here to
 //!   planted changes that must be judged (a changed line, a changed test, a removed ledger entry,
@@ -2617,6 +2619,16 @@ fn miri_tests_limit_problems(text: &str) -> Vec<String> {
             found.push(format!("{name} has no tests' step"));
             continue;
         };
+        let sigterm = format!(
+            "timeout --signal=TERM --kill-after=30 {} {command}",
+            miri::TESTS_RUN_SECONDS
+        );
+        if !run_of(tests).contains(&sigterm) {
+            found.push(format!(
+                "{name}'s tests are not stopped with SIGTERM after {} s",
+                miri::TESTS_RUN_SECONDS
+            ));
+        }
         let step = tests["timeout-minutes"].as_i64();
         if step != i64::try_from(miri::TESTS_STEP_MINUTES).ok() {
             found.push(format!(
@@ -2673,8 +2685,20 @@ fn a_partition_that_overruns_fails_in_its_tests_step_with_its_log_kept() {
     let pool_upload = format!(
         "        if: ${{{{ !cancelled() }}}}\n{bound}        with:\n          name: miri-pool\n"
     );
+    let term = "          timeout --signal=TERM --kill-after=30 1380 \\\n            cargo miri nextest run";
+    let pool_term = format!("{term} --locked -p geom-pool");
     // Seeded violations: each must be reported.
     for (from, to, said) in [
+        (
+            term,
+            "          cargo miri nextest run",
+            "miri's tests are not stopped with SIGTERM after 1380 s",
+        ),
+        (
+            &pool_term as &str,
+            &pool_term.replace("1380", "1500") as &str,
+            "miri-pool's tests are not stopped with SIGTERM after 1380 s",
+        ),
         (
             limited,
             named,

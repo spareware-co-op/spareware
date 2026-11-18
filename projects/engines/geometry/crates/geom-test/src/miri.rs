@@ -151,6 +151,12 @@ pub const BUDGET: u64 = 600;
 /// out the job's limit inside the step, and nothing of it was kept).
 pub const TESTS_STEP_MINUTES: u64 = 24;
 
+/// The seconds after which a Miri gate job's tests' step stops nextest with SIGTERM (coreutils'
+/// `timeout`), a minute before [`TESTS_STEP_MINUTES`]: nextest then ends its tests and writes its
+/// report. GitHub's own stop at the step's limit ends nextest before it writes one (trial run
+/// 44290072805 found no report), so without this an overrun kept its log and lost its report.
+pub const TESTS_RUN_SECONDS: u64 = TESTS_STEP_MINUTES * 60 - 60;
+
 /// `seconds` on a runner [`SLOWER`], rounded up.
 fn on_a_slower_runner(seconds: u64) -> u64 {
     seconds.saturating_mul(SLOWER.0).div_ceil(SLOWER.1)

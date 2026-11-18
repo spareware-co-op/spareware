@@ -1167,8 +1167,13 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             profile=(--profile miri-smoke)
           fi
+          # coreutils' timeout stops nextest with SIGTERM a minute before this step's limit
+          # (`geom_test::miri::TESTS_RUN_SECONDS`): nextest then ends its tests and writes its
+          # report, which GitHub's own stop at the limit does not let it do (trial run
+          # 44290072805: no report). The step's limit stays, for a run that ignores the signal.
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
-          cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
+          timeout --signal=TERM --kill-after=30 1380 \
+            cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
             -E "not package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/part-${{ matrix.partition }}.txt"))"
       # A test nextest stops at the budget is counted as passing (the profiles' `on-timeout =
       # "pass"`), and its report shows a plain pass; a test nobody saw finish is not one (32.68).
@@ -1297,7 +1302,12 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             profile=(--profile miri-smoke)
           fi
-          cargo miri nextest run --locked -p geom-pool "${profile[@]}" \
+          # coreutils' timeout stops nextest with SIGTERM a minute before this step's limit
+          # (`geom_test::miri::TESTS_RUN_SECONDS`): nextest then ends its tests and writes its
+          # report, which GitHub's own stop at the limit does not let it do (trial run
+          # 44290072805: no report). The step's limit stays, for a run that ignores the signal.
+          timeout --signal=TERM --kill-after=30 1380 \
+            cargo miri nextest run --locked -p geom-pool "${profile[@]}" \
             -E "package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/pool.txt"))"
       # As in each partition: every geom-pool test stopped is named as stopped with no verdict,
       # and one not on the list of tests that may stop fails the job (32.68).
