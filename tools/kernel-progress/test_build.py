@@ -2,6 +2,7 @@
 
 Run: python tools/kernel-progress/test_build.py (standard library only; no network).
 """
+import json
 import os
 import sys
 import unittest
@@ -107,11 +108,139 @@ class Counting(unittest.TestCase):
 
     def test_page(self):
         r = build.count(self.phases, {"G10"}, {"G11"}, {})
-        page = build.render(r, {"next": "Next gate: G13.", "source": "Counts what is pushed to GitHub.", "built": "today"})
+        ops = build.operation_states(self.phases, OPS, CASES, FAULTS, build.case_results(CASES, FAULTS), {"G11"}, set())
+        page = build.render(r, {"next": "Next gate: G13.", "source": "Counts what is pushed to GitHub.", "built": "today",
+                                "ops": ops})
         self.assertIn("12%</span>", page)
         self.assertIn("1 on main, 1 built and waiting to land, 1 not started", page)
         self.assertNotIn("{{", page)
         self.assertNotIn(chr(0x2014), page)
+
+
+# A made-up table of operations, stored cases and named faults for the board above.
+OPS = {
+    "operations": [
+        {"piece": "G11", "family": "Make", "name": "Make numbers"},
+        {"piece": "G20", "family": "Make", "name": "Make points"},
+        {"piece": "G21", "family": "Combine", "name": "Join lines"},
+        {"piece": "G22", "family": "Sweep", "name": "Sweep arcs"},
+        {"piece": "G24", "family": "Query", "name": "Search arcs"},
+        {"piece": "G98", "family": "Query", "name": "Not on the board"},
+    ],
+    "wrapper": {"point": {"piece": "G20"}, "join": {"piece": "G21"}, "number": {"piece": "G11"}},
+    "case_pieces": {"odd-1": "G20"},
+    "waiting": [
+        {"case": "w-1", "name": "arc swept", "waits_for": "sweep", "piece": "G22"},
+        {"case": "w-2", "name": "arc swept twice", "waits_for": "sweep", "piece": "G22"},
+        {"case": "p-2", "name": "now a stored case", "waits_for": "points", "piece": "G22"},
+        {"case": "w-3", "name": "for a piece not listed", "waits_for": "lines", "piece": "G23"},
+    ],
+}
+CASES = {"cases": [
+    {"id": "p-1", "operation": "point", "name": "a point"},
+    {"id": "p-2", "operation": "point", "name": "another point"},
+    {"id": "odd-1", "operation": "odd", "name": "linked one by one"},
+    {"id": "j-1", "operation": "join", "name": "two lines joined"},
+    {"id": "j-2", "operation": "join", "name": "two lines apart"},
+    {"id": "n-1", "operation": "number", "name": "a number"},
+    {"id": "x-1", "operation": "fly", "name": "an operation with no piece"},
+]}
+FAULTS = {"faults": [
+    {"case": "j-2", "fault": "SC-9, lines apart are joined: the zone is too wide", "blocks": "join"},
+    {"case": "n-1", "fault": "SC-8, numbers off by one: no reason", "blocks": "number"},
+]}
+
+
+class Operations(unittest.TestCase):
+    def setUp(self):
+        self.phases = build.read_board(BOARD_JSON, BOARD_MD)
+
+    def states(self, results=None, main=frozenset({"G11"}), landing=frozenset({"G24"})):
+        results = build.case_results(CASES, FAULTS) if results is None else results
+        ops = build.operation_states(self.phases, OPS, CASES, FAULTS, results, set(main), set(landing))
+        return ops, {r["piece"]: r for r in ops["rows"]}
+
+    def test_the_four_states(self):
+        ops, rows = self.states()
+        # G11 is ours on main, though solidcore has a named fault on it: our own work counts first.
+        # G20: every case passes on both targets. G21: a named fault. G22: cases waiting. G24: none.
+        self.assertEqual({p: r["state"] for p, r in rows.items()},
+                         {"G11": build.OURS, "G20": build.SC_DONE, "G21": build.SC_HELD, "G22": build.SC_HELD,
+                          "G24": build.NOT_YET})
+        self.assertEqual(ops["total"], {"ours": 1, "solidcore": 1, "held": 2, "none": 1})
+        self.assertEqual((ops["size"], ops["share"]), (5, {"ours": 20, "solidcore": 20, "held": 40, "none": 20}))
+        self.assertEqual(ops["not_on_board"], ["G98"])
+        # G24 is not started by solidcore but built by us and waiting to land, and says so.
+        self.assertTrue(rows["G24"]["landing"])
+        self.assertEqual(ops["landing"], 1)
+        self.assertEqual(build.headline(ops), (
+            "40% of the kernel's 5 operations work today: 20% (1) by our own exact core and 20% (1) by solidcore. "
+            "40% (2) are solidcore's but held back, and 20% (1) do not work yet: 1 built by us and waiting to land, "
+            "and 0 not started.", 40))
+
+    def test_a_named_fault_holds_its_operation_back(self):
+        _, rows = self.states()
+        g21 = rows["G21"]
+        self.assertEqual([(f["code"], f["cases"]) for f in g21["faults"]], [("SC-9", ["j-2"])])
+        self.assertEqual(build.held_reason(g21), "1 of 2 cases pass. Held back: fault SC-9 (lines apart are joined; 1 case).")
+        # Even a result that says the named case passed does not make it done: the list names it as failing.
+        results = {c["id"]: {"linux": True, "wasm": True} for c in CASES["cases"]}
+        self.assertEqual(self.states(results)[1]["G21"]["state"], build.SC_HELD)
+
+    def test_a_case_failing_with_no_named_fault_is_not_done(self):
+        good = build.case_results(CASES, FAULTS)
+        for target in ("linux", "wasm"):
+            results = {k: dict(v) for k, v in good.items()}
+            results["p-1"][target] = False
+            g20 = self.states(results)[1]["G20"]
+            self.assertEqual((g20["state"], g20["unnamed"], g20["faults"]), (build.SC_HELD, ["p-1"], []), target)
+            self.assertIn("1 case fails with no named fault (p-1)", build.held_reason(g20))
+        # A case with no result at all has not been shown to pass.
+        results = {k: v for k, v in good.items() if k != "odd-1"}
+        self.assertEqual(self.states(results)[1]["G20"]["state"], build.SC_HELD)
+
+    def test_waiting_cases_are_counted_and_a_stored_case_is_never_waiting(self):
+        _, rows = self.states()
+        g22 = rows["G22"]
+        self.assertEqual(([w["case"] for w in g22["waiting"]], g22["cases"]), (["w-1", "w-2"], 0))
+        self.assertEqual(build.held_reason(g22), "No case can run yet. Held back: 2 cases wait for the link to "
+                         "solidcore to offer the operation they need: sweep (2).")
+        # p-2 is stored now, so it is judged as a case of point (G20), not as waiting.
+        self.assertEqual((rows["G20"]["cases"], rows["G20"]["passing"]), (3, 3))
+
+    def test_every_case_belongs_to_an_operation_or_is_listed(self):
+        ops, _ = self.states()
+        self.assertEqual(sorted(u["case"] for u in ops["unlinked"]), ["w-3", "x-1"])
+        r = build.count(self.phases, {"G10"}, set(), {})
+        page = build.render(r, {"next": "", "source": "", "built": "", "ops": ops})
+        self.assertIn("Cases linked to no operation (2)", page)
+        self.assertIn("an operation with no piece", page)
+        self.assertIn("missing from the board (1)", page)
+        self.assertIn("40%</span>", page)
+        self.assertIn("Held back: fault SC-9", page)
+
+    def test_shares_add_up(self):
+        self.assertEqual(build.shares({"a": 1, "b": 1, "c": 1}, 3), {"a": 34, "b": 33, "c": 33})
+        self.assertEqual(sum(build.shares({"a": 11, "b": 1, "c": 5, "d": 66}, 83).values()), 100)
+        self.assertEqual(build.shares({"a": 0}, 0), {"a": 0})
+
+
+class RepositoryTable(unittest.TestCase):
+    """The real operations.json against the real board: a typo in it would drop an operation."""
+
+    def test_the_table_names_board_pieces(self):
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+        with open(os.path.join(root, build.BOARD_JSON), encoding="utf-8") as f:
+            board = {p["id"] for p in json.load(f)}
+        with open(build.OPERATIONS, encoding="utf-8") as f:
+            table = json.load(f)
+        ops = [o["piece"] for o in table["operations"]]
+        self.assertEqual(sorted(set(ops) - board), [])
+        self.assertEqual(len(ops), len(set(ops)))
+        linked = [w["piece"] for w in table["wrapper"].values()] + list(table["case_pieces"].values()) + [
+            w["piece"] for w in table["waiting"]]
+        self.assertEqual(sorted(set(linked) - set(ops)), [])
+        self.assertTrue(all(o["name"] and o["family"] for o in table["operations"]))
 
 
 if __name__ == "__main__":
