@@ -590,10 +590,13 @@ def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", check=True).stdout
 
 
-def build(out_path, offline=False):
-    def read(path):
-        with open(path, encoding="utf-8") as f:
-            return f.read()
+def read(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def gather(offline=False):
+    """Everything both pages count: the board's counts, the operations' states and where they came from."""
     board_md = read(BOARD_MD)
     phases = read_board(json.loads(read(BOARD_JSON)), board_md)
     decisions = read_decisions(read(DECISIONS))
@@ -616,6 +619,11 @@ def build(out_path, offline=False):
     now = datetime.datetime.now(datetime.timezone.utc)
     meta = {"next": next_gate(result), "source": source, "ops": ops,
             "built": f"{now:%d %B %Y}, {now:%H:%M} UTC, from main at {sha}"}
+    return result, meta
+
+
+def build(out_path, offline=False):
+    result, meta = gather(offline)
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(render(result, meta))
     return result, meta
