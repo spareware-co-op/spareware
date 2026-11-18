@@ -14,6 +14,9 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
+#[macro_use]
+mod slices;
+
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::Piece;
@@ -909,17 +912,32 @@ proptest! {
             prop_assert_eq!(volume(&test, &classified), counted(&test, &blocks));
         }
     }
+}
 
-    #[test]
-    fn every_box_agrees_with_the_blocks(
-        blocks in prop::collection::vec(any_block(), 1..4),
-        low in [-6i64..6, -6i64..6, -6i64..6],
-        size in [1i64..7, 1i64..7, 1i64..7],
-    ) {
+// Every box agrees with the blocks: in quarters of its one stream of cases (decision 32.78,
+// `slices`).
+sliced!(
+    every_box_agrees_with_the_blocks,
+    ProptestConfig::with_cases(160),
+    (
+        prop::collection::vec(any_block(), 1..4),
+        [-6i64..6, -6i64..6, -6i64..6],
+        [1i64..7, 1i64..7, 1i64..7],
+    ),
+    |(blocks, low, size)| {
         let cell = Cell {
             low,
             high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
         };
         agrees(&blocks, &in_cell(&blocks, &cell));
+        Ok(())
     }
+);
+
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(
+        ProptestConfig::with_cases(160).cases,
+        "a property's 160 cases",
+    );
 }

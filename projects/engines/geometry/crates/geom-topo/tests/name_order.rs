@@ -7,6 +7,9 @@
     clippy::cast_possible_truncation
 )]
 
+#[macro_use]
+mod slices;
+
 use geom_topo::order::{NameKey, OrderError, Permutation};
 use proptest::prelude::*;
 
@@ -30,14 +33,26 @@ proptest! {
         prop_assert_eq!(&a, &b);
         prop_assert!(a.windows(2).all(|w| w[0] < w[1]));
     }
+}
 
-    #[test]
-    fn the_permutation_and_its_inverse_agree(names in keys()) {
+// The permutation and its inverse agree: in quarters of its one stream of cases (decision 32.78,
+// `slices`).
+sliced!(
+    the_permutation_and_its_inverse_agree,
+    ProptestConfig::default(),
+    (keys(),),
+    |(names,)| {
         let p = Permutation::by_name(&names).unwrap();
         for old in 0..p.len() {
             prop_assert_eq!(p.old_of(p.new_of(old).unwrap()), Some(old));
         }
+        Ok(())
     }
+);
+
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(ProptestConfig::default().cases, "a property's cases");
 }
 
 #[test]

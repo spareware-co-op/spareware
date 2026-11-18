@@ -20,6 +20,9 @@
 // clippy.toml says tests may use these, and a broken case must stop the test loudly.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
+#[macro_use]
+mod slices;
+
 use geom_op::{History, LawBreak, NameId, NameSet, Origin, Record};
 use geom_test::history::{ChainBreak, chain, check_chain, check_laws, step};
 use proptest::prelude::*;
@@ -36,6 +39,51 @@ fn config(cases: u32) -> Config {
 
 fn inputs(count: u8) -> Vec<NameId> {
     (1..=count).map(|x| NameId::from_bytes([x; 16])).collect()
+}
+
+// A deleted input that passes through is found: in quarters of its one stream of cases from the
+// fixed seed (decision 32.78, `slices`).
+sliced!(
+    a_deleted_input_that_passes_through_is_found,
+    config(256),
+    ((1_u8..24).prop_flat_map(|c| (Just(c), step(0, inputs(c)))),),
+    |((count, (history, _)),)| {
+        let ins = NameSet::new(inputs(count)).unwrap();
+        // Delete an input that passes through unchanged, if one does.
+        if let Some(kept) = history
+            .records()
+            .iter()
+            .find(|r| r.origin == Origin::Unchanged)
+            .map(|r| r.output)
+        {
+            let mut deleted: Vec<NameId> = history.deleted().names().to_vec();
+            deleted.push(kept);
+            let broken = History::new(
+                history.records().to_vec(),
+                NameSet::new(deleted).unwrap(),
+                [],
+            )
+            .unwrap();
+            prop_assert_eq!(
+                check_laws(&broken, &ins),
+                Err(LawBreak::DeletedButModified {
+                    input: kept,
+                    output: kept
+                })
+            );
+            let at_first_step = matches!(
+                check_chain(&[(broken, ins)]),
+                Err(ChainBreak::Step { at: 0, .. })
+            );
+            prop_assert!(at_first_step);
+        }
+        Ok(())
+    }
+);
+
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(config(256).cases, "a property's 256 cases");
 }
 
 proptest! {
@@ -55,38 +103,6 @@ proptest! {
         steps in (1_u8..16, 2_u8..5).prop_flat_map(|(c, len)| chain(inputs(c), len)),
     ) {
         prop_assert_eq!(check_chain(&steps), Ok(()));
-    }
-
-    #[test]
-    fn a_deleted_input_that_passes_through_is_found(
-        (count, (history, _)) in (1_u8..24).prop_flat_map(|c| (Just(c), step(0, inputs(c)))),
-    ) {
-        let ins = NameSet::new(inputs(count)).unwrap();
-        // Delete an input that passes through unchanged, if one does.
-        if let Some(kept) = history
-            .records()
-            .iter()
-            .find(|r| r.origin == Origin::Unchanged)
-            .map(|r| r.output)
-        {
-            let mut deleted: Vec<NameId> = history.deleted().names().to_vec();
-            deleted.push(kept);
-            let broken = History::new(
-                history.records().to_vec(),
-                NameSet::new(deleted).unwrap(),
-                [],
-            )
-            .unwrap();
-            prop_assert_eq!(
-                check_laws(&broken, &ins),
-                Err(LawBreak::DeletedButModified { input: kept, output: kept })
-            );
-            let at_first_step = matches!(
-                check_chain(&[(broken, ins)]),
-                Err(ChainBreak::Step { at: 0, .. })
-            );
-            prop_assert!(at_first_step);
-        }
     }
 
     #[test]
