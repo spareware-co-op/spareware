@@ -671,7 +671,7 @@ pub(crate) struct Package {
 const LIBRARY_KINDS: [&str; 6] = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"];
 
 /// A path with `/` between its parts.
-fn forward(path: &str) -> String {
+pub(crate) fn forward(path: &str) -> String {
     path.replace('\\', "/")
 }
 
