@@ -603,15 +603,23 @@ fn kernel_yml_runs_every_golden_on_wasm32_in_every_build_mode() {
 /// `--nocapture` and keeps that process's whole output, which it prints when the test fails, so
 /// its wasm32 runs add no capture of their own (no `--no-capture`, which would also run one test at
 /// a time); and each of Node's runners prints the seed of every random byte a failing binary drew,
-/// which `WASI_RUN_SEED` replays.
+/// which `WASI_RUN_SEED` replays. A `cargo test --no-run` for wasm32 builds the test modules and
+/// runs none of them, so it has nothing to capture: the one such build is geom-solidcore's, and
+/// the step that runs its modules under wasmtime passes `--nocapture` to every test and keeps the
+/// test's whole output.
 #[test]
 fn a_wasm32_failure_reaches_the_log_with_its_message_and_its_seed() {
     let yml = KERNEL_YML.replace("\r\n", "\n");
     let mut runs = 0;
+    let mut builds = 0;
     let mut archives = 0;
     for line in yml.lines() {
         let run = line.trim_start().trim_start_matches("run: ");
         if run.starts_with("cargo test ") && run.contains("--target wasm32-wasip1") {
+            if run.contains(" --no-run ") {
+                builds += 1;
+                continue;
+            }
             assert!(run.ends_with(" -- --nocapture"), "{run}");
             runs += 1;
         }
@@ -625,6 +633,17 @@ fn a_wasm32_failure_reaches_the_log_with_its_message_and_its_seed() {
         "the shipped leg, and the doctests of both builds under both runtimes"
     );
     assert_eq!(archives, 1, "the wasm32 suite's parts");
+    assert_eq!(
+        builds, 1,
+        "geom-solidcore's test modules, built and not run"
+    );
+    let one_test = "out=$(wasmtime run --allow-precompiled \"$module.cwasm\" --exact \"$t\" \
+                    --nocapture 2>&1) || rc=$?";
+    assert_eq!(
+        yml.matches(one_test).count(),
+        builds,
+        "each module built and not run has its tests run one a process, uncaptured, the output kept"
+    );
     let draws = "imports.wasi_snapshot_preview1.random_get = ";
     let replays = "failed; WASI_RUN_SEED=${seed} replays its random bytes";
     assert_eq!(
