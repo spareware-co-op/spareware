@@ -11,6 +11,8 @@
     reason = "tests: native arithmetic and short names as in the formulas"
 )]
 
+mod slices;
+
 use core::cmp::Ordering;
 
 use geom_num::grid::COORD_MAX;
@@ -824,6 +826,21 @@ fn quarter_of(all: u32, part: u32) -> std::ops::Range<u32> {
 /// Quarter `part` of `a_table_gives_one_entry_to_one_plane`: the stream's cases from the first up
 /// to the quarter's end are all drawn, as `seeded` draws them, and those in the quarter checked.
 fn table_cases(part: u32) {
+    if std::env::var_os("SPAREKIT_SEED").is_none() {
+        // From the default seed: the quarter starts at its first case's pinned seed, so it draws
+        // no earlier quarter's cases (decision 32.78, `slices`).
+        let config = geom_test::prop::config(Seed(0x6142_0007), 256);
+        slices::run_slice_from(
+            &config,
+            (any_plane(), any_plane()),
+            part,
+            TABLE_SEEDS[usize::try_from(part).unwrap()],
+            table_check,
+        );
+        return;
+    }
+    // From a seed SPAREKIT_SEED names: every case up to the quarter's end drawn, those in it
+    // checked.
     let cases = (any_plane(), any_plane());
     let range = quarter_of(256, part);
     let drawn = std::cell::Cell::new(0_u32);
@@ -832,26 +849,75 @@ fn table_cases(part: u32) {
         0x6142_0007,
         range.end,
         &cases,
-        |(q, r)| {
+        |planes| {
             let at = drawn.get();
             drawn.set(at + 1);
             if at < range.start {
                 return Ok(());
             }
-            let mut table = PlaneTable::new();
-            let (a, b) = (
-                table.insert(&q).unwrap(),
-                table.insert(&flipped(&q)).unwrap(),
-            );
-            prop_assert_eq!(a.plane, b.plane);
-            prop_assert_ne!(a.flipped, b.flipped);
-            let c = table.insert(&r).unwrap();
-            let same = canonical(&q).unwrap().plane == canonical(&r).unwrap().plane;
-            prop_assert_eq!(a.plane == c.plane, same);
-            prop_assert_eq!(table.plane(c.plane), Some(canonical(&r).unwrap().plane));
-            Ok(())
+            table_check(planes)
         },
     );
+}
+
+/// The seed the default-seeded runner draws the first case of each quarter of
+/// `a_table_gives_one_entry_to_one_plane` from (`slices::case_seeds`; checked below).
+const TABLE_SEEDS: [[u8; 32]; 4] = [
+    [
+        206, 230, 125, 127, 230, 197, 45, 252, 146, 152, 43, 5, 122, 170, 118, 247, 102, 44, 239,
+        29, 148, 49, 56, 235, 113, 236, 47, 140, 206, 222, 94, 101,
+    ],
+    [
+        215, 176, 186, 79, 163, 156, 188, 216, 37, 107, 185, 145, 20, 153, 175, 74, 109, 8, 179,
+        220, 229, 2, 176, 51, 222, 155, 242, 144, 152, 36, 142, 130,
+    ],
+    [
+        27, 149, 202, 94, 61, 65, 139, 158, 4, 81, 237, 234, 10, 200, 10, 206, 244, 244, 85, 78,
+        48, 161, 248, 251, 153, 94, 213, 13, 245, 232, 109, 118,
+    ],
+    [
+        248, 235, 64, 150, 25, 217, 4, 150, 157, 178, 93, 44, 242, 123, 199, 138, 122, 142, 121,
+        119, 27, 16, 121, 173, 53, 73, 238, 203, 83, 186, 238, 97,
+    ],
+];
+
+/// The pinned seeds are the runner's own: the chain of case seeds reproduces the runner's cases,
+/// and starts each quarter where the pins say.
+#[cfg_attr(
+    miri,
+    ignore = "draws all 256 cases to find the pins, which the quarters exist not to do under Miri"
+)]
+#[test]
+fn the_table_quarters_pinned_seeds_are_the_runners_own() {
+    let config = geom_test::prop::config(Seed(0x6142_0007), 256);
+    let strategy = (any_plane(), any_plane());
+    assert_eq!(
+        slices::chained_cases(&config, &strategy, 32),
+        slices::runner_cases(&config, &strategy, 32)
+    );
+    let starts: Vec<u32> = (0..slices::SLICES)
+        .map(|k| slices::range(config.cases, k).start)
+        .collect();
+    assert_eq!(
+        slices::case_seeds(&config, &strategy, &starts),
+        TABLE_SEEDS.to_vec()
+    );
+}
+
+/// One case of `a_table_gives_one_entry_to_one_plane`.
+fn table_check((q, r): (Plane, Plane)) -> Result<(), TestCaseError> {
+    let mut table = PlaneTable::new();
+    let (a, b) = (
+        table.insert(&q).unwrap(),
+        table.insert(&flipped(&q)).unwrap(),
+    );
+    prop_assert_eq!(a.plane, b.plane);
+    prop_assert_ne!(a.flipped, b.flipped);
+    let c = table.insert(&r).unwrap();
+    let same = canonical(&q).unwrap().plane == canonical(&r).unwrap().plane;
+    prop_assert_eq!(a.plane == c.plane, same);
+    prop_assert_eq!(table.plane(c.plane), Some(canonical(&r).unwrap().plane));
+    Ok(())
 }
 
 /// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
