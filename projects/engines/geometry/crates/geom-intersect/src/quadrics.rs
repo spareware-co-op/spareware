@@ -888,8 +888,9 @@ fn parallel_cylinders(a: &Cylinder, b: &Cylinder) -> Result<Vec<Piece>, Intersec
 }
 
 /// The offset, square to the axes, from the axis of `a` to the parallel axis of `b`, from exact
-/// sums: n = (c_b − c_a) × e is a sum of products of the stored doubles, so each of its parts is
-/// enclosed to a step of its exact value however small, and the offset is e × n over e · e.
+/// sums: n = (b's centre − a's centre) × e is a sum of products of the stored doubles, so each of
+/// its parts is enclosed to a step of its exact value however small, and the offset is e × n over
+/// e · e.
 fn exact_run(a: &Cylinder, b: &Cylinder) -> Result<Vector, IntersectError> {
     let [p0, p1, p2] = b.center();
     let [c0, c1, c2] = a.center();
