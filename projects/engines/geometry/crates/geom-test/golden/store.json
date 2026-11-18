@@ -302,9 +302,15 @@
               "kind": "corpus",
               "piece": "Phase 5 train 1 (G158 to G180, with G242)",
               "why": "Phase 5's first train, one record for its pieces' 40 new count benchmarks: 39 in the groups intersect and quadric (geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils) and G242's curved/broad_pairs (geom-bool's broad phase, decision 32.46). Their rows are the sizes CI runs: thirteen were resized on the train after their first digests so that every batch runs inside its CI job, and three of them (intersect/march_poles, intersect/natural_apex and intersect/selfcross_sweep) keep a few inputs of their batch of 64 (geom-bench's inputs::SHORT_BATCHES) so that both 5% count gates finish inside their jobs, chosen so that the measured pass runs every function and line the pass over all 64 runs; no gate or limit changed. No existing digest of main's moved: every other row is main's, unchanged"
+            },
+            {
+              "sha256": "e966010f905f9267f9d30a67b5ced97e098ea1788fd88fd872bb6c5aa3fad27e",
+              "kind": "improvement",
+              "piece": "issue 974",
+              "why": "No answer moved. Four benchmarks of geom-intersect's natural (intersect/natural_tee, intersect/natural_apex, intersect/reduced_torus and intersect/reduced_tube, each typical) have new result digests because an answer carries the count of the work it cost, and that count fell: the trim now runs each edge of a pair against the other surface once a call, where every curve of the answer ran every edge again (issue 974). An input costs 98 units where it cost 174 (the tee, two curves), 23,450 where 93,452 (the apex, four), 29 where 33 on 58 of the torus cut's 64 inputs (two; the other 6 cost 25 before and now) and 111 where 197 (the torus tube, two). With the work count's line taken out, every input's answer is the same text before and after; the four input digests and every other row are unchanged"
             }
           ],
-          "sha256": "e966010f905f9267f9d30a67b5ced97e098ea1788fd88fd872bb6c5aa3fad27e"
+          "sha256": "ea0e61d4b4b86a448a9e44396f0c607c445b0814ccbb4debd40b65c363a4f74e"
         },
         {
           "id": "geom-nurbs/operations",
