@@ -78,6 +78,119 @@ fn run(result: TestResult) {
     }
 }
 
+/// The slices a long property's cases are cut into (`sliced!`), so that each slice ends within a
+/// Miri gate part (decision 32.78: a row of at most 486 yardstick seconds); natively and under
+/// Miri the property runs the same `CASES` cases as one `proptest!` test did.
+const SLICES: u32 = 4;
+
+/// The cases slice `k` of [`SLICES`] runs: one range of the property's one stream of cases.
+fn slice(k: u32) -> std::ops::Range<u32> {
+    let each = CASES / SLICES;
+    each * k..each * (k + 1)
+}
+
+/// Runs slice `k` of a property: proptest's runner, made as `proptest!` makes it (the same
+/// configuration, so the same seeding: Miri's fixed one under Miri), draws the stream's cases from
+/// the first up to the slice's end, every one of them, and checks those in the slice.
+fn run_slice<S>(strategy: S, k: u32, check: impl Fn(S::Value) -> TestResult)
+where
+    S: proptest::strategy::Strategy,
+{
+    let cases = slice(k);
+    let mut runner = proptest::test_runner::TestRunner::new(Config {
+        cases: cases.end,
+        ..cfg()
+    });
+    let drawn = std::cell::Cell::new(0_u32);
+    let outcome = runner.run(&strategy, |value| {
+        let at = drawn.get();
+        drawn.set(at + 1);
+        if at < cases.start {
+            Ok(())
+        } else {
+            check(value)
+        }
+    });
+    if let Err(e) = outcome {
+        panic!("slice {} of {SLICES}, cases {cases:?}: {e}", k + 1);
+    }
+}
+
+/// A long property as [`SLICES`] tests, one a quarter of its cases (`quarter_1` to `quarter_4`).
+macro_rules! sliced {
+    ($name:ident, $strategy:expr, |$value:pat_param| $check:expr) => {
+        mod $name {
+            use super::*;
+
+            #[test]
+            fn quarter_1() {
+                crate::run_slice($strategy, 0, |$value| $check);
+            }
+
+            #[test]
+            fn quarter_2() {
+                crate::run_slice($strategy, 1, |$value| $check);
+            }
+
+            #[test]
+            fn quarter_3() {
+                crate::run_slice($strategy, 2, |$value| $check);
+            }
+
+            #[test]
+            fn quarter_4() {
+                crate::run_slice($strategy, 3, |$value| $check);
+            }
+        }
+    };
+}
+
+#[test]
+fn the_slices_join_to_every_case_once() {
+    assert_eq!(
+        CASES % SLICES,
+        0,
+        "every slice holds the same number of cases"
+    );
+    let mut next = 0;
+    for k in 0..SLICES {
+        let cases = slice(k);
+        assert_eq!(
+            cases.start,
+            next,
+            "slice {} starts where the one before ends",
+            k + 1
+        );
+        assert!(cases.end > cases.start, "slice {} holds cases", k + 1);
+        next = cases.end;
+    }
+    assert_eq!(next, CASES, "the slices end at the last case");
+    // The split exponents of every width the file attacks, 0 to 64L − 1, each once.
+    for l in [2, 3, 4, 7, 16] {
+        let mut next = 0;
+        for part in 0..SLICES {
+            let ks = split_exponents(l, part);
+            assert_eq!(
+                ks.start,
+                next,
+                "Wide<{l}>: part {} starts where the one before ends",
+                part + 1
+            );
+            assert!(
+                ks.end > ks.start,
+                "Wide<{l}>: part {} holds exponents",
+                part + 1
+            );
+            next = ks.end;
+        }
+        assert_eq!(
+            usize::try_from(next).unwrap(),
+            top(l) + 1,
+            "Wide<{l}>: every exponent"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // The byte-level oracle.
 // ---------------------------------------------------------------------------------------------
@@ -447,9 +560,25 @@ fn widen<const L: usize, const M: usize>(x: Wide<L>, y: Wide<L>) -> TestResult {
     Ok(())
 }
 
-/// The constants, the asymmetric limits, and every product 2^k × 2^(64L−1−k) with each factor
-/// moved by −1, 0 or +1 and every sign.
-fn constants<const L: usize>() -> TestResult {
+/// The split exponents `k` of [`constants`]' products, 0 to 64L − 1, cut into [`SLICES`] ranges:
+/// slice `part` of them. The ranges join to every exponent once (`the_slices_join_to_every_case_once`).
+fn split_exponents(l: usize, part: u32) -> std::ops::Range<u32> {
+    let all = u32::try_from(top(l)).unwrap() + 1;
+    let at = |k: u32| all * k / SLICES;
+    at(part)..at(part + 1)
+}
+
+/// Part `part` of [`SLICES`] of the constants' check: the constants and the asymmetric limits in
+/// the first, and in each its range of the split exponents ([`split_exponents`]).
+fn constants_part<const L: usize>(part: u32) -> TestResult {
+    if part == 0 {
+        constants_fixed::<L>()?;
+    }
+    threshold_splits::<L>(split_exponents(L, part))
+}
+
+/// The constants and the asymmetric limits.
+fn constants_fixed<const L: usize>() -> TestResult {
     let (zero, one) = (Wide::<L>::ZERO, Wide::<L>::one());
     let (max, min) = (Wide::<L>::max_value(), Wide::<L>::min_value());
     let minus_one = Wide::<L>::from_i64(-1);
@@ -488,8 +617,14 @@ fn constants<const L: usize>() -> TestResult {
         format!("{min:?}"),
         format!("Wide<{L}>(0x8{})", "0".repeat(16 * L - 1))
     );
+    Ok(())
+}
+
+/// Every product 2^k × 2^(64L−1−k), for each split exponent `k` of `ks`, with each factor moved by
+/// −1, 0 or +1 and every sign.
+fn threshold_splits<const L: usize>(ks: std::ops::Range<u32>) -> TestResult {
     let p = top(L);
-    for k in 0..=p {
+    for k in ks.map(|k| usize::try_from(k).unwrap()) {
         for da in -1i32..=1 {
             for db in -1i32..=1 {
                 let (ma, mb) = (pow2(k) + da, pow2(p - k) + db);
@@ -614,16 +749,6 @@ macro_rules! width_attack {
                 #![proptest_config(cfg())]
 
                 #[test]
-                fn unary_matches_oracle(x in wide::<L>()) {
-                    unary::<L>(x)?;
-                }
-
-                #[test]
-                fn binary_matches_oracle(x in wide::<L>(), y in wide::<L>()) {
-                    binary::<L>(x, y)?;
-                }
-
-                #[test]
                 fn products_at_the_threshold((x, y) in product_pair::<L>()) {
                     binary::<L>(x, y)?;
                 }
@@ -631,11 +756,6 @@ macro_rules! width_attack {
                 #[test]
                 fn sums_and_differences_at_the_limits((x, y) in limit_pair::<L>()) {
                     binary::<L>(x, y)?;
-                }
-
-                #[test]
-                fn three_operand_laws(x in wide::<L>(), y in wide::<L>(), z in wide::<L>()) {
-                    laws::<L>(x, y, z)?;
                 }
 
                 #[test]
@@ -648,22 +768,66 @@ macro_rules! width_attack {
                     repeated::<L>(x, k)?;
                 }
 
-                #[test]
-                fn narrow_agrees_with_wide(x in wide::<L>(), y in wide::<L>()) {
-                    widen::<L, $wider>(x, y)?;
-                    widen::<L, $double>(x, y)?;
-                }
-
-                #[test]
-                fn narrow_agrees_with_wide_at_the_threshold((x, y) in product_pair::<L>()) {
-                    widen::<L, $wider>(x, y)?;
-                    widen::<L, $double>(x, y)?;
-                }
             }
 
-            #[test]
-            fn constants_and_threshold_splits() {
-                run(constants::<L>());
+            // The longest properties under Miri, each cut into quarters of its one stream of
+            // cases (`sliced!`): the same cases, from the same strategies, drawn in the same order.
+            sliced!(unary_matches_oracle, (wide::<L>(),), |(x,)| unary::<L>(x));
+
+            sliced!(binary_matches_oracle, (wide::<L>(), wide::<L>()), |(
+                x,
+                y,
+            )| {
+                binary::<L>(x, y)
+            });
+
+            sliced!(
+                three_operand_laws,
+                (wide::<L>(), wide::<L>(), wide::<L>()),
+                |(x, y, z)| laws::<L>(x, y, z)
+            );
+
+            sliced!(narrow_agrees_with_wide, (wide::<L>(), wide::<L>()), |(
+                x,
+                y,
+            )| {
+                widen::<L, $wider>(x, y)?;
+                widen::<L, $double>(x, y)
+            });
+
+            sliced!(
+                narrow_agrees_with_wide_at_the_threshold,
+                (product_pair::<L>(),),
+                |((x, y),)| {
+                    widen::<L, $wider>(x, y)?;
+                    widen::<L, $double>(x, y)
+                }
+            );
+
+            /// The constants and every split of the threshold product, in quarters of the split
+            /// exponents (`split_exponents`).
+            mod constants_and_threshold_splits {
+                use super::*;
+
+                #[test]
+                fn quarter_1() {
+                    run(constants_part::<L>(0));
+                }
+
+                #[test]
+                fn quarter_2() {
+                    run(constants_part::<L>(1));
+                }
+
+                #[test]
+                fn quarter_3() {
+                    run(constants_part::<L>(2));
+                }
+
+                #[test]
+                fn quarter_4() {
+                    run(constants_part::<L>(3));
+                }
             }
         }
     };
