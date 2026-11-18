@@ -254,13 +254,16 @@ fn shells_that_share_every_vertex_of_one_fail_closed() {
         cavity,
         &[&[8, 10, 9], &[8, 9, 12], &[8, 12, 10], &[9, 10, 12]],
     );
+    // Each of the cavity's vertices has corners in both shells, where the two shells touch: group
+    // 1 refuses the solid there (a body with such a vertex is general, chapter 8.1), so group 3
+    // is never asked where the cavity lies, and the body fails closed.
     let found = exact(&r);
+    let at = |v: u32, fin: u32| {
+        Fault::at(FaultKind::VertexShells, Entity::Vertex(ix(v))).with(Entity::Fin(ix(fin)))
+    };
     assert_eq!(
         found.faults(),
-        [
-            Fault::at(FaultKind::PairUnchecked, Entity::Shell(ix(cavity)))
-                .with(Entity::Shell(ix(outer)))
-        ],
+        [at(8, 74), at(9, 73), at(10, 72), at(12, 76)],
         "{:?}",
         found.faults()
     );
