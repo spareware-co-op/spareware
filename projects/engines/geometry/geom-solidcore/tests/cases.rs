@@ -52,6 +52,15 @@ fn p3(v: &Value) -> [f64; 3] {
     [num(&v[0]), num(&v[1]), num(&v[2])]
 }
 
+/// A plane's whole-number normal.
+fn whole_normal(v: &Value) -> [i32; 3] {
+    [0, 1, 2].map(|i| {
+        v[i].as_i64()
+            .and_then(|x| i32::try_from(x).ok())
+            .unwrap_or_else(|| panic!("not a whole-number normal: {v}"))
+    })
+}
+
 /// The grid step the table was written for, and of the tests that are not cases: 6.25 nm, on
 /// which every length of the table but those of seven cases is a whole number of steps.
 const STEP: GridStep = GridStep::Q1;
@@ -133,17 +142,16 @@ fn mitred_wall(v: &Value, step: GridStep) -> Vec<([i128; 3], i128)> {
 }
 
 /// The grid of the case `c` (the grid is the modeller's parameter): [`STEP`], if every length of
-/// the case, its operands' and its plane's point, is a whole number of its steps on its range;
-/// otherwise the coarsest grid on which every one is. bool-19, a metre from 1e5 m, is past the
-/// range of [`STEP`] and runs on Q0. A case with no such grid is run on the finest, where `steps`
-/// refuses by name the length that is not whole: nothing is rounded. Those are isect-15 to
-/// isect-20, whose plane holds no point of any grid (`diagonal_planes_hold_no_point_of_any_grid`),
-/// and bldg-10, whose wall the table puts at 0.20000010000000001 m.
+/// the case, its operands' and its plane's (its point, or the point it is measured from and its
+/// distance), is a whole number of its steps on its range; otherwise the coarsest grid on which
+/// every one is. bool-19, a metre from 1e5 m, is past the range of [`STEP`] and runs on Q0. A case
+/// with no such grid is run on the finest, where `steps` refuses by name the length that is not
+/// whole: nothing is rounded. That is bldg-10, whose wall the table puts at 0.20000010000000001 m.
 fn grid_of(c: &Value) -> GridStep {
     let mut all = Vec::new();
     lengths(&c["operands"], &mut all);
-    if let Some(at) = c.get("plane").map(|p| &p["at"]) {
-        lengths(at, &mut all);
+    if let Some(plane) = c.get("plane") {
+        lengths(plane, &mut all);
     }
     let fits = |g: GridStep| all.iter().all(|x| whole(x, g).is_some());
     if fits(STEP) {
@@ -263,6 +271,9 @@ fn norm(a: [f64; 3]) -> f64 {
 fn residual(s: &Value, q: [f64; 3]) -> f64 {
     if let Some(p) = s.get("plane") {
         let n = p3(&p["normal"]);
+        if let Some(d) = p.get("distance") {
+            return (dot(sub(q, p3(&p["from"])), n) / norm(n) - num(d)).abs();
+        }
         return (dot(sub(q, p3(&p["at"])), n) / norm(n)).abs();
     }
     if let Some(p) = s.get("sphere") {
@@ -331,13 +342,18 @@ fn run_intersection(c: &Value) {
         .iter()
         .map(|o| solid(&mut m, o).expect("operand"))
         .collect();
+    let plane = &c["plane"];
     let pieces = match c["operation"].as_str() {
-        Some("plane_section") => m
-            .plane_section(
+        Some("plane_section") if plane.get("distance").is_some() => m
+            .plane_section_at_distance(
                 &operands[0],
-                grid(&c["plane"]["at"], step),
-                p3(&c["plane"]["normal"]),
+                grid(&plane["from"], step),
+                whole_normal(&plane["normal"]),
+                length(&plane["distance"], step),
             )
+            .expect("plane_section_at_distance"),
+        Some("plane_section") => m
+            .plane_section(&operands[0], grid(&plane["at"], step), p3(&plane["normal"]))
             .expect("plane_section"),
         Some("meet") => {
             m.meet(
@@ -726,32 +742,132 @@ fn what_needs_upstream_files_is_named_and_counted() {
     }
 }
 
-/// Why isect-15 to isect-20 run on no grid, by exact arithmetic on the table's decimals: each
-/// plane is `x + y + z = 3a`, with `a` the decimal the table writes for every coordinate of its
-/// point (the plane's distance `d` along the diagonal, `d / sqrt(3)`, cut at 16 or 17 digits).
-/// The plane passes through `(a, a, a)`, but a point of any grid is a point of Q2's (each step a
-/// whole number of quarter-nanometres), whose coordinates' sum is `k / 4e9` m for a whole `k`, so
-/// the plane holds a point of a grid only if `3a * 4e9` is whole, and it is not. Neither the point
-/// the table gives nor any other point of its plane is on a grid, and these cases are WR-1 of
-/// tests/named-faults.json.
+/// isect-15 to isect-20 are stated by what they mean (decision 32.99): the plane at the distance
+/// `d` of the case's name from the sphere's centre, the grid point (0, 0, 0), along the
+/// whole-number normal (1, 1, 1), every length a whole number of steps of [`STEP`]. Such a plane
+/// holds no point of any grid, by exact arithmetic: it is `x + y + z = d sqrt(3)`, and a point of
+/// any grid has coordinates whose sum is rational, while `d sqrt(3)` is not, `d` being a positive
+/// decimal and 3 not the square of a whole number. (The table wrote these planes, before, by the
+/// point `(a, a, a)` with `a` the decimal printed for `d / sqrt(3)` as computed in binary64.)
 #[test]
 fn diagonal_planes_hold_no_point_of_any_grid() {
-    for id in [
-        "isect-15", "isect-16", "isect-17", "isect-18", "isect-19", "isect-20",
-    ] {
+    let named = [
+        ("isect-15", "0.3"),
+        ("isect-16", "0.6"),
+        ("isect-17", "0.9"),
+        ("isect-18", "0.999"),
+        ("isect-19", "1"),
+        ("isect-20", "1.2"),
+    ];
+    for (id, d) in named {
         let c = case(id);
-        let at = &c["plane"]["at"];
-        assert_eq!(p3(&c["plane"]["normal"]), [1.0; 3], "{id}");
-        let a = text(&at[0]);
-        assert!(text(&at[1]) == a && text(&at[2]) == a, "{id}");
-        let sum =
-            BigDecimal::from_str(&a).expect("a decimal") * BigDecimal::from(12_000_000_000_u64);
-        assert!(
-            sum.is_positive() && !sum.is_integer(),
-            "{id}: 3a * 4e9 = {sum}"
+        let plane = &c["plane"];
+        assert_eq!(c["name"], format!("plane-sphere n=diag d={d}"), "{id}");
+        assert_eq!(&c["surfaces"][0]["plane"], plane, "{id}");
+        assert_eq!(
+            grid(&plane["from"], STEP),
+            grid(&c["operands"][0]["centre"], STEP)
         );
-        assert!(GRIDS.iter().all(|&g| whole(&a, g).is_none()), "{id}");
+        let normal: Vec<i64> = (0..3)
+            .map(|i| plane["normal"][i].as_i64().expect("a whole number"))
+            .collect();
+        assert_eq!(normal, [1, 1, 1], "{id}");
+        let n2: i64 = normal.iter().map(|c| c * c).sum();
+        assert!((0..n2).all(|k| k * k != n2), "{id}: {n2} is a square");
+        let distance = text(&plane["distance"]);
+        assert_eq!(
+            BigDecimal::from_str(&distance).expect("a decimal"),
+            BigDecimal::from_str(d).expect("a decimal"),
+            "{id}"
+        );
+        assert!(steps(&distance, STEP).is_positive(), "{id}");
     }
+}
+
+/// A plane given by its distance is the plane it means, wherever it lies (decision 32.99): the
+/// unit sphere about the grid point c = (0.5, -0.25, 1) m, cut by the planes 0.3 m and 0.6 m from c
+/// along six whole-number normals, with components of each sign, of zero and past one, two of
+/// whole length ((1, -2, 2) and (0, 0, -1)) and four not, is cut each time in a circle every
+/// sampled point of which is within the table's residual of the sphere and of the plane
+/// n . (q - c) = d |n|, its length within the table's bound of 2 pi sqrt(1 - d^2).
+#[test]
+fn a_plane_at_a_distance_is_the_plane_it_means() {
+    let mut m = Modeller::new(STEP);
+    let at = [0.5, -0.25, 1.0];
+    let centre = grid(&serde_json::json!(at), STEP);
+    let ball = m
+        .sphere(centre, length(&serde_json::json!(1.0), STEP))
+        .expect("the ball");
+    let normals = [
+        [1, 1, 1],
+        [-1, 1, -1],
+        [1, -2, 2],
+        [0, 0, -1],
+        [2, 0, -1],
+        [-3, -1, 2],
+    ];
+    for normal in normals {
+        for d in [0.3_f64, 0.6] {
+            let pieces = m
+                .plane_section_at_distance(
+                    &ball,
+                    centre,
+                    normal,
+                    length(&serde_json::json!(d), STEP),
+                )
+                .expect("plane_section_at_distance");
+            let surfaces = serde_json::json!([
+                {"plane": {"from": at, "normal": normal, "distance": d}},
+                {"sphere": {"centre": at, "radius": 1.0}},
+            ]);
+            let (worst, len) = sample(&m, &pieces, &surfaces);
+            assert!(
+                worst <= tolerance("max_residual"),
+                "{normal:?} {d}: a point {worst:e} off a surface"
+            );
+            let exact = std::f64::consts::TAU * (1.0 - d * d).sqrt();
+            let err = (len - exact).abs() / exact;
+            assert!(
+                err <= tolerance("length_relerr"),
+                "{normal:?} {d}: length {len}, expected {exact} (relative error {err:e})"
+            );
+        }
+    }
+}
+
+/// A plane given by its distance is refused before solidcore for the normal (0, 0, 0), at any
+/// distance, and for a distance past the frame's largest clearance (2^42 steps); at that
+/// clearance it is taken, and misses the unit ball.
+#[test]
+fn a_plane_with_no_normal_or_past_the_frame_is_refused() {
+    let mut m = Modeller::new(STEP);
+    let origin = P3::new(0, 0, 0).expect("a grid point");
+    let ball = m
+        .sphere(origin, length(&serde_json::json!(1.0), STEP))
+        .expect("the ball");
+    let far = geom_num::distance::MAX_CLEARANCE;
+    for (normal, d) in [
+        ([0, 0, 0], Steps(0)),
+        ([0, 0, 0], Steps(1)),
+        ([1, 1, 1], Steps(far + 1)),
+        ([0, 0, 1], Steps(u64::MAX)),
+    ] {
+        let found = m.plane_section_at_distance(&ball, origin, normal, d);
+        assert!(
+            matches!(
+                found,
+                Err(Error::Invalid {
+                    operation: "plane_section",
+                    ..
+                })
+            ),
+            "{normal:?} {d:?}: {found:?}"
+        );
+    }
+    let missed = m
+        .plane_section_at_distance(&ball, origin, [1, 1, 1], Steps(far))
+        .expect("a plane at the largest clearance");
+    assert!(missed.is_empty(), "{} pieces", missed.len());
 }
 
 /// The turn each mitred wall is given is within its stated angle of the angle it names, by exact
