@@ -296,6 +296,58 @@
       "solidcore_gives": "the octant, one spherical face and three quarter discs bounded by three quarter circles and three lines, refused by the kernel's checker: 15 faults, the first \"group 3, edge 0: no certified test of this pair exists yet (edge 1)\"",
       "expected": "one solid of volume pi / 6, passed by the checker",
       "blocks": "solids with arcs of circles meeting at vertices, until group 3 certifies such pairs"
+    },
+    {
+      "case": "bldg-04",
+      "test": "bldg_04_mitred_corner_at_30_degrees",
+      "ours": true,
+      "fault": "WR-4 (ours: the case table, not solidcore), a mitre's corners on no grid: the walls meet at 30 degrees, so the mitre's outer corner (-t cot(phi/2), -t) and the second wall's far corners (at angle phi) are irrational, and the table writes them as the building program's binary64 values, which are whole numbers of steps of no grid; the modeller takes a profile's corners as grid points, so the case is refused before solidcore is reached. The mitre at 90 degrees (bldg-07), whose corners are grid points, passes",
+      "solidcore_gives": "not reached: the test stops at \"-0.7464101615137756 m is not a whole number of steps of Q2\"",
+      "expected": "one solid of volume h (2 t L + t^2 cot(phi/2)), as the closed form gives",
+      "blocks": "nothing of solidcore's: whether the case is restated at an angle whose corners are grid points (a slope of whole numbers, such as 3 in 4), or the modeller takes a corner another exact way, is the main session's to rule"
+    },
+    {
+      "case": "bldg-05",
+      "test": "bldg_05_mitred_corner_at_45_degrees",
+      "ours": true,
+      "fault": "WR-4 (ours: the case table, not solidcore), a mitre's corners on no grid: the walls meet at 45 degrees, so the mitre's outer corner (-t cot(phi/2), -t) and the second wall's far corners (at angle phi) are irrational, and the table writes them as the building program's binary64 values, which are whole numbers of steps of no grid; the modeller takes a profile's corners as grid points, so the case is refused before solidcore is reached. The mitre at 90 degrees (bldg-07), whose corners are grid points, passes",
+      "solidcore_gives": "not reached: the test stops at \"-0.482842712474619 m is not a whole number of steps of Q2\"",
+      "expected": "one solid of volume h (2 t L + t^2 cot(phi/2)), as the closed form gives",
+      "blocks": "nothing of solidcore's: whether the case is restated at an angle whose corners are grid points (a slope of whole numbers, such as 3 in 4), or the modeller takes a corner another exact way, is the main session's to rule"
+    },
+    {
+      "case": "bldg-06",
+      "test": "bldg_06_mitred_corner_at_60_degrees",
+      "ours": true,
+      "fault": "WR-4 (ours: the case table, not solidcore), a mitre's corners on no grid: the walls meet at 60 degrees, so the mitre's outer corner (-t cot(phi/2), -t) and the second wall's far corners (at angle phi) are irrational, and the table writes them as the building program's binary64 values, which are whole numbers of steps of no grid; the modeller takes a profile's corners as grid points, so the case is refused before solidcore is reached. The mitre at 90 degrees (bldg-07), whose corners are grid points, passes",
+      "solidcore_gives": "not reached: the test stops at \"-0.3464101615137755 m is not a whole number of steps of Q2\"",
+      "expected": "one solid of volume h (2 t L + t^2 cot(phi/2)), as the closed form gives",
+      "blocks": "nothing of solidcore's: whether the case is restated at an angle whose corners are grid points (a slope of whole numbers, such as 3 in 4), or the modeller takes a corner another exact way, is the main session's to rule"
+    },
+    {
+      "case": "bldg-33",
+      "test": "bldg_33_sloped_slab_with_a_vertical_round_opening",
+      "ours": true,
+      "fault": "WR-3 (ours: geom-solidcore's conversion, not solidcore), an ellipse: the sloped slab less a vertical cylinder has the sloped plane cutting the cylinder in two ellipses, and the conversion of solidcore's record into the kernel's body has no row for a record's ellipse (convert.rs writes lines and circles; geom-curve has an Ellipse kind), so the result is refused as unconverted. The extrusion itself (bldg-32) and the cylinder both pass the checker",
+      "solidcore_gives": "a body the conversion refuses: Unconverted { operation: \"difference\", what: \"an ellipse\" }",
+      "expected": "one solid of volume 6 - pi 0.5^2 0.25, passed by the checker",
+      "blocks": "every result with an elliptical edge (a sloped plane through a cylinder: sloped slabs and roofs with round openings), until the conversion writes the kernel's ellipse"
+    },
+    {
+      "case": "bldg-47",
+      "test": "bldg_47_extrusion_of_a_square_with_a_round_hole",
+      "fault": "SC-8, a round hole's circle and the top cap written off the profile's plane: given the hole's circle on the exact frame x (1, 0, 0), y (0, -1, 0) at z = 0, solidcore's linear sweep turns it a half-turn about x in binary64 and writes it with y axis (-2.7755575615628914e-16, 1, -1.2246467991473532e-16) (the z part is the binary64 sine of pi), so both circles leave their flat faces' planes; and it writes the top cap on a plane with v axis (-1, 0, 8.564140683729681e-16) through z = 2.9999999999999987, off square to the sweep and below the profile's height 3. Group 3 of the kernel's checker then cannot separate the circle from the square's sides of its own face (the first fault \"group 3, edge 5: no certified test of this pair exists yet (edge 4)\"). A diagnostic run, not committed, with the record's numbers within 1e-12 of a quarter snapped to it: the circles and vertices snapped, the first fault becomes SC-5's (the cap and the side, \"face 0 (face 1)\"); everything snapped, it becomes CK-2's, 12 faults with the first \"face 0 (face 3)\", the same as bldg-25's wall with a round opening",
+      "solidcore_gives": "the extruded square with a round hole, refused by the kernel's checker: 16 faults, the first \"group 3, edge 5: no certified test of this pair exists yet (edge 4)\"",
+      "expected": "one solid of volume (4 - pi 0.25) 3, passed by the checker",
+      "blocks": "the extrusion of a profile with a round hole (geom-solidcore's extrude with a circle): behind it, solidcore's cap off square (SC-5) and then group 3's flat face holding a circle (CK-2); extrusions of polygons with polygon holes are not affected (bldg-49, bldg-50 pass)"
+    },
+    {
+      "case": "bldg-48",
+      "test": "bldg_48_extrusion_of_a_square_with_a_round_hole_as_a_void_cutting_a_box",
+      "fault": "SC-8, a round hole's circle and the top cap written off the profile's plane: given the hole's circle on the exact frame x (1, 0, 0), y (0, -1, 0) at z = 0, solidcore's linear sweep turns it a half-turn about x in binary64 and writes it with y axis (-2.7755575615628914e-16, 1, -1.2246467991473532e-16) (the z part is the binary64 sine of pi), so both circles leave their flat faces' planes; and it writes the top cap on a plane with v axis (-1, 0, 8.564140683729681e-16) through z = 2.9999999999999987, off square to the sweep and below the profile's height 3. Group 3 of the kernel's checker then cannot separate the circle from the square's sides of its own face (the first fault \"group 3, edge 5: no certified test of this pair exists yet (edge 4)\"). A diagnostic run, not committed, with the record's numbers within 1e-12 of a quarter snapped to it: the circles and vertices snapped, the first fault becomes SC-5's (the cap and the side, \"face 0 (face 1)\"); everything snapped, it becomes CK-2's, 12 faults with the first \"face 0 (face 3)\", the same as bldg-25's wall with a round opening",
+      "solidcore_gives": "the extrusion it cuts with refused by the kernel's checker before the difference: 16 faults, the first \"group 3, edge 5: no certified test of this pair exists yet (edge 4)\"",
+      "expected": "two solids, the frame and the round core, of 13 faces and volume 36 - (4 - 0.25 pi), passed by the checker",
+      "blocks": "the extrusion of a profile with a round hole (geom-solidcore's extrude with a circle): behind it, solidcore's cap off square (SC-5) and then group 3's flat face holding a circle (CK-2); extrusions of polygons with polygon holes are not affected (bldg-49, bldg-50 pass)"
     }
   ],
   "upstream": {

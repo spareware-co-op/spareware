@@ -18,7 +18,7 @@ use geom_num::{GridStep, P3, Steps};
 use geom_op::{OpContext, OpId, OpPath};
 use geom_run::{Budget, WorkMeter};
 use geom_solidcore::convert::metres;
-use geom_solidcore::{Error, Modeller, Piece, Solid};
+use geom_solidcore::{Error, Hole, Modeller, Piece, Profile, Solid};
 use serde_json::Value;
 
 /// The case table.
@@ -141,7 +141,7 @@ fn from_bits(v: &Value) -> Option<f64> {
         .map(|s| f64::from_bits(u64::from_str_radix(s, 16).expect("hex bits")))
 }
 
-/// Builds an operand: a primitive, or a boolean of two operands.
+/// Builds an operand: a primitive, an extrusion, or a boolean of two operands.
 fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
     for op in ["union", "difference", "intersection"] {
         if let Some(pair) = v.get(op) {
@@ -169,7 +169,29 @@ fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
             length(&v["top_radius"]),
             length(&v["height"]),
         ),
-        "extrusion" => panic!("the modeller has no extrusion yet"),
+        "extrusion" => {
+            let corners = |v: &Value| -> Vec<P3> {
+                v.as_array().expect("corners").iter().map(grid).collect()
+            };
+            let holes = v["holes"]
+                .as_array()
+                .expect("holes")
+                .iter()
+                .map(|h| match h.get("circle") {
+                    Some(c) => Hole::Circle {
+                        centre: grid(&c["centre"]),
+                        radius: length(&c["radius"]),
+                    },
+                    None => Hole::Polygon(corners(&h["polygon"])),
+                })
+                .collect();
+            let by = &v["by"];
+            let profile = Profile {
+                outer: corners(&v["outer"]),
+                holes,
+            };
+            m.extrude(&profile, [0, 1, 2].map(|i| steps(&text(&by[i]), g)))
+        }
         s => panic!("unknown shape {s}"),
     }
 }
@@ -392,6 +414,52 @@ fn results_are_the_kernels_bodies() {
     assert_eq!(ball.body().arenas().faces.len(), 1);
     let can = m.cylinder(o, r, r).expect("a cylinder");
     assert_eq!(can.body().arenas().faces.len(), 3);
+}
+
+/// The extrusion takes its loops either way round, the way decided exactly from their corners'
+/// whole steps: the square with a square hole of bldg-49, its loops given the other way round, or
+/// extruded downwards, is the same solid (volume 9 and 10 faces); and before solidcore is reached
+/// it refuses an outer polygon of two corners, a vector in the profile's plane and a hole off it.
+#[test]
+fn extrude_takes_its_loops_either_way_round() {
+    let mut m = Modeller::new(STEP);
+    let s = |x: &str| steps(x, STEP);
+    let p = |x: &str, y: &str, z: &str| P3::new(s(x), s(y), s(z)).expect("a grid point");
+    let square = |a: &str, b: &str, z: &str| vec![p(a, a, z), p(b, a, z), p(b, b, z), p(a, b, z)];
+    let up = [0, 0, s("3")];
+    let given = Profile {
+        outer: square("-1", "1", "0"),
+        holes: vec![Hole::Polygon(square("-0.5", "0.5", "0"))],
+    };
+    let mut reversed = given.clone();
+    reversed.outer.reverse();
+    for hole in &mut reversed.holes {
+        if let Hole::Polygon(q) = hole {
+            q.reverse();
+        }
+    }
+    let nine = 9.0 / metres(STEP).powi(3);
+    for (profile, by) in [(&given, up), (&reversed, up), (&given, up.map(|c| -c))] {
+        let r = m.extrude(profile, by).expect("the extrusion");
+        assert_eq!(m.face_count(&r), 10);
+        let v = m.volume(&r).expect("the volume");
+        assert!(
+            (v - nine).abs() / nine <= tolerance("volume_relerr_flat"),
+            "{v} for {by:?}"
+        );
+    }
+    let invalid = |r: Result<Solid, Error>| matches!(r, Err(Error::Invalid { .. }));
+    let two = Profile {
+        outer: square("-1", "1", "0")[..2].to_vec(),
+        holes: Vec::new(),
+    };
+    assert!(invalid(m.extrude(&two, up)));
+    assert!(invalid(m.extrude(&given, [s("1"), 0, 0])));
+    let off = Profile {
+        outer: square("-1", "1", "0"),
+        holes: vec![Hole::Polygon(square("-0.5", "0.5", "1"))],
+    };
+    assert!(invalid(m.extrude(&off, up)));
 }
 
 /// The named list, `tests/named-faults.json`.
