@@ -16,6 +16,7 @@
 # GitHub measuring run 44085710191, fix/natural-slow at bae076419 (#974's circle_on_surface)
 # GitHub measuring run 44409922854 (miri_measure=new on fix/line-plane-exact at 549e13a42).
 # GitHub measuring run 44436033427 (miri_measure=new on fix/line-plane-exact at 99f67aeba).
+# GitHub measuring run 44459740315 (miri_measure=new on fix/line-plane-exact at 1e1292dfd).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1461,6 +1462,7 @@ native-only over 601	geom-intersect::known_round	a_cylinder_lying_on_a_sheet_is_
 2	geom-intersect::line_plane_exact	a_line_across_a_plane_off_the_grid_is_told_by_its_enclosure_alone
 3	geom-intersect::line_plane_exact	a_line_lying_in_a_plane_off_the_grid_is_one_overlap
 3	geom-intersect::line_plane_exact	a_pair_whose_enclosures_hold_zero_is_told_by_the_exact_signs
+1	geom-intersect::line_plane_exact	a_parallel_line_an_ulp_below_a_plane_whose_enclosures_hold_zero_meets_nothing
 3	geom-intersect::line_plane_exact	a_parallel_line_well_off_a_plane_off_the_grid_meets_nothing
 4	geom-intersect::line_plane_exact	every_product_of_a_general_plane_counts
 84	geom-intersect::loop_far_from_zero	a_cylinder_is_met_however_far_its_turn_starts
