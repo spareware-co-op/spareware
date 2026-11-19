@@ -16,12 +16,14 @@
     clippy::panic,
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects,
+    clippy::cast_precision_loss,
     reason = "test code: a failure should stop loudly"
 )]
 
 use geom_curve::{CurveKind, Frame};
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{CurveContact, Intersection, Item};
+use geom_num::Exactness;
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
 
@@ -34,11 +36,16 @@ const R: f64 = 1_048_576.0;
 /// 2^-15, a stored vector's fraction, under half of 2^-13 so `FAR + TILT` rounds to `FAR`.
 const TILT: f64 = 1.0 / 32_768.0;
 
-/// How near a point a curve is read to pass, in steps: well under the 2^5 or more each fault
-/// moves the meeting by, and well over the enclosures' rounding at 2^39.
+/// How near a point a curve is read to pass, in steps: well under how far each fault moves the
+/// meeting, and well over the enclosures' rounding at 2^39.
 const NEAR: f64 = 0.01;
 
+/// A plane's span without end.
 const ALL: (f64, f64) = (f64::NEG_INFINITY, f64::INFINITY);
+
+/// A plane's span past the cone: a plane without end against a cone is refused with
+/// `InvalidInput`, whatever its data, before and after the fix (a matter apart from this one).
+const PAST: (f64, f64) = (-4096.0, 4096.0);
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(50_000_000))
@@ -55,9 +62,9 @@ fn tilted() -> Frame<3> {
     Frame::new([0.0, 1.0, 0.0], [TILT, 0.0, 1.0]).unwrap()
 }
 
-/// The plane through `c` along `a` and `b`, without end.
-fn plane(c: [f64; 3], a: [f64; 3], b: [f64; 3]) -> SurfaceKind {
-    SurfaceKind::Plane(Plane::new(c, a, b, (ALL, ALL)).unwrap())
+/// The plane through `c` along `a` and `b`, over `span` in each.
+fn plane(c: [f64; 3], a: [f64; 3], b: [f64; 3], span: (f64, f64)) -> SurfaceKind {
+    SurfaceKind::Plane(Plane::new(c, a, b, (span, span)).unwrap())
 }
 
 fn sub(p: [f64; 3], q: [f64; 3]) -> [f64; 3] {
@@ -113,7 +120,7 @@ fn crossing_lines(r: &Intersection) -> Vec<([f64; 3], [f64; 3])> {
 /// meet in a circle of radius √(R² − h²), about 184,640, about the foot of the centre on the plane.
 #[test]
 fn a_plane_whose_vector_rounds_onto_the_grid_cuts_a_sphere_in_a_circle() {
-    let sheet = plane([FAR, 0.0, 0.0], [TILT, 1.0, 0.0], [0.0, 0.0, 1.0]);
+    let sheet = plane([FAR, 0.0, 0.0], [TILT, 1.0, 0.0], [0.0, 0.0, 1.0], ALL);
     let centre = [FAR + R + 16_384.0, 1_073_741_824.0, 0.0];
     let ball = SurfaceKind::Sphere(
         Sphere::new(
@@ -182,7 +189,7 @@ fn cylinders_on_axes_that_round_upright_cross_in_two_lines() {
 }
 
 /// `funnel`'s far point. The cone of slope 1 with its apex at (2^39, 0, 0), on the stored normal
-/// (2^-15, 0, 1), over heights 16 to 1,024 on one nappe; the plane x − z = 2^39 through the apex,
+/// (2^-15, 0, 1), over heights −1,024 to 1,024; the plane x − z = 2^39 through the apex,
 /// along (1, 0, 1) and (0, 1, 0). About the upright axis apex + n rounded to, the plane holds the
 /// ruling along (1, 0, 1): the closed form found it, one tangent line. The stored cone leans 2^-15
 /// toward +x, so the plane cuts it in two lines through the apex: d = α·(1, 0, 1)/√2 + β·(0, 1, 0)
@@ -193,9 +200,9 @@ fn cylinders_on_axes_that_round_upright_cross_in_two_lines() {
 fn a_plane_through_the_apex_of_a_cone_whose_axis_rounds_upright_cuts_it_in_two_lines() {
     let apex = [FAR, 0.0, 0.0];
     let cone = SurfaceKind::Cone(
-        Cone::new(apex, 0.0, 1.0, tilted(), ((0.0, 2.0), (16.0, 1024.0))).unwrap(),
+        Cone::new(apex, 0.0, 1.0, tilted(), ((0.0, 2.0), (-1024.0, 1024.0))).unwrap(),
     );
-    let sheet = plane(apex, [1.0, 0.0, 1.0], [0.0, 1.0, 0.0]);
+    let sheet = plane(apex, [1.0, 0.0, 1.0], [0.0, 1.0, 0.0], PAST);
     let mut found = crossing_lines(&natural(&sheet, &cone, &mut meter()).unwrap().unwrap());
     assert_eq!(found.len(), 2, "{found:?}");
     found.sort_by(|s, t| (s.1[1] / s.1[0]).total_cmp(&(t.1[1] / t.1[0])));
@@ -210,13 +217,32 @@ fn a_plane_through_the_apex_of_a_cone_whose_axis_rounds_upright_cuts_it_in_two_l
 /// `plane_plane`'s far points of its second plane. The planes x = 2^39 and x = 2^39 + 2^-15·y,
 /// both through (2^39, 0, 0): the second's far point o + u rounded to (2^39, 1, 0), onto the
 /// first, so the closed form found them one plane. They cross in the line x = 2^39, y = 0, along z.
+/// Planes 2^-15 apart in angle meet where a rounding of their offsets at 2^39, 2^-13, moves the
+/// line by about 2^2 across, so the line found is held to its class's bound: the true line must
+/// lie within it, along z.
 #[test]
 fn a_plane_whose_vector_rounds_onto_another_plane_crosses_it_in_a_line() {
-    let upright = plane([FAR, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]);
-    let leaning = plane([FAR, 0.0, 0.0], [TILT, 1.0, 0.0], [0.0, 0.0, 1.0]);
-    let found = crossing_lines(&natural(&upright, &leaning, &mut meter()).unwrap().unwrap());
+    let upright = plane([FAR, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], ALL);
+    let leaning = plane([FAR, 0.0, 0.0], [TILT, 1.0, 0.0], [0.0, 0.0, 1.0], ALL);
+    let r = natural(&upright, &leaning, &mut meter()).unwrap().unwrap();
+    let found = crossing_lines(&r);
     assert_eq!(found.len(), 1, "{found:?}");
+    let Item::Curve { class, .. } = &r.items()[0] else {
+        panic!("not a curve");
+    };
+    let bound = match class {
+        Exactness::Exact => 0.0,
+        Exactness::Certified { bound, .. } => bound.0 as f64,
+        Exactness::Approximate { .. } => panic!("not certified: {class:?}"),
+    };
     let (o, d) = found[0];
-    assert!(off([FAR, 0.0, 0.0], o, d) < NEAR, "{found:?}");
-    assert!(off([FAR, 0.0, 1_000_000.0], o, d) < NEAR, "{found:?}");
+    assert!(d[0].abs() + d[1].abs() < 1e-9 * d[2].abs(), "{found:?}");
+    assert!(
+        off([FAR, 0.0, 0.0], o, d) <= bound + NEAR,
+        "{found:?} {class:?}"
+    );
+    assert!(
+        off([FAR, 0.0, 1_000_000.0], o, d) <= bound + NEAR,
+        "{found:?} {class:?}"
+    );
 }
