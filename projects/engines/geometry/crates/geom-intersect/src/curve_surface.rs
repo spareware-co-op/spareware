@@ -1190,6 +1190,9 @@ fn second_order(
         &[t, u, v],
         &[seam_t.reach()?, seam_u.reach()?, seam_v.reach()?],
     )?;
+    // Written back as an answer writes a span: one grown a turn wide or more is the whole turn,
+    // read once, not again over the stretch past the end that it overlaps.
+    let [t, u, v] = [seam_t.onto(t)?, seam_u.onto(u)?, seam_v.onto(v)?];
     let mut slopes: [Option<Bounds<3>>; 2] = [None, None];
     for part in seam_t.spans(t).into_iter().flatten() {
         for (slot, order) in slopes.iter_mut().zip([1, 2]) {

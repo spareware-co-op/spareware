@@ -901,6 +901,28 @@ fn one_loop(a: &SurfaceKind, b: &SurfaceKind) -> ([f64; 3], f64) {
     out[0]
 }
 
+/// Issue 1068 (decision 32.104): a sphere of radius 1 against a cylinder of radius 1 about a line
+/// through its centre, whose end circle is the sphere's equator (issue 974's input, stored for the
+/// natural fuzz target). No closed form places a circle on a sphere, so the engine runs that
+/// circle against the sphere, and its run is the whole turn of the circle and of the sphere's u.
+/// Grown for its second derivatives, a run a turn wide is still the whole turn, read once: grown
+/// on past the join and read again over the stretch past the end that it overlaps, the call cost
+/// 19,163 units, where the whole call costs 19,112, as it did before 32.104.
+#[test]
+fn a_run_round_a_whole_turn_is_read_once_for_its_second_derivatives() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let ball =
+        SurfaceKind::Sphere(Sphere::new([0.0; 3], 1.0, frame, (ROUND, (-0.5, 0.5))).unwrap());
+    let tube = SurfaceKind::Cylinder(
+        Cylinder::new([0.0, 0.0, 300.0], 1.0, frame, (ROUND, (-300.0, 300.0))).unwrap(),
+    );
+    let mut work = meter();
+    let got = natural(&ball, &tube, &mut work).unwrap().unwrap();
+    assert!(!got.items().is_empty(), "{:?}", got.items());
+    let used = work.used().work;
+    assert!(used <= 19_112, "{used} units, over 19,112");
+}
+
 /// Issue 1044: a cylinder that ends exactly on a plane or a sphere meets it in its end circle, an
 /// edge of its domain, and the box of any point of that circle reaches the edge, so #1043 left
 /// every such pair to the engine. A column of radius 0.25 standing on a slab, z = 0 over

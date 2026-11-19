@@ -752,6 +752,9 @@ fn second_order<const D: usize>(
     // read modulo the turn.
     let [first, second] = gap.seams;
     let [s, t] = grown(&[s, t], &[first.reach()?, second.reach()?])?;
+    // Written back as an answer writes a span: one grown a turn wide or more is the whole turn,
+    // read once, not again over the stretch past the end that it overlaps.
+    let [s, t] = [first.onto(s)?, second.onto(t)?];
     let mut parts = [[Interval::point(0.0)?; 2]; 4];
     let wanted = [
         (gap.a, first, s, 1),
