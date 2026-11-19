@@ -96,14 +96,15 @@ fn centroid<const N: usize>(points: &[[f64; N]]) -> Result<[f64; N], SketchError
     Ok(sum)
 }
 
-/// The sign of the determinant of the N × N matrix `m` (row-major), by LU: the product of the
-/// pivots' signs times the permutation's parity.
-fn determinant_sign<const N: usize>(m: &[f64], work: &mut Work) -> Result<f64, SketchError> {
+/// Whether the N × N orthogonal matrix `m` (row-major) is a reflection, its determinant negative,
+/// by LU: the product of the pivots' signs times the permutation's parity. An orthogonal matrix is
+/// never singular, so no pivot is zero and each has a sign.
+fn reflects<const N: usize>(m: &[f64], work: &mut Work) -> Result<bool, SketchError> {
     let a = Matrix::from_rows(N, N, m)?;
     let lu = Lu::factor(&a, work)?;
     let mut negative = false;
     for i in 0..N {
-        negative ^= lu.factors().get(i, i)? < 0.0;
+        negative ^= lu.factors().get(i, i)?.is_sign_negative();
     }
     // Parity of the row permutation: N minus its number of cycles.
     let perm = lu.permutation();
@@ -122,7 +123,7 @@ fn determinant_sign<const N: usize>(m: &[f64], work: &mut Work) -> Result<f64, S
     }
     let swaps = N.checked_sub(cycles).ok_or(SketchError::Internal)?;
     negative ^= swaps.checked_rem(2) == Some(1);
-    Ok(if negative { -1.0 } else { 1.0 })
+    Ok(negative)
 }
 
 /// The rigid motion that best carries `local` onto `drawn`, point for point.
@@ -177,8 +178,11 @@ pub fn kabsch<const N: usize>(
         Ok(r)
     };
     let plain = product(1.0)?;
-    let flip = determinant_sign::<N>(&plain, work)?;
-    let r = if flip < 0.0 { product(-1.0)? } else { plain };
+    let r = if reflects::<N>(&plain, work)? {
+        product(-1.0)?
+    } else {
+        plain
+    };
     let mut rotation = [[0.0; N]; N];
     for (i, row) in rotation.iter_mut().enumerate() {
         for (j, cell) in row.iter_mut().enumerate() {

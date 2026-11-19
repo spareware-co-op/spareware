@@ -12,6 +12,10 @@
 //! two moves (Henneberg 1911; Laman 1970, doi:10.1007/BF01534980) the whole graph is one rigid
 //! cluster, and with one bar removed it is not; a plan is the same for every order of the input;
 //! a component past the size limit is reported and left alone; and a budget too small refuses.
+//! Kabsch placement recovers every rotation and shift tried in the plane and in space and fits a
+//! mirror image by the nearest rotation, never a reflection; the flow network gives the textbook
+//! flow and cut, takes flow back along an arc, refuses bad nodes before any work, and charges its
+//! work exactly.
 //! The paper's own figures are not reproduced: they were not available to the build, so the
 //! examples here are the standard ones the papers describe in words.
 
@@ -28,9 +32,12 @@
 
 use std::collections::BTreeSet;
 
+use geom_linalg::matrix::Work;
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::cluster::{Child, Link, Node, Plan, Problem, SIZE_LIMIT, plan};
+use geom_sketch::flow::Network;
 use geom_sketch::model::SketchError;
+use geom_sketch::place::{Placement, Rigid, kabsch, place};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -563,4 +570,268 @@ fn a_family_of_rigid_bodies_gives_one_body_each_and_a_floppy_chain_joins_none() 
     let chained = run(&family(12, true));
     assert_eq!(chained.clusters.len(), 3 * 12);
     assert_eq!(chained.top.len(), 12);
+}
+
+fn work() -> Work {
+    Work::new(u64::MAX)
+}
+
+/// `rotation` times `p`, plus `shift`.
+fn moved<const N: usize>(rotation: &[[f64; N]; N], shift: &[f64; N], p: &[f64; N]) -> [f64; N] {
+    let mut out = *shift;
+    for i in 0..N {
+        for j in 0..N {
+            out[i] += rotation[i][j] * p[j];
+        }
+    }
+    out
+}
+
+fn determinant<const N: usize>(m: &[[f64; N]; N]) -> f64 {
+    match N {
+        2 => m[0][0] * m[1][1] - m[0][1] * m[1][0],
+        3 => {
+            m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+                - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+        }
+        _ => panic!("the tests use the plane and space only"),
+    }
+}
+
+/// Asserts that `kabsch` carries `local` onto its image under `rotation` and `shift`, and finds
+/// that rotation and shift.
+fn assert_recovered<const N: usize>(local: &[[f64; N]], rotation: [[f64; N]; N], shift: [f64; N]) {
+    let drawn: Vec<[f64; N]> = local.iter().map(|p| moved(&rotation, &shift, p)).collect();
+    let r = kabsch(local, &drawn, &mut work()).unwrap();
+    for i in 0..N {
+        assert!((r.translation[i] - shift[i]).abs() < 1e-9, "{r:?}");
+        for j in 0..N {
+            assert!((r.rotation[i][j] - rotation[i][j]).abs() < 1e-9, "{r:?}");
+        }
+    }
+    for (p, q) in local.iter().zip(&drawn) {
+        let image = r.apply(p);
+        assert!(
+            image.iter().zip(q).all(|(a, b)| (a - b).abs() < 1e-9),
+            "{image:?}"
+        );
+    }
+}
+
+#[test]
+fn a_rigid_motion_turns_a_point_and_then_moves_it() {
+    let r = Rigid {
+        rotation: [[0.0, -1.0], [1.0, 0.0]],
+        translation: [5.0, -2.0],
+        singular_values: [0.0; 2],
+    };
+    assert_eq!(r.apply(&[2.0, 1.0]), [4.0, 0.0]);
+    assert_eq!(r.apply(&[3.0, -7.0]), [12.0, 1.0]);
+}
+
+#[test]
+fn kabsch_recovers_every_rotation_and_shift_in_the_plane_and_in_space() {
+    let plane = [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 3.0]];
+    for degrees in [0.0_f64, 30.0, 90.0, 180.0, 250.0, 300.0] {
+        let (s, c) = degrees.to_radians().sin_cos();
+        assert_recovered(&plane, [[c, -s], [s, c]], [5.0, -2.0]);
+    }
+    let space = [
+        [1.0, 0.0, 0.0],
+        [0.0, 2.0, 0.0],
+        [0.0, 0.0, 3.0],
+        [1.0, 1.0, 1.0],
+    ];
+    // A half turn about z, a quarter turn about x, a third of a turn about (1, 1, 1) (the cycle of
+    // the axes), and a turn about z then x.
+    let (s, c) = 40.0_f64.to_radians().sin_cos();
+    let about_z = [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]];
+    let about_x = [[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]];
+    let mut both = [[0.0; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            for k in 0..3 {
+                both[i][j] += about_x[i][k] * about_z[k][j];
+            }
+        }
+    }
+    for rotation in [
+        [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]],
+        [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+        [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        both,
+    ] {
+        assert_recovered(&space, rotation, [0.5, -1.0, 4.0]);
+    }
+}
+
+#[test]
+fn a_mirror_image_is_fitted_by_the_rotation_nearest_it_never_by_a_reflection() {
+    // The points spread three steps along x and one along y; mirrored in x, no rotation fits them.
+    // The best is near a half turn, which keeps the long side along its line: the direction the
+    // points fix least is the one turned the wrong way.
+    let local = [[0.0, 0.0], [3.0, 0.0], [0.0, 1.0]];
+    let drawn = [[0.0, 0.0], [-3.0, 0.0], [0.0, 1.0]];
+    let r = kabsch(&local, &drawn, &mut work()).unwrap();
+    assert!((determinant(&r.rotation) - 1.0).abs() < 1e-12, "{r:?}");
+    assert!(r.rotation[0][0] < -0.9, "{r:?}");
+    // Each reflection of the plane and of space, whatever its pivots, gives a rotation.
+    let plane = [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 3.0]];
+    for mirror in [[[1.0, 0.0], [0.0, -1.0]], [[0.0, 1.0], [1.0, 0.0]]] {
+        let drawn: Vec<[f64; 2]> = plane
+            .iter()
+            .map(|p| moved(&mirror, &[1.0, 1.0], p))
+            .collect();
+        let r = kabsch(&plane, &drawn, &mut work()).unwrap();
+        assert!((determinant(&r.rotation) - 1.0).abs() < 1e-12, "{r:?}");
+    }
+    let space = [
+        [1.0, 0.0, 0.0],
+        [0.0, 2.0, 0.0],
+        [0.0, 0.0, 3.0],
+        [1.0, 1.0, 1.0],
+    ];
+    for mirror in [
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]],
+        [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+        [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]],
+    ] {
+        let drawn: Vec<[f64; 3]> = space.iter().map(|p| moved(&mirror, &[0.0; 3], p)).collect();
+        let r = kabsch(&space, &drawn, &mut work()).unwrap();
+        assert!((determinant(&r.rotation) - 1.0).abs() < 1e-12, "{r:?}");
+    }
+}
+
+#[test]
+fn the_ground_is_never_moved_and_bad_input_places_nothing() {
+    let a = [[0.0, 0.0], [1.0, 0.0]];
+    assert_eq!(place(true, &a, &a, &mut work()), Ok(Placement::Frame));
+    assert!(matches!(
+        place(false, &a, &a, &mut work()),
+        Ok(Placement::Moved(_))
+    ));
+    assert_eq!(
+        place(false, &a, &a[..1], &mut work()),
+        Err(SketchError::Internal)
+    );
+    assert_eq!(
+        place(false, &a[..1], &a, &mut work()),
+        Err(SketchError::Internal)
+    );
+    assert_eq!(
+        place::<2>(false, &[], &[], &mut work()),
+        Err(SketchError::Internal)
+    );
+    for bad in [[f64::NAN, 0.0], [0.0, f64::INFINITY]] {
+        assert_eq!(
+            place(false, &a, &[bad, [1.0, 0.0]], &mut work()),
+            Err(SketchError::NotFinite)
+        );
+        assert_eq!(
+            place(false, &[bad, [1.0, 0.0]], &a, &mut work()),
+            Err(SketchError::NotFinite)
+        );
+    }
+}
+
+/// A meter that stops a search that runs away instead of letting it hang.
+fn bounded() -> WorkMeter<'static> {
+    WorkMeter::new(Budget::of_work(100_000))
+}
+
+fn network(nodes: usize, arcs: &[(usize, usize, u64)]) -> Network {
+    let mut n = Network::new(nodes).unwrap();
+    for &(from, to, capacity) in arcs {
+        n.add_arc(from, to, capacity).unwrap();
+    }
+    n
+}
+
+fn side(reached: &[bool]) -> Vec<usize> {
+    (0..reached.len()).filter(|&i| reached[i]).collect()
+}
+
+#[test]
+fn the_largest_flow_and_the_smallest_source_side_of_a_cheapest_cut() {
+    // The network of Cormen, Leiserson, Rivest and Stein's figure 26.1: flow 23, cut by
+    // {s, v1, v2, v4} against {v3, t} (12 + 7 + 4).
+    let mut n = network(
+        6,
+        &[
+            (0, 1, 16),
+            (0, 2, 13),
+            (1, 2, 10),
+            (2, 1, 4),
+            (1, 3, 12),
+            (3, 2, 9),
+            (2, 4, 14),
+            (4, 3, 7),
+            (3, 5, 20),
+            (4, 5, 4),
+        ],
+    );
+    assert_eq!(n.max_flow(0, 5, &mut bounded()), Ok(23));
+    assert_eq!(
+        side(&n.source_side(0, &mut bounded()).unwrap()),
+        [0, 1, 2, 4]
+    );
+}
+
+#[test]
+fn a_flow_that_must_be_taken_back_along_an_arc_is_taken_back() {
+    // The shortest path s 1 2 t fills 2 t; the second unit goes s 3 2, back along 1 2, then 1 4 5 t.
+    // Afterwards 1 reaches 2 again through the arc emptied, and from 2 reaches 3 and s backwards.
+    let mut n = network(
+        7,
+        &[
+            (0, 1, 1),
+            (0, 3, 1),
+            (1, 2, 1),
+            (3, 2, 1),
+            (2, 6, 1),
+            (1, 4, 1),
+            (4, 5, 1),
+            (5, 6, 1),
+        ],
+    );
+    assert_eq!(n.max_flow(0, 6, &mut bounded()), Ok(2));
+    assert_eq!(side(&n.source_side(0, &mut bounded()).unwrap()), [0]);
+    assert_eq!(
+        side(&n.source_side(1, &mut bounded()).unwrap()),
+        [0, 1, 2, 3]
+    );
+}
+
+#[test]
+fn a_flow_charges_each_arc_it_looks_at_each_step_and_its_arcs() {
+    // One arc of 5 from 0 to 1, and its reverse: the first level search looks at two arcs, the
+    // path takes two steps, the search for a second path one, the second level search one arc,
+    // and the flow then charges its two arcs: 8 in all.
+    let mut n = network(2, &[(0, 1, 5)]);
+    assert_eq!(
+        n.clone()
+            .max_flow(0, 1, &mut WorkMeter::new(Budget::of_work(8))),
+        Ok(5)
+    );
+    assert!(
+        n.max_flow(0, 1, &mut WorkMeter::new(Budget::of_work(7)))
+            .is_err()
+    );
+}
+
+#[test]
+fn a_flow_between_nodes_that_are_not_two_of_the_networks_is_refused_before_any_work() {
+    let mut n = network(2, &[(0, 1, 5)]);
+    for (source, sink) in [(0, 9), (9, 0), (1, 1)] {
+        assert_eq!(
+            n.max_flow(source, sink, &mut WorkMeter::new(Budget::of_work(0))),
+            Err(SketchError::Internal),
+            "{source} {sink}"
+        );
+    }
+    // An arc to or from a node past the last is refused and leaves the network as it was.
+    assert_eq!(n.add_arc(0, 5, 1), Err(SketchError::Internal));
+    assert_eq!(n.add_arc(5, 0, 1), Err(SketchError::Internal));
+    assert_eq!(n.max_flow(0, 1, &mut bounded()), Ok(5));
 }

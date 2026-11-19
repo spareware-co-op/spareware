@@ -1016,6 +1016,36 @@ fn fixing_a_whole_entity_fixes_its_points() {
         .unwrap();
         assert_eq!(fix_entity(&held, id(9, 0), 30, 0).unwrap().len(), count);
     }
+    // An elliptical arc holds its own three values, its centre's and ends' (here one point), and
+    // the two parameters that place its ends: 3 + 2 + 2 + 1 + 1.
+    let mut held = s.clone();
+    held.add_entity(Entity {
+        id: id(9, 0),
+        kind: EntityKind::EllipticalArc {
+            centre: id(1, 0),
+            axis: [3.0, 0.0],
+            minor: 1.0,
+            start: id(1, 1),
+            end: id(1, 1),
+            from: id(9, 1),
+            to: id(9, 2),
+        },
+        construction: false,
+    })
+    .unwrap();
+    for key in [1, 2] {
+        held.add_entity(Entity {
+            id: id(9, key),
+            kind: EntityKind::Parameter {
+                curve: id(9, 0),
+                t: 0.5,
+                speed: 1.0,
+            },
+            construction: false,
+        })
+        .unwrap();
+    }
+    assert_eq!(fix_entity(&held, id(9, 0), 30, 0).unwrap().len(), 9);
 }
 
 #[test]

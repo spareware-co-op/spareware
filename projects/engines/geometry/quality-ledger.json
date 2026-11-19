@@ -8983,22 +8983,6 @@
       "reason": "The loop only builds a sum to ask whether it is exactly zero. Subtracting every term gives the negated sum, which is zero exactly when the sum is."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
-      "mutant": "replace == with != in blocks_of",
-      "line_text": "if place == 0 {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests stop it by their timeout: every equation of the square part reads the variable it determines, so the walk meets its own equation as a next one; the mutant numbers an equation only after its first visit, so there it is still unnumbered and is walked into again, for ever. It is a hang the tests catch; kept so that the judge counts it as one."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
-      "mutant": "replace == with != in blocks_of",
-      "line_text": "if get(&order, w)? == NONE {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests stop it by their timeout: every equation of the square part reads the variable it determines, so the walk meets its own equation as a next one; the mutant walks only into equations already numbered, so it walks into that one again, renumbering it each time, for ever. It is a hang the tests catch; kept so that the judge counts it as one."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
       "mutant": "delete ! in odd",
       "line_text": "if !first {",
@@ -9192,14 +9176,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
-      "mutant": "replace + with - in continue_to",
-      "line_text": "let ahead = done + size;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests stop it by their timeout: short of the end each step goes back by its size instead of on, so done never reaches 1. It is a hang the tests catch; kept so that the judge counts it as one."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
       "mutant": "replace + with * in continue_to",
       "line_text": "let ahead = done + size;",
       "occurrences": 1,
@@ -9221,14 +9197,6 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The tests stop it by their timeout: with every |v|² read as −1, every predicted reduction is 0 and every ratio 0/0, a NaN that passes none of the damping's tests, so λ never moves and the same step is tried and refused for ever (the tests' meters have no budget). It is a hang the tests catch; kept so that the judge counts it as one."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
-      "mutant": "replace <= with > in Stage::iterate",
-      "line_text": "if predicted <= FLAT * square(&r)? {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests stop it by their timeout: the mutant refuses every step that predicts a reduction and takes only one that predicts none: at a block whose step is zero the trial is the point itself, the ratio 0/0 is a NaN that passes none of the damping's tests, and the same step is tried and refused for ever. It is a hang the tests catch; kept so that the judge counts it as one."
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
