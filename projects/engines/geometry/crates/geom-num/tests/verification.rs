@@ -633,7 +633,7 @@ fn crossing(
 }
 
 /// F(n), the n-th Fibonacci number; F(58) is the last below 2^40.
-fn fibonacci(n: usize) -> i64 {
+fn fibonacci(n: u64) -> i64 {
     let (mut a, mut b) = (0i64, 1i64);
     for _ in 0..n {
         (a, b) = (b, a + b);
@@ -673,8 +673,15 @@ fn draws() -> impl Strategy<Value = (u32, i64, i64, i64)> {
 /// x0 + B and x0 + C has the value ±k at x0, while B and C, and so the plane's coefficients, are
 /// as large as n makes them: the cancellation that keeps a filter from deciding for small k, and
 /// lets it decide once k is large enough.
+///
+/// n is drawn as a `u64`, never a `usize`: proptest 1.12 samples a `usize` range as a `u64` on
+/// 64-bit targets and as a `u32` on wasm32 (`num.rs`, `sample_uniform!`), so a `usize` draw reads
+/// the stream at other offsets there and every later value differs, and the pinned counts of
+/// `side_of_tpi_filter_boundary_crossed_both_ways` held on x86-64 only. A `u64` range is sampled
+/// as a `u64` on every target: on 64-bit targets exactly as the `usize` range was, so the cases
+/// there are unchanged.
 fn cassini3() -> impl Strategy<Value = (Pt3, Pt3, Pt3, Pt3)> {
-    (3usize..=56, draws(), 0u8..6, any::<[bool; 3]>()).prop_map(|(n, (bits, r, s, t), o, flip)| {
+    (3u64..=56, draws(), 0u8..6, any::<[bool; 3]>()).prop_map(|(n, (bits, r, s, t), o, flip)| {
         let room = (COORD_MAX - fibonacci(n + 1)) / 2;
         let xm = (1i64 << bits).min(room);
         let x0 = [span(r, xm), span(s, xm), span(t, xm)];
