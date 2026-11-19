@@ -1,4 +1,4 @@
-//! The 99 stored cases, run through geom-solidcore (decision 32.70): one test per case, each
+//! The 120 stored cases, run through geom-solidcore (decision 32.70): one test per case, each
 //! holding solidcore's answer to the expected answer in `tests/cases.json`, with no case left out
 //! and no check loosened.
 //!
@@ -169,6 +169,7 @@ fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
             length(&v["top_radius"]),
             length(&v["height"]),
         ),
+        "extrusion" => panic!("the modeller has no extrusion yet"),
         s => panic!("unknown shape {s}"),
     }
 }
@@ -306,13 +307,19 @@ fn run_intersection(c: &Value) {
     }
 }
 
+/// A solid's case: a boolean of two operands, or an operation that makes its one operand
+/// (`extrude`), judged by the solid's volume and, where given, its face count.
 fn run_boolean(c: &Value) {
     let step = grid_of(c);
     let mut m = Modeller::new(step);
-    let a = solid(&mut m, &c["operands"][0]).expect("first operand");
-    let b = solid(&mut m, &c["operands"][1]).expect("second operand");
-    let r =
-        boolean(&mut m, c["operation"].as_str().expect("operation"), &a, &b).expect("the boolean");
+    let r = match c["operation"].as_str().expect("operation") {
+        "extrude" => solid(&mut m, &c["operands"][0]).expect("the extrusion"),
+        op => {
+            let a = solid(&mut m, &c["operands"][0]).expect("first operand");
+            let b = solid(&mut m, &c["operands"][1]).expect("second operand");
+            boolean(&mut m, op, &a, &b).expect("the boolean")
+        }
+    };
     let faces = m.face_count(&r);
     if let Some(want) = c.get("faces").and_then(Value::as_u64) {
         assert_eq!(faces as u64, want, "{}: faces", c["name"]);
@@ -514,7 +521,7 @@ fn every_case_has_its_test() {
         .map(|l| l.split(' ').next().expect("id"))
         .collect();
     assert_eq!(ids, listed);
-    assert_eq!(ids.len(), 99);
+    assert_eq!(ids.len(), 120);
     let source = include_str!("cases.rs");
     for line in names.lines() {
         let mut parts = line.split(' ');
@@ -659,6 +666,10 @@ cases! {
     bldg_01_t_overlapping => "bldg-01",
     bldg_02_t_wall_ending_flush_on_the_other_s_face => "bldg-02",
     bldg_03_cross => "bldg-03",
+    bldg_04_mitred_corner_at_30_degrees => "bldg-04",
+    bldg_05_mitred_corner_at_45_degrees => "bldg-05",
+    bldg_06_mitred_corner_at_60_degrees => "bldg-06",
+    bldg_07_mitred_corner_at_90_degrees => "bldg-07",
     bldg_08_walls_of_different_thickness_and_height => "bldg-08",
     bldg_09_two_walls_in_line_end_to_end => "bldg-09",
     bldg_10_wall_1e_7_away_from_another_two_solids => "bldg-10",
@@ -681,6 +692,23 @@ cases! {
     bldg_29_slab_with_a_rectangular_and_a_round_opening => "bldg-29",
     bldg_30_slab_cut_right_through_by_a_wall_two_pieces => "bldg-30",
     bldg_31_slab_notched_by_a_wall_along_its_edge => "bldg-31",
+    bldg_32_sloped_slab => "bldg-32",
+    bldg_33_sloped_slab_with_a_vertical_round_opening => "bldg-33",
     bldg_34_slab_edge_shared_with_a_wall_face => "bldg-34",
     bldg_35_slab_sitting_on_a_wall_top => "bldg-35",
+    bldg_36_two_roof_planes_meeting_at_a_ridge_solid_halves => "bldg-36",
+    bldg_37_two_thick_roof_planes_meeting_at_a_ridge => "bldg-37",
+    bldg_38_hip_roof => "bldg-38",
+    bldg_39_valley_two_gables_meeting_in_a_t => "bldg-39",
+    bldg_40_gable_end_wall_cut_by_two_roof_planes => "bldg-40",
+    bldg_41_eave_wall_cut_by_a_shed_roof_plane => "bldg-41",
+    bldg_42_dormer_through_a_roof_plane => "bldg-42",
+    bldg_43_extrusion_of_a_rectangle => "bldg-43",
+    bldg_44_extrusion_of_a_rectangle_as_a_void_cutting_a_box => "bldg-44",
+    bldg_45_extrusion_of_an_l => "bldg-45",
+    bldg_46_extrusion_of_an_l_as_a_void_cutting_a_box => "bldg-46",
+    bldg_47_extrusion_of_a_square_with_a_round_hole => "bldg-47",
+    bldg_48_extrusion_of_a_square_with_a_round_hole_as_a_void_cutting_a_box => "bldg-48",
+    bldg_49_extrusion_of_a_square_with_a_square_hole => "bldg-49",
+    bldg_50_extrusion_of_a_square_with_a_square_hole_as_a_void_cutting_a_box => "bldg-50",
 }

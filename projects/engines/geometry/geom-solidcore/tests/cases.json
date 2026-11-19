@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "about": "The 99 stored cases that geom-solidcore runs solidcore through (decision 32.70): 42 intersections of planes, spheres, cylinders and cones, 29 booleans, and 28 building cases (walls, openings and slabs of a building, ids bldg-NN), each with its expected answer, where that answer comes from, and the bits of every expected number (length_bits, volume_bits: the IEEE 754 bits of the closed form as computed in binary64). tests/cases.rs reads it. An intersection is the same when every sampled point of every curve is within max_residual of both surfaces and the total length within length_relerr of the closed form (the sampling's own bias is about 5e-8); a boolean when the volume is within volume_relerr (flat or curved) of the closed form, the face count where given is equal, and the result passes the check.",
+  "about": "The 120 stored cases that geom-solidcore runs solidcore through (decision 32.70): 42 intersections of planes, spheres, cylinders and cones, 29 booleans, and 49 building cases (walls, openings, slabs and roofs of a building and a family's extruded forms, alone and as voids, ids bldg-NN), each with its expected answer, where that answer comes from, and the bits of every expected number (length_bits, volume_bits: the IEEE 754 bits of the closed form as computed in binary64). tests/cases.rs reads it. An intersection is the same when every sampled point of every curve is within max_residual of both surfaces and the total length within length_relerr of the closed form (the sampling's own bias is about 5e-8); a boolean when the volume is within volume_relerr (flat or curved) of the closed form, the face count where given is equal, and the result passes the check.",
   "tolerances": {
     "samples_per_piece": 4000,
     "max_residual": 1e-09,
@@ -3515,6 +3515,294 @@
       "source": "closed form, worked by hand and checked a second way: h*(0.8+0.8-0.04); also 4 arms 1.9*0.2 + 0.04"
     },
     {
+      "id": "bldg-04",
+      "name": "walls: mitred corner at 30 degrees",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.7464101615137756,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.7464101615137756,
+              -0.2,
+              0.0
+            ],
+            [
+              2.498076211353316,
+              1.6732050807568875,
+              0.0
+            ],
+            [
+              2.598076211353316,
+              1.4999999999999998,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "401030fe9135d958",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=30; the mitre's corners are the table's binary64 values of its trigonometry (the outer corner at -t cot(phi/2), the second wall's far corners at angle phi)"
+    },
+    {
+      "id": "bldg-05",
+      "name": "walls: mitred corner at 45 degrees",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.482842712474619,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.482842712474619,
+              -0.2,
+              0.0
+            ],
+            [
+              1.9798989873223334,
+              2.2627416997969525,
+              0.0
+            ],
+            [
+              2.121320343559643,
+              2.121320343559643,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "400f1e1dfbe8e9fe",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=45; the mitre's corners are the table's binary64 values of its trigonometry (the outer corner at -t cot(phi/2), the second wall's far corners at angle phi)"
+    },
+    {
+      "id": "bldg-06",
+      "name": "walls: mitred corner at 60 degrees",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.3464101615137755,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.3464101615137755,
+              -0.2,
+              0.0
+            ],
+            [
+              1.3267949192431128,
+              2.698076211353316,
+              0.0
+            ],
+            [
+              1.5000000000000004,
+              2.598076211353316,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "400e767803b360c4",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=60; the mitre's corners are the table's binary64 values of its trigonometry (the outer corner at -t cot(phi/2), the second wall's far corners at angle phi)"
+    },
+    {
+      "id": "bldg-07",
+      "name": "walls: mitred corner at 90 degrees",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.2,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.2,
+              -0.2,
+              0.0
+            ],
+            [
+              -0.2,
+              3.0,
+              0.0
+            ],
+            [
+              0.0,
+              3.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "400dc28f5c28f5c4",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=90; every corner a grid point, written exactly"
+    },
+    {
       "id": "bldg-08",
       "name": "walls: walls of different thickness and height",
       "operation": "union",
@@ -4427,6 +4715,98 @@
       "source": "closed form, worked by hand and checked a second way: 6 - 6*0.2*0.25"
     },
     {
+      "id": "bldg-32",
+      "name": "slabs: sloped slab",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              6.0,
+              0.0,
+              1.0
+            ],
+            [
+              6.0,
+              0.0,
+              1.25
+            ],
+            [
+              0.0,
+              0.0,
+              0.25
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            4.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4018000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: parallelogram 6*0.25 * 4"
+    },
+    {
+      "id": "bldg-33",
+      "name": "slabs: sloped slab with a vertical round opening",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              6.0,
+              0.0,
+              1.0
+            ],
+            [
+              6.0,
+              0.0,
+              1.25
+            ],
+            [
+              0.0,
+              0.0,
+              0.25
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            4.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            3.0,
+            2.0,
+            -1.0
+          ],
+          "radius": 0.5,
+          "height": 3.0
+        }
+      ],
+      "volume_bits": "401736f0255dde97",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 6 - pi 0.5^2 * 0.25 (vertical thickness, Cavalieri)"
+    },
+    {
       "id": "bldg-34",
       "name": "slabs: slab edge shared with a wall face",
       "operation": "union",
@@ -4497,6 +4877,930 @@
       "volume_bits": "401599999999999a",
       "curved": false,
       "source": "closed form, worked by hand and checked a second way: 2.4 + 4*3*0.25"
+    },
+    {
+      "id": "bldg-36",
+      "name": "roofs: two roof planes meeting at a ridge (solid halves)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              2.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            8.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              5.0,
+              0.0,
+              0.0
+            ],
+            [
+              10.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              2.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            8.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4059000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2 * (5*2.5/2) * 8"
+    },
+    {
+      "id": "bldg-37",
+      "name": "roofs: two thick roof planes meeting at a ridge",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              2.5
+            ],
+            [
+              5.0,
+              0.0,
+              2.8
+            ],
+            [
+              0.0,
+              0.0,
+              0.3
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            8.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              5.0,
+              0.0,
+              2.5
+            ],
+            [
+              10.0,
+              0.0,
+              0.0
+            ],
+            [
+              10.0,
+              0.0,
+              0.3
+            ],
+            [
+              5.0,
+              0.0,
+              2.8
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            8.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4038000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2 * (5*0.3) * 8"
+    },
+    {
+      "id": "bldg-38",
+      "name": "roofs: hip roof",
+      "operation": "intersection",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              6.0,
+              0.0
+            ],
+            [
+              0.0,
+              3.0,
+              1.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            10.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              10.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              2.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            6.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4042000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: p W^2 (3L-W)/12, p=0.5 L=10 W=6; also gable 4.5*4 + pyramid 36*1.5/3"
+    },
+    {
+      "id": "bldg-39",
+      "name": "roofs: valley: two gables meeting in a T",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              6.0,
+              0.0
+            ],
+            [
+              0.0,
+              3.0,
+              1.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            10.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              2.0,
+              3.0,
+              0.0
+            ],
+            [
+              8.0,
+              3.0,
+              0.0
+            ],
+            [
+              5.0,
+              3.0,
+              1.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            9.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4053200000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 45 + 40.5 - 9 (half pyramid 6x6, h 1.5); also 45 + 27 + 4.5"
+    },
+    {
+      "id": "bldg-40",
+      "name": "roofs: gable end wall cut by two roof planes",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            6.0,
+            0.2,
+            5.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              2.0
+            ],
+            [
+              3.0,
+              -1.0,
+              4.0
+            ],
+            [
+              7.0,
+              -1.0,
+              2.0
+            ],
+            [
+              7.0,
+              -1.0,
+              6.0
+            ],
+            [
+              -1.0,
+              -1.0,
+              6.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            2.2,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "400f333333333333",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 0.2*(6*2.5 + 6*1.5/2); also 0.2*(30 - 10.5)"
+    },
+    {
+      "id": "bldg-41",
+      "name": "roofs: eave wall cut by a shed roof plane",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            10.0,
+            0.2,
+            4.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              2.95
+            ],
+            [
+              11.0,
+              -1.0,
+              3.55
+            ],
+            [
+              11.0,
+              -1.0,
+              5.0
+            ],
+            [
+              -1.0,
+              -1.0,
+              5.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            2.2,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "401a000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 0.2 * int_0^10 (3 + 0.05x) dx"
+    },
+    {
+      "id": "bldg-42",
+      "name": "roofs: dormer through a roof plane",
+      "operation": "union",
+      "operands": [
+        {
+          "union": [
+            {
+              "shape": "extrusion",
+              "outer": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  6.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  3.0,
+                  1.5
+                ]
+              ],
+              "holes": [],
+              "by": [
+                10.0,
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                4.0,
+                -1.0,
+                0.0
+              ],
+              "size": [
+                2.0,
+                4.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              4.0,
+              -1.0,
+              1.0
+            ],
+            [
+              6.0,
+              -1.0,
+              1.0
+            ],
+            [
+              5.0,
+              -1.0,
+              1.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            4.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4049555555555555",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 45 + 10 - 13/3 (overlap int min(0.5y, 1+0.5m(x)))"
+    },
+    {
+      "id": "bldg-43",
+      "name": "extrusion: extrusion of a rectangle",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4018000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2*1*3"
+    },
+    {
+      "id": "bldg-44",
+      "name": "extrusion-void: extrusion of a rectangle as a void cutting a box",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -1.0,
+            -1.0,
+            1.0
+          ],
+          "size": [
+            4.0,
+            3.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4024000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 12 - 2*1*1"
+    },
+    {
+      "id": "bldg-45",
+      "name": "extrusion: extrusion of an L",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.5,
+              0.0
+            ],
+            [
+              0.5,
+              0.5,
+              0.0
+            ],
+            [
+              0.5,
+              2.0,
+              0.0
+            ],
+            [
+              0.0,
+              2.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4015000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: (2*0.5 + 0.5*1.5)*3; shoelace 1.75"
+    },
+    {
+      "id": "bldg-46",
+      "name": "extrusion-void: extrusion of an L as a void cutting a box",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -1.0,
+            -1.0,
+            1.0
+          ],
+          "size": [
+            4.0,
+            4.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.5,
+              0.0
+            ],
+            [
+              0.5,
+              0.5,
+              0.0
+            ],
+            [
+              0.5,
+              2.0,
+              0.0
+            ],
+            [
+              0.0,
+              2.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "402c800000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 16 - 1.75"
+    },
+    {
+      "id": "bldg-47",
+      "name": "extrusion: extrusion of a square with a round hole",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0,
+              0.0
+            ],
+            [
+              -1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [
+            {
+              "circle": {
+                "centre": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "radius": 0.5
+              }
+            }
+          ],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "402349a0e033378c",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: (4 - pi 0.25)*3"
+    },
+    {
+      "id": "bldg-48",
+      "name": "extrusion-void: extrusion of a square with a round hole as a void cutting a box",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -3.0,
+            -3.0,
+            1.0
+          ],
+          "size": [
+            6.0,
+            6.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0,
+              0.0
+            ],
+            [
+              -1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [
+            {
+              "circle": {
+                "centre": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "radius": 0.5
+              }
+            }
+          ],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "40406487ed5110b4",
+      "curved": true,
+      "faces": 13,
+      "source": "closed form, worked by hand and checked a second way: 36 - (4 - 0.25pi); the core inside the hole stays as its own piece; two lumps: the core inside the hole stays as its own piece (13 faces: the frame's 10 and the round core's 3)"
+    },
+    {
+      "id": "bldg-49",
+      "name": "extrusion: extrusion of a square with a square hole",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0,
+              0.0
+            ],
+            [
+              -1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [
+            {
+              "polygon": [
+                [
+                  -0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.5,
+                  0.5,
+                  0.0
+                ],
+                [
+                  -0.5,
+                  0.5,
+                  0.0
+                ]
+              ]
+            }
+          ],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4022000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: (4 - 1)*3"
+    },
+    {
+      "id": "bldg-50",
+      "name": "extrusion-void: extrusion of a square with a square hole as a void cutting a box",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -3.0,
+            -3.0,
+            1.0
+          ],
+          "size": [
+            6.0,
+            6.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0,
+              0.0
+            ],
+            [
+              -1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [
+            {
+              "polygon": [
+                [
+                  -0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.5,
+                  0.5,
+                  0.0
+                ],
+                [
+                  -0.5,
+                  0.5,
+                  0.0
+                ]
+              ]
+            }
+          ],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4040800000000000",
+      "curved": false,
+      "faces": 16,
+      "source": "closed form, worked by hand and checked a second way: 36 - 3; core stays as its own piece; two lumps: the core inside the hole stays as its own piece (16 faces: the frame's 10 and the square core's 6)"
     }
   ]
 }
