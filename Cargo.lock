@@ -992,6 +992,7 @@ dependencies = [
 name = "geom-bench"
 version = "0.0.0"
 dependencies = [
+ "cap",
  "divan",
  "engine-geometry",
  "geom-bool",
@@ -1015,6 +1016,7 @@ dependencies = [
  "gungraun",
  "gungraun-runner",
  "hex",
+ "libtest-mimic",
  "num-bigint",
  "serde_json",
  "sha2",
