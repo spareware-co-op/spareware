@@ -31,6 +31,7 @@
 # GitHub measuring run 44459010430 (miri_measure=new on fix/cone-start-radius-exact at 6d5517af1).
 # GitHub measuring run 44534321347 (miri_measure=new on fix/fuzz-slow-level-piercing at 85896a967).
 # GitHub measuring run 44562084137 (miri_measure=new on fix/line-cone-exact at 313824f07).
+# GitHub measuring run 44608532867 (miri_measure=new on land5/fixes-1 at d9b546470).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1328,7 +1329,12 @@ native-only over 601	geom-intersect::attack_g167	a_plane_along_an_extrusion_cuts
 native-only over 601	geom-intersect::attack_g167	a_plane_through_a_revolution_s_axis_cuts_two_copies
 13	geom-intersect::attack_g167	a_plane_through_a_torus_s_axis
 111	geom-intersect::attack_g167	a_quadric_about_a_revolution
+23	geom-intersect::attack_g167	a_tube_turn_box_meeting_the_domain_at_two_turns_holds_the_circle_s_turn
+23	geom-intersect::attack_g167	a_tube_turn_box_rounded_onto_the_domain_s_start_two_turns_back_is_not_held_there
 13	geom-intersect::attack_g167	a_tube_turn_ending_on_the_domain_s_start_is_not_moved_a_turn_on
+36	geom-intersect::attack_g167	a_tube_turn_is_moved_by_whole_turns_to_a_domain_far_out
+40	geom-intersect::attack_g167	a_tube_turn_past_the_domain_s_end_is_moved_a_turn_back
+native-only over 601	geom-intersect::attack_g167	an_arc_any_number_of_turns_out_is_cut_where_an_edge_crosses_it
 native-only over 601	geom-intersect::attack_g167	every_reduction_makes_what_it_made
 95	geom-intersect::attack_g167	quadrics_about_a_torus_s_axis
 native-only over 601	geom-intersect::attack_g167	two_sweeps_of_one_direction_meet_in_lines
@@ -1533,6 +1539,9 @@ native-only over 601	geom-intersect::edge_end	a_zero_on_the_end_of_a_nurbs_patch
 native-only over 601	geom-intersect::fit_refined	a_closed_loop_of_three_vertices_is_refined_and_closes
 native-only over 601	geom-intersect::fit_refined	a_two_vertex_branch_is_refined_into_a_certified_curve
 native-only over 601	geom-intersect::fit_refined	a_two_vertex_branch_on_the_plane_first_is_refined_too
+2	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_circle_twice
+2	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_cylinder_twice
+2	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_sphere_twice
 47	geom-intersect::half_plane	a_circle_in_a_plane_of_the_axis_is_a_meridian_while_it_stays_on_one_side
 49	geom-intersect::half_plane	a_circle_through_the_plane_at_its_ends_and_middle_is_no_meridian
 158	geom-intersect::half_plane	a_cone_scaled_by_three_meets_a_coaxial_revolution_in_its_ring
@@ -1553,6 +1562,8 @@ native-only over 601	geom-intersect::known_round	a_cylinder_lying_on_a_sheet_is_
 3	geom-intersect::line_cone_exact	a_line_across_a_sphere_or_a_circle_is_two_points_in_closed_form
 107	geom-intersect::line_cone_exact	a_line_tangent_off_the_grid_is_one_exact_point
 87	geom-intersect::line_cone_exact	a_line_through_an_apex_is_one_point_on_the_grid_and_off_it
+35	geom-intersect::line_cone_exact	a_near_tangent_on_the_grid_is_two_points_in_closed_form
+7	geom-intersect::line_cone_exact	a_near_tangent_to_a_cylinder_on_the_grid_is_two_points_in_closed_form
 6	geom-intersect::line_cone_exact	a_segment_touching_a_start_circle_at_its_end_is_one_point
 10	geom-intersect::line_cone_exact	a_step_from_a_tangent_to_a_cone_with_a_start_radius_is_two_points_or_none
 8	geom-intersect::line_cone_exact	a_step_from_group_q_s_touch_is_two_points_or_none
@@ -1578,6 +1589,8 @@ native-only over 601	geom-intersect::loop_far_from_zero	a_swept_loop_is_cut_wher
 7	geom-intersect::lower_half_arcs	an_arc_to_a_lower_half_end_on_the_line_through_the_centre_ends_in_place
 3	geom-intersect::lower_half_arcs	lower_half_ends_each_side_of_the_axis_are_placed
 3	geom-intersect::lower_half_arcs	upper_half_ends_each_side_of_the_axis_are_placed
+4	geom-intersect::on_axis_exact	a_line_across_a_torus_whose_axis_rounds_upright_crosses_it_twice
+3	geom-intersect::on_axis_exact	a_line_up_a_ruling_of_a_cylinder_whose_axis_rounds_upright_crosses_it_once
 native-only over 601	geom-intersect::parallel_hair	cylinders_whose_radii_differ_by_less_than_the_hair_between_their_axes_meet_in_two_lines
 235	geom-intersect::parallel_hair	equal_cylinders_on_askew_axes_a_hair_apart_meet_in_two_lines
 native-only over 601	geom-intersect::parallel_hair	equal_cylinders_on_parallel_axes_a_hair_apart_meet_in_two_lines
