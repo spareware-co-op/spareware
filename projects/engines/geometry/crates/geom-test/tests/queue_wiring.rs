@@ -27,6 +27,8 @@
 //!   wasm archive, goldens' runner and macOS x86-64 archive, `kernel-quality.yml`'s Miri plan) is uploaded by exactly its job under exactly
 //!   its name, kept one day, and downloaded under that name by exactly its jobs of the same run;
 //!   no other upload of either workflow is kept one day, and none other uses a hand-over's name.
+//!   `kernel-dev.yml`'s hand-over is held so by
+//!   `the_development_crates_built_on_arm64_run_every_step_of_native`.
 //! - `the_queue_and_the_pull_request_cover_every_leg`: the goldens' matrix (`test`) and the
 //!   pull request's Linux job (`linux`) together cover every native runner in release and debug,
 //!   once each; the suites run optimised with overflow checks and debug assertions on, on Linux
@@ -53,6 +55,15 @@
 //!   crates and targets with `suite`'s flags (the build overrides' overflow checks from the
 //!   profile, which RUSTFLAGS no longer reach once `--target` is given), and `suite-cross` runs
 //!   every test of each archive on macOS x86-64's runner, after the build, none filtered.
+//! - `the_development_crates_built_on_arm64_run_every_step_of_native`: `kernel-dev.yml`'s `native`
+//!   runs on kernel.yml's six runners but macOS x86-64, whose run is `native-cross` on the Intel
+//!   runner, after `native-cross-build` on macOS arm64 (decision 32.92); the build installs
+//!   x86_64-apple-darwin and builds for it, with no flag `native` lacks, exactly what each step of
+//!   `native` builds (a test target archived with the step's selection, a tool built with it), in
+//!   order, and nothing else; the run runs each archive's every test, none filtered, and each tool
+//!   with the step's arguments, in order, and nothing else; no step of either is conditional;
+//!   their hand-over is kept a day and read by the run alone; and only a push to main saves the
+//!   build's cache.
 //! - `each_change_is_measured_against_its_base_and_marked_once`: `changes` measures a pull request
 //!   against its merge commit's first parent, the queue against the queue's base and a push against
 //!   the commit main was at; only the merge queue's last job marks a tree as tested, under the name
@@ -110,9 +121,10 @@ struct HandOver {
 
 /// Every in-run hand-over: `kernel.yml`'s wasm build archive for its suite's parts, its
 /// goldens' runner for each system's `test` parts and the archive of each macOS x86-64 suite part
-/// built on macOS arm64 for its run, and `kernel-quality.yml`'s Miri plan (filtersets, crates and
-/// cargo-nextest) for its Miri jobs.
-const HAND_OVERS: [HandOver; 4] = [
+/// built on macOS arm64 for its run, `kernel-quality.yml`'s Miri plan (filtersets, crates and
+/// cargo-nextest) for its Miri jobs, and `kernel-dev.yml`'s macOS x86-64 archives and tools built
+/// on macOS arm64 for its Intel job.
+const HAND_OVERS: [HandOver; 5] = [
     HandOver {
         workflow: "kernel.yml",
         job: "wasm-build",
@@ -140,6 +152,13 @@ const HAND_OVERS: [HandOver; 4] = [
         name: "miri-plan",
         readers: &["miri", "miri-pool"],
         read_as: "miri-plan",
+    },
+    HandOver {
+        workflow: "kernel-dev.yml",
+        job: "native-cross-build",
+        name: DEV_CROSS,
+        readers: &["native-cross"],
+        read_as: DEV_CROSS,
     },
 ];
 
@@ -3367,4 +3386,420 @@ fn the_count_gates_measure_one_kind_a_push_and_the_base_once() {
             .any(|p| p.contains("before the merge base is kept")),
         "{found:#?}"
     );
+}
+
+/// The folder `kernel-dev.yml`'s `native-cross-build` fills and hands to `native-cross`, and the
+/// artifact's name (decision 32.92).
+const DEV_CROSS: &str = "dev-macos-x86-64";
+
+/// The runners of kernel.yml's test job, which `kernel-dev.yml`'s development crates run on.
+const DEV_RUNNERS: [&str; 6] = [
+    "ubuntu-latest",
+    "ubuntu-24.04-arm",
+    "windows-latest",
+    "windows-11-arm",
+    "macos-latest",
+    "macos-15-intel",
+];
+
+/// macOS arm64's runner, which builds macOS x86-64's run of `native`.
+const DEV_ARM: &str = "macos-latest";
+
+/// macOS x86-64's runner.
+const DEV_INTEL: &str = "macos-15-intel";
+
+/// The steps' commands of `native`, carried over: for each `run:` of `native` in order, what
+/// `native-cross-build` must run to build it and what `native-cross` must run to run it, with the
+/// tools' binary names; or what `native` runs that has no such form.
+struct Carried {
+    builds: Vec<String>,
+    runs: Vec<String>,
+    tools: Vec<String>,
+    strays: Vec<String>,
+}
+
+/// What `native-cross-build` and `native-cross` must run for `native`'s steps: a test target
+/// (`cargo test --locked <selection>`) archived with the same selection for x86_64-apple-darwin
+/// into the hand-over and run whole from that archive, and a tool (`cargo run --locked <selection>
+/// -- <arguments>`) built with the same selection for x86_64-apple-darwin and run from the
+/// hand-over with the same arguments.
+fn carried(dev: &Yaml) -> Carried {
+    let mut c = Carried {
+        builds: Vec::new(),
+        runs: Vec::new(),
+        tools: Vec::new(),
+        strays: Vec::new(),
+    };
+    for step in steps_of(dev, "native") {
+        let run = text(&step["run"]);
+        if run.is_empty() {
+            continue;
+        }
+        if let Some(selection) = run.strip_prefix("cargo test --locked ") {
+            let words: Vec<&str> = selection.split_whitespace().collect();
+            let tests: Vec<&str> = words
+                .windows(2)
+                .filter(|w| w[0] == "--test")
+                .map(|w| w[1])
+                .collect();
+            match tests.as_slice() {
+                [test] if !words.contains(&"--") => {
+                    let file = format!("\"$RUNNER_TEMP/{DEV_CROSS}/{test}.tar.zst\"");
+                    c.builds.push(format!(
+                        "cargo nextest archive --locked {selection} --target x86_64-apple-darwin \
+                         --archive-file {file}"
+                    ));
+                    c.runs.push(format!(
+                        "cargo nextest run --archive-file {file} --workspace-remap . --extract-to . \
+                         --extract-overwrite --no-fail-fast"
+                    ));
+                }
+                _ => c.strays.push(run),
+            }
+        } else if let Some((selection, arguments)) = run
+            .strip_prefix("cargo run --locked ")
+            .and_then(|r| r.split_once(" -- "))
+        {
+            let words: Vec<&str> = selection.split_whitespace().collect();
+            let named = |flag: &str| words.windows(2).find(|w| w[0] == flag).map(|w| w[1]);
+            match named("--bin").or_else(|| named("-p")) {
+                Some(tool) => {
+                    c.builds.push(format!(
+                        "cargo build --locked {selection} --target x86_64-apple-darwin"
+                    ));
+                    c.runs
+                        .push(format!("\"$RUNNER_TEMP/{DEV_CROSS}/{tool}\" {arguments}"));
+                    c.tools.push(tool.to_owned());
+                }
+                None => c.strays.push(run),
+            }
+        } else {
+            c.strays.push(run);
+        }
+    }
+    c
+}
+
+/// What is wrong with macOS x86-64's run of `kernel-dev.yml`'s `native`, built on macOS arm64 and
+/// run on the Intel runner (decision 32.92): `native` and `native-cross` not on kernel.yml's six
+/// runners, each once, `native-cross` not on macOS x86-64's or not after the build, the build not
+/// on macOS arm64's; the build without x86_64-apple-darwin, with a flag or setting in its
+/// environment that `native` lacks, or running other than exactly what `native`'s steps build, in
+/// order (with the hand-over's folder made first and the tools put in it last); the run running
+/// other than exactly each archive's every test and each tool with its step's arguments, in order
+/// (after the tools are made executable and the locked sources fetched); a step of either that is
+/// conditional or may fail; and the build's cache saved by any other run than a push to main.
+#[allow(clippy::too_many_lines, reason = "one rule after another")]
+fn dev_cross_problems(dev: &Yaml) -> Vec<String> {
+    let build_job = "native-cross-build";
+    let run_job = "native-cross";
+    let mut found = Vec::new();
+    let build = &dev["jobs"][build_job];
+    let run = &dev["jobs"][run_job];
+    if build.is_badvalue() || run.is_badvalue() {
+        found.push(format!("kernel-dev.yml has no {build_job} or no {run_job}"));
+        return found;
+    }
+    let mut runners: Vec<String> = dev["jobs"]["native"]["strategy"]["matrix"]["include"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .map(os)
+        .collect();
+    runners.push(text(&run["runs-on"]));
+    runners.sort();
+    let mut six: Vec<String> = DEV_RUNNERS.iter().map(|r| (*r).to_owned()).collect();
+    six.sort();
+    if runners != six {
+        found.push(format!(
+            "native's runners and {run_job}'s {runners:?} are not kernel.yml's six, each once: \
+             {six:?}"
+        ));
+    }
+    if text(&run["runs-on"]) != DEV_INTEL {
+        found.push(format!(
+            "{run_job} runs on {:?}, not macOS x86-64's {DEV_INTEL:?}",
+            text(&run["runs-on"])
+        ));
+    }
+    if text(&build["runs-on"]) != DEV_ARM {
+        found.push(format!(
+            "{build_job} runs on {:?}, not macOS arm64's {DEV_ARM:?}",
+            text(&build["runs-on"])
+        ));
+    }
+    if text(&run["needs"]) != build_job && !strings(&run["needs"]).iter().any(|n| n == build_job) {
+        found.push(format!("{run_job} does not wait for {build_job}"));
+    }
+    if !steps_of(dev, build_job).iter().any(|s| {
+        text(&s["uses"]).starts_with("dtolnay/rust-toolchain@")
+            && text(&s["with"]["targets"]) == "x86_64-apple-darwin"
+    }) {
+        found.push(format!(
+            "{build_job} does not install the x86_64-apple-darwin target"
+        ));
+    }
+    // `native` sets no flag of its own: neither job may set one (RUSTFLAGS, a profile's setting,
+    // a nextest filter or partition through its environment), and no step may be skipped or
+    // allowed to fail.
+    for job in [build_job, run_job] {
+        let mut envs = vec![(job.to_owned(), &dev["jobs"][job]["env"])];
+        for (i, s) in steps_of(dev, job).into_iter().enumerate() {
+            envs.push((format!("{job}'s step {}", i + 1), &s["env"]));
+            if !s["if"].is_badvalue() || !s["continue-on-error"].is_badvalue() {
+                found.push(format!(
+                    "{job}'s step {} ({}) may be skipped or fail unseen",
+                    i + 1,
+                    text(&s["name"])
+                ));
+            }
+        }
+        for (said, env) in envs {
+            for key in keys(env) {
+                if key != "CARGO_NEXTEST_VERSION" {
+                    found.push(format!("{said} sets {key}, which native does not"));
+                }
+            }
+        }
+        if !dev["jobs"][job]["continue-on-error"].is_badvalue()
+            || !dev["jobs"][job]["if"].is_badvalue()
+        {
+            found.push(format!("{job} may be skipped or fail unseen"));
+        }
+    }
+    let c = carried(dev);
+    for stray in &c.strays {
+        found.push(format!(
+            "native runs {stray:?}, which {build_job} and {run_job} do not carry"
+        ));
+    }
+    let tools = c.tools.join(",");
+    let mut builds = vec![format!("mkdir \"$RUNNER_TEMP/{DEV_CROSS}\"")];
+    builds.extend(c.builds);
+    builds.push(format!(
+        "cp target/x86_64-apple-darwin/debug/{{{tools}}} \"$RUNNER_TEMP/{DEV_CROSS}/\""
+    ));
+    let mut runs = vec![
+        format!("chmod +x \"$RUNNER_TEMP\"/{DEV_CROSS}/{{{tools}}}"),
+        "cargo fetch --locked".to_owned(),
+    ];
+    runs.extend(c.runs);
+    for (job, want) in [(build_job, builds), (run_job, runs)] {
+        let have: Vec<String> = steps_of(dev, job)
+            .into_iter()
+            .map(|s| text(&s["run"]))
+            .filter(|r| !r.is_empty())
+            .collect();
+        if have != want {
+            found.push(format!(
+                "{job} does not run exactly what native's steps build and run, in order: \
+                 {have:#?}, not {want:#?}"
+            ));
+        }
+    }
+    for s in steps_of(dev, build_job) {
+        if text(&s["uses"]).starts_with("Swatinem/rust-cache@") {
+            let t = terms(&text(&s["with"]["save-if"]));
+            let has = |term: &str| t.iter().any(|x| x == term);
+            if !(has("github.event_name == 'push'") && has("github.ref == 'refs/heads/main'"))
+                || t.iter().any(|x| x.contains("||"))
+            {
+                found.push(format!(
+                    "{build_job}'s cache is saved by another run than a push to main: {:?}",
+                    text(&s["with"]["save-if"])
+                ));
+            }
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+#[allow(clippy::too_many_lines, reason = "the cases are written out in full")]
+fn the_development_crates_built_on_arm64_run_every_step_of_native() {
+    let dev = read(&format!("{WORKFLOWS}/kernel-dev.yml"));
+    assert_eq!(dev_cross_problems(&parse(&dev)), Vec::<String>::new());
+    assert_eq!(
+        hand_over_problems("kernel-dev.yml", &dev),
+        Vec::<String>::new()
+    );
+    // Every step of `native` is carried: two test targets and four tools.
+    let c = carried(&parse(&dev));
+    assert_eq!(c.runs.len(), 6, "{:#?}", c.runs);
+    assert_eq!(c.tools, ["geom-gen", "map", "provenance", "source-scan"]);
+
+    let build = "  native-cross-build:\n";
+    let run = "  native-cross:\n";
+    let all = "--extract-overwrite --no-fail-fast\n";
+    // Seeded violations: each must be reported.
+    for (planted, said) in [
+        // A seventh step in `native` that the cross jobs do not build or run: macOS x86-64 loses it.
+        (
+            dev.replacen(
+                "        run: cargo run --locked -p geom-test --bin source-scan -- check\n",
+                "        run: cargo run --locked -p geom-test --bin source-scan -- check\n      - name: The goldens\n        run: cargo run --locked -p geom-test --bin golden -- check\n",
+                1,
+            ),
+            "native-cross-build does not run exactly",
+        ),
+        // A step of `native` the cross jobs cannot carry at all.
+        (
+            dev.replacen(
+                "        run: cargo run --locked -p geom-test --bin source-scan -- check\n",
+                "        run: cargo run --locked -p geom-test --bin source-scan -- check\n      - name: A script\n        run: ./check.sh\n",
+                1,
+            ),
+            "native runs \"./check.sh\"",
+        ),
+        // A test filtered out of the Intel run.
+        (
+            dev.replacen(all, "--extract-overwrite --no-fail-fast -E 'not test(=seeded_violations_are_caught)'\n", 1),
+            "native-cross does not run exactly",
+        ),
+        // Half an archive's tests run.
+        (
+            dev.replacen(all, "--extract-overwrite --no-fail-fast --partition count:1/2\n", 1),
+            "native-cross does not run exactly",
+        ),
+        // A tool built but not run.
+        (
+            dev.replacen(
+                "      - name: Every crate and module header is complete, and MAP.json is current\n        run: '\"$RUNNER_TEMP/dev-macos-x86-64/map\" check'\n",
+                "",
+                1,
+            ),
+            "native-cross does not run exactly",
+        ),
+        // A tool run with other arguments: it would write, not check.
+        (
+            dev.replacen("/map\" check'", "/map\" write'", 1),
+            "native-cross does not run exactly",
+        ),
+        // A test target not built: its run would find no archive, and the build no longer matches.
+        (
+            dev.replacen(
+                "        run: cargo nextest archive --locked -p geom-fuzz --test predicates",
+                "        run: echo cargo nextest archive --locked -p geom-fuzz --test predicates",
+                1,
+            ),
+            "native-cross-build does not run exactly",
+        ),
+        // Built for the arm64 runner's own target: binaries the Intel runner would not run as tested.
+        (
+            dev.replacen("--test dependency_rule --target x86_64-apple-darwin", "--test dependency_rule", 1),
+            "native-cross-build does not run exactly",
+        ),
+        // A tool built in another profile than `cargo run`'s.
+        (
+            dev.replacen("cargo build --locked -p geom-gen --target", "cargo build --locked --release -p geom-gen --target", 1),
+            "native-cross-build does not run exactly",
+        ),
+        // Flags native does not have.
+        (
+            planted_after(
+                &dev,
+                build,
+                "      CARGO_NEXTEST_VERSION: \"0.9.146\"\n",
+                "      CARGO_NEXTEST_VERSION: \"0.9.146\"\n      RUSTFLAGS: -C opt-level=1\n",
+            ),
+            "native-cross-build sets RUSTFLAGS",
+        ),
+        // A nextest setting that leaves tests out, through the run's environment.
+        (
+            planted_after(
+                &dev,
+                run,
+                "      CARGO_NEXTEST_VERSION: \"0.9.146\"\n",
+                "      CARGO_NEXTEST_VERSION: \"0.9.146\"\n      NEXTEST_PROFILE: quick\n",
+            ),
+            "native-cross sets NEXTEST_PROFILE",
+        ),
+        // A step of the run that is skipped.
+        (
+            dev.replacen(
+                "      - name: No banned-source marker in the kernel's crates\n        run: '",
+                "      - name: No banned-source marker in the kernel's crates\n        if: false\n        run: '",
+                1,
+            ),
+            "may be skipped or fail unseen",
+        ),
+        // A step of the run that may fail unseen.
+        (
+            dev.replacen(
+                "      - name: Fetch the locked dependencies\n",
+                "      - name: Fetch the locked dependencies\n        continue-on-error: true\n",
+                1,
+            ),
+            "may be skipped or fail unseen",
+        ),
+        // Run on the arm64 runner, under no Intel processor: macOS x86-64 not run at all.
+        (
+            planted_after(&dev, run, "    runs-on: macos-15-intel\n", "    runs-on: macos-latest\n"),
+            "native-cross runs on \"macos-latest\"",
+        ),
+        // Built on the Intel runner, the job's time lost.
+        (
+            planted_after(&dev, build, "    runs-on: macos-latest\n", "    runs-on: macos-15-intel\n"),
+            "native-cross-build runs on \"macos-15-intel\"",
+        ),
+        // macOS x86-64 run natively as well: the runners are no longer six, each once.
+        (
+            dev.replacen(
+                "          - name: macOS arm64\n            os: macos-latest\n",
+                "          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n",
+                1,
+            ),
+            "are not kernel.yml's six, each once",
+        ),
+        // A runner dropped from `native`.
+        (
+            dev.replacen("          - name: Windows arm64\n            os: windows-11-arm\n", "", 1),
+            "are not kernel.yml's six, each once",
+        ),
+        // The run started before its build.
+        (
+            dev.replacen("    needs: native-cross-build\n", "", 1),
+            "native-cross does not wait for native-cross-build",
+        ),
+        // No x86_64-apple-darwin installed.
+        (
+            planted_after(&dev, build, "          targets: x86_64-apple-darwin\n", ""),
+            "does not install the x86_64-apple-darwin target",
+        ),
+        // The build's cache saved by a pull request's run.
+        (
+            dev.replacen(
+                "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: dev-cross",
+                "save-if: true\n          key: dev-cross",
+                1,
+            ),
+            "native-cross-build's cache is saved by another run than a push to main",
+        ),
+    ] {
+        assert_ne!(planted, dev, "{said}: the planted edit applies");
+        let found = dev_cross_problems(&parse(&planted));
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+    // The hand-over kept a month, for later runs to find; or read by another job.
+    for (from, to, said) in [
+        (
+            "          name: dev-macos-x86-64\n          path: ${{ runner.temp }}/dev-macos-x86-64\n          retention-days: 1\n",
+            "          name: dev-macos-x86-64\n          path: ${{ runner.temp }}/dev-macos-x86-64\n          retention-days: 30\n",
+            "native-cross-build does not hand dev-macos-x86-64 over once",
+        ),
+        (
+            "      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16\n        with:\n          toolchain: ${{ env.RUST_TOOLCHAIN }}\n          targets: wasm32-wasip1\n",
+            "      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16\n        with:\n          toolchain: ${{ env.RUST_TOOLCHAIN }}\n          targets: wasm32-wasip1\n      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2\n        with:\n          name: dev-macos-x86-64\n",
+            "downloads dev-macos-x86-64, which is not handed to it",
+        ),
+    ] {
+        let planted = dev.replacen(from, to, 1);
+        assert_ne!(planted, dev, "the planted edit {from:?} applies");
+        let found = hand_over_problems("kernel-dev.yml", &planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
 }
