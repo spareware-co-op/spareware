@@ -542,6 +542,37 @@ fn roots_of_two_quartics_compare_exactly() {
 }
 
 #[test]
+fn a_double_root_beside_a_simple_one_is_parted_from_it() {
+    // (t² − 3)(d t − n)² and (3t² − 1)(d t − n)² with n / d near √3 or 1/√3 and d no power of two:
+    // the roots are isolated factor by factor, so the double root's stretch and its simple
+    // neighbour's overlap and each must be narrowed until they part, which takes about 17 levels
+    // for 97/56 against √3. Every root then stands once, in order, with its multiplicity.
+    let near = [
+        (3, 5, [-3, 0, 1]),
+        (5, 9, [-3, 0, 1]),
+        (7, 12, [-3, 0, 1]),
+        (11, 19, [-3, 0, 1]),
+        (15, 26, [-3, 0, 1]),
+        (41, 71, [-3, 0, 1]),
+        (56, 97, [-3, 0, 1]),
+        (7, 4, [-1, 0, 3]),
+        (5, 3, [-1, 0, 3]),
+        (19, 11, [-1, 0, 3]),
+        (26, 15, [-1, 0, 3]),
+        (71, 41, [-1, 0, 3]),
+    ];
+    for (d, n, square) in near {
+        let q = quartic(&[(d, n), (d, n)], &[square]);
+        let roots = q.roots().unwrap_or_else(|e| panic!("{n}/{d}: {e:?}"));
+        // The simple roots ±r, r² = −square[0] / square[2], against the double root n / d > 0.
+        let double_past = n * n * square[2] > -square[0] * d * d;
+        let order: Vec<u8> = roots.iter().map(RealRoot::multiplicity).collect();
+        let want = if double_past { [1, 1, 2] } else { [1, 2, 1] };
+        assert_eq!(order, want, "{n}/{d}");
+    }
+}
+
+#[test]
 fn the_zero_polynomial_is_refused_and_a_budget_is_never_an_answer() {
     let zero = Quartic::new([Big::from_i64(0); 5]);
     assert!(zero.is_zero());
