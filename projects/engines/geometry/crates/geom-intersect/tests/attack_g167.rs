@@ -449,7 +449,13 @@ fn ring(tube: (f64, f64)) -> SurfaceKind {
 /// The radius of each circle the plane z = -1/2 meets `ring(tube)` in, with its tube turn's box,
 /// sorted.
 fn circles_below(tube: (f64, f64)) -> Vec<(f64, (f64, f64))> {
-    let r = meet(&level(-0.5), &ring(tube));
+    circles_at(-0.5, tube)
+}
+
+/// The radius of each circle the plane at height `z` meets `ring(tube)` in, with its tube turn's
+/// box, sorted.
+fn circles_at(z: f64, tube: (f64, f64)) -> Vec<(f64, (f64, f64))> {
+    let r = meet(&level(z), &ring(tube));
     let mut out: Vec<(f64, (f64, f64))> = r
         .items()
         .iter()
@@ -529,6 +535,32 @@ fn a_tube_turn_box_meeting_the_domain_at_two_turns_holds_the_circle_s_turn() {
     // A span holds every turn that meets the domain, so it holds the circle's.
     both_circles((1.9, 3.9), 19.0 / 6.0, 23.0 / 6.0);
     both_circles((1.4, 3.4), 19.0 / 6.0, 11.0 / 6.0);
+}
+
+#[test]
+fn a_tube_turn_box_rounded_onto_the_domain_s_start_two_turns_back_is_not_held_there() {
+    // The plane z = -h meets the ring in an inner circle of radius 3 - √(1 - h²), whose box's
+    // corner stands √2 times that from the axis. Just under the height h0 where that corner is on
+    // the tube's centre circle, the inner's tube turn, read from its box, runs from about 1.05 to
+    // a hair under 3/2.
+    let h0 = (1.0 - (3.0 - 3.0 / 2f64.sqrt()).powi(2)).sqrt();
+    let h = h0 - 3e-11;
+    let (_, (lo, hi)) = circles_at(-h, ROUND)[0];
+    assert!(1.05 < lo && 1.5 - 1e-10 < hi && hi < 1.5, "{lo}, {hi}");
+    // On a tube from the double above -1000002.5, where doubles stand 2^-33 apart, the box meets
+    // the domain moved by -1000002 half-turns, from about -1000000.95 to the end, where the circle
+    // stands. Moved a turn further back, its top rounds to -1000002.5 and the move's widening
+    // lifts it a step, onto the domain's start; but every turn of that box lies under
+    // 3/2 - 1000004, before the start, and the span is not held there: it starts where the box a
+    // turn on does.
+    let start = (-1_000_002.5f64).next_up();
+    let tube = (start, -1_000_000.6);
+    let got = circles_at(-h, tube);
+    assert_eq!(got.len(), 2, "{got:?}");
+    let turn = 1.0 + h.atan2((1.0 - h * h).sqrt()) / core::f64::consts::PI - 1_000_002.0;
+    let (_, (lo, hi)) = got[0];
+    assert!((lo..=hi).contains(&turn) && hi <= tube.1, "{got:?}");
+    assert!(lo > start + 1.5, "{got:?}");
 }
 
 #[test]

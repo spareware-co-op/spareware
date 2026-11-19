@@ -1394,8 +1394,9 @@ fn tube_turn(
 /// First the turns to the domain's window: `m − m % 2` is a multiple of two, exactly, for every
 /// double m (`%` is exact), and for m the sum lo + 1/2, however it rounds, it leaves the start
 /// strictly between −5/2 and 3/2 past it. From there a turn back, none, one or two on reach every
-/// turn of the box that can meet the domain: two back it ends by 3/2 − 4, under the start, and
-/// three on it starts from −1 + 6, over the end, which is under 3/2 + 2.
+/// turn of the box that can meet the domain: two back each of its turns is under 3/2 − 4, before
+/// the start (its box, rounded and widened by the move, may end on the start, and is not tried),
+/// and three on it starts from −1 + 6, over the end, which is under 3/2 + 2.
 ///
 /// A box wider than the gap from the domain's end to its start a turn on can meet it at two turns
 /// (a box across a torus's centre circle, or across an arc's gap), one at each end, and the point
